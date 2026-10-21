@@ -200,9 +200,9 @@ test("what a model writes streams into the session under its rung until its repl
   try {
     const engine = session.open();
     const prompt = engine.prompt("int", { message: "count", on: engine.root });
-    // The rungs of the three official extensions come first.
-    await until(session, () => session.streams.get("rung5")?.text === "close(3)");
-    expect(session.streams.get("rung5")).toEqual({
+    // The rungs of the five official extensions come first.
+    await until(session, () => session.streams.get("rung6")?.text === "close(3)");
+    expect(session.streams.get("rung6")).toEqual({
       chain: engine.root,
       text: "close(3)",
       thinking: "counting",
@@ -514,9 +514,9 @@ test("record inspection reports pending work when its replay starts or feeds a c
   await first.dispose();
   try {
     expect((await inspectRecord(record)).pending.map(([id]) => id)).toEqual([
-      "rung5",
-      "bash1",
       "rung6",
+      "bash1",
+      "rung7",
       "bash2",
     ]);
   } finally {
@@ -667,7 +667,7 @@ test("a session enables the extensions of the configs, and a later session on it
   const first = new Session({ cwd, record, config });
   try {
     first.open();
-    expect(running(first)).toEqual(["memory", "skills", "compaction", "ouroboros"]);
+    expect(running(first)).toEqual(["memory", "skills", "compaction", "ouroboros", "web"]);
     const told = first.engine?.turns({ on: "chain1" }).at(-1)?.[1] ?? "";
     expect(told).toContain(
       `#memory1\nmemory1_path = '${join(cwd, "CLAUDE.md").replaceAll("\\", "\\\\")}'\nmemory1_text = 'Use two spaces.'`,
@@ -680,7 +680,10 @@ test("a session enables the extensions of the configs, and a later session on it
   try {
     later.open();
     fresh.open();
-    expect([running(later), running(fresh)]).toEqual([["memory", "skills", "compaction", "ouroboros"], []]);
+    expect([running(later), running(fresh)]).toEqual([
+      ["memory", "skills", "compaction", "ouroboros", "web"],
+      [],
+    ]);
   } finally {
     await later.dispose();
     await fresh.dispose();

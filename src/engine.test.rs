@@ -644,6 +644,44 @@ fn the_work_an_earlier_life_left_is_pending_until_a_wake_that_this_life_says() {
   assert_eq!(pending.collect::<Vec<_>>(), ["rung1 rung", "wait1 wait", "wait3 wait"]);
 }
 
+#[test]
+fn a_key_of_the_client_makes_its_act_once_across_a_crash_and_a_retry() {
+  let word = || vec![("word", Object::string("close(1)"))];
+  let (root, id) = {
+    let mut first = Lived::new("keyed", &[], true).unwrap();
+    let root = first.root();
+    let id = first.engine.keyed("k1", "rung", vec![], word()).unwrap();
+    assert_eq!(
+      first.engine.keyed("k1", "rung", vec![], word()).unwrap(),
+      id,
+      "a retry in the same life"
+    );
+    assert_ne!(
+      first.engine.keyed("k2", "rung", vec![], word()).unwrap(),
+      id,
+      "another key makes another act"
+    );
+    // A host that crashed after it kept the key of k3 and before it kept the act.
+    first.engine.say("key", &root, vec![Object::string("k3"), Object::string("rung")]).unwrap();
+    (root, id)
+  };
+  let mut second = Lived::new("keyed", &[], false).unwrap();
+  assert!(second.engine.raised().is_none(), "{:?}", second.engine.raised());
+  assert_eq!(
+    second.engine.keyed("k1", "rung", vec![], word()).unwrap(),
+    id,
+    "a retry in a later life"
+  );
+  let made = second.engine.keyed("k3", "rung", vec![], word()).unwrap();
+  assert_eq!(made, "rung3", "the key that the crash left with no act makes its act");
+  drop(second);
+  let mut third = Lived::new("keyed", &[], false).unwrap();
+  assert_eq!(third.engine.keyed("k3", "rung", vec![], word()).unwrap(), made);
+  let facts = third.engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
+  let rungs = facts.iter().filter(|one| one.kind() == "rung" && one.by() == "operator").count();
+  assert_eq!(rungs, 3);
+}
+
 /// An ear that takes a wait and ends it by its work, of its own accord, once its gate opens: it tells a pause of the
 /// chain of the wait, says the wait due, then says it done.
 fn pauser(gate: oneshot::Receiver<()>) -> Box<dyn Ear> {
