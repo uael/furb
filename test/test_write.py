@@ -225,3 +225,15 @@ async def test_a_write_to_a_file_whose_every_line_ends_with_crlf_ends_each_line_
     "one\n",
     b"one\n",
   )
+
+
+async def test_the_world_refuses_a_write_of_a_path_whose_first_part_is_the_name_of_an_act(tmp_path: Path) -> None:
+  """The World refuses a write of a path whose first part is the name of an act, and writes no file, since that path is a door that no ear of the engine served, and the refusal names the chain of that act."""
+  live, root = machine(tmp_path)
+  away = engine.chain("away")
+  asked = engine.wait(60.0, on=away)
+  with pytest.raises(Refused) as one:
+    engine.write(Text(asked, "x\n"), on=root)
+  live.end()
+  assert str(one.value) == f"{asked} is no file, since {asked} is an act of {away}: write it on {away}."
+  assert not (tmp_path / asked).exists()

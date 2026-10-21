@@ -18,7 +18,9 @@ use crate::{
 /// answers, each resolved against the working directory of the chain, or with
 /// the refusal. The path of a read or a write that is `~` or starts with `~/` resolves against the home of the user,
 /// and one of `scratch://` against the scratch directory of the life, which no chain stands in. A file whose every
-/// line ends with CRLF reads with LF, and a write to it writes CRLF.
+/// line ends with CRLF reads with LF, and a write to it writes CRLF. A path whose first part is the name of an act
+/// of the life is a door that no ear of the engine served, and never a file, so the ear refuses it with the chain of
+/// that act.
 pub fn files(scratch: Scratch) -> Box<dyn Ear> {
   ear(move |mut co| async move {
     loop {
@@ -80,6 +82,15 @@ async fn served(co: &mut Co, a: &Fact, scratch: &Scratch) -> Result<Text, Fault>
   }
   if path.contains("://") {
     return Err(Fault::refused(format!("No file at {path}.")));
+  }
+  let head = path.split('/').next().unwrap_or_default();
+  if co.call("get", vec![Object::string(head)], vec![]).await?.as_ref().type_name() != "NoneType" {
+    let chain = co.call("scope", vec![Object::string(head)], vec![]).await?;
+    let chain = chain.as_ref().as_str().unwrap_or_default().to_owned();
+    return Err(Fault::refused(format!(
+      "{path} is no file, since {head} is an act of {chain}: {} it on {chain}.",
+      a.kind()
+    )));
   }
   let at = match homed(&path, std::env::home_dir()) {
     Some(at) => at?,
