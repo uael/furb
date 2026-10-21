@@ -406,6 +406,30 @@ fn a_wait_that_a_wake_starts_again_in_a_later_life_ends_when_it_was_due() {
 }
 
 #[test]
+fn a_template_string_of_the_host_comes_in_whole_and_a_pair_comes_in_as_its_expression_with_an_equals_sign()
+ {
+  let mut lived = Lived::new("templates", &[], true).unwrap();
+  let whole = crate::value::templated([
+    Object::string("n is "),
+    Object::list([Object::int(5), Object::string("n"), Object::none(), Object::string("03")]),
+  ]);
+  let got = lived.engine.word("repr(list(t))", vec![("t", whole)]).unwrap();
+  assert_eq!(
+    got.as_ref().as_str(),
+    Some("['n is ', Interpolation(5, 'n', None, '03')]"),
+    "each string and each interpolation came in as it was, its conversion and its format spec among it"
+  );
+  let pairs =
+    crate::value::paired([("n".to_owned(), Object::int(5)), ("s".to_owned(), Object::string("a"))]);
+  let got = lived.engine.word("repr(list(t))", vec![("t", pairs)]).unwrap();
+  assert_eq!(
+    got.as_ref().as_str(),
+    Some("['n=', Interpolation(5, 'n', 'r', ''), ' s=', Interpolation('a', 's', 'r', '')]"),
+    "each pair came in as the f-string {{expression=}} makes it, with a space between two"
+  );
+}
+
+#[test]
 fn a_function_of_the_host_is_called_back_by_the_sandbox_with_what_the_word_gave_it() {
   let mut lived = Lived::new("callables", &[], true).unwrap();
   let seen = Rc::new(RefCell::new(0usize));

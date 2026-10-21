@@ -939,7 +939,7 @@ fn dict<'py, 'a>(
 
 /// One value of python, as the sandbox takes it: a shape as its name, as the engine names one; a name of the
 /// engine as its name; an ear of the crate and a generator as an ear, and a function as one the sandbox calls back,
-/// each handed over to the life it comes into; a template string as its interpolations; plain data as it is, each
+/// each handed over to the life it comes into; a template string as its parts; plain data as it is, each
 /// entry as it crosses; an instance of a class or an exception as its name and its fields; and nothing else.
 fn of_python(value: &Bound<'_, PyAny>) -> PyResult<Object> {
   let py = value.py();
@@ -1011,13 +1011,22 @@ fn of_python(value: &Bound<'_, PyAny>) -> PyResult<Object> {
     }));
   }
   if kind == "Template" {
-    let mut interpolations = Vec::new();
-    for one in value.getattr("interpolations")?.try_iter()? {
+    let mut parts = Vec::new();
+    for one in value.try_iter()? {
       let one = one?;
-      let expression = of_python(&one.getattr("expression")?)?;
-      interpolations.push((of_python(&one.getattr("value")?)?, expression));
+      if one.is_instance_of::<PyString>() {
+        parts.push(of_python(&one)?);
+        continue;
+      }
+      let at = |name: &str| one.getattr(name).and_then(|held| of_python(&held));
+      parts.push(Object::list([
+        at("value")?,
+        at("expression")?,
+        at("conversion")?,
+        at("format_spec")?,
+      ]));
     }
-    return Ok(templated(interpolations));
+    return Ok(templated(parts));
   }
   if value.is_instance_of::<PyList>() {
     return Ok(Object::list(each(value)?));

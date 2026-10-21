@@ -87,7 +87,7 @@ exec(__kernel_source, __kernel)
   lambda by: __engine["site"].set(by),
   lambda token: __engine["site"].reset(token),
   lambda word, names: eval(word, __engine, names),
-  lambda held: Template(*[Interpolation(value, expression) for value, expression in held]),
+  lambda held: Template(*[x if isinstance(x, str) else Interpolation(*x) for x in held]),
   lambda x: None if callable(x) else repr(x),
   lambda cls: cls.__bases__[0],
 )"#;
@@ -178,8 +178,8 @@ fn left(record: &[Object]) -> Vec<String> {
 
 /// A template string, as a host says one: each expression beside its value.
 fn templated(pairs: &[(&str, Object)]) -> Object {
-  crate::value::templated(
-    pairs.iter().map(|(expression, one)| (one.clone(), Object::string(*expression))),
+  crate::value::paired(
+    pairs.iter().map(|(expression, one)| ((*expression).to_owned(), one.clone())),
   )
 }
 
@@ -197,7 +197,7 @@ struct Opened {
   spoke: Object,
   /// A word run in the names of the engine, with values bound.
   word: Object,
-  /// A template string of the sandbox, made from the values and the expressions of a template string of the host.
+  /// A template string of the sandbox, made from the parts of a template string of the host.
   template: Object,
   /// Nothing for a callable, and the representation of anything else.
   shown: Object,
@@ -827,18 +827,19 @@ impl Outside {
         self.standing.insert(on, (name, if started { At::Waiting } else { At::Unborn }));
         Ok(Some(object("Ear", on)))
       }
-      "Templated"
-        if let Some(MontyNode::List(held)) = at("interpolations").map(|one| graph.node(one)) =>
-      {
+      "Templated" if let Some(MontyNode::List(held)) = at("parts").map(|one| graph.node(one)) => {
         let mut each = Vec::new();
         for one in held {
-          let (MontyNode::List(pair) | MontyNode::Tuple(pair)) = graph.node(*one) else {
-            return Ok(None);
+          let (MontyNode::List(part) | MontyNode::Tuple(part)) = graph.node(*one) else {
+            each.push(graph.value(*one).to_owned());
+            continue;
           };
-          let [value, expression] = pair[..] else { return Ok(None) };
+          let [value, expression, conversion, spec] = part[..] else { return Ok(None) };
           each.push(Object::tuple([
             self.comes(sand, graph, value)?,
             graph.value(expression).to_owned(),
+            graph.value(conversion).to_owned(),
+            graph.value(spec).to_owned(),
           ]));
         }
         let template = self.opened.template.clone();

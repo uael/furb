@@ -164,12 +164,14 @@ def close(value: object, id: str = "") -> None:
 def debug(template: Template) -> None:
   if not (who := acting()):
     raise Refused("no act")
-  got = module().setdefault(who + "_debug", [])
-  at = f"[{len(got)}:]" if got else ""
-  said = [repr(x.value) for x in template.interpolations]
-  got += said
-  if tells(who) and said:
-    say(*told(who, "debugged " + " ".join(x.expression for x in template.interpolations), **{"debug" + at: said}))
+  text = "".join(
+    x
+    if isinstance(x, str)
+    else format(("{!" + x.conversion + "}").format(x.value) if x.conversion else x.value, x.format_spec)
+    for x in template
+  )
+  if tells(who) and text:
+    say(*told(who, "debugged", debug=text))
 
 
 def wait(seconds: float = 0.0, on: str = "") -> Act[None]:
@@ -864,8 +866,8 @@ How to work
 - Start all independent acts first, then await each one.
 - A report of another chain is a claim. Examine a claim before you give it as a fact, and give each result from what
   an act showed.
-- To see a value, debug it: debug(t"{value}") binds the repr of each value of its template, as rung5_debug = ['0']
-  for 0. When a word raises, the chain binds the exception as raised.
+- To see a value, debug it: debug(t"{x=}") or debug(t"{x!r}") tells the text that the same f-string makes. When a
+  word raises, the chain binds the exception as raised.
 - Keep each word lean: no comment, and no code that the task does not need. The chain reads each token that you
   write again at each reply.
 - Your share of the window is the tokens that your last answer read, [u for _, _, u, _ in turns() if u][-1][0], over
