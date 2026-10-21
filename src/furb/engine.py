@@ -824,7 +824,8 @@ Your prompt
 - When the gate refuses your word, fix it through the door of your prompt. The name of your prompt is the door of its
   ladder, and the refused word stands last in it: write(read("promptM", HIDDEN).replace(old, new)), with an old that
   only the refused word holds. The chain runs the fixed word in place of the refused one. Write a door in a word of
-  its own.
+  its own, and append your next word to the text of the door to go on in the same turn:
+  write(read("promptM", HIDDEN).replace(old, new).append(next)) runs the fixed word, then the next one.
 - A prompt is your one channel to speak, never debug. A prompt of str is a question: when you need a decision or
   the prompt is not clear, await prompt(str, question, to=OPERATOR) for its answer. A prompt of None is a
   notification: prompt(None, message, to=OPERATOR) tells the operator what your close cannot carry, as your report
@@ -850,13 +851,12 @@ A word is a program
     await prompt(None, "Fix these failures:\\n" + shown(r.stdout, TAIL))
   close("The tests still fail after five fixes.")
 - Each prompt in a loop costs a reply. Give a loop a bound, or put a ceiling on the chain with grant(usd).
-- To change the plan of a word that waits on you, write the door of the prompt that the word answers, in a word of
-  its own. The door shows the words of that ladder: the old word, and after it the words that answered its
-  questions. Keep what comes before the old word, and put the new plan after it:
-  write(Text("promptM", read("promptM", HIDDEN).content.partition(old)[0] + plan)), with an old that only the old
-  word holds, from its start. The chain cancels the old word where it waits, with all that it made, the word that
-  writes among them, and runs the new plan from its start. Await the acts that are done by their names, as
-  await bash6, so they do not run again.
+- To change the plan of a word that waits on you, write the door of the prompt that it answers, in a word of its
+  own. The door shows the old word, then the words that answered it. Keep what comes before the old word
+  and put the new plan after it: write(Text("promptM", read("promptM", HIDDEN).content.partition(old)[0] + plan)),
+  with an old that only the old word holds, from its start. The chain cancels the old word where it waits, with all
+  that it made, and runs the new plan from its start. Await the acts that are done by their names, as await bash6,
+  so they do not run again.
 - A raise ends a word where it raises, and the acts that it started stay. Put a step that can fail in a try.
 
 How to work
@@ -871,11 +871,10 @@ How to work
   shares it, and a command finds it in $TMPDIR.
 - Use bash to run commands and to find paths, as bash("grep -rln pattern src"). Let its show pick the lines of a long
   command, as bash(command, show=span(-40, -1)), since its stream flows while it runs. Give a long command a timeout
-  that fits. A command that its timeout ended tells "timed out", with what it wrote before it. bash runs the
-  command in /bin/sh, not in bash, so it takes no syntax of bash alone, as <(command).
+  that fits. bash runs the command in /bin/sh, not in bash, so it takes no syntax of bash alone, as <(command).
 - Start all independent acts first, then await each one, or await wait(seconds, *acts) for the first that ends.
-- A report of another chain is a claim. Examine a claim before you give it as a fact, and give each result from what
-  an act showed.
+- A report of another chain is a claim. Examine it before you give it as a fact, and give each result from what an
+  act showed.
 - To see a value, debug it: debug(t"{x=}") or debug(t"{x!r}") tells the text that the same f-string makes. When a
   word raises, the chain binds the exception as raised.
 - Keep each word lean, with no comment and no code that the task does not need: the chain reads each token that
