@@ -335,18 +335,18 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
             heard = []
           ran = tells(rid) and rid
           rungs[(donor := get(rid)[5]) or rid] = word
-          if tells(rid) and (found := gate(word)):
+          if ran and (found := gate(word)):
             yield told(rid, "refused", findings="\n".join(found))
             refused.add(rid)
             close(Refused(), rid)
           else:
-            act("run", id, None, rid, unquoted(word), donor)
+            running[rid] = act("run", id, None, rid, unquoted(word), donor)
         case ("done", about, by, Refused()) if not by and question(("reply", about)):
           pause(id)
         case ("done", about, *_):
           waiting.pop(about, None)
       if (r := get(a[1]))[0] in ("run", "wants"):
-        running[r[4] if r[0] == "run" else get(r[2])[4]] = (a[0] == "started") == (r[0] == "run")
+        running[r[4] if r[0] == "run" else get(r[2])[4]] = a[0] != ("done" if r[0] == "run" else "started")
       if any(running.values()):
         continue
       if asking not in waiting and (asking := next((x for x in waiting if not paused(x)), "")):
