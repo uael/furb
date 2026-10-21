@@ -531,6 +531,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   A write of a door cancels each rung of that ladder that it drops, but the rung that writes, so the plan that it replaces ends wholly: a word that waits ends where it waits, with every act under it, the rung that writes among them when it answers that word, and a word that is done ends each act that it made and that is not done.
   A write of a door that drops no rung that ran, since the gate refused each rung that it drops, keeps the module and every rung of the chain as they stand, and makes only the rung of what is new.
   Before every reply the chain tells the last line of the turn, which says what the answer is for, as #rung5 advance on prompt1, which names the one that made the rung.
+  When nothing was told on the chain since the word of the last rung that the chain did not make was ready, the chain tells that rung under the header told nothing before the advance, so the model sees that the word showed it nothing.
   The chain holds the text of each paragraph told on it, in order.
   At the first ready of the next rung, the chain runs that text as the told rung of that rung, before its word, and holds nothing more.
   Each act that a told paragraph opened and each value that it told is bound for the word of that rung, whoever wrote it.

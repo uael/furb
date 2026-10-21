@@ -51,7 +51,11 @@ async def test_a_gate_carries_the_word_alone() -> None:
   bind = fresh(root, prompted(act, "int", "edit"), f"#{first} advance on {act}")
   refused = f"#{bad} refused\n{bad}_findings = {faulted('x = BAD')!r}\n\n#{bad} closed\n{bad}_value = Refused()"
   shut = f"#{copy} closed\n{copy}_value = Refused()\n\n#{last} advance on {act}"
-  told = [f"#{bad} advance on {act}", f"{refused}\n\n#{after} advance on {act}", f"#{edit} advance on {act}"]
+  told = [
+    f"#{first} told nothing\n\n#{bad} advance on {act}",
+    f"{refused}\n\n#{after} advance on {act}",
+    f"#{after} told nothing\n\n#{edit} advance on {act}",
+  ]
   read = engine.unquoted(f"#read1\nread1_path = {act!r}\n<s:read1_text>\nk = 1\nx = BAD\ny = 2</s:read1_text>")
   again = [read, bind, "k = 1", *told, written(made, "k = 3")]
   assert gatings(log) == [
@@ -122,7 +126,7 @@ async def test_a_rung_that_retells_stands_with_the_gate_where_the_one_it_retells
   assert [(word, donor) for _, word, donor in copies] == [
     (bind, f"{first[0]}_told"),
     ("k = 1", first[0]),
-    (f"#{first[1]} advance on {act}", f"{first[1]}_told"),
+    (f"#{first[0]} told nothing\n\n#{first[1]} advance on {act}", f"{first[1]}_told"),
     ("x = BAD", first[1]),
     (bad, f"{first[2]}_told"),
   ]

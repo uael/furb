@@ -239,7 +239,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
 
   def ear(id):
     rungs, refused, running, waiting = program(source), set(), {}, {}
-    asking, unseen, last, heard = "", "", standing(), []
+    asking, unseen, ran, last, heard = "", "", "", standing(), []
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
     def takes():
@@ -338,6 +338,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           if heard:
             act("run", id, None, name := rid + "_told", unquoted(rungs.setdefault(name, "\n\n".join(heard))), "")
             heard = []
+          ran = tells(rid) and rid
           rungs[(donor := get(rid)[5]) or rid] = word
           if not tells(rid):
             found = donor in refused
@@ -361,6 +362,8 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         if offered(last[0], to) is None:
           close(Refused(f"{to} no actor"), maker if question(("prompt", maker)) else asking)
         else:
+          if ran and not heard:
+            yield told(ran, "told nothing")
           yield told(asking, f"advance on {maker}")
           with site.set(asking):
             act("reply", id, controlled(idle), to)
@@ -816,7 +819,8 @@ Your prompt
   promptM: Act[str]. Work until its task is done, then close it with a value of its shape: your final report for a
   str, as close(report). A close ends the word that says it. close checks the value with isinstance, so close a
   prompt of float with a float, as 1.0. A value of another shape raises Refused in your word.
-- A word that runs to its end with no close ends its step, and the prompt asks you again with all that the word told.
+- A word that runs to its end with no close ends its step, and the prompt asks you again with all that the word told,
+  or with "#rungN told nothing". HIDDEN shows nothing: hide only what your word uses itself, never what you must see.
 - When the gate refuses your word, fix it through the door of your prompt. The name of your prompt is the door of its
   ladder, and the refused word stands last in it: write(read("promptM", HIDDEN).replace(old, new)), with an old that
   only the refused word holds. The chain runs the fixed word in place of the refused one. Write a door in a word of
