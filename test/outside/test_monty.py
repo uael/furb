@@ -318,7 +318,12 @@ async def test_the_door_opens_a_life_as_every_host_opens_one(tmp_path: Path) -> 
   )
   root = furb_monty.engine.boot(record, **dict(ears), world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears())
   await settle()
-  assert [one["name"] for one in _monty.enabled(engine.transcript(on=root))] == ["memory", "skills", "compaction"]
+  assert [one["name"] for one in _monty.enabled(engine.transcript(on=root))] == [
+    "memory",
+    "skills",
+    "compaction",
+    "ouroboros",
+  ]
   assert {a[0] for a in engine.transcript(on=root) if a[2] == "memory"} == {"done"}, "the memory ear answered"
   for _, one in ears:
     one.dispose()

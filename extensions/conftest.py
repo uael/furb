@@ -2,6 +2,7 @@
 the suite of each extension only through a conftest above it, and the helpers that only those suites need."""
 
 from collections.abc import Callable, Sequence
+from dataclasses import replace
 from pathlib import Path
 
 from conftest import STANDS, Sand, World, engine_of, life, of, pytest_generate_tests, sown  # noqa: F401
@@ -15,17 +16,23 @@ EXTENDING = (
 """EXTENDING is the line that the list of the skills holds of the skill that the extension carries."""
 
 
-def extended(
-  name: str, at: Path, ear: Callable[[str], World] | None = None, *, lives: bool = False, record: Sequence[tuple] = ()
+def extended(  # noqa: PLR0913
+  name: str,
+  at: Path,
+  ear: Callable[[str], World] | None = None,
+  *,
+  lives: bool = False,
+  record: Sequence[tuple] = (),
+  sand: Sand | None = None,
 ) -> tuple[Sand, str]:
   """A life on a record, whose chains stand in the folder work of a directory, which enables at its tip the official
-  extension of that name, with its life word when it lives: it hears the ear of the extension when it has one, whose config directory
-  of the user is the folder config of the directory, and the files of the machine after the World of the suite. It
-  gives the World and the root."""
+  extension of that name, with its life word when it lives: it hears the ear of the extension when it has one, whose
+  config directory of the user is the folder config of the directory, and the files of the machine after the World
+  of the suite, or after the World it is given. It gives the World and the root."""
   one = next(x for x in _monty.official() if x["name"] == name)
   (at / "work").mkdir(exist_ok=True)
   given = _monty.extensions([one if lives else {**one, "life": ""}])
-  sand = sown(stands=[STANDS[0], str(at / "work"), STANDS[2]])
+  sand = replace(sand or sown(), stands=[STANDS[0], str(at / "work"), STANDS[2]])
   files = _monty.files(str(at / "scratch"))
   return sand, life(sand, record, extensions=given, **({name: ear(str(at / "config"))} if ear else {}), files=files)[1]
 

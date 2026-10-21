@@ -28,7 +28,7 @@ use crate::{
   ear::{Co, Ear, ear, hear, say},
   engine::ROOT,
   fact::{Fact, named},
-  value::{Fault, Object, entry},
+  value::{Fault, Object, Text, entry},
 };
 
 /// The kind of the fact that enables an extension in a life, which [`extensions`] says and reads.
@@ -38,12 +38,16 @@ pub const ENABLE: &str = "enable";
 const JOURNAL: &str = "journal";
 
 /// The official extensions, each as its manifest and the file of its word, in the order a life runs them.
-const OFFICIAL: [(&str, &str); 3] = [
+const OFFICIAL: [(&str, &str); 4] = [
   (include_str!("../extensions/memory/furb.json"), include_str!("../extensions/memory/memory.py")),
   (include_str!("../extensions/skills/furb.json"), include_str!("../extensions/skills/skills.py")),
   (
     include_str!("../extensions/compaction/furb.json"),
     include_str!("../extensions/compaction/compaction.py"),
+  ),
+  (
+    include_str!("../extensions/ouroboros/furb.json"),
+    include_str!("../extensions/ouroboros/ouroboros.py"),
   ),
 ];
 
@@ -203,6 +207,20 @@ fn beside(file: &Path, path: &str, places: &Places) -> PathBuf {
   }
 }
 
+/// The extensions that a config of the project turns on by the path of their folder, which a write of that config
+/// gives in the middle of a life. A config that is not of the form of a config, and a folder that holds no
+/// extension, turn on nothing.
+fn turned(file: &Path, text: &str, places: &Places) -> Vec<Extension> {
+  let Some(Value::Object(extensions)) =
+    serde_json::from_str::<Value>(text).ok().and_then(|one| one.get("extensions").cloned())
+  else {
+    return Vec::new();
+  };
+  let folder = |form: &Value| form.as_str().map(|path| beside(file, path, places));
+  let found = extensions.iter().filter_map(|(name, form)| load(name, &folder(form)?).ok());
+  found.collect()
+}
+
 /// The word of a file: the file with its line ends made LF, less each top level import of furb and the lines up to
 /// the `)` of one that opens a `(`, with no empty line at its start or at its end, and no run of more than two
 /// empty lines.
@@ -265,6 +283,21 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
         }
         "done" if named(a.about(), "stand") && a.by() != JOURNAL => {
           given.iter().filter(|one| !runs(one)).cloned().collect()
+        }
+        // A write of the config of the project that lands turns on each extension that it gives by its path and
+        // that the life does not run, as the configs do at the tip.
+        "done" if named(a.about(), "write") && a.by() != JOURNAL => {
+          let Some(text) = a.word(0).and_then(Text::of) else { continue };
+          let got = co.call("standing", vec![], vec![]).await?;
+          let project = entry(&got.as_ref(), 1).and_then(|one| one.as_str().map(PathBuf::from));
+          let file = PathBuf::from(&text.path);
+          if project.is_none_or(|one| file != one.join(".furb").join("config.json")) {
+            continue;
+          }
+          turned(&file, &text.content, &Places::here())
+            .into_iter()
+            .filter(|one| !runs(one))
+            .collect()
         }
         ENABLE => Extension::of(&a).filter(|one| !runs(one)).into_iter().collect(),
         _ => continue,

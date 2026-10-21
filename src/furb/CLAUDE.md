@@ -143,8 +143,9 @@ meanings. The entry of such a name here gives only its form in the engine.
   gives a life, its life word, which starts its work; an official one has an ear of the World that answers the
   questions that its word defines.
 - enable: the fact by which the World turns an extension on in a life, with its name, its word and its life word,
-  which the record keeps; the World plays the extension as a rung on every chain there is when it hears the fact, and
-  after it on each chain at its birth.
+  which the record keeps; the World says it at the tip, and when a write of the config of the project lands that
+  turns on an extension by its path, and it plays the extension as a rung on every chain there is when it hears the
+  fact, and after it on each chain at its birth.
 - life word: the python of an extension that its rung runs after its word, and that the World plays alone on a chain
   whose origin had the extension, since that chain made the rung of its origin again.
 
@@ -199,5 +200,6 @@ meanings. The entry of such a name here gives only its form in the engine.
 - An ear that makes acts makes each one while it hears the fact that causes it, from what it heard alone and never
   from the disk, so a later life makes it again at the same place; what the disk holds reaches a chain through a
   question that the World answers and that the journal answers again.
-- The word of an extension only defines, holds no sentence and no comment, and binds no name of the engine; its
+- The word of an extension only defines, holds no comment, and binds no name of the engine, and it holds no
+  sentence but one doctrine of its own, a quote that it tells and that holds no law, as engine.py holds its own; its
   contract holds its laws.
