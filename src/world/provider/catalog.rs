@@ -39,6 +39,7 @@ use super::{
   claude::{self, Claude},
   clients::{Client, Reach},
   local::{ENV_URL, Heard, LOCAL, Server},
+  search,
 };
 use crate::{ear::reactor, world::cache};
 
@@ -605,10 +606,15 @@ pub(super) fn reached(
   reach: Result<Reach, String>,
 ) -> Model {
   let made: Arc<OnceLock<Result<Streams, String>>> = Arc::default();
-  Model::lazy(name, window, move || {
+  let search = reach.as_ref().ok().and_then(|one| search::native(client, one));
+  let model = Model::lazy(name, window, move || {
     let got = made.get_or_init(|| reach.clone().and_then(|reach| client.streams(&reach)));
     got.clone().map_err(CompletionError::ProviderError)
-  })
+  });
+  match search {
+    Some(search) => model.searches(search),
+    None => model,
+  }
 }
 
 /// The providers of the snapshot, with the models of each that the cache at a path holds, read once in a process;

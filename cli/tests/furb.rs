@@ -186,7 +186,7 @@ fn a_word_its_caller_wrote_runs_on_the_root() {
 fn a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it() {
   let yard = Yard::new("resumed");
   fs::create_dir_all(yard.at.join(".furb")).expect("the folder of the project");
-  let off = r#"{"extensions": {"memory": false, "skills": false, "compaction": false, "ouroboros": false}}"#;
+  let off = r#"{"extensions": {"memory": false, "skills": false, "compaction": false, "ouroboros": false, "web": false}}"#;
   fs::write(yard.at.join(".furb/config.json"), off).expect("a config of the project");
   assert_eq!(printed(yard.kept(&["run", "k = 3"]), ""), "None\n");
   assert_eq!(printed(yard.kept(&["run", "close(k + 1)"]), ""), "4\n");
@@ -220,7 +220,7 @@ fn a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it() {
 fn a_record_is_printed_as_facts_each_after_the_number_of_its_line() {
   let yard = Yard::new("facts");
   fs::create_dir_all(yard.at.join(".furb")).expect("the folder of the project");
-  let off = r#"{"extensions": {"memory": false, "skills": false, "compaction": false, "ouroboros": false}}"#;
+  let off = r#"{"extensions": {"memory": false, "skills": false, "compaction": false, "ouroboros": false, "web": false}}"#;
   fs::write(yard.at.join(".furb/config.json"), off).expect("a config of the project");
   assert_eq!(printed(yard.kept(&["run", "k = 3"]), ""), "None\n");
   let facts = |words: &[&str]| {
@@ -252,7 +252,7 @@ fn a_life_runs_the_extensions_that_its_record_enables_and_those_that_the_configs
   fs::create_dir_all(skill.parent().expect("a folder")).expect("the folder of a skill");
   fs::write(&skill, "---\nname: brew\ndescription: Make tea.\n---\n").expect("a skill");
   fs::write(yard.at.join("CLAUDE.md"), "Use two spaces.\n").expect("a memory file");
-  let every = "memory: remember()\nskills: counted()\ncompaction\nouroboros: ouroboros()\n";
+  let every = "memory: remember()\nskills: counted()\ncompaction\nouroboros: ouroboros()\nweb\n";
   assert_eq!(printed(yard.furb(&["extensions"]), ""), every, "the official extensions are on");
   let path = printed(yard.kept(&["run", "close(skill('brew').path)"]), "");
   assert_eq!(path, format!("{:?}\n", skill.display().to_string()).replace('"', "'"));
@@ -265,7 +265,7 @@ fn a_life_runs_the_extensions_that_its_record_enables_and_those_that_the_configs
     .expect("a config of the project");
   assert_eq!(
     printed(yard.furb(&["extensions"]), ""),
-    "skills: counted()\ncompaction\nouroboros: ouroboros()\n"
+    "skills: counted()\ncompaction\nouroboros: ouroboros()\nweb\n"
   );
   assert_eq!(printed(yard.kept(&["extensions"]), ""), every, "a life runs what its record enables");
 }
@@ -598,15 +598,15 @@ fn a_word_of_the_client_runs_as_a_rung_and_a_pause_holds_a_chain_until_its_wake(
   let mut client = Client::new(&yard);
   assert_eq!(
     client.data("1", json!({"type": "rung", "word": "k = 1\nclose(k + 1)"})),
-    json!({"act": "rung5"}),
-    "the four rungs of the extensions come first"
+    json!({"act": "rung6"}),
+    "the five rungs of the extensions come first"
   );
-  assert_eq!(client.done("rung5")["value"], 2);
+  assert_eq!(client.done("rung6")["value"], 2);
   client.data("2", json!({"type": "pause", "act": "chain1"}));
   let state = client.data("3", json!({"type": "state"}));
   assert_eq!(
     (&state["paused"], &state["extensions"]),
-    (&json!(true), &json!(["memory", "skills", "compaction", "ouroboros"]))
+    (&json!(true), &json!(["memory", "skills", "compaction", "ouroboros", "web"]))
   );
   client.data("4", json!({"type": "prompt", "message": "one", "shape": "int"}));
   assert!(
@@ -680,7 +680,7 @@ fn the_state_names_the_work_that_an_earlier_life_left_pending() {
   let mut later = Client::new(&yard);
   let state = later.data("1", json!({"type": "state"}));
   // The rungs of the two official extensions come first, and the rung of the client made the wait.
-  assert_eq!(state["pending"], json!([["rung5", "rung"], ["wait1", "wait"]]));
+  assert_eq!(state["pending"], json!([["rung6", "rung"], ["wait1", "wait"]]));
   later.data("2", json!({"type": "cancel", "act": "wait1"}));
   let state = later.data("3", json!({"type": "state"}));
   assert_eq!(state["pending"], json!([]), "an act that is done is pending no more");

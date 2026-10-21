@@ -17,7 +17,7 @@ use std::{
 use crate::{
   Ear, Engine, Fault, Object,
   ear::{ear, hear},
-  extension::{self, Places, memory::memory, skills::skills},
+  extension::{self, Places, memory::memory, skills::skills, web::web},
   world::{self, Catalog, Scratch, Writes},
 };
 
@@ -116,7 +116,8 @@ impl Opening {
   }
 
   /// The record the life opens on, and the ears of the crate, in the order of boot: the provider, the extensions,
-  /// each official extension, the files, the commands and time, and the store when the life keeps.
+  /// each official extension, the files, the commands and time, and the store when the life keeps. The ear of the
+  /// web does work, so a life that inspects hears it silent.
   ///
   /// The files and the commands share the scratch directory of the life: the one of its record when it keeps the
   /// record, and else one of its own, which goes with the life. A new record starts with an empty scratch directory,
@@ -147,7 +148,7 @@ impl Opening {
       true => extension::configured(&places, self.directory.as_ref())?,
       false => Vec::new(),
     };
-    let provider = self.provider()?;
+    let (provider, search) = self.provider()?;
     let working = |made: Option<Box<dyn Ear>>| made.unwrap_or_else(silent);
     let config = places.config;
     let mut ears = vec![
@@ -155,6 +156,7 @@ impl Opening {
       ("extensions", extension::extensions(extensions)),
       ("memory", memory(config.clone())),
       ("skills", skills(config)),
+      ("web", working(works.then(|| web(search)))),
       ("files", working(scratch.clone().map(world::files))),
       ("bash", working(scratch.map(world::bash))),
       ("time", working(works.then(world::time))),
@@ -164,8 +166,9 @@ impl Opening {
   }
 
   /// The ear of the provider: the models of the roster that the catalog makes, which the function of the host
-  /// answers when it gives one, and which a life that inspects asks nothing.
-  fn provider(self) -> Result<Box<dyn Ear>, Fault> {
+  /// answers when it gives one, and which a life that inspects asks nothing; and the native search of the web of
+  /// each of them, which the ear of the web asks.
+  fn provider(self) -> Result<(Box<dyn Ear>, world::Search), Fault> {
     let works = self.works();
     let stall = self.stall.and_then(|seconds| Duration::try_from_secs_f64(seconds).ok());
     let catalog = Catalog::load().claude(self.claude.map(PathBuf::from), stall);
@@ -181,7 +184,8 @@ impl Opening {
     if let Some(stream) = self.stream {
       provider = provider.writes(stream.0);
     }
-    Ok(provider.ear())
+    let search = provider.search();
+    Ok((provider.ear(), search))
   }
 
   /// The life, booted on the ears of the host and then on the ears of the crate, and the record it opened on. A life

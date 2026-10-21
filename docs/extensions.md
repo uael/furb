@@ -49,7 +49,7 @@ extensions of a project are code of the project, so a project can share them.
 - A path gives the folder of an extension that is not official. A relative path starts at the folder of the config,
   and `~` is the home.
 
-The official extensions, `memory`, `skills`, `compaction` and `ouroboros`, are on unless a config turns them off. A config that is not of this
+The official extensions, `memory`, `skills`, `compaction`, `ouroboros` and `web`, are on unless a config turns them off. A config that is not of this
 form, a folder with no manifest, a manifest of another name, and a missing word are each refused with the path.
 
 ## How a life runs its extensions
@@ -101,10 +101,20 @@ journal answers again in a later life, so a replay is exact and the World is ask
   an extension of its own whose word rebinds `SHARE`, `FILTERS`, `CHOOSER` or `LABEL`. Its doctrine, the quote
   `compaction`, says each part in a few words.
 
+- `web` searches the web and reads its pages. `web_search(query)` is an act that the World answers with the native
+  search of the provider of the actor of the chain, or of the actor that `to` names: the claude command line with its
+  tool WebSearch alone, the web search of the Messages API of Anthropic and of the Responses API of OpenAI and of
+  xAI, Gemini grounded in Google Search, and the search API of DeepSeek. For a provider that has no native search,
+  the World uses the free search of Parallel for agents, which needs no key. `web_fetch(url)` is an act that the
+  World answers with the page at that address, in Markdown when the page is HTML. Each is an act of a text to await,
+  as a command is, and not a read, since a read gives its value at once and a page takes seconds. Each tells its
+  text with its show when it is done. The extension has no life word. Its doctrine, the quote `web`, says each part
+  in a few words.
+
 Each has a contract, `extensions/<name>/<name>.pyi`, which the hygiene laws 1 to 4 of `CLAUDE.md` hold to its suite
 as they hold the engine. Laws 5 to 7 are for `engine.py` alone, and laws 8 and 9 hold the word of each extension.
-`memory` and `skills` also have an ear of the World in the crate, `src/extension/<name>.rs`, which answers their
-questions from the disk. The suite runs on both engines.
+`memory`, `skills` and `web` also have an ear of the World in the crate, `src/extension/<name>.rs`, which answers
+their questions from the disk, or from the network for `web`. The suite runs on both engines.
 
 ## A third party extension
 

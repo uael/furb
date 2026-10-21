@@ -52,14 +52,14 @@ fn kinds(record: &[Object]) -> Vec<String> {
 fn a_life_enables_what_the_configs_turn_on_and_a_later_life_runs_what_its_record_enables() {
   let at = place("configs");
   let (mut first, _) = opening(&at, true).boot::<String>([]).unwrap();
-  assert_eq!(names(&mut first), ["memory", "skills", "compaction", "ouroboros"]);
+  assert_eq!(names(&mut first), ["memory", "skills", "compaction", "ouroboros", "web"]);
   drop(first);
   fs::create_dir_all(at.join("config")).unwrap();
   fs::write(at.join("config").join("config.json"), r#"{"extensions": {"skills": false}}"#).unwrap();
   let (mut later, record) = opening(&at, true).boot::<String>([]).unwrap();
   assert_eq!(
     names(&mut later),
-    ["memory", "skills", "compaction", "ouroboros"],
+    ["memory", "skills", "compaction", "ouroboros", "web"],
     "the record wins over the configs"
   );
   drop(later);
@@ -69,7 +69,7 @@ fn a_life_enables_what_the_configs_turn_on_and_a_later_life_runs_what_its_record
   let (mut fresh, _) = Opening { record: fresh, ..opening(&at, true) }.boot::<String>([]).unwrap();
   assert_eq!(
     names(&mut fresh),
-    ["memory", "compaction", "ouroboros"],
+    ["memory", "compaction", "ouroboros", "web"],
     "a life on a new record enables what the configs turn on"
   );
 }
@@ -98,7 +98,7 @@ fn the_ears_of_the_crate_come_after_the_ears_of_the_host_each_under_the_name_eve
   let names: Vec<&str> = ears.iter().map(|(name, _)| name.as_str()).collect();
   assert_eq!(
     names,
-    ["provider", "extensions", "memory", "skills", "files", "bash", "time", "store"]
+    ["provider", "extensions", "memory", "skills", "web", "files", "bash", "time", "store"]
   );
   drop(ears);
   let (mut engine, _) = opening(&at, true).boot([("mine", mine())]).unwrap();
