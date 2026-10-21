@@ -6,7 +6,7 @@ from furb.engine import Act, Exit
 
 
 async def test_what_an_ear_says_to_take_an_act_whose_done_comes_later() -> None:
-  """What an ear says to take an act whose done comes later, and which no ear after it hears."""
+  """What an ear says to take an act whose done comes later, and which no ear after it hears, a chain apart."""
   after: list[tuple] = []
   log, root = life(sown(auto=False), after=keeping(after))
   act = engine.bash("slow", on=root)

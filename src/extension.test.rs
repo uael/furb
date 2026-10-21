@@ -198,6 +198,38 @@ fn rung(id: &str, chain: &str, word: &str) -> (String, String, String) {
 }
 
 #[test]
+fn a_chain_that_a_word_makes_takes_each_extension_before_what_the_word_says_on_it() {
+  let at = place("word");
+  fs::write(at.join("note.txt"), "noted\n").unwrap();
+  let word = "prompt(None, 'task', on=chain('w'))\nprompt(None, 'more', on=chain('s', 'chain1'))";
+  let shown = |engine: &mut Engine, chain: &str| {
+    let on = verbs::Transcript { on: Some(chain.to_owned()) };
+    let facts = engine.transcript(on).unwrap();
+    facts
+      .iter()
+      .map(|one| (one.kind().to_owned(), one.about().to_owned(), one.by().to_owned()))
+      .collect::<Vec<_>>()
+  };
+  let first = {
+    let mut engine = lived(&at, vec![note(NOTE)]);
+    let word = Some(word.to_owned());
+    engine.rung(verbs::Rung { word, on: Some("chain1".to_owned()), ..Default::default() }).unwrap();
+    ["chain2", "chain3"].map(|chain| shown(&mut engine, chain))
+  };
+  for facts in &first {
+    let at =
+      |kind: &str, by: &str| facts.iter().position(|one| one.0 == kind && one.2.starts_with(by));
+    assert!(at("rung", "extensions").unwrap() < at("prompt", "rung").unwrap(), "{facts:?}");
+  }
+  let mut engine = lived(&at, vec![note(NOTE)]);
+  let again = ["chain2", "chain3"].map(|chain| shown(&mut engine, chain));
+  let places = |all: &[Vec<(String, String, String)>; 2]| {
+    all.clone().map(|facts| facts.into_iter().map(|one| (one.0, one.1)).collect::<Vec<_>>())
+  };
+  assert_eq!(places(&again), places(&first), "a later life plays the same rungs at the same place");
+}
+
+#[test]
 fn a_life_enables_at_its_tip_each_extension_it_is_given_and_plays_its_word_then_its_life_word() {
   let at = place("tip");
   fs::write(at.join("note.txt"), "noted\n").unwrap();

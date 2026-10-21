@@ -91,7 +91,7 @@ async def test_its_own_ear_is_born_after_the_ears_of_the_engine_heard_it() -> No
 
 
 async def test_it_is_then_put_to_the_ears_of_the_outside_in_turn_until_one_takes_it() -> None:
-  """It is then put to the ears of the outside in turn, until one takes it, and no ear of the outside after that one hears it."""
+  """It is then put to the ears of the outside in turn, until one takes it, and no ear of the outside after that one hears it, a chain apart, which every ear of the outside hears at its birth after its own ear took it, so an ear of the outside plays on a chain before the call that made it returns."""
   sand = Sand()
   log: list[tuple] = []
   after: list[tuple] = []
@@ -100,6 +100,8 @@ async def test_it_is_then_put_to_the_ears_of_the_outside_in_turn_until_one_takes
   assert engine.peek(one, ...) is ... and [a for a in after if a[0] == "note"] == []
   two = engine.act("seen", root, None)
   assert [a for a in after if a[0] == "seen"] == [engine.get(two)]
+  made = engine.chain("w")
+  assert ("started", made, made) in log and [a for a in after if a[1] == made][:1] == [engine.get(made)]
 
 
 async def test_to_take_an_act_is_to_say_a_started_or_a_done_about_it() -> None:
