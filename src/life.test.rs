@@ -38,7 +38,8 @@ fn opening(at: &Path, keeps: bool) -> Opening {
 
 /// The names of the extensions that a life runs.
 fn names(engine: &mut Engine) -> Vec<String> {
-  let root = engine.transcript(verbs::Transcript { on: Some("chain1".to_owned()) }).unwrap();
+  let root =
+    engine.transcript(verbs::Transcript { on: Some("chain1".to_owned()), of: None }).unwrap();
   enabled(&root).into_iter().map(|one| one.name).collect()
 }
 

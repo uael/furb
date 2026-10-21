@@ -16,7 +16,7 @@ use serde_json::value::RawValue;
 use monty_types::unstable::{MontyGraph, MontyNode};
 
 use crate::{
-  ear::{Ear, ear, hear},
+  ear::{Ear, hear, hearing},
   value::{Fault, Object, ObjectRef},
   wire::{built, whole},
 };
@@ -61,7 +61,7 @@ pub fn kept(path: impl AsRef<Path>) -> Result<Vec<Object>, Fault> {
 /// The record that a store holds, and the ear that keeps in the store what the journal says to keep.
 pub fn keeping(mut store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>), Fault> {
   let entries = store.entries()?;
-  let kept = ear(move |mut co| async move {
+  let kept = hearing(&["keep"], move |mut co| async move {
     loop {
       let a = hear(&mut co).await;
       if a.kind() != "keep" {

@@ -71,10 +71,10 @@ export declare class Engine {
   say(kind: string, about: string, words?: unknown[]): [string, string, string, ...unknown[]]
   /** The way to make a question: it takes a name when it is made, it is put to the ears, its ear, when it has one, is brought to life under that name and given the name, and the name is given back, which is the act to whoever holds it. */
   act(kind: string, on: string, ear: unknown, words?: unknown[]): Act & PromiseLike<unknown>
-  /** The other way to speak: a generator is brought to life under a name, and from then it hears every fact that is said and says its own. */
+  /** The other way to speak: a generator is brought to life under a name, and from then it hears every fact that it waits for and says its own. */
   drive(g: Generator<unknown, unknown, unknown> | NativeEar, name: string): void
   /** transcript gives the facts on a chain, each of which the life adds when it is said, so a chain reads at once what it said itself. */
-  transcript(options?: { on?: string } | null): Array<[string, string, string, ...unknown[]]>
+  transcript(options?: { on?: string; of?: string } | null): Array<[string, string, string, ...unknown[]]>
   /** The way to put a question that is answered now: it makes the act, and gives back what the act came to. */
   ask(kind: string, on: string, words?: unknown[]): unknown
   /** span(lo, hi) is the show of the lines lo through hi, where a line under one is counted back from the end, so that span(1, 20) is the first twenty lines and span(-20, -1) is the last twenty. */

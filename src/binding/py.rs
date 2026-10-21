@@ -21,8 +21,8 @@ use pyo3::{
   prelude::*,
   sync::PyOnceLock,
   types::{
-    PyBool, PyCFunction, PyDict, PyFloat, PyFunction, PyInt, PyList, PyModule, PyString, PyTuple,
-    PyType,
+    PyBool, PyCFunction, PyDict, PyFloat, PyFrozenSet, PyFunction, PyInt, PyList, PyModule, PySet,
+    PyString, PyTuple, PyType,
   },
 };
 
@@ -455,7 +455,8 @@ impl NativeEar {
     loop {
       match ear.resume(heard, &mut Context::from_waker(&waker)) {
         Step::Call(call) => heard = Heard::Answer(answer_of(py, &call)),
-        Step::Wait => return Ok(py.None()),
+        Step::Wait(None) => return Ok(py.None()),
+        Step::Wait(Some(wait)) => return Ok(to_python(py, wait.as_ref())?.unbind()),
         Step::Say(saying) => return Ok(to_python(py, saying.0.as_ref())?.unbind()),
         Step::Over => {
           hearing.ear = None;
@@ -886,6 +887,8 @@ fn to_python<'py>(py: Python<'py>, said: ObjectRef<'_>) -> PyResult<Bound<'py, P
     "ellipsis" => Ok(py.Ellipsis().into_bound(py)),
     "list" => Ok(PyList::new(py, each(said.items().unwrap_or_default())?)?.into_any()),
     "tuple" => Ok(PyTuple::new(py, each(said.items().unwrap_or_default())?)?.into_any()),
+    "set" => Ok(PySet::new(py, each(said.items().unwrap_or_default())?)?.into_any()),
+    "frozenset" => Ok(PyFrozenSet::new(py, each(said.items().unwrap_or_default())?)?.into_any()),
     "dict" => {
       let pairs = said.pairs().unwrap_or_default();
       let at = |name: &str| field(&said, name);
@@ -1087,6 +1090,12 @@ fn of_python(value: &Bound<'_, PyAny>) -> PyResult<Object> {
   }
   if value.is_instance_of::<PyTuple>() {
     return Ok(Object::tuple(each(value)?));
+  }
+  if value.is_instance_of::<PySet>() {
+    return Ok(Object::set(each(value)?));
+  }
+  if value.is_instance_of::<PyFrozenSet>() {
+    return Ok(Object::frozenset(each(value)?));
   }
   if let Ok(held) = value.cast::<PyDict>() {
     let mut pairs = Vec::new();

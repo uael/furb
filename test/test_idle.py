@@ -2,20 +2,17 @@
 
 import pytest
 
-from conftest import born, said
+from conftest import born
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
 
-async def test_idle_hears_every_fact_and_says_nothing_of_its_own() -> None:
-  """idle hears every fact and says nothing of its own, which is the ear of a wait and the ear of the operator."""
-  hears = engine.idle("wait://operator.1.1")
-  assert next(hears) is None
-  assert hears.send(("tell", "chain://one", OPERATOR, [])) is None
-  assert hears.send(("done", "rung://operator.2.1", OPERATOR, 1)) is None
-  _, log, root = born()
-  act = engine.wait(0, on=root)
-  assert (await act) is None
-  assert [one for one in said(log, "tell") if one[1] == act] == []
+async def test_idle_waits_for_the_facts_about_its_own_name_and_says_nothing_of_its_own() -> None:
+  """idle waits for the facts about its own name and says nothing of its own, which is the ear of a reply and the ear of the operator."""
+  hears = engine.idle("reply1")
+  assert next(hears) == {"reply1"}
+  assert hears.send(("tell", "chain1", OPERATOR, [])) == {"reply1"}
+  assert hears.send(("done", "reply1", OPERATOR, 1)) == {"reply1"}
+  born()
   with pytest.raises(Refused, match="operator hears"):
     engine.drive(engine.idle(OPERATOR), OPERATOR)

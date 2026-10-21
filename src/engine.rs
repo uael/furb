@@ -84,7 +84,8 @@ const KEYED: &str = "next((b[1] for f, k, w in [(transcript(__on), __key, __kind
 /// It gives the park too: a generator that stands in front of an ear of the outside and holds back from it each act
 /// that is parked when the act is put to it, and the parked names, which the host sets at boot and clears at a retry.
 /// When a retried act is not done and no ear took it in this life, the park puts it to its ear at the next fact that
-/// the ear hears, in the order of the ears, before that fact.
+/// the ear hears, in the order of the ears, before that fact. The park waits for what its ear waits for, and for every
+/// fact while it holds an act back.
 ///
 /// The module of the engine holds the names python gives a module before the engine runs, so a word reads them in a
 /// chain as it reads them in python, and as the gate reads them. No loader made the module here, so it has no spec
@@ -101,7 +102,7 @@ __parked = set()
 
 
 def __parking(ear):
-  held, heard = [], None
+  held, heard, wait = [], None, None
   try:
     while True:
       if heard is not None and heard[1] in __parked and heard is __engine["get"](heard[1]):
@@ -112,12 +113,14 @@ def __parking(ear):
           at = __engine["transcript"](__engine["scope"](a[1]))
           if not __engine["over"](a[1]) and ("started", a[1]) not in [x[:2] for x in at if x[2] != "journal"]:
             said = ear.send(a)
-            while said is not None:
+            while isinstance(said, tuple):
               said = ear.send((yield said))
+            wait = said
         said = ear.send(heard)
-        while said is not None:
+        while isinstance(said, tuple):
           said = ear.send((yield said))
-      heard = yield
+        wait = said
+      heard = yield (None if held else wait)
   except StopIteration:
     return
 
@@ -322,6 +325,8 @@ struct Outside {
   kept: HashSet<MontyUuid>,
   /// Each ear of the host, by the id of its object in the sandbox: its name and where it stands.
   standing: HashMap<MontyUuid, (String, At)>,
+  /// What each ear of the host waits for since its last step, by the id of its object in the sandbox.
+  waits: HashMap<MontyUuid, Object>,
   /// How many ids the host gave, which names the next.
   given: u128,
 }
@@ -339,6 +344,7 @@ impl Default for Outside {
       numbers: HashMap::new(),
       kept: HashSet::new(),
       standing: HashMap::new(),
+      waits: HashMap::new(),
       given: 0,
     }
   }
@@ -611,7 +617,9 @@ impl Outside {
         ));
       }
       (At::Unborn, None) => Heard::Born,
-      (At::Waiting, None) => return Answer::Value(Object::none()),
+      (At::Waiting, None) => {
+        return Answer::Value(self.waits.get(&on).cloned().unwrap_or_else(Object::none));
+      }
       (At::Waiting, Some(a)) => match self.outward(sand, a).map(|a| Fact::of(a.as_ref())) {
         Ok(Some(fact)) => Heard::Fact(fact),
         Ok(None) => return Answer::Abort(Fault::refused("an ear hears a fact or nothing")),
@@ -633,7 +641,11 @@ impl Outside {
             self.inward(sand, &saying.0).map_or_else(Answer::Abort, Answer::Value),
           );
         }
-        Step::Wait => break (At::Waiting, Answer::Value(Object::none())),
+        Step::Wait(wait) => {
+          let wait = wait.unwrap_or_else(Object::none);
+          self.waits.insert(on, wait.clone());
+          break (At::Waiting, Answer::Value(wait));
+        }
         Step::Over => break (At::Over, Answer::Fault(Fault::new("StopIteration", vec![]))),
         Step::Raised(fault) => break (At::Over, self.raising(sand, fault)),
       }

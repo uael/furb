@@ -10,7 +10,7 @@ use futures::{Stream, StreamExt, stream};
 use unsync::oneshot;
 
 use crate::{
-  ear::{Co, Ear, Next, ear, say},
+  ear::{Co, Ear, Next, hearing, say},
   fact::Fact,
   value::{Fault, Object},
 };
@@ -22,7 +22,7 @@ use crate::{
 /// and says again in a later life, so a wait that a wake starts again ends when it would have ended then. A wait
 /// that a control ended first ends at once, and says nothing more.
 pub fn time() -> Box<dyn Ear> {
-  ear(|mut co: Co<String>| async move {
+  hearing(&["clock", "chance", "wait", "due"], |mut co: Co<String>| async move {
     let mut due: HashMap<String, f64> = HashMap::new();
     // The stop of each wait that runs, which ends it when it drops.
     let mut stops: HashMap<String, oneshot::Sender<()>> = HashMap::new();

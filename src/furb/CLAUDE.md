@@ -37,7 +37,8 @@ meanings. The entry of such a name here gives only its form in the engine.
   nothing when the word may run.
 - boot: the life, given the record and the generators of the outside, which binds say, act, drive, get, peek and
   transcript, and gives the root.
-- bus: what boot binds for every verb to speak through: say for a fact, act for an act, and drive for a generator.
+- bus: what boot binds for every verb to speak through: say for a fact, act for an act, and drive for a generator;
+  it keeps what each ear waits for, and gives each fact to the ears that wait for it.
 - fact: a tuple of its kind, the act it is about, who said it, and its words.
 - site: who is speaking, which every fact is said from: the generator while it speaks, the run while it is
   stepped, the operator otherwise.
@@ -46,9 +47,13 @@ meanings. The entry of such a name here gives only its form in the engine.
 - act: a question, which is over at its done.
 - life: one run of the engine, which boot opens and a second boot ends; every act, name and outcome is of it.
 - ear: a generator that hears the facts of the life and speaks by yielding one; the ear of an act is given the name
-  of the act, and a verb makes it with controlled, so the controls over the act reach it. An ear of the engine hears
-  every fact and every act; an ear of the outside, the World, the Kernel and every other generator that boot is
-  given, hears every fact, and an act only while no ear before it took it, but a chain, which it hears at its birth.
+  of the act, and a verb makes it with controlled, so the controls over the act reach it. An ear hears each fact that
+  it waits for, and every control; an ear of the engine hears each act that it waits for, and an ear of the outside,
+  the World, the Kernel and every other generator that boot is given, hears an act only while no ear before it took
+  it, but a chain, which it hears at its birth.
+- wait: what an ear says it waits for when it yields no saying: a set of names, so it hears each fact that names one
+  of them by its kind, its act, or the kind, the maker or the chain of that act, or the chain of the maker of that
+  act; or nothing, so it hears every fact.
 - done: the fact that settles the act it names with what the act came to.
 - outcome: what an act came to, held under its name once its done lands: the value or the exception.
 - id: the name of an act, as a string: its kind and its number among the acts of that kind, as bash1 or read3,
@@ -69,7 +74,8 @@ meanings. The entry of such a name here gives only its form in the engine.
   makes the filter of the file.
 - transcript: the facts on a chain, in the order of the log, which boot adds as they are said; it is the whole state
   of the chain, and its module, its program, its working directory and its turns are read off it. The view gives a
-  new list of them at each call.
+  new list of them at each call, and the view of a kind or of a speaker gives the facts on the chain of that kind
+  or that it said, which boot keeps as they are said.
 - module: the fact that carries the globals of a chain, which the chain says at its birth and at each replay.
 - prefix: the fact that carries what a chain with a source holds of the transcript of its origin, which the chain
   says at its birth, before its open; the transcript of the chain holds those facts where the prefix stands.

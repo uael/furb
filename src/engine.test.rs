@@ -216,7 +216,7 @@ fn the_world_writes_the_stderr_of_a_merged_command_into_its_stdout() {
   let id = act.id().to_owned();
   let exit: Exit = block_on(act).unwrap();
   assert_eq!((exit.stdout.content.as_str(), exit.stderr.content.as_str()), ("abc", ""));
-  let facts = lived.engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
+  let facts = lived.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
   let outs: Vec<(String, String)> = facts
     .iter()
     .filter(|one| one.kind() == "out" && one.about() == id)
@@ -356,7 +356,7 @@ fn the_world_ends_a_command_at_a_cancel_of_its_prompt_and_never_at_a_close_of_it
   let exit =
     Exit::of(lived.settled("bash2").unwrap().as_ref()).expect("the command came to its exit");
   assert_eq!((exit.code, exit.stdout.content.as_str()), (Some(0), "late\n"));
-  let dones = lived.engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
+  let dones = lived.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
   let dones = dones.iter().filter(|one| one.kind() == "done" && one.about() == "bash1").count();
   assert_eq!(dones, 1, "the World said no second done of the command a control ended");
 }
@@ -368,7 +368,7 @@ fn a_wait_is_done_when_its_time_is_up_and_it_says_when_it_is_due() {
   let act = lived.engine.wait(&[], verbs::Wait { seconds: Some(0.1), on: on(&root) }).unwrap();
   let id = act.id().to_owned();
   block_on(act).unwrap();
-  let facts = lived.engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
+  let facts = lived.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
   let kinds: Vec<(String, String)> = facts
     .iter()
     .filter(|one| one.about() == id)
@@ -394,7 +394,7 @@ fn a_wait_for_an_act_is_done_with_its_name_when_it_ends_first_and_the_time_ear_s
   );
   let later = lived.engine.wait(&[], verbs::Wait { seconds: Some(0.8), on: on(&root) }).unwrap();
   block_on(later).unwrap();
-  let facts = lived.engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
+  let facts = lived.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
   let dones: Vec<String> = facts
     .iter()
     .filter(|one| one.kind() == "done" && one.about() == id)
@@ -414,7 +414,7 @@ fn a_wait_that_a_wake_starts_again_in_a_later_life_ends_when_it_was_due() {
   };
   let mut second = Lived::new("due", &[], false).unwrap();
   assert!(second.engine.raised().is_none(), "{:?}", second.engine.raised());
-  let due = second.engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
+  let due = second.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
   let due = due
     .iter()
     .find(|one| one.kind() == "due")
@@ -422,7 +422,7 @@ fn a_wait_that_a_wake_starts_again_in_a_later_life_ends_when_it_was_due() {
   assert!(due.is_some(), "the record said the due again");
   second.engine.wake(&root).unwrap();
   assert_eq!(second.settled("wait1").unwrap().as_ref().type_name(), "NoneType");
-  let facts = second.engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
+  let facts = second.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
   assert_eq!(
     facts.iter().filter(|one| one.kind() == "due").count(),
     1,
@@ -568,7 +568,7 @@ fn a_wait_that_a_wake_starts_again_says_nothing_after_a_cancel() {
   // A later wait outlives the deadline of the first.
   let later = second.engine.wait(&[], verbs::Wait { seconds: Some(0.4), on: on(&root) }).unwrap();
   block_on(later).unwrap();
-  let facts = second.engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
+  let facts = second.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
   let dones = facts.iter().filter(|one| one.kind() == "done" && one.about() == "wait1");
   assert_eq!(dones.map(|one| one.by().to_owned()).collect::<Vec<_>>(), ["wait1"]);
 }
@@ -601,7 +601,7 @@ fn a_second_life_on_the_record_the_store_kept_makes_the_same_acts_again() {
   );
   assert_eq!(second.read.borrow().len(), 0, "a later life asks no model for what the record holds");
   assert_eq!(second.settled(&id).unwrap().as_ref().as_int(), Some(2));
-  let turn = second.engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
+  let turn = second.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
   let turn = turn.iter().find(|one| one.kind() == "done" && one.about() == "reply1");
   let turn = turn.and_then(|one| one.word(0)).map(|one| one.type_name().to_owned());
   assert_eq!(
@@ -653,7 +653,7 @@ fn an_act_that_lives_end_while_it_runs_again_and_again_is_parked_until_a_retry()
     root
   };
   let started = |lived: &mut Lived| {
-    let facts = lived.engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
+    let facts = lived.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
     let ours =
       |one: &&Fact| one.kind() == "started" && one.about() == "bash1" && one.by() != "journal";
     facts.iter().filter(ours).count()
@@ -723,7 +723,7 @@ fn a_key_of_the_client_makes_its_act_once_across_a_crash_and_a_retry() {
   drop(second);
   let mut third = Lived::new("keyed", &[], false).unwrap();
   assert_eq!(third.engine.keyed("k3", "rung", vec![], word()).unwrap(), made);
-  let facts = third.engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
+  let facts = third.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
   let rungs = facts.iter().filter(|one| one.kind() == "rung" && one.by() == "operator").count();
   assert_eq!(rungs, 3);
 }
@@ -771,7 +771,7 @@ fn the_work_of_an_ear_tells_a_verb_in_its_turn_and_under_its_name() {
   let id = act.id().to_owned();
   let _ = gate.send(());
   block_on(act).unwrap();
-  let facts = engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
+  let facts = engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
   let said: Vec<(String, String)> = facts
     .iter()
     .filter(|one| one.by() == "pauser")
@@ -827,7 +827,7 @@ fn what_the_work_of_an_ear_came_to_lands_after_the_run_that_began_it() {
   let word = Some("w = wait(9)".to_owned());
   engine.rung(verbs::Rung { word, on: on(&root), ..Default::default() }).unwrap();
   block_on(Act::<Object>::of(&mut engine, "wait1")).unwrap();
-  let facts = engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
+  let facts = engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
   let at = |kind: &str, about: &str| {
     facts.iter().position(|one| one.kind() == kind && one.about() == about).expect("the fact")
   };
@@ -949,7 +949,7 @@ fn the_work_of_an_ear_takes_what_its_verb_came_to_when_the_life_drives_it_and_ne
   let root = engine.root().to_owned();
   let act = engine.wait(&[], verbs::Wait { seconds: Some(1.0), on: on(&root) }).unwrap();
   block_on(act).unwrap();
-  let facts = engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
+  let facts = engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
   let at = |kind: &str, about: &str| {
     facts.iter().position(|one| one.kind() == kind && one.about() == about).expect("the fact")
   };
@@ -1006,7 +1006,7 @@ fn an_ear_of_the_host_hears_on_after_a_word_that_failed_where_it_reached_that_ea
   let act = lived.engine.prompt(Object::string("int"), with).unwrap();
   let id = act.id().to_owned();
   assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(8));
-  let facts = lived.engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
+  let facts = lived.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
   let raised = facts.iter().find(|one| one.kind() == "done" && one.about() == "rung1");
   let raised = raised.and_then(|one| one.word(0)).and_then(|one| Fault::of(one));
   assert_eq!(raised.map(|one| one.name).as_deref(), Some("NotImplementedError"));

@@ -3,7 +3,7 @@
 use std::{fs, path::PathBuf};
 
 use crate::{
-  ear::{Ear, ear, hear, say},
+  ear::{Ear, hear, hearing, say},
   fact::Fact,
   value::{Fault, Text},
   world::{files::read, here},
@@ -33,7 +33,7 @@ struct Skill {
 /// nearest first, then in `skills` of the config directory of the user, and then the skill `extending` that the
 /// extension carries.
 pub fn skills(config: PathBuf) -> Box<dyn Ear> {
-  ear(move |mut co| async move {
+  hearing(&["read"], move |mut co| async move {
     loop {
       let a = hear(&mut co).await;
       if a.kind() != "read" || !a.question() {
