@@ -43,7 +43,7 @@ meanings. The entry of such a name here gives only its form in the engine.
 - site: who is speaking, which every fact is said from: the generator while it speaks, the run while it is
   stepped, the operator otherwise.
 - kind: the first slot of a fact; for a question, the verb that made it.
-- question: a fact that is asked, whose first word is the chain it is on.
+- question: a fact that is asked, whose first word is the chain or the thread it is on.
 - act: a question, which is over at its done.
 - life: one run of the engine, which boot opens and a second boot ends; every act, name and outcome is of it.
 - ear: a generator that hears the facts of the life and speaks by yielding one; the ear of an act is given the name
@@ -63,7 +63,7 @@ meanings. The entry of such a name here gives only its form in the engine.
 - lineage: the makers of an act, one under the other, which the life holds and under walks; chains form a tree by
   maker, from the operator.
 - under: what an act is to its ancestors.
-- scope: the chain an act is on, and itself for a chain.
+- scope: the chain an act is on, or the scope of the thread it is on, and itself for a chain.
 - root: chain1, which boot opens.
 - chain: an act, chainN, that holds the facts on it, with a module and a working directory of its own;
   with a source it holds, besides, the acts it inherited.
@@ -96,7 +96,10 @@ meanings. The entry of such a name here gives only its form in the engine.
 - shape: the python type of a response, which a prompt carries by its name.
 - response: what a prompt completes with.
 - acknowledgment: the prompt of nothing a chain makes when an act a rung made is done, or the chain of a prompt that
-  a rung made pauses, and no reply has shown it.
+  a rung made pauses, and no reply has shown it, on the thread that made that rung, so it opens that thread again.
+- thread: a prompt and the prompts on it, in order, each of which names the one before it as its on; a prompt of
+  None on a thread that is open is a message of it, and any other prompt on it is answered in steps, and opens it
+  again when it closed.
 - rung: the run of one word on a chain, and the verb that makes it: with a word its caller wrote, or with no word,
   for a turn of a model.
 - reply: the act a chain makes, under the site of a rung, to ask the model of that rung for its word, which the

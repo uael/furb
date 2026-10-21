@@ -1,5 +1,7 @@
 """covers, whether a control is over an act."""
 
+from asyncio import CancelledError
+
 from conftest import born, said, settle, stalled
 from furb import engine
 from furb.engine import OPERATOR
@@ -29,3 +31,21 @@ async def test_a_rung_that_a_word_makes_is_an_act_of_that_word() -> None:
   made = [a[1] for a in said(log, "rung") if a[4] in ("k = 1", "j = 2")]
   assert [engine.peek(one) for one in made] == [None, None]
   assert (engine.module(other)["k"], engine.module(root)["j"]) == (1, 2)
+
+
+async def test_a_control_over_a_thread_is_over_each_prompt_on_it_too() -> None:
+  """A control over a thread is over each prompt on it too, and over what a control over that prompt is over."""
+  _, log, root = born("close(1)", "await bash('slow')", auto=False)
+  first = engine.prompt(int, "count", on=root)
+  assert await first == 1
+  more = engine.prompt(None, "go on", on=first)
+  await settle()
+  step = next(a[1] for a in said(log, "rung") if a[2] == more)
+  command = said(log, "bash")[0][1]
+  other = engine.prompt(str, "aside", to=OPERATOR, on=root)
+  shut = ("close", first, OPERATOR, 0)
+  assert [engine.covers(shut, one) for one in (first, more, step, command, other)] == [True, True, True, False, False]
+  engine.cancel(first)
+  await settle()
+  assert [type(engine.peek(one)) for one in (more, step, command)] == [CancelledError] * 3
+  assert engine.peek(other, ...) is ...

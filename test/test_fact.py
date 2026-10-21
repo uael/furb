@@ -92,13 +92,16 @@ async def test_a_model_calls_a_verb_from_a_rung_and_the_operator_calls_the_same_
   assert [(one[4], one[2]) for one in said(log, "bash")] == [("from a rung", step), ("from the operator", OPERATOR)]
 
 
-async def test_an_act_is_on_the_chain_that_the_verb_names() -> None:
-  """An act is on the chain that the verb names."""
+async def test_an_act_is_on_the_chain_or_the_thread_that_the_verb_names() -> None:
+  """An act is on the chain or the thread that the verb names, and a thread is a prompt."""
   sand, log, root = born()
   two = await chained("two")
   sand.script[root] = [f"x = bash('elsewhere', on={two!r})\nclose(1)"]
-  assert await engine.prompt(int, "run it", on=root) == 1
-  assert [one[3] for one in said(log, "bash")] == [two]
+  act = engine.prompt(int, "run it", on=root)
+  assert await act == 1
+  more = engine.prompt(None, "note", to=OPERATOR, on=act)
+  await settle()
+  assert [one[3] for one in said(log, "bash")] == [two] and engine.get(more)[3] == act
 
 
 async def test_an_act_is_on_a_chain_and_its_facts_are_on_its_scope() -> None:

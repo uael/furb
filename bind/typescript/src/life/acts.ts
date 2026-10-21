@@ -12,7 +12,10 @@ export interface LiveAct {
   id: string;
   kind: string;
   by: string;
+  /** The chain that the act stands on, which is the chain of its thread for a prompt on a thread. */
   on: string;
+  /** The thread that a prompt on a thread is on: the prompt that its on names. */
+  thread?: string;
   words: unknown[];
   done: boolean;
   value: unknown;
