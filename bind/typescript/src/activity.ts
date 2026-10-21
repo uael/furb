@@ -1,24 +1,13 @@
 import { type Call, call, isFault } from "./ears.js";
+import { type LiveAct, WORK } from "./life/acts.js";
 import { bound, display, type Fact, isQuestion } from "./types.js";
 
-/** The kinds of act that are work which ends later, and the table counts each one that is done. */
-export const WORK = ["prompt", "rung", "bash", "wait"];
-
-export interface RunState {
-  status: "running" | "failed" | "done";
-  reason: string;
-}
-export interface LiveAct {
-  id: string;
-  kind: string;
-  by: string;
-  on: string;
-  words: unknown[];
-  done: boolean;
-  value: unknown;
-  /** Whether a pause stands over the act while it lives. */
-  paused: boolean;
-  run?: RunState;
+/** One answer of a model on a chain: its place in time, the actor whose reply it answered, and its usage, which is
+ * the tokens that it read and wrote, of which the tokens that it read again and kept to read again, and its dollars. */
+export interface Answered {
+  at: number;
+  actor: string;
+  usage: [number, number, number, number, number];
 }
 /** Whether a pause or a wake covers an act, which the engine answers the ear that yields the question. */
 function* covers(control: Fact, id: string): Generator<Call, boolean, unknown> {
@@ -47,6 +36,13 @@ export class Activity {
   readonly acts = new Map<string, LiveAct>();
   completed = 0;
   cost = 0;
+  /** The answers of the models on each chain, in order, by the chain that the reply stands on, so that a host reads
+   * the dollars of a chain and the share of the window that its last answer read. */
+  readonly answers = new Map<string, Answered[]>();
+  /** How many facts the activity has heard, which is the place in time of the fact that it hears. */
+  private clock = 0;
+  /** The chain and the actor of each reply that is not done. */
+  private readonly replies = new Map<string, [string, string]>();
   /** How many changes of a row the table has made, and the count at the last change of each row, so that a reader
    * takes only the rows that changed since it last read. */
   private changes = 0;
@@ -80,9 +76,11 @@ export class Activity {
 
   *hear(fact: Fact): Generator<Call, void, unknown> {
     const [kind, id, by] = fact;
+    const at = ++this.clock;
     const question = isQuestion(kind, id);
     if (question) this.scopes.set(id, kind === "chain" ? id : String(fact[3]));
     if (question && kind === "run") this.runs.set(id, String(fact[4]));
+    if (question && kind === "reply") this.replies.set(id, [String(fact[3]), String(fact[4])]);
     if (question && !STEPS.has(kind)) {
       const act: LiveAct = {
         id,
@@ -93,6 +91,7 @@ export class Activity {
         done: false,
         value: null,
         paused: yield* this.pausedAtBirth(id),
+        began: at,
         ...(kind === "rung" ? { run: { status: "running" as const, reason: "" } } : {}),
       };
       if (kind === "bash")
@@ -119,8 +118,16 @@ export class Activity {
           this.mark(row);
         }
     } else if (kind === "done") {
-      if (isQuestion("reply", id) && Array.isArray(fact[3]) && Array.isArray(fact[3][2]))
-        this.cost += Number(fact[3][2][4] ?? 0);
+      const reply = this.replies.get(id);
+      this.replies.delete(id);
+      if (reply && Array.isArray(fact[3]) && Array.isArray(fact[3][2])) {
+        const usage = fact[3][2].map(Number) as Answered["usage"];
+        this.cost += usage[4] ?? 0;
+        const [chain, actor] = reply;
+        const answers = this.answers.get(chain) ?? [];
+        answers.push({ at, actor, usage });
+        this.answers.set(chain, answers);
+      }
       const rung = this.runs.get(id);
       if (rung !== undefined) {
         this.ran.set(rung, fact[3]);
@@ -130,6 +137,7 @@ export class Activity {
       if (act) {
         if (!act.done && WORK.includes(act.kind)) this.completed++;
         act.done = true;
+        act.ended ??= at;
         act.value = fact[3];
         this.mark(act);
         this.updateRun(act);
