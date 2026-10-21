@@ -10,10 +10,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{Value, value::RawValue};
 
+use monty_types::unstable::{MontyGraph, MontyNode};
+
 use crate::{
   ear::{Ear, ear, hear},
   value::{Fault, Object},
-  wire::{decoded, inward, record},
+  wire::{built, record, whole},
 };
 
 /// The record at a path, read under its lease, and the ear that keeps on it what the journal says to keep.
@@ -81,7 +83,7 @@ fn read(path: &Path, repair: bool) -> Result<Vec<Object>, Fault> {
   let mut entries = Vec::new();
   let mut start = 0;
   while start < data.len() {
-    let end = data[start..].iter().position(|one| *one == b'\n').map(|at| start + at);
+    let end = memchr::memchr(b'\n', &data[start..]).map(|at| start + at);
     let line = &data[start..end.unwrap_or(data.len())];
     let next = end.map_or(data.len(), |at| at + 1);
     let text = std::str::from_utf8(line).map_err(|_| invalid(start))?;
@@ -105,10 +107,10 @@ fn read(path: &Path, repair: bool) -> Result<Vec<Object>, Fault> {
     if held.is_empty() || held.len() > 2 || !held[1..].iter().all(|one| timed(one)) {
       return Err(invalid(start));
     }
-    let whole = format!("[{}]", held[0].get());
-    let raw = serde_json::from_str::<&RawValue>(&whole).map_err(|_| invalid(start))?;
-    let entry =
-      inward(&decoded(raw, 0).map_err(|_| invalid(start))?).map_err(|_| invalid(start))?;
+    let mut graph = MontyGraph::new();
+    let fact = built(&mut graph, held[0], 1).map_err(|_| invalid(start))?;
+    let root = graph.push(MontyNode::List(vec![fact]));
+    let entry = whole(graph, root).map_err(|_| invalid(start))?;
     let fact = entry.as_ref().items().and_then(|held| held.first().and_then(|one| one.items()));
     let holds = entry.as_ref().items().is_some_and(|held| held.len() == 1);
     if !holds || !fact.is_some_and(|fact| fact.len() >= 3 && fact[0].as_str().is_some()) {
