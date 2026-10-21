@@ -32,7 +32,7 @@ async def test_the_way_to_say_a_fact_from_what_is_no_ear() -> None:
   assert made == ("tell", "chain1", OPERATOR, ["#chain1 noted"])
   assert said(log, "tell")[-1] == made
   assert await engine.rung("cd('sub')", on=root) is None
-  assert said(log, "tell")[-1] == ("tell", "rung1", "rung1", ["#cd1\ncd1_path = '/w/sub'"])
+  assert said(log, "tell")[-1] == ("tell", "cd1", "rung1", ["#cd1\ncd1_path = '/w/sub'"])
   assert (
     world_says("tell", root, ["#chain1 later"]) == said(log, "tell")[-1] == ("tell", root, WORLD, ["#chain1 later"])
   )
