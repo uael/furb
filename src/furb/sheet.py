@@ -32,7 +32,10 @@ two names a chain binds of its own come next, with the types the contract gives 
 stands in a try of its own, since a rung that raised keeps what it bound before the raise and the word after it
 runs all the same: ty reads the next word through the except, with every name the words before it bound before
 they raised, so a word that raises at its top level hides no name a later word binds, and a rung that never ends
-leaves the word reachable the same way. A call opens each try, since ty reads an except that no statement before
+leaves the word reachable the same way. But ty reads a name after a try through its except too, which may come
+before any statement of the try, so it gives a name that a later word binds again each type it was bound to. So
+the gate deletes each name that a statement at the top of a word binds again before the try of that word, and the
+name has the type of its last binding, as python gives it when the words run in order. A call opens each try, since ty reads an except that no statement before
 it can reach, and an empty word still has a body. And the program and the word keep their own lines, so a finding
 is counted back to the line the model wrote.
 

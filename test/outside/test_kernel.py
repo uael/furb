@@ -86,6 +86,38 @@ async def test_a_word_reads_a_name_of_the_engine_as_the_program_bound_it_last(wh
     swapped(furb.python)
 
 
+@pytest.mark.parametrize("which", [furb.python, furb_monty.engine], ids=["python", "monty"])
+async def test_a_word_compares_sets_as_python_does_on_both_engines(which: object) -> None:
+  """A set and a frozenset compare by the subset order, by their members and by the methods of sets, on both engines,
+  as python compares them."""
+  swapped(which)
+  try:
+    root = engine.boot((), world=worlds(STANDS), **kernel())
+    word = (
+      "a, b, c = {1}, {1, 2}, frozenset({1, 2})\n"
+      "close([a < b, b < c, a <= b, b <= c, b > a, c > b, b >= a, c >= b, a == b, b == c, a != b,"
+      " a.issubset(c), c.issuperset(a), a.isdisjoint({3})])"
+    )
+    assert await engine.rung(word, on=root) == [
+      True,
+      False,
+      True,
+      True,
+      True,
+      False,
+      True,
+      True,
+      False,
+      True,
+      True,
+      True,
+      True,
+      True,
+    ]
+  finally:
+    swapped(furb.python)
+
+
 def test_a_word_that_imports_the_engine_by_its_package_is_refused() -> None:
   """The gate gives the checker the engine under a name that the sheet alone says, so a word that imports the
   engine by the name of its package is refused, as it is where the engine runs in the sandbox."""
