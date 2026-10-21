@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
 import type { Act, FileChange, ImageAttachment, LiveAct, Engine as Native, Stream, Turn } from "@furb/engine";
+import type { Measure } from "@furb/engine/life";
 import type { EngineOptions } from "./models.ts";
 import type { ActRow, FollowUp } from "./session.ts";
 
@@ -30,15 +31,6 @@ export interface Snapshot {
    * since the grant that stands on it and the dollars of its ceiling, the share of the window that its last answer
    * read, and how many answers it had. */
   measures: Record<string, Measure>;
-}
-export interface Measure {
-  dollars: number;
-  spent: number;
-  ceiling?: number;
-  share?: number;
-  answers: number;
-  /** The actor of its last answer. */
-  actor?: string;
 }
 
 type Returned<T> = T extends Act ? string : Awaited<T>;

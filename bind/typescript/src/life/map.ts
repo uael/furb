@@ -1,4 +1,4 @@
-import type { ActRow } from "./session.ts";
+import type { LiveAct } from "./acts.js";
 
 /** The place of a chain on the map: its column, which is its depth in the tree of hires, and its row. */
 export interface Place {
@@ -22,8 +22,8 @@ export const you = "operator";
  * each chain, in the order it was born, in the column of its depth, at the first free row at or under the row of the
  * chain that hired it. */
 export function places(
-  chains: readonly ActRow[],
-  parent: (chain: ActRow) => string | undefined,
+  chains: readonly LiveAct[],
+  parent: (chain: LiveAct) => string | undefined,
 ): Map<string, Place> {
   const out = new Map<string, Place>([[you, { column: 0, row: 0 }]]);
   const taken = new Map<number, Set<number>>([[0, new Set([0])]]);
@@ -42,7 +42,7 @@ export function places(
 
 /** The messages of a life at a moment: each open prompt from one chain to another or to the operator, and each
  * answer that closed in the last moments, to the chain of the rung that made its prompt. */
-export function messages(acts: readonly ActRow[], recent: (act: ActRow) => boolean): Message[] {
+export function messages(acts: readonly LiveAct[], recent: (act: LiveAct) => boolean): Message[] {
   const rows = new Map(acts.map((act) => [act.id, act]));
   const out: Message[] = [];
   for (const act of acts) {

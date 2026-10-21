@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { messages, places, route, you } from "../src/map.ts";
-import { outcome, placed, source } from "../src/source.ts";
-import { anchorOf, outline, pullsOf, threads } from "../src/threads.ts";
+import { messages, places, route, you } from "../../src/life/map.ts";
+import { outcome, placed, source } from "../../src/life/source.ts";
+import { anchorOf, outline, pullsOf, threads } from "../../src/life/threads.ts";
 import { act } from "./acts.ts";
 
 const ask = (

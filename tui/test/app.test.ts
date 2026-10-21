@@ -1,16 +1,16 @@
 import { afterAll, expect, test } from "bun:test";
+import type { RowState } from "@furb/engine/life";
 import type { App } from "../src/app.ts";
 import { removeDemoDirectories } from "../src/demo.ts";
-import type { ThreadState } from "../src/loom.ts";
 import { idle } from "./idle.ts";
 import { looming, soon } from "./looming.ts";
 
 afterAll(removeDemoDirectories);
 
 /** The state of each thread of the loom by its label, as the App reads it now. */
-function states(app: App): Record<string, ThreadState> {
+function states(app: App): Record<string, RowState> {
   app.render();
-  return Object.fromEntries(app.loom.threads.map((thread) => [thread.label, thread.state]));
+  return Object.fromEntries(app.loom.rows.map((thread) => [thread.label, thread.state]));
 }
 
 /** The demo of a conductor once its workers stand: one done, one at work, one paused, and a question to the operator. */
@@ -89,9 +89,9 @@ test("space pauses the selected chain and wakes it again, and x cancels its work
   looming(
     async ({ app, screen }) => {
       await settled(app);
-      const docs = app.loom.threads.findIndex((thread) => thread.label === "w docs");
+      const docs = app.loom.rows.findIndex((thread) => thread.label === "w docs");
       await app.move(docs - app.selectedThread);
-      expect(app.selection).toBe(app.loom.threads[docs]?.id ?? "");
+      expect(app.selection).toBe(app.loom.rows[docs]?.id ?? "");
       screen.mockInput.pressKey(" ");
       await soon(() => states(app)["w docs"] === "paused");
       screen.mockInput.pressKey(" ");
@@ -127,7 +127,7 @@ test("Left folds the workers of a conductor into its thread, which counts them b
   looming(
     async ({ app, screen, session, frame }) => {
       await settled(app);
-      const root = app.loom.threads.findIndex((thread) => thread.id === session.engine.root);
+      const root = app.loom.rows.findIndex((thread) => thread.id === session.engine.root);
       await app.move(root - app.selectedThread);
       screen.mockInput.pressArrow("left");
       await soon(() => app.folds.has(session.engine.root));

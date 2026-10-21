@@ -1,6 +1,21 @@
 import { isAbsolute, relative } from "node:path";
 import { display, type FileChange, safeText } from "@furb/engine";
 import {
+  type ActState,
+  asOf,
+  type Cell,
+  type Exit,
+  type Line,
+  type Loom,
+  ladder,
+  momentsOf,
+  owedAt,
+  type Row,
+  type RowState,
+  valueText,
+  weave,
+} from "@furb/engine/life";
+import {
   BoxRenderable,
   type CliRenderer,
   CodeRenderable,
@@ -17,19 +32,8 @@ import { shortenHome } from "./files.ts";
 import { ago, clip, dollars, elapsed } from "./format.ts";
 import { Graph, type Stage } from "./graph.ts";
 import { hints, keyTable } from "./keys.ts";
-import { type ActState, type Line, ladder, valueText } from "./ladder.ts";
-import {
-  asOf,
-  type Cell,
-  type Loom,
-  momentsOf,
-  owedAt,
-  type Thread,
-  type ThreadState,
-  weave,
-} from "./loom.ts";
 import { loadParsers } from "./parsers.ts";
-import { type ActRow, type Exit, type Session, type SessionStatus, statusLabels } from "./session.ts";
+import { type ActRow, type Session, type SessionStatus, statusLabels } from "./session.ts";
 import { theme as c, defaultTheme, frame, setTheme, spin, syntax, type ThemeName } from "./theme.ts";
 import { bold, logo, mix, type Part, plain, styled } from "./ui.ts";
 import type { SessionEntry, Workspace, Workspaces } from "./workspaces.ts";
@@ -69,7 +73,7 @@ export type Focus = "loom" | "thread" | "lens" | "word" | "lives";
 export type Mode = "prompt" | "python" | "command" | "answer" | "grant" | "close" | "door";
 
 /** The mark and the color of each state of a thread. */
-const threadMarks: Record<ThreadState, [string, () => RGBA]> = {
+const rowMarks: Record<RowState, [string, () => RGBA]> = {
   asks: ["◆", () => c.warning],
   failed: ["✗", () => c.danger],
   working: ["◉", () => c.accent],
@@ -129,7 +133,7 @@ export class App {
   /** The threads whose workers the loom folds into them. */
   readonly folds = new Set<string>();
   /** What the loom and the thread show now, as the last render made them. */
-  loom: Loom = { threads: [], owed: [], folded: 0 };
+  loom: Loom = { rows: [], owed: [], folded: 0 };
   lines: Line[] = [];
   help = false;
   /** The row that the list of lives selects. */
@@ -307,7 +311,7 @@ export class App {
     renderer.on("resize", this.render);
     this.tick = setInterval(() => {
       if (
-        this.loom.threads.some((thread) => thread.state === "working") ||
+        this.loom.rows.some((thread) => thread.state === "working") ||
         this.lines.some(running) ||
         (this.variant === "graph" && this.loom.owed.length)
       )
@@ -388,8 +392,8 @@ export class App {
             owed,
           )
         : [];
-    this.selectedThread = Math.min(this.selectedThread, this.loom.threads.length - 1);
-    const selected = this.loom.threads.findIndex((thread) => thread.id === w.selected);
+    this.selectedThread = Math.min(this.selectedThread, this.loom.rows.length - 1);
+    const selected = this.loom.rows.findIndex((thread) => thread.id === w.selected);
     if ((this.focus !== "loom" || !this.placed) && selected >= 0) {
       this.selectedThread = selected;
       this.placed = true;
@@ -431,7 +435,7 @@ export class App {
 
   private renderHeader(): void {
     const w = this.session;
-    const working = this.loom.threads.filter((thread) => thread.state === "working").length;
+    const working = this.loom.rows.filter((thread) => thread.state === "working").length;
     const owed = this.loom.owed.length;
     const moments = momentsOf(w.acts);
     // The header says the state by shape and color alone, and shows a count only where it is not zero.
@@ -455,14 +459,14 @@ export class App {
   }
 
   private renderLoom(cellWidth: number): void {
-    const { threads, folded } = this.loom;
+    const { rows: all, folded } = this.loom;
     const room = Math.max(3, Math.floor((this.renderer.height - 12) * 0.45));
     if (this.selectedThread < this.loomTop) this.loomTop = this.selectedThread;
     if (this.selectedThread >= this.loomTop + room) this.loomTop = this.selectedThread - room + 1;
-    this.loomTop = Math.max(0, Math.min(this.loomTop, threads.length - room));
-    const shown = threads.slice(this.loomTop, this.loomTop + room);
+    this.loomTop = Math.max(0, Math.min(this.loomTop, all.length - room));
+    const shown = all.slice(this.loomTop, this.loomTop + room);
     const cellStart = 4 + this.labelWidth + 1;
-    const span = this.loom.threads[0]?.cells.length ?? 0;
+    const span = this.loom.rows[0]?.cells.length ?? 0;
     const blank = cellWidth - span;
     const ruler: Part[] = [[" ".repeat(cellStart), c.faint]];
     if (folded && span) {
@@ -491,14 +495,14 @@ export class App {
     return this.cursor === undefined ? c.faint : c.secondary;
   }
   /** One thread of the loom: its mark, its label in the tree, its cells, what it waits on, and its measure. */
-  private threadRow(thread: Thread, selected: boolean, cellWidth: number): Part[] {
-    const [mark, color] = threadMarks[thread.state];
+  private threadRow(thread: Row, selected: boolean, cellWidth: number): Part[] {
+    const [mark, color] = rowMarks[thread.state];
     const frozen = this.cursor !== undefined;
     const live = thread.state === "working" && !frozen ? spin() : mark;
     const ground = selected ? (this.focus === "loom" ? c.selected : c.panel) : undefined;
     const tally = thread.folded
       ? ` ${Object.entries(thread.tally)
-          .map(([state, n]) => `${n}${threadMarks[state as ThreadState][0]}`)
+          .map(([state, n]) => `${n}${rowMarks[state as RowState][0]}`)
           .join(" ")}`
       : "";
     const fold = thread.workers ? (thread.folded ? "▸ " : "▾ ") : "";
@@ -545,7 +549,7 @@ export class App {
 
   /** The measure of a thread: its dollars against the ceiling of its grant, and the share of the window that its last
    * answer read, as a bar of eight steps to a cell. */
-  private measureParts(thread: Thread): Part[] {
+  private measureParts(thread: Row): Part[] {
     const measure = thread.measure;
     if (!measure) return [[" ".repeat(36), c.faint]];
     const money = measure.ceiling
@@ -955,7 +959,7 @@ export class App {
     const parts: Part[] = [["Keys", c.text, bold], ["\n\n"]];
     for (const [key, action] of keyTable) parts.push([key.padEnd(18), c.accent], [action, c.prose], ["\n"]);
     parts.push(["\n"], ["Marks  ", c.text, bold]);
-    for (const [state, [mark, color]] of Object.entries(threadMarks))
+    for (const [state, [mark, color]] of Object.entries(rowMarks))
       parts.push([`${mark} `, color()], [`${state}   `, c.muted]);
     parts.push(
       ["\n"],
@@ -978,7 +982,7 @@ export class App {
    * selected chain in the loom. */
   get selection(): string {
     if (this.variant === "graph" && this.focus === "loom") return this.graph.selection;
-    if (this.focus === "loom") return this.loom.threads[this.selectedThread]?.id ?? this.session.selected;
+    if (this.focus === "loom") return this.loom.rows[this.selectedThread]?.id ?? this.session.selected;
     if (this.focus === "lens" && this.lens) return this.lens.id;
     return this.lines[this.selectedLine]?.act.id ?? this.session.selected;
   }
@@ -1114,8 +1118,8 @@ export class App {
       this.render();
       return;
     }
-    this.selectedThread = Math.max(0, Math.min(this.loom.threads.length - 1, this.selectedThread + by));
-    const thread = this.loom.threads[this.selectedThread];
+    this.selectedThread = Math.max(0, Math.min(this.loom.rows.length - 1, this.selectedThread + by));
+    const thread = this.loom.rows[this.selectedThread];
     this.render();
     if (thread && thread.id !== "operator" && thread.id !== this.session.selected)
       await this.select(thread.id);
@@ -1128,7 +1132,7 @@ export class App {
   }
   /** The workers of the selected thread fold into it, or show again. */
   fold(folding: boolean): void {
-    const thread = this.loom.threads[this.selectedThread];
+    const thread = this.loom.rows[this.selectedThread];
     if (this.focus === "thread" && folding) {
       this.back();
       return;
@@ -1142,7 +1146,7 @@ export class App {
    * prompt in the word line. */
   async open(): Promise<void> {
     if (this.focus === "loom") {
-      const thread = this.loom.threads[this.selectedThread];
+      const thread = this.loom.rows[this.selectedThread];
       if (thread?.id === "operator") return this.answerNext();
       this.focus = "thread";
       this.render();
@@ -1188,7 +1192,7 @@ export class App {
       (act) => act.on === chain && act.kind === "rung" && act.done,
     ).length;
     this.stepping.set(chain, ended);
-    if (this.loom.threads.find((thread) => thread.id === chain)?.state === "paused")
+    if (this.loom.rows.find((thread) => thread.id === chain)?.state === "paused")
       await this.session.engine.wake(chain);
     this.session.notice = `${this.session.labelOf(chain)} runs one step, then pauses.`;
     await this.session.refresh();
@@ -1356,7 +1360,7 @@ export class App {
     const act = this.session.acts.find((one) => one.id === id);
     const held =
       act?.kind === "chain"
-        ? this.loom.threads.find((thread) => thread.id === id)?.state === "paused"
+        ? this.loom.rows.find((thread) => thread.id === id)?.state === "paused"
         : act?.paused;
     if (held) await this.session.engine.wake(id);
     else await this.session.engine.pause(id);
@@ -1416,7 +1420,7 @@ export class App {
 
   private clickThread(event: MouseEvent): void {
     const index = this.loomTop + (event.y - this.threads.y);
-    if (index < 0 || index >= this.loom.threads.length) return;
+    if (index < 0 || index >= this.loom.rows.length) return;
     this.focus = "loom";
     void this.move(index - this.selectedThread).catch(this.session.fail);
   }

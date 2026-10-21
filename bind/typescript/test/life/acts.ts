@@ -1,4 +1,4 @@
-import type { ActRow } from "../src/session.ts";
+import type { LiveAct } from "../../src/life/acts.ts";
 
 /** An act of a life, made at a moment, and done at another when it is done. */
 export function act(
@@ -8,8 +8,8 @@ export function act(
   by: string,
   began: number,
   ended?: number,
-  more: Partial<ActRow> = {},
-): ActRow {
+  more: Partial<LiveAct> = {},
+): LiveAct {
   return {
     id,
     kind,
@@ -23,5 +23,5 @@ export function act(
     ended,
     ...(kind === "rung" ? { run: { status: ended === undefined ? "running" : "done", reason: "" } } : {}),
     ...more,
-  } as ActRow;
+  } as LiveAct;
 }

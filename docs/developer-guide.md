@@ -95,10 +95,11 @@ uv run pre-commit install
 
 | File | What it holds |
 | --- | --- |
-| `tui/DESIGN.md` | Why the TUI is a loom: the principles, the directions that it did not take, and what it builds. |
+| `tui/DESIGN.md` | Why the TUI is made so: the principles, the directions that it did not take, the variants, and what it builds. |
 | `tui/src/app.ts` | The screen: the top line, the loom, the thread, the lens, the list of lives, the word line, the footer and the help. Each key acts on the selection, and the footer offers the keys of the focus. |
-| `tui/src/loom.ts` | The loom, from the acts of the life alone: the threads in the order of the tree of chains, the cells of each over the moments of the life, the state of each, and the prompts that the operator owes. |
-| `tui/src/ladder.ts` | The thread of one chain, from its acts: each prompt, the rungs of its ladder, the acts of each rung as chips, and the tails of what runs. |
+| `tui/src/graph.ts` | The variant graph: the threads beside the map of the programs, and the levels of zoom down to one act. |
+| `bind/typescript/src/life/` | The model of a life, which every host reads: the rows of the loom, the ladder of a chain, the tree of the threads, the map of the programs and the messages, and the source of a chain. |
+| `tui/src/script.ts` | The words that the model of the demo answers each prompt with. |
 | `tui/src/session.ts` | The state of one session: its chains, its drafts, its queue, its commands, and its record of the UI. |
 | `tui/src/worker.ts` | The session, in a worker thread, and the demo session with its scripted answers. |
 | `tui/src/theme.ts` | The palettes, the marks, and the spacing. One mark says one thing everywhere. |

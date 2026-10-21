@@ -288,10 +288,12 @@ the owner can try each one on the same life and choose.
 
 ### One model of a life
 
-Each variant reads the same views, which the Session gives and which make nothing:
+Each variant reads the same views, which make nothing and keep nothing. They are the model of a life, in
+`bind/typescript/src/life`, which `@furb/engine/life` gives with no native code and no module of node, so that the
+app of the lane gui, a window of the web, reads the same views as the terminal:
 
 - The acts, each with its place in time, `began` and `ended`, and its state.
-- The loom, in `loom.ts`: the chains in the order of the tree, with the cells of their moments.
+- The loom, in `loom.ts`: the chains in the order of the tree, each a row with the cells of its moments.
 - The ladder, in `ladder.ts`: the prompts of a chain, the rungs of each, and the acts of each rung.
 - The threads, in `threads.ts`: the tree of the prompts of the life, as the next part says.
 - The map, in `map.ts`: the place of each chain on a plane, and the messages between the chains.
@@ -423,7 +425,7 @@ first draft that the brief changed; and opentui, which this repository holds, fo
 ### As built
 
 - The variants are `loom` and `graph`, behind `--variant` and the key `v`. The loom keeps its screens. The graph is
-  `tui/src/graph.ts` over `threads.ts`, `map.ts` and `source.ts`, in the App of the loom, which holds the header, the
+  `tui/src/graph.ts` over the model of a life, in the App of the loom, which holds the header, the
   composer, the lens, the lives and the help for both.
 - `n` steps a chain: it wakes the chain when a pause holds it, and pauses it again once one more of its rungs ends.
 - The demo is a life of many threads at once: a release that a conductor hires four workers for, a worker that hires

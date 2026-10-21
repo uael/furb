@@ -1,5 +1,6 @@
 import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
+import type { Exit } from "@furb/engine/life";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import type { App } from "../src/app.ts";
@@ -11,7 +12,7 @@ import {
   seedThreads,
 } from "../src/demo.ts";
 import { loadParsers } from "../src/parsers.ts";
-import type { Exit, Session } from "../src/session.ts";
+import type { Session } from "../src/session.ts";
 import { palettes } from "../src/theme.ts";
 import type { Workspaces } from "../src/workspaces.ts";
 import { rasterize } from "./raster.ts";
@@ -54,7 +55,7 @@ await show(session);
 /** The state of each thread by its label. */
 const states = () => {
   app().render();
-  return Object.fromEntries(app().loom.threads.map((thread) => [thread.label, thread.state]));
+  return Object.fromEntries(app().loom.rows.map((thread) => [thread.label, thread.state]));
 };
 /** A condition that the App reads with no event of its own, as its focus after a key. */
 async function soon(ready: () => boolean): Promise<void> {
@@ -78,7 +79,7 @@ async function capture(name: string): Promise<void> {
 }
 /** The thread of a label selected in the loom. */
 async function pick(label: string): Promise<void> {
-  const at = app().loom.threads.findIndex((thread) => thread.label === label);
+  const at = app().loom.rows.findIndex((thread) => thread.label === label);
   app().focus = "loom";
   await app().move(at - app().selectedThread);
 }
@@ -194,7 +195,7 @@ try {
   const chainOf = (label: string) =>
     session.acts.find((act) => act.kind === "chain" && session.labelOf(act.id) === label)?.id ?? "";
   await soon(() =>
-    app().loom.threads.some((thread) => thread.label === "docs/guide" && thread.waits?.startsWith("bash")),
+    app().loom.rows.some((thread) => thread.label === "docs/guide" && thread.waits?.startsWith("bash")),
   );
   app().variant = "graph";
   app().render();

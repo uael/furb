@@ -1,12 +1,25 @@
+import {
+  type ActState,
+  actState,
+  type LiveAct,
+  type Loom,
+  messages,
+  outcome,
+  outline,
+  type Place,
+  places,
+  type RowState,
+  route,
+  type SourceLine,
+  source,
+  type Thread,
+  threads,
+  valueText,
+  you,
+} from "@furb/engine/life";
 import type { RGBA } from "@opentui/core";
 import { clip, dollars } from "./format.ts";
-import { type ActState, actState, valueText } from "./ladder.ts";
-import type { Loom, ThreadState } from "./loom.ts";
-import { messages, type Place, places, route, you } from "./map.ts";
-import type { ActRow } from "./session.ts";
-import { outcome, type SourceLine, source } from "./source.ts";
 import { theme as c, spin } from "./theme.ts";
-import { outline, type Thread, threads } from "./threads.ts";
 import { bold, mix, type Part, plain } from "./ui.ts";
 
 /** How near the graph stands to the life: the tree of threads, the map of the programs, the source of one program,
@@ -17,7 +30,7 @@ export const levels: readonly Level[] = ["threads", "map", "program", "word", "a
 /** What the graph reads of the App that holds it: the life as it stands at the time cursor, and the controls that it
  * asks the App for. */
 export interface Stage {
-  readonly acts: readonly ActRow[];
+  readonly acts: readonly LiveAct[];
   readonly loom: Loom;
   readonly owed: ReadonlySet<string>;
   /** Whether the time cursor stands in the past, where nothing moves. */
@@ -30,7 +43,7 @@ export interface Stage {
   /** The session selects a chain. */
   select(chain: string): Promise<void>;
   /** The lens shows an act whole, or nothing. */
-  lens(act?: ActRow): void;
+  lens(act?: LiveAct): void;
 }
 
 /** The size of a program on the map, and the room between two of them. */
@@ -40,7 +53,7 @@ const columnWidth = 30,
   sidebarWidth = 38;
 /** The glyph of the lines that meet in a cell, by the sides they reach: up 1, right 2, down 4, left 8. */
 const joins = ["", "│", "─", "└", "│", "│", "┌", "├", "─", "┘", "─", "┴", "┐", "┤", "┬", "┼"];
-const stateMarks: Record<ThreadState, [string, () => RGBA]> = {
+const stateMarks: Record<RowState, [string, () => RGBA]> = {
   asks: ["◆", () => c.warning],
   failed: ["✗", () => c.danger],
   working: ["◉", () => c.accent],
@@ -414,7 +427,7 @@ export class Graph {
     const { acts, loom } = this.stage;
     const chains = acts.filter((act) => act.kind === "chain");
     const rows = new Map(acts.map((act) => [act.id, act]));
-    const parent = (chain: ActRow) => {
+    const parent = (chain: LiveAct) => {
       const maker = rows.get(chain.by);
       return maker && maker.on !== chain.id ? maker.on : undefined;
     };
@@ -454,7 +467,7 @@ export class Graph {
     }
     const [cx, cy] = this.camera;
     const view = (point: [number, number]): [number, number] => [point[0] - cx, point[1] - cy];
-    const byId = new Map(loom.threads.map((row) => [row.id, row]));
+    const byId = new Map(loom.rows.map((row) => [row.id, row]));
     const labelOf = (id: string) => clip(id === you ? "you" : this.stage.label(id), columnWidth - 8);
     // The edges of the tree of hires: from the end of the name of a program to the program that it hired, and from
     // the operator down the left side to each program at the top.
@@ -491,7 +504,7 @@ export class Graph {
     }
     // The messages flow along the edges, from the chain of the rung that made a prompt to the chain that serves it,
     // and an answer flows back for a moment once it closes.
-    const recent = (act: ActRow) => !this.stage.frozen && Date.now() - (this.seen.get(act.id) ?? 0) < 4000;
+    const recent = (act: LiveAct) => !this.stage.frozen && Date.now() - (this.seen.get(act.id) ?? 0) < 4000;
     const tick = Math.floor(Date.now() / 120);
     const trails = new Map<RGBA, RGBA>();
     for (const message of messages(acts, recent)) {
@@ -526,7 +539,7 @@ export class Graph {
       const row = byId.get(id);
       const lit = id === you || held.has(id);
       const tone = (one: RGBA) => (lit ? one : mix(c.background, one, 0.4));
-      const state: ThreadState = id === you ? (loom.owed.length ? "asks" : "idle") : (row?.state ?? "idle");
+      const state: RowState = id === you ? (loom.owed.length ? "asks" : "idle") : (row?.state ?? "idle");
       const [mark, color] = stateMarks[state];
       const selected = id === this.node;
       const label = labelOf(id);
@@ -734,7 +747,7 @@ export class Graph {
     const out: Part[][] = [[["stack", c.text, bold]]];
     const selected = this.lines[this.line];
     const start = selected?.type === "code" ? selected.rung : selected?.act;
-    const stack: ActRow[] = [];
+    const stack: LiveAct[] = [];
     for (let at = start; at && stack.length < 12; at = rows.get(at.by))
       if (at.kind === "prompt" || at.kind === "rung") stack.unshift(at);
     for (const act of stack)
@@ -751,7 +764,7 @@ export class Graph {
           c.prose,
         ],
       ]);
-    const row = this.stage.loom.threads.find((one) => one.id === (this.node || this.stage.selected));
+    const row = this.stage.loom.rows.find((one) => one.id === (this.node || this.stage.selected));
     if (row?.waits)
       out.push([
         ["  ▶ waits on ", c.accent],
@@ -899,7 +912,7 @@ export class Graph {
 }
 
 /** What an act came to, whole, as the word shows it under its line. */
-function full(act: ActRow): string {
+function full(act: LiveAct): string {
   if (act.kind === "bash") {
     const exit = act.value as
       | { stdout?: { content?: string }; stderr?: { content?: string }; code?: number }

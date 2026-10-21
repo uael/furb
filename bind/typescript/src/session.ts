@@ -2,10 +2,11 @@ import { EventEmitter } from "node:events";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { attachImage, Engine, type ImageAttachment, model, type NativeEar, type Opening } from "../index.cjs";
-import { Activity, WORK } from "./activity.js";
+import { Activity } from "./activity.js";
 import { FileChanges } from "./changes.js";
 import { Console, type ConsoleOptions } from "./console.js";
 import { driving, type Ear } from "./ears.js";
+import { WORK } from "./life/acts.js";
 import { furbDirectory, saveFile } from "./project.js";
 import { actorParts, type Entry, type Fact, isQuestion } from "./types.js";
 

@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
-import { ladder } from "../src/ladder.ts";
-import { asOf, momentsOf, owedAt, spans, weave } from "../src/loom.ts";
-import type { ActRow } from "../src/session.ts";
+import type { LiveAct } from "../../src/life/acts.ts";
+import { ladder } from "../../src/life/ladder.ts";
+import { asOf, momentsOf, owedAt, spans, weave } from "../../src/life/loom.ts";
 import { act } from "./acts.ts";
 
 const loomOf = (
-  acts: ActRow[],
+  acts: LiveAct[],
   options: { folds?: string[]; prompts?: { id: string; shape: string; message: string }[] } = {},
 ) =>
   weave({
@@ -52,8 +52,8 @@ test("a chain whose model answers and a chain whose command runs both show work 
     act("rung4", "rung", "chain4", "prompt3", 12, 13),
     act("read1", "read", "chain3", "rung3", 15, 15),
   ];
-  const { threads } = loomOf(acts);
-  const of = (id: string) => threads.find((thread) => thread.id === id);
+  const { rows } = loomOf(acts);
+  const of = (id: string) => rows.find((thread) => thread.id === id);
   expect(of("chain2")?.state).toBe("working");
   expect(of("chain3")?.state).toBe("working");
   expect(of("chain3")?.waits).toBe("bash1");
@@ -75,7 +75,7 @@ test("the loom stands each worker under the chain whose rung made it, and a fold
     act("chain5", "chain", "", "operator", 8),
   ];
   const open = loomOf(acts);
-  expect(open.threads.map((thread) => [thread.lines, thread.label])).toEqual([
+  expect(open.rows.map((thread) => [thread.lines, thread.label])).toEqual([
     ["", "you"],
     ["", "conduct"],
     ["├ ", "w chain2"],
@@ -83,8 +83,8 @@ test("the loom stands each worker under the chain whose rung made it, and a fold
     ["", "w chain5"],
   ]);
   const folded = loomOf(acts, { folds: ["chain1"] });
-  expect(folded.threads.map((thread) => thread.id)).toEqual(["operator", "chain1", "chain5"]);
-  expect(folded.threads[1]).toMatchObject({ folded: true, workers: 2, tally: { working: 1, done: 1 } });
+  expect(folded.rows.map((thread) => thread.id)).toEqual(["operator", "chain1", "chain5"]);
+  expect(folded.rows[1]).toMatchObject({ folded: true, workers: 2, tally: { working: 1, done: 1 } });
 });
 
 test("the operator owes the prompts that wait for it, the oldest first, and no prompt whose act is done, and its thread and the thread of each asks", () => {
@@ -98,7 +98,7 @@ test("the operator owes the prompts that wait for it, the oldest first, and no p
     }),
     act("prompt2", "prompt", "chain1", "rung1", 7, undefined, { words: ["bool", "Merge?", "operator"] }),
   ];
-  const { owed, threads } = loomOf(acts, {
+  const { owed, rows } = loomOf(acts, {
     prompts: [
       { id: "prompt3", shape: "str", message: "Which name?" },
       { id: "prompt2", shape: "bool", message: "Merge?" },
@@ -109,8 +109,8 @@ test("the operator owes the prompts that wait for it, the oldest first, and no p
     ["prompt1", "chain2"],
     ["prompt2", "chain1"],
   ]);
-  expect(threads.map((thread) => thread.state)).toEqual(["asks", "asks", "asks"]);
-  expect(threads[0]?.cells.at(-1)?.tone).toBe("asks");
+  expect(rows.map((thread) => thread.state)).toEqual(["asks", "asks", "asks"]);
+  expect(rows[0]?.cells.at(-1)?.tone).toBe("asks");
 });
 
 test("a thread shows each prompt with the rungs of its ladder, the acts of each rung as chips, and what the prompt closed with", () => {

@@ -1,6 +1,4 @@
-import { WORK } from "@furb/engine";
-import type { ActRow, Exit } from "./session.ts";
-import { cancelled, failed } from "./session.ts";
+import { cancelled, type Exit, failed, type LiveAct, WORK } from "./acts.js";
 
 /** What an act of a thread is: it runs, it ended well, it failed, a cancel ended it, a pause holds it, or it asks the
  * operator. */
@@ -17,12 +15,12 @@ export type ActState = "running" | "stands" | "done" | "failed" | "cancelled" | 
  * - `value`: what a prompt closed with.
  */
 export type Line =
-  | { type: "prompt"; act: ActRow; depth: number; state: ActState }
-  | { type: "rung"; act: ActRow; depth: number; state: ActState; word: string; more: number; acts: Chip[] }
-  | { type: "act"; act: ActRow; depth: number; state: ActState }
-  | { type: "ear"; act: ActRow; depth: number; state: ActState; rungs: ActRow[]; acts: Chip[] }
-  | { type: "tail"; act: ActRow; depth: number; text: string; model: boolean }
-  | { type: "value"; act: ActRow; depth: number; text: string };
+  | { type: "prompt"; act: LiveAct; depth: number; state: ActState }
+  | { type: "rung"; act: LiveAct; depth: number; state: ActState; word: string; more: number; acts: Chip[] }
+  | { type: "act"; act: LiveAct; depth: number; state: ActState }
+  | { type: "ear"; act: LiveAct; depth: number; state: ActState; rungs: LiveAct[]; acts: Chip[] }
+  | { type: "tail"; act: LiveAct; depth: number; text: string; model: boolean }
+  | { type: "value"; act: LiveAct; depth: number; text: string };
 /** The acts of a rung, by name: one act, or a run of acts of one kind and one state, as read3…7. */
 export interface Chip {
   ids: string[];
@@ -31,7 +29,7 @@ export interface Chip {
 }
 
 /** The state of an act, with the prompts that the operator owes. */
-export function actState(act: ActRow, owed: ReadonlySet<string>): ActState {
+export function actState(act: LiveAct, owed: ReadonlySet<string>): ActState {
   if (owed.has(act.id)) return "asks";
   if (act.paused && !act.done) return "held";
   if (cancelled(act)) return "cancelled";
@@ -42,7 +40,7 @@ export function actState(act: ActRow, owed: ReadonlySet<string>): ActState {
 
 /** The acts of a rung as chips: a run of acts of one kind and one state stands as one chip, by its first and its last
  * number. */
-export function chips(acts: readonly ActRow[], owed: ReadonlySet<string>): Chip[] {
+export function chips(acts: readonly LiveAct[], owed: ReadonlySet<string>): Chip[] {
   const out: Chip[] = [];
   for (const act of acts) {
     const state = actState(act, owed);
@@ -68,7 +66,7 @@ export function valueText(value: unknown): string {
 }
 
 /** The last lines that a command printed, at most a count of them, with no empty line at the end. */
-export function tailOf(act: ActRow, count = 3): string {
+export function tailOf(act: LiveAct, count = 3): string {
   const exit = act.value as Exit | undefined;
   const lines = `${exit?.stdout?.content ?? ""}${exit?.stderr?.content ?? ""}`
     .replace(/\n+$/, "")
@@ -81,14 +79,14 @@ export function tailOf(act: ActRow, count = 3): string {
  * A command that runs shows its tail, and a model that answers shows what it writes. */
 export function ladder(
   chain: string,
-  acts: readonly ActRow[],
-  word: (rung: ActRow) => string,
+  acts: readonly LiveAct[],
+  word: (rung: LiveAct) => string,
   streams: ReadonlyMap<string, { text: string; thinking: string }>,
   owed: ReadonlySet<string>,
 ): Line[] {
   const on = acts.filter((act) => act.on === chain && act.kind !== "chain");
   const local = new Set(on.map((act) => act.id));
-  const made = new Map<string, ActRow[]>();
+  const made = new Map<string, LiveAct[]>();
   for (const act of acts) {
     if (act.id === chain) continue;
     const list = made.get(act.by) ?? [];
@@ -96,7 +94,7 @@ export function ladder(
     made.set(act.by, list);
   }
   const lines: Line[] = [];
-  const emit = (act: ActRow, depth: number): void => {
+  const emit = (act: LiveAct, depth: number): void => {
     const state = actState(act, owed);
     if (act.kind === "prompt") {
       lines.push({ type: "prompt", act, depth, state });

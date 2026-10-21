@@ -69,7 +69,7 @@ async function press(name: string, delay: number, modifiers?: { ctrl?: boolean }
 /** The thread of a label selected in the loom, a key at a time. */
 async function pick(label: string): Promise<void> {
   for (let step = 0; step < 3 && app().focus !== "loom"; step++) await press("escape", 15);
-  const at = app().loom.threads.findIndex((thread) => thread.label === label);
+  const at = app().loom.rows.findIndex((thread) => thread.label === label);
   const by = at - app().selectedThread;
   for (let step = 0; step < Math.abs(by); step++) await press(by > 0 ? "down" : "up", 25);
 }

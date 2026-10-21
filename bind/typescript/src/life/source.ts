@@ -1,5 +1,5 @@
-import { type ActState, actState, valueText } from "./ladder.ts";
-import type { ActRow, Exit } from "./session.ts";
+import type { Exit, LiveAct } from "./acts.js";
+import { type ActState, actState, valueText } from "./ladder.js";
 
 /** One line of the source of a chain.
  *
@@ -8,17 +8,17 @@ import type { ActRow, Exit } from "./session.ts";
  * - `value`: what a prompt closed with.
  */
 export type SourceLine =
-  | { type: "prompt"; act: ActRow; state: ActState }
+  | { type: "prompt"; act: LiveAct; state: ActState }
   | {
       type: "code";
-      rung: ActRow;
+      rung: LiveAct;
       number: number;
       text: string;
-      acts: ActRow[];
+      acts: LiveAct[];
       runs: boolean;
       state: ActState;
     }
-  | { type: "value"; act: ActRow; text: string };
+  | { type: "value"; act: LiveAct; text: string };
 
 /** The verbs that make an act, which a line of a word calls. */
 const calls = /\b(bash|read|write|prompt|chain|wait|rung|grant|cd)\s*\(/g;
@@ -27,12 +27,12 @@ const followed = new Set(["bash", "read", "write", "prompt", "chain", "wait", "r
 
 /** The acts that a word made, each on the line of the word that made it: the next line that calls its verb, or for a
  * line that a loop runs again, the last line that calls it, or else the last line. */
-export function placed(text: string, made: readonly ActRow[]): ActRow[][] {
+export function placed(text: string, made: readonly LiveAct[]): LiveAct[][] {
   const lines = text.split("\n");
   const slots: [line: number, kind: string][] = [];
   for (const [index, line] of lines.entries())
     for (const match of line.matchAll(calls)) slots.push([index, match[1] ?? ""]);
-  const out = lines.map((): ActRow[] => []);
+  const out = lines.map((): LiveAct[] => []);
   let next = 0;
   for (const act of made) {
     if (!followed.has(act.kind)) continue;
@@ -54,18 +54,18 @@ export function placed(text: string, made: readonly ActRow[]): ActRow[][] {
  * The line that runs is the line of the newest act of a rung that runs, which is not done. */
 export function source(
   chain: string,
-  acts: readonly ActRow[],
-  word: (rung: ActRow) => string,
+  acts: readonly LiveAct[],
+  word: (rung: LiveAct) => string,
   owed: ReadonlySet<string>,
 ): SourceLine[] {
-  const made = new Map<string, ActRow[]>();
+  const made = new Map<string, LiveAct[]>();
   for (const act of acts) {
     const list = made.get(act.by) ?? [];
     list.push(act);
     made.set(act.by, list);
   }
   const out: SourceLine[] = [];
-  const rungOf = (rung: ActRow): void => {
+  const rungOf = (rung: LiveAct): void => {
     const children = made.get(rung.id) ?? [];
     const text = word(rung);
     const on = placed(text, children);
@@ -100,7 +100,7 @@ export function source(
 }
 
 /** What an act came to, in a few words, as the margin of the source shows it. */
-export function outcome(act: ActRow, label: (chain: string) => string): string {
+export function outcome(act: LiveAct, label: (chain: string) => string): string {
   const value = act.value as { is?: string; content?: string; path?: string } | Exit | null | undefined;
   if (act.kind === "bash") {
     const exit = act.value as Exit | undefined;

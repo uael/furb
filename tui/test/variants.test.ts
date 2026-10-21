@@ -63,10 +63,8 @@ test("Enter zooms from a thread to its map, then to the source of a program, a w
 test("n lets the selected chain run one more rung, then a pause holds it again", () =>
   looming(
     async ({ app, screen, session }) => {
-      await soon(() =>
-        app.loom.threads.some((thread) => thread.label === "w gif" && thread.state === "paused"),
-      );
-      const gif = app.loom.threads.find((thread) => thread.label === "w gif")?.id ?? "";
+      await soon(() => app.loom.rows.some((thread) => thread.label === "w gif" && thread.state === "paused"));
+      const gif = app.loom.rows.find((thread) => thread.label === "w gif")?.id ?? "";
       await app.select(gif);
       screen.mockInput.pressKey("n");
       await soon(() => app.stepping.has(gif));

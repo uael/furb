@@ -1,5 +1,5 @@
-import { type ActState, actState, valueText } from "./ladder.ts";
-import type { ActRow, Exit } from "./session.ts";
+import type { Exit, LiveAct } from "./acts.js";
+import { type ActState, actState, valueText } from "./ladder.js";
 
 /** Where a thread hangs: the act that it is about, a place in a file, and a pull request, each when it names one. */
 export interface Anchor {
@@ -14,7 +14,7 @@ export interface Pull {
 }
 /** One thread of a life: a prompt, with the messages that came to it, its sub-threads, and what its tree holds. */
 export interface Thread {
-  act: ActRow;
+  act: LiveAct;
   /** The chain that the prompt stands on, whose actor serves it. */
   chain: string;
   /** The first line of its message, its shape and its actor. */
@@ -26,7 +26,7 @@ export interface Thread {
   depth: number;
   anchor?: Anchor;
   /** The prompts of None that came to the thread while it was open, in order. */
-  messages: ActRow[];
+  messages: LiveAct[];
   /** The prompts that the rungs of its ladder made, in the order they began. */
   children: Thread[];
   /** How many threads of its tree closed, of all of them, it not among them. */
@@ -51,7 +51,7 @@ export function pullsOf(text: string): Pull[] {
 
 /** Where a prompt hangs: the act that its `on` names, when it names an act and not a chain, or else the first act of
  * the life that its message names, the first place in a file, and the first pull request. */
-export function anchorOf(prompt: ActRow, rows: ReadonlyMap<string, ActRow>): Anchor | undefined {
+export function anchorOf(prompt: LiveAct, rows: ReadonlyMap<string, LiveAct>): Anchor | undefined {
   const message = String(prompt.words[1] ?? "");
   const on = rows.get(prompt.on);
   const act =
@@ -70,7 +70,7 @@ export function anchorOf(prompt: ActRow, rows: ReadonlyMap<string, ActRow>): Anc
 
 /** The prompt of the ladder that an act stands in: the prompt that a rung over it advances, walking up the makers. A
  * prompt that the operator, an ear or a chain made stands in none. */
-export function threadOf(act: ActRow, rows: ReadonlyMap<string, ActRow>): string | undefined {
+export function threadOf(act: LiveAct, rows: ReadonlyMap<string, LiveAct>): string | undefined {
   let maker = rows.get(act.by);
   for (let step = 0; maker && step < 64; step++) {
     if (maker.kind === "prompt") return maker.id;
@@ -82,7 +82,7 @@ export function threadOf(act: ActRow, rows: ReadonlyMap<string, ActRow>): string
 
 /** Whether a prompt is a message of a thread and no thread of its own: a prompt of None that a chain made, as the
  * acknowledgment of an act that one of its rungs made, which belongs to the thread of that act. */
-function messageOf(act: ActRow, rows: ReadonlyMap<string, ActRow>): string | undefined {
+function messageOf(act: LiveAct, rows: ReadonlyMap<string, LiveAct>): string | undefined {
   if (act.words[0] !== "None" || rows.get(act.by)?.kind !== "chain") return undefined;
   const about = String(act.words[1] ?? "").match(/^(\w+?\d+) /)?.[1];
   const subject = about ? rows.get(about) : undefined;
@@ -95,11 +95,11 @@ function messageOf(act: ActRow, rows: ReadonlyMap<string, ActRow>): string | und
 
 /** The tree of the threads of a life: each prompt under the prompt of the ladder whose rung made it, each with its
  * anchor, its messages, its progress, what waits for the operator in it, and its pull requests. */
-export function threads(acts: readonly ActRow[], owed: ReadonlySet<string>): Thread[] {
+export function threads(acts: readonly LiveAct[], owed: ReadonlySet<string>): Thread[] {
   const rows = new Map(acts.map((act) => [act.id, act]));
   const all = new Map<string, Thread>();
   const tops: Thread[] = [];
-  const later: [ActRow, string][] = [];
+  const later: [LiveAct, string][] = [];
   for (const act of acts) {
     if (act.kind !== "prompt") continue;
     const message = messageOf(act, rows);

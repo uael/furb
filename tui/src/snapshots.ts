@@ -7,9 +7,10 @@ import {
   type Session,
   WINDOW,
 } from "@furb/engine";
+import type { Exit } from "@furb/engine/life";
 import type { Snapshot, Usage } from "./bridge.ts";
 import { queueDispatches } from "./queue.ts";
-import type { ActRow, Exit } from "./session.ts";
+import type { ActRow } from "./session.ts";
 
 /** What a snapshot knows of one chain. A value it must read again is undefined. */
 interface ChainView {

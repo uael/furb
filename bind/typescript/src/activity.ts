@@ -1,29 +1,7 @@
 import { type Call, call, isFault } from "./ears.js";
+import { type LiveAct, WORK } from "./life/acts.js";
 import { bound, display, type Fact, isQuestion } from "./types.js";
 
-/** The kinds of act that are work which ends later, and the table counts each one that is done. */
-export const WORK = ["prompt", "rung", "bash", "wait"];
-
-export interface RunState {
-  status: "running" | "failed" | "done";
-  reason: string;
-}
-export interface LiveAct {
-  id: string;
-  kind: string;
-  by: string;
-  on: string;
-  words: unknown[];
-  done: boolean;
-  value: unknown;
-  /** Whether a pause stands over the act while it lives. */
-  paused: boolean;
-  run?: RunState;
-  /** The place of the act in time: how many facts the life had said when the act was made, and when it was done. It
-   * is the order of the record, so a later life gives the same places. */
-  began: number;
-  ended?: number;
-}
 /** One answer of a model on a chain: its place in time, the actor whose reply it answered, and its usage, which is
  * the tokens that it read and wrote, of which the tokens that it read again and kept to read again, and its dollars. */
 export interface Answered {
