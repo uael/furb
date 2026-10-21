@@ -113,11 +113,17 @@ class Live:
 
   async def show(self, about: str, shape: str, message: str) -> None:
     """A prompt of the operator: the message on the terminal, and one line back as the shape the prompt wants, by the
-    rules of the crate; and no line for a shape the operator answers not, which that no line refuses.
+    rules of the crate; and no line for a shape the operator answers not, which that no line refuses. A prompt of
+    None asks nothing: the World closed it as it took it, and the terminal shows its message as a notice.
 
     There is one terminal and one operator, so prompts of the operator are shown and answered one at a time, in
     the order they asked, and never two at once on one stream.
     """
+    if shape == "None":
+      async with self.reading:
+        sys.stdout.write(f"{about} tells: {message}\n")
+        sys.stdout.flush()
+      return
     try:
       line = ""
       if shape in _monty.shapes():
@@ -154,6 +160,8 @@ class Live:
       match a:
         case ("prompt", about, _, _, shape, message, _):
           yield "started", about
+          if shape == "None":
+            engine.close(None, about)
           start(self.show(about, shape, message))
         case ("pause", on, "provider", *_):
           paused.add(on)

@@ -239,8 +239,8 @@ class Sand:
         self.timers.pop(about).cancel()
       case ("prompt", about, _, _, shape, _, _):
         yield "started", about
-        if shape not in ("None", "bool", "int", "float", "str"):
-          engine.close(Refused(f"the operator answers no {shape}"), about)
+        if shape not in ("bool", "int", "float", "str"):
+          engine.close(None if shape == "None" else Refused(f"the operator answers no {shape}"), about)
       case ("stand", qid, *_):
         yield "done", qid, self.stands
       case ("cd", qid, _, on, path):
