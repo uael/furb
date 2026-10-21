@@ -1,0 +1,37 @@
+[package]
+name = "furb-gui"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+description = "furb, the desktop app: the debugger of a living program, on the crate linked directly, with a UI of the web."
+license = "AGPL-3.0-only"
+repository = "https://github.com/uael/furb"
+publish = false
+
+[[bin]]
+name = "furb-gui"
+path = "src/main.rs"
+
+[dependencies]
+# The engine, the ears of the World and the provider of models, linked directly: the life runs in this process.
+furb = { path = "../..", version = "0.1.0" }
+# The window and the web view, which show the UI of gui/src and carry its commands and the views of the life.
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# The timers of the demo, whose models think for a while, and the channel of the commands of the UI.
+tokio = { version = "1", features = ["time", "macros"] }
+futures = "0.3"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+# A workspace of its own: Tauri needs the web view of the system, which the gates of the crate do not install.
+[workspace]
+
+# As the crate builds them: each dependency optimized, the interpreter among them, so a word runs as fast as in a
+# release while the app builds quickly.
+[profile.dev.package."*"]
+opt-level = 3
+debug-assertions = false
+overflow-checks = false

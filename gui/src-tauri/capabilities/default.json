@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "What the window of furb may do: hear the views of the life and send its commands.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}
