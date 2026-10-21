@@ -8,6 +8,12 @@ from conftest import STANDS, Sand, World, engine_of, life, of, pytest_generate_t
 from furb import engine
 from furb_monty import _monty
 
+EXTENDING = (
+  "extending: How to extend furb: a def in a word, which lives as long as its chain, and an extension, which a host"
+  " enables on each chain of a life."
+)
+"""EXTENDING is the line that the list of the skills holds of the skill that the extension carries."""
+
 
 def extended(
   name: str, at: Path, ear: Callable[[str], World] | None = None, *, lives: bool = False, record: Sequence[tuple] = ()

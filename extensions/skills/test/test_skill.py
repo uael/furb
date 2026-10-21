@@ -31,12 +31,15 @@ async def test_skill_reads_the_path_skills_and_the_name_with_its_show(tmp_path: 
 
 
 async def test_the_world_answers_it_with_the_text_of_the_skill_md_file(tmp_path: Path) -> None:
-  """The World answers it with the text of the SKILL.md file at the path of that file, so the text of a skill is the text of a read of that path."""
+  """The World answers it with the text of the SKILL.md file at the path of that file, so the text of a skill is the text of a read of that path, and it answers the skill extending that the extension carries with its text at the path skills://extending."""
   root, path = brewed(tmp_path)
   await engine.rung(f'skill("brew")\nread({str(path)!r})', on=root)
   one, two = of(engine.turns(on=root), "read")
   assert one.split("\n", 2)[2].replace("read1_", "read2_") == two.split("\n", 2)[2]
   assert await engine.rung('close(skill("brew").path)', on=root) == str(path)
+  carried = Path(__file__).parent.parent / "extending" / "SKILL.md"
+  got = await engine.rung('close(skill("extending"))', on=root)
+  assert got == Text("skills://extending", carried.read_text(encoding="utf-8"))
 
 
 async def test_a_skill_of_a_name_that_no_skill_has_raises_refused(tmp_path: Path) -> None:

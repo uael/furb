@@ -15,17 +15,23 @@ const SCHEME: &str = "skills://";
 /// The marks that open a block of lines as the value of a key of a frontmatter.
 const BLOCKS: [&str; 6] = ["|", "|-", "|+", ">", ">-", ">+"];
 
-/// One skill that the ear found: its name, what it is for, and its SKILL.md file.
+/// The skill that the extension carries, which says how a model extends furb, and which a skill of its name in a
+/// folder replaces.
+const EXTENDING: &str = include_str!("../../extensions/skills/extending/SKILL.md");
+
+/// One skill that the ear found: its name, what it is for, and its SKILL.md file, which the skill that the extension
+/// carries has not.
 struct Skill {
   name: String,
   description: String,
-  path: PathBuf,
+  path: Option<PathBuf>,
 }
 
 /// The ear of the skills: it answers a read of `skills://` with the list of the skills of the chain, one line for
 /// each, and a read of `skills://` and a name with the SKILL.md file of that skill, or with the refusal. It finds the
 /// skills in `.furb/skills` and `.claude/skills` of the working directory of the chain and of each folder above it,
-/// nearest first, and then in `skills` of the config directory of the user.
+/// nearest first, then in `skills` of the config directory of the user, and then the skill `extending` that the
+/// extension carries.
 pub fn skills(config: PathBuf) -> Box<dyn Ear> {
   ear(move |mut co| async move {
     loop {
@@ -44,7 +50,8 @@ pub fn skills(config: PathBuf) -> Box<dyn Ear> {
             found.iter().map(|one| format!("{}: {}", one.name, one.description)).collect();
           Ok(Text::new(SCHEME, lines.join("\n")))
         }
-        Some(one) => read(&one.path),
+        Some(Skill { path: Some(path), .. }) => read(path),
+        Some(_) => Ok(Text::new(format!("{SCHEME}{name}"), EXTENDING)),
         None => Err(Fault::refused(format!("There is no skill {name}."))),
       };
       let answer = answer.map_or_else(|no| no.object(), |one| one.object());
@@ -54,8 +61,8 @@ pub fn skills(config: PathBuf) -> Box<dyn Ear> {
 }
 
 /// The skills in these folders, in the order of their names: each folder in them that holds a SKILL.md file that
-/// the World reads as a text, under the name its frontmatter gives or else the name of the folder, and a name that
-/// an earlier folder holds wins.
+/// the World reads as a text, under the name its frontmatter gives or else the name of the folder, and then the skill
+/// that the extension carries, and a name that an earlier folder holds wins.
 fn found(roots: impl Iterator<Item = PathBuf>) -> Vec<Skill> {
   let mut out: Vec<Skill> = Vec::new();
   for root in roots {
@@ -70,9 +77,14 @@ fn found(roots: impl Iterator<Item = PathBuf>) -> Vec<Skill> {
         folder.file_name().map(|one| one.to_string_lossy().into()).unwrap_or_default()
       });
       if !out.iter().any(|one| one.name == name) {
-        out.push(Skill { name, description: description.unwrap_or_default(), path });
+        out.push(Skill { name, description: description.unwrap_or_default(), path: Some(path) });
       }
     }
+  }
+  let (name, description) = frontmatter(EXTENDING);
+  let name = name.unwrap_or_default();
+  if !out.iter().any(|one| one.name == name) {
+    out.push(Skill { name, description: description.unwrap_or_default(), path: None });
   }
   out.sort_by(|one, two| one.name.cmp(&two.name));
   out

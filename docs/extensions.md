@@ -66,7 +66,9 @@ journal answers again in a later life, so a replay is exact and the World is ask
 - `skills` defines `counted()`, which tells in one line how many skills the chain knows and that `skills()` lists
   them, and `skills()`, which reads `skills://`: one line for each skill that the World finds in
   `.furb/skills` and `.claude/skills` of the working directory of the chain and of each folder above it, then in
-  `skills` of the config directory. `skill(name)` reads the `SKILL.md` file of a skill. Its life word is `counted()`.
+  `skills` of the config directory. `skill(name)` reads the `SKILL.md` file of a skill. It carries one skill of its own, `extending`, which a
+  skill of that name in a folder replaces: it shows a model, with an example each, how to extend furb by a def in a
+  word and by an extension, and it points to this guide for the rest. Its life word is `counted()`.
 - `memory` defines `memory(path)`, which tells the chain the memory files that apply to a path: the memory of the
   user, in the config directory, then that of each folder from the root down to the working directory of the chain,
   then that of each folder under it down to the folder of the path, when the path is under it. The memory of a
@@ -87,7 +89,8 @@ questions from the disk. The suite runs on both engines.
 
 ## A third party extension
 
-A third party extension has a word and a life word, and no ear of its own. Its word reaches the machine through the
+A third party extension has a word and a life word, and no ear of its own. The skill `extending` gives an example
+of one. Its word reaches the machine through the
 acts that the World takes already: a read, a write, a command, a wait, the clock, a chance, and a prompt to the
 operator. It can also make acts with ears of its own, written in python, as `remember` does, and a door that
 answers the reads of a scheme of its own. An extension that needs an ear in rust is a change of the crate.
