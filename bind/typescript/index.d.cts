@@ -421,7 +421,7 @@ export declare function skills(config: string): NativeEar
 export declare function store(path: string): [unknown[], NativeEar]
 
 /**
- * The system prompt of every model: the engine minified in layout alone, and nothing else.
+ * The system prompt of every model: the engine minified with its program kept as it is, and nothing else.
  *
  * The build makes it from [`ENGINE`], and stops unless it is the same program.
  */
