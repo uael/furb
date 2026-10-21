@@ -76,8 +76,8 @@ meanings. The entry of such a name here gives only its form in the engine.
 - paragraph: what one fact that tells stands as in a turn: its notes, with a blank line between two paragraphs.
 - header: the first line of a paragraph: # and, with no space, the id of the act it is of, then what happened to
   the act, and no text that the act tells.
-- advance: the header the chain tells last before a reply, which names the rung it asks for and the prompt that
-  rung advances.
+- advance: the paragraph the chain tells last before a reply, whose header names the rung it asks for and the prompt
+  that rung advances, and which binds the share that the last reply read.
 - binding: a statement that binds the name of an act to the act, or a value that the act tells to the id of the act
   and the word of the value, as bash1_command, which a turn shows and a rung the chain writes runs.
 - tell: the one fact that carries notes, about the act it is of, which the turns are folded from; a control tells

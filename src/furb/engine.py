@@ -239,7 +239,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
 
   def ear(id):
     rungs, refused, running, waiting = program(source), set(), {}, {}
-    asking, unseen, ran, last, heard = "", "", "", standing(), []
+    asking, unseen, ran, reply, last, heard = "", "", "", "", standing(), []
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
     def takes():
@@ -357,9 +357,9 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         else:
           if ran and not heard:
             yield told(ran, "told nothing")
-          yield told(asking, f"advance on {maker}")
+          yield told(asking, f"advance on {maker}", share=filled(reply) or None)
           with site.set(asking):
-            act("reply", id, controlled(idle), to)
+            reply = act("reply", id, controlled(idle), to)
           unseen = ""
       if unseen and all(over(x[1]) for x in transcript() if x[0] == "prompt" and x[3] == id):
         prompt(None, unseen)
@@ -382,11 +382,10 @@ def grant(usd: float | None = None, share: float | None = None, on: str = "") ->
     yield told(id, "", bound(id, "None"), usd=usd, share=share)
     while True:
       match (yield):
-        case ("done", about, _, (_, _, (tokens, *_, cost), _)) if question(("reply", about)) and scope(about) == here:
+        case ("done", about, _, (_, _, (*_, cost), _)) if question(("reply", about)) and scope(about) == here:
           spent += cost
-          filled = tokens / (offered(standing()[0], get(about)[4]) or WINDOW)
-          yield told(id, "ledger", spent=spent, filled=filled)
-          if (usd and spent >= usd) or (share and filled >= share):
+          yield told(id, "ledger", spent=spent, filled=(now := filled(about)))
+          if (usd and spent >= usd) or (share and now >= share):
             pause(here)
 
   return act("grant", on, controlled(ear), usd, share)
@@ -528,6 +527,12 @@ def answer(kind, on, empty):
   return next(
     (got for x in reversed(transcript(on)) if x[0] == kind and isinstance(got := peek(x[1]), type(empty))), empty
   )
+
+
+def filled(about):
+  match peek(about):
+    case (_, _, (tokens, *_), _):
+      return round(tokens / (offered(standing()[0], get(about)[4]) or WINDOW), 2)
 
 
 def over(id):
@@ -869,8 +874,8 @@ How to work
   word raises, the chain binds the exception as raised.
 - Keep each word lean: no comment, and no code that the task does not need. The chain reads each token that you
   write again at each reply.
-- Your share of the window is the tokens that your last answer read, [u for _, _, u, _ in turns() if u][-1][0], over
-  the window that the roster of your standing gives your actor. When it is high, go on in a chain that keeps only the
-  work you still need: chain(label, source=<your chain>, filter=take(<ids of old work>, inside=False)).
+- The advance binds your share of the window, as rungN_share = 0.25: the part of the window of your actor that your
+  last answer read. When it passes 0.5, go on in a chain that keeps only the work you still need:
+  chain(label, source=<your chain>, filter=take(<ids of old work>, inside=False)).
 - Do what the prompt asks. Before an act that changes anything else, ask the operator.
 """

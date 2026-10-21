@@ -76,5 +76,5 @@ async def test_the_python_of_a_turn() -> None:
   _, _, root = await spoke("<s:hi>\nhi\n</s:hi>\na = hi", "close(len(a) - 2)")
   got = engine.turns(on=root)
   assert got[1][1] == "<s:hi>\nhi\n</s:hi>\na = hi"
-  assert got[2][1] == "#rung1 told nothing\n\n#rung2 advance on prompt1"
+  assert got[2][1] == "#rung1 told nothing\n\n#rung2 advance on prompt1\nrung2_share = 0.02"
   assert got[4][1] == "#prompt1 closed\nprompt1_value = 1"

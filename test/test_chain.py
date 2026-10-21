@@ -1124,7 +1124,7 @@ async def test_a_replay_makes_the_module_of_the_chain_again_as_it_was_at_its_bir
 
 
 async def test_before_every_reply_the_chain_tells_the_last_line_of_the_turn() -> None:
-  """Before every reply the chain tells the last line of the turn, which says what the answer is for, as #rung5 advance on prompt1, which names the one that made the rung."""
+  """Before every reply the chain tells the last paragraph of the turn, whose header says what the answer is for, as #rung5 advance on prompt1, which names the one that made the rung."""
   sand, log, root = born("a = 1", "close(a)", "k = 2")
   one = engine.prompt(int, "count", on=root)
   assert await one == 1
@@ -1139,6 +1139,16 @@ async def test_before_every_reply_the_chain_tells_the_last_line_of_the_turn() ->
     (bare, "user", f"#{bare} advance on {OPERATOR}"),
   ]
   assert engine.module(root)["k"] == 2
+
+
+async def test_the_advance_binds_the_share_of_the_window_that_the_last_reply_read() -> None:
+  """The advance binds the share of the window that the last reply on the chain read, as rung5_share = 0.25: the tokens that reply read over the window that the roster gives its actor, to two places, and no share before a reply that read a token."""
+  _, log, root = born("a = 1", "close(1)", cost=(100000, 0, 0, 0, 0.0))
+  act = engine.prompt(int, "count", on=root)
+  assert await act == 1
+  first, second = steps(log, act)
+  told = paragraphs(engine.turns(on=root))
+  assert f"#{first} advance on {act}" in told and f"#{second} advance on {act}\n{second}_share = 0.25" in told
 
 
 async def test_the_chain_tells_a_word_that_told_nothing_before_the_advance() -> None:
