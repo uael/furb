@@ -74,7 +74,7 @@ test("a prompt of None to the operator is a notice that the operator owes nothin
     });
     expect(app.loom.owed).toEqual([]);
     const shown = await frame();
-    expect(shown).toContain("✉ 1 to read");
+    expect(shown).toContain("○ 1 to read");
     expect(shown).toMatch(/you +.*1 to read/);
     screen.mockInput.pressTab();
     await soon(() => !session.host.notices.has(id));

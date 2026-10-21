@@ -368,7 +368,7 @@ export class App {
       ...(w.host.pending.size ? ([[`◌ ${w.host.pending.size} held   `, c.warning]] as Part[]) : []),
       [`◆ ${owed} owed`, owed ? c.warning : c.faint],
       ...(this.loom.unread.length
-        ? ([[`   ✉ ${this.loom.unread.length} to read`, c.warning]] as Part[])
+        ? ([[`   ○ ${this.loom.unread.length} to read`, c.warning]] as Part[])
         : []),
       ["   ", c.faint],
       [`◉ ${working} at work`, working ? c.accent : c.faint],

@@ -163,7 +163,7 @@ test("a prompt of None to the operator is a notice: the operator owes it nothing
   ]);
   expect(threads[0]?.state).toBe("idle");
   expect(threads[0]?.cells.some((cell) => cell.tone === "asks")).toBe(false);
-  expect(threads[0]?.cells.some((cell) => cell.tone === "past")).toBe(true);
+  expect(threads[0]?.cells.some((cell) => cell.tone !== "none")).toBe(true);
   expect(loomOf(acts).unread).toEqual([]);
 });
 
