@@ -49,6 +49,10 @@ export declare class Engine {
    * kind, as the engine of the crate finds it.
    */
   pending(): Array<[string, string]>
+  /** The work that a crash loop parked, each act by its name and its kind, as the engine of the crate finds it. */
+  parked(): Array<[string, string]>
+  /** A parked act, run again, as the engine of the crate runs it. */
+  retry(id: string): void
   /**
    * The act of a verb that a key of the client makes once, across a crash of the host and a retry of the client:
    * the act that the key made before, or a new act, as the engine of the crate finds it.
