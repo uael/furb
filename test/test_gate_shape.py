@@ -62,7 +62,7 @@ async def test_a_gate_carries_the_word_alone() -> None:
     ("y = 2", [bind, "k = 1", told[0], told[1]]),
     ("write(read(get(acting())[2]).replace('y = 2', 'k = 3'))", [bind, "k = 1", *told[:2], "y = 2", told[2]]),
     ("k = 3", again),
-    ("close(k)", [*again, "k = 3", f"#{made} told nothing\n\n#{last} advance on {act}"]),
+    ("close(k)", [*again, "k = 3", f"#write1\nwrite1_path = {act!r}\n\n#{last} advance on {act}"]),
   ]
 
 

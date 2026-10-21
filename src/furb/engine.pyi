@@ -172,8 +172,8 @@ def write(text: Text, on: str = "") -> Text:
   """A write: whoever serves the path of the text takes its content.
   write is given a text, and gives the text as it is on disk after the write.
   A write that the World refuses raises Refused in the caller.
-  The engine tells of a write of a text only the lines that differ from what the caller asked, and of a write a door answers with a value, that value.
-  A write takes no show, since what a write would show the word of the model already said: it tells the lines of what came back that differ from what it asked for, so a write that the disk took as it was asked tells nothing at all.
+  The engine tells a write of a text by its header and its path, with the lines that differ from what the caller asked when some do, and a write that a door answers with a value by that value.
+  A write takes no show, since what a write would show the word of the model already said: it tells its header and its path, so the turns show each write that landed, and the lines of what came back that differ from what it asked for, so a write that the disk took as it was asked tells no line.
   A door that answers a write with more than it was asked for tells each line of what came back that differs from the line it was asked for at the same place.
   A write to the door of a prompt edits the program of its ladder, so the door and the verb are one act.
   The chain answers a write of the door of one of its prompts with the text it took, and makes its ladder from it.

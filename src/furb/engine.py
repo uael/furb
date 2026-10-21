@@ -58,8 +58,7 @@ def read(path: str, show: Show = HEAD, on: str = "") -> Text:
 
 def write(text: Text, on: str = "") -> Text:
   got = ask("write", on, Text(text.path, text.content))
-  if not isinstance(got, Text) or got.lines != text.lines:
-    tell(on, text.path, got, differs(text.lines))
+  tell(on, text.path, got, differs(text.lines))
   return got
 
 
@@ -861,7 +860,7 @@ How to work
   of the lines that the pattern matches.
 - Change a file through the Text that read gave: replace, edit, insert, append or delete, then write. replace
   changes every place, as str does: give count=1 for one place. An edit of what the text does not hold raises
-  Refused. A write tells the lines that landed otherwise than you asked.
+  Refused. A write tells its path, and the lines that landed otherwise than you asked.
 - Keep notes and scratch files in scratch://, as write(Text("scratch://plan.md", plan)). Every chain of the record
   shares it, and a command finds it in $TMPDIR, where tools put their temp files too.
 - Use bash to run commands and to find paths, as bash("grep -rln pattern src"). Let its show pick the lines of a long

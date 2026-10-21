@@ -87,7 +87,7 @@ async def test_a_write_that_the_world_refuses_raises_refused_in_the_caller() -> 
 
 
 async def test_the_engine_tells_of_a_write_of_a_text_only_the_lines_that_differ() -> None:
-  """The engine tells of a write of a text only the lines that differ from what the caller asked, and of a write a door answers with a value, that value."""
+  """The engine tells a write of a text by its header and its path, with the lines that differ from what the caller asked when some do, and a write that a door answers with a value by that value."""
   sand = Firm()
   _, root = life(sand)
   assert await engine.rung("write(Text('b.txt', 'one\\ntwo\\n'))", on=root) is None
@@ -99,10 +99,10 @@ async def test_the_engine_tells_of_a_write_of_a_text_only_the_lines_that_differ(
 
 
 async def test_a_write_takes_no_show() -> None:
-  """A write takes no show, since what a write would show the word of the model already said: it tells the lines of what came back that differ from what it asked for, so a write that the disk took as it was asked tells nothing at all."""
+  """A write takes no show, since what a write would show the word of the model already said: it tells its header and its path, so the turns show each write that landed, and the lines of what came back that differ from what it asked for, so a write that the disk took as it was asked tells no line."""
   _, _, root = born()
   assert await engine.rung("write(Text('b.txt', 'one\\ntwo\\n'))", on=root) is None
-  assert of(engine.turns(on=root), "write") == []
+  assert of(engine.turns(on=root), "write") == ["#write1\nwrite1_path = 'b.txt'"]
   held = engine.transcript(root)
   assert said(held, "write")[0][4:] == (Text("b.txt", "one\ntwo\n"),)
 
