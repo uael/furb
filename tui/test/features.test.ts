@@ -218,7 +218,7 @@ test("/extensions lists what a life runs, and a cancel of the work of a chain le
       await session.refresh();
       await session.command("/extensions");
       expect(session.notice).toBe(
-        "This life runs memory with remember(), skills with counted(), compaction, ouroboros with ouroboros(). Run a word of one with /run.",
+        "This life runs memory with remember(), skills with counted(), compaction, ouroboros with ouroboros(), web. Run a word of one with /run.",
       );
       await session.command("/run await wait(60)");
       await session.command("/cancel");

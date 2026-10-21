@@ -16,11 +16,13 @@ API of its own:
   knows the models of every provider that pi-ai serves and those of the claude command line, and it offers each
   model whose credential stands in the environment, the claude command line when it finds the program, and each
   model for chat that a local server lists when `FURB_LOCAL_URL` names its address, which `provider/local.rs` asks.
+  `provider/search.rs` holds the native search of the web of each provider that has one, which the extension `web`
+  asks.
   `operator.rs` holds the rules by which every console reads what the operator answers, and `scratch.rs` the
   scratch directory of a life, which the files serve as `scratch://` and the commands name as `$TMPDIR`.
 - `src/extension.rs` says what an extension is and where a host finds the ones that a life runs, and holds the ear
   `extensions`, which enables each by a fact that the record keeps and plays its word as a rung on each chain.
-  `extensions/` holds the official extensions, `memory`, `skills`, `compaction` and `ouroboros`, each a word, a
+  `extensions/` holds the official extensions, `memory`, `skills`, `compaction`, `ouroboros` and `web`, each a word, a
   contract and a suite, and `src/extension/` holds the ear of the World of each that has one. `docs/extensions.md` says how an extension works.
 - `src/life.rs` opens a life as every host opens one: the record, and the ears of the crate after the ears of the
   host, the provider among them, on the default actor and the roster that the host names from the catalog, or every

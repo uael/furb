@@ -44,6 +44,12 @@ each act by its name and its kind, as the `Engine` of the door finds it: among e
 did not end, and the acts that made it, each prompt, rung, command and wait that is not done and that no pause holds.
 An act that a wake puts to the outside again is pending no more.
 
+`furb_monty.engine.keyed(key, kind, *args, **kwargs)` makes the act of a verb once for a key of the client, across a
+crash of the host and a retry of the client, as `keyed("k1", "prompt", int, "count the lines", on=root)`. A key fact
+goes to the record before the act, and a later call with the same key on the same chain gives the act that the key
+made, in this life or in a later life on the record. When the host crashed after it kept the key and before it kept
+the act, the call makes the act.
+
 A generator of this interpreter is heard where the engine runs. A verb it says while it hears goes to the life that
 hears it, as a verb that an ear of the engine of python says does.
 

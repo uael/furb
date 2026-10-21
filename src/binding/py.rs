@@ -710,6 +710,20 @@ impl PyEngine {
     self.call(Engine::pending)
   }
 
+  /// The act of a verb that a key of the client makes once, across a crash of the host and a retry of the client:
+  /// the act that the key made before, or a new act, as the engine of the crate finds it.
+  #[pyo3(signature = (key, kind, args = None, kwargs = None))]
+  fn keyed(
+    &self,
+    key: &str,
+    kind: &str,
+    args: Option<Vec<Value>>,
+    kwargs: Option<HashMap<String, Value>>,
+  ) -> Result<String, Fault> {
+    let (args, kwargs) = words(args, &kwargs);
+    self.call(|engine| engine.keyed(key, kind, args, kwargs))
+  }
+
   /// What an act comes to, which python awaits: its value, or the exception it completed with, raised.
   fn result<'py>(&self, py: Python<'py>, act: String) -> PyResult<Bound<'py, PyAny>> {
     let future =

@@ -64,6 +64,12 @@ const TOOK: &str = "peek(__id, ...) is not ... or ('started', __id) in [x[:2] fo
 /// Whether an act waits: it is not done, and no pause holds it.
 const WAITS: &str = "peek(__id, ...) is ... and not paused(__id)";
 
+/// The act that the operator made for a key of the client on a chain: the first question that the operator made on
+/// the chain after a key fact of that key and that kind, when it is of that kind, and nothing otherwise.
+const KEYED: &str = "next((b[1] for f, k, w in [(transcript(__on), __key, __kind)] \
+  for i, a in enumerate(f) if a[0] == 'key' and a[3:5] == (k, w) for b in [next((x for x in f[i + 1:] if x[2] == OPERATOR and question(x)), ('',))] \
+  if b[0] == w), '')";
+
 /// The one piece of python the crate writes: it loads the engine, the sheet and the Kernel, each in a namespace of
 /// its own, and gives what the host calls in the sandbox by.
 ///
@@ -1157,6 +1163,38 @@ impl Engine {
       }
     }
     Ok(pending)
+  }
+
+  /// The act of a verb that a key of the client makes once, across a crash of the host and a retry of the client. A
+  /// key fact on the chain, `["key", chain, by, key, kind]`, goes to the record before the act, and the act of the key
+  /// is the first question that the operator makes on that chain after it. When the chain holds such an act, it is
+  /// given back and nothing is made. When it holds none, as when the host crashed after it kept the key and before it
+  /// kept the act, the key is said again and the act is made. The chain is the one that `on` names, or the root.
+  pub fn keyed(
+    &mut self,
+    key: &str,
+    kind: &str,
+    args: Vec<Object>,
+    mut kwargs: Vec<(&str, Object)>,
+  ) -> Result<String, Fault> {
+    let named = kwargs.iter().find(|(name, _)| *name == "on");
+    let on =
+      named.and_then(|(_, one)| one.as_ref().as_str().map(str::to_owned)).unwrap_or_default();
+    let on = if on.is_empty() { self.root.clone() } else { on };
+    kwargs.retain(|(name, _)| *name != "on");
+    kwargs.push(("on", Object::string(on.as_str())));
+    let bound = vec![
+      ("__on", Object::string(on.as_str())),
+      ("__key", Object::string(key)),
+      ("__kind", Object::string(kind)),
+    ];
+    let found = self.word(KEYED, bound)?;
+    if let Some(id) = found.as_ref().as_str().filter(|one| !one.is_empty()) {
+      return Ok(id.to_owned());
+    }
+    self.say("key", &on, vec![Object::string(key), Object::string(kind)])?;
+    let got = self.verb(kind, args, kwargs)?;
+    got.as_ref().as_str().map(str::to_owned).ok_or_else(|| Fault::refused("a verb gave no act"))
   }
 
   /// Whether a word of the names of the engine is true of an act.

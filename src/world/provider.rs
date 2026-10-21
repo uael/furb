@@ -13,6 +13,7 @@ mod clients;
 pub mod images;
 mod local;
 mod pi;
+pub mod search;
 
 use std::{
   collections::{HashMap, HashSet},
@@ -32,7 +33,7 @@ use serde_json::{Map, Value, json};
 use tokio::sync::mpsc;
 use unsync::oneshot;
 
-use self::images::Images;
+use self::{images::Images, search::Searches};
 use crate::{
   SYSTEM,
   ear::{Co, Ear, Next, ear, say},
@@ -53,6 +54,9 @@ pub type Writes = Arc<dyn Fn(&str, &str, &str, &str) + Send + Sync>;
 /// writes, and it answers with the turn of the model, or with why it gives none.
 pub type Hosted =
   Arc<dyn Fn(Value, Told) -> BoxFuture<'static, Result<Object, String>> + Send + Sync>;
+
+/// The native search of the web of the model that an actor names, if its provider has one.
+pub type Search = Arc<dyn Fn(&str) -> Option<Searches> + Send + Sync>;
 
 /// What streams one response of a model of rig, whatever model it is.
 type Streams = Arc<
@@ -122,6 +126,8 @@ pub struct Model {
   /// off the request.
   thought: Option<(u64, Map<String, Value>)>,
   answers: Answers,
+  /// The native search of the web of its provider, which the extension web asks for an actor that names it.
+  search: Option<Searches>,
 }
 
 impl Model {
@@ -157,6 +163,7 @@ impl Model {
       tagged: false,
       thought: None,
       answers,
+      search: None,
     }
   }
 
@@ -187,6 +194,12 @@ impl Model {
   /// The model takes the images that a turn names.
   pub fn images(mut self) -> Model {
     self.images = true;
+    self
+  }
+
+  /// The model, whose provider searches the web with this search.
+  pub fn searches(mut self, search: Searches) -> Model {
+    self.search = Some(search);
     self
   }
 
@@ -285,6 +298,18 @@ impl Provider {
   pub fn writes(mut self, writes: Writes) -> Provider {
     self.writes = Some(writes);
     self
+  }
+
+  /// The native search of the web of the model that an actor names, or none when its provider has none or no
+  /// model of the provider is that actor.
+  pub fn search(&self) -> Search {
+    let models = self.models.clone();
+    Arc::new(move |actor| {
+      models
+        .iter()
+        .find(|model| model.settings(actor).is_some())
+        .and_then(|model| model.search.clone())
+    })
   }
 
   /// The ear of the provider: it answers a stand with the standing, the roster of its models and the operator, the
