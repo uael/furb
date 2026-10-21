@@ -3,10 +3,12 @@
 
 use std::{
   collections::{HashMap, HashSet},
-  future,
+  env, future,
+  io::ErrorKind,
   path::{Path, PathBuf},
   pin::pin,
   process::{Command, Stdio},
+  sync::OnceLock,
   time::Duration,
 };
 
@@ -28,9 +30,33 @@ use crate::{
   value::{Exit, Fault, Object, Text},
 };
 
-/// The POSIX shell that runs a command: `/bin/sh`, and on Windows, which has none of its own, the `sh` on PATH, such
-/// as the one of Git for Windows.
-pub const SHELL: &str = if cfg!(windows) { "sh" } else { "/bin/sh" };
+/// The POSIX sh that runs a command: `/bin/sh`, and on Windows, which has none of its own, the sh of Git for Windows,
+/// which [`git_sh`] finds, or `sh` when it finds none, which a command then names in the refusal of its start.
+pub fn shell() -> &'static Path {
+  static FOUND: OnceLock<PathBuf> = OnceLock::new();
+  FOUND.get_or_init(|| {
+    if !cfg!(windows) {
+      return PathBuf::from("/bin/sh");
+    }
+    let folders: Vec<PathBuf> =
+      env::split_paths(&env::var_os("PATH").unwrap_or_default()).collect();
+    git_sh(&folders, env::var_os("ProgramFiles").map(PathBuf::from))
+      .unwrap_or_else(|| PathBuf::from("sh"))
+  })
+}
+
+/// The sh of Git for Windows: the `sh` in these folders, else the one of the Git whose `git` stands in them, in a
+/// `bin` or a `usr/bin` of a folder above that program, as a Git that puts only its `cmd` on PATH holds it, else the one
+/// of the Git in the folder of the programs of the machine.
+pub(crate) fn git_sh(folders: &[PathBuf], programs: Option<PathBuf>) -> Option<PathBuf> {
+  program("sh", folders.iter().cloned())
+    .or_else(|| {
+      let git = program("git", folders.iter().cloned())?;
+      let roots = git.ancestors().skip(2).take(3).map(Path::to_path_buf).collect::<Vec<_>>();
+      program("sh", roots.iter().flat_map(|one| [one.join("bin"), one.join("usr").join("bin")]))
+    })
+    .or_else(|| program("sh", [programs?.join("Git").join("bin")]))
+}
 
 /// The first program of a name in these folders, with the endings of a program on Windows.
 pub fn program(name: &str, folders: impl IntoIterator<Item = PathBuf>) -> Option<PathBuf> {
@@ -228,7 +254,7 @@ async fn begun(co: &mut Co<Said>, a: &Fact, scratch: &Scratch) -> Result<Begun, 
   let dir = here(co, &on).await?;
   let asked = vec![Object::string("merged"), Object::string(on), Object::string(about.clone())];
   let merged = co.call("ask", asked, vec![]).await?.as_ref().as_bool().unwrap_or_default();
-  let mut command = Command::new(SHELL);
+  let mut command = Command::new(shell());
   command
     .arg("-c")
     .arg(if merged { format!("exec 2>&1\n{line}") } else { line })
@@ -242,9 +268,14 @@ async fn begun(co: &mut Co<Said>, a: &Fact, scratch: &Scratch) -> Result<Begun, 
     command.env("TMP", tmp).env("TEMP", tmp);
   }
   grouped(&mut command);
-  let mut child = tokio::process::Command::from(command)
-    .spawn()
-    .map_err(|no| Fault::refused(format!("{shown} did not start: {no}: {}", dir.display())))?;
+  let mut child = tokio::process::Command::from(command).spawn().map_err(|no| {
+    let why = if cfg!(windows) && no.kind() == ErrorKind::NotFound {
+      format!("no POSIX sh runs it: install Git for Windows, whose sh furb runs: {no}")
+    } else {
+      no.to_string()
+    };
+    Fault::refused(format!("{shown} did not start: {why}: {}", dir.display()))
+  })?;
   match Group::of(&child) {
     Ok(group) => Ok(Begun { about, child, group, timeout, given }),
     Err(no) => {
@@ -345,7 +376,14 @@ fn coded(status: std::process::ExitStatus) -> Option<i32> {
     status.code().or_else(|| status.signal().map(|signal| 128 + signal))
   }
   #[cfg(not(unix))]
-  status.code()
+  status.code().map(signalled)
+}
+
+/// The code of an exit of the sh of Git for Windows, which a signal ends with the number of the signal times 256, as
+/// 128 and that number, as a shell gives; and every other code as it is.
+#[cfg_attr(unix, allow(dead_code))]
+pub(super) fn signalled(code: i32) -> i32 {
+  if code % 256 == 0 && (1..=64).contains(&(code / 256)) { 128 + code / 256 } else { code }
 }
 
 /// What is fed to a command, written into its stdin, until nothing closes it or the command reads no more.
@@ -508,3 +546,7 @@ impl Drop for Group {
     self.slay();
   }
 }
+
+#[cfg(test)]
+#[path = "bash.test.rs"]
+mod test;

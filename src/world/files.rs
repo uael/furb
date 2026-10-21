@@ -50,6 +50,7 @@ pub fn files(scratch: Scratch) -> Box<dyn Ear> {
 /// stands there.
 async fn moved(co: &mut Co, a: &Fact) -> Result<String, Fault> {
   let path = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
+  let path = native(&path, cfg!(windows));
   if path.starts_with("scratch:") {
     return Err(Fault::refused(format!(
       "A chain cannot stand in {path}, since {SCRATCH} has no path to stand in."
@@ -72,6 +73,7 @@ async fn served(co: &mut Co, a: &Fact, scratch: &Scratch) -> Result<Text, Fault>
       (text.path, Some(text.content))
     }
   };
+  let path = native(&path, cfg!(windows));
   if let Some(path) = path.strip_prefix(SCRATCH) {
     return scratch.served(path, content);
   }
@@ -118,6 +120,28 @@ pub(super) fn ended(at: &Path, content: String) -> String {
     content.replace("\r\n", "\n").replace('\n', "\r\n")
   } else {
     content
+  }
+}
+
+/// A path as Windows names it, from the form of the sh of Git for Windows, which names `C:\\x` as `/c/x` and the
+/// scratch directory, its temporary directory, as `/tmp`: on Windows, `/c` and `/c/x` are `C:/` and `C:/x`, and `/tmp`
+/// and `/tmp/x` are `scratch://` and `scratch://x`. Any other path, and every path on another machine, stands as it is.
+pub(super) fn native(path: &str, windows: bool) -> String {
+  if !windows {
+    return path.to_owned();
+  }
+  if let Some(rest) =
+    path.strip_prefix("/tmp").filter(|rest| rest.is_empty() || rest.starts_with('/'))
+  {
+    return format!("{SCRATCH}{}", rest.trim_start_matches('/'));
+  }
+  match path.as_bytes() {
+    [b'/', drive, rest @ ..]
+      if drive.is_ascii_alphabetic() && (rest.is_empty() || rest[0] == b'/') =>
+    {
+      format!("{}:/{}", char::from(*drive).to_ascii_uppercase(), path[2..].trim_start_matches('/'))
+    }
+    _ => path.to_owned(),
   }
 }
 

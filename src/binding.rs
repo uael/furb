@@ -444,8 +444,8 @@ pub fn config_directory() -> String {
 /// The POSIX shell that runs a command of this machine, which a host runs its own commands in too.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
-pub fn shell() -> &'static str {
-  world::SHELL
+pub fn shell() -> String {
+  world::shell().display().to_string()
 }
 
 /// Every shape the operator answers, by its name.

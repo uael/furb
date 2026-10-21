@@ -162,6 +162,7 @@ def read(path: str, show: Show = HEAD, on: str = "") -> Text:
   Each text and each refusal of scratch:// names its path under scratch:// and never the place of the scratch directory on the machine.
   A path of scratch:// that leaves the scratch directory, by .. or by a link, is refused, and so is a path that starts with scratch: and not scratch://, with a refusal that names scratch://.
   The World gives a file whose every line ends with CRLF with LF at the end of each line, so a text holds the same lines on every machine, and a file of other line ends as it is.
+  On Windows the World reads a path in the form that the sh of Git gives it as Windows names it: /c/x is C:/x, and /tmp/x is scratch://x, since the sh names the scratch directory /tmp.
   read is given a path and a show.
   read gives a Text.
   A text without a show is told as HEAD, which is the span of its first 2000 lines.
@@ -593,6 +594,7 @@ def bash(
   bash is given a command, its stdin, a timeout, and a show for each stream, the plain words first, so the journal makes it again.
   bash gives the command, which is awaited for its exit code and its streams.
   The World runs the command in the working directory of the chain, which it reads.
+  The World runs the command in a POSIX sh: /bin/sh, and on Windows the sh of Git for Windows, which it finds on PATH, beside the git on PATH, or in the folder of the programs of the machine.
   The World runs each command with TMPDIR set to the scratch directory, and TMP and TEMP too on Windows, which it makes first, so the command finds the files of scratch:// in $TMPDIR, and a program that reads TMPDIR, as tempfile of python does, makes its files there.
   The command runs until it ends, until its timeout, or until a cancel.
   The command ends once its shell exited and its streams closed, or once its shell exited and no process of its group lives, as when a process that left the group holds a stream, with the code of the shell and what its streams wrote.
