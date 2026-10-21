@@ -18,7 +18,8 @@ bun run tui -- --resume .furb/sessions/example.jsonl
 effort of its `--model` as `--model` and `--effort`, each `--roster`, and the words after `--`.
 
 Use `--cwd`, `--model provider:model`, `--effort`, `--record`, and repeated `--roster` options to configure
-a new life. A session offers its model, the default model when you name none, and the models of `--roster`.
+a new life. A session offers every model that the catalog offers, with its model first: the default model when you
+name none. With `--roster`, it offers its model and the models of `--roster`, and no more.
 Sessions are saved under `.furb/sessions` in the selected directory. The `.furb` that the TUI makes holds
 a `.gitignore` that keeps it out of version control. Keep the `.jsonl`, `.session.json`, `.changes.jsonl`, and
 `.ui.json` files together. The last file keeps the view of the session as you left it. Keep its `.images` directory

@@ -134,6 +134,17 @@ test("a session offers the models its host names, and keeps the model and the ef
   } finally {
     await alone.dispose();
   }
+  const every = new Session({ cwd });
+  try {
+    const [roster, , actor] = every.open().standing() as [[string][], string, string];
+    expect([roster.map(([name]) => name).slice(0, 4), roster.at(-1)?.[0], actor]).toEqual([
+      ["claude-cli:opus", "claude-cli:sonnet", "claude-cli:haiku", "claude-cli:fable"],
+      "operator",
+      "claude-cli:opus/high",
+    ]);
+  } finally {
+    await every.dispose();
+  }
   const first = new Session({ cwd, record, model: "opus", effort: "high", roster: ["claude-cli:sonnet"] });
   try {
     const engine = first.open();
