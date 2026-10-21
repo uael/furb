@@ -37,6 +37,9 @@ export type Engine = {
 };
 /** A question that waits for the operator. */
 type Prompt = { id: string; shape: string; message: string };
+/** A prompt of None to the operator, which asks nothing and was closed as the console took it, until the operator
+ * dismisses it. */
+type Notice = { id: string; message: string };
 /** What the session in the worker holds that the host keeps as it comes. */
 interface Plain {
   completed: number;
@@ -54,6 +57,7 @@ interface Plain {
 export interface HostState extends Plain {
   facts: number;
   prompts: Prompt[];
+  notices: Notice[];
   streams: [string, Stream][];
   pending: [string, string][];
 }
@@ -68,14 +72,16 @@ export class HostView extends EventEmitter implements Plain {
   record?: string;
   changes = 0;
   prompts = new Map<string, Prompt>();
+  notices = new Map<string, Notice>();
   streams = new Map<string, Stream>();
   pending = new Map<string, string>();
   constructor(private request: (target: string, method: string, args: unknown[]) => Promise<unknown>) {
     super();
   }
-  update({ facts, prompts, streams, pending, ...plain }: HostState): void {
+  update({ facts, prompts, notices, streams, pending, ...plain }: HostState): void {
     Object.assign(this, plain);
     this.prompts = new Map(prompts.map((prompt) => [prompt.id, prompt]));
+    this.notices = new Map(notices.map((notice) => [notice.id, notice]));
     this.streams = new Map(streams);
     this.pending = new Map(pending);
     if (facts) this.emit("facts");
@@ -93,6 +99,8 @@ export class HostView extends EventEmitter implements Plain {
   /** The name of the model that a name gives in the roster or in the catalog, and nothing when it gives none. */
   model = (name: string) => this.ask<string | null>("library", "model", name);
   answer = (id: string, value: string) => this.ask<unknown>("console", "answer", id, value);
+  /** The notice that the operator read, which the TUI shows no more as unread. */
+  dismiss = (id: string) => this.ask<unknown>("console", "dismiss", id);
   attachImage = (path: string) => this.ask<ImageAttachment>("session", "attachImage", path);
   sendQueued = (entry: FollowUp) => this.ask<string>("library", "queue", entry);
   resume = () => this.ask<unknown>("session", "resume");

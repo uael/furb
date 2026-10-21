@@ -87,7 +87,7 @@ fn the_configs_turn_on_each_extension_they_give_a_folder_the_project_after_the_u
   let names = |got: Vec<Extension>| got.into_iter().map(|one| one.name).collect::<Vec<_>>();
   assert_eq!(
     names(configured(&places, &project).unwrap()),
-    ["memory", "skills", "compaction", "ouroboros"],
+    ["memory", "skills", "compaction", "ouroboros", "web"],
     "the official ones are on"
   );
   folder(&at.join("home").join("tilde"), r#"{"name": "tilde", "word": "note.py"}"#, "t = 1");
@@ -99,7 +99,7 @@ fn the_configs_turn_on_each_extension_they_give_a_folder_the_project_after_the_u
   );
   assert_eq!(
     names(configured(&places, &project).unwrap()),
-    ["memory", "compaction", "ouroboros", "tilde", "near"]
+    ["memory", "compaction", "ouroboros", "web", "tilde", "near"]
   );
   config(
     &project.join(".furb").join("config.json"),
@@ -107,7 +107,7 @@ fn the_configs_turn_on_each_extension_they_give_a_folder_the_project_after_the_u
   );
   assert_eq!(
     names(configured(&places, &project).unwrap()),
-    ["memory", "skills", "compaction", "ouroboros", "tilde", "far"],
+    ["memory", "skills", "compaction", "ouroboros", "web", "tilde", "far"],
     "each stands where a config first names it, after the official ones"
   );
 }
@@ -123,7 +123,7 @@ fn a_config_that_is_not_of_the_form_is_refused_with_its_path() {
   };
   let refused = |text: &str| read(text).unwrap_err().message();
   let shown = file.display();
-  assert_eq!(read(r#"{"theme": "dark"}"#).unwrap().len(), 4, "a config may name no extension");
+  assert_eq!(read(r#"{"theme": "dark"}"#).unwrap().len(), 5, "a config may name no extension");
   assert_eq!(refused("[]"), format!("A config is a map, whose extensions is a map: {shown}"));
   assert_eq!(
     refused(r#"{"extensions": []}"#),
@@ -195,6 +195,38 @@ fn played(engine: &mut Engine, chains: &[&str]) -> Vec<(String, String, String)>
 
 fn rung(id: &str, chain: &str, word: &str) -> (String, String, String) {
   (id.to_owned(), chain.to_owned(), word.to_owned())
+}
+
+#[test]
+fn a_chain_that_a_word_makes_takes_each_extension_before_what_the_word_says_on_it() {
+  let at = place("word");
+  fs::write(at.join("note.txt"), "noted\n").unwrap();
+  let word = "prompt(None, 'task', on=chain('w'))\nprompt(None, 'more', on=chain('s', 'chain1'))";
+  let shown = |engine: &mut Engine, chain: &str| {
+    let on = verbs::Transcript { on: Some(chain.to_owned()) };
+    let facts = engine.transcript(on).unwrap();
+    facts
+      .iter()
+      .map(|one| (one.kind().to_owned(), one.about().to_owned(), one.by().to_owned()))
+      .collect::<Vec<_>>()
+  };
+  let first = {
+    let mut engine = lived(&at, vec![note(NOTE)]);
+    let word = Some(word.to_owned());
+    engine.rung(verbs::Rung { word, on: Some("chain1".to_owned()), ..Default::default() }).unwrap();
+    ["chain2", "chain3"].map(|chain| shown(&mut engine, chain))
+  };
+  for facts in &first {
+    let at =
+      |kind: &str, by: &str| facts.iter().position(|one| one.0 == kind && one.2.starts_with(by));
+    assert!(at("rung", "extensions").unwrap() < at("prompt", "rung").unwrap(), "{facts:?}");
+  }
+  let mut engine = lived(&at, vec![note(NOTE)]);
+  let again = ["chain2", "chain3"].map(|chain| shown(&mut engine, chain));
+  let places = |all: &[Vec<(String, String, String)>; 2]| {
+    all.clone().map(|facts| facts.into_iter().map(|one| (one.0, one.1)).collect::<Vec<_>>())
+  };
+  assert_eq!(places(&again), places(&first), "a later life plays the same rungs at the same place");
 }
 
 #[test]

@@ -65,6 +65,13 @@ its answer, or ⌃A opens a dialog for it.
 
 ![Answer dialog](screenshots/09-operator-dialog.png)
 
+## A notice for you
+
+A prompt of None asks nothing, so it is a notice and not a question. The console closes it as it takes it, so the
+word that sent it goes on, and the notice stands in the feed with no field to answer. ⌃A or a click dismisses it.
+
+![Operator notice](screenshots/22-operator-notice.png)
+
 ## Python input
 
 The input grows as you type, and its bar and the line under it name the mode: Prompt, Python, Answer, or Edit

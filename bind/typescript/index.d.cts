@@ -49,6 +49,11 @@ export declare class Engine {
    * kind, as the engine of the crate finds it.
    */
   pending(): Array<[string, string]>
+  /**
+   * The act of a verb that a key of the client makes once, across a crash of the host and a retry of the client:
+   * the act that the key made before, or a new act, as the engine of the crate finds it.
+   */
+  keyed(key: string, kind: string, args?: unknown[], kwargs?: Record<string, unknown>): Act
   /** One name of a chain, the root when none is given, read without calling it. */
   inspect(name: string, chain?: string | undefined | null): Inspection
   /** Every name the module of a chain binds, the root when none is given, in the order it bound them. */

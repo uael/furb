@@ -89,7 +89,9 @@ the chain, the messages and the settings of the effort as the provider would sen
 what it writes as it writes it, and gives a turn. The host still names the models that `answer` stands in for. With
 no `operator`, questions stand in `session.console.prompts`; call `session.console.answer(id, text)` to read an
 answer by the rules that every console of the crate reads a line by, which `answered(shape, line)` gives, for each
-of the `shapes()` that the operator answers. `session` emits `change` and `facts`, and `fault` tells what the life refused when the console
+of the `shapes()` that the operator answers. A prompt of `None` asks nothing: the console closes it with `None` as
+it takes it, so no word waits for the operator, and keeps it in `session.console.notices` until
+`session.console.dismiss(id)`, or gives it to `operator` and waits for no answer. `session` emits `change` and `facts`, and `fault` tells what the life refused when the console
 said what an act came to. `session.streams` holds what a model writes for each rung, until the done of its reply.
 `session.facts` holds every fact of the life, every act among them, since the session drives the ear that keeps
 them as an ear of the engine. A view reads the life and says nothing, so a listener that reads the life hears no
@@ -138,7 +140,13 @@ each act, as `engine.pending()` finds it: among each act that the outside starte
 made it, each prompt, rung, command and wait that is not done and that no pause holds. `session.resume()` wakes each
 chain that holds some, and an act that a wake puts to the outside again is pending no more. The engine reads the
 pending work off the transcripts, so the session asks it again only after a pause, a wake, or a start or a done of
-an act of that work, and keeps what it gave until then. The record's
+an act of that work, and keeps what it gave until then.
+
+`engine.keyed(key, kind, args, kwargs)` makes the act of a verb once for a key of the client, across a crash of the
+host and a retry of the client, as `engine.keyed("k1", "prompt", ["int"], { message: "count", on })`. A key fact goes
+to the record before the act, and a later call with the same key on the same chain gives the act that the key made,
+in this life or in a later life on the record. When the host crashed after it kept the key and before it kept the
+act, the call makes the act. The record's
 `.session.json` companion holds the directory, the model and the effort that the host chose last, and no stream,
 since a stream lives only while its reply runs. File snapshots append to `.changes.jsonl`;
 `session.changes.read` loads a page of them. Keep both companions with the JSONL record. The session saves

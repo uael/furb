@@ -1542,6 +1542,40 @@ export class App {
             (box) => this.word(box, code, rung?.run?.reason),
             { collapsible: true, act: rung, title: moving(rung), shown: code },
           );
+        } else if (item.type === "prompt" && asksOperator(item.act) && item.act.words[0] === "None") {
+          // A prompt of None asks nothing: the console closed it as it took it, and it is a notice that the operator
+          // reads and dismisses, with no field to answer.
+          const { act } = item;
+          const message = String(act.words[1] ?? "");
+          const unread = w.host.notices.has(act.id);
+          add(
+            item.key,
+            `${message}\n${unread}`,
+            [
+              [`${glyph.asks} `, unread ? c.warning : c.faint],
+              ["Notice", c.text, bold],
+              [`  ${act.by === "operator" ? "for you" : `from ${act.by}`}`, c.faint],
+            ],
+            (box) => {
+              this.panel(box, unread ? c.warning : c.border).add(this.text(message));
+              if (unread)
+                box.add(
+                  this.inset(
+                    space.between,
+                    this.text(
+                      [
+                        ["Nothing to answer. Press ", c.muted],
+                        ["⌃A", c.muted],
+                        [" or click here to dismiss it", c.faint],
+                      ],
+                      c.muted,
+                      { run: () => void this.session.host.dismiss(act.id).catch(this.report) },
+                    ),
+                  ),
+                );
+            },
+            { group: "question", act, shown: message },
+          );
         } else if (item.type === "prompt" && asksOperator(item.act)) {
           const { act } = item;
           const message = String(act.words[1] ?? "");
@@ -3801,7 +3835,11 @@ export class App {
   };
   question(): void {
     const question = this.session.operatorPrompt;
-    if (!question) return;
+    if (!question) {
+      const notice = this.session.operatorNotice;
+      if (notice) void this.session.host.dismiss(notice.id).catch(this.report);
+      return;
+    }
     if (question.shape === "bool") {
       this.openPalette("Answer yes or no", [
         {
@@ -5141,7 +5179,7 @@ export class App {
   /** When an action of the table acts, where it does not act at all times: a key that does not act goes on to the
    * input, and the footer does not offer it. */
   private readonly when: Partial<Record<Action, () => boolean>> = {
-    answer: () => Boolean(this.session.operatorPrompt),
+    answer: () => Boolean(this.session.operatorPrompt ?? this.session.operatorNotice),
     page: () => this.session.view === "changes",
     pause: () => !this.searchRow.visible && this.pausing(),
   };

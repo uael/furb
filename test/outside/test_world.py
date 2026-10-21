@@ -121,6 +121,17 @@ async def test_two_prompts_of_the_operator_are_shown_and_answered_one_at_a_time(
     assert (await one, await two) == ("first", "second")
 
 
+async def test_a_prompt_of_none_is_closed_as_it_is_taken_and_shown_as_a_notice(
+  yard: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+  """A prompt of None asks nothing: the World closes it with None as it takes it, reads no line of the operator for
+  it, and the terminal shows its message as a notice."""
+  root = life(world(yard))
+  got = engine.prompt(None, "the build is green", OPERATOR, on=root)
+  assert engine.peek(got, ...) is None
+  assert await until(lambda: "prompt1 tells: the build is green\n" in capsys.readouterr().out)
+
+
 async def test_the_world_refuses_a_shape_the_operator_does_not_answer(yard: Path) -> None:
   """Which shapes the operator answers is the law of the World, and one it cannot put to the operator it closes."""
   root = life(world(yard))

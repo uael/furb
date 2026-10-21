@@ -27,10 +27,12 @@ use std::{
 pub use bash::{SHELL, bash, program};
 pub use files::files;
 pub use operator::{SHAPES, answered};
+pub(crate) use provider::search::{posted, spawned};
 pub use provider::{
-  Hosted, Model, Provider, Told, Writes,
+  Hosted, Model, Provider, Search, Told, Writes,
   catalog::{self, Catalog},
   claude, images,
+  search::Searches,
 };
 pub use scratch::{SCRATCH, Scratch};
 pub use store::{kept, store};

@@ -47,7 +47,7 @@ meanings. The entry of such a name here gives only its form in the engine.
 - ear: a generator that hears the facts of the life and speaks by yielding one; the ear of an act is given the name
   of the act, and a verb makes it with controlled, so the controls over the act reach it. An ear of the engine hears
   every fact and every act; an ear of the outside, the World, the Kernel and every other generator that boot is
-  given, hears every fact, and an act only while no ear before it took it.
+  given, hears every fact, and an act only while no ear before it took it, but a chain, which it hears at its birth.
 - done: the fact that settles the act it names with what the act came to.
 - outcome: what an act came to, held under its name once its done lands: the value or the exception.
 - id: the name of an act, as a string: its kind and its number among the acts of that kind, as bash1 or read3,
@@ -145,7 +145,7 @@ meanings. The entry of such a name here gives only its form in the engine.
 - enable: the fact by which the World turns an extension on in a life, with its name, its word and its life word,
   which the record keeps; the World says it at the tip, and when a write of the config of the project lands that
   turns on an extension by its path, and it plays the extension as a rung on every chain there is when it hears the
-  fact, and after it on each chain at its birth.
+  fact, and after it on each chain at its birth, before the call that made the chain returns.
 - life word: the python of an extension that its rung runs after its word, and that the World plays alone on a chain
   whose origin had the extension, since that chain made the rung of its origin again.
 

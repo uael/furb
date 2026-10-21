@@ -1,12 +1,14 @@
 """The conftest of the suites of the extensions: the hooks and the fixtures of the harness of the engine, which reach
 the suite of each extension only through a conftest above it, and the helpers that only those suites need."""
 
+import asyncio
 from collections.abc import Callable, Sequence
 from dataclasses import replace
 from pathlib import Path
 
-from conftest import STANDS, Sand, World, engine_of, life, of, pytest_generate_tests, sown  # noqa: F401
+from conftest import STANDS, Sand, World, engine_of, life, of, pytest_generate_tests, sown, world_says  # noqa: F401
 from furb import engine
+from furb.engine import Refused, Text
 from furb_monty import _monty
 
 EXTENDING = (
@@ -77,3 +79,23 @@ def compacting(at: Path) -> tuple[Sand, str, str]:
   work = str(at / "work")
   sand.files[f"{work}/a.txt"] = "one\ntwo\n"
   return sand, root, work
+
+
+def surfed(answers: dict[str, Text], heard: list[tuple]) -> World:
+  """The web of the suite, in memory: an ear that takes each web_search and each web_fetch, keeps it in heard, says it
+  started, and says it done from its own loop with the answer of its query or its address, or with a refusal when it
+  has none."""
+  while True:
+    a = yield
+    if a[0] in ("web_search", "web_fetch") and engine.question(a):
+      heard.append(a)
+      yield "started", a[1]
+      got = answers.get(a[4], Refused(f"No page answers {a[4]}."))
+      asyncio.get_running_loop().call_soon(world_says, "done", a[1], got)
+
+
+def webbed(at: Path, answers: dict[str, Text]) -> tuple[str, list[tuple]]:
+  """A life that runs the extension web, on the web of the suite with these answers: the root, and what the web
+  heard."""
+  heard: list[tuple] = []
+  return extended("web", at, lambda _: surfed(answers, heard))[1], heard

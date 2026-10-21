@@ -239,8 +239,8 @@ class Sand:
         self.timers.pop(about).cancel()
       case ("prompt", about, _, _, shape, _, _):
         yield "started", about
-        if shape not in ("None", "bool", "int", "float", "str"):
-          engine.close(Refused(f"the operator answers no {shape}"), about)
+        if shape not in ("bool", "int", "float", "str"):
+          engine.close(None if shape == "None" else Refused(f"the operator answers no {shape}"), about)
       case ("stand", qid, *_):
         yield "done", qid, self.stands
       case ("cd", qid, _, on, path):
@@ -279,7 +279,8 @@ class Sand:
 
 
 class Dead(Sand):
-  """A World that refuses everything: every question it hears is answered with a refusal.
+  """A World that refuses everything: every question it hears is answered with a refusal, but a chain, which it hears
+  at its birth and never takes.
 
   What a chain stands on is the one question it answers, since every chain asks it as it opens and no record holds
   it. It does no act, it answers no ask and it keeps nothing, so a life that reaches it for anything else fails
@@ -290,7 +291,7 @@ class Dead(Sand):
     """The World that answers a standing and refuses every other question."""
     while True:
       match a := (yield):
-        case (kind, qid, *_) if engine.get(qid) == a:
+        case (kind, qid, *_) if engine.get(qid) == a and kind != "chain":
           self.calls.append(a)
           yield "done", qid, self.stands if kind == "stand" else Refused(f"a dead World answers no {kind}")
 

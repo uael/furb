@@ -62,8 +62,8 @@ Each command is an object whose `type` names it. An `id` is optional, and the re
 
 | `type` | Fields | `data` of the response |
 | --- | --- | --- |
-| `prompt` | `message`, `shape`, `to`, `on` | `{"act": "prompt1"}` |
-| `rung` | `word`, `on` | `{"act": "rung1"}` |
+| `prompt` | `message`, `shape`, `to`, `on`, `key` | `{"act": "prompt1"}` |
+| `rung` | `word`, `on`, `key` | `{"act": "rung1"}` |
 | `close` | `act`, `value` | none |
 | `cancel` | `act` | none |
 | `pause` | `act` | none |
@@ -80,6 +80,12 @@ Each command is an object whose `type` names it. An `id` is optional, and the re
   default actor of its chain.
 - `rung` runs `word`, which is python, as a rung on a chain, in the globals of that chain. The act is done with what
   the word gave to `close`, and with nothing when the word runs to its end.
+- `key` makes a `prompt` or a `rung` once, across a crash of furb and a retry of the client. It is any
+  string that the client chooses. A command with a key that a command of the same type
+  on the same chain had before makes no act: its response names the act that the key made, in this life or in a later
+  life on the record, and the client gets the `done` event of that act again. furb keeps the key in the record before
+  the act, as the fact `["key", "chain1", "operator", "k1", "prompt"]`, so a crash between the two leaves a key with
+  no act, and the retry makes the act.
 - `close` ends an act with `value`, which is none when the command does not give it. It is how the client answers a
   prompt to the operator. An exception, such as `{"is": "Refused", "args": ["no"]}`, ends the act with that
   exception. The operator answers a prompt of the shape `float` with any number, so a whole number closes it as a
@@ -125,7 +131,9 @@ The life says its events as they happen, after the response of the command that 
 - `prompt`: each prompt to the operator, which the client answers with `close`. It comes from a `prompt` of the
   client to `operator`, or from a word of a model that asks the operator. The operator answers the shapes `str`,
   `None`, `bool`, `int`, `float`, `list` and `dict`, as at the terminal. A prompt to the operator of another shape
-  is not sent: furb closes it at once with a refusal, such as `the operator answers no set`.
+  is not sent: furb closes it at once with a refusal, such as `the operator answers no set`. A prompt of the shape
+  `None` asks nothing: furb closes it with `None` as it sends it, so the client shows it as a notice and answers it
+  not.
 
   ```json
   {"type": "prompt", "act": "prompt2", "on": "chain1", "shape": "int", "message": "how many?"}
