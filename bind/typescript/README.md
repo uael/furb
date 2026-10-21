@@ -59,9 +59,10 @@ the program, and the models of the local server that `FURB_LOCAL_URL` names, eac
 names what the provider offers beside the model of the default actor in `roster`, as `provider:id`, and the default
 actor in `model` and `effort`: the first of the roster when unsaid. When the roster is unsaid too, the session stands on
 the default of the crate: a model of the claude command line, then of a provider of the network, then of the local
-server. A roster that names
-no model, with no model, offers the operator alone, and a prompt that names no actor goes to the operator. The standing
-of every chain tells the roster, so a session offers the models it names and not the whole catalog. An actor that names
+server. A session whose roster is
+unsaid offers every model that the catalog offers, after the model of the default actor. A roster that names models
+offers those and no more, since the standing of every chain tells the roster, and a roster that names no model, with no
+model, offers the operator alone, and a prompt that names no actor goes to the operator. An actor that names
 no effort takes `high`, and an effort moves to the nearest one the model takes, among `levels()`. A name without its
 provider names the one model of that id. A reopened session offers what its host names now. It keeps the model and the
 effort that the host chose last, and takes that model when the host names none and the catalog knows it. The journal

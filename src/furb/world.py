@@ -53,8 +53,8 @@ class Live:
   them.
 
   `directory` is where the chains of the life start. `actor` is the actor a prompt goes to when it names none, and
-  `roster` names the models the life offers beside its model, or the first model the catalog of the crate offers
-  stands alone when neither is said. `answer` answers each request in place of the models, when it is given, and
+  `roster` names the models the life offers beside its model, and the life offers every model that the catalog of the
+  crate offers when it is unsaid. `answer` answers each request in place of the models, when it is given, and
   `stream` is told what a model writes as it writes it, on a thread of the models. `images` is the directory of the
   images that a turn names. `calls` holds every question the World heard that it or the provider answered, in order.
   `ears` are the ears of the crate the life is booted on, which the World lets go at its end. `reader` reads the
