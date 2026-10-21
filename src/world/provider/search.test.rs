@@ -1,11 +1,15 @@
 //! The native searches: what each API answers comes to an answer with its sources, and the claude command line
 //! searches with its tool WebSearch alone.
 
+#[cfg(unix)]
 use std::{fs, path::Path, sync::Arc};
 
 use serde_json::json;
 
-use super::{anthropic, claude, deepseek, gemini, responses, sourced};
+#[cfg(unix)]
+use super::claude;
+use super::{anthropic, deepseek, gemini, responses, sourced};
+#[cfg(unix)]
 use crate::ear::reactor;
 
 fn pair(title: &str, url: &str) -> (String, String) {
@@ -81,17 +85,15 @@ fn deepseek_answers_with_each_result_its_title_its_address_and_its_summary() {
 }
 
 /// A command line that writes its arguments and what its stdin holds, or that fails, in a folder of its own.
+#[cfg(unix)]
 fn program(name: &str, body: &str) -> Arc<Path> {
   let at = std::env::temp_dir().join(format!("furb-search-{name}-{}", std::process::id()));
   let _ = fs::remove_dir_all(&at);
   fs::create_dir_all(&at).unwrap();
   let bin = at.join("claude");
   fs::write(&bin, format!("#!/bin/sh\n{body}\n")).unwrap();
-  #[cfg(unix)]
-  {
-    use std::os::unix::fs::PermissionsExt;
-    fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).unwrap();
-  }
+  use std::os::unix::fs::PermissionsExt;
+  fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).unwrap();
   bin.into()
 }
 

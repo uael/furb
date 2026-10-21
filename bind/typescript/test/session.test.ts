@@ -668,7 +668,10 @@ test("a session enables the extensions of the configs, and a later session on it
   try {
     later.open();
     fresh.open();
-    expect([running(later), running(fresh)]).toEqual([["memory", "skills", "compaction", "ouroboros", "web"], []]);
+    expect([running(later), running(fresh)]).toEqual([
+      ["memory", "skills", "compaction", "ouroboros", "web"],
+      [],
+    ]);
   } finally {
     await later.dispose();
     await fresh.dispose();
