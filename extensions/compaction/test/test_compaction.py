@@ -40,7 +40,7 @@ async def test_the_fill_of_a_chain_watched(tmp_path: Path) -> None:
 
 
 async def test_the_share_is_what_filled_of_the_engine_gives_of_the_reply(tmp_path: Path) -> None:
-  """The share is what filled of the engine gives of the reply, so compaction tells the share that the advance and the ledger bind, to two places."""
+  """The share is what filled of the engine gives of the reply, so compaction tells the share that the advance binds, to two places."""
   _, root, watcher = await watching(tmp_path, (150001, 0, 0, 0, 0.0), to="n/low")
   (reply,) = [a[1] for a in engine.transcript(root) if engine.question(a) and a[0] == "reply"]
   assert engine.filled(reply) == 0.75

@@ -139,7 +139,7 @@ export class Session extends EventEmitter {
   /** The usage of each answer of the chain itself, which the turns of a chain with a source do not tell apart. */
   answers: Usage[] = [];
   /** The share of the window that the last answer of the chain filled, as filled of the engine gives it, which the
-   * advance and the ledger of a grant bind too. Nothing before the first answer. */
+   * advance binds too. Nothing before the first answer. */
   filled?: number;
   changes: ShownChange[] = [];
   changePage = 0;

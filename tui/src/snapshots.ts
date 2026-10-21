@@ -107,7 +107,7 @@ export class Snapshots {
       this.dispatched = [...queueDispatches(this.session.entries).keys()];
     }
     const { acts, count } = this.session.activity.since(since);
-    // The share of the window has one home, filled of the engine, which the advance and the ledger bind too.
+    // The share of the window has one home, filled of the engine, which the advance binds too.
     const reply = this.replies.get(selected);
     const filled = reply === undefined ? undefined : this.engine.verb("filled", [reply]);
     return {
