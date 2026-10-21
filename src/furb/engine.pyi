@@ -152,6 +152,7 @@ def take(*ids: str, inside: bool = True) -> Filter:
 def read(path: str, show: Show = HEAD, on: str = "") -> Text:
   """A read: whoever serves the path answers it with the text of it, which the read tells by the lines its show picks.
   A read that the World refuses raises Refused in the caller.
+  The World refuses a read of a path whose first part is the name of an act, since that path is a door that no ear of the engine served and never a file, and the refusal names the chain of that act.
   The engine judges no scheme, so a path of an unknown scheme goes to the World too.
   The World serves the scratch directory as scratch://: a read of scratch://plan.md gives that file, and a read of scratch:// or of a folder of it gives the name of each entry of that folder, one on each line, each folder with / at its end, as ls does.
   Each text and each refusal of scratch:// names its path under scratch:// and never the place of the scratch directory on the machine.
@@ -173,6 +174,7 @@ def write(text: Text, on: str = "") -> Text:
   """A write: whoever serves the path of the text takes its content.
   write is given a text, and gives the text as it is on disk after the write.
   A write that the World refuses raises Refused in the caller.
+  The World refuses a write of a path whose first part is the name of an act, and writes no file, since that path is a door that no ear of the engine served, and the refusal names the chain of that act.
   The engine tells a write of a text by its header and its path, with the lines that differ from what the caller asked when some do, and a write that a door answers with a value by that value.
   A write takes no show, since what a write would show the word of the model already said: it tells its header and its path, so the turns show each write that landed, and the lines of what came back that differ from what it asked for, so a write that the disk took as it was asked tells no line.
   A door that answers a write with more than it was asked for tells each line of what came back that differs from the line it was asked for at the same place.

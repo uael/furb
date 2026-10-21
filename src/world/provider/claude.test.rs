@@ -250,7 +250,7 @@ fn a_message_that_the_command_line_did_not_hear_goes_whole_at_the_next_turn() {
   ];
   for (name, last, sent) in cases {
     let yard = Yard::new(name);
-    let model = yard.claude(10_000).completion_model("sonnet");
+    let model = yard.claude(10_000).waiting(Duration::ZERO).completion_model("sonnet");
     let settings = json!({"session": "chain"});
     let one = asked(&model, &[user("first")], settings.clone()).unwrap();
     let answer = Message::Assistant { id: None, content: one.choice };
@@ -421,6 +421,23 @@ fn a_process_that_exits_fails_its_turn_with_the_tail_of_its_stderr() {
   let model = yard.claude(10_000).completion_model("sonnet");
   let no = asked(&model, &[user("FAIL")], json!({})).unwrap_err();
   assert!(no.to_string().contains("Claude exited (2): deliberate failure"), "{no}");
+}
+
+#[test]
+fn a_program_that_appears_after_a_delay_starts_its_turn() {
+  let yard = Yard::new("appears");
+  let later = yard.at.join("later");
+  let model = Claude::with(Some(later.clone()), Some(Duration::from_millis(10_000)))
+    .completion_model("sonnet");
+  let source = yard.at.join("claude");
+  let placed = std::thread::spawn(move || {
+    std::thread::sleep(Duration::from_millis(300));
+    fs::rename(source, later).expect("the program appears");
+  });
+  let got = asked(&model, &[user("hi")], json!({}));
+  placed.join().expect("the program was placed");
+  assert!(got.is_ok(), "{:?}", got.err());
+  assert_eq!(yard.pids().len(), 1);
 }
 
 #[test]

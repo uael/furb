@@ -353,7 +353,7 @@ fn a_prompt_the_world_paused_ends_its_command_with_why_and_goes_on_when_it_is_ta
   let yard = Yard::new("paused");
   let counted = ["prompt", "count the lines", "--shape", "int"];
   let mut missing = yard.kept(&counted);
-  missing.env("FURB_CLAUDE_BIN", yard.at.join("missing"));
+  missing.env("FURB_CLAUDE_BIN", yard.at.join("missing")).env("FURB_CLAUDE_GONE", "0");
   let said = refused(missing, "");
   assert!(
     said.contains("furb: prompt1 is paused: claude-cli:opus/high answered nothing: "),

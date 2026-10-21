@@ -31,7 +31,8 @@ names it as the roster does. A model of the local server takes its id alone only
 `qwen3:8b`; when the part before the colon names a provider, as `mistral:7b`, only once the server listed it, and
 `local:mistral:7b` is the sure name. A command that names a model of the local server that furb has not listed waits
 for the list, five seconds at most. `FURB_CLAUDE_BIN` names the claude command line, and the `claude` on PATH is used
-when it is not set.
+when it is not set. When that program is missing or does not run, as while the command line updates itself, a turn
+tries it again for 60 seconds, or for the seconds that `FURB_CLAUDE_GONE` gives, before it fails.
 
 ## Framing
 
