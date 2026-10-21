@@ -18,6 +18,11 @@ use monty_types::{
 
 use crate::value::{Fault, Object};
 
+/// How many allocations the collector of cycles lets pass between two of its runs. Monty runs it after 100000
+/// allocations by default, and each run walks every candidate of a cycle and all that it reaches, which in a life
+/// is most of the heap.
+const GC_INTERVAL: usize = 10_000_000;
+
 /// The name of the function of the host that an entry calls first, whose answer is the body of the entry.
 const ENTER: &str = "__enter";
 
@@ -63,7 +68,7 @@ pub(crate) struct Sand {
 impl Sand {
   /// A sandbox with the limits of monty, which holds handles, and nothing in it yet.
   pub(crate) fn new() -> Self {
-    let limits = ResourceTracker::new(ResourceLimits::default());
+    let limits = ResourceTracker::new(ResourceLimits::default().gc_interval(GC_INTERVAL));
     let repl = MontyRepl::new("furb", limits, CompileOptions::default()).with_handles();
     Self { idle: Some(repl), answering: None, ended: None, fed: 0 }
   }
