@@ -11,6 +11,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./life": {
+      "types": "./dist/life/index.d.ts",
+      "import": "./dist/life/index.js"
     }
   },
   "files": [

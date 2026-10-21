@@ -20,6 +20,8 @@ export interface FileChange {
   path: string;
   before: string;
   after: string;
+  /** The write that made the change. A change that an older session kept names none. */
+  act?: string;
 }
 
 /** Append file snapshots once. Keep only their positions in memory and read a page on demand. As an ear that comes
@@ -78,7 +80,7 @@ export class FileChanges {
         before.delete(id);
         const after = words[0] as { is?: unknown; content?: unknown } | undefined;
         if (!held || after?.is !== "Text" || typeof after.content !== "string") continue;
-        this.append({ ...held, after: after.content });
+        this.append({ ...held, after: after.content, act: id });
         // A listener may ask the life, which no ear may do while it hears, so the host hears of it after the ear.
         if (changed) queueMicrotask(changed);
       }
