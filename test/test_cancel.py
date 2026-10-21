@@ -45,7 +45,7 @@ async def test_cancel_is_given_the_id_of_an_act_and_says_a_cancel_over_it() -> N
   """cancel is given the id of an act, and says a cancel over it."""
   _, log, _, one = slow()
   engine.cancel(one)
-  assert said(log, "cancel") == [("cancel", one, OPERATOR, [f"#{one} cancelled"])]
+  assert said(log, "cancel") == [("cancel", one, OPERATOR)]
 
 
 async def test_a_cancelled_act_completes_with_cancellederror() -> None:

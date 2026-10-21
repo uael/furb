@@ -196,7 +196,7 @@ def peek(at: str, waiting: object = None) -> object:
 
 def turns(on: str = "") -> list[Turn]:
   """The turns of a chain, folded from what it has heard.
-  The turns of what a chain has heard: every fact that carries notes stands as a paragraph of them, and nothing else stands at all.
+  The turns of what a chain has heard: every tell stands as a paragraph of its notes, and nothing else stands at all.
   The turn a model was answered with closes the turn of the operator and stands as the turn it is, and a text stands by the lines that the show of the one that tells it picks.
   turns reads the transcript of the chain and asks nothing, so no act is made and the journal keeps nothing.
   A user turn packs one paragraph for each thing told since the last reply, in order.
@@ -736,27 +736,27 @@ A kind that ends when it is told to: it starts its ear, and then a done that nam
 type Tell = tuple[Literal["tell"], str, str, list[Note]]
 """A tell carries notes about the act it is about, and the turns are folded from them.
 What an act tells is the telling of its chain, so the journal keeps none of it, and a later life tells it again.
-A fact that carries notes is what the turns are folded from: a tell, and a control, which carries the header it tells.
+A tell is the one fact that carries notes, which the turns are folded from: a control tells its header by a tell.
 """
-type Pause = tuple[Literal["pause"], str, str, list[Note]]
+type Pause = tuple[Literal["pause"], str, str]
 """While a pause stands, nothing that the pause is over hears, and what is said meanwhile waits for the wake.
 A control is a fact over an act: over that act, over everything that act made, and over everything on a chain when the control names a chain.
 A control reaches what it is over, and whatever else the words of the control name.
 A control is no act: it takes no name of its own, and the record holds it as a fact about the acts it is over.
 What a control reaches: the act it names, everything that act made, and every act of the chain it names.
 It reaches by the chain as well as by the name, since an act on a chain is not under it unless the chain made it.
-A control carries the header it tells, so a model reads what was done to its work whoever did it, and nothing else writes that header: the chain that pauses a chain at its ceiling, or closes a prompt it will not serve, says the control the one way there is to say it.
+A control tells its header by a tell that its call says just before it, so a model reads what was done to its work whoever did it, and nothing else writes that header: the chain that pauses a chain at its ceiling, or closes a prompt it will not serve, says the control the one way there is to say it.
 A pause is over the act it names and everything under it.
 """
-type Wake = tuple[Literal["wake"], str, str, list[Note]]
+type Wake = tuple[Literal["wake"], str, str]
 """A wake ends the pause over the same act, and what waited is heard.
 A wake is over the act it names and everything under it.
 """
-type Cancel = tuple[Literal["cancel"], str, str, list[Note]]
+type Cancel = tuple[Literal["cancel"], str, str]
 """A cancel ends everything it is over: each of them is done with CancelledError, and none of them says anything of its own again.
 A cancel reaches to any depth, and on whatever chain.
 """
-type Close = tuple[Literal["close"], str, str, object, list[Note]]
+type Close = tuple[Literal["close"], str, str, object]
 """A close is a cancel that carries what the act it names is done with, and it is a kind of its own, since a tuple has no slot that may be empty.
 A close is over the act it names, the words running under it and the replies that ask for those words, where a cancel is over everything under it.
 """
@@ -911,7 +911,7 @@ def told(id: str, what: str = "", *notes: Note, **words: object) -> Tell:
   """
 
 def control(kind: str, name: str, id: str, *words: object) -> Fact:
-  """A control said over the act it names, with a header of its name headed with that act, which is how pause, wake, cancel and close say theirs.
+  """A control said over the act it names, after a tell of a header of its name headed with that act, which is how pause, wake, cancel and close say theirs.
   The call gives the control as the life made it whole, so a close that named no act reads which act it is over.
   A control is said while the act it names is not done, and a wake also while that act is paused, done or not, so a control that reaches nothing says nothing.
   """

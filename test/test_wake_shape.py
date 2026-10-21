@@ -15,7 +15,7 @@ async def test_a_wake_ends_the_pause_over_the_same_act_and_what_waited_is_heard(
   assert f"#{act} exited 0" not in heads(engine.turns(on=root))
   engine.wake(root)
   await settle()
-  assert said(log, "wake") == [("wake", root, OPERATOR, [f"#{root} woke"])]
+  assert said(log, "wake") == [("wake", root, OPERATOR)]
   assert heads(engine.turns(on=root))[-1] == f"#{act} exited 0"
 
 

@@ -72,7 +72,7 @@ def turns(on: str = "") -> list[tuple]:
       case ("done", about, _, (_, _, _, _) as turn) if question(("reply", about)):
         folded += [("user", "\n\n".join(user[:cut]), None, None), turn]
         del user[:cut]
-      case (kind, *_, notes) if kind in ("tell", "pause", "wake", "cancel", "close"):
+      case ("tell", *_, notes):
         user.append("\n".join(notes))
   return [*folded, ("user", "\n\n".join(user), None, None)]
 
@@ -327,7 +327,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           yield "done", about, took
         case ("rung", rid, maker, _, "", _, to):
           waiting[rid] = maker, to
-        case (kind, *_, notes) if kind in ("tell", "pause", "wake", "cancel", "close"):
+        case ("tell", *_, notes):
           heard.append("\n".join(notes))
         case ("ready", rid, _, word):
           waiting.pop(rid, None)
@@ -540,7 +540,8 @@ def control(kind, name, id, *words):
   return (
     get(id)
     and (peek(id, ...) is ... or (kind == "wake" and paused(id)))
-    and say(kind, id, *words, [headed(id, name, value=(*words, None)[0])])
+    and say(*told(id, name, value=(*words, None)[0]))
+    and say(kind, id, *words)
   )
 
 

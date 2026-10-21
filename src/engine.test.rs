@@ -618,7 +618,7 @@ fn the_work_of_an_ear_tells_a_verb_in_its_turn_and_under_its_name() {
     .filter(|one| one.by() == "pauser")
     .map(|one| (one.kind().to_owned(), one.about().to_owned()))
     .collect();
-  let expected = [("started", &id), ("pause", &root), ("due", &id), ("done", &id)];
+  let expected = [("started", &id), ("tell", &root), ("pause", &root), ("due", &id), ("done", &id)];
   assert_eq!(said, expected.map(|(kind, about)| (kind.to_owned(), about.clone())));
 }
 

@@ -77,7 +77,7 @@ async def test_a_step_that_raised_nothing_and_debugged_nothing_tells_nothing() -
   act = engine.prompt(int, "count", on=root)
   assert await act == 1
   steps = [a[1] for a in said(log, "rung") if a[2] == act]
-  assert len(steps) == 2 and [a for a in said(log, "tell") if a[2] in steps] == []
+  assert len(steps) == 2 and [a for a in said(log, "tell") if a[1] in steps and a[2] in steps] == []
   assert [of(engine.turns(on=root), step) for step in steps] == [[f"#{step} advance on {act}"] for step in steps]
 
 

@@ -125,7 +125,7 @@ async def test_close_is_given_the_value_first() -> None:
   engine.close(21, act)
   word = said(log, "close")[0]
   assert (word[0], word[1], word[2], word[3]) == ("close", act, OPERATOR, 21)
-  assert word[4] == [f"#{act} closed\n{act}_value = 21"]
+  assert len(word) == 4
 
 
 async def test_a_value_closes_an_act_with_that_value_and_a_prompt_with_a_value_that_has_its_shape() -> None:

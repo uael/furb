@@ -210,14 +210,15 @@ fn a_second_refusal_in_a_row_of_an_actor_on_a_chain_pauses_the_chain_before_its_
   let (mut engine, _) = life("refusals", vec![scripted(&model)]);
   let root = engine.root().to_owned();
   asked(&mut engine);
-  assert!(until(&mut engine, |engine| said(engine).len() == 5), "{:?}", said(&mut engine));
+  assert!(until(&mut engine, |engine| said(engine).len() == 6), "{:?}", said(&mut engine));
   let refused =
     |why: &str| format!("Refused(args=('m/high answered nothing: ProviderError: {why}'))");
   let expected = [
     ("started", "reply1", String::new()),
     ("done", "reply1", refused("boom")),
     ("started", "reply2", String::new()),
-    ("pause", root.as_str(), format!("['#{root} paused']")),
+    ("tell", root.as_str(), format!("['#{root} paused']")),
+    ("pause", root.as_str(), String::new()),
     ("done", "reply2", refused("boom again")),
   ];
   let expected: Vec<_> =
@@ -245,12 +246,13 @@ fn a_function_of_the_host_that_refuses_later_twice_in_a_row_pauses_the_chain_and
   let mut engine = lived(Provider::new(yard("refused").display().to_string(), vec![model]));
   let root = engine.root().to_owned();
   asked(&mut engine);
-  assert!(until(&mut engine, |engine| said(engine).len() == 5), "{:?}", said(&mut engine));
+  assert!(until(&mut engine, |engine| said(engine).len() == 6), "{:?}", said(&mut engine));
   let kinds: Vec<_> = said(&mut engine).into_iter().map(|(kind, about, _)| (kind, about)).collect();
   let expected = [
     ("started", "reply1"),
     ("done", "reply1"),
     ("started", "reply2"),
+    ("tell", root.as_str()),
     ("pause", root.as_str()),
     ("done", "reply2"),
   ];
