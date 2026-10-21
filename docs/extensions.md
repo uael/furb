@@ -49,7 +49,7 @@ extensions of a project are code of the project, so a project can share them.
 - A path gives the folder of an extension that is not official. A relative path starts at the folder of the config,
   and `~` is the home.
 
-The official extensions, `memory`, `skills`, `compaction` and `ouroboros`, are on unless a config turns them off. A config that is not of this
+The official extensions, `memory`, `skills`, `compaction`, `ouroboros` and `look`, are on unless a config turns them off. A config that is not of this
 form, a folder with no manifest, a manifest of another name, and a missing word are each refused with the path.
 
 ## How a life runs its extensions
@@ -88,6 +88,12 @@ journal answers again in a later life, so a replay is exact and the World is ask
   `name` in `.furb/extensions/<name>`, with its manifest, and turns it on in `.furb/config.json`, so it plays on
   every chain now and in every later life. An official extension lives in furb. `enabled()` gives the names of the
   extensions that the life runs. It needs no ear of the World.
+
+- `look` teaches a local model to look before it changes a file. Its life word, `look()`, tells its doctrine once on
+  a chain whose actor is a model of a local server, `local:` and its id: work in two words at least, since a model
+  sees no file until a word shows it; a first word reads the files of the task and runs its check, with no close,
+  and a later word changes the files from the lines that it saw and closes. On a chain of any other actor it tells
+  nothing, so a model of the network pays none of it. It needs no ear of the World.
 
 - `compaction` is a kit to go on in a new chain that keeps less of the old one, since in furb a compaction is a
   chain with a source and a filter. `compact()` makes that chain from the chain of the caller: its filter applies

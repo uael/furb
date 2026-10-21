@@ -323,6 +323,7 @@ async def test_the_door_opens_a_life_as_every_host_opens_one(tmp_path: Path) -> 
     "skills",
     "compaction",
     "ouroboros",
+    "look",
   ]
   assert {a[0] for a in engine.transcript(on=root) if a[2] == "memory"} == {"done"}, "the memory ear answered"
   for _, one in ears:
