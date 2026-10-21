@@ -29,6 +29,8 @@ API of its own:
   host, the provider among them, on the default actor and the roster that the host names from the catalog, or every
   model that the catalog offers when the host names no roster, or on a model of its own, and the extensions. A host adds only its own ears, such as the console of its operator. Every
   host gives it as one `Opening`, and each door gives it as `opened` and as `Engine.open`.
+- `src/snapshot.rs` holds the snapshot of a life beside its record: the session of the sandbox that monty dumps and
+  what the engine holds of the ears, which a later life on the same record and build opens from with no replay.
 - `src/engine.rs` opens a life in the sandbox: it loads the engine, the sheet and the Kernel, each in a namespace of
   its own, and it carries each value between the sandbox and a host. An ear of a host is an object of the host in the
   sandbox, which the engine steps as a generator.
@@ -102,7 +104,9 @@ engine does not serve its meaning, the name is wrong, and the name changes.
   from them.
 - The record is the one truth of a life. A cache of a life is derived from its record and checked against it, and a
   reader drops a cache that does not agree: the log of a life holds every fact that the life said, and each later
-  life writes it again from the record.
+  life writes it again from the record. A record is made again by running its words, or loaded from the snapshot
+  that a run of those words made on the same record, which the life checks, so a chain stays a function of its
+  record.
 
 ## The bar
 

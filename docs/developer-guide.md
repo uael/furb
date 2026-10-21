@@ -44,6 +44,7 @@ uv run pre-commit install
 | `src/furb/CLAUDE.md` | The technical names of the engine, and the laws that no test can hold. |
 | `src/furb/__init__.py` | The switch: `FURB_ENGINE` picks the engine that `from furb import engine` gives. |
 | `src/engine.rs`, `src/sand.rs` | One life of `engine.py` in the sandbox of monty, how each value crosses, and the verbs that a host says. |
+| `src/snapshot.rs` | The snapshot of a life beside its record: the state that a later life on the same record, build and ears opens from with no replay, which it checks against the record. |
 | `src/ear.rs`, `src/fact.rs` | The ear, the one thing a life hears by, and a fact as the engine says it. |
 | `src/value.rs`, `src/wire.rs` | A value that crosses between the engine and a host, and that value as JSON. |
 

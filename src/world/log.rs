@@ -33,6 +33,12 @@ pub fn log(record: impl AsRef<Path>, entries: usize) -> Box<dyn Ear> {
   heard(Log::open(record.as_ref(), entries))
 }
 
+/// The ear of the log of the record at a path, for a life that opens from the snapshot of an earlier life on the
+/// record: it writes the log on after the lines that it holds, since this life says none of them again.
+pub(crate) fn continued(record: impl AsRef<Path>, entries: usize) -> Box<dyn Ear> {
+  heard(Log::continued(record.as_ref(), entries))
+}
+
 /// The ear that writes a log.
 fn heard(mut log: Log) -> Box<dyn Ear> {
   ear(move |mut co| async move {
@@ -64,6 +70,20 @@ impl Log {
     let mut log = Log { path, file, entries, seen: HashSet::new() };
     log.line(&serde_json::json!({ "entries": entries }));
     log
+  }
+
+  /// The log of the record at a path, written on after the lines that it holds, each name of which it has seen.
+  fn continued(record: &Path, entries: usize) -> Log {
+    let path = PathBuf::from(format!("{}.log", record.display()));
+    let mut seen = HashSet::new();
+    for line in std::fs::read_to_string(&path).unwrap_or_default().lines().skip(1) {
+      let about = serde_json::from_str::<Value>(line)
+        .ok()
+        .and_then(|one| one.get(1)?.as_str().map(str::to_owned));
+      seen.extend(about.filter(|one| !one.is_empty()));
+    }
+    let file = OpenOptions::new().append(true).open(&path).ok();
+    Log { path, file, entries, seen }
   }
 
   /// A fact that the ear heard, after the act it is about when no line shows that act yet.

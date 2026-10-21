@@ -400,6 +400,11 @@ export interface Opening {
   /** A function of the host that is told what a model writes, as it writes it. */
   stream?: (rung: string, chain: string, text: string, thinking: string) => void
   /**
+   * Whether the life opens from the snapshot of its record when the snapshot agrees with the record, and keeps one
+   * when it keeps its record; true when unsaid.
+   */
+  snapshot?: boolean
+  /**
    * A function of the host that is told each report of the life that no model reads, one line each; the stderr of
    * this process when unsaid.
    */

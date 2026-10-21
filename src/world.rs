@@ -28,6 +28,7 @@ use std::{
 
 pub use bash::{bash, program, shell};
 pub use files::files;
+pub(crate) use log::continued;
 pub use log::{log, logged};
 pub use operator::{SHAPES, answered};
 pub(crate) use provider::search::{posted, spawned};
@@ -38,6 +39,7 @@ pub use provider::{
   search::Searches,
 };
 pub use scratch::{SCRATCH, Scratch};
+pub(crate) use store::database;
 pub use store::{Lines, Sqlite, Store, keeping, kept, store};
 pub use time::time;
 
