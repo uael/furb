@@ -137,7 +137,8 @@ class Sand:
   """A World in memory, outside the engine.
 
   `files` is its disk by path, `script` what its models answer by the id of the chain a reply is on, one word per
-  reply, `record` what it keeps of the keep facts of the journal, `fed` what was fed to its commands, `calls` every
+  reply, `record` what it keeps of the keep facts of the journal, `fed` what was fed to its commands and `shut` those whose
+  stdin a write closed, `calls` every
   fact it answered or performed, in order, and `turns` the turns it read for each reply it took, by its name.
   `stands` is what a chain stands on, STANDS unless a test gives another, or the refusal it answers a stand with,
   `cost` the usage of one answer, and `auto` says whether a command tells a line and exits at once. `tick` counts
@@ -154,6 +155,7 @@ class Sand:
   script: dict[str, list[str]] = field(default_factory=dict)
   record: list[tuple] = field(default_factory=list)
   fed: list[str | None] = field(default_factory=list)
+  shut: set[str] = field(default_factory=set)
   calls: list[tuple] = field(default_factory=list)
   auto: bool = True
   stands: list | Refused = field(default_factory=lambda: STANDS)
@@ -186,9 +188,26 @@ class Sand:
     self.loop = asyncio.get_running_loop()
     while True:
       a = yield
-      if a[0] in ("bash", "wait", "prompt", "reply", "stand", "cd", "read", "write", "feed", "clock", "chance"):
+      if a[0] in ("bash", "wait", "prompt", "reply", "stand", "cd", "read", "write", "clock", "chance"):
         self.calls.append(a)
       yield from self.hear(a)
+
+  def door(self, path: str, content: str) -> Refused | None:
+    """The refusal of a write of a door of a command, or nothing when the stdin of the command takes it: only the stdin
+    of a command whose stdin is None takes a write, while the command is not over and until a write of nothing
+    closes it."""
+    command, _, stream = path.partition("/")
+    if stream != "stdin" or engine.over(command) or engine.get(command)[5] is not None or command in self.shut:
+      return Refused(path + " takes no write")
+    self.feeds(command, content)
+    return None
+
+  def feeds(self, command: str, content: str) -> None:
+    """What a write of the stdin of a command gives it: the text, or nothing for an empty text, which closes that
+    stdin."""
+    self.fed.append(content or None)
+    if not content:
+      self.shut.add(command)
 
   def placed(self, on: str, path: str) -> str:
     """The path of a read or a write: one that is ~ or starts with ~/ hangs off the home of the user, and any other
@@ -229,6 +248,14 @@ class Sand:
         yield "done", qid, Refused(f"No directory at {full}.") if full in self.gone else full
       case ("read", qid, _, on, path) if (full := self.placed(on, path)) in self.files:
         yield "done", qid, Text(full, self.files[full])
+      case ("write", qid, _, _, Text(path=path, content=content) as took) if (
+        re.fullmatch(r"bash\d+/std(in|out|err)", path) and engine.get(path.split("/")[0]) is not None
+      ):
+        yield "done", qid, self.door(path, content) or took
+      case ("done", about, "journal", Text(path=path, content=content)) if engine.question(("write", about)) and (
+        re.fullmatch(r"bash\d+/stdin", path)
+      ):
+        self.feeds(path.split("/")[0], content)
       case ("write", qid, _, on, Text(path=path, content=content)) if (
         "://" not in path and engine.get(path.split("/")[0]) is None
       ):
@@ -244,16 +271,11 @@ class Sand:
       case ("cancel" | "close", *_):
         for one in [x for x in self.outs if engine.covers(a, x)]:
           self.outs.pop(one)
-      case ("feed", _, _, text):
-        self.fed.append(text)
       case ("keep", _, _, entry):
         self.record.append(entry)
-      case ("clock", qid, *_):
+      case ("clock" | "chance", qid, *_):
         self.tick += 1
-        yield "done", qid, 1000.0 + self.tick
-      case ("chance", qid, *_):
-        self.tick += 1
-        yield "done", qid, (self.tick % 7) / 7
+        yield "done", qid, 1000.0 + self.tick if a[0] == "clock" else (self.tick % 7) / 7
 
 
 class Dead(Sand):

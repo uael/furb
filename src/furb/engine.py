@@ -316,19 +316,6 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
             elif seen[:2] == ("out", command) and seen[4] == door[2]:
               part += seen[3]
           yield "done", about, getattr(peek(command), door[2], Text(path, part))
-        case ("write", about, *_, Text(path, content) as took) if (
-          door := re.fullmatch(r"(bash\d+)/std(in|out|err)", path)
-        ) and get(command := door[1]):
-          if (
-            door[2] != "in"
-            or peek(command)
-            or get(command)[5] is not None
-            or ("feed", command, id, None) in transcript(scope(command))
-          ):
-            took = Refused(path + " takes no write")
-          else:
-            yield "feed", command, content or None
-          yield "done", about, took
         case ("rung", rid, maker, _, "", _, to):
           waiting[rid] = maker, to
         case ("tell", *_, notes):

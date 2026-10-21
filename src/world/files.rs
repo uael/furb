@@ -6,7 +6,7 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use super::{SCRATCH, Scratch, here, resolved};
+use super::{SCRATCH, Scratch, bash::door, here, resolved};
 use crate::{
   ear::{Co, Ear, ear, hear, say},
   fact::Fact,
@@ -14,7 +14,8 @@ use crate::{
 };
 
 /// The ear of the files: it answers a cd with the directory that the path names, a read with the text at the path
-/// and a write with the text as it stands after, each resolved against the working directory of the chain, or with
+/// and a write with the text as it stands after, but a write of a door of a command, which the ear of the commands
+/// answers, each resolved against the working directory of the chain, or with
 /// the refusal. The path of a read or a write that is `~` or starts with `~/` resolves against the home of the user,
 /// and one of `scratch://` against the scratch directory of the life, which no chain stands in.
 pub fn files(scratch: Scratch) -> Box<dyn Ear> {
@@ -22,6 +23,14 @@ pub fn files(scratch: Scratch) -> Box<dyn Ear> {
     loop {
       let a = hear(&mut co).await;
       if !a.question() || !matches!(a.kind(), "cd" | "read" | "write") {
+        continue;
+      }
+      // A write of a door of a command of the life is the ear of the commands' to answer, wherever that ear stands.
+      if a.kind() == "write"
+        && let Some((_, command, _)) = door(&a)
+        && co.call("get", vec![Object::string(&command)], vec![]).await?.as_ref().type_name()
+          != "NoneType"
+      {
         continue;
       }
       let answer = match a.kind() {

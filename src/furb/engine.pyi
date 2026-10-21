@@ -47,7 +47,7 @@ type Saying = tuple[str, str, *tuple[object, ...]]
 """What an ear says: the kind of the fact, the act it is about, and the words, and nothing of who says it, which the bus fills in from whoever is speaking."""
 type Ear = Generator[Saying | None, Fact]
 """An ear is any generator of that shape, so the World and the Kernel are ears, and boot takes an ear of the outside under any name it is to hear by.
-The World, the ears of the outside that serve the machine, one or many, hears every fact, and every act that no ear before it took: it answers a stand, a clock, a chance, a cd, a read and a write of a path nobody of the engine serves, resolved against the working directory of the chain, or against the scratch directory for a path of scratch://; it takes a command, asks it whether it is merged, feeds it, and ends it at its timeout and at a cancel; it takes a wait and a prompt to the operator, which it shows; and it takes a reply, which it answers with the turn of the model.
+The World, the ears of the outside that serve the machine, one or many, hears every fact, and every act that no ear before it took: it answers a stand, a clock, a chance, a cd, a read and a write of a path nobody of the engine serves, resolved against the working directory of the chain, or against the scratch directory for a path of scratch://; it takes a command, asks it whether it is merged, answers a write of its doors and feeds it what a write of its stdin gives, and ends it at its timeout and at a cancel; it takes a wait and a prompt to the operator, which it shows; and it takes a reply, which it answers with the turn of the model.
 The World performs any fact that an extension defines and that the World knows.
 The opening of a life gives the World the scratch directory of its record, which every chain of that record shares, or, for a life that keeps no record, a scratch directory of its own, which goes when that life ends.
 A later life on a record finds its scratch directory again, and when the directory is missing, as on another machine, the opening makes again in it each file that a write of the record made, in the order of the last write of each, with the text that the journal kept, and no file that a command made; the opening of a new record starts with an empty directory.
@@ -590,17 +590,18 @@ def bash(
   A command without a timeout has the timeout TIMEOUT that the file names.
   The World that takes a command answers it: it says it done with its Exit, the code and the streams it kept, since the owner of an act is the one that answers it.
   A stdin of None stays open, and the door bash1/stdin is writable while the command runs.
+  The World feeds a command the text of each write of its stdin that it answers, and a write of nothing closes that stdin; a later life feeds it again, in order, each such text of the record, which the World hears in the done that the journal says, when a wake starts the command again.
   The doors bash1/stdout and bash1/stderr of a command bash1 are readable while the command runs and after it: a read gives that stream of the Exit once the command exited, and otherwise the out facts of that stream since the World last started it, so a command that runs again starts its streams again.
   A wake on a chain with a source starts no inherited command again, since only the owner starts an act.
   The World takes it, and a later life has the World take it again only when the record shows it started and not ended, and then only at a wake.
   With a hidden show it tells its header and its binding alone, and not its command and not its close.
-  The chain that a read or a write of a door of the command is on answers that read or that write, while the command runs and after it, so the ear of the command lives only until it hears the done of the command, and a cancel ends the command as it ends every other act.
-  A read or a write of a door of a command that an ear makes while the chain of that read or that write speaks finds no ear of the engine that answers it, as a read of the door of a prompt finds none, since an ear that speaks hears nothing until it is done.
+  The chain that a read of a door of the command is on answers that read, while the command runs and after it, and the World answers a write of a door of it, so the ear of the command lives only until it hears the done of the command, and a cancel ends the command as it ends every other act.
+  A read of a door of a command that an ear makes while the chain of that read speaks finds no ear of the engine that answers it, as a read of the door of a prompt finds none, since an ear that speaks hears nothing until it is done.
   It runs until it ends, until its timeout or until a cancel: the World is the one that ends it, at the timeout it reads off the act as at a cancel, since the World is the one running it, and the engine says nothing to make it.
   A pause stops no command: it runs on, the World says it done when it ends, and its ear tells its exit at the wake.
   Its close tells what its stdout shows, and what its stderr shows when that stream has a show of its own that is no hidden one, so a merged command tells no stderr.
   The stdout of a command without a show is told as TAIL, which is the span of its last 250 lines.
-  The engine refuses a write to the door bash1/stdout or bash1/stderr, and a write to bash1/stdin once the command ended or was cancelled, or once its stdin is closed, as a stdin of text is from the start.
+  The World refuses a write to the door bash1/stdout or bash1/stderr, and a write to bash1/stdin once the command ended or was cancelled, or once its stdin is closed, as a stdin of text is from the start.
   The World asks a command whether its stderr flows into its stdout, and the command answers from what its verb was given.
   The World hears the bash itself, with the command, the stdin and the timeout, and no working directory and no show.
   """
@@ -733,7 +734,7 @@ The record is a sequence of entries about acts.
 type Done = tuple[Literal["done"], str, str, object]
 """What an act came to: a done settles the act it names.
 A result enters the transcript whether or not anyone awaits it.
-An act that is over says nothing, and the chain answers the doors of a command that is over.
+An act that is over says nothing, and the chain answers a read of the doors of a command that is over.
 A done that an act said itself is the result of the act.
 A done that an ear says while the act is put to it is the answer to the act, which takes it now.
 A kind that ends when it is told to: it starts its ear, and then a done that names it is what it came to; a cancel over it ends it with a CancelledError, and a close of it with the value that close carries.
@@ -826,8 +827,6 @@ type Out = tuple[Literal["out"], str, str, str, str]
 """The streams of a command come as out facts while the command runs, which the journal keeps.
 A later life reads the parts that a command told before the death of the process.
 """
-type Feed = tuple[Literal["feed"], str, str, str | None]
-"""A write to the stdin door of a command with a stdin of None hands the World a feed with the text and gives that text, and a write of nothing hands it a feed of None, which closes the stdin."""
 type Read = tuple[Literal["read"], str, str, str, str]
 """A read is the question of the text at a path."""
 type Write = tuple[Literal["write"], str, str, str, Text]
