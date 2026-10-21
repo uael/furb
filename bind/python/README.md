@@ -30,7 +30,7 @@ model writes as it writes it, its `log`, a function, is told each report of the 
 each, in place of the stderr of the process, and `images` is the directory of the images that a message names. A life that is
 `inspecting` keeps nothing, enables nothing new and asks no model. `models(claude)` gives the models the catalog of this
 machine offers, `model(name)` one model by its name, and `levels()` the levels of effort. `files(scratch)`,
-`bash(scratch)`, `time()`, `store(path)`, `official()`, `extensions(given)`, `memory(config)` and `skills(config)` give
+`bash(scratch, record)`, `time()`, `store(path)`, `official()`, `extensions(given)`, `memory(config)` and `skills(config)` give
 the ears one by one, as the suite of each extension boots them: the files and the commands share the scratch directory
 that the host names, which a word reads as `scratch://` and a command as `$TMPDIR`. Only the opening of a life makes the
 files of a record again in its scratch directory, and gives a life with no record a directory that goes with it.

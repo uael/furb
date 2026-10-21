@@ -306,7 +306,7 @@ def wake(id: str) -> None:
   A wake gates and runs a held response.
   A wake makes a prompt ask its model with the transcript as it grew.
   A wake makes no reply twice and loses none.
-  A wake that this life says, and not one that the journal says again, puts every pending act it is over on to the outside, so the World takes each command, wait, prompt to the operator and reply of them, and a model reads the transcript as it grew.
+  A wake that this life says, and not one that the journal says again, puts every pending act it is over on to the outside, so the World takes each wait, prompt to the operator and reply of them and closes each command of them as interrupted, and a model reads the transcript as it grew.
   """
 
 def cancel(id: str) -> None:
@@ -608,10 +608,10 @@ def bash(
   A command without a timeout has the timeout TIMEOUT that the file names.
   The World that takes a command answers it: it says it done with its Exit, the code and the streams it kept, since the owner of an act is the one that answers it.
   A stdin of None stays open, and the door bash1/stdin is writable while the command runs.
-  The World feeds a command the text of each write of its stdin that it answers, and a write of nothing closes that stdin; a later life feeds it again, in order, each such text of the record, which the World hears in the done that the journal says, when a wake starts the command again.
-  The doors bash1/stdout and bash1/stderr of a command bash1 are readable while the command runs and after it: a read gives that stream of the Exit once the command exited, and otherwise the out facts of that stream since the World last started it, so a command that runs again starts its streams again.
+  The World feeds a command the text of each write of its stdin that it answers, and a write of nothing closes that stdin.
+  The doors bash1/stdout and bash1/stderr of a command bash1 are readable while the command runs and after it: a read gives that stream of the Exit once the command exited, and otherwise the out facts of that stream, so the doors of a command that a crash cut give what it wrote before the crash.
   A wake on a chain with a source starts no inherited command again, since only the owner starts an act.
-  The World takes it, and a later life has the World take it again only when the record shows it started and not ended, and then only at a wake.
+  The World takes it once: a later life never runs it again, and at a wake the World closes a command that the record shows started and not ended with a refusal that says the command was interrupted, so the model sees that outcome and runs the command again if it wants.
   With a hidden show it tells its header and its binding alone, and not its command and not its close.
   The chain that a read of a door of the command is on answers that read, while the command runs and after it, and the World answers a write of a door of it, so the ear of the command lives only until it hears the done of the command, and a cancel ends the command as it ends every other act.
   A read of a door of a command that an ear makes while the chain of that read speaks finds no ear of the engine that answers it, as a read of the door of a prompt finds none, since an ear that speaks hears nothing until it is done.
@@ -619,7 +619,7 @@ def bash(
   A pause stops no command: it runs on, the World says it done when it ends, and its ear tells its exit at the wake.
   Its close tells what its stdout shows, and what its stderr shows when that stream has a show of its own that is no hidden one, so a merged command tells no stderr.
   The stdout of a command without a show is told as TAIL, which is the span of its last 250 lines.
-  The World refuses a write to the door bash1/stdout or bash1/stderr, and a write to bash1/stdin once the command ended or was cancelled, or once its stdin is closed, as a stdin of text is from the start.
+  The World refuses a write to the door bash1/stdout or bash1/stderr, and a write to bash1/stdin once the command ended or was cancelled, once its stdin is closed, as a stdin of text is from the start, or once a crash cut the command.
   The World asks a command whether its stderr flows into its stdout, and the command answers from what its verb was given.
   The World hears the bash itself, with the command, the stdin and the timeout, and no working directory and no show.
   """

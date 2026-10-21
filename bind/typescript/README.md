@@ -45,10 +45,12 @@ of each official extension, the files, the commands, time, and the store of the 
 record it opened on. The extensions enable at the start of the life what the configs of the user and of the directory
 turn on, which `docs/extensions.md` says: `SessionOptions.extensions` is false to enable nothing new, and `config` names
 the config directory of the user. A life runs what its record enables either way. The package also gives the ears of the
-files, the commands, time and the store one by one, as `files(scratch)`, `bash(scratch)`, `time()` and `store(path)`,
-for a host that boots an engine by hand. The files read and write a path against the directory where its chain stands,
+files, the commands, time and the store one by one, as `files(scratch)`, `bash(scratch, record)`, `time()` and
+`store(path)`, for a host that boots an engine by hand. The files read and write a path against the directory where its chain stands,
 and a path of `scratch://` in the scratch directory that the host names. The commands stream what a command writes,
-feed its stdin, and end it at its timeout, and each runs with `TMPDIR` set to that scratch directory. Only the opening
+feed its stdin, and end it at its timeout, and each runs with `TMPDIR` set to that scratch directory. They are given
+the record that the life opens on, and at a wake they close each command that the record shows started and not done
+with a refusal that says it was interrupted, and run it no more. Only the opening
 of a life makes the files of a record again in its scratch directory, and gives a life with no record a directory that
 goes with it. A session has the scratch directory of its record, in the cache of furb, which `scratch(record)` gives,
 so a host removes it when it deletes the record. Time gives the clock and a chance, and ends a wait. The provider asks
@@ -143,7 +145,7 @@ pending work off the transcripts, so the session asks it again only after a paus
 an act of that work, and keeps what it gave until then.
 
 `session.parked` names the work that a crash loop parked, by the kind of each act, as `engine.parked()` finds it: a
-run, a command or a reply that the record shows started in five lives and not done, since each of those lives ended
+run or a reply that the record shows started in five lives and not done, since each of those lives ended
 while it ran. A wake puts no parked act to the outside, so `session.resume()` does not run it again and end again,
 and a parked act is pending no more. `session.retry(id)` runs a parked act again: it is parked no more in this life,
 and a wake of it puts it to the outside.

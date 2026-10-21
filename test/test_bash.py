@@ -223,23 +223,17 @@ async def test_a_stdin_of_none_stays_open_and_the_stdin_door_is_writable_while_t
 
 
 async def test_the_world_feeds_a_command_the_text_of_each_write_of_its_stdin_that_it_answers() -> None:
-  """The World feeds a command the text of each write of its stdin that it answers, and a write of nothing closes that stdin; a later life feeds it again, in order, each such text of the record, which the World hears in the done that the journal says, when a wake starts the command again."""
+  """The World feeds a command the text of each write of its stdin that it answers, and a write of nothing closes that stdin."""
   sand, _, root = born(auto=False)
   one = engine.bash("cat", stdin=None, on=root)
   await settle()
   assert engine.write(Text(door(one, "stdin"), "a"), on=root) == Text(door(one, "stdin"), "a")
   engine.write(Text(door(one, "stdin")), on=root)
   assert sand.fed == ["a", None] and sand.shut == {one}
-  later = Sand(auto=False)
-  _, over = await relived(later, plain(sand.record))
-  assert later.fed == ["a", None] and said(later.calls, "bash") == []
-  engine.wake(over)
-  await settle()
-  assert [a[1] for a in said(later.calls, "bash")] == [one] and said(later.calls, "write") == []
 
 
 async def test_the_stdout_and_the_stderr_doors_are_readable_while_the_command_runs_and_after_it() -> None:
-  """The doors bash1/stdout and bash1/stderr of a command bash1 are readable while the command runs and after it: a read gives that stream of the Exit once the command exited, and otherwise the out facts of that stream since the World last started it, so a command that runs again starts its streams again."""
+  """The doors bash1/stdout and bash1/stderr of a command bash1 are readable while the command runs and after it: a read gives that stream of the Exit once the command exited, and otherwise the out facts of that stream, so the doors of a command that a crash cut give what it wrote before the crash."""
   _, _, top = born(auto=False)
   shown = engine.bash("run", show_err=TAIL, on=top)
   assert shown == "bash1"
@@ -257,18 +251,11 @@ async def test_the_stdout_and_the_stderr_doors_are_readable_while_the_command_ru
   await settle()
   sand.writes(one, "first\n", "stdout")
   await settle()
-  later = Sand(auto=False)
-  _, over = await relived(later, list(sand.record))
-  assert engine.read(door(one, "stdout"), on=over).content == "first\n"
+  _, over = await relived(Sand(auto=False), list(sand.record))
   engine.wake(over)
   await settle()
-  assert engine.read(door(one, "stdout"), on=over).content == ""
-  later.writes(one, "second\n", "stdout")
-  await settle()
-  assert engine.read(door(one, "stdout"), on=over).content == "second\n"
-  world_says("done", one, Exit(0, Text(door(one, "stdout"), "kept\n"), Text(door(one, "stderr"))))
-  await settle()
-  assert engine.read(door(one, "stdout"), on=over).content == "kept\n"
+  assert isinstance(engine.peek(one), Refused)
+  assert engine.read(door(one, "stdout"), on=over) == Text(door(one, "stdout"), "first\n")
 
 
 async def test_a_wake_on_a_chain_with_a_source_starts_no_inherited_command_again() -> None:
@@ -284,10 +271,8 @@ async def test_a_wake_on_a_chain_with_a_source_starts_no_inherited_command_again
   assert [a[1] for a in said(log, "bash")] == [command]
 
 
-async def test_the_world_takes_it_and_a_later_life_has_it_take_it_again_only_when_the_record_shows_it_not_ended() -> (
-  None
-):
-  """The World takes it, and a later life has the World take it again only when the record shows it started and not ended, and then only at a wake."""
+async def test_the_world_takes_it_once_and_closes_a_command_that_a_crash_cut_as_interrupted_at_a_wake() -> None:
+  """The World takes it once: a later life never runs it again, and at a wake the World closes a command that the record shows started and not ended with a refusal that says the command was interrupted, so the model sees that outcome and runs the command again if it wants."""
   sand, _, root = born()
   one = engine.bash("echo hi", on=root)
   await one
@@ -304,12 +289,14 @@ async def test_the_world_takes_it_and_a_later_life_has_it_take_it_again_only_whe
   two = engine.bash("sleep 9", on=root)
   await settle()
   third = Sand()
-  _, over = await relived(third, plain(quiet.record))
+  heard, over = await relived(third, plain(quiet.record))
   assert said(third.calls, "bash") == [] and engine.peek(two) is None
   engine.wake(over)
   await settle()
-  got = engine.peek(two)
-  assert [a[1] for a in said(third.calls, "bash")] == [two] and isinstance(got, Exit) and got.code == 0
+  got, why = engine.peek(two), "'sleep 9' was interrupted: the life that ran it ended before it did"
+  assert isinstance(got, Refused) and str(got) == why
+  assert third.outs == {} and [a[1] for a in heard if a[0] == "close"] == [two]
+  assert f"#{two} closed\n{two}_value = Refused({why!r})" in paragraphs(engine.turns(on=over))
 
 
 async def test_with_a_hidden_show_it_tells_its_header_and_its_binding_alone() -> None:
@@ -426,7 +413,7 @@ async def test_the_stdout_of_a_command_without_a_show_is_told_as_tail() -> None:
 
 
 async def test_the_world_refuses_a_write_to_a_door_of_a_command_that_takes_no_write() -> None:
-  """The World refuses a write to the door bash1/stdout or bash1/stderr, and a write to bash1/stdin once the command ended or was cancelled, or once its stdin is closed, as a stdin of text is from the start."""
+  """The World refuses a write to the door bash1/stdout or bash1/stderr, and a write to bash1/stdin once the command ended or was cancelled, once its stdin is closed, as a stdin of text is from the start, or once a crash cut the command."""
   sand, _, root = born()
   one = engine.bash("echo hi", stdin=None, on=root)
   assert one == "bash1"
@@ -448,6 +435,13 @@ async def test_the_world_refuses_a_write_to_a_door_of_a_command_that_takes_no_wr
     with pytest.raises(Refused, match="takes no write"):
       engine.write(Text(door(one, "stdin"), "late"), on=root)
   assert len(said(sand.calls, "write")) == 8 and sand.fed == ["x", None, None]
+  held = engine.bash("sleep", stdin=None, on=root)
+  await settle()
+  later = Sand(auto=False)
+  _, over = await relived(later, plain(sand.record))
+  with pytest.raises(Refused, match="takes no write"):
+    engine.write(Text(door(held, "stdin"), "late"), on=over)
+  assert later.fed == []
 
 
 async def test_its_close_tells_what_its_stdout_shows() -> None:

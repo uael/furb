@@ -57,7 +57,8 @@ fn done(about: &str, value: Object) -> Fact {
   Fact::says("done", about, [value])
 }
 
-/// The provider of the test: it answers what the chains stand on, and each reply with the next word of its script.
+/// The provider of the test: it answers what the chains stand on, and each reply with the next word of its script,
+/// but for the word WAIT, which leaves the reply started and not done.
 fn provider(
   at: PathBuf,
   words: Rc<RefCell<VecDeque<String>>>,
@@ -91,6 +92,9 @@ fn provider(
           let turns = co.call("turns", vec![], vec![("on", Object::string(a.on()))]).await?;
           read.borrow_mut().push(turns.py_repr());
           let word = words.borrow_mut().pop_front().unwrap_or_else(|| "close(None)".to_owned());
+          if word == "WAIT" {
+            continue;
+          }
           let turn = Object::tuple([
             Object::string("assistant"),
             Object::string(word),
@@ -127,7 +131,7 @@ impl Lived {
     let ears = [
       ("provider", provider(at.clone(), words, Rc::clone(&read))),
       ("files", world::files(scratch.clone())),
-      ("bash", world::bash(scratch)),
+      ("bash", world::bash(scratch, &record)),
       ("time", world::time()),
       ("store", store),
     ];
@@ -508,60 +512,14 @@ fn a_function_of_the_host_is_called_back_by_the_sandbox_with_what_the_word_gave_
 }
 
 #[test]
-fn what_is_fed_to_a_command_before_a_wake_starts_it_in_a_later_life_reaches_its_process() {
-  let id = {
-    let mut first = Lived::new("held", &[], true).unwrap();
-    let root = first.root();
-    let with = verbs::Bash { stdin: Some(None), on: on(&root), ..Default::default() };
-    first.engine.bash("cat", with).unwrap().id().to_owned()
-  };
-  let mut second = Lived::new("held", &[], false).unwrap();
-  let root = second.root();
-  let fed = Text::new(format!("{id}/stdin"), "before start\n");
-  second.engine.write(&fed, verbs::Write { on: on(&root) }).unwrap();
-  second
-    .engine
-    .write(&Text::new(format!("{id}/stdin"), ""), verbs::Write { on: on(&root) })
-    .unwrap();
-  second.engine.wake(&root).unwrap();
-  let exit = Exit::of(second.settled(&id).unwrap().as_ref()).expect("the command came to its exit");
-  assert_eq!(exit.stdout.content, "before start\n");
-}
-
-#[test]
-fn what_an_earlier_life_wrote_to_the_stdin_of_a_command_reaches_it_again_when_a_later_life_starts_it_at_a_wake()
+fn a_command_an_earlier_life_did_not_end_runs_no_more_and_ends_as_interrupted_at_the_wake_with_what_it_said()
  {
-  let id = {
-    let mut first = Lived::new("refed", &[], true).unwrap();
+  let line = "printf x >> count; printf ready; exec sleep 30";
+  let (id, at) = {
+    let mut first = Lived::new("cut", &[], true).unwrap();
     let root = first.root();
     let with = verbs::Bash { stdin: Some(None), on: on(&root), ..Default::default() };
-    let id = first.engine.bash("cat", with).unwrap().id().to_owned();
-    let fed = Text::new(format!("{id}/stdin"), "a\n");
-    first.engine.write(&fed, verbs::Write { on: on(&root) }).unwrap();
-    id
-  };
-  let mut second = Lived::new("refed", &[], false).unwrap();
-  let root = second.root();
-  second.engine.wake(&root).unwrap();
-  second
-    .engine
-    .write(&Text::new(format!("{id}/stdin"), ""), verbs::Write { on: on(&root) })
-    .unwrap();
-  let exit = Exit::of(second.settled(&id).unwrap().as_ref()).expect("the command came to its exit");
-  assert_eq!(
-    exit.stdout.content, "a\n",
-    "the later life feeds the command again what the earlier life wrote"
-  );
-}
-
-#[test]
-fn a_command_an_earlier_life_did_not_end_runs_once_at_the_wake_and_its_door_holds_what_it_said() {
-  let line = "printf x >> count; [ -e done ] || { printf ready; exec sleep 30; }";
-  let (id, at) = {
-    let mut first = Lived::new("rerun", &[], true).unwrap();
-    let root = first.root();
-    let id = first.engine.bash(line, verbs::Bash { on: on(&root), ..Default::default() }).unwrap();
-    let id = id.id().to_owned();
+    let id = first.engine.bash(line, with).unwrap().id().to_owned();
     let door = || verbs::Read { on: on(&root), ..Default::default() };
     let waker = Waker::from(Arc::new(Parked(thread::current())));
     while first.engine.read(&format!("{id}/stdout"), door()).unwrap().content != "ready" {
@@ -570,18 +528,22 @@ fn a_command_an_earlier_life_did_not_end_runs_once_at_the_wake_and_its_door_hold
     }
     (id, first.at.clone())
   };
-  fs::write(at.join("done"), "").unwrap();
-  let mut second = Lived::new("rerun", &[], false).unwrap();
+  let mut second = Lived::new("cut", &[], false).unwrap();
   let root = second.root();
   let door = || verbs::Read { on: on(&root), ..Default::default() };
-  assert_eq!(fs::read_to_string(at.join("count")).unwrap(), "x", "a life that opens runs nothing");
+  let fed =
+    second.engine.write(&Text::new(format!("{id}/stdin"), "a\n"), verbs::Write { on: on(&root) });
+  assert_eq!(fed.unwrap_err().name, "Refused", "a command that a crash cut takes no write");
+  second.engine.wake(&root).unwrap();
+  let why = second.settled(&id).unwrap_err();
+  assert_eq!(why.name, "Refused");
+  assert_eq!(
+    why.message(),
+    format!("{line:?} was interrupted: the life that ran it ended before it did")
+  );
   assert_eq!(second.engine.read(&format!("{id}/stdout"), door()).unwrap().content, "ready");
   second.engine.wake(&root).unwrap();
-  let exit = Exit::of(second.settled(&id).unwrap().as_ref()).expect("the command came to its exit");
-  assert_eq!((exit.code, exit.stdout.content.as_str()), (Some(0), ""));
-  second.engine.wake(&root).unwrap();
-  second.settled(&id).unwrap();
-  assert_eq!(fs::read_to_string(at.join("count")).unwrap(), "xx", "a second wake runs nothing");
+  assert_eq!(fs::read_to_string(at.join("count")).unwrap(), "x", "no life runs it again");
 }
 
 #[test]
@@ -678,28 +640,35 @@ fn the_work_an_earlier_life_left_is_pending_until_a_wake_that_this_life_says() {
 #[test]
 fn an_act_that_lives_end_while_it_runs_again_and_again_is_parked_until_a_retry() {
   let root = {
-    let mut first = Lived::new("parked", &[], true).unwrap();
+    let mut first = Lived::new("parked", &["WAIT"], true).unwrap();
     let root = first.root();
-    first.engine.bash("sleep 30", verbs::Bash { on: on(&root), ..Default::default() }).unwrap();
+    let message = Some("count".to_owned());
+    first
+      .engine
+      .prompt(
+        Object::string("None"),
+        verbs::Prompt { message, on: on(&root), ..Default::default() },
+      )
+      .unwrap();
     root
   };
   let started = |lived: &mut Lived| {
     let facts = lived.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
     let ours =
-      |one: &&Fact| one.kind() == "started" && one.about() == "bash1" && one.by() != "journal";
+      |one: &&Fact| one.kind() == "started" && one.about() == "reply1" && one.by() != "journal";
     facts.iter().filter(ours).count()
   };
-  let bash = || vec![("bash1".to_owned(), "bash".to_owned())];
-  // Each life that a host wakes as it opens starts the command again, and ends while it runs.
+  let reply = || vec![("reply1".to_owned(), "reply".to_owned())];
+  // Each life that a host wakes as it opens asks the model again, and ends while the reply runs.
   for _ in 1..CRASHES {
-    let mut again = Lived::new("parked", &[], false).unwrap();
+    let mut again = Lived::new("parked", &["WAIT"], false).unwrap();
     assert!(again.engine.parked().unwrap().is_empty());
-    assert_eq!(again.engine.pending().unwrap(), bash());
+    assert!(!again.engine.pending().unwrap().is_empty());
     again.engine.wake(&root).unwrap();
     assert_eq!(started(&mut again), 1);
   }
-  let mut parked = Lived::new("parked", &[], false).unwrap();
-  assert_eq!(parked.engine.parked().unwrap(), bash());
+  let mut parked = Lived::new("parked", &["WAIT"], false).unwrap();
+  assert_eq!(parked.engine.parked().unwrap(), reply());
   assert!(parked.engine.pending().unwrap().is_empty(), "a parked act is pending no more");
   parked.engine.wake(&root).unwrap();
   assert_eq!(started(&mut parked), 0, "a wake puts no parked act to the outside");
@@ -707,18 +676,18 @@ fn an_act_that_lives_end_while_it_runs_again_and_again_is_parked_until_a_retry()
   let rung = parked.engine.rung(verbs::Rung { word, on: on(&root), ..Default::default() }).unwrap();
   let rung = rung.id().to_owned();
   assert!(parked.settled(&rung).is_ok(), "the ears behind the park hear as before");
-  parked.engine.retry("bash1").unwrap();
+  parked.engine.retry("reply1").unwrap();
   assert_eq!(started(&mut parked), 1, "a retry puts it to the outside after the wake");
   assert!(parked.engine.parked().unwrap().is_empty());
-  assert_eq!(parked.engine.retry("bash1").unwrap_err().name, "Refused");
+  assert_eq!(parked.engine.retry("reply1").unwrap_err().name, "Refused");
   drop(parked);
   // A retry before any wake puts the act to the outside as well.
-  let mut retried = Lived::new("parked", &[], false).unwrap();
-  assert_eq!(retried.engine.parked().unwrap(), bash());
-  retried.engine.retry("bash1").unwrap();
+  let mut retried = Lived::new("parked", &["WAIT"], false).unwrap();
+  assert_eq!(retried.engine.parked().unwrap(), reply());
+  retried.engine.retry("reply1").unwrap();
   assert_eq!(started(&mut retried), 1);
-  retried.engine.cancel("bash1").unwrap();
-  assert_eq!(retried.settled("bash1").unwrap_err().name, "CancelledError");
+  retried.engine.cancel("reply1").unwrap();
+  assert_eq!(retried.settled("reply1").unwrap_err().name, "CancelledError");
 }
 
 #[test]

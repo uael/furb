@@ -158,7 +158,7 @@ impl Opening {
       ("skills", skills(config)),
       ("web", working(works.then(|| web(search)))),
       ("files", working(scratch.clone().map(world::files))),
-      ("bash", working(scratch.map(world::bash))),
+      ("bash", working(scratch.map(|scratch| world::bash(scratch, &record)))),
       ("time", working(works.then(world::time))),
     ];
     ears.extend(store.map(|store| ("store", store)));

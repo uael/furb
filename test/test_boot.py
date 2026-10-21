@@ -346,10 +346,8 @@ async def test_a_later_life_reads_the_same_text_from_a_door() -> None:
   _, over = await relived(second, list(first.record))
   engine.wake(over)
   await settle()
-  second.writes(one, "second\n", "stdout")
-  await settle()
   was = engine.read(f"{one}/stdout", on=over)
-  assert was == Text(f"{one}/stdout", "second\n") and engine.peek(one) is None
+  assert was == Text(f"{one}/stdout", "first\n") and isinstance(engine.peek(one), Refused)
   _, again = await relived(Dead(), list(second.record))
   assert engine.read(f"{one}/stdout", on=again) == was
 

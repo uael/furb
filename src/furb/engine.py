@@ -319,12 +319,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         case ("read", about, *_, path) if (door := re.fullmatch(r"(bash\d+)/(stdout|stderr)", path)) and get(
           command := door[1]
         ):
-          part = ""
-          for seen in transcript(scope(command)):
-            if seen[:2] == ("started", command):
-              part = ""
-            elif seen[:2] == ("out", command) and seen[4] == door[2]:
-              part += seen[3]
+          part = "".join(x[3] for x in transcript(scope(command), "out") if x[1] == command and x[4] == door[2])
           yield "done", about, getattr(peek(command), door[2], Text(path, part))
         case ("rung", rid, maker, _, "", _, to):
           waiting[rid] = maker, to

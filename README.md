@@ -30,7 +30,8 @@ module, and each answer of the model is a program that runs in it.
   to open the rewind tree.
 - **You see what the model sees.** The transcript is the exact text that the model reads. The record holds every
   act of the operator and every answer of the World, and a later run replays it. Work that was interrupted
-  starts again when you resume it.
+  starts again when you resume it, but for a command, which ends as interrupted, so the model sees that it was cut
+  and runs it again if it wants.
 - **Limits that hold.** A chain pauses when it reaches a dollar ceiling or a share of the context window.
 - **No permissions, by design.** Each act runs with the rights of the user who runs furb, and the record shows who
   made each act. For isolation, run furb in a virtual machine. An extension can

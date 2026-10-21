@@ -68,9 +68,10 @@ const WAITS: &str = "peek(__id, ...) is ... and not paused(__id)";
 /// while the act ran and before it was done, so the act may be what ended them.
 pub const CRASHES: usize = 5;
 
-/// The kinds of act that a life parks, which are those that can end the process that runs them: the run of a word,
-/// a command and a reply.
-const PARKS: [&str; 3] = ["run", "bash", "reply"];
+/// The kinds of act that a life parks, which are those that can end the process that runs them again: the run of a
+/// word and a reply. A command is none of them, since no later life runs it again: the ear of commands closes it as
+/// interrupted at the wake.
+const PARKS: [&str; 2] = ["run", "reply"];
 
 /// The act that the operator made for a key of the client on a chain: the first question that the operator made on
 /// the chain after a key fact of that key and that kind, when it is of that kind, and nothing otherwise.
@@ -218,7 +219,7 @@ impl Life {
 /// The acts that the entries of a record show started and not done, by name, in the order of the record: work that
 /// the outside took in an earlier life. The record keeps the started of the outside alone, since a later life says
 /// again what an act said.
-fn left(record: &[Object]) -> Vec<String> {
+pub(crate) fn left(record: &[Object]) -> Vec<String> {
   let facts: Vec<Fact> =
     record.iter().filter_map(|one| entry(&one.as_ref(), 0).and_then(Fact::of)).collect();
   let done: HashSet<&str> = facts.iter().filter(|a| a.kind() == "done").map(Fact::about).collect();
@@ -1259,7 +1260,7 @@ impl Engine {
   }
 
   /// The work that a crash loop parked, each act by its name and its kind, in the order of the record: an act of the
-  /// outside, a run, a command or a reply, that the record shows started in [`CRASHES`] lives and not done, since each
+  /// outside, a run or a reply, that the record shows started in [`CRASHES`] lives and not done, since each
   /// of those lives ended while it ran. A wake puts no parked act to the outside, and it is pending no more: it waits,
   /// not done, until a retry, or until a control ends it, so a host that wakes the work of a life as it opens does
   /// not run it again and end again.
