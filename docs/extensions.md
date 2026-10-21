@@ -28,8 +28,8 @@ The manifest is a JSON map with three keys:
 - `word` is the file of the word, relative to the folder. It is a python module that imports what it uses from
   `furb.engine`, so an editor, ruff and ty read it. The word is that file less its imports of furb, with its line
   ends made LF. It only defines, holds no comment, and binds no name of the engine. It holds no sentence but one
-  doctrine of its own, a quote that it tells and that holds no law, as `engine.py` holds its own. Its contract holds
-  its laws, as `engine.pyi` holds those of the engine.
+  doctrine of its own, a quote that holds no law, as `engine.py` holds its own. Its contract holds its laws, as
+  `engine.pyi` holds those of the engine.
 - `life` is the life word, python that starts the work of the extension, such as `remember()`. It can be absent.
 
 ## Where furb finds extensions
@@ -89,10 +89,17 @@ journal answers again in a later life, so a replay is exact and the World is ask
   every chain now and in every later life. An official extension lives in furb. `enabled()` gives the names of the
   extensions that the life runs. It needs no ear of the World.
 
-- `compaction` defines `compaction()`, an act that watches the fill of its chain. At the first answer of a model
-  that reads more than `SHARE`, 0.6, of the window of its actor, it tells the model that share and the word that goes
-  on in a chain with a source and a take of the old work, which drops each prompt of the chain that is done. It
-  does not act for the model, and it needs no ear of the World. Its life word is `compaction()`.
+- `compaction` is a kit to go on in a new chain that keeps less of the old one, since in furb a compaction is a
+  chain with a source and a filter. `compact()` makes that chain from the chain of the caller: its filter applies
+  `FILTERS` in order, and its first word, `reground(source)`, reads again each file that the old chain read or
+  wrote. Each filter is a small function that gives a filter: `latest()` keeps the last read or write of each path,
+  `quiet()` drops the commands, `recent(n)` keeps the acts of the last `n` replies, and `await chosen()` asks a model
+  on a chain of its own which acts to keep. `together(*filters)` applies filters in order. `compacted()` wraps one
+  chain: after an answer that reads more than `SHARE`, 0.6, of the window of its actor, it compacts the chain at its
+  next reply, moves each open prompt of a model to the new chain, and wraps that chain. No chain is wrapped unless a
+  word wraps it, so the extension has no life word and needs no ear of the World. A project changes the defaults in
+  an extension of its own whose word rebinds `SHARE`, `FILTERS`, `CHOOSER` or `LABEL`. Its doctrine, the quote
+  `compaction`, says each part in a few words.
 
 Each has a contract, `extensions/<name>/<name>.pyi`, which the hygiene laws 1 to 4 of `CLAUDE.md` hold to its suite
 as they hold the engine. Laws 5 to 7 are for `engine.py` alone, and laws 8 and 9 hold the word of each extension.
