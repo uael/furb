@@ -15,7 +15,8 @@ meanings. The entry of such a name here gives only its form in the engine.
 - provider: the service that runs a model.
 - actor: the operator, or a model at an effort, named model/effort; it answers prompts and makes acts.
 - effort: one of the levels of reasoning the World offers, ordered from least to most.
-- roster: the actors the World offers, each as its name, its efforts and its window.
+- roster: the actors the World offers, each as its name, its efforts, its window and, for a model that reads one,
+  its doctrine.
 - window: the context size of a model in tokens, as its roster entry says.
 - share: the part of a window that one model response used.
 - standing: what the chains stand on, which the World answers a stand with: the roster, the directory and the default
@@ -77,7 +78,8 @@ meanings. The entry of such a name here gives only its form in the engine.
 - header: the first line of a paragraph: # and, with no space, the id of the act it is of, then what happened to
   the act, or the maker of a rung whose word it tells, and no text that the act tells.
 - advance: the paragraph the chain tells last before a reply, whose header names the rung it asks for and the prompt
-  that rung advances, and which binds the share that the last reply read.
+  that rung advances, and which binds the share that the last reply read, and the doctrine of its actor at the first
+  reply of the chain to an actor of that doctrine.
 - binding: a statement that binds the name of an act to the act, or a value that the act tells to the id of the act
   and the word of the value, as bash1_command, which a turn shows and a rung the chain writes runs.
 - tell: the one fact that carries notes, about the act it is of, which the turns are folded from; a control tells
@@ -119,8 +121,9 @@ meanings. The entry of such a name here gives only its form in the engine.
   differs make the shows of the file.
 - quote: a string between two marks, <s:name> and </s:name>, which binds its name when it runs; a word writes one,
   and the transcript tells each string of more than one line as one.
-- doctrine: the last statement of engine.py, which the system prompt shows as a quote after the engine; it says how
-  a model works in furb, and holds no law.
+- doctrine: prose that says how a model works in furb, and holds no law: the doctrine of the engine, the last
+  statement of engine.py, which the system prompt shows as a quote after the engine, and the doctrine of an actor,
+  which the World gives in the roster entry of that actor and a chain tells in the advance of its first reply to it.
 - template: a python template string, each interpolation of which carries an expression and its value.
 - debug: the verb that tells the interpolations of a template, a tell and no act.
 - control: a pause, a wake, a cancel or a close; a close is a cancel with a value, and a cancel a close with

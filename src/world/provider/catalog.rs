@@ -49,6 +49,18 @@ pub const LEVELS: [&str; 7] = ["off", "minimal", "low", "medium", "high", "xhigh
 /// The level of an actor that names none.
 pub const LEVEL: &str = "high";
 
+/// The doctrine of each family of models that reads one, as a word that the id of a model of the family holds: how
+/// a model of the family works in furb, beside the doctrine of the engine, which each chain tells once to that model.
+const DOCTRINES: [(&str, &str); 1] = [(
+  "qwen",
+  "Work in two words at least, since you see no file until a word shows it.
+Your first word looks: read(path) shows each file of the task whole, and bash(command) runs its check. It ends with no
+close, and the chain asks you again with all that it showed.
+A later word reads each file again for the Text that it changes, changes it from the lines that you saw, runs the
+check again, and closes.
+Never guess what a file holds, and never hide what you must see.",
+)];
+
 /// The snapshot of the catalog that the crate carries.
 const SNAPSHOT: &str = include_str!("catalog.json");
 
@@ -341,6 +353,12 @@ fn named<'a>(models: &[&'a Model], name: &str) -> Option<&'a Model> {
   }
 }
 
+/// The doctrine of a model by its name: that of the family whose word the id of the model holds, in any case, and
+/// none for a model of no such family.
+pub fn doctrine(name: &str) -> Option<&'static str> {
+  let id = name.split_once(':').map_or(name, |(_, id)| id).to_lowercase();
+  DOCTRINES.iter().find(|(family, _)| id.contains(family)).map(|(_, text)| *text)
+}
 /// The level of these efforts nearest a level: the level itself when a model takes it, the next one up that it
 /// takes, or the next one down; and nothing for a model that takes no effort.
 pub fn clamp<'a>(efforts: &[&'a str], level: &str) -> Option<&'a str> {
