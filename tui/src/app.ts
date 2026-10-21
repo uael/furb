@@ -580,6 +580,32 @@ export class App {
       return pad([bar, [`${indent}  closed  `, c.faint], [text, c.prose]], width, ground);
     }
     const act = line.act;
+    if (line.type === "ear") {
+      const first = line.rungs[0]?.id ?? "",
+        end = line.rungs.at(-1)?.id ?? "";
+      const name = line.rungs.length > 1 ? `${first}…${end.replace(/^rung/, "")}` : first;
+      const chips: Part[] = line.acts.flatMap((chip): Part[] => [
+        ["  "],
+        [chip.label, c.faint],
+        [" "],
+        [actMarks[chip.state][0] || spin(), actMarks[chip.state][1]()],
+      ]);
+      const count = line.rungs.length;
+      return pad(
+        [
+          bar,
+          [indent],
+          mark(line.state),
+          [" "],
+          [name, c.faint],
+          ["  "],
+          [`${count} ${count === 1 ? "word" : "words"} of ${act.by}`, c.muted],
+          ...chips,
+        ],
+        width,
+        ground,
+      );
+    }
     const head: Part[] = [bar, [indent], mark(line.state), [" "], [act.id, c.muted], ["  "]];
     if (line.type === "prompt") {
       const [shape, message, to] = act.words.map(String);
@@ -796,7 +822,7 @@ export class App {
       this.mode === "answer"
         ? `${clip(owed?.message.split("\n")[0] ?? "", 60)}  (${owed?.shape ?? ""})`
         : {
-            prompt: `Ask the model of ${this.session.labelOf(this.session.selected)}`,
+            prompt: `Ask ${this.session.actor} on ${this.session.labelOf(this.session.selected)}`,
             python: "A word of python, which runs as a rung on this chain",
             command: "A command, as model, theme or fork",
             answer: "",

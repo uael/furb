@@ -174,3 +174,27 @@ test("a thread shows each prompt with the rungs of its ladder, the acts of each 
     ["tail", "bash2", 1, "", "two\nthree\nfour"],
   ]);
 });
+
+test("the rungs in a row that an ear made on a chain stand on one line, with the acts that they made", () => {
+  const acts = [
+    act("chain1", "chain", "", "operator", 1),
+    act("rung1", "rung", "chain1", "extensions", 2, 3),
+    act("remember1", "remember", "chain1", "rung1", 3),
+    act("rung2", "rung", "chain1", "extensions", 4, 5),
+    act("rung3", "rung", "chain1", "operator", 6, 7, { words: ["x = 1"] }),
+  ];
+  const lines = ladder("chain1", acts, (rung) => String(rung.words[0] ?? ""), new Map(), new Set());
+  expect(
+    lines.map((line) => [
+      line.type,
+      line.act.id,
+      line.type === "ear" ? line.rungs.map((rung) => rung.id) : [],
+    ]),
+  ).toEqual([
+    ["ear", "rung1", ["rung1", "rung2"]],
+    ["rung", "rung3", []],
+  ]);
+  expect(lines[0]?.type === "ear" && lines[0].acts.map((chip) => [chip.label, chip.state])).toEqual([
+    ["remember1", "stands"],
+  ]);
+});

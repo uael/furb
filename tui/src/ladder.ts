@@ -11,6 +11,8 @@ export type ActState = "running" | "stands" | "done" | "failed" | "cancelled" | 
  * - `rung`: a rung of a ladder, or a word that its caller wrote, with the first line of its word, the acts that it
  *   made, and what refused or ended it.
  * - `act`: an act on the chain that no rung of the chain made, such as a command of the operator.
+ * - `ear`: the rungs in a row that an ear of the outside made on the chain, as the words of the extensions, with the
+ *   acts that they made.
  * - `tail`: the last lines that a command that runs printed, or that a model writes while it answers.
  * - `value`: what a prompt closed with.
  */
@@ -18,6 +20,7 @@ export type Line =
   | { type: "prompt"; act: ActRow; depth: number; state: ActState }
   | { type: "rung"; act: ActRow; depth: number; state: ActState; word: string; more: number; acts: Chip[] }
   | { type: "act"; act: ActRow; depth: number; state: ActState }
+  | { type: "ear"; act: ActRow; depth: number; state: ActState; rungs: ActRow[]; acts: Chip[] }
   | { type: "tail"; act: ActRow; depth: number; text: string; model: boolean }
   | { type: "value"; act: ActRow; depth: number; text: string };
 /** The acts of a rung, by name: one act, or a run of acts of one kind and one state, as read3…7. */
@@ -138,6 +141,26 @@ export function ladder(
     if (act.kind === "bash" && !act.done && tailOf(act))
       lines.push({ type: "tail", act, depth: depth + 1, text: tailOf(act), model: false });
   };
-  for (const act of on) if (!local.has(act.by)) emit(act, 0);
+  const rows = new Map(acts.map((act) => [act.id, act]));
+  for (const act of on) {
+    if (local.has(act.by)) continue;
+    // The rungs that an ear made, as the words of the extensions, stand together on one line.
+    const last = lines.at(-1);
+    if (act.kind === "rung" && act.by !== "operator" && !rows.has(act.by)) {
+      if (last?.type === "ear" && last.act.by === act.by) last.rungs.push(act);
+      else lines.push({ type: "ear", act, depth: 0, state: "done", rungs: [act], acts: [] });
+      continue;
+    }
+    emit(act, 0);
+  }
+  for (const line of lines)
+    if (line.type === "ear") {
+      const states = line.rungs.map((rung) => actState(rung, owed));
+      line.state = states.find((state) => state !== "done") ?? "done";
+      line.acts = chips(
+        line.rungs.flatMap((rung) => made.get(rung.id) ?? []),
+        owed,
+      );
+    }
   return lines;
 }
