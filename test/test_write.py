@@ -208,3 +208,20 @@ async def test_a_write_of_scratch_puts_its_text_in_that_file_of_the_scratch_dire
   live.end()
   assert wrote == Text("scratch://deep/er/plan.md", "plan\n")
   assert (place / "deep" / "er" / "plan.md").read_text() == "plan\n"
+
+
+async def test_a_write_to_a_file_whose_every_line_ends_with_crlf_ends_each_line_of_the_text_with_crlf(
+  tmp_path: Path,
+) -> None:
+  """A write to a file whose every line ends with CRLF ends each line of the text with CRLF, so the file keeps its line ends, and gives the text with LF, as a read does."""
+  (at := tmp_path / "crlf.txt").write_bytes(b"one\r\n")
+  live, root = machine(tmp_path)
+  wrote = engine.write(Text(str(at), "one\ntwo\n"), on=root)
+  fresh_one = engine.write(Text(str(tmp_path / "new.txt"), "one\n"), on=root)
+  live.end()
+  assert (wrote.content, at.read_bytes(), fresh_one.content, (tmp_path / "new.txt").read_bytes()) == (
+    "one\ntwo\n",
+    b"one\r\ntwo\r\n",
+    "one\n",
+    b"one\n",
+  )
