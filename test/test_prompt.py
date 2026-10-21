@@ -516,8 +516,15 @@ async def test_the_response_of_an_acknowledgment_is_no_orphan() -> None:
 
 
 async def test_when_an_act_a_rung_of_the_chain_made_is_done_the_chain_prompts_nothing() -> None:
-  """When an act that a rung of the chain made is done while the word of that rung does not run, no word of the chain awaited it, no reply has shown it, no prompt it heard on itself is open and no word of the chain is running, the chain prompts nothing, so that the model sees it."""
-  sand, log, root = born("x = bash('slow')\nclose(1)", "close(None)", "close((await bash('slow')).code)", auto=False)
+  """When an act that a rung of the chain made is done while the word of that rung does not run, no word of the chain awaited it, no reply has shown it, no rung of the chain waits for a reply or ends the step of a prompt that is open, and no word of the chain is running, the chain prompts nothing, so that the model sees it, though after a word that the operator or an outside ear gave it waits for the next fact on the chain."""
+  sand, log, root = born(
+    "x = bash('slow')\nclose(1)",
+    "close(None)",
+    "close((await bash('slow')).code)",
+    "y = prompt(str, 'which?', to=OPERATOR)\nclose((await bash('slow')).code)",
+    "close(None)",
+    auto=False,
+  )
   act = engine.prompt(int, "start one", on=root)
   await settle()
   command = said(log, "bash")[0][1]
@@ -532,6 +539,15 @@ async def test_when_an_act_a_rung_of_the_chain_made_is_done_the_chain_prompts_no
   assert (await awaited) == 0
   await settle()
   assert [one[5] for one in said(log, "prompt")] == ["start one", f"{command} done", "await one"]
+  asking = engine.prompt(int, "ask one", on=root)
+  await settle()
+  asked = next(one[1] for one in said(log, "prompt") if one[6] == OPERATOR)
+  engine.close("left", asked)
+  await settle()
+  shown = ["start one", f"{command} done", "await one", "ask one", "which?", f"{asked} done"]
+  assert [one[5] for one in said(log, "prompt")] == shown
+  sand.exits(said(log, "bash")[2][1], 0)
+  assert (await asking) == 0
 
 
 async def test_a_pause_stands_over_the_close_that_answers_a_prompt_too() -> None:

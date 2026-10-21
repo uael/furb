@@ -343,7 +343,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
             act("run", id, None, rid, unquoted(word), donor)
         case ("done", about, by, Refused()) if not by and question(("reply", about)):
           pause(id)
-        case ("done", about, _, value):
+        case ("done", about, *_):
           waiting.pop(about, None)
       if (r := get(a[1]))[0] in ("run", "wants"):
         running[r[4] if r[0] == "run" else get(r[2])[4]] = (a[0] == "started") == (r[0] == "run")
@@ -360,7 +360,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           with site.set(asking):
             reply = act("reply", id, controlled(idle), to)
           unseen = ""
-      if unseen and all(over(x[1]) for x in transcript() if x[0] == "prompt" and x[3] == id):
+      if unseen and not waiting and (r[2] in running or over(r[2]) or a[0] == "tell"):
         prompt(None, unseen)
         unseen = ""
 
