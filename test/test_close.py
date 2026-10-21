@@ -38,7 +38,8 @@ async def test_a_close_ends_the_rung_of_a_prompt_at_its_next_await() -> None:
 
 async def test_the_operator_closes_a_prompt_of_shape_none_with_none() -> None:
   """The operator closes a prompt of shape None with None."""
-  _, _, _, act = await posed(None, "look at this")
+  act = engine.prompt(None, "look at this", on=born()[2])
+  await settle()
   engine.close(None, act)
   await settle()
   assert engine.peek(act, ...) is not ... and (await act) is None

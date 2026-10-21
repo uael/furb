@@ -29,7 +29,9 @@ pub struct Asked {
 impl Asked {
   /// The prompt a fact asks the operator, when it is one that no ear before the console took, as a console takes it:
   /// the console says its started, and closes at once a prompt of a shape outside SHAPES, with the refusal of that
-  /// shape, and gives it not. So every console of furb puts to the operator the same shapes.
+  /// shape, and gives it not. So every console of furb puts to the operator the same shapes. A prompt of None asks
+  /// nothing, so the console closes it with None at once and gives it, as a notice that the operator reads and
+  /// answers not.
   pub async fn taken<W: 'static>(co: &mut Co<W>, a: &Fact) -> Result<Option<Asked>, Fault> {
     if a.kind() != "prompt" || !a.question() {
       return Ok(None);
@@ -42,6 +44,10 @@ impl Asked {
       message: word(2).unwrap_or_default(),
     };
     say(co, Fact::says("started", &asked.about, []));
+    if asked.shape == "None" {
+      co.call("close", vec![Object::none()], vec![("id", Object::string(&asked.about))]).await?;
+      return Ok(Some(asked));
+    }
     if SHAPES.contains(&asked.shape.as_str()) {
       return Ok(Some(asked));
     }
@@ -55,7 +61,8 @@ impl Asked {
 type Input = Lines<BufReader<Stdin>>;
 
 /// The console, as an ear: it takes each prompt to the operator and shows them in turn, and closes each with the line
-/// the operator writes back, or with why no line came. A prompt that is done before its line comes, by a cancel, is
+/// the operator writes back, or with why no line came. A notice, which the console closed as it took it, is shown in
+/// its turn as one line, and reads no line. A prompt that is done before its line comes, by a cancel, is
 /// shown no more: a line the operator wrote before that goes nowhere, and the next line goes to the next prompt.
 pub fn terminal() -> Box<dyn Ear> {
   ear(|mut co: Co<Read>| async move {
@@ -68,8 +75,12 @@ pub fn terminal() -> Box<dyn Ear> {
       if shown.is_none()
         && lines.is_some()
         && let Some(next) = waiting.pop_front()
-        && let Some(held) = lines.take()
       {
+        if next.shape == "None" {
+          eprintln!("{} tells: {}", next.about, next.message);
+          continue;
+        }
+        let Some(held) = lines.take() else { continue };
         eprint!("{} wants a {}: {}\n> ", next.about, next.shape, next.message);
         let _ = io::stderr().flush();
         let (stop, stopped) = oneshot::channel();
@@ -81,7 +92,7 @@ pub fn terminal() -> Box<dyn Ear> {
           if let Some(asked) = Asked::taken(&mut co, &a).await? {
             waiting.push_back(asked);
           } else if a.kind() == "done" {
-            waiting.retain(|one| one.about != a.about());
+            waiting.retain(|one| one.about != a.about() || one.shape == "None");
             shown = shown.filter(|(one, _)| one.about != a.about());
           }
         }

@@ -98,11 +98,11 @@ async def test_it_lives_until_it_returns() -> None:
   _, log, root = born()
   heard: list[tuple] = []
   engine.drive(keeping(heard), "keeper")
-  act = engine.prompt(None, "hi", to="operator", on=root)
+  act = engine.prompt(int, "hi", to="operator", on=root)
   await settle()
   with pytest.raises(Refused, match="hears"):
     engine.drive(engine.idle(act), act)
-  engine.close(None, act)
+  engine.close(1, act)
   await settle()
   engine.drive(engine.idle(act), act)
   assert heard and heard[-1] == log[-1]

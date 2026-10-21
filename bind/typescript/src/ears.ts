@@ -18,7 +18,7 @@ export function call(verb: string, args: unknown[] = [], kwargs: Record<string, 
 
 /** An ear of the outside that brings another to life as an ear of the engine at the birth of the life, and is over.
  * An ear of the engine hears every fact and every question, where an ear of the outside hears a question only when
- * no ear before it took it, so an ear that keeps every act is one. */
+ * no ear before it took it, and a chain at its birth, so an ear that keeps every act is one. */
 export function* driving(ear: Ear, name: string): Ear {
   yield call("drive", [ear, name]);
 }

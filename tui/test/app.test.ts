@@ -233,6 +233,32 @@ test("operator answers and program edits act through the binding", () =>
     { width: 120, height: 40, exitOnCtrlC: false },
   ));
 
+test("a prompt of None to the operator is a notice with no field, done at once, that ⌃A dismisses", () =>
+  composing(
+    async ({ session, screen, frame }) => {
+      const id = await session.engine.prompt("None", {
+        message: "The build is green.",
+        to: "operator",
+        on: session.engine.root,
+      });
+      expect(await session.engine.result(id)).toBeNull();
+      await until(session.host, () => session.host.notices.has(id));
+      await session.refresh();
+      expect(session.operatorPrompt).toBeUndefined();
+      const shown = await frame();
+      expect(shown).toContain("Notice");
+      expect(shown).toContain("The build is green.");
+      expect(shown).toContain("Nothing to answer");
+      expect(shown).not.toContain("Answer in the input below");
+      screen.mockInput.pressKey("a", { ctrl: true });
+      await until(session.host, () => !session.host.notices.has(id));
+      const read = await frame();
+      expect(read).toContain("The build is green.");
+      expect(read).not.toContain("Nothing to answer");
+    },
+    { width: 120, height: 40 },
+  ));
+
 test("resume preserves chains, programs, theme, and input drafts while unfinished work stays paused", async () => {
   const first = await demoSession({ seed: true });
   let library = await demoLibrary(first);
