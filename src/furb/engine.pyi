@@ -165,7 +165,7 @@ def read(path: str, show: Show = HEAD, on: str = "") -> Text:
   A read of a door that a rung of that ladder says leaves the word of that rung out, since a rung is no part of the program it reads.
   One made from inside an act tells itself under its own name, with its path and what it was answered, on the scope of that act; one made from outside an act tells nothing, and neither does one whose show is hidden.
   A read answered with what is no text gives that value, and tells it as python shows it.
-  A read from inside an act whose show picks more than LARGEST bytes of its text raises Refused, which names those bytes and LARGEST, and tells nothing, and a read from outside an act, which tells nothing, is never refused for its size.
+  A read from inside an act that would tell more than LARGEST bytes of its text raises Refused, which names those bytes and LARGEST, and tells nothing, and a read from outside an act, which tells nothing, is never refused for its size.
   """
 
 def write(text: Text, on: str = "") -> Text:
@@ -943,7 +943,7 @@ def bound(id: str, of: str = "object") -> str:
   """The statement that binds the name of an act to the act, with the type of what the act comes to, as bash1: Act[Exit] = Act('bash1'), so the gate knows what an await of it gives."""
 
 def shown(text: Text, show: Show) -> str:
-  """The lines of a text that a show picks, as they are, one on each line."""
+  """The lines of a text that a show picks, as they are, one on each line, each cut at its first 1000 characters, so a long line of a command or of a file does not fill the turns."""
 
 def unquoted(word: str) -> str:
   """What a word is as python: each quote in it bound as a string.

@@ -6,7 +6,9 @@ from furb.engine import HEAD, HIDDEN, Text, grep, span
 
 
 def test_the_lines_of_a_text_that_a_show_picks() -> None:
-  """The lines of a text that a show picks, as they are, one on each line."""
+  """The lines of a text that a show picks, as they are, one on each line, each cut at its first 1000 characters, so a long line of a command or of a file does not fill the turns."""
+  wide = Text("/w/w.txt", "a" * 1000 + "\n" + "b" * 1001 + "\n" + "c" * 1045)
+  assert engine.shown(wide, HEAD).split("\n") == ["a" * 1000, "b" * 1000, "c" * 1000]
   assert engine.shown(THREE, HEAD) == "one\ntwo\nthree"
   assert engine.shown(THREE, span(2, 3)) == "two\nthree"
   assert engine.shown(THREE, grep("^t")) == "two\nthree"

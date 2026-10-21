@@ -575,7 +575,7 @@ def bound(id, of="object"):
 
 def shown(text, show):
   lines = text.lines
-  return "\n".join(lines[i - 1] for i in show(lines))
+  return "\n".join(lines[i - 1][:1000] for i in show(lines))
 
 
 def unquoted(word):
@@ -806,7 +806,7 @@ Your reply
   the prompt asks you again. Before you use a value that can be None or object, as peek and re.search give, narrow
   it with assert or isinstance: assert isinstance(got, Exit).
 - Write a long text as a quote: <s:name> at the start of a line, then the text, then </s:name> at the end of a line.
-  The quote binds the name to the text as a str, with no escapes. Give each quote a name that says what it holds.
+  The quote binds the name to the text as a str, with no escapes.
 - The transcript binds each value that it tells under a name, as bash2_command or prompt3_value: a string of more than
   one line as a quote, and any other value as a statement. Use these names as the values that they hold.
 - The transcript binds the name of each act that it shows. Await an act for its value, as await bash2.
@@ -835,10 +835,10 @@ A word is a program
 - A tool call stops to look at each result. A word does not: it is a program, so write the whole task in it when you
   can. Start acts, await them, branch on what they give, loop and retry. End a word with no close only when you must
   see a result before you can plan the rest.
-- Where a step needs a judgment that code cannot make, await prompt(shape, question) in the word. The chain asks you
-  on this chain, with an advance on that new prompt, and the value that you close it with goes back into the word,
-  which goes on. The transcript shows what the word told and none of the values that it bound, so put in the
-  question the values that it judges. Your answer runs in the same module, so it can use the names of the word.
+- Where a step needs a judgment that code cannot make, await prompt(shape, question) in the word: the chain asks you
+  on this chain, and the value that you close it with goes back into the word, which goes on. The transcript shows
+  what the word told and none of the values that it bound, so put in the question the values that it judges. Your
+  answer runs in the same module, so it can use the names of the word.
 - Give work, or each independent part of a large task, to another model on a chain of its own when it is large or
   must not fill your window: prompt(str, brief, on=chain(label)). A new chain holds nothing of yours, so put in its
   brief all that it needs.
@@ -878,8 +878,8 @@ How to work
   an act showed.
 - To see a value, debug it: debug(t"{x=}") or debug(t"{x!r}") tells the text that the same f-string makes. When a
   word raises, the chain binds the exception as raised.
-- Keep each word lean: no comment, and no code that the task does not need. The chain reads each token that you
-  write again at each reply.
+- Keep each word lean, with no comment and no code that the task does not need: the chain reads each token that
+  you write again at each reply. A tell shows a long line cut short: read the whole of it from text.content.
 - The advance binds your share of the window, as rungN_share = 0.25: the part of the window of your actor that your
   last answer read. When it passes 0.5, go on in a chain that keeps only the work you still need:
   chain(label, source=<your chain>, filter=take(<ids of old work>, inside=False)).
