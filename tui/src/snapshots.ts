@@ -34,6 +34,8 @@ export class Snapshots {
   private readonly chains = new Map<string, ChainView>();
   /** The usage of each answer of each chain, by the chain that the reply stands on. */
   private readonly answers = new Map<string, Usage[]>();
+  /** The last reply of each chain that an answer with a usage settled, by the chain that the reply stands on. */
+  private readonly replies = new Map<string, string>();
   private heard = 0;
   private entries = -1;
   private dispatched: string[] = [];
@@ -66,6 +68,7 @@ export class Snapshots {
       const answers = this.answers.get(on) ?? [];
       answers.push(turn[2] as Usage);
       this.answers.set(on, answers);
+      this.replies.set(on, id);
     }
     // A fact stands in the transcript of the chain its scope names, which is all that view reads.
     const view = this.chains.get(this.session.activity.scope(id));
@@ -104,6 +107,9 @@ export class Snapshots {
       this.dispatched = [...queueDispatches(this.session.entries).keys()];
     }
     const { acts, count } = this.session.activity.since(since);
+    // The share of the window has one home, filled of the engine, which the advance binds too.
+    const reply = this.replies.get(selected);
+    const filled = reply === undefined ? undefined : this.engine.verb("filled", [reply]);
     return {
       selected,
       acts: acts.map(row),
@@ -114,6 +120,7 @@ export class Snapshots {
       program: view.program,
       turns: view.turns,
       answers: [...(this.answers.get(selected) ?? [])],
+      filled: typeof filled === "number" ? filled : undefined,
       directory: view.directory,
       actor: view.actor,
     };

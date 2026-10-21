@@ -20,6 +20,9 @@ export interface Snapshot {
   /** The usage of each answer of the chain, in order. A chain with a source reads the answers of its origin in its
    * turns, and they are not among these. */
   answers: Usage[];
+  /** The share of the window that the last answer of the chain filled, as filled of the engine gives it. Nothing
+   * before the first answer. */
+  filled?: number;
   program: Record<string, string>;
   actor: string;
   directory: string;
