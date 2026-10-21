@@ -857,7 +857,7 @@ A word is a program
 How to work
 - Read before you write. To see a file, read it, with a show for a part of it: read(path, grep(pattern)) or
   read(path, span(lo, hi)). A read shows lines without their numbers: grep(pattern)(text.lines) gives the numbers
-  of the lines that the pattern matches.
+  of the lines that the pattern matches, which count from 1, so the line n is text.lines[n - 1].
 - Change a file through the Text that read gave: replace, edit, insert, append or delete, then write. replace
   changes every place, as str does: give count=1 for one place. An edit of what the text does not hold raises
   Refused. A write tells its path, and the lines that landed otherwise than you asked.
