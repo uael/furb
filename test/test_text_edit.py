@@ -2,18 +2,25 @@
 
 import pytest
 
-from conftest import THREE
+from conftest import THREE, born
+from furb import engine
 from furb.engine import Refused, Text
 
 
-def test_the_text_with_one_more_edit_an_edit_whose_lines_are_not_there_is_refused() -> None:
-  """The text with one more edit; an edit whose lines are not there is refused."""
-  made = THREE.edit(2, 2, ["TWO"])
+async def test_edit_lo_hi_text_gives_a_new_text_with_the_lines_of_text_in_their_place() -> None:
+  """edit(lo, hi, text) gives a new text in which the lines of text take the place of the lines lo through hi, each with a line break at its end; an edit of lines that are not there is refused."""
+  made = THREE.edit(2, 2, "TWO")
   assert made.content == "one\nTWO\nthree\n" and made.before is THREE
+  assert THREE.edit(2, 3, "a\nb\nc").content == "one\na\nb\nc\n"
+  assert THREE.edit(1, 1, "a\r\nb\n").content == "a\r\nb\ntwo\nthree\n"
+  assert THREE.edit(1, 2, "").content == "three\n"
   with pytest.raises(Refused, match=r"/w/n\.txt no lines 9:9"):
-    THREE.edit(9, 9, ["x"])
+    THREE.edit(9, 9, "x")
   with pytest.raises(Refused, match=r"/w/n\.txt no lines 1:4"):
-    THREE.edit(1, 4, ["x"])
+    THREE.edit(1, 4, "x")
+  _, _, root = born()
+  word = "<s:lines>\nx\ny\n</s:lines>\nclose(Text('/w/n.txt', 'one\\ntwo\\n').edit(1, 1, lines).content)"
+  assert await engine.rung(word, on=root) == "x\ny\ntwo\n"
 
 
 def test_the_edits_that_say_themselves_are_one_edit_each() -> None:
@@ -31,7 +38,7 @@ def test_an_edit_ends_the_last_line_of_the_text_with_a_line_break() -> None:
   bare = Text("/w/n.txt", "one\ntwo")
   assert bare.append("three").content == "one\ntwo\nthree\n"
   assert bare.insert(3, "x\ny").lines == ["one", "two", "x", "y"]
-  assert bare.edit(1, 1, ["ONE"]).content == "ONE\ntwo\n"
+  assert bare.edit(1, 1, "ONE").content == "ONE\ntwo\n"
   assert Text("/w/n.txt", "a\r\nb").append("c").content == "a\r\nb\nc\n"
   assert Text("/w/n.txt").append("x").content == "x\n"
   assert bare.replace("two", "2").content == "one\n2"
