@@ -34,7 +34,7 @@ async def test_the_working_directory_of_a_chain_is_the_directory_of_the_standing
 async def test_the_world_resolves_the_path_of_a_read_a_write_and_a_command_against_the_working_directory(
   tmp_path: Path,
 ) -> None:
-  """The World resolves the path of a read, a write and a command against the working directory of the chain, which it reads, and the path of a read or a write that is ~ or starts with ~/ against the home of the user, and one of scratch:// against the scratch directory."""
+  """The World resolves the path of a read, a write and a command against the working directory of the chain, which it reads, and the path of a read or a write that is ~ or starts with ~/, or with ~\\ on Windows, against the home of the user, and one of scratch:// against the scratch directory."""
   sand = Where(files={"/x/a.txt": "two\n"})
   _, root = life(sand)
   engine.cd("/x", on=root)
