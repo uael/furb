@@ -43,7 +43,7 @@ test("record inspection derives pending work without taking its lock, writing fi
     const engine = session.open();
     const on = engine.root;
     await engine.rung({ word: 'write(Text("value.txt", "once"))', on });
-    const waiting = engine.wait({ seconds: 60, on }).id;
+    const waiting = engine.wait([], { seconds: 60, on }).id;
     const prompt = engine.prompt("str", { message: "Question", to: "operator", on }).id;
     const before = await readFile(record, "utf8");
     const metadata = await readFile(`${record}.session.json`, "utf8");
@@ -77,12 +77,12 @@ test("the act table holds an act paused while the last pause or wake that covers
     const engine = session.open();
     const root = engine.root;
     const two = engine.chain({ label: "two" }).id;
-    const here = engine.wait({ seconds: 60, on: root }).id;
-    const there = engine.wait({ seconds: 60, on: two }).id;
+    const here = engine.wait([], { seconds: 60, on: root }).id;
+    const there = engine.wait([], { seconds: 60, on: two }).id;
     const paused = () => [root, two, here, there].filter((id) => session.isPaused(id));
     engine.pause(two);
     expect(paused()).toEqual([two, there]);
-    const later = engine.wait({ seconds: 60, on: two }).id;
+    const later = engine.wait([], { seconds: 60, on: two }).id;
     expect(session.isPaused(later)).toBe(true);
     engine.pause(here);
     expect(paused()).toEqual([two, here, there]);
@@ -92,8 +92,8 @@ test("the act table holds an act paused while the last pause or wake that covers
     engine.pause(root);
     engine.wake(here);
     expect(paused()).toEqual([root]);
-    expect(session.isPaused(engine.wait({ seconds: 60, on: root }).id)).toBe(true);
-    expect(session.isPaused(engine.wait({ seconds: 60, on: two }).id)).toBe(false);
+    expect(session.isPaused(engine.wait([], { seconds: 60, on: root }).id)).toBe(true);
+    expect(session.isPaused(engine.wait([], { seconds: 60, on: two }).id)).toBe(false);
     // An act of a kind the file does not make is a row of the table, which a pause holds as it holds any other.
     await engine.rung({
       word: 'def takes(id):\n  yield "started", id\n  while True:\n    yield\nnote = act("note", "", takes)',
@@ -279,7 +279,7 @@ test("unfinished model work and waits reopen pending until the host resumes them
   const first = new Session({ cwd, record, ...modeled, answer: () => new Promise(() => {}) });
   const engine = first.open();
   const prompt = engine.prompt("str", { message: "pending", on: engine.root }).id;
-  const wait = engine.wait({ seconds: 0.1, on: engine.root }).id;
+  const wait = engine.wait([], { seconds: 0.1, on: engine.root }).id;
   await first.dispose();
   const second = new Session({
     record,
@@ -311,8 +311,8 @@ test("the session asks the engine for the pending work again only after a fact t
   const record = join(cwd, "life.jsonl");
   const first = new Session({ cwd, record, ...modeled, answer: () => new Promise(() => {}) });
   const engine = first.open();
-  const gone = engine.wait({ seconds: 600, on: engine.root }).id;
-  const wait = engine.wait({ seconds: 600, on: engine.root }).id;
+  const gone = engine.wait([], { seconds: 600, on: engine.root }).id;
+  const wait = engine.wait([], { seconds: 600, on: engine.root }).id;
   await first.dispose();
   const second = new Session({ record, ...modeled, answer: () => new Promise(() => {}) });
   const resumed = second.open();

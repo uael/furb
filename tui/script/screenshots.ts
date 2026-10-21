@@ -184,7 +184,7 @@ try {
   await capture("20-gate-findings");
   const record = session.host.record;
   if (!record) throw new Error("The demo session has no record.");
-  await session.engine.wait({ seconds: 60, on: session.engine.root });
+  await session.engine.wait([], { seconds: 60, on: session.engine.root });
   app().dispose();
   await library.dispose();
   session = await demoSession({ record });
@@ -276,7 +276,7 @@ try {
       on: changelog.session.engine.root,
     }),
   );
-  await research.session.engine.wait({ seconds: 60, on: research.session.engine.root });
+  await research.session.engine.wait([], { seconds: 60, on: research.session.engine.root });
   await research.session.submit("/pause");
   await library.select(main);
   session = main.session;
