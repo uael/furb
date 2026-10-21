@@ -134,7 +134,8 @@ test("a session offers the models its host names, and keeps the model and the ef
   } finally {
     await alone.dispose();
   }
-  const every = new Session({ cwd });
+  // A claude command line that the session names is one the catalog offers, and no model is asked.
+  const every = new Session({ cwd, claude: join(cwd, "claude") });
   try {
     const [roster, , actor] = every.open().standing() as [[string][], string, string];
     expect([roster.map(([name]) => name).slice(0, 4), roster.at(-1)?.[0], actor]).toEqual([
