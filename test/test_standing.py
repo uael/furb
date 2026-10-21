@@ -35,9 +35,11 @@ async def test_it_reads_the_transcript_of_the_root_as_it_stands_where_the_call_i
   one = engine.prompt(int, "count", on=root)
   assert await one == 1
   await settle()
-  ledger = ["#grant1 ledger\ngrant1_spent = 0.0\ngrant1_filled = 0.5"]
-  assert [a for a in paragraphs(engine.turns(on=root)) if a.startswith("#grant1 ledger")] == ledger
+  (reply,) = [a[1] for a in engine.transcript(root) if a[0] == "reply"]
+  assert engine.filled(reply) == 0.5
   later = Sand(stands=[[STANDS[0][0]], "/z", "operator"])
   await relived(later, list(sand.record))
   assert engine.standing() == later.stands
+  ledger = ["#grant1 ledger\ngrant1_spent = 0.0"]
   assert [a for a in paragraphs(engine.turns(on=root)) if a.startswith("#grant1 ledger")] == ledger
+  assert not engine.paused(root) and engine.filled(reply) == 1.0

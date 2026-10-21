@@ -134,9 +134,7 @@ async def test_a_rung_with_no_word_and_no_actor_takes_the_default_actor_of_its_c
   world_says("done", asked[1], ("assistant", "k = 1", (80000, 0, 0, 0, 0.0), None))
   await settle()
   assert [a[6] for a in said(log, "rung") if a[1] == bare] == ["m/low"] == [a[4] for a in said(log, "reply")]
-  assert [one for one in paragraphs(engine.turns(on=root)) if one.startswith("#grant1 ledger")] == [
-    "#grant1 ledger\ngrant1_spent = 0.0\ngrant1_filled = 0.2"
-  ]
+  assert engine.filled(asked[1]) == 0.2
 
 
 async def test_the_raised_paragraph_binds_the_exception_as_rungn_raised() -> None:

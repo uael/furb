@@ -1,6 +1,6 @@
 """WINDOW, the window of a model whose roster entry says none."""
 
-from conftest import born, paragraphs, settle
+from conftest import born, settle
 from furb import engine
 from furb.engine import WINDOW
 
@@ -17,7 +17,6 @@ async def test_window_is_the_window_in_tokens_of_a_model_whose_roster_entry_does
   await settle()
   sand.script[root] = ["close(1)"]
   assert await engine.prompt(int, "count", on=root) == 1
-  assert [one for one in paragraphs(engine.turns(on=root)) if one.startswith("#grant1 ledger")] == [
-    "#grant1 ledger\ngrant1_spent = 0.0\ngrant1_filled = 0.5"
-  ]
+  (reply,) = [a[1] for a in engine.transcript(root) if a[0] == "reply"]
+  assert engine.filled(reply) == 0.5
   engine.cancel(ceiling)

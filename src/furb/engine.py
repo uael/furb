@@ -384,8 +384,8 @@ def grant(usd: float | None = None, share: float | None = None, on: str = "") ->
       match (yield):
         case ("done", about, _, (_, _, (*_, cost), _)) if question(("reply", about)) and scope(about) == here:
           spent += cost
-          yield told(id, "ledger", spent=spent, filled=(now := filled(about)))
-          if (usd and spent >= usd) or (share and now >= share):
+          yield told(id, "ledger", spent=spent)
+          if (usd and spent >= usd) or (share and filled(about) >= share):
             pause(here)
 
   return act("grant", on, controlled(ear), usd, share)

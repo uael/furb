@@ -15,7 +15,7 @@ def crossed(log: list[tuple], root: str, act: str, message: str) -> str:
   paragraphs of its open, of its standing, of the open of the grant and of the prompt, of the line that says what the
   answer is for, of the ledger of that answer, and of the pause that the grant said, joined by blank lines."""
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
-  ledger = "#grant1 ledger\ngrant1_spent = 1.5\ngrant1_filled = 0.2"
+  ledger = "#grant1 ledger\ngrant1_spent = 1.5"
   return fresh(root, GRANT, prompted(act, "int", message), f"#{step} advance on {act}", ledger, f"#{root} paused")
 
 
@@ -31,7 +31,7 @@ async def capped(*script: str, message: str = "count") -> tuple[Sand, list[tuple
 
 
 async def test_a_ceiling_on_a_chain_in_dollars_in_the_share_of_the_window_or_both() -> None:
-  """A ceiling on a chain, in dollars, in the share of the window that one answer fills, or both: it holds the ledger of the chain from the moment it is made, the dollars of the answers since then and the share of the window the last one filled, and it tells that ledger at each answer of a model, so no turn a reply has sent grows a line after it."""
+  """A ceiling on a chain, in dollars, in the share of the window that one answer fills, or both: it holds the ledger of the chain from the moment it is made, the dollars of the answers since then and the share of the window the last one filled, and it tells the dollars of that ledger at each answer of a model, since the advance binds the share before the next reply, so no turn a reply has sent grows a line after it."""
   sand, log, root = born(cost=COST)
   engine.grant(usd=10.0, on=root)
   sand.script[root] = ["a = 1", "b = 2", "close(a + b)"]
@@ -40,9 +40,9 @@ async def test_a_ceiling_on_a_chain_in_dollars_in_the_share_of_the_window_or_bot
   assert len(said(log, "reply")) == 3
   final = engine.turns(on=root)
   assert [one for one in paragraphs(final) if one.startswith("#grant1 ledger")] == [
-    "#grant1 ledger\ngrant1_spent = 1.5\ngrant1_filled = 0.2",
-    "#grant1 ledger\ngrant1_spent = 3.0\ngrant1_filled = 0.2",
-    "#grant1 ledger\ngrant1_spent = 4.5\ngrant1_filled = 0.2",
+    "#grant1 ledger\ngrant1_spent = 1.5",
+    "#grant1 ledger\ngrant1_spent = 3.0",
+    "#grant1 ledger\ngrant1_spent = 4.5",
   ]
   assert [final[: len(turns)] == turns for turns in sand.turns.values()] == [True, True, True]
 
@@ -173,9 +173,9 @@ async def test_a_later_grant_that_stands_closes_every_grant_of_the_chain_before_
   await settle()
   assert len(said(log, "reply")) == 3
   assert [one for one in paragraphs(engine.turns(on=root)) if " ledger" in one.split("\n")[0]] == [
-    f"#{ceiling} ledger\n{ceiling}_spent = 1.5\n{ceiling}_filled = 0.2",
-    f"#{ceiling} ledger\n{ceiling}_spent = 3.0\n{ceiling}_filled = 0.2",
-    f"#{top} ledger\n{top}_spent = 1.5\n{top}_filled = 0.2",
+    f"#{ceiling} ledger\n{ceiling}_spent = 1.5",
+    f"#{ceiling} ledger\n{ceiling}_spent = 3.0",
+    f"#{top} ledger\n{top}_spent = 1.5",
   ]
   assert [
     one
