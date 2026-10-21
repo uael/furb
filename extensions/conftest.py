@@ -2,6 +2,7 @@
 the suite of each extension only through a conftest above it, and the helpers that only those suites need."""
 
 import asyncio
+import sys
 import tempfile
 from collections.abc import Callable, Generator, Sequence
 from dataclasses import replace
@@ -32,15 +33,20 @@ def stray(folder: Path) -> bool:
   return any((one / place).is_dir() for one in folder.parents for place in SKILLED)
 
 
+TOP = Path(tempfile.gettempdir()).anchor if sys.platform == "win32" else "/tmp"  # noqa: S108
+"""TOP is the folder of the system that a test takes its temporary folder in when the one of pytest lies under skills:
+/tmp, and on Windows, which has no /tmp, the root of the drive of the temporary folder."""
+
+
 @pytest.fixture
 def tmp_path(tmp_path: Path) -> Generator[Path]:
-  """The temporary folder of a test, under no folder that holds skills: the one of pytest, or else a new one in /tmp,
+  """The temporary folder of a test, under no folder that holds skills: the one of pytest, or else a new one in TOP,
   as when the temporary folder of the system lies under a home that holds skills. So a test sees only the skills that
   it gives, and none of the machine."""
   if not stray(tmp_path):
     yield tmp_path
     return
-  with tempfile.TemporaryDirectory(dir="/tmp") as made:
+  with tempfile.TemporaryDirectory(dir=TOP) as made:
     one = Path(made).resolve()
     assert not stray(one), f"a folder above {one} holds skills"
     yield one
@@ -70,7 +76,7 @@ def extended(  # noqa: PLR0913
 def noted(folder: Path, text: str, name: str = "CLAUDE.md") -> Path:
   """A memory file in a folder, which it makes with the folders above it, and the path of that file."""
   folder.mkdir(parents=True, exist_ok=True)
-  (path := folder / name).write_text(text, encoding="utf-8")
+  (path := folder / name).write_text(text, encoding="utf-8", newline="")
   return path
 
 
@@ -93,7 +99,7 @@ def skilled(skills: Path, folder: str, head: str) -> Path:
   """A skill in a folder of skills, whose SKILL.md file opens with a frontmatter of these lines, and the path of that
   file."""
   (skills / folder).mkdir(parents=True, exist_ok=True)
-  (path := skills / folder / "SKILL.md").write_text(f"---\n{head}\n---\nSteps.\n", encoding="utf-8")
+  (path := skills / folder / "SKILL.md").write_text(f"---\n{head}\n---\nSteps.\n", encoding="utf-8", newline="")
   return path
 
 

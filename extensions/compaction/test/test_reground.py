@@ -19,6 +19,6 @@ async def test_reground_reads_again_each_file_that_the_source_read_or_wrote(tmp_
   await settle()
   assert await engine.rung("reground('chain1')", on=two) is None
   assert of(engine.turns(on=two), "read") == [
-    f"#read3\nread3_path = '{work}/a.txt'\nread3_text = 'fresh'",
-    f"#read4\nread4_path = '{work}/b.txt'\nread4_text = 'b'",
+    f"#read3\nread3_path = {f'{work}/a.txt'!r}\nread3_text = 'fresh'",
+    f"#read4\nread4_path = {f'{work}/b.txt'!r}\nread4_text = 'b'",
   ]

@@ -144,6 +144,7 @@ async def test_the_exit_code_of_the_command_is_none_after_a_timeout() -> None:
   assert (await engine.bash("forever", timeout=0, on=root)).code is None
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="on Windows the life hangs after a command that a signal ended")
 async def test_a_signal_that_ends_the_command_gives_the_code_128_and_the_number_of_the_signal(tmp_path: Path) -> None:
   """A signal that ends the command gives the code 128 and the number of the signal, as a shell gives, so the code None says that the timeout ended it."""
   live, root = machine(tmp_path)
