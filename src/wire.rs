@@ -4,8 +4,12 @@
 //! JSON holds plain data, and the wire keeps the rest whole: a value that JSON holds only in part crosses as a map
 //! that names its type under `is`, with what that type is made again from, so it comes back in as it went out.
 
-use crate::{Fault, Object, ObjectRef, Text, value::marked};
-use serde_json::{Value, json};
+use crate::{
+  Fault, Object, ObjectRef, Text,
+  value::{IS, marked},
+};
+use monty_types::unstable::{self, MontyGraph, MontyNode, NodeId};
+use serde_json::{Value, json, value::RawValue};
 
 /// The largest integer a JavaScript number holds exactly.
 const SAFE: u64 = 9_007_199_254_740_991;
@@ -54,9 +58,137 @@ pub fn outward(value: ObjectRef<'_>) -> Value {
 /// One value of JSON, read with every number exact, as the sandbox takes it: a number with a point stays a float, and
 /// a map that names its type under `is` comes in as that type, a fault among them.
 pub fn parsed(text: &str) -> Result<Object, Fault> {
-  let raw = serde_json::from_str::<&serde_json::value::RawValue>(text)
-    .map_err(|no| Fault::refused(no.to_string()))?;
-  inward(&decoded(raw, 0)?)
+  let raw = serde_json::from_str::<&RawValue>(text).map_err(|no| Fault::refused(no.to_string()))?;
+  let mut graph = MontyGraph::new();
+  let root = built(&mut graph, raw, 0)?;
+  whole(graph, root)
+}
+
+/// A value of the sandbox, from the graph that holds it and its id there.
+pub(crate) fn whole(graph: MontyGraph, root: NodeId) -> Result<Object, Fault> {
+  unstable::object_from_graph(graph, root).map_err(|no| Fault::refused(no.to_string()))
+}
+
+/// One value of JSON that serde read whole, put into a graph in one pass at the depth it stands at, with every number
+/// exact: an integer within the safe range of JavaScript, and a float that stays a float, as a map marked `float` when
+/// it is whole. It gives the id of the value in the graph. Serde reads the value first, so this pass meets only JSON
+/// that is valid, and serde reads each string in it, so every string comes in as serde reads it.
+pub(crate) fn built(graph: &mut MontyGraph, raw: &RawValue, depth: usize) -> Result<NodeId, Fault> {
+  Reader { text: raw.get(), at: 0 }.value(graph, depth)
+}
+
+/// The place of a pass over the text of a value of JSON.
+struct Reader<'a> {
+  text: &'a str,
+  at: usize,
+}
+
+impl Reader<'_> {
+  /// The byte at the place, and nothing past the end.
+  fn byte(&self) -> u8 {
+    self.text.as_bytes().get(self.at).copied().unwrap_or_default()
+  }
+
+  /// The place after the whitespace of JSON.
+  fn space(&mut self) {
+    while matches!(self.byte(), b' ' | b'\t' | b'\n' | b'\r') {
+      self.at += 1;
+    }
+  }
+
+  /// Whether a container holds one more entry: past the comma before it, or false past the mark that ends it.
+  fn more(&mut self, end: u8) -> bool {
+    self.space();
+    let one = self.byte();
+    if one == b',' {
+      self.at += 1;
+      self.space();
+    } else if one == end || one == 0 {
+      self.at += 1;
+      return false;
+    }
+    true
+  }
+
+  /// The value at the place, as a node of the graph.
+  fn value(&mut self, graph: &mut MontyGraph, depth: usize) -> Result<NodeId, Fault> {
+    if depth > 64 {
+      return Err(Fault::refused("the record exceeds 64 levels"));
+    }
+    self.space();
+    let node = match self.byte() {
+      b'[' => {
+        self.at += 1;
+        let mut held = Vec::new();
+        while self.more(b']') {
+          held.push(self.value(graph, depth + 1)?);
+        }
+        MontyNode::List(held)
+      }
+      b'{' => {
+        self.at += 1;
+        let mut held = indexmap::IndexMap::new();
+        while self.more(b'}') {
+          let key = self.string()?;
+          self.space();
+          self.at += 1;
+          held.insert(key, self.value(graph, depth + 1)?);
+        }
+        MontyNode::Dict(
+          held.into_iter().map(|(key, one)| (graph.push(MontyNode::String(key)), one)).collect(),
+        )
+      }
+      b'"' => MontyNode::String(self.string()?),
+      b't' | b'f' | b'n' => {
+        let (node, size) = match self.byte() {
+          b't' => (MontyNode::Bool(true), 4),
+          b'f' => (MontyNode::Bool(false), 5),
+          _ => (MontyNode::None, 4),
+        };
+        self.at += size;
+        node
+      }
+      _ => return self.number(graph),
+    };
+    Ok(graph.push(node))
+  }
+
+  /// The string at the place, which starts at its quote, as serde reads it, which finds its end and its escapes many
+  /// bytes at a time.
+  fn string(&mut self) -> Result<String, Fault> {
+    let rest = self.text.get(self.at..).unwrap_or_default();
+    let mut stream = serde_json::Deserializer::from_str(rest).into_iter::<String>();
+    let got = stream.next().unwrap_or_else(|| serde_json::from_str(rest));
+    self.at += stream.byte_offset();
+    got.map_err(|no| Fault::refused(no.to_string()))
+  }
+
+  /// The number at the place: an integer, which must stand in the safe range of JavaScript, or a float, which stays
+  /// a float, as a map marked `float` when it is whole.
+  fn number(&mut self, graph: &mut MontyGraph) -> Result<NodeId, Fault> {
+    let start = self.at;
+    while matches!(self.byte(), b'-' | b'+' | b'.' | b'e' | b'E' | b'0'..=b'9') {
+      self.at += 1;
+    }
+    let raw = &self.text[start..self.at];
+    if !raw.contains(['.', 'e', 'E']) {
+      let number = raw.parse::<i64>().ok().filter(|number| number.unsigned_abs() <= SAFE);
+      let number = number
+        .ok_or_else(|| Fault::refused("the number exceeds the safe integer range of JavaScript"))?;
+      return Ok(graph.push(MontyNode::Int(number)));
+    }
+    let number = raw.parse::<f64>().ok().filter(|number| number.is_finite());
+    let number = number.ok_or_else(|| Fault::refused("invalid float"))?;
+    if number.fract() != 0.0 {
+      return Ok(graph.push(MontyNode::Float(number)));
+    }
+    let is = graph.push(MontyNode::String(IS.into()));
+    let float = graph.push(MontyNode::String("float".into()));
+    let args = graph.push(MontyNode::String("args".into()));
+    let digits = graph.push(MontyNode::String(number.to_string()));
+    let digits = graph.push(MontyNode::List(vec![digits]));
+    Ok(graph.push(MontyNode::Dict(vec![(is, float), (args, digits)])))
+  }
 }
 
 /// A value of the sandbox, as the record holds it: a whole float and a tuple keep their marks, so a later life reads
@@ -140,51 +272,6 @@ fn outward_at(value: ObjectRef<'_>, depth: usize, durable: bool) -> Value {
     return Value::Object(result);
   }
   json!(value.py_repr())
-}
-
-/// Read numbers from serde's raw values before JavaScript can round them or erase a decimal point.
-pub(crate) fn decoded(value: &serde_json::value::RawValue, depth: usize) -> Result<Value, Fault> {
-  if depth > 64 {
-    return Err(Fault::refused("the record exceeds 64 levels"));
-  }
-  let raw = value.get();
-  let invalid = |error: serde_json::Error| Fault::refused(error.to_string());
-  Ok(match raw.as_bytes()[0] {
-    b'[' => Value::Array(
-      serde_json::from_str::<Vec<&serde_json::value::RawValue>>(raw)
-        .map_err(invalid)?
-        .into_iter()
-        .map(|item| decoded(item, depth + 1))
-        .collect::<Result<_, _>>()?,
-    ),
-    b'{' => Value::Object(
-      serde_json::from_str::<indexmap::IndexMap<String, &serde_json::value::RawValue>>(raw)
-        .map_err(invalid)?
-        .into_iter()
-        .map(|(key, item)| Ok((key, decoded(item, depth + 1)?)))
-        .collect::<Result<_, Fault>>()?,
-    ),
-    b'-' | b'0'..=b'9' if !raw.contains(['.', 'e', 'E']) => {
-      let number =
-        raw.parse::<i64>().ok().filter(|number| number.unsigned_abs() <= SAFE).ok_or_else(
-          || Fault::refused("the number exceeds the safe integer range of JavaScript"),
-        )?;
-      json!(number)
-    }
-    b'-' | b'0'..=b'9' => {
-      let number = raw
-        .parse::<f64>()
-        .ok()
-        .filter(|number| number.is_finite())
-        .ok_or_else(|| Fault::refused("invalid float"))?;
-      if number.fract() == 0.0 {
-        json!({"is": "float", "args": [number.to_string()]})
-      } else {
-        json!(number)
-      }
-    }
-    _ => serde_json::from_str(raw).map_err(invalid)?,
-  })
 }
 
 #[cfg(test)]
