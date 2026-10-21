@@ -120,7 +120,7 @@ async def test_a_standing_binds_the_default_actor_of_the_chain_when_its_actor_di
 
 
 async def test_the_chain_tells_each_standing_it_takes_in_one_paragraph_headed_standing() -> None:
-  """The chain tells each standing it takes in one paragraph headed standing, which binds its roster, its directory and its actor, as chain1_roster, chain1_cwd and chain1_actor."""
+  """The chain tells each standing it takes in one paragraph headed standing, which binds its roster, its directory and its actor, as chain1_roster, chain1_cwd and chain1_actor, and its roster holds no doctrine, since a chain tells the doctrine of an actor only where it asks that actor."""
   sand, log, root = born()
   answered = next(a[3] for a in said(log, "done") if a[1] == said(log, "stand")[0][1])
   assert answered == STANDS
@@ -137,6 +137,13 @@ async def test_the_chain_tells_each_standing_it_takes_in_one_paragraph_headed_st
   assert [one for one in paragraphs(engine.turns(on=root)) if one.startswith(f"#{root} standing")][-1] == (
     "#chain1 standing\nchain1_roster = [['operator', [], 200000], ['o', ['low'], 200000]]\n"
     "chain1_cwd = '/z'\nchain1_actor = 'o/low'"
+  )
+  _, _, root = born(stands=[[*STANDS[0], ["q", ["low"], 300000, "Look first."]], "/w", "q/low"])
+  assert paragraphs(engine.turns(on=root))[1] == (
+    "#chain1 standing\n"
+    "chain1_roster = [['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000], ['q', ['low'], 300000]]\n"
+    "chain1_cwd = '/w'\n"
+    "chain1_actor = 'q/low'"
   )
 
 

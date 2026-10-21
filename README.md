@@ -67,7 +67,9 @@ Studio, Ollama, vLLM and Strata do. `FURB_LOCAL_KEY` gives its key when it takes
 that the server lists `local:` and its id, as in `--model local:qwen3`. Such a model takes no effort, costs nothing, and
 writes a quarter of its window at most in one turn, or the number that `FURB_LOCAL_TOKENS` gives. It thinks 8192 tokens
 at most in one turn, or the number that `FURB_LOCAL_THOUGHT` gives, and 0 sets no most: past it, furb asks the model
-again with that thought and with its thought turned off, so it writes its word at once. Its window is the one
+again with that thought and with its thought turned off, so it writes its word at once. A model of a family that
+furb teaches, as qwen, reads the doctrine of that family once on each chain that asks it, in the paragraph that asks
+it for its first word, and a chain of any other model reads nothing of it. Its window is the one
 that the server gives, or the number that `FURB_LOCAL_WINDOW` gives, and furb offers no model whose window neither
 gives. Ollama serves a model in the `num_ctx` of its parameters, or in `OLLAMA_CONTEXT_LENGTH`: set it to 32768 or more,
 since the system prompt of furb is about 9000 tokens. Ollama tells that window only for a model that it loaded, so give
