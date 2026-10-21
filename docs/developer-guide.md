@@ -13,6 +13,7 @@ each part. When the two differ, `CLAUDE.md` is right, and this guide must change
 | [uv](https://docs.astral.sh/uv/) | The Python environment, the hooks, and every Python command. |
 | Rust, from `rust-toolchain.toml` | The crate at the root, which `uv sync` builds into the packages `furb-monty` and `furb-cli`. rustup reads the version from the file. |
 | [bun](https://bun.sh) 1.4.2 or later | The TypeScript bindings and the TUI. On Windows, bun 1.3 crashes the TUI. |
+| [Git for Windows](https://gitforwindows.org), on Windows | Its sh runs the commands of a life, as /bin/sh does on Linux and on macOS. |
 | The `claude` command line, signed in, the credential of a provider, or a local server that `FURB_LOCAL_URL` names | Only for a real life, such as `bun run tui`, `furb prompt` or `script/smoke.py`. The demo and the suite need no model. |
 
 Then set up a clone as the [README](../README.md#try-it) says, and install the hooks, which run at each commit:

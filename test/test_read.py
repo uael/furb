@@ -232,3 +232,15 @@ async def test_the_world_gives_a_file_whose_every_line_ends_with_crlf_with_lf_at
   got = [engine.read(str(tmp_path / name), on=root).content for name in ("crlf.txt", "mixed.txt")]
   live.end()
   assert got == ["one\ntwo\n", "one\r\ntwo\n"]
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the form of the sh of Git is of Windows alone")
+async def test_on_windows_the_world_reads_a_path_in_the_form_that_the_sh_of_git_gives_it(tmp_path: Path) -> None:
+  """On Windows the World reads a path in the form that the sh of Git gives it as Windows names it: /c/x is C:/x, and /tmp/x is scratch://x, since the sh names the scratch directory /tmp."""
+  (tmp_path / "a.txt").write_text("a\n", encoding="utf-8", newline="")
+  live, root = machine(tmp_path)
+  engine.write(Text("scratch://plan.md", "plan\n"), on=root)
+  drive, rest = tmp_path.drive, tmp_path.as_posix()[len(tmp_path.drive) :]
+  got = [engine.read(path, on=root).content for path in (f"/{drive[0].lower()}{rest}/a.txt", "/tmp/plan.md")]  # noqa: S108
+  live.end()
+  assert got == ["a\n", "plan\n"]
