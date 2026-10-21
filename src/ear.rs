@@ -1,7 +1,7 @@
 //! The ear: the one thing a life hears by.
 //!
-//! The contract lets `boot`, `act` and `drive` take any generator of one shape: it hears every fact of the life
-//! and every question that no ear before it took, and every chain at its birth, and it speaks by yielding a saying. The Kernel, the gate, the
+//! The contract lets `boot`, `act` and `drive` take any generator of one shape: it hears the facts of the life
+//! that it waits for and every question that no ear before it took, and every chain at its birth, and it speaks by yielding a saying. The Kernel, the gate, the
 //! record and each ear of the World are one, whatever language writes it: a generator of python, a generator of
 //! TypeScript, or a coroutine of rust.
 //!
@@ -58,8 +58,9 @@ pub enum Step {
   Say(Fact),
   /// One verb of the engine, which the life says under the name of the ear and answers as the next thing it hears.
   Call(Call),
-  /// Nothing more: the ear waits for the next fact.
-  Wait,
+  /// Nothing more: the ear waits for the next fact about one of the names and kinds it gives, as a set, or for the
+  /// next fact of any kind when it gives none.
+  Wait(Option<Object>),
   /// The ear is over, as a generator that returned, and hears nothing more.
   Over,
   /// The ear raised, as a generator that raised, and hears nothing more.
@@ -81,7 +82,10 @@ impl Step {
   pub(crate) fn of(yielded: &Object) -> Result<Step, Fault> {
     let got = yielded.as_ref();
     if got.type_name() == "NoneType" {
-      return Ok(Step::Wait);
+      return Ok(Step::Wait(None));
+    }
+    if matches!(got.type_name(), "set" | "frozenset") {
+      return Ok(Step::Wait(Some(yielded.clone())));
     }
     if let Some(pairs) = got.pairs() {
       let field =
@@ -245,6 +249,8 @@ type Body = Pin<Box<dyn Future<Output = Result<(), Fault>>>>;
 /// said at a resume, which goes nowhere, since the log gives the ear that fact later too.
 struct Coroutine {
   body: Option<Body>,
+  /// The names and kinds the ear waits for, as a set, or nothing for every fact.
+  hears: Option<Object>,
   events: spsc::Sender<Event>,
   spoken: spsc::Receiver<Spoken>,
   accord: VecDeque<Spoken>,
@@ -301,10 +307,13 @@ impl Coroutine {
     match self.stepped(cx) {
       Poll::Ready(Spoken::Saying(saying)) => Step::Say(saying),
       Poll::Ready(Spoken::Verb(call)) => Step::Call(call),
-      Poll::Pending => self.ended.take().map_or(Step::Wait, |ended| {
-        self.ended = Some(Step::Over);
-        ended
-      }),
+      Poll::Pending => self.ended.take().map_or_else(
+        || Step::Wait(self.hears.clone()),
+        |ended| {
+          self.ended = Some(Step::Over);
+          ended
+        },
+      ),
     }
   }
 
@@ -339,6 +348,27 @@ where
   B: FnOnce(Co<W>) -> F,
   F: Future<Output = Result<(), Fault>> + 'static,
 {
+  coroutine(None, body)
+}
+
+/// An ear of rust from its body, as [`ear`] makes one, that hears only the facts of these kinds and the facts about
+/// an act of these kinds, besides the controls that every ear hears.
+pub fn hearing<W, F, B>(kinds: &[&str], body: B) -> Box<dyn Ear>
+where
+  W: 'static,
+  B: FnOnce(Co<W>) -> F,
+  F: Future<Output = Result<(), Fault>> + 'static,
+{
+  coroutine(Some(Object::set(kinds.iter().map(|one| Object::string(*one)))), body)
+}
+
+/// An ear of rust from its body and what it waits for.
+fn coroutine<W, F, B>(hears: Option<Object>, body: B) -> Box<dyn Ear>
+where
+  W: 'static,
+  B: FnOnce(Co<W>) -> F,
+  F: Future<Output = Result<(), Fault>> + 'static,
+{
   let (told, events) = spsc::unbounded();
   let (spoken, said) = spsc::unbounded();
   let co = Co {
@@ -352,6 +382,7 @@ where
   let body = Box::pin(body(co));
   Box::new(Coroutine {
     body: Some(body),
+    hears,
     events: told,
     spoken: said,
     accord: VecDeque::new(),

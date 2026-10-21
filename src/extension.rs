@@ -26,7 +26,7 @@ use std::{
 use serde_json::Value;
 
 use crate::{
-  ear::{Co, Ear, ear, hear, say},
+  ear::{Co, Ear, hear, hearing, say},
   engine::ROOT,
   fact::{Fact, named},
   value::{Fault, Object, Text, entry},
@@ -263,7 +263,7 @@ pub fn enabled(root: &[Fact]) -> Vec<Extension> {
 /// that this life answers, the first of which is at the tip. The ear plays the rungs from the fact alone, so a later
 /// life plays the same rungs where the journal says the fact again.
 pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
-  ear(move |mut co| async move {
+  hearing(&["chain", "stand", "write", ENABLE], move |mut co| async move {
     // What the life enabled, in order, and each chain in the order of its birth, with the extensions it has.
     let (mut enabled, mut chains) = (Vec::<Extension>::new(), Vec::<(String, Vec<String>)>::new());
     loop {

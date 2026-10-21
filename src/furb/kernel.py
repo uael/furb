@@ -14,7 +14,7 @@ from contextvars import ContextVar
 
 type Names = dict[str, object]
 """The names of the engine: its module, in which every word runs in the module of its chain."""
-type Ear = Generator[tuple | None, tuple | None]
+type Ear = Generator[tuple | set[str] | None, tuple | None]
 """An ear, as the engine hears one."""
 
 
@@ -139,9 +139,9 @@ class Running:
 def kernel(names: Names) -> Ear:
   """The Kernel: it takes each run, begins its word when it hears that it took it, and carries the word at the done
   of each wants it made."""
-  held = Running(names)
+  held, heard = Running(names), {"run", "wants", "cancel", "close"}
   while True:
-    match (yield):
+    match (yield heard):
       case ("run", run, *_):
         # This Kernel runs every word, retold or not, so it reads no donor off the run.
         held.took(run)

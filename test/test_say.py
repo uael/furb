@@ -127,7 +127,7 @@ async def test_every_generator_the_acts_first_then_those_of_the_engine_then_thos
 
 
 async def test_every_generator_hears_every_fact_it_has_not_heard_in_order_until_none_is_left() -> None:
-  """Every generator hears every fact it has not heard, in order, until none is left, and each act as act puts it."""
+  """Every generator hears every fact that it waits for and has not heard, in order, until none is left, and each act as act puts it."""
   _, log, root = born()
   heard: list[tuple] = []
   at = len(log)

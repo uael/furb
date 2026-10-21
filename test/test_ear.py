@@ -1,4 +1,4 @@
-"""Ear, any generator that hears every fact and speaks by yielding one: the World and the Kernel among them."""
+"""Ear, any generator that hears the facts that it waits for and speaks by yielding one: the World and the Kernel among them."""
 
 import shutil
 from asyncio import CancelledError
@@ -24,6 +24,7 @@ from conftest import (
   said,
   scratched,
   settle,
+  slow,
   sown,
   written,
 )
@@ -66,7 +67,7 @@ class Answering(Sand):
 
 
 async def test_the_world_hears_every_fact(tmp_path: Path) -> None:
-  """The World, the ears of the outside that serve the machine, one or many, hears every fact, every act that no ear before it took, and every chain at its birth: it answers a stand, a clock, a chance, a cd, a read and a write of a path nobody of the engine serves, resolved against the working directory of the chain, or against the scratch directory for a path of scratch://; it takes a command, asks it whether it is merged, answers a write of its doors and feeds it what a write of its stdin gives, and ends it at its timeout and at a cancel; it takes a wait and a prompt to the operator, which it shows; and it takes a reply, which it answers with the turn of the model."""
+  """The World, the ears of the outside that serve the machine, one or many, hears every fact that it waits for, every act that no ear before it took, and every chain at its birth: it answers a stand, a clock, a chance, a cd, a read and a write of a path nobody of the engine serves, resolved against the working directory of the chain, or against the scratch directory for a path of scratch://; it takes a command, asks it whether it is merged, answers a write of its doors and feeds it what a write of its stdin gives, and ends it at its timeout and at a cancel; it takes a wait and a prompt to the operator, which it shows; and it takes a reply, which it answers with the turn of the model."""
   sand, log, root = born(files={"/w/a.txt": "one\n"}, auto=False)
   assert engine.cwd(on=root) == "/w"
   assert engine.clock(on=root) == 1001.0
@@ -252,3 +253,54 @@ async def test_a_later_life_on_a_record_finds_its_scratch_directory_again(tmp_pa
   assert found == "made\n"
   assert remade == ["a/\nplan.md", "two\n", "in a folder\n"]
   assert empty == ""
+
+
+def listening(heard: list[tuple], names: set[str]) -> Generator[set[str], tuple]:
+  """An ear that waits for these names and keeps each fact it hears."""
+  while True:
+    heard.append((yield names))
+
+
+async def test_an_ear_that_yields_a_set_of_names_waits_for_the_facts_that_name_one_of_them() -> None:
+  """An ear that yields a set of names waits for the facts that name one of them: by the kind of the fact, the act that it is about, or the kind, the maker or the chain of that act, or the chain of the maker of that act."""
+  _, _, root = born()
+  other = engine.chain("other", on=root)
+  heard: list[tuple] = []
+  engine.drive(listening(heard, {other, "clock"}), "listener")
+  engine.read("a.txt", on=root)
+  engine.read("a.txt", on=other)
+  engine.clock(on=root)
+  await settle()
+  assert [(a[0], engine.get(a[1])[0], engine.scope(a[1])) for a in heard] == [
+    ("read", "read", other),
+    ("done", "read", other),
+    ("clock", "clock", root),
+    ("done", "clock", root),
+  ]
+
+
+async def test_an_ear_that_yields_nothing_or_an_empty_set_waits_for_every_fact() -> None:
+  """An ear that yields nothing, or an empty set, waits for every fact."""
+  _, _, root = born()
+  every: list[tuple] = []
+  engine.drive(listening(every, set()), "every")
+  read = engine.act("read", root, None, "a.txt")
+  await settle()
+  assert [a[:2] for a in every if a[1] == read] == [("read", read), ("done", read)]
+  assert {a[0] for a in every} > {"read", "done"}
+
+
+async def test_every_ear_hears_every_pause_wake_cancel_and_close() -> None:
+  """Every ear hears every pause, wake, cancel and close, whatever it waits for, so a control reaches each act that it is over."""
+  _, _, _, act = slow()
+  heard: list[tuple] = []
+  engine.drive(listening(heard, {"none"}), "listener")
+  engine.pause(act)
+  engine.wake(act)
+  engine.cancel(act)
+  await settle()
+  assert [a[:2] for a in heard if a[0] in ("pause", "wake", "cancel", "close")] == [
+    ("pause", act),
+    ("wake", act),
+    ("cancel", act),
+  ]

@@ -11,7 +11,7 @@ use std::{
 
 use furb::{
   Ear, Fact, Fault, Object,
-  ear::{Co, Next, ear, say},
+  ear::{Co, Next, hearing, say},
   world::{SHAPES, answered},
 };
 use futures::{Stream, stream};
@@ -65,7 +65,7 @@ type Input = Lines<BufReader<Stdin>>;
 /// its turn as one line, and reads no line. A prompt that is done before its line comes, by a cancel, is
 /// shown no more: a line the operator wrote before that goes nowhere, and the next line goes to the next prompt.
 pub fn terminal() -> Box<dyn Ear> {
-  ear(|mut co: Co<Read>| async move {
+  hearing(&["prompt"], |mut co: Co<Read>| async move {
     // The lines of stdin, while no read holds them.
     let mut lines = Some(BufReader::new(tokio::io::stdin()).lines());
     let mut waiting: VecDeque<Asked> = VecDeque::new();

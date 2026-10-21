@@ -52,7 +52,7 @@ is a fact of one interpreter, which the boundary does not carry."""
 
 type World = Generator[tuple | None, tuple]
 """The World, an Ear of engine.pyi: engine.py binds no such name, so the suite says the type itself."""
-type Kernel = Generator[tuple | None, tuple]
+type Kernel = Generator[tuple | set[str] | None, tuple]
 """The Kernel, an Ear of engine.pyi: engine.py binds no such name, so the suite says the type itself."""
 
 WORLD = "world"

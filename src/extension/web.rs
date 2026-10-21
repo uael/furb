@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 use unsync::oneshot;
 
 use crate::{
-  ear::{Co, Ear, Next, ear, say},
+  ear::{Co, Ear, Next, hearing, say},
   fact::Fact,
   value::{Fault, Text},
   world::{Search, Searches, posted, spawned},
@@ -43,7 +43,7 @@ type Worked = (String, Result<Text, String>);
 /// HTML and as it is when it is other text, at the path of that address. A control that ends an act first ends its
 /// work, and the ear says nothing more of it.
 pub fn web(native: Search) -> Box<dyn Ear> {
-  ear(move |mut co: Co<Worked>| async move {
+  hearing(&["web_search", "web_fetch"], move |mut co: Co<Worked>| async move {
     let mut stops: HashMap<String, oneshot::Sender<()>> = HashMap::new();
     loop {
       let a = match co.next().await {

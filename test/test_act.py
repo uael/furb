@@ -49,7 +49,7 @@ async def test_the_way_to_make_a_question() -> None:
 
 
 async def test_an_act_is_put_to_every_ear_of_the_engine_the_acts_first() -> None:
-  """An act is put to every ear of the engine, the acts first, and a busy one hears it once it is done speaking, at its place among what was said."""
+  """An act is put to every ear of the engine that waits for it, the acts first, and a busy one hears it once it is done speaking, at its place among what was said."""
   _, _, root = born()
   heard: list[tuple] = []
   made: list[str] = []
@@ -190,7 +190,7 @@ async def test_the_chain_an_act_is_on_is_the_chain_named_to_the_call() -> None:
 
 
 async def test_the_ear_of_an_act_is_given_the_name_of_the_act_and_hears_every_fact_said_after_its_birth() -> None:
-  """The ear of an act is given the name of the act and hears every fact said after its birth, and it speaks by yielding a saying."""
+  """The ear of an act is given the name of the act and hears every fact said after its birth that it waits for, and it speaks by yielding a saying."""
   _, log, root = born()
   heard: list[object] = []
   one = engine.act("note", root, noting(heard, "spoke"), "one")

@@ -16,7 +16,7 @@ use std::{
 
 use furb::{
   Act, Ear, Fact, Fault, Object,
-  ear::{ear, hear, reactor},
+  ear::{hear, hearing, reactor},
   life::Opening,
   verbs, wire,
 };
@@ -72,7 +72,7 @@ fn fields(asked: &Asked) -> Value {
 /// The console of the client, as an ear of the World: it takes each prompt put to the operator and sends it to the
 /// client, whose close answers it.
 fn console(events: mpsc::UnboundedSender<Event>) -> Box<dyn Ear> {
-  ear(move |mut co| async move {
+  hearing(&["prompt"], move |mut co| async move {
     loop {
       let a = hear(&mut co).await;
       if let Some(asked) = Asked::taken(&mut co, &a).await? {
@@ -284,7 +284,7 @@ impl Server {
         Ok(json!({"turns": turns}))
       }
       "transcript" => {
-        let facts = self.life.engine.transcript(verbs::Transcript { on: Some(on) });
+        let facts = self.life.engine.transcript(verbs::Transcript { on: Some(on), of: None });
         let facts: Vec<Value> =
           facts.map_err(failed)?.iter().map(|one| wire::outward(one.0.as_ref())).collect();
         Ok(json!({"facts": facts}))

@@ -45,9 +45,12 @@ The generator that settles an await of an act from outside a run is named after 
 """
 type Saying = tuple[str, str, *tuple[object, ...]]
 """What an ear says: the kind of the fact, the act it is about, and the words, and nothing of who says it, which the bus fills in from whoever is speaking."""
-type Ear = Generator[Saying | None, Fact]
+type Ear = Generator[Saying | set[str] | None, Fact]
 """An ear is any generator of that shape, so the World and the Kernel are ears, and boot takes an ear of the outside under any name it is to hear by.
-The World, the ears of the outside that serve the machine, one or many, hears every fact, every act that no ear before it took, and every chain at its birth: it answers a stand, a clock, a chance, a cd, a read and a write of a path nobody of the engine serves, resolved against the working directory of the chain, or against the scratch directory for a path of scratch://; it takes a command, asks it whether it is merged, answers a write of its doors and feeds it what a write of its stdin gives, and ends it at its timeout and at a cancel; it takes a wait and a prompt to the operator, which it shows; and it takes a reply, which it answers with the turn of the model.
+An ear that yields a set of names waits for the facts that name one of them: by the kind of the fact, the act that it is about, or the kind, the maker or the chain of that act, or the chain of the maker of that act.
+An ear that yields nothing, or an empty set, waits for every fact.
+Every ear hears every pause, wake, cancel and close, whatever it waits for, so a control reaches each act that it is over.
+The World, the ears of the outside that serve the machine, one or many, hears every fact that it waits for, every act that no ear before it took, and every chain at its birth: it answers a stand, a clock, a chance, a cd, a read and a write of a path nobody of the engine serves, resolved against the working directory of the chain, or against the scratch directory for a path of scratch://; it takes a command, asks it whether it is merged, answers a write of its doors and feeds it what a write of its stdin gives, and ends it at its timeout and at a cancel; it takes a wait and a prompt to the operator, which it shows; and it takes a reply, which it answers with the turn of the model.
 The World performs any fact that an extension defines and that the World knows.
 The opening of a life gives the World the scratch directory of its record, which every chain of that record shares, or, for a life that keeps no record, a scratch directory of its own, which goes when that life ends.
 A later life on a record finds its scratch directory again, and when the directory is missing, as on another machine, the opening makes again in it each file that a write of the record made, in the order of the last write of each, with the text that the journal kept, and no file that a command made; the opening of a new record starts with an empty directory.
@@ -80,14 +83,14 @@ def say(kind: str, about: str, *words: object) -> Fact:
   A fact said: it says its kind, the act it is about, who said it and its words, in that order, and nothing else, since the chain it is on is the scope of the act it is about.
   The bus makes every fact whole from what it is given, so nobody holds a fact that is not whole.
   Every generator, the acts first, then those of the engine, then those the life was given from the outside, since the engine settles what it knows before the outside reads it or acts on it, and it asks the outside for nothing it can answer itself.
-  Every generator hears every fact it has not heard, in order, until none is left, and each act as act puts it.
+  Every generator hears every fact that it waits for and has not heard, in order, until none is left, and each act as act puts it.
   While one speaks nobody hears, and whoever spoke has everyone hear when it is done, so the facts of one speaker stand together in the log, and no one is having everyone hear while another is.
   A done said of a question that has no outcome yet fills its outcome, and a later done of the same question fills nothing.
   """
 
 def act(kind: str, on: str, ear: Callable[[str], Ear] | None, *words: object) -> Act[object]:
   """The way to make a question: it takes a name when it is made, it is put to the ears, its ear, when it has one, is brought to life under that name and given the name, and the name is given back, which is the act to whoever holds it.
-  An act is put to every ear of the engine, the acts first, and a busy one hears it once it is done speaking, at its place among what was said.
+  An act is put to every ear of the engine that waits for it, the acts first, and a busy one hears it once it is done speaking, at its place among what was said.
   Its own ear is born after the ears of the engine heard it, so the acts that ear makes stand after it.
   It is then put to the ears of the outside in turn, until one takes it, and no ear of the outside after that one hears it, a chain apart, which every ear of the outside hears at its birth after its own ear took it, so an ear of the outside plays on a chain before the call that made it returns.
   To take an act is to say a started or a done about it: a done settles it now, and a started says that its done comes later.
@@ -97,21 +100,22 @@ def act(kind: str, on: str, ear: Callable[[str], Ear] | None, *words: object) ->
   Two acts that say the same words under one name are one act.
   The engine refuses an act said from outside a run that names no chain, a chain apart.
   The chain an act is on is the chain named to the call, or the scope of the one that made it when the call names none.
-  The ear of an act is given the name of the act and hears every fact said after its birth, and it speaks by yielding a saying.
+  The ear of an act is given the name of the act and hears every fact said after its birth that it waits for, and it speaks by yielding a saying.
   An act carries the words of its kind, which are the plain arguments the verb was given, in the order of the verb, and a show or a filter is none of them.
   """
 
 def drive(g: Ear, name: str) -> None:
-  """The other way to speak: a generator is brought to life under a name, and from then it hears every fact that is said and says its own.
+  """The other way to speak: a generator is brought to life under a name, and from then it hears every fact that it waits for and says its own.
   One that returns is over and lives no more, which is how a thing that watches for one fact alone is dropped the moment it hears it.
   One that raises while it hears is broken the same way: the next fact it is given finds it over, and what went wrong goes to the one that spoke.
   A generator brought to life under a name and nothing more: it hears from the tip and runs to its first wait, and one born while a fact goes round hears from the next.
   It lives until it returns, and an act that hears nothing more returns at the first fact it hears after its own end.
-  A generator that yields a saying is given the fact as the bus said it, and one that yields nothing waits for the next fact said.
+  A generator that yields a saying is given the fact as the bus said it, one that yields a set of names waits for the next fact that names one of them, and one that yields nothing waits for the next fact said.
   """
 
-def transcript(on: str = "") -> list[Fact]:
+def transcript(on: str = "", of: str = "") -> list[Fact]:
   """transcript gives the facts on a chain, each of which the life adds when it is said, so a chain reads at once what it said itself.
+  transcript(on, of) gives the facts on a chain whose kind is of or that of said, in order, and the view of pause holds the wakes too.
   transcript gives a new list at each call, so a word that changes the list it was given changes no transcript.
   The transcript is the whole state of a chain: its module, its program, its working directory and its turns are read off it, and the standing is read off the transcript of the root.
   A name of no chain gives no fact.
@@ -286,7 +290,7 @@ def pause(id: str) -> None:
   pause is given the id of a pending act or the id of a chain.
   A pause stops no reply in flight: the reply returns.
   A paused chain goes quiet as its in-flight work returns.
-  A kind a pause stops: it starts its ear, and while a pause over it stands the ear hears nothing, and at the wake it hears everything that was said meanwhile, in order.
+  A kind a pause stops: it starts its ear, and while a pause over it stands the ear hears nothing, and at the wake it hears the wake and then everything that was said meanwhile, in order.
   An act made in that time it hears at once, since an act is put to the ears while it is made and to no ear after the one that takes it, a chain apart, so a paused rung takes the wants of its run.
   A pause stands over what is made after it, until the wake.
   A control is on the scope of what it is over, so it takes no chain of its own.
@@ -974,11 +978,11 @@ def covers(a: Fact, id: str) -> bool:
 def paused(id: str) -> bool:
   """paused reads whether an act is paused off the transcript of its chain, so an ear born while a pause over its act stands is born paused, and takes its act all the same."""
 
-def idle(id: str) -> Generator[None, Fact]:
-  """idle hears every fact and says nothing of its own, which is the ear of a wait and the ear of the operator."""
+def idle(id: str) -> Generator[set[str], Fact]:
+  """idle waits for the facts about its own name and says nothing of its own, which is the ear of a reply and the ear of the operator."""
 
-def lives(g: Ear, a: Fact | None) -> bool:
-  """lives carries a fact into an ear, says everything the ear yields, and gives whether the ear lives on."""
+def lives(g: Ear, a: Fact | None) -> set[str] | Literal[False] | None:
+  """lives carries a fact into an ear, says everything the ear yields, and gives what the ear waits for, or False once the ear is over."""
 
 def controlled(ear: Callable[[str], Ear], lasting: bool = False) -> Callable[[str], Ear]:
   """An act is paused while the last control in record order that is over it is a pause.
@@ -991,6 +995,7 @@ def controlled(ear: Callable[[str], Ear], lasting: bool = False) -> Callable[[st
   A close from outside still ends what a pause is over.
   What an act a control is over is done with: the value a close carries for the act it names, and a CancelledError for every other.
   An ear that is not lasting is over as it says a done of its own, so it never hears that done and says nothing after it.
+  A controlled ear waits for what the ear that it carries waits for.
   A lasting ear lives past the done of its act until it returns, as the ear of a command does to hear that done, whoever said it, and to tell its exit, and a cancel or a close over its act ends the act all the same.
   """
 

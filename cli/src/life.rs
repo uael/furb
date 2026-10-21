@@ -86,7 +86,8 @@ impl Life {
     let (mut engine, held) = opening.boot([("console", console)]).map_err(failed)?;
     let root = engine.root().to_owned();
     let mut quiet = Quiet::default();
-    let facts = engine.transcript(verbs::Transcript { on: Some(root.clone()) }).map_err(failed)?;
+    let facts =
+      engine.transcript(verbs::Transcript { on: Some(root.clone()), of: None }).map_err(failed)?;
     quiet.watch(vec![root.clone()], &facts);
     let (mut tells, told) = spsc::unbounded();
     let observer = ear(move |mut co| async move {
@@ -109,7 +110,7 @@ impl Life {
 
   /// The extensions that the life runs, in the order it enabled them.
   pub fn extensions(&mut self) -> Result<Vec<Extension>, String> {
-    let root = self.engine.transcript(verbs::Transcript { on: Some(self.root.clone()) });
+    let root = self.engine.transcript(verbs::Transcript { on: Some(self.root.clone()), of: None });
     Ok(extension::enabled(&root.map_err(|no| no.to_string())?))
   }
 
@@ -137,7 +138,7 @@ impl Life {
   /// loop; or why it never will be: a pause over the act or over the root, which no one wakes while one command
   /// runs.
   pub fn settled(&mut self, id: &str) -> Result<Object, String> {
-    let facts = self.engine.transcript(verbs::Transcript { on: Some(self.root.clone()) });
+    let facts = self.engine.transcript(verbs::Transcript { on: Some(self.root.clone()), of: None });
     let facts = facts.map_err(|no| no.to_string())?;
     quieted(&mut self.quiet, &mut self.heard);
     self.quiet.watch(vec![self.root.clone(), id.to_owned()], &facts);

@@ -107,8 +107,9 @@ fn asked(engine: &mut Engine) -> String {
 /// representation of its first word.
 fn said(engine: &mut Engine) -> Vec<(String, String, String)> {
   let root = engine.root().to_owned();
-  let facts =
-    engine.transcript(verbs::Transcript { on: on(&root) }).expect("the root has a transcript");
+  let facts = engine
+    .transcript(verbs::Transcript { on: on(&root), of: None })
+    .expect("the root has a transcript");
   facts
     .iter()
     .filter(|one| one.by() == "provider" && !one.about().starts_with("stand"))
@@ -628,7 +629,8 @@ fn the_host_is_told_nothing_more_of_what_a_model_writes_once_its_reply_is_over()
   engine.cancel(&id).expect("the prompt is cancelled");
   let over = |engine: &mut Engine| {
     let root = engine.root().to_owned();
-    let facts = engine.transcript(verbs::Transcript { on: on(&root) }).expect("the transcript");
+    let facts =
+      engine.transcript(verbs::Transcript { on: on(&root), of: None }).expect("the transcript");
     facts.iter().any(|one| one.kind() == "done" && one.about().starts_with("reply"))
   };
   assert!(until(&mut engine, over), "the reply is over");
@@ -790,8 +792,9 @@ fn local(name: &str, events: String) -> (Engine, String, std::thread::JoinHandle
 /// Whether a word that holds this text ran on the root.
 fn ran(engine: &mut Engine, text: &str) -> bool {
   let root = engine.root().to_owned();
-  let facts =
-    engine.transcript(verbs::Transcript { on: on(&root) }).expect("the root has a transcript");
+  let facts = engine
+    .transcript(verbs::Transcript { on: on(&root), of: None })
+    .expect("the root has a transcript");
   let holds = |one: &Fact| {
     (0..4)
       .any(|at| one.word(at).and_then(|word| word.as_str()).is_some_and(|word| word.contains(text)))
