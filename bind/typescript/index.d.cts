@@ -371,8 +371,8 @@ export interface Opening {
   actor?: string
   /**
    * The models the provider offers beside the model of the actor, as the catalog names them. When it is unsaid, the
-   * model of the actor stands alone, or the first model the catalog offers when the actor is unsaid too; a roster
-   * that names none, with no actor, offers the operator alone.
+   * provider offers every model that the catalog offers, after the model of the actor; a roster that names none
+   * offers the model of the actor alone, and, with no actor, the operator alone.
    */
   roster?: Array<string>
   /** The claude command line to run, in place of the one that `FURB_CLAUDE_BIN` names or this machine holds. */

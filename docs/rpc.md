@@ -19,11 +19,13 @@ knows the models, each named `provider:id`, and offers those of the claude comma
 `claude-cli:sonnet`, `claude-cli:haiku` and `claude-cli:fable`, when furb finds the program, those of a local server
 that `FURB_LOCAL_URL` names, each named `local:` and the id that the server lists, and those of each provider whose
 credential, such as `ANTHROPIC_API_KEY`, stands in the environment. The roster of the life holds the model of the
-default actor, the models that `--roster` names, and the operator, which is the client. `--model provider:model/effort`
-names the default actor, and a prompt that names no actor goes to it. When it is not given, the default actor is
-`claude-cli:opus/high` when furb finds the claude command line, then the first model of a provider of the network, and
-then the first model of the local server, which furb asks only then or when a name needs it. An actor that names no
-effort takes `high`, and an effort moves to the nearest one that its model takes. The life refuses a prompt to a model
+default actor, the models that `--roster` names, and the operator, which is the client. With no `--roster`, it holds
+every model that the catalog offers, the model of the default actor first, and the operator.
+`--model provider:model/effort` names the default actor, and a prompt that names no actor goes to it. When it is not
+given, the default actor is `claude-cli:opus/high` when furb finds the claude command line, then the first model of a
+provider of the network, and then the first model of the local server, which furb asks when `--roster` is not given
+or a name needs it. An actor that names no effort takes `high`, and an effort moves to the nearest one that its model
+takes. The life refuses a prompt to a model
 that its roster does not hold. An actor may name its model by the id alone, when one model alone holds it, and furb
 names it as the roster does. A model of the local server takes its id alone only when that id holds a colon, as
 `qwen3:8b`; when the part before the colon names a provider, as `mistral:7b`, only once the server listed it, and

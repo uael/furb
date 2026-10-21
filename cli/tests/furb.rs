@@ -314,12 +314,12 @@ fn a_model_answers_a_prompt_of_any_shape() {
 
 #[test]
 fn the_life_of_a_prompt_offers_the_model_of_the_actor_it_names() {
-  let yard = Yard::new("to");
-  yard.words(&["close('hi')"]);
-  assert_eq!(
-    printed(yard.furb(&["prompt", "hi", "--to", "sonnet/high", "--shape", "str"]), ""),
-    "'hi'\n"
-  );
+  for (name, roster) in [("to", &[][..]), ("to-named", &["--roster", "haiku"][..])] {
+    let yard = Yard::new(name);
+    yard.words(&["close('hi')"]);
+    let words = [&["prompt", "hi", "--to", "sonnet/high", "--shape", "str"][..], roster].concat();
+    assert_eq!(printed(yard.furb(&words), ""), "'hi'\n", "{name}");
+  }
 }
 
 #[test]
@@ -566,8 +566,11 @@ fn a_prompt_to_the_operator_is_sent_and_the_close_of_the_client_answers_it() {
 }
 
 #[test]
-fn a_life_offers_the_model_of_its_default_actor_and_the_models_it_names_and_no_more() {
+fn a_life_offers_every_model_of_the_catalog_or_the_model_of_its_default_actor_and_the_models_it_names_and_no_more()
+ {
   let yard = Yard::new("rpc-roster");
+  yard.words(&["close('sonnet')"]);
+  let claude = ["claude-cli:opus", "claude-cli:sonnet", "claude-cli:haiku", "claude-cli:fable"];
   let names = |client: &mut Client| {
     let state = client.data("1", json!({"type": "state"}));
     let roster = state["standing"][0].as_array().cloned().unwrap_or_default();
@@ -577,11 +580,20 @@ fn a_life_offers_the_model_of_its_default_actor_and_the_models_it_names_and_no_m
   };
   let mut first = Client::new(&yard);
   let (roster, actor) = names(&mut first);
-  assert!(first.ended(), "the record is free for the next life");
   assert_eq!(
-    (roster, actor),
-    (vec!["claude-cli:opus".to_owned(), "operator".to_owned()], json!("claude-cli:opus/high"))
+    roster[..4],
+    claude,
+    "a life that names no roster offers each model of the claude command line"
   );
+  assert_eq!(
+    (roster.last().map(String::as_str), actor),
+    (Some("operator"), json!("claude-cli:opus/high"))
+  );
+  let asked =
+    json!({"type": "prompt", "message": "hi", "shape": "str", "to": "claude-cli:sonnet/medium"});
+  let asked = first.data("2", asked)["act"].as_str().expect("the act").to_owned();
+  assert_eq!(first.done(&asked)["value"], "sonnet", "a prompt to sonnet is answered");
+  assert!(first.ended(), "the record is free for the next life");
   let mut client = Client::with(&yard, &["--model", "sonnet/high", "--roster", "haiku"]);
   let (roster, actor) = names(&mut client);
   assert_eq!(roster, ["claude-cli:sonnet", "claude-cli:haiku", "operator"]);
@@ -589,6 +601,15 @@ fn a_life_offers_the_model_of_its_default_actor_and_the_models_it_names_and_no_m
   let refused = client.data("2", json!({"type": "prompt", "to": "opus"}));
   let prompt = refused["act"].as_str().expect("the act").to_owned();
   assert_eq!(client.done(&prompt)["raised"]["is"], "Refused", "the roster holds no opus");
+  assert!(client.ended(), "the record is free for the next life");
+  let mut later = Client::new(&yard);
+  let (roster, actor) = names(&mut later);
+  assert_eq!(
+    roster[..4],
+    claude,
+    "a later life on the record stands on the roster of its own opening at its tip"
+  );
+  assert_eq!(actor, "claude-cli:opus/high");
 }
 
 #[test]
