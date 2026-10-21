@@ -168,3 +168,24 @@ Put that reference in the prompt as a Markdown image,
 provider hands the python of the turn as it is, and adds each image that the message of a prompt of that turn
 references, to a model that takes images. The stored bytes are checked against their digest before use. PNG, JPEG, GIF,
 and WebP are supported, with a 20 MiB limit per image. Keep `.images` with the record when moving a session.
+
+The model of a life is the views that a host derives from the acts of a life, in `src/life`, which `@furb/engine/life`
+gives. It holds no native code and no module of node, so a terminal and a window of the web read the same views:
+
+- `acts`: the act as a view reads it, `LiveAct`, the kinds of work, `WORK`, what a command came to, `Exit`, the
+  measure of a chain, `Measure`, and whether an act failed or was cancelled.
+- `loom`: the rows of the loom, one for the operator and one for each chain in the order of the tree, with the cells
+  of their moments, and the acts as they stood at a moment, `asOf`.
+- `ladder`: the lines of the thread of a chain, each prompt with the rungs of its ladder and their acts.
+- `threads`: the tree of the threads of a life, where a thread is a prompt and a prompt that a rung of a thread makes
+  is its sub-thread, each with its anchor, its messages, its progress, what waits for the operator and its pull
+  requests.
+- `map`: the place of each chain on the map, which no later chain moves, the messages that flow between chains, and
+  the way of a message along the tree of hires.
+- `source`: the words of the ladders of a chain as one program, with each act on the line that made it and the line
+  that runs, and what each act came to in a few words.
+- `plain`: a message as a person reads it, with no name of its exception around it and no path of the directory of
+  the life, and what a failed act says in such words.
+- `time`: the marks of a life on its axis of time: each step, each question to the operator, and each end of a thread.
+- `watch`: the last value of each name that a chain told by a moment, under the act whose name it starts with.
+- `debugger`: the call stack of a chain, and the program of the ladder of a prompt, which its door holds.

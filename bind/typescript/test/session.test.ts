@@ -665,7 +665,9 @@ test("a session opens a record in a directory that does not stand yet, and keeps
     const { engine } = session;
     engine.write({ path: "note.txt", content: "one\n" }, { on: engine.root });
     await until(session, () => session.changes.length === 1);
-    expect(session.changes.read()).toEqual([{ path: join(cwd, "note.txt"), before: "", after: "one\n" }]);
+    expect(session.changes.read()).toEqual([
+      { path: join(cwd, "note.txt"), before: "", after: "one\n", act: expect.stringMatching(/^write\d+$/) },
+    ]);
     expect((await stat(`${record}.changes.jsonl`)).isFile()).toBe(true);
   } finally {
     await session.dispose();
@@ -725,4 +727,21 @@ test("the activity starts the streams of a command again at each started of it, 
     stdout: { content: "second\n" },
     stderr: { content: "bad\n" },
   });
+});
+
+test("the activity places each act in time by the count of facts, and keeps the answers of each chain", () => {
+  const activity = new Activity();
+  const hear = (fact: Fact) => {
+    const heard = activity.hear(fact);
+    while (!heard.next().done);
+  };
+  hear(["bash", "bash1", "operator", ROOT, "ls", "", 600]);
+  hear(["done", "bash1", "world", { is: "Exit", code: 0 }]);
+  hear(["reply", "reply1", "rung1", ROOT, "claude-cli:opus/high"]);
+  hear(["done", "reply1", "world", ["assistant", "close(1)", [100, 10, 80, 0, 0.5], null]]);
+  expect(activity.acts.get("bash1")).toMatchObject({ kind: "bash", began: 1, ended: 2, done: true });
+  expect(activity.answers.get(ROOT)).toEqual([
+    { at: 4, actor: "claude-cli:opus/high", usage: [100, 10, 80, 0, 0.5] },
+  ]);
+  expect(activity.cost).toBe(0.5);
 });
