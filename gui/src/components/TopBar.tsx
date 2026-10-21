@@ -59,7 +59,7 @@ export function TopBar({
       data-tauri-drag-region
       className="flex h-[46px] shrink-0 items-center gap-4 border-b border-hair px-5"
     >
-      <div className="flex min-w-0 flex-1 items-center gap-2 text-[13px]">
+      <div data-tauri-drag-region className="flex min-w-0 flex-1 items-center gap-2 text-[13px]">
         {held ? (
           <>
             <Glyph state={held.state} size={11} />
@@ -85,7 +85,7 @@ export function TopBar({
           </button>
         ))}
       </nav>
-      <div className="flex flex-1 justify-end">
+      <div data-tauri-drag-region className="flex flex-1 justify-end">
         <Time view={view} />
       </div>
     </header>

@@ -39,6 +39,8 @@ impl Seen {
   fn heard(&mut self, event: Event) {
     match event {
       Event::Opened { directory, works, .. } => {
+        let how = if works { "a life that works" } else { "a record to read" };
+        eprintln!("furb-gui: opened {how} in {directory}");
         self.place = directory.rsplit(['/', '\\']).next().unwrap_or_default().to_owned();
         self.works = works;
       }
@@ -51,7 +53,10 @@ impl Seen {
         self.facts.extend(facts);
       }
       Event::Writing { rung, text } => self.writing.entry(rung).or_default().push_str(&text),
-      Event::Said(line) => self.said.push(line),
+      Event::Said(line) => {
+        eprintln!("furb-gui: {line}");
+        self.said.push(line);
+      }
     }
   }
 
@@ -83,6 +88,18 @@ fn send(held: tauri::State<'_, Held>, command: Command) {
   let _ = held.commands.unbounded_send(command);
 }
 
+/// Whether the app runs as a check: it ends once its window drew the threads of the life, or fails after a while.
+static CHECK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// What the window drew, which it tells at each view it draws: the threads and the chains of that view.
+#[tauri::command]
+fn drew(threads: usize, chains: usize) {
+  if CHECK.load(std::sync::atomic::Ordering::Relaxed) && threads > 0 {
+    println!("furb-gui: the window drew {threads} threads of {chains} chains");
+    std::process::exit(0);
+  }
+}
+
 #[tauri::command]
 fn travel(app: tauri::AppHandle, held: tauri::State<'_, Held>, at: Option<usize>) {
   if let Ok(mut seen) = held.seen.lock() {
@@ -100,6 +117,7 @@ fn asked(words: &[String]) -> Result<(Source, Option<PathBuf>), String> {
     let mut value = || words.next().cloned().ok_or_else(|| format!("{word} needs a value."));
     match word.as_str() {
       "--demo" => {}
+      "--check" => CHECK.store(true, std::sync::atomic::Ordering::Relaxed),
       "--record" => source = Source::Record(value()?.into()),
       "--live" => source = Source::Live { directory: value()?.into(), record: None },
       "--view" => {
@@ -153,6 +171,13 @@ fn main() {
   }
   tauri::Builder::default()
     .setup(move |app| {
+      if CHECK.load(std::sync::atomic::Ordering::Relaxed) {
+        std::thread::spawn(|| {
+          std::thread::sleep(Duration::from_secs(45));
+          eprintln!("furb-gui: the window drew no thread in 45 seconds");
+          std::process::exit(1);
+        });
+      }
       let handle = app.handle().clone();
       let woke = handle.clone();
       let (life, events) = Life::open(source, move || {
@@ -174,7 +199,7 @@ fn main() {
       std::mem::forget(life);
       Ok(())
     })
-    .invoke_handler(tauri::generate_handler![view, send, travel])
+    .invoke_handler(tauri::generate_handler![view, send, travel, drew])
     .run(tauri::generate_context!())
     .expect("the window of furb opens");
 }

@@ -20,15 +20,23 @@ function useView(): View {
     void (async () => {
       const { invoke } = await import("@tauri-apps/api/core");
       const { listen } = await import("@tauri-apps/api/event");
+      // The window listens first, then asks for the view, so no view that the core sends between the two is lost.
+      stop = await listen<View>("view", (event) => setView(event.payload));
       const first = await invoke<View | null>("view");
       if (!gone && first) setView(first);
-      stop = await listen<View>("view", (event) => setView(event.payload));
     })();
     return () => {
       gone = true;
       stop?.();
     };
   }, []);
+  // The window tells the core what it drew, which a check of the app reads.
+  useEffect(() => {
+    if (!tauri) return;
+    void import("@tauri-apps/api/core").then(({ invoke }) =>
+      invoke("drew", { threads: view.threads.length, chains: view.chains.length }).catch(() => undefined),
+    );
+  }, [view]);
   return view;
 }
 
