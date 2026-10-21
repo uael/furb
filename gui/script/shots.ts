@@ -25,11 +25,6 @@ const asked = process.env.FURB_SHOTS?.split(" ").map((one): [string, string] => 
   return [one.slice(0, at), one.slice(at + 1).replaceAll(",", "&")];
 });
 if (asked?.length) screens.splice(0, screens.length, ...asked);
-screens.splice(
-  0,
-  screens.length,
-  ...asked.map(([name, query]) => [name, query.replaceAll(",", "&")] as [string, string]),
-);
 
 await mkdir(out, { recursive: true });
 const server = spawn("./node_modules/.bin/vite", ["preview"], { stdio: "ignore" });

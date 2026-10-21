@@ -67,7 +67,9 @@ export function App() {
       );
   }, [held.state, moment.threads.length, moment.chains.length]);
   if (held.state !== "open" || query.get("picker"))
-    return <Picker said={held.said} opening={held.state === "opening" ? held.what : undefined} />;
+    return (
+      <Picker key={held.len} said={held.said} opening={held.state === "opening" ? held.what : undefined} />
+    );
   const thread =
     moment.threads.find((one) => one.act.id === picked) ??
     moment.threads.find((one) => moment.owed.has(one.act.id)) ??
