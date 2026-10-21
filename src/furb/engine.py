@@ -628,7 +628,7 @@ def controlled(ear, lasting=False):
         match a:
           case ("pause" | "wake", *_) if covers(a, id):
             stopped = a[0] == "pause"
-          case ("cancel" | "close", _, by, *_) if covers(a, id) and not over(id) and not (stopped and under(by, id)):
+          case ("cancel" | "close", _, by, *_) if covers(a, id) and not (over(id) or (stopped and under(by, id))):
             yield "done", id, a[3] if a[:2] == ("close", id) else CancelledError()
           case _ if stopped and get(a[1]) is not a:
             later.append(a)
