@@ -109,7 +109,7 @@ def compacted(on: str = "") -> Act:
     yield "started", id
     here, due, moved = scope(id), False, {}
     while True:
-      match (yield):
+      match (yield {id, here, *moved}):
         case ("done", about, _, value) if about in moved:
           close(value, moved.pop(about))
         case ("done", about, *_) if question(("reply", about)) and scope(about) == here:
