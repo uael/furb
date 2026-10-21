@@ -11,7 +11,8 @@ API of its own:
 - `src/lib.rs` says what the crate gives: `Engine`, whose methods are the verbs of the contract, which `build.rs`
   makes from the contract, and `Ear`, the one trait of an ear, which a host writes as a generator of rust with `ear`.
 - `src/world/` holds the ears of the World that the crate writes, one file each: the files in `files.rs`, the
-  commands in `bash.rs`, time in `time.rs`, the store of the record in `store.rs`, and the provider of models in
+  commands in `bash.rs`, time in `time.rs`, the store of the record in `store.rs`, as a file of lines or a database
+  of SQLite, each a `Store` that the suite in `store.test.rs` holds to its laws, and the provider of models in
   `provider.rs`, which asks each model through rig and streams what it writes. Its catalog, `provider/catalog.rs`,
   knows the models of every provider that pi-ai serves and those of the claude command line, and it offers each
   model whose credential stands in the environment, the claude command line when it finds the program, and each
@@ -215,8 +216,8 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
   real renderer. Run both after a change that a screen shows, and read each capture.
 
 Every pull request and every push to `main` runs the gates in `.github/workflows/gates.yml`: the hooks, which
-include the gates of the crate and the type check. The suite runs on Linux and on macOS. The gates of the
-TypeScript side run on Linux, on macOS, and on Windows.
+include the gates of the crate and the type check. The suite runs on Linux, on macOS and on Windows, and the gates
+of the crate run on Windows too. The gates of the TypeScript side run on Linux, on macOS, and on Windows.
 
 ## Prose
 

@@ -56,7 +56,8 @@ enum Mode {
 /// The record a life keeps and resumes from, and the directory its chains start in.
 #[derive(Args)]
 struct Place {
-  /// The record to keep, and to resume from.
+  /// The record to keep, and to resume from: a database of SQLite when its name ends in `.sqlite`, `.sqlite3` or
+  /// `.db`, and else a file of lines.
   #[arg(long)]
   record: Option<PathBuf>,
   /// The directory the chains of the life start in, the current directory when unsaid.
