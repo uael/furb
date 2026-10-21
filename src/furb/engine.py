@@ -295,7 +295,16 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           if scope(about) != id:
             yield "tell", maker, [headed(about, "done", value=value)]
           if not isinstance(value, CancelledError):
-            unseen = about
+            unseen = about + " done"
+        case ("done", about, by, Refused() as why) if (
+          question(("reply", about))
+          and scope(about) != id
+          and (paused(scope(about)) or not by)
+          and running.get(maker := (get(p := get(get(about)[2])[2]) or a)[2]) is not None
+        ):
+          yield "tell", maker, [headed(p, "paused", why=why)]
+          if not running[maker]:
+            unseen = p + " paused"
       if scope(a[1]) != id:
         continue
       match a:
@@ -353,7 +362,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
             act("reply", id, controlled(idle), to)
           unseen = ""
       if unseen and all(over(x[1]) for x in transcript() if x[0] == "prompt" and x[3] == id):
-        prompt(None, unseen + " done")
+        prompt(None, unseen)
         unseen = ""
 
   return act("chain", on, ear, label, source)

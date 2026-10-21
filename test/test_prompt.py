@@ -475,7 +475,7 @@ async def test_a_prompt_carries_the_name_of_its_shape_as_a_word() -> None:
 
 
 async def test_the_acknowledgment_carries_no_shape_and_a_message_that_names_the_act_that_is_done() -> None:
-  """The acknowledgment carries no shape and a message that names the act that is done."""
+  """The acknowledgment carries no shape and a message that names the act and what happened to it, as prompt3 done."""
   _, log, _ = await lived()
   command = said(log, "bash")[0][1]
   assert [(one[4], one[5]) for one in said(log, "prompt")] == [("int", "read and run"), ("None", f"{command} done")]

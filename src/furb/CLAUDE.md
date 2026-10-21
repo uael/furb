@@ -87,7 +87,8 @@ meanings. The entry of such a name here gives only its form in the engine.
 - message: the text a prompt carries.
 - shape: the python type of a response, which a prompt carries by its name.
 - response: what a prompt completes with.
-- acknowledgment: the prompt of nothing a chain makes when an act a rung made is done and no reply has shown it.
+- acknowledgment: the prompt of nothing a chain makes when an act a rung made is done, or the chain of a prompt that
+  a rung made pauses, and no reply has shown it.
 - rung: the run of one word on a chain, and the verb that makes it: with a word its caller wrote, or with no word,
   for a turn of a model.
 - reply: the act a chain makes, under the site of a rung, to ask the model of that rung for its word, which the
@@ -185,7 +186,8 @@ meanings. The entry of such a name here gives only its form in the engine.
 - A chain is one conversation, and the transcript that a provider caches grows at one end.
 - Nothing is told twice, and nothing tells what it does not know: an act tells of itself, and a chain of the rungs it
   asks a model for, with the message of the prompt each advances, of a word that told nothing, of the prompts and the
-  words it refuses, and of the done of an act that one of its rungs made on another chain.
+  words it refuses, and of the done of an act that one of its rungs made on another chain, or of the pause of the
+  chain of such a prompt.
 - A drift is a hard error.
 - The engine owns the order of every run, and nothing of a model runs on the loop of the outside.
 - A chain with a source reads the transcript of its origin as it stands, where the record is what a later life should
