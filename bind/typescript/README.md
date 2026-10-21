@@ -175,3 +175,8 @@ gives. It holds no native code and no module of node, so a terminal and a window
   the way of a message along the tree of hires.
 - `source`: the words of the ladders of a chain as one program, with each act on the line that made it and the line
   that runs, and what each act came to in a few words.
+- `plain`: a message as a person reads it, with no name of its exception around it and no path of the directory of
+  the life, and what a failed act says in such words.
+- `time`: the marks of a life on its axis of time: each step, each question to the operator, and each end of a thread.
+- `watch`: the last value of each name that a chain told by a moment, under the act whose name it starts with.
+- `debugger`: the call stack of a chain, and the program of the ladder of a prompt, which its door holds.
