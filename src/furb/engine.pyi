@@ -915,6 +915,7 @@ def tell(on: str, path: str, got: object = None, show: Show = HEAD) -> None:
   A question is put to the ears of the engine before those of the outside, so the World is asked for nothing that the engine knows.
   The question that tell names is the last question on its chain that the run made.
   A text is told by the lines that its show picks, under the word text, and any other answer under the word value.
+  When the lines that a show picks of a text are not one run, the tell binds their numbers too, under the word numbers, before the text, so a model can place each line.
   """
 
 def tells(id: str) -> bool:

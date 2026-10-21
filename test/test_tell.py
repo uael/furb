@@ -67,3 +67,15 @@ async def test_a_text_is_told_by_the_lines_that_its_show_picks_under_the_word_te
     "#read1\nread1_path = 'nums://a'\nread1_value = [1, 2]",
     "#read2\nread2_path = 'a.txt'\nread2_text = 'two'",
   ]
+
+
+async def test_when_the_lines_that_a_show_picks_of_a_text_are_not_one_run_the_tell_binds_their_numbers() -> None:
+  """When the lines that a show picks of a text are not one run, the tell binds their numbers too, under the word numbers, before the text, so a model can place each line."""
+  files = {"/w/b.txt": "one\ntwo\nsix\nfour\n"}
+  _, _, root = born("read('b.txt', grep('o'))\nread('b.txt', span(2, 3))\nclose(1)", files=files)
+  assert await engine.prompt(int, "where are they", on=root) == 1
+  await settle()
+  assert [one for one in paragraphs(engine.turns(on=root)) if one.startswith("#read")] == [
+    "#read1\nread1_path = 'b.txt'\nread1_numbers = [1, 2, 4]\n<s:read1_text>\none\ntwo\nfour</s:read1_text>",
+    "#read2\nread2_path = 'b.txt'\n<s:read2_text>\ntwo\nsix</s:read2_text>",
+  ]

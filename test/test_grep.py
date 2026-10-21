@@ -10,5 +10,5 @@ async def test_grep_pattern_is_the_show_of_the_lines_that_the_pattern_matches_ea
   _, _, root = born("read('m.txt', grep('^[bd]'))\nclose(1)", files={"/w/m.txt": "a\nb\nc\nd\n"})
   assert await engine.prompt(int, "pick some", on=root) == 1
   await settle()
-  told = "#read1\nread1_path = 'm.txt'\n<s:read1_text>\nb\nd</s:read1_text>"
+  told = "#read1\nread1_path = 'm.txt'\nread1_numbers = [2, 4]\n<s:read1_text>\nb\nd</s:read1_text>"
   assert engine.turns(on=root)[-1][1] == f"{told}\n\n#prompt1 closed\nprompt1_value = 1"

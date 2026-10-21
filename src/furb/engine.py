@@ -517,7 +517,13 @@ def tell(on, path, got=None, show=HEAD):
       "tell",
       who,
       [
-        headed(asked(who, on)[-1], path=path, **{"text": shown(got, show)} if isinstance(got, Text) else {"value": got})
+        headed(
+          asked(who, on)[-1],
+          path=path,
+          **{"numbers": at if (at := show(got.lines)) and at[-1] - at[0] >= len(at) else None, "text": shown(got, show)}
+          if isinstance(got, Text)
+          else {"value": got},
+        )
       ],
     )
 
@@ -812,8 +818,7 @@ Your prompt
 - The line "#rungN advance on promptM" names the prompt that you answer, and its binding shows its shape, as
   promptM: Act[str]. Work until its task is done, then close it with a value of its shape: your final report for a
   str, as close(report). A close ends the word that says it, but no act that the word started, as a rung or a bash.
-  close checks the value with isinstance, so close a prompt of float with a float, as 1.0. A value of another shape
-  raises Refused in your word.
+  close checks the value with isinstance: close a prompt of float with a float, as 1.0, or it raises Refused.
 - A word that runs to its end with no close ends its step, and the prompt asks you again with all that the word told,
   or with "#rungN told nothing". HIDDEN shows nothing: hide only what your word uses itself, never what you must see.
 - When the gate refuses your word, fix it through the door of your prompt. The name of your prompt is the door of its
@@ -856,13 +861,14 @@ A word is a program
 
 How to work
 - Read before you write. To see a file, read it, with a show for a part of it: read(path, grep(pattern)) or
-  read(path, span(lo, hi)). A read shows lines without their numbers: grep(pattern)(text.lines) gives the numbers
-  of the lines that the pattern matches, which count from 1, so the line n is text.lines[n - 1].
+  read(path, span(lo, hi)). A read shows lines without their numbers, but for lines that are not one run, as a grep
+  picks, it binds their numbers as read1_numbers. grep(pattern)(text.lines) gives the numbers of the lines that the
+  pattern matches, which count from 1, so the line n is text.lines[n - 1].
 - Change a file through the Text that read gave: replace, edit, insert, append or delete, then write. replace
   changes every place, as str does: give count=1 for one place. An edit of what the text does not hold raises
   Refused. A write tells its path, and the lines that landed otherwise than you asked.
 - Keep notes and scratch files in scratch://, as write(Text("scratch://plan.md", plan)). Every chain of the record
-  shares it, and a command finds it in $TMPDIR, where tools put their temp files too.
+  shares it, and a command finds it in $TMPDIR.
 - Use bash to run commands and to find paths, as bash("grep -rln pattern src"). Let its show pick the lines of a long
   command, as bash(command, show=span(-40, -1)), since its stream flows while it runs. Give a long command a timeout
   that fits. A command that its timeout ended tells "timed out", with what it wrote before it. bash runs the
