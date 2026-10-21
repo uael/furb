@@ -94,6 +94,8 @@ program that `FURB_TUI` names, or the `furb-tui` on PATH.
 
 ## Learn more
 
+- [The examples](docs/examples/README.md): a program for each door, Rust, TypeScript and python, which shows a durable
+  life, a tree of chains, a prompt to the operator, a grant and a door.
 - [The TUI](tui/README.md): the views, the keys, the commands, and [a gallery of each screen](docs/tui.md).
 - [The JSON-RPC](docs/rpc.md): the commands and the events of `furb --mode rpc`.
 - [The extensions](docs/extensions.md): what an extension is, the configs that turn one on, and the official ones.

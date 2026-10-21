@@ -21,6 +21,13 @@ path = "src/lib.rs"
 # A library to a Rust host, and the extension module of the python distribution when the python feature is on.
 crate-type = ["rlib", "cdylib"]
 
+# The examples of the framework, which `cargo test` runs as programs.
+[[example]]
+name = "framework"
+path = "docs/examples/rust.rs"
+harness = false
+test = true
+
 [features]
 # The python binding: the same crate, reached from python. It links no interpreter of its own, which is what an
 # extension module is, so the module feature is on only where maturin builds the wheel.

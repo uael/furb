@@ -78,6 +78,7 @@ uv run pre-commit install
 | `bind/python/furb_monty/engine.py` | Every name of the contract over one life of the engine in the sandbox. |
 | `src/binding/ts.rs` | The door to TypeScript through N-API, which also makes the declarations of `bind/typescript`. |
 | `src/binding/ts/host.rs` | The door on the thread of JavaScript: a value as the engine takes it, and a generator heard as an ear. |
+| `docs/examples/` | One example for each door, which a test of that door runs. Change an example with its door. |
 
 ## Changing the suite
 

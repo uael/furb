@@ -65,6 +65,10 @@ The TypeScript side is a bun workspace at the root, with two packages:
 - `tui` is the OpenTUI application on that package. `tui/README.md` says what the TUI does, and `docs/tui.md` shows
   each screen.
 
+`docs/examples/` holds one example of the framework for each door, a program that a user runs as it stands, and
+that a test of each door runs: `cargo test`, `test/outside/test_examples.py` and
+`bind/typescript/test/examples.test.ts`.
+
 `docs/developer-guide.md` is the guide for a person who changes the repository: the tools to install, how a word
 runs, and the files of each part. For everything else, it links to this file.
 
