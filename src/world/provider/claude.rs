@@ -121,7 +121,7 @@ impl Claude {
   }
 
   /// The same command line, whose process waits this long for a program that is missing or does not run.
-  #[cfg(test)]
+  #[cfg(all(test, unix))]
   pub(crate) fn waiting(self, gone: Duration) -> Claude {
     Claude { gone, ..self }
   }
