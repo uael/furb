@@ -13,4 +13,7 @@ target/
 *.pyd
 *.node
 node_modules/
-.furb/
+# Of .furb/, only the config and the extensions of the project are source.
+.furb/*
+!.furb/config.json
+!.furb/extensions/
