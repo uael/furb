@@ -270,10 +270,10 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
       let a = hear(&mut co).await;
       let runs = |one: &Extension| enabled.iter().any(|two| two.name == one.name);
       let new: Vec<Extension> = match a.kind() {
-        // A chain says its started at its birth, and it has what its origin had, which it made again.
-        "started" if named(a.about(), "chain") => {
-          let got = co.call("get", vec![Object::string(a.about())], vec![]).await?;
-          let source = entry(&got.as_ref(), 5).and_then(|one| one.as_str().map(str::to_owned));
+        // The ear hears a chain at its birth, before the call that made it returns, and the chain has what its
+        // origin had, which it made again.
+        "chain" if a.question() => {
+          let source = a.word(2).and_then(|one| one.as_str().map(str::to_owned));
           let had =
             chains.iter().find(|one| Some(&one.0) == source.as_ref()).map(|one| one.1.clone());
           chains.push((a.about().to_owned(), had.unwrap_or_default()));
