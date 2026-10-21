@@ -157,6 +157,25 @@ async def test_a_read_from_inside_an_act_that_would_tell_more_than_largest_bytes
   assert [one.split("\n")[0] for one in of(engine.turns(on=root), "read")] == ["#read2"]
 
 
+async def test_the_world_refuses_a_read_of_a_path_whose_first_part_is_the_name_of_an_act(tmp_path: Path) -> None:
+  """The World refuses a read of a path whose first part is the name of an act, since that path is a door that no ear of the engine served and never a file, and the refusal names the chain of that act."""
+  live, root = machine(tmp_path)
+  away = engine.chain("away")
+  asked = engine.wait(60.0, on=away)
+  (tmp_path / asked).write_text("a file\n")
+  refused = []
+  for path in (asked, f"{asked}/x", away):
+    with pytest.raises(Refused) as one:
+      engine.read(path, on=root)
+    refused.append(str(one.value))
+  live.end()
+  assert refused == [
+    f"{asked} is no file, since {asked} is an act of {away}: read it on {away}.",
+    f"{asked}/x is no file, since {asked} is an act of {away}: read it on {away}.",
+    f"{away} is no file, since {away} is an act of {away}: read it on {away}.",
+  ]
+
+
 async def test_the_world_serves_the_scratch_directory_as_scratch(tmp_path: Path) -> None:
   """The World serves the scratch directory as scratch://: a read of scratch://plan.md gives that file, and a read of scratch:// or of a folder of it gives the name of each entry of that folder, one on each line, each folder with / at its end, as ls does."""
   live, root = machine(tmp_path)
