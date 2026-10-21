@@ -854,7 +854,11 @@ fn a_turn_that_the_most_it_writes_ended_is_refused_and_no_part_of_its_word_runs(
   let (mut engine, _, asked_of) = local("length", format!("{part}data: [DONE]\n\n"));
   let word = replied(&mut engine);
   assert!(
-    word.contains("the turn of local:qwen reached the most it writes before its end"),
+    word.contains("the turn of local:qwen reached the most it writes before its end: it wrote"),
+    "{word}"
+  );
+  assert!(
+    word.contains(r#"0 characters of thought and 5 of text, which end with "x = 1""#),
     "{word}"
   );
   assert!(!ran(&mut engine, "x = 1"), "no part of the word runs");

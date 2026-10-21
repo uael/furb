@@ -566,7 +566,7 @@ fn turn(model: &Model, response: &CompletionResponse) -> Result<Object, Completi
     Some(_) => None,
   };
   if let Some(why) = cut {
-    return Err(CompletionError::ResponseError(why));
+    return Err(CompletionError::ResponseError(format!("{why}: {}", wrote(model, response))));
   }
   let mut choice: Vec<AssistantContent> = response.choice.to_vec();
   if model.tagged {
@@ -590,6 +590,39 @@ fn turn(model: &Model, response: &CompletionResponse) -> Result<Object, Completi
   let usage =
     Object::tuple([count(input), count(output), count(read), count(wrote), Object::float(dollars)]);
   Ok(Object::tuple([Object::string("assistant"), Object::string(text.trim()), usage, blocks]))
+}
+
+/// How many characters of the end of a cut turn its refusal shows.
+const END: usize = 400;
+
+/// What a cut turn wrote, which its refusal says, since the record keeps the refusal and no part of the turn: the
+/// tokens it wrote, the characters of its thought and of its text, and the end of the last of the two that it wrote. A
+/// thought in the text whose close tag never came is thought.
+fn wrote(model: &Model, response: &CompletionResponse) -> String {
+  let mut choice: Vec<AssistantContent> = response.choice.to_vec();
+  if model.tagged {
+    choice = untagged(choice);
+  }
+  let mut thought: String = choice
+    .iter()
+    .filter_map(|one| match one {
+      AssistantContent::Reasoning(one) => Some(one.display_text()),
+      _ => None,
+    })
+    .collect();
+  let mut text = texts(&choice);
+  if model.tagged && text.trim_start().starts_with("<think>") && !text.contains("</think>") {
+    thought.push_str(&text);
+    text.clear();
+  }
+  let last: Vec<char> =
+    if text.trim().is_empty() { &thought } else { &text }.trim_end().chars().collect();
+  let end: String = last[last.len().saturating_sub(END)..].iter().collect();
+  let (thought, text) = (thought.chars().count(), text.chars().count());
+  let tokens = response.usage.output_tokens;
+  format!(
+    "it wrote {tokens} tokens, {thought} characters of thought and {text} of text, which end with {end:?}"
+  )
 }
 
 /// The text of these blocks, whole.
