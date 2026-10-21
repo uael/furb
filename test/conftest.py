@@ -8,6 +8,7 @@ hear by, so no name of them stands in the globals of the engine. Every fact is a
 import asyncio
 import os
 import re
+import shlex
 import sys
 import tempfile
 from collections.abc import Generator, Sequence
@@ -129,7 +130,7 @@ def plain(record: Sequence[tuple]) -> list:
 def resolved(here: str, path: str) -> str:
   """A path against a working directory, as a World of the suite reads it: a path of its own stands as it is, and any
   other hangs off it."""
-  return path if path.startswith("/") or "://" in path else f"{here}/{path}"
+  return path if path.startswith("/") or Path(path).is_absolute() or "://" in path else f"{here}/{path}"
 
 
 @dataclass
@@ -420,6 +421,14 @@ def machine(directory: Path, record: Path | None = None) -> tuple[Live, str]:
   no model and offers the operator alone: the World, which a test ends, and the root."""
   live = Live(str(directory), roster=[])
   return live, engine.boot(live.opened(record, extensions=False), world=live.hears(), **live.ears, **kernel())
+
+
+async def scratched(on: str) -> Path:
+  """The scratch directory of a life as a program of the machine names it, which the sh of Git for Windows names in a
+  form of its own, as /tmp."""
+  shown = "import os; print(os.environ['TMPDIR'])"
+  got = await engine.bash(f"{shlex.quote(sys.executable)} -c {shlex.quote(shown)}", on=on)
+  return Path(got.stdout.content.strip())
 
 
 def world_says(kind: str, about: str, *words: object) -> tuple:

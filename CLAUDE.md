@@ -215,8 +215,8 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
   real renderer. Run both after a change that a screen shows, and read each capture.
 
 Every pull request and every push to `main` runs the gates in `.github/workflows/gates.yml`: the hooks, which
-include the gates of the crate and the type check. The suite runs on Linux and on macOS. The gates of the
-TypeScript side run on Linux, on macOS, and on Windows.
+include the gates of the crate and the type check. The suite runs on Linux, on macOS and on Windows, and the gates
+of the crate run on Windows too. The gates of the TypeScript side run on Linux, on macOS, and on Windows.
 
 ## Prose
 

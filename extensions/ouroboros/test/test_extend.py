@@ -45,7 +45,9 @@ async def test_extend_writes_the_words_of_the_rungs_it_names(tmp_path: Path) -> 
 async def test_extend_turns_the_extension_on_in_the_config_of_the_project(tmp_path: Path) -> None:
   """extend turns the extension on in .furb/config.json with the path of its folder from the folder of that config, and keeps every other entry of the config."""
   (tmp_path / "work" / ".furb").mkdir(parents=True)
-  (config := tmp_path / "work" / ".furb" / "config.json").write_text('{"extensions": {"memory": false}, "x": 1}')
+  (config := tmp_path / "work" / ".furb" / "config.json").write_text(
+    '{"extensions": {"memory": false}, "x": 1}', encoding="utf-8", newline=""
+  )
   _, root = extended("ouroboros", tmp_path, lives=True, sand=Disk())
   f = engine.rung(F, on=root)
   await engine.rung(f"extend('kit', {f!r})", on=root)
