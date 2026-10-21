@@ -1,7 +1,7 @@
 //! The ear: the one thing a life hears by.
 //!
 //! The contract lets `boot`, `act` and `drive` take any generator of one shape: it hears every fact of the life
-//! and every question that no ear before it took, and it speaks by yielding a saying. The Kernel, the gate, the
+//! and every question that no ear before it took, and every chain at its birth, and it speaks by yielding a saying. The Kernel, the gate, the
 //! record and each ear of the World are one, whatever language writes it: a generator of python, a generator of
 //! TypeScript, or a coroutine of rust.
 //!

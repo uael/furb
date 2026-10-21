@@ -726,7 +726,7 @@ def boot(record=(), **outside):
             else:
               taken.add(name)
               holding.append(name)
-          if kind == "run" or not owed():
+          if kind in ("run", "chain") or not owed():
             offers(a)
         if name not in taken:
           with site.set(""):
@@ -738,7 +738,7 @@ def boot(record=(), **outside):
 
   def offers(a):
     for n, g in outside.items():
-      a[1] in taken or hears(n, g, a)
+      (a[1] in taken and a[0] != "chain") or hears(n, g, a)
 
   def ears():
     return sorted(alive.items(), key=lambda pair: (pair[0] not in known, pair[0] in outside))

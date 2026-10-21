@@ -47,7 +47,7 @@ type Saying = tuple[str, str, *tuple[object, ...]]
 """What an ear says: the kind of the fact, the act it is about, and the words, and nothing of who says it, which the bus fills in from whoever is speaking."""
 type Ear = Generator[Saying | None, Fact]
 """An ear is any generator of that shape, so the World and the Kernel are ears, and boot takes an ear of the outside under any name it is to hear by.
-The World, the ears of the outside that serve the machine, one or many, hears every fact, and every act that no ear before it took: it answers a stand, a clock, a chance, a cd, a read and a write of a path nobody of the engine serves, resolved against the working directory of the chain, or against the scratch directory for a path of scratch://; it takes a command, asks it whether it is merged, answers a write of its doors and feeds it what a write of its stdin gives, and ends it at its timeout and at a cancel; it takes a wait and a prompt to the operator, which it shows; and it takes a reply, which it answers with the turn of the model.
+The World, the ears of the outside that serve the machine, one or many, hears every fact, every act that no ear before it took, and every chain at its birth: it answers a stand, a clock, a chance, a cd, a read and a write of a path nobody of the engine serves, resolved against the working directory of the chain, or against the scratch directory for a path of scratch://; it takes a command, asks it whether it is merged, answers a write of its doors and feeds it what a write of its stdin gives, and ends it at its timeout and at a cancel; it takes a wait and a prompt to the operator, which it shows; and it takes a reply, which it answers with the turn of the model.
 The World performs any fact that an extension defines and that the World knows.
 The opening of a life gives the World the scratch directory of its record, which every chain of that record shares, or, for a life that keeps no record, a scratch directory of its own, which goes when that life ends.
 A later life on a record finds its scratch directory again, and when the directory is missing, as on another machine, the opening makes again in it each file that a write of the record made, in the order of the last write of each, with the text that the journal kept, and no file that a command made; the opening of a new record starts with an empty directory.
@@ -89,7 +89,7 @@ def act(kind: str, on: str, ear: Callable[[str], Ear] | None, *words: object) ->
   """The way to make a question: it takes a name when it is made, it is put to the ears, its ear, when it has one, is brought to life under that name and given the name, and the name is given back, which is the act to whoever holds it.
   An act is put to every ear of the engine, the acts first, and a busy one hears it once it is done speaking, at its place among what was said.
   Its own ear is born after the ears of the engine heard it, so the acts that ear makes stand after it.
-  It is then put to the ears of the outside in turn, until one takes it, and no ear of the outside after that one hears it.
+  It is then put to the ears of the outside in turn, until one takes it, and no ear of the outside after that one hears it, a chain apart, which every ear of the outside hears at its birth after its own ear took it, so an ear of the outside plays on a chain before the call that made it returns.
   To take an act is to say a started or a done about it: a done settles it now, and a started says that its done comes later.
   An act that no ear takes and that the record does not hold is refused: the life says it done with a refusal that names its kind.
   An act said: it is begun, and what the call gives is its name, which is awaited for what the act comes to.
@@ -283,7 +283,7 @@ def pause(id: str) -> None:
   A pause stops no reply in flight: the reply returns.
   A paused chain goes quiet as its in-flight work returns.
   A kind a pause stops: it starts its ear, and while a pause over it stands the ear hears nothing, and at the wake it hears everything that was said meanwhile, in order.
-  An act made in that time it hears at once, since an act is put to the ears while it is made and to no ear after the one that takes it, so a paused rung takes the wants of its run.
+  An act made in that time it hears at once, since an act is put to the ears while it is made and to no ear after the one that takes it, a chain apart, so a paused rung takes the wants of its run.
   A pause stands over what is made after it, until the wake.
   A control is on the scope of what it is over, so it takes no chain of its own.
   """
@@ -770,7 +770,7 @@ type Close = tuple[Literal["close"], str, str, object]
 A close is over the act it names, the words running under it and the replies that ask for those words, where a cancel is over everything under it.
 """
 type Started = tuple[Literal["started"], str, str]
-"""What an ear says to take an act whose done comes later, and which no ear after it hears.
+"""What an ear says to take an act whose done comes later, and which no ear after it hears, a chain apart.
 The started names the act and says no more of it, since the ear heard the act itself and nothing is told twice.
 The journal keeps a started of the outside, so a later life holds the act from the outside and does not say its first started again, since only the outside runs it: the act is done where the record holds its done, and pending when the record holds none.
 """
