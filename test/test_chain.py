@@ -1151,6 +1151,23 @@ async def test_the_advance_binds_the_share_of_the_window_that_the_last_reply_rea
   assert f"#{first} advance on {act}" in told and f"#{second} advance on {act}\n{second}_share = 0.25" in told
 
 
+async def test_the_advance_of_a_reply_to_an_actor_of_a_doctrine_binds_that_doctrine() -> None:
+  """The advance of a reply to an actor whose roster entry holds a doctrine binds that doctrine, as rung5_doctrine, unless the transcript holds a reply to an actor of the same doctrine, so the model reads it once, in its user turn, just before it answers, and a chain that asks no such actor tells nothing of it."""
+  taught = [*STANDS[0], ["q", ["low", "high"], 300000, "Look first.\nThen fix."]]
+  _, log, root = born("a = 1", "close(1)", "close(2)", "close(3)", stands=[taught, "/w", "q/low"])
+  one = engine.prompt(int, "count", on=root)
+  assert await one == 1
+  assert await engine.prompt(int, "again", to="q/high", on=root) == 2
+  assert await engine.prompt(int, "plain", to="m/low", on=root) == 3
+  first = said(log, "reply")[0][2]
+  advances = [one for one in paragraphs(engine.turns(on=root)) if " advance on " in one]
+  assert advances[0] == f"#{first} advance on {one}\n<s:{first}_doctrine>\nLook first.\nThen fix.</s:{first}_doctrine>"
+  assert len(advances) == 4 and not any("_doctrine" in one for one in advances[1:])
+  _, _, root = born("close(1)")
+  assert await engine.prompt(int, "count", on=root) == 1
+  assert not any("_doctrine" in one for one in paragraphs(engine.turns(on=root)))
+
+
 async def test_the_chain_tells_a_word_that_told_nothing_before_the_advance() -> None:
   """When nothing was told on the chain since the word of the last rung that the chain did not make was ready, the chain tells that rung under the header told nothing before the advance, so the model sees that the word showed it nothing."""
   _, log, root = born("x = read('/w/a.txt', show=HIDDEN)", "x = read('/w/a.txt')", "close(1)")

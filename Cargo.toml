@@ -32,9 +32,9 @@ typescript = ["dep:napi", "dep:napi-derive", "dep:napi-build"]
 # The sandbox the engine runs in, and its type checker, which is the gate of the
 # Kernel. A revision of the fork, since the interpreter the engine needs is not
 # released, and a revision reads the same interpreter at every build.
-monty = { git = "https://github.com/uael/monty", rev = "ec1ef95a" }
-monty-type-checking = { git = "https://github.com/uael/monty", rev = "ec1ef95a" }
-monty-types = { git = "https://github.com/uael/monty", rev = "ec1ef95a" }
+monty = { git = "https://github.com/uael/monty", rev = "ddfef05b" }
+monty-type-checking = { git = "https://github.com/uael/monty", rev = "ddfef05b" }
+monty-types = { git = "https://github.com/uael/monty", rev = "ddfef05b" }
 # A whole number past 64 bits, which a host hands in as its digits.
 num-bigint = "0.4"
 # The record: one fact per line, as JSON, whose numbers are read before anything rounds them. The catalog of models
@@ -45,6 +45,8 @@ indexmap = { version = "2", features = ["serde"] }
 # The search for a byte, which finds the end of each line of the record many bytes at a time, even in a build that
 # does not optimize the crate.
 memchr = "2"
+# The store of a record as a database of SQLite, built from its source, so no machine needs a library of its own.
+rusqlite = { version = "0.40", features = ["bundled"] }
 # The chance of the World, drawn by the system.
 getrandom = "0.3"
 # The one interface of the models of the provider, which the claude command line answers too, and the clients of the

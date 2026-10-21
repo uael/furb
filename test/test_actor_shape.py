@@ -1,12 +1,16 @@
 """Actor, an actor the World offers."""
 
-from conftest import born, paragraphs, said, settle
+from conftest import STANDS, born, paragraphs, said, settle
 from furb import engine
 from furb.engine import Refused
 
 
 async def test_an_actor_the_world_offers() -> None:
-  """An actor the World offers: the name of a model, the efforts it takes, and the window it reads."""
+  """An actor the World offers: the name of a model, the efforts it takes, the window it reads, and the doctrine it reads, which the entry of a model that reads none leaves unsaid."""
+  taught = [*STANDS[0], ["q", ["low"], 300000, "Look first."]]
+  born(stands=[taught, "/w", "m/low"])
+  assert engine.standing()[0] == taught
+  assert [engine.offered(taught, to, 3) for to in ("q/low", "m/low")] == ["Look first.", ""]
   _, _, root = born()
   assert paragraphs(engine.turns(on=root)) == [
     "#chain1\nchain1_label = 'root'\nchain1: Act[object] = Act('chain1')",
