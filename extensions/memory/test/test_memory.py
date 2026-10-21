@@ -18,7 +18,7 @@ async def test_the_memory_of_a_path_told_to_its_chain(tmp_path: Path) -> None:
   _, root = extended("memory", tmp_path, _monty.memory)
   await engine.rung("memory()", on=root)
   assert recalled(root, tmp_path) == [memorized("memory1", top, text)]
-  top.write_text(text.replace("\n5\n", "\nfive\n"))
+  top.write_text(text.replace("\n5\n", "\nfive\n"), encoding="utf-8", newline="")
   await engine.rung("memory()", on=root)
   assert recalled(root, tmp_path)[1:] == [f"#memory2\nmemory2_path = {str(top)!r}\nmemory2_text = 'five'"]
 
