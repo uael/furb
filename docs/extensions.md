@@ -27,8 +27,9 @@ The manifest is a JSON map with three keys:
   the extension by it, and the name must be the key of the config.
 - `word` is the file of the word, relative to the folder. It is a python module that imports what it uses from
   `furb.engine`, so an editor, ruff and ty read it. The word is that file less its imports of furb, with its line
-  ends made LF. It only defines, holds no sentence and no comment, and binds no name of the engine. Its contract
-  holds its laws, as `engine.pyi` holds those of the engine.
+  ends made LF. It only defines, holds no comment, and binds no name of the engine. It holds no sentence but one
+  doctrine of its own, a quote that it tells and that holds no law, as `engine.py` holds its own. Its contract holds
+  its laws, as `engine.pyi` holds those of the engine.
 - `life` is the life word, python that starts the work of the extension, such as `remember()`. It can be absent.
 
 ## Where furb finds extensions
@@ -36,7 +37,8 @@ The manifest is a JSON map with three keys:
 Two configs say which extensions a life runs: `config.json` in the config directory of the user, then
 `.furb/config.json` in the directory of the life, so the project wins for a name. The config directory is
 `FURB_CONFIG_DIR`, else `furb` under `XDG_CONFIG_HOME`, under `%APPDATA%` on Windows, or under `~/.config`. The
-`.furb` that a host makes keeps all it holds out of version control but `config.json`, so a project can share it.
+`.furb` that a host makes keeps all it holds out of version control but `config.json` and `extensions/`, since the
+extensions of a project are code of the project, so a project can share them.
 
 ```json
 { "extensions": { "memory": true, "skills": false, "notes": "~/src/furb-notes" } }
@@ -47,7 +49,7 @@ Two configs say which extensions a life runs: `config.json` in the config direct
 - A path gives the folder of an extension that is not official. A relative path starts at the folder of the config,
   and `~` is the home.
 
-The official extensions, `memory`, `skills` and `compaction`, are on unless a config turns them off. A config that is not of this
+The official extensions, `memory`, `skills`, `compaction` and `ouroboros`, are on unless a config turns them off. A config that is not of this
 form, a folder with no manifest, a manifest of another name, and a missing word are each refused with the path.
 
 ## How a life runs its extensions
@@ -55,7 +57,10 @@ form, a folder with no manifest, a manifest of another name, and a missing word 
 A life enables each extension by a fact, `enable`, which the record keeps. [`src/furb/CLAUDE.md`](../src/furb/CLAUDE.md)
 says what the fact means and when a life says it, under the names enable and life word and in its laws.
 The ear `extensions` of [`src/extension.rs`](../src/extension.rs) says the fact and plays it, and its documentation
-gives the shape of the fact. The extensions that a host gives the ear are those that the configs turn on. A host
+gives the shape of the fact. The extensions that a host gives the ear are those that the configs turn on. In the
+middle of a life, when a write of `.furb/config.json` in the directory of the life lands, the ear enables each
+extension that the config turns on by its path and that the life does not run, with the same fact. A word that
+the life runs already does not change in that life, and an extension that a config turns off runs on. A host
 that turns the extensions off, as the DeepSWE rig does, gives the ear none.
 
 Anything that comes from the disk reaches a chain through a question that an ear of the World answers, which the
@@ -76,6 +81,13 @@ journal answers again in a later life, so a replay is exact and the World is ask
   whole the first time, and after that again whole, only when it changed. `remember()`
   is an act that tells the memory of the working directory when it is made, then the memory of the folder of each
   file that the chain reads, and the memory that changed at each stand. Its life word is `remember()`.
+
+- `ouroboros` teaches a model to extend furb. Its life word, `ouroboros()`, tells each chain its doctrine once: the
+  three ways to extend furb and when to take each. A def in a word lives with its chain. `extend(name, *rungs)` lives
+  with the project: it writes the words of those rungs, as `program()` holds them, as the word of the extension
+  `name` in `.furb/extensions/<name>`, with its manifest, and turns it on in `.furb/config.json`, so it plays on
+  every chain now and in every later life. An official extension lives in furb. `enabled()` gives the names of the
+  extensions that the life runs. It needs no ear of the World.
 
 - `compaction` defines `compaction()`, an act that watches the fill of its chain. At the first answer of a model
   that reads more than `SHARE`, 0.6, of the window of its actor, it tells the model that share and the word that goes
@@ -103,7 +115,9 @@ rights of the user on the engine of CPython, as a word of a model does there.
 furb has no permissions, by design. Each act runs with the rights of the user who runs furb, and the record shows who
 made each act. For isolation, run furb in a virtual machine. An extension can add a check: its word can rebind a verb,
 such as `bash`, so that the verb asks the operator before it makes the act. A word of the model can rebind that verb
-again, so such a check stops a mistake and not an attack. furb has no such extension built in.
+again, so such a check stops a mistake and not an attack. furb has no such extension built in. The extensions of
+a project in `.furb/extensions`, as `extend` writes them, run with the rights of the user who runs furb, with no
+permission, as the rest of furb does.
 
 ## In the hosts
 
