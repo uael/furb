@@ -8,6 +8,8 @@ the name of the World. It tells the operator on stderr why the provider paused a
 """
 
 import asyncio
+import os
+import stat
 import sys
 import threading
 from collections.abc import Callable, Coroutine, Generator, Sequence
@@ -119,13 +121,18 @@ class Live:
     if self.reader is None:
       # The loop is asked for the number of the file first: a terminal it cannot read fails here, where nothing
       # has been built yet, rather than half way through a reader whose own end then fails again.
-      sys.stdin.fileno()
+      mode = os.fstat(sys.stdin.fileno()).st_mode
       self.reader = reader = asyncio.StreamReader()
       made = asyncio.StreamReaderProtocol(reader)
       loop = asyncio.get_running_loop()
-      try:
-        await loop.connect_read_pipe(lambda: made, sys.stdin)
-      except OSError, ValueError:
+      # A selector loop reads a pipe, a socket or a device, and no file. The proactor of Windows takes a pipe that it
+      # cannot read and fails only at its first read, so it reads none.
+      piped = (
+        isinstance(loop, asyncio.SelectorEventLoop)
+        and (stat.S_ISFIFO(mode) or stat.S_ISSOCK(mode) or stat.S_ISCHR(mode))
+        and await loop.connect_read_pipe(lambda: made, sys.stdin)
+      )
+      if not piped:
         threading.Thread(target=handed, args=(loop, reader, sys.stdin), name="furb-operator", daemon=True).start()
     return (await self.reader.readline()).decode(errors="replace").rstrip("\r\n")
 
