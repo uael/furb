@@ -481,6 +481,23 @@ async def test_the_acknowledgment_carries_no_shape_and_a_message_that_names_the_
   assert [(one[4], one[5]) for one in said(log, "prompt")] == [("int", "read and run"), ("None", f"{command} done")]
 
 
+async def test_the_acknowledgment_goes_to_the_actor_of_the_rung_that_made_the_act() -> None:
+  """The acknowledgment goes to the actor of the rung that made the act, so the model that made it sees it, and to the default actor of the chain when that rung names no actor."""
+  sand, log, root = born("x = bash('slow')\nclose(1)", "close(None)", "close(None)", auto=False)
+  assert (await engine.prompt(int, "start one", to="m/high", on=root)) == 1
+  first = said(log, "bash")[0][1]
+  sand.exits(first, 0)
+  await settle()
+  engine.rung("y = bash('slow')", on=root)
+  await settle()
+  second = said(log, "bash")[1][1]
+  sand.exits(second, 0)
+  await settle()
+  acks = [(one[5], one[6]) for one in said(log, "prompt") if one[4] == "None"]
+  assert acks == [(f"{first} done", "m/high"), (f"{second} done", "")]
+  assert [one[6] for one in said(log, "rung") if one[4] == ""] == ["m/high", "m/high", "m/low"]
+
+
 async def test_the_turns_of_the_chain_hold_the_result_of_the_command_the_acknowledgment_names() -> None:
   """The turns of the chain hold the result of the command that the acknowledgment names."""
   _, log, root = await lived()
