@@ -62,8 +62,8 @@ Each command is an object whose `type` names it. An `id` is optional, and the re
 
 | `type` | Fields | `data` of the response |
 | --- | --- | --- |
-| `prompt` | `message`, `shape`, `to`, `on` | `{"act": "prompt1"}` |
-| `rung` | `word`, `on` | `{"act": "rung1"}` |
+| `prompt` | `message`, `shape`, `to`, `on`, `key` | `{"act": "prompt1"}` |
+| `rung` | `word`, `on`, `key` | `{"act": "rung1"}` |
 | `close` | `act`, `value` | none |
 | `cancel` | `act` | none |
 | `pause` | `act` | none |
@@ -80,6 +80,12 @@ Each command is an object whose `type` names it. An `id` is optional, and the re
   default actor of its chain.
 - `rung` runs `word`, which is python, as a rung on a chain, in the globals of that chain. The act is done with what
   the word gave to `close`, and with nothing when the word runs to its end.
+- `key` makes a `prompt` or a `rung` once, across a crash of furb and a retry of the client. It is any
+  string that the client chooses. A command with a key that a command of the same type
+  on the same chain had before makes no act: its response names the act that the key made, in this life or in a later
+  life on the record, and the client gets the `done` event of that act again. furb keeps the key in the record before
+  the act, as the fact `["key", "chain1", "operator", "k1", "prompt"]`, so a crash between the two leaves a key with
+  no act, and the retry makes the act.
 - `close` ends an act with `value`, which is none when the command does not give it. It is how the client answers a
   prompt to the operator. An exception, such as `{"is": "Refused", "args": ["no"]}`, ends the act with that
   exception. The operator answers a prompt of the shape `float` with any number, so a whole number closes it as a

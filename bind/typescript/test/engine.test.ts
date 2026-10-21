@@ -210,6 +210,16 @@ test("a whole JavaScript number is an int, and a BigInt is one exactly", () => {
   expect(() => engine.close(2 ** 60, { id: asked("int") })).toThrow("safe integer");
 });
 
+test("a key of the client makes its act once in a life and in a later life", () => {
+  const first = open();
+  const on = first.engine.root;
+  const id = first.engine.keyed("k1", "wait", [], { seconds: 60, on }).id;
+  expect(first.engine.keyed("k1", "wait", [], { seconds: 60, on }).id).toBe(id);
+  expect(first.engine.keyed("k2", "wait", [], { seconds: 60, on }).id).not.toBe(id);
+  const second = open(first.entries);
+  expect(second.engine.keyed("k1", "wait", [], { seconds: 60, on }).id).toBe(id);
+});
+
 test("a life whose replay drifts is kept, with what boot raised", () => {
   const first = open();
   // No verb makes an act of this kind again, so a later life drifts at its entry.
