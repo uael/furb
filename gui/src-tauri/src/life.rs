@@ -29,7 +29,7 @@ use furb::{
 use futures::{StreamExt, channel::mpsc as channel};
 use serde_json::Value;
 
-use crate::demo;
+use crate::{demo, places};
 
 /// What a life opens on: the demo, a record to inspect, or a live life on this machine.
 #[derive(Debug, Clone)]
@@ -38,12 +38,12 @@ pub enum Source {
   Demo { pace: Duration },
   /// A record, made again to be read: the life keeps nothing, asks no model and runs no command.
   Record(PathBuf),
-  /// A life in a directory, on the record it keeps there, on the default actor of the catalog.
-  Live { directory: PathBuf, record: Option<PathBuf> },
+  /// A life in a project directory, on the record it keeps there, on the models of the catalog.
+  Live { directory: PathBuf, record: PathBuf },
 }
 
 /// A breakpoint: the app pauses a chain when the life reaches it.
-#[derive(Debug, Clone, PartialEq, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(tag = "kind", content = "value", rename_all = "lowercase")]
 pub enum Break {
   /// Each new rung of the chain, which is each step of it.
@@ -92,12 +92,12 @@ pub enum Command {
 /// What the life tells the app.
 #[derive(Debug, Clone)]
 pub enum Event {
-  /// The life is open: its root, its directory, its record, and whether it does work.
-  Opened { directory: String, works: bool },
+  /// The life is open: its root, its directory, and whether it does work.
+  Opened { root: String, directory: String, works: bool },
   /// The facts that the life said since the last event, in order.
   Facts(Vec<Value>),
-  /// What a model wrote for a rung, as it writes it.
-  Writing { rung: String, text: String },
+  /// What a model wrote for a rung, as it writes it: its text and its thought.
+  Writing { rung: String, text: String, thinking: String },
   /// A report for the operator: a refusal, or why the life did not open.
   Said(String),
 }
@@ -162,7 +162,7 @@ fn lived(
     }
     Source::Record(path) => (
       Opening {
-        directory: path.parent().map(|one| one.display().to_string()).unwrap_or_default(),
+        directory: places::project_of(path).display().to_string(),
         record: Some(path.display().to_string()),
         inspecting: Some(true),
         ..Opening::default()
@@ -172,7 +172,7 @@ fn lived(
     Source::Live { directory, record } => (
       Opening {
         directory: directory.display().to_string(),
-        record: record.as_ref().map(|one| one.display().to_string()),
+        record: Some(record.display().to_string()),
         ..Opening::default()
       },
       false,
@@ -180,17 +180,19 @@ fn lived(
   };
   let works = !matches!(source, Source::Record(_));
   let writer = tell.clone();
-  opening.stream = Some(Stream(Arc::new(move |rung: &str, _: &str, text: &str, _: &str| {
-    if !text.is_empty() {
-      let (rung, text) = (rung.to_owned(), text.to_owned());
-      writer.tell(Event::Writing { rung, text });
-    }
-  })));
+  opening.stream =
+    Some(Stream(Arc::new(move |rung: &str, _: &str, text: &str, thinking: &str| {
+      if !text.is_empty() || !thinking.is_empty() {
+        let (rung, text, thinking) = (rung.to_owned(), text.to_owned(), thinking.to_owned());
+        writer.tell(Event::Writing { rung, text, thinking });
+      }
+    })));
   let directory = opening.directory.clone();
-  let ears = [("observer", observer(heard.clone())), ("console", console())];
+  let ears =
+    [("observer", observer(heard.clone())), ("console", if works { console() } else { silent() })];
   let (engine, _) = opening.boot(ears).map_err(|no| no.to_string())?;
   let root = engine.root().to_owned();
-  tell.tell(Event::Opened { directory, works });
+  tell.tell(Event::Opened { root: root.clone(), directory, works });
   let mut held = Held {
     engine,
     root,
@@ -271,6 +273,16 @@ fn console() -> Box<dyn furb::Ear> {
         let no = answered(&shape, "").unwrap_or_else(|no| no.object());
         co.call("close", vec![no], vec![("id", Object::string(a.about()))]).await?;
       }
+    }
+  })
+}
+
+/// The console of a life that only reads its record: it hears each fact under the name of the console, and takes
+/// nothing, so no question waits for the operator.
+fn silent() -> Box<dyn furb::Ear> {
+  ear(|mut co: Co<()>| async move {
+    loop {
+      let _ = co.next().await;
     }
   })
 }

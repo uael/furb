@@ -116,7 +116,26 @@ fn answer(pace: Duration) -> Answer {
 pub enum Lane {
   Root,
   Shortcut,
+  Review,
   Test,
+  Docs,
+  Readme,
+  Changelog,
+}
+
+/// The lane of a request: the label of its chain, which the first label that the transcript binds names.
+fn lane(text: &str) -> Lane {
+  let label =
+    text.split("_label = '").nth(1).and_then(|rest| rest.split('\'').next()).unwrap_or_default();
+  match label {
+    "w shortcut" => Lane::Shortcut,
+    "w review" => Lane::Review,
+    "w test" => Lane::Test,
+    "w docs" => Lane::Docs,
+    "w readme" => Lane::Readme,
+    "w changelog" => Lane::Changelog,
+    _ => Lane::Root,
+  }
 }
 
 /// The word that the script answers a request with, and the tokens that the turn read: by the lane of its chain and
@@ -125,15 +144,9 @@ pub fn scripted(request: &Value) -> (String, u64) {
   let messages = request["messages"].as_array().cloned().unwrap_or_default();
   let text = request["messages"].to_string();
   let step = messages.iter().filter(|one| one["role"] == "assistant").count();
-  let lane = if text.contains("_label = 'w shortcut'") {
-    Lane::Shortcut
-  } else if text.contains("_label = 'w test'") {
-    Lane::Test
-  } else {
-    Lane::Root
-  };
+  let lane = lane(&text);
   let tokens = 14_000 + 21_000 * step as u64 + if lane == Lane::Root { 6_000 } else { 0 };
-  if lane == Lane::Root && acknowledges(&text) {
+  if acknowledges(&text) {
     return ("close(None)".to_owned(), tokens);
   }
   let step = match lane {
@@ -164,8 +177,12 @@ pub fn word(lane: Lane, step: usize) -> &'static str {
     (Lane::Root, 1) => ROOT_SECOND,
     (Lane::Shortcut, 0) => SHORTCUT_FENCED,
     (Lane::Shortcut, 1) => SHORTCUT,
+    (Lane::Review, 0) => REVIEW,
     (Lane::Test, 0) => TEST_FIRST,
     (Lane::Test, 1) => TEST,
+    (Lane::Docs, 0) => DOCS,
+    (Lane::Readme, 0) => README,
+    (Lane::Changelog, 0) => CHANGELOG,
     _ => "close(\"Done.\")",
   }
 }
@@ -173,19 +190,25 @@ pub fn word(lane: Lane, step: usize) -> &'static str {
 const ROOT_FIRST: &str = r#"notes = read("README.md")
 shortcut = prompt(str, "Add SHORTCUT = 'Ctrl+K' to src/search.ts, and close with what you changed.", on=chain("w shortcut"))
 test = prompt(str, "Write test/shortcut.test.ts for SHORTCUT, run it, and close with the result.", on=chain("w test"))
-first = await wait(120, shortcut, test)
+docs = prompt(str, "Tell the users of Fieldnotes about the search shortcut, and close with what you wrote.", on=chain("w docs"))
+first = await wait(120, shortcut, test, docs)
 debug(t"{first=}")"#;
 
-const ROOT_SECOND: &str = r#"parts = [await shortcut, await test]
+const ROOT_SECOND: &str = r#"parts = [await shortcut, await docs, await test]
 check = await bash("sleep 1; grep -c SHORTCUT src/search.ts test/shortcut.test.ts")
-close("Both parts landed.\n" + "\n".join(parts) + "\n" + check.stdout.content)"#;
+close("All parts landed.\n" + "\n".join(parts) + "\n" + check.stdout.content)"#;
 
 const SHORTCUT_FENCED: &str = "```python\nsource = read(\"src/search.ts\")\n```";
 
 const SHORTCUT: &str = r#"source = read("src/search.ts")
 write(source.append('export const SHORTCUT = "Ctrl+K";'))
 check = await bash("sleep 2; grep -n SHORTCUT src/search.ts")
-close("src/search.ts exports SHORTCUT at line " + check.stdout.content.split(":")[0])"#;
+review = await prompt(str, "Review the export of SHORTCUT in src/search.ts, and close with your verdict.", on=chain("w review"))
+close("src/search.ts exports SHORTCUT at line " + check.stdout.content.split(":")[0] + ". " + review)"#;
+
+const REVIEW: &str = r#"source = read("src/search.ts")
+found = await bash("sleep 1; grep -c 'export const SHORTCUT' src/search.ts")
+close("The review passes: one export of SHORTCUT, " + found.stdout.content.strip() + " line.")"#;
 
 const TEST_FIRST: &str = r#"spec = read("test/shortcut.test.ts")"#;
 
@@ -195,6 +218,19 @@ spec = 'import { expect, test } from "bun:test";\nimport { SHORTCUT } from "../s
 write(Text("test/shortcut.test.ts", spec))
 run = await bash("sleep 3; printf '1 pass\n'")
 close("test/shortcut.test.ts expects " + key + ": " + run.stdout.content.strip())"#;
+
+const DOCS: &str = r#"readme = prompt(str, "Add a line on the search shortcut to README.md, and close with the line.", on=chain("w readme"))
+changelog = prompt(str, "Start CHANGELOG.md with the search shortcut, and close with what you wrote.", on=chain("w changelog"))
+lines = [await readme, await changelog]
+close("The docs name the shortcut.\n" + "\n".join(lines))"#;
+
+const README: &str = r#"notes = read("README.md")
+write(notes.append("- Press Ctrl+K to search"))
+close("README.md now says: Press Ctrl+K to search")"#;
+
+const CHANGELOG: &str = r##"write(Text("CHANGELOG.md", "# Changelog\n\n- Add the search shortcut, Ctrl+K.\n"))
+check = await bash("sleep 1; wc -l < CHANGELOG.md")
+close("CHANGELOG.md holds " + check.stdout.content.strip() + " lines")"##;
 
 #[cfg(test)]
 #[path = "demo.test.rs"]

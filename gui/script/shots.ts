@@ -1,5 +1,5 @@
-// Captures of the screens of the app, in WebKit, the engine of the web view of Tauri on macOS, on the view of the
-// demo: run `bun run build` in gui, then `bun run shots [directory]`.
+// Captures of the screens of the app, in WebKit, the engine of the web view of Tauri on macOS, on the fixture of the
+// demo, or on the one that the build took from FURB_FIXTURE: run `vite build` in gui, then `bun run shots [directory]`.
 
 import { spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
@@ -9,12 +9,14 @@ import { webkit } from "playwright";
 const out = process.argv[2] ?? "captures";
 const screens: [name: string, query: string][] = [
   ["1-thread", "screen=thread&thread=prompt3"],
-  ["2-programs", "screen=programs&thread=prompt3"],
-  ["3-code", "screen=code&thread=prompt3"],
-  ["4-thread-root", "screen=thread&thread=prompt1"],
-  ["5-thread-paper", "screen=thread&thread=prompt3&theme=paper"],
-  ["6-programs-paper", "screen=programs&thread=prompt3&theme=paper"],
-  ["7-code-paper", "screen=code&thread=prompt3&theme=paper"],
+  ["2-programs-out", "screen=programs&zoom=out"],
+  ["3-programs-in", "screen=programs&zoom=in"],
+  ["4-code", "screen=code&thread=prompt3"],
+  ["5-past", "screen=thread&thread=prompt1&past=0.4"],
+  ["6-door", "screen=code&thread=prompt3&door=1"],
+  ["7-thread-paper", "screen=thread&thread=prompt3&theme=paper"],
+  ["8-programs-paper", "screen=programs&theme=paper"],
+  ["9-picker", "picker=1"],
 ];
 
 await mkdir(out, { recursive: true });
@@ -25,7 +27,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
   for (const [name, query] of screens) {
     await page.goto(`http://localhost:4174/?${query}`);
-    await page.waitForTimeout(900);
+    await page.waitForTimeout(1200);
     await page.screenshot({ path: join(out, `${name}.png`) });
   }
 } finally {

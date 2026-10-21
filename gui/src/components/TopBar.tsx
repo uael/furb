@@ -1,6 +1,5 @@
 import { Braces, MessagesSquare, Workflow } from "lucide-react";
-import type { View } from "../data.ts";
-import { chainName } from "../data.ts";
+import { chainName, type Moment, threadState } from "../life.ts";
 import { Glyph } from "./Glyph.tsx";
 
 export type Mode = "thread" | "programs" | "code";
@@ -11,59 +10,27 @@ const modes: { id: Mode; label: string; icon: typeof Braces; key: string }[] = [
   { id: "code", label: "Code", icon: Braces, key: "3" },
 ];
 
-/** The life on its axis of time: one tick for each answer of a model, and the cursor, which is now while the life is
- * live. */
-function Time({ view }: { view: View }) {
-  const { at, len } = view.life;
-  const live = at >= len;
-  return (
-    <div className="flex items-center gap-2.5">
-      <div className="relative h-6 w-[148px]" title={`Fact ${at} of ${len}`}>
-        <div className="absolute top-1/2 right-0 left-0 h-px bg-hair-strong" />
-        <div
-          className="absolute top-1/2 left-0 h-px bg-muted"
-          style={{ width: `${(at / Math.max(len, 1)) * 100}%` }}
-        />
-        <div
-          className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-bg bg-text"
-          style={{ left: `${(at / Math.max(len, 1)) * 100}%` }}
-        />
-      </div>
-      <span
-        className={`flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11.5px] ${
-          live ? "text-done" : "bg-accent/15 text-accent"
-        }`}
-      >
-        {live ? <span className="h-1.5 w-1.5 rounded-full bg-done" /> : null}
-        {live ? "Live" : "Back to now"}
-      </span>
-    </div>
-  );
-}
-
-/** The bar over the view: where the operator is, the switch of views, and time. */
+/** The bar over the view: the thread that the operator reads, and the switch of views. Each empty part of it moves
+ * the window. */
 export function TopBar({
-  view,
+  moment,
   thread,
   mode,
   onMode,
 }: {
-  view: View;
+  moment: Moment;
   thread: string;
   mode: Mode;
   onMode: (mode: Mode) => void;
 }) {
-  const held = view.threads.find((one) => one.id === thread);
+  const held = moment.threads.find((one) => one.act.id === thread);
   return (
-    <header
-      data-tauri-drag-region
-      className="flex h-[46px] shrink-0 items-center gap-4 border-b border-hair px-5"
-    >
+    <header data-tauri-drag-region className="flex h-[46px] shrink-0 items-center gap-4 px-5">
       <div data-tauri-drag-region className="flex min-w-0 flex-1 items-center gap-2 text-[13px]">
         {held ? (
           <>
-            <Glyph state={held.state} size={11} />
-            <span className="shrink-0 text-faint">{chainName(view, held.chain)}</span>
+            <Glyph state={threadState(moment, held)} size={11} />
+            <span className="shrink-0 text-faint">{chainName(moment, held.chain)}</span>
             <span className="text-faint">/</span>
             <span className="truncate font-medium text-text">{held.title}</span>
           </>
@@ -85,9 +52,7 @@ export function TopBar({
           </button>
         ))}
       </nav>
-      <div data-tauri-drag-region className="flex flex-1 justify-end">
-        <Time view={view} />
-      </div>
+      <div data-tauri-drag-region className="flex-1" />
     </header>
   );
 }

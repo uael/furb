@@ -1,78 +1,128 @@
-import { ChevronDown, Plus } from "lucide-react";
-import { chainName, type Thread, type View } from "../data.ts";
+import { actState } from "@furb/engine/life";
+import * as Menu from "@radix-ui/react-dropdown-menu";
+import { ChevronDown, FolderOpen, Plus } from "lucide-react";
+import { call, dollars } from "../data.ts";
+import { chainName, glyphOf, type Held, type Moment, threadState } from "../life.ts";
+import { clip } from "../steps.ts";
 import { Glyph } from "./Glyph.tsx";
+import { Tip } from "./Tip.tsx";
 
-/** The progress of a thread as its steps: one tick each, colored by how it ended. */
-function Ticks({ thread }: { thread: Thread }) {
-  const ticks = thread.ladder.slice(-6);
-  if (ticks.length === 0) return null;
-  return (
-    <span
-      className="flex items-center gap-[3px]"
-      title={`${thread.steps.done} of ${thread.steps.all} steps ended well`}
-    >
-      {ticks.map((step) => (
-        <span
-          key={step.id}
-          className="h-[10px] w-[3px] rounded-full"
-          style={{
-            background:
-              step.state === "done"
-                ? "var(--done)"
-                : step.state === "failed"
-                  ? "var(--failed)"
-                  : step.state === "asks"
-                    ? "var(--asks)"
-                    : "var(--accent)",
-            opacity: step.state === "done" ? 0.55 : 1,
-          }}
-        />
+const tickColors = { done: "var(--done)", failed: "var(--failed)", asks: "var(--asks)" } as const;
+const tickWords: Record<string, string> = {
+  done: "ended well",
+  failed: "failed",
+  asks: "asks you",
+  paused: "is paused",
+  runs: "runs",
+  rest: "was cancelled",
+  waits: "waits",
+};
+
+/** The steps of a thread as ticks, one for each of its last six steps, colored by how each ended, with a tip that
+ * says so. */
+function Ticks({ moment, thread }: { moment: Moment; thread: string }) {
+  const rungs = moment.acts.filter((act) => act.kind === "rung" && act.by === thread);
+  if (rungs.length === 0) return null;
+  const states = rungs.map((rung) => glyphOf(actState(rung, moment.owed)));
+  const first = Math.max(0, rungs.length - 6);
+  const tip = (
+    <div className="space-y-0.5">
+      <div className="text-faint">
+        {rungs.length === 1 ? "One step" : `${rungs.length} steps`}, the last {Math.min(6, rungs.length)} here
+      </div>
+      {states.slice(first).map((state, n) => (
+        <div key={rungs[first + n]?.id}>
+          Step {first + n + 1} {tickWords[state] ?? state}
+        </div>
       ))}
-    </span>
+    </div>
+  );
+  return (
+    <Tip text={tip} side="right">
+      <span className="flex items-center gap-[3px] px-0.5 py-1">
+        {states.slice(first).map((state, n) => (
+          <span
+            key={rungs[first + n]?.id}
+            className="h-[10px] w-[3px] rounded-full"
+            style={{
+              background: tickColors[state as keyof typeof tickColors] ?? "var(--accent)",
+              opacity: state === "done" ? 0.55 : 1,
+            }}
+          />
+        ))}
+      </span>
+    </Tip>
   );
 }
 
-/** The rail: the life and what it spent, then its threads as a tree, the questions that wait for you first. */
+/** The rail: the life and what it spent, the questions that wait for you, and the threads as a tree. */
 export function Rail({
-  view,
+  held,
+  moment,
   selected,
   onSelect,
   onNew,
 }: {
-  view: View;
+  held: Held;
+  moment: Moment;
   selected: string;
   onSelect: (thread: string) => void;
   onNew: () => void;
 }) {
-  const { life } = view;
-  const owed = view.threads.filter((one) => life.owed.includes(one.id));
-  const share = life.ceiling ? Math.min(life.spent / life.ceiling, 1) : 0;
+  const owed = moment.threads.filter((one) => moment.owed.has(one.act.id));
+  const spent = Object.values(held.measures).reduce((sum, one) => sum + one.dollars, 0);
+  const ceiling = held.measures[held.root]?.ceiling;
+  const share = ceiling ? Math.min(spent / ceiling, 1) : 0;
+  const live = held.works && moment.now;
   return (
     <aside className="flex h-full w-[272px] shrink-0 flex-col bg-rail">
       <div data-tauri-drag-region className="h-[46px] shrink-0" />
-      <div className="px-4 pb-3">
-        <button
-          type="button"
-          className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-text/5"
-        >
-          <span className="grid h-6 w-6 place-items-center rounded-md bg-accent text-[13px] font-semibold text-accent-ink">
-            f
-          </span>
-          <span className="flex-1 truncate text-[14px] font-semibold">{life.place}</span>
-          <ChevronDown size={14} className="text-faint" />
-        </button>
+      <div data-tauri-drag-region className="px-4 pb-3">
+        <Menu.Root>
+          <Menu.Trigger asChild>
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left outline-none hover:bg-text/5"
+            >
+              <span className="grid h-6 w-6 place-items-center rounded-md bg-accent text-[13px] font-semibold text-accent-ink">
+                f
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[14px] font-semibold">{held.place}</span>
+                {held.works ? null : <span className="block text-[11.5px] text-faint">A record to read</span>}
+              </span>
+              <ChevronDown size={14} className="text-faint" />
+            </button>
+          </Menu.Trigger>
+          <Menu.Portal>
+            <Menu.Content
+              align="start"
+              sideOffset={4}
+              className="z-50 min-w-[220px] rounded-xl border border-hair bg-raised p-1 text-[13px] shadow-[var(--shadow)]"
+            >
+              <Menu.Item
+                onSelect={() => void call("close")}
+                className="flex cursor-default items-center gap-2 rounded-lg px-2.5 py-1.5 outline-none data-[highlighted]:bg-text/5"
+              >
+                <FolderOpen size={14} strokeWidth={1.8} />
+                Open another life
+              </Menu.Item>
+            </Menu.Content>
+          </Menu.Portal>
+        </Menu.Root>
       </div>
-      <div className="px-4">
-        <button
-          type="button"
-          onClick={onNew}
-          className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-[13.5px] text-muted hover:bg-text/5 hover:text-text"
-        >
-          <Plus size={15} strokeWidth={1.8} />
-          New thread
-          <kbd className="ml-auto font-sans text-[11px] text-faint">A</kbd>
-        </button>
-      </div>
+      {live ? (
+        <div className="px-4">
+          <button
+            type="button"
+            onClick={onNew}
+            className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-[13.5px] text-muted hover:bg-text/5 hover:text-text"
+          >
+            <Plus size={15} strokeWidth={1.8} />
+            New thread
+          </button>
+        </div>
+      ) : null}
       {owed.length > 0 ? (
         <div className="mx-4 mt-4 rounded-xl border border-asks/25 bg-asks/[0.07] p-1.5">
           <div className="px-2 pt-1 pb-1.5 text-[11.5px] font-medium text-asks">
@@ -80,9 +130,9 @@ export function Rail({
           </div>
           {owed.map((thread) => (
             <button
-              key={thread.id}
+              key={thread.act.id}
               type="button"
-              onClick={() => onSelect(thread.id)}
+              onClick={() => onSelect(thread.act.id)}
               className="flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] leading-snug hover:bg-asks/10"
             >
               <span className="pt-[3px]">
@@ -95,38 +145,48 @@ export function Rail({
       ) : null}
       <div className="mt-5 px-6 pb-1.5 text-[11.5px] text-faint">Threads</div>
       <nav className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
-        {view.threads.map((thread) => {
-          const on = thread.id === selected;
+        {moment.threads.map((thread) => {
+          const on = thread.act.id === selected;
+          const to = thread.to === "operator" ? "asks you" : chainName(moment, thread.chain);
           return (
-            <button
-              key={thread.id}
-              type="button"
-              onClick={() => onSelect(thread.id)}
-              className={`group relative flex w-full items-center gap-2.5 rounded-lg py-[7px] pr-2 text-left transition-colors duration-150 ${
-                on ? "bg-panel shadow-[var(--shadow)]" : "hover:bg-text/[0.04]"
-              }`}
-              style={{ paddingLeft: 8 + thread.depth * 16 }}
+            <Tip
+              key={thread.act.id}
+              side="right"
+              text={
+                thread.title.length > 30 ? (
+                  <span className="block whitespace-pre-wrap">
+                    {clip(String(thread.act.words[1] ?? ""), 400)}
+                  </span>
+                ) : null
+              }
             >
-              {thread.depth > 0 ? (
-                <span
-                  className="absolute top-0 bottom-0 w-px bg-hair"
-                  style={{ left: 13 + (thread.depth - 1) * 16 }}
-                  aria-hidden
-                />
-              ) : null}
-              <Glyph state={thread.state} size={12} title />
-              <span className="min-w-0 flex-1">
-                <span
-                  className={`block truncate text-[13.5px] ${on ? "text-text" : "text-muted group-hover:text-text"}`}
-                >
-                  {thread.title}
+              <button
+                type="button"
+                onClick={() => onSelect(thread.act.id)}
+                className={`group relative flex w-full items-center gap-2.5 rounded-lg py-[7px] pr-1.5 text-left transition-colors duration-150 ${
+                  on ? "bg-panel shadow-[var(--shadow)]" : "hover:bg-text/[0.04]"
+                }`}
+                style={{ paddingLeft: 8 + Math.min(thread.depth, 6) * 14 }}
+              >
+                {thread.depth > 0 ? (
+                  <span
+                    className="absolute top-0 bottom-0 w-px bg-hair"
+                    style={{ left: 13 + (Math.min(thread.depth, 6) - 1) * 14 }}
+                    aria-hidden
+                  />
+                ) : null}
+                <Glyph state={threadState(moment, thread)} size={12} />
+                <span className="min-w-0 flex-1">
+                  <span
+                    className={`block truncate text-[13.5px] ${on ? "text-text" : "text-muted group-hover:text-text"}`}
+                  >
+                    {thread.title}
+                  </span>
+                  <span className="block truncate text-[11.5px] text-faint">{to}</span>
                 </span>
-                <span className="block truncate text-[11.5px] text-faint">
-                  {thread.to === "operator" ? "asks you" : chainName(view, thread.chain)}
-                </span>
-              </span>
-              <Ticks thread={thread} />
-            </button>
+                <Ticks moment={moment} thread={thread.act.id} />
+              </button>
+            </Tip>
           );
         })}
       </nav>
@@ -134,8 +194,8 @@ export function Rail({
         <div className="flex items-baseline justify-between text-[12px]">
           <span className="text-muted">Spent</span>
           <span className="tabular font-mono text-[12px] text-text">
-            ${life.spent.toFixed(2)}
-            {life.ceiling ? <span className="text-faint"> of ${life.ceiling.toFixed(2)}</span> : null}
+            {dollars(spent)}
+            {ceiling ? <span className="text-faint"> of {dollars(ceiling)}</span> : null}
           </span>
         </div>
         <div className="mt-2 h-[3px] overflow-hidden rounded-full bg-hair">

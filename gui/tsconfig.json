@@ -12,7 +12,11 @@
     "resolveJsonModule": true,
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
-    "types": []
+    "types": [],
+    "paths": {
+      "@furb/engine/life": ["../bind/typescript/src/life/index.ts"],
+      "@fixture": ["./src/data/demo.json"]
+    }
   },
   "include": ["src", "vite.config.ts"]
 }

@@ -1,730 +1,1476 @@
 {
-  "life": {
-    "place": "fieldnotes",
-    "root": "chain1",
-    "at": 262,
-    "len": 262,
-    "spent": 0.663,
-    "ceiling": 2.0,
-    "works": true,
-    "owed": [
-      "prompt4"
-    ]
-  },
-  "threads": [
-    {
-      "id": "prompt1",
-      "depth": 0,
-      "state": "waits",
-      "title": "Add a search shortcut to Fieldnotes, with a test. Give each part to a worker of its own.",
-      "shape": "str",
-      "chain": "chain1",
-      "to": "chain1",
-      "from": "operator",
-      "rung": "operator",
-      "steps": {
-        "done": 1,
-        "failed": 0,
-        "all": 2
-      },
-      "answer": null,
-      "failed": false,
-      "messages": [
-        "prompt2 done"
-      ],
-      "ladder": [
-        {
-          "id": "rung1",
-          "state": "done",
-          "said": "Read 1 file, waited, asked 2 threads",
-          "lines": [
-            {
-              "text": "notes = read(\"README.md\")",
-              "here": false,
-              "acts": [
-                {
-                  "id": "read1",
-                  "kind": "read",
-                  "state": "done",
-                  "summary": "6 lines"
-                }
-              ]
-            },
-            {
-              "text": "shortcut = prompt(str, \"Add SHORTCUT = 'Ctrl+K' to src/search.ts, and close with what you changed.\", on=chain(\"w shortcut\"))",
-              "here": false,
-              "acts": [
-                {
-                  "id": "chain2",
-                  "kind": "chain",
-                  "state": "runs",
-                  "summary": "runs"
-                },
-                {
-                  "id": "prompt2",
-                  "kind": "prompt",
-                  "state": "done",
-                  "summary": "'src/search.ts exports SHORTCUT at line 4'"
-                },
-                {
-                  "id": "chain3",
-                  "kind": "chain",
-                  "state": "runs",
-                  "summary": "runs"
-                },
-                {
-                  "id": "prompt3",
-                  "kind": "prompt",
-                  "state": "waits",
-                  "summary": "waits on chain3"
-                }
-              ]
-            },
-            {
-              "text": "test = prompt(str, \"Write test/shortcut.test.ts for SHORTCUT, run it, and close with the result.\", on=chain(\"w test\"))",
-              "here": false,
-              "acts": []
-            },
-            {
-              "text": "first = await wait(120, shortcut, test)",
-              "here": false,
-              "acts": [
-                {
-                  "id": "wait1",
-                  "kind": "wait",
-                  "state": "done",
-                  "summary": "'prompt2'"
-                }
-              ]
-            },
-            {
-              "text": "debug(t\"{first=}\")",
-              "here": false,
-              "acts": []
-            }
-          ],
-          "findings": null,
-          "raised": null,
-          "thinks": false,
-          "asks": [
-            "prompt2",
-            "prompt3"
-          ],
-          "awaits": null
-        },
-        {
-          "id": "rung7",
-          "state": "waits",
-          "said": "parts = [await shortcut, await test]",
-          "lines": [
-            {
-              "text": "parts = [await shortcut, await test]",
-              "here": true,
-              "acts": []
-            },
-            {
-              "text": "check = await bash(\"sleep 1; grep -c SHORTCUT src/search.ts test/shortcut.test.ts\")",
-              "here": false,
-              "acts": []
-            },
-            {
-              "text": "close(\"Both parts landed.\\n\" + \"\\n\".join(parts) + \"\\n\" + check.stdout.content)",
-              "here": false,
-              "acts": []
-            }
-          ],
-          "findings": null,
-          "raised": null,
-          "thinks": false,
-          "asks": [],
-          "awaits": "prompt3"
-        }
-      ]
-    },
-    {
-      "id": "prompt2",
-      "depth": 1,
-      "state": "done",
-      "title": "Add SHORTCUT = 'Ctrl+K' to src/search.ts, and close with what you changed.",
-      "shape": "str",
-      "chain": "chain2",
-      "to": "chain2",
-      "from": "chain1",
-      "rung": "rung1",
-      "steps": {
-        "done": 1,
-        "failed": 1,
-        "all": 2
-      },
-      "answer": "src/search.ts exports SHORTCUT at line 4",
-      "failed": false,
-      "messages": [],
-      "ladder": [
-        {
-          "id": "rung2",
-          "state": "failed",
-          "said": "The gate refused this word",
-          "lines": [
-            {
-              "text": "```python",
-              "here": false,
-              "acts": []
-            },
-            {
-              "text": "source = read(\"src/search.ts\")",
-              "here": false,
-              "acts": []
-            },
-            {
-              "text": "```",
-              "here": false,
-              "acts": []
-            }
-          ],
-          "findings": "line 1: Got unexpected token ` (<string>, line 1); a reply is python and quotes only, with no fence, no markup and no prose, in '```python'",
-          "raised": null,
-          "thinks": false,
-          "asks": [],
-          "awaits": null
-        },
-        {
-          "id": "rung5",
-          "state": "done",
-          "said": "Read 1 file, wrote 1 file, ran 1 command",
-          "lines": [
-            {
-              "text": "source = read(\"src/search.ts\")",
-              "here": false,
-              "acts": [
-                {
-                  "id": "read3",
-                  "kind": "read",
-                  "state": "done",
-                  "summary": "3 lines"
-                }
-              ]
-            },
-            {
-              "text": "write(source.append('export const SHORTCUT = \"Ctrl+K\";'))",
-              "here": false,
-              "acts": [
-                {
-                  "id": "write1",
-                  "kind": "write",
-                  "state": "done",
-                  "summary": "4 lines"
-                }
-              ]
-            },
-            {
-              "text": "check = await bash(\"sleep 2; grep -n SHORTCUT src/search.ts\")",
-              "here": false,
-              "acts": [
-                {
-                  "id": "bash1",
-                  "kind": "bash",
-                  "state": "done",
-                  "summary": "exit 0, 4:export const SHORTCUT = \"Ctrl+K\";"
-                }
-              ]
-            },
-            {
-              "text": "close(\"src/search.ts exports SHORTCUT at line \" + check.stdout.content.split(\":\")[0])",
-              "here": false,
-              "acts": []
-            }
-          ],
-          "findings": null,
-          "raised": null,
-          "thinks": false,
-          "asks": [],
-          "awaits": null
-        }
-      ]
-    },
-    {
-      "id": "prompt3",
-      "depth": 1,
-      "state": "asks",
-      "title": "Write test/shortcut.test.ts for SHORTCUT, run it, and close with the result.",
-      "shape": "str",
-      "chain": "chain3",
-      "to": "chain3",
-      "from": "chain1",
-      "rung": "rung1",
-      "steps": {
-        "done": 0,
-        "failed": 1,
-        "all": 2
-      },
-      "answer": null,
-      "failed": false,
-      "messages": [],
-      "ladder": [
-        {
-          "id": "rung3",
-          "state": "failed",
-          "said": "There is no file at test/shortcut.test.ts",
-          "lines": [
-            {
-              "text": "spec = read(\"test/shortcut.test.ts\")",
-              "here": false,
-              "acts": [
-                {
-                  "id": "read2",
-                  "kind": "read",
-                  "state": "failed",
-                  "summary": "Refused: There is no file at /Users/uael/Library/Caches/furb/scratch…"
-                }
-              ]
-            }
-          ],
-          "findings": null,
-          "raised": "Refused('There is no file at /Users/uael/Library/Caches/furb/scratch/62547b369c96589a/furb-gui-45417-1792593516339710000/fieldnotes/test/shortcut.test.ts.')",
-          "thinks": false,
-          "asks": [],
-          "awaits": null
-        },
-        {
-          "id": "rung4",
-          "state": "asks",
-          "said": "Ran 1 command, asked you",
-          "lines": [
-            {
-              "text": "runner = await bash(\"sleep 1; printf 'bun test: ready\\n'\")",
-              "here": false,
-              "acts": [
-                {
-                  "id": "bash2",
-                  "kind": "bash",
-                  "state": "done",
-                  "summary": "exit 0, bun test: ready"
-                }
-              ]
-            },
-            {
-              "text": "key = await prompt(str, \"The test needs the key. Which key does SHORTCUT hold?\", to=OPERATOR)",
-              "here": true,
-              "acts": [
-                {
-                  "id": "prompt4",
-                  "kind": "prompt",
-                  "state": "asks",
-                  "summary": "asks you"
-                }
-              ]
-            },
-            {
-              "text": "spec = 'import { expect, test } from \"bun:test\";\\nimport { SHORTCUT } from \"../src/search.ts\";\\n\\ntest(\"shortcut\", () => expect(SHORTCUT).toBe(\"' + key + '\"));\\n'",
-              "here": false,
-              "acts": []
-            },
-            {
-              "text": "write(Text(\"test/shortcut.test.ts\", spec))",
-              "here": false,
-              "acts": []
-            },
-            {
-              "text": "run = await bash(\"sleep 3; printf '1 pass\\n'\")",
-              "here": false,
-              "acts": []
-            },
-            {
-              "text": "close(\"test/shortcut.test.ts expects \" + key + \": \" + run.stdout.content.strip())",
-              "here": false,
-              "acts": []
-            }
-          ],
-          "findings": null,
-          "raised": null,
-          "thinks": false,
-          "asks": [
-            "prompt4"
-          ],
-          "awaits": "prompt4"
-        }
-      ]
-    },
-    {
-      "id": "prompt4",
-      "depth": 2,
-      "state": "asks",
-      "title": "The test needs the key. Which key does SHORTCUT hold?",
-      "shape": "str",
-      "chain": "chain3",
-      "to": "operator",
-      "from": "chain3",
-      "rung": "rung4",
-      "steps": {
-        "done": 0,
-        "failed": 0,
-        "all": 0
-      },
-      "answer": null,
-      "failed": false,
-      "messages": [],
-      "ladder": []
-    }
-  ],
-  "chains": [
+  "state": "open",
+  "generation": 0,
+  "said": [],
+  "from": 0,
+  "count": 134,
+  "len": 454,
+  "root": "chain1",
+  "place": "fieldnotes",
+  "directory": "/Users/uael/Library/Caches/furb/scratch/62547b369c96589a/furb-gui-17444-1792604875958005000/fieldnotes",
+  "works": true,
+  "acts": [
     {
       "id": "chain1",
-      "label": "root",
-      "parent": "",
-      "depth": 0,
-      "state": "waits",
-      "actor": "claude-cli:sonnet/high",
-      "cost": 0.369,
-      "share": 0.062,
-      "threads": [
-        "prompt1"
+      "kind": "chain",
+      "by": "operator",
+      "on": "chain1",
+      "words": [
+        "root",
+        ""
       ],
+      "done": false,
+      "value": null,
       "paused": false,
-      "stack": [
-        {
-          "act": "rung7",
-          "chain": "chain1",
-          "awaits": "prompt3"
-        },
-        {
-          "act": "prompt1",
-          "chain": "chain1",
-          "awaits": null
-        }
-      ],
-      "watch": [
-        {
-          "name": "grant1_spent",
-          "value": "0.369",
-          "fresh": false
-        },
-        {
-          "name": "rung7_share",
-          "value": "0.04",
-          "fresh": false
-        },
-        {
-          "name": "rung6_share",
-          "value": "0.02",
-          "fresh": false
-        },
-        {
-          "name": "rung1_debug",
-          "value": "\"first='prompt2'\"",
-          "fresh": false
-        },
-        {
-          "name": "prompt5",
-          "value": "Act[None]",
-          "fresh": false
-        },
-        {
-          "name": "prompt5_message",
-          "value": "'prompt2 done'",
-          "fresh": false
-        },
-        {
-          "name": "prompt2_value",
-          "value": "'src/search.ts exports SHORTCUT at line 4'",
-          "fresh": false
-        },
-        {
-          "name": "read1_text",
-          "value": "# Fieldnotes\n\nA small place to keep ideas.\n\n- Capture a thought\n- Find it when it matters",
-          "fresh": false
-        },
-        {
-          "name": "read1_path",
-          "value": "'README.md'",
-          "fresh": false
-        },
-        {
-          "name": "prompt1",
-          "value": "Act[str]",
-          "fresh": false
-        },
-        {
-          "name": "prompt1_message",
-          "value": "'Add a search shortcut to Fieldnotes, with a test. Give each part to a worker of its own.'",
-          "fresh": false
-        },
-        {
-          "name": "grant1",
-          "value": "Act[None]",
-          "fresh": false
-        },
-        {
-          "name": "grant1_usd",
-          "value": "2.0",
-          "fresh": false
-        },
-        {
-          "name": "chain1_actor",
-          "value": "'claude-cli:sonnet/high'",
-          "fresh": false
-        },
-        {
-          "name": "chain1_cwd",
-          "value": "'/Users/uael/Library/Caches/furb/scratch/62547b369c96589a/furb-gui-45417-1792593516339710000/fieldnotes'",
-          "fresh": false
-        },
-        {
-          "name": "chain1_roster",
-          "value": "[['claude-cli:sonnet', ['low', 'medium', 'high', 'xhigh', 'max'], 1000000], ['claude-cli:opus', ['low', 'medium', 'high', 'xhigh', 'max'], 1000000], ['claude-cli:haiku', ['low', 'medium', 'high', 'xhigh', 'max'], 200000], ['operator', [], 200000]]",
-          "fresh": false
-        },
-        {
-          "name": "chain1",
-          "value": "Act[object]",
-          "fresh": false
-        },
-        {
-          "name": "chain1_label",
-          "value": "'root'",
-          "fresh": false
-        }
-      ]
+      "began": 1,
+      "ended": null
     },
     {
-      "id": "chain2",
-      "label": "w shortcut",
-      "parent": "chain1",
-      "depth": 1,
-      "state": "done",
-      "actor": "claude-cli:sonnet/high",
-      "cost": 0.147,
-      "share": 0.035,
-      "threads": [
-        "prompt2"
+      "id": "grant1",
+      "kind": "grant",
+      "by": "operator",
+      "on": "chain1",
+      "words": [
+        2.0,
+        null
       ],
+      "done": false,
+      "value": null,
       "paused": false,
-      "stack": [],
-      "watch": [
-        {
-          "name": "prompt2_value",
-          "value": "'src/search.ts exports SHORTCUT at line 4'",
-          "fresh": false
-        },
-        {
-          "name": "bash1_stdout",
-          "value": "'4:export const SHORTCUT = \"Ctrl+K\";'",
-          "fresh": false
-        },
-        {
-          "name": "bash1",
-          "value": "Act[Exit]",
-          "fresh": false
-        },
-        {
-          "name": "bash1_command",
-          "value": "'sleep 2; grep -n SHORTCUT src/search.ts'",
-          "fresh": false
-        },
-        {
-          "name": "write1_path",
-          "value": "'/Users/uael/Library/Caches/furb/scratch/62547b369c96589a/furb-gui-45417-1792593516339710000/fieldnotes/src/search.ts'",
-          "fresh": false
-        },
-        {
-          "name": "read3_text",
-          "value": "import { load } from \"./storage.ts\";\n\nexport const search = (query: string) => load().filter((note) => note.text.includes(query));",
-          "fresh": false
-        },
-        {
-          "name": "read3_path",
-          "value": "'src/search.ts'",
-          "fresh": false
-        },
-        {
-          "name": "rung5_share",
-          "value": "0.01",
-          "fresh": false
-        },
-        {
-          "name": "rung2_value",
-          "value": "Refused()",
-          "fresh": false
-        },
-        {
-          "name": "rung2_findings",
-          "value": "\"line 1: Got unexpected token ` (<string>, line 1); a reply is python and quotes only, with no fence, no markup and no prose, in '```python'\"",
-          "fresh": false
-        },
-        {
-          "name": "prompt2",
-          "value": "Act[str]",
-          "fresh": false
-        },
-        {
-          "name": "prompt2_message",
-          "value": "\"Add SHORTCUT = 'Ctrl+K' to src/search.ts, and close with what you changed.\"",
-          "fresh": false
-        },
-        {
-          "name": "chain2_actor",
-          "value": "'claude-cli:sonnet/high'",
-          "fresh": false
-        },
-        {
-          "name": "chain2_cwd",
-          "value": "'/Users/uael/Library/Caches/furb/scratch/62547b369c96589a/furb-gui-45417-1792593516339710000/fieldnotes'",
-          "fresh": false
-        },
-        {
-          "name": "chain2_roster",
-          "value": "[['claude-cli:sonnet', ['low', 'medium', 'high', 'xhigh', 'max'], 1000000], ['claude-cli:opus', ['low', 'medium', 'high', 'xhigh', 'max'], 1000000], ['claude-cli:haiku', ['low', 'medium', 'high', 'xhigh', 'max'], 200000], ['operator', [], 200000]]",
-          "fresh": false
-        },
-        {
-          "name": "chain2",
-          "value": "Act[object]",
-          "fresh": false
-        },
-        {
-          "name": "chain2_label",
-          "value": "'w shortcut'",
-          "fresh": false
-        }
-      ]
+      "began": 11,
+      "ended": null
     },
     {
-      "id": "chain3",
-      "label": "w test",
-      "parent": "chain1",
-      "depth": 1,
-      "state": "asks",
-      "actor": "claude-cli:sonnet/high",
-      "cost": 0.147,
-      "share": 0.035,
-      "threads": [
+      "id": "prompt1",
+      "kind": "prompt",
+      "by": "operator",
+      "on": "chain1",
+      "words": [
+        "str",
+        "Add a search shortcut to Fieldnotes, with a test. Give each part to a worker of its own.",
+        ""
+      ],
+      "done": false,
+      "value": null,
+      "paused": false,
+      "began": 15,
+      "ended": null
+    },
+    {
+      "id": "rung1",
+      "kind": "rung",
+      "by": "prompt1",
+      "on": "chain1",
+      "words": [
+        "",
+        "",
+        "claude-cli:sonnet/high"
+      ],
+      "done": true,
+      "value": null,
+      "paused": false,
+      "began": 19,
+      "ended": 342,
+      "run": {
+        "status": "done",
+        "reason": ""
+      }
+    },
+    {
+      "id": "read1",
+      "kind": "read",
+      "by": "rung1",
+      "on": "chain1",
+      "words": [
+        "README.md"
+      ],
+      "done": true,
+      "value": {
+        "is": "Text",
+        "path": "/Users/uael/Library/Caches/furb/scratch/62547b369c96589a/furb-gui-17444-1792604875958005000/fieldnotes/README.md",
+        "content": "# Fieldnotes\n\nA small place to keep ideas.\n\n- Capture a thought\n- Find it when it matters\n"
+      },
+      "paused": false,
+      "began": 34,
+      "ended": 41
+    },
+    {
+      "id": "wait1",
+      "kind": "wait",
+      "by": "rung1",
+      "on": "chain1",
+      "words": [
+        120,
+        "prompt2",
         "prompt3",
         "prompt4"
       ],
+      "done": true,
+      "value": "prompt4",
       "paused": false,
-      "stack": [
-        {
-          "act": "rung4",
-          "chain": "chain3",
-          "awaits": "prompt4"
-        },
-        {
-          "act": "prompt3",
-          "chain": "chain3",
-          "awaits": null
-        },
-        {
-          "act": "rung1",
-          "chain": "chain1",
-          "awaits": null
-        },
-        {
-          "act": "prompt1",
-          "chain": "chain1",
-          "awaits": null
-        }
-      ],
-      "watch": [
-        {
-          "name": "prompt4",
-          "value": "Act[str]",
-          "fresh": false
-        },
-        {
-          "name": "prompt4_message",
-          "value": "'The test needs the key. Which key does SHORTCUT hold?'",
-          "fresh": false
-        },
-        {
-          "name": "bash2_stdout",
-          "value": "'bun test: ready'",
-          "fresh": false
-        },
-        {
-          "name": "bash2",
-          "value": "Act[Exit]",
-          "fresh": false
-        },
-        {
-          "name": "bash2_command",
-          "value": "sleep 1; printf 'bun test: ready\n'",
-          "fresh": false
-        },
-        {
-          "name": "rung4_share",
-          "value": "0.01",
-          "fresh": false
-        },
-        {
-          "name": "rung3_raised",
-          "value": "Refused('There is no file at /Users/uael/Library/Caches/furb/scratch/62547b369c96589a/furb-gui-45417-1792593516339710000/fieldnotes/test/shortcut.test.ts.')",
-          "fresh": false
-        },
-        {
-          "name": "prompt3",
-          "value": "Act[str]",
-          "fresh": false
-        },
-        {
-          "name": "prompt3_message",
-          "value": "'Write test/shortcut.test.ts for SHORTCUT, run it, and close with the result.'",
-          "fresh": false
-        },
-        {
-          "name": "chain3_actor",
-          "value": "'claude-cli:sonnet/high'",
-          "fresh": false
-        },
-        {
-          "name": "chain3_cwd",
-          "value": "'/Users/uael/Library/Caches/furb/scratch/62547b369c96589a/furb-gui-45417-1792593516339710000/fieldnotes'",
-          "fresh": false
-        },
-        {
-          "name": "chain3_roster",
-          "value": "[['claude-cli:sonnet', ['low', 'medium', 'high', 'xhigh', 'max'], 1000000], ['claude-cli:opus', ['low', 'medium', 'high', 'xhigh', 'max'], 1000000], ['claude-cli:haiku', ['low', 'medium', 'high', 'xhigh', 'max'], 200000], ['operator', [], 200000]]",
-          "fresh": false
-        },
-        {
-          "name": "chain3",
-          "value": "Act[object]",
-          "fresh": false
-        },
-        {
-          "name": "chain3_label",
-          "value": "'w test'",
-          "fresh": false
-        }
-      ]
-    }
-  ],
-  "edges": [
+      "began": 35,
+      "ended": 329
+    },
     {
-      "id": "prompt1",
-      "from": "operator",
-      "to": "chain1",
-      "rung": null,
-      "state": "waits"
+      "id": "chain2",
+      "kind": "chain",
+      "by": "rung1",
+      "on": "chain2",
+      "words": [
+        "w shortcut",
+        ""
+      ],
+      "done": false,
+      "value": null,
+      "paused": false,
+      "began": 43,
+      "ended": null
     },
     {
       "id": "prompt2",
-      "from": "chain1",
-      "to": "chain2",
-      "rung": "rung1",
-      "state": "done"
+      "kind": "prompt",
+      "by": "rung1",
+      "on": "chain2",
+      "words": [
+        "str",
+        "Add SHORTCUT = 'Ctrl+K' to src/search.ts, and close with what you changed.",
+        ""
+      ],
+      "done": true,
+      "value": "src/search.ts exports SHORTCUT at line 4. The review passes: one export of SHORTCUT, 1 line.",
+      "paused": false,
+      "began": 48,
+      "ended": 450
+    },
+    {
+      "id": "rung2",
+      "kind": "rung",
+      "by": "prompt2",
+      "on": "chain2",
+      "words": [
+        "",
+        "",
+        "claude-cli:sonnet/high"
+      ],
+      "done": true,
+      "value": {
+        "is": "Refused",
+        "args": []
+      },
+      "paused": false,
+      "began": 52,
+      "ended": 136,
+      "run": {
+        "status": "failed",
+        "reason": "line 1: Got unexpected token ` (<string>, line 1); a reply is python and quotes only, with no fence, no markup and no prose, in '```python'"
+      }
+    },
+    {
+      "id": "chain3",
+      "kind": "chain",
+      "by": "rung1",
+      "on": "chain3",
+      "words": [
+        "w test",
+        ""
+      ],
+      "done": false,
+      "value": null,
+      "paused": false,
+      "began": 54,
+      "ended": null
     },
     {
       "id": "prompt3",
-      "from": "chain1",
-      "to": "chain3",
-      "rung": "rung1",
-      "state": "asks"
+      "kind": "prompt",
+      "by": "rung1",
+      "on": "chain3",
+      "words": [
+        "str",
+        "Write test/shortcut.test.ts for SHORTCUT, run it, and close with the result.",
+        ""
+      ],
+      "done": false,
+      "value": null,
+      "paused": false,
+      "began": 59,
+      "ended": null
+    },
+    {
+      "id": "rung3",
+      "kind": "rung",
+      "by": "prompt3",
+      "on": "chain3",
+      "words": [
+        "",
+        "",
+        "claude-cli:sonnet/high"
+      ],
+      "done": true,
+      "value": {
+        "is": "Refused",
+        "args": [
+          "There is no file at /Users/uael/Library/Caches/furb/scratch/62547b369c96589a/furb-gui-17444-1792604875958005000/fieldnotes/test/shortcut.test.ts."
+        ]
+      },
+      "paused": false,
+      "began": 63,
+      "ended": 115,
+      "run": {
+        "status": "failed",
+        "reason": "Refused: There is no file at /Users/uael/Library/Caches/furb/scratch/62547b369c96589a/furb-gui-17444-1792604875958005000/fieldnotes/test/shortcut.test.ts."
+      }
+    },
+    {
+      "id": "chain4",
+      "kind": "chain",
+      "by": "rung1",
+      "on": "chain4",
+      "words": [
+        "w docs",
+        ""
+      ],
+      "done": false,
+      "value": null,
+      "paused": false,
+      "began": 65,
+      "ended": null
     },
     {
       "id": "prompt4",
-      "from": "chain3",
-      "to": "operator",
-      "rung": "rung4",
-      "state": "asks"
+      "kind": "prompt",
+      "by": "rung1",
+      "on": "chain4",
+      "words": [
+        "str",
+        "Tell the users of Fieldnotes about the search shortcut, and close with what you wrote.",
+        ""
+      ],
+      "done": true,
+      "value": "The docs name the shortcut.\nREADME.md now says: Press Ctrl+K to search\nCHANGELOG.md holds 3 lines",
+      "paused": false,
+      "began": 70,
+      "ended": 327
+    },
+    {
+      "id": "rung4",
+      "kind": "rung",
+      "by": "prompt4",
+      "on": "chain4",
+      "words": [
+        "",
+        "",
+        "claude-cli:sonnet/high"
+      ],
+      "done": true,
+      "value": {
+        "is": "CancelledError",
+        "args": []
+      },
+      "paused": false,
+      "began": 74,
+      "ended": 328,
+      "run": {
+        "status": "done",
+        "reason": ""
+      }
+    },
+    {
+      "id": "read2",
+      "kind": "read",
+      "by": "rung3",
+      "on": "chain3",
+      "words": [
+        "test/shortcut.test.ts"
+      ],
+      "done": true,
+      "value": {
+        "is": "Refused",
+        "args": [
+          "There is no file at /Users/uael/Library/Caches/furb/scratch/62547b369c96589a/furb-gui-17444-1792604875958005000/fieldnotes/test/shortcut.test.ts."
+        ]
+      },
+      "paused": false,
+      "began": 104,
+      "ended": 110
+    },
+    {
+      "id": "rung5",
+      "kind": "rung",
+      "by": "prompt3",
+      "on": "chain3",
+      "words": [
+        "",
+        "",
+        "claude-cli:sonnet/high"
+      ],
+      "done": false,
+      "value": null,
+      "paused": false,
+      "began": 117,
+      "ended": null,
+      "run": {
+        "status": "running",
+        "reason": ""
+      }
+    },
+    {
+      "id": "rung6",
+      "kind": "rung",
+      "by": "prompt2",
+      "on": "chain2",
+      "words": [
+        "",
+        "",
+        "claude-cli:sonnet/high"
+      ],
+      "done": true,
+      "value": {
+        "is": "CancelledError",
+        "args": []
+      },
+      "paused": false,
+      "began": 138,
+      "ended": 451,
+      "run": {
+        "status": "done",
+        "reason": ""
+      }
+    },
+    {
+      "id": "chain5",
+      "kind": "chain",
+      "by": "rung4",
+      "on": "chain5",
+      "words": [
+        "w readme",
+        ""
+      ],
+      "done": false,
+      "value": null,
+      "paused": false,
+      "began": 156,
+      "ended": null
+    },
+    {
+      "id": "prompt5",
+      "kind": "prompt",
+      "by": "rung4",
+      "on": "chain5",
+      "words": [
+        "str",
+        "Add a line on the search shortcut to README.md, and close with the line.",
+        ""
+      ],
+      "done": true,
+      "value": "README.md now says: Press Ctrl+K to search",
+      "paused": false,
+      "began": 161,
+      "ended": 267
+    },
+    {
+      "id": "rung7",
+      "kind": "rung",
+      "by": "prompt5",
+      "on": "chain5",
+      "words": [
+        "",
+        "",
+        "claude-cli:sonnet/high"
+      ],
+      "done": true,
+      "value": {
+        "is": "CancelledError",
+        "args": []
+      },
+      "paused": false,
+      "began": 165,
+      "ended": 268,
+      "run": {
+        "status": "done",
+        "reason": ""
+      }
+    },
+    {
+      "id": "chain6",
+      "kind": "chain",
+      "by": "rung4",
+      "on": "chain6",
+      "words": [
+        "w changelog",
+        ""
+      ],
+      "done": false,
+      "value": null,
+      "paused": false,
+      "began": 167,
+      "ended": null
+    },
+    {
+      "id": "prompt6",
+      "kind": "prompt",
+      "by": "rung4",
+      "on": "chain6",
+      "words": [
+        "str",
+        "Start CHANGELOG.md with the search shortcut, and close with what you wrote.",
+        ""
+      ],
+      "done": true,
+      "value": "CHANGELOG.md holds 3 lines",
+      "paused": false,
+      "began": 172,
+      "ended": 321
+    },
+    {
+      "id": "rung8",
+      "kind": "rung",
+      "by": "prompt6",
+      "on": "chain6",
+      "words": [
+        "",
+        "",
+        "claude-cli:sonnet/high"
+      ],
+      "done": true,
+      "value": {
+        "is": "CancelledError",
+        "args": []
+      },
+      "paused": false,
+      "began": 176,
+      "ended": 322,
+      "run": {
+        "status": "done",
+        "reason": ""
+      }
+    },
+    {
+      "id": "bash1",
+      "kind": "bash",
+      "by": "rung5",
+      "on": "chain3",
+      "words": [
+        "sleep 1; printf 'bun test: ready\n'",
+        "",
+        600.0
+      ],
+      "done": true,
+      "value": {
+        "is": "Exit",
+        "code": 0,
+        "stdout": {
+          "is": "Text",
+          "path": "bash1/stdout",
+          "content": "bun test: ready\n"
+        },
+        "stderr": {
+          "is": "Text",
+          "path": "bash1/stderr",
+          "content": ""
+        }
+      },
+      "paused": false,
+      "began": 195,
+      "ended": 301
+    },
+    {
+      "id": "read3",
+      "kind": "read",
+      "by": "rung6",
+      "on": "chain2",
+      "words": [
+        "src/search.ts"
+      ],
+      "done": true,
+      "value": {
+        "is": "Text",
+        "path": "/Users/uael/Library/Caches/furb/scratch/62547b369c96589a/furb-gui-17444-1792604875958005000/fieldnotes/src/search.ts",
+        "content": "import { load } from \"./storage.ts\";\n\nexport const search = (query: string) => load().filter((note) => note.text.includes(query));\n"
+      },
+      "paused": false,
+      "began": 217,
+      "ended": 225
+    },
+    {
+      "id": "write1",
+      "kind": "write",
+      "by": "rung6",
+      "on": "chain2",
+      "words": [
+        {
+          "is": "Text",
+          "path": "/Users/uael/Library/Caches/furb/scratch/62547b369c96589a/furb-gui-17444-1792604875958005000/fieldnotes/src/search.ts",
+          "content": "import { load } from \"./storage.ts\";\n\nexport const search = (query: string) => load().filter((note) => note.text.includes(query));\nexport const SHORTCUT = \"Ctrl+K\";\n"
+        }
+      ],
+      "done": true,
+      "value": {
+        "is": "Text",
+        "path": "/Users/uael/Library/Caches/furb/scratch/62547b369c96589a/furb-gui-17444-1792604875958005000/fieldnotes/src/search.ts",
+        "content": "import { load } from \"./storage.ts\";\n\nexport const search = (query: string) => load().filter((note) => note.text.includes(query));\nexport const SHORTCUT = \"Ctrl+K\";\n"
+      },
+      "paused": false,
+      "began": 218,
+      "ended": 227
+    },
+    {
+      "id": "bash2",
+      "kind": "bash",
+      "by": "rung6",
+      "on": "chain2",
+      "words": [
+        "sleep 2; grep -n SHORTCUT src/search.ts",
+        "",
+        600.0
+      ],
+      "done": true,
+      "value": {
+        "is": "Exit",
+        "code": 0,
+        "stdout": {
+          "is": "Text",
+          "path": "bash2/stdout",
+          "content": "4:export const SHORTCUT = \"Ctrl+K\";\n"
+        },
+        "stderr": {
+          "is": "Text",
+          "path": "bash2/stderr",
+          "content": ""
+        }
+      },
+      "paused": false,
+      "began": 219,
+      "ended": 372
+    },
+    {
+      "id": "read4",
+      "kind": "read",
+      "by": "rung7",
+      "on": "chain5",
+      "words": [
+        "README.md"
+      ],
+      "done": true,
+      "value": {
+        "is": "Text",
+        "path": "/Users/uael/Library/Caches/furb/scratch/62547b369c96589a/furb-gui-17444-1792604875958005000/fieldnotes/README.md",
+        "content": "# Fieldnotes\n\nA small place to keep ideas.\n\n- Capture a thought\n- Find it when it matters\n"
+      },
+      "paused": false,
+      "began": 249,
+      "ended": 256
+    },
+    {
+      "id": "write2",
+      "kind": "write",
+      "by": "rung7",
+      "on": "chain5",
+      "words": [
+        {
+          "is": "Text",
+          "path": "/Users/uael/Library/Caches/furb/scratch/62547b369c96589a/furb-gui-17444-1792604875958005000/fieldnotes/README.md",
+          "content": "# Fieldnotes\n\nA small place to keep ideas.\n\n- Capture a thought\n- Find it when it matters\n- Press Ctrl+K to search\n"
+        }
+      ],
+      "done": true,
+      "value": {
+        "is": "Text",
+        "path": "/Users/uael/Library/Caches/furb/scratch/62547b369c96589a/furb-gui-17444-1792604875958005000/fieldnotes/README.md",
+        "content": "# Fieldnotes\n\nA small place to keep ideas.\n\n- Capture a thought\n- Find it when it matters\n- Press Ctrl+K to search\n"
+      },
+      "paused": false,
+      "began": 250,
+      "ended": 258
+    },
+    {
+      "id": "write3",
+      "kind": "write",
+      "by": "rung8",
+      "on": "chain6",
+      "words": [
+        {
+          "is": "Text",
+          "path": "CHANGELOG.md",
+          "content": "# Changelog\n\n- Add the search shortcut, Ctrl+K.\n"
+        }
+      ],
+      "done": true,
+      "value": {
+        "is": "Text",
+        "path": "/Users/uael/Library/Caches/furb/scratch/62547b369c96589a/furb-gui-17444-1792604875958005000/fieldnotes/CHANGELOG.md",
+        "content": "# Changelog\n\n- Add the search shortcut, Ctrl+K.\n"
+      },
+      "paused": false,
+      "began": 279,
+      "ended": 286
+    },
+    {
+      "id": "bash3",
+      "kind": "bash",
+      "by": "rung8",
+      "on": "chain6",
+      "words": [
+        "sleep 1; wc -l < CHANGELOG.md",
+        "",
+        600.0
+      ],
+      "done": true,
+      "value": {
+        "is": "Exit",
+        "code": 0,
+        "stdout": {
+          "is": "Text",
+          "path": "bash3/stdout",
+          "content": "       3\n"
+        },
+        "stderr": {
+          "is": "Text",
+          "path": "bash3/stderr",
+          "content": ""
+        }
+      },
+      "paused": false,
+      "began": 280,
+      "ended": 314
+    },
+    {
+      "id": "prompt7",
+      "kind": "prompt",
+      "by": "rung5",
+      "on": "chain3",
+      "words": [
+        "str",
+        "The test needs the key. Which key does SHORTCUT hold?",
+        "operator"
+      ],
+      "done": false,
+      "value": null,
+      "paused": false,
+      "began": 302,
+      "ended": null
+    },
+    {
+      "id": "prompt8",
+      "kind": "prompt",
+      "by": "chain1",
+      "on": "chain1",
+      "words": [
+        "None",
+        "prompt4 done",
+        "claude-cli:sonnet/high"
+      ],
+      "done": true,
+      "value": null,
+      "paused": false,
+      "began": 332,
+      "ended": 364
+    },
+    {
+      "id": "rung9",
+      "kind": "rung",
+      "by": "prompt8",
+      "on": "chain1",
+      "words": [
+        "",
+        "",
+        "claude-cli:sonnet/high"
+      ],
+      "done": true,
+      "value": {
+        "is": "CancelledError",
+        "args": []
+      },
+      "paused": false,
+      "began": 335,
+      "ended": 365,
+      "run": {
+        "status": "done",
+        "reason": ""
+      }
+    },
+    {
+      "id": "rung10",
+      "kind": "rung",
+      "by": "prompt1",
+      "on": "chain1",
+      "words": [
+        "",
+        "",
+        "claude-cli:sonnet/high"
+      ],
+      "done": false,
+      "value": null,
+      "paused": false,
+      "began": 343,
+      "ended": null,
+      "run": {
+        "status": "running",
+        "reason": ""
+      }
+    },
+    {
+      "id": "chain7",
+      "kind": "chain",
+      "by": "rung6",
+      "on": "chain7",
+      "words": [
+        "w review",
+        ""
+      ],
+      "done": false,
+      "value": null,
+      "paused": false,
+      "began": 376,
+      "ended": null
+    },
+    {
+      "id": "prompt9",
+      "kind": "prompt",
+      "by": "rung6",
+      "on": "chain7",
+      "words": [
+        "str",
+        "Review the export of SHORTCUT in src/search.ts, and close with your verdict.",
+        ""
+      ],
+      "done": true,
+      "value": "The review passes: one export of SHORTCUT, 1 line.",
+      "paused": false,
+      "began": 381,
+      "ended": 444
+    },
+    {
+      "id": "rung11",
+      "kind": "rung",
+      "by": "prompt9",
+      "on": "chain7",
+      "words": [
+        "",
+        "",
+        "claude-cli:sonnet/high"
+      ],
+      "done": true,
+      "value": {
+        "is": "CancelledError",
+        "args": []
+      },
+      "paused": false,
+      "began": 385,
+      "ended": 445,
+      "run": {
+        "status": "done",
+        "reason": ""
+      }
+    },
+    {
+      "id": "read5",
+      "kind": "read",
+      "by": "rung11",
+      "on": "chain7",
+      "words": [
+        "src/search.ts"
+      ],
+      "done": true,
+      "value": {
+        "is": "Text",
+        "path": "/Users/uael/Library/Caches/furb/scratch/62547b369c96589a/furb-gui-17444-1792604875958005000/fieldnotes/src/search.ts",
+        "content": "import { load } from \"./storage.ts\";\n\nexport const search = (query: string) => load().filter((note) => note.text.includes(query));\nexport const SHORTCUT = \"Ctrl+K\";\n"
+      },
+      "paused": false,
+      "began": 415,
+      "ended": 422
+    },
+    {
+      "id": "bash4",
+      "kind": "bash",
+      "by": "rung11",
+      "on": "chain7",
+      "words": [
+        "sleep 1; grep -c 'export const SHORTCUT' src/search.ts",
+        "",
+        600.0
+      ],
+      "done": true,
+      "value": {
+        "is": "Exit",
+        "code": 0,
+        "stdout": {
+          "is": "Text",
+          "path": "bash4/stdout",
+          "content": "1\n"
+        },
+        "stderr": {
+          "is": "Text",
+          "path": "bash4/stderr",
+          "content": ""
+        }
+      },
+      "paused": false,
+      "began": 416,
+      "ended": 437
     }
-  ]
+  ],
+  "words": {
+    "rung4": "readme = prompt(str, \"Add a line on the search shortcut to README.md, and close with the line.\", on=chain(\"w readme\"))\nchangelog = prompt(str, \"Start CHANGELOG.md with the search shortcut, and close with what you wrote.\", on=chain(\"w changelog\"))\nlines = [await readme, await changelog]\nclose(\"The docs name the shortcut.\\n\" + \"\\n\".join(lines))",
+    "rung11": "source = read(\"src/search.ts\")\nfound = await bash(\"sleep 1; grep -c 'export const SHORTCUT' src/search.ts\")\nclose(\"The review passes: one export of SHORTCUT, \" + found.stdout.content.strip() + \" line.\")",
+    "rung9": "close(None)",
+    "rung1": "notes = read(\"README.md\")\nshortcut = prompt(str, \"Add SHORTCUT = 'Ctrl+K' to src/search.ts, and close with what you changed.\", on=chain(\"w shortcut\"))\ntest = prompt(str, \"Write test/shortcut.test.ts for SHORTCUT, run it, and close with the result.\", on=chain(\"w test\"))\ndocs = prompt(str, \"Tell the users of Fieldnotes about the search shortcut, and close with what you wrote.\", on=chain(\"w docs\"))\nfirst = await wait(120, shortcut, test, docs)\ndebug(t\"{first=}\")",
+    "rung7": "notes = read(\"README.md\")\nwrite(notes.append(\"- Press Ctrl+K to search\"))\nclose(\"README.md now says: Press Ctrl+K to search\")",
+    "rung5": "runner = await bash(\"sleep 1; printf 'bun test: ready\\n'\")\nkey = await prompt(str, \"The test needs the key. Which key does SHORTCUT hold?\", to=OPERATOR)\nspec = 'import { expect, test } from \"bun:test\";\\nimport { SHORTCUT } from \"../src/search.ts\";\\n\\ntest(\"shortcut\", () => expect(SHORTCUT).toBe(\"' + key + '\"));\\n'\nwrite(Text(\"test/shortcut.test.ts\", spec))\nrun = await bash(\"sleep 3; printf '1 pass\\n'\")\nclose(\"test/shortcut.test.ts expects \" + key + \": \" + run.stdout.content.strip())",
+    "rung3": "spec = read(\"test/shortcut.test.ts\")",
+    "rung6": "source = read(\"src/search.ts\")\nwrite(source.append('export const SHORTCUT = \"Ctrl+K\";'))\ncheck = await bash(\"sleep 2; grep -n SHORTCUT src/search.ts\")\nreview = await prompt(str, \"Review the export of SHORTCUT in src/search.ts, and close with your verdict.\", on=chain(\"w review\"))\nclose(\"src/search.ts exports SHORTCUT at line \" + check.stdout.content.split(\":\")[0] + \". \" + review)",
+    "rung2": "```python\nsource = read(\"src/search.ts\")\n```",
+    "rung8": "write(Text(\"CHANGELOG.md\", \"# Changelog\\n\\n- Add the search shortcut, Ctrl+K.\\n\"))\ncheck = await bash(\"sleep 1; wc -l < CHANGELOG.md\")\nclose(\"CHANGELOG.md holds \" + check.stdout.content.strip() + \" lines\")",
+    "rung10": "parts = [await shortcut, await docs, await test]\ncheck = await bash(\"sleep 1; grep -c SHORTCUT src/search.ts test/shortcut.test.ts\")\nclose(\"All parts landed.\\n\" + \"\\n\".join(parts) + \"\\n\" + check.stdout.content)"
+  },
+  "owed": [
+    "prompt7"
+  ],
+  "measures": {
+    "chain1": {
+      "dollars": 0.369,
+      "spent": 0.369,
+      "ceiling": 2.0,
+      "share": 0.062,
+      "answers": 3,
+      "actor": "claude-cli:sonnet/high"
+    },
+    "chain2": {
+      "dollars": 0.147,
+      "spent": -0.0,
+      "ceiling": null,
+      "share": 0.035,
+      "answers": 2,
+      "actor": "claude-cli:sonnet/high"
+    },
+    "chain4": {
+      "dollars": 0.042,
+      "spent": -0.0,
+      "ceiling": null,
+      "share": 0.014,
+      "answers": 1,
+      "actor": "claude-cli:sonnet/high"
+    },
+    "chain7": {
+      "dollars": 0.042,
+      "spent": -0.0,
+      "ceiling": null,
+      "share": 0.014,
+      "answers": 1,
+      "actor": "claude-cli:sonnet/high"
+    },
+    "chain6": {
+      "dollars": 0.042,
+      "spent": -0.0,
+      "ceiling": null,
+      "share": 0.014,
+      "answers": 1,
+      "actor": "claude-cli:sonnet/high"
+    },
+    "chain3": {
+      "dollars": 0.147,
+      "spent": -0.0,
+      "ceiling": null,
+      "share": 0.035,
+      "answers": 2,
+      "actor": "claude-cli:sonnet/high"
+    },
+    "chain5": {
+      "dollars": 0.042,
+      "spent": -0.0,
+      "ceiling": null,
+      "share": 0.014,
+      "answers": 1,
+      "actor": "claude-cli:sonnet/high"
+    }
+  },
+  "streams": {},
+  "breaks": [],
+  "watch": {
+    "chain1": [
+      {
+        "name": "chain1_label",
+        "value": "'root'",
+        "at": 3,
+        "act": "chain1"
+      },
+      {
+        "name": "chain1",
+        "value": "Act[object]",
+        "at": 3,
+        "act": "chain1"
+      },
+      {
+        "name": "chain1_roster",
+        "value": "[['claude-cli:sonnet', ['low', 'medium', 'high', 'xhigh', 'max'], 1000000], ['claude-cli:opus', ['low', 'medium', 'high', 'xhigh', 'max'], 1000000], ['claude-cli:haiku', ['low', 'medium', 'high', 'xhigh', 'max'], 200000], ['operator', [], 200000]]",
+        "at": 9,
+        "act": "chain1"
+      },
+      {
+        "name": "chain1_cwd",
+        "value": "'/Users/uael/Library/Caches/furb/scratch/62547b369c96589a/furb-gui-17444-1792604875958005000/fieldnotes'",
+        "at": 9,
+        "act": "chain1"
+      },
+      {
+        "name": "chain1_actor",
+        "value": "'claude-cli:sonnet/high'",
+        "at": 9,
+        "act": "chain1"
+      },
+      {
+        "name": "grant1_usd",
+        "value": "2.0",
+        "at": 13,
+        "act": "grant1"
+      },
+      {
+        "name": "grant1",
+        "value": "Act[None]",
+        "at": 13,
+        "act": "grant1"
+      },
+      {
+        "name": "prompt1_message",
+        "value": "'Add a search shortcut to Fieldnotes, with a test. Give each part to a worker of its own.'",
+        "at": 17,
+        "act": "prompt1"
+      },
+      {
+        "name": "prompt1",
+        "value": "Act[str]",
+        "at": 17,
+        "act": "prompt1"
+      },
+      {
+        "name": "grant1_spent",
+        "value": "0.06",
+        "at": 27,
+        "act": "grant1"
+      },
+      {
+        "name": "read1_path",
+        "value": "'README.md'",
+        "at": 42,
+        "act": "read1"
+      },
+      {
+        "name": "read1_text",
+        "value": "# Fieldnotes\n\nA small place to keep ideas.\n\n- Capture a thought\n- Find it when it matters",
+        "at": 42,
+        "act": "read1"
+      },
+      {
+        "name": "prompt4_value",
+        "value": "The docs name the shortcut.\nREADME.md now says: Press Ctrl+K to search\nCHANGELOG.md holds 3 lines",
+        "at": 331,
+        "act": "prompt4"
+      },
+      {
+        "name": "prompt8_message",
+        "value": "'prompt4 done'",
+        "at": 334,
+        "act": "prompt8"
+      },
+      {
+        "name": "prompt8",
+        "value": "Act[None]",
+        "at": 334,
+        "act": "prompt8"
+      },
+      {
+        "name": "rung1_debug",
+        "value": "\"first='prompt4'\"",
+        "at": 337,
+        "act": "rung1"
+      },
+      {
+        "name": "rung9_share",
+        "value": "0.02",
+        "at": 340,
+        "act": "rung9"
+      },
+      {
+        "name": "grant1_spent",
+        "value": "0.183",
+        "at": 348,
+        "act": "grant1"
+      },
+      {
+        "name": "rung10_share",
+        "value": "0.04",
+        "at": 366,
+        "act": "rung10"
+      },
+      {
+        "name": "grant1_spent",
+        "value": "0.369",
+        "at": 394,
+        "act": "grant1"
+      }
+    ],
+    "chain2": [
+      {
+        "name": "chain2_label",
+        "value": "'w shortcut'",
+        "at": 45,
+        "act": "chain2"
+      },
+      {
+        "name": "chain2",
+        "value": "Act[object]",
+        "at": 45,
+        "act": "chain2"
+      },
+      {
+        "name": "chain2_roster",
+        "value": "[['claude-cli:sonnet', ['low', 'medium', 'high', 'xhigh', 'max'], 1000000], ['claude-cli:opus', ['low', 'medium', 'high', 'xhigh', 'max'], 1000000], ['claude-cli:haiku', ['low', 'medium', 'high', 'xhigh', 'max'], 200000], ['operator', [], 200000]]",
+        "at": 47,
+        "act": "chain2"
+      },
+      {
+        "name": "chain2_cwd",
+        "value": "'/Users/uael/Library/Caches/furb/scratch/62547b369c96589a/furb-gui-17444-1792604875958005000/fieldnotes'",
+        "at": 47,
+        "act": "chain2"
+      },
+      {
+        "name": "chain2_actor",
+        "value": "'claude-cli:sonnet/high'",
+        "at": 47,
+        "act": "chain2"
+      },
+      {
+        "name": "prompt2_message",
+        "value": "\"Add SHORTCUT = 'Ctrl+K' to src/search.ts, and close with what you changed.\"",
+        "at": 50,
+        "act": "prompt2"
+      },
+      {
+        "name": "prompt2",
+        "value": "Act[str]",
+        "at": 50,
+        "act": "prompt2"
+      },
+      {
+        "name": "rung2_findings",
+        "value": "\"line 1: Got unexpected token ` (<string>, line 1); a reply is python and quotes only, with no fence, no markup and no prose, in '```python'\"",
+        "at": 130,
+        "act": "rung2"
+      },
+      {
+        "name": "rung2_value",
+        "value": "Refused()",
+        "at": 131,
+        "act": "rung2"
+      },
+      {
+        "name": "rung6_share",
+        "value": "0.01",
+        "at": 140,
+        "act": "rung6"
+      },
+      {
+        "name": "read3_path",
+        "value": "'src/search.ts'",
+        "at": 226,
+        "act": "read3"
+      },
+      {
+        "name": "read3_text",
+        "value": "import { load } from \"./storage.ts\";\n\nexport const search = (query: string) => load().filter((note) => note.text.includes(query));",
+        "at": 226,
+        "act": "read3"
+      },
+      {
+        "name": "write1_path",
+        "value": "'/Users/uael/Library/Caches/furb/scratch/62547b369c96589a/furb-gui-17444-1792604875958005000/fieldnotes/src/search.ts'",
+        "at": 228,
+        "act": "write1"
+      },
+      {
+        "name": "bash2_command",
+        "value": "'sleep 2; grep -n SHORTCUT src/search.ts'",
+        "at": 229,
+        "act": "bash2"
+      },
+      {
+        "name": "bash2",
+        "value": "Act[Exit]",
+        "at": 229,
+        "act": "bash2"
+      },
+      {
+        "name": "bash2_stdout",
+        "value": "'4:export const SHORTCUT = \"Ctrl+K\";'",
+        "at": 374,
+        "act": "bash2"
+      },
+      {
+        "name": "prompt2_value",
+        "value": "'src/search.ts exports SHORTCUT at line 4. The review passes: one export of SHORTCUT, 1 line.'",
+        "at": 447,
+        "act": "prompt2"
+      }
+    ],
+    "chain3": [
+      {
+        "name": "chain3_label",
+        "value": "'w test'",
+        "at": 56,
+        "act": "chain3"
+      },
+      {
+        "name": "chain3",
+        "value": "Act[object]",
+        "at": 56,
+        "act": "chain3"
+      },
+      {
+        "name": "chain3_roster",
+        "value": "[['claude-cli:sonnet', ['low', 'medium', 'high', 'xhigh', 'max'], 1000000], ['claude-cli:opus', ['low', 'medium', 'high', 'xhigh', 'max'], 1000000], ['claude-cli:haiku', ['low', 'medium', 'high', 'xhigh', 'max'], 200000], ['operator', [], 200000]]",
+        "at": 58,
+        "act": "chain3"
+      },
+      {
+        "name": "chain3_cwd",
+        "value": "'/Users/uael/Library/Caches/furb/scratch/62547b369c96589a/furb-gui-17444-1792604875958005000/fieldnotes'",
+        "at": 58,
+        "act": "chain3"
+      },
+      {
+        "name": "chain3_actor",
+        "value": "'claude-cli:sonnet/high'",
+        "at": 58,
+        "act": "chain3"
+      },
+      {
+        "name": "prompt3_message",
+        "value": "'Write test/shortcut.test.ts for SHORTCUT, run it, and close with the result.'",
+        "at": 61,
+        "act": "prompt3"
+      },
+      {
+        "name": "prompt3",
+        "value": "Act[str]",
+        "at": 61,
+        "act": "prompt3"
+      },
+      {
+        "name": "rung3_raised",
+        "value": "Refused('There is no file at /Users/uael/Library/Caches/furb/scratch/62547b369c96589a/furb-gui-17444-1792604875958005000/fieldnotes/test/shortcut.test.ts.')",
+        "at": 114,
+        "act": "rung3"
+      },
+      {
+        "name": "rung5_share",
+        "value": "0.01",
+        "at": 119,
+        "act": "rung5"
+      },
+      {
+        "name": "bash1_command",
+        "value": "sleep 1; printf 'bun test: ready\n'",
+        "at": 201,
+        "act": "bash1"
+      },
+      {
+        "name": "bash1",
+        "value": "Act[Exit]",
+        "at": 201,
+        "act": "bash1"
+      },
+      {
+        "name": "bash1_stdout",
+        "value": "'bun test: ready'",
+        "at": 304,
+        "act": "bash1"
+      },
+      {
+        "name": "prompt7_message",
+        "value": "'The test needs the key. Which key does SHORTCUT hold?'",
+        "at": 306,
+        "act": "prompt7"
+      },
+      {
+        "name": "prompt7",
+        "value": "Act[str]",
+        "at": 306,
+        "act": "prompt7"
+      }
+    ],
+    "chain4": [
+      {
+        "name": "chain4_label",
+        "value": "'w docs'",
+        "at": 67,
+        "act": "chain4"
+      },
+      {
+        "name": "chain4",
+        "value": "Act[object]",
+        "at": 67,
+        "act": "chain4"
+      },
+      {
+        "name": "chain4_roster",
+        "value": "[['claude-cli:sonnet', ['low', 'medium', 'high', 'xhigh', 'max'], 1000000], ['claude-cli:opus', ['low', 'medium', 'high', 'xhigh', 'max'], 1000000], ['claude-cli:haiku', ['low', 'medium', 'high', 'xhigh', 'max'], 200000], ['operator', [], 200000]]",
+        "at": 69,
+        "act": "chain4"
+      },
+      {
+        "name": "chain4_cwd",
+        "value": "'/Users/uael/Library/Caches/furb/scratch/62547b369c96589a/furb-gui-17444-1792604875958005000/fieldnotes'",
+        "at": 69,
+        "act": "chain4"
+      },
+      {
+        "name": "chain4_actor",
+        "value": "'claude-cli:sonnet/high'",
+        "at": 69,
+        "act": "chain4"
+      },
+      {
+        "name": "prompt4_message",
+        "value": "'Tell the users of Fieldnotes about the search shortcut, and close with what you wrote.'",
+        "at": 72,
+        "act": "prompt4"
+      },
+      {
+        "name": "prompt4",
+        "value": "Act[str]",
+        "at": 72,
+        "act": "prompt4"
+      },
+      {
+        "name": "prompt4_value",
+        "value": "The docs name the shortcut.\nREADME.md now says: Press Ctrl+K to search\nCHANGELOG.md holds 3 lines",
+        "at": 324,
+        "act": "prompt4"
+      }
+    ],
+    "chain5": [
+      {
+        "name": "chain5_label",
+        "value": "'w readme'",
+        "at": 158,
+        "act": "chain5"
+      },
+      {
+        "name": "chain5",
+        "value": "Act[object]",
+        "at": 158,
+        "act": "chain5"
+      },
+      {
+        "name": "chain5_roster",
+        "value": "[['claude-cli:sonnet', ['low', 'medium', 'high', 'xhigh', 'max'], 1000000], ['claude-cli:opus', ['low', 'medium', 'high', 'xhigh', 'max'], 1000000], ['claude-cli:haiku', ['low', 'medium', 'high', 'xhigh', 'max'], 200000], ['operator', [], 200000]]",
+        "at": 160,
+        "act": "chain5"
+      },
+      {
+        "name": "chain5_cwd",
+        "value": "'/Users/uael/Library/Caches/furb/scratch/62547b369c96589a/furb-gui-17444-1792604875958005000/fieldnotes'",
+        "at": 160,
+        "act": "chain5"
+      },
+      {
+        "name": "chain5_actor",
+        "value": "'claude-cli:sonnet/high'",
+        "at": 160,
+        "act": "chain5"
+      },
+      {
+        "name": "prompt5_message",
+        "value": "'Add a line on the search shortcut to README.md, and close with the line.'",
+        "at": 163,
+        "act": "prompt5"
+      },
+      {
+        "name": "prompt5",
+        "value": "Act[str]",
+        "at": 163,
+        "act": "prompt5"
+      },
+      {
+        "name": "read4_path",
+        "value": "'README.md'",
+        "at": 257,
+        "act": "read4"
+      },
+      {
+        "name": "read4_text",
+        "value": "# Fieldnotes\n\nA small place to keep ideas.\n\n- Capture a thought\n- Find it when it matters",
+        "at": 257,
+        "act": "read4"
+      },
+      {
+        "name": "write2_path",
+        "value": "'/Users/uael/Library/Caches/furb/scratch/62547b369c96589a/furb-gui-17444-1792604875958005000/fieldnotes/README.md'",
+        "at": 259,
+        "act": "write2"
+      },
+      {
+        "name": "prompt5_value",
+        "value": "'README.md now says: Press Ctrl+K to search'",
+        "at": 260,
+        "act": "prompt5"
+      }
+    ],
+    "chain6": [
+      {
+        "name": "chain6_label",
+        "value": "'w changelog'",
+        "at": 169,
+        "act": "chain6"
+      },
+      {
+        "name": "chain6",
+        "value": "Act[object]",
+        "at": 169,
+        "act": "chain6"
+      },
+      {
+        "name": "chain6_roster",
+        "value": "[['claude-cli:sonnet', ['low', 'medium', 'high', 'xhigh', 'max'], 1000000], ['claude-cli:opus', ['low', 'medium', 'high', 'xhigh', 'max'], 1000000], ['claude-cli:haiku', ['low', 'medium', 'high', 'xhigh', 'max'], 200000], ['operator', [], 200000]]",
+        "at": 171,
+        "act": "chain6"
+      },
+      {
+        "name": "chain6_cwd",
+        "value": "'/Users/uael/Library/Caches/furb/scratch/62547b369c96589a/furb-gui-17444-1792604875958005000/fieldnotes'",
+        "at": 171,
+        "act": "chain6"
+      },
+      {
+        "name": "chain6_actor",
+        "value": "'claude-cli:sonnet/high'",
+        "at": 171,
+        "act": "chain6"
+      },
+      {
+        "name": "prompt6_message",
+        "value": "'Start CHANGELOG.md with the search shortcut, and close with what you wrote.'",
+        "at": 174,
+        "act": "prompt6"
+      },
+      {
+        "name": "prompt6",
+        "value": "Act[str]",
+        "at": 174,
+        "act": "prompt6"
+      },
+      {
+        "name": "write3_path",
+        "value": "'CHANGELOG.md'",
+        "at": 287,
+        "act": "write3"
+      },
+      {
+        "name": "bash3_command",
+        "value": "'sleep 1; wc -l < CHANGELOG.md'",
+        "at": 288,
+        "act": "bash3"
+      },
+      {
+        "name": "bash3",
+        "value": "Act[Exit]",
+        "at": 288,
+        "act": "bash3"
+      },
+      {
+        "name": "bash3_stdout",
+        "value": "'       3'",
+        "at": 316,
+        "act": "bash3"
+      },
+      {
+        "name": "prompt6_value",
+        "value": "'CHANGELOG.md holds 3 lines'",
+        "at": 318,
+        "act": "prompt6"
+      }
+    ],
+    "chain7": [
+      {
+        "name": "chain7_label",
+        "value": "'w review'",
+        "at": 378,
+        "act": "chain7"
+      },
+      {
+        "name": "chain7",
+        "value": "Act[object]",
+        "at": 378,
+        "act": "chain7"
+      },
+      {
+        "name": "chain7_roster",
+        "value": "[['claude-cli:sonnet', ['low', 'medium', 'high', 'xhigh', 'max'], 1000000], ['claude-cli:opus', ['low', 'medium', 'high', 'xhigh', 'max'], 1000000], ['claude-cli:haiku', ['low', 'medium', 'high', 'xhigh', 'max'], 200000], ['operator', [], 200000]]",
+        "at": 380,
+        "act": "chain7"
+      },
+      {
+        "name": "chain7_cwd",
+        "value": "'/Users/uael/Library/Caches/furb/scratch/62547b369c96589a/furb-gui-17444-1792604875958005000/fieldnotes'",
+        "at": 380,
+        "act": "chain7"
+      },
+      {
+        "name": "chain7_actor",
+        "value": "'claude-cli:sonnet/high'",
+        "at": 380,
+        "act": "chain7"
+      },
+      {
+        "name": "prompt9_message",
+        "value": "'Review the export of SHORTCUT in src/search.ts, and close with your verdict.'",
+        "at": 383,
+        "act": "prompt9"
+      },
+      {
+        "name": "prompt9",
+        "value": "Act[str]",
+        "at": 383,
+        "act": "prompt9"
+      },
+      {
+        "name": "read5_path",
+        "value": "'src/search.ts'",
+        "at": 423,
+        "act": "read5"
+      },
+      {
+        "name": "read5_text",
+        "value": "import { load } from \"./storage.ts\";\n\nexport const search = (query: string) => load().filter((note) => note.text.includes(query));\nexport const SHORTCUT = \"Ctrl+K\";",
+        "at": 423,
+        "act": "read5"
+      },
+      {
+        "name": "bash4_command",
+        "value": "\"sleep 1; grep -c 'export const SHORTCUT' src/search.ts\"",
+        "at": 424,
+        "act": "bash4"
+      },
+      {
+        "name": "bash4",
+        "value": "Act[Exit]",
+        "at": 424,
+        "act": "bash4"
+      },
+      {
+        "name": "bash4_stdout",
+        "value": "'1'",
+        "at": 439,
+        "act": "bash4"
+      },
+      {
+        "name": "prompt9_value",
+        "value": "'The review passes: one export of SHORTCUT, 1 line.'",
+        "at": 441,
+        "act": "prompt9"
+      }
+    ]
+  }
 }

@@ -5,10 +5,10 @@ import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemir
 import { tags } from "@lezer/highlight";
 import CodeMirror from "@uiw/react-codemirror";
 import { useMemo } from "react";
-import type { ActMark, Step } from "../data.ts";
+import type { ActMark, Step } from "../steps.ts";
 
 /** The colors of code: quiet, so the values of the acts beside it read first. */
-const highlight = HighlightStyle.define([
+export const highlight = HighlightStyle.define([
   { tag: [tags.keyword, tags.controlKeyword, tags.operatorKeyword], color: "var(--accent)" },
   {
     tag: [tags.string, tags.special(tags.string)],
@@ -189,7 +189,7 @@ export function Code({
             builder.add(range.to, range.to, Decoration.widget({ widget: new Value(act), side: 1 }));
           }
           if (n === first + step.lines.length - 1) {
-            const why = step.findings ?? step.raised;
+            const why = step.why;
             if (why)
               builder.add(
                 range.to,
