@@ -1,7 +1,7 @@
 // The claude command line of the tests of the examples, which answers from a script, as src/world/provider/fake-claude.sh
 // does where a shell runs it. The word of a turn is the JSON text in the file word.N beside it, for the Nth turn of all,
 // and each turn costs the dollars of the file cost beside it. When the file deaf stands beside it, it writes the file
-// asked, reads no input and lives on.
+// asked, reads no input and lives on until the file deaf goes.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
@@ -21,7 +21,7 @@ const usage = {
 
 if (existsSync(beside("deaf"))) {
   writeFileSync(beside("asked"), "");
-  setInterval(() => {}, 1 << 30);
+  setInterval(() => existsSync(beside("deaf")) || process.exit(0), 20);
 } else {
   const cost = existsSync(beside("cost")) ? Number(readFileSync(beside("cost"), "utf8")) : 0.01;
   let n = 0;
