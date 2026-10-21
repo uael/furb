@@ -361,7 +361,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           with site.set(asking):
             act("reply", id, controlled(idle), to)
           unseen = ""
-      if unseen and all(peek(x[1], ...) is not ... for x in transcript() if x[0] == "prompt" and x[3] == id):
+      if unseen and all(over(x[1]) for x in transcript() if x[0] == "prompt" and x[3] == id):
         prompt(None, unseen + " done")
         unseen = ""
 
@@ -528,6 +528,10 @@ def tell(on, path, got=None, show=HEAD):
     )
 
 
+def over(id):
+  return peek(id, ...) is not ...
+
+
 def tells(id):
   return get(id)[2] != scope(id)
 
@@ -539,7 +543,7 @@ def told(id, what="", *notes, **words):
 def control(kind, name, id, *words):
   return (
     get(id)
-    and (peek(id, ...) is ... or (kind == "wake" and paused(id)))
+    and (not over(id) or (kind == "wake" and paused(id)))
     and say(*told(id, name, value=(*words, None)[0]))
     and say(kind, id, *words)
   )
@@ -578,12 +582,12 @@ def offered(roster, to):
 
 
 def covers(a, id):
-  kind, over, *_ = a
+  kind, of, *_ = a
   if kind != "close":
-    return under(id, over) or scope(id) == over
-  while id != over and (question(("rung", id)) or question(("reply", id))):
+    return under(id, of) or scope(id) == of
+  while id != of and (question(("rung", id)) or question(("reply", id))):
     id = get(id)[2]
-  return id == over
+  return id == of
 
 
 def paused(id):
@@ -612,14 +616,12 @@ def controlled(ear, lasting=False):
     if lives(g, None):
       while True:
         a = later.pop(0) if later and not stopped else (yield)
-        if peek(id, ...) is not ... and not lasting:
+        if over(id) and not lasting:
           return
         match a:
           case ("pause" | "wake", *_) if covers(a, id):
             stopped = a[0] == "pause"
-          case ("cancel" | "close", _, by, *_) if (
-            covers(a, id) and peek(id, ...) is ... and not (stopped and under(by, id))
-          ):
+          case ("cancel" | "close", _, by, *_) if covers(a, id) and not over(id) and not (stopped and under(by, id)):
             yield "done", id, a[3] if a[:2] == ("close", id) else CancelledError()
           case _ if stopped and get(a[1]) is not a:
             later.append(a)
@@ -670,7 +672,7 @@ def boot(record=(), **outside):
               if a is not known[about]:
                 yield "keep", "", (a,)
             if kind == "wake":
-              for name in [x for x in holding if covers(a, x) and peek(x, ...) is ...]:
+              for name in [x for x in holding if covers(a, x) and not over(x)]:
                 holding.remove(name)
                 taken.discard(name)
                 offers(known[name])
