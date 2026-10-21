@@ -44,6 +44,12 @@ each act by its name and its kind, as the `Engine` of the door finds it: among e
 did not end, and the acts that made it, each prompt, rung, command and wait that is not done and that no pause holds.
 An act that a wake puts to the outside again is pending no more.
 
+`furb_monty.engine.parked()` names the work that a crash loop parked, each act by its name and its kind: a run, a
+command or a reply that the record shows started in five lives and not done, since each of those lives ended while it
+ran. A wake puts no parked act to the outside, so a host that wakes the work of a life as it opens does not run it
+again and end again, and a parked act is pending no more. `furb_monty.engine.retry(id)` runs a parked act again: it is
+parked no more in this life, and a wake of it puts it to the outside.
+
 `furb_monty.engine.keyed(key, kind, *args, **kwargs)` makes the act of a verb once for a key of the client, across a
 crash of the host and a retry of the client, as `keyed("k1", "prompt", int, "count the lines", on=root)`. A key fact
 goes to the record before the act, and a later call with the same key on the same chain gives the act that the key
