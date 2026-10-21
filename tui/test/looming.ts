@@ -1,6 +1,7 @@
 import { createTestRenderer } from "@opentui/core/testing";
+import type { Variant } from "../src/app.ts";
 import { App } from "../src/app.ts";
-import { demoLibrary, demoSession, seedConductor, seedDemo } from "../src/demo.ts";
+import { demoLibrary, demoSession, seedConductor, seedDemo, seedHundred, seedThreads } from "../src/demo.ts";
 import type { Session } from "../src/session.ts";
 
 /** A demo session that a test uses, which ends after it. */
@@ -35,11 +36,19 @@ export async function looming(
     seed = "none",
     width = 152,
     height = 46,
-  }: { seed?: "none" | "demo" | "conductor"; width?: number; height?: number } = {},
+    variant,
+  }: {
+    seed?: "none" | "demo" | "conductor" | "threads" | "hundred";
+    width?: number;
+    height?: number;
+    variant?: Variant;
+  } = {},
 ): Promise<void> {
   const session = await demoSession();
   if (seed === "demo") await seedDemo(session);
   if (seed === "conductor") await seedConductor(session);
+  if (seed === "threads") await seedThreads(session);
+  if (seed === "hundred") await seedHundred(session);
   const library = await demoLibrary(session);
   const screen = await createTestRenderer({ width, height });
   let quits = 0;
@@ -48,6 +57,7 @@ export async function looming(
       quits++;
     },
     workspaces: library,
+    variant,
   });
   const frame = async () => {
     await session.refresh();

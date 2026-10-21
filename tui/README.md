@@ -1,19 +1,21 @@
 # furb TUI
 
-The TUI shows a life of furb as a loom. Each chain is a thread, a row of the loom, in the order of the tree of
-chains, and time goes from left to right. You see at once which chains work, which wait for you, which stopped at a
-ceiling, and which failed. [The design](DESIGN.md) says why the TUI is made so, and [the gallery](../docs/tui.md)
+The TUI shows a life of furb in two variants, which `v` switches and `--variant loom` or `--variant graph` chooses
+at the start. The loom shows each chain as a row, in the order of the tree of chains, with time from left to right.
+The graph shows the life as programs that run: the tree of its threads beside a map of its chains, with the messages
+that flow between them, and levels of zoom down to the source of one program and to one act, as a debugger does.
+You see at once which chains work, which wait for you, which stopped at a ceiling, and which failed. [The design](DESIGN.md) says why the TUI is made so, and [the gallery](../docs/tui.md)
 shows each screen.
 
 ![The furb TUI in action](../docs/furb.gif)
 
 ## What the screen shows
 
-- **The loom**, at the top. The first thread is you, the operator: its cells show the prompts that you owe. Then
-  each chain, under the chain whose word made it, so a conductor stands with its workers under it. A thread gives the
-  state of the chain, its label, its cells, the act that it waits on, its dollars against the ceiling of its grant,
-  and the share of the window that its last answer read.
-- **The cells** of a thread show what the chain did at each moment, where a moment is the start or the end of an act.
+- **The loom**, at the top. The first row is you, the operator: its cells show the prompts that you owe. Then each
+  chain, under the chain whose word made it, so a conductor stands with its workers under it. A row gives the state
+  of the chain, its label, its cells, the act that it waits on, its dollars against the ceiling of its grant, and the
+  share of the window that its last answer read.
+- **The cells** of a row show what the chain did at each moment, where a moment is the start or the end of an act.
   The lowest cell, `▁`, is work that runs: a command, a wait, or a model that writes its answer. A taller cell holds
   more acts that began or ended. A cell is yellow where the chain asks you, and red where an act failed. The newest
   moments take a column each, and older moments share a column, so a long life fits in the terminal. `older ┊` marks
@@ -26,6 +28,12 @@ shows each screen.
 - **The time cursor**: `[` and `]` move back and forward in time by one moment, and `{` and `}` by ten. The loom and
   the thread show the life as it stood at the cursor, and the right edge of the loom says `then`. In the past the
   verbs that change the life do nothing, and `b` branches the selected chain there. Esc returns to now.
+- **The graph**, which `v` shows. A thread is a prompt, and a prompt that a rung of a thread makes is its
+  sub-thread. The threads stand in a sidebar, each with its state, its progress and what waits for you in it, and the
+  map of the selected thread stands beside them: each chain as its mark and its name, the lines of the tree of hires,
+  and a dot that walks along a line while a message flows. Enter zooms in: from a thread to its map, from a program
+  to its source, where each line holds what its acts came to and the line that runs is marked, from a line to its
+  word whole, and from an act to its lens. Esc zooms out. `n` steps a chain: it runs one more rung, then pauses.
 - **The word line**, at the bottom. `i` asks the model of the selected chain, `:` writes a word of python that runs
   as a rung there, and `/` types a command. Tab answers the oldest prompt that you owe, on any chain.
 
@@ -51,6 +59,8 @@ thread and the lens. The same space pauses one command and a conductor with its 
 | e | Edit the door of the prompt of the selection, which replays its ladder |
 | b | Branch the chain after the selected act, or at the moment of the time cursor |
 | [ and ] | Move the time cursor back and forward by a moment, or by ten with { and }. Esc returns to now |
+| n | Step: the selected chain runs one more rung, then a pause holds it |
+| v | Change the variant: the loom of the chains in time, or the graph of the programs that run |
 | w | Wake the work that an earlier life left |
 | ⌃O | Open the list of lives, by workspace |
 | ? | Show or hide these keys |
@@ -131,10 +141,10 @@ git clone https://github.com/uael/furb.git
 cd furb
 bun install
 bun run build                # The crate through N-API, in the dev profile. The first build takes minutes.
-bun run demo                 # A scripted life of a conductor and four workers. It asks no model.
+bun run demo                 # A scripted life of many threads at once. It asks no model.
 bun run tui                  # A real life, on the models of the catalog of the crate.
 bun run tui -- --resume .furb/sessions/example.jsonl
-bun run tui -- --help        # The options: --cwd, --model, --effort, --record, --resume and --roster.
+bun run tui -- --help        # The options: --cwd, --model, --effort, --record, --resume, --roster, --variant.
 ```
 
 `bun run tui` asks the claude command line when it finds one, else a model of a provider whose credential stands in
@@ -194,8 +204,9 @@ holds work from before opens with that work held, and `w` wakes it. ⌃O lists t
 state and their cost, and `n` there starts a new life.
 
 The theme is a preference of the user, in `ui.json` of the config directory: `$XDG_CONFIG_HOME/furb`, `~/.config/furb`,
-or `%APPDATA%\furb` on Windows, and `FURB_CONFIG_DIR` names another one. `/theme github`, `paper`, `midnight` or
-`forest` changes it. The tests and the gallery use preferences of their own.
+or `%APPDATA%\furb` on Windows, and `FURB_CONFIG_DIR` names another one. `/theme dusk`, `day`, `github`, `paper`,
+`midnight` or `forest` changes it. Dusk is the default, and Day is its light theme. The tests and the gallery use
+preferences of their own.
 
 A life runs the extensions that the configs turn on, as [the guide of the extensions](../docs/extensions.md) says.
 The rungs of their words stand in the thread of each chain, as every rung does. `/extensions` lists what the life runs.

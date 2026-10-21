@@ -6,6 +6,7 @@ import { Act, actorParts, ENGINE, model, models, Session } from "@furb/engine";
 import type { HostState } from "./bridge.ts";
 import { type EngineOptions, roster } from "./models.ts";
 import { queueDispatches, queueHash } from "./queue.ts";
+import { scripted as scriptedWord } from "./script.ts";
 import type { FollowUp } from "./session.ts";
 import { Snapshots } from "./snapshots.ts";
 
@@ -98,29 +99,36 @@ function scriptedSession(options: SessionOptions): Session {
       // A turn whose last message asks to think until a cancel never answers, so its work stays in progress until the
       // operator cancels it, however slow the machine that shows it.
       const message = [...last.matchAll(/prompt\d+_message = '([^']*)'/g)].at(-1)?.[1];
-      if (message === "Think until I cancel.") return await new Promise<Turn>((resolve) => held.add(resolve));
+      // The script of the demo answers the prompts of the life of many threads, and an empty word thinks until a cancel.
+      const word = scriptedWord(JSON.stringify(messages));
+      if (message === "Think until I cancel." || word === "")
+        return await new Promise<Turn>((resolve) => held.add(resolve));
       // Only the turn that asks for live progress is slow, and not every later turn of its chain: it thinks, then
       // writes its word a few words at a time, as a model streams it. FURB_DEMO_STREAM=1 makes every turn so, for a
       // recording of the demo.
       const slow = process.env.FURB_DEMO_STREAM === "1" || last.includes("show live progress");
       await pause(slow ? 300 : 180);
       const first = !messages.some((message) => (message as { role?: string }).role === "assistant");
-      const [thinking, answer] = first
-        ? ["I read the README and run the checks before I answer.", ""]
-        : reply(last);
+      const [thinking, answer] = word
+        ? ["The brief names the step, so the word takes it.", ""]
+        : first
+          ? ["I read the README and run the checks before I answer.", ""]
+          : reply(last);
       // A message that asks for an answer in a fence gets one, as a model sometimes writes it, which the gate refuses,
       // and the model answers again once it reads the refusal.
       const fenced = !first && last.includes("an answer in a fence");
       // A prompt whose message says to ask first gets a question to the operator and no close, so the model answers
       // again once the operator has answered.
       const asks = message?.startsWith("Ask me first") ?? false;
-      const code = fenced
-        ? '```python\nclose("Here is the answer, in a fence.")\n```'
-        : asks
-          ? 'await prompt(str, "Which effort should the next step take?", to=OPERATOR)'
-          : first
-            ? 'notes = read("README.md")\ncheck = await bash("printf \'✓ capture\\n✓ search\\n✓ local storage\\n\'")\nclose("## A clear starting point\\nFieldnotes keeps ideas close. The project has three small parts: capture, search, and local storage.\\n\\nAll three checks passed. A useful next step is to add a **search shortcut**, then cover it with a focused test.")'
-            : `close(${JSON.stringify(answer)})`;
+      const code =
+        word ??
+        (fenced
+          ? '```python\nclose("Here is the answer, in a fence.")\n```'
+          : asks
+            ? 'await prompt(str, "Which effort should the next step take?", to=OPERATOR)'
+            : first
+              ? 'notes = read("README.md")\ncheck = await bash("printf \'✓ capture\\n✓ search\\n✓ local storage\\n\'")\nclose("## A clear starting point\\nFieldnotes keeps ideas close. The project has three small parts: capture, search, and local storage.\\n\\nAll three checks passed. A useful next step is to add a **search shortcut**, then cover it with a focused test.")'
+              : `close(${JSON.stringify(answer)})`);
       if (slow) {
         write({ thinking });
         await pause(200);

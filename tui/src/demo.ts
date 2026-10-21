@@ -119,3 +119,32 @@ export async function seedConductor(session: Session): Promise<void> {
   await engine.rung({ word: conducting, on: engine.root });
   await session.refresh();
 }
+
+/** A demo life of many threads at once: the conversation of the demo, then a release that a conductor on the root
+ * hires four workers for, and a second thread on a chain of its own that reaches parity with Pi. A worker hires two
+ * writers, a review hangs on the change of a worker and asks the operator, a worker asks the operator first, a grant
+ * pauses a worker at its ceiling, and a command streams. */
+export async function seedThreads(session: Session): Promise<void> {
+  const { engine } = session;
+  await seedDemo(session);
+  await engine.prompt("str", {
+    message: "Ship the release 0.4: the search, the docs and the animation.",
+    on: engine.root,
+  });
+  const parity = await engine.chain({ label: "Pi parity" });
+  await engine.prompt("str", { message: "Reach parity with Pi: sessions, RPC and themes.", on: parity });
+  await session.refresh();
+}
+
+/** The word that makes a hundred chains, each of which asks the operator a question, so that a hundred messages flow
+ * on the map, to measure a large life. No model answers on them. */
+export const hundred = `for n in range(100):
+  prompt(str, f"Which way does the load {n} go?", to=OPERATOR, on=chain(f"load {n}"))`;
+
+/** A demo life of a hundred chains on the root, after the conversation of the demo. */
+export async function seedHundred(session: Session): Promise<void> {
+  const { engine } = session;
+  await seedDemo(session);
+  await engine.rung({ word: hundred, on: engine.root });
+  await session.refresh();
+}

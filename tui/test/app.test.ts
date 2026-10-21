@@ -31,7 +31,7 @@ test("the loom shows a conductor with its four workers under it, each in its sta
     async ({ app, frame }) => {
       await settled(app);
       const shown = await frame();
-      expect(shown).toContain("◆ 1 owed");
+      expect(shown).toMatch(/◆ 1\s+◉ \d/);
       expect(shown).toMatch(/◆ you +.*1 owed/);
       for (const row of [/✓ ├ w search/, /◉ ├ w docs|[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] ├ w docs/, /◌ └ w gif .* paused/])
         expect(shown).toMatch(row);
@@ -183,7 +183,7 @@ test("[ moves the time cursor into the past, where the loom shows the life as it
         await soon(() => app.cursor !== undefined);
       }
       const shown = await frame();
-      expect(shown).toMatch(/◷ moment \d+ of \d+/);
+      expect(shown).toMatch(/◷ \d+ of \d+/);
       expect(shown).toContain("then");
       expect(app.lines.find((line) => line.act.id === prompt.id)).toMatchObject({ state: "running" });
       screen.mockInput.pressKey("x");

@@ -5,8 +5,8 @@ import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { efforts, furbDirectory, onConsoleEnd } from "@furb/engine";
 import { createCliRenderer } from "@opentui/core";
-import { follow } from "./app.ts";
-import { demoDirectory, removeDemoDirectories, seedConductor } from "./demo.ts";
+import { follow, variants } from "./app.ts";
+import { demoDirectory, removeDemoDirectories, seedThreads } from "./demo.ts";
 import type { EngineOptions } from "./models.ts";
 import { Preferences } from "./preferences.ts";
 import { palettes } from "./theme.ts";
@@ -23,16 +23,19 @@ const { values } = parseArgs({
     record: { type: "string" },
     resume: { type: "string" },
     roster: { type: "string", multiple: true },
+    variant: { type: "string" },
   },
 });
 if (values.help) {
   console.log(`furb-tui [--demo] [--cwd path] [--model provider:model] [--effort ${efforts.join("|")}]
-         [--record file.jsonl | --resume file.jsonl] [--roster provider:model ...]
+         [--record file.jsonl | --resume file.jsonl] [--roster provider:model ...] [--variant ${variants.join("|")}]
 
 The loom shows each chain of the life as a thread, and the thread below it the ladders of the selected chain.
 ↑ and ↓ select a thread, Enter opens it, i asks its model, : writes a word of python, and Tab answers the oldest
 prompt that you owe. Space pauses or wakes the selection, x cancels it, and ? lists every key. ⌃Q quits.
---demo opens a scripted life of a conductor and four workers, which asks no model.
+--demo opens a scripted life of many threads at once, which asks no model.
+--variant chooses the first view: the loom of the chains in time, or the graph of the programs that run, a debugger
+with levels of zoom. v changes it in a running TUI.
 The default model is the one that the catalog offers first: opus, through your Claude CLI subscription, when this
 machine holds the claude command line, then a model of a provider of the network, then a model of the local server.
 A session offers it and the models of --roster. /model lists them, and every model of a provider whose credentials
@@ -41,6 +44,8 @@ provider:model. A model of that list joins the session when you choose it.`);
   process.exit(0);
 }
 if (values.effort && !efforts.some((effort) => effort === values.effort)) throw new Error("Invalid effort.");
+const variant = variants.find((one) => one === (values.variant ?? "loom"));
+if (!variant) throw new Error(`Invalid variant: choose ${variants.join(" or ")}.`);
 if (values.resume && !existsSync(resolve(values.resume))) throw new Error(`No session at ${values.resume}.`);
 const preferences = new Preferences();
 const record = values.resume ?? values.record;
@@ -72,8 +77,8 @@ if (record) await library.import(record, group);
 else await library.create(group);
 const initial = library.current?.session;
 if (!initial) throw new Error("The session did not open.");
-// A new demo shows a life of many workers at once, as a conductor runs them.
-if (values.demo && !record) await seedConductor(initial);
+// A new demo shows a life of many threads at once: conductors, the workers that they hire, and two questions.
+if (values.demo && !record) await seedThreads(initial);
 const renderer = await createCliRenderer({
   exitOnCtrlC: false,
   // The TUI ends on a signal by its own quit, since the view saves its draft before the renderer goes.
@@ -102,7 +107,7 @@ const quit = async () => {
   for (const error of failures) console.error(error);
   if (failures.length) process.exitCode = 1;
 };
-const app = follow(renderer, { quit, workspaces: library });
+const app = follow(renderer, { quit, workspaces: library, variant });
 for (const signal of ["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"] as const)
   process.once(signal, () => void quit().finally(() => process.exit()));
 // The runtime gives no signal for Ctrl+Break or for the close of the console of Windows, and ends the process at once.

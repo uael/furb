@@ -83,12 +83,12 @@ cells show.
 
 ## A narrow terminal, and the themes
 
-On a narrow terminal the loom leaves out the measures and keeps the cells. `/theme` changes every surface: GitHub
-Dark is the default, Paper is light, and Midnight and Forest are dark.
+On a narrow terminal the loom leaves out the measures and keeps the cells. `/theme` changes every surface: Dusk is
+the default, Day is its light theme, and GitHub Dark, Paper, Midnight and Forest stay.
 
 ![Narrow terminal](screenshots/15-narrow.png)
 
-![Paper theme](screenshots/16-paper.png)
+![Day theme](screenshots/16-day.png)
 
 ![Midnight theme](screenshots/17-midnight.png)
 
@@ -100,3 +100,36 @@ header counts the moment, and the right edge of the loom says `then`. In the pas
 nothing, but `b` branches the selected chain at the moment. Esc returns to now.
 
 ![Time cursor](screenshots/18-time-cursor.png)
+
+## The graph
+
+`v` shows the other variant, the graph: the life as programs that run, on a life of many threads at once. A thread
+is a prompt, and a prompt that a rung of a thread makes is its sub-thread. The sidebar holds the tree of the
+threads, each with its state, its progress and what waits for you in it. Beside it stands the map of the selected
+thread: each chain as its mark and its name, the lines of the tree of hires, and a dot that walks along a line while
+a message flows, as a question that a worker puts to you, or the brief that a conductor gives a worker.
+
+![The threads and the map](screenshots/19-graph.png)
+
+Enter zooms in, and Esc zooms out. The map selects a program, and the arrows move between the programs by their
+places.
+
+![The map](screenshots/20-graph-map.png)
+
+A program opens as its source: the words of its ladders, each line with what its acts came to, and at the side the
+stack of awaits and the watch of the selected line.
+
+![The source of a program](screenshots/21-graph-program.png)
+
+A line opens its word whole, with what each act came to under the line that made it, and an act opens its lens: a
+write shows its change, and a command its streams, live while it runs.
+
+![A word](screenshots/22-graph-word.png)
+
+![The change of a write](screenshots/23-graph-change.png)
+
+![A command that streams](screenshots/24-graph-command.png)
+
+Day is the light theme of every surface.
+
+![The graph in the theme Day](screenshots/25-graph-day.png)

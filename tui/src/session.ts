@@ -494,10 +494,16 @@ export class Session extends EventEmitter {
       ...(this.images[this.selected] ?? []).map(({ name, uri }) => imageReference(name, uri)),
     ].join("\n");
   }
+  /** The label of each chain, by the acts that it was read from, so that a view of many chains reads each in one step. */
+  private labels?: { acts: readonly ActRow[]; byId: Map<string, string> };
   labelOf(id: string): string {
-    return id === this.engine.root
-      ? "Main"
-      : String(this.chains.find((chain) => chain.id === id)?.words[0] || "Chain");
+    if (id === this.engine.root) return "Main";
+    if (this.labels?.acts !== this.acts)
+      this.labels = {
+        acts: this.acts,
+        byId: new Map(this.chains.map((chain) => [chain.id, String(chain.words[0] || "Chain")])),
+      };
+    return this.labels.byId.get(id) ?? "Chain";
   }
   async select(id: string): Promise<void> {
     // The turns and the program of the chain left are not the chain selected, which shows them once it has read them.

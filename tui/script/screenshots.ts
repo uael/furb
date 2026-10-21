@@ -3,7 +3,13 @@ import { basename, join, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import type { App } from "../src/app.ts";
-import { demoSession, removeDemoDirectories, seedConductor, seedDemoFiles } from "../src/demo.ts";
+import {
+  demoSession,
+  removeDemoDirectories,
+  seedConductor,
+  seedDemoFiles,
+  seedThreads,
+} from "../src/demo.ts";
 import { loadParsers } from "../src/parsers.ts";
 import type { Exit, Session } from "../src/session.ts";
 import { palettes } from "../src/theme.ts";
@@ -34,6 +40,11 @@ let app!: () => App;
 let library!: Workspaces;
 /** A session on the stage, under the name of a first session when it has no name of its own. */
 async function show(next: Session): Promise<void> {
+  // A second session replaces the first on the stage, which ends with its App and its library.
+  if (library) {
+    app().dispose();
+    await library.dispose();
+  }
   session = next;
   if (session.sessionName === basename(session.host.directory)) await session.command("/name Release 0.4");
   ({ library, app } = await mount(session, test.renderer));
@@ -159,11 +170,11 @@ try {
   test.resize(96, 32);
   await capture("15-narrow");
   test.resize(152, 46);
-  session.theme = "paper";
-  await capture("16-paper");
+  session.theme = "day";
+  await capture("16-day");
   session.theme = "midnight";
   await capture("17-midnight");
-  session.theme = "github";
+  session.theme = "dusk";
   app().focus = "loom";
   await pick("Main");
   for (let step = 0; step < 6; step++) await test.mockInput.typeText("[");
@@ -171,6 +182,70 @@ try {
   await capture("18-time-cursor");
   test.mockInput.pressEscape();
   await soon(() => app().cursor === undefined);
+  // The graph, on a life of many threads at once.
+  await show(await demoSession({ cwd: await project("release") }));
+  await seedThreads(session);
+  const done = (cue: string) =>
+    session.acts.some((act) => act.kind === "prompt" && String(act.words[1]).startsWith(cue) && act.done);
+  await until(
+    session,
+    () => done("Write the changelog") && done("Close the gap of sessions") && session.host.prompts.size === 2,
+  );
+  const chainOf = (label: string) =>
+    session.acts.find((act) => act.kind === "chain" && session.labelOf(act.id) === label)?.id ?? "";
+  await soon(() =>
+    app().loom.threads.some((thread) => thread.label === "docs/guide" && thread.waits?.startsWith("bash")),
+  );
+  app().variant = "graph";
+  app().render();
+  test.mockInput.pressArrow("down");
+  await soon(() => app().graph.thread === 1);
+  await capture("19-graph");
+  test.mockInput.pressEnter();
+  await soon(() => app().graph.level === "map");
+  await capture("20-graph-map");
+  app().graph.node = chainOf("w search");
+  await app().select(app().graph.node);
+  await app().graph.zoom(1);
+  app().render();
+  app().graph.line = Math.max(
+    0,
+    app().graph.lines.findIndex(
+      (line) => line.type === "code" && line.acts.some((act) => act.kind === "write"),
+    ),
+  );
+  await capture("21-graph-program");
+  await app().graph.zoom(1);
+  await capture("22-graph-word");
+  await app().graph.zoom(1);
+  await soon(() => app().focus === "lens");
+  await until(session, () => {
+    app().render();
+    return test.captureCharFrame().includes("@@");
+  });
+  await capture("23-graph-change");
+  await app().graph.zoom(-1);
+  await app().graph.zoom(-1);
+  await app().graph.zoom(-1);
+  app().graph.node = chainOf("docs/guide");
+  await app().select(app().graph.node);
+  await app().graph.zoom(1);
+  app().render();
+  app().graph.line = Math.max(
+    0,
+    app().graph.lines.findIndex((line) => line.type === "code" && line.runs),
+  );
+  await app().graph.zoom(1);
+  await app().graph.zoom(1);
+  await soon(() => app().focus === "lens");
+  await capture("24-graph-command");
+  test.mockInput.pressEscape();
+  await soon(() => app().graph.level === "word");
+  await app().graph.zoom(-1);
+  await app().graph.zoom(-1);
+  session.theme = "day";
+  await capture("25-graph-day");
+  session.theme = "dusk";
 } finally {
   app().dispose();
   test.renderer.destroy();

@@ -104,7 +104,7 @@ for (const ending of endings)
       await eventually(async () => (await pid()) > 0, "the command to start");
       // The word line asks the model once i opens it, and what it holds when the TUI ends stays as a draft.
       tui.type("i");
-      await eventually(() => tui.screen().includes("ask ›"), "the word line");
+      await eventually(() => tui.screen().includes("› Ask"), "the word line");
       tui.type("draftmarker");
       await eventually(() => tui.screen().includes("draftmarker"), "the draft on the screen");
       await tui.signal();

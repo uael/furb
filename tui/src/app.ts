@@ -1,4 +1,5 @@
-import { display, safeText } from "@furb/engine";
+import { isAbsolute, relative } from "node:path";
+import { display, type FileChange, safeText } from "@furb/engine";
 import {
   BoxRenderable,
   type CliRenderer,
@@ -10,9 +11,11 @@ import {
   TextareaRenderable,
   TextRenderable,
 } from "@opentui/core";
+import { createTwoFilesPatch } from "diff";
 import { conversation } from "./conversation.ts";
 import { shortenHome } from "./files.ts";
 import { ago, clip, dollars, elapsed } from "./format.ts";
+import { Graph, type Stage } from "./graph.ts";
 import { hints, keyTable } from "./keys.ts";
 import { type ActState, type Line, ladder, valueText } from "./ladder.ts";
 import {
@@ -34,7 +37,14 @@ import type { SessionEntry, Workspace, Workspaces } from "./workspaces.ts";
 export interface AppOptions {
   quit(): void | Promise<void>;
   workspaces: Workspaces;
+  /** The variant that the App shows first. */
+  variant?: Variant;
 }
+
+/** The whole directions of the TUI over one model of a life: the loom of the chains in time, and the graph of the
+ * programs that run, a debugger with levels of zoom. */
+export const variants = ["loom", "graph"] as const;
+export type Variant = (typeof variants)[number];
 
 /** An App on the session that the library selects, which a new App replaces for each session that the library
  * selects later. It gives the App that shows now. */
@@ -44,8 +54,9 @@ export function follow(renderer: CliRenderer, options: AppOptions): () => App {
   let app = new App(renderer, session, options);
   options.workspaces.on("select", (next: Session) => {
     if (app.session === next) return;
+    const variant = app.variant;
     app.dispose();
-    app = new App(renderer, next, options);
+    app = new App(renderer, next, { ...options, variant });
   });
   return () => app;
 }
@@ -126,8 +137,18 @@ export class App {
   /** The act that the lens shows, and the whole of it, once the session gave it. */
   lens?: ActRow;
   private whole?: ActRow;
+  /** The changes of the files, which the lens of a write reads its own from. */
+  private changes: FileChange[] = [];
   /** The moment that the time cursor stands at, and nothing at the present. */
   cursor?: number;
+  /** The variant that shows, and the graph, which the variant graph draws on the stage. */
+  variant: Variant;
+  readonly graph: Graph;
+  /** The acts as they stood at the time cursor, which the last render read. */
+  acts: readonly ActRow[] = [];
+  /** The chains that a step lets run for one rung, with the count of their rungs that had ended when it began. */
+  readonly stepping = new Map<string, number>();
+  private readonly stage: TextRenderable;
   private readonly header: TextRenderable;
   private readonly ruler: TextRenderable;
   private readonly threads: TextRenderable;
@@ -184,6 +205,19 @@ export class App {
     this.root.add(this.threads);
     this.rule = this.text({ id: "rule", height: 1, marginTop: 1 });
     this.root.add(this.rule);
+    this.variant = options.variant ?? "loom";
+    this.stage = this.text({
+      id: "stage",
+      flexGrow: 1,
+      flexShrink: 1,
+      minHeight: 0,
+      visible: false,
+      onMouseUp: (event) => {
+        if (this.graph.click(event.y - this.stage.y)) this.render();
+      },
+    });
+    this.root.add(this.stage);
+    this.graph = new Graph(this.stageOf());
     this.thread = this.text({
       id: "thread",
       flexGrow: 1,
@@ -272,7 +306,11 @@ export class App {
     renderer.keyInput.on("keypress", this.press);
     renderer.on("resize", this.render);
     this.tick = setInterval(() => {
-      if (this.loom.threads.some((thread) => thread.state === "working") || this.lines.some(running))
+      if (
+        this.loom.threads.some((thread) => thread.state === "working") ||
+        this.lines.some(running) ||
+        (this.variant === "graph" && this.loom.owed.length)
+      )
         this.render();
     }, frame);
     void loadParsers().then(() => {
@@ -326,6 +364,8 @@ export class App {
     // The time cursor shows the life as it stood at its moment, and the present shows it as it stands.
     const then = this.cursor;
     const acts = then === undefined ? w.acts : asOf(w.acts, then);
+    this.acts = acts;
+    this.steps();
     this.loom = weave({
       acts,
       prompts: then === undefined ? [...w.host.prompts.values()] : owedAt(acts),
@@ -336,14 +376,18 @@ export class App {
       label: (id) => w.labelOf(id),
     });
     const owed = new Set(this.loom.owed.map((prompt) => prompt.id));
-    const words = this.words();
-    this.lines = ladder(
-      w.selected,
-      acts,
-      (rung) => words.get(rung.id) ?? "",
-      then === undefined ? w.host.streams : new Map(),
-      owed,
-    );
+    const words = this.variant === "loom" ? this.words() : new Map<string, string>();
+    // The graph reads the source of a chain, and the loom its ladder.
+    this.lines =
+      this.variant === "loom"
+        ? ladder(
+            w.selected,
+            acts,
+            (rung) => words.get(rung.id) ?? "",
+            then === undefined ? w.host.streams : new Map(),
+            owed,
+          )
+        : [];
     this.selectedThread = Math.min(this.selectedThread, this.loom.threads.length - 1);
     const selected = this.loom.threads.findIndex((thread) => thread.id === w.selected);
     if ((this.focus !== "loom" || !this.placed) && selected >= 0) {
@@ -352,12 +396,18 @@ export class App {
     }
     this.selectedLine = Math.max(0, Math.min(this.selectedLine, (this.lines.length || starters.length) - 1));
     this.renderHeader();
-    this.renderLoom(cellWidth);
-    this.renderRule();
+    const graph = this.variant === "graph";
+    this.ruler.visible = this.threads.visible = this.rule.visible = !graph;
+    if (!graph) {
+      this.renderLoom(cellWidth);
+      this.renderRule();
+    }
     this.lensBox.visible = this.focus === "lens" && Boolean(this.lens);
-    this.thread.visible = !this.lensBox.visible;
+    this.thread.visible = !this.lensBox.visible && (!graph || this.focus === "lives");
+    this.stage.visible = graph && !this.lensBox.visible && this.focus !== "lives";
     if (this.lensBox.visible) this.renderLens();
     else if (this.focus === "lives") this.renderLives();
+    else if (graph) this.renderStage();
     else this.renderThread();
     this.renderWord();
     this.renderFooter();
@@ -384,25 +434,22 @@ export class App {
     const working = this.loom.threads.filter((thread) => thread.state === "working").length;
     const owed = this.loom.owed.length;
     const moments = momentsOf(w.acts);
+    // The header says the state by shape and color alone, and shows a count only where it is not zero.
     const right: Part[] = [
       ...(this.cursor !== undefined
-        ? ([
-            [`◷ moment ${moments.indexOf(this.cursor) + 1} of ${moments.length}   `, c.secondary, bold],
-          ] as Part[])
+        ? ([[`◷ ${moments.indexOf(this.cursor) + 1} of ${moments.length}   `, c.secondary, bold]] as Part[])
         : []),
-      ...(w.host.pending.size ? ([[`◌ ${w.host.pending.size} held   `, c.warning]] as Part[]) : []),
-      [`◆ ${owed} owed`, owed ? c.warning : c.faint],
-      ["   ", c.faint],
-      [`◉ ${working} at work`, working ? c.accent : c.faint],
-      ["   ", c.faint],
-      [dollars(w.cost), c.text],
+      ...(w.host.pending.size ? ([[`◌ ${w.host.pending.size}   `, c.warning]] as Part[]) : []),
+      ...(owed ? ([[`◆ ${owed}   `, c.warning, bold]] as Part[]) : []),
+      ...(working ? ([[`◉ ${working}   `, c.accent]] as Part[]) : []),
+      [dollars(w.cost), c.muted],
     ];
     const left: Part[] = [
       ["furb", c.accent, bold],
-      ["  ", c.faint],
+      ["   ", c.faint],
       [w.sessionName, c.text],
-      ["  ", c.faint],
-      [clip(shortenHome(w.host.directory), Math.max(10, this.width - 80), "end"), c.muted],
+      ["   ", c.faint],
+      [clip(shortenHome(w.host.directory), Math.max(10, this.width - 80), "end"), c.faint],
     ];
     this.header.content = styled(justify(left, right, this.width));
   }
@@ -828,6 +875,12 @@ export class App {
     } else if (act.kind === "prompt") {
       const [shape, message, to] = act.words.map(String);
       body = `${message}\n\nshape ${shape}${to ? `, to ${to}` : ""}${act.done ? `\n\nclosed with ${valueText(act.value)}` : ""}`;
+    } else if (act.kind === "write" && this.changes.some((change) => change.act === act.id)) {
+      // A write shows the change that it made to its file, line by line.
+      const change = this.changes.findLast((one) => one.act === act.id);
+      this.lensCode.visible = false;
+      this.lensBody.content = styled(change ? patchParts(change, this.session.host.directory) : []);
+      return;
     } else {
       const value = act.value as { is?: string; content?: string } | null;
       body = value?.is === "Text" ? String(value.content ?? "") : display(act.value);
@@ -854,12 +907,15 @@ export class App {
       grant: c.warning,
       door: c.secondary,
     }[this.mode as string];
-    this.wordLabel.content = styled([[`${label} › `, color ?? c.accent, bold]]);
+    // The composer names its mode only when it does more than ask the model of the chain.
+    this.wordLabel.content = styled(
+      this.mode === "prompt" ? [["› ", c.faint]] : [[`${label}  `, color ?? c.accent, bold]],
+    );
     this.word.placeholder =
       this.mode === "answer"
         ? `${clip(owed?.message.split("\n")[0] ?? "", 60)}  (${owed?.shape ?? ""})`
         : {
-            prompt: `Ask ${this.session.actor} on ${this.session.labelOf(this.session.selected)}`,
+            prompt: `Ask ${this.session.labelOf(this.session.selected)}`,
             python: "A word of python, which runs as a rung on this chain",
             command: "A command, as model, theme or fork",
             answer: "",
@@ -867,7 +923,9 @@ export class App {
             close: "The value, as JSON",
             door: "The program of the ladder",
           }[this.mode];
-    this.wordMeta.content = styled([[`  ${this.session.actor}  ${this.session.shape}`, c.faint]]);
+    const actor = this.session.actor.replace(/^[\w-]+:/, "");
+    const shape = this.session.shape === "str" ? "" : `  ${this.session.shape}`;
+    this.wordMeta.content = styled([[`  ${actor}${shape}`, c.faint]]);
   }
 
   private renderFooter(): void {
@@ -876,19 +934,20 @@ export class App {
       w.error ||
       w.notice ||
       (w.host.pending.size ? "This life holds work from before. Press w to wake it." : "");
-    // The footer offers the keys of the focus that fit beside its note, the first ones first.
-    const room = this.width - Math.min(60, Bun.stringWidth(note)) - 2;
-    const keys: Part[] = [];
-    for (const [key, action] of hints[this.focus]) {
-      const next: Part[] = [
+    // The footer keeps the keys out of sight: it offers the three of the focus that act most, and ? for the rest.
+    const offered = this.variant === "graph" && this.focus === "loom" ? this.graph.hints : hints[this.focus];
+    const keys: Part[] = [...offered.slice(0, 3), ["?", "keys"] as [string, string]].flatMap(
+      ([key, action]): Part[] => [
         [key, c.muted],
         [` ${action}   `, c.faint],
-      ];
-      if (Bun.stringWidth(plain([...keys, ...next])) > room) break;
-      keys.push(...next);
-    }
+      ],
+    );
     this.footer.content = styled(
-      justify([[clip(note, 60), w.error ? c.danger : c.warning]], keys, this.width),
+      justify(
+        [[clip(note, Math.max(20, this.width - 60)), w.error ? c.danger : c.warning]],
+        keys,
+        this.width,
+      ),
     );
   }
 
@@ -918,6 +977,7 @@ export class App {
   /** The act or the chain that the verbs act on: the act of the selected line in the thread and the lens, and the
    * selected chain in the loom. */
   get selection(): string {
+    if (this.variant === "graph" && this.focus === "loom") return this.graph.selection;
     if (this.focus === "loom") return this.loom.threads[this.selectedThread]?.id ?? this.session.selected;
     if (this.focus === "lens" && this.lens) return this.lens.id;
     return this.lines[this.selectedLine]?.act.id ?? this.session.selected;
@@ -961,10 +1021,24 @@ export class App {
     }
     const name = [":", "/", "?", "!", "[", "]", "{", "}"].includes(key.sequence) ? key.sequence : key.name;
     // The past is read only: a verb acts on the life as it stands, so the time cursor holds the verbs but a branch.
-    if (this.cursor !== undefined && ["space", "x", "c", "g", "e", "i", ":", "!", "tab"].includes(name)) {
+    if (
+      this.cursor !== undefined &&
+      ["space", "x", "c", "g", "e", "i", ":", "!", "tab", "n"].includes(name)
+    ) {
       this.session.notice = "The loom shows the past. b branches here, and Esc returns to now.";
       return this.render();
     }
+    if (name === "v") return this.switchVariant();
+    if (name === "n") return this.step();
+    // The graph takes the keys that move and zoom at each of its levels, and the lens of an act gives Esc back to it.
+    if (
+      this.variant === "graph" &&
+      !key.ctrl &&
+      !key.meta &&
+      (this.focus === "loom" || (this.focus === "lens" && name === "escape")) &&
+      (await this.graph.key(name))
+    )
+      return this.render();
     const moves: Record<string, number> = { up: -1, k: -1, down: 1, j: 1, pageup: -10, pagedown: 10 };
     if (name in moves && !key.ctrl && !key.meta) return this.move(moves[name] ?? 0);
     switch (name) {
@@ -1008,7 +1082,7 @@ export class App {
       case "x":
         return this.cancel();
       case "c":
-        if (this.focus === "loom") return;
+        if (this.focus === "loom" && this.variant === "loom") return;
         return this.write("close", this.selection);
       case "g":
         return this.write("grant");
@@ -1089,17 +1163,105 @@ export class App {
     this.focus = "lens";
     this.lensBox.scrollTo(0);
     this.render();
-    const whole = await this.session.host.act(line.act.id);
-    if (whole && this.lens?.id === whole.id) {
-      this.whole = whole;
-      this.render();
-    }
+    await this.fetchWhole(line.act);
   }
   back(): void {
     if (this.focus === "lens") this.focus = "thread";
     else if (this.focus === "thread") this.focus = "loom";
     else if (this.cursor !== undefined) this.cursor = undefined;
     this.render();
+  }
+  /** The variant that comes next, in place of the one that shows. */
+  switchVariant(): void {
+    this.variant = variants[(variants.indexOf(this.variant) + 1) % variants.length] ?? "loom";
+    if (this.focus === "thread" || this.focus === "lens") {
+      this.focus = "loom";
+      this.lens = undefined;
+    }
+    this.session.notice = `The ${this.variant} shows the life. v changes the variant.`;
+    this.render();
+  }
+  /** A step: the selected chain runs until one more of its rungs ends, then a pause holds it again. */
+  async step(): Promise<void> {
+    const chain = this.session.selected;
+    const ended = this.session.acts.filter(
+      (act) => act.on === chain && act.kind === "rung" && act.done,
+    ).length;
+    this.stepping.set(chain, ended);
+    if (this.loom.threads.find((thread) => thread.id === chain)?.state === "paused")
+      await this.session.engine.wake(chain);
+    this.session.notice = `${this.session.labelOf(chain)} runs one step, then pauses.`;
+    await this.session.refresh();
+  }
+  /** Each chain that a step let run pauses again once a rung of it that the step let run ends. */
+  private steps(): void {
+    for (const [chain, ended] of this.stepping) {
+      const now = this.session.acts.filter(
+        (act) => act.on === chain && act.kind === "rung" && act.done,
+      ).length;
+      if (now <= ended) continue;
+      this.stepping.delete(chain);
+      void this.session.engine.pause(chain).then(() => {
+        this.session.notice = `${this.session.labelOf(chain)} paused after one step.`;
+        return this.session.refresh();
+      }, this.session.fail);
+    }
+  }
+  /** The stage of the graph: the life as the App reads it, and the controls that the graph asks for. */
+  private stageOf(): Stage {
+    const app = this;
+    return {
+      get acts() {
+        return app.acts;
+      },
+      get loom() {
+        return app.loom;
+      },
+      get owed() {
+        return new Set(app.loom.owed.map((prompt) => prompt.id));
+      },
+      get frozen() {
+        return app.cursor !== undefined;
+      },
+      get selected() {
+        return app.session.selected;
+      },
+      words: () => app.words(),
+      label: (chain) => app.session.labelOf(chain),
+      streams: () => (app.cursor === undefined ? app.session.host.streams : new Map()),
+      select: (chain) => app.select(chain),
+      lens: (act) => app.showLens(act),
+    };
+  }
+  /** The lens shows an act whole, or the graph again. */
+  private showLens(act?: ActRow): void {
+    if (!act) {
+      this.lens = undefined;
+      this.focus = "loom";
+      return;
+    }
+    this.lens = act;
+    this.focus = "lens";
+    this.lensBox.scrollTo(0);
+    void this.fetchWhole(act).catch(this.session.fail);
+  }
+  /** The act whole for the lens, once the session gave it, with the changes of the files for a write. */
+  private async fetchWhole(act: ActRow): Promise<void> {
+    const host = this.session.host;
+    const [whole, changes] = await Promise.all([
+      host.act(act.id),
+      act.kind === "write" ? host.readChanges(0, host.changes) : Promise.resolve(this.changes),
+    ]);
+    if (whole && this.lens?.id === whole.id) {
+      this.whole = whole;
+      this.changes = changes;
+      this.render();
+    }
+  }
+  private renderStage(): void {
+    const height = this.stage.height || Math.max(4, this.renderer.height - 8);
+    const rows = this.graph.rows(this.width, height);
+    this.stage.content = styled(rows.flatMap((row, index) => (index ? [["\n"] as Part, ...row] : row)));
   }
   /** The time cursor moves back or forward by a count of moments, and past the last moment it stands at the present
    * again. */
@@ -1137,7 +1299,7 @@ export class App {
     this.word.blur();
     if (this.mode !== "prompt" && this.mode !== "python" && this.mode !== "command") this.word.setText("");
     this.session.editing = undefined;
-    this.focus = this.lines.length ? "thread" : "loom";
+    this.focus = this.variant === "loom" && this.lines.length ? "thread" : "loom";
     this.mode = "prompt";
     this.render();
   }
@@ -1244,7 +1406,7 @@ export class App {
       this.render();
       return;
     }
-    if (this.focus === "loom") return;
+    if (this.focus === "loom" && this.variant === "loom") return;
     const id = this.selection;
     await this.session.rewind(id);
     this.focus = "thread";
@@ -1289,6 +1451,32 @@ export class App {
 
 /** Whether a line shows work that runs, whose spinner turns. */
 const running = (line: Line) => line.type !== "tail" && line.type !== "value" && line.state === "running";
+
+/** The change of a file, as the lines of its patch under the path of the file in the directory of the life: what it
+ * added on the ground of an addition, what it removed on the ground of a removal, and the rest as it stands. */
+function patchParts({ path, before, after }: FileChange, directory: string): Part[] {
+  const near = relative(directory, path);
+  const name = near.startsWith("..") || isAbsolute(near) ? shortenHome(path) : near;
+  const patch = createTwoFilesPatch(path, path, before, after).split("\n").slice(4).filter(Boolean);
+  return [
+    [safeText(name), c.text, bold],
+    ...patch.flatMap((line): Part[] => [
+      ["\n"],
+      [
+        safeText(line),
+        line.startsWith("+")
+          ? c.success
+          : line.startsWith("-")
+            ? c.danger
+            : line.startsWith("@@")
+              ? c.faint
+              : c.prose,
+        0,
+        line.startsWith("+") ? c.added : line.startsWith("-") ? c.removed : undefined,
+      ],
+    ]),
+  ];
+}
 
 /** A bar of the share of a window, eight steps to a cell. */
 export function gauge(share: number, cells: number): string {

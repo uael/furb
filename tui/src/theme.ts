@@ -39,6 +39,58 @@ interface Palette {
 }
 
 export const palettes = {
+  dusk: {
+    background: "#1f1e1c",
+    panel: "#262523",
+    raised: "#2e2d2a",
+    selected: "#35332f",
+    border: "#3b3935",
+    text: "#ecebe6",
+    prose: "#cfcdc5",
+    muted: "#9a978e",
+    faint: "#6b6963",
+    accent: "#d4835f",
+    secondary: "#a9a4cc",
+    success: "#93b58c",
+    warning: "#e2b55c",
+    danger: "#e07a6f",
+    link: "#9db7d9",
+    added: "#24301f",
+    removed: "#3a2522",
+    backdrop: "#0e0d0cb0",
+    syntaxKeyword: "#d9a37e",
+    syntaxString: "#a9c19d",
+    syntaxNumber: "#e2b55c",
+    syntaxFunction: "#ecebe6",
+    syntaxType: "#a9a4cc",
+    syntaxComment: "#8a867d",
+  },
+  day: {
+    background: "#faf9f5",
+    panel: "#f2f0e9",
+    raised: "#ffffff",
+    selected: "#e8e5db",
+    border: "#e0ddd2",
+    text: "#1f1e1c",
+    prose: "#3d3b36",
+    muted: "#6e6b63",
+    faint: "#a29e94",
+    accent: "#b85a3c",
+    secondary: "#6b5fa8",
+    success: "#4f7a4a",
+    warning: "#9a6a12",
+    danger: "#b4433a",
+    link: "#3d64a0",
+    added: "#e3eedc",
+    removed: "#f5dfd9",
+    backdrop: "#1f1e1c40",
+    syntaxKeyword: "#9a4f33",
+    syntaxString: "#4f7a4a",
+    syntaxNumber: "#9a6a12",
+    syntaxFunction: "#1f1e1c",
+    syntaxType: "#6b5fa8",
+    syntaxComment: "#8d897f",
+  },
   github: {
     background: "#0d1117",
     panel: "#161b22",
@@ -145,9 +197,11 @@ export const palettes = {
   },
 } satisfies Record<string, Palette>;
 export type ThemeName = keyof typeof palettes;
-export const defaultTheme: ThemeName = "github";
+export const defaultTheme: ThemeName = "dusk";
 /** The name of a theme as a picker shows it, and whether it is light or dark. */
 export const themeLabels: Record<ThemeName, [string, string]> = {
+  dusk: ["Dusk", "Dark"],
+  day: ["Day", "Light"],
   github: ["GitHub Dark", "Dark"],
   forest: ["Forest", "Dark"],
   paper: ["Paper", "Light"],

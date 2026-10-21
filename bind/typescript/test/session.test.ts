@@ -636,7 +636,9 @@ test("a session opens a record in a directory that does not stand yet, and keeps
     const { engine } = session;
     engine.write({ path: "note.txt", content: "one\n" }, { on: engine.root });
     await until(session, () => session.changes.length === 1);
-    expect(session.changes.read()).toEqual([{ path: join(cwd, "note.txt"), before: "", after: "one\n" }]);
+    expect(session.changes.read()).toEqual([
+      { path: join(cwd, "note.txt"), before: "", after: "one\n", act: expect.stringMatching(/^write\d+$/) },
+    ]);
     expect((await stat(`${record}.changes.jsonl`)).isFile()).toBe(true);
   } finally {
     await session.dispose();

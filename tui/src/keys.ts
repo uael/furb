@@ -67,6 +67,8 @@ export const keyTable: [string, string][] = [
     "[ and ]",
     "Move the time cursor back and forward by a moment, or by ten with { and }. Esc returns to now",
   ],
+  ["n", "Step: the selected chain runs one more rung, then a pause holds it"],
+  ["v", "Change the variant: the loom of the chains in time, or the graph of the programs that run"],
   ["w", "Wake the work that an earlier life left"],
   ["⌃O", "Open the list of lives, by workspace"],
   ["?", "Show or hide these keys"],

@@ -113,12 +113,19 @@ try {
   await press(" ", 140);
   await press("x", 160);
   await moments(6);
+  // v changes the variant: the graph shows the threads beside the map of the programs, and the messages flow.
+  await press("v", 60);
+  await moments(20);
+  await press("down", 40);
+  await press("enter", 60);
+  await moments(20);
+  await press("escape", 40);
   // The palettes change every surface at once.
   await press("/", 30);
-  await type("theme paper", 2, 6);
+  await type("theme day", 2, 6);
   await press("enter", 220);
   await press("/", 20);
-  await type("theme github", 3, 6);
+  await type("theme dusk", 3, 6);
   await press("enter", 200);
   // The lights of the title bar are rare pixels, which the palette keeps all the same.
   await writeFile(output, gif(stills, size.width, size.height, [0xff5f57, 0xfebc2e, 0x28c840]));
