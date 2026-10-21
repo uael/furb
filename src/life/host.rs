@@ -344,7 +344,7 @@ impl Life {
     let mut found = Vec::new();
     let mut open = vec![self.root()];
     while let Some(on) = open.pop() {
-      let facts = self.engine.transcript(verbs::Transcript { on: Some(on.0.clone()) })?;
+      let facts = self.engine.transcript(verbs::Transcript { on: Some(on.0.clone()), of: None })?;
       let children =
         facts.iter().filter(|one| one.kind() == "chain" && one.question() && one.on() == on.0);
       open.extend(
@@ -359,7 +359,8 @@ impl Life {
 
   /// Every act on a chain, in order, with named fields.
   pub fn acts(&mut self, chain: &Chain) -> Result<Vec<LifeAct>, Fault> {
-    let facts = self.engine.transcript(verbs::Transcript { on: Some(chain.0.clone()) })?;
+    let facts =
+      self.engine.transcript(verbs::Transcript { on: Some(chain.0.clone()), of: None })?;
     let mut acts = Vec::new();
     for one in facts.iter().filter(|one| one.question() && one.on() == chain.0) {
       let done = self.engine.outcome(one.about())?.is_some();
@@ -390,7 +391,8 @@ impl Life {
 
   /// The words of the rungs of a thread, as python, in order.
   pub fn plan<T>(&mut self, thread: &Thread<T>) -> Result<String, Fault> {
-    let facts = self.engine.transcript(verbs::Transcript { on: Some(thread.chain.0.clone()) })?;
+    let facts =
+      self.engine.transcript(verbs::Transcript { on: Some(thread.chain.0.clone()), of: None })?;
     let mut words: Vec<(String, String)> = Vec::new();
     for one in &facts {
       let word =
