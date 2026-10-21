@@ -47,7 +47,7 @@ Two configs say which extensions a life runs: `config.json` in the config direct
 - A path gives the folder of an extension that is not official. A relative path starts at the folder of the config,
   and `~` is the home.
 
-The official extensions, `memory` and `skills`, are on unless a config turns them off. A config that is not of this
+The official extensions, `memory`, `skills` and `compaction`, are on unless a config turns them off. A config that is not of this
 form, a folder with no manifest, a manifest of another name, and a missing word are each refused with the path.
 
 ## How a life runs its extensions
@@ -75,10 +75,15 @@ journal answers again in a later life, so a replay is exact and the World is ask
   is an act that tells the memory of the working directory when it is made, then the memory of the folder of each
   file that the chain reads, and the memory that changed at each stand. Its life word is `remember()`.
 
+- `compaction` defines `compaction()`, an act that watches the fill of its chain. At the first answer of a model
+  that reads more than `SHARE`, 0.6, of the window of its actor, it tells the model that share and the word that goes
+  on in a chain with a source and a take of the old work, which drops each prompt of the chain that is done. It
+  does not act for the model, and it needs no ear of the World. Its life word is `compaction()`.
+
 Each has a contract, `extensions/<name>/<name>.pyi`, which the hygiene laws 1 to 4 of `CLAUDE.md` hold to its suite
 as they hold the engine. Laws 5 to 7 are for `engine.py` alone, and laws 8 and 9 hold the word of each extension.
-Each also has an ear of the World in the crate, `src/extension/<name>.rs`, which answers its questions from the
-disk. The suite runs on both engines.
+`memory` and `skills` also have an ear of the World in the crate, `src/extension/<name>.rs`, which answers their
+questions from the disk. The suite runs on both engines.
 
 ## A third party extension
 

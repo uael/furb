@@ -38,9 +38,13 @@ pub const ENABLE: &str = "enable";
 const JOURNAL: &str = "journal";
 
 /// The official extensions, each as its manifest and the file of its word, in the order a life runs them.
-const OFFICIAL: [(&str, &str); 2] = [
+const OFFICIAL: [(&str, &str); 3] = [
   (include_str!("../extensions/memory/furb.json"), include_str!("../extensions/memory/memory.py")),
   (include_str!("../extensions/skills/furb.json"), include_str!("../extensions/skills/skills.py")),
+  (
+    include_str!("../extensions/compaction/furb.json"),
+    include_str!("../extensions/compaction/compaction.py"),
+  ),
 ];
 
 /// Whether a line imports furb or a module of it, as `from furb import`, `from furb.engine import` or `import

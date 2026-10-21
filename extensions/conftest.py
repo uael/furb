@@ -10,10 +10,10 @@ from furb_monty import _monty
 
 
 def extended(
-  name: str, at: Path, ear: Callable[[str], World], *, lives: bool = False, record: Sequence[tuple] = ()
+  name: str, at: Path, ear: Callable[[str], World] | None = None, *, lives: bool = False, record: Sequence[tuple] = ()
 ) -> tuple[Sand, str]:
   """A life on a record, whose chains stand in the folder work of a directory, which enables at its tip the official
-  extension of that name, with its life word when it lives: it hears the ear of the extension, whose config directory
+  extension of that name, with its life word when it lives: it hears the ear of the extension when it has one, whose config directory
   of the user is the folder config of the directory, and the files of the machine after the World of the suite. It
   gives the World and the root."""
   one = next(x for x in _monty.official() if x["name"] == name)
@@ -21,7 +21,7 @@ def extended(
   given = _monty.extensions([one if lives else {**one, "life": ""}])
   sand = sown(stands=[STANDS[0], str(at / "work"), STANDS[2]])
   files = _monty.files(str(at / "scratch"))
-  return sand, life(sand, record, extensions=given, **{name: ear(str(at / "config"))}, files=files)[1]
+  return sand, life(sand, record, extensions=given, **({name: ear(str(at / "config"))} if ear else {}), files=files)[1]
 
 
 def noted(folder: Path, text: str, name: str = "CLAUDE.md") -> Path:
