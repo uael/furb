@@ -118,3 +118,21 @@ fn mine() -> Box<dyn Ear> {
     }
   })
 }
+
+#[test]
+fn a_life_that_keeps_a_record_writes_a_new_file_and_a_new_file_in_a_new_folder_to_its_scratch_directory()
+ {
+  let at = place("scratch");
+  let (mut engine, _) =
+    Opening { extensions: Some(false), ..opening(&at, true) }.boot::<String>([]).unwrap();
+  let root = engine.root().to_owned();
+  let on = || Some(root.clone());
+  let write = verbs::Write { on: on() };
+  let plan = engine.write(&Text::new("scratch://plan.md", "plan\n"), write).unwrap();
+  assert_eq!(plan, Text::new("scratch://plan.md", "plan\n"));
+  let write = verbs::Write { on: on() };
+  let note = engine.write(&Text::new("scratch://notes/new.md", "note\n"), write).unwrap();
+  assert_eq!(note, Text::new("scratch://notes/new.md", "note\n"));
+  let read = verbs::Read { on: on(), ..Default::default() };
+  assert_eq!(engine.read("scratch://", read).unwrap(), Text::new("scratch://", "notes/\nplan.md"));
+}
