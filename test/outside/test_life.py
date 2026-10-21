@@ -2,11 +2,18 @@
 
 import json
 import shutil
+import sys
 from pathlib import Path
+
+import pytest
 
 import furb
 
 FAKE = Path(__file__).parents[2] / "src" / "world" / "provider" / "fake-claude.sh"
+
+pytestmark = pytest.mark.skipif(
+  sys.platform == "win32", reason="the claude of the tests is a script of sh, which Windows does not start"
+)
 
 
 async def test_the_acts_of_a_chain_have_named_fields_and_a_chain_names_its_actor(tmp_path: Path) -> None:

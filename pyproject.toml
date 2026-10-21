@@ -162,5 +162,7 @@ filterwarnings = ["error"]
 patch = ["subprocess"]
 
 [tool.coverage.report]
-# The suite runs every line of engine.py.
+# The suite runs every line of engine.py. A run counts no file that FURB_UNCOUNTED names: the suite on Windows names
+# src/furb/life.py, since the tests of the life as a program run on POSIX alone.
 fail_under = 100
+omit = ["${FURB_UNCOUNTED-}"]
