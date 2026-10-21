@@ -140,9 +140,9 @@ async def test_a_read_answered_with_what_is_no_text_gives_that_value() -> None:
   assert of(engine.turns(on=root), "read") == ["#read1\nread1_path = 'nums://a'\nread1_value = [1, 2]"]
 
 
-async def test_a_read_from_inside_an_act_whose_show_picks_more_than_largest_bytes_of_its_text_raises_refused() -> None:
-  """A read from inside an act whose show picks more than LARGEST bytes of its text raises Refused, which names those bytes and LARGEST, and tells nothing, and a read from outside an act, which tells nothing, is never refused for its size."""
-  long = "".join(f"{i:07}" + "x" * 1000 + "\n" for i in range(600))
+async def test_a_read_from_inside_an_act_that_would_tell_more_than_largest_bytes_of_its_text_raises_refused() -> None:
+  """A read from inside an act that would tell more than LARGEST bytes of its text raises Refused, which names those bytes and LARGEST, and tells nothing, and a read from outside an act, which tells nothing, is never refused for its size."""
+  long = "".join(f"{i:07}" + "x" * 900 + "\n" for i in range(600))
   word = "try:\n  read('long.txt')\nexcept Refused as no:\n  why = str(no)\nclose([why, read('long.txt', span(2, 2)).lines[1][:7]])"
   _, _, root = born(word, files={"/w/long.txt": long})
   size = len("\n".join(long.splitlines()).encode())
