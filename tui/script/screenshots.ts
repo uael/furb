@@ -123,6 +123,16 @@ try {
   app().closeOverlay();
   await session.host.answer(session.operatorPrompt?.id ?? "", "yes");
   await until(session.host, () => !session.host.prompts.size);
+  const notice = await session.engine.prompt("None", {
+    message: "The search shortcut is on the main chain.",
+    on: session.selected,
+    to: "operator",
+  });
+  await until(session.host, () => session.host.notices.has(notice));
+  await session.refresh();
+  await capture("22-operator-notice");
+  app().question();
+  await until(session.host, () => !session.host.notices.size);
   app().toggleMode();
   app().composer.setText('notes = read("README.md")\nprint(notes.content)');
   await capture("10-python-input");

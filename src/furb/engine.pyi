@@ -428,15 +428,16 @@ def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[No
   The completion of a prompt cancels nothing under the prompt but the words it ran.
   The operator prompts on any chain, by the id of the chain.
   A rung prompts on any chain, by the id of the chain.
-  A prompt to the operator completes when the operator closes the prompt.
+  A prompt to the operator of a shape that is not None completes when the operator closes the prompt.
   The response of a prompt on a chain with a source comes to the act that the caller holds.
   It is the ladder of its rungs, and its name is the door of the program of that ladder, which holds the word of every rung of it for as long as the chain lives.
   A word written to its door is a rung of it, which answers it as the word of its model does.
-  A prompt to the operator asks no model: the World takes it and shows it, and it waits to be closed; in a later life, one the record shows open is shown again only at a wake, and one the record shows closed is shown no more.
+  A prompt to the operator asks no model: the World takes it and shows it, and it waits to be closed, but for a prompt of shape None; in a later life, one the record shows open is shown again only at a wake, and one the record shows closed is shown no more.
   A prompt to a model takes its own act, since the engine is the one that asks the model.
   Its close tells what closed it from outside, which the one that closed it says, and nothing of what its rung gave, which the rung has told.
   A paused prompt makes no rung until the wake, and a cancel of it is over its rung too, which ends itself.
   The World closes with a refusal a prompt it cannot put to the operator; which shapes the operator answers is the World's law.
+  The World closes a prompt of shape None to the operator with None as it takes it, since that prompt asks nothing: the operator reads it as a notice, and no word that awaits it waits for the operator.
   The shape left unsaid is None, which the acknowledgment uses, and any value responds to it.
   A prompt takes any shape, which a close is read against as python reads an instance: of the shape, or of the origin of a generic one, and a union as any of its members, each read the same way.
   A prompt carries the name of its shape as a word, and takes the name as well as the shape, so the journal makes it again.

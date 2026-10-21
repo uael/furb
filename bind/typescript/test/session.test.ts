@@ -434,6 +434,23 @@ test("a whole number from the operator answers a float prompt as a float, typed 
   }
 });
 
+test("a prompt of None to the operator is closed as the console takes it, and stays a notice until a dismiss", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-notice-"));
+  const session = boot({ cwd });
+  try {
+    const { engine } = session;
+    const told = engine.prompt("None", { message: "The build is green.", to: "operator", on: engine.root });
+    expect(await told).toBeNull();
+    expect(session.console.prompts.size).toBe(0);
+    expect([...session.console.notices.values()]).toEqual([{ id: told.id, message: "The build is green." }]);
+    session.console.dismiss(told.id);
+    expect(session.console.notices.size).toBe(0);
+  } finally {
+    await session.dispose();
+    await rm(cwd, { recursive: true });
+  }
+});
+
 test("an operator question survives a resume and validates its answer", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-operator-resume-"));
   const record = join(cwd, "life.jsonl");
