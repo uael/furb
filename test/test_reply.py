@@ -260,7 +260,7 @@ async def test_a_new_prompt_reads_the_whole_transcript_of_the_chain_the_cancelle
     f"#{root}",
     f"#{root} standing",
     f"#{first}",
-    f"#{first} cancelled",
+    f"#{first} cancelled by operator",
     f"#{second}",
     f"#{step} advance on {second}",
   ]

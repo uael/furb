@@ -85,6 +85,19 @@ async def test_the_awaiter_of_a_cancelled_command_raises_cancellederror_in_its_s
   await settle()
   assert isinstance(engine.peek(step), CancelledError)
   ends = [one for one in paragraphs(engine.turns(on=root)) if one.split()[1:2] in (["raised"], ["cancelled"])]
-  assert ends == [f"#{command} cancelled", f"#{step} cancelled"]
+  assert ends == [f"#{command} cancelled by operator", f"#{step} cancelled"]
   assert engine.peek(one) is None
   engine.cancel(one)
+
+
+async def test_the_paragraph_of_a_cancel_names_in_its_header_the_one_that_said_it() -> None:
+  """The paragraph of a cancel names in its header the one that said it, as #rung5 cancelled by operator, so a turn says what ended the act."""
+  _, log, root = born(auto=False)
+  first = engine.bash("slow", on=root)
+  word = engine.rung(f"cancel({first!r})", on=root)
+  await word
+  other = engine.bash("slow", on=root)
+  engine.cancel(other)
+  await settle()
+  heads = [a[3][0] for a in said(log, "tell") if a[1] in (first, other) and " cancelled" in a[3][0]]
+  assert heads == [f"#{first} cancelled by {word}", f"#{other} cancelled by operator"]
