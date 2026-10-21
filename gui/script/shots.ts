@@ -19,6 +19,18 @@ const screens: [name: string, query: string][] = [
   ["9-picker", "picker=1"],
 ];
 
+// FURB_SHOTS names other screens, as name=query pairs split by spaces, as for the fixture of a record.
+const asked = process.env.FURB_SHOTS?.split(" ").map((one): [string, string] => {
+  const at = one.indexOf("=");
+  return [one.slice(0, at), one.slice(at + 1).replaceAll(",", "&")];
+});
+if (asked?.length) screens.splice(0, screens.length, ...asked);
+screens.splice(
+  0,
+  screens.length,
+  ...asked.map(([name, query]) => [name, query.replaceAll(",", "&")] as [string, string]),
+);
+
 await mkdir(out, { recursive: true });
 const server = spawn("./node_modules/.bin/vite", ["preview"], { stdio: "ignore" });
 await new Promise((done) => setTimeout(done, 1500));
@@ -27,7 +39,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
   for (const [name, query] of screens) {
     await page.goto(`http://localhost:4174/?${query}`);
-    await page.waitForTimeout(1200);
+    await page.waitForTimeout(Number(process.env.FURB_SHOTS_WAIT ?? 1200));
     await page.screenshot({ path: join(out, `${name}.png`) });
   }
 } finally {

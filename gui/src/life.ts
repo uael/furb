@@ -14,7 +14,7 @@ import {
   threads,
 } from "@furb/engine/life";
 import { useEffect, useMemo, useState } from "react";
-import { type Break, call, demo, type State, type Told, tauri, type Wire } from "./data.ts";
+import { type Break, call, demo, type State, shown, type Told, tauri, type Wire } from "./data.ts";
 
 /** The life as the window holds it: the acts that the core sent, merged, and what came with the last part. */
 export interface Held {
@@ -28,6 +28,7 @@ export interface Held {
   place: string;
   directory: string;
   works: boolean;
+  kept: boolean;
   acts: Map<string, LiveAct>;
   words: Map<string, string>;
   owed: string[];
@@ -47,6 +48,7 @@ const empty: Held = {
   place: "",
   directory: "",
   works: false,
+  kept: false,
   acts: new Map(),
   words: new Map(),
   owed: [],
@@ -81,6 +83,7 @@ function merged(held: Held, part: Wire): Held {
     place: part.place,
     directory: part.directory,
     works: part.works,
+    kept: part.kept,
     acts,
     words,
     owed: part.owed,
@@ -90,11 +93,21 @@ function merged(held: Held, part: Wire): Held {
   };
 }
 
+/** A fixture that a browser fetches in place of the demo, as a record too large to build into the UI. */
+const fetched = new URLSearchParams(window.location.search).get("fixture");
+
 /** The life that the window shows: the one that the core of the app sends, or the fixture of the demo in a browser.
  * A part that comes after a gap makes the window ask the core again for all that changed since what it holds. */
 export function useHeld(): Held {
-  const [held, setHeld] = useState<Held>(() => (tauri ? empty : merged(empty, demo)));
+  const [held, setHeld] = useState<Held>(() => (tauri || fetched ? empty : merged(empty, demo)));
   useEffect(() => {
+    if (!tauri && fetched)
+      void fetch(fetched)
+        .then((answer) => answer.json())
+        .then((fixture: typeof demo) => {
+          shown.fixture = fixture;
+          setHeld(merged(empty, fixture));
+        });
     if (!tauri) return;
     let gone = false;
     let stop: (() => void) | undefined;
@@ -157,7 +170,8 @@ export function useMoment(held: Held, at: number | null): Moment {
   return useMemo(() => {
     const now = at === null || at >= held.len;
     const acts = now ? all : asOf(all, at);
-    const owed = new Set(now ? held.owed : owedAt(acts).map((one) => one.id));
+    // A life that works says what its console owes now; a record and the past derive it from the acts.
+    const owed = new Set(now && held.works ? held.owed : owedAt(acts).map((one) => one.id));
     const tree = threads(acts, owed);
     const rows = new Map(acts.map((act) => [act.id, act]));
     const word = (rung: LiveAct) => String(rung.words[0] || held.words.get(rung.id) || "");
@@ -173,7 +187,7 @@ export function useMoment(held: Held, at: number | null): Moment {
       chains: acts.filter((act) => act.kind === "chain"),
       word,
     };
-  }, [all, at, held.len, held.owed, held.words, marked]);
+  }, [all, at, held.len, held.owed, held.words, held.works, marked]);
 }
 
 /** The state of an act, as a glyph shows it. */
@@ -225,11 +239,11 @@ export function hirer(moment: Moment, chain: LiveAct): string | undefined {
 
 /** The watch of a chain: what it told, from the core of the app, or from the fixture in a browser. */
 export function useTold(chain: string, count: number): Told[] {
-  const [told, setTold] = useState<Told[]>(() => (tauri ? [] : (demo.watch[chain] ?? [])));
+  const [told, setTold] = useState<Told[]>(() => (tauri ? [] : (shown.fixture.watch[chain] ?? [])));
   // biome-ignore lint/correctness/useExhaustiveDependencies: the watch is asked again at each change of the life.
   useEffect(() => {
     if (!tauri) {
-      setTold(demo.watch[chain] ?? []);
+      setTold(shown.fixture.watch[chain] ?? []);
       return;
     }
     let gone = false;

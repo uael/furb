@@ -168,6 +168,12 @@ export function ThreadView({
           </ol>
         ) : null}
         {owed && held.works && moment.now ? <Answer thread={thread} /> : null}
+        {held.kept && !thread.act.done && thread.to !== "operator" ? (
+          <div className="mt-6 ml-8 rounded-xl border border-dashed border-hair-strong px-4 py-3 text-[13px] leading-relaxed text-muted">
+            The record keeps no end of this thread. A word may have closed it, or raised, and the record does
+            not say which: it keeps only what the World, the models and the operator said.
+          </div>
+        ) : null}
         {answer !== undefined && answer !== null ? (
           <section className="mt-6 pl-8">
             <div

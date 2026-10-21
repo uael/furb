@@ -50,6 +50,8 @@ export type Wire =
       place: string;
       directory: string;
       works: boolean;
+      /** Whether the facts are what a record kept, read with no life, so the view of it has gaps that the app says. */
+      kept: boolean;
       acts: LiveAct[];
       words: Record<string, string>;
       owed: string[];
@@ -77,6 +79,9 @@ export const demo = fixture as unknown as Extract<Wire, { state: "open" }> & {
   watch: Record<string, Told[]>;
   places?: Places;
 };
+
+/** The fixture that a browser shows: the demo, or the one that it fetched at ?fixture=, as for a large record. */
+export const shown: { fixture: typeof demo } = { fixture: demo };
 
 /** Whether the UI runs in the window of the app, which hears a life, or in a browser, which shows the fixture. */
 export const tauri = "__TAURI_INTERNALS__" in window;

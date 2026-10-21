@@ -232,7 +232,20 @@ function You({ data }: NodeProps<Node<YouData>>) {
   );
 }
 
-const nodeTypes = { program: Program, you: You };
+type NoteData = { count: number };
+
+/** The chains that a record names and holds no thread of, folded into one note, since the record keeps only the
+ * rungs of the extensions on them. */
+function Note({ data }: NodeProps<Node<NoteData>>) {
+  return (
+    <div className="w-[380px] rounded-2xl border border-dashed border-hair-strong px-5 py-4 text-[13px] leading-relaxed text-muted">
+      {data.count === 1 ? "One more chain holds" : `${data.count} more chains hold`} no thread in this record.
+      The record keeps only the rungs of the extensions on them.
+    </div>
+  );
+}
+
+const nodeTypes = { program: Program, you: You, note: Note };
 
 /** The legend of the edges: one meaning for each style. */
 function Legend() {
@@ -281,8 +294,13 @@ export function GraphView({
 }) {
   const flow = useRef<ReactFlowInstance | null>(null);
   const { nodes, edges } = useMemo(() => {
-    const grid = places(moment.chains, (chain) => hirer(moment, chain));
-    const nodes: Node[] = moment.chains.map((chain) => {
+    // A record shows only the chains that hold a thread, and folds the others into one note.
+    const holds = (chain: LiveAct) =>
+      !held.kept || chain.id === held.root || moment.threads.some((one) => one.chain === chain.id);
+    const shown = moment.chains.filter(holds);
+    const folded = moment.chains.length - shown.length;
+    const grid = places(shown, (chain) => hirer(moment, chain));
+    const nodes: Node[] = shown.map((chain) => {
       const place = grid.get(chain.id) ?? { column: 0, row: 0 };
       return {
         id: chain.id,
@@ -294,8 +312,17 @@ export function GraphView({
       };
     });
     nodes.push({ id: "operator", type: "you", position: { x: 0, y: 0 }, data: { moment } });
+    if (folded) {
+      const rows = Math.max(0, ...[...grid.values()].map((one) => one.row));
+      nodes.push({
+        id: "folded",
+        type: "note",
+        position: { x: 0, y: (rows + 1) * ROW },
+        data: { count: folded },
+      });
+    }
     const edges: FlowEdge[] = [];
-    for (const chain of moment.chains) {
+    for (const chain of shown) {
       const from = hirer(moment, chain);
       if (!from) continue;
       edges.push({
@@ -309,8 +336,9 @@ export function GraphView({
       });
     }
     const recent = (act: LiveAct) => act.ended !== undefined && moment.at - act.ended < 24;
+    const drawn = new Set(["operator", ...shown.map((one) => one.id)]);
     for (const message of messages(moment.acts, recent)) {
-      if (message.kind === "answer") continue;
+      if (message.kind === "answer" || !drawn.has(message.from) || !drawn.has(message.to)) continue;
       const prompt = moment.rows.get(message.act);
       const thread = moment.threads.find((one) => one.act.id === message.act);
       const state = thread ? threadState(moment, thread) : "runs";
@@ -344,6 +372,7 @@ export function GraphView({
         fitViewOptions={{
           padding: { top: "48px", left: "64px", right: "64px", bottom: "200px" },
           maxZoom: 1,
+          minZoom: 0.35,
         }}
         minZoom={0.15}
         maxZoom={2.5}
@@ -353,7 +382,7 @@ export function GraphView({
         onInit={(instance) => {
           flow.current = instance;
           const padding = { top: "48px", left: "64px", right: "64px", bottom: "200px" } as const;
-          if (zoom === "out") void instance.fitView({ maxZoom: 0.55, padding });
+          if (zoom === "out") void instance.fitView({ maxZoom: 0.55, minZoom: 0.35, padding });
           if (zoom === "in")
             void instance.fitView({ nodes: [{ id: picked }], maxZoom: 1, minZoom: 1, padding });
         }}

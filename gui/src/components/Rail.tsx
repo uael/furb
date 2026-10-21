@@ -89,7 +89,11 @@ export function Rail({
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[14px] font-semibold">{held.place}</span>
-                {held.works ? null : <span className="block text-[11.5px] text-faint">A record to read</span>}
+                {held.works ? null : (
+                  <span className="block text-[11.5px] text-faint">
+                    {held.kept ? "A record, read with no life" : "A record to read"}
+                  </span>
+                )}
               </span>
               <ChevronDown size={14} className="text-faint" />
             </button>

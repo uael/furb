@@ -1,7 +1,7 @@
 import { open as pickOne } from "@tauri-apps/plugin-dialog";
 import { FileClock, FolderOpen, FolderPlus, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
-import { call, demo, type Pick, type Places, tauri } from "../data.ts";
+import { call, type Pick, type Places, shown, tauri } from "../data.ts";
 
 /** How long ago a time was, in words. */
 function ago(millis: number): string {
@@ -23,7 +23,7 @@ function size(bytes: number): string {
  * a new life, a record of it opens its life again to go on, or opens it to read, which asks no model and runs no
  * command. */
 export function Picker({ said, opening }: { said: string[]; opening?: string }) {
-  const [places, setPlaces] = useState<Places>(() => demo.places ?? { projects: [] });
+  const [places, setPlaces] = useState<Places>(() => shown.fixture.places ?? { projects: [] });
   const [error, setError] = useState("");
   useEffect(() => {
     if (tauri) void call<Places>("places").then((got) => got && setPlaces(got));

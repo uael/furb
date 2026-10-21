@@ -125,6 +125,94 @@ fn the_measure_of_a_chain_sums_the_dollars_of_its_answers() {
 }
 
 #[test]
+fn the_turn_of_a_reply_reads_as_a_tuple_of_the_wire() {
+  let mut facts = facts();
+  facts.push(json!(["reply", "reply1", "rung1", "chain1", "claude-cli:opus/high"]));
+  let turn = json!({"is": "tuple", "args": [["assistant", "x", [1000, 10, 0, 0, 0.5], null]]});
+  facts.push(json!(["done", "reply1", "provider", turn]));
+  assert_eq!(Life::of(&facts).measures()["chain1"]["dollars"], 0.5);
+}
+
+#[test]
+fn a_record_read_with_no_life_makes_each_rung_that_an_act_names() {
+  let mut life = Life { kept: true, ..Life::default() };
+  let kept = [
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["prompt", "prompt1", "operator", "chain1", "str", "Do it", ""]),
+    json!(["reply", "reply1", "rung1", "chain1", "claude-cli:opus/high"]),
+    json!(["done", "reply1", "provider", ["assistant", "x = read('a')", [10, 1, 0, 0, 0.1], null]]),
+    json!(["read", "read1", "rung1", "chain1", "a"]),
+    json!(["reply", "reply2", "rung2", "chain1", "claude-cli:opus/high"]),
+  ];
+  for fact in &kept {
+    life.add(fact);
+  }
+  let rung = life.act("rung1").expect("the rung is made");
+  assert_eq!((rung.by.as_str(), rung.ended), ("prompt1", Some(6)));
+  assert_eq!(life.words.get("rung1").map(String::as_str), Some("x = read('a')"));
+}
+
+#[test]
+fn a_record_read_with_no_life_makes_each_chain_that_an_act_stands_on() {
+  let mut life = Life { kept: true, ..Life::default() };
+  let kept = [
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["reply", "reply1", "rung1", "chain1", "claude-cli:opus/high"]),
+    json!(["prompt", "prompt2", "rung1", "chain2", "str", "Work", ""]),
+  ];
+  for fact in &kept {
+    life.add(fact);
+  }
+  let chain = life.act("chain2").expect("the chain is made");
+  assert_eq!(chain.by, "rung1");
+  assert_eq!(life.act("rung1").map(|one| one.on.as_str()), Some("chain1"));
+}
+
+#[test]
+fn a_chain_with_no_maker_is_hired_by_the_rung_of_its_first_prompt() {
+  let mut life = Life { kept: true, ..Life::default() };
+  let kept = [
+    json!(["rung", "rung1", "extensions", "chain2", "def x(): pass", "", ""]),
+    json!(["prompt", "prompt2", "rung9", "chain2", "str", "Work", ""]),
+  ];
+  for fact in &kept {
+    life.add(fact);
+  }
+  assert_eq!(life.act("chain2").map(|one| one.by.as_str()), Some("rung9"));
+}
+
+#[test]
+fn a_made_rung_joins_no_question_to_the_operator() {
+  let mut life = Life { kept: true, ..Life::default() };
+  let kept = [
+    json!(["prompt", "prompt1", "operator", "chain1", "str", "Do it", ""]),
+    json!(["prompt", "prompt2", "rung1", "chain1", "str", "Which?", "operator"]),
+    json!(["reply", "reply1", "rung2", "chain1", "claude-cli:opus/high"]),
+  ];
+  for fact in &kept {
+    life.add(fact);
+  }
+  assert_eq!(life.act("rung2").map(|one| one.by.as_str()), Some("prompt1"));
+}
+
+#[test]
+fn a_record_read_with_no_life_refuses_the_word_that_its_gate_found_wrong() {
+  let mut life = Life { kept: true, ..Life::default() };
+  let kept = [
+    json!(["prompt", "prompt1", "operator", "chain1", "str", "Do it", ""]),
+    json!(["reply", "reply1", "rung1", "chain1", "claude-cli:opus/high"]),
+    json!(["done", "reply1", "provider", ["assistant", "x", [10, 1, 0, 0, 0.1], null]]),
+    json!(["gate", "gate1", "chain1", "chain1", "x"]),
+    json!(["done", "gate1", "gate", ["line 1: no name x"]]),
+  ];
+  for fact in &kept {
+    life.add(fact);
+  }
+  let rung = life.act("rung1").expect("the rung is made");
+  assert_eq!(life.run(rung), ("failed", "line 1: no name x".to_owned()));
+}
+
+#[test]
 fn a_binding_belongs_to_the_act_its_name_starts_with() {
   let mut facts = facts();
   facts.push(json!([

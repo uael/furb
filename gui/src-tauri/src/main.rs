@@ -58,8 +58,9 @@ impl Seen {
   /// One event of the life, taken in.
   fn heard(&mut self, event: Event) {
     match event {
-      Event::Opened { root, directory, works } => {
+      Event::Opened { root, directory, works, kept } => {
         let how = if works { "a life that works" } else { "a record to read" };
+        self.now.kept = kept;
         eprintln!("furb-gui: opened {how} in {directory}");
         self.place = directory.rsplit(['/', '\\']).next().unwrap_or_default().to_owned();
         self.works = works;
@@ -120,6 +121,7 @@ impl Seen {
       "place": self.place,
       "directory": self.directory,
       "works": self.works,
+      "kept": self.now.kept,
       "acts": acts,
       "words": words,
       "owed": self.now.owed(),
@@ -324,7 +326,7 @@ fn asked(words: &[String]) -> Result<(Option<Pick>, Option<PathBuf>), String> {
 fn dumped(source: Source, path: &Path) -> Result<(), String> {
   let demo = matches!(source, Source::Demo { .. });
   let (life, events) = Life::open(source, || {});
-  let mut seen = Seen::default();
+  let mut seen = Seen { opening: Some("the life".to_owned()), ..Seen::default() };
   let end = Instant::now() + Duration::from_secs(if demo { 90 } else { 900 });
   let mut rests: Option<Instant> = None;
   while Instant::now() < end {
@@ -334,6 +336,9 @@ fn dumped(source: Source, path: &Path) -> Result<(), String> {
         seen.heard(more);
       }
       rests = None;
+    }
+    if !seen.open && seen.opening.is_none() && !seen.said.is_empty() {
+      return Err(seen.said.join("\n"));
     }
     let settled = if demo { !seen.now.owed().is_empty() && !seen.now.busy() } else { seen.open };
     rests = if settled { rests.or_else(|| Some(Instant::now())) } else { None };

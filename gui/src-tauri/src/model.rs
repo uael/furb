@@ -10,6 +10,9 @@ use std::collections::HashMap;
 
 use serde_json::{Value, json};
 
+/// The operator, as the facts name it.
+const OPERATOR: &str = "operator";
+
 /// The window of a model whose stand names none.
 const WINDOW: f64 = 200_000.0;
 
@@ -18,7 +21,7 @@ const STEPS: [&str; 8] = ["stand", "clock", "chance", "gate", "merged", "run", "
 
 /// How many characters a text of a fact keeps: the window shows no more of a value, and a life of many facts fits in
 /// memory.
-pub const LONG: usize = 65_536;
+pub const LONG: usize = 16_384;
 
 /// How many characters of a value the watch shows.
 const SHOWN: usize = 400;
@@ -83,14 +86,24 @@ pub struct Life {
   pub words: HashMap<String, String>,
   /// The paragraphs told on each chain, each with its place.
   told: HashMap<String, Vec<(usize, String)>>,
-  /// The chain and the actor of each reply that is not done, and the answers on each chain.
-  replies: HashMap<String, (String, String)>,
+  /// The chain, the actor and the rung of each reply that is not done, and the answers on each chain.
+  replies: HashMap<String, (String, String, String)>,
   answers: HashMap<String, Vec<Answer>>,
   /// The windows of the roster, by the name of each model.
   windows: HashMap<String, f64>,
   /// How many changes the acts had, and the count at the last change of each act.
   pub count: u64,
   changed: HashMap<String, u64>,
+  /// Whether the facts are what a record kept, read with no life. The record keeps no rung of a ladder and few chains,
+  /// so the life makes each rung that a kept act names as its maker: on the open prompt of its chain, with the word of
+  /// the reply that it asked for, and done at the start of the next rung of that prompt; and each chain that a kept act
+  /// stands on, hired by the rung that made that act, or by the rung that makes the first prompt on it.
+  pub kept: bool,
+  /// The rung whose word each gate read, and the findings of each rung that a gate refused.
+  gates: HashMap<String, String>,
+  refusals: HashMap<String, String>,
+  /// The chains that the life made with no maker, which the rung that makes the first prompt on each hires.
+  orphans: std::collections::HashSet<String>,
 }
 
 /// Whether a fact is a question: its act is named by its kind and a number.
@@ -108,6 +121,14 @@ pub fn fault(value: &Value) -> Option<&str> {
   let name = value.get("is")?.as_str()?;
   (value.get("args").is_some() && !matches!(name, "int" | "float" | "tuple" | "dict"))
     .then_some(name)
+}
+
+/// The items of a value that is a list or a tuple, which the wire marks as a map whose `is` is tuple.
+fn items(value: &Value) -> Option<&Vec<Value>> {
+  match value.get("is").and_then(Value::as_str) {
+    Some("tuple") => value.get("args")?.get(0)?.as_array(),
+    _ => value.as_array(),
+  }
 }
 
 /// A value as a line shows it: a string as its text, and any other value as JSON.
@@ -209,6 +230,7 @@ impl Life {
         stream.push_str(text(3));
         self.mark(about);
       }
+      "close" if self.kept => self.done(at, about, value),
       "pause" | "wake" => {
         self.controls.retain(|(one, _)| one != about);
         self.controls.push((about.to_owned(), kind == "pause"));
@@ -242,12 +264,54 @@ impl Life {
       .entry(about.to_owned())
       .or_insert_with(|| if kind == "chain" { about.to_owned() } else { on.clone() });
     let text = |at: usize| words.get(at).and_then(Value::as_str).unwrap_or_default().to_owned();
+    if self.kept
+      && kind == "prompt"
+      && kind_of(by) == "rung"
+      && self.orphans.remove(&on)
+      && let Some(chain) = self.acts.get_mut(&on)
+    {
+      chain.by = by.to_owned();
+      self.mark(&on);
+    }
+    if self.kept && kind != "prompt" && kind_of(by) == "rung" && !self.acts.contains_key(by) {
+      self.unkept(at, by, &on);
+    }
+    if self.kept && kind != "chain" && kind_of(&on) == "chain" && !self.acts.contains_key(&on) {
+      let maker = if kind_of(by) == "rung" { by } else { OPERATOR };
+      if maker == OPERATOR {
+        self.orphans.insert(on.clone());
+      }
+      let chain = Act {
+        id: on.clone(),
+        kind: "chain".to_owned(),
+        by: maker.to_owned(),
+        on: on.clone(),
+        words: vec![Value::from(on.clone()), Value::from("")],
+        began: at,
+        ended: None,
+        taker: String::new(),
+        value: Value::Null,
+      };
+      self.order.push(on.clone());
+      self.acts.insert(on.clone(), chain);
+      self.mark(&on);
+    }
     match kind {
       "run" => {
         self.runs.insert(about.to_owned(), text(1));
       }
       "reply" => {
-        self.replies.insert(about.to_owned(), (on.clone(), text(1)));
+        self.replies.insert(about.to_owned(), (on.clone(), text(1), by.to_owned()));
+      }
+      "gate" if self.kept => {
+        let worded = |one: &&String| {
+          self.acts[*one].kind == "rung"
+            && self.acts[*one].on == on
+            && self.words.contains_key(*one)
+        };
+        if let Some(rung) = self.order.iter().rev().find(worded) {
+          self.gates.insert(about.to_owned(), rung.clone());
+        }
       }
       _ => {}
     }
@@ -270,11 +334,56 @@ impl Life {
     self.mark(about);
   }
 
+  /// A rung that a record names as the maker of an act and does not hold, made at the place of that act: on the open
+  /// prompt of its chain that is no question to the operator, and it ends the last rung of that prompt.
+  fn unkept(&mut self, at: usize, id: &str, chain: &str) {
+    let open = |kind: &'static str, by: Option<&str>| {
+      self.order.iter().rev().filter_map(|one| self.acts.get(one)).find(|act| {
+        act.kind == kind
+          && act.on == chain
+          && act.ended.is_none()
+          && by.is_none_or(|by| act.by == by)
+      })
+    };
+    let asked = self.order.iter().rev().filter_map(|one| self.acts.get(one)).find(|act| {
+      let to = act.words.get(2).and_then(Value::as_str);
+      act.kind == "prompt" && act.on == chain && act.ended.is_none() && to != Some(OPERATOR)
+    });
+    let maker = asked.map_or_else(|| chain.to_owned(), |act| act.id.clone());
+    if let Some(last) = open("rung", Some(&maker)).map(|act| act.id.clone()) {
+      if let Some(act) = self.acts.get_mut(&last) {
+        act.ended = Some(at);
+      }
+      self.mark(&last);
+    }
+    let act = Act {
+      id: id.to_owned(),
+      kind: "rung".to_owned(),
+      by: maker,
+      on: chain.to_owned(),
+      words: Vec::new(),
+      began: at,
+      ended: None,
+      taker: String::new(),
+      value: Value::Null,
+    };
+    self.order.push(id.to_owned());
+    self.acts.insert(id.to_owned(), act);
+    self.mark(id);
+  }
+
   /// A done: the first gives its act its end and its value, and a done of a reply, of a stand or of a run tells the
   /// answers, the windows and the run of a rung.
   fn done(&mut self, at: usize, about: &str, value: Value) {
-    if let Some((chain, actor)) = self.replies.remove(about) {
-      let usage = value.get(2);
+    if let Some((chain, actor, rung)) = self.replies.remove(about) {
+      let turn = items(&value);
+      if self.kept
+        && let Some(word) = turn.and_then(|one| one.get(1)).and_then(Value::as_str)
+      {
+        self.words.insert(rung.clone(), word.to_owned());
+        self.mark(&rung);
+      }
+      let usage = turn.and_then(|one| one.get(2));
       let number =
         |at: usize| usage.and_then(|one| one.get(at)).and_then(Value::as_f64).unwrap_or_default();
       self.answers.entry(chain).or_default().push(Answer {
@@ -288,6 +397,13 @@ impl Life {
       for one in value.get(0).and_then(Value::as_array).into_iter().flatten() {
         let name = one.get(0).and_then(Value::as_str).unwrap_or_default();
         self.windows.insert(name.to_owned(), one.get(2).and_then(Value::as_f64).unwrap_or(WINDOW));
+      }
+    }
+    if let Some(rung) = self.gates.remove(about) {
+      let found: Vec<String> = value.as_array().into_iter().flatten().map(display).collect();
+      if !found.is_empty() {
+        self.refusals.insert(rung.clone(), found.join("\n"));
+        self.mark(&rung);
       }
     }
     if let Some(rung) = self.runs.get(about).cloned() {
@@ -344,6 +460,9 @@ impl Life {
   /// with the findings of the gate, and a word that raised fails with its exception; a cancel of a rung whose prompt
   /// ended well is no failure.
   pub fn run(&self, act: &Act) -> (&'static str, String) {
+    if let Some(findings) = self.refusals.get(&act.id) {
+      return ("failed", findings.clone());
+    }
     if let Some(findings) = self.heads.get(&format!("#{} refused", act.id)) {
       return (
         "failed",
@@ -366,7 +485,7 @@ impl Life {
         let args = value.get("args").and_then(Value::as_array).into_iter().flatten().map(display);
         ("failed", format!("{name}: {}", args.collect::<Vec<_>>().join(", ")))
       }
-      None if ran.is_some() => ("done", String::new()),
+      None if ran.is_some() || act.ended.is_some() => ("done", String::new()),
       None => ("running", String::new()),
     }
   }
