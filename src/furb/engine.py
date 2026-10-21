@@ -189,10 +189,7 @@ def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
     while True:
       match (yield):
         case ("done", about, _, value) if question(("reply", about)) and get(about)[2] == id:
-          if isinstance(value, BaseException):
-            yield "done", id, value
-            return
-          yield "ready", id, value[1]
+          yield ("done", id, value) if isinstance(value, BaseException) else ("ready", id, value[1])
         case ("wants", about, by, _, call) if get(by)[4] == id:
           yield "started", about
           while not over(call):
@@ -209,7 +206,6 @@ def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
             if tells(id):
               yield told(id, "raised", raised=value)
           yield "done", id, value
-          return
 
   if not (word or to):
     to = module(on).get("actor", "")
@@ -237,8 +233,8 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
     raise Refused("no chain " + source)
 
   def ear(id):
-    rungs, refused, running, waiting = program(source), set(), {}, {}
-    asking, unseen, ran, reply, last, heard = "", "", "", "", standing(), []
+    rungs, refused, running, waiting, last, heard = program(source), set(), {}, {}, standing(), []
+    asking = unseen = ran = reply = ""
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
     def takes():
@@ -294,7 +290,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           if scope(about) != id:
             yield "tell", maker, [headed(about, "done", value=value)]
           if not isinstance(value, CancelledError):
-            unseen = about + " done"
+            unseen = about + " done", get(maker)[6]
         case ("done", about, by, Refused() as why) if (
           question(("reply", about))
           and scope(about) != id
@@ -303,7 +299,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         ):
           yield "tell", maker, [headed(p, "paused", why=why)]
           if not running[maker]:
-            unseen = p + " paused"
+            unseen = p + " paused", get(maker)[6]
       if scope(a[1]) != id:
         continue
       match a:
@@ -361,7 +357,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
             reply = act("reply", id, controlled(idle), to)
           unseen = ""
       if unseen and not waiting and (r[2] in running or over(r[2]) or a[0] == "tell"):
-        prompt(None, unseen)
+        prompt(None, *unseen)
         unseen = ""
 
   return act("chain", on, ear, label, source)
@@ -370,7 +366,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
 def grant(usd: float | None = None, share: float | None = None, on: str = "") -> Act[None]:
   def ear(id):
     here = scope(id)
-    if not (usd or share) or (usd or 0) < 0 or not 0 <= (share or 0) <= 1:
+    if not (usd or share) or not (usd or 0) >= 0 <= (share or 0) <= 1:
       yield "done", id, Refused(f"{usd}/{share} no ceiling")
       return
     yield "started", id
