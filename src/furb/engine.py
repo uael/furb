@@ -1,5 +1,5 @@
 import re
-from asyncio import CancelledError, current_task, get_running_loop
+from asyncio import CancelledError, get_running_loop
 from collections import Counter
 from collections.abc import Callable, Generator
 from contextvars import ContextVar
@@ -473,7 +473,7 @@ class Act[T = object](str):
         yield
       (f.set_exception if isinstance(got, BaseException) else f.set_result)(got)
 
-    drive(g := waits(), f"{self} waits {id(current_task())}")
+    drive(g := waits(), f"{self} waits {id(g)}")
     try:
       return (yield from f)
     finally:
