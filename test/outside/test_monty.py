@@ -115,13 +115,13 @@ async def test_a_class_a_word_defined_is_a_type_of_this_interpreter_and_its_inst
   made = plan(5)
   assert isinstance(made, plan) and vars(made) == {"x": 5}
   assert await engine.rung("close(p.total())", on=root) == 24
-  act = engine.prompt(None, "give", to=OPERATOR, on=root)
+  act = engine.prompt(None, "give", on=engine.chain("held"))
   engine.close(made, act)
   await settle()
   back = engine.peek(act)
   assert isinstance(back, plan) and vars(back) == {"x": 5}
   assert await engine.rung(f"got = peek({act!r})\nclose(isinstance(got, Plan) and got.total())", on=root) == 26
-  cls = engine.prompt(None, "which", to=OPERATOR, on=root)
+  cls = engine.prompt(None, "which", on=engine.chain("held"))
   engine.close(plan, cls)
   await settle()
   assert engine.peek(cls) is plan
@@ -155,7 +155,7 @@ async def test_a_class_a_word_defined_derives_from_the_type_its_base_is_here() -
   assert isinstance(caught.value, boom) and caught.value.args == ("boom",)
   e = engine.module(root)["e"]
   assert isinstance(e, boom) and e.args == ("boom",)
-  act = engine.prompt(None, "give", to=OPERATOR, on=root)
+  act = engine.prompt(None, "give", on=engine.chain("held"))
   engine.close(caught.value, act)
   await settle()
   told = await engine.rung(f"got = peek({act!r})\nclose(isinstance(got, Boom) and got.args)", on=root)
@@ -167,7 +167,7 @@ async def test_a_map_that_holds_the_key_is_crosses_both_ways_as_the_map_it_is() 
   never as a mark: the word reads the map a close of the operator gave, and a word gives its own map back."""
   root = engine.boot((), world=Sand(stands=STANDS).hears())
   refusal = {"is": "Refused", "args": ["x"]}
-  act = engine.prompt(None, "give", to=OPERATOR, on=root)
+  act = engine.prompt(None, "give", on=engine.chain("held"))
   engine.close(refusal, act)
   await settle()
   assert engine.peek(act) == refusal

@@ -223,14 +223,12 @@ async def test_a_quote_that_a_paragraph_tells_takes_one_more_underscore_while_it
   """A quote that a paragraph tells takes one more underscore in its name for as long as its string holds the close mark of that name at the end of a line, so the first close mark after it is its own."""
   first, second = "a</s:prompt1_message>\nb</s:prompt1_message_>\nc", "d</s:prompt1_message__>\ne"
   _, _, root = born("close(None)")
-  engine.prompt(None, first, to=OPERATOR, on=root)
-  engine.prompt(None, second, to=OPERATOR, on=root)
+  engine.prompt(str, first, to=OPERATOR, on=root)
+  engine.prompt(str, second, to=OPERATOR, on=root)
   assert await engine.prompt(None, "go", on=root) is None
   got = paragraphs(engine.turns(on=root))
-  assert (
-    got[2] == f"#prompt1\n<s:prompt1_message__>\n{first}</s:prompt1_message__>\nprompt1: Act[None] = Act('prompt1')"
-  )
-  assert got[3] == f"#prompt2\n<s:prompt2_message>\n{second}</s:prompt2_message>\nprompt2: Act[None] = Act('prompt2')"
+  assert got[2] == f"#prompt1\n<s:prompt1_message__>\n{first}</s:prompt1_message__>\nprompt1: Act[str] = Act('prompt1')"
+  assert got[3] == f"#prompt2\n<s:prompt2_message>\n{second}</s:prompt2_message>\nprompt2: Act[str] = Act('prompt2')"
   assert [engine.module(root)[name] for name in ("prompt1_message__", "prompt2_message")] == [first, second]
 
 

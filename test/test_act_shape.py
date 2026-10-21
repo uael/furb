@@ -11,7 +11,7 @@ from furb.engine import OPERATOR, Act, Refused
 
 async def test_the_name_of_an_act() -> None:
   """The name of an act, which is what a verb gives and what a caller holds of the act: a string, so it names the act to close, cancel, pause, peek and get, and awaitable, so it gives what the act comes to."""
-  _, log, root, one = await posed(None, "hi")
+  _, log, root, one = await posed(int, "hi")
   assert isinstance(one, Act) and isinstance(one, str) and one == "prompt1"
   assert engine.get(one)[:4] == ("prompt", one, OPERATOR, root)
   engine.pause(one)
@@ -29,7 +29,7 @@ async def test_the_name_of_an_act() -> None:
 
 async def test_an_act_is_over_when_its_done_stands_and_lives_until_then() -> None:
   """An act is over when its done stands and lives until then; there is no other state, and a control over an act that is over tells nothing and reaches only the acts that it covers and that are not over, as control says, but a wake also reaches the ear of a command that a pause holds."""
-  sand, log, root, one = await posed(None, "hi")
+  sand, log, root, one = await posed(int, "hi")
   assert engine.peek(one) is None
   engine.close(21, one)
   await settle()
@@ -68,10 +68,10 @@ async def test_the_outcome_of_a_cancelled_act_is_the_cancellederror_it_completed
 
 async def test_an_act_is_dropped_at_its_done_and_only_the_ear_of_a_command_lives_on_until_it_hears_that_done() -> None:
   """An act is dropped at its done, and so is its ear, but a lasting ear, which lives on until it returns, as the ear of a command does once it heard that done and told the exit."""
-  _, _, root, one = await posed(None, "hi")
+  _, _, root, one = await posed(int, "hi")
   with pytest.raises(Refused, match="hears"):
     engine.drive(engine.idle(one), one)
-  engine.close(None, one)
+  engine.close(1, one)
   await settle()
   engine.drive(engine.idle(one), one)
   two = engine.bash("echo hi", on=root)

@@ -31,11 +31,16 @@ function act(
 
 const loomOf = (
   acts: ActRow[],
-  options: { folds?: string[]; prompts?: { id: string; shape: string; message: string }[] } = {},
+  options: {
+    folds?: string[];
+    prompts?: { id: string; shape: string; message: string }[];
+    notices?: { id: string; message: string }[];
+  } = {},
 ) =>
   weave({
     acts,
     prompts: options.prompts ?? [],
+    notices: options.notices ?? [],
     measures: {},
     folds: new Set(options.folds ?? []),
     width: 40,
@@ -136,6 +141,30 @@ test("the operator owes the prompts that wait for it, the oldest first, and no p
   ]);
   expect(threads.map((thread) => thread.state)).toEqual(["asks", "asks", "asks"]);
   expect(threads[0]?.cells.at(-1)?.tone).toBe("asks");
+});
+
+test("a prompt of None to the operator is a notice: the operator owes it nothing, reads it until it is dismissed, and its cell is no question", () => {
+  const acts = [
+    act("chain1", "chain", "", "operator", 1),
+    act("rung1", "rung", "chain1", "operator", 2),
+    act("prompt2", "prompt", "chain1", "rung1", 3, 4, { words: ["None", "The build is green.", "operator"] }),
+    act("prompt1", "prompt", "chain1", "rung1", 5, 6, { words: ["None", "The PR is open.", "operator"] }),
+  ];
+  const { owed, unread, threads } = loomOf(acts, {
+    notices: [
+      { id: "prompt1", message: "The PR is open." },
+      { id: "prompt2", message: "The build is green." },
+    ],
+  });
+  expect(owed).toEqual([]);
+  expect(unread.map((notice) => [notice.id, notice.chain])).toEqual([
+    ["prompt2", "chain1"],
+    ["prompt1", "chain1"],
+  ]);
+  expect(threads[0]?.state).toBe("idle");
+  expect(threads[0]?.cells.some((cell) => cell.tone === "asks")).toBe(false);
+  expect(threads[0]?.cells.some((cell) => cell.tone === "past")).toBe(true);
+  expect(loomOf(acts).unread).toEqual([]);
 });
 
 test("a thread shows each prompt with the rungs of its ladder, the acts of each rung as chips, and what the prompt closed with", () => {

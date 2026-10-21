@@ -39,9 +39,13 @@ export interface Owed {
   message: string;
   began: number;
 }
+/** A prompt of None to the operator that the operator did not read yet: it asks nothing, so it is owed no answer. */
+export type Unread = Omit<Owed, "shape">;
 export interface Loom {
   threads: Thread[];
   owed: Owed[];
+  /** The notices that the operator did not read, the oldest first. */
+  unread: Unread[];
   /** How many columns of the threads hold more than one moment, which stand at the left of the others. */
   folded: number;
 }
@@ -49,6 +53,8 @@ export interface Weave {
   acts: readonly ActRow[];
   /** The prompts that wait for the operator. */
   prompts: readonly { id: string; shape: string; message: string }[];
+  /** The notices that the operator did not dismiss. */
+  notices: readonly { id: string; message: string }[];
   measures: Readonly<Record<string, Measure>>;
   /** The threads whose workers the loom folds into them. */
   folds: ReadonlySet<string>;
@@ -117,8 +123,12 @@ function cellOf(acts: readonly ActRow[], lo: number, hi: number): Cell {
   }
 }
 
-/** Whether an act is a question to the operator: a prompt whose actor is the operator. */
-export const asksOperator = (act: ActRow): boolean => act.kind === "prompt" && act.words[2] === "operator";
+/** Whether an act is a prompt to the operator: a question, or a notice when its shape is None. */
+export const toOperator = (act: ActRow): boolean => act.kind === "prompt" && act.words[2] === "operator";
+/** Whether an act is a notice to the operator: a prompt of None, which asks nothing. */
+export const isNotice = (act: ActRow): boolean => toOperator(act) && act.words[0] === "None";
+/** Whether an act is a question to the operator: a prompt to the operator that is no notice. */
+export const asksOperator = (act: ActRow): boolean => toOperator(act) && !isNotice(act);
 
 /** The chain that a chain stands under in the tree: the chain of the rung that made it, and nothing for a chain that
  * the operator or an ear made. */
@@ -162,13 +172,19 @@ export function waitsOn(
 
 /** The loom of a life: the operator, then each chain in the order of the tree, with its cells over the moments of the
  * life, its state, what it waits on and its measure. A moment is the start or the end of an act. */
-export function weave({ acts, prompts, measures, folds, width, pending, label }: Weave): Loom {
+export function weave({ acts, prompts, notices, measures, folds, width, pending, label }: Weave): Loom {
   const rows = new Map(acts.map((act) => [act.id, act]));
   const owed: Owed[] = prompts
     .flatMap((prompt) => {
       const act = rows.get(prompt.id);
       // A prompt is owed until its act is done, though the console can hold it a moment longer.
       return act && !act.done ? [{ ...prompt, chain: act.on, by: act.by, began: act.began }] : [];
+    })
+    .sort((one, other) => one.began - other.began);
+  const unread: Unread[] = notices
+    .flatMap((notice) => {
+      const act = rows.get(notice.id);
+      return act ? [{ ...notice, chain: act.on, by: act.by, began: act.began }] : [];
     })
     .sort((one, other) => one.began - other.began);
   const owing = new Set(owed.map((prompt) => prompt.chain));
@@ -203,7 +219,7 @@ export function weave({ acts, prompts, measures, folds, width, pending, label }:
       owing.has(id),
       pending,
     );
-  const operatorActs = acts.filter(asksOperator);
+  const operatorActs = acts.filter(toOperator);
   const threads: Thread[] = [
     {
       id: "operator",
@@ -243,5 +259,5 @@ export function weave({ acts, prompts, measures, folds, width, pending, label }:
       visit(child, depth ? `${lines}${last ? "  " : "│ "}` : "", index === next.length - 1, depth + 1);
   };
   for (const top of children.get(undefined) ?? []) visit(top, "", true, 0);
-  return { threads, owed, folded };
+  return { threads, owed, unread, folded };
 }

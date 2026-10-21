@@ -41,6 +41,14 @@ with it, and the worker goes on.
 
 ![Answer](screenshots/05-answer.png)
 
+## A notice for you
+
+A prompt of None asks nothing, so it is a notice and not a question. The console closes it as it takes it, so the
+word that sent it goes on, and you owe it nothing. The header and the thread of the operator count the notices that
+you did not read. Tab goes to the oldest one in its thread and reads it, and Enter on its line reads it too.
+
+![Notice](screenshots/18-notice.png)
+
 ## A conductor, folded
 
 Left folds the workers of a thread into it, and the thread counts them by state. Right shows them again.

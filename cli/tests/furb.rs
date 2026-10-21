@@ -279,7 +279,9 @@ fn a_prompt_of_the_operator_is_answered_at_the_terminal() {
   let asked = String::from_utf8_lossy(&output.stderr);
   assert_eq!(asked, "prompt1 wants a str: say a word\n> ");
   let nothing = ["prompt", "say nothing", "--to", "operator", "--shape", "None"];
-  assert_eq!(printed(yard.furb(&nothing), "\n"), "None\n");
+  let output = ran(yard.furb(&nothing), "");
+  assert_eq!(String::from_utf8_lossy(&output.stdout), "None\n", "a notice reads no line");
+  assert_eq!(String::from_utf8_lossy(&output.stderr), "prompt1 tells: say nothing\n");
   let said =
     refused(yard.furb(&["prompt", "count", "--to", "operator", "--shape", "int"]), "many\n");
   assert!(said.ends_with("furb: Refused: \"many\" is no int\n"), "{said}");

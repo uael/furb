@@ -35,9 +35,9 @@ thread and the lens. The same space pauses one command and a conductor with its 
 | --- | --- |
 | ↑ ↓ or k j | Select a thread of the loom, a line of the thread, or scroll the lens |
 | ← → or h l | Fold the workers of a thread into it, or show them again |
-| Enter | Open the selection: a thread, a lens of an act, or the answer of a prompt that you owe |
+| Enter | Open the selection: a thread, a lens of an act, which reads a notice, or the answer of a prompt that you owe |
 | Esc | Go back one level |
-| Tab | Answer the oldest prompt that you owe, on any chain |
+| Tab | Answer the oldest prompt that you owe, or read the oldest notice for you, on any chain |
 | i | Ask the model of the selected chain |
 | : | Write a word of python, which runs as a rung on the selected chain |
 | / | Type a command, as /model, /theme or /fork |

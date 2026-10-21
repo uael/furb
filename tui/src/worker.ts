@@ -30,6 +30,7 @@ const state = () => {
     record: owner.record,
     facts: owner.facts.length - sentFacts,
     prompts: [...owner.console.prompts.values()].map(({ id, shape, message }) => ({ id, shape, message })),
+    notices: [...owner.console.notices.values()],
     streams: [...owner.streams],
     pending: [...owner.pending],
     changes: owner.changes.length,

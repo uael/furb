@@ -109,7 +109,7 @@ export class App {
   /** The threads whose workers the loom folds into them. */
   readonly folds = new Set<string>();
   /** What the loom and the thread show now, as the last render made them. */
-  loom: Loom = { threads: [], owed: [], folded: 0 };
+  loom: Loom = { threads: [], owed: [], unread: [], folded: 0 };
   lines: Line[] = [];
   help = false;
   /** The row that the list of lives selects. */
@@ -315,6 +315,7 @@ export class App {
     this.loom = weave({
       acts: w.acts,
       prompts: [...w.host.prompts.values()],
+      notices: [...w.host.notices.values()],
       measures: w.measures,
       folds: this.folds,
       width: cellWidth,
@@ -366,6 +367,9 @@ export class App {
     const right: Part[] = [
       ...(w.host.pending.size ? ([[`◌ ${w.host.pending.size} held   `, c.warning]] as Part[]) : []),
       [`◆ ${owed} owed`, owed ? c.warning : c.faint],
+      ...(this.loom.unread.length
+        ? ([[`   ✉ ${this.loom.unread.length} to read`, c.warning]] as Part[])
+        : []),
       ["   ", c.faint],
       [`◉ ${working} at work`, working ? c.accent : c.faint],
       ["   ", c.faint],
@@ -429,11 +433,14 @@ export class App {
         ? [spin(), c.accent]
         : [cell.mark, mix(c.background, toneColor(cell), 0.45 + (0.55 * (index + 1)) / count)],
     );
+    const unread = thread.id === "operator" ? this.loom.unread.length : 0;
     const waits =
       thread.id === "operator"
         ? owed
           ? `${owed} owed`
-          : ""
+          : unread
+            ? `${unread} to read`
+            : ""
         : thread.state === "asks"
           ? "asks you"
           : thread.state === "paused"
@@ -609,8 +616,9 @@ export class App {
     const head: Part[] = [bar, [indent], mark(line.state), [" "], [act.id, c.muted], ["  "]];
     if (line.type === "prompt") {
       const [shape, message, to] = act.words.map(String);
-      const owed = line.state === "asks";
-      const who = to === "operator" ? "asks you" : to ? `to ${to}` : "";
+      const unread = this.session.host.notices.has(act.id);
+      const owed = line.state === "asks" || unread;
+      const who = to === "operator" ? (shape === "None" ? "for you" : "asks you") : to ? `to ${to}` : "";
       const tail = `${shape}${who ? `  ${who}` : ""}`;
       const room = width - Bun.stringWidth(plain(head)) - tail.length - 4;
       const first = clip((message ?? "").split("\n")[0] ?? "", Math.max(8, room));
@@ -1034,6 +1042,7 @@ export class App {
     const line = this.lines[this.selectedLine];
     if (!line) return;
     if (line.type === "prompt" && line.state === "asks") return this.write("answer", line.act.id);
+    if (this.session.host.notices.has(line.act.id)) await this.session.host.dismiss(line.act.id);
     this.lens = line.act;
     this.focus = "lens";
     this.lensBox.scrollTo(0);
@@ -1049,19 +1058,25 @@ export class App {
     else if (this.focus === "thread") this.focus = "loom";
     this.render();
   }
-  /** The oldest prompt that the operator owes, on any chain, which the word line answers. */
+  /** The oldest prompt that the operator owes, on any chain, which the word line answers, or else the oldest notice that
+   * the operator did not read, which its thread shows and which is then read. */
   async answerNext(): Promise<void> {
     const owed = this.loom.owed[0];
-    if (!owed) {
+    const next = owed ?? this.loom.unread[0];
+    if (!next) {
       this.session.notice = "You owe no prompt.";
       return;
     }
-    if (owed.chain !== this.session.selected) await this.select(owed.chain);
+    if (next.chain !== this.session.selected) await this.select(next.chain);
     this.selectedLine = Math.max(
       0,
-      this.lines.findIndex((line) => line.act.id === owed.id),
+      this.lines.findIndex((line) => line.act.id === next.id),
     );
-    this.write("answer", owed.id);
+    if (owed) return this.write("answer", owed.id);
+    this.focus = "thread";
+    this.session.notice = `${next.id}: ${next.message.split("\n")[0] ?? ""}`;
+    await this.session.host.dismiss(next.id);
+    this.render();
   }
   /** The word line takes the keys, in a mode, for an act. */
   write(mode: Mode, target = ""): void {

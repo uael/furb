@@ -97,6 +97,17 @@ try {
     app().render();
     return app().loom.owed.length === 0;
   });
+  const notice = await session.engine.prompt("None", {
+    message: "The search index is built.",
+    on: session.selected,
+    to: "operator",
+  });
+  await until(session.host, () => session.host.notices.has(notice));
+  app().focus = "loom";
+  await pick("you");
+  await capture("18-notice");
+  test.mockInput.pressTab();
+  await until(session.host, () => !session.host.notices.size);
   app().focus = "loom";
   await pick("Main");
   test.mockInput.pressArrow("left");

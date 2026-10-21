@@ -60,6 +60,34 @@ test("Tab answers the oldest prompt that the operator owes, and the answer close
     { seed: "conductor" },
   ));
 
+test("a prompt of None to the operator is a notice that the operator owes nothing, and Tab reads it", () =>
+  looming(async ({ app, screen, session, frame }) => {
+    const id = await session.engine.prompt("None", {
+      message: "The build is green.",
+      to: "operator",
+      on: session.engine.root,
+    });
+    expect(await session.engine.result(id)).toBeNull();
+    await soon(() => {
+      app.render();
+      return app.loom.unread.length === 1;
+    });
+    expect(app.loom.owed).toEqual([]);
+    const shown = await frame();
+    expect(shown).toContain("✉ 1 to read");
+    expect(shown).toMatch(/you +.*1 to read/);
+    screen.mockInput.pressTab();
+    await soon(() => !session.host.notices.has(id));
+    app.render();
+    expect(app.loom.unread).toEqual([]);
+    expect(app.focus).toBe("thread");
+    expect(app.lines[app.selectedLine]?.act.id).toBe(id);
+    const read = await frame();
+    expect(read).toContain("The build is green.");
+    expect(read).toContain("for you");
+    expect(read).not.toContain("to read");
+  }, {}));
+
 test("i asks the model of the selected chain, and the thread shows the prompt, its rung, and what it closed with", () =>
   looming(async ({ app, screen, session, frame }) => {
     screen.mockInput.pressKey("i");

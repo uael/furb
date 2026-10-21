@@ -462,6 +462,12 @@ export class Session extends EventEmitter {
       (prompt) => this.acts.find((act) => act.id === prompt.id)?.on === this.selected,
     );
   }
+  /** The notice of the chain shown that the operator did not dismiss yet: a prompt of None, which asks nothing. */
+  get operatorNotice() {
+    return [...this.host.notices.values()].find(
+      (notice) => this.acts.find((act) => act.id === notice.id)?.on === this.selected,
+    );
+  }
   isUserPrompt(act: ActRow): boolean {
     return act.kind === "prompt" && act.by === "operator";
   }
