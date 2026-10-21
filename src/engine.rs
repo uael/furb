@@ -64,6 +64,14 @@ const TOOK: &str = "peek(__id, ...) is not ... or ('started', __id) in [x[:2] fo
 /// Whether an act waits: it is not done, and no pause holds it.
 const WAITS: &str = "peek(__id, ...) is ... and not paused(__id)";
 
+/// How many lives may end while an act of the outside runs before a later life parks it. Each of those lives ended
+/// while the act ran and before it was done, so the act may be what ended them.
+pub const CRASHES: usize = 5;
+
+/// The kinds of act that a life parks, which are those that can end the process that runs them: the run of a word,
+/// a command and a reply.
+const PARKS: [&str; 3] = ["run", "bash", "reply"];
+
 /// The act that the operator made for a key of the client on a chain: the first question that the operator made on
 /// the chain after a key fact of that key and that kind, when it is of that kind, and nothing otherwise.
 const KEYED: &str = "next((b[1] for f, k, w in [(transcript(__on), __key, __kind)] \
@@ -72,6 +80,11 @@ const KEYED: &str = "next((b[1] for f, k, w in [(transcript(__on), __key, __kind
 
 /// The one piece of python the crate writes: it loads the engine, the sheet and the Kernel, each in a namespace of
 /// its own, and gives what the host calls in the sandbox by.
+///
+/// It gives the park too: a generator that stands in front of an ear of the outside and holds back from it each act
+/// that is parked when the act is put to it, and the parked names, which the host sets at boot and clears at a retry.
+/// When a retried act is not done and no ear took it in this life, the park puts it to its ear at the next fact that
+/// the ear hears, in the order of the ears, before that fact.
 ///
 /// The module of the engine holds the names python gives a module before the engine runs, so a word reads them in a
 /// chain as it reads them in python, and as the gate reads them. No loader made the module here, so it has no spec
@@ -84,6 +97,31 @@ __sheet = {}
 exec(__sheet_source, __sheet)
 __kernel = {}
 exec(__kernel_source, __kernel)
+__parked = set()
+
+
+def __parking(ear):
+  held, heard = [], None
+  try:
+    while True:
+      if heard is not None and heard[1] in __parked and heard is __engine["get"](heard[1]):
+        held.append(heard)
+      else:
+        for a in [x for x in held if x[1] not in __parked]:
+          held.remove(a)
+          at = __engine["transcript"](__engine["scope"](a[1]))
+          if not __engine["over"](a[1]) and ("started", a[1]) not in [x[:2] for x in at if x[2] != "journal"]:
+            said = ear.send(a)
+            while said is not None:
+              said = ear.send((yield said))
+        said = ear.send(heard)
+        while said is not None:
+          said = ear.send((yield said))
+      heard = yield
+  except StopIteration:
+    return
+
+
 (
   lambda: {name: x for name, x in __engine.items() if not name.startswith("_") and callable(x)},
   lambda name, /, *args, **kwargs: __engine[name](*args, **kwargs),
@@ -96,6 +134,9 @@ exec(__kernel_source, __kernel)
   lambda held: Template(*[x if isinstance(x, str) else Interpolation(*x) for x in held]),
   lambda x: None if callable(x) else repr(x),
   lambda cls: cls.__bases__[0],
+  __parking,
+  lambda names: __parked.update(names),
+  lambda name: __parked.discard(name),
 )"#;
 
 /// The next number a callable or a class goes out under, in this process.
@@ -182,6 +223,27 @@ fn left(record: &[Object]) -> Vec<String> {
   started.map(|a| a.about().to_owned()).collect()
 }
 
+/// The acts that the entries of a record park, each by its name and its kind, in the order of the record: an act of
+/// a kind that [`PARKS`] names, which the record shows started in [`CRASHES`] lives or more and not done. The outside
+/// says an act started once in each life that takes it, and the journal keeps each such started.
+fn looping(record: &[Object]) -> Vec<(String, String)> {
+  let facts: Vec<Fact> =
+    record.iter().filter_map(|one| entry(&one.as_ref(), 0).and_then(Fact::of)).collect();
+  let done: HashSet<&str> = facts.iter().filter(|a| a.kind() == "done").map(Fact::about).collect();
+  let mut lives: Vec<(&str, usize)> = Vec::new();
+  for a in facts.iter().filter(|a| a.kind() == "started" && !done.contains(a.about())) {
+    match lives.iter_mut().find(|(id, _)| *id == a.about()) {
+      Some((_, n)) => *n += 1,
+      None => lives.push((a.about(), 1)),
+    }
+  }
+  let parks = |id: &str| {
+    let kind = id.trim_end_matches(|c: char| c.is_ascii_digit());
+    PARKS.contains(&kind).then(|| (id.to_owned(), kind.to_owned()))
+  };
+  lives.into_iter().filter(|(_, n)| *n >= CRASHES).filter_map(|(id, _)| parks(id)).collect()
+}
+
 /// A template string, as a host says one: each expression beside its value.
 fn templated(pairs: &[(&str, Object)]) -> Object {
   crate::value::paired(
@@ -209,6 +271,8 @@ struct Opened {
   shown: Object,
   /// The class a class was made with.
   base: Object,
+  /// A name taken out of the parked names of the park.
+  unpark: Object,
 }
 
 impl Opened {
@@ -224,6 +288,7 @@ impl Opened {
       template: at(8),
       shown: at(9),
       base: at(10),
+      unpark: at(13),
     }
   }
 }
@@ -312,10 +377,10 @@ impl Outside {
   fn new(given: Handed, opened: &Object) -> Outside {
     let got = opened.as_ref();
     let at = |i: usize| {
-      entry(&got, i).map(|one| one.to_owned()).expect("the opening gives eleven callables")
+      entry(&got, i).map(|one| one.to_owned()).expect("the opening gives fourteen callables")
     };
     let opened = Opened::of(at);
-    let kept = (0..11).filter_map(|i| at(i).as_ref().handle()).collect();
+    let kept = (0..14).filter_map(|i| at(i).as_ref().handle()).collect();
     Outside { handed: given, opened, kept, ..Outside::default() }
   }
 
@@ -948,6 +1013,8 @@ pub struct Engine {
   /// The acts that the record showed started and not done, which the journal holds from the outside and which this
   /// life has not taken up yet, in the order of the record.
   holding: Vec<String>,
+  /// The acts that the record parks and that this life has not retried, by name and kind, in the order of the record.
+  parked: Vec<(String, String)>,
 }
 
 impl Engine {
@@ -1036,9 +1103,17 @@ impl Engine {
       kernel.expect("the opening gives the Kernel").to_owned(),
       gate.expect("and the gate").to_owned(),
     );
+    let (parking, park) = (entry(&got, 11), entry(&got, 12));
+    let (parking, park) = (
+      parking.expect("the opening gives the park").to_owned(),
+      park.expect("and its names").to_owned(),
+    );
     let record: Vec<Object> = record.into_iter().collect();
-    let (watchers, holding) = (HashMap::new(), left(&record));
-    let mut engine = Engine { sand, outside, watchers, root: String::new(), raised: None, holding };
+    let (watchers, holding, parked) = (HashMap::new(), left(&record), looping(&record));
+    let names_parked = Object::list(parked.iter().map(|(id, _)| Object::string(id)));
+    let parks = !parked.is_empty();
+    let mut engine =
+      Engine { sand, outside, watchers, root: String::new(), raised: None, holding, parked };
     let (root, raised) = engine.run(|sand, outside| {
       outside.bound(sand)?;
       let mut entries = Vec::new();
@@ -1054,6 +1129,12 @@ impl Engine {
         let on = outside.fresh();
         outside.standing.insert(on, (name.clone(), At::Unborn));
         given.push((name, object("Ear", on)));
+      }
+      if parks {
+        sand.call(outside, &park, vec![names_parked], vec![])?;
+        for (_, one) in &mut given {
+          *one = sand.call(outside, &parking, vec![one.clone()], vec![])?;
+        }
       }
       let given = given.iter().map(|(name, one)| (name.as_str(), one.clone())).collect();
       let got = outside.named_call(sand, "boot", vec![Object::list(entries)], given);
@@ -1146,7 +1227,7 @@ impl Engine {
     self.holding = holding.clone();
     let mut pending = Vec::new();
     for id in holding {
-      if !self.whether(WAITS, &id)? {
+      if self.parked.iter().any(|(one, _)| *one == id) || !self.whether(WAITS, &id)? {
         continue;
       }
       let (mut made, mut at) = (Vec::new(), id.clone());
@@ -1163,6 +1244,33 @@ impl Engine {
       }
     }
     Ok(pending)
+  }
+
+  /// The work that a crash loop parked, each act by its name and its kind, in the order of the record: an act of the
+  /// outside, a run, a command or a reply, that the record shows started in [`CRASHES`] lives and not done, since each
+  /// of those lives ended while it ran. A wake puts no parked act to the outside, and it is pending no more: it waits,
+  /// not done, until a retry, or until a control ends it, so a host that wakes the work of a life as it opens does
+  /// not run it again and end again.
+  pub fn parked(&mut self) -> Result<Vec<(String, String)>, Fault> {
+    let mut parked = Vec::new();
+    for (id, kind) in self.parked.clone() {
+      if self.whether("peek(__id, ...) is ...", &id)? {
+        parked.push((id, kind));
+      }
+    }
+    Ok(parked)
+  }
+
+  /// A parked act, run again: it is parked no more in this life, and a wake of it puts it to the outside, which takes
+  /// it as at any wake, so the record shows one more life that started it. An act that is not parked is refused.
+  pub fn retry(&mut self, id: &str) -> Result<(), Fault> {
+    if !self.parked()?.iter().any(|(one, _)| one == id) {
+      return Err(Fault::refused(format!("{id} is not parked")));
+    }
+    self.parked.retain(|(one, _)| one != id);
+    let unpark = self.outside.opened.unpark.clone();
+    self.run(|sand, outside| sand.call(outside, &unpark, vec![Object::string(id)], vec![]))?;
+    self.verb("wake", vec![Object::string(id)], vec![]).map(|_| ())
   }
 
   /// The act of a verb that a key of the client makes once, across a crash of the host and a retry of the client. A

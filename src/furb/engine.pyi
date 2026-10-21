@@ -156,6 +156,7 @@ def read(path: str, show: Show = HEAD, on: str = "") -> Text:
   The World serves the scratch directory as scratch://: a read of scratch://plan.md gives that file, and a read of scratch:// or of a folder of it gives the name of each entry of that folder, one on each line, each folder with / at its end, as ls does.
   Each text and each refusal of scratch:// names its path under scratch:// and never the place of the scratch directory on the machine.
   A path of scratch:// that leaves the scratch directory, by .. or by a link, is refused, and so is a path that starts with scratch: and not scratch://, with a refusal that names scratch://.
+  The World gives a file whose every line ends with CRLF with LF at the end of each line, so a text holds the same lines on every machine, and a file of other line ends as it is.
   read is given a path and a show.
   read gives a Text.
   A text without a show is told as HEAD, which is the span of its first 2000 lines.
@@ -181,6 +182,7 @@ def write(text: Text, on: str = "") -> Text:
   A write of a door that a rung of that ladder says leaves the word of that rung out of the ladder, so the door shows it no more.
   A new file is a write of a Text made of its path and its content.
   A write of scratch://plan.md puts its text in that file of the scratch directory, and makes the directory and the folders of the file first when they are not there.
+  A write to a file whose every line ends with CRLF ends each line of the text with CRLF, so the file keeps its line ends, and gives the text with LF, as a read does.
   """
 
 def peek(at: str, waiting: object = None) -> object:
@@ -537,6 +539,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   A write of a door that drops no rung that ran, since the gate refused each rung that it drops, keeps the module and every rung of the chain as they stand, and makes only the rung of what is new.
   Before every reply the chain tells the last paragraph of the turn, whose header says what the answer is for, as #rung5 advance on prompt1, which names the one that made the rung.
   The advance binds the share of the window that the last reply on the chain read, as rung5_share = 0.25: the tokens that reply read over the window that the roster gives its actor, to two places, and no share before a reply that read a token.
+  The advance of a reply to an actor whose roster entry holds a doctrine binds that doctrine, as rung5_doctrine, unless the transcript holds a reply to an actor of the same doctrine, so the model reads it once, in its user turn, just before it answers, and a chain that asks no such actor tells nothing of it.
   When nothing was told on the chain since the word of the last rung that the chain did not make was ready, the chain tells that rung under the header told nothing before the advance, so the model sees that the word showed it nothing.
   The chain holds the text of each paragraph told on it, in order.
   At the first ready of the next rung, the chain runs that text as the told rung of that rung, before its word, and holds nothing more.
@@ -717,7 +720,7 @@ The engine sends the response to the provider again whole.
 The python of an assistant turn is the word the model wrote, quotes and all, and the python of a user turn is the paragraphs told since the reply before it, and nothing else.
 """
 type Actor = list[str | list[str] | int]
-"""An actor the World offers: the name of a model, the efforts it takes, and the window it reads.
+"""An actor the World offers: the name of a model, the efforts it takes, the window it reads, and the doctrine it reads, which the entry of a model that reads none leaves unsaid.
 The window that a roster entry leaves unsaid is the window that the file names.
 What a prompt names is one of these names and one effort of that range.
 An actor takes an effort of its own, and any actor takes the effort that is not named.
@@ -848,7 +851,7 @@ The journal keeps each stand and its answer, so a later life says them again at 
 At its tip, once the record is said again whole, boot stands the life again, so a change of the World reaches every chain after what it replayed.
 Every chain hears the done of every stand, and a chain whose standing that answer changes tells it there, and binds its default actor again when the actor of the standing changes, so the transcript grows at one end.
 A standing binds the default actor of the chain, under the name actor, when its actor differs from that of the standing before it, so a new roster or a new directory alone keeps the actor that a word chose.
-The chain tells each standing it takes in one paragraph headed standing, which binds its roster, its directory and its actor, as chain1_roster, chain1_cwd and chain1_actor.
+The chain tells each standing it takes in one paragraph headed standing, which binds its roster, its directory and its actor, as chain1_roster, chain1_cwd and chain1_actor, and its roster holds no doctrine, since a chain tells the doctrine of an actor only where it asks that actor.
 The standing a chain tells is what its transcript holds of it, and the stand itself tells nothing.
 """
 type Module = tuple[Literal["module"], str, str, dict[str, object]]
@@ -958,8 +961,8 @@ def unquoted(word: str) -> str:
   The engine unquotes a word before the gate reads it and before the Kernel runs it, and the door of a ladder and the turns keep the quotes as the word wrote them.
   """
 
-def offered(roster: list[Actor], to: str) -> int | None:
-  """The window an actor reads, and nothing at all when the roster holds no such actor, or when that one takes no such effort."""
+def offered(roster: list[Actor], to: str, at: int = 2) -> int | str | None:
+  """The slot that at names of the roster entry of an actor, its window when at is unsaid and its doctrine at 3, the empty string for a slot that the entry leaves unsaid, and nothing at all when the roster holds no such actor, or when that one takes no such effort."""
 
 def covers(a: Fact, id: str) -> bool:
   """Whether a control is over an act: over the act it names and everything under it, and over every act on the chain it names; a close is over the act it names, each rung that act made and each reply that asks for the word of one of those, where a cancel is over everything under it.

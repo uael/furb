@@ -5,6 +5,7 @@ it tells the operator a chain went quiet, the answers a record holds, and the op
 the crate, the provider and its catalog among them, are proved where the crate writes them.
 """
 
+import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
@@ -110,6 +111,7 @@ async def test_the_answers_a_record_holds_are_the_turns_its_replies_came_to(yard
   assert [(one[1], one[3][1]) for one in answered(said)] == [(replies[1], "close(3)")]
 
 
+@pytest.mark.xfail(sys.platform == "win32", reason="the loop of Windows reads no pipe of the operator", strict=True)
 async def test_two_prompts_of_the_operator_are_shown_and_answered_one_at_a_time(yard: Path) -> None:
   """There is one terminal and one operator, so prompts of the operator are shown and answered one at a time, in
   the order they asked, and never two at once on one stream."""
@@ -153,6 +155,7 @@ async def test_the_operator_that_cannot_be_read_closes_the_prompt_with_a_refusal
     await got
 
 
+@pytest.mark.xfail(sys.platform == "win32", reason="the loop of Windows reads no pipe of the operator", strict=True)
 async def test_a_line_that_is_no_value_of_the_shape_closes_the_prompt_with_a_refusal(yard: Path) -> None:
   """Which shapes the operator answers is the law of the World, and a line that is none of the shape is refused."""
   with speaking("not a number\n"):

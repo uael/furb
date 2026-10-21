@@ -45,6 +45,8 @@ indexmap = { version = "2", features = ["serde"] }
 # The search for a byte, which finds the end of each line of the record many bytes at a time, even in a build that
 # does not optimize the crate.
 memchr = "2"
+# The store of a record as a database of SQLite, built from its source, so no machine needs a library of its own.
+rusqlite = { version = "0.40", features = ["bundled"] }
 # The chance of the World, drawn by the system.
 getrandom = "0.3"
 # The one interface of the models of the provider, which the claude command line answers too, and the clients of the

@@ -39,14 +39,14 @@ jobs:
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
-      # The suite is a gate of its own below, on two systems, and no hook runs it a second time here.
+      # The suite is a gate of its own below, on three systems, and no hook runs it a second time here.
       - run: uv run pre-commit run --all-files --show-diff-on-failure
         env:
           SKIP: pytest
           UV_NO_SYNC: "1"
 
   suite:
-    # The engine speaks to a machine through the World, and a machine answers as itself: the suite runs on both,
+    # The engine speaks to a machine through the World, and a machine answers as itself: the suite runs on each,
     # and on both engines, the one of the interpreter and the one in the sandbox of monty.
     name: the suite on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -54,13 +54,36 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    # On Windows the commands of the tests run in the sh of Git for Windows, which the bash of Git puts on PATH.
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
       - run: uv run pytest -q
+
+  crate:
+    # The hooks run the gates of the crate and of the command line on Linux. Windows has a job of its own, since a
+    # path, a line end and a process are of another form there.
+    name: the crate on windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          python: none
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
 
   typescript:
     name: the bindings and the TUI on ${{ matrix.os }}

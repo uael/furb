@@ -274,6 +274,10 @@ impl Server {
         };
         done.map_err(failed).map(|()| Value::Null)
       }
+      "retry" => {
+        let act = command.needed("act")?;
+        self.life.engine.retry(&act).map_err(failed).map(|()| Value::Null)
+      }
       "turns" => {
         let turns = self.life.engine.turns(verbs::Turns { on: Some(on) }).map_err(failed)?;
         let turns: Vec<Value> = turns.iter().map(|one| wire::outward(one.as_ref())).collect();
@@ -312,6 +316,7 @@ impl Server {
           "prompts": prompts,
           "acts": self.awaited,
           "pending": self.life.engine.pending().map_err(failed)?,
+          "parked": self.life.engine.parked().map_err(failed)?,
         }))
       }
       "" => Err("The command needs type.".to_owned()),
