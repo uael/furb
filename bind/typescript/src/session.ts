@@ -247,6 +247,19 @@ export class Session extends EventEmitter {
     return new Map(this.held);
   }
 
+  /** The work that a crash loop parked, by the kind of each act, as the engine of the crate finds it: a wake puts
+   * none of it to the outside, so resume does not run it again. */
+  get parked(): Map<string, string> {
+    return new Map(this.engine?.parked() ?? []);
+  }
+
+  /** Run a parked act again: it is parked no more in this life, and a wake of it puts it to the outside. */
+  retry(id: string): void {
+    if (this.options.readOnly) throw new Error("Record inspection cannot resume work.");
+    this.engine?.retry(id);
+    this.emit("change");
+  }
+
   /** Start the pending work: a wake of each chain that holds some, which the engine answers by starting each
    * command, wait and prompt to the operator of it again, and by asking for each pending rung. */
   async resume(): Promise<void> {

@@ -142,6 +142,12 @@ chain that holds some, and an act that a wake puts to the outside again is pendi
 pending work off the transcripts, so the session asks it again only after a pause, a wake, or a start or a done of
 an act of that work, and keeps what it gave until then.
 
+`session.parked` names the work that a crash loop parked, by the kind of each act, as `engine.parked()` finds it: a
+run, a command or a reply that the record shows started in five lives and not done, since each of those lives ended
+while it ran. A wake puts no parked act to the outside, so `session.resume()` does not run it again and end again,
+and a parked act is pending no more. `session.retry(id)` runs a parked act again: it is parked no more in this life,
+and a wake of it puts it to the outside.
+
 `engine.keyed(key, kind, args, kwargs)` makes the act of a verb once for a key of the client, across a crash of the
 host and a retry of the client, as `engine.keyed("k1", "prompt", ["int"], { message: "count", on })`. A key fact goes
 to the record before the act, and a later call with the same key on the same chain gives the act that the key made,
