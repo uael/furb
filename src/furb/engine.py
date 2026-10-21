@@ -130,7 +130,7 @@ def wake(id: str) -> None:
 
 
 def cancel(id: str) -> None:
-  control("cancel", "cancelled", id)
+  control("cancel", "cancelled by " + site.get(), id)
 
 
 def close(value: object, id: str = "") -> None:

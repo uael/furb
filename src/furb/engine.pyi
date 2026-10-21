@@ -308,6 +308,7 @@ def cancel(id: str) -> None:
   A cancelled prompt raises CancelledError to whoever awaits it.
   A cancel touches nothing else on the chain.
   The awaiter of a cancelled command raises CancelledError in its step.
+  The paragraph of a cancel names in its header the one that said it, as #rung5 cancelled by operator, so a turn says what ended the act.
   """
 
 def close(value: object, id: str = "") -> None:
