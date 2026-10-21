@@ -117,15 +117,15 @@ async def test_a_read_of_a_door_that_a_rung_of_that_ladder_says_leaves_the_word_
 
 
 async def test_one_made_from_inside_an_act_tells_itself() -> None:
-  """One made from inside an act tells itself under its own name, with its path and what it was answered, on the scope of that act; one made from outside an act tells nothing, and neither does one whose show is hidden."""
+  """One made from inside an act tells itself under its own name, with its path and what it was answered, about itself, on the chain it is on; one made from outside an act tells nothing, and neither does one whose show is hidden."""
   _, log, root = born("read('a.txt')\nread('a.txt', HIDDEN)\nclose(1)")
   assert await engine.prompt(int, "read it", on=root) == 1
   step = said(log, "rung")[0][1]
   told = [a for a in said(log, "tell") if a[3][0].startswith("#read")]
   paragraph = "#read1\nread1_path = 'a.txt'\n<s:read1_text>\none\ntwo</s:read1_text>"
-  assert [(a[1], a[2], a[3]) for a in told] == [(step, step, [paragraph])]
+  assert [(a[1], a[2], a[3]) for a in told] == [("read1", step, [paragraph])]
   held = engine.transcript(root)
-  assert engine.scope(step) == root and told[0] in held
+  assert engine.scope("read1") == root and told[0] in held
   was = engine.turns(on=root)
   assert of(was, "read") == [paragraph]
   assert engine.read("a.txt", on=root) == Text("/w/a.txt", "one\ntwo\n")

@@ -163,7 +163,7 @@ def read(path: str, show: Show = HEAD, on: str = "") -> Text:
   Whether a name is one of the prompts a chain has heard on itself, which is what the doors of its prompts serve and no other path, a path of no name being none of them.
   A prompt is the door of the program of its ladder, so a read of its name gives the word of every rung of it in order, the words the gate refused among them, which are none at all for a prompt that ran no word.
   A read of a door that a rung of that ladder says leaves the word of that rung out, since a rung is no part of the program it reads.
-  One made from inside an act tells itself under its own name, with its path and what it was answered, on the scope of that act; one made from outside an act tells nothing, and neither does one whose show is hidden.
+  One made from inside an act tells itself under its own name, with its path and what it was answered, about itself, on the chain it is on; one made from outside an act tells nothing, and neither does one whose show is hidden.
   A read answered with what is no text gives that value, and tells it as python shows it.
   A read from inside an act that would tell more than LARGEST bytes of its text raises Refused, which names those bytes and LARGEST, and tells nothing, and a read from outside an act, which tells nothing, is never refused for its size.
   """
@@ -912,7 +912,7 @@ def asked(id: str, on: str = "") -> list[str]:
   """The names of the questions that an act asked on a chain, in the order that it asked them."""
 
 def tell(on: str, path: str, got: object = None, show: Show = HEAD) -> None:
-  """What a question answered now that shows a text or changes a state tells of itself: a paragraph headed with the name of the question, which binds its path and what it was answered, said on the run that asked it, and nothing at all outside a run; one that only reads a value tells nothing, since the word that asked it holds the value, which it debugs to see.
+  """What a question answered now that shows a text or changes a state tells of itself: a paragraph headed with the name of the question, which binds its path and what it was answered, said by the run that asked it about that question, and nothing at all outside a run; one that only reads a value tells nothing, since the word that asked it holds the value, which it debugs to see.
   A question is put to the ears of the engine before those of the outside, so the World is asked for nothing that the engine knows.
   The question that tell names is the last question on its chain that the run made.
   A text is told by the lines that its show picks, under the word text, and any other answer under the word value.
