@@ -442,6 +442,7 @@ def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[No
   A prompt carries the name of its shape as a word, and takes the name as well as the shape, so the journal makes it again.
   The name of a shape is the word a chain says it by, so a shape that holds a class of the engine or of the chain names it as the chain does, under no module.
   The acknowledgment carries no shape and a message that names the act and what happened to it, as prompt3 done.
+  The acknowledgment goes to the actor of the rung that made the act, so the model that made it sees it, and to the default actor of the chain when that rung names no actor.
   The turns of the chain hold the result of the command that the acknowledgment names.
   A cancelled result is no orphan.
   The response of an acknowledgment is no orphan.
