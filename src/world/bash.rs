@@ -3,10 +3,12 @@
 
 use std::{
   collections::{HashMap, HashSet},
-  future,
+  env, future,
+  io::ErrorKind,
   path::{Path, PathBuf},
   pin::pin,
   process::{Command, Stdio},
+  sync::OnceLock,
   time::Duration,
 };
 
@@ -28,9 +30,33 @@ use crate::{
   value::{Exit, Fault, Object, Text},
 };
 
-/// The POSIX shell that runs a command: `/bin/sh`, and on Windows, which has none of its own, the `sh` on PATH, such
-/// as the one of Git for Windows.
-pub const SHELL: &str = if cfg!(windows) { "sh" } else { "/bin/sh" };
+/// The POSIX sh that runs a command: `/bin/sh`, and on Windows, which has none of its own, the sh of Git for Windows,
+/// which [`git_sh`] finds, or `sh` when it finds none, which a command then names in the refusal of its start.
+pub fn shell() -> &'static Path {
+  static FOUND: OnceLock<PathBuf> = OnceLock::new();
+  FOUND.get_or_init(|| {
+    if !cfg!(windows) {
+      return PathBuf::from("/bin/sh");
+    }
+    let folders: Vec<PathBuf> =
+      env::split_paths(&env::var_os("PATH").unwrap_or_default()).collect();
+    git_sh(&folders, env::var_os("ProgramFiles").map(PathBuf::from))
+      .unwrap_or_else(|| PathBuf::from("sh"))
+  })
+}
+
+/// The sh of Git for Windows: the `sh` in these folders, else the one of the Git whose `git` stands in them, in a
+/// `bin` or a `usr/bin` of a folder above that program, as a Git that puts only its `cmd` on PATH holds it, else the one
+/// of the Git in the folder of the programs of the machine.
+pub(crate) fn git_sh(folders: &[PathBuf], programs: Option<PathBuf>) -> Option<PathBuf> {
+  program("sh", folders.iter().cloned())
+    .or_else(|| {
+      let git = program("git", folders.iter().cloned())?;
+      let roots = git.ancestors().skip(2).take(3).map(Path::to_path_buf).collect::<Vec<_>>();
+      program("sh", roots.iter().flat_map(|one| [one.join("bin"), one.join("usr").join("bin")]))
+    })
+    .or_else(|| program("sh", [programs?.join("Git").join("bin")]))
+}
 
 /// The first program of a name in these folders, with the endings of a program on Windows.
 pub fn program(name: &str, folders: impl IntoIterator<Item = PathBuf>) -> Option<PathBuf> {
@@ -228,7 +254,7 @@ async fn begun(co: &mut Co<Said>, a: &Fact, scratch: &Scratch) -> Result<Begun, 
   let dir = here(co, &on).await?;
   let asked = vec![Object::string("merged"), Object::string(on), Object::string(about.clone())];
   let merged = co.call("ask", asked, vec![]).await?.as_ref().as_bool().unwrap_or_default();
-  let mut command = Command::new(SHELL);
+  let mut command = Command::new(shell());
   command
     .arg("-c")
     .arg(if merged { format!("exec 2>&1\n{line}") } else { line })
@@ -242,9 +268,14 @@ async fn begun(co: &mut Co<Said>, a: &Fact, scratch: &Scratch) -> Result<Begun, 
     command.env("TMP", tmp).env("TEMP", tmp);
   }
   grouped(&mut command);
-  let mut child = tokio::process::Command::from(command)
-    .spawn()
-    .map_err(|no| Fault::refused(format!("{shown} did not start: {no}: {}", dir.display())))?;
+  let mut child = tokio::process::Command::from(command).spawn().map_err(|no| {
+    let why = if cfg!(windows) && no.kind() == ErrorKind::NotFound {
+      format!("no POSIX sh runs it: install Git for Windows, whose sh furb runs: {no}")
+    } else {
+      no.to_string()
+    };
+    Fault::refused(format!("{shown} did not start: {why}: {}", dir.display()))
+  })?;
   match Group::of(&child) {
     Ok(group) => Ok(Begun { about, child, group, timeout, given }),
     Err(no) => {
@@ -269,9 +300,11 @@ fn command(
 /// A command run to its end: what its streams write is said as it comes, what is fed goes into its stdin, and its
 /// exit is said at its end; or the command is ended at its stop, with every process of it.
 ///
-/// A command that outlives its timeout is ended with every process of it, and exits with no code. Its streams are
-/// read to their end before its exit is read, and only that read reaps it, so its process group stays its own for
-/// as long as a process of it holds a stream open, and an end never signals a group that another took.
+/// A command that outlives its timeout is ended with every process of it, and exits with no code. Its exit comes once
+/// its shell exited and its streams closed, or once its shell exited and no process of its group lives, as when a
+/// process that left the group holds a stream: then the exit gives what its streams wrote until then. The shell is
+/// reaped as it exits, and its group keeps its number for as long as a process of it lives, so an end signals no
+/// group that another took, but in the moment between the last probe of an empty group and that end.
 async fn ran(
   begun: Begun,
   fed: spsc::Receiver<Option<String>>,
@@ -280,30 +313,48 @@ async fn ran(
 ) {
   let Begun { about, mut child, mut group, timeout, .. } = begun;
   let (stdout, stderr, stdin) = (child.stdout.take(), child.stderr.take(), child.stdin.take());
-  let ended = async {
-    let (out, err) =
-      tokio::join!(read(stdout, "stdout", &about, &says), read(stderr, "stderr", &about, &says),);
-    (out, err, child.wait().await)
+  let (mut out, mut err) = (String::new(), String::new());
+  let streams = async {
+    tokio::join!(
+      read(stdout, "stdout", &about, &says, &mut out),
+      read(stderr, "stderr", &about, &says, &mut err)
+    );
   };
+  let shell = child.wait();
   let expired = async {
     match timeout {
       Some(left) => tokio::time::sleep(left).await,
       None => future::pending().await,
     }
   };
-  let (mut ended, mut expired, mut feeding) = (pin!(ended), pin!(expired), pin!(feed(stdin, fed)));
-  let (mut late, mut closed) = (false, false);
-  let mut stopped = pin!(stopped);
-  let (out, err, status) = loop {
-    tokio::select! {
-      biased;
-      _ = &mut stopped => return,
-      got = &mut ended => break got,
-      () = &mut expired, if !late => {
-        late = true;
-        group.slay();
+  let (late, status) = {
+    let (mut streams, mut shell) = (pin!(streams), pin!(shell));
+    let (mut expired, mut feeding) = (pin!(expired), pin!(feed(stdin, fed)));
+    let (mut late, mut closed, mut drained, mut status) = (false, false, false, None);
+    let (mut gone, mut ended) = (false, false);
+    let mut stopped = pin!(stopped);
+    loop {
+      tokio::select! {
+        biased;
+        _ = &mut stopped => return,
+        got = &mut shell, if status.is_none() => status = Some(got),
+        () = &mut streams, if !drained => drained = true,
+        () = &mut expired, if !late => {
+          late = true;
+          group.slay();
+        }
+        () = &mut feeding, if !closed => closed = true,
+        // A process that left the group can hold a stream once no process of the group lives, so the group is
+        // probed while the shell is gone and a stream is open, and a probe that finds it empty gives the streams
+        // one more probe to give what they hold.
+        () = tokio::time::sleep(PROBE), if status.is_some() && !drained => {
+          ended = gone;
+          gone = !group.lives();
+        }
       }
-      () = &mut feeding, if !closed => closed = true,
+      if let Some(got) = status.take_if(|_| drained || ended) {
+        break (late, got);
+      }
     }
   };
   group.free();
@@ -325,7 +376,14 @@ fn coded(status: std::process::ExitStatus) -> Option<i32> {
     status.code().or_else(|| status.signal().map(|signal| 128 + signal))
   }
   #[cfg(not(unix))]
-  status.code()
+  status.code().map(signalled)
+}
+
+/// The code of an exit of the sh of Git for Windows, which a signal ends with the number of the signal times 256, as
+/// 128 and that number, as a shell gives; and every other code as it is.
+#[cfg_attr(unix, allow(dead_code))]
+pub(super) fn signalled(code: i32) -> i32 {
+  if code % 256 == 0 && (1..=64).contains(&(code / 256)) { 128 + code / 256 } else { code }
 }
 
 /// What is fed to a command, written into its stdin, until nothing closes it or the command reads no more.
@@ -338,15 +396,19 @@ async fn feed(stdin: Option<ChildStdin>, mut fed: spsc::Receiver<Option<String>>
   }
 }
 
-/// One stream of a command: each text said as it comes, whole in utf-8, and the whole stream given at its end.
+/// How long the World waits between two probes of the group of a command whose shell exited while a stream is open.
+const PROBE: Duration = Duration::from_millis(100);
+
+/// One stream of a command: each text said as it comes, whole in utf-8, and kept in all until the stream ends.
 async fn read(
   stream: Option<impl AsyncRead + Unpin>,
   name: &'static str,
   about: &str,
   says: &UnboundedSender<Said>,
-) -> String {
-  let Some(mut stream) = stream else { return String::new() };
-  let (mut all, mut held, mut chunk) = (String::new(), Vec::new(), [0u8; 8192]);
+  all: &mut String,
+) {
+  let Some(mut stream) = stream else { return };
+  let (mut held, mut chunk) = (Vec::new(), [0u8; 8192]);
   loop {
     let n = stream.read(&mut chunk).await.unwrap_or(0);
     held.extend_from_slice(&chunk[..n]);
@@ -360,7 +422,7 @@ async fn read(
       all.push_str(&text);
     }
     if n == 0 {
-      return all;
+      return;
     }
   }
 }
@@ -417,9 +479,7 @@ fn grouped(command: &mut Command) {
 /// Every process a command started: on Unix the process group it leads, and on Windows, where a shell of Git does
 /// not keep the tree of its processes, a job that holds the command and every process it starts.
 ///
-/// Every process of it ends when the group goes before the command is over: at a stop, or at the end of the ear. Its
-/// leader stays unreaped until the command is over, since only the read of its exit reaps it, so an end never reaches
-/// a group that another took.
+/// Every process of it ends when the group goes before the command is over: at a stop, or at the end of the ear.
 struct Group {
   #[cfg(unix)]
   leader: Option<rustix::process::Pid>,
@@ -459,6 +519,17 @@ impl Group {
     self.job.take();
   }
 
+  /// Whether a process of the group lives. On Windows no job here says it, so the group lives until the command is
+  /// over, and the command waits for its streams.
+  fn lives(&self) -> bool {
+    #[cfg(unix)]
+    let lives =
+      self.leader.is_some_and(|leader| rustix::process::test_kill_process_group(leader).is_ok());
+    #[cfg(windows)]
+    let lives = self.job.is_some();
+    lives
+  }
+
   /// The group let go once the command is over, and every process of it that outlives the command left to run.
   fn free(&mut self) {
     #[cfg(unix)]
@@ -475,3 +546,7 @@ impl Drop for Group {
     self.slay();
   }
 }
+
+#[cfg(test)]
+#[path = "bash.test.rs"]
+mod test;

@@ -24,7 +24,7 @@ use std::{
   path::{Component, Path, PathBuf},
 };
 
-pub use bash::{SHELL, bash, program};
+pub use bash::{bash, program, shell};
 pub use files::files;
 pub use operator::{SHAPES, answered};
 pub(crate) use provider::search::{posted, spawned};

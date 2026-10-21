@@ -24,7 +24,7 @@ import pytest
 
 import furb
 import furb_monty.engine
-from conftest import OPERATOR, STANDS, Dead, Py, Sand, settle, swapped
+from conftest import OPERATOR, STANDS, Dead, Py, Sand, life, settle, swapped
 from furb import engine
 from furb.engine import TIMEOUT, Refused
 from furb_monty import _monty
@@ -428,3 +428,29 @@ def test_the_door_gives_the_catalog_of_the_crate(tmp_path: Path) -> None:
   claude.chmod(0o755)
   opus = {"name": "claude-cli:opus", "efforts": efforts, "window": 1000000, "images": True, "price": None}
   assert opus in _monty.models(str(claude))
+
+
+async def test_a_raise_after_a_try_whose_assert_captures_a_local_is_not_caught_by_its_handler() -> None:
+  """A word whose try holds an assert that captures a local in a closure gives what it gives on this interpreter."""
+  word = """def shaped(value, later):
+  if value is not None:
+    try:
+      assert any(isinstance(value, x) for x in [int])
+    except Exception:
+      raise ValueError("the handler of the try")
+  if later:
+    raise KeyError("after the try")
+  return "done"
+def outcome(*args):
+  try:
+    return shaped(*args)
+  except Exception as e:
+    return repr(e)
+close([outcome(1, False), outcome("a", False), outcome(None, True), outcome(1, True)])"""
+  got = []
+  for each in (furb.python, furb_monty.engine):
+    swapped(each)
+    _, root = life(Sand(stands=STANDS))
+    got.append(await engine.rung(word, on=root))
+  expected = ["done", "ValueError('the handler of the try')", "KeyError('after the try')", "KeyError('after the try')"]
+  assert got == [expected, expected]

@@ -2,7 +2,7 @@
 
 use std::{fs, path::PathBuf};
 
-use super::{crlf, homed, read};
+use super::{crlf, homed, native, read};
 
 #[test]
 fn a_path_that_is_a_tilde_or_starts_with_one_and_a_slash_resolves_against_the_home_of_the_user() {
@@ -37,4 +37,18 @@ fn bytes_end_each_line_with_crlf_when_they_hold_a_line_break_and_a_cr_comes_befo
   assert!(!crlf(b"\na"));
   assert!(!crlf(b"no break"));
   assert!(!crlf(b""));
+}
+
+#[test]
+fn a_path_of_the_sh_of_git_is_the_path_of_windows_on_windows_alone() {
+  assert_eq!(native("/c/Users/a.txt", true), "C:/Users/a.txt");
+  assert_eq!(native("/d", true), "D:/");
+  assert_eq!(native("/tmp/plan.md", true), "scratch://plan.md");
+  assert_eq!(native("/tmp", true), "scratch://");
+  assert_eq!(native("/tmpx/a", true), "/tmpx/a");
+  assert_eq!(native("/cd/a", true), "/cd/a");
+  assert_eq!(native("src/a.txt", true), "src/a.txt");
+  assert_eq!(native("C:\\x", true), "C:\\x");
+  assert_eq!(native("/c/Users/a.txt", false), "/c/Users/a.txt");
+  assert_eq!(native("/tmp/plan.md", false), "/tmp/plan.md");
 }

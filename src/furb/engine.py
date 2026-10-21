@@ -886,7 +886,7 @@ How to work
   shares it, and a command finds it in $TMPDIR.
 - Use bash to run commands and to find paths, as bash("grep -rln pattern src"). Let its show pick the lines of a long
   command, as bash(command, show=span(-40, -1)), since its stream flows while it runs. Give a long command a timeout
-  that fits. bash runs the command in /bin/sh, not in bash, so it takes no syntax of bash alone, as <(command).
+  that fits. bash runs the command in a POSIX sh, /bin/sh or on Windows the sh of Git, not in bash, so it takes no syntax of bash alone, as <(command).
 - Start all independent acts first, then await each one, or await wait(seconds, *acts) for the first that ends.
 - A report of another chain is a claim. Examine it before you give it as a fact, and give each result from what an
   act showed.

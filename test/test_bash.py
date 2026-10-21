@@ -1,7 +1,10 @@
 """bash, a command of the World."""
 
+import os
 import shlex
+import signal
 import sys
+import time
 from asyncio import CancelledError
 from collections.abc import Generator
 from pathlib import Path
@@ -28,6 +31,7 @@ from conftest import (
 )
 from furb import engine
 from furb.engine import HEAD, HIDDEN, OPERATOR, TAIL, Act, Exit, Refused, Text, grep, span
+from furb_monty import _monty
 
 
 def door(one: str, part: str) -> str:
@@ -141,7 +145,6 @@ async def test_the_exit_code_of_the_command_is_none_after_a_timeout() -> None:
   assert (await engine.bash("forever", timeout=0, on=root)).code is None
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="on Windows the life hangs after a command that a signal ended")
 async def test_a_signal_that_ends_the_command_gives_the_code_128_and_the_number_of_the_signal(tmp_path: Path) -> None:
   """A signal that ends the command gives the code 128 and the number of the signal, as a shell gives, so the code None says that the timeout ended it."""
   live, root = machine(tmp_path)
@@ -149,6 +152,23 @@ async def test_a_signal_that_ends_the_command_gives_the_code_128_and_the_number_
   late = await engine.bash("echo before; sleep 30", timeout=0.5, on=root)
   live.end()
   assert (got.code, late.code, late.stdout.content) == (137, None, "before\n")
+
+
+async def test_the_command_ends_once_its_shell_exited_and_its_streams_closed(tmp_path: Path) -> None:
+  """The command ends once its shell exited and its streams closed, or once its shell exited and no process of its group lives, as when a process that left the group holds a stream, with the code of the shell and what its streams wrote."""
+  live, root = machine(tmp_path)
+  behind = await engine.bash("(sleep 1 && echo x) &", on=root)
+  if sys.platform == "win32":
+    live.end()
+    assert (behind.code, behind.stdout.content) == (0, "x\n")
+    return
+  begun = time.monotonic()
+  left = await engine.bash("perl -e 'use POSIX; setsid(); sleep 120' & echo $!", on=root)
+  took = time.monotonic() - begun
+  os.kill(int(left.stdout.content), signal.SIGKILL)
+  live.end()
+  assert (behind.code, behind.stdout.content, left.code) == (0, "x\n", 0)
+  assert took < 120
 
 
 async def test_a_command_that_its_timeout_ended_tells_timed_out_and_its_timeout_in_its_header() -> None:
@@ -494,3 +514,11 @@ async def test_the_world_runs_each_command_with_tmpdir_set_to_the_scratch_direct
   plan, one = got.stdout.content.splitlines()
   assert (first.stdout.content, plan) == ("made\n", "plan")
   assert listed == f"plan.md\n{Path(one).name}"
+
+
+async def test_the_world_runs_the_command_in_a_posix_sh(tmp_path: Path) -> None:
+  """The World runs the command in a POSIX sh: /bin/sh, and on Windows the sh of Git for Windows, which it finds on PATH, beside the git on PATH, or in the folder of the programs of the machine."""
+  live, root = machine(tmp_path)
+  got = await engine.bash('n=6; echo "$((n * 7))" "${n#6}x"', on=root)
+  live.end()
+  assert (got.code, got.stdout.content, Path(_monty.shell()).stem) == (0, "42 x\n", "sh")
