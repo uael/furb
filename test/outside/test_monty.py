@@ -6,8 +6,9 @@ engine made that an ear calls back while it hears, a template string that a func
 while a word calls it, which crosses whole, a class a word defined held as a type of this interpreter
 and its instances as objects of it, both ways, the Kernel of this interpreter refused, since the engine of monty
 holds its own, a gate that accepts a builtin or a name of a module exactly when the sandbox runs it, an ear the
-crate writes, which serves a life of either engine, a life longer than the tables of its session could count, and
-an engine and an ear that the collector of cycles drops on another thread. What the ears of the crate do, the crate
+crate writes, which serves a life of either engine, a life longer than the tables of its session could count, a
+word that awaits in a lambda, which the gate lets pass and the sandbox refuses as python does, and an engine and an
+ear that the collector of cycles drops on another thread. What the ears of the crate do, the crate
 proves.
 """
 
@@ -79,6 +80,16 @@ async def test_a_word_that_asks_the_operating_system_raises_where_it_asks_and_it
   sand.script[root] = ["open('a.txt')", "close(str(raised))"]
   said = await engine.prompt(str, "open it", on=root)
   assert said == "open asks the operating system, and a life asks nothing of it"
+
+
+async def test_a_word_that_awaits_in_a_function_that_is_not_async_raises_where_it_runs_and_its_chain_goes_on() -> None:
+  """A word that awaits in a lambda, which the gate lets pass, raises the SyntaxError of python, and the chain goes on,
+  so the prompt asks its model again."""
+  sand = Sand(stands=STANDS)
+  root = engine.boot((), world=sand.hears())
+  sand.script[root] = ["f = lambda: await wait()\nf()", "close(str(raised))"]
+  said = await engine.prompt(str, "await it", on=root)
+  assert said == "'await' outside async function (<string>, line 1)"
 
 
 async def test_a_template_string_that_a_function_of_this_interpreter_debugs_crosses_whole() -> None:
