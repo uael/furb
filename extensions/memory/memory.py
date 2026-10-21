@@ -26,7 +26,7 @@ def remember(on: str = "") -> Act:
     yield "started", id
     memory(on=on)
     while True:
-      match (yield):
+      match (yield {id, "read", "stand"}):
         case ("done", about, _, Text(path)) if (
           question(("read", about)) and scope(about) == scope(id) and "://" not in path
         ):
