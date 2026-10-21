@@ -26,7 +26,7 @@ use unsync::oneshot;
 use crate::{
   Act, Ear, Engine, Exit, Fact, Fault, Object, Text,
   ear::{Co, Next, ear, hear, say},
-  engine::callable,
+  engine::{CRASHES, callable},
   verbs, world,
 };
 
@@ -673,6 +673,52 @@ fn the_work_an_earlier_life_left_is_pending_until_a_wake_that_this_life_says() {
   let pending =
     third.engine.pending().unwrap().into_iter().map(|(id, kind)| format!("{id} {kind}"));
   assert_eq!(pending.collect::<Vec<_>>(), ["rung1 rung", "wait1 wait", "wait3 wait"]);
+}
+
+#[test]
+fn an_act_that_lives_end_while_it_runs_again_and_again_is_parked_until_a_retry() {
+  let root = {
+    let mut first = Lived::new("parked", &[], true).unwrap();
+    let root = first.root();
+    first.engine.bash("sleep 30", verbs::Bash { on: on(&root), ..Default::default() }).unwrap();
+    root
+  };
+  let started = |lived: &mut Lived| {
+    let facts = lived.engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
+    let ours =
+      |one: &&Fact| one.kind() == "started" && one.about() == "bash1" && one.by() != "journal";
+    facts.iter().filter(ours).count()
+  };
+  let bash = || vec![("bash1".to_owned(), "bash".to_owned())];
+  // Each life that a host wakes as it opens starts the command again, and ends while it runs.
+  for _ in 1..CRASHES {
+    let mut again = Lived::new("parked", &[], false).unwrap();
+    assert!(again.engine.parked().unwrap().is_empty());
+    assert_eq!(again.engine.pending().unwrap(), bash());
+    again.engine.wake(&root).unwrap();
+    assert_eq!(started(&mut again), 1);
+  }
+  let mut parked = Lived::new("parked", &[], false).unwrap();
+  assert_eq!(parked.engine.parked().unwrap(), bash());
+  assert!(parked.engine.pending().unwrap().is_empty(), "a parked act is pending no more");
+  parked.engine.wake(&root).unwrap();
+  assert_eq!(started(&mut parked), 0, "a wake puts no parked act to the outside");
+  let word = Some("x = 1".to_owned());
+  let rung = parked.engine.rung(verbs::Rung { word, on: on(&root), ..Default::default() }).unwrap();
+  let rung = rung.id().to_owned();
+  assert!(parked.settled(&rung).is_ok(), "the ears behind the park hear as before");
+  parked.engine.retry("bash1").unwrap();
+  assert_eq!(started(&mut parked), 1, "a retry puts it to the outside after the wake");
+  assert!(parked.engine.parked().unwrap().is_empty());
+  assert_eq!(parked.engine.retry("bash1").unwrap_err().name, "Refused");
+  drop(parked);
+  // A retry before any wake puts the act to the outside as well.
+  let mut retried = Lived::new("parked", &[], false).unwrap();
+  assert_eq!(retried.engine.parked().unwrap(), bash());
+  retried.engine.retry("bash1").unwrap();
+  assert_eq!(started(&mut retried), 1);
+  retried.engine.cancel("bash1").unwrap();
+  assert_eq!(retried.settled("bash1").unwrap_err().name, "CancelledError");
 }
 
 #[test]

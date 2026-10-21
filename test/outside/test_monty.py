@@ -13,6 +13,7 @@ proves.
 
 import builtins
 import gc
+import json
 import sys
 import threading
 from collections.abc import Generator
@@ -360,6 +361,34 @@ async def test_the_door_names_the_work_that_an_earlier_life_left_pending(tmp_pat
   engine.wait(600, on=root)
   furb_monty.engine.boot(_monty.kept(path), time=_monty.time(), world=Dead(stands=STANDS).hears())
   assert furb_monty.engine.pending() == [("wait1", "wait")]
+
+
+async def test_the_door_parks_a_command_that_five_lives_left_and_runs_it_again_at_a_retry(tmp_path: Path) -> None:
+  """A later life on a record that shows a command started five times and not done, as five lives that ended while it
+  ran leave it, names it parked and not pending, a wake starts it not, and a retry starts it, as the engine of the
+  crate does."""
+  path = str(tmp_path / "record.jsonl")
+  record, store = _monty.store(path)
+  root = furb_monty.engine.boot(record, bash=_monty.bash(str(tmp_path)), store=store, world=Dead(stands=STANDS).hears())
+  engine.bash("sleep 30", on=root)
+  await settle()
+  lines = Path(path).read_text().splitlines(keepends=True)
+  started = next(i for i, line in enumerate(lines) if json.loads(line)[0][:2] == ["started", "bash1"])
+  crashed = tmp_path / "crashed.jsonl"
+  crashed.write_text("".join(lines[: started + 1]) + lines[started] * 4)
+  furb_monty.engine.boot(_monty.kept(str(crashed)), bash=_monty.bash(str(tmp_path)), world=Dead(stands=STANDS).hears())
+  assert (furb_monty.engine.parked(), furb_monty.engine.pending()) == ([("bash1", "bash")], [])
+
+  def started() -> list[tuple]:
+    return [x for x in engine.transcript(root) if x[:2] == ("started", "bash1") and x[2] != "journal"]
+
+  engine.wake(root)
+  await settle()
+  assert started() == []
+  furb_monty.engine.retry("bash1")
+  await settle()
+  assert len(started()) == 1
+  assert furb_monty.engine.parked() == []
 
 
 async def test_a_key_of_the_client_makes_its_act_once_in_a_life_and_in_a_later_life(tmp_path: Path) -> None:

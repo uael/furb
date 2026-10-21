@@ -62,8 +62,9 @@ The TypeScript side is a bun workspace at the root, with two packages:
 
 - `bind/typescript` is the crate through N-API. Its views, its queries and its controls are synchronous, and an
   act that is answered later can be awaited. It includes a `Session`: an engine on the ears of the crate, the
-  provider among them, and on a console of the operator. `bind/typescript/README.md` says how to use it. The
-  TUI imports its build in `bind/typescript/dist`, which `bun run build` makes again.
+  provider among them, and on a console of the operator. `bind/typescript/README.md` says how to use it. Its
+  model of a life, `@furb/engine/life` in `src/life`, gives the views of a life that every host draws, with no native
+  code. The TUI imports its build in `bind/typescript/dist`, which `bun run build` makes again.
 - `tui` is the OpenTUI application on that package. `tui/README.md` says what the TUI does, and `docs/tui.md` shows
   each screen.
 
@@ -133,8 +134,8 @@ The suite drives the engine through its public API alone, end to end, from the m
   assertion to pass: a sentence the engine fails stays red until the engine, or the sentence, is right.
 - A helper that only one file needs lives in that file. A helper that several files need lives in
   `test/conftest.py`, and one that only the suites of the extensions need lives in `extensions/conftest.py`.
-- `test/outside/` holds the tests of the World, the Kernel, the door, and the switch of the package that
-  `FURB_ENGINE` sets. These tests stand outside the hygiene laws.
+- `test/outside/` holds the tests of the World, the Kernel, the door, the switch of the package that
+  `FURB_ENGINE` sets, and the harness. These tests stand outside the hygiene laws.
 
 ## The hygiene laws
 
