@@ -14,9 +14,7 @@ async def test_what_one_answer_of_a_model_cost() -> None:
   assert await engine.prompt(int, "count", on=root) == 1
   got = engine.turns(on=root)
   assert got[1][2] == USAGE
-  assert [one for one in paragraphs(got) if one.startswith("#grant1 ledger")] == [
-    "#grant1 ledger\ngrant1_spent = 1.5\ngrant1_filled = 0.2"
-  ]
+  assert [one for one in paragraphs(got) if one.startswith("#grant1 ledger")] == ["#grant1 ledger\ngrant1_spent = 1.5"]
 
 
 async def test_a_usage_holds_the_token_counts_and_the_dollars_of_one_model_response() -> None:
@@ -33,18 +31,14 @@ async def test_the_share_of_the_window_it_filled_is_the_words_it_read_against_th
   await settle()
   sand.script[root] = ["a = 1", "close(2)"]
   assert await engine.prompt(int, "count", on=root) == 2
-  assert [line for line in paragraphs(engine.turns(on=root)) if line.startswith("#grant1 ledger")] == [
-    "#grant1 ledger\ngrant1_spent = 1.5\ngrant1_filled = 0.2",
-    "#grant1 ledger\ngrant1_spent = 3.0\ngrant1_filled = 0.2",
-  ]
+  assert [engine.filled(a[1]) for a in engine.transcript(root) if a[0] == "reply"] == [0.2, 0.2]
   engine.cancel(ceiling)
   _, _, root = born("close(2)", cost=USAGE)
   asked = engine.prompt(int, "count", on=root)
   engine.rung("actor = 'n/low'", on=root)
   later = engine.grant(usd=10.0, on=root)
   assert await asked == 2
-  ledgers = [one for one in paragraphs(engine.turns(on=root)) if one.startswith(f"#{later} ledger")]
-  assert [one.split(f"{later}_filled = ")[1] for one in ledgers] == ["0.2"]
+  assert later and [engine.filled(a[1]) for a in engine.transcript(root) if a[0] == "reply"] == [0.2]
   engine.cancel(later)
   first, _, root = born(cost=USAGE)
   engine.prompt(int, "count", on=root)
@@ -57,5 +51,4 @@ async def test_the_share_of_the_window_it_filled_is_the_words_it_read_against_th
   (asked,) = [a for a in engine.transcript(root) if a[0] == "reply"]
   world_says("done", asked[1], ("assistant", "close(3)", USAGE, None))
   await settle()
-  ledgers = [one for one in paragraphs(engine.turns(on=root)) if one.startswith(f"#{share} ledger")]
-  assert [one.split(f"{share}_filled = ")[1] for one in ledgers] == ["0.1"]
+  assert share and engine.filled(asked[1]) == 0.1

@@ -550,7 +550,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   """
 
 def grant(usd: float | None = None, share: float | None = None, on: str = "") -> Act[None]:
-  """A ceiling on a chain, in dollars, in the share of the window that one answer fills, or both: it holds the ledger of the chain from the moment it is made, the dollars of the answers since then and the share of the window the last one filled, and it tells that ledger at each answer of a model, so no turn a reply has sent grows a line after it.
+  """A ceiling on a chain, in dollars, in the share of the window that one answer fills, or both: it holds the ledger of the chain from the moment it is made, the dollars of the answers since then and the share of the window the last one filled, and it tells the dollars of that ledger at each answer of a model, since the advance binds the share before the next reply, so no turn a reply has sent grows a line after it.
   grant on a chain puts a ceiling on it: dollars, a share of the window, or both.
   The engine enters a pause on the chain when a response carries the ledger to its ceiling.
   The word of the response that crossed the ceiling runs.

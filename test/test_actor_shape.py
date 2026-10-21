@@ -19,17 +19,12 @@ async def test_an_actor_the_world_offers() -> None:
 async def test_the_window_that_a_roster_entry_leaves_unsaid_is_the_window_that_the_file_names() -> None:
   """The window that a roster entry leaves unsaid is the window that the file names."""
   assert engine.WINDOW == 200000
-  ledgers = []
+  shares = []
   for roster in ([["plain", [], 0]], [["plain", [], 400000]]):
-    _, _, root = born("close(1)", stands=[roster, "/w", "plain"], cost=(100000, 0, 0, 0, 0.0))
-    engine.grant(share=0.9, on=root)
+    _, log, root = born("close(1)", stands=[roster, "/w", "plain"], cost=(100000, 0, 0, 0, 0.0))
     assert await engine.prompt(int, "count", on=root) == 1
-    await settle()
-    ledgers += [one for one in paragraphs(engine.turns(on=root)) if one.startswith("#grant1 ledger")]
-  assert ledgers == [
-    f"#grant1 ledger\ngrant1_spent = 0.0\ngrant1_filled = {100000 / engine.WINDOW}",
-    f"#grant1 ledger\ngrant1_spent = 0.0\ngrant1_filled = {100000 / 400000}",
-  ]
+    shares += [engine.filled(a[1]) for a in said(log, "reply")]
+  assert shares == [100000 / engine.WINDOW, 100000 / 400000]
 
 
 async def test_what_a_prompt_names_is_one_of_these_names_and_one_effort_of_that_range() -> None:

@@ -443,9 +443,9 @@ export class Session extends EventEmitter {
   get context(): number | undefined {
     return this.turns.findLast(([role, , used]) => role === "assistant" && used)?.[2]?.[0];
   }
-  /** The share of the window that the last answer of the chain filled, as the ledger of a grant says it: the whole
-   * prompt of that answer over the window of the model that the last rung of a prompt asked, or the window of the
-   * engine for a model that the roster does not name. Nothing before the first answer. */
+  /** The share of the window that the last answer of the chain filled, as filled of the engine reckons it, less its
+   * rounding: the whole prompt of that answer over the window of the model that the last rung of a prompt asked, or
+   * the window of the engine for a model that the roster does not name. Nothing before the first answer. */
   get filled(): number | undefined {
     const usage = this.turns.findLast(([role, , used]) => role === "assistant" && used)?.[2];
     if (!usage) return undefined;
