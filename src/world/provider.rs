@@ -72,12 +72,14 @@ fn streams<M: CompletionModel + 'static>(model: M) -> Streams {
   })
 }
 
-/// One turn asked of a model: the actor and the chain it answers, the request, and what it tells as it streams.
+/// One turn asked of a model: the actor and the chain it answers, the request, what it tells as it streams, and the
+/// budget of its thought.
 struct Asked {
   actor: String,
   chain: String,
   request: CompletionRequest,
   told: Told,
+  thought: Option<(u64, Map<String, Value>)>,
 }
 
 /// What a model answers a turn with: the response of a model of rig, or the turn that a function of the host gave.
@@ -115,6 +117,10 @@ pub struct Model {
   /// Whether its server may write its thought in its text, between `<think>` and `</think>`, which the host is told as
   /// text while it streams.
   tagged: bool,
+  /// The most parts of thought it streams in one turn, each a token as a local server streams it, and the settings
+  /// with which the provider asks it again once its thought passed that most: a setting of null takes that setting
+  /// off the request.
+  thought: Option<(u64, Map<String, Value>)>,
   answers: Answers,
 }
 
@@ -149,6 +155,7 @@ impl Model {
       tokens: None,
       ends: false,
       tagged: false,
+      thought: None,
       answers,
     }
   }
@@ -186,7 +193,7 @@ impl Model {
   /// The same model, whose turns a function of the host answers in place of the model.
   pub fn hosted(mut self, host: Hosted) -> Model {
     self.answers = Arc::new(move |asked| {
-      let Asked { actor, chain, request, told } = asked;
+      let Asked { actor, chain, request, told, .. } = asked;
       let settings = request.additional_params.unwrap_or_else(|| json!({}));
       let request = json!({
         "actor": actor,
@@ -442,7 +449,8 @@ fn requested(
     output_schema: None,
     record_telemetry_content: false,
   };
-  let asked = Asked { actor: actor.to_owned(), chain: chain.to_owned(), request, told };
+  let thought = model.thought.clone();
+  let asked = Asked { actor: actor.to_owned(), chain: chain.to_owned(), request, told, thought };
   Ok((model.clone(), asked))
 }
 
@@ -484,20 +492,29 @@ fn messages(
 }
 
 /// One response of a model of rig, streamed: what it writes is told as it comes, and the response holds it whole,
-/// with the raw record of its end, where a model says what the turn cost. A model that says each block whole once it
-/// streamed it, as the claude command line does, gives those blocks in that record as `settled`, and they are the
-/// choice of the response, since a part of the stream may be lost where the whole block holds it.
+/// with the raw record of its end, where a model says what the turn cost. A model whose thought passes its budget is
+/// asked again, as [`rethought`] says.
 async fn streamed(streams: Streams, asked: Asked) -> Result<CompletionResponse, CompletionError> {
-  let Asked { request, told, .. } = asked;
-  let mut stream = streams(request).await?;
+  let Asked { request, told, thought: budget, .. } = asked;
+  let mut stream = streams(request.clone()).await?;
   // A thought whose parts streamed is told already, and a thought that came whole is told as it comes.
   let mut thought = HashSet::new();
+  let (mut thinking, mut parts) = (String::new(), 0);
   while let Some(part) = stream.next().await {
     match part? {
       StreamedAssistantContent::Text(text) => told(&text.text, ""),
       StreamedAssistantContent::ReasoningDelta { id, reasoning, .. } => {
         told("", &reasoning);
         thought.insert(id);
+        thinking.push_str(&reasoning);
+        parts += 1;
+        if let Some((most, again)) = &budget
+          && parts > *most
+        {
+          // The call of this stream ends here.
+          drop(stream);
+          return rethought(&streams, request, again, thinking, parts, &told).await;
+        }
       }
       StreamedAssistantContent::Reasoning { reasoning, id } if !thought.contains(&id) => {
         told("", &reasoning.display_text());
@@ -505,13 +522,77 @@ async fn streamed(streams: Streams, asked: Asked) -> Result<CompletionResponse, 
       _ => {}
     }
   }
+  Ok(whole(stream))
+}
+
+/// The response of a stream that ended, with the raw record of its end. A model that says each block whole once it
+/// streamed it, as the claude command line does, gives those blocks in that record as `settled`, and they are the
+/// choice of the response, since a part of the stream may be lost where the whole block holds it.
+fn whole(stream: StreamingCompletionResponse) -> CompletionResponse {
   let raw = stream.response.as_ref().map(|end| end.raw.clone()).unwrap_or_default();
   let settled = raw.get("settled").and_then(|one| serde_json::from_value(one.clone()).ok());
   let mut response = CompletionResponse::from(stream).with_raw(raw);
   if let Some(settled) = settled {
     response.choice = settled;
   }
+  response
+}
+
+/// The turn of a model whose thought passed its budget. The provider asks it again with the same turns, its thought
+/// given back as a turn of its own that holds that thought and no word, and with the settings of its budget, which turn its
+/// thought off, so it writes its word at once. The turn holds that thought and the word, and what the model wrote
+/// counts each part of that thought. A model that writes with no thought wraps its word in a fence, which its own
+/// setting makes, so one fence that wraps the whole text of this turn goes.
+async fn rethought(
+  streams: &Streams,
+  mut request: CompletionRequest,
+  again: &Map<String, Value>,
+  thinking: String,
+  parts: u64,
+  told: &Told,
+) -> Result<CompletionResponse, CompletionError> {
+  let mut settings = match request.additional_params.take() {
+    Some(Value::Object(settings)) => settings,
+    _ => Map::new(),
+  };
+  for (key, value) in again {
+    match value {
+      Value::Null => settings.remove(key),
+      one => settings.insert(key.clone(), one.clone()),
+    };
+  }
+  request.additional_params = (!settings.is_empty()).then_some(Value::Object(settings));
+  let thought = AssistantContent::Reasoning(Reasoning::new(&thinking));
+  // rig sends no turn that holds no text, so the turn of the thought holds an empty text too.
+  let given = vec![thought.clone(), AssistantContent::text("")];
+  request.chat_history.push(Message::Assistant { id: None, content: given });
+  let mut stream = streams(request).await?;
+  while let Some(part) = stream.next().await {
+    match part? {
+      StreamedAssistantContent::Text(text) => told(&text.text, ""),
+      StreamedAssistantContent::ReasoningDelta { reasoning, .. } => told("", &reasoning),
+      _ => {}
+    }
+  }
+  let mut response = whole(stream);
+  let text = texts(&response.choice);
+  let word = unfenced(&text).unwrap_or(&text).to_owned();
+  response.choice = vec![thought, AssistantContent::text(word)];
+  response.usage.output_tokens += parts;
+  response.usage.total_tokens += parts;
   Ok(response)
+}
+
+/// The text inside one fence that wraps the whole of a text: an opening line of three backticks, alone or with
+/// `python`, and a closing line of three backticks, with no other fence between them; and nothing for any other text,
+/// so a text before or after the fence, or a second fence, keeps the text as it is.
+fn unfenced(text: &str) -> Option<&str> {
+  let (opening, rest) = text.trim().split_once('\n')?;
+  if !matches!(opening.trim_end(), "```" | "```python") {
+    return None;
+  }
+  let inside = rest.strip_suffix("```")?.strip_suffix('\n')?;
+  (!inside.contains("```")).then_some(inside)
 }
 
 /// The terminal record of a stream of a provider, from a response of it that came whole.
@@ -551,11 +632,13 @@ fn answered(
 
 /// The turn of a model: its text, which is the word of the rung, what it read and wrote, and the blocks it gave.
 ///
-/// A model speaks python alone, so a fence or prose around the code stays in the word, for the gate to refuse. What
-/// it read is every token of its input, the cache among them, and what it wrote is the rest of its total, its
-/// thought among it. A model that says why each turn ended, and says nothing of the end of this one or says that
-/// the most it writes ended it, was cut, so its turn is refused, and a part of a word never runs. The thought that a
-/// model writes in its text, before its word, is a block of reasoning of its turn.
+/// A model speaks python alone, so a fence or prose around the code stays in the word, for the gate to refuse; only
+/// a turn that the provider asked again after the budget of thought loses one fence that wraps its whole text, since
+/// the setting of no thought of that request makes the fence. What it read is every token of its input, the cache
+/// among them, and what it wrote is the rest of its total, its thought among it. A model that says why each turn
+/// ended, and says nothing of the end of this one or says that the most it writes ended it, was cut, so its turn is
+/// refused, and a part of a word never runs. The thought that a model writes in its text, before its word, is a block
+/// of reasoning of its turn.
 fn turn(model: &Model, response: &CompletionResponse) -> Result<Object, CompletionError> {
   let cut = match response.finish_reason() {
     _ if !model.ends => None,
