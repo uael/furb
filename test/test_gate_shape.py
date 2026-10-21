@@ -47,10 +47,8 @@ async def test_a_gate_carries_the_word_alone() -> None:
   await settle()
   assert [len(e[0]) for e in sand.record if e[0][0] == "gate"] == [5] * 6
   first, bad, after, edit, made, last = [a[1] for a in said(log, "rung") if a[2] == act]
-  (copy,) = [a[1] for a in said(log, "rung") if a[5] == bad]
   bind = fresh(root, prompted(act, "int", "edit"), f"#{first} advance on {act}")
   refused = f"#{bad} refused\n{bad}_findings = {faulted('x = BAD')!r}\n\n#{bad} closed\n{bad}_value = Refused()"
-  shut = f"#{copy} closed\n{copy}_value = Refused()\n\n#{last} advance on {act}"
   told = [
     f"#{first} told nothing\n\n#{bad} advance on {act}",
     f"{refused}\n\n#{after} advance on {act}",
@@ -64,7 +62,7 @@ async def test_a_gate_carries_the_word_alone() -> None:
     ("y = 2", [bind, "k = 1", told[0], told[1]]),
     ("write(read(get(acting())[2]).replace('y = 2', 'k = 3'))", [bind, "k = 1", *told[:2], "y = 2", told[2]]),
     ("k = 3", again),
-    ("close(k)", [*again, "k = 3", shut]),
+    ("close(k)", [*again, "k = 3", f"#{made} told nothing\n\n#{last} advance on {act}"]),
   ]
 
 
@@ -109,7 +107,7 @@ async def test_a_refused_word_of_a_rung_stands_in_the_ladder_of_its_prompt() -> 
 
 
 async def test_a_rung_that_retells_stands_with_the_gate_where_the_one_it_retells_stood() -> None:
-  """A rung that retells stands with the gate where the one it retells stood, so the gate reads a word once in a life, and a copy of a refused word is refused again and tells its findings not again."""
+  """A rung that retells stands with the gate where the one it retells stood, so the gate reads a word once in a life, and a replay makes no copy of a refused word, which never ran, so the chain tells nothing of that word again."""
   _, log, root = born("k = 1", "x = BAD", "close(k)", "close(None)")
   act = engine.prompt(int, "count", on=root)
   assert await act == 1
@@ -127,18 +125,21 @@ async def test_a_rung_that_retells_stands_with_the_gate_where_the_one_it_retells
     (bind, f"{first[0]}_told"),
     ("k = 1", first[0]),
     (f"#{first[0]} told nothing\n\n#{first[1]} advance on {act}", f"{first[1]}_told"),
-    ("x = BAD", first[1]),
     (bad, f"{first[2]}_told"),
   ]
-  kinds = ["NoneType", "NoneType", "NoneType", "Refused", "NoneType"]
+  kinds = ["NoneType"] * 4
   assert [type(engine.peek(one)).__name__ for one, *_ in copies] == kinds
   assert [(a[1], a[3][0].split("\n")[0]) for a in said(log, "tell") if " refused" in a[3][0]] == [
     (first[1], f"#{first[1]} refused")
   ]
   assert engine.read(act, on=root).content == "k = 1\nx = BAD"
+  assert [one for one in heads(engine.turns(on=root)) if one.endswith(" closed")] == [
+    f"#{first[1]} closed",
+    f"#{act} closed",
+  ]
   assert engine.program(root) == {
     f"{copies[0][0]}_told": f"#{act} closed\n{act}_value = 1",
-    **{donor: word for _, word, donor in copies if donor != first[1]},
+    **{donor: word for _, word, donor in copies},
   }
 
 

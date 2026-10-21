@@ -1021,7 +1021,7 @@ async def test_the_donor_of_a_replay_is_the_ladder_of_the_origin_or_the_ladder_a
   await settle()
   mine = [a for a in said(log, "rung") if a[3] == twin]
   (made, again) = [a[1] for a in mine if a[2] == act]
-  donors = [f"{theirs[0][1]}_told", theirs[0][5], theirs[1][5], f"{made}_told"]
+  donors = [theirs[0][5], theirs[1][5], f"{theirs[0][1]}_told", f"{made}_told"]
   assert [a[5] for a in mine[len(theirs) :]] == ["", *donors, ""] and mine[-1][1] == again
   assert engine.module(twin)["k"] == 3 and engine.module(root)["k"] == 1
 
