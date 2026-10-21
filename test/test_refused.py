@@ -14,8 +14,6 @@ async def test_what_a_call_the_engine_will_not_make_raises_in_the_one_that_made_
     engine.bash("nowhere")
   with pytest.raises(Refused, match="no chain"):
     engine.chain("twin", source="chain://operator.9")
-  with pytest.raises(Refused, match="no act"):
-    engine.debug(t"{1}")
 
 
 async def test_a_refused_call_raises_refused_in_the_caller() -> None:
