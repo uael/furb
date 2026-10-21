@@ -214,7 +214,8 @@ def time() -> NativeEar:
 
 def store(path: str) -> tuple[list[list[list[object]]], NativeEar]:
   """The record at a path, read under its lease, and the ear of the store, which keeps on it what the journal says
-  to keep."""
+  to keep: a database of SQLite when the name of the path ends in `.sqlite`, `.sqlite3` or `.db`, and else a file
+  of lines."""
 
 def kept(path: str) -> list[list[list[object]]]:
   """What the store kept at a path, read with no lease and changed in nothing."""
