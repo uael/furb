@@ -2,7 +2,7 @@
 
 use std::{fs, path::PathBuf};
 
-use super::{homed, read};
+use super::{crlf, homed, read};
 
 #[test]
 fn a_path_that_is_a_tilde_or_starts_with_one_and_a_slash_resolves_against_the_home_of_the_user() {
@@ -27,4 +27,14 @@ fn a_read_gives_the_whole_text_of_a_file_of_any_size_and_refuses_what_is_no_file
   assert_eq!(read(&at.join("large.txt")).unwrap().content, content);
   assert_eq!(read(&at).unwrap_err().message(), format!("Read needs a text file: {}", at.display()));
   fs::remove_dir_all(&at).unwrap();
+}
+
+#[test]
+fn bytes_end_each_line_with_crlf_when_they_hold_a_line_break_and_a_cr_comes_before_each() {
+  assert!(crlf(b"a\r\nb\r\n"));
+  assert!(crlf(b"a\r\nb"));
+  assert!(!crlf(b"a\r\nb\n"));
+  assert!(!crlf(b"\na"));
+  assert!(!crlf(b"no break"));
+  assert!(!crlf(b""));
 }

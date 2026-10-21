@@ -134,6 +134,18 @@ test("a session offers the models its host names, and keeps the model and the ef
   } finally {
     await alone.dispose();
   }
+  // A claude command line that the session names is one the catalog offers, and no model is asked.
+  const every = new Session({ cwd, claude: join(cwd, "claude") });
+  try {
+    const [roster, , actor] = every.open().standing() as [[string][], string, string];
+    expect([roster.map(([name]) => name).slice(0, 4), roster.at(-1)?.[0], actor]).toEqual([
+      ["claude-cli:opus", "claude-cli:sonnet", "claude-cli:haiku", "claude-cli:fable"],
+      "operator",
+      "claude-cli:opus/high",
+    ]);
+  } finally {
+    await every.dispose();
+  }
   const first = new Session({ cwd, record, model: "opus", effort: "high", roster: ["claude-cli:sonnet"] });
   try {
     const engine = first.open();
@@ -188,9 +200,9 @@ test("what a model writes streams into the session under its rung until its repl
   try {
     const engine = session.open();
     const prompt = engine.prompt("int", { message: "count", on: engine.root });
-    // The rungs of the three official extensions come first.
-    await until(session, () => session.streams.get("rung5")?.text === "close(3)");
-    expect(session.streams.get("rung5")).toEqual({
+    // The rungs of the five official extensions come first.
+    await until(session, () => session.streams.get("rung6")?.text === "close(3)");
+    expect(session.streams.get("rung6")).toEqual({
       chain: engine.root,
       text: "close(3)",
       thinking: "counting",
@@ -302,6 +314,49 @@ test("unfinished model work and waits reopen pending until the host resumes them
     expect(calls).toBe(1);
   } finally {
     await second.dispose();
+    await rm(cwd, { recursive: true });
+  }
+});
+
+test("work that ends with its life again and again parks until the host retries it", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-parked-"));
+  const record = join(cwd, "life.jsonl");
+  const never = { ...modeled, answer: () => new Promise(() => {}) };
+  const first = new Session({ cwd, record, ...never });
+  const engine = first.open();
+  const prompt = engine.prompt("str", { message: "parked", on: engine.root }).id;
+  await tick();
+  await first.dispose();
+  for (let life = 1; life < 5; life++) {
+    const later = new Session({ record, ...never });
+    later.open();
+    await later.resume();
+    await tick();
+    await later.dispose();
+  }
+  let calls = 0;
+  const last = new Session({
+    record,
+    ...modeled,
+    answer: async () => {
+      calls++;
+      return ["assistant", 'close("retried")', null, null];
+    },
+  });
+  const resumed = last.open();
+  try {
+    expect([...last.parked.values()]).toEqual(["reply"]);
+    const [reply = ""] = last.parked.keys();
+    expect(last.pending.size).toBe(0);
+    resumed.wake(resumed.root);
+    await tick();
+    expect(calls).toBe(0);
+    last.retry(reply);
+    expect(await resumed.result<string>(prompt)).toBe("retried");
+    expect(calls).toBe(1);
+    expect(last.parked.size).toBe(0);
+  } finally {
+    await last.dispose();
     await rm(cwd, { recursive: true });
   }
 });
@@ -422,6 +477,23 @@ test("a whole number from the operator answers a float prompt as a float, typed 
   }
 });
 
+test("a prompt of None to the operator is closed as the console takes it, and stays a notice until a dismiss", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-notice-"));
+  const session = boot({ cwd });
+  try {
+    const { engine } = session;
+    const told = engine.prompt("None", { message: "The build is green.", to: "operator", on: engine.root });
+    expect(await told).toBeNull();
+    expect(session.console.prompts.size).toBe(0);
+    expect([...session.console.notices.values()]).toEqual([{ id: told.id, message: "The build is green." }]);
+    session.console.dismiss(told.id);
+    expect(session.console.notices.size).toBe(0);
+  } finally {
+    await session.dispose();
+    await rm(cwd, { recursive: true });
+  }
+});
+
 test("an operator question survives a resume and validates its answer", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-operator-resume-"));
   const record = join(cwd, "life.jsonl");
@@ -502,9 +574,9 @@ test("record inspection reports pending work when its replay starts or feeds a c
   await first.dispose();
   try {
     expect((await inspectRecord(record)).pending.map(([id]) => id)).toEqual([
-      "rung5",
-      "bash1",
       "rung6",
+      "bash1",
+      "rung7",
       "bash2",
     ]);
   } finally {
@@ -636,7 +708,9 @@ test("a session opens a record in a directory that does not stand yet, and keeps
     const { engine } = session;
     engine.write({ path: "note.txt", content: "one\n" }, { on: engine.root });
     await until(session, () => session.changes.length === 1);
-    expect(session.changes.read()).toEqual([{ path: join(cwd, "note.txt"), before: "", after: "one\n" }]);
+    expect(session.changes.read()).toEqual([
+      { path: join(cwd, "note.txt"), before: "", after: "one\n", act: expect.stringMatching(/^write\d+$/) },
+    ]);
     expect((await stat(`${record}.changes.jsonl`)).isFile()).toBe(true);
   } finally {
     await session.dispose();
@@ -655,7 +729,7 @@ test("a session enables the extensions of the configs, and a later session on it
   const first = new Session({ cwd, record, config });
   try {
     first.open();
-    expect(running(first)).toEqual(["memory", "skills", "compaction", "ouroboros"]);
+    expect(running(first)).toEqual(["memory", "skills", "compaction", "ouroboros", "web"]);
     const told = first.engine?.turns({ on: "chain1" }).at(-1)?.[1] ?? "";
     expect(told).toContain(
       `#memory1\nmemory1_path = '${join(cwd, "CLAUDE.md").replaceAll("\\", "\\\\")}'\nmemory1_text = 'Use two spaces.'`,
@@ -668,7 +742,10 @@ test("a session enables the extensions of the configs, and a later session on it
   try {
     later.open();
     fresh.open();
-    expect([running(later), running(fresh)]).toEqual([["memory", "skills", "compaction", "ouroboros"], []]);
+    expect([running(later), running(fresh)]).toEqual([
+      ["memory", "skills", "compaction", "ouroboros", "web"],
+      [],
+    ]);
   } finally {
     await later.dispose();
     await fresh.dispose();
@@ -693,4 +770,21 @@ test("the activity starts the streams of a command again at each started of it, 
     stdout: { content: "second\n" },
     stderr: { content: "bad\n" },
   });
+});
+
+test("the activity places each act in time by the count of facts, and keeps the answers of each chain", () => {
+  const activity = new Activity();
+  const hear = (fact: Fact) => {
+    const heard = activity.hear(fact);
+    while (!heard.next().done);
+  };
+  hear(["bash", "bash1", "operator", ROOT, "ls", "", 600]);
+  hear(["done", "bash1", "world", { is: "Exit", code: 0 }]);
+  hear(["reply", "reply1", "rung1", ROOT, "claude-cli:opus/high"]);
+  hear(["done", "reply1", "world", ["assistant", "close(1)", [100, 10, 80, 0, 0.5], null]]);
+  expect(activity.acts.get("bash1")).toMatchObject({ kind: "bash", began: 1, ended: 2, done: true });
+  expect(activity.answers.get(ROOT)).toEqual([
+    { at: 4, actor: "claude-cli:opus/high", usage: [100, 10, 80, 0, 0.5] },
+  ]);
+  expect(activity.cost).toBe(0.5);
 });

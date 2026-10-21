@@ -77,8 +77,9 @@ uv run pre-commit install
 | `src/binding/py.rs` | The door to python, which `bind/python` makes into the package `furb-monty`. |
 | `bind/python/furb_monty/engine.py` | Every name of the contract over one life of the engine in the sandbox. |
 | `src/binding/ts.rs` | The door to TypeScript through N-API, which also makes the declarations of `bind/typescript`. |
+| `bind/typescript/src/life/` | The model of a life, which every host reads, with no native code: the tree of the threads, the ladder and the source of a chain, the map of the programs and the messages, the loom, the marks of time, the watch, the call stack, and a message as a person reads it. |
 | `src/binding/ts/host.rs` | The door on the thread of JavaScript: a value as the engine takes it, and a generator heard as an ear. |
-| `src/furb/life.py`, `bind/typescript/src/life.ts`, `src/life/host.rs` | A life as a program holds it, with the same names in each door. Change the three together. |
+| `src/furb/life.py`, `bind/typescript/src/framework.ts`, `src/life/host.rs` | A life as a program holds it, with the same names in each door. Change the three together. |
 | `docs/examples/` | Five examples for each door, which a test of that door runs. Change an example with its door. |
 
 ## Changing the suite

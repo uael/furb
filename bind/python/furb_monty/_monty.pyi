@@ -168,6 +168,18 @@ class Engine:
     """The work that an earlier life left, which waits for a wake that this life says, each act by its name and its
     kind, as the engine of the crate finds it."""
 
+  def parked(self) -> list[tuple[str, str]]:
+    """The work that a crash loop parked, each act by its name and its kind, as the engine of the crate finds it."""
+
+  def retry(self, act: str) -> None:
+    """A parked act, run again, as the engine of the crate runs it."""
+
+  def keyed(
+    self, key: str, kind: str, args: Iterable[object] | None = None, kwargs: dict[str, object] | None = None
+  ) -> str:
+    """The act of a verb that a key of the client makes once, across a crash of the host and a retry of the client:
+    the act that the key made before, or a new act, as the engine of the crate finds it."""
+
   def result[T](self, act: str) -> Awaitable[T]:
     """What an act comes to, which python awaits: its value, or the exception it completed with, raised."""
 

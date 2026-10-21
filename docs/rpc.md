@@ -19,11 +19,13 @@ knows the models, each named `provider:id`, and offers those of the claude comma
 `claude-cli:sonnet`, `claude-cli:haiku` and `claude-cli:fable`, when furb finds the program, those of a local server
 that `FURB_LOCAL_URL` names, each named `local:` and the id that the server lists, and those of each provider whose
 credential, such as `ANTHROPIC_API_KEY`, stands in the environment. The roster of the life holds the model of the
-default actor, the models that `--roster` names, and the operator, which is the client. `--model provider:model/effort`
-names the default actor, and a prompt that names no actor goes to it. When it is not given, the default actor is
-`claude-cli:opus/high` when furb finds the claude command line, then the first model of a provider of the network, and
-then the first model of the local server, which furb asks only then or when a name needs it. An actor that names no
-effort takes `high`, and an effort moves to the nearest one that its model takes. The life refuses a prompt to a model
+default actor, the models that `--roster` names, and the operator, which is the client. With no `--roster`, it holds
+every model that the catalog offers, the model of the default actor first, and the operator.
+`--model provider:model/effort` names the default actor, and a prompt that names no actor goes to it. When it is not
+given, the default actor is `claude-cli:opus/high` when furb finds the claude command line, then the first model of a
+provider of the network, and then the first model of the local server, which furb asks when `--roster` is not given
+or a name needs it. An actor that names no effort takes `high`, and an effort moves to the nearest one that its model
+takes. The life refuses a prompt to a model
 that its roster does not hold. An actor may name its model by the id alone, when one model alone holds it, and furb
 names it as the roster does. A model of the local server takes its id alone only when that id holds a colon, as
 `qwen3:8b`; when the part before the colon names a provider, as `mistral:7b`, only once the server listed it, and
@@ -60,16 +62,17 @@ Each command is an object whose `type` names it. An `id` is optional, and the re
 
 | `type` | Fields | `data` of the response |
 | --- | --- | --- |
-| `prompt` | `message`, `shape`, `to`, `on` | `{"act": "prompt1"}` |
-| `rung` | `word`, `on` | `{"act": "rung1"}` |
+| `prompt` | `message`, `shape`, `to`, `on`, `key` | `{"act": "prompt1"}` |
+| `rung` | `word`, `on`, `key` | `{"act": "rung1"}` |
 | `close` | `act`, `value` | none |
 | `cancel` | `act` | none |
 | `pause` | `act` | none |
 | `wake` | `act` | none |
+| `retry` | `act` | none |
 | `turns` | `on` | `{"turns": [...]}` |
 | `transcript` | `on` | `{"facts": [...]}` |
 | `peek` | `act` | `{"done": false}`, or `{"done": true, "value": ...}`, or `{"done": true, "raised": ...}` |
-| `state` | none | `{"root", "record", "standing", "extensions", "paused", "prompts", "acts", "pending"}` |
+| `state` | none | `{"root", "record", "standing", "extensions", "paused", "prompts", "acts", "pending", "parked"}` |
 
 - `prompt` prompts an actor on a chain. `message` is what the actor reads, and the actor reads the transcript alone when
   there is no message. `shape` is the name of the type of the response, such as `int`, `str` or `list[str]`. A prompt
@@ -78,19 +81,26 @@ Each command is an object whose `type` names it. An `id` is optional, and the re
   default actor of its chain.
 - `rung` runs `word`, which is python, as a rung on a chain, in the globals of that chain. The act is done with what
   the word gave to `close`, and with nothing when the word runs to its end.
+- `key` makes a `prompt` or a `rung` once, across a crash of furb and a retry of the client. It is any
+  string that the client chooses. A command with a key that a command of the same type
+  on the same chain had before makes no act: its response names the act that the key made, in this life or in a later
+  life on the record, and the client gets the `done` event of that act again. furb keeps the key in the record before
+  the act, as the fact `["key", "chain1", "operator", "k1", "prompt"]`, so a crash between the two leaves a key with
+  no act, and the retry makes the act.
 - `close` ends an act with `value`, which is none when the command does not give it. It is how the client answers a
   prompt to the operator. An exception, such as `{"is": "Refused", "args": ["no"]}`, ends the act with that
   exception. The operator answers a prompt of the shape `float` with any number, so a whole number closes it as a
   float. A value of another shape is refused, and the prompt stays open.
 - `cancel` ends an act and everything that it made, each with `CancelledError`.
 - `pause` holds an act, or every act on a chain, until a `wake` of the same act or chain.
+- `retry` runs again an act that a crash loop parked, which the part on a resumed life says.
 - `turns` gives the turns of a chain, as the model reads them: each is its role, its python, its usage and its blocks.
 - `transcript` gives the facts on a chain, in the order of the log.
 - `peek` gives what an act came to, when it is done.
 - `state` gives the root, the path of the record, the standing, which is the roster, the directory and the default
   actor, the names of the extensions that the life runs, whether a pause stands over the root, each prompt to the
   operator that waits for a close, each act that a `prompt` or a `rung` of the client made that is not done, and the
-  work that an earlier life left pending, which the part on a resumed life says.
+  work that an earlier life left pending or that a crash loop parked, which the part on a resumed life says.
 
 ## Responses
 
@@ -123,7 +133,9 @@ The life says its events as they happen, after the response of the command that 
 - `prompt`: each prompt to the operator, which the client answers with `close`. It comes from a `prompt` of the
   client to `operator`, or from a word of a model that asks the operator. The operator answers the shapes `str`,
   `None`, `bool`, `int`, `float`, `list` and `dict`, as at the terminal. A prompt to the operator of another shape
-  is not sent: furb closes it at once with a refusal, such as `the operator answers no set`.
+  is not sent: furb closes it at once with a refusal, such as `the operator answers no set`. A prompt of the shape
+  `None` asks nothing: furb closes it with `None` as it sends it, so the client shows it as a notice and answers it
+  not.
 
   ```json
   {"type": "prompt", "act": "prompt2", "on": "chain1", "shape": "int", "message": "how many?"}
@@ -146,6 +158,12 @@ of the client. `state` says whether a pause stands over the root, and `pending` 
 waits, each act as its name and its kind, such as `["bash1", "bash"]`: among each act that the World started and did
 not end, and the acts that made it, each prompt, rung, command and wait that is not done and that no pause holds. An
 act is pending no more once a `wake` puts it to the World again.
+
+A run of a word, a command or a reply that the record shows started in five lives and not done is parked, since each
+of those lives ended while it ran, so it may be what ended them. `parked` names each such act as `pending` names an
+act, and a parked act is pending no more. A `wake` puts no parked act to the World, so a client that wakes the work of
+a life as it opens does not run it again and end furb again. `retry` runs a parked act again: it is parked no more in
+this life, and a `wake` of it puts it to the World. A `retry` of an act that is not parked fails.
 
 ## A session
 

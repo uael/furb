@@ -2,10 +2,11 @@ import { EventEmitter } from "node:events";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { attachImage, Engine, type ImageAttachment, model, type NativeEar, type Opening } from "../index.cjs";
-import { Activity, WORK } from "./activity.js";
+import { Activity } from "./activity.js";
 import { FileChanges } from "./changes.js";
 import { Console, type ConsoleOptions } from "./console.js";
 import { driving, type Ear } from "./ears.js";
+import { WORK } from "./life/acts.js";
 import { furbDirectory, saveFile } from "./project.js";
 import { actorParts, type Entry, type Fact, isQuestion } from "./types.js";
 
@@ -31,9 +32,9 @@ export interface SessionOptions {
   model?: string;
   /** The effort of that model, which moves to the nearest one the model takes; the effort of the crate when unsaid. */
   effort?: string;
-  /** The models the session offers beside that one, as the catalog names them. When it is unsaid, the model stands
-   * alone, or the first model the catalog offers when the model is unsaid too; a roster that names none, with no
-   * model, offers the operator alone. */
+  /** The models the session offers beside that one, as the catalog names them. When it is unsaid, the session offers
+   * every model that the catalog offers, after that one; a roster that names none offers that model alone, and, with
+   * no model, the operator alone. */
   roster?: string[];
   /** The claude command line to run, in place of the one that `FURB_CLAUDE_BIN` names or this machine holds. */
   claude?: string;
@@ -244,6 +245,19 @@ export class Session extends EventEmitter {
     if (!this.engine) return new Map();
     this.held ??= new Map(this.engine.pending());
     return new Map(this.held);
+  }
+
+  /** The work that a crash loop parked, by the kind of each act, as the engine of the crate finds it: a wake puts
+   * none of it to the outside, so resume does not run it again. */
+  get parked(): Map<string, string> {
+    return new Map(this.engine?.parked() ?? []);
+  }
+
+  /** Run a parked act again: it is parked no more in this life, and a wake of it puts it to the outside. */
+  retry(id: string): void {
+    if (this.options.readOnly) throw new Error("Record inspection cannot resume work.");
+    this.engine?.retry(id);
+    this.emit("change");
   }
 
   /** Start the pending work: a wake of each chain that holds some, which the engine answers by starting each

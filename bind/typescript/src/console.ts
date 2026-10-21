@@ -1,6 +1,6 @@
 import { answered, type Engine, shapes } from "../index.cjs";
 import { type Ear, fault, over, speaking } from "./ears.js";
-import { type Fact, isQuestion, type OperatorPrompt } from "./types.js";
+import { type Fact, isQuestion, type OperatorNotice, type OperatorPrompt } from "./types.js";
 
 /** A value the operator gives, in the shape its prompt wants: a number goes to a float prompt as a float, which
  * crosses marked, as its digits, since a whole number crosses as an int. */
@@ -14,7 +14,7 @@ export interface ConsoleOptions {
     prompt: { id: string; shape: string; message: string },
     signal: AbortSignal,
   ) => Promise<unknown>;
-  /** Told when the prompts that wait change. */
+  /** Told when the prompts that wait or the notices change. */
   changed?: () => void;
   /** Told what the life refused when the console closed a prompt. */
   fault?: (error: unknown) => void;
@@ -22,10 +22,14 @@ export interface ConsoleOptions {
 
 /** The console, as an ear: it takes each prompt put to the operator, shows it, and closes it with what the operator
  * answered. A prompt of a shape that the operator answers not is shown not, and closed with what no line comes to,
- * which is the refusal of its shape. */
+ * which is the refusal of its shape. A prompt of None asks nothing: the console closes it with None as it takes it,
+ * so no word waits on it, and keeps it as a notice until the operator dismisses it, or gives it to the callback of
+ * the operator. */
 export class Console {
   /** The prompts that wait for the operator, by the act. */
   readonly prompts = new Map<string, OperatorPrompt>();
+  /** The notices that the operator did not dismiss yet, by the act. */
+  readonly notices = new Map<string, OperatorNotice>();
   /** The engine whose prompts it takes, which its later work speaks into. */
   engine?: Engine;
   private readonly controller = new AbortController();
@@ -55,6 +59,16 @@ export class Console {
   private async asked(id: string, shape: string, message: string): Promise<void> {
     const engine = this.engine;
     if (!engine || over(engine, id)) return;
+    if (shape === "None") {
+      speaking(engine, "console", () => engine.close(answered(shape, ""), { id }));
+      if (this.options.operator)
+        await this.options.operator({ id, shape, message }, this.controller.signal).catch(() => {});
+      else {
+        this.notices.set(id, { id, message });
+        this.options.changed?.();
+      }
+      return;
+    }
     let value: unknown;
     try {
       if (this.options.operator)
@@ -83,9 +97,15 @@ export class Console {
     this.options.changed?.();
   }
 
+  /** The notice that the operator read, which the console shows no more. */
+  dismiss(id: string): void {
+    if (this.notices.delete(id)) this.options.changed?.();
+  }
+
   /** Every prompt that waits is refused, and no answer comes any more. */
   dispose(): void {
     this.controller.abort();
+    this.notices.clear();
     for (const prompt of this.prompts.values()) prompt.reject(new Error("The console was disposed."));
     this.prompts.clear();
   }

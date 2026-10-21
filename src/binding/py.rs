@@ -6,13 +6,18 @@
 use std::{
   cell::{OnceCell, RefCell},
   collections::HashMap,
-  sync::Arc,
+  sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+    mpsc,
+  },
   task::{Context, Poll, Wake, Waker},
+  thread,
 };
 
 use pyo3::{
   Borrowed, Bound, Py, PyAny, PyResult, Python,
-  exceptions::{PyBaseException, PyStopIteration, PyTypeError},
+  exceptions::{PyBaseException, PyRuntimeError, PyStopIteration, PyTypeError},
   prelude::*,
   sync::PyOnceLock,
   types::{
@@ -525,30 +530,55 @@ fn verb_said<'py>(py: Python<'py>, call: &Call) -> PyResult<Bound<'py, PyAny>> {
   made(py)?.python.bind(py).getattr(call.verb.as_str())?.call(args, Some(&kwargs))
 }
 
-/// What wakes the loop of python to drive an engine, when what an ear waits for is ready: the loop the engine was
-/// booted in, and what drives it there.
+/// What wakes the loop of python to drive an engine, when what an ear waits for is ready.
+///
+/// A wake comes on any thread, as a thread of the system that saw a command end, and that thread can hold a lock that
+/// the loop waits for while the loop holds python, as a process of Windows does while the loop drops it. So a wake
+/// takes nothing of python: it hands itself to the thread of the waker, which alone takes python, and a wake that
+/// comes while one waits there adds nothing.
 struct Wakes {
-  running: Py<PyAny>,
-  drive: Py<PyAny>,
+  wanted: mpsc::Sender<()>,
+  waiting: Arc<AtomicBool>,
 }
 
 impl Wake for Wakes {
   fn wake(self: Arc<Self>) {
-    Python::attach(|py| {
-      // A loop that is closed drives nothing more, and the engine is gone with it.
-      let _ = self.running.bind(py).call_method1("call_soon_threadsafe", (self.drive.bind(py),));
-    });
+    self.wake_by_ref();
+  }
+
+  fn wake_by_ref(self: &Arc<Self>) {
+    if !self.waiting.swap(true, Ordering::AcqRel) {
+      let _ = self.wanted.send(());
+    }
   }
 }
 
-/// What wakes the running loop to drive, as `drive` does.
+/// What wakes the running loop to drive, as `drive` does: a thread of its own, which puts the drive on that loop at
+/// each wake, and ends when the waker goes.
 fn waker(
   py: Python<'_>,
   drive: impl Fn(Python<'_>) -> PyResult<()> + Send + Sync + 'static,
 ) -> PyResult<Waker> {
   let running = py.import("asyncio")?.call_method0("get_running_loop")?.unbind();
-  let drive = PyCFunction::new_closure(py, None, None, move |args, _| drive(args.py()))?;
-  Ok(Waker::from(Arc::new(Wakes { running, drive: drive.into_any().unbind() })))
+  let drive =
+    PyCFunction::new_closure(py, None, None, move |args, _| drive(args.py()))?.into_any().unbind();
+  let (wanted, wakes) = mpsc::channel::<()>();
+  let waiting = Arc::new(AtomicBool::new(false));
+  let seen = waiting.clone();
+  let woken = move || {
+    while wakes.recv().is_ok() {
+      seen.store(false, Ordering::Release);
+      Python::attach(|py| {
+        // A loop that is closed drives nothing more, and the engine is gone with it.
+        let _ = running.bind(py).call_method1("call_soon_threadsafe", (drive.bind(py),));
+      });
+    }
+  };
+  thread::Builder::new()
+    .name("furb-waker".to_owned())
+    .spawn(woken)
+    .map_err(|no| PyRuntimeError::new_err(format!("the waker of the loop did not start: {no}")))?;
+  Ok(Waker::from(Arc::new(Wakes { wanted, waiting })))
 }
 
 /// One engine, held on the thread of python and driven in the loop it was booted in, when an ear of the crate can go
@@ -708,6 +738,30 @@ impl PyEngine {
   /// kind, as the engine of the crate finds it.
   fn pending(&self) -> Result<Vec<(String, String)>, Fault> {
     self.call(Engine::pending)
+  }
+
+  /// The work that a crash loop parked, each act by its name and its kind, as the engine of the crate finds it.
+  fn parked(&self) -> Result<Vec<(String, String)>, Fault> {
+    self.call(Engine::parked)
+  }
+
+  /// A parked act, run again, as the engine of the crate runs it.
+  fn retry(&self, act: &str) -> Result<(), Fault> {
+    self.call(|engine| engine.retry(act))
+  }
+
+  /// The act of a verb that a key of the client makes once, across a crash of the host and a retry of the client:
+  /// the act that the key made before, or a new act, as the engine of the crate finds it.
+  #[pyo3(signature = (key, kind, args = None, kwargs = None))]
+  fn keyed(
+    &self,
+    key: &str,
+    kind: &str,
+    args: Option<Vec<Value>>,
+    kwargs: Option<HashMap<String, Value>>,
+  ) -> Result<String, Fault> {
+    let (args, kwargs) = words(args, &kwargs);
+    self.call(|engine| engine.keyed(key, kind, args, kwargs))
   }
 
   /// What an act comes to, which python awaits: its value, or the exception it completed with, raised.

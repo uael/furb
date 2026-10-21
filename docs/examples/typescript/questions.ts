@@ -7,7 +7,7 @@ const lines = terminal[Symbol.asyncIterator]();
 const deploy = life.prompt("str", "Deploy version 2. Ask me before you deploy.");
 for await (const question of life.questions({ until: deploy })) {
   process.stdout.write(`${question.message} `);
-  question.answer((await lines.next()).value);
+  question.answer((await lines.next()).value ?? "");
 }
 terminal.close();
 console.log(await deploy);

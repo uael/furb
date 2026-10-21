@@ -181,7 +181,7 @@ async def test_a_rung_need_not_wait_for_a_prompt_of_shape_none() -> None:
   """A rung need not wait for a prompt of shape None."""
   sand, log, root = born()
   two = engine.chain("two")
-  sand.script[root] = [f"prompt(None, 'look at this', to='operator', on={two!r})\nclose(1)"]
+  sand.script[root] = [f"prompt(None, 'look at this', on={two!r})\nclose(1)"]
   assert await engine.prompt(int, "tell them", on=root) == 1
   await settle()
   theirs = said(log, "prompt")[-1]
@@ -284,7 +284,7 @@ async def test_a_rung_prompts_on_any_chain_by_the_id_of_the_chain() -> None:
 
 
 async def test_a_prompt_to_the_operator_completes_when_the_operator_closes_the_prompt() -> None:
-  """A prompt to the operator completes when the operator closes the prompt."""
+  """A prompt to the operator of a shape that is not None completes when the operator closes the prompt."""
   _, _, root = born()
   act = engine.prompt(int, "how many?", to=OPERATOR, on=root)
   await settle()
@@ -335,7 +335,7 @@ async def test_a_word_written_to_its_door_is_a_rung_of_it() -> None:
 
 
 async def test_a_prompt_to_the_operator_asks_no_model() -> None:
-  """A prompt to the operator asks no model: the World takes it and shows it, and it waits to be closed; in a later life, one the record shows open is shown again only at a wake, and one the record shows closed is shown no more."""
+  """A prompt to the operator asks no model: the World takes it and shows it, and it waits to be closed, but for a prompt of shape None; in a later life, one the record shows open is shown again only at a wake, and one the record shows closed is shown no more."""
   sand, log, root = born()
   act = engine.prompt(int, "how many?", to=OPERATOR, on=root)
   await settle()
@@ -415,11 +415,20 @@ async def test_the_world_closes_with_a_refusal_a_prompt_it_cannot_put_to_the_ope
   engine.close(21, fine)
 
 
+async def test_the_world_closes_a_prompt_of_shape_none_to_the_operator_with_none_as_it_takes_it() -> None:
+  """The World closes a prompt of shape None to the operator with None as it takes it, since that prompt asks nothing: the operator reads it as a notice, and no word that awaits it waits for the operator."""
+  sand, log, root = born("await prompt(None, 'the build is green', to='operator')\nclose(1)")
+  assert await engine.prompt(int, "build it", on=root) == 1
+  notice = said(log, "prompt")[-1]
+  assert notice[4:] == ("None", "the build is green", OPERATOR) and engine.peek(notice[1], ...) is None
+  assert [one[1] for one in sand.calls if one[0] == "prompt"] == [notice[1]]
+
+
 async def test_the_shape_left_unsaid_is_none() -> None:
   """The shape left unsaid is None, which the acknowledgment uses, and any value responds to it."""
-  _, log, root = await lived()
+  _, log, _ = await lived()
   assert [one[4] for one in said(log, "prompt")] == ["int", "None"]
-  act = engine.prompt(None, "look at this", to=OPERATOR, on=root)
+  act = engine.prompt(None, "look at this", on=engine.chain("held"))
   await settle()
   engine.close("anything", act)
   await settle()

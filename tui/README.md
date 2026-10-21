@@ -18,7 +18,8 @@ bun run tui -- --resume .furb/sessions/example.jsonl
 effort of its `--model` as `--model` and `--effort`, each `--roster`, and the words after `--`.
 
 Use `--cwd`, `--model provider:model`, `--effort`, `--record`, and repeated `--roster` options to configure
-a new life. A session offers its model, the default model when you name none, and the models of `--roster`.
+a new life. A session offers every model that the catalog offers, with its model first: the default model when you
+name none. With `--roster`, it offers its model and the models of `--roster`, and no more.
 Sessions are saved under `.furb/sessions` in the selected directory. The `.furb` that the TUI makes holds
 a `.gitignore` that keeps it out of version control. Keep the `.jsonl`, `.session.json`, `.changes.jsonl`, and
 `.ui.json` files together. The last file keeps the view of the session as you left it. Keep its `.images` directory
@@ -76,7 +77,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | ↑, ↓, Tab, Enter after / or @ | Choose a slash command, its value, or a project file as it is typed |
 | ⌃F / PageUp / PageDown | Filter the current view / scroll |
 | ⌃R / ⌃Space | Python input / complete a name |
-| ⌃L / ⌃A | Edit a prompt program / answer an operator question |
+| ⌃L / ⌃A | Edit a prompt program / answer an operator question or dismiss a notice |
 | ⌃G / ⌃click a name | Inspect a value and follow its definition |
 | Drag / ⌃Y | Select text and copy it / copy the selected text again |
 | Click / right-click an act | Fold or expand it / inspect its value or prompt program |

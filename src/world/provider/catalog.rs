@@ -15,9 +15,9 @@
 //!
 //! The models of the local server that the environment names are the provider `local`, which [`local`] lists. The
 //! catalog asks that server only when a roster or an actor names a model of the provider local, or of a provider
-//! that the catalog does not know, when a host lists the models that the catalog offers, and when no other model
-//! stands for the default actor. It offers them after the claude command line and the providers of the network, so
-//! its first model is the default actor.
+//! that the catalog does not know, and when a host lists the models that the catalog offers, as a roster that the
+//! host does not name does. It offers them after the claude command line and the providers of the network, so the
+//! default actor is a model of the local server only when the catalog offers no other model.
 //!
 //! [`local`]: super::local
 
@@ -39,6 +39,7 @@ use super::{
   claude::{self, Claude},
   clients::{Client, Reach},
   local::{ENV_URL, Heard, LOCAL, Server},
+  search,
 };
 use crate::{ear::reactor, world::cache};
 
@@ -269,9 +270,10 @@ impl Catalog {
     Some((self.served(name)?, Some(level)))
   }
 
-  /// The models of a roster, and its default actor: the model of the actor, and the models the host names; or, when
-  /// the host names no roster, the model of the actor alone, and the first model the catalog offers when there is no
-  /// actor either. The actor is named as the catalog names its model, at its level as [`Model::at`] moves it.
+  /// The models of a roster, and its default actor: the model of the actor first, then the models the host names, or,
+  /// when the host names no roster, every model the catalog offers, in the order of [`Catalog::offered`], whose first
+  /// stands for the actor when there is no actor. The actor is named as the catalog names its model, at its level as
+  /// [`Model::at`] moves it.
   pub fn roster(
     &self,
     names: Option<&[String]>,
@@ -292,8 +294,7 @@ impl Catalog {
         .iter()
         .map(|name| self.find(name).ok_or_else(|| unknown(name)))
         .collect::<Result<Vec<_>, _>>()?,
-      None if actor.is_none() => self.default().into_iter().collect(),
-      None => Vec::new(),
+      None => self.offered(),
     };
     let actor = match actor {
       Some(actor) => {
@@ -307,13 +308,6 @@ impl Catalog {
     let mut seen = HashSet::new();
     models.retain(|model| seen.insert(model.name.clone()));
     Ok((models, actor))
-  }
-
-  /// The model a host that names none stands on: the first that the catalog offers, which asks the local server only
-  /// when the catalog offers no model of the claude command line or of the network.
-  fn default(&self) -> Option<Model> {
-    let first = self.models.iter().find(|(_, offered)| *offered).map(|(model, _)| model.clone());
-    first.or_else(|| self.heard(None)?.models.into_iter().next())
   }
 
   /// The provider of a roster of the catalog on a directory, with the default actor of the roster, whose models a
@@ -605,10 +599,15 @@ pub(super) fn reached(
   reach: Result<Reach, String>,
 ) -> Model {
   let made: Arc<OnceLock<Result<Streams, String>>> = Arc::default();
-  Model::lazy(name, window, move || {
+  let search = reach.as_ref().ok().and_then(|one| search::native(client, one));
+  let model = Model::lazy(name, window, move || {
     let got = made.get_or_init(|| reach.clone().and_then(|reach| client.streams(&reach)));
     got.clone().map_err(CompletionError::ProviderError)
-  })
+  });
+  match search {
+    Some(search) => model.searches(search),
+    None => model,
+  }
 }
 
 /// The providers of the snapshot, with the models of each that the cache at a path holds, read once in a process;

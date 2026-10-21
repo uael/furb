@@ -186,7 +186,7 @@ fn a_word_its_caller_wrote_runs_on_the_root() {
 fn a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it() {
   let yard = Yard::new("resumed");
   fs::create_dir_all(yard.at.join(".furb")).expect("the folder of the project");
-  let off = r#"{"extensions": {"memory": false, "skills": false, "compaction": false, "ouroboros": false}}"#;
+  let off = r#"{"extensions": {"memory": false, "skills": false, "compaction": false, "ouroboros": false, "web": false}}"#;
   fs::write(yard.at.join(".furb/config.json"), off).expect("a config of the project");
   assert_eq!(printed(yard.kept(&["run", "k = 3"]), ""), "None\n");
   assert_eq!(printed(yard.kept(&["run", "close(k + 1)"]), ""), "4\n");
@@ -220,7 +220,7 @@ fn a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it() {
 fn a_record_is_printed_as_facts_each_after_the_number_of_its_line() {
   let yard = Yard::new("facts");
   fs::create_dir_all(yard.at.join(".furb")).expect("the folder of the project");
-  let off = r#"{"extensions": {"memory": false, "skills": false, "compaction": false, "ouroboros": false}}"#;
+  let off = r#"{"extensions": {"memory": false, "skills": false, "compaction": false, "ouroboros": false, "web": false}}"#;
   fs::write(yard.at.join(".furb/config.json"), off).expect("a config of the project");
   assert_eq!(printed(yard.kept(&["run", "k = 3"]), ""), "None\n");
   let facts = |words: &[&str]| {
@@ -252,7 +252,7 @@ fn a_life_runs_the_extensions_that_its_record_enables_and_those_that_the_configs
   fs::create_dir_all(skill.parent().expect("a folder")).expect("the folder of a skill");
   fs::write(&skill, "---\nname: brew\ndescription: Make tea.\n---\n").expect("a skill");
   fs::write(yard.at.join("CLAUDE.md"), "Use two spaces.\n").expect("a memory file");
-  let every = "memory: remember()\nskills: counted()\ncompaction\nouroboros: ouroboros()\n";
+  let every = "memory: remember()\nskills: counted()\ncompaction\nouroboros: ouroboros()\nweb\n";
   assert_eq!(printed(yard.furb(&["extensions"]), ""), every, "the official extensions are on");
   let path = printed(yard.kept(&["run", "close(skill('brew').path)"]), "");
   assert_eq!(path, format!("{:?}\n", skill.display().to_string()).replace('"', "'"));
@@ -265,7 +265,7 @@ fn a_life_runs_the_extensions_that_its_record_enables_and_those_that_the_configs
     .expect("a config of the project");
   assert_eq!(
     printed(yard.furb(&["extensions"]), ""),
-    "skills: counted()\ncompaction\nouroboros: ouroboros()\n"
+    "skills: counted()\ncompaction\nouroboros: ouroboros()\nweb\n"
   );
   assert_eq!(printed(yard.kept(&["extensions"]), ""), every, "a life runs what its record enables");
 }
@@ -279,7 +279,9 @@ fn a_prompt_of_the_operator_is_answered_at_the_terminal() {
   let asked = String::from_utf8_lossy(&output.stderr);
   assert_eq!(asked, "prompt1 wants a str: say a word\n> ");
   let nothing = ["prompt", "say nothing", "--to", "operator", "--shape", "None"];
-  assert_eq!(printed(yard.furb(&nothing), "\n"), "None\n");
+  let output = ran(yard.furb(&nothing), "");
+  assert_eq!(String::from_utf8_lossy(&output.stdout), "None\n", "a notice reads no line");
+  assert_eq!(String::from_utf8_lossy(&output.stderr), "prompt1 tells: say nothing\n");
   let said =
     refused(yard.furb(&["prompt", "count", "--to", "operator", "--shape", "int"]), "many\n");
   assert!(said.ends_with("furb: Refused: \"many\" is no int\n"), "{said}");
@@ -314,12 +316,12 @@ fn a_model_answers_a_prompt_of_any_shape() {
 
 #[test]
 fn the_life_of_a_prompt_offers_the_model_of_the_actor_it_names() {
-  let yard = Yard::new("to");
-  yard.words(&["close('hi')"]);
-  assert_eq!(
-    printed(yard.furb(&["prompt", "hi", "--to", "sonnet/high", "--shape", "str"]), ""),
-    "'hi'\n"
-  );
+  for (name, roster) in [("to", &[][..]), ("to-named", &["--roster", "haiku"][..])] {
+    let yard = Yard::new(name);
+    yard.words(&["close('hi')"]);
+    let words = [&["prompt", "hi", "--to", "sonnet/high", "--shape", "str"][..], roster].concat();
+    assert_eq!(printed(yard.furb(&words), ""), "'hi'\n", "{name}");
+  }
 }
 
 #[test]
@@ -566,8 +568,11 @@ fn a_prompt_to_the_operator_is_sent_and_the_close_of_the_client_answers_it() {
 }
 
 #[test]
-fn a_life_offers_the_model_of_its_default_actor_and_the_models_it_names_and_no_more() {
+fn a_life_offers_every_model_of_the_catalog_or_the_model_of_its_default_actor_and_the_models_it_names_and_no_more()
+ {
   let yard = Yard::new("rpc-roster");
+  yard.words(&["close('sonnet')"]);
+  let claude = ["claude-cli:opus", "claude-cli:sonnet", "claude-cli:haiku", "claude-cli:fable"];
   let names = |client: &mut Client| {
     let state = client.data("1", json!({"type": "state"}));
     let roster = state["standing"][0].as_array().cloned().unwrap_or_default();
@@ -577,11 +582,20 @@ fn a_life_offers_the_model_of_its_default_actor_and_the_models_it_names_and_no_m
   };
   let mut first = Client::new(&yard);
   let (roster, actor) = names(&mut first);
-  assert!(first.ended(), "the record is free for the next life");
   assert_eq!(
-    (roster, actor),
-    (vec!["claude-cli:opus".to_owned(), "operator".to_owned()], json!("claude-cli:opus/high"))
+    roster[..4],
+    claude,
+    "a life that names no roster offers each model of the claude command line"
   );
+  assert_eq!(
+    (roster.last().map(String::as_str), actor),
+    (Some("operator"), json!("claude-cli:opus/high"))
+  );
+  let asked =
+    json!({"type": "prompt", "message": "hi", "shape": "str", "to": "claude-cli:sonnet/medium"});
+  let asked = first.data("2", asked)["act"].as_str().expect("the act").to_owned();
+  assert_eq!(first.done(&asked)["value"], "sonnet", "a prompt to sonnet is answered");
+  assert!(first.ended(), "the record is free for the next life");
   let mut client = Client::with(&yard, &["--model", "sonnet/high", "--roster", "haiku"]);
   let (roster, actor) = names(&mut client);
   assert_eq!(roster, ["claude-cli:sonnet", "claude-cli:haiku", "operator"]);
@@ -589,6 +603,15 @@ fn a_life_offers_the_model_of_its_default_actor_and_the_models_it_names_and_no_m
   let refused = client.data("2", json!({"type": "prompt", "to": "opus"}));
   let prompt = refused["act"].as_str().expect("the act").to_owned();
   assert_eq!(client.done(&prompt)["raised"]["is"], "Refused", "the roster holds no opus");
+  assert!(client.ended(), "the record is free for the next life");
+  let mut later = Client::new(&yard);
+  let (roster, actor) = names(&mut later);
+  assert_eq!(
+    roster[..4],
+    claude,
+    "a later life on the record stands on the roster of its own opening at its tip"
+  );
+  assert_eq!(actor, "claude-cli:opus/high");
 }
 
 #[test]
@@ -598,15 +621,15 @@ fn a_word_of_the_client_runs_as_a_rung_and_a_pause_holds_a_chain_until_its_wake(
   let mut client = Client::new(&yard);
   assert_eq!(
     client.data("1", json!({"type": "rung", "word": "k = 1\nclose(k + 1)"})),
-    json!({"act": "rung5"}),
-    "the four rungs of the extensions come first"
+    json!({"act": "rung6"}),
+    "the five rungs of the extensions come first"
   );
-  assert_eq!(client.done("rung5")["value"], 2);
+  assert_eq!(client.done("rung6")["value"], 2);
   client.data("2", json!({"type": "pause", "act": "chain1"}));
   let state = client.data("3", json!({"type": "state"}));
   assert_eq!(
     (&state["paused"], &state["extensions"]),
-    (&json!(true), &json!(["memory", "skills", "compaction", "ouroboros"]))
+    (&json!(true), &json!(["memory", "skills", "compaction", "ouroboros", "web"]))
   );
   client.data("4", json!({"type": "prompt", "message": "one", "shape": "int"}));
   assert!(
@@ -668,6 +691,31 @@ fn the_life_ends_with_stdin_and_a_later_life_resumes_its_record() {
 }
 
 #[test]
+fn a_key_of_the_client_makes_its_prompt_once_in_a_life_and_in_a_later_life() {
+  let yard = Yard::new("rpc-key");
+  yard.words(&[COUNT]);
+  let mut client = Client::new(&yard);
+  let asked = json!({"type": "prompt", "message": "count the lines", "shape": "int", "key": "k1"});
+  assert_eq!(client.data("1", asked.clone()), json!({"act": "prompt1"}));
+  client.done("prompt1");
+  assert_eq!(
+    client.data("2", asked.clone()),
+    json!({"act": "prompt1"}),
+    "a retry gives the same act"
+  );
+  assert_eq!(client.done("prompt1")["value"], 3, "a retry gets the done again");
+  assert!(client.ended());
+  let mut later = Client::new(&yard);
+  assert_eq!(later.data("1", asked), json!({"act": "prompt1"}), "a retry after the life ended");
+  assert_eq!(later.done("prompt1")["value"], 3);
+  let rung = json!({"type": "rung", "word": "close(5)", "key": "k2"});
+  let made = later.data("2", rung.clone());
+  assert_eq!(later.data("3", rung), made);
+  assert!(later.ended());
+  assert_eq!(yard.answered(), 1);
+}
+
+#[test]
 fn the_state_names_the_work_that_an_earlier_life_left_pending() {
   let yard = Yard::new("rpc-pending");
   let mut client = Client::new(&yard);
@@ -680,11 +728,40 @@ fn the_state_names_the_work_that_an_earlier_life_left_pending() {
   let mut later = Client::new(&yard);
   let state = later.data("1", json!({"type": "state"}));
   // The rungs of the two official extensions come first, and the rung of the client made the wait.
-  assert_eq!(state["pending"], json!([["rung5", "rung"], ["wait1", "wait"]]));
+  assert_eq!(state["pending"], json!([["rung6", "rung"], ["wait1", "wait"]]));
   later.data("2", json!({"type": "cancel", "act": "wait1"}));
   let state = later.data("3", json!({"type": "state"}));
   assert_eq!(state["pending"], json!([]), "an act that is done is pending no more");
   assert!(later.ended());
+}
+
+#[test]
+fn the_state_names_the_work_that_a_crash_loop_parked_and_a_retry_runs_it_again() {
+  let yard = Yard::new("rpc-parked");
+  let started =
+    |one: &Value| one["type"] == "fact" && one["fact"][0] == "started" && one["fact"][1] == "bash1";
+  let mut client = Client::new(&yard);
+  client.data("1", json!({"type": "rung", "word": "bash('sleep 30')"}));
+  client.until(started);
+  assert!(client.ended());
+  // Each life that the client wakes as it opens starts the command again, and ends while it runs.
+  for _ in 1..5 {
+    let mut later = Client::new(&yard);
+    let state = later.data("1", json!({"type": "state"}));
+    assert_eq!((&state["pending"], &state["parked"]), (&json!([["bash1", "bash"]]), &json!([])));
+    later.data("2", json!({"type": "wake", "act": "chain1"}));
+    later.until(started);
+    assert!(later.ended());
+  }
+  let mut parked = Client::new(&yard);
+  let state = parked.data("1", json!({"type": "state"}));
+  assert_eq!((&state["pending"], &state["parked"]), (&json!([]), &json!([["bash1", "bash"]])));
+  parked.data("2", json!({"type": "wake", "act": "chain1"}));
+  parked.data("3", json!({"type": "retry", "act": "bash1"}));
+  parked.until(started);
+  let state = parked.data("4", json!({"type": "state"}));
+  assert_eq!(state["parked"], json!([]), "a retry runs the act again");
+  assert!(parked.ended());
 }
 
 #[test]

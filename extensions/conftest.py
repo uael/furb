@@ -1,12 +1,17 @@
 """The conftest of the suites of the extensions: the hooks and the fixtures of the harness of the engine, which reach
 the suite of each extension only through a conftest above it, and the helpers that only those suites need."""
 
-from collections.abc import Callable, Sequence
+import asyncio
+import tempfile
+from collections.abc import Callable, Generator, Sequence
 from dataclasses import replace
 from pathlib import Path
 
-from conftest import STANDS, Sand, World, engine_of, life, of, pytest_generate_tests, sown  # noqa: F401
+import pytest
+
+from conftest import STANDS, Sand, World, engine_of, life, of, pytest_generate_tests, sown, world_says  # noqa: F401
 from furb import engine
+from furb.engine import Refused, Text
 from furb_monty import _monty
 
 EXTENDING = (
@@ -14,6 +19,31 @@ EXTENDING = (
   " enables on each chain of a life."
 )
 """EXTENDING is the line that the list of the skills holds of the skill that the extension carries."""
+
+
+SKILLED = (".furb/skills", ".claude/skills")
+"""SKILLED is the folders of skills that the World finds in the working directory of a chain and in each folder above
+it."""
+
+
+def stray(folder: Path) -> bool:
+  """Whether a folder above this one holds a folder of skills, whose skills the World finds for a chain that stands
+  under it."""
+  return any((one / place).is_dir() for one in folder.parents for place in SKILLED)
+
+
+@pytest.fixture
+def tmp_path(tmp_path: Path) -> Generator[Path]:
+  """The temporary folder of a test, under no folder that holds skills: the one of pytest, or else a new one in /tmp,
+  as when the temporary folder of the system lies under a home that holds skills. So a test sees only the skills that
+  it gives, and none of the machine."""
+  if not stray(tmp_path):
+    yield tmp_path
+    return
+  with tempfile.TemporaryDirectory(dir="/tmp") as made:
+    one = Path(made).resolve()
+    assert not stray(one), f"a folder above {one} holds skills"
+    yield one
 
 
 def extended(  # noqa: PLR0913
@@ -77,3 +107,23 @@ def compacting(at: Path) -> tuple[Sand, str, str]:
   work = str(at / "work")
   sand.files[f"{work}/a.txt"] = "one\ntwo\n"
   return sand, root, work
+
+
+def surfed(answers: dict[str, Text], heard: list[tuple]) -> World:
+  """The web of the suite, in memory: an ear that takes each web_search and each web_fetch, keeps it in heard, says it
+  started, and says it done from its own loop with the answer of its query or its address, or with a refusal when it
+  has none."""
+  while True:
+    a = yield
+    if a[0] in ("web_search", "web_fetch") and engine.question(a):
+      heard.append(a)
+      yield "started", a[1]
+      got = answers.get(a[4], Refused(f"No page answers {a[4]}."))
+      asyncio.get_running_loop().call_soon(world_says, "done", a[1], got)
+
+
+def webbed(at: Path, answers: dict[str, Text]) -> tuple[str, list[tuple]]:
+  """A life that runs the extension web, on the web of the suite with these answers: the root, and what the web
+  heard."""
+  heard: list[tuple] = []
+  return extended("web", at, lambda _: surfed(answers, heard))[1], heard

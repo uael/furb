@@ -16,15 +16,17 @@ API of its own:
   knows the models of every provider that pi-ai serves and those of the claude command line, and it offers each
   model whose credential stands in the environment, the claude command line when it finds the program, and each
   model for chat that a local server lists when `FURB_LOCAL_URL` names its address, which `provider/local.rs` asks.
+  `provider/search.rs` holds the native search of the web of each provider that has one, which the extension `web`
+  asks.
   `operator.rs` holds the rules by which every console reads what the operator answers, and `scratch.rs` the
   scratch directory of a life, which the files serve as `scratch://` and the commands name as `$TMPDIR`.
 - `src/extension.rs` says what an extension is and where a host finds the ones that a life runs, and holds the ear
   `extensions`, which enables each by a fact that the record keeps and plays its word as a rung on each chain.
-  `extensions/` holds the official extensions, `memory`, `skills`, `compaction` and `ouroboros`, each a word, a
+  `extensions/` holds the official extensions, `memory`, `skills`, `compaction`, `ouroboros` and `web`, each a word, a
   contract and a suite, and `src/extension/` holds the ear of the World of each that has one. `docs/extensions.md` says how an extension works.
 - `src/life.rs` opens a life as every host opens one: the record, and the ears of the crate after the ears of the
-  host, the provider among them, on the default actor and the roster that the host names from the catalog, or on a
-  model of its own, and the extensions. A host adds only its own ears, such as the console of its operator. Every
+  host, the provider among them, on the default actor and the roster that the host names from the catalog, or every
+  model that the catalog offers when the host names no roster, or on a model of its own, and the extensions. A host adds only its own ears, such as the console of its operator. Every
   host gives it as one `Opening`, and each door gives it as `opened` and as `Engine.open`.
 - `src/engine.rs` opens a life in the sandbox: it loads the engine, the sheet and the Kernel, each in a namespace of
   its own, and it carries each value between the sandbox and a host. An ear of a host is an object of the host in the
@@ -47,7 +49,7 @@ API of its own:
   `docs/rpc.md` says. `prompt`, `turns`, `run` and `extensions` each open one life on the record they are given, and `facts` prints
   each fact of a record after the number of its line, filtered by an act or by a chain, and opens no life.
   Every life runs on the ears of the crate, on the model of its default actor and the models that `--roster` names,
-  and on a console of the operator. The package `furb` depends on the wheel of `furb-cli`, so `pip install furb`
+  or every model of the catalog when `--roster` names none, and on a console of the operator. The package `furb` depends on the wheel of `furb-cli`, so `pip install furb`
   gives the command `furb`.
 
 The suite runs on both engines, but for the tests that `MONTY_SKIPS` in `test/conftest.py` names: these boot on a Kernel
@@ -60,15 +62,16 @@ The TypeScript side is a bun workspace at the root, with two packages:
 
 - `bind/typescript` is the crate through N-API. Its views, its queries and its controls are synchronous, and an
   act that is answered later can be awaited. It includes a `Session`: an engine on the ears of the crate, the
-  provider among them, and on a console of the operator. `bind/typescript/README.md` says how to use it. The
-  TUI imports its build in `bind/typescript/dist`, which `bun run build` makes again.
+  provider among them, and on a console of the operator. `bind/typescript/README.md` says how to use it. Its
+  model of a life, `@furb/engine/life` in `src/life`, gives the views of a life that every host draws, with no native
+  code. The TUI imports its build in `bind/typescript/dist`, which `bun run build` makes again.
 - `tui` is the OpenTUI application on that package. `tui/README.md` says what the TUI does, and `docs/tui.md` shows
   each screen.
 
 `docs/examples/` holds the examples of the framework: five short programs for each door, in `python/`,
 `typescript/` and `rust/`, which a user runs as they stand, and which `docs/examples/README.md` shows. They stand on
 a life as a program holds it, which each door gives with the same names: `src/furb/life.py`, which `furb.open`
-gives, `bind/typescript/src/life.ts`, and `src/life/host.rs`. `test/outside/test_examples.py`,
+gives, `bind/typescript/src/framework.ts`, and `src/life/host.rs`. `test/outside/test_examples.py`,
 `bind/typescript/test/examples.test.ts` and `tests/examples.rs` run each example as a process, on a claude command
 line that answers from a script.
 
@@ -138,8 +141,8 @@ The suite drives the engine through its public API alone, end to end, from the m
   assertion to pass: a sentence the engine fails stays red until the engine, or the sentence, is right.
 - A helper that only one file needs lives in that file. A helper that several files need lives in
   `test/conftest.py`, and one that only the suites of the extensions need lives in `extensions/conftest.py`.
-- `test/outside/` holds the tests of the World, the Kernel, the door, and the switch of the package that
-  `FURB_ENGINE` sets. These tests stand outside the hygiene laws.
+- `test/outside/` holds the tests of the World, the Kernel, the door, the switch of the package that
+  `FURB_ENGINE` sets, and the harness. These tests stand outside the hygiene laws.
 
 ## The hygiene laws
 
@@ -152,7 +155,7 @@ is the folder `test` beside it.
 2. Every test carries a sentence of the contract.
 3. Every definition has a file of its own and at least one sentence. Two definitions never share a file.
 4. The module docstring of each contract is empty.
-5. `engine.py` less its doctrine, minified with its program kept as it is, costs fewer than 6000 tokens of
+5. `engine.py` less its doctrine, minified with its program kept as it is, costs fewer than 6500 tokens of
    `o200k_base`, the tokenizer of OpenAI, and the doctrine costs at most 2000. The test counts with `o200k_base`
    because it is local and the same on each machine: the tokenizer of Claude is not public, and only the network
    counts with it. The wall is a proxy for the cost to Claude, which reads about 1.5 tokens for each token of

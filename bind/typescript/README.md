@@ -59,9 +59,10 @@ the program, and the models of the local server that `FURB_LOCAL_URL` names, eac
 names what the provider offers beside the model of the default actor in `roster`, as `provider:id`, and the default
 actor in `model` and `effort`: the first of the roster when unsaid. When the roster is unsaid too, the session stands on
 the default of the crate: a model of the claude command line, then of a provider of the network, then of the local
-server. A roster that names
-no model, with no model, offers the operator alone, and a prompt that names no actor goes to the operator. The standing
-of every chain tells the roster, so a session offers the models it names and not the whole catalog. An actor that names
+server. A session whose roster is
+unsaid offers every model that the catalog offers, after the model of the default actor. A roster that names models
+offers those and no more, since the standing of every chain tells the roster, and a roster that names no model, with no
+model, offers the operator alone, and a prompt that names no actor goes to the operator. An actor that names
 no effort takes `high`, and an effort moves to the nearest one the model takes, among `levels()`. A name without its
 provider names the one model of that id. A reopened session offers what its host names now. It keeps the model and the
 effort that the host chose last, and takes that model when the host names none and the catalog knows it. The journal
@@ -88,7 +89,9 @@ the chain, the messages and the settings of the effort as the provider would sen
 what it writes as it writes it, and gives a turn. The host still names the models that `answer` stands in for. With
 no `operator`, questions stand in `session.console.prompts`; call `session.console.answer(id, text)` to read an
 answer by the rules that every console of the crate reads a line by, which `answered(shape, line)` gives, for each
-of the `shapes()` that the operator answers. `session` emits `change` and `facts`, and `fault` tells what the life refused when the console
+of the `shapes()` that the operator answers. A prompt of `None` asks nothing: the console closes it with `None` as
+it takes it, so no word waits for the operator, and keeps it in `session.console.notices` until
+`session.console.dismiss(id)`, or gives it to `operator` and waits for no answer. `session` emits `change` and `facts`, and `fault` tells what the life refused when the console
 said what an act came to. `session.streams` holds what a model writes for each rung, until the done of its reply.
 `session.facts` holds every fact of the life, every act among them, since the session drives the ear that keeps
 them as an ear of the engine. A view reads the life and says nothing, so a listener that reads the life hears no
@@ -137,7 +140,19 @@ each act, as `engine.pending()` finds it: among each act that the outside starte
 made it, each prompt, rung, command and wait that is not done and that no pause holds. `session.resume()` wakes each
 chain that holds some, and an act that a wake puts to the outside again is pending no more. The engine reads the
 pending work off the transcripts, so the session asks it again only after a pause, a wake, or a start or a done of
-an act of that work, and keeps what it gave until then. The record's
+an act of that work, and keeps what it gave until then.
+
+`session.parked` names the work that a crash loop parked, by the kind of each act, as `engine.parked()` finds it: a
+run, a command or a reply that the record shows started in five lives and not done, since each of those lives ended
+while it ran. A wake puts no parked act to the outside, so `session.resume()` does not run it again and end again,
+and a parked act is pending no more. `session.retry(id)` runs a parked act again: it is parked no more in this life,
+and a wake of it puts it to the outside.
+
+`engine.keyed(key, kind, args, kwargs)` makes the act of a verb once for a key of the client, across a crash of the
+host and a retry of the client, as `engine.keyed("k1", "prompt", ["int"], { message: "count", on })`. A key fact goes
+to the record before the act, and a later call with the same key on the same chain gives the act that the key made,
+in this life or in a later life on the record. When the host crashed after it kept the key and before it kept the
+act, the call makes the act. The record's
 `.session.json` companion holds the directory, the model and the effort that the host chose last, and no stream,
 since a stream lives only while its reply runs. File snapshots append to `.changes.jsonl`;
 `session.changes.read` loads a page of them. Keep both companions with the JSONL record. The session saves
@@ -159,3 +174,24 @@ Put that reference in the prompt as a Markdown image,
 provider hands the python of the turn as it is, and adds each image that the message of a prompt of that turn
 references, to a model that takes images. The stored bytes are checked against their digest before use. PNG, JPEG, GIF,
 and WebP are supported, with a 20 MiB limit per image. Keep `.images` with the record when moving a session.
+
+The model of a life is the views that a host derives from the acts of a life, in `src/life`, which `@furb/engine/life`
+gives. It holds no native code and no module of node, so a terminal and a window of the web read the same views:
+
+- `acts`: the act as a view reads it, `LiveAct`, the kinds of work, `WORK`, what a command came to, `Exit`, the
+  measure of a chain, `Measure`, and whether an act failed or was cancelled.
+- `loom`: the rows of the loom, one for the operator and one for each chain in the order of the tree, with the cells
+  of their moments, and the acts as they stood at a moment, `asOf`.
+- `ladder`: the lines of the thread of a chain, each prompt with the rungs of its ladder and their acts.
+- `threads`: the tree of the threads of a life, where a thread is a prompt and a prompt that a rung of a thread makes
+  is its sub-thread, each with its anchor, its messages, its progress, what waits for the operator and its pull
+  requests.
+- `map`: the place of each chain on the map, which no later chain moves, the messages that flow between chains, and
+  the way of a message along the tree of hires.
+- `source`: the words of the ladders of a chain as one program, with each act on the line that made it and the line
+  that runs, and what each act came to in a few words.
+- `plain`: a message as a person reads it, with no name of its exception around it and no path of the directory of
+  the life, and what a failed act says in such words.
+- `time`: the marks of a life on its axis of time: each step, each question to the operator, and each end of a thread.
+- `watch`: the last value of each name that a chain told by a moment, under the act whose name it starts with.
+- `debugger`: the call stack of a chain, and the program of the ladder of a prompt, which its door holds.

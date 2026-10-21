@@ -34,7 +34,7 @@ use tokio::{
 use futures::{FutureExt, StreamExt};
 use sha2::{Digest, Sha256};
 
-use super::{Model, ended, uuid};
+use super::{Model, ended, search, uuid};
 use crate::ear::reactor;
 
 /// The name of the command line as a provider: each response of it says this name, and each of its models is named
@@ -119,8 +119,9 @@ impl Claude {
       .iter()
       .map(|(alias, window)| {
         let named = format!("{CLAUDE}:{alias}");
-        let mut model =
+        let model =
           Model::new(named, *window, self.completion_model(*alias)).conversation("session");
+        let mut model = model.searches(search::claude(Arc::clone(&self.bin), (*alias).to_owned()));
         model.apart = true;
         EFFORTS
           .iter()

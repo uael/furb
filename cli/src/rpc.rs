@@ -228,18 +228,35 @@ impl Server {
       "prompt" => {
         let shape = command.text("shape")?.filter(|name| !name.is_empty());
         let shape = life::shape(shape.as_deref().unwrap_or(life::SHAPE));
-        let with = verbs::Prompt {
-          message: command.text("message")?,
-          to: command.text("to")?.map(|to| life::actor(&to).0),
-          on: Some(on),
+        let (message, to) =
+          (command.text("message")?, command.text("to")?.map(|to| life::actor(&to).0));
+        let id = match command.text("key")? {
+          Some(key) => {
+            let mut kwargs = vec![("on", Object::string(on.as_str()))];
+            kwargs.extend(message.map(|one| ("message", Object::string(one.as_str()))));
+            kwargs.extend(to.map(|one| ("to", Object::string(one.as_str()))));
+            self.life.engine.keyed(&key, "prompt", vec![shape], kwargs).map_err(failed)?
+          }
+          None => {
+            let with = verbs::Prompt { message, to, on: Some(on) };
+            self.life.engine.prompt(shape, with).map_err(failed)?.id().to_owned()
+          }
         };
-        let id = self.life.engine.prompt(shape, with).map_err(failed)?.id().to_owned();
         Ok(self.made(id))
       }
       "rung" => {
-        let with =
-          verbs::Rung { word: Some(command.needed("word")?), on: Some(on), ..Default::default() };
-        let id = self.life.engine.rung(with).map_err(failed)?.id().to_owned();
+        let word = command.needed("word")?;
+        let id = match command.text("key")? {
+          Some(key) => {
+            let kwargs =
+              vec![("word", Object::string(word.as_str())), ("on", Object::string(on.as_str()))];
+            self.life.engine.keyed(&key, "rung", vec![], kwargs).map_err(failed)?
+          }
+          None => {
+            let with = verbs::Rung { word: Some(word), on: Some(on), ..Default::default() };
+            self.life.engine.rung(with).map_err(failed)?.id().to_owned()
+          }
+        };
         Ok(self.made(id))
       }
       "close" => {
@@ -256,6 +273,10 @@ impl Server {
           _ => engine.wake(&act),
         };
         done.map_err(failed).map(|()| Value::Null)
+      }
+      "retry" => {
+        let act = command.needed("act")?;
+        self.life.engine.retry(&act).map_err(failed).map(|()| Value::Null)
       }
       "turns" => {
         let turns = self.life.engine.turns(verbs::Turns { on: Some(on) }).map_err(failed)?;
@@ -295,6 +316,7 @@ impl Server {
           "prompts": prompts,
           "acts": self.awaited,
           "pending": self.life.engine.pending().map_err(failed)?,
+          "parked": self.life.engine.parked().map_err(failed)?,
         }))
       }
       "" => Err("The command needs type.".to_owned()),
@@ -302,10 +324,13 @@ impl Server {
     }
   }
 
-  /// An act a command made, whose done the client gets when it is done, and the data of the response that names it.
+  /// An act a command made, or the act that the key of a command made before, whose done the client gets when it is
+  /// done, once more for a retry, and the data of the response that names it.
   fn made(&mut self, id: String) -> Value {
     let data = json!({"act": id});
-    self.awaited.push(id);
+    if !self.awaited.contains(&id) {
+      self.awaited.push(id);
+    }
     data
   }
 

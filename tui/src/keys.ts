@@ -167,7 +167,7 @@ export const keys = [
   },
   {
     chord: "⌃L / ⌃A",
-    action: "Edit a prompt program / answer an operator question",
+    action: "Edit a prompt program / answer an operator question or dismiss a notice",
     bindings: [
       { on: ["ctrl+l"], run: "ladders", chord: "⌃L", command: "edit" },
       { on: ["ctrl+a"], run: "answer", chord: "⌃A", hint: "answer" },

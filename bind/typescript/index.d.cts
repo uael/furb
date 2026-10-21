@@ -49,6 +49,15 @@ export declare class Engine {
    * kind, as the engine of the crate finds it.
    */
   pending(): Array<[string, string]>
+  /** The work that a crash loop parked, each act by its name and its kind, as the engine of the crate finds it. */
+  parked(): Array<[string, string]>
+  /** A parked act, run again, as the engine of the crate runs it. */
+  retry(id: string): void
+  /**
+   * The act of a verb that a key of the client makes once, across a crash of the host and a retry of the client:
+   * the act that the key made before, or a new act, as the engine of the crate finds it.
+   */
+  keyed(key: string, kind: string, args?: unknown[], kwargs?: Record<string, unknown>): Act
   /** One name of a chain, the root when none is given, read without calling it. */
   inspect(name: string, chain?: string | undefined | null): Inspection
   /** Every name the module of a chain binds, the root when none is given, in the order it bound them. */
@@ -366,8 +375,8 @@ export interface Opening {
   actor?: string
   /**
    * The models the provider offers beside the model of the actor, as the catalog names them. When it is unsaid, the
-   * model of the actor stands alone, or the first model the catalog offers when the actor is unsaid too; a roster
-   * that names none, with no actor, offers the operator alone.
+   * provider offers every model that the catalog offers, after the model of the actor; a roster that names none
+   * offers the model of the actor alone, and, with no actor, the operator alone.
    */
   roster?: Array<string>
   /** The claude command line to run, in place of the one that `FURB_CLAUDE_BIN` names or this machine holds. */

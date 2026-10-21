@@ -365,6 +365,36 @@ impl JsEngine {
     self.held.call(Engine::pending)
   }
 
+  /// The work that a crash loop parked, each act by its name and its kind, as the engine of the crate finds it.
+  #[napi]
+  pub fn parked(&self) -> napi::Result<Vec<(String, String)>> {
+    self.held.call(Engine::parked)
+  }
+
+  /// A parked act, run again, as the engine of the crate runs it.
+  #[napi]
+  pub fn retry(&self, id: String) -> napi::Result<()> {
+    self.held.call(|engine| engine.retry(&id))
+  }
+
+  /// The act of a verb that a key of the client makes once, across a crash of the host and a retry of the client:
+  /// the act that the key made before, or a new act, as the engine of the crate finds it.
+  #[napi(
+    ts_args_type = "key: string, kind: string, args?: unknown[], kwargs?: Record<string, unknown>",
+    ts_return_type = "Act"
+  )]
+  pub fn keyed(
+    &self,
+    key: String,
+    kind: String,
+    args: Option<Vec<Value>>,
+    kwargs: Option<HashMap<String, Value>>,
+  ) -> napi::Result<JsAct> {
+    let (args, kwargs) = words(args, &kwargs);
+    let id = self.held.call(|engine| engine.keyed(&key, &kind, args, kwargs))?;
+    Ok(JsAct { held: Rc::clone(&self.held), id })
+  }
+
   /// One name of a chain, the root when none is given, read without calling it.
   #[napi]
   pub fn inspect(&self, name: String, chain: Option<String>) -> napi::Result<Inspection> {
