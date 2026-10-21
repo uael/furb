@@ -689,6 +689,31 @@ fn the_life_ends_with_stdin_and_a_later_life_resumes_its_record() {
 }
 
 #[test]
+fn a_key_of_the_client_makes_its_prompt_once_in_a_life_and_in_a_later_life() {
+  let yard = Yard::new("rpc-key");
+  yard.words(&[COUNT]);
+  let mut client = Client::new(&yard);
+  let asked = json!({"type": "prompt", "message": "count the lines", "shape": "int", "key": "k1"});
+  assert_eq!(client.data("1", asked.clone()), json!({"act": "prompt1"}));
+  client.done("prompt1");
+  assert_eq!(
+    client.data("2", asked.clone()),
+    json!({"act": "prompt1"}),
+    "a retry gives the same act"
+  );
+  assert_eq!(client.done("prompt1")["value"], 3, "a retry gets the done again");
+  assert!(client.ended());
+  let mut later = Client::new(&yard);
+  assert_eq!(later.data("1", asked), json!({"act": "prompt1"}), "a retry after the life ended");
+  assert_eq!(later.done("prompt1")["value"], 3);
+  let rung = json!({"type": "rung", "word": "close(5)", "key": "k2"});
+  let made = later.data("2", rung.clone());
+  assert_eq!(later.data("3", rung), made);
+  assert!(later.ended());
+  assert_eq!(yard.answered(), 1);
+}
+
+#[test]
 fn the_state_names_the_work_that_an_earlier_life_left_pending() {
   let yard = Yard::new("rpc-pending");
   let mut client = Client::new(&yard);

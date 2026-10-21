@@ -362,6 +362,19 @@ async def test_the_door_names_the_work_that_an_earlier_life_left_pending(tmp_pat
   assert furb_monty.engine.pending() == [("wait1", "wait")]
 
 
+async def test_a_key_of_the_client_makes_its_act_once_in_a_life_and_in_a_later_life(tmp_path: Path) -> None:
+  """A verb that a key makes gives the act that the key made before, in the same life and in a later life on its
+  record, and another key makes another act."""
+  path = str(tmp_path / "record.jsonl")
+  record, store = _monty.store(path)
+  root = furb_monty.engine.boot(record, time=_monty.time(), store=store, world=Dead(stands=STANDS).hears())
+  first = furb_monty.engine.keyed("k1", "wait", 600, on=root)
+  assert (first, furb_monty.engine.keyed("k1", "wait", 600, on=root)) == ("wait1", "wait1")
+  assert furb_monty.engine.keyed("k2", "wait", 600) == "wait2"
+  furb_monty.engine.boot(_monty.kept(path), time=_monty.time(), world=Dead(stands=STANDS).hears())
+  assert furb_monty.engine.keyed("k1", "wait", 600, on=root) == "wait1"
+
+
 def test_the_door_gives_the_catalog_of_the_crate(tmp_path: Path) -> None:
   """The door gives the catalog of the crate, as the door to TypeScript gives it: the levels of effort, a model by
   its name whether this machine offers it or not, and the models this machine offers."""
