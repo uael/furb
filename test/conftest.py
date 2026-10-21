@@ -629,10 +629,12 @@ def prompted(id: str, shape: str, message: str = "") -> str:
   return "\n".join([f"#{id}", *[f"{id}_message = {message!r}"] * bool(message), engine.bound(id, shape)])
 
 
-def written(id: str, word: str) -> str:
-  """The paragraph a rung tells of a word that its caller wrote: its header and the binding of that word, as a quote
+def written(id: str, word: str, by: str = "operator") -> str:
+  """The paragraph a rung tells of a word that its caller wrote: its header, which names the maker of the rung, and the binding of that word, as a quote
   when the word holds more than one line."""
-  return f"#{id}\n<s:{id}_word>\n{word}</s:{id}_word>" if "\n" in word else f"#{id}\n{id}_word = {word!r}"
+  return (
+    f"#{id} by {by}\n<s:{id}_word>\n{word}</s:{id}_word>" if "\n" in word else f"#{id} by {by}\n{id}_word = {word!r}"
+  )
 
 
 def fresh(root: str, *told: str) -> str:

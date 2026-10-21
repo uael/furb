@@ -46,7 +46,7 @@ async def test_told_gives_the_saying_of_a_tell_about_an_act() -> None:
   act = engine.rung("k = 1", on=root)
   assert await act is None
   told = [a for a in said(log, "tell") if a[1] == act]
-  assert [a[3] for a in told] == [[f"#{act}\n{act}_word = 'k = 1'"]]
+  assert [a[3] for a in told] == [[f"#{act} by operator\n{act}_word = 'k = 1'"]]
   saying = engine.told(act, "said", "more = 1", count=2)
   assert saying == ("tell", act, [f"#{act} said\n{act}_count = 2", "more = 1"])
   made = engine.say(*saying)

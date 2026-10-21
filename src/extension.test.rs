@@ -227,7 +227,7 @@ fn a_life_enables_at_its_tip_each_extension_it_is_given_and_plays_its_word_then_
   let told = turns.last().unwrap().as_ref().items().unwrap()[1].as_str().unwrap().to_owned();
   assert!(
     told.contains(&format!(
-      "#rung1\n<s:rung1_word>\n{full}</s:rung1_word>\n\n#read1\nread1_path = 'note.txt'\n"
+      "#rung1 by extensions\n<s:rung1_word>\n{full}</s:rung1_word>\n\n#read1\nread1_path = 'note.txt'\n"
     )),
     "{told}"
   );
