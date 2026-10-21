@@ -262,11 +262,15 @@ fn run(opening: Opening, word: String) -> Result<(), String> {
   Ok(())
 }
 
-/// Each extension that a life on the record runs, as its name and its life word, one on each line.
+/// Each extension that a life on the record runs, as its name and its life word, or its name alone when it has none,
+/// one on each line.
 fn extensions(opening: Opening) -> Result<(), String> {
   let mut life = Life::lived(opening)?;
   for one in life.extensions()? {
-    println!("{}: {}", one.name, one.life);
+    match one.life.as_str() {
+      "" => println!("{}", one.name),
+      life => println!("{}: {life}", one.name),
+    }
   }
   Ok(())
 }

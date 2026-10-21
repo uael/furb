@@ -65,3 +65,15 @@ def skilled(skills: Path, folder: str, head: str) -> Path:
   (skills / folder).mkdir(parents=True, exist_ok=True)
   (path := skills / folder / "SKILL.md").write_text(f"---\n{head}\n---\nSteps.\n", encoding="utf-8")
   return path
+
+
+FULL = (300000, 0, 0, 0, 0.0)
+"""An answer that reads three quarters of the window of the default actor of the suite, which is 400000 tokens."""
+
+
+def compacting(at: Path) -> tuple[Sand, str, str]:
+  """A life that runs the extension compaction, whose folder work holds a.txt: the World, the root and the folder."""
+  sand, root = extended("compaction", at)
+  work = str(at / "work")
+  sand.files[f"{work}/a.txt"] = "one\ntwo\n"
+  return sand, root, work

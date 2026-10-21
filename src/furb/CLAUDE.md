@@ -201,5 +201,5 @@ meanings. The entry of such a name here gives only its form in the engine.
   from the disk, so a later life makes it again at the same place; what the disk holds reaches a chain through a
   question that the World answers and that the journal answers again.
 - The word of an extension only defines, holds no comment, and binds no name of the engine, and it holds no
-  sentence but one doctrine of its own, a quote that it tells and that holds no law, as engine.py holds its own; its
-  contract holds its laws.
+  sentence but one doctrine of its own, a quote that holds no law, as engine.py holds its own; its contract holds
+  its laws.
