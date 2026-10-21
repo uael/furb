@@ -75,7 +75,19 @@ const TAIL: usize = 2000;
 /// The error of the system that says a program is open to be written, which is ETXTBSY.
 const BUSY: i32 = 26;
 
-/// The claude command line: its program, how long a turn may go with no progress, and the conversations it holds.
+/// How long a process waits for its program when the program is missing or does not run, unless
+/// `FURB_CLAUDE_GONE` gives other seconds: the command line that updates itself replaces its program, and its link
+/// points at nothing for a moment.
+const GONE: Duration = Duration::from_secs(60);
+
+/// The first pause before a process tries its program again, which doubles at each try up to [`PAUSE`].
+const FIRST: Duration = Duration::from_millis(100);
+
+/// The longest pause before a process tries its program again.
+const PAUSE: Duration = Duration::from_secs(5);
+
+/// The claude command line: its program, how long a turn may go with no progress, how long a process waits for a
+/// program that is missing or does not run, and the conversations it holds.
 ///
 /// It is cheap to clone, and every clone holds the same conversations, which one keeper owns and lends to one turn at
 /// a time. When the last clone goes, the keeper ends, and every process it started ends.
@@ -83,6 +95,7 @@ const BUSY: i32 = 26;
 pub struct Claude {
   bin: Arc<Path>,
   stall: Duration,
+  gone: Duration,
   keeper: mpsc::UnboundedSender<Kept>,
 }
 
@@ -94,7 +107,8 @@ impl Claude {
 
   /// The command line at this program, and how long a turn may go with no progress. With no program, it is the one
   /// that `FURB_CLAUDE_BIN` names, or the one found on this machine; with no stall, `FURB_CLAUDE_STALL` gives it in
-  /// seconds, or it is 900 seconds.
+  /// seconds, or it is 900 seconds. A process waits for a program that is missing or does not run for the seconds
+  /// that `FURB_CLAUDE_GONE` gives, or for 60 seconds.
   pub fn with(bin: Option<PathBuf>, stall: Option<Duration>) -> Claude {
     let bin = bin.or_else(located).unwrap_or_else(|| PROGRAM.into());
     let stall = stall.unwrap_or_else(|| {
@@ -103,7 +117,13 @@ impl Claude {
     });
     let (keeper, asked) = mpsc::unbounded_channel();
     reactor().spawn(kept(asked));
-    Claude { bin: bin.into(), stall, keeper }
+    Claude { bin: bin.into(), stall, gone: patience(), keeper }
+  }
+
+  /// The same command line, whose process waits this long for a program that is missing or does not run.
+  #[cfg(test)]
+  pub(crate) fn waiting(self, gone: Duration) -> Claude {
+    Claude { gone, ..self }
   }
 
   /// One model of the command line, by its name, as a completion model of rig.
@@ -212,7 +232,7 @@ impl Claude {
     self.keeper.send(asked).map_err(|_| gone())?;
     let conversation = borrowed.await.map_err(|_| gone())?;
     let mut lent = Lent { key, conversation: Some(conversation), keeper: self.keeper.clone() };
-    lent.conversation().turn(&messages, effort, &self.bin, self.stall, deltas).await
+    lent.conversation().turn(&messages, effort, &self.bin, self.stall, self.gone, deltas).await
   }
 }
 
@@ -454,6 +474,7 @@ impl Conversation {
     effort: Option<String>,
     bin: &Path,
     stall: Duration,
+    gone: Duration,
     deltas: Option<&Deltas>,
   ) -> Result<CompletionResponse, CompletionError> {
     let incoming: Vec<String> = messages.iter().map(canonical).collect();
@@ -488,7 +509,7 @@ impl Conversation {
     let again = again && !anew;
     let mut flight =
       Flight { conversation: self, incoming, asked, again, heard: false, reply: None };
-    let got = flight.run(delta, effort, bin, stall, deltas).await;
+    let got = flight.run(delta, effort, bin, stall, gone, deltas).await;
     if let Ok(response) = &got {
       let reply = Message::Assistant { id: None, content: response.choice.clone() };
       flight.reply = Some(canonical(&reply));
@@ -496,11 +517,14 @@ impl Conversation {
     got
   }
 
-  /// A process of the conversation at an effort: a new one, a resumed one, or the fork of its parent.
+  /// A process of the conversation at an effort: a new one, a resumed one, or the fork of its parent. When its program
+  /// is missing or does not run, it tries again after a pause that grows, until the program starts or [`GONE`]
+  /// passed.
   async fn start(
     &mut self,
     bin: &Path,
     effort: Option<String>,
+    gone: Duration,
   ) -> Result<Process, CompletionError> {
     let mut command = Command::new(bin);
     command.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json"]);
@@ -524,12 +548,27 @@ impl Conversation {
     // A program that a process holds open to write it is busy, as a new program is for a moment while a fork of
     // another thread holds it, so it starts at a later try.
     let mut tries = 0;
+    let due = Instant::now() + gone;
+    let mut pause = FIRST;
     let mut child = loop {
-      match command.spawn() {
-        Err(no) if no.raw_os_error() == Some(BUSY) && tries < 50 => tries += 1,
+      let wait = match command.spawn() {
+        Err(no) if no.raw_os_error() == Some(BUSY) && tries < 50 => {
+          tries += 1;
+          Duration::from_millis(10)
+        }
+        Err(no)
+          if matches!(
+            no.kind(),
+            std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied
+          ) && Instant::now() < due =>
+        {
+          let wait = pause.min(due.saturating_duration_since(Instant::now()));
+          pause = (pause * 2).min(PAUSE);
+          wait
+        }
         got => break got,
-      }
-      tokio::time::sleep(Duration::from_millis(10)).await;
+      };
+      tokio::time::sleep(wait).await;
     }
     .map_err(|no| failed(format!("{} did not start: {no}", bin.display())))?;
     let (Some(stdin), Some(stdout), Some(stderr)) =
@@ -719,6 +758,7 @@ impl Flight<'_> {
     effort: Option<String>,
     bin: &Path,
     stall: Duration,
+    gone: Duration,
     deltas: Option<&Deltas>,
   ) -> Result<CompletionResponse, CompletionError> {
     let line = input(delta)?;
@@ -728,7 +768,7 @@ impl Flight<'_> {
       held.process = None;
     }
     if held.process.is_none() {
-      held.process = Some(held.start(bin, effort).await?);
+      held.process = Some(held.start(bin, effort, gone).await?);
     }
     let Conversation { process: Some(process), id, name, .. } = held else {
       return Err(failed("claude is not running"));
@@ -1145,6 +1185,12 @@ fn failed(why: impl Into<String>) -> CompletionError {
 
 /// The name of the program of the command line.
 const PROGRAM: &str = if cfg!(windows) { "claude.exe" } else { "claude" };
+
+/// How long a process waits for its program: the seconds that `FURB_CLAUDE_GONE` gives, or [`GONE`].
+fn patience() -> Duration {
+  let seconds = env::var("FURB_CLAUDE_GONE").ok().and_then(|one| one.parse::<f64>().ok());
+  seconds.and_then(|one| Duration::try_from_secs_f64(one).ok()).unwrap_or(GONE)
+}
 
 /// The command line of this machine: the one `FURB_CLAUDE_BIN` names, or the first program named claude on the
 /// PATH, in the local programs of the home, or, on macOS, in the newest version of Claude Desktop.
