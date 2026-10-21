@@ -23,6 +23,9 @@ shows each screen.
   A command that runs shows the end of what it prints, and a model shows what it writes.
 - **The lens**: Enter on a line shows its act whole. A rung shows its word as python, a command its command and all
   that it printed, a prompt its message and its value, and a read or a write its text.
+- **The time cursor**: `[` and `]` move back and forward in time by one moment, and `{` and `}` by ten. The loom and
+  the thread show the life as it stood at the cursor, and the right edge of the loom says `then`. In the past the
+  verbs that change the life do nothing, and `b` branches the selected chain there. Esc returns to now.
 - **The word line**, at the bottom. `i` asks the model of the selected chain, `:` writes a word of python that runs
   as a rung there, and `/` types a command. Tab answers the oldest prompt that you owe, on any chain.
 
@@ -46,7 +49,8 @@ thread and the lens. The same space pauses one command and a conductor with its 
 | c | Close the selected act with a value |
 | g | Put a ceiling of dollars on the selected chain |
 | e | Edit the door of the prompt of the selection, which replays its ladder |
-| b | Branch the chain after the selected act |
+| b | Branch the chain after the selected act, or at the moment of the time cursor |
+| [ and ] | Move the time cursor back and forward by a moment, or by ten with { and }. Esc returns to now |
 | w | Wake the work that an earlier life left |
 | ⌃O | Open the list of lives, by workspace |
 | ? | Show or hide these keys |

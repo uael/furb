@@ -132,6 +132,8 @@ function mark(glyph: string, x: number, y: number, color: string): string | unde
       );
     case "⊘":
       return `<circle cx="${x}" cy="${y}" r="3" stroke="${color}" stroke-width="1.1" fill="none"/>${stroke(1.1, `M ${x - 2.1} ${y + 2.1} L ${x + 2.1} ${y - 2.1}`)}`;
+    case "◷":
+      return `<circle cx="${x}" cy="${y}" r="3.3" stroke="${color}" stroke-width="1.1" fill="none"/>${stroke(1.1, `M ${x} ${y - 2.1} L ${x} ${y} L ${x + 1.8} ${y}`)}`;
     case "❯":
       return stroke(1.7, `M ${x - 1.9} ${y - 3.5} L ${x + 2} ${y} L ${x - 1.9} ${y + 3.5}`);
     case "›":

@@ -91,3 +91,12 @@ Dark is the default, Paper is light, and Midnight and Forest are dark.
 ![Paper theme](screenshots/16-paper.png)
 
 ![Midnight theme](screenshots/17-midnight.png)
+
+## Time
+
+`[` and `]` move a cursor in time on the loom by one moment, and `{` and `}` by ten. The loom and the thread show the
+life as it stood at that moment: an act that began later is not there, and an act that ended later still runs. The
+header counts the moment, and the right edge of the loom says `then`. In the past the verbs that change the life do
+nothing, but `b` branches the selected chain at the moment. Esc returns to now.
+
+![Time cursor](screenshots/18-time-cursor.png)

@@ -268,7 +268,12 @@ The first version of the Loom follows this document, with these changes that the
   the share of the window of each thread. It also follows reads, writes and changes of directory as acts, so a thread
   names them.
 
-What is left for later work: the time cursor, `[` and `]`, which shows a chain as it was at a moment and branches
-there; a lens for the transcript of a chain and for the change of a write; and the commands of the old TUI that acted
-on its screens alone, such as the share of a conversation as HTML, images in the word line, the external editor, and
-the queue of follow-ups in the screen.
+- The time cursor moves by one moment with `[` and `]`, and by ten with `{` and `}`. It stands at a moment of the
+  record: an act that began later is not shown, and an act that ended later runs, with no value yet. The verbs that
+  change the life do nothing in the past, and `b` branches the selected chain at the cursor: the branch keeps the
+  acts of the chain up to that moment, and the module and the files keep the state that they have now.
+
+What is left for later work: the feed, which the next part of this document designs; the commands of the old TUI that acted on its screens alone, such as the share of a
+conversation as HTML, images in the word line, the external editor, and the queue of follow-ups in the screen; a
+measure of a convergence loop beyond the dollars and the window, such as the count of retries of a ladder; and the
+replay of a record that an older engine made, which drifts, so an old record does not open.

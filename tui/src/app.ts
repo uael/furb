@@ -15,7 +15,16 @@ import { shortenHome } from "./files.ts";
 import { ago, clip, dollars, elapsed } from "./format.ts";
 import { hints, keyTable } from "./keys.ts";
 import { type ActState, type Line, ladder, valueText } from "./ladder.ts";
-import { type Cell, type Loom, type Thread, type ThreadState, weave } from "./loom.ts";
+import {
+  asOf,
+  type Cell,
+  type Loom,
+  momentsOf,
+  owedAt,
+  type Thread,
+  type ThreadState,
+  weave,
+} from "./loom.ts";
 import { loadParsers } from "./parsers.ts";
 import { type ActRow, type Exit, type Session, type SessionStatus, statusLabels } from "./session.ts";
 import { theme as c, defaultTheme, frame, setTheme, spin, syntax, type ThemeName } from "./theme.ts";
@@ -117,6 +126,8 @@ export class App {
   /** The act that the lens shows, and the whole of it, once the session gave it. */
   lens?: ActRow;
   private whole?: ActRow;
+  /** The moment that the time cursor stands at, and nothing at the present. */
+  cursor?: number;
   private readonly header: TextRenderable;
   private readonly ruler: TextRenderable;
   private readonly threads: TextRenderable;
@@ -312,18 +323,27 @@ export class App {
     const w = this.session;
     if (w.theme !== this.theme) this.applyTheme(w.theme);
     const cellWidth = Math.max(8, this.width - this.fixed);
+    // The time cursor shows the life as it stood at its moment, and the present shows it as it stands.
+    const then = this.cursor;
+    const acts = then === undefined ? w.acts : asOf(w.acts, then);
     this.loom = weave({
-      acts: w.acts,
-      prompts: [...w.host.prompts.values()],
+      acts,
+      prompts: then === undefined ? [...w.host.prompts.values()] : owedAt(acts),
       measures: w.measures,
       folds: this.folds,
       width: cellWidth,
-      pending: w.host.pending,
+      pending: then === undefined ? w.host.pending : new Map(),
       label: (id) => w.labelOf(id),
     });
     const owed = new Set(this.loom.owed.map((prompt) => prompt.id));
     const words = this.words();
-    this.lines = ladder(w.selected, w.acts, (rung) => words.get(rung.id) ?? "", w.host.streams, owed);
+    this.lines = ladder(
+      w.selected,
+      acts,
+      (rung) => words.get(rung.id) ?? "",
+      then === undefined ? w.host.streams : new Map(),
+      owed,
+    );
     this.selectedThread = Math.min(this.selectedThread, this.loom.threads.length - 1);
     const selected = this.loom.threads.findIndex((thread) => thread.id === w.selected);
     if ((this.focus !== "loom" || !this.placed) && selected >= 0) {
@@ -363,7 +383,13 @@ export class App {
     const w = this.session;
     const working = this.loom.threads.filter((thread) => thread.state === "working").length;
     const owed = this.loom.owed.length;
+    const moments = momentsOf(w.acts);
     const right: Part[] = [
+      ...(this.cursor !== undefined
+        ? ([
+            [`◷ moment ${moments.indexOf(this.cursor) + 1} of ${moments.length}   `, c.secondary, bold],
+          ] as Part[])
+        : []),
       ...(w.host.pending.size ? ([[`◌ ${w.host.pending.size} held   `, c.warning]] as Part[]) : []),
       [`◆ ${owed} owed`, owed ? c.warning : c.faint],
       ["   ", c.faint],
@@ -395,8 +421,11 @@ export class App {
     if (folded && span) {
       const at = blank + folded;
       ruler.push([" ".repeat(Math.max(0, at - 7)), c.faint], ["older ┊", c.faint]);
-      ruler.push([" ".repeat(Math.max(0, cellWidth - Math.max(at, 7) - 3)), c.faint], ["now", c.faint]);
-    } else ruler.push([" ".repeat(Math.max(0, cellWidth - 3)), c.faint], ["now", c.faint]);
+      ruler.push(
+        [" ".repeat(Math.max(0, cellWidth - Math.max(at, 7) - 4)), c.faint],
+        [this.edge, this.edgeColor],
+      );
+    } else ruler.push([" ".repeat(Math.max(0, cellWidth - 4)), c.faint], [this.edge, this.edgeColor]);
     ruler.push(["  "], ["waits on".padEnd(12), c.faint]);
     if (this.wide) ruler.push(["dollars".padStart(20), c.faint], ["     window", c.faint]);
     this.ruler.content = styled(ruler);
@@ -407,10 +436,18 @@ export class App {
     this.threads.content = styled(rows.flatMap((row, index) => (index ? [["\n"] as Part, ...row] : row)));
   }
 
+  /** What the right edge of the loom is: the present, or the moment of the time cursor. */
+  private get edge(): string {
+    return this.cursor === undefined ? " now" : "then";
+  }
+  private get edgeColor(): RGBA {
+    return this.cursor === undefined ? c.faint : c.secondary;
+  }
   /** One thread of the loom: its mark, its label in the tree, its cells, what it waits on, and its measure. */
   private threadRow(thread: Thread, selected: boolean, cellWidth: number): Part[] {
     const [mark, color] = threadMarks[thread.state];
-    const live = thread.state === "working" ? spin() : mark;
+    const frozen = this.cursor !== undefined;
+    const live = thread.state === "working" && !frozen ? spin() : mark;
     const ground = selected ? (this.focus === "loom" ? c.selected : c.panel) : undefined;
     const tally = thread.folded
       ? ` ${Object.entries(thread.tally)
@@ -425,7 +462,7 @@ export class App {
     // The past fades: a cell takes more of its color the nearer it stands to the present.
     const count = thread.cells.length;
     const cells: Part[] = thread.cells.map((cell, index) =>
-      index === count - 1 && thread.state === "working"
+      index === count - 1 && thread.state === "working" && !frozen
         ? [spin(), c.accent]
         : [cell.mark, mix(c.background, toneColor(cell), 0.45 + (0.55 * (index + 1)) / count)],
     );
@@ -922,7 +959,12 @@ export class App {
       this.render();
       return;
     }
-    const name = [":", "/", "?", "!"].includes(key.sequence) ? key.sequence : key.name;
+    const name = [":", "/", "?", "!", "[", "]", "{", "}"].includes(key.sequence) ? key.sequence : key.name;
+    // The past is read only: a verb acts on the life as it stands, so the time cursor holds the verbs but a branch.
+    if (this.cursor !== undefined && ["space", "x", "c", "g", "e", "i", ":", "!", "tab"].includes(name)) {
+      this.session.notice = "The loom shows the past. b branches here, and Esc returns to now.";
+      return this.render();
+    }
     const moves: Record<string, number> = { up: -1, k: -1, down: 1, j: 1, pageup: -10, pagedown: 10 };
     if (name in moves && !key.ctrl && !key.meta) return this.move(moves[name] ?? 0);
     switch (name) {
@@ -953,6 +995,14 @@ export class App {
       case "?":
         this.help = !this.help;
         return this.render();
+      case "[":
+        return this.travel(-1);
+      case "]":
+        return this.travel(1);
+      case "{":
+        return this.travel(-10);
+      case "}":
+        return this.travel(10);
       case "space":
         return this.toggle();
       case "x":
@@ -1033,7 +1083,8 @@ export class App {
     }
     const line = this.lines[this.selectedLine];
     if (!line) return;
-    if (line.type === "prompt" && line.state === "asks") return this.write("answer", line.act.id);
+    if (line.type === "prompt" && line.state === "asks" && this.cursor === undefined)
+      return this.write("answer", line.act.id);
     this.lens = line.act;
     this.focus = "lens";
     this.lensBox.scrollTo(0);
@@ -1047,6 +1098,17 @@ export class App {
   back(): void {
     if (this.focus === "lens") this.focus = "thread";
     else if (this.focus === "thread") this.focus = "loom";
+    else if (this.cursor !== undefined) this.cursor = undefined;
+    this.render();
+  }
+  /** The time cursor moves back or forward by a count of moments, and past the last moment it stands at the present
+   * again. */
+  travel(by: number): void {
+    const moments = momentsOf(this.session.acts);
+    if (!moments.length) return;
+    const from = this.cursor === undefined ? moments.length - 1 : moments.indexOf(this.cursor);
+    const to = Math.max(0, from + by);
+    this.cursor = to >= moments.length - 1 ? undefined : moments[to];
     this.render();
   }
   /** The oldest prompt that the operator owes, on any chain, which the word line answers. */
@@ -1165,6 +1227,23 @@ export class App {
   }
   /** A branch of the chain after the selected act, which the session selects. */
   async branch(): Promise<void> {
+    const w = this.session;
+    if (this.cursor !== undefined) {
+      // A branch at the time cursor keeps the acts of the chain up to its moment.
+      const at = this.cursor;
+      const later = w.acts.filter((act) => act.on === w.selected && act.kind !== "chain" && act.began > at);
+      this.cursor = undefined;
+      await w.branch(
+        `${w.label} then`,
+        later.map((act) => act.id),
+      );
+      this.focus = "thread";
+      this.selectedLine = Number.MAX_SAFE_INTEGER;
+      w.notice =
+        "The new branch reads the chain as it stood then. The module and the files keep their state.";
+      this.render();
+      return;
+    }
     if (this.focus === "loom") return;
     const id = this.selection;
     await this.session.rewind(id);

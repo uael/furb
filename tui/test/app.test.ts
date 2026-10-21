@@ -170,3 +170,29 @@ test("⌃O lists the lives by workspace, and the help lists every key", () =>
     screen.mockInput.pressKey("q", { ctrl: true });
     await soon(() => quits() === 1);
   }));
+
+test("[ moves the time cursor into the past, where the loom shows the life as it stood, and b branches the chain there", () =>
+  looming(
+    async ({ app, screen, session, frame }) => {
+      await idle(session);
+      const prompt = session.acts.find((act) => act.kind === "prompt");
+      if (!prompt?.ended) throw new Error("The demo made no prompt.");
+      // The cursor walks back to the moment before the prompt ended, where its rung still runs.
+      while (app.cursor === undefined || app.cursor >= prompt.ended) {
+        await screen.mockInput.typeText("[");
+        await soon(() => app.cursor !== undefined);
+      }
+      const shown = await frame();
+      expect(shown).toMatch(/◷ moment \d+ of \d+/);
+      expect(shown).toContain("then");
+      expect(app.lines.find((line) => line.act.id === prompt.id)).toMatchObject({ state: "running" });
+      screen.mockInput.pressKey("x");
+      await soon(() => session.notice.startsWith("The loom shows the past"));
+      const chains = session.acts.filter((act) => act.kind === "chain").length;
+      screen.mockInput.pressKey("b");
+      await soon(() => session.acts.filter((act) => act.kind === "chain").length === chains + 1);
+      await soon(() => app.cursor === undefined && session.selected !== session.engine.root);
+      expect(session.label).toBe("Main then");
+    },
+    { seed: "demo" },
+  ));

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { ladder } from "../src/ladder.ts";
-import { spans, weave } from "../src/loom.ts";
+import { asOf, momentsOf, owedAt, spans, weave } from "../src/loom.ts";
 import type { ActRow } from "../src/session.ts";
 
 /** An act of a life, made at a moment, and done at another when it is done. */
@@ -199,4 +199,34 @@ test("the rungs in a row that an ear made on a chain stand on one line, with the
   expect(lines[0]?.type === "ear" && lines[0].acts.map((chip) => [chip.label, chip.state])).toEqual([
     ["remember1", "stands"],
   ]);
+});
+
+test("the acts as they stood at a moment hold what began by then, and an act that ended later runs, with no value yet", () => {
+  const acts = [
+    act("chain1", "chain", "", "operator", 1),
+    act("prompt1", "prompt", "chain1", "rung1", 2, 9, {
+      words: ["str", "Which?", "operator"],
+      value: "this",
+    }),
+    act("rung2", "rung", "chain1", "operator", 3, 5),
+    act("bash1", "bash", "chain1", "rung2", 4, 8, {
+      value: { stdout: { content: "all\n" }, stderr: { content: "" } },
+    }),
+    act("read1", "read", "chain1", "rung2", 7, 7),
+  ];
+  expect(momentsOf(acts)).toEqual([1, 2, 3, 4, 5, 7, 8, 9]);
+  const then = asOf(acts, 5);
+  expect(then.map((one) => [one.id, one.done])).toEqual([
+    ["chain1", false],
+    ["prompt1", false],
+    ["rung2", true],
+    ["bash1", false],
+  ]);
+  expect(then.find((one) => one.id === "prompt1")?.value).toBeNull();
+  expect(then.find((one) => one.id === "bash1")?.value).toMatchObject({
+    code: null,
+    stdout: { content: "" },
+  });
+  expect(owedAt(then)).toEqual([{ id: "prompt1", shape: "str", message: "Which?" }]);
+  expect(owedAt(asOf(acts, 9))).toEqual([]);
 });

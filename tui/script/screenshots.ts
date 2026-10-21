@@ -164,6 +164,13 @@ try {
   session.theme = "midnight";
   await capture("17-midnight");
   session.theme = "github";
+  app().focus = "loom";
+  await pick("Main");
+  for (let step = 0; step < 6; step++) await test.mockInput.typeText("[");
+  await soon(() => app().cursor !== undefined);
+  await capture("18-time-cursor");
+  test.mockInput.pressEscape();
+  await soon(() => app().cursor === undefined);
 } finally {
   app().dispose();
   test.renderer.destroy();

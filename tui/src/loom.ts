@@ -245,3 +245,44 @@ export function weave({ acts, prompts, measures, folds, width, pending, label }:
   for (const top of children.get(undefined) ?? []) visit(top, "", true, 0);
   return { threads, owed, folded };
 }
+
+/** The acts of a life as they stood at a moment: each act that began by then, and an act that ended after it as one
+ * that runs, with no value yet. */
+export function asOf(acts: readonly ActRow[], at: number): ActRow[] {
+  return acts
+    .filter((act) => act.began <= at)
+    .map((act): ActRow => {
+      if (act.ended === undefined || act.ended <= at) return act;
+      const value =
+        act.kind === "bash"
+          ? {
+              is: "Exit",
+              code: null,
+              stdout: { is: "Text", content: "" },
+              stderr: { is: "Text", content: "" },
+            }
+          : null;
+      return {
+        ...act,
+        done: false,
+        ended: undefined,
+        value,
+        paused: false,
+        ...(act.run ? { run: { status: "running", reason: "" } } : {}),
+      };
+    });
+}
+
+/** The prompts that the operator owed at a moment, from the acts as they stood then. */
+export function owedAt(acts: readonly ActRow[]): { id: string; shape: string; message: string }[] {
+  return acts
+    .filter((act) => asksOperator(act) && !act.done)
+    .map((act) => ({ id: act.id, shape: String(act.words[0] ?? ""), message: String(act.words[1] ?? "") }));
+}
+
+/** The moments of a life, in order: each start and each end of an act. */
+export function momentsOf(acts: readonly ActRow[]): number[] {
+  return [...new Set(acts.flatMap((act) => [act.began, ...(act.ended === undefined ? [] : [act.ended])]))]
+    .filter((moment) => moment > 0)
+    .sort((one, other) => one - other);
+}
