@@ -1267,6 +1267,12 @@ impl Plain for f64 {
   }
 }
 
+impl Plain for i64 {
+  fn plain(got: Object) -> Result<Self, Fault> {
+    got.as_ref().as_int().ok_or_else(|| Fault::refused(format!("{} is no int", got.py_repr())))
+  }
+}
+
 /// A value read as a type of the crate that it makes again, or why it is none.
 macro_rules! made {
   ($($kind:ty => $what:literal),*) => {$(

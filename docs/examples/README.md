@@ -1,32 +1,295 @@
 # Examples of furb as a framework
 
-Each door of furb has one example: a program that you run as it stands. Each program opens a life of the engine on
-a record, and shows these five things, in this order:
+Each example is a short program that you run as it stands. It shows one thing, in each door of furb: python, with
+the package `furb`; TypeScript, with the package `@furb/engine`; and Rust, with the crate `furb`. The three read the
+same, since each door gives the same names: `open` opens a life on its record, or goes on with it; `prompt` gives a
+thread that you await for its value; `chain` opens a chain; `questions` gives each question to the operator; `grant`
+puts a ceiling on a chain; and a thread has its `plan`, which `edit` changes.
 
-1. A durable life. The program starts itself again as a second process. That process opens a record, gives the
-   model a task, and ends while the model waits for the operator. The first process then opens the same record. The
-   record answers each word that the model wrote before, so the model is asked nothing again. The program wakes the
-   root, the operator answers, and the task closes with its answer.
-2. A tree of chains. The word of the model on the root opens the chain `reviewer` and prompts a model on it, in one
-   line: `await prompt(str, "Review the plan.", on=reviewer)`.
-3. A prompt to the operator. The word of the model asks `await prompt(str, "Ship it?", to=OPERATOR)`. An ear of the
-   host, written in the language of the door, answers it.
-4. A grant. `grant(usd=0.5)` puts a ceiling on the chain `budget`. Each answer of the model costs 0.3 dollars, so
-   the chain pauses after two answers.
-5. A door. The model on the chain `door` waits. The operator writes the door of its prompt, `promptN`, with a new
-   plan. The chain cancels the old word and runs the new plan, which closes the prompt.
+Each prompt goes to the default actor of the crate, which is the claude command line when this machine holds it.
+Run an example in a directory of its own, since it keeps its record there:
 
-A scripted model answers in place of a real one, through the `answer` of the opening of the life, so an example
-costs nothing and asks no network. To ask a real model, remove `answer`, and name the model in the actor.
+- python: `uv run python docs/examples/python/durable.py`
+- TypeScript: `bun run build`, then `bun docs/examples/typescript/durable.ts`
+- Rust: `cargo run --example durable`
 
-| Door | Example | Run it | Its test |
-| --- | --- | --- | --- |
-| Rust, the crate `furb` | [`rust.rs`](rust.rs) | `cargo run --example framework` | `cargo test` runs it as a program |
-| TypeScript, the package `@furb/engine` | [`typescript.ts`](typescript.ts) | `bun run build`, then `bun docs/examples/typescript.ts` | `bind/typescript/test/examples.test.ts` |
-| python, the packages `furb` and `furb-monty` | [`python.py`](python.py) | `uv run python docs/examples/python.py` | `test/outside/test_examples.py` |
+A program that runs again on its record makes its prompts, chains and grants in the same order, so each one finds
+the act that it made before, done or pending. A program that changes between two runs makes a new act where it no
+longer agrees with the record, and the act of the record goes on as pending work. A key that a program gives a call,
+so that the call agrees with the record wherever it stands, is a later change.
 
-The python example runs on the engine of this interpreter. With `FURB_ENGINE=monty`, it runs the same program on
-the engine of the crate, which the package `furb-monty` gives, and its test runs it both ways.
+The tests run each example as a process, on a claude command line that answers from a script:
+`test/outside/test_examples.py`, `bind/typescript/test/examples.test.ts` and `tests/examples.rs`.
 
-Each program asserts each claim that it shows, and fails when one does not hold. Each test runs its program as a
-process, as you run it, so the gates of CI prove each claim on each change.
+## A durable life
+
+Run it, end the process while the model works, and run it again: the second run finds its prompt in the record and goes on, with no word of the model asked twice.
+
+```python
+import asyncio
+
+import furb
+
+
+async def main() -> None:
+  life = await furb.open("release.jsonl")
+  plan = await life.prompt(str, "Plan the release of version 2.")
+  print(plan)
+
+
+asyncio.run(main())
+```
+
+```ts
+import { open } from "@furb/engine";
+
+await using life = await open("release.jsonl");
+console.log(await life.prompt("str", "Plan the release of version 2."));
+```
+
+```rust
+use std::error::Error;
+
+use furb::life::Life;
+use futures::executor::block_on;
+
+fn main() -> Result<(), Box<dyn Error>> {
+  block_on(async {
+    let mut life = Life::open("release.jsonl").await?;
+    let plan = life.prompt::<String>("Plan the release of version 2.")?;
+    println!("{}", life.wait(plan).await?);
+    Ok(())
+  })
+}
+```
+
+## A tree of chains
+
+A reviewer on a chain of its own, with a model of its own, reviews the draft of the root.
+
+```python
+import asyncio
+
+import furb
+
+
+async def main() -> None:
+  life = await furb.open("notes.jsonl", roster=["claude-cli:opus", "claude-cli:sonnet"])
+  reviewer = life.chain("reviewer", model="claude-cli:sonnet")
+  draft = await life.prompt(str, "Write the release notes of version 2.")
+  review = await reviewer.prompt(str, f"Review these release notes:\n{draft}")
+  print(review)
+  for chain in life.chains():
+    print(chain.label, "under", chain.parent.label)
+
+
+asyncio.run(main())
+```
+
+```ts
+import { open } from "@furb/engine";
+
+await using life = await open("notes.jsonl", { roster: ["claude-cli:opus", "claude-cli:sonnet"] });
+const reviewer = life.chain("reviewer", { model: "claude-cli:sonnet" });
+const draft = await life.prompt("str", "Write the release notes of version 2.");
+console.log(await reviewer.prompt("str", `Review these release notes:\n${draft}`));
+for (const chain of life.chains()) console.log(chain.label, "under", chain.parent?.label);
+```
+
+```rust
+use std::error::Error;
+
+use furb::life::Life;
+use futures::executor::block_on;
+
+fn main() -> Result<(), Box<dyn Error>> {
+  block_on(async {
+    let mut life = Life::open("notes.jsonl").roster(["claude-cli:opus", "claude-cli:sonnet"]).await?;
+    let reviewer = life.chain("reviewer")?;
+    life.model(&reviewer, "claude-cli:sonnet")?;
+    let draft = life.prompt::<String>("Write the release notes of version 2.")?;
+    let draft = life.wait(draft).await?;
+    let review = life.prompt_on::<String>(&reviewer, &format!("Review these release notes:\n{draft}"))?;
+    println!("{}", life.wait(review).await?);
+    for chain in life.chains()? {
+      let parent = life.parent(&chain)?.expect("a chain under the root");
+      println!("{} under {}", life.label(&chain)?, life.label(&parent)?);
+    }
+    Ok(())
+  })
+}
+```
+
+## A prompt to the operator
+
+The model asks you before it deploys, and your program answers each question that it puts to the operator.
+
+```python
+import asyncio
+
+import furb
+
+
+async def main() -> None:
+  life = await furb.open("deploy.jsonl")
+  deploy = life.prompt(str, "Deploy version 2. Ask me before you deploy.")
+  async for question in life.questions(until=deploy):
+    question.answer(input(question.message + " "))
+  print(await deploy)
+
+
+asyncio.run(main())
+```
+
+```ts
+import { createInterface } from "node:readline";
+import { open } from "@furb/engine";
+
+await using life = await open("deploy.jsonl");
+const terminal = createInterface({ input: process.stdin });
+const lines = terminal[Symbol.asyncIterator]();
+const deploy = life.prompt("str", "Deploy version 2. Ask me before you deploy.");
+for await (const question of life.questions({ until: deploy })) {
+  process.stdout.write(`${question.message} `);
+  question.answer((await lines.next()).value);
+}
+terminal.close();
+console.log(await deploy);
+```
+
+```rust
+use std::{error::Error, io::Write};
+
+use furb::life::Life;
+use futures::executor::block_on;
+
+fn main() -> Result<(), Box<dyn Error>> {
+  block_on(async {
+    let mut life = Life::open("deploy.jsonl").await?;
+    let deploy = life.prompt::<String>("Deploy version 2. Ask me before you deploy.")?;
+    while let Some(question) = life.question(&deploy).await? {
+      print!("{} ", question.message);
+      std::io::stdout().flush()?;
+      let mut line = String::new();
+      std::io::stdin().read_line(&mut line)?;
+      question.answer(&mut life, line.trim())?;
+    }
+    println!("{}", life.wait(deploy).await?);
+    Ok(())
+  })
+}
+```
+
+## A grant
+
+A ceiling of fifty cents pauses the chain, and a larger grant lets it go on.
+
+```python
+import asyncio
+
+import furb
+
+
+async def main() -> None:
+  life = await furb.open("budget.jsonl")
+  budget = life.chain("budget")
+  budget.grant(usd=0.50)
+  count = budget.prompt(int, "Count the lines of python in this directory.")
+  await budget.paused()
+  print(f"paused at {budget.spent:.2f} dollars")
+  budget.grant(usd=2.00)
+  budget.wake()
+  print(await count)
+
+
+asyncio.run(main())
+```
+
+```ts
+import { open } from "@furb/engine";
+
+await using life = await open("budget.jsonl");
+const budget = life.chain("budget");
+budget.grant({ usd: 0.5 });
+const count = budget.prompt("int", "Count the lines of python in this directory.");
+await budget.paused();
+console.log(`paused at ${budget.spent.toFixed(2)} dollars`);
+budget.grant({ usd: 2 });
+budget.wake();
+console.log(await count);
+```
+
+```rust
+use std::error::Error;
+
+use furb::life::Life;
+use futures::executor::block_on;
+
+fn main() -> Result<(), Box<dyn Error>> {
+  block_on(async {
+    let mut life = Life::open("budget.jsonl").await?;
+    let budget = life.chain("budget")?;
+    life.grant(&budget, 0.50)?;
+    let count = life.prompt_on::<i64>(&budget, "Count the lines of python in this directory.")?;
+    life.paused(&budget).await?;
+    println!("paused at {:.2} dollars", life.spent(&budget)?);
+    life.grant(&budget, 2.00)?;
+    life.wake(&budget)?;
+    println!("{}", life.wait(count).await?);
+    Ok(())
+  })
+}
+```
+
+## A door
+
+You change the plan of the model while it works: an edit of the door of the thread cancels the old word and runs the new plan.
+
+```python
+import asyncio
+
+import furb
+
+
+async def main() -> None:
+  life = await furb.open("door.jsonl")
+  release = life.prompt(str, "Release version 2 in one hour.")
+  await release.step()
+  print(release.plan)
+  release.edit(release.plan.replace("await wait(3600)\n", ""))
+  print(await release)
+
+
+asyncio.run(main())
+```
+
+```ts
+import { open } from "@furb/engine";
+
+await using life = await open("door.jsonl");
+const release = life.prompt("str", "Release version 2 in one hour.");
+await release.step();
+console.log(release.plan);
+release.edit(release.plan.replace("await wait(3600)\n", ""));
+console.log(await release);
+```
+
+```rust
+use std::error::Error;
+
+use furb::life::Life;
+use futures::executor::block_on;
+
+fn main() -> Result<(), Box<dyn Error>> {
+  block_on(async {
+    let mut life = Life::open("door.jsonl").await?;
+    let release = life.prompt::<String>("Release version 2 in one hour.")?;
+    life.step(&release).await?;
+    let plan = life.plan(&release)?;
+    println!("{plan}");
+    life.edit(&release, &plan.replace("await wait(3600)\n", ""))?;
+    println!("{}", life.wait(release).await?);
+    Ok(())
+  })
+}
+```

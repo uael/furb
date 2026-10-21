@@ -65,9 +65,12 @@ The TypeScript side is a bun workspace at the root, with two packages:
 - `tui` is the OpenTUI application on that package. `tui/README.md` says what the TUI does, and `docs/tui.md` shows
   each screen.
 
-`docs/examples/` holds one example of the framework for each door, a program that a user runs as it stands, and
-that a test of each door runs: `cargo test`, `test/outside/test_examples.py` and
-`bind/typescript/test/examples.test.ts`.
+`docs/examples/` holds the examples of the framework: five short programs for each door, in `python/`,
+`typescript/` and `rust/`, which a user runs as they stand, and which `docs/examples/README.md` shows. They stand on
+a life as a program holds it, which each door gives with the same names: `src/furb/life.py`, which `furb.open`
+gives, `bind/typescript/src/life.ts`, and `src/life/host.rs`. `test/outside/test_examples.py`,
+`bind/typescript/test/examples.test.ts` and `tests/examples.rs` run each example as a process, on a claude command
+line that answers from a script.
 
 `docs/developer-guide.md` is the guide for a person who changes the repository: the tools to install, how a word
 runs, and the files of each part. For everything else, it links to this file.

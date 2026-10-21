@@ -21,12 +21,26 @@ path = "src/lib.rs"
 # A library to a Rust host, and the extension module of the python distribution when the python feature is on.
 crate-type = ["rlib", "cdylib"]
 
-# The examples of the framework, which `cargo test` runs as programs.
+# The examples of the framework, one for each thing that it shows, which tests/examples.rs runs as programs.
 [[example]]
-name = "framework"
-path = "docs/examples/rust.rs"
-harness = false
-test = true
+name = "durable"
+path = "docs/examples/rust/durable.rs"
+
+[[example]]
+name = "chains"
+path = "docs/examples/rust/chains.rs"
+
+[[example]]
+name = "questions"
+path = "docs/examples/rust/questions.rs"
+
+[[example]]
+name = "grant"
+path = "docs/examples/rust/grant.rs"
+
+[[example]]
+name = "door"
+path = "docs/examples/rust/door.rs"
 
 [features]
 # The python binding: the same crate, reached from python. It links no interpreter of its own, which is what an

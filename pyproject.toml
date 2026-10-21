@@ -82,7 +82,10 @@ ignore = ["S101"]
 "extensions/*/*.pyi" = ["E501"]
 # An example of the framework starts itself again as a process of its own, to show a life that resumes after its
 # process ends.
-"docs/examples/*.py" = ["S603"]
+"docs/examples/**/*.py" = ["T201"]
+# A life speaks the vocabulary of the engine, whose ids shadow a builtin, and open opens a life as open opens a file.
+"src/furb/life.py" = ["A001", "A002", "PLR0913"]
+"src/furb/__init__.py" = ["A004"]
 # A word speaks the vocabulary of the engine, which a model reads: the ear of an act takes its id, untyped, as the
 # ears of the engine do.
 "extensions/*/*.py" = ["A002", "ANN001"]
@@ -153,6 +156,10 @@ timeout_method = "thread"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 filterwarnings = ["error"]
+
+[tool.coverage.run]
+# The examples run as processes, as a user runs them, and each one counts.
+patch = ["subprocess"]
 
 [tool.coverage.report]
 # The suite runs every line of engine.py.
