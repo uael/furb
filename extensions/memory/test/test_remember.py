@@ -13,7 +13,7 @@ async def test_the_memory_of_a_chain_kept(tmp_path: Path) -> None:
   """The memory of a chain, kept: an act on the chain that tells the memory of its working directory when it is made, then the memory of the path of each text that a read on the chain gives, and the memory that changed at each stand, and that never completes."""
   top = noted(tmp_path / "work", "one\n")
   sub = noted(tmp_path / "work" / "sub", "two\n")
-  (tmp_path / "work" / "sub" / "a.txt").write_text("a\n", encoding="utf-8")
+  (tmp_path / "work" / "sub" / "a.txt").write_text("a\n", encoding="utf-8", newline="")
   sand, root = extended("memory", tmp_path, _monty.memory)
   watcher = await engine.rung("close(remember())", on=root)
   assert isinstance(watcher, str)
@@ -24,7 +24,7 @@ async def test_the_memory_of_a_chain_kept(tmp_path: Path) -> None:
   asked = [a for a in engine.transcript(on=root) if a[0] == "memory"]
   await engine.rung('read("note://a")', on=root)
   assert [a for a in engine.transcript(on=root) if a[0] == "memory"] == asked, "a path of a scheme is no folder"
-  top.write_text("three\n", encoding="utf-8")
+  top.write_text("three\n", encoding="utf-8", newline="")
   engine.stand()
   assert recalled(root, tmp_path)[2:] == [memorized("memory3", top, "three\n")]
   assert engine.peek(watcher, "living") == "living"
@@ -35,7 +35,7 @@ async def test_a_cancel_over_it_ends_it_and_a_pause_over_it_holds_it_until_the_w
   sub = noted(tmp_path / "work" / "sub", "two\n")
   deep = noted(tmp_path / "work" / "deep", "three\n")
   for folder in (sub.parent, deep.parent):
-    (folder / "a.txt").write_text("a\n", encoding="utf-8")
+    (folder / "a.txt").write_text("a\n", encoding="utf-8", newline="")
   _, root = extended("memory", tmp_path, _monty.memory)
   watcher = await engine.rung("close(remember())", on=root)
   assert isinstance(watcher, str)
@@ -71,7 +71,7 @@ async def test_a_memory_file_enters_a_chain_once_and_again_only_when_it_changed(
   _, root = extended("memory", tmp_path, _monty.memory, lives=True)
   engine.stand()
   await engine.rung("memory()", on=root)
-  top.write_text("one\nthree\n", encoding="utf-8")
+  top.write_text("one\nthree\n", encoding="utf-8", newline="")
   engine.stand()
   assert recalled(root, tmp_path) == [
     memorized("memory1", top, "one\ntwo\n"),
@@ -84,7 +84,7 @@ async def test_a_later_life_tells_what_the_record_holds(tmp_path: Path) -> None:
   top = noted(tmp_path / "work", "one\ntwo\n")
   sand, root = extended("memory", tmp_path, _monty.memory, lives=True)
   first = recalled(root, tmp_path)
-  top.write_text("one\nthree\n", encoding="utf-8")
+  top.write_text("one\nthree\n", encoding="utf-8", newline="")
   _, root = extended("memory", tmp_path, _monty.memory, lives=True, record=plain(sand.record))
   await settle()
   assert recalled(root, tmp_path) == [*first, f"#memory2\nmemory2_path = {str(top)!r}\nmemory2_text = 'three'"]
