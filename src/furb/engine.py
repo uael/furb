@@ -191,8 +191,8 @@ def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
           yield "ready", id, value[1]
         case ("wants", about, by, _, call) if get(by)[4] == id:
           yield "started", about
-          while (yield)[:2] != ("done", call):
-            pass
+          while not over(call):
+            yield
           yield "done", about, peek(call)
         case ("done", about, _, value) if question(("run", about)) and get(about)[4] == id:
           if isinstance(value, CancelledError):
