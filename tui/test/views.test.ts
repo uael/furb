@@ -31,7 +31,7 @@ async function show({ session, app, screen }: Pick<Composing, "session" | "app" 
 test("a view opens at the offset it was left at, after a shorter view, in a new App, and after a reopen", async () => {
   const session = await demoSession({ seed: true });
   const library = await demoLibrary(session);
-  const screen = await createTestRenderer({ width: 120, height: 30 });
+  const screen = await createTestRenderer({ width: 120, height: 30, exitSignals: [] });
   let app = new App(screen.renderer, session, { quit() {}, workspaces: library });
   let record: string | undefined;
   try {

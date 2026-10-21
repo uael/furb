@@ -257,6 +257,40 @@ test("a model request failure shows in the feed as the failure of an act, and no
   }
 });
 
+test("an App ends with its renderer while a model request fails and a redraw waits, and draws on no freed buffer", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-teardown-"));
+  try {
+    const opened = await openEngine({
+      cwd: directory,
+      record: join(directory, "session.jsonl"),
+      claude: await failing(directory),
+      roster: ["claude-cli:sonnet"],
+    });
+    await composing(
+      async ({ session, app, screen }) => {
+        // A pipe that a model command line closes early sends a signal that ends no test terminal.
+        expect(process.listenerCount("SIGPIPE")).toBe(0);
+        await session.submit("Say something.");
+        app.composer.setText("a draft to keep");
+        session.notice = "A redraw waits.";
+        expect(Reflect.get(app, "redraw")).toBeDefined();
+        // The renderer ends on its own, as on a signal: the App ends first, and keeps the draft while it can.
+        screen.renderer.destroy();
+        expect(Reflect.get(app, "redraw")).toBeUndefined();
+        expect(session.drafts[session.draftKey]).toBe("a draft to keep");
+        await until(session, () => session.paused);
+        await Bun.sleep(100);
+        app.render();
+        app.dispose();
+      },
+      { width: 140, height: 42 },
+      new Session(opened.engine, opened.host, true),
+    );
+  } finally {
+    await remove(directory);
+  }
+});
+
 test("file and shell shortcuts, an external editor, and a safe standalone share use the real session", async () => {
   const session = await demoSession();
   const oldEditor = process.env.EDITOR,

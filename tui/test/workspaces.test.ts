@@ -44,7 +44,7 @@ async function withLibrary(
     return library;
   };
   const sidebar = async (library: Workspaces): Promise<Sidebar> => {
-    const screen = await createTestRenderer({ width: 152, height: 42, useMouse: true });
+    const screen = await createTestRenderer({ width: 152, height: 42, useMouse: true, exitSignals: [] });
     const app = follow(screen.renderer, { quit() {}, workspaces: library });
     const left = 152 - library.preferences.sidebarWidth;
     const shown = {
