@@ -31,9 +31,9 @@ export interface SessionOptions {
   model?: string;
   /** The effort of that model, which moves to the nearest one the model takes; the effort of the crate when unsaid. */
   effort?: string;
-  /** The models the session offers beside that one, as the catalog names them. When it is unsaid, the model stands
-   * alone, or the first model the catalog offers when the model is unsaid too; a roster that names none, with no
-   * model, offers the operator alone. */
+  /** The models the session offers beside that one, as the catalog names them. When it is unsaid, the session offers
+   * every model that the catalog offers, after that one; a roster that names none offers that model alone, and, with
+   * no model, the operator alone. */
   roster?: string[];
   /** The claude command line to run, in place of the one that `FURB_CLAUDE_BIN` names or this machine holds. */
   claude?: string;

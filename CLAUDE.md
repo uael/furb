@@ -25,8 +25,8 @@ API of its own:
   `extensions/` holds the official extensions, `memory`, `skills`, `compaction`, `ouroboros` and `web`, each a word, a
   contract and a suite, and `src/extension/` holds the ear of the World of each that has one. `docs/extensions.md` says how an extension works.
 - `src/life.rs` opens a life as every host opens one: the record, and the ears of the crate after the ears of the
-  host, the provider among them, on the default actor and the roster that the host names from the catalog, or on a
-  model of its own, and the extensions. A host adds only its own ears, such as the console of its operator. Every
+  host, the provider among them, on the default actor and the roster that the host names from the catalog, or every
+  model that the catalog offers when the host names no roster, or on a model of its own, and the extensions. A host adds only its own ears, such as the console of its operator. Every
   host gives it as one `Opening`, and each door gives it as `opened` and as `Engine.open`.
 - `src/engine.rs` opens a life in the sandbox: it loads the engine, the sheet and the Kernel, each in a namespace of
   its own, and it carries each value between the sandbox and a host. An ear of a host is an object of the host in the
@@ -49,7 +49,7 @@ API of its own:
   `docs/rpc.md` says. `prompt`, `turns`, `run` and `extensions` each open one life on the record they are given, and `facts` prints
   each fact of a record after the number of its line, filtered by an act or by a chain, and opens no life.
   Every life runs on the ears of the crate, on the model of its default actor and the models that `--roster` names,
-  and on a console of the operator. The package `furb` depends on the wheel of `furb-cli`, so `pip install furb`
+  or every model of the catalog when `--roster` names none, and on a console of the operator. The package `furb` depends on the wheel of `furb-cli`, so `pip install furb`
   gives the command `furb`.
 
 The suite runs on both engines, but for the tests that `MONTY_SKIPS` in `test/conftest.py` names: these boot on a Kernel
