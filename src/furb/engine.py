@@ -341,8 +341,10 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           pause(id)
         case ("done", about, *_):
           waiting.pop(about, None)
-      if (r := get(a[1]))[0] in ("run", "wants"):
-        running[r[4] if r[0] == "run" else get(r[2])[4]] = a[0] != ("done" if r[0] == "run" else "started")
+      if (r := get(a[1]))[0] == "run":
+        running[r[4]] = a[0] != "done"
+      elif r[0] == "wants":
+        running[get(r[2])[4]] = a[0] != "started"
       if any(running.values()):
         continue
       if asking not in waiting and (asking := next((x for x in waiting if not paused(x)), "")):
@@ -366,7 +368,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
 def grant(usd: float | None = None, share: float | None = None, on: str = "") -> Act[None]:
   def ear(id):
     here = scope(id)
-    if not (usd or share) or not (usd or 0) >= 0 <= (share or 0) <= 1:
+    if not ((usd or share) and (usd or 0) >= 0 <= (share or 0) <= 1):
       yield "done", id, Refused(f"{usd}/{share} no ceiling")
       return
     yield "started", id
