@@ -1,129 +1,106 @@
-//! The store: the record of a life on the disk, one fact per line, which one process at a time owns by a lease.
+//! The store: the record of a life, which one process at a time owns by a lease. A record whose name ends in
+//! `.sqlite`, `.sqlite3` or `.db` is a database of SQLite, and any other record is a file of lines, one fact per line.
+
+mod lines;
+mod sqlite;
 
 use std::{
+  fmt::Display,
   fs::{File, OpenOptions, TryLockError, create_dir_all},
-  io::{ErrorKind, Write},
   path::{Path, PathBuf},
+  time::{SystemTime, UNIX_EPOCH},
 };
 
-use std::time::{SystemTime, UNIX_EPOCH};
-
-use serde_json::{Value, value::RawValue};
+use serde_json::value::RawValue;
 
 use monty_types::unstable::{MontyGraph, MontyNode};
 
 use crate::{
   ear::{Ear, ear, hear},
-  value::{Fault, Object},
-  wire::{built, record, whole},
+  value::{Fault, Object, ObjectRef},
+  wire::{built, whole},
 };
 
-/// The record at a path, read under its lease, and the ear that keeps on it what the journal says to keep.
+pub use lines::Lines;
+pub use sqlite::Sqlite;
+
+/// The place that keeps the record of a life, which a host can write for a place of its own and give to `keeping`.
 ///
-/// The lease is a lock on the file beside the record, `<record>.lock`, which the store holds until its ear is gone
-/// or the process ends; the kernel ends the lease of a process that ends. The lock file never moves and is never
-/// removed, so its name always means the one file that every process locks. A final line that a crash tore is
-/// removed, and a final line that is whole but not ended is ended, before the store keeps anything after it. Each
-/// line holds the entry and, after the fact, the time at which the store kept it, which the life never reads.
+/// A store owns its record from its opening to its end, by a lease, so no other store opens on the record while it
+/// lives. A life reads the entries once, as it opens, before it keeps anything. Each store passes the suite in
+/// `store.test.rs`.
+pub trait Store {
+  /// Each entry that the record holds, in the order that the store kept them, each the fact it kept in a list of
+  /// one, as boot takes them.
+  fn entries(&mut self) -> Result<Vec<Object>, Fault>;
+
+  /// Keep one entry after each entry that the store kept before it. When keep returns, the entry outlives a crash of
+  /// the process.
+  fn keep(&mut self, entry: ObjectRef<'_>) -> Result<(), Fault>;
+}
+
+/// The record at a path, read under its lease, and the ear that keeps on it what the journal says to keep: a
+/// database of SQLite when the name of the path ends in `.sqlite`, `.sqlite3` or `.db`, and else a file of lines.
 pub fn store(path: impl AsRef<Path>) -> Result<(Vec<Object>, Box<dyn Ear>), Fault> {
-  let path = path.as_ref().to_path_buf();
-  let lease = leased(&path)?;
-  let entries = read(&path, true)?;
-  let failed = |no: std::io::Error| Fault::refused(format!("{no}: {}", path.display()));
-  let mut file = OpenOptions::new().create(true).append(true).open(&path).map_err(failed)?;
+  let path = path.as_ref();
+  match database(path) {
+    true => keeping(Sqlite::open(path)?),
+    false => keeping(Lines::open(path)?),
+  }
+}
+
+/// What the store kept at a path, read with no lease and changed in nothing, as a later life would open on it.
+pub fn kept(path: impl AsRef<Path>) -> Result<Vec<Object>, Fault> {
+  let path = path.as_ref();
+  match database(path) {
+    true => sqlite::kept(path),
+    false => lines::kept(path),
+  }
+}
+
+/// The record that a store holds, and the ear that keeps in the store what the journal says to keep.
+pub fn keeping(mut store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>), Fault> {
+  let entries = store.entries()?;
   let kept = ear(move |mut co| async move {
-    let _lease = lease;
     loop {
       let a = hear(&mut co).await;
       if a.kind() != "keep" {
         continue;
       }
       let Some(entry) = a.word(0) else { continue };
-      let line = stamped(record(entry), now());
-      file
-        .write_all(line.as_bytes())
-        .and_then(|()| file.sync_data())
-        .map_err(|no| Fault::refused(no.to_string()))?;
+      store.keep(entry)?;
     }
   });
   Ok((entries, kept))
 }
 
-/// The line of an entry: its fact, and after it the time at which the store kept it, in milliseconds since the start
-/// of 1970, so the fact stays as the journal said it.
-fn stamped(mut entry: Value, at: u64) -> String {
-  if let Value::Array(held) = &mut entry {
-    held.push(Value::from(at));
-  }
-  format!("{entry}\n")
+/// Whether the record at a path is a database of SQLite, which its name says.
+fn database(path: &Path) -> bool {
+  let named = path.extension().and_then(|one| one.to_str()).unwrap_or_default();
+  ["sqlite", "sqlite3", "db"].iter().any(|one| named.eq_ignore_ascii_case(one))
+}
+
+/// The entry of one fact, from the JSON that the record holds of the fact, or nothing when it is no fact: a fact is
+/// a list of three words at least, whose first word is its kind.
+fn entry_of(fact: &RawValue) -> Option<Object> {
+  let mut graph = MontyGraph::new();
+  let fact = built(&mut graph, fact, 1).ok()?;
+  let root = graph.push(MontyNode::List(vec![fact]));
+  let entry = whole(graph, root).ok()?;
+  let fact = entry.as_ref().items().and_then(|held| held.first().and_then(|one| one.items()));
+  let holds = fact.is_some_and(|fact| fact.len() >= 3 && fact[0].as_str().is_some());
+  holds.then_some(entry)
+}
+
+/// The refusal of what a store could not do at a path.
+fn failed(path: &Path, no: impl Display) -> Fault {
+  Fault::refused(format!("{no}: {}", path.display()))
 }
 
 /// The time now, in milliseconds since the start of 1970.
 fn now() -> u64 {
   let since = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
   u64::try_from(since.as_millis()).unwrap_or(u64::MAX)
-}
-
-/// What the store kept at a path, read with no lease and changed in nothing, as a later life would open on it.
-pub fn kept(path: impl AsRef<Path>) -> Result<Vec<Object>, Fault> {
-  read(path.as_ref(), false)
-}
-
-/// The entries of a record, each the fact it kept in a list of one, as boot takes them. The time that a line holds
-/// after its fact stays out of the entry, and a line with no time, as an older store kept it, reads the same.
-fn read(path: &Path, repair: bool) -> Result<Vec<Object>, Fault> {
-  let failed = |no: std::io::Error| Fault::refused(format!("{no}: {}", path.display()));
-  let data = match std::fs::read(path) {
-    Ok(data) => data,
-    Err(no) if no.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
-    Err(no) => return Err(failed(no)),
-  };
-  let invalid =
-    |at: usize| Fault::refused(format!("Invalid record entry at byte {at} in {}.", path.display()));
-  let mut entries = Vec::new();
-  let mut start = 0;
-  while start < data.len() {
-    let end = memchr::memchr(b'\n', &data[start..]).map(|at| start + at);
-    let line = &data[start..end.unwrap_or(data.len())];
-    let next = end.map_or(data.len(), |at| at + 1);
-    let text = std::str::from_utf8(line).map_err(|_| invalid(start))?;
-    if text.trim().is_empty() {
-      start = next;
-      continue;
-    }
-    let parsed = serde_json::from_str::<Vec<&RawValue>>(text);
-    let Ok(held) = parsed else {
-      if end.is_none() {
-        // The last line was torn as it was written: nothing after it was kept, so it goes.
-        if repair {
-          let file = OpenOptions::new().write(true).open(path).map_err(failed)?;
-          file.set_len(start as u64).map_err(failed)?;
-        }
-        break;
-      }
-      return Err(invalid(start));
-    };
-    let timed = |one: &RawValue| serde_json::from_str::<u64>(one.get()).is_ok();
-    if held.is_empty() || held.len() > 2 || !held[1..].iter().all(|one| timed(one)) {
-      return Err(invalid(start));
-    }
-    let mut graph = MontyGraph::new();
-    let fact = built(&mut graph, held[0], 1).map_err(|_| invalid(start))?;
-    let root = graph.push(MontyNode::List(vec![fact]));
-    let entry = whole(graph, root).map_err(|_| invalid(start))?;
-    let fact = entry.as_ref().items().and_then(|held| held.first().and_then(|one| one.items()));
-    let holds = entry.as_ref().items().is_some_and(|held| held.len() == 1);
-    if !holds || !fact.is_some_and(|fact| fact.len() >= 3 && fact[0].as_str().is_some()) {
-      return Err(invalid(start));
-    }
-    entries.push(entry);
-    if end.is_none() && repair {
-      let mut file = OpenOptions::new().append(true).open(path).map_err(failed)?;
-      file.write_all(b"\n").map_err(failed)?;
-    }
-    start = next;
-  }
-  Ok(entries)
 }
 
 /// The lease of a record: the lock on the file beside it, which ends when the lease goes. A process that this one
@@ -137,16 +114,16 @@ impl Drop for Lease {
   }
 }
 
-/// The lease of the record at a path, or the refusal when another process holds it.
+/// The lease of the record at a path, or the refusal when another process holds it: the lock on the file beside
+/// the record, `<record>.lock`, which every store of the crate takes, and which the kernel ends when the process ends.
 ///
 /// The lease is the lock on the file at the path, and nothing checks which file that is. A rename of the file would
 /// leave a lock that no later process meets, and on macOS a lookup of a renamed path can go on giving the moved file
 /// to every process for seconds, so no holder moves or removes the lock file.
 fn leased(path: &Path) -> Result<Lease, Fault> {
   let lock = PathBuf::from(format!("{}.lock", path.display()));
-  let failed = |no: std::io::Error| Fault::refused(format!("{no}: {}", lock.display()));
   if let Some(parent) = path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
-    create_dir_all(parent).map_err(failed)?;
+    create_dir_all(parent).map_err(|no| failed(&lock, no))?;
   }
   let file = OpenOptions::new()
     .read(true)
@@ -154,13 +131,13 @@ fn leased(path: &Path) -> Result<Lease, Fault> {
     .create(true)
     .truncate(false)
     .open(&lock)
-    .map_err(failed)?;
+    .map_err(|no| failed(&lock, no))?;
   match file.try_lock() {
     Ok(()) => Ok(Lease(file)),
     Err(TryLockError::WouldBlock) => {
       Err(Fault::refused(format!("Another process owns {}.", path.display())))
     }
-    Err(TryLockError::Error(no)) => Err(failed(no)),
+    Err(TryLockError::Error(no)) => Err(failed(&lock, no)),
   }
 }
 
