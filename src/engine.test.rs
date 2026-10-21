@@ -501,7 +501,7 @@ fn what_is_fed_to_a_command_before_a_wake_starts_it_in_a_later_life_reaches_its_
 fn what_an_earlier_life_wrote_to_the_stdin_of_a_command_reaches_it_again_when_a_later_life_starts_it_at_a_wake()
  {
   let id = {
-    let mut first = Lived::new("again", &[], true).unwrap();
+    let mut first = Lived::new("refed", &[], true).unwrap();
     let root = first.root();
     let with = verbs::Bash { stdin: Some(None), on: on(&root), ..Default::default() };
     let id = first.engine.bash("cat", with).unwrap().id().to_owned();
@@ -509,7 +509,7 @@ fn what_an_earlier_life_wrote_to_the_stdin_of_a_command_reaches_it_again_when_a_
     first.engine.write(&fed, verbs::Write { on: on(&root) }).unwrap();
     id
   };
-  let mut second = Lived::new("again", &[], false).unwrap();
+  let mut second = Lived::new("refed", &[], false).unwrap();
   let root = second.root();
   second.engine.wake(&root).unwrap();
   second
