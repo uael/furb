@@ -18,7 +18,7 @@ use std::cell::RefCell;
 use monty_type_checking::{SourceFile, TypeChecker};
 use monty_types::{NamedValues, TypeCheckingConfig, TypeCheckingFormat};
 use ruff_python_ast::{
-  Expr, Stmt,
+  ExceptHandler, Expr, Stmt,
   statement_visitor::{StatementVisitor, walk_stmt},
   visitor::{self, Visitor},
 };
@@ -66,6 +66,7 @@ pub fn checked(sheet: &str) -> Result<Vec<(usize, String)>, Fault> {
 /// What the checker found on a sheet. A checker that could not read the sheet has said nothing of the word, which
 /// is not a finding, so it is a fault of the gate.
 fn typed(sheet: &str) -> Result<Vec<(usize, String)>, Fault> {
+  let (sheet, stands) = rebound(sheet);
   let config = TypeCheckingConfig { format: TypeCheckingFormat::Concise, color: false };
   let path = format!("{MODULE}/__init__.py");
   let engine = SourceFile::new(ENGINE, &path);
@@ -74,9 +75,17 @@ fn typed(sheet: &str) -> Result<Vec<(usize, String)>, Fault> {
     // given to a new checker alone.
     let given = held.is_none().then_some(&engine);
     let checker = held.get_or_insert_with(TypeChecker::default);
-    match checker.run(&SourceFile::new(sheet, SHEET), given, config) {
+    match checker.run(&SourceFile::new(&sheet, SHEET), given, config) {
       Ok(found) => Ok(
-        found.map(|said| said.to_string().lines().filter_map(read).collect()).unwrap_or_default(),
+        found
+          .map(|said| {
+            let found = said.to_string().lines().filter_map(read).collect::<Vec<_>>();
+            found
+              .into_iter()
+              .map(|(line, why)| (stands.get(line - 1).copied().unwrap_or(line), why))
+              .collect()
+          })
+          .unwrap_or_default(),
       ),
       Err(why) => {
         // A checker that failed may not hold the engine, so the next reading makes a new one and gives it again.
@@ -85,6 +94,108 @@ fn typed(sheet: &str) -> Result<Vec<(usize, String)>, Fault> {
       }
     }
   })
+}
+
+/// The sheet as the checker reads it, and the line of the sheet that each of its lines stands for.
+///
+/// Each word of the program stands in a try of its own on the sheet, and the checker reads the name after a try
+/// through its except, which may come before any statement of the try, so it gives a name that the word binds again
+/// the union of each type it was bound to, where python gives it the last. So before the try of each word, the
+/// names that the statements at the top of that word bind, and that a statement before it bound, are deleted: the
+/// checker reads each through the except as unbound or as the word bound it, which is the type of its last binding
+/// and a warning at most. A try of a word is the one that `furb.sheet` writes, which calls `acting()` first and
+/// passes on any exception, and the sheet holds the program in the one async function it defines.
+fn rebound(sheet: &str) -> (String, Vec<usize>) {
+  let lines: Vec<&str> = sheet.split_inclusive('\n').collect();
+  let mut deleted: Vec<(usize, String)> = vec![];
+  if let Ok(parsed) = parse_module(sheet) {
+    let body = parsed.syntax().body.iter().find_map(|stmt| match stmt {
+      Stmt::FunctionDef(def) if def.is_async => Some(&def.body),
+      _ => None,
+    });
+    let mut bound: Vec<&str> = vec![];
+    for stmt in body.into_iter().flatten() {
+      let names: Vec<&str> = match stmt {
+        Stmt::Try(one) if worded(one) => one.body.iter().flat_map(binds).collect(),
+        other => binds(other),
+      };
+      if matches!(stmt, Stmt::Try(one) if worded(one)) {
+        let mut again: Vec<&str> = vec![];
+        for name in names.iter().filter(|name| bound.contains(name)) {
+          if !again.contains(name) {
+            again.push(name);
+          }
+        }
+        if !again.is_empty() {
+          let line = sheet[..stmt.start().to_usize()].matches('\n').count();
+          let indent: String = lines[line].chars().take_while(|one| *one == ' ').collect();
+          deleted.push((line, format!("{indent}del {}\n", again.join(", "))));
+        }
+      }
+      bound.extend(names);
+    }
+  }
+  let (mut text, mut stands) = (String::with_capacity(sheet.len()), vec![]);
+  let mut deletes = deleted.into_iter().peekable();
+  for (at, line) in lines.iter().enumerate() {
+    if let Some((_, del)) = deletes.next_if(|(before, _)| *before == at) {
+      text.push_str(&del);
+      stands.push(at + 1);
+    }
+    text.push_str(line);
+    stands.push(at + 1);
+  }
+  (text, stands)
+}
+
+/// Whether a try is the try of a word of the program, as `furb.sheet` writes it: `acting()` first, and one except
+/// of `BaseException` that passes.
+fn worded(one: &ruff_python_ast::StmtTry) -> bool {
+  let opens = matches!(one.body.first(), Some(Stmt::Expr(call)) if matches!(
+    &*call.value,
+    Expr::Call(called) if called.arguments.is_empty()
+      && matches!(&*called.func, Expr::Name(name) if name.id.as_str() == "acting")
+  ));
+  let passes = matches!(one.handlers.as_slice(), [ExceptHandler::ExceptHandler(caught)] if caught.name.is_none()
+    && matches!(caught.body.as_slice(), [Stmt::Pass(_)])
+    && matches!(caught.type_.as_deref(), Some(Expr::Name(name)) if name.id.as_str() == "BaseException"));
+  opens && passes && one.orelse.is_empty() && one.finalbody.is_empty()
+}
+
+/// The names that a statement binds when it runs to its end, though it may read them first: an assignment, an
+/// annotated assignment with a value, a def, a class, a type alias and an import. A name that only a nested statement
+/// binds may keep the value it had, and an augmented assignment reads the name it binds.
+fn binds(stmt: &Stmt) -> Vec<&str> {
+  match stmt {
+    Stmt::Assign(one) => one.targets.iter().flat_map(named).collect(),
+    Stmt::AnnAssign(one) if one.value.is_some() => named(&one.target),
+    Stmt::FunctionDef(one) => vec![one.name.as_str()],
+    Stmt::ClassDef(one) => vec![one.name.as_str()],
+    Stmt::TypeAlias(one) => named(&one.name),
+    Stmt::Import(one) => one
+      .names
+      .iter()
+      .map(|alias| match &alias.asname {
+        Some(name) => name.as_str(),
+        None => alias.name.as_str().split('.').next().unwrap_or_default(),
+      })
+      .collect(),
+    Stmt::ImportFrom(one) => {
+      one.names.iter().map(|alias| alias.asname.as_ref().unwrap_or(&alias.name).as_str()).collect()
+    }
+    _ => vec![],
+  }
+}
+
+/// The names that a target of an assignment binds.
+fn named(target: &Expr) -> Vec<&str> {
+  match target {
+    Expr::Name(one) => vec![one.id.as_str()],
+    Expr::Tuple(one) => one.elts.iter().flat_map(named).collect(),
+    Expr::List(one) => one.elts.iter().flat_map(named).collect(),
+    Expr::Starred(one) => named(&one.value),
+    _ => vec![],
+  }
 }
 
 /// One finding of the checker in its concise form, as the line it stands on and what it says.
@@ -309,6 +420,27 @@ mod tests {
   fn an_await_in_an_async_function_or_at_the_top_of_the_word_is_no_finding() {
     let word = "async def fix():\n  return await wait(0)\nawait fix()\nawait wait(0)\nclose(1)";
     assert_eq!(said(&[], word), vec![]);
+  }
+
+  #[test]
+  fn a_name_bound_again_has_the_type_of_its_last_binding() {
+    assert_eq!(
+      said(
+        &["x = 1", "def x() -> int:\n  return 1"],
+        "y: int = x()\ndef z() -> int:\n  return x()"
+      ),
+      vec![]
+    );
+    let found = said(&["x = ''", "x = x + 'a'\nx = 1"], "y: str = x");
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(found[0].1.contains("`Literal[1]` is not assignable to `str`"), "{found:?}");
+  }
+
+  #[test]
+  fn a_name_a_nested_statement_binds_again_keeps_each_type() {
+    let found = said(&["x = 1", "if chance() > 0.5:\n  def x() -> int:\n    return 1"], "x()");
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(found[0].1.starts_with("error[call-non-callable]"), "{found:?}");
   }
 
   #[test]
