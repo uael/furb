@@ -97,7 +97,7 @@ async def test_the_open_of_a_rung_with_a_word_tells_that_word_as_a_command_tells
   await act
   assert [a[3] for a in said(log, "tell") if a[1] in (one, act)] == [
     [written(one, "n = 1")],
-    [f"#{act}\n<s:{act}_word>\n{word}</s:{act}_word>"],
+    [f"#{act} by operator\n<s:{act}_word>\n{word}</s:{act}_word>"],
   ]
   sand.script[root] = ["close(n)"]
   asking = engine.prompt(int, "count", on=root)
@@ -110,6 +110,20 @@ async def test_the_open_of_a_rung_with_a_word_tells_that_word_as_a_command_tells
   ]
   assert [a[5] for a in said(log, "run") if a[4].endswith("_told")] == [engine.unquoted(one) for one in told]
   assert engine.module(root)[f"{act}_word"] == word and engine.module(root)["hi"] == "hi"
+
+
+async def test_the_header_that_tells_the_word_of_a_rung_names_the_maker_of_that_rung() -> None:
+  """The header that tells the word of a rung names the maker of that rung, as #rungN by operator, so a turn says who made a word that it did not ask for."""
+  sand, log, root = born()
+  two = engine.chain("two")
+  made = engine.rung("k = 1", on=two)
+  await made
+  sand.script[root] = [f"await rung('j = 2', on={two!r})\nclose(1)"]
+  asking = engine.prompt(int, "delegate", on=root)
+  assert await asking == 1
+  (step,) = [a[1] for a in said(log, "rung") if a[2] == asking]
+  (helper,) = [a[1] for a in said(log, "rung") if a[4] == "j = 2"]
+  assert heads(engine.turns(on=two))[2:] == [f"#{made} by operator", f"#{helper} by {step}"]
 
 
 async def test_a_rung_with_no_word_tells_nothing_where_it_is_made() -> None:
@@ -144,7 +158,7 @@ async def test_the_raised_paragraph_binds_the_exception_as_rungn_raised() -> Non
     await engine.rung("raise ValueError('boom')", on=root)
   (act,) = [a[1] for a in said(log, "rung")]
   assert of(engine.turns(on=root), act) == [
-    f"#{act}\n{act}_word = \"raise ValueError('boom')\"",
+    f"#{act} by operator\n{act}_word = \"raise ValueError('boom')\"",
     f"#{act} raised\n{act}_raised = ValueError('boom')",
   ]
 
@@ -156,7 +170,7 @@ async def test_a_word_that_raises_a_cancellederror_tells_cancelled_and_no_raised
   with pytest.raises(CancelledError):
     await act
   assert [head for head in heads(engine.turns(on=root)) if head.startswith(f"#{act}")] == [
-    f"#{act}",
+    f"#{act} by operator",
     f"#{act} cancelled",
   ]
 
@@ -288,10 +302,12 @@ async def test_the_turns_of_the_chain_of_another_prompt_tell_the_rung_of_a_word_
   sand, log, root = born()
   two = engine.chain("two")
   sand.script[root] = [f"await rung('helper = 2', on={two!r})\nclose(1)"]
-  assert await engine.prompt(int, "delegate", on=root) == 1
+  asking = engine.prompt(int, "delegate", on=root)
+  assert await asking == 1
   await settle()
   (helper,) = [a[1] for a in said(log, "rung") if a[4] == "helper = 2"]
-  assert paragraphs(engine.turns(on=two)) == [opened(two, "two"), takes(two), written(helper, "helper = 2")]
+  (step,) = [a[1] for a in said(log, "rung") if a[2] == asking]
+  assert paragraphs(engine.turns(on=two)) == [opened(two, "two"), takes(two), written(helper, "helper = 2", step)]
   assert of(engine.turns(on=root), helper) == []
 
 
@@ -406,13 +422,16 @@ async def test_it_is_done_with_what_the_word_gave() -> None:
   assert engine.peek(ended) is None and engine.peek(answered) == 21
   assert isinstance(engine.peek(hurt), ValueError)
   assert of(engine.turns(on=root), hurt) == [
-    f"#{hurt}\n{hurt}_word = \"raise ValueError('boom')\"",
+    f"#{hurt} by operator\n{hurt}_word = \"raise ValueError('boom')\"",
     f"#{hurt} raised\n{hurt}_raised = ValueError('boom')",
   ]
   stopped = engine.rung("w = wait(5)\ncancel(w)\nawait w", on=root)
   with pytest.raises(CancelledError):
     await stopped
-  assert [one.split("\n")[0] for one in of(engine.turns(on=root), stopped)] == [f"#{stopped}", f"#{stopped} cancelled"]
+  assert [one.split("\n")[0] for one in of(engine.turns(on=root), stopped)] == [
+    f"#{stopped} by operator",
+    f"#{stopped} cancelled",
+  ]
 
 
 async def test_of_the_acts_its_word_made_and_read_at_once_it_tells_nothing() -> None:

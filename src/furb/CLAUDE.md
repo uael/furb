@@ -75,7 +75,7 @@ meanings. The entry of such a name here gives only its form in the engine.
 - note: one thing a tell says: a paragraph, or the binding of an act.
 - paragraph: what one fact that tells stands as in a turn: its notes, with a blank line between two paragraphs.
 - header: the first line of a paragraph: # and, with no space, the id of the act it is of, then what happened to
-  the act, and no text that the act tells.
+  the act, or the maker of a rung whose word it tells, and no text that the act tells.
 - advance: the paragraph the chain tells last before a reply, whose header names the rung it asks for and the prompt
   that rung advances, and which binds the share that the last reply read.
 - binding: a statement that binds the name of an act to the act, or a value that the act tells to the id of the act

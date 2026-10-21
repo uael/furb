@@ -55,7 +55,7 @@ async def test_a_gate_carries_the_word_alone() -> None:
     f"#{after} told nothing\n\n#{edit} advance on {act}",
   ]
   read = engine.unquoted(f"#read1\nread1_path = {act!r}\n<s:read1_text>\nk = 1\nx = BAD\ny = 2</s:read1_text>")
-  again = [read, bind, "k = 1", *told, written(made, "k = 3")]
+  again = [read, bind, "k = 1", *told, written(made, "k = 3", act)]
   assert gatings(log) == [
     ("k = 1", [bind]),
     ("x = BAD", [bind, "k = 1", told[0]]),

@@ -182,7 +182,7 @@ def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
     yield "started", id
     if word:
       if tells(id):
-        yield told(id, word=word)
+        yield told(id, "by " + get(id)[2], word=word)
       while not over(retells) and get(retells) if retells else paused(get(id)[2]):
         yield
       yield "ready", id, word

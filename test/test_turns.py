@@ -68,7 +68,7 @@ async def test_turns_reads_the_transcript_of_the_chain_and_asks_nothing() -> Non
   made, kept = dict(acts(log)), len(sand.record)
   got = engine.turns(on=root)
   assert [role for role, *_ in got] == ["user"]
-  assert heads(got) == [f"#{root}", f"#{root} standing", "#rung1", "#cd1"]
+  assert heads(got) == [f"#{root}", f"#{root} standing", "#rung1 by operator", "#cd1"]
   assert acts(log) == made and len(sand.record) == kept
 
 
@@ -78,7 +78,7 @@ async def test_a_user_turn_packs_one_paragraph_for_each_thing_told_since_the_las
   assert await engine.rung("k = 1", on=root) is None
   got = engine.turns(on=root)
   assert len(got) == 1
-  assert heads(got) == ["#chain1", "#chain1 standing", "#rung1"]
+  assert heads(got) == ["#chain1", "#chain1 standing", "#rung1 by operator"]
   assert got[0][1] == "\n\n".join(paragraphs(got))
   sand.script[root] = ["close(1)"]
   assert await engine.prompt(int, "count", on=root) == 1

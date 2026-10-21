@@ -75,10 +75,12 @@ export function conversation(turns: readonly Turn[], acts: readonly ActRow[]): I
 }
 
 /** Whether a paragraph is the open of a rung its caller wrote, which binds that word as rungN_word under a header
- * that says nothing more. */
+ * that names its maker alone. */
 function writes(act: ActRow, paragraph: Paragraph): boolean {
   return (
-    Boolean(act.words[0]) && !paragraph.words && bound(paragraph.lines, `${act.id}_word`) === act.words[0]
+    Boolean(act.words[0]) &&
+    paragraph.words === `by ${act.by}` &&
+    bound(paragraph.lines, `${act.id}_word`) === act.words[0]
   );
 }
 

@@ -68,4 +68,4 @@ async def test_the_old_words_stay_in_the_program_and_in_the_turns_after_a_rung_r
   shut = engine.unquoted(f"#{act} closed\n\n{written(laid, new)}")
   assert program == {f"{step}_told": wrote, step: old, f"{laid}_told": shut, laid: new}
   assert [turn[1] for turn in engine.turns(on=root) if turn[0] == "assistant"] == [old]
-  assert engine.turns(on=root)[-1][1].endswith(f"#{laid}\n<s:{laid}_word>\n{new}</s:{laid}_word>")
+  assert engine.turns(on=root)[-1][1].endswith(f"#{laid} by operator\n<s:{laid}_word>\n{new}</s:{laid}_word>")

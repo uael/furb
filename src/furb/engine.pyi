@@ -363,6 +363,7 @@ def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
   The engine tells what a step raised.
   A step that raised nothing and debugged nothing tells nothing.
   The open of a rung with a word tells that word as a command tells its command, bound as rungN_word, so no word that ran runs again.
+  The header that tells the word of a rung names the maker of that rung, as #rungN by operator, so a turn says who made a word that it did not ask for.
   A rung with no word tells nothing where it is made, since the chain tells it as the last line of the turn it asks for it with.
   A rung with no word and no actor takes the default actor of its chain when it is made, and writes it into its actor word, so its reply and its ledger read the one actor.
   The raised paragraph binds the exception as rungN_raised, as python shows it, which says its type and its message.

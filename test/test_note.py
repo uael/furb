@@ -79,7 +79,7 @@ async def test_a_paragraph_is_what_one_fact_that_tells_stands_as_in_a_turn() -> 
   assert await act is None
   got = engine.turns(on=root)
   assert got[-1][1] == "\n\n".join("\n".join(a[3]) for a in said(log, "tell"))
-  assert paragraphs(got)[2:] == [f"#{act}\n<s:{act}_word>\nk = 1\nj = 2</s:{act}_word>"]
+  assert paragraphs(got)[2:] == [f"#{act} by operator\n<s:{act}_word>\nk = 1\nj = 2</s:{act}_word>"]
 
 
 async def test_the_first_line_of_a_paragraph_is_its_header() -> None:

@@ -148,7 +148,7 @@ async def test_the_chain_answers_a_write_of_the_door_of_one_of_its_prompts_with_
   again = engine.write(Text(act, "k = 22"), on=root)
   await settle()
   assert again == Text(act, "k = 22") and engine.read(act, on=root) == Text(act, "k = 22")
-  bound = fresh(root, prompted(act, "int", "count"), written(said(log, "rung")[0][1], "k = 21"))
+  bound = fresh(root, prompted(act, "int", "count"), written(said(log, "rung")[0][1], "k = 21", act))
   assert [a[4] for a in said(log, "rung")] == ["k = 21", bound, "k = 22"] and engine.module(root)["k"] == 22
   assert [a[0] for a in sand.calls] == ["stand", "prompt"]
 
@@ -171,7 +171,7 @@ async def test_a_write_of_a_door_that_a_rung_of_that_ladder_says_leaves_the_word
     "mine = get(acting())[2]\nwrite(read(mine).replace('BAD', '2'))\nwrite(read(mine))",
     "",
   )
-  assert said(log, "run")[5][4:] == (f"{made}_told", engine.unquoted(f"{read}\n\n{written(made, 'ok = 2')}"), "")
+  assert said(log, "run")[5][4:] == (f"{made}_told", engine.unquoted(f"{read}\n\n{written(made, 'ok = 2', act)}"), "")
   assert engine.read(act, on=root) == Text(act, "k = 1\nok = 2\nclose((k, ok, read(get(acting())[2]).content))")
   assert engine.read(act, on=root) == Text(act, "\n".join(engine.program(root)[x] for x in (one, made, last)))
 

@@ -1003,7 +1003,7 @@ async def test_a_replay_makes_the_rungs_of_a_chain_again_from_its_donor() -> Non
     bind,
     "a = 1",
     *[one for one, _ in advances],
-    engine.unquoted(written(last, "b = 20\nc = 30")),
+    engine.unquoted(written(last, "b = 20\nc = 30", act)),
   ]
   assert list(kept) == held and list(kept.values()) == [*told, "b = 20\nc = 30"]
   assert (engine.module(root)["b"], engine.module(root)["c"]) == (20, 30)
@@ -1048,7 +1048,7 @@ async def test_a_write_of_a_door_gives_the_words_of_that_ladder_alone() -> None:
     "mine = 1",
     f"{prompted(act, 'None', 'count')}\n\n#{first} advance on {act}",
     f"#{first} told nothing\n\n#{closer} advance on {act}",
-    written(made, "a = 2"),
+    written(made, "a = 2", act),
     "a = 2",
   ]
   assert engine.module(root)["mine"] == 1 and engine.module(root)["a"] == 2
