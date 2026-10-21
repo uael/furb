@@ -222,14 +222,21 @@ test("clipboard import and share publication use bounded files and the explicitl
   }
 });
 
+/** A claude command line in the directory that ends with a failure as it starts. */
+async function failing(directory: string): Promise<string> {
+  await writeFile(join(directory, "claude.ts"), "process.exit(1);\n");
+  return executable(join(directory, "claude.ts"), directory, "claude");
+}
+
 test("a model request failure shows in the feed as the failure of an act, and not as an error of the view", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-model-failure-"));
   try {
     const opened = await openEngine({
       cwd: directory,
       record: join(directory, "session.jsonl"),
-      // A claude command line that does not start fails every request, as a model that is not there does.
-      claude: join(directory, "missing"),
+      // A claude command line that fails at once fails every request, as a model that is not there does. A program
+      // that is missing would be tried again for a minute, as a command line that updates itself is.
+      claude: await failing(directory),
       roster: ["claude-cli:sonnet"],
     });
     await composing(
