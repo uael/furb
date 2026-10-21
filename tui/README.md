@@ -138,8 +138,9 @@ The command table comes from the same source as completion, the palette, and hel
 changing that source. Enter sends a message straight to the engine. The engine gives the next
 ask to the rung that has waited longest. ⌥Enter or `/queue text` holds a follow-up until the chain's
 current prompt and rungs complete. `/queue` edits or removes waiting messages. Saved queues require a resume
-choice; a dispatch recorded before a crash is not sent twice. Editing a prompt's program writes its door and uses the engine's
-replay. A slash command typed while a program is under edit runs as a command, since no Python program starts with a
+choice; a dispatch recorded before a crash is not sent twice. Editing a prompt's program writes its door, and the engine
+makes the program again only when the edit drops a word that ran; else it keeps the module and runs only the new words.
+A slash command typed while a program is under edit runs as a command, since no Python program starts with a
 slash. Python input uses the same gate as a model's word and marks a refused line in the word and editor.
 The editor matches brackets and indents a new Python line.
 `@` opens project file search. A reference that names a file, such as `@README.md` or `@"file name.txt"`, is read

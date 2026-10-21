@@ -184,6 +184,8 @@ def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
     if word:
       if tells(id):
         yield told(id, word=word)
+      while not retells and paused(get(id)[2]):
+        yield
       yield "ready", id, word
     while True:
       match (yield):
@@ -248,18 +250,21 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
     def takes():
       return told(id, "standing", roster=last[0], cwd=last[1], actor=module().get("actor"))
 
-    def replay(of="", words="", writer=""):
-      yield "module", id, {**globals(), "__name__": id, "actor": stood}
-      for whose, said in rungs.items():
+    def replay(of="", words=""):
+      fresh = not of
+      for whose, said in [*rungs.items()]:
         if under(whose, of):
-          if whose == writer:
-            continue
-          if not (words + "\n").startswith(said + "\n"):
+          if (words + "\n").startswith(said + "\n"):
+            words = words[len(said) + 1 :]
+          else:
+            fresh |= whose not in refused
+            del rungs[whose]
             cancel(whose)
-            continue
-          words = words[len(said) + 1 :]
-        rung(said, whose)
-      rungs.clear()
+      if fresh:
+        yield "module", id, {**globals(), "__name__": id, "actor": stood}
+        for whose, said in rungs.items():
+          rung(said, whose)
+        rungs.clear()
       if words:
         with site.set(of):
           rung(words)
@@ -302,7 +307,9 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         case ("read", about, by, _, path) if question(("prompt", path)) and scope(path) == id:
           yield "done", about, Text(path, "\n".join(w for x, w in rungs.items() if x != by and under(x, path)))
         case ("write", about, by, _, Text(path, content) as text) if question(("prompt", path)) and scope(path) == id:
-          yield from replay(path, content.rstrip("\n"), by)
+          if under(by, path):
+            rungs.pop(by, None)
+          yield from replay(path, content.rstrip("\n"))
           yield "done", about, text
         case ("read", about, *_, path) if (door := re.fullmatch(r"(bash\d+)/(stdout|stderr)", path)) and get(
           command := door[1]
@@ -542,12 +549,7 @@ def told(id, what="", *notes, **words):
 
 
 def control(kind, name, id, *words):
-  return (
-    get(id)
-    and (not over(id) or (kind == "wake" and paused(id)))
-    and say(*told(id, name, value=(*words, None)[0]))
-    and say(kind, id, *words)
-  )
+  return get(id) and (over(id) or say(*told(id, name, value=(*words, None)[0]))) and say(kind, id, *words)
 
 
 def headed(id, what="", **words):

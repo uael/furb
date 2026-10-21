@@ -33,9 +33,10 @@ async def test_program_gives_the_program_of_a_chain() -> None:
   asked = engine.prompt(int, "edit", to=OPERATOR, on=root)
   engine.write(Text(asked, "k = 1"), on=root)
   await settle()
-  again = engine.program(root)
   (made,) = [a[1] for a in said(log, "rung") if a[2] == asked]
-  held = f"#{one} closed\n{one}_value = 3\n\n{prompted(asked, 'int', 'edit')}"
-  (retold, *_) = [a[1] for a in said(log, "rung") if a[2] == root]
-  assert list(again) == [f"{retold}_told", *program, f"{made}_told", made]
-  assert list(again.values()) == [held, *program.values(), written(made, "k = 1"), "k = 1"]
+  held = f"#{one} closed\n{one}_value = 3\n\n{prompted(asked, 'int', 'edit')}\n\n{written(made, 'k = 1')}"
+  assert list(engine.program(root).items()) == [*program.items(), (f"{made}_told", held), (made, "k = 1")]
+  engine.write(Text(asked, ""), on=root)
+  await settle()
+  assert list(engine.program(root).items()) == [*program.items(), (f"{made}_told", held)]
+  assert len(said(engine.transcript(root), "module")) == 2 and "k" not in engine.module(root)

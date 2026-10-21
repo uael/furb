@@ -5,8 +5,10 @@ from asyncio import CancelledError
 import pytest
 
 from conftest import (
+  STANDS,
   WORLD,
   Py,
+  Sand,
   acts,
   born,
   chained,
@@ -24,6 +26,7 @@ from conftest import (
   paragraphs,
   prompted,
   ran,
+  relived,
   said,
   settle,
   sown,
@@ -34,7 +37,7 @@ from conftest import (
   written,
 )
 from furb import engine
-from furb.engine import Exit, Refused, Text
+from furb.engine import OPERATOR, Exit, Refused, Text
 
 
 async def test_the_run_of_a_word_on_a_chain() -> None:
@@ -449,18 +452,22 @@ async def test_a_rung_that_retells_names_the_rung_that_the_word_first_ran_in() -
   """A rung that retells names the rung that the word first ran in and never another rung that retells it, so a second replay makes the same acts and asks the World nothing twice."""
   sand, log, root = born()
   act = engine.prompt(int, "read it", to="operator", on=root)
-  engine.write(Text(act, "t = read('a.txt')"), on=root)
-  await settle()
-  engine.write(Text(act, "t = read('a.txt')\nn = len(t.lines)"), on=root)
-  await settle()
-  engine.write(Text(act, "t = read('a.txt')\nn = len(t.lines)\nm = n + 1"), on=root)
-  await settle()
+  for words in (
+    "t = read('a.txt')",
+    "t = read('a.txt')\nn = 0",
+    "t = read('a.txt')\nn = 1",
+    "t = read('a.txt')\nm = 3",
+  ):
+    engine.write(Text(act, words), on=root)
+    await settle()
   laid = said(log, "rung")
-  first, again, _, second, *_ = [a[1] for a in laid]
+  first, zero, again, _ = [a[1] for a in laid if not a[5]]
   told = f"{first}_told"
-  assert [a[5] for a in laid] == ["", told, first, "", f"{again}_told", told, first, f"{second}_told", second, ""]
+  donors = ["", "", told, first, f"{zero}_told", "", told, first, f"{zero}_told", f"{again}_told", ""]
+  assert [a[5] for a in laid] == donors
+  assert [engine.get(a[1])[2] for a in laid if a[5] == first] == [root, root]
   assert [a[0] for a in sand.calls].count("read") == 1
-  assert engine.module(root)["m"] == 3
+  assert engine.module(root)["m"] == 3 and "n" not in engine.module(root)
 
 
 async def test_a_rung_that_retells_is_done_with_nothing() -> None:
@@ -558,3 +565,22 @@ async def test_a_rung_with_no_word_holds_the_word_of_its_model_when_the_reply_fo
   with pytest.raises(Refused, match=r"^no model$"):
     await other
   assert [a for a in said(log, "ready") if a[1] == other] == []
+
+
+async def test_a_rung_with_a_word_says_its_word_ready_only_while_the_one_that_made_it_is_not_paused() -> None:
+  """A rung with a word that it does not retell says its word ready only while the one that made it is not paused, so a paused prompt runs no word that a write of its door gives until the wake."""
+  sand, log, root = born()
+  await engine.rung("j = 1", on=root)
+  act = engine.prompt(None, "work", to=OPERATOR, on=root)
+  engine.pause(act)
+  engine.write(Text(act, "k = 1"), on=root)
+  await settle()
+  (made,) = [a[1] for a in said(log, "rung") if a[2] == act]
+  twin = await chained("twin", root)
+  assert [a for a in said(log, "ready") if a[1] == made] == [] and "k" not in engine.module(root)
+  assert engine.module(twin)["j"] == 1 and "k" not in engine.module(twin)
+  engine.wake(act)
+  await settle()
+  assert [a[1] for a in said(log, "ready")].count(made) == 1 and engine.module(root)["k"] == 1
+  again, _ = await relived(Sand(stands=STANDS), list(sand.record))
+  assert [a[4] for a in said(again, "run")].count(made) == 1 and engine.module(root)["k"] == 1

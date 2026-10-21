@@ -1,5 +1,7 @@
 """control, the one way a pause, a wake, a cancel or a close is said over an act."""
 
+from asyncio import CancelledError
+
 from conftest import born, heads, said, settle, slow
 from furb import engine
 from furb.engine import OPERATOR
@@ -34,22 +36,33 @@ async def test_the_call_gives_the_control_as_the_life_made_it_whole() -> None:
   assert [(one[1], one[3]) for one in said(log, "close")] == [(act, 3)]
 
 
-async def test_a_control_is_said_while_it_is_over_an_act_that_is_not_done() -> None:
-  """A control is said while the act it names is not done, and a wake also while that act is paused, done or not, so a control that reaches nothing says nothing."""
+async def test_a_control_is_said_over_any_act_and_tells_its_header_only_while_the_act_it_names_is_not_over() -> None:
+  """A control is said over any act of the life, and it tells its header only while the act it names is not over, so a control over an act that is over tells nothing and still reaches each act under it that is not over."""
   sand, log, root = born("x = bash('slow')\nclose(7)", auto=False)
   act = engine.prompt(int, "go", on=root)
   assert await act == 7
   command = said(log, "bash")[0][1]
-  engine.close(1, act)
-  engine.pause(command)
   sand.exits(command, 0)
   await settle()
+  told = len(said(log, "tell"))
+  engine.close(1, act)
   engine.cancel(command)
-  engine.wake(command)
-  engine.cancel(act)
   engine.pause("nothing9")
   engine.close(1, "bogus9")
   await settle()
-  controls = [(a[0], a[1]) for a in log if a[0] in ("pause", "wake", "cancel", "close")]
-  assert controls == [("close", act), ("pause", command), ("wake", command)]
-  assert heads(engine.turns(on=root))[-1] == f"#{command} exited 0"
+  assert [(a[0], a[1]) for a in log if a[0] in ("pause", "wake", "cancel", "close")][-2:] == [
+    ("close", act),
+    ("cancel", command),
+  ]
+  assert said(log, "tell")[told:] == [] and engine.peek(act) == 7
+  first = engine.rung("lane = chain('far')", on=root)
+  await first
+  second = engine.rung("p = prompt(None, 'work', on=lane)", on=root)
+  await second
+  (far,) = [a[1] for a in said(log, "prompt") if engine.under(a[1], second)]
+  assert engine.peek(far, ...) is ...
+  engine.cancel(second)
+  await settle()
+  assert isinstance(engine.peek(far), CancelledError)
+  assert said(log, "cancel")[-1] == ("cancel", second, OPERATOR)
+  assert f"#{second} cancelled" not in heads(engine.turns(on=root))

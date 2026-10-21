@@ -18,7 +18,7 @@ from conftest import (
   written,
 )
 from furb import engine
-from furb.engine import OPERATOR, Refused
+from furb.engine import OPERATOR, Refused, Text
 
 
 async def test_a_gate_is_the_question_of_whether_a_word_may_run() -> None:
@@ -110,7 +110,7 @@ async def test_a_rung_that_retells_stands_with_the_gate_where_the_one_it_retells
   act = engine.prompt(int, "count", on=root)
   assert await act == 1
   await settle()
-  engine.write(engine.read(act, on=root), on=root)
+  engine.write(Text(act, "k = 1\nx = BAD"), on=root)
   await settle(300)
   assert gated(log) == ["k = 1", "x = BAD", "close(k)"]
   assert [a[4] for a in acts(log).values() if a[0] == "gate"] == ["k = 1", "x = BAD", "close(k)"]
@@ -125,14 +125,13 @@ async def test_a_rung_that_retells_stands_with_the_gate_where_the_one_it_retells
     (f"#{first[1]} advance on {act}", f"{first[1]}_told"),
     ("x = BAD", first[1]),
     (bad, f"{first[2]}_told"),
-    ("close(k)", first[2]),
   ]
-  kinds = ["NoneType", "NoneType", "NoneType", "Refused", "NoneType", "NoneType"]
+  kinds = ["NoneType", "NoneType", "NoneType", "Refused", "NoneType"]
   assert [type(engine.peek(one)).__name__ for one, *_ in copies] == kinds
   assert [(a[1], a[3][0].split("\n")[0]) for a in said(log, "tell") if " refused" in a[3][0]] == [
     (first[1], f"#{first[1]} refused")
   ]
-  assert engine.read(act, on=root).content == "k = 1\nx = BAD\nclose(k)"
+  assert engine.read(act, on=root).content == "k = 1\nx = BAD"
   assert engine.program(root) == {
     f"{copies[0][0]}_told": f"#{act} closed\n{act}_value = 1",
     **{donor: word for _, word, donor in copies if donor != first[1]},
