@@ -1,7 +1,8 @@
 """transcript, the facts on a chain."""
 
-from conftest import born, fresh, heads, lasting, paragraphs, said, settle, written
+from conftest import born, fresh, heads, lasting, paragraphs, said, settle, slow, written
 from furb import engine
+from furb.engine import OPERATOR
 
 
 async def test_transcript_gives_the_facts_on_a_chain() -> None:
@@ -49,3 +50,15 @@ async def test_a_name_of_no_chain_gives_no_fact() -> None:
   _, _, root = born()
   one = engine.bash("echo hi", on=root)
   assert engine.transcript("chain9") == [] and engine.transcript(one) == []
+
+
+async def test_transcript_of_a_kind_or_a_speaker() -> None:
+  """transcript(on, of) gives the facts on a chain whose kind is of or that of said, in order, and the view of pause holds the wakes too."""
+  _, _, root, act = slow()
+  engine.read("a.txt", on=root)
+  engine.pause(act)
+  engine.wake(act)
+  held = engine.transcript(root)
+  assert engine.transcript(root, "read") == [a for a in held if a[0] == "read"] != []
+  assert engine.transcript(root, OPERATOR) == [a for a in held if a[2] == OPERATOR] != []
+  assert [a[:2] for a in engine.transcript(root, "pause")] == [("pause", act), ("wake", act)]

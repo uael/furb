@@ -98,8 +98,8 @@ contradiction in it, say so, with the change that fixes it.
 The owner is the source of truth of what a word means, and a name serves its meaning strictly. When a name of the
 engine does not serve its meaning, the name is wrong, and the name changes.
 
-- A fact is inert: a piece of information dropped into the life, with no response, which every ear hears in the
-  order of the log.
+- A fact is inert: a piece of information dropped into the life, with no response, which each ear that waits for it
+  hears in the order of the log.
 - A question is an act: it takes a name when it is said, it goes to the ears in turn until one owns it, and what it
   came to the life holds under that name. A fact with an answer makes no sense: the answer belongs to the question.
 - An act is answered now, or later, and it is awaited for its answer. The ear that owns it says so: a done for an

@@ -182,7 +182,7 @@ fn lived(at: &Path, given: Vec<Extension>) -> Engine {
 fn played(engine: &mut Engine, chains: &[&str]) -> Vec<(String, String, String)> {
   let mut out = Vec::new();
   for chain in chains {
-    let on = verbs::Transcript { on: Some((*chain).to_owned()) };
+    let on = verbs::Transcript { on: Some((*chain).to_owned()), of: None };
     for one in engine.transcript(on).unwrap() {
       if one.kind() == "rung" && one.by() == "extensions" && one.on() == *chain {
         let word = one.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
@@ -203,7 +203,7 @@ fn a_chain_that_a_word_makes_takes_each_extension_before_what_the_word_says_on_i
   fs::write(at.join("note.txt"), "noted\n").unwrap();
   let word = "prompt(None, 'task', on=chain('w'))\nprompt(None, 'more', on=chain('s', 'chain1'))";
   let shown = |engine: &mut Engine, chain: &str| {
-    let on = verbs::Transcript { on: Some(chain.to_owned()) };
+    let on = verbs::Transcript { on: Some(chain.to_owned()), of: None };
     let facts = engine.transcript(on).unwrap();
     facts
       .iter()

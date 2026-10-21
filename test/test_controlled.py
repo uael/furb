@@ -180,3 +180,21 @@ async def test_what_an_act_a_control_is_over_is_done_with() -> None:
   engine.close(21, act)
   await settle()
   assert engine.peek(act) == 21 and isinstance(engine.peek(step), CancelledError)
+
+
+async def test_a_controlled_ear_waits_for_what_the_ear_that_it_carries_waits_for() -> None:
+  """A controlled ear waits for what the ear that it carries waits for."""
+  _, _, root = born()
+  heard: list[tuple] = []
+
+  def asking(id: str) -> Generator[tuple | set[str], tuple]:
+    yield "started", id
+    while True:
+      heard.append((yield {id, "clock"}))
+
+  probe = engine.act("probe", root, engine.controlled(asking))
+  engine.read("a.txt", on=root)
+  engine.clock(on=root)
+  await settle()
+  assert {engine.get(a[1])[0] for a in heard} == {"probe", "clock"}
+  assert probe == "probe1"

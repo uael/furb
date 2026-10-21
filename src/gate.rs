@@ -240,8 +240,9 @@ fn unrun(sheet: &str) -> Vec<(usize, String)> {
 /// Each await of the sheet in a function that is not async, by the line it stands on.
 ///
 /// Python refuses such a word, but the checker of monty lets it pass, though it refuses an async for and an async
-/// with there, and the sandbox then runs it to a fault that ends the life, so the gate refuses it. An await at the
-/// top of the sheet is the word's own, which a word may hold.
+/// with there. The sandbox then refuses the word with the SyntaxError of python before it runs, which the model sees
+/// only after its turn, so the gate refuses it first and names the fix. An await at the top of the sheet is the word's
+/// own, which a word may hold.
 fn unawaited(sheet: &str) -> Vec<(usize, String)> {
   let Ok(parsed) = parse_module(sheet) else { return vec![] };
   let mut awaits = Awaits { function: None, found: vec![] };

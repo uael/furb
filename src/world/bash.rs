@@ -23,7 +23,7 @@ use unsync::{oneshot, spsc};
 
 use super::{Scratch, here};
 use crate::{
-  ear::{Co, Ear, Next, ear, say},
+  ear::{Co, Ear, Next, hearing, say},
   fact::{Fact, named},
   value::{Exit, Fault, Object, Text},
 };
@@ -62,7 +62,7 @@ fn runs(path: &Path) -> bool {
 /// the ear makes first, so a command finds there the files of `scratch://`. A command ends with every process it started, which its group holds. A
 /// command that a control ended first, which the engine says done, is ended so and says nothing more.
 pub fn bash(scratch: Scratch) -> Box<dyn Ear> {
-  ear(move |mut co: Co<Said>| async move {
+  hearing(&["bash", "write"], move |mut co: Co<Said>| async move {
     let mut running: HashMap<String, Running> = HashMap::new();
     // What a write fed a command that runs nowhere yet, which a later life holds until a wake starts it.
     let mut fed: HashMap<String, Vec<Option<String>>> = HashMap::new();

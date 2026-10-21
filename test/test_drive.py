@@ -23,7 +23,7 @@ def breaks() -> Generator[tuple | None, tuple | None]:
 
 
 async def test_the_other_way_to_speak_a_generator_is_brought_to_life_under_a_name() -> None:
-  """The other way to speak: a generator is brought to life under a name, and from then it hears every fact that is said and says its own."""
+  """The other way to speak: a generator is brought to life under a name, and from then it hears every fact that it waits for and says its own."""
   _, log, root = born()
   heard: list[tuple] = []
   at = len(log)
@@ -109,7 +109,7 @@ async def test_it_lives_until_it_returns() -> None:
 
 
 async def test_a_generator_that_yields_a_saying_is_given_the_fact_as_the_bus_said_it() -> None:
-  """A generator that yields a saying is given the fact as the bus said it, and one that yields nothing waits for the next fact said."""
+  """A generator that yields a saying is given the fact as the bus said it, one that yields a set of names waits for the next fact that names one of them, and one that yields nothing waits for the next fact said."""
   _, log, root = born()
   got: list[object] = []
 

@@ -8,7 +8,7 @@ use std::{
 
 use super::{SCRATCH, Scratch, bash::door, here, resolved};
 use crate::{
-  ear::{Co, Ear, ear, hear, say},
+  ear::{Co, Ear, hear, hearing, say},
   fact::Fact,
   value::{Fault, Object, Text},
 };
@@ -22,7 +22,7 @@ use crate::{
 /// of the life is a door that no ear of the engine served, and never a file, so the ear refuses it with the chain of
 /// that act.
 pub fn files(scratch: Scratch) -> Box<dyn Ear> {
-  ear(move |mut co| async move {
+  hearing(&["cd", "read", "write"], move |mut co| async move {
     loop {
       let a = hear(&mut co).await;
       if !a.question() || !matches!(a.kind(), "cd" | "read" | "write") {

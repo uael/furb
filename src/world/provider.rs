@@ -36,7 +36,7 @@ use unsync::oneshot;
 use self::{images::Images, search::Searches};
 use crate::{
   SYSTEM,
-  ear::{Co, Ear, Next, ear, say},
+  ear::{Co, Ear, Next, hearing, say},
   engine::{OPERATOR, WINDOW},
   fact::Fact,
   value::{Fault, Object, ObjectRef, entry},
@@ -326,7 +326,7 @@ impl Provider {
       models.first().map_or_else(|| OPERATOR.to_owned(), |model| model.at(None))
     });
     let mut images = Images::new(images);
-    ear(move |mut co: Co<Replied>| async move {
+    hearing(&["stand", "reply"], move |mut co: Co<Replied>| async move {
       // The ids of chains repeat in every life, so a conversation of this life is keyed by the life too.
       let life = uuid();
       let mut replies: HashMap<String, Reply> = HashMap::new();

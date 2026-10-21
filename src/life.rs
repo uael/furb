@@ -16,7 +16,7 @@ use std::{
 
 use crate::{
   Ear, Engine, Fault, Object,
-  ear::{ear, hear},
+  ear::{hear, hearing},
   extension::{self, Places, memory::memory, skills::skills, web::web},
   world::{self, Catalog, Scratch, Writes},
 };
@@ -206,7 +206,7 @@ impl Opening {
 
 /// An ear that takes nothing and says nothing, which stands in the place of an ear that does work.
 fn silent() -> Box<dyn Ear> {
-  ear(|mut co| async move {
+  hearing(&[], |mut co| async move {
     loop {
       hear(&mut co).await;
     }
