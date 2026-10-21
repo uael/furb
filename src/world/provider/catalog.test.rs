@@ -278,7 +278,13 @@ fn a_model_whose_credential_stands_nowhere_is_refused_when_it_is_asked() {
     record_telemetry_content: false,
   };
   let told: Told = Arc::new(|_, _| {});
-  let asked = Asked { actor: "google:gemini-flash".into(), chain: "chain1".into(), request, told };
+  let asked = Asked {
+    actor: "google:gemini-flash".into(),
+    chain: "chain1".into(),
+    request,
+    told,
+    thought: None,
+  };
   let Err(no) = reactor().block_on((model.answers)(asked)) else {
     panic!("a model with no credential answers nothing")
   };

@@ -65,7 +65,9 @@ furb extensions                      # The extensions that a life runs here.
 A local server serves the chat completions of OpenAI under `/v1` and lists its models at `/v1/models`, as llama.cpp, LM
 Studio, Ollama, vLLM and Strata do. `FURB_LOCAL_KEY` gives its key when it takes one. furb names each model for chat
 that the server lists `local:` and its id, as in `--model local:qwen3`. Such a model takes no effort, costs nothing, and
-writes a quarter of its window at most in one turn, or the number that `FURB_LOCAL_TOKENS` gives. Its window is the one
+writes a quarter of its window at most in one turn, or the number that `FURB_LOCAL_TOKENS` gives. It thinks 8192 tokens
+at most in one turn, or the number that `FURB_LOCAL_THOUGHT` gives, and 0 sets no most: past it, furb asks the model
+again with that thought and with its thought turned off, so it writes its word at once. Its window is the one
 that the server gives, or the number that `FURB_LOCAL_WINDOW` gives, and furb offers no model whose window neither
 gives. Ollama serves a model in the `num_ctx` of its parameters, or in `OLLAMA_CONTEXT_LENGTH`: set it to 32768 or more,
 since the system prompt of furb is about 9000 tokens. Ollama tells that window only for a model that it loaded, so give
