@@ -112,18 +112,20 @@ test("the loom stands each worker under the chain whose rung made it, and a fold
   expect(folded.threads[1]).toMatchObject({ folded: true, workers: 2, tally: { working: 1, done: 1 } });
 });
 
-test("the operator owes the prompts that wait for it, the oldest first, and its thread and the thread of each asks", () => {
+test("the operator owes the prompts that wait for it, the oldest first, and no prompt whose act is done, and its thread and the thread of each asks", () => {
   const acts = [
     act("chain1", "chain", "", "operator", 1),
     act("rung1", "rung", "chain1", "operator", 2),
     act("chain2", "chain", "", "rung1", 3),
-    act("prompt1", "prompt", "chain2", "rung1", 4, undefined, {
+    act("prompt3", "prompt", "chain1", "rung1", 4, 5, { words: ["str", "Which name?", "operator"] }),
+    act("prompt1", "prompt", "chain2", "rung1", 6, undefined, {
       words: ["str", "Which effort?", "operator"],
     }),
-    act("prompt2", "prompt", "chain1", "rung1", 5, undefined, { words: ["bool", "Merge?", "operator"] }),
+    act("prompt2", "prompt", "chain1", "rung1", 7, undefined, { words: ["bool", "Merge?", "operator"] }),
   ];
   const { owed, threads } = loomOf(acts, {
     prompts: [
+      { id: "prompt3", shape: "str", message: "Which name?" },
       { id: "prompt2", shape: "bool", message: "Merge?" },
       { id: "prompt1", shape: "str", message: "Which effort?" },
     ],

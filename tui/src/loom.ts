@@ -167,7 +167,8 @@ export function weave({ acts, prompts, measures, folds, width, pending, label }:
   const owed: Owed[] = prompts
     .flatMap((prompt) => {
       const act = rows.get(prompt.id);
-      return act ? [{ ...prompt, chain: act.on, by: act.by, began: act.began }] : [];
+      // A prompt is owed until its act is done, though the console can hold it a moment longer.
+      return act && !act.done ? [{ ...prompt, chain: act.on, by: act.by, began: act.began }] : [];
     })
     .sort((one, other) => one.began - other.began);
   const owing = new Set(owed.map((prompt) => prompt.chain));
