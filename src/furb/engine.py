@@ -189,10 +189,7 @@ def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
     while True:
       match (yield):
         case ("done", about, _, value) if question(("reply", about)) and get(about)[2] == id:
-          if isinstance(value, BaseException):
-            yield "done", id, value
-            return
-          yield "ready", id, value[1]
+          yield ("done", id, value) if isinstance(value, BaseException) else ("ready", id, value[1])
         case ("wants", about, by, _, call) if get(by)[4] == id:
           yield "started", about
           while not over(call):
@@ -209,7 +206,6 @@ def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
             if tells(id):
               yield told(id, "raised", raised=value)
           yield "done", id, value
-          return
 
   if not (word or to):
     to = module(on).get("actor", "")
@@ -237,8 +233,8 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
     raise Refused("no chain " + source)
 
   def ear(id):
-    rungs, refused, running, waiting = program(source), set(), {}, {}
-    asking, unseen, ran, reply, last, heard = "", "", "", "", standing(), []
+    rungs, refused, running, waiting, last, heard = program(source), set(), {}, {}, standing(), []
+    asking = unseen = ran = reply = ""
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
     def takes():
@@ -294,7 +290,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           if scope(about) != id:
             yield "tell", maker, [headed(about, "done", value=value)]
           if not isinstance(value, CancelledError):
-            unseen = about + " done"
+            unseen = about + " done", get(maker)[6]
         case ("done", about, by, Refused() as why) if (
           question(("reply", about))
           and scope(about) != id
@@ -303,7 +299,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         ):
           yield "tell", maker, [headed(p, "paused", why=why)]
           if not running[maker]:
-            unseen = p + " paused"
+            unseen = p + " paused", get(maker)[6]
       if scope(a[1]) != id:
         continue
       match a:
@@ -335,18 +331,20 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
             heard = []
           ran = tells(rid) and rid
           rungs[(donor := get(rid)[5]) or rid] = word
-          if tells(rid) and (found := gate(word)):
+          if ran and (found := gate(word)):
             yield told(rid, "refused", findings="\n".join(found))
             refused.add(rid)
             close(Refused(), rid)
           else:
-            act("run", id, None, rid, unquoted(word), donor)
+            running[rid] = act("run", id, None, rid, unquoted(word), donor)
         case ("done", about, by, Refused()) if not by and question(("reply", about)):
           pause(id)
-        case ("done", about, _, value):
+        case ("done", about, *_):
           waiting.pop(about, None)
-      if (r := get(a[1]))[0] in ("run", "wants"):
-        running[r[4] if r[0] == "run" else get(r[2])[4]] = (a[0] == "started") == (r[0] == "run")
+      if (r := get(a[1]))[0] == "run":
+        running[r[4]] = a[0] != "done"
+      elif r[0] == "wants":
+        running[get(r[2])[4]] = a[0] != "started"
       if any(running.values()):
         continue
       if asking not in waiting and (asking := next((x for x in waiting if not paused(x)), "")):
@@ -360,8 +358,8 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           with site.set(asking):
             reply = act("reply", id, controlled(idle), to)
           unseen = ""
-      if unseen and all(over(x[1]) for x in transcript() if x[0] == "prompt" and x[3] == id):
-        prompt(None, unseen)
+      if unseen and not waiting and (r[2] in running or over(r[2]) or a[0] == "tell"):
+        prompt(None, *unseen)
         unseen = ""
 
   return act("chain", on, ear, label, source)
@@ -370,7 +368,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
 def grant(usd: float | None = None, share: float | None = None, on: str = "") -> Act[None]:
   def ear(id):
     here = scope(id)
-    if not (usd or share) or (usd or 0) < 0 or not 0 <= (share or 0) <= 1:
+    if not ((usd or share) and (usd or 0) >= 0 <= (share or 0) <= 1):
       yield "done", id, Refused(f"{usd}/{share} no ceiling")
       return
     yield "started", id
@@ -821,11 +819,16 @@ Your prompt
   close checks the value with isinstance: close a prompt of float with a float, as 1.0, or it raises Refused.
 - A word that runs to its end with no close ends its step, and the prompt asks you again with all that the word told,
   or with "#rungN told nothing". HIDDEN shows nothing: hide only what your word uses itself, never what you must see.
-- When the gate refuses your word, fix it through the door of your prompt. The name of your prompt is the door of its
-  ladder, and the refused word stands last in it: write(read("promptM", HIDDEN).replace(old, new)), with an old that
-  only the refused word holds. The chain runs the fixed word in place of the refused one. Write a door in a word of
-  its own, and append your next word to the text of the door to go on in the same turn:
-  write(read("promptM", HIDDEN).replace(old, new).append(next)) runs the fixed word, then the next one.
+- The name of your prompt is the door of its ladder: read("promptM", HIDDEN) gives the program of the ladder, the
+  words of its rungs in order, with the words that the gate refused among them. A write of the door edits that
+  program, at any word and not only at the last. Write a door in a word of its own, with an old that only one word
+  holds. The chain keeps the words before the first word that differs, with their acts. It cancels the old words from
+  there, with all that they made, and runs the new text in their place. An act that is done keeps its result: in the
+  new text, await it by its name, as await bash6, so it does not run again. Two examples:
+  write(read("promptM", HIDDEN).replace(old, new)) fixes the refused word, which stands last, and .append(next)
+  after the replace runs your next word in the same turn.
+  write(Text("promptM", read("promptM", HIDDEN).content.partition(old)[0] + plan)) changes the plan of a word that
+  waits on you, with an old from its start.
 - A prompt is your one channel to speak, never debug. A prompt of str is a question: when you need a decision or
   the prompt is not clear, await prompt(str, question, to=OPERATOR) for its answer. A prompt of None is a
   notification: prompt(None, message, to=OPERATOR) tells the operator what your close cannot carry, as your report
@@ -851,12 +854,6 @@ A word is a program
     await prompt(None, "Fix these failures:\\n" + shown(r.stdout, TAIL))
   close("The tests still fail after five fixes.")
 - Each prompt in a loop costs a reply. Give a loop a bound, or put a ceiling on the chain with grant(usd).
-- To change the plan of a word that waits on you, write the door of the prompt that it answers, in a word of its
-  own. The door shows the old word, then the words that answered it. Keep what comes before the old word
-  and put the new plan after it: write(Text("promptM", read("promptM", HIDDEN).content.partition(old)[0] + plan)),
-  with an old that only the old word holds, from its start. The chain cancels the old word where it waits, with all
-  that it made, and runs the new plan from its start. Await the acts that are done by their names, as await bash6,
-  so they do not run again.
 - A raise ends a word where it raises, and the acts that it started stay. Put a step that can fail in a try.
 
 How to work
