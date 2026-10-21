@@ -13,7 +13,7 @@ async def test_how_many_skills_a_chain_knows(tmp_path: Path) -> None:
   skilled(tmp_path / "work" / ".furb" / "skills", "brew", "name: brew\ndescription: Make tea.")
   skilled(tmp_path / "work" / ".furb" / "skills", "steep", "name: steep\ndescription: Wait for the leaves.")
   _, root = extended("skills", tmp_path, _monty.skills)
-  assert await engine.rung("close(counted())", on=root) == 2
+  assert await engine.rung("close(counted())", on=root) == 3
 
 
 async def test_counted_reads_the_path_skills_on_its_chain_with_the_show_hidden(tmp_path: Path) -> None:
@@ -30,8 +30,8 @@ async def test_counted_tells_the_read_under_the_word_value(tmp_path: Path) -> No
   _, root = extended("skills", tmp_path, _monty.skills)
   got = await engine.rung("close(counted())", on=root)
   assert (got, of(engine.turns(on=root), "read")) == (
-    1,
-    ["#read1\nread1_path = 'skills://'\nread1_value = '1 skills: skills() lists them'"],
+    2,
+    ["#read1\nread1_path = 'skills://'\nread1_value = '2 skills: skills() lists them'"],
   )
 
 
@@ -41,6 +41,6 @@ async def test_the_life_word_of_the_extension_is_counted(tmp_path: Path) -> None
   _, root = extended("skills", tmp_path, _monty.skills, lives=True)
   two = await chained("two")
   assert (of(engine.turns(on=root), "read"), of(engine.turns(on=two), "read")) == (
-    ["#read1\nread1_path = 'skills://'\nread1_value = '1 skills: skills() lists them'"],
-    ["#read2\nread2_path = 'skills://'\nread2_value = '1 skills: skills() lists them'"],
+    ["#read1\nread1_path = 'skills://'\nread1_value = '2 skills: skills() lists them'"],
+    ["#read2\nread2_path = 'skills://'\nread2_value = '2 skills: skills() lists them'"],
   )
