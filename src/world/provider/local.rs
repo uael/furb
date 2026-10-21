@@ -228,6 +228,7 @@ impl Server {
     model.images = offer.images;
     model.price = Some([0.0; 4]);
     model.tokens = Some(self.tokens.unwrap_or(window / 4));
+    model.efforts = efforts();
     model.ends = true;
     model.tagged = true;
     model
@@ -370,6 +371,18 @@ fn names(name: &str, id: &str) -> bool {
   };
   let leveled = |(model, level): (&str, &str)| LEVELS.contains(&level) && is(model);
   is(name) || name.rsplit_once('/').is_some_and(leveled)
+}
+
+/// The efforts that a model of a local server takes, each with what its request says: `off` turns its thought off as
+/// the template of its chat reads it, and each other level is the effort of reasoning of OpenAI, which the server hands
+/// its template. A model asked at no effort thinks as its template says when it is told nothing.
+fn efforts() -> Vec<(String, serde_json::Map<String, Value>)> {
+  let off = ("off", json!({"chat_template_kwargs": {"enable_thinking": false}}));
+  let levels = ["low", "medium", "high"].map(|level| (level, json!({"reasoning_effort": level})));
+  let each = [off].into_iter().chain(levels);
+  each
+    .map(|(level, settings)| (level.to_owned(), settings.as_object().cloned().unwrap_or_default()))
+    .collect()
 }
 
 /// A count of JSON that is more than zero.
