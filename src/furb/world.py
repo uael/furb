@@ -8,10 +8,15 @@ the name of the World. It tells the operator on stderr why the provider paused a
 """
 
 import asyncio
+import os
+import stat
 import sys
+import threading
 from collections.abc import Callable, Coroutine, Generator, Sequence
+from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TextIO
 
 from furb import engine
 from furb.engine import Refused
@@ -45,6 +50,15 @@ def answered(entries: Sequence[tuple]) -> list[tuple]:
     for one, *_ in entries
     if one[0] == "done" and engine.question(("reply", one[1])) and isinstance(one[3], tuple | list)
   ]
+
+
+def handed(loop: asyncio.AbstractEventLoop, reader: asyncio.StreamReader, stream: TextIO) -> None:
+  """The lines of the operator, read on a thread of their own and each handed to the loop with the end of the terminal
+  after them: the thread reads the terminal and runs nothing else, and it stops when the loop is closed."""
+  with suppress(RuntimeError):
+    for line in iter(stream.buffer.readline, b""):
+      loop.call_soon_threadsafe(reader.feed_data, line)
+    loop.call_soon_threadsafe(reader.feed_eof)
 
 
 @dataclass
@@ -98,17 +112,28 @@ class Live:
       one.dispose()
 
   async def line(self) -> str:
-    """One line of the operator, read on the loop and never on a thread, so no read outlives the life.
+    """One line of the operator, which the loop reads off the terminal, or, when the loop reads no pipe of it, as the
+    loop of Windows reads none, a thread that reads the lines of the operator alone and hands each to the loop, so
+    nothing of the life or of a model runs on it.
 
     The reader of the terminal is made once, at the first read, and it is the one reader there is.
     """
     if self.reader is None:
       # The loop is asked for the number of the file first: a terminal it cannot read fails here, where nothing
       # has been built yet, rather than half way through a reader whose own end then fails again.
-      sys.stdin.fileno()
+      mode = os.fstat(sys.stdin.fileno()).st_mode
       self.reader = reader = asyncio.StreamReader()
       made = asyncio.StreamReaderProtocol(reader)
-      await asyncio.get_running_loop().connect_read_pipe(lambda: made, sys.stdin)
+      loop = asyncio.get_running_loop()
+      # A selector loop reads a pipe, a socket or a device, and no file. The proactor of Windows takes a pipe that it
+      # cannot read and fails only at its first read, so it reads none.
+      piped = (
+        isinstance(loop, asyncio.SelectorEventLoop)
+        and (stat.S_ISFIFO(mode) or stat.S_ISSOCK(mode) or stat.S_ISCHR(mode))
+        and await loop.connect_read_pipe(lambda: made, sys.stdin)
+      )
+      if not piped:
+        threading.Thread(target=handed, args=(loop, reader, sys.stdin), name="furb-operator", daemon=True).start()
     return (await self.reader.readline()).decode(errors="replace").rstrip("\r\n")
 
   async def show(self, about: str, shape: str, message: str) -> None:

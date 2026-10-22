@@ -73,6 +73,27 @@ impl Sand {
     Self { idle: Some(repl), answering: None, ended: None, fed: 0 }
   }
 
+  /// The session between two runs, as monty dumps it.
+  pub(crate) fn dump(&self) -> Result<Vec<u8>, Fault> {
+    let repl = self
+      .idle
+      .as_ref()
+      .ok_or_else(|| Fault::refused("a sandbox dumps its session between two runs"))?;
+    monty::dump("furb", None, monty::SessionRef::Idle(repl))
+      .map_err(|no| Fault::refused(no.to_string()))
+  }
+
+  /// A sandbox on the session of a dump, between two runs.
+  pub(crate) fn loaded(bytes: &[u8]) -> Result<Self, Fault> {
+    let dump = monty::Dump::load(bytes).map_err(|no| Fault::refused(no.to_string()))?;
+    match dump.state {
+      monty::Session::Idle(repl) => {
+        Ok(Self { idle: Some(*repl), answering: None, ended: None, fed: 0 })
+      }
+      _ => Err(Fault::refused("a snapshot holds a session between two runs")),
+    }
+  }
+
   /// A sandbox of nothing, which holds no session, and stands in for one that is lent to code of a host.
   pub(crate) fn none() -> Self {
     Self { idle: None, answering: None, ended: None, fed: 0 }

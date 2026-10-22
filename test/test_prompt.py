@@ -189,7 +189,7 @@ async def test_a_rung_need_not_wait_for_a_prompt_of_shape_none() -> None:
 
 
 async def test_the_actor_left_unsaid_is_the_default_actor_of_the_chain() -> None:
-  """The actor left unsaid is the default actor of the chain when each rung of the prompt is made, which that rung writes into its actor word, so a rung asks the actor the chain stands on then, a prompt that names an actor asks that one at every rung, and every life asks the actor the record holds."""
+  """The actor that a prompt leaves unsaid, and that its thread leaves unsaid too, is the default actor of the chain when each rung of the prompt is made, which that rung writes into its actor word, so a rung asks the actor the chain stands on then, a prompt that names an actor asks that one at every rung, and every life asks the actor the record holds."""
   sand, log, root = born("actor = 'n/low'", "close(1)")
   assert await engine.prompt(int, "count", on=root) == 1
   assert engine.module(root)["actor"] == "n/low"
@@ -490,10 +490,11 @@ async def test_the_acknowledgment_carries_no_shape_and_a_message_that_names_the_
   assert [(one[4], one[5]) for one in said(log, "prompt")] == [("int", "read and run"), ("None", f"{command} done")]
 
 
-async def test_the_acknowledgment_goes_to_the_actor_of_the_rung_that_made_the_act() -> None:
-  """The acknowledgment goes to the actor of the rung that made the act, so the model that made it sees it, and to the default actor of the chain when that rung names no actor."""
+async def test_the_acknowledgment_is_a_prompt_on_the_thread_that_made_the_rung_that_made_the_act() -> None:
+  """The acknowledgment is a prompt on the thread that made the rung that made the act, so the actor of that thread sees it in that thread, and a prompt on the chain when that rung answers no prompt."""
   sand, log, root = born("x = bash('slow')\nclose(1)", "close(None)", "close(None)", auto=False)
-  assert (await engine.prompt(int, "start one", to="m/high", on=root)) == 1
+  start = engine.prompt(int, "start one", to="m/high", on=root)
+  assert (await start) == 1
   first = said(log, "bash")[0][1]
   sand.exits(first, 0)
   await settle()
@@ -502,9 +503,93 @@ async def test_the_acknowledgment_goes_to_the_actor_of_the_rung_that_made_the_ac
   second = said(log, "bash")[1][1]
   sand.exits(second, 0)
   await settle()
-  acks = [(one[5], one[6]) for one in said(log, "prompt") if one[4] == "None"]
-  assert acks == [(f"{first} done", "m/high"), (f"{second} done", "")]
+  acks = [(one[3], one[5], one[6]) for one in said(log, "prompt") if one[4] == "None"]
+  assert acks == [(start, f"{first} done", "m/high"), (root, f"{second} done", "")]
   assert [one[6] for one in said(log, "rung") if one[4] == ""] == ["m/high", "m/high", "m/low"]
+
+
+async def test_a_prompt_on_a_thread_is_on_the_chain_of_that_thread() -> None:
+  """A prompt on a thread is on the chain of that thread, and goes to the actor of the thread unless it names one."""
+  _, log, root = born("close(1)", "close(2)", "close(3)")
+  first = engine.prompt(int, "count", to="m/high", on=root)
+  assert await first == 1
+  same = engine.prompt(int, "again", on=first)
+  assert await same == 2
+  other = engine.prompt(int, "once more", to="n/low", on=same)
+  assert await other == 3
+  assert [engine.get(one)[3] for one in (same, other)] == [first, same]
+  assert [engine.scope(one) for one in (same, other)] == [root, root]
+  assert [engine.get(one)[6] for one in (same, other)] == ["m/high", "n/low"]
+  assert [a[4] for a in said(log, "reply")] == ["m/high", "m/high", "n/low"]
+
+
+async def test_a_prompt_on_a_thread_tells_the_thread_it_is_on() -> None:
+  """A prompt on a thread tells the thread it is on under the word thread, as prompt4_thread = 'prompt1'."""
+  _, _, root = born("close(1)", "close(2)")
+  first = engine.prompt(int, "count", on=root)
+  assert await first == 1
+  more = engine.prompt(int, "again", on=first)
+  assert await more == 2
+  told = paragraphs(engine.turns(on=root))
+  assert prompted(first, "int", "count") in told and prompted(more, "int", "again", first) in told
+
+
+async def test_a_prompt_of_none_on_a_thread_that_is_open_is_a_message_of_that_thread() -> None:
+  """A prompt of None on a thread that is open and that a model answers is a message of that thread: it tells its message, makes no rung, and is done with None at once, so the model of the thread reads it at its next step."""
+  sand, log, root = born("await bash('slow')", "close(prompt2_message)", auto=False)
+  first = engine.prompt(str, "work", on=root)
+  await settle()
+  note = engine.prompt(None, "use this", on=first)
+  assert note == "prompt2" and engine.peek(note, ...) is None
+  sand.exits(said(log, "bash")[0][1], 0)
+  assert await first == "use this"
+  assert [a for a in said(log, "rung") if a[2] == note] == []
+  told = paragraphs(engine.turns(on=root))
+  later = [a[1] for a in said(log, "rung") if a[2] == first][1]
+  assert told.index(prompted(note, "None", "use this", first)) < told.index(f"#{later} advance on {first}")
+
+
+async def test_every_other_prompt_on_a_thread_is_answered_in_steps() -> None:
+  """Every other prompt on a thread is answered in steps, with a ladder and a door of its own, and on a thread that is closed it opens the thread again, so the model of the thread goes on with the whole transcript of its chain."""
+  _, log, root = born("close(1)", "x = 2", "close(x + 1)")
+  first = engine.prompt(int, "count", on=root)
+  assert await first == 1
+  more = engine.prompt(None, "go on", on=first)
+  assert await more == 3 and engine.peek(first) == 1
+  assert len([a for a in said(log, "rung") if a[2] == more]) == 2
+  assert engine.read(first, on=root).content == "close(1)"
+  assert engine.read(more, on=root).content == "x = 2\nclose(x + 1)"
+  told = paragraphs(engine.turns(on=root))
+  assert told.index(f"#{first} closed\n{first}_value = 1") < told.index(prompted(more, "None", "go on", first))
+
+
+async def test_a_later_life_makes_each_prompt_on_a_thread_again_at_its_place() -> None:
+  """A thread is a prompt and the prompts on it, in order, and the record keeps each done as it landed, so a later life makes each prompt on a thread again at its place, as a message or as a prompt in steps as the thread stood there."""
+  sand, log, root = born("await bash('slow')", "close(prompt2_message)", "close(7)", auto=False)
+  first = engine.prompt(str, "work", on=root)
+  await settle()
+  note = engine.prompt(None, "use this", on=first)
+  sand.exits(said(log, "bash")[0][1], 0)
+  assert await first == "use this"
+  more = engine.prompt(int, "go on", on=first)
+  assert await more == 7
+  await settle()
+  made = [(a[1], a[3]) for a in said(log, "prompt")]
+  assert made == [(first, root), (note, first), (more, first)]
+  again, _ = await relived(Sand(), plain(sand.record))
+  assert [(a[1], a[3]) for a in said(again, "prompt")] == made
+  assert [engine.peek(one) for one in (first, note, more)] == ["use this", None, 7]
+  assert [a for a in said(again, "rung") if a[2] == note] == []
+  assert len([a for a in said(again, "rung") if a[2] == more]) == 1
+
+
+async def test_a_prompt_that_a_rung_of_a_thread_makes_is_a_thread_under_it() -> None:
+  """A prompt that a rung of a thread makes is a thread under it, by its lineage."""
+  _, log, root = born("x = prompt(str, 'which?', to=OPERATOR)\nclose(1)")
+  first = engine.prompt(int, "ask", on=root)
+  assert await first == 1
+  (sub,) = [a[1] for a in said(log, "prompt") if a[5] == "which?"]
+  assert engine.under(sub, first) and engine.get(sub)[3] == root
 
 
 async def test_the_turns_of_the_chain_hold_the_result_of_the_command_the_acknowledgment_names() -> None:
@@ -516,7 +601,8 @@ async def test_the_turns_of_the_chain_hold_the_result_of_the_command_the_acknowl
   told = paragraphs(engine.turns(on=root))
   answered = [one for one in told if one.startswith("#") and one.endswith(f" advance on {ack}")]
   assert told.index(f"#{command} exited 0\n{command}_stdout = 'ran echo hi'") < told.index(answered[0])
-  assert told.index(prompted(ack, "None", f"{command} done")) < told.index(answered[0])
+  thread = said(log, "prompt")[0][1]
+  assert told.index(prompted(ack, "None", f"{command} done", thread)) < told.index(answered[0])
 
 
 async def test_a_cancelled_result_is_no_orphan() -> None:

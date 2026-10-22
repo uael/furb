@@ -45,10 +45,12 @@ of each official extension, the files, the commands, time, and the store of the 
 record it opened on. The extensions enable at the start of the life what the configs of the user and of the directory
 turn on, which `docs/extensions.md` says: `SessionOptions.extensions` is false to enable nothing new, and `config` names
 the config directory of the user. A life runs what its record enables either way. The package also gives the ears of the
-files, the commands, time and the store one by one, as `files(scratch)`, `bash(scratch)`, `time()` and `store(path)`,
-for a host that boots an engine by hand. The files read and write a path against the directory where its chain stands,
+files, the commands, time and the store one by one, as `files(scratch)`, `bash(scratch, record)`, `time()` and
+`store(path)`, for a host that boots an engine by hand. The files read and write a path against the directory where its chain stands,
 and a path of `scratch://` in the scratch directory that the host names. The commands stream what a command writes,
-feed its stdin, and end it at its timeout, and each runs with `TMPDIR` set to that scratch directory. Only the opening
+feed its stdin, and end it at its timeout, and each runs with `TMPDIR` set to that scratch directory. They are given
+the record that the life opens on, and at a wake they close each command that the record shows started and not done
+with a refusal that says it was interrupted, and run it no more. Only the opening
 of a life makes the files of a record again in its scratch directory, and gives a life with no record a directory that
 goes with it. A session has the scratch directory of its record, in the cache of furb, which `scratch(record)` gives,
 so a host removes it when it deletes the record. Time gives the clock and a chance, and ends a wait. The provider asks
@@ -143,7 +145,7 @@ pending work off the transcripts, so the session asks it again only after a paus
 an act of that work, and keeps what it gave until then.
 
 `session.parked` names the work that a crash loop parked, by the kind of each act, as `engine.parked()` finds it: a
-run, a command or a reply that the record shows started in five lives and not done, since each of those lives ended
+run or a reply that the record shows started in five lives and not done, since each of those lives ended
 while it ran. A wake puts no parked act to the outside, so `session.resume()` does not run it again and end again,
 and a parked act is pending no more. `session.retry(id)` runs a parked act again: it is parked no more in this life,
 and a wake of it puts it to the outside.
@@ -155,7 +157,26 @@ in this life or in a later life on the record. When the host crashed after it ke
 act, the call makes the act. The record's
 `.session.json` companion holds the directory, the model and the effort that the host chose last, and no stream,
 since a stream lives only while its reply runs. File snapshots append to `.changes.jsonl`;
-`session.changes.read` loads a page of them. Keep both companions with the JSONL record. The session saves
+`session.changes.read` loads a page of them. Keep both companions with the JSONL record.
+
+The ear of the log writes the log of the life beside its record, `<record>.log`, in each life that keeps its record,
+and `log(record)` gives it to a host that boots an engine by hand: every fact that the life said, in the order
+in which every ear heard it, with the rungs of each ladder, each run and each tell of a chain, which the record leaves
+out. The fact of a module stands with no words. It is a cache: each life on the record writes it again from its first
+line, and a host can delete it, since the next life writes it again. `logged(record)` gives its facts, as
+`session.facts` holds them, while the log agrees with the record, and `null` otherwise, so a host shows a life whole
+with no life, and opens an inspection when the log does not agree. An `Activity` reads them as it reads a live life,
+but for the question `covers`, which a reader with no life answers from the acts of the log, as the engine does: a
+pause, a wake or a cancel covers the act that it names, each act that this act made at any depth, and each act on the
+chain that it names; a close covers the act that it names, each rung that this act made, and each reply that one of these made.
+
+A life that keeps its record keeps a snapshot of its state beside it, `<record>.snapshot`: the session of the sandbox
+and what the engine holds of its ears, with the key of the build and of the ears, and digests of the record and of
+the log that it covers. A later life on the record opens from it with no replay when it agrees with all of them,
+tells each ear the past of the life from the log, and stands again at its tip; else it replays the record, and keeps
+a new snapshot. A life writes it when it opens, at most once each thirty seconds while it does work, and when it
+ends, but not while work of the outside runs, as a command or a reply. `snapshot: false` in the opening turns it off.
+A `Session` keeps none yet: its observer is an ear that a verb was given, which a later process cannot give again. The session saves
 `.session.json` whole with `saveFile(path, text)`, which writes `<path>.tmp` and gives it the name of the file. A
 save that fails throws an error that names the file, with the error of the system as its cause. The TUI saves its
 own files with it.
