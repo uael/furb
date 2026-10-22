@@ -65,21 +65,44 @@ The model picker names the current model and the window of each. ⇧Tab chooses 
 
 ![Effort](screenshots/07-effort.png)
 
-## A question for you
+## Questions and notices for you
 
-A question that a model asks you stands in the feed with a yellow bar, and your answer follows it. The input takes
-its answer, or ⌃A opens a dialog for it.
+A model asks you a question with a prompt to the operator, and a prompt of None is a notice, which tells you
+something and asks nothing. Many of them can wait at once, on many chains. The desk over the input shows what waits:
+a mark for each, `◆` for a question and `◇` for a notice, in the order that they came, and the one that you act on
+in the color of a question, with its place, its chain, its id, and what it wants. Under it stand the first line of
+its message, the count of its other lines, and its choices or where the input sends its answer. A click on a mark
+goes to its ask and shows its chain, and a click on the message opens it whole.
+
+On the chain shown, the input answers the question that you point at, or else the oldest question of the chain. The
+line under the input says so, as `answers prompt2 returns str`, and the card of that question in the feed says that
+the input answers it. A click on the card of another question points the input at it.
+
+![Many questions](screenshots/52-many-questions.png)
+
+Each question takes an answer of its shape. A str, an int, a float, a list, or a dict takes a line of the input,
+which the console reads in that shape. A choice offers its values: a bool offers yes and no, and a Literal offers
+each of its values, once the console answers a Literal. A click on a choice of the desk sends it. A notice takes no
+answer: ⌃A or a click dismisses it.
 
 ![Operator question](screenshots/08-operator-question.png)
 
-![Answer dialog](screenshots/09-operator-dialog.png)
-
-## A notice for you
-
-A prompt of None asks nothing, so it is a notice and not a question. The console closes it as it takes it, so the
-word that sent it goes on, and the notice stands in the feed with no field to answer. ⌃A or a click dismisses it.
-
 ![Operator notice](screenshots/22-operator-notice.png)
+
+⌃A opens the dialog of the question that you act on, with its whole message. Tab and ⇧Tab go to the next and the
+previous ask, and show its chain under the dialog. An answer goes on to the next ask that waits, and the dialog
+closes when none waits.
+
+![Answer dialog](screenshots/53-question-dialog.png)
+
+![The next question](screenshots/54-next-question.png)
+
+Each answer lands where you can see it: the card of the question shows your answer, the desk drops its mark, and the
+footer says where the answer went and how many asks still wait.
+
+![An answer that landed](screenshots/55-answer-landed.png)
+
+![Answer dialog of one question](screenshots/09-operator-dialog.png)
 
 A message, a question, a notice, and an answer show as markdown, with no marks left: headings, emphasis, links,
 lists, quotes, and tables. A code block stands on a surface of its own, with its language as a label above it. The
@@ -125,9 +148,10 @@ under Finished.
 ## Keys, marks, and commands
 
 One mark means one state in every view, dialog, and sidebar: a spinner for work that runs, `◉` for a chain or a
-session at work, `◆` for a question that waits for you, `◌` for paused work, `✓` for a done act, `✗` for a failure,
-`●` for a chain you started or a session that finished while you were away, and `○` for rest. F1 lists the chords
-that the terminal in use sends, what each mark means, and every slash command.
+session at work, `◆` for a question that waits for you, `◇` for a notice that you did not dismiss, `◌` for paused
+work, `✓` for a done act, `✗` for a failure, `●` for a chain you started or a session that finished while you were
+away, and `○` for rest. F1 lists the chords that the terminal in use sends, what each mark means, and every slash
+command.
 
 ![Help](screenshots/16-help.png)
 

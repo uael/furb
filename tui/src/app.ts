@@ -10,7 +10,18 @@ import {
   TIMEOUT,
   WORK,
 } from "@furb/engine";
-import { type Chip, type Line, ladder, nowOf, type RowState, type Tone, weave } from "@furb/engine/life";
+import {
+  beside,
+  type Chip,
+  gist,
+  type Line,
+  ladder,
+  nowOf,
+  type RowState,
+  type Tone,
+  wants,
+  weave,
+} from "@furb/engine/life";
 import {
   type BoxOptions,
   BoxRenderable,
@@ -373,6 +384,11 @@ export class App {
   /** The board over the feed: one row for each chain of the life, with what it does now. */
   private readonly board: BoxRenderable;
   private boardKey = "";
+  /** What waits for the operator, over the input, and the key of what it shows. */
+  private readonly deskBox: BoxRenderable;
+  private deskKey = "";
+  /** The ask that the answer dialog shows, which Tab moves from. */
+  private answering?: string;
   /** The rewind tree, which the feed shows in place of its cards while it is open: its rows, and the row that the
    * pointer stands on. */
   private tree?: { rows: TreeRow[]; selected: string; title: string };
@@ -538,6 +554,15 @@ export class App {
     this.scroll.verticalScrollBar.visible = false;
     this.scroll.horizontalScrollBar.visible = false;
     center.add(this.scroll);
+    this.deskBox = this.box({
+      id: "desk",
+      visible: false,
+      marginTop: space.section,
+      paddingX: space.inset,
+      paddingY: space.inset,
+      backgroundColor: c.panel,
+    });
+    center.add(this.deskBox);
     this.queueBox = this.row({
       id: "queued-follow-ups",
       visible: false,
@@ -913,7 +938,9 @@ export class App {
         ? [
             "Answer",
             c.warning,
-            pending.shape === "bool" ? "Answer yes or no" : `Your answer, as ${pending.shape}`,
+            pending.choices.length
+              ? `Answer ${wants(pending)}`
+              : `Your answer to ${pending.id}, as ${pending.shape}`,
           ]
         : w.mode === "python"
           ? ["Python", c.secondary, "Write Python. The gate reads it before it runs."]
@@ -927,6 +954,7 @@ export class App {
       space.section +
       space.bar;
     this.renderMeta(mode, modeColor);
+    this.renderDesk();
     this.renderStatus();
     this.renderContent();
     this.renderRail();
@@ -1048,6 +1076,7 @@ export class App {
         provider,
         effort,
         w.shape,
+        pending?.id,
         pending?.shape,
         stash,
         prompt,
@@ -1067,7 +1096,7 @@ export class App {
       gaps +
       (shown.chord ? 4 : 0) +
       Bun.stringWidth(`on ${w.label}`) +
-      (pending ? gaps + Bun.stringWidth(`returns ${pending.shape}`) : 0) +
+      (pending ? 2 * gaps + Bun.stringWidth(`answers ${pending.id}returns ${pending.shape}`) : 0) +
       (prompt ? gaps + Bun.stringWidth(name) : 0) +
       (shown.provider ? provider.length + 1 : 0) +
       (shown.effort ? gaps + Bun.stringWidth(`${effort} effort`) : 0) +
@@ -1101,6 +1130,14 @@ export class App {
       () => this.chains(),
     );
     if (pending) {
+      gap();
+      button(
+        [
+          ["answers ", c.faint],
+          [pending.id, c.muted],
+        ],
+        () => this.question(pending),
+      );
       gap();
       button([
         ["returns ", c.faint],
@@ -1730,6 +1767,7 @@ export class App {
           // reads and dismisses, with no field to answer.
           const message = String(act.words[1] ?? "");
           const unread = w.host.notices.has(act.id);
+          const ask = w.desk.asks.find((one) => one.id === act.id);
           add(
             act.id,
             `${message}\n${unread}`,
@@ -1753,7 +1791,7 @@ export class App {
                         [" or click here to dismiss it", c.faint],
                       ],
                       c.muted,
-                      { run: () => void this.session.host.dismiss(act.id).catch(this.report) },
+                      { run: () => ask && void w.dismiss(ask).catch(this.report) },
                     ),
                   ),
                 );
@@ -1762,10 +1800,12 @@ export class App {
           );
         } else if (asksOperator(act)) {
           const message = String(act.words[1] ?? "");
-          const waiting = w.host.prompts.has(act.id);
+          const ask = w.desk.asks.find((one) => one.id === act.id);
+          const waiting = Boolean(ask);
+          const aimed = waiting && w.aimed?.id === act.id;
           add(
             act.id,
-            `${message}\n${waiting}`,
+            `${message}\n${waiting}\n${aimed}`,
             [
               [`${glyph.asks} `, waiting ? c.warning : c.faint],
               ["Question", c.text, bold],
@@ -1775,19 +1815,22 @@ export class App {
               this.panel(box, waiting ? c.warning : c.border).add(
                 this.markdown(message, c.text, c.background),
               );
-              if (waiting)
+              // The question that the input answers says so, and a click on another one points the input at it.
+              if (ask)
                 box.add(
                   this.inset(
                     space.between,
                     this.text(
-                      [
-                        ["Answer in the input below", c.muted],
-                        [act.words[0] === "bool" ? " with yes or no" : `, as ${act.words[0]}`, c.muted],
-                        [", or press ", c.faint],
-                        ["⌃A", c.muted],
-                      ],
+                      aimed
+                        ? [
+                            ["The input below answers this question", c.muted],
+                            [ask.choices.length ? ` with ${wants(ask)}` : `, as ${ask.shape}`, c.muted],
+                            [", or press ", c.faint],
+                            ["⌃A", c.muted],
+                          ]
+                        : [["Click here to answer this question in the input below", c.muted]],
                       c.muted,
-                      { run: () => this.question() },
+                      { run: () => (aimed ? this.question(ask) : void w.point(ask.id).catch(this.report)) },
                     ),
                   ),
                 );
@@ -2387,6 +2430,121 @@ export class App {
           { paddingX: space.inset, run: () => this.chains() },
         ),
       );
+  }
+  /** The desk over the input: one mark for each ask that waits for the operator, in the order that they came, then
+   * the ask that he acts on, from which chain, and what it wants, the first line of its message, and its choices or
+   * where its answer goes. A click on a mark points at its ask and shows its chain, and a click on the message opens
+   * the ask whole. */
+  private renderDesk(): void {
+    const w = this.session;
+    const { asks, questions, notices } = w.desk;
+    const ask = w.aimed;
+    const visible = asks.length > 0 && !this.tree;
+    if (this.deskBox.visible !== visible) this.deskBox.visible = visible;
+    if (!visible) {
+      this.deskKey = "";
+      return;
+    }
+    const key = JSON.stringify([asks, ask?.id, w.selected, this.feedWidth, this.theme]);
+    if (key === this.deskKey) return;
+    this.deskKey = key;
+    this.deskBox.backgroundColor = c.panel;
+    this.clear(this.deskBox);
+    const room = this.feedWidth - space.inset * 2;
+    const head = this.row();
+    const marks = this.row({ gap: 1 });
+    head.add(marks);
+    for (const one of asks)
+      marks.add(
+        this.text(one.notice ? glyph.notice : glyph.asks, one.id === ask?.id ? c.warning : c.faint, {
+          run: () => void w.point(one.id).catch(this.report),
+        }),
+      );
+    const count = [
+      questions ? `${questions} ${questions === 1 ? "question" : "questions"}` : "",
+      notices ? `${notices} ${notices === 1 ? "notice" : "notices"}` : "",
+    ]
+      .filter(Boolean)
+      .join(" and ");
+    if (!ask) {
+      head.add(
+        this.line(
+          [
+            ["  ", c.faint],
+            [`${count} ${asks.length === 1 ? "waits" : "wait"} on other chains`, c.text, bold],
+            ["  ⌃A or a mark goes to the first", c.faint],
+          ],
+          c.text,
+          { truncate: true, flexShrink: 1, run: () => this.question() },
+        ),
+      );
+      this.deskBox.add(head);
+      return;
+    }
+    const place = `${asks.findIndex((one) => one.id === ask.id) + 1} of ${asks.length}`;
+    const wanted = ask.notice ? "tells, and asks nothing" : `wants ${wants(ask)}`;
+    head.add(
+      this.line(
+        [
+          ["  ", c.faint],
+          [ask.notice ? "Notice" : "Question", c.text, bold],
+          [` ${place}`, c.muted],
+          ["  from ", c.faint],
+          [ask.label, c.text],
+          [`  ${ask.id}  `, c.faint],
+          [wanted, c.warning],
+        ],
+        c.text,
+        { truncate: true, flexShrink: 1 },
+      ),
+    );
+    this.deskBox.add(head);
+    const lines = ask.message.split("\n").filter((line) => line.trim()).length;
+    const more = lines > 1 ? `  +${lines - 1} ${lines === 2 ? "line" : "lines"}` : "";
+    this.deskBox.add(
+      this.line(
+        [
+          [clip(shortenHomes(gist(ask.message)), room - Bun.stringWidth(more)), c.text],
+          [more, c.faint],
+        ],
+        c.text,
+        { truncate: true, run: () => this.question(ask) },
+      ),
+    );
+    const act = this.row({ gap: space.between });
+    if (ask.notice)
+      act.add(
+        this.line(
+          [
+            ["Dismiss", c.warning, bold],
+            ["  ⌃A", c.faint],
+          ],
+          c.warning,
+          { run: () => void w.dismiss(ask).catch(this.report) },
+        ),
+      );
+    else if (ask.choices.length) {
+      for (const choice of ask.choices)
+        act.add(
+          this.line([[choice, c.warning, bold]], c.warning, {
+            run: () => void w.answer(ask, choice).catch(this.report),
+          }),
+        );
+      act.add(this.text("or type it below", c.faint));
+    } else
+      act.add(
+        this.line(
+          [
+            ["Enter sends the input to ", c.faint],
+            [ask.id, c.muted],
+            [` as ${ask.shape}`, c.faint],
+            [asks.length > 1 ? "   ⌃A opens each in turn" : "   ⌃A opens it", c.faint],
+          ],
+          c.faint,
+          { truncate: true, flexShrink: 1 },
+        ),
+      );
+    this.deskBox.add(act);
   }
   /** The rung that took the place of a rung of a model that failed: a later rung for the same prompt, which the model
    * wrote once it read the failure, so the failure no longer stands. */
@@ -4106,52 +4264,72 @@ export class App {
       },
     ]);
   };
-  question(): void {
-    const question = this.session.operatorPrompt;
-    if (!question) {
-      const notice = this.session.operatorNotice;
-      if (notice) void this.session.host.dismiss(notice.id).catch(this.report);
+  /** The dialog of an ask: its whole message, and the field of its answer or the choices of its shape. Its title says
+   * which ask of the desk it is, and from which chain. Tab and ⇧Tab go to the next and the previous ask, and an
+   * answer goes on to the next ask that waits, until none waits. A notice asks nothing, so it is dismissed at once,
+   * but when the dialog goes on to it, where it offers its dismissal. */
+  question(ask = this.session.aimed ?? this.session.desk.asks[0], onward = false): void {
+    const w = this.session;
+    if (!ask) return;
+    if (ask.notice && !onward) {
+      void w.dismiss(ask).catch(this.report);
       return;
     }
-    if (question.shape === "bool") {
-      this.openPalette("Answer yes or no", [
-        {
-          label: "Yes",
-          detail: "",
-          run: () => this.session.host.answer(question.id, "yes").then(() => {}),
-        },
-        {
-          label: "No",
-          detail: "",
-          run: () => this.session.host.answer(question.id, "no").then(() => {}),
-        },
-      ]);
-      this.showQuestionText(question.message);
+    if (w.pointed !== ask.id || ask.chain !== w.selected) void w.point(ask.id).catch(this.report);
+    const { asks } = w.desk;
+    const title = `${ask.notice ? "Notice" : "Question"} ${asks.findIndex((one) => one.id === ask.id) + 1} of ${asks.length} from ${ask.label}`;
+    const moves = asks.length > 1 ? " Tab goes to the next one." : "";
+    // An answer goes on to the ask after this one, or closes the dialog when no other ask waits.
+    const next = () => {
+      const rest = w.desk.asks;
+      const after = rest.find((one) => one.began > ask.began) ?? rest[0];
+      if (after) this.question(after, true);
+      else this.closeOverlay();
+    };
+    if (ask.notice || ask.choices.length) {
+      this.openPalette(
+        title,
+        ask.notice
+          ? [{ label: "Dismiss", detail: `It asks nothing.${moves}`, run: () => w.dismiss(ask).then(next) }]
+          : ask.choices.map((choice) => ({
+              label: choice,
+              detail: "",
+              run: () => w.answer(ask, choice).then(next),
+            })),
+      );
+      this.showQuestionText(ask.message);
+      this.answering = ask.id;
       return;
     }
-    this.openPalette(`Your answer, as ${question.shape}`, []);
+    this.openPalette(title, []);
     // The field of the dialog takes the answer, and shows its prompt from the start.
     const prompt = this.paletteInputRow?.getChildren()[0];
     if (prompt) prompt.visible = true;
     if (this.paletteInputRow) this.paletteInputRow.height = space.bar;
-    this.showQuestionText(question.message);
-    if (this.paletteInput) this.paletteInput.placeholder = `Type the answer, as ${question.shape}`;
-    const error = this.text("Enter submits. Esc leaves the question open.", c.muted);
+    this.showQuestionText(ask.message);
+    if (this.paletteInput) this.paletteInput.placeholder = `Type the answer to ${ask.id}, as ${ask.shape}`;
+    const error = this.text(`Enter sends it. Esc leaves the question open.${moves}`, c.muted);
     this.paletteList?.add(error);
+    this.answering = ask.id;
     const input = this.paletteInput;
     if (!input) return;
     input.removeAllListeners(InputRenderableEvents.INPUT);
     input.removeAllListeners(InputRenderableEvents.ENTER);
     input.on(InputRenderableEvents.ENTER, () => {
-      void this.session.host
-        .answer(question.id, input.value)
-        .then(() => this.closeOverlay())
+      void w
+        .answer(ask, input.value)
+        .then(next)
         .catch((failure) => {
           error.fg = c.danger;
           error.content = String(failure);
         });
     });
   }
+  /** The dialog of the ask a step after or before the one that it shows. */
+  private moveAsk = (key?: KeyEvent) => {
+    const next = beside(this.session.desk.asks, this.answering, key?.shift ? -1 : 1);
+    if (next && next.id !== this.answering) this.question(next, true);
+  };
   private showQuestionText(message: string): void {
     if (!this.overlay || !this.paletteInput) return;
     // The text of the question takes the rows it wraps to, up to what the screen leaves, and scrolls past them. A
@@ -5129,6 +5307,7 @@ export class App {
     this.paletteInputRow = undefined;
     this.paletteList = undefined;
     this.questionDocument = undefined;
+    this.answering = undefined;
     this.composer?.focus();
   }
   /** The keys that this terminal sends, what each mark means, and the commands. */
@@ -5137,6 +5316,11 @@ export class App {
       [`${spin(0)} Working`, c.accent, "A model or a command runs"],
       [`${glyph.running} Running`, c.accent, "A chain or a session has work in progress"],
       [`${glyph.asks} Input needed`, c.warning, "A question waits for your answer"],
+      [
+        `${glyph.notice} Notice`,
+        c.warning,
+        "A notice tells you something and asks nothing, until you dismiss it",
+      ],
       [`${glyph.held} Paused`, c.warning, "Work waits until you wake it"],
       [`${glyph.done} Done`, c.success, "The act ended and gave its value"],
       [
@@ -5271,6 +5455,7 @@ export class App {
       },
     ]);
     layer(free, "", [
+      { on: ["tab", "shift+tab"], run: this.moveAsk, when: () => Boolean(this.overlay && this.answering) },
       ...table(true),
       { on: "ctrl+c", run: () => this.cancel() },
       { on: "escape", run: this.escape },
@@ -5452,7 +5637,7 @@ export class App {
   /** When an action of the table acts, where it does not act at all times: a key that does not act goes on to the
    * input, and the footer does not offer it. */
   private readonly when: Partial<Record<Action, () => boolean>> = {
-    answer: () => Boolean(this.session.operatorPrompt ?? this.session.operatorNotice),
+    answer: () => this.session.desk.asks.length > 0,
     page: () => this.session.view === "changes",
     pause: () => !this.searchRow.visible && this.pausing(),
   };

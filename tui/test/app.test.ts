@@ -304,6 +304,52 @@ test("a prompt of None to the operator is a notice with no field, done at once, 
     { width: 120, height: 40 },
   ));
 
+test("many questions wait on the desk, which says which one the input answers, and the dialog goes from one to the next", () =>
+  composing(
+    async ({ session, app, screen, frame }) => {
+      const root = session.engine.root;
+      const side = await session.engine.chain({ label: "Side" });
+      const base = await session.engine.prompt("str", { message: "Which base?", to: "operator", on: root });
+      const merge = await session.engine.prompt("bool", { message: "Merge it?", to: "operator", on: side });
+      const count = await session.engine.prompt("int", {
+        message: "How many retries?",
+        to: "operator",
+        on: root,
+      });
+      await until(session.host, () => session.host.prompts.size === 3);
+      await session.refresh();
+      const first = await drawn(frame, screen.renderer.root);
+      expect(first).toContain("◆ ◆ ◆  Question 1 of 3  from Main");
+      expect(first).toContain(`answers ${base}`);
+      expect(first).toContain("The input below answers this question, as str");
+      expect(first).toContain("Click here to answer this question in the input below");
+      await session.submit("main");
+      expect(await session.engine.result(base)).toBe("main");
+      expect(session.notice).toBe(`Your answer went to ${base} on Main. 2 more wait.`);
+      await until(session.host, () => !session.host.prompts.has(base));
+      await session.refresh();
+      expect(await drawn(frame, screen.renderer.root)).toContain(`answers ${count}`);
+      app.question();
+      screen.mockInput.pressTab();
+      await until(session, () => session.selected === side);
+      const next = await drawn(frame, screen.renderer.root);
+      expect(next).toContain("Question 1 of 2 from Side");
+      expect(next).toContain("Merge it?");
+      screen.mockInput.pressEnter();
+      expect(await session.engine.result(merge)).toBe(true);
+      await until(session.host, () => !session.host.prompts.has(merge));
+      await until(session, () => session.selected === root);
+      expect(await drawn(frame, screen.renderer.root)).toContain("Question 1 of 1 from Main");
+      await screen.mockInput.typeText("3");
+      screen.mockInput.pressEnter();
+      expect(await session.engine.result(count)).toBe(3);
+      await until(session.host, () => !session.host.prompts.size);
+      await session.refresh();
+      expect(await drawn(frame, screen.renderer.root)).not.toContain("Question 1 of");
+    },
+    { width: 120, height: 40 },
+  ));
+
 test("the markdown of a message draws each element with no marks, and a code block on a surface of its own", () =>
   composing(
     async ({ session, screen, frame }) => {
