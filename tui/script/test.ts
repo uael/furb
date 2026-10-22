@@ -23,6 +23,7 @@ const env = {
   FURB_CONFIG_DIR: ".furb/tests",
   XDG_CACHE_HOME: ".furb/tests/cache",
   FURB_LOCAL_URL: "",
+  MAX_THINKING_TOKENS: "",
 };
 const entities: Record<string, string> = { quot: '"', amp: "&", lt: "<", gt: ">", apos: "'" };
 

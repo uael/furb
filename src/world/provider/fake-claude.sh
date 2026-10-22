@@ -15,9 +15,11 @@
 # stderr, and ends it with a failure. When the file loud stands beside it, it writes more on the stderr than its pipe
 # holds before it reads any input, when the file odd stands beside it, it writes a line that is no JSON before it reads
 # any input, and when the file deaf stands beside it, it reads no input and lives on. When the file cost stands beside
-# it, each turn costs the dollars that it holds.
+# it, each turn costs the dollars that it holds. It writes the MAX_THINKING_TOKENS of each process beside it too, or
+# unset.
 here=$(dirname "$0")
 printf '%s\0' "$@" > "$here/args.$$"
+printf '%s' "${MAX_THINKING_TOKENS-unset}" > "$here/thinking.$$"
 echo "$$" >> "$here/pids"
 id=none
 last=
