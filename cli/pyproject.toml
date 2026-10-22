@@ -38,6 +38,7 @@ cache-keys = [
   { file = "../Cargo.toml" },
   { file = "../Cargo.lock" },
   { file = "../build.rs" },
+  { file = "../DOCTRINE.md" },
   { file = "../src/**/*.rs" },
   { file = "../src/**/*.py" },
   { file = "../src/**/*.pyi" },

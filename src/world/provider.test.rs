@@ -145,22 +145,21 @@ fn the_provider_answers_a_stand_with_its_roster_its_directory_and_its_default_ac
   let standing = engine.standing().expect("the life stands");
   // The default actor is the first model, at the level of an actor that names none. Python shows each backslash of a path of Windows twice.
   let expected = format!(
-    "[[['m', ['low', 'high'], 1000], ['operator', [], 200000]], '{}', 'm/high']",
+    "[[['m', ['low', 'high'], 1000, {}], ['operator', [], 200000]], '{}', 'm/high']",
+    Object::string(super::catalog::DOCTRINE).py_repr(),
     at.display().to_string().replace('\\', "\\\\")
   );
   assert_eq!(standing.py_repr(), expected);
 }
 
 #[test]
-fn the_entry_of_a_model_of_a_family_that_reads_a_doctrine_holds_that_doctrine_after_its_window() {
+fn the_entry_of_each_model_holds_its_doctrine_after_its_window() {
   let qwen = Model::new("local:qwen3", 1000, MockCompletionModel::new([]));
   let (mut engine, _) = life("doctrine", vec![qwen, scripted(&MockCompletionModel::new([]))]);
   let standing = engine.standing().expect("the life stands");
-  let taught =
-    Object::string(super::catalog::doctrine("local:qwen3").expect("qwen reads a doctrine"))
-      .py_repr();
+  let taught = Object::string(super::catalog::DOCTRINE).py_repr();
   let expected = format!(
-    "[[['local:qwen3', [], 1000, {taught}], ['m', ['low', 'high'], 1000], ['operator', [], 200000]]"
+    "[[['local:qwen3', [], 1000, {taught}], ['m', ['low', 'high'], 1000, {taught}], ['operator', [], 200000]]"
   );
   assert!(standing.py_repr().starts_with(&expected), "{}", standing.py_repr());
 }

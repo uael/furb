@@ -756,10 +756,8 @@ fn logical<'a>(source: &'a str, tokens: &[Token]) -> Vec<Line<'a>> {
 /// The engine minified with its program kept as it is, which is the system prompt of every model. The comments go,
 /// one space is one level of indentation, and each pair of parentheses goes that the program does not need, as the
 /// formatter adds them to break a long line. A suite of simple statements stands on the line of its header, the simple statements
-/// that follow one another in a block share one line, and the outer parentheses of a case pattern go. The last
-/// statement, when it binds a name to a string of more than one line, stands as a quote of that string, which is how
-/// the doctrine stands after the engine. The build stops unless the text it makes, less that quote, is the program
-/// on disk.
+/// that follow one another in a block share one line, and the outer parentheses of a case pattern go. The build
+/// stops unless the text it makes is the program on disk.
 fn minified(source: &str) -> String {
   let parsed = parse_module(source).expect("the engine parses");
   let program = ComparableModModule::from(parsed.syntax());
@@ -795,22 +793,12 @@ fn minified(source: &str) -> String {
       open += 1;
     }
   }
-  let mut lines = laid(&lines);
-  let prompt = lines.join("\n");
+  let prompt = laid(&lines).join("\n");
   let again = parse_module(&prompt).expect("the minified engine parses");
   assert!(
     ComparableModModule::from(again.syntax()) == program,
     "the minified engine is the program on disk"
   );
-  if let Some(Stmt::Assign(last)) = parsed.syntax().body.last()
-    && let [Expr::Name(name)] = &last.targets[..]
-    && let Expr::StringLiteral(text) = &*last.value
-    && text.value.to_str().contains('\n')
-  {
-    lines.pop();
-    lines.push(format!("<s:{0}>\n{1}</s:{0}>", name.id, text.value.to_str()));
-    return lines.join("\n");
-  }
   prompt
 }
 
