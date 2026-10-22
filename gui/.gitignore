@@ -1,0 +1,2 @@
+# What Tauri writes at its build: the schemas of its capabilities.
+src-tauri/gen/
