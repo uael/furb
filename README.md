@@ -72,7 +72,8 @@ as its effort says and cannot turn its thought off.
 
 A local server serves the chat completions of OpenAI under `/v1` and lists its models at `/v1/models`, as llama.cpp, LM
 Studio, Ollama, vLLM and Strata do. `FURB_LOCAL_KEY` gives its key when it takes one. furb names each model for chat
-that the server lists `local:` and its id, as in `--model local:qwen3`. Such a model takes no effort, costs nothing, and
+that the server lists `local:` and its id, as in `--model local:qwen3`. Such a model costs nothing, takes the efforts `off`, `low`, `medium` and
+`high`, which it reads as `enable_thinking` false or as `reasoning_effort`, as in `--model local:qwen3/medium`, and
 writes a quarter of its window at most in one turn, or the number that `FURB_LOCAL_TOKENS` gives. Past the most tokens
 of thought of a turn, furb asks the model again with that thought and with its thought turned off, so it writes its word
 at once, and at a most of 0 furb asks it with its thought off from the first request. Every model reads the
