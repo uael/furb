@@ -449,7 +449,7 @@ def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[No
   The World closes with a refusal a prompt it cannot put to the operator; which shapes the operator answers is the World's law.
   The World closes a prompt of shape None to the operator with None as it takes it, since that prompt asks nothing: the operator reads it as a notice, and no word that awaits it waits for the operator.
   The shape left unsaid is None, which the acknowledgment uses, and any value responds to it.
-  A prompt takes any shape, which a close is read against as python reads an instance: of the shape, or of the origin of a generic one, and a union as any of its members, each read the same way.
+  A prompt takes any shape, which a close is read against as python reads an instance: of the shape, or of the origin of a generic one, a Literal as one of its values of the same type, and a union as any of its members, each read the same way.
   A prompt carries the name of its shape as a word, and takes the name as well as the shape, so the journal makes it again.
   The name of a shape is the word a chain says it by, so a shape that holds a class of the engine or of the chain names it as the chain does, under no module.
   The acknowledgment carries no shape and a message that names the act and what happened to it, as prompt3 done.

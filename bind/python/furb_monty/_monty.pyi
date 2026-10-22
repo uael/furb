@@ -283,6 +283,9 @@ def shell() -> str:
 def shapes() -> list[str]:
   """Every shape the operator answers, by its name."""
 
+def answers(shape: str) -> bool:
+  """Whether the operator answers a shape: one of the shapes it offers, or a Literal of values that a line names."""
+
 def answered(shape: str, line: str) -> object:
   """A line of the operator as a value of the shape a prompt wants, by the rules every console of the crate reads a
   line by. It raises Refused for a line that is no value of the shape, and for a shape the operator answers not."""

@@ -1047,7 +1047,7 @@ fn of_python(value: &Bound<'_, PyAny>) -> PyResult<Object> {
     return Ok(marked("name", [("name", Object::string(name))]));
   }
   let kind = value.get_type().name()?.to_string();
-  if matches!(kind.as_str(), "GenericAlias" | "UnionType" | "Union") {
+  if matches!(kind.as_str(), "GenericAlias" | "UnionType" | "Union" | "_LiteralGenericAlias") {
     return Ok(Object::string(bare(&value.repr()?.to_string())));
   }
   if let Ok(held) = value.cast::<NativeEar>() {
@@ -1168,7 +1168,7 @@ fn called(f: &Py<PyAny>, args: Vec<Object>) -> Result<Object, Fault> {
 }
 
 /// The name of a shape as the engine names one: what python shows, with every module stripped, since the word of
-/// a chain says a class of the engine or of the chain by its bare name.
+/// a chain says a class of the engine or of the chain by its bare name, and with each string of a Literal kept whole.
 fn bare(shown: &str) -> String {
   /// A run of name characters, cut after its last dot.
   fn cut(run: &str) -> &str {
@@ -1176,8 +1176,17 @@ fn bare(shown: &str) -> String {
   }
   let mut out = String::new();
   let mut run = String::new();
+  let mut quote = None;
   for c in shown.chars() {
-    if c.is_alphanumeric() || matches!(c, '_' | '.' | ':' | '/') {
+    if let Some(mark) = quote {
+      out.push(c);
+      quote = (c != mark).then_some(mark);
+    } else if matches!(c, '\'' | '"') {
+      out.push_str(cut(&run));
+      run.clear();
+      out.push(c);
+      quote = Some(c);
+    } else if c.is_alphanumeric() || matches!(c, '_' | '.' | ':' | '/') {
       run.push(c);
     } else {
       out.push_str(cut(&run));
@@ -1223,6 +1232,7 @@ fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
     wrap_pyfunction!(config_directory, module)?,
     wrap_pyfunction!(shell, module)?,
     wrap_pyfunction!(shapes, module)?,
+    wrap_pyfunction!(answers, module)?,
     wrap_pyfunction!(answered, module)?,
     wrap_pyfunction!(models, module)?,
     wrap_pyfunction!(model, module)?,

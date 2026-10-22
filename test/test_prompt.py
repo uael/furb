@@ -1,6 +1,7 @@
 """prompt, the one channel of the engine: a message to an actor, which wants a response of a shape."""
 
 from asyncio import CancelledError
+from typing import Literal
 
 from conftest import (
   BAD,
@@ -436,7 +437,7 @@ async def test_the_shape_left_unsaid_is_none() -> None:
 
 
 async def test_a_prompt_takes_any_shape_which_a_close_is_read_against_as_python_reads_an_instance() -> None:
-  """A prompt takes any shape, which a close is read against as python reads an instance: of the shape, or of the origin of a generic one, and a union as any of its members, each read the same way."""
+  """A prompt takes any shape, which a close is read against as python reads an instance: of the shape, or of the origin of a generic one, a Literal as one of its values of the same type, and a union as any of its members, each read the same way."""
   _, log, root = born(
     "close(Text('p.txt', 'hi'))",
     "close([1, 2])",
@@ -449,6 +450,9 @@ async def test_a_prompt_takes_any_shape_which_a_close_is_read_against_as_python_
     "close({'a': 1})",
     "close('x')",
     "close([4])",
+    "close('c')",
+    "close('b.c')",
+    "close(None)",
   )
   assert await engine.prompt(Text, "a text", on=root) == Text("p.txt", "hi")
   assert await engine.prompt(list[int], "some numbers", on=root) == [1, 2]
@@ -461,12 +465,16 @@ async def test_a_prompt_takes_any_shape_which_a_close_is_read_against_as_python_
   assert await engine.prompt(list[int] | None, "numbers or nothing", on=root) is None
   assert await engine.prompt(dict[str, int] | list[int], "a map or a list", on=root) == {"a": 1}
   assert await engine.prompt(list[int] | None, "numbers", on=root) == [4]
+  assert await engine.prompt(Literal["a", "b.c"], "a or b.c", on=root) == "b.c"
+  assert await engine.prompt(Literal["a", "b"] | None, "a, b or nothing", on=root) is None
   (no,) = [a[1] for a in said(log, "ready") if a[3] == "close('no')"]
   (x,) = [a[1] for a in said(log, "ready") if a[3] == "close('x')"]
+  (c,) = [a[1] for a in said(log, "ready") if a[3] == "close('c')"]
   raised = [one for one in paragraphs(engine.turns(on=root)) if one.split("\n")[0].endswith(" raised")]
   assert raised == [
     f"#{no} raised\n{no}_raised = Refused(\"'no' not int\")",
     f"#{x} raised\n{x}_raised = Refused(\"'x' not list[int] | None\")",
+    f"#{c} raised\n{c}_raised = Refused(\"'c' not Literal['a', 'b.c']\")",
   ]
 
 

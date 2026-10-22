@@ -31,7 +31,7 @@ pub use bash::{bash, program, shell};
 pub use files::files;
 pub(crate) use log::continued;
 pub use log::{log, logged};
-pub use operator::{SHAPES, answered};
+pub use operator::{SHAPES, answered, answers};
 pub(crate) use provider::search::{posted, spawned};
 pub use provider::{
   Hosted, Model, Provider, Search, Told, Writes,

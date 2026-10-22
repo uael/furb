@@ -1,4 +1,4 @@
-import { answered, type Engine, shapes } from "../index.cjs";
+import { answered, answers, type Engine } from "../index.cjs";
 import { type Ear, fault, over, speaking } from "./ears.js";
 import { type Fact, isQuestion, type OperatorNotice, type OperatorPrompt } from "./types.js";
 
@@ -73,7 +73,7 @@ export class Console {
     try {
       if (this.options.operator)
         value = shaped(shape, await this.options.operator({ id, shape, message }, this.controller.signal));
-      else if (!shapes().includes(shape)) value = answered(shape, "");
+      else if (!answers(shape)) value = answered(shape, "");
       else
         value = await new Promise((resolve, reject) => {
           this.prompts.set(id, { id, shape, message, resolve, reject });
