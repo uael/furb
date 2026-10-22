@@ -375,6 +375,13 @@ fn a_provider_is_offered_when_the_environment_holds_its_credential_and_each_plac
   assert!(offered(&["RADIUS_API_KEY"], "radius:balanced"));
 }
 
+#[test]
+fn each_place_of_an_address_is_filled_once_so_a_value_that_names_a_place_stands_as_it_is() {
+  let offered =
+    catalog(&["AZURE_OPENAI_API_KEY", "AZURE_RESOURCE_NAME=${AZURE_RESOURCE_NAME}"]).offered();
+  assert!(offered.iter().any(|model| model.name == "azure:gpt-5-mini"));
+}
+
 /// The names of these models.
 fn names_of(models: &[Model]) -> Vec<String> {
   models.iter().map(|one| one.name.clone()).collect()
