@@ -276,7 +276,7 @@ test("a prompt of None to the operator is a notice with no field, done at once, 
       expect(shown).not.toContain("Answer in the input below");
       screen.mockInput.pressKey("a", { ctrl: true });
       await until(session.host, () => !session.host.notices.has(id));
-      const read = await frame();
+      const read = await drawn(frame, screen.renderer.root);
       expect(read).toContain("The build is green.");
       expect(read).not.toContain("Nothing to answer");
     },
