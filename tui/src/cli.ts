@@ -8,6 +8,7 @@ import { createCliRenderer } from "@opentui/core";
 import { follow } from "./app.ts";
 import { demoDirectory, removeDemoDirectories } from "./demo.ts";
 import type { EngineOptions } from "./models.ts";
+import { isLifeView, lifeViews } from "./overview.ts";
 import { Preferences } from "./preferences.ts";
 import { palettes } from "./theme.ts";
 import { Workspaces } from "./workspaces.ts";
@@ -23,11 +24,12 @@ const { values } = parseArgs({
     record: { type: "string" },
     resume: { type: "string" },
     roster: { type: "string", multiple: true },
+    view: { type: "string" },
   },
 });
 if (values.help) {
   console.log(`furb-tui [--demo] [--cwd path] [--model provider:model] [--effort ${efforts.join("|")}]
-         [--record file.jsonl | --resume file.jsonl] [--roster provider:model ...]
+         [--record file.jsonl | --resume file.jsonl] [--roster provider:model ...] [--view main|loom|graph]
 
 Enter sends a prompt. ⌃J (Control J) adds a line, and so does ⇧Enter (Shift Enter) in a terminal with the kitty
 keyboard protocol. ⌃P opens actions. F1 shows all keys that the terminal sends. ⌃ is Control, ⌥ is Option or Alt,
@@ -37,12 +39,16 @@ machine holds the claude command line, then a model of a provider of the network
 A session offers every model of the claude command line, of a provider whose credentials stand in the environment,
 such as ANTHROPIC_API_KEY, and of the local server that FURB_LOCAL_URL names, each named as provider:model, and
 /model lists them. With --roster, a session offers its model and the models of --roster, and a model of the list
-of /model joins the session when you choose it.`);
+of /model joins the session when you choose it.
+--view shows the life as the board of main, the loom of its chains in time, or the graph of its programs. ⌥V
+switches the view at run time, and the setting keeps the last one.`);
   process.exit(0);
 }
+if (values.view && !isLifeView(values.view)) throw new Error(`Choose a view of ${lifeViews.join(", ")}.`);
 if (values.effort && !efforts.some((effort) => effort === values.effort)) throw new Error("Invalid effort.");
 if (values.resume && !existsSync(resolve(values.resume))) throw new Error(`No session at ${values.resume}.`);
 const preferences = new Preferences();
+if (isLifeView(values.view)) preferences.view = values.view;
 const record = values.resume ?? values.record;
 const savedDirectory =
   record && !values.cwd

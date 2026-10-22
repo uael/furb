@@ -16,8 +16,11 @@ import {
   condense,
   gist,
   type Line,
+  type Loom,
   ladder,
+  momentsOf,
   nowOf,
+  owedAt,
   type RowState,
   type Tone,
   wants,
@@ -74,7 +77,19 @@ import {
   retryLine,
   share,
 } from "./format.ts";
+import { Graph, type Stage } from "./graph.ts";
 import { type Action, bindings, chords, keys, shown } from "./keys.ts";
+import {
+  actorOf,
+  isLifeView,
+  joined,
+  type LifeView,
+  LoomPane,
+  lifeViewDetails,
+  lifeViewLabels,
+  lifeViews,
+  shortActor,
+} from "./overview.ts";
 import { loadParsers } from "./parsers.ts";
 import {
   type ActRow,
@@ -418,6 +433,23 @@ export class App {
   /** The board over the feed: one row for each chain of the life, with what it does now. */
   private readonly board: BoxRenderable;
   private boardKey = "";
+  /** The view of the life that shows in place of the board: the loom or the graph, drawn as rows of text. */
+  private readonly stage: TextRenderable;
+  /** The loom and the graph, each with its own selection, folds and level, which a switch of the view keeps. */
+  readonly loom = new LoomPane();
+  readonly graph: Graph;
+  /** Whether the keys move on the loom or the graph, in place of the input. */
+  steering = false;
+  /** The moment that the loom, the graph and the feed show, which is the moment of the session, and nothing at the
+   * present: one cursor in time for every view. */
+  get cursor(): number | undefined {
+    return this.session.moment;
+  }
+  set cursor(at: number | undefined) {
+    this.session.moment = at;
+  }
+  /** The chains that a step lets run for one rung, with the count of their rungs that had ended when it began. */
+  private readonly stepping = new Map<string, number>();
   /** What waits for the operator, over the input, and the key of what it shows. */
   private readonly deskBox: BoxRenderable;
   private deskKey = "";
@@ -574,6 +606,18 @@ export class App {
       backgroundColor: c.panel,
     });
     center.add(this.board);
+    this.stage = new TextRenderable(renderer, {
+      id: "life-stage",
+      content: "",
+      fg: c.text,
+      wrapMode: "none",
+      flexShrink: 0,
+      visible: false,
+      marginTop: space.section,
+      onMouseUp: (event) => this.clickStage(event.y - this.stage.y),
+    });
+    center.add(this.stage);
+    this.graph = new Graph(this.stageOf());
     this.scroll = new ScrollBoxRenderable(renderer, {
       id: "timeline",
       flexGrow: 1,
@@ -706,6 +750,7 @@ export class App {
       for (const card of this.cards.values())
         if (card.title) this.label(card, [...card.marker, ...card.title()]);
       if (this.statusMoves) this.renderStatus();
+      if (this.stage.visible && this.cursor === undefined && this.moves()) this.renderStage();
     }, frame);
     this.render();
     this.composer.focus();
@@ -2690,7 +2735,12 @@ export class App {
       label: (id) => w.labelOf(id),
     });
     const rows = loom.rows.filter((row) => row.id !== "operator");
-    const visible = w.view === "feed" && !this.tree && (rows.length > 1 || loom.owed.length > 0);
+    this.renderStage();
+    const visible =
+      this.lifeView === "main" &&
+      w.view === "feed" &&
+      !this.tree &&
+      (rows.length > 1 || loom.owed.length > 0);
     if (this.board.visible !== visible) this.board.visible = visible;
     if (!visible) {
       this.boardKey = "";
@@ -2760,11 +2810,16 @@ export class App {
       const measure = row.measure
         ? `${row.measure.answers} ${row.measure.answers === 1 ? "answer" : "answers"}  ${row.measure.dollars < 0.01 ? "<$0.01" : `$${row.measure.dollars.toFixed(2)}`}`
         : "";
+      // A wide board names the actor of each chain beside its cost.
+      const actor = this.feedWidth >= 110 ? clip(shortActor(this.actorOf(row.id)), 16) : "";
       const id = now.act && now.tone === "work" ? `${now.act}  ` : "";
       const said = now.tone === "work" && !now.text ? "writing" : shortenHomes(now.text);
       const more = now.more ? `  +${now.more}` : "";
       const label = pad(clip(row.label, name - 2 * depth), name - 2 * depth);
-      const room = Math.max(8, this.feedWidth - 2 * space.inset - 23 - name - Bun.stringWidth(more));
+      const room = Math.max(
+        8,
+        this.feedWidth - 2 * space.inset - 23 - name - Bun.stringWidth(more) - (actor ? 18 : 0),
+      );
       const text = clip(id + said, room);
       const rest = text.slice(Math.min(id.length, text.length));
       this.board.add(
@@ -2778,6 +2833,7 @@ export class App {
             [text.slice(0, Math.min(id.length, text.length)), c.faint],
             [pad(rest, room - Math.min(Bun.stringWidth(id), room)), toneColors[now.tone]()],
             [more, c.faint],
+            [actor ? `  ${actor.padEnd(16)}` : "", c.muted],
             [measure.padStart(18), c.faint],
           ],
           c.text,
@@ -2785,6 +2841,289 @@ export class App {
         ),
       );
     }
+  }
+  /** The view of the life that shows: the board of main, the loom, or the graph. */
+  get lifeView(): LifeView {
+    return this.session.preferences.view;
+  }
+  /** The view of the life switched to the one named, or to the next one, which the preferences keep. */
+  switchView(view?: LifeView): void {
+    const w = this.session;
+    const next = view ?? lifeViews[(lifeViews.indexOf(this.lifeView) + 1) % lifeViews.length] ?? "main";
+    w.preferences.view = next;
+    w.preferences.save();
+    if (next === "main") {
+      this.cursor = undefined;
+      if (this.steering) this.steer(false);
+    }
+    w.notice =
+      next === "main"
+        ? "The board of main shows the life. ⌥V switches the view."
+        : `The ${next} shows the life. ⌥V switches the view, and ⌥G moves in it.`;
+    this.boardKey = "";
+    this.render();
+  }
+  /** The actor of a chain, as its last answer, its rungs or its prompts name it. */
+  private actorOf(chain: string): string {
+    const w = this.session;
+    return actorOf(chain, w.acts, w.host.measures, chain === w.selected ? w.actor : w.host.actor);
+  }
+  /** The acts of the life as they stood at the time cursor, which the loom and the graph read. */
+  private stageActs: readonly ActRow[] = [];
+  /** The loom of the life at the time cursor, which the last draw of the stage read. */
+  private stageLoom: Loom = { rows: [], owed: [], folded: 0 };
+  private weaveStage(width: number): Loom {
+    const w = this.session;
+    const then = this.cursor;
+    const acts = w.at(w.acts);
+    this.stageActs = acts;
+    this.stageLoom = weave({
+      acts,
+      prompts: then === undefined ? [...w.host.prompts.values()] : owedAt(acts),
+      measures: w.host.measures,
+      folds: this.loom.folds,
+      width,
+      pending: then === undefined ? w.host.pending : new Map(),
+      label: (id) => w.labelOf(id),
+    });
+    return this.stageLoom;
+  }
+  /** Whether the stage moves with time: a chain works, or the graph shows a message that flows. */
+  private moves(): boolean {
+    return (
+      this.stageLoom.rows.some((row) => row.state === "working") ||
+      (this.lifeView === "graph" && this.stageLoom.owed.length > 0)
+    );
+  }
+  /** The loom or the graph in place of the board of main, over the feed. The graph takes the whole height of the
+   * feed for one program and its words, and gives it back to the feed to show one act. */
+  private renderStage(): void {
+    const w = this.session;
+    const view = this.lifeView;
+    const shows =
+      view !== "main" && w.view === "feed" && !this.tree && !(view === "graph" && this.graph.level === "act");
+    const whole = shows && view === "graph" && ["program", "word"].includes(this.graph.level);
+    if (this.stage.visible !== shows) this.stage.visible = shows;
+    if (this.scroll.visible === whole) this.scroll.visible = !whole;
+    this.steps();
+    if (!shows) return;
+    const width = this.feedWidth;
+    const body = Math.max(8, this.renderer.height - 14);
+    if (view === "loom") {
+      const loom = this.weaveStage(LoomPane.cellWidth(width));
+      const rows = this.loom.draw({
+        loom,
+        width,
+        height: Math.min(loom.rows.length + 1, Math.max(4, Math.floor(body * 0.45))),
+        selected: w.selected,
+        frozen: this.cursor !== undefined,
+        steering: this.steering,
+        actor: (id) => this.actorOf(id),
+      });
+      this.stage.flexGrow = 0;
+      this.stage.height = rows.length;
+      this.stage.content = styled(joined(rows));
+      return;
+    }
+    this.weaveStage(Math.max(8, width - 60));
+    if (whole) {
+      this.stage.flexGrow = 1;
+      this.stage.flexShrink = 1;
+      this.stage.minHeight = 0;
+    } else {
+      this.stage.flexGrow = 0;
+      this.stage.flexShrink = 0;
+    }
+    const height = whole ? Math.max(6, this.renderer.height - 12) : Math.max(8, Math.floor(body * 0.55));
+    this.stage.height = height;
+    this.stage.content = styled(joined(this.graph.rows(width, height)));
+  }
+  /** A click on a row of the stage: the loom selects its chain, or answers for the row of the operator, and the graph
+   * selects what the row shows, and zooms in on a second click. */
+  private clickStage(row: number): void {
+    if (this.lifeView === "graph") {
+      if (this.graph.click(row)) this.render();
+      return;
+    }
+    const chain = this.loom.click(row);
+    if (chain === "operator") this.question();
+    else if (chain) void this.selectAt(chain).catch(this.report);
+  }
+  /** What the graph reads of the App: the life at the time cursor, and the controls that it asks for. */
+  private stageOf(): Stage {
+    const app = this;
+    return {
+      get acts() {
+        return app.stageActs;
+      },
+      get loom() {
+        return app.stageLoom;
+      },
+      get owed() {
+        return new Set(app.stageLoom.owed.map((prompt) => prompt.id));
+      },
+      get frozen() {
+        return app.cursor !== undefined;
+      },
+      get selected() {
+        return app.session.selected;
+      },
+      words: () => app.words(),
+      label: (chain) => app.session.labelOf(chain),
+      actor: (chain) => app.actorOf(chain),
+      streams: () => (app.cursor === undefined ? app.session.host.streams : new Map()),
+      select: (chain) => app.selectAt(chain),
+      // The lens of the graph is the card of the act in the feed, which shows it whole.
+      lens: (act) => {
+        if (!act) return app.render();
+        const w = app.session;
+        void (act.on === w.selected ? Promise.resolve() : w.select(act.on))
+          .then(() => app.go("feed", act.id))
+          .catch(app.report);
+      },
+    };
+  }
+  /** The words of the rungs of the life: what the caller of each wrote, what ran, and what its model wrote, the words
+   * that the gate refused among them. */
+  private words(): Map<string, string> {
+    const w = this.session;
+    const words = new Map<string, string>();
+    for (const item of conversation(w.turns, w.acts))
+      if (item.type === "python" && item.rung) words.set(item.rung.id, item.code);
+    for (const [id, word] of Object.entries(w.program)) words.set(id, word);
+    for (const act of w.acts)
+      if (act.kind === "rung" && act.words[0]) words.set(act.id, String(act.words[0]));
+    return words;
+  }
+  /** The keys go to the loom or the graph, or back to the input. */
+  steer(on = !this.steering): void {
+    const w = this.session;
+    if (on && this.lifeView === "main") {
+      w.notice = "⌥V shows the loom or the graph, which ⌥G moves in.";
+      return;
+    }
+    this.steering = on;
+    if (on) {
+      this.closeTree();
+      this.composer.blur();
+    } else this.composer.focus();
+    this.boardKey = "";
+    this.render();
+  }
+  /** The selection of the loom moves by a count of chains, and the session shows the chain that it reaches. */
+  private moveLoom(by: number): void {
+    const rows = this.stageLoom.rows.filter((row) => row.id !== "operator");
+    const at = rows.findIndex((row) => row.id === this.session.selected);
+    const next = rows[Math.max(0, Math.min(rows.length - 1, at + by))];
+    if (next && next.id !== this.session.selected) void this.selectAt(next.id).catch(this.report);
+  }
+  /** A chain shown at the moment of the cursor in time, which the loom and the graph keep from chain to chain. */
+  private async selectAt(chain: string): Promise<void> {
+    const at = this.cursor;
+    await this.session.select(chain);
+    // A move of the cursor while the chain opened stands.
+    if (at !== undefined && this.cursor === undefined) this.cursor = at;
+    this.render();
+  }
+  /** The workers of the selected chain fold into its row of the loom, or show again. */
+  private foldLoom(folding: boolean): void {
+    const row = this.stageLoom.rows.find((one) => one.id === this.session.selected);
+    if (!row?.workers) return;
+    if (folding) this.loom.folds.add(row.id);
+    else this.loom.folds.delete(row.id);
+    this.render();
+  }
+  /** The time cursor moves back or forward by a count of moments, and past the last moment it stands at the present
+   * again. */
+  travel(by: number): void {
+    const moments = momentsOf(this.session.acts);
+    if (!moments.length) return;
+    const from = this.cursor === undefined ? moments.length - 1 : moments.indexOf(this.cursor);
+    const to = Math.max(0, from + by);
+    this.cursor = to >= moments.length - 1 ? undefined : moments[to];
+    this.render();
+  }
+  /** Whether a verb that changes the life can act: none acts in the past. */
+  private present(): boolean {
+    if (this.cursor === undefined) return true;
+    this.session.notice =
+      "The cursor stands in the past, where nothing changes. Esc returns to now, and b branches.";
+    this.render();
+    return false;
+  }
+  /** The selected chain paused, or woken when a pause holds it. */
+  private holdChain(): void {
+    if (!this.present()) return;
+    const w = this.session;
+    const row = this.stageLoom.rows.find((one) => one.id === w.selected);
+    this.action(`/${row?.state === "paused" ? "wake" : "pause"} ${w.selected}`);
+  }
+  /** The work of the selected chain cancelled: the act that the graph selects, or what the chain waits on. */
+  private cancelChain(): void {
+    if (!this.present()) return;
+    const w = this.session;
+    const target =
+      this.lifeView === "graph" && this.graph.level !== "threads" && this.graph.level !== "map"
+        ? this.graph.selection
+        : this.stageLoom.rows.find((one) => one.id === w.selected)?.waits;
+    if (target) this.action(`/cancel ${target}`);
+    else w.notice = `${w.label} waits on nothing to cancel.`;
+  }
+  /** A step: the selected chain runs until one more of its rungs ends, then a pause holds it again. */
+  private async step(): Promise<void> {
+    if (!this.present()) return;
+    const w = this.session;
+    const chain = w.selected;
+    this.stepping.set(chain, this.rungsDone(chain));
+    if (this.stageLoom.rows.find((row) => row.id === chain)?.state === "paused")
+      this.action(`/wake ${chain}`);
+    w.notice = `${w.labelOf(chain)} runs one step, then pauses.`;
+    this.render();
+  }
+  private rungsDone(chain: string): number {
+    return this.session.acts.filter((act) => act.on === chain && act.kind === "rung" && act.done).length;
+  }
+  /** Each chain that a step let run pauses again once a rung of it that the step let run ends. */
+  private steps(): void {
+    for (const [chain, ended] of this.stepping) {
+      if (this.rungsDone(chain) <= ended) continue;
+      this.stepping.delete(chain);
+      this.action(`/pause ${chain}`);
+      this.session.notice = `${this.session.labelOf(chain)} paused after one step.`;
+    }
+  }
+  /** A branch of the selected chain at the time cursor, as the feed branches at its moment. */
+  private branchAtCursor(): void {
+    const w = this.session;
+    if (this.cursor === undefined) {
+      w.notice = "[ moves the cursor back in time, and b branches the chain there.";
+      this.render();
+      return;
+    }
+    void w.branchHere().catch(this.report);
+  }
+  /** Escape on the stage: the graph zooms out, then the cursor returns to now, then the keys go back to the input. */
+  private async leaveStage(): Promise<void> {
+    if (this.lifeView === "graph" && (await this.graph.key("escape"))) this.render();
+    else if (this.cursor !== undefined) this.travel(Number.MAX_SAFE_INTEGER);
+    else this.steer(false);
+  }
+  /** Enter on the stage: the graph zooms in, and the loom answers for the row of the operator or gives the keys to the
+   * input on the selected chain. */
+  private async enterStage(): Promise<void> {
+    if (this.lifeView === "graph") {
+      await this.graph.key("return");
+      this.render();
+    } else this.steer(false);
+  }
+  /** An arrow on the stage: the graph moves its selection, and the loom moves between chains or folds their workers. */
+  private async arrowStage(name: string): Promise<void> {
+    if (this.lifeView === "graph") {
+      await this.graph.key(name);
+      this.render();
+    } else if (name === "up" || name === "down") this.moveLoom(name === "up" ? -1 : 1);
+    else if (name === "pageup" || name === "pagedown") this.moveLoom(name === "pageup" ? -8 : 8);
+    else this.foldLoom(name === "left");
   }
   /** The desk over the input: one mark for each ask that waits for the operator, in the order that they came, then
    * the ask that he acts on, from which chain, and what it wants, the first line of its message, and its choices or
@@ -3923,6 +4262,12 @@ export class App {
       await bare[name]?.();
       return true;
     }
+    if (name === "view") {
+      if (!argument) this.viewPicker();
+      else if (isLifeView(argument)) this.switchView(argument);
+      else throw new Error(`Choose ${lifeViews.join(", ")}.`);
+      return true;
+    }
     if (name === "inspect" && argument) {
       await this.inspect(argument);
       return true;
@@ -3954,6 +4299,17 @@ export class App {
       return true;
     }
     return false;
+  }
+  /** The views of the life to choose from, the one that shows marked. */
+  private viewPicker(): void {
+    this.openPalette(
+      "View of the life",
+      lifeViews.map((view) => ({
+        label: `${lifeViewLabels[view]}${view === this.lifeView ? "  (shows)" : ""}`,
+        detail: lifeViewDetails[view],
+        run: () => this.switchView(view),
+      })),
+    );
   }
   private imageActions(uri: string): void {
     const content = imageContent(this.session.host.imageDirectory, uri);
@@ -5921,6 +6277,34 @@ export class App {
         hint: ["Esc", "now"],
       },
     ]);
+    // While the keys move on the loom or the graph, the arrows, Enter and Escape move there, and a letter acts on the
+    // selected chain.
+    const stageKey = (on: string | string[], run: () => unknown, hint?: Hint): KeyCommand => ({
+      on,
+      run: () => void Promise.resolve(run()).catch(this.report),
+      hint,
+    });
+    layer(() => bare() && this.steering && this.lifeView !== "main", "stage", [
+      stageKey("up", () => this.arrowStage("up"), ["↑↓←→", "move"]),
+      ...["down", "left", "right", "pageup", "pagedown"].map((on) => stageKey(on, () => this.arrowStage(on))),
+      stageKey(["return", "enter"], () => this.enterStage(), [
+        "Enter",
+        () => (this.lifeView === "graph" ? "zoom in" : "input"),
+      ]),
+      stageKey("escape", () => this.leaveStage(), [
+        "Esc",
+        () => (this.lifeView === "graph" && this.graph.level !== "threads" ? "zoom out" : "back"),
+      ]),
+      stageKey("[", () => this.travel(-1), ["[ ]", "time"]),
+      stageKey("]", () => this.travel(1)),
+      stageKey("{", () => this.travel(-10)),
+      stageKey("}", () => this.travel(10)),
+      stageKey("space", () => this.holdChain(), ["Space", "pause"]),
+      stageKey("x", () => this.cancelChain(), ["x", "cancel"]),
+      stageKey("n", () => this.step(), ["n", "step"]),
+      stageKey("b", () => this.branchAtCursor(), ["b", "branch"]),
+      stageKey("tab", () => this.question(), ["Tab", "answer"]),
+    ]);
     layer(bare, "", [
       // As in Claude Code, Ctrl+D acts on an empty input.
       { on: "ctrl+d", run: () => this.exit(), when: () => !this.composer.plainText },
@@ -6117,6 +6501,8 @@ export class App {
     pause: this.escape,
     help: () => this.help(),
     quit: () => void this.options.quit(),
+    lifeView: () => this.switchView(),
+    steer: () => this.steer(),
   };
   /** When an action of the table acts, where it does not act at all times: a key that does not act goes on to the
    * input, and the footer does not offer it. */

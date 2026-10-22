@@ -187,6 +187,55 @@ under Finished.
 
 ![Chains](screenshots/15-chains.png)
 
+## Views of the life
+
+The board of main, the loom and the graph are three views of the whole life, side by side. ⌥V switches the view at
+run time, `/view` names one or lists the three, `--view main|loom|graph` chooses one at the start, and the setting
+keeps the last one. A view of the life stands where the board stands, over the feed of the selected chain, and each
+screen of main stays where it is in each view: the transcript, the changes, the palette, the dialogs, the desk, and
+the composer. Each row of a chain shows its state, its actor, its cost, and the question that it waits on.
+
+The board of main counts the chains by what they do, and gives one row to each chain that needs a look, with what it
+waits on, its actor, and its answers and dollars.
+
+![The board of main](screenshots/02-feed.png)
+
+The loom shows each chain as a thread in time, under you. Time goes from left to right, and the right edge is now. A
+cell is taller where more acts began or ended, yellow where the chain asks you, and red where an act failed, and the
+past fades and folds. At the right of each thread stand what it waits on or the question that it asks, its actor, its
+dollars against the ceiling of its grant, and the share of the window that its last answer read.
+
+![The loom](screenshots/66-loom.png)
+
+⌥G gives the keys to the loom, and Esc gives them back to the input. The arrows move between the chains and fold
+the workers of a chain into its row. `[` and `]` move a cursor in time by one moment, and `{` and `}` by ten: the
+loom and the feed show the life as it stood then, and the right edge of the loom says `then`. The verbs that change the life do nothing in
+the past, `b` branches the selected chain at the cursor, and Esc returns to now. Space pauses or wakes the selected
+chain, `x` cancels its work, `n` lets it run one more rung, and Tab answers the oldest question.
+
+![The cursor in time](screenshots/67-loom-time-cursor.png)
+
+The graph shows the life as programs that run: the tree of its threads, one for each prompt, beside the map of its
+programs, one for each chain at the place of its birth, with the lines of the tree of hires and a dot where a
+message flows. Under the name of each program stand what it waits on, its actor, its dollars, and its question.
+
+![The graph](screenshots/68-graph.png)
+
+After ⌥G, Enter zooms in and Esc zooms out: from the threads to the map, to the source of one program, with what
+each act came to beside the line that made it, to one word, and to one act, whose card the feed shows whole.
+
+![The map](screenshots/69-graph-map.png)
+
+![A program](screenshots/70-graph-program.png)
+
+![A word](screenshots/71-graph-word.png)
+
+![An act](screenshots/72-graph-act.png)
+
+A command that runs shows as it runs at the level of one act, since its card in the feed streams what it prints.
+
+![A command at the level of one act](screenshots/73-graph-command.png)
+
 ## Keys, marks, and commands
 
 One mark means one state in every view, dialog, and sidebar: a spinner for work that runs, `◉` for a chain or a
