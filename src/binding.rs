@@ -324,11 +324,13 @@ pub fn files(scratch: String) -> NativeEar {
 }
 
 /// The ear of commands, which runs each in a shell of this machine, with `TMPDIR` set to the scratch directory that
-/// the host names, which the ear of the files is given too.
+/// the host names, which the ear of the files is given too. It is given the record that the life opens on, so it
+/// closes as interrupted each command that the record shows started and not done, at the wake.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
-pub fn bash(scratch: String) -> NativeEar {
-  NativeEar::of(world::bash(world::Scratch::at(scratch)))
+pub fn bash(scratch: String, record: Vec<Value>) -> NativeEar {
+  let record: Vec<Object> = record.into_iter().map(|one| one.0).collect();
+  NativeEar::of(world::bash(world::Scratch::at(scratch), &record))
 }
 
 /// The scratch directory of the record at a path, in the cache of furb, which a host removes when it deletes the
@@ -361,6 +363,23 @@ pub fn store(path: String) -> Result<(Record, NativeEar), Fault> {
 #[cfg_attr(feature = "typescript", napi(ts_return_type = "unknown[]"))]
 pub fn kept(path: String) -> Result<Record, Fault> {
   Ok(Record(Object::list(world::kept(&path)?)))
+}
+
+/// The ear of the log of the life beside the record at a path, which writes it again from its first line.
+#[cfg_attr(feature = "python", pyfunction)]
+#[cfg_attr(feature = "typescript", napi)]
+pub fn log(path: String) -> Result<NativeEar, Fault> {
+  let entries = world::kept(&path)?.len();
+  Ok(NativeEar::of(world::log(&path, entries)))
+}
+
+/// The facts of the log of the record at a path, read with no lease, when the log agrees with the record: every fact
+/// that the life that wrote it said, as an ear of a host hears it, the rungs of each ladder among them. Nothing when
+/// the record has no log, or a log that does not agree with it.
+#[cfg_attr(feature = "python", pyfunction)]
+#[cfg_attr(feature = "typescript", napi(ts_return_type = "unknown[] | null"))]
+pub fn logged(path: String) -> Result<Option<Value>, Fault> {
+  Ok(world::logged(&path)?.map(|facts| Value(Object::list(facts))))
 }
 
 /// One line of a record, read with every number exact, as the record keeps it.

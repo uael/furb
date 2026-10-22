@@ -26,6 +26,7 @@ use unsync::{oneshot, spsc};
 use super::{Scratch, here};
 use crate::{
   ear::{Co, Ear, Next, hearing, say},
+  engine::left,
   fact::{Fact, named},
   value::{Exit, Fault, Object, Text},
 };
@@ -84,14 +85,26 @@ fn runs(path: &Path) -> bool {
 /// The ear of commands: it takes a command, says what it writes, answers a write of a door of it, feeds it what a
 /// write of its stdin gives, and says it done with its exit.
 ///
+/// A command that the record shows started and not done was cut by the end of the life that ran it: the ear runs it
+/// no more, and when a wake puts it to the ear, the ear takes it and closes it with a refusal that says it was
+/// interrupted, so the model sees that outcome and runs it again if it wants, and its doors keep what it wrote before.
+/// It takes no write.
+///
 /// A command runs with `TMPDIR` set to the scratch directory of the life, and `TMP` and `TEMP` too on Windows, which
 /// the ear makes first, so a command finds there the files of `scratch://`. A command ends with every process it started, which its group holds. A
 /// command that a control ended first, which the engine says done, is ended so and says nothing more.
-pub fn bash(scratch: Scratch) -> Box<dyn Ear> {
+pub fn bash(scratch: Scratch, record: &[Object]) -> Box<dyn Ear> {
+  let left: HashSet<String> = left(record).into_iter().collect();
+  // Each command that a crash cut, with its chain and its line, so a later act that only shares its name, as after a
+  // drift, is no command of the record.
+  let mut cut: HashMap<String, (String, String)> = record
+    .iter()
+    .filter_map(|one| Fact::of(*one.as_ref().items()?.first()?))
+    .filter(|a| a.kind() == "bash" && a.question() && left.contains(a.about()))
+    .map(|a| (a.about().to_owned(), held(&a)))
+    .collect();
   hearing(&["bash", "write"], move |mut co: Co<Said>| async move {
     let mut running: HashMap<String, Running> = HashMap::new();
-    // What a write fed a command that runs nowhere yet, which a later life holds until a wake starts it.
-    let mut fed: HashMap<String, Vec<Option<String>>> = HashMap::new();
     // The commands whose stdin a write closed.
     let mut closed: HashSet<String> = HashSet::new();
     loop {
@@ -114,6 +127,15 @@ pub fn bash(scratch: Scratch) -> Box<dyn Ear> {
       };
       let about = a.about().to_owned();
       match a.kind() {
+        "bash" if a.question() && cut.get(&about).is_some_and(|it| *it == held(&a)) => {
+          cut.remove(&about);
+          say(&mut co, Fact::says("started", &about, []));
+          let line = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
+          let why = Fault::refused(format!(
+            "{line:?} was interrupted: the life that ran it ended before it did"
+          ));
+          co.call("close", vec![why.object()], vec![("id", Object::string(&about))]).await?;
+        }
         "bash" if a.question() => {
           say(&mut co, Fact::says("started", &about, []));
           match begun(&mut co, &a, &scratch).await {
@@ -126,9 +148,6 @@ pub fn bash(scratch: Scratch) -> Box<dyn Ear> {
                 one.feed(Some(text));
                 one.feed(None);
               }
-              for text in fed.remove(&about).unwrap_or_default() {
-                one.feed(text);
-              }
               co.work(command(begun, fed_in, stopped));
               running.insert(about, one);
             }
@@ -140,7 +159,7 @@ pub fn bash(scratch: Scratch) -> Box<dyn Ear> {
           }
         }
         // A write of a door of a command: the stdin of a command whose stdin is None takes it while the command
-        // is not over and until a write of nothing closes it, and every other door takes no write.
+        // runs and until a write of nothing closes it, and every other door takes no write.
         "write" if a.question() => {
           let Some((text, command, stream)) = door(&a) else { continue };
           let act = co.call("get", vec![Object::string(&command)], vec![]).await?;
@@ -149,34 +168,31 @@ pub fn bash(scratch: Scratch) -> Box<dyn Ear> {
           let open = stream == "stdin"
             && over.as_ref().as_bool() != Some(true)
             && act.word(2).is_some_and(|one| one.type_name() == "NoneType")
-            && !closed.contains(&command);
+            && !closed.contains(&command)
+            && !cut.contains_key(&command);
           let answer = if open {
-            written(&mut running, &mut fed, &mut closed, &command, &text.content);
+            written(&mut running, &mut closed, &command, &text.content);
             text.object()
           } else {
             Fault::refused(format!("{} takes no write", text.path)).object()
           };
           say(&mut co, Fact::says("done", &about, [answer]));
         }
-        // The done of a write of a stdin that the journal says again in a later life: the command takes that text
-        // again, in its order, when a wake starts it again.
-        "done" if a.by() == "journal" && named(&about, "write") => {
-          if let Some(text) = a.word(0).and_then(Text::of)
-            && let Some((command, "stdin")) = text.path.split_once('/')
-            && named(command, "bash")
-          {
-            written(&mut running, &mut fed, &mut closed, command, &text.content);
-          }
-        }
         "done" => {
-          fed.remove(&about);
           running.remove(&about);
           closed.remove(&about);
+          cut.remove(&about);
         }
         _ => {}
       }
     }
   })
+}
+
+/// The chain and the line of a command, which say whether an act is the command of the record under its name.
+fn held(a: &Fact) -> (String, String) {
+  let line = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
+  (a.on().to_owned(), line)
 }
 
 /// The text of a write of a door of a command, the command and the stream of the door, when the write is of one.
@@ -189,10 +205,8 @@ pub(super) fn door(a: &Fact) -> Option<(Text, String, String)> {
 }
 
 /// What a write of the stdin of a command gives it: the text, or nothing for an empty text, which closes the stdin.
-/// A command that runs nowhere yet takes it when it starts.
 fn written(
   running: &mut HashMap<String, Running>,
-  fed: &mut HashMap<String, Vec<Option<String>>>,
   closed: &mut HashSet<String>,
   command: &str,
   content: &str,
@@ -201,9 +215,8 @@ fn written(
   if text.is_none() {
     closed.insert(command.to_owned());
   }
-  match running.get_mut(command) {
-    Some(one) => one.feed(text),
-    None => fed.entry(command.to_owned()).or_default().push(text),
+  if let Some(one) = running.get_mut(command) {
+    one.feed(text);
   }
 }
 

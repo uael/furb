@@ -79,8 +79,9 @@ class Inspection(TypedDict):
 
 class Opening(TypedDict):
   """What a life is opened on, which every host gives the same. Each part that is unsaid takes its default: no
-  record, a life that keeps and does work and enables the extensions that the configs turn on, the config directory
-  of this process, and the first model the catalog offers."""
+  record, a life that keeps and does work and enables the extensions that the configs turn on, a life that opens from
+  the snapshot of its record and keeps one, the config directory of this process, and the first model the catalog
+  offers."""
 
   directory: str
   record: NotRequired[str | None]
@@ -95,6 +96,7 @@ class Opening(TypedDict):
   images: NotRequired[str | None]
   answer: NotRequired[Callable[[dict, Callable[..., None]], object] | None]
   stream: NotRequired[Callable[[str, str, str, str], None] | None]
+  snapshot: NotRequired[bool | None]
   log: NotRequired[Callable[[str], None] | None]
 
 type Ears = Iterable[tuple[str, object]]
@@ -201,9 +203,10 @@ def files(scratch: str) -> NativeEar:
   """The ear of the files, which reads and writes a path, and a path of `scratch://` in the scratch directory that
   the host names, which the ear of commands is given too."""
 
-def bash(scratch: str) -> NativeEar:
+def bash(scratch: str, record: Iterable[object]) -> NativeEar:
   """The ear of commands, which runs each in a shell of this machine, with `TMPDIR` set to the scratch directory that
-  the host names, which the ear of the files is given too."""
+  the host names, which the ear of the files is given too. It is given the record that the life opens on, so it
+  closes as interrupted each command that the record shows started and not done, at the wake."""
 
 def scratch(record: str) -> str | None:
   """The scratch directory of the record at a path, in the cache of furb, which a host removes when it deletes the
@@ -219,6 +222,14 @@ def store(path: str) -> tuple[list[list[list[object]]], NativeEar]:
 
 def kept(path: str) -> list[list[list[object]]]:
   """What the store kept at a path, read with no lease and changed in nothing."""
+
+def log(path: str) -> NativeEar:
+  """The ear of the log of the life beside the record at a path, which writes it again from its first line."""
+
+def logged(path: str) -> list[list[object]] | None:
+  """The facts of the log of the record at a path, read with no lease, when the log agrees with the record: every fact
+  that the life that wrote it said, as an ear of a host hears it, the rungs of each ladder among them. Nothing when
+  the record has no log, or a log that does not agree with it."""
 
 def decode_record(line: str) -> object:
   """One line of a record, read with every number exact, as the record keeps it."""

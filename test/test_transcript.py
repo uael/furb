@@ -45,11 +45,12 @@ async def test_the_transcript_is_the_whole_state_of_a_chain() -> None:
   assert engine.standing() == next(a[3] for a in engine.transcript(engine.ROOT) if a[:2] == ("done", "stand1"))
 
 
-async def test_a_name_of_no_chain_gives_no_fact() -> None:
-  """A name of no chain gives no fact."""
+async def test_the_name_of_an_act_gives_the_facts_on_its_scope() -> None:
+  """The name of an act gives the facts on its scope, and a name of no act gives no fact."""
   _, _, root = born()
   one = engine.bash("echo hi", on=root)
-  assert engine.transcript("chain9") == [] and engine.transcript(one) == []
+  assert engine.transcript(one) == engine.transcript(root) and one in [a[1] for a in engine.transcript(one)]
+  assert engine.transcript("chain9") == [] and engine.transcript("bash99") == []
 
 
 async def test_transcript_of_a_kind_or_a_speaker() -> None:

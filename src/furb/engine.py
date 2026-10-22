@@ -215,12 +215,18 @@ def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
 
 def prompt[T](shape: type[T] | object, message: str = "", to: str = "", on: str = "") -> Act[T]:
   named = shape if isinstance(shape, str) else re.sub(r"<class '|'>|[\w.:/]*\.", "", repr(shape))
+  thread = on if question(("prompt", on)) else ""
+  to = to or (thread and get(thread)[6])
   asks = (to or module(on).get("actor")) != OPERATOR
+  says = asks and thread and named == "None" and not over(thread)
 
   def ear(id):
     if asks:
       yield "started", id
-    yield told(id, "", bound(id, named), message=message)
+    yield told(id, "", bound(id, named), message=message, thread=thread)
+    if says:
+      yield "done", id, None
+      return
     live = set()
     while True:
       if asks and not (live or paused(id)):
@@ -296,7 +302,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           if scope(about) != id:
             yield "tell", maker, [headed(about, "done", value=value)]
           if not isinstance(value, CancelledError):
-            unseen = about + " done", get(maker)[6]
+            unseen = about + " done", get(maker)[2]
         case ("done", about, by, Refused() as why) if (
           question(("reply", about))
           and scope(about) != id
@@ -305,7 +311,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         ):
           yield "tell", maker, [headed(p, "paused", why=why)]
           if not running[maker]:
-            unseen = p + " paused", get(maker)[6]
+            unseen = p + " paused", get(maker)[2]
       if scope(a[1]) != id:
         continue
       match a:
@@ -319,12 +325,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         case ("read", about, *_, path) if (door := re.fullmatch(r"(bash\d+)/(stdout|stderr)", path)) and get(
           command := door[1]
         ):
-          part = ""
-          for seen in transcript(scope(command)):
-            if seen[:2] == ("started", command):
-              part = ""
-            elif seen[:2] == ("out", command) and seen[4] == door[2]:
-              part += seen[3]
+          part = "".join(x[3] for x in transcript(scope(command), "out") if x[1] == command and x[4] == door[2])
           yield "done", about, getattr(peek(command), door[2], Text(path, part))
         case ("rung", rid, maker, _, "", _, to):
           waiting[rid] = maker, to
@@ -368,7 +369,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
             reply = act("reply", id, controlled(idle), to)
           unseen = ""
       if unseen and not waiting and (r[2] in running or over(r[2]) or a[0] == "tell"):
-        prompt(None, *unseen)
+        prompt(None, unseen[0], on=ours if question(("prompt", ours := unseen[1])) else "")
         unseen = ""
 
   return act("chain", on, ear, label, source)
@@ -510,7 +511,7 @@ def question(a):
 def scope(name):
   match get(name):
     case (kind, _, _, on, *_):
-      return name if kind == "chain" else on
+      return name if kind == "chain" else scope(on)
   return ""
 
 
@@ -595,11 +596,20 @@ def offered(roster, to, at=2):
 
 def covers(a, id):
   kind, of, *_ = a
+
+  def on(name):
+    while name != of and question(("prompt", name)):
+      name = get(name)[3]
+    return name == of
+
   if kind != "close":
-    return under(id, of) or scope(id) == of
+    up = id
+    while not on(up) and (x := get(up)):
+      up = x[2]
+    return on(up) or scope(id) == of
   if question(("reply", id)):
     id = get(id)[2]
-  return id == of or (question(("rung", id)) and get(id)[2] == of)
+  return on(id) or (question(("rung", id)) and on(get(id)[2]))
 
 
 def paused(id):
@@ -661,7 +671,7 @@ def boot(record=(), **outside):
         while owed() and not (log or left):
           match due.pop():
             case (kind, name, by, on, *words) if question((kind, name)):
-              if by in outside or by in kept or scope(on) != on:
+              if by in outside or by in kept or (on and not get(on)):
                 born.setdefault(kind, {})[name] = name
                 continue
               if not callable(verb := (module(on) or globals()).get(kind)) or re.fullmatch(r"\w+?\d+", by):
@@ -711,7 +721,7 @@ def boot(record=(), **outside):
     names = born.setdefault(kind, {})
     a = (kind, name := names.setdefault((by, made[speaker, kind]), kind + str(len(names) + 1)), by, on, *words)
     if known.setdefault(name, a) is a:
-      holds(on, [a])
+      holds(scope(on), [a])
       if kind == "chain":
         held[name, ""] = []
       log.append((a, heard := [*outside]))
@@ -748,7 +758,7 @@ def boot(record=(), **outside):
 
   def ears(a):
     q = get(a[1]) or a[:1] * 4
-    k = {a[0], *q[:4], scope(q[2])}
+    k = {a[0], *q[:4], scope(q[2]), scope(q[3])}
     return sorted(
       ((n, g) for n, g in alive.items() if k & (waits.get(n) or k) or a[0] in ("pause", "wake", "cancel", "close")),
       key=lambda pair: (pair[0] not in known, pair[0] in outside),
@@ -800,7 +810,7 @@ def boot(record=(), **outside):
     return done.get(at, waiting)
 
   def transcript(on: str = "", of: str = "") -> list[tuple]:
-    return [*held.get((on or scope(site.get()), of), [])]
+    return [*held.get((scope(on or site.get()), of), [])]
 
   for who, hearer in [(OPERATOR, idle(OPERATOR)), *outside.items(), ("journal", journal())]:
     drive(hearer, who)
@@ -852,6 +862,8 @@ Your prompt
   notification: prompt(None, message, to=OPERATOR) tells the operator what your close cannot carry, as your report
   when the shape of your prompt is None. A question for the one that gave you your task goes on its chain:
   prompt(str, question, on=scope(get(promptM)[2])). to=OPERATOR is for the operator alone.
+- prompt(None, message, on=promptM) adds a message to the thread promptM, which its model reads at its next step,
+  or opens it again once it closed.
 
 A word is a program
 - A tool call stops to look at each result. A word does not: it is a program, so write the whole task in it when you
@@ -886,7 +898,7 @@ How to work
   shares it, and a command finds it in $TMPDIR.
 - Use bash to run commands and to find paths, as bash("grep -rln pattern src"). Let its show pick the lines of a long
   command, as bash(command, show=span(-40, -1)), since its stream flows while it runs. Give a long command a timeout
-  that fits. bash runs the command in a POSIX sh, /bin/sh or on Windows the sh of Git, not in bash, so it takes no syntax of bash alone, as <(command).
+  that fits. bash runs the command in sh, so it takes no syntax of bash alone, as <(command).
 - Start all independent acts first, then await each one, or await wait(seconds, *acts) for the first that ends.
 - A report of another chain is a claim. Examine it before you give it as a fact, and give each result from what an
   act showed.

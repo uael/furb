@@ -1209,6 +1209,8 @@ fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
     wrap_pyfunction!(time, module)?,
     wrap_pyfunction!(store, module)?,
     wrap_pyfunction!(kept, module)?,
+    wrap_pyfunction!(log, module)?,
+    wrap_pyfunction!(logged, module)?,
     wrap_pyfunction!(decode_record, module)?,
     wrap_pyfunction!(opened, module)?,
     wrap_pyfunction!(gate, module)?,

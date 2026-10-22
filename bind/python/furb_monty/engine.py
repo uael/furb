@@ -251,8 +251,8 @@ def pending() -> list[tuple[str, str]]:
 
 
 def parked() -> list[tuple[str, str]]:
-  """The work that a crash loop parked, each act by its name and its kind: a run, a command or a reply that the
-  record shows started in five lives and not done. A wake puts no parked act to the outside, and it is pending no
+  """The work that a crash loop parked, each act by its name and its kind: a run or a reply that the record
+  shows started in five lives and not done. A wake puts no parked act to the outside, and it is pending no
   more until a retry."""
   return held_engine().parked()
 

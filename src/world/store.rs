@@ -75,7 +75,7 @@ pub fn keeping(mut store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn 
 }
 
 /// Whether the record at a path is a database of SQLite, which its name says.
-fn database(path: &Path) -> bool {
+pub(crate) fn database(path: &Path) -> bool {
   let named = path.extension().and_then(|one| one.to_str()).unwrap_or_default();
   ["sqlite", "sqlite3", "db"].iter().any(|one| named.eq_ignore_ascii_case(one))
 }

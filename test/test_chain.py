@@ -422,7 +422,7 @@ async def test_a_chain_holds_whole_every_act_made_on_the_chain() -> None:
     "#read1\nread1_path = 'a.txt'\n<s:read1_text>\none\ntwo</s:read1_text>",
     f"#bash1\nbash1_command = 'echo hi'\n{binding('bash1', 'Exit')}",
     "#prompt1 closed\nprompt1_value = 1",
-    prompted("prompt2", "None", "bash1 done"),
+    prompted("prompt2", "None", "bash1 done", "prompt1"),
     "#bash1 exited 0\nbash1_stdout = 'ran echo hi'",
     "#rung2 advance on prompt2",
   ]
@@ -1293,7 +1293,7 @@ async def test_when_an_act_that_a_rung_made_on_another_chain_is_done_the_chain_t
     (step, root, [f"#{x} done\n<s:{x}_value>\na\nb</s:{x}_value>"])
   ]
   assert f"#{x} done\n<s:{x}_value>\na\nb</s:{x}_value>" in paragraphs(engine.turns(on=root))
-  assert [a[5] for a in said(log, "prompt") if a[3] == root] == ["fan out", f"{x} done"]
+  assert [a[3::2] for a in said(log, "prompt") if engine.scope(a[1]) == root] == [(root, "fan out"), (act, f"{x} done")]
   assert engine.peek(y) == "c" and engine.get(far)[0] == "chain"
 
 
@@ -1332,4 +1332,7 @@ async def test_the_chain_tells_the_pause_of_a_prompt_that_one_of_its_rungs_made_
     (step, root, [told])
   ]
   assert told in paragraphs(engine.turns(on=root))
-  assert [a[5] for a in said(log, "prompt") if a[3] == root] == ["lead", f"{work} paused"]
+  assert [a[3::2] for a in said(log, "prompt") if engine.scope(a[1]) == root] == [
+    (root, "lead"),
+    (act, f"{work} paused"),
+  ]
