@@ -262,7 +262,7 @@ test("a prompt of None to the operator is a notice with no field, done at once, 
 test("resume preserves chains, programs, theme, and input drafts while unfinished work stays paused", async () => {
   const first = await demoSession({ seed: true });
   let library = await demoLibrary(first);
-  const screen = await createTestRenderer({ width: 120, height: 40 });
+  const screen = await createTestRenderer({ width: 120, height: 40, exitSignals: [] });
   const app = new App(screen.renderer, first, { quit() {}, workspaces: library });
   const fork = first.chains.find((chain) => chain.id !== first.engine.root);
   if (!fork) throw new Error("No fork in the fixture.");

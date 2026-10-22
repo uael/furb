@@ -39,7 +39,9 @@ export async function composing(
 ): Promise<void> {
   const session = typeof opened === "boolean" ? await demoSession({ seed: opened }) : opened;
   const library = await demoLibrary(session);
-  const screen = await createTestRenderer(options);
+  // A test terminal ends on no signal, as the terminal of the TUI does, so that a pipe that a model command line
+  // closes early ends no test.
+  const screen = await createTestRenderer({ exitSignals: [], ...options });
   let quits = 0;
   const app = new App(screen.renderer, session, {
     quit() {
