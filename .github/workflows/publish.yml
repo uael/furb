@@ -4,11 +4,21 @@ name: publish
 # program of rust; and furb-monty, the crate built for python. Each of the two crates goes as one wheel for each
 # machine the gates run on and as its source for any other machine, which builds it with the rust of
 # rust-toolchain.toml. PyPI is told to trust this workflow of this repository for all three, so no token is kept
-# anywhere: the job asks GitHub for a short lived identity and PyPI reads it. A run started by hand builds everything
-# and publishes nothing, which is the rehearsal of a release.
+# anywhere: the job asks GitHub for a short lived identity and PyPI reads it. Before it publishes, each machine
+# installs the wheels in a clean environment with pip, and runs the command furb. A run started by hand, or by a pull
+# request that changes what the release builds, builds and proves everything and publishes nothing, which is the
+# rehearsal of a release.
 on:
   push:
     tags: ["v*"]
+  pull_request:
+    paths:
+      - .github/workflows/publish.yml
+      - Cargo.toml
+      - pyproject.toml
+      - bind/python/pyproject.toml
+      - cli/Cargo.toml
+      - cli/pyproject.toml
   workflow_dispatch:
 
 permissions:
@@ -31,6 +41,10 @@ jobs:
         with:
           version: ${{ env.UV_VERSION }}
       - run: uv python install
+      # A tag publishes the version that it names, and no other.
+      - if: github.ref_type == 'tag'
+        run: |
+          test "v$(uv version --short)" = "$GITHUB_REF_NAME"
       - run: uv build
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -44,7 +58,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
         # The extension is built for one interpreter, and the program for none.
         crate:
           - { name: furb-monty, path: bind/python, args: --interpreter python3.14 }
@@ -92,10 +106,43 @@ jobs:
           name: ${{ matrix.crate.name }}-source
           path: ${{ matrix.crate.path }}/dist
 
+  proof:
+    # What a user does: pip installs furb from the wheels alone, in a clean environment, which brings the two crates
+    # at the same version, and runs the command furb and the engine of monty.
+    name: pip install on ${{ matrix.os }}
+    needs: [furb, wheels]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: dist
+          merge-multiple: true
+      - run: python -m venv clean
+      - run: |
+          bin=clean/bin; [ -d clean/Scripts ] && bin=clean/Scripts
+          echo "$PWD/$bin" >> "$GITHUB_PATH"
+      - run: python -m pip install --no-index --only-binary ":all:" --find-links dist furb
+      - run: python -m pip list
+      - run: furb --help
+      - run: python -c "from furb import engine; print(engine.__name__)"
+        env:
+          FURB_ENGINE: monty
+
   publish:
     name: publish
     if: github.event_name == 'push'
-    needs: [furb, wheels, source]
+    needs: [furb, wheels, source, proof]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: pypi
