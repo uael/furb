@@ -159,7 +159,9 @@ test("a damaged journal of file changes says what broke, with no word of the par
       await session.refresh().catch(session.fail);
       const shown = await frame();
       expect(shown).toContain("The journal of file changes is damaged");
-      expect(shown).toContain("change 1 cannot be read");
+      // The message wraps where the path of the journal ends, which differs from one machine to the next.
+      expect(session.damagedJournal).toEndWith("is damaged: change 1 cannot be read.");
+      expect(shown).toContain("cannot be read");
       expect(shown).toContain("Repair the journal");
       expect(shown).toContain("Start a new journal");
       expect(shown).not.toContain("JSON");
