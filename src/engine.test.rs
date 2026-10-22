@@ -26,7 +26,7 @@ use unsync::oneshot;
 use crate::{
   Act, Ear, Engine, Exit, Fact, Fault, Object, Text,
   ear::{Co, Next, ear, hear, say},
-  engine::{CRASHES, callable},
+  engine::{CRASHES, HEARING, callable},
   verbs, world,
 };
 
@@ -1098,4 +1098,12 @@ fn a_record_whose_word_never_yields_replays_to_the_same_facts() {
   let (made, tip) = again.split_at(facts.len().min(again.len()));
   assert_eq!(made, facts);
   assert!(tip.first().is_some_and(|one| one.starts_with("stand ")), "{tip:?}");
+}
+
+#[test]
+fn the_rule_by_which_a_restore_tells_an_ear_the_past_is_the_rule_of_the_bus_of_the_engine() {
+  let ears = crate::ENGINE.split("  def ears(a):\n").nth(1).expect("boot defines ears");
+  let rule = ears.lines().find_map(|line| line.trim().strip_prefix("k = ")).expect("ears names k");
+  let held = HEARING.split_whitespace().collect::<String>();
+  assert!(held.contains(&rule.split_whitespace().collect::<String>()), "{rule} is not in HEARING");
 }
