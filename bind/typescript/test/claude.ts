@@ -21,9 +21,18 @@ const usage = {
 };
 
 if (existsSync(beside("deaf"))) {
+  // Windows gives a process no new parent when its parent ends, so the parent is asked whether it lives.
   const parent = process.ppid;
+  const lives = () => {
+    try {
+      process.kill(parent, 0);
+      return process.ppid === parent;
+    } catch {
+      return false;
+    }
+  };
   writeFileSync(beside("asked"), String(process.pid));
-  setInterval(() => (existsSync(beside("deaf")) && process.ppid === parent) || process.exit(0), 20);
+  setInterval(() => (existsSync(beside("deaf")) && lives()) || process.exit(0), 20);
 } else {
   const cost = existsSync(beside("cost")) ? Number(readFileSync(beside("cost"), "utf8")) : 0.01;
   let n = 0;
