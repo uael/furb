@@ -356,6 +356,12 @@ async def test_the_ear_of_the_log_writes_the_log_of_a_life_on_the_engine_of_this
   assert heads[0] == ["chain", "chain1"]
   assert ["rung", "rung1"] in heads and ["run", "run1"] in heads
   assert ["run", "run1"] not in [fact[:2] for (fact,) in _monty.kept(path)]
+  retold = _monty.retold(path)
+  assert retold["logged"] and retold["facts"] == logged
+  Path(f"{path}.log").unlink()
+  retold = _monty.retold(path)
+  assert not retold["logged"]
+  assert ["rung", "rung1"] in [fact[:2] for fact in retold["facts"]]
 
 
 async def test_an_engine_and_an_ear_that_the_collector_of_cycles_drops_on_another_thread_go_with_no_error() -> None:

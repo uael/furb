@@ -4,16 +4,19 @@ import type { Exit } from "@furb/engine/life";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import { type App, follow } from "../src/app.ts";
+import { openEngine } from "../src/bridge.ts";
 import { demoSession, removeDemoDirectories, seedDemo, seedDemoFiles } from "../src/demo.ts";
 import { loadParsers } from "../src/parsers.ts";
 import { Preferences } from "../src/preferences.ts";
-import type { Session } from "../src/session.ts";
+import { Session } from "../src/session.ts";
 import { palettes } from "../src/theme.ts";
 import { Workspaces } from "../src/workspaces.ts";
 import { idle } from "../test/idle.ts";
 import { rasterize } from "./raster.ts";
 import { click, find, highlighting, home, mount } from "./stage.ts";
 
+/** The recorded life of a conductor, from the fixtures of the TUI. */
+const conductor = resolve(import.meta.dir, "..", "fixtures", "conductor.jsonl");
 // The model of the demo writes slowly, so that its work stays in progress while a capture shows it. The session runs
 // in a worker, which reads the environment once, as it starts.
 const projects = await home("furb-gallery", { FURB_DEMO_PACE: "200" });
@@ -45,7 +48,7 @@ async function show(next: Session): Promise<void> {
 await show(session);
 
 /** The shots whose notice tells what the step did, which keep it. The others show no notice of an earlier step. */
-const notices = /^(34|36|37|42|43|44|45|50|55)-/;
+const notices = /^(34|36|37|42|43|44|45|50|55|58)-/;
 /** The work of the chain completes, and the queue sends what waits in it, until nothing is left to do. */
 async function settle(): Promise<void> {
   await session.refresh();
@@ -91,7 +94,6 @@ try {
   await session.command("/name Explore project");
   await idle(session);
   await session.refresh();
-  await capture("02-feed");
   session.show("transcript");
   await capture("03-transcript");
   const written = session.host.changes;
@@ -173,11 +175,15 @@ try {
     on: session.selected,
     to: "operator",
   });
-  await until(session.host, () => session.host.notices.has(markdown));
+  // A notice settles as a quiet line, which opens to its whole message.
+  await until(session.host, () => session.acts.some((act) => act.id === markdown && act.done));
+  session.folds[markdown] = false;
   await session.refresh();
   await capture("51-markdown");
-  app().question();
-  await until(session.host, () => !session.host.notices.size);
+  // The rung that wrote the file opens to its read and its write, each with what it did.
+  session.folds[markdown] = true;
+  const wrote = session.acts.find((act) => act.kind === "write")?.by;
+  if (wrote) session.folds[wrote] = false;
   app().toggleMode();
   app().composer.setText('notes = read("README.md")\nprint(notes.content)');
   await capture("10-python-input");
@@ -198,9 +204,6 @@ try {
   app().help();
   await capture("16-help");
   app().closeOverlay();
-  test.resize(82, 32);
-  await capture("17-narrow");
-  test.resize(152, 46);
   app().toggleMode();
   app().composer.setText("");
   const command = await session.engine.bash(
@@ -533,6 +536,83 @@ try {
   await until(session.host, () => !session.host.prompts.has(merge));
   app().closeOverlay();
   await capture("55-answer-landed");
+
+  // A record that an earlier engine made drifts on a replay, so it opens to read, with a dialog that names both engines.
+  const older = await demoSession({ cwd: await project("fieldnotes-old") });
+  await seedDemo(older);
+  const drifts = older.host.record ?? "";
+  await older.dispose();
+  const kept = await readFile(drifts, "utf8");
+  await writeFile(drifts, kept.replace(/("bash","bash\d+","rung\d+","chain\d+","[^"]*"),""/, "$1,false"));
+  await library.import(drifts, await library.add(older.host.directory));
+  session = library.current?.session ?? session;
+  await capture("56-record-to-read");
+
+  app().dispose();
+  await library.dispose();
+  await show(await gallerySession());
+  // A thread of the owner whose model hires two workers, each on a chain of its own, and a later message of his.
+  await session.submit("Hire two workers.");
+  await until(
+    session,
+    () =>
+      session.acts.filter((act) => act.kind === "rung" && act.on !== session.engine.root && !act.done)
+        .length === 2,
+  );
+  const thread = session.activity.find((act) => session.isUserPrompt(act))?.id ?? "";
+  await session.submit("Think until I cancel.");
+  await until(session, () => {
+    const last = session.lastOwn;
+    return Boolean(
+      last && last.id !== thread && session.activity.some((act) => act.by === last.id && !act.done),
+    );
+  });
+  await session.refresh();
+  app().render();
+  await test.flush();
+  // A right click on the message offers to take it back.
+  const [column, row] = find(test, "┃ Think until I cancel.");
+  await test.mockMouse.click(column + 4, row, 2);
+  await capture("57-message-menu");
+  app().closeOverlay();
+  // A cancel of the thread reaches the workers, so it asks first.
+  await session.command(`/cancel ${thread}`);
+  await rest();
+  await capture("58-cancel-confirm");
+  app().closeOverlay();
+  // ⌃C takes back the last message alone, and the workers go on.
+  const message = session.lastOwn?.id;
+  await session.command("/cancel");
+  await until(session, () => session.acts.some((act) => act.id === message && act.done));
+  await rest();
+  await capture("59-take-back");
+
+  // The feed of a real life: a life of the conductor, recorded from its log, with a score of chains at work, which
+  // shows and runs nothing. The library of the demo ends first, with the sessions and the workers that it holds.
+  app().dispose();
+  await library.dispose();
+  const life = await openEngine({ record: conductor, cwd: await project("conductor") });
+  session = new Session(life.engine, life.host, true);
+  await session.refresh();
+  ({ library, app } = await mount(session, test.renderer));
+  await capture("02-feed");
+  // A worker of the life, whose ladders are long: the earlier rungs of a ladder fold into one line.
+  await session.select(session.chains.find((chain) => session.labelOf(chain.id) === "life3/feed")?.id ?? "");
+  await capture("60-long-ladder");
+  // The conductor runs one long word, under which its messages pile up, and the earlier ones fold into one line.
+  await session.select(session.engine.root);
+  app().render();
+  await test.flush();
+  const fold = app()
+    .scroll.getChildren()
+    .find((node) => node.id.startsWith("more-"));
+  app().scroll.stickyScroll = false;
+  app().scroll.scrollTo(Math.max(0, (fold?.y ?? 0) - app().scroll.y + app().scroll.scrollTop - 6));
+  await test.flush();
+  await capture("61-folded-steps");
+  test.resize(82, 32);
+  await capture("17-narrow");
+  test.resize(152, 46);
 } finally {
   app().dispose();
   test.renderer.destroy();

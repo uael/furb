@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promi
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { executable } from "./executable.ts";
+import { remove } from "./processes.ts";
 
 const examples = join(import.meta.dir, "..", "..", "..", "docs", "examples", "typescript");
 const fake = join(import.meta.dir, "claude.ts");
@@ -67,7 +68,7 @@ test("a life goes on in a second process after its first process ends", async ()
       .filter((fact) => fact[0] === "prompt" && fact[2] === "operator");
     expect(asked.map((fact) => fact[1])).toEqual(["prompt1"]);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await remove(root);
   }
 });
 
@@ -91,7 +92,7 @@ test("the deaf claude of a life ends when the process of the life is killed", as
     for (let n = 0; n < 60 && lives(); n++) await Bun.sleep(50);
     expect(lives()).toBe(false);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await remove(root);
   }
 });
 
@@ -100,7 +101,7 @@ test("a reviewer on a chain of its own reviews the draft of the root", async () 
   try {
     expect(await run("chains")).toBe("The notes read well.\nreviewer under root\n");
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await remove(root);
   }
 });
 
@@ -111,7 +112,7 @@ test("the model asks the operator before it deploys", async () => {
   try {
     expect(await run("questions", "yes\n")).toBe("Deploy version 2 now? deployed\n");
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await remove(root);
   }
 });
 
@@ -121,7 +122,7 @@ test("a grant pauses the chain at its ceiling and a larger grant lets it go on",
     await writeFile(join(home, "cost"), "0.3");
     expect(await run("grant")).toBe("paused at 0.60 dollars\n1200\n");
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await remove(root);
   }
 });
 
@@ -130,6 +131,6 @@ test("an edit of the door of a thread changes the plan of the model", async () =
   try {
     expect(await run("door")).toBe('await wait(3600)\nclose("released")\nreleased\n');
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await remove(root);
   }
 });

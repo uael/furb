@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
 import type { LiveAct } from "../../src/life/acts.ts";
-import { ladder } from "../../src/life/ladder.ts";
-import { asOf, momentsOf, nowOf, owedAt, spans, subjectOf, weave } from "../../src/life/loom.ts";
+import { measureOf } from "../../src/life/acts.ts";
+import { condense, ladder } from "../../src/life/ladder.ts";
+import { asOf, duration, momentsOf, nowOf, owedAt, spans, subjectOf, weave } from "../../src/life/loom.ts";
 import { act } from "./acts.ts";
 
 const loomOf = (
@@ -268,7 +269,7 @@ test("a chain that failed says why, and a chain whose prompts closed says the fi
   expect(of("chain2")).toEqual({ tone: "past", act: "prompt2", more: 0, text: "The tests pass." });
 });
 
-test("an act says what it is about on one line: the word of a rung, the message of a prompt, the seconds of a wait", () => {
+test("an act says what it is about on one line: the word of a rung, the message of a prompt, the time and the acts of a wait", () => {
   const word = (rung: LiveAct) => (rung.id === "rung1" ? "\nx = 1\ny = 2" : "");
   expect(subjectOf(act("rung1", "rung", "chain1", "operator", 1), word)).toBe("x = 1");
   expect(
@@ -278,6 +279,84 @@ test("an act says what it is about on one line: the word of a rung, the message 
     ),
   ).toBe("Go on.");
   expect(subjectOf(act("wait1", "wait", "chain1", "operator", 1, undefined, { words: [30] }), word)).toBe(
-    "30s",
+    "up to 30s",
   );
+  expect(
+    subjectOf(
+      act("wait2", "wait", "chain1", "operator", 1, undefined, { words: [600, "prompt3", "bash2"] }),
+      word,
+    ),
+  ).toBe("up to 10m for prompt3, bash2");
+});
+
+test("a long thread folds its earlier steps into one line of more, and keeps a prompt that asks the operator", () => {
+  const acts = [act("chain1", "chain", "", "operator", 1)];
+  for (let n = 1; n <= 10; n++)
+    acts.push(
+      act(`prompt${n}`, "prompt", "chain1", "operator", 10 * n, 10 * n + 5, {
+        words: ["str", `step ${n}`, ""],
+      }),
+    );
+  // The second prompt asks the operator and waits for an answer.
+  acts[2] = act("prompt2", "prompt", "chain1", "operator", 20, undefined, {
+    words: ["str", "step 2", "operator"],
+  });
+  const lines = condense(
+    ladder("chain1", acts, () => "", new Map(), new Set(["prompt2"])),
+    new Set(),
+  );
+  expect(lines.map((line) => (line.type === "more" ? `more ${line.count}` : line.act.id))).toEqual([
+    "prompt1",
+    "prompt2",
+    "more 2",
+    "prompt5",
+    "prompt6",
+    "prompt7",
+    "prompt8",
+    "prompt9",
+    "prompt10",
+  ]);
+  const more = lines.find((line) => line.type === "more");
+  expect(more?.type === "more" && [more.key, more.heads]).toEqual(["prompts:chain1", ["prompt"]]);
+  expect(
+    condense(
+      ladder("chain1", acts, () => "", new Map(), new Set(["prompt2"])),
+      new Set(["prompts:chain1"]),
+    ).some((line) => line.type === "more"),
+  ).toBe(false);
+});
+
+test("a long ladder folds its earlier rungs into one line of more, keeps a rung that runs, and folds no lone rung", () => {
+  const acts = [act("chain1", "chain", "", "operator", 1), act("prompt1", "prompt", "chain1", "operator", 2)];
+  for (let n = 1; n <= 9; n++)
+    acts.push(act(`rung${n}`, "rung", "chain1", "prompt1", 2 + n, n === 2 ? undefined : 3 + n));
+  const ids = (opened: string[]) =>
+    condense(
+      ladder("chain1", acts, () => "x = 1", new Map(), new Set()),
+      new Set(opened),
+    ).map((line) => (line.type === "more" ? `more ${line.count}` : line.act.id));
+  expect(ids([])).toEqual(["prompt1", "rung1", "rung2", "more 3", "rung6", "rung7", "rung8", "rung9"]);
+  expect(ids(["rungs:prompt1"])).toHaveLength(10);
+  // Five rungs leave one to fold, and a line of more in place of one rung shows nothing less.
+  expect(ids([]).length).toBeLessThan(ids(["rungs:prompt1"]).length);
+  const five = acts.slice(0, 7);
+  expect(
+    condense(
+      ladder("chain1", five, () => "", new Map(), new Set()),
+      new Set(),
+    ).some((line) => line.type === "more"),
+  ).toBe(false);
+});
+
+test("the measure of a chain counts its answers, sums their dollars, and names the actor of the last", () => {
+  expect(
+    measureOf([
+      { actor: "claude-cli:sonnet/high", usage: [100, 10, 0, 0, 0.25] },
+      { actor: "claude-cli:opus/high", usage: [200, 20, 0, 0, 0.5] },
+    ]),
+  ).toEqual({ dollars: 0.75, spent: 0.75, answers: 2, actor: "claude-cli:opus/high" });
+});
+
+test("a count of seconds reads as seconds, minutes or hours", () => {
+  expect([duration(45), duration(600), duration(10800)]).toEqual(["45s", "10m", "3h"]);
 });

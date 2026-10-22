@@ -13,7 +13,7 @@ members = ["cli"]
 
 # The one version of furb: each crate takes it, and maturin gives it to the wheel of each crate.
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 
 [lib]
 name = "furb"
@@ -53,9 +53,9 @@ typescript = ["dep:napi", "dep:napi-derive", "dep:napi-build"]
 # The sandbox the engine runs in, and its type checker, which is the gate of the
 # Kernel. A revision of the fork, since the interpreter the engine needs is not
 # released, and a revision reads the same interpreter at every build.
-monty = { git = "https://github.com/uael/monty", rev = "a7655d40" }
-monty-type-checking = { git = "https://github.com/uael/monty", rev = "a7655d40" }
-monty-types = { git = "https://github.com/uael/monty", rev = "a7655d40" }
+monty = { git = "https://github.com/uael/monty", rev = "217d1cf7" }
+monty-type-checking = { git = "https://github.com/uael/monty", rev = "217d1cf7" }
+monty-types = { git = "https://github.com/uael/monty", rev = "217d1cf7" }
 # A whole number past 64 bits, which a host hands in as its digits.
 num-bigint = "0.4"
 # The record: one fact per line, as JSON, whose numbers are read before anything rounds them. The catalog of models

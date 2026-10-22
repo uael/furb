@@ -9,13 +9,21 @@ Rendering, input, and syntax coloring stay responsive while the sandbox gates an
 uv sync
 bun install
 bun run build
-bun run demo                 # A local, scripted life. No model request.
+bun run demo                 # A local, scripted life, and a real life recorded from its log. No model request.
 bun run tui                  # A real life, on the models of the catalog of the crate.
 bun run tui -- --resume .furb/sessions/example.jsonl
 ```
 
 `furb`, the command line, opens this TUI when it has no command, with `--demo`, `--record`, `--cwd`, the model and the
 effort of its `--model` as `--model` and `--effort`, each `--roster`, and the words after `--`.
+
+A recorded life is a log of a life whose first line is a header that says `"recorded": true`. The TUI reads it as it
+reads a record that another engine made, from its acts, and runs nothing: what you send to it fails with the
+reason. The demo opens
+`fixtures/conductor.jsonl`, a life of a conductor of furb with 23 chains, beside its scripted life, when it has no
+`--cwd` and no record. `bun run tui/script/fixture.ts <record>.jsonl.log [out]` makes such a fixture from the log of
+a real life: it keeps the acts that the model of a life reads, cuts each word, message and output to its first lines,
+replaces each key, address of mail and home directory, and ends at the moment with the most chains at work.
 
 Use `--cwd`, `--model provider:model`, `--effort`, `--record`, and repeated `--roster` options to configure
 a new life. A session offers every model that the catalog offers, with its model first: the default model when you
@@ -25,6 +33,10 @@ a `.gitignore` that keeps it out of version control. Keep the `.jsonl`, `.sessio
 `.ui.json` files together. The last file keeps the view of the session as you left it. Keep its `.images` directory
 too when the session has image attachments. An unfinished session opens paused and offers a resume choice. The
 native engine replays completed work from the record.
+A record whose replay drifts, as a record that another engine made, opens to read: the TUI shows what the record
+kept, runs no word again, asks no model, and refuses each command that would change the life. A dialog names the
+engine that made the record and the engine of this build, and offers to read it or to start a new life in its
+workspace.
 ⌃W lists the workspaces and their sessions, each with its state, save time, cost, and record size. It reads
 unfinished work through native replay without locking or changing the saved record. The record shows what remains
 unfinished. The list shows at once, and each saved session shows its state when its replay ends.
@@ -77,15 +89,15 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | ↑, ↓, Tab, Enter after /, @ or : | Choose a slash command, its value, a project file, or an emoji as it is typed |
 | ⌃F / PageUp / PageDown | Filter the current view / scroll |
 | ⌃R / ⌃Space | Python input / complete a name |
-| ⌃L / ⌃A | Edit a prompt program / answer the questions that wait, or dismiss a notice |
-| Tab / ⇧Tab in an answer | Next / previous question or notice that waits |
+| ⌃L / ⌃A | Edit a prompt program / answer the questions that wait |
+| Tab / ⇧Tab in an answer | Next / previous question that waits |
 | ⌃G / ⌃click a name | Inspect a value and follow its definition |
 | Drag / ⌃Y | Select text and copy it / copy the selected text again |
 | Click / right-click an act | Fold or expand it / inspect its value or prompt program |
 | ⌃⌥← | Return from a definition jump |
 | ⌥[ / ⌥] or ⌥P / ⌥N | Previous / next message of the feed |
 | ⌃PageUp / ⌃PageDown | Previous / next page of file changes |
-| ⌃C | Clear the input, close a dialog, or cancel current work |
+| ⌃C | Clear the input, close a dialog, or cancel what you sent last (a message goes back to the input) |
 | Esc | Close a dialog or pause current model work |
 | F1 / ⌃Q / ⌃D twice | Help / save and quit / save and quit from an empty input |
 
@@ -121,7 +133,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/context <fraction>` | Pause at a share of the model window |
 | `/pause [act or chain]` | Hold delivery while work completes |
 | `/wake [act or chain]` | Deliver pending work |
-| `/cancel [id]` | End an act or the selected chain's work |
+| `/cancel [id]` | End an act, or what you sent last on this chain |
 | `/feed <id> [text]` | Send a line of input to a command; no text closes its input |
 | `/close <id> <json>` | Close an act with a JSON value |
 | `/name <name>` | Set a name in the session picker |
@@ -178,5 +190,5 @@ the structured JSON export. `/context` sets the context ceiling.
 
 A life runs the extensions that the configs turn on, as [the guide of the extensions](../docs/extensions.md) says,
 and each chain shows the rungs of their words in its feed, as it shows any rung. The TUI has no part of its own for an extension: `/extensions` lists what the life runs, and `/run`
-runs a word of one on the chain on screen, as `/run skill("pdf")`. A cancel of the work of a chain ends its prompts,
-rungs, commands and waits, and not what an extension started on it, such as the watcher of the memory.
+runs a word of one on the chain on screen, as `/run skill("pdf")`. A cancel ends one act and the work under it, and
+not what an extension started on the chain, such as the watcher of the memory.

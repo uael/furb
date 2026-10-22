@@ -5,6 +5,7 @@ use std::{
   collections::{HashMap, HashSet},
   env, future,
   io::ErrorKind,
+  ops::{Deref, DerefMut},
   path::{Path, PathBuf},
   pin::pin,
   process::{Command, Stdio},
@@ -25,7 +26,7 @@ use unsync::{oneshot, spsc};
 
 use super::{Scratch, here};
 use crate::{
-  ear::{Co, Ear, Next, hearing, say},
+  ear::{Co, Ear, Next, hearing, reactor, say},
   engine::left,
   fact::{Fact, named},
   value::{Exit, Fault, Object, Text},
@@ -243,7 +244,7 @@ enum Said {
 /// stdin is given, or nothing when its stdin stays open for what is fed to it.
 struct Begun {
   about: String,
-  child: Child,
+  child: Shell,
   group: Group,
   timeout: Option<Duration>,
   given: Option<String>,
@@ -290,7 +291,7 @@ async fn begun(co: &mut Co<Said>, a: &Fact, scratch: &Scratch) -> Result<Begun, 
     Fault::refused(format!("{shown} did not start: {why}: {}", dir.display()))
   })?;
   match Group::of(&child) {
-    Ok(group) => Ok(Begun { about, child, group, timeout, given }),
+    Ok(group) => Ok(Begun { about, child: Shell(Some(child)), group, timeout, given }),
     Err(no) => {
       let _ = child.start_kill();
       Err(Fault::refused(format!("{shown} could not be held: {no}")))
@@ -409,7 +410,8 @@ async fn feed(stdin: Option<ChildStdin>, mut fed: spsc::Receiver<Option<String>>
   }
 }
 
-/// How long the World waits between two probes of the group of a command whose shell exited while a stream is open.
+/// How long the World waits between two probes of the group of a command whose shell exited while a stream is open,
+/// and between two probes of the shell of a command that dropped before its shell was reaped.
 const PROBE: Duration = Duration::from_millis(100);
 
 /// One stream of a command: each text said as it comes, whole in utf-8, and kept in all until the stream ends.
@@ -557,6 +559,42 @@ impl Group {
 impl Drop for Group {
   fn drop(&mut self) {
     self.slay();
+  }
+}
+
+/// The shell of a command, which the life reaps once it ends, so no shell stays a zombie of the process of the life.
+///
+/// A `Child` of tokio that drops before it is reaped waits in a queue that tokio drains only when the signal of a
+/// child wakes its reactor. A command that drops before it is over ends its group as it drops, so the signal of its
+/// shell can wake the reactor in the moment after tokio found the shell alive and before the shell is in that queue.
+/// The shell then stays a zombie until another child of the process ends. So the reactor probes a shell that drops
+/// alive until it reaps it.
+struct Shell(Option<Child>);
+
+impl Deref for Shell {
+  type Target = Child;
+
+  fn deref(&self) -> &Child {
+    self.0.as_ref().expect("a shell holds its child until it drops")
+  }
+}
+
+impl DerefMut for Shell {
+  fn deref_mut(&mut self) -> &mut Child {
+    self.0.as_mut().expect("a shell holds its child until it drops")
+  }
+}
+
+impl Drop for Shell {
+  fn drop(&mut self) {
+    let Some(mut child) = self.0.take() else { return };
+    if matches!(child.try_wait(), Ok(None)) {
+      reactor().spawn(async move {
+        while let Ok(None) = child.try_wait() {
+          tokio::time::sleep(PROBE).await;
+        }
+      });
+    }
   }
 }
 

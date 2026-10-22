@@ -5,7 +5,7 @@ from collections.abc import Callable, Generator
 from contextvars import ContextVar
 from dataclasses import dataclass
 from string.templatelib import Template
-from typing import Any, Never
+from typing import Any, Literal, Never
 
 WINDOW = 200000
 OPERATOR = "operator"
@@ -145,7 +145,9 @@ def close(value: object, id: str = "") -> None:
       try:
         s = eval(shape, module(on)) or object
         fits = any(
-          isinstance(value, getattr(x, "__origin__", x))
+          (type(value), value) in [(type(a), a) for a in x.__args__]
+          if getattr(x, "__origin__", x) is Literal
+          else isinstance(value, getattr(x, "__origin__", x))
           for x in (s.__args__ if isinstance(s, type(int | str)) else [s])
         )
       except Exception:
@@ -214,7 +216,9 @@ def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
 
 
 def prompt[T](shape: type[T] | object, message: str = "", to: str = "", on: str = "") -> Act[T]:
-  named = shape if isinstance(shape, str) else re.sub(r"<class '|'>|[\w.:/]*\.", "", repr(shape))
+  named = (
+    shape if isinstance(shape, str) else re.sub(r"""<class '|'>|('[^']*'|"[^"]*")|[\w.:/]*\.""", r"\1", repr(shape))
+  )
   thread = on if question(("prompt", on)) else ""
   to = to or (thread and get(thread)[6])
   asks = (to or module(on).get("actor")) != OPERATOR

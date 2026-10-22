@@ -382,6 +382,27 @@ pub fn logged(path: String) -> Result<Option<Value>, Fault> {
   Ok(world::logged(&path)?.map(|facts| Value(Object::list(facts))))
 }
 
+/// What the record at a path tells, read with no life, so no word runs again and a record of any engine opens: the
+/// engine that made it, as the record names it, and nothing when it names none; the engine of this build; whether
+/// the facts are those of its log; and the facts, in order. The facts are those of the log when it agrees with the
+/// record, and else those that the record kept, with the chains, the rungs, the runs and the dones that they name.
+#[cfg_attr(feature = "python", pyfunction)]
+#[cfg_attr(
+  feature = "typescript",
+  napi(
+    ts_return_type = "{ made: string | null; engine: string; logged: boolean; facts: unknown[] }"
+  )
+)]
+pub fn retold(path: String) -> Result<Value, Fault> {
+  let world::Retold { made, logged, facts } = world::retold(&path)?;
+  Ok(Value(Object::dict([
+    (Object::string("made"), made.map_or_else(Object::none, Object::string)),
+    (Object::string("engine"), Object::string(world::engine())),
+    (Object::string("logged"), Object::bool(logged)),
+    (Object::string("facts"), Object::list(facts)),
+  ])))
+}
+
 /// One line of a record, read with every number exact, as the record keeps it.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi(ts_return_type = "unknown"))]
@@ -472,6 +493,13 @@ pub fn shell() -> String {
 #[cfg_attr(feature = "typescript", napi)]
 pub fn shapes() -> Vec<&'static str> {
   world::SHAPES.to_vec()
+}
+
+/// Whether the operator answers a shape: one of the shapes it offers, or a Literal of values that a line names.
+#[cfg_attr(feature = "python", pyfunction)]
+#[cfg_attr(feature = "typescript", napi)]
+pub fn answers(shape: String) -> bool {
+  world::answers(&shape)
 }
 
 /// A line of the operator as a value of the shape a prompt wants, by the rules every console of the crate reads a

@@ -429,7 +429,11 @@ fn the_catalog_asks_the_local_server_only_when_a_name_needs_it_or_a_host_lists_w
     "a word after a slash that is no level names nothing"
   );
   let high = catalog.roster(None, Some("local:qwen/high")).map(|(_, actor)| actor);
-  assert_eq!(high, Ok(Some("local:qwen".to_owned())));
+  assert_eq!(
+    high,
+    Ok(Some("local:qwen/high".to_owned())),
+    "a level after a slash is an effort of the model"
+  );
   assert_eq!(catalog.find("local:qwen").map(|one| one.window), Some(1000));
   assert_eq!(told.try_iter().count(), 0, "a catalog asks the server once");
 }

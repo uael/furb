@@ -2,10 +2,12 @@
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { Engine, SessionOptions, Turn } from "@furb/engine";
-import { Act, actorParts, ENGINE, model, models, Session, standingOf } from "@furb/engine";
+import { Act, actorParts, ENGINE, model, models, retold, Session, standingOf } from "@furb/engine";
+import { measureOf } from "@furb/engine/life";
 import type { HostState } from "./bridge.ts";
 import { type EngineOptions, roster } from "./models.ts";
 import { queueDispatches, queueHash } from "./queue.ts";
+import { isRecorded, Reader } from "./reading.ts";
 import type { FollowUp } from "./session.ts";
 import { Snapshots } from "./snapshots.ts";
 
@@ -13,12 +15,36 @@ declare const self: Worker & { close(): void };
 let session: Session | undefined;
 let engine: Engine | undefined;
 let snapshots: Snapshots | undefined;
+/** The record open to read, when the life on it was refused for a drift: one that another engine made. */
+let reader: Reader | undefined;
 /** The claude command line that the session names, which the catalog offers, and whether the session is the demo. */
 let claude: string | undefined;
 let demo = false;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let sentFacts = 0;
 const state = () => {
+  if (reader) {
+    self.postMessage({
+      state: {
+        completed: reader.activity.completed,
+        cost: reader.activity.cost,
+        directory: reader.directory,
+        imageDirectory: reader.imageDirectory,
+        actor: reader.actor,
+        record: reader.record,
+        facts: reader.facts.length,
+        prompts: [],
+        notices: [],
+        streams: [],
+        pending: [],
+        changes: 0,
+        reading: reader.reading,
+        recorded: reader.recorded,
+        measures: measuresOf(reader.activity.answers),
+      } satisfies HostState,
+    });
+    return;
+  }
   const owner = session;
   if (!owner) return;
   const snapshot: HostState = {
@@ -34,6 +60,7 @@ const state = () => {
     streams: [...owner.streams],
     pending: [...owner.pending],
     changes: owner.changes.length,
+    measures: measuresOf(owner.activity.answers),
   };
   sentFacts = owner.facts.length;
   self.postMessage({ state: snapshot });
@@ -115,13 +142,18 @@ function scriptedSession(options: SessionOptions): Session {
       // A message that says to ask first gets a question to the operator and no close, so the model answers again
       // once the operator has answered.
       const asks = !first && last.includes("Ask me first");
-      const code = fenced
-        ? '```python\nclose("Here is the answer, in a fence.")\n```'
-        : asks
-          ? 'await prompt(str, "Which effort should the next step take?", to=OPERATOR)'
-          : first
-            ? 'notes = read("README.md")\ncheck = await bash("printf \'✓ capture\\n✓ search\\n✓ local storage\\n\'")\nclose("## A clear starting point\\nFieldnotes keeps ideas close. The project has three small parts: capture, search, and local storage.\\n\\nAll three checks passed. A useful next step is to add a **search shortcut**, then cover it with a focused test.")'
-            : `close(${JSON.stringify(answer)})`;
+      // A message that hires workers makes a life as a conductor makes it: a prompt to a worker on each of two chains of
+      // its own, each of which thinks until a cancel, under a wait that holds the thread of the message open.
+      const hires = last.includes("Hire two workers");
+      const code = hires
+        ? 'for label in ("w/one", "w/two"):\n  prompt(str, "Think until I cancel.", on=chain(label))\nawait wait(3600)'
+        : fenced
+          ? '```python\nclose("Here is the answer, in a fence.")\n```'
+          : asks
+            ? 'await prompt(str, "Which effort should the next step take?", to=OPERATOR)'
+            : first
+              ? 'notes = read("README.md")\ncheck = await bash("printf \'✓ capture\\n✓ search\\n✓ local storage\\n\'")\nclose("## A clear starting point\\nFieldnotes keeps ideas close. The project has three small parts: capture, search, and local storage.\\n\\nAll three checks passed. A useful next step is to add a **search shortcut**, then cover it with a focused test.")'
+              : `close(${JSON.stringify(answer)})`;
       if (slow) {
         write({ thinking });
         await pause(200);
@@ -139,15 +171,37 @@ function scriptedSession(options: SessionOptions): Session {
   });
 }
 
+/** The measure of each chain whose models answered, from the answers of the activity of a life. */
+function measuresOf(answers: ReadonlyMap<string, readonly { actor: string; usage: readonly number[] }[]>) {
+  return Object.fromEntries([...answers].map(([chain, list]) => [chain, measureOf(list)]));
+}
+
 /** What a request of the session comes to. */
 async function answer(data: { target: string; method: string; args: unknown[] }): Promise<unknown> {
   if (data.method === "open") {
     const { demo: scripted, ...options } = data.args[0] as EngineOptions;
+    // A recorded life is a log of a life that a host reads and runs not, at the moment where it ends.
+    if (options.record && isRecorded(options.record)) {
+      reader = Reader.recorded(options.record, options.cwd ?? dirname(options.record));
+      demo = true;
+      snapshots = new Snapshots(reader, reader);
+      return reader.root;
+    }
     claude = options.claude;
     demo = scripted ?? false;
     const opened = demo ? scriptedSession(options) : new Session({ ...options, roster: roster(options) });
+    try {
+      engine = opened.open();
+    } catch (error) {
+      // A record that another engine made drifts on a replay, so it opens to read, with the facts that it kept.
+      const why = error instanceof Error ? error.message : String(error);
+      if (!why.startsWith("Drift") || !opened.record) throw error;
+      const { facts, made, engine: ours, logged } = retold(opened.record);
+      reader = new Reader(facts, opened.directory, opened.record, { made, engine: ours, why, logged });
+      snapshots = new Snapshots(reader, reader);
+      return reader.root;
+    }
     session = opened;
-    engine = opened.open();
     snapshots = new Snapshots(engine, opened);
     opened.on("fault", (error) =>
       self.postMessage({ fault: error instanceof Error ? error.message : String(error) }),
@@ -161,6 +215,7 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     });
     return engine.root;
   }
+  if (reader) return read(data);
   if (data.target === "library" && data.method === "queue") {
     if (!engine || !session) throw new Error("The session is not open.");
     const entry = data.args[0] as FollowUp;
@@ -219,6 +274,34 @@ async function answer(data: { target: string; method: string; args: unknown[] })
   return result instanceof Act ? result.id : await result;
 }
 
+/** What a request comes to on a record open to read: a view of what it kept, or a refusal of what would change it. */
+function read(data: { target: string; method: string; args: unknown[] }): unknown {
+  const open = reader as Reader;
+  const views = ["root", "standing", "program", "turns", "cwd", "inspect", "outcome", "transcript"];
+  if (data.target === "library" && data.method === "snapshot")
+    return snapshots?.take(String(data.args[0]), Number(data.args[1]));
+  if (data.target === "library" && data.method === "source") return ENGINE;
+  if (data.target === "library" && data.method === "catalog") return [];
+  if (data.target === "library" && data.method === "sees") return false;
+  if (data.target === "library" && data.method === "model") return null;
+  if (data.target === "library" && data.method === "changes") return [];
+  if (data.target === "library" && data.method === "act") return open.activity.acts.get(String(data.args[0]));
+  if (data.target === "library" && data.method === "look") {
+    const path = resolve(open.directory, open.cwd({ on: String(data.args[1]) }), String(data.args[0]));
+    try {
+      return { path, content: readFileSync(path, "utf8") };
+    } catch {
+      throw new Error(`There is no file at ${path}.`);
+    }
+  }
+  if (data.target === "session" && data.method === "dispose") return;
+  if (data.target === "engine" && views.includes(data.method)) {
+    const method = Reflect.get(open, data.method) as (...args: unknown[]) => unknown;
+    return Reflect.apply(method, open, data.args);
+  }
+  return open.refuse();
+}
+
 self.onmessage = async ({ data }) => {
   let reply: { value?: unknown; error?: string };
   try {
@@ -236,6 +319,7 @@ self.onmessage = async ({ data }) => {
   session = undefined;
   engine = undefined;
   snapshots = undefined;
+  reader = undefined;
   setTimeout(() => {
     self.postMessage({ id: data.id, ...reply, disposed: true });
     self.close();

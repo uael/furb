@@ -304,7 +304,7 @@ export function subjectOf(act: LiveAct, word: (rung: LiveAct) => string): string
     act.kind === "rung"
       ? word(act)
       : act.kind === "wait"
-        ? `${String(act.words[0] ?? 0)}s`
+        ? `up to ${duration(Number(act.words[0] ?? 0))}${act.words.length > 1 ? ` for ${act.words.slice(1).map(String).join(", ")}` : ""}`
         : String(act.kind === "prompt" ? (act.words[1] ?? "") : (act.words[0] ?? ""));
   return (
     text
@@ -353,4 +353,11 @@ export function readable(text: string): string {
     .replace(/^\s*#{1,6}\s+/, "")
     .replace(/(\*\*|__|\*|`)(\S(?:.*?\S)?)\1/g, "$2")
     .trim();
+}
+
+/** A count of seconds as a person reads it: seconds under two minutes, minutes under two hours, and hours. */
+export function duration(seconds: number): string {
+  if (seconds < 120) return `${Math.round(seconds)}s`;
+  if (seconds < 7200) return `${Math.round(seconds / 60)}m`;
+  return `${Math.round(seconds / 360) / 10}h`;
 }
