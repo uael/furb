@@ -38,7 +38,12 @@ The owner chose the stack: Tauri 2, with a UI of web components.
   the whole record. A window that misses a part asks the core with `life` for all that changed since what it holds.
   `open` and `close` open a record and go back to the picker, and `places` lists the projects.
 - `furb-gui --check` ends the app once its window drew the whole record, and prints the count of its chains, its
-  threads and its acts. It fails after 600 seconds, so a bundle is proved before anyone opens it.
+  threads and its acts. It fails after 600 seconds, so a bundle is proved before anyone opens it. The test
+  `gui/src-tauri/tests/check.rs` runs it on the record that `FURB_RECORD` names, compares the counts with those of
+  `furb facts` on the same record, and holds the WebContent of the window under 300 MB, as its comment says.
+- The rail and the ladder of a thread draw only the rows that they show. The core cuts the text of each file to 2048
+  characters and keeps the count of its lines, and the window grows its acts in place and derives its views once a
+  second while the core reads. So a record of 185 MB opens in a window of about 250 MB.
 - `furb-gui --record RECORD --view PATH` reads the record with no window and writes it as the window takes it, with
   the places of the picker. `gui/src/data/demo.json` is such a fixture, of the demo of the TUI: a browser shows the UI
   on it, and `bun run shots` takes the captures. `FURB_FIXTURE` gives another fixture to the build of the UI.
