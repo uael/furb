@@ -592,6 +592,8 @@ export class App {
     this.layersOff = this.layers();
     renderer.on("resize", this.render);
     renderer.on("selection", this.copySelection);
+    // A renderer that ends on its own, as on a signal, ends the App before it frees the buffers of the view.
+    renderer.on("destroy", this.dispose);
     // A label that moves with time is read again, and no other part of the view is drawn again.
     this.tick = setInterval(() => {
       for (const card of this.cards.values())
@@ -5248,15 +5250,20 @@ export class App {
     const offset = step > 0 ? messages.find((at) => at > 0) : messages.findLast((at) => at < 0);
     if (offset !== undefined) this.scroll.scrollBy(offset);
   }
-  dispose(): void {
-    clearInterval(this.tick);
+  /** The App ends once, by its own quit or as its renderer ends. It stops each timer and each frame to come first,
+   * so that nothing draws on a buffer that is gone, and it keeps the draft while the input still holds it. */
+  dispose = (): void => {
+    if (this.closed) return;
     this.closed = true;
-    this.keepDraft();
-    this.session.scrolls[this.lastView] = this.place;
+    clearInterval(this.tick);
+    clearTimeout(this.redraw);
+    clearTimeout(this.hoverTimer);
+    this.redraw = this.hoverTimer = undefined;
     this.renderer.off("frame", this.laidOut);
+    this.renderer.off("destroy", this.dispose);
+    if (!this.composer.isDestroyed) this.keepDraft();
+    this.session.scrolls[this.lastView] = this.place;
     this.session.save();
-    if (this.redraw) clearTimeout(this.redraw);
-    if (this.hoverTimer) clearTimeout(this.hoverTimer);
     this.session.off("change", this.schedule);
     this.options.workspaces.off("change", this.schedule);
     this.session.off("compose", this.compose);
@@ -5267,7 +5274,7 @@ export class App {
     this.renderer.off("selection", this.copySelection);
     this.root.destroyRecursively();
     this.style.destroy();
-  }
+  };
   private changePage(step: number): void {
     this.session.changePage = Math.max(
       0,
