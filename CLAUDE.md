@@ -249,7 +249,9 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 - `bun run docs`: write the tables of keys and commands in `tui/README.md` again from `tui/src/keys.ts` and
   `tui/src/commands.ts`.
 - `bun run screenshots` and `bun run animation`: capture `docs/screenshots/` and `docs/furb.gif` again from the
-  real renderer. Run both after a change that a screen shows, and read each capture.
+  real renderer. Run both after a change that a screen shows, and read each capture. One run of each at a time holds
+  its home in `/tmp`, and a second run waits until the first ends. A screen that does not come in three minutes ends
+  the run with an error that names the screen, and a run never waits past thirty minutes.
 
 Every pull request and every push to `main` runs the gates in `.github/workflows/gates.yml`: the hooks, which
 include the gates of the crate and the type check. The suite runs on Linux, on macOS and on Windows, and the gates
