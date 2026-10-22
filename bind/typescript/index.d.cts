@@ -161,6 +161,9 @@ export declare class NativeEar {
  */
 export declare function answered(shape: string, line: string): unknown
 
+/** Whether the operator answers a shape: one of the shapes it offers, or a Literal of values that a line names. */
+export declare function answers(shape: string): boolean
+
 /** An image copied into a directory of images under the digest of its bytes, as a message attaches it. */
 export declare function attachImage(directory: string, path: string): ImageAttachment
 

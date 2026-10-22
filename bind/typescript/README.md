@@ -91,7 +91,8 @@ the chain, the messages and the settings of the effort as the provider would sen
 what it writes as it writes it, and gives a turn. The host still names the models that `answer` stands in for. With
 no `operator`, questions stand in `session.console.prompts`; call `session.console.answer(id, text)` to read an
 answer by the rules that every console of the crate reads a line by, which `answered(shape, line)` gives, for each
-of the `shapes()` that the operator answers. A prompt of `None` asks nothing: the console closes it with `None` as
+shape that `answers(shape)` holds for: the `shapes()` that the operator offers, and a `Literal` of values that a line
+names, as `Literal['a', 'b']`. A prompt of `None` asks nothing: the console closes it with `None` as
 it takes it, so no word waits for the operator, and keeps it in `session.console.notices` until
 `session.console.dismiss(id)`, or gives it to `operator` and waits for no answer. `session` emits `change` and `facts`, and `fault` tells what the life refused when the console
 said what an act came to. `session.streams` holds what a model writes for each rung, until the done of its reply.
