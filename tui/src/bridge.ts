@@ -108,8 +108,6 @@ export class HostView extends EventEmitter implements Plain {
   attachImage = (path: string) => this.ask<ImageAttachment>("session", "attachImage", path);
   sendQueued = (entry: FollowUp) => this.ask<string>("library", "queue", entry);
   resume = () => this.ask<unknown>("session", "resume");
-  /** The work of a chain cancelled, and not the acts that an extension started on it. */
-  interrupt = (chain: string) => this.ask<unknown>("session", "interrupt", chain);
   source = () => this.ask<string>("library", "source");
   snapshot = (chain: string, since = 0) => this.ask<Snapshot>("library", "snapshot", chain, since);
   readChanges = (start: number, count: number) => this.ask<FileChange[]>("library", "changes", start, count);

@@ -202,7 +202,11 @@ export const keys = [
     action: "Previous / next page of file changes",
     bindings: [{ on: ["ctrl+pageup", "ctrl+pagedown"], run: "page", always: true }],
   },
-  { chord: "⌃C", action: "Clear the input, close a dialog, or cancel current work" },
+  {
+    chord: "⌃C",
+    action:
+      "Clear the input, close a dialog, or cancel what you sent last (a message goes back to the input)",
+  },
   {
     chord: "Esc",
     action: "Close a dialog or pause current model work",
