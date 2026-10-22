@@ -271,7 +271,7 @@ impl Catalog {
     if let Some(model) = self.served(actor) {
       return Some((model, None));
     }
-    // A model of the local server takes no effort, so a word after its slash is a level of effort or no name of it.
+    // A model of the local server is named by its id, so a word after its slash is a level of effort or no name of it.
     let (name, level) = split.filter(|(_, level)| LEVELS.contains(level))?;
     Some((self.served(name)?, Some(level)))
   }

@@ -818,7 +818,11 @@ fn thinking_local(
     Catalog::of(&super::catalog::parsed("{}", None), None, Server::named(env).map(Arc::new), env);
   let (models, actor) =
     catalog.roster(None, Some("local:qwen/high")).expect("the model is offered");
-  assert_eq!(actor.as_deref(), Some("local:qwen"), "a model of a local server takes no effort");
+  assert_eq!(
+    actor.as_deref(),
+    Some("local:qwen/high"),
+    "a model of a local server takes the effort that its actor names"
+  );
   assert_eq!(models[0].priced(), Some([0.0; 4]), "a model of a local server costs nothing");
   let provider = Provider::new(yard(name).display().to_string(), models).actor(actor);
   let mut engine = lived(provider.thinking(most));
@@ -887,8 +891,8 @@ fn a_model_of_a_local_server_is_asked_with_no_key_and_a_cap_and_the_thought_in_i
     (&body["model"], &body["max_tokens"], body.get("cache_prompt"), body.get("reasoning_effort"));
   assert_eq!(
     asked,
-    (&json!("qwen"), &json!(250), None, None),
-    "a model writes a quarter of its window at most"
+    (&json!("qwen"), &json!(250), None, Some(&json!("high"))),
+    "a model writes a quarter of its window at most, and thinks at the effort of its actor"
   );
 }
 
