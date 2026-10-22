@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
 import type { Act, FileChange, ImageAttachment, LiveAct, Engine as Native, Stream, Turn } from "@furb/engine";
+import type { Measure } from "@furb/engine/life";
 import type { EngineOptions } from "./models.ts";
 import type { Reading } from "./reading.ts";
 import type { ActRow, FollowUp } from "./session.ts";
@@ -54,6 +55,10 @@ interface Plain {
   changes: number;
   /** Why the record is open to read, when a life on it was refused for a drift, as on a record of another engine. */
   reading?: Reading;
+  /** Whether the life is a recording, which shows its log and runs nothing. */
+  recorded?: boolean;
+  /** The measure of each chain whose models answered, by the chain. */
+  measures: Record<string, Measure>;
 }
 /** What the session in the worker holds, as it sends it to the host, and how many facts the life said since the last
  * state, which the host needs to know of and not to hold. */
@@ -75,6 +80,8 @@ export class HostView extends EventEmitter implements Plain {
   record?: string;
   changes = 0;
   reading?: Reading;
+  recorded?: boolean;
+  measures: Record<string, Measure> = {};
   prompts = new Map<string, Prompt>();
   notices = new Map<string, Notice>();
   streams = new Map<string, Stream>();

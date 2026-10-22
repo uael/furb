@@ -287,6 +287,8 @@ test("the feed left at its end opens at its end, and one left above its end open
       await show(context, "transcript");
       for (let i = 0; i < 12; i++) await session.command(`/run grown${i} = ${i}`);
       await until(session, () => Object.values(session.program).includes("grown11 = 11"));
+      // The earlier words stand open, so that the feed is longer than its view.
+      session.folds[`prompts:${session.selected}`] = false;
       await show(context, "feed");
       expect(end()).toBeGreaterThan(0);
       expect(app.scroll.scrollTop).toBe(end());
@@ -307,6 +309,8 @@ test("the feed at its end stays at its end when the input grows, and a turn of t
       await show(context, "transcript");
       for (let i = 0; i < 12; i++) await session.command(`/run grown${i} = ${i}`);
       await until(session, () => Object.values(session.program).includes("grown11 = 11"));
+      // The earlier words stand open, so that the feed is longer than its view.
+      session.folds[`prompts:${session.selected}`] = false;
       await show(context, "feed");
       const tall = app.scroll.viewport.height;
       app.composer.setText("one\ntwo\nthree\nfour\nfive");

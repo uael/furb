@@ -1,0 +1,70 @@
+import { expect, test } from "bun:test";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { until } from "../../bind/typescript/test/until.ts";
+import { clip, scrub } from "../script/fixture.ts";
+import { openEngine } from "../src/bridge.ts";
+import { Session } from "../src/session.ts";
+import { composing } from "./composing.ts";
+
+/** The recorded life of a conductor, which the demo and the gallery show. */
+const conductor = join(import.meta.dir, "..", "fixtures", "conductor.jsonl");
+/** A session on the recorded life, which shows its log and runs nothing. */
+async function recorded(): Promise<Session> {
+  const { engine, host } = await openEngine({ record: conductor });
+  return new Session(engine, host, true);
+}
+
+test("the board of a real life counts its chains by what they do and says what each chain at work waits on, and the feed folds the earlier steps of a long thread into one line that a click opens", async () =>
+  // One test holds both, since each test runs in a process of its own and two demo libraries at once save one list.
+  composing(
+    async ({ session, app, frame, click }) => {
+      await session.refresh();
+      const shown = await frame();
+      const lines = shown.split("\n");
+      expect(lines.find((line) => line.includes("at work"))).toContain("21 at work");
+      // A board of a third of the screen holds the chains that need a look, and counts the ones it leaves out.
+      expect(shown).toContain("more, ⌃B lists every chain");
+      // The sidebar names the chains too, so the row of the board is the one that says what the chain waits on.
+      expect(lines.some((line) => /◉ life3\/feed +bash361 .*95 answers {2}\$\d+\.\d\d/.test(line))).toBe(
+        true,
+      );
+      // The conductor runs one long word, under which its messages pile up: the earlier ones fold into one line.
+      const folds = () => app.scroll.getChildren().filter((node) => node.id.startsWith("more-")).length;
+      expect(folds()).toBeGreaterThan(0);
+      const before = app.scroll.scrollHeight;
+      const line = app.scroll.getChildren().find((node) => node.id.startsWith("more-"));
+      const key = line?.id.slice("more-".length) ?? "";
+      app.scroll.stickyScroll = false;
+      app.scroll.scrollTo((line?.y ?? 0) - app.scroll.y + app.scroll.scrollTop);
+      await frame();
+      await click("earlier");
+      await until(session, () => session.folds[key] === false);
+      await frame();
+      expect(app.scroll.scrollHeight).toBeGreaterThan(before);
+    },
+    { width: 152, height: 46, useMouse: true },
+    await recorded(),
+  ));
+
+test("a recorded life runs nothing: what the operator sends to it fails with the reason", async () => {
+  const session = await recorded();
+  try {
+    await session.refresh();
+    expect(session.chains.length).toBe(23);
+    expect(
+      String(await session.engine.rung({ word: "x = 1", on: session.selected }).catch((error) => error)),
+    ).toContain("This record is open to read");
+  } finally {
+    await session.dispose();
+  }
+});
+
+test("the fixture of a recorded life holds no secret: no key, no address of mail, and no home directory", async () => {
+  expect(
+    scrub("gh auth ghp_abcdefghijklmnopqrstuvwxyz0123 for a@b.co in /Users/alice/src and API_KEY=s3cret"),
+  ).toBe("gh auth [key] for someone@example.com in ~/src and API_KEY=[key]");
+  expect(clip("one\ntwo\nthree", 2)).toBe("one\ntwo\n… 1 more lines");
+  const text = await readFile(conductor, "utf8");
+  expect(text).not.toMatch(/\/Users\/|\/home\/|gh[pousr]_[A-Za-z0-9]{20}|github_pat_\w{20}|sk-[\w-]{20}/);
+});

@@ -71,6 +71,10 @@ await library.refresh();
 try {
   if (record) await library.import(record, group);
   else await library.create(group);
+  // The demo shows a real life beside its scripted one, recorded from a log, and opens on it.
+  const recordedLife = join(import.meta.dir, "..", "fixtures", "conductor.jsonl");
+  if (values.demo && !record && !values.cwd && existsSync(recordedLife))
+    await library.import(recordedLife, group);
 } catch (error) {
   // A life that does not open ends the TUI with what it said, and with no trace of the stack.
   console.error(`furb-tui: ${error instanceof Error ? error.message : String(error)}`);
