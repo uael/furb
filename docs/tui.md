@@ -178,6 +178,25 @@ A session that opens with unfinished work stays paused until you resume it.
 
 ![Paused resume](screenshots/21-paused-resume.png)
 
+## Cancel and take back
+
+⌃C on an empty input cancels the last message, word or command that you sent on the chain shown and that still
+runs, and that act alone with the work under it. It never cancels the thread or the chain that the act stands on,
+and it never cancels a prompt that a model made, such as the prompt of a worker. When that act is a message, ⌃C takes
+it back: the message is cancelled and its text goes back to the input, so you change it and send it again, and the
+other work of the life goes on. A right click on a message opens its menu, which offers Take back for your last
+message that runs, and Cancel for another act that runs. `/cancel <id>` cancels the act that you name.
+
+![Message menu](screenshots/56-message-menu.png)
+
+A cancel that reaches running work asks first: the acts under the act that are not over, as the workers that a
+thread hired on their chains. The dialog says how many acts the cancel ends and on which chains. Keep ends nothing.
+A cancel of an act with no running work under it, as a message that its model still answers, asks nothing.
+
+![Cancel confirmation](screenshots/57-cancel-confirm.png)
+
+![Take back a message](screenshots/58-take-back.png)
+
 ## Rewind
 
 Escape twice opens the rewind tree in the feed. Each act stands under the act that made it, and each branch under

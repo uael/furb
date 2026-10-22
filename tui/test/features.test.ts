@@ -362,18 +362,21 @@ test("file and shell shortcuts, an external editor, and a safe standalone share 
   }
 });
 
-test("/extensions lists what a life runs, and a cancel of the work of a chain leaves the watcher of its memory", async () => {
+test("/extensions lists what a life runs, and a cancel of a word of the operator leaves the watcher of its memory", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-extensions-"));
   try {
     const opened = await openEngine({ cwd: directory, record: join(directory, "session.jsonl") });
     await composing(
-      async ({ session, frame }) => {
+      async ({ session, frame, click }) => {
         await session.command("/extensions");
         expect(session.notice).toBe(
           "This life runs memory with remember(), skills with counted(), compaction, ouroboros with ouroboros(), web. Run a word of one with /run.",
         );
         await session.command("/run await wait(60)");
+        // The wait runs under the word, so the cancel asks first.
+        await until(session, () => session.activity.some((act) => act.kind === "wait" && !act.done));
         await session.command("/cancel");
+        await click("Cancel it");
         await until(session, () => session.activity.every((act) => act.kind !== "wait" || act.done));
         await session.refresh();
         // The watcher lives on, and shows no work in the feed.

@@ -85,7 +85,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | ⌃⌥← | Return from a definition jump |
 | ⌥[ / ⌥] or ⌥P / ⌥N | Previous / next message of the feed |
 | ⌃PageUp / ⌃PageDown | Previous / next page of file changes |
-| ⌃C | Clear the input, close a dialog, or cancel current work |
+| ⌃C | Clear the input, close a dialog, or cancel what you sent last (a message goes back to the input) |
 | Esc | Close a dialog or pause current model work |
 | F1 / ⌃Q / ⌃D twice | Help / save and quit / save and quit from an empty input |
 
@@ -121,7 +121,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/context <fraction>` | Pause at a share of the model window |
 | `/pause [act or chain]` | Hold delivery while work completes |
 | `/wake [act or chain]` | Deliver pending work |
-| `/cancel [id]` | End an act or the selected chain's work |
+| `/cancel [id]` | End an act, or what you sent last on this chain |
 | `/feed <id> [text]` | Send a line of input to a command; no text closes its input |
 | `/close <id> <json>` | Close an act with a JSON value |
 | `/name <name>` | Set a name in the session picker |
@@ -178,5 +178,5 @@ the structured JSON export. `/context` sets the context ceiling.
 
 A life runs the extensions that the configs turn on, as [the guide of the extensions](../docs/extensions.md) says,
 and each chain shows the rungs of their words in its feed, as it shows any rung. The TUI has no part of its own for an extension: `/extensions` lists what the life runs, and `/run`
-runs a word of one on the chain on screen, as `/run skill("pdf")`. A cancel of the work of a chain ends its prompts,
-rungs, commands and waits, and not what an extension started on it, such as the watcher of the memory.
+runs a word of one on the chain on screen, as `/run skill("pdf")`. A cancel ends one act and the work under it, and
+not what an extension started on the chain, such as the watcher of the memory.

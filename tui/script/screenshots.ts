@@ -44,7 +44,7 @@ async function show(next: Session): Promise<void> {
 await show(session);
 
 /** The shots whose notice tells what the step did, which keep it. The others show no notice of an earlier step. */
-const notices = /^(34|36|37|42|43|44|45|50|55)-/;
+const notices = /^(34|36|37|42|43|44|45|50|55|58)-/;
 /** The work of the chain completes, and the queue sends what waits in it, until nothing is left to do. */
 async function settle(): Promise<void> {
   await session.refresh();
@@ -532,6 +532,44 @@ try {
   await until(session.host, () => !session.host.prompts.has(merge));
   app().closeOverlay();
   await capture("55-answer-landed");
+  app().dispose();
+  await library.dispose();
+  await show(await gallerySession());
+  // A thread of the owner whose model hires two workers, each on a chain of its own, and a later message of his.
+  await session.submit("Hire two workers.");
+  await until(
+    session,
+    () =>
+      session.acts.filter((act) => act.kind === "rung" && act.on !== session.engine.root && !act.done)
+        .length === 2,
+  );
+  const thread = session.activity.find((act) => session.isUserPrompt(act))?.id ?? "";
+  await session.submit("Think until I cancel.");
+  await until(session, () => {
+    const last = session.lastOwn;
+    return Boolean(
+      last && last.id !== thread && session.activity.some((act) => act.by === last.id && !act.done),
+    );
+  });
+  await session.refresh();
+  app().render();
+  await test.flush();
+  // A right click on the message offers to take it back.
+  const [column, row] = find(test, "┃ Think until I cancel.");
+  await test.mockMouse.click(column + 4, row, 2);
+  await capture("56-message-menu");
+  app().closeOverlay();
+  // A cancel of the thread reaches the workers, so it asks first.
+  await session.command(`/cancel ${thread}`);
+  await rest();
+  await capture("57-cancel-confirm");
+  app().closeOverlay();
+  // ⌃C takes back the last message alone, and the workers go on.
+  const message = session.lastOwn?.id;
+  await session.command("/cancel");
+  await until(session, () => session.acts.some((act) => act.id === message && act.done));
+  await rest();
+  await capture("58-take-back");
 } finally {
   app().dispose();
   test.renderer.destroy();

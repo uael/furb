@@ -115,13 +115,18 @@ function scriptedSession(options: SessionOptions): Session {
       // A message that says to ask first gets a question to the operator and no close, so the model answers again
       // once the operator has answered.
       const asks = !first && last.includes("Ask me first");
-      const code = fenced
-        ? '```python\nclose("Here is the answer, in a fence.")\n```'
-        : asks
-          ? 'await prompt(str, "Which effort should the next step take?", to=OPERATOR)'
-          : first
-            ? 'notes = read("README.md")\ncheck = await bash("printf \'✓ capture\\n✓ search\\n✓ local storage\\n\'")\nclose("## A clear starting point\\nFieldnotes keeps ideas close. The project has three small parts: capture, search, and local storage.\\n\\nAll three checks passed. A useful next step is to add a **search shortcut**, then cover it with a focused test.")'
-            : `close(${JSON.stringify(answer)})`;
+      // A message that hires workers makes a life as a conductor makes it: a prompt to a worker on each of two chains of
+      // its own, each of which thinks until a cancel, under a wait that holds the thread of the message open.
+      const hires = last.includes("Hire two workers");
+      const code = hires
+        ? 'for label in ("w/one", "w/two"):\n  prompt(str, "Think until I cancel.", on=chain(label))\nawait wait(3600)'
+        : fenced
+          ? '```python\nclose("Here is the answer, in a fence.")\n```'
+          : asks
+            ? 'await prompt(str, "Which effort should the next step take?", to=OPERATOR)'
+            : first
+              ? 'notes = read("README.md")\ncheck = await bash("printf \'✓ capture\\n✓ search\\n✓ local storage\\n\'")\nclose("## A clear starting point\\nFieldnotes keeps ideas close. The project has three small parts: capture, search, and local storage.\\n\\nAll three checks passed. A useful next step is to add a **search shortcut**, then cover it with a focused test.")'
+              : `close(${JSON.stringify(answer)})`;
       if (slow) {
         write({ thinking });
         await pause(200);
