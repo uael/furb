@@ -250,6 +250,8 @@ async function answer(data: { target: string; method: string; args: unknown[] })
   if (data.target === "library" && data.method === "source") return ENGINE;
   if (data.target === "library" && data.method === "changes")
     return session?.changes.read(Number(data.args[0]), Number(data.args[1]));
+  if (data.target === "library" && data.method === "repairChanges") return session?.changes.repair();
+  if (data.target === "library" && data.method === "renewChanges") return session?.changes.renew();
   if (data.target === "library" && data.method === "act")
     return session?.activity.acts.get(String(data.args[0]));
   if (data.target === "library" && data.method === "look") {
@@ -303,11 +305,12 @@ function read(data: { target: string; method: string; args: unknown[] }): unknow
 }
 
 self.onmessage = async ({ data }) => {
-  let reply: { value?: unknown; error?: string };
+  let reply: { value?: unknown; error?: string; name?: string };
   try {
     reply = { value: await answer(data) };
   } catch (error) {
-    reply = { error: error instanceof Error ? error.message : String(error) };
+    // The name of an error crosses with its message, so the view knows a damaged journal from another failure.
+    reply = error instanceof Error ? { error: error.message, name: error.name } : { error: String(error) };
   }
   if (data.method === "open" && !reply.error) state();
   if (data.target !== "session" || data.method !== "dispose") {

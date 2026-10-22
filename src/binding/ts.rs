@@ -25,7 +25,7 @@ use host::{Held, Word};
 use super::{Given, Inspection, NativeEar, Outcome, Record, Said, Told, Value, words};
 use crate::{
   Engine, Fault, Object,
-  life::{Answer, Log, Opening, Stream},
+  life::{Answer, Log, Opening, Retrying, Stream},
   wire,
 };
 
@@ -123,6 +123,29 @@ impl FromNapiValue for Stream {
       .build_callback(|call| Ok(FnArgs::from(call.value)))?;
     Ok(Stream(Arc::new(move |rung, chain, text, thinking| {
       let said = (rung.to_owned(), chain.to_owned(), text.to_owned(), thinking.to_owned());
+      told.call(said, ThreadsafeFunctionCallMode::NonBlocking);
+    })))
+  }
+}
+
+impl FromNapiValue for Retrying {
+  /// A function of JavaScript, told on its own thread, which keeps no host alive that has nothing else to do.
+  unsafe fn from_napi_value(env: sys::napi_env, value: sys::napi_value) -> napi::Result<Self> {
+    // SAFETY: napi gives the value in its env, where it is read at once.
+    let retry = unsafe { Function::<(), ()>::from_napi_value(env, value) }?;
+    let told = retry
+      .build_threadsafe_function::<(String, String, u32, u32, f64, String)>()
+      .weak::<true>()
+      .build_callback(|call| Ok(FnArgs::from(call.value)))?;
+    Ok(Retrying(Arc::new(move |rung, chain, retry| {
+      let said = (
+        rung.to_owned(),
+        chain.to_owned(),
+        retry.attempt,
+        retry.most,
+        retry.wait.as_secs_f64(),
+        retry.why.clone(),
+      );
       told.call(said, ThreadsafeFunctionCallMode::NonBlocking);
     })))
   }

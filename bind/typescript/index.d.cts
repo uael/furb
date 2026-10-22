@@ -403,6 +403,8 @@ export interface Opening {
   answer?: (request: { actor: string; chain: string; messages: unknown[]; settings: Record<string, unknown> }, write: (delta: { text?: string; thinking?: string }) => void) => Promise<unknown>
   /** A function of the host that is told what a model writes, as it writes it. */
   stream?: (rung: string, chain: string, text: string, thinking: string) => void
+  /** A function of the host that is told each retry of a call of a model, before its wait. */
+  retrying?: (rung: string, chain: string, attempt: number, most: number, seconds: number, why: string) => void
   /**
    * Whether the life opens from the snapshot of its record when the snapshot agrees with the record, and keeps one
    * when it keeps its record; true when unsaid.

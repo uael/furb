@@ -296,6 +296,9 @@ export class Session extends EventEmitter {
   };
   fail = (error: unknown) => {
     this.error = error instanceof Error ? error.message : String(error);
+    // A damaged journal is no failure of the view alone: the view offers to repair it or to start a new one.
+    this.damaged[`${this.selected}:${this.view}`] =
+      (error as { name?: unknown } | undefined)?.name === "DamagedJournal";
     this.emit("change");
   };
   get error(): string {
@@ -303,6 +306,33 @@ export class Session extends EventEmitter {
   }
   set error(value: string) {
     this.errors[`${this.selected}:${this.view}`] = value;
+    if (!value) delete this.damaged[`${this.selected}:${this.view}`];
+  }
+  /** Whether the error of each view of a chain is a damaged journal of file changes. */
+  private readonly damaged: Record<string, boolean> = {};
+  /** Why the journal of file changes cannot be read, which the view shown offers to repair; empty when it reads. */
+  get damagedJournal(): string {
+    return this.damaged[`${this.selected}:${this.view}`] ? this.error : "";
+  }
+
+  /** The journal of file changes written again with each change that it holds, and the view read again. */
+  async repairJournal(): Promise<void> {
+    const lost = await this.host.repairChanges();
+    await this.journalMended(
+      `The journal is repaired: ${lost} damaged ${lost === 1 ? "line is" : "lines are"} removed, and each change that it held stays.`,
+    );
+  }
+  /** A new journal of file changes, with the damaged one kept beside it, and the view read again. */
+  async renewJournal(): Promise<void> {
+    const aside = await this.host.renewChanges();
+    await this.journalMended(`A new journal is started. The damaged one is kept at ${shortenHome(aside)}.`);
+  }
+  private async journalMended(notice: string): Promise<void> {
+    this.error = "";
+    this.changesRead = "";
+    this.changePage = 0;
+    this.notice = notice;
+    await this.refresh();
   }
 
   refresh(): Promise<void> {
@@ -346,11 +376,11 @@ export class Session extends EventEmitter {
         }
         const page = `${this.changePage}:${this.host.changes}`;
         if (this.view === "changes" && page !== this.changesRead) {
-          this.changesRead = page;
           this.changes = (await this.host.readChanges(this.changePage * 20, 20)).map((change) => ({
             ...change,
             patch: createTwoFilesPatch(change.path, change.path, change.before, change.after),
           }));
+          this.changesRead = page;
         }
         const rows = this.acts;
         for (const act of rows) {

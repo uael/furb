@@ -31,7 +31,7 @@ use crate::{
   Ear, Engine, Fact, Fault, Heard, Object, ObjectRef, Step,
   ear::{Call, Spoken},
   engine::{Life, handed, lending},
-  life::{Answer, Log, Opening, Stream},
+  life::{Answer, Log, Opening, Retrying, Stream},
   value::{IS, entry, field, marked, templated},
 };
 
@@ -246,6 +246,25 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Stream {
     Ok(Stream(Arc::new(move |rung, chain, text, thinking| {
       Python::attach(|py| {
         if let Err(no) = stream.call1(py, (rung, chain, text, thinking)) {
+          no.write_unraisable(py, None);
+        }
+      });
+    })))
+  }
+}
+
+impl<'a, 'py> FromPyObject<'a, 'py> for Retrying {
+  type Error = PyErr;
+
+  /// A function of python, told on a thread of the models with the rung, the chain, the attempt that comes next, the
+  /// most attempts, the seconds of the wait and why; what it raised goes to the hook of python for what no one can
+  /// raise.
+  fn extract(value: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
+    let retry = value.to_owned().unbind();
+    Ok(Retrying(Arc::new(move |rung, chain, one| {
+      Python::attach(|py| {
+        let said = (rung, chain, one.attempt, one.most, one.wait.as_secs_f64(), one.why.as_str());
+        if let Err(no) = retry.call1(py, said) {
           no.write_unraisable(py, None);
         }
       });
