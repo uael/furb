@@ -136,6 +136,7 @@ const forms: Record<(typeof kept)[number] | "cost", "text" | "flag" | "number" |
   scrolls: "map",
   folds: "map",
   models: "texts",
+  took: "map",
   cost: "number",
 };
 
