@@ -121,6 +121,9 @@ pub struct Model {
   /// Whether its server may write its thought in its text, between `<think>` and `</think>`, which the host is told as
   /// text while it streams.
   tagged: bool,
+  /// Whether it may wrap its word in a fence, as a model of a local server does, so its turn loses an opening fence
+  /// at its start, and the closing fence at its end when it has one.
+  fenced: bool,
   /// The most parts of thought it streams in one turn, each a token as a local server streams it, and the settings
   /// with which the provider asks it again once its thought passed that most: a setting of null takes that setting
   /// off the request.
@@ -161,6 +164,7 @@ impl Model {
       tokens: None,
       ends: false,
       tagged: false,
+      fenced: false,
       thought: None,
       answers,
       search: None,
@@ -520,7 +524,8 @@ fn messages(
 
 /// One response of a model of rig, streamed: what it writes is told as it comes, and the response holds it whole,
 /// with the raw record of its end, where a model says what the turn cost. A model whose thought passes its budget is
-/// asked again, as [`rethought`] says.
+/// asked again, as [`rethought`] says, and so is a model with a budget whose turn ended with a thought and no word, so
+/// the chain never reads an empty word from it. A turn that the most it writes ended is not asked again.
 async fn streamed(streams: Streams, asked: Asked) -> Result<CompletionResponse, CompletionError> {
   let Asked { request, told, thought: budget, .. } = asked;
   let mut stream = streams(request.clone()).await?;
@@ -549,7 +554,24 @@ async fn streamed(streams: Streams, asked: Asked) -> Result<CompletionResponse, 
       _ => {}
     }
   }
-  Ok(whole(stream))
+  let response = whole(stream);
+  let Some((_, again)) = &budget else { return Ok(response) };
+  let blocks = untagged(response.choice.to_vec());
+  if thinking.is_empty() {
+    thinking = blocks
+      .iter()
+      .filter_map(|one| match one {
+        AssistantContent::Reasoning(one) => Some(one.display_text()),
+        _ => None,
+      })
+      .collect();
+  }
+  let ended = !matches!(response.finish_reason(), None | Some(FinishReason::Length));
+  if !ended || thinking.trim().is_empty() || !texts(&blocks).trim().is_empty() {
+    return Ok(response);
+  }
+  let parts = response.usage.output_tokens.max(parts);
+  rethought(&streams, request, again, thinking, parts, &told).await
 }
 
 /// The response of a stream that ended, with the raw record of its end. A model that says each block whole once it
@@ -568,8 +590,7 @@ fn whole(stream: StreamingCompletionResponse) -> CompletionResponse {
 /// The turn of a model whose thought passed its budget. The provider asks it again with the same turns, its thought
 /// given back as a turn of its own that holds that thought and no word, and with the settings of its budget, which turn its
 /// thought off, so it writes its word at once. The turn holds that thought and the word, and what the model wrote
-/// counts each part of that thought. A model that writes with no thought wraps its word in a fence, which its own
-/// setting makes, so one fence that wraps the whole text of this turn goes.
+/// counts each part of that thought.
 async fn rethought(
   streams: &Streams,
   mut request: CompletionRequest,
@@ -602,24 +623,26 @@ async fn rethought(
     }
   }
   let mut response = whole(stream);
-  let text = texts(&response.choice);
-  let word = unfenced(&text).unwrap_or(&text).to_owned();
+  let word = texts(&response.choice);
   response.choice = vec![thought, AssistantContent::text(word)];
   response.usage.output_tokens += parts;
   response.usage.total_tokens += parts;
   Ok(response)
 }
 
-/// The text inside one fence that wraps the whole of a text: an opening line of three backticks, alone or with
-/// `python`, and a closing line of three backticks, with no other fence between them; and nothing for any other text,
-/// so a text before or after the fence, or a second fence, keeps the text as it is.
+/// A text less the fence that opens it: an opening line of three backticks, alone or with `python`, at its start, and
+/// a closing line of three backticks at its end when it has one; and nothing for a text that no fence opens, so a text
+/// before the fence keeps the text as it is.
 fn unfenced(text: &str) -> Option<&str> {
-  let (opening, rest) = text.trim().split_once('\n')?;
+  let text = text.trim();
+  let (opening, rest) = text.split_once('\n').unwrap_or((text, ""));
   if !matches!(opening.trim_end(), "```" | "```python") {
     return None;
   }
-  let inside = rest.strip_suffix("```")?.strip_suffix('\n')?;
-  (!inside.contains("```")).then_some(inside)
+  let rest = rest.trim_end();
+  let closed =
+    rest.strip_suffix("```").filter(|inside| inside.is_empty() || inside.ends_with('\n'));
+  Some(closed.unwrap_or(rest).trim_end())
 }
 
 /// The terminal record of a stream of a provider, from a response of it that came whole.
@@ -660,8 +683,8 @@ fn answered(
 /// The turn of a model: its text, which is the word of the rung, what it read and wrote, and the blocks it gave.
 ///
 /// A model speaks python alone, so a fence or prose around the code stays in the word, for the gate to refuse; only
-/// a turn that the provider asked again after the budget of thought loses one fence that wraps its whole text, since
-/// the setting of no thought of that request makes the fence. What it read is every token of its input, the cache
+/// a turn of a model that may wrap its word in a fence, as a model of a local server, loses the fence that opens its
+/// text, and the closing fence at its end when it has one. What it read is every token of its input, the cache
 /// among them, and what it wrote is the rest of its total, its thought among it. A model that says why each turn
 /// ended, and says nothing of the end of this one or says that the most it writes ended it, was cut, so its turn is
 /// refused, and a part of a word never runs. The thought that a model writes in its text, before its word, is a block
@@ -682,7 +705,21 @@ fn turn(model: &Model, response: &CompletionResponse) -> Result<Object, Completi
   if model.tagged {
     choice = untagged(choice);
   }
-  let text = texts(&choice);
+  let mut text = texts(&choice);
+  if model.fenced
+    && let Some(word) = unfenced(&text).map(str::to_owned)
+  {
+    let mut worded = Vec::new();
+    for one in choice {
+      match one {
+        AssistantContent::Text(_)
+          if worded.iter().any(|one| matches!(one, AssistantContent::Text(_))) => {}
+        AssistantContent::Text(_) => worded.push(AssistantContent::text(&word)),
+        other => worded.push(other),
+      }
+    }
+    (choice, text) = (worded, word);
+  }
   let spent = response.usage;
   let (read, wrote) = (spent.cached_input_tokens, spent.cache_creation_input_tokens);
   let input = spent.input_tokens + if model.apart { read + wrote } else { 0 };

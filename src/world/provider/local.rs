@@ -235,8 +235,9 @@ impl Server {
 
   /// A model of the server under its name, with its window: its chat completions are asked with the key of the
   /// server, it writes a quarter of its window at most in one turn, or what the environment gives, it costs nothing,
-  /// it says why each turn ended, it may write its thought in its text, and it is asked again with its thought off
-  /// once its thought passes the most of the server.
+  /// it says why each turn ended, it may write its thought in its text, it may wrap its word in a fence, and it is
+  /// asked again with its thought off once its thought passes the most of the server, or once its turn ended with a
+  /// thought and no word.
   fn model(&self, name: String, offer: &Offer, window: u64) -> Model {
     let api = Some(format!("{}/v1", self.root));
     let reach = Reach { key: self.key.clone(), api, id: offer.id.clone(), ..Reach::default() };
@@ -246,6 +247,7 @@ impl Server {
     model.tokens = Some(self.tokens.unwrap_or(window / 4));
     model.ends = true;
     model.tagged = true;
+    model.fenced = true;
     let off = json!({"reasoning_effort": null, "chat_template_kwargs": {"enable_thinking": false}});
     model.thought = self.thought.map(|most| (most, off.as_object().cloned().unwrap_or_default()));
     model
