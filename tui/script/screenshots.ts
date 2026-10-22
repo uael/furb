@@ -238,6 +238,13 @@ try {
   await session.refresh();
   await capture("19-model-progress");
   await session.engine.result(progress);
+  // A call of a model that failed for a cause that passes waits for its next attempt, which the footer counts down.
+  // The streams hold the retry while the capture reads the life again, which sends the streams of the life anew.
+  const retry = { attempt: 2, most: 10, until: Date.now() + 3600, why: "connection reset" };
+  const retrying = new Map([["rung0", { chain: session.selected, text: "", thinking: "", retry }]]);
+  Object.defineProperty(session.host, "streams", { configurable: true, get: () => retrying, set: () => {} });
+  await capture("62-model-retry");
+  Object.defineProperty(session.host, "streams", { configurable: true, writable: true, value: new Map() });
   await session.submit("/run this is invalid python !!!").catch(session.fail);
   await capture("20-gate-findings");
   const record = session.host.record;

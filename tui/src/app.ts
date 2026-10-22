@@ -55,7 +55,7 @@ import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import type { Token, Tokens } from "marked";
 import { clipboardImage } from "./clipboard.ts";
 import { commands, slashes } from "./commands.ts";
-import { conversation } from "./conversation.ts";
+import { conversation, refusal } from "./conversation.ts";
 import { externalEditor, openFile } from "./editor.ts";
 import { emojiNamed, emojis } from "./emoji.ts";
 import { shortenHome, shortenHomes } from "./files.ts";
@@ -69,6 +69,8 @@ import {
   kibibytes,
   lineCounts,
   modelName,
+  plainFailure,
+  retryLine,
   share,
 } from "./format.ts";
 import { type Action, bindings, chords, keys, shown } from "./keys.ts";
@@ -1257,16 +1259,23 @@ export class App {
     // A refresh follows each fact, so the footer says Loading only while the chain has nothing to show yet.
     const loading = w.loading && !w.turns.length;
     const status = loading ? "opening" : w.status(w.selected);
-    const moving = status === "working" || status === "opening";
+    // A call of a model that waits to be made again counts its wait down in the footer, on the selected chain first.
+    const retries = [...w.host.streams.values()].filter((stream) => stream.retry);
+    const retry = loading
+      ? undefined
+      : (retries.find((stream) => stream.chain === w.selected) ?? retries[0])?.retry;
+    const moving = status === "working" || status === "opening" || Boolean(retry);
     this.statusMoves = moving;
-    const [mark, color] = statusMark(status);
+    const [mark, color] = retry ? [`${glyph.held} `, c.warning] : statusMark(status);
     const label = loading
       ? "Loading"
-      : status === "error"
-        ? w.error
-          ? "The view could not load"
-          : "The last act failed"
-        : statusLabels[status];
+      : retry
+        ? retryLine(retry)
+        : status === "error"
+          ? w.error
+            ? "The view could not load"
+            : "The last act failed"
+          : statusLabels[status];
     // The footer offers the keys of the top layer that offers any, each of which does what its key does, and under
     // the layer of the table, the wake of a paused chain.
     type Offer = readonly [chord: string, action: string, run: () => void];
@@ -1302,7 +1311,7 @@ export class App {
     // The state stays in the footer, and a notice stands after it, cut at its end where the footer has no room for it
     // beside the keys.
     const state: Part[] = [
-      [moving ? `${spin()} ` : mark, color],
+      [moving && !retry ? `${spin()} ` : mark, color],
       [label, moving ? c.text : c.muted],
     ];
     const room =
@@ -1618,16 +1627,39 @@ export class App {
           }),
         );
       });
-    if (w.error)
+    if (w.error && w.view === "changes" && w.damagedJournal)
+      // A damaged journal of file changes says what broke, and offers to repair it or to start a new one.
+      add("view-error", `${w.view}:${w.damagedJournal}`, [], (box) =>
+        this.banner(
+          box,
+          c.danger,
+          [
+            [`${glyph.failed} `, c.danger],
+            ["The journal of file changes is damaged", c.text, bold],
+          ],
+          this.text(w.damagedJournal, c.muted),
+          [
+            "Repair the journal",
+            "keeps each change that it can read",
+            () => void w.repairJournal().catch(w.fail),
+          ],
+          [
+            "Start a new journal",
+            "keeps the damaged one beside it",
+            () => void w.renewJournal().catch(w.fail),
+          ],
+        ),
+      );
+    else if (w.error)
       add("view-error", `${w.view}:${w.error}`, [], (box) =>
         this.banner(
           box,
           c.danger,
           [
             [`${glyph.failed} `, c.danger],
-            [`Error in the ${viewLabels[w.view].toLowerCase()} view`, c.text, bold],
+            [`The ${viewLabels[w.view].toLowerCase()} view could not load`, c.text, bold],
           ],
-          this.text(w.error, c.muted),
+          this.text(plainFailure(w.error), c.muted),
           [
             "Refresh view",
             "reads the view again",
@@ -1742,7 +1774,7 @@ export class App {
             closed ? this.rungLabel(line, indent) : this.actLabel(act, false, indent, code);
           add(
             act.id,
-            `${code}\n${act.run?.reason ?? ""}\n${line.acts.map((chip) => chip.label + chip.state).join(" ")}\n${w.folds[`word:${act.id}`]}`,
+            `${code}\n${act.run?.reason ?? ""}\n${this.gateHint(act) ?? ""}\n${line.acts.map((chip) => chip.label + chip.state).join(" ")}\n${w.folds[`word:${act.id}`]}`,
             label(),
             (box) => {
               // A rung that stands open by itself, as one that runs, shows the first rows of a long word, and a click
@@ -1751,7 +1783,7 @@ export class App {
                 w.folds[act.id] === undefined && w.folds[`word:${act.id}`] !== false
                   ? this.firstRows(code, WORD_ROWS)
                   : [code, 0];
-              this.word(box, shown, act.run?.reason);
+              this.word(box, shown, act.run?.reason, this.gateHint(act));
               if (rest)
                 box.add(
                   this.inset(
@@ -2200,15 +2232,21 @@ export class App {
     color: RGBA,
     heading: Part[],
     detail: Renderable | undefined,
-    [label, does, run]: [string, string, () => void],
+    ...actions: [label: string, does: string, run: () => void][]
   ): void {
     const panel = this.panel(box, color);
     panel.add(this.text(heading));
     if (detail) panel.add(this.inset(space.between, detail));
-    const row = this.box({ flexDirection: "row", marginTop: space.section, paddingLeft: space.between });
-    row.add(this.link([[label, c.accent, bold]], run));
-    row.add(this.text(`  ${does}`, c.faint));
-    panel.add(row);
+    for (const [index, [label, does, run]] of actions.entries()) {
+      const row = this.box({
+        flexDirection: "row",
+        marginTop: index ? 0 : space.section,
+        paddingLeft: space.between,
+      });
+      row.add(this.link([[label, c.accent, bold]], run));
+      row.add(this.text(`  ${does}`, c.faint));
+      panel.add(row);
+    }
   }
   /** A text that lights under the pointer, and runs an action at a click. */
   private link(content: string | Part[], run: () => void): TextRenderable {
@@ -2872,8 +2910,9 @@ export class App {
       ],
     ];
   }
-  /** A word of Python in a card: its numbered lines, and the reason it failed. */
-  private word(box: BoxRenderable, word: string, reason?: string): void {
+  /** A word of Python in a card: its numbered lines, the reason it failed, and what to do after a refusal of the
+   * gate. */
+  private word(box: BoxRenderable, word: string, reason?: string, hint?: string): void {
     // The code starts under the name of its rung, past the fold and the glyph of the heading.
     const inner = this.box({ gap: space.stack, paddingLeft: space.inset });
     // A rung whose word has not come yet shows no code.
@@ -2881,11 +2920,36 @@ export class App {
     // The parser names the word as <string> and says its line twice, which the reason leaves out.
     if (reason)
       inner.add(this.branched(shortenHomes(reason.replace(/\s*\(<string>, line \d+\)$/, "")), c.danger));
+    // The line of what to do stands under the reason, at the column of its text.
+    if (hint) inner.add(this.inset(space.between, this.text(hint, c.muted)));
     box.add(inner);
+  }
+  /** Whether the gate refused the word of each rung of the turns shown, by rung, read once for each set of turns. */
+  private refused: { turns: unknown; rungs: Map<string, boolean> } = { turns: undefined, rungs: new Map() };
+  /** The one line that says what to do after the gate refused the word of a rung, and nothing for any other rung:
+   * the operator fixes his own word, and the chain asks a model for its word again with the findings. */
+  private gateHint(act: ActRow): string | undefined {
+    const { turns } = this.session;
+    if (act.kind !== "rung" || !act.done) return undefined;
+    if (this.refused.turns !== turns) this.refused = { turns, rungs: new Map() };
+    let refused = this.refused.rungs.get(act.id);
+    if (refused === undefined) {
+      refused = refusal(turns, act.id).length > 0;
+      this.refused.rungs.set(act.id, refused);
+    }
+    if (!refused) return undefined;
+    return act.by === "operator"
+      ? "Press ↑ in the input to bring the word back, fix the line that the gate names, and send it again."
+      : "The chain tells the model these findings and asks it for its word again.";
   }
   private actDetails(box: BoxRenderable, act: ActRow): void {
     if (act.kind === "rung") {
-      this.word(box, String(this.session.program[act.id] || act.words[0] || ""), act.run?.reason);
+      this.word(
+        box,
+        String(this.session.program[act.id] || act.words[0] || ""),
+        act.run?.reason,
+        this.gateHint(act),
+      );
       return;
     }
     const details = this.box({ paddingLeft: space.between * 2, gap: space.stack });

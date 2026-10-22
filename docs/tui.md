@@ -184,7 +184,14 @@ On a narrow terminal the sidebar is hidden, and the top line keeps the session, 
 ## Work in progress
 
 A command streams its output while it runs, and a model shows the last lines that it writes. A word that the gate
-refuses shows the line and the reason.
+refuses shows the line and the reason, and one more line that says what to do: press ↑ to bring your word back to the
+input, fix it and send it again, or wait while the chain asks the model again with the findings.
+
+When a call of a model fails for a cause that passes, as a lost connection, a provider that is overloaded or a limit
+of the rate, the provider asks the model again after a wait that doubles each time, up to ten attempts. The footer
+counts the wait down, as `Retrying in 4 s, attempt 2 of 10, connection reset`.
+
+![Model retry](screenshots/62-model-retry.png)
 
 ![Command streaming](screenshots/18-live-command.png)
 
@@ -237,8 +244,11 @@ the chain through that act. The module and the files keep their state.
 
 ## Empty, loading, and failed views
 
-A view with nothing to show says why in its middle. An act that fails keeps its failure in the feed, and a view
-that cannot load offers to read it again.
+A view with nothing to show says why in its middle. An act that fails keeps its failure in the feed. A view that
+cannot load says what broke in plain words, and never the words of the parser of JSON, and offers to read it again.
+When the journal of file changes beside the record is damaged, the view of changes names the change that it cannot
+read, and offers to repair the journal, which keeps each change that it can read, or to start a new journal, which
+keeps the damaged one beside it.
 
 ![Empty results](screenshots/24-empty-results.png)
 

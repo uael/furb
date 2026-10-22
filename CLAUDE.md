@@ -16,7 +16,7 @@ API of its own:
   commands in `bash.rs`, time in `time.rs`, the store of the record in `store.rs`, as a file of lines or a database
   of SQLite, each a `Store` that the suite in `store.test.rs` holds to its laws, whose ear names in the record the
   engine that made it, the log of a life beside its record
-  in `log.rs`, the reader of a record with no life in `reader.rs`, which opens a record of any engine to read, and the provider of models in `provider.rs`, which asks each model through rig and streams what it writes. Its catalog, `provider/catalog.rs`,
+  in `log.rs`, the reader of a record with no life in `reader.rs`, which opens a record of any engine to read, and the provider of models in `provider.rs`, which asks each model through rig and streams what it writes, and asks it again with a backoff after a failure that passes, as a lost connection. Its catalog, `provider/catalog.rs`,
   knows the models of every provider that pi-ai serves and those of the claude command line, and it offers each
   model whose credential stands in the environment, the claude command line when it finds the program, and each
   model for chat that a local server lists when `FURB_LOCAL_URL` names its address, which `provider/local.rs` asks.

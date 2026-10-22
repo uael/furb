@@ -164,13 +164,21 @@ export class Snapshots {
       this.dispatched = [...queueDispatches(this.session.entries).keys()];
     }
     const files = this.session.changes;
-    for (const change of files?.read(this.changes, files.length - this.changes) ?? [])
-      if (change.act)
-        this.lines.set(
-          change.act,
-          lineCounts(createTwoFilesPatch(change.path, change.path, change.before, change.after)),
-        );
-    this.changes = files?.length ?? 0;
+    // A journal that a repair or a new journal made shorter is read again from its start.
+    if ((files?.length ?? 0) < this.changes) this.changes = 0;
+    try {
+      for (const change of files?.read(this.changes, files.length - this.changes) ?? [])
+        if (change.act)
+          this.lines.set(
+            change.act,
+            lineCounts(createTwoFilesPatch(change.path, change.path, change.before, change.after)),
+          );
+      this.changes = files?.length ?? 0;
+    } catch (error) {
+      // A damaged journal is the failure of the view of changes alone, which offers to repair it: the rows keep the
+      // counts that they hold, and the journal is read again once it reads.
+      if ((error as { name?: unknown } | undefined)?.name !== "DamagedJournal") throw error;
+    }
     const { acts, count } = this.session.activity.since(since);
     // The share of the window has one home, filled of the engine, which the advance binds too.
     const reply = this.replies.get(selected);
