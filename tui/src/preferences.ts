@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { configDirectory, saveFile } from "@furb/engine";
+import { isLifeView, type LifeView } from "./overview.ts";
 import { defaultTheme, palettes, type ThemeName } from "./theme.ts";
 
 export class Preferences {
@@ -11,6 +12,8 @@ export class Preferences {
   foldRungs = true;
   /** Whether the welcome showed the check of the first run, which it shows once, and again while no model answers. */
   setupSeen = false;
+  /** The view of the life that the TUI shows: the board of main, the loom, or the graph. */
+  view: LifeView = "main";
   notice = "";
   private saved = "";
   constructor(readonly path = join(configDirectory(), "ui.json")) {
@@ -21,11 +24,13 @@ export class Preferences {
         sidebarWidth?: number;
         foldRungs?: boolean;
         setupSeen?: boolean;
+        view?: string;
       } | null;
       if (saved?.theme && Object.hasOwn(palettes, saved.theme)) this.theme = saved.theme as ThemeName;
       if (typeof saved?.sidebar === "boolean") this.sidebar = saved.sidebar;
       if (typeof saved?.foldRungs === "boolean") this.foldRungs = saved.foldRungs;
       if (typeof saved?.setupSeen === "boolean") this.setupSeen = saved.setupSeen;
+      if (isLifeView(saved?.view)) this.view = saved.view;
       if (typeof saved?.sidebarWidth === "number")
         this.sidebarWidth = Math.max(26, Math.min(48, saved.sidebarWidth));
     } catch (error) {
@@ -41,6 +46,7 @@ export class Preferences {
       sidebarWidth: this.sidebarWidth,
       foldRungs: this.foldRungs,
       setupSeen: this.setupSeen,
+      view: this.view,
     });
   }
   save(theme = this.theme): void {

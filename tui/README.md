@@ -36,6 +36,11 @@ replaces each key, address of mail and home directory, and ends at the moment wi
 Use `--cwd`, `--model provider:model`, `--effort`, `--record`, and repeated `--roster` options to configure
 a new life. A session offers every model that the catalog offers, with its model first: the default model when you
 name none. With `--roster`, it offers its model and the models of `--roster`, and no more.
+The TUI holds three views of the whole life side by side: the board of main, the loom of the chains in time, and the
+graph of the programs that run. `--view main|loom|graph` chooses one at the start, ⌥V switches it at run time,
+`/view` names one or lists the three, and the preferences keep the last one. Each view stands over the feed of the
+selected chain, and every other screen stays the same in each one. ⌥G gives the keys to the loom or the graph, and
+Esc gives them back. `docs/tui.md` shows each view, and `tui/DESIGN.md` says how they came.
 Sessions are saved under `.furb/sessions` in the selected directory. The `.furb` that the TUI makes holds
 a `.gitignore` that keeps it out of version control. Keep the `.jsonl`, `.session.json`, `.changes.jsonl`, and
 `.ui.json` files together. The last file keeps the view of the session as you left it. Keep its `.images` directory
@@ -104,6 +109,10 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | Click / right-click an act | Fold or expand it / inspect its value or prompt program |
 | ⌃⌥← | Return from a definition jump |
 | ⌥[ / ⌥] or ⌥P / ⌥N | Previous / next message of the feed |
+| ⌥V / ⌥G | Switch the view of the life: main, the loom, or the graph / move in the loom or the graph |
+| ↑↓←→ / Enter / Esc after ⌥G | Move, fold or zoom / zoom in / zoom out or go back |
+| [ ] / { } after ⌥G | Move the cursor in time by one / ten moments |
+| Space / x / n / b after ⌥G | Pause or wake / cancel / step / branch at the cursor the chain |
 | ⌃PageUp / ⌃PageDown | Previous / next page of file changes |
 | ⌃C | Clear the input, close a dialog, or cancel what you sent last (a message goes back to the input) |
 | Esc | Close a dialog or pause current model work |
@@ -149,6 +158,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/share [path]` | Export a standalone HTML conversation |
 | `/export <path>` | Write the transcript and program to a new JSON file |
 | `/workspace [path]` | Choose a workspace or add a project folder |
+| `/view [main|loom|graph]` | Show the life as the board of main, the loom, or the graph |
 | `/sidebar` | Show or hide the chains, the usage, and the workspaces |
 | `/delete` | Archive a session, or move it and its files to the workspace trash |
 | `/autocollapse` | Toggle collapse of completed rungs |
