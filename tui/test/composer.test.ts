@@ -682,6 +682,8 @@ test("Escape, a space, a removed colon, or no match closes the emoji list and ke
     await screen.mockInput.typeText(":rock");
     expect(await frame()).toContain(":rocket:");
     screen.mockInput.pressEscape();
+    // A lone Escape reaches the app once the parser knows that no sequence follows it.
+    for (let tries = 0; tries < 100 && (await frame()).includes(":rocket:"); tries++) await Bun.sleep(10);
     expect(await frame()).not.toContain(":rocket:");
     expect(app.composer.plainText).toBe(":rock");
     app.composer.setText("");
