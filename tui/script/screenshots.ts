@@ -13,13 +13,15 @@ import { palettes } from "../src/theme.ts";
 import { Workspaces } from "../src/workspaces.ts";
 import { idle } from "../test/idle.ts";
 import { rasterize } from "./raster.ts";
-import { click, find, highlighting, home, mount } from "./stage.ts";
+import { click, end, find, highlighting, home, mount, watch } from "./stage.ts";
 
 /** The recorded life of a conductor, from the fixtures of the TUI. */
 const conductor = resolve(import.meta.dir, "..", "fixtures", "conductor.jsonl");
 // The model of the demo writes slowly, so that its work stays in progress while a capture shows it. The session runs
 // in a worker, which reads the environment once, as it starts.
 const projects = await home("furb-gallery", { FURB_DEMO_PACE: "200" });
+/** What the script waits for: a screen whose state never comes ends the script with an error that names the screen. */
+const waits = watch();
 /** A project of the gallery in its home, new, with the files of the demo. */
 async function project(name: string): Promise<string> {
   const directory = join(projects, name);
@@ -67,6 +69,7 @@ async function rest(): Promise<void> {
   await test.mockMouse.moveTo(0, test.renderer.height - 1);
 }
 async function capture(name: string): Promise<void> {
+  waits(`the screen ${name}`);
   if (!notices.test(name)) session.notice = "";
   // A read that a change starts while the last one ends leaves the view loading, so the capture waits for none.
   if (name !== "25-loading" && name !== "27-view-error")
@@ -80,6 +83,7 @@ async function capture(name: string): Promise<void> {
   await app().colorsDone();
   app().render();
   await test.flush();
+  waits(`the screen after ${name}`);
   if (only && !only.test(name)) return;
   await writeFile(`${output}/${name}.png`, rasterize(test.captureSpans(), palettes[session.theme], "furb"));
   // The text of each shot goes to a folder that FURB_GALLERY_TEXT names, to read the gallery without its pictures.
@@ -87,6 +91,7 @@ async function capture(name: string): Promise<void> {
   if (texts) await writeFile(join(texts, `${name}.txt`), test.captureCharFrame());
 }
 
+let failed = false;
 try {
   await loadParsers();
   await capture("01-welcome");
@@ -620,9 +625,15 @@ try {
   test.resize(82, 32);
   await capture("17-narrow");
   test.resize(152, 46);
-} finally {
-  app().dispose();
-  test.renderer.destroy();
-  await library.dispose();
-  await removeDemoDirectories();
+} catch (error) {
+  console.error(error);
+  failed = true;
 }
+waits("the end of the script");
+await end(
+  failed,
+  () => app().dispose(),
+  () => test.renderer.destroy(),
+  () => library.dispose(),
+  removeDemoDirectories,
+);
