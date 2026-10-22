@@ -1,6 +1,6 @@
 # furb TUI
 
-An OpenTUI application built on `@furb/engine`. The TUI owns a Bun worker for each open session: its life and its
+An OpenTUI application built on the npm package `furb`, in `bind/typescript`. The TUI owns a Bun worker for each open session: its life and its
 ears.
 Rendering, input, and syntax coloring stay responsive while the sandbox gates and runs Python. The TUI needs Bun
 1.4.2 or later. On Windows, Bun 1.3 crashes the TUI when it calls into OpenTUI.

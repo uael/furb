@@ -1,4 +1,4 @@
-import { open } from "@furb/engine";
+import { open } from "furb";
 
 await using life = await open("budget.jsonl");
 const budget = life.chain("budget");

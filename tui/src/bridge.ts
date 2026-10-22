@@ -8,8 +8,8 @@ import type {
   SetupInfo,
   Stream,
   Turn,
-} from "@furb/engine";
-import type { Measure } from "@furb/engine/life";
+} from "furb";
+import type { Measure } from "furb/life";
 import type { EngineOptions } from "./models.ts";
 import type { Reading } from "./reading.ts";
 import type { ActRow, FollowUp } from "./session.ts";

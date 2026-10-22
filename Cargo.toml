@@ -6,6 +6,20 @@ rust-version = "1.95"
 description = "The core of an AI harness: the engine in a sandbox, behind an async API, with a World of your own."
 license = "AGPL-3.0-only"
 repository = "https://github.com/uael/furb"
+readme = "README.md"
+# What the crate on crates.io holds: the engine and what its build reads, the extensions that the crate carries, the
+# doctrine, and the examples. The rest of the repository is other packages and their tests.
+include = [
+  "/build.rs",
+  "/src/**",
+  "/extensions/*/furb.json",
+  "/extensions/*/*.py",
+  "/extensions/*/*/SKILL.md",
+  "/DOCTRINE.md",
+  "/docs/examples/rust/*.rs",
+  "/LICENSE",
+  "/README.md",
+]
 
 [workspace]
 # The command line is a program of its own on this crate, so the library takes none of its dependencies.

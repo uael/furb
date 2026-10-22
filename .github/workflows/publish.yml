@@ -1,13 +1,22 @@
 name: publish
 
-# A tag that names a version publishes that version to PyPI: furb, the engine; furb-cli, the command furb, which is a
-# program of rust; and furb-monty, the crate built for python. Each of the two crates goes as one wheel for each
-# machine the gates run on and as its source for any other machine, which builds it with the rust of
-# rust-toolchain.toml. PyPI is told to trust this workflow of this repository for all three, so no token is kept
-# anywhere: the job asks GitHub for a short lived identity and PyPI reads it. Before it publishes, each machine
-# installs the wheels in a clean environment with pip, and runs the command furb. A run started by hand, or by a pull
-# request that changes what the release builds, builds and proves everything and publishes nothing, which is the
-# rehearsal of a release.
+# A tag vX.Y.Z publishes the version X.Y.Z of furb to each registry: to crates.io the crates furb and then furb-cli,
+# once no dependency of either stands on git, which crates.io refuses; to npm the package furb and the package of its
+# engine for each system that it runs on; and to PyPI furb, the engine, furb-cli, the command furb, which is a program
+# of rust, and furb-monty, the crate built for python. The tag comes from a merge of the pull request of
+# release-please, which release.yml starts this on, or from the owner. Each registry is told to trust this workflow of
+# this repository, so no token is kept once each package stands: the job asks GitHub for a short lived identity and the
+# registry reads it. A registry that trusts a workflow only for a package that stands already takes, for its first
+# release, the token that a secret of its environment holds.
+#
+# Each of the two crates of PyPI goes as one wheel for each machine the gates run on and as its source for any other
+# machine, which builds it with the rust of rust-toolchain.toml. The engine of npm is built on each system that it
+# runs on. Before anything is published, each package is installed from its built artifacts alone, in a clean
+# environment: pip installs the wheels and runs the command furb; a new crate takes the packed furb as a patch of
+# crates.io, with every other crate from crates.io and no lock of furb, and runs an example of docs/examples/rust;
+# and npm installs the packed furb in a new folder and runs an example of docs/examples/typescript. A run started by
+# hand on a branch, or by a pull request that changes what a release builds, builds and proves everything and
+# publishes nothing, which is the rehearsal of a release.
 on:
   push:
     tags: ["v*"]
@@ -19,7 +28,18 @@ on:
       - bind/python/pyproject.toml
       - cli/Cargo.toml
       - cli/pyproject.toml
+      - bind/typescript/package.json
+      - bind/typescript/build.ts
+      - bind/typescript/npm/**
+      - script/prove-crate.sh
+      - script/prove-npm.sh
   workflow_dispatch:
+
+# One run for one ref: a push that follows another on a branch or a pull request ends the run before it, so a rehearsal
+# of an old head holds no runner. A run on a tag is never ended, so no release stops halfway.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
 
 permissions:
   contents: read
@@ -27,6 +47,9 @@ permissions:
 env:
   # The one uv every job installs, as the gates do.
   UV_VERSION: "0.12.17"
+  # The one bun of the gates, and the node of the proof and of npm, whose npm trusts a workflow.
+  BUN_VERSION: "1.4.2"
+  NODE_VERSION: "24"
 
 jobs:
   furb:
@@ -139,10 +162,143 @@ jobs:
         env:
           FURB_ENGINE: monty
 
+  crates:
+    name: cargo add furb
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          python: none
+      # A tag publishes the version that it names, and no other.
+      - if: github.ref_type == 'tag'
+        run: |
+          test "v$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "furb") | .version')" = "$GITHUB_REF_NAME"
+      - run: sh script/prove-crate.sh "$RUNNER_TEMP/proof"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: crates
+          path: ${{ runner.temp }}/proof/crates
+
+  engines:
+    # A build on Linux links the glibc of Ubuntu 22.04, so it runs on a system with glibc 2.35 or later.
+    name: the engine of npm for ${{ matrix.system }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-22.04, system: linux-x64-gnu }
+          - { os: ubuntu-22.04-arm, system: linux-arm64-gnu }
+          - { os: macos-latest, system: darwin-arm64 }
+          - { os: macos-15-intel, system: darwin-x64 }
+          - { os: windows-latest, system: win32-x64-msvc }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          python: none
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: bun install --frozen-lockfile
+      - run: bun run build --release
+      - run: test -f "bind/typescript/furb.${{ matrix.system }}.node"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: engine-${{ matrix.system }}
+          path: |
+            bind/typescript/furb.${{ matrix.system }}.node
+            bind/typescript/index.cjs
+
+  npm:
+    name: npm pack
+    needs: [engines]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - if: github.ref_type == 'tag'
+        run: |
+          test "v$(node -p 'require("./bind/typescript/package.json").version')" = "$GITHUB_REF_NAME"
+      - run: bun install --frozen-lockfile
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: engine-*
+          path: engines
+      # Each build wrote the same loader, so the loader of one serves the package.
+      - run: |
+          cp engines/engine-linux-x64-gnu/index.cjs bind/typescript/index.cjs
+          for system in linux-x64-gnu linux-arm64-gnu darwin-arm64 darwin-x64 win32-x64-msvc; do
+            cp "engines/engine-$system/furb.$system.node" "bind/typescript/npm/$system/"
+          done
+      - run: bun x --no-install tsc -p bind/typescript/tsconfig.json
+      - run: |
+          mkdir packs
+          for folder in bind/typescript bind/typescript/npm/*; do
+            cp LICENSE "$folder/LICENSE"
+            (cd "$folder" && npm pack --pack-destination "$GITHUB_WORKSPACE/packs")
+          done
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: npm
+          path: packs
+
+  npm-proof:
+    name: npm install on ${{ matrix.system }}
+    needs: [npm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-22.04, system: linux-x64-gnu }
+          - { os: ubuntu-22.04-arm, system: linux-arm64-gnu }
+          - { os: macos-latest, system: darwin-arm64 }
+          - { os: macos-15-intel, system: darwin-x64 }
+          - { os: windows-latest, system: win32-x64-msvc }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # bun compiles the fake claude to a program, since Windows runs no script by its shebang.
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: npm
+          path: packs
+      - run: sh script/prove-npm.sh packs
+
   publish:
-    name: publish
-    if: github.event_name == 'push'
-    needs: [furb, wheels, source, proof]
+    name: publish to PyPI
+    if: github.ref_type == 'tag'
+    needs: [furb, wheels, source, proof, crates, npm-proof]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: pypi
@@ -157,3 +313,90 @@ jobs:
         with:
           version: ${{ env.UV_VERSION }}
       - run: uv publish --trusted-publishing always
+
+  crates-io:
+    name: publish to crates.io
+    if: github.ref_type == 'tag'
+    needs: [furb, wheels, source, proof, crates, npm-proof]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: crates-io
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      # crates.io trusts a workflow only for a crate that stands, so the first release takes the token of this secret.
+      FIRST: ${{ secrets.CARGO_REGISTRY_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          python: none
+      # crates.io takes no crate that stands on git. While a dependency of furb or of furb-cli stands on git, as monty
+      # does until it stands on crates.io with what furb needs, the job publishes nothing there and says why.
+      - id: git
+        run: |
+          found=$(cargo metadata --no-deps --locked --format-version 1 | jq -r '.packages[]
+            | select(.name == "furb" or .name == "furb-cli") | .name as $crate | .dependencies[]
+            | select((.source // "") | startswith("git+")) | "\($crate) depends on \(.name) from \(.source)"')
+          if [ -n "$found" ]; then
+            echo "::notice title=crates.io waits::crates.io takes no crate that stands on git, so nothing goes there: $(echo "$found" | paste -sd ';' -)"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.git.outputs.ready == 'true' && env.FIRST != 'true'
+        uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
+        id: auth
+      # cargo publishes furb, waits for it in the index, then publishes furb-cli. A run again after a failure skips each
+      # crate that crates.io holds at this version.
+      - if: steps.git.outputs.ready == 'true'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN || steps.auth.outputs.token }}
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          for crate in furb furb-cli; do
+            if curl -sf -A "furb release (github.com/uael/furb)" "https://crates.io/api/v1/crates/$crate/$version" >/dev/null; then
+              echo "crates.io holds $crate $version"
+            else
+              cargo publish --locked -p "$crate"
+            fi
+          done
+
+  npm-publish:
+    name: publish to npm
+    if: github.ref_type == 'tag'
+    needs: [furb, wheels, source, proof, crates, npm-proof]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: https://registry.npmjs.org
+      # npm trusts a workflow from npm 11.5.1 on.
+      - run: npm install -g npm@11
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: npm
+          path: packs
+      # The package of each engine goes first, so the package furb never names an engine that npm does not hold. npm
+      # trusts a workflow only for a package that stands, so the first release takes the token of the secret NPM_TOKEN.
+      # A run again after a failure skips each package that npm holds at this version.
+      - env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          for name in furb-linux-x64-gnu furb-linux-arm64-gnu furb-darwin-arm64 furb-darwin-x64 furb-win32-x64-msvc furb; do
+            if [ "$(npm view "$name@$version" version 2>/dev/null)" = "$version" ]; then
+              echo "npm holds $name $version"
+            else
+              npm publish "packs/$name-$version.tgz" --provenance --access public
+            fi
+          done

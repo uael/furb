@@ -1,4 +1,4 @@
-import { actState, type LiveAct, outcome, reason, source } from "@furb/engine/life";
+import { actState, type LiveAct, outcome, reason, source } from "furb/life";
 import type { State } from "./data.ts";
 import { chainName, glyphOf, type Moment } from "./life.ts";
 

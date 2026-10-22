@@ -3,7 +3,7 @@
 // argument exists. This process exits with the exit code of the command.
 import { dlopen, FFIType } from "bun:ffi";
 import { existsSync } from "node:fs";
-import { onConsoleEnd } from "@furb/engine";
+import { onConsoleEnd } from "furb";
 
 const { symbols } = dlopen("kernel32.dll", {
   FreeConsole: { args: [], returns: FFIType.i32 },

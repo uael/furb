@@ -16,6 +16,11 @@ const command = [
   "bind/typescript/package.json",
   "--output-dir",
   "bind/typescript",
+  // The engine is furb.<system>.node, as the package of the engine of each system names it, and index.cjs, which napi
+  // writes, loads it from beside itself or from that package.
+  "--platform",
+  "--js",
+  "index.cjs",
   "--dts",
   "index.d.cts",
   // The dev profile optimizes every dependency, the interpreter among them, so a debug build runs a word as fast as a

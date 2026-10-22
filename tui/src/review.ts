@@ -1,8 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { FileChange } from "@furb/engine";
 import { type StructuredPatchHunk as Hunk, structuredPatch } from "diff";
+import type { FileChange } from "furb";
 
 export type { Hunk };
 

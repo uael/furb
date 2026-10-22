@@ -5,11 +5,11 @@
 
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { furbDirectory } from "@furb/engine";
 import { demoDirectory, removeDemoDirectories } from "@furb/tui/src/demo.ts";
 import type { EngineOptions } from "@furb/tui/src/models.ts";
 import { Preferences } from "@furb/tui/src/preferences.ts";
 import { Workspaces } from "@furb/tui/src/workspaces.ts";
+import { furbDirectory } from "furb";
 import { Host } from "./host.ts";
 import { serve } from "./serve.ts";
 

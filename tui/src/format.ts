@@ -1,4 +1,4 @@
-import type { Retry } from "@furb/engine";
+import type { Retry } from "furb";
 
 /** What the footer says of a retry of the call of a model: the seconds left of its wait, its attempt, and why the
  * attempt before it failed. */

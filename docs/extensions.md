@@ -160,7 +160,7 @@ the model of a life and on the acts of the extension. Nothing builds it: Bun loa
   part that names a command of the TUI fails.
 - `seen` gives the chain on screen, every act of the life, `of(kind)` for the acts of a kind, `run(word)`, which runs
   python on the chain through the gate as `/run` does, and `say(text)`, which shows a notice in the footer.
-  `furb.life` is the model of a life, `@furb/engine/life`.
+  `furb.life` is the model of a life, `furb/life`.
 - A part imports types alone, so it loads in any project. `tui/src/parts.ts` gives the types, and `tui/fixtures/todo`
   is an extension with a part.
 - A module that does not load, that exports no function as its default, or whose function throws, shows its error in

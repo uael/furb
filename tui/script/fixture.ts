@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { isQuestion } from "@furb/engine";
+import { isQuestion } from "furb";
 
 /** The kinds of question that are steps of an act, which a view of a life shows not, as the activity says. The run, the
  * reply and the stand stay, since a run carries the word of its rung, a reply the usage of an answer, and a stand the

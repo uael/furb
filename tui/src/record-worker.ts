@@ -1,4 +1,4 @@
-import { inspectRecord } from "@furb/engine";
+import { inspectRecord } from "furb";
 
 declare const self: Worker & { close(): void };
 self.onmessage = async ({ data }: MessageEvent<string[]>) => {

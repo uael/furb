@@ -71,7 +71,7 @@ A long thread stays short. The feed shows the last six steps of the chain and of
 of each ladder, and one line in place of each run of earlier ones, as "28 earlier messages". A click on the line
 shows them. A step that asks you or runs always shows. A long message shows its first eight rows, and the word of a
 rung that runs shows its first twelve, each with a line that shows the rest. A jump to an act opens each fold over
-it. The board and the feed come from the model of a life that `@furb/engine/life` gives, so each host shows the same
+it. The board and the feed come from the model of a life that `furb/life` gives, so each host shows the same
 life. The sidebar shows the chains, the context and the cost, and the workspaces.
 
 ![Feed](screenshots/02-feed.png)

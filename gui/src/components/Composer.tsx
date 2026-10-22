@@ -1,4 +1,4 @@
-import { aimed, gist } from "@furb/engine/life";
+import { aimed, gist } from "furb/life";
 import { ArrowUp, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { call } from "../data.ts";

@@ -2,7 +2,7 @@ import { expect, mock, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { store } from "@furb/engine";
+import { store } from "furb";
 import { Preferences } from "../src/preferences.ts";
 import * as records from "../src/records.ts";
 import { Workspaces } from "../src/workspaces.ts";

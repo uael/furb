@@ -1,4 +1,4 @@
-import { open } from "@furb/engine";
+import { open } from "furb";
 
 await using life = await open("notes.jsonl", { roster: ["claude-cli:opus", "claude-cli:sonnet"] });
 const reviewer = life.chain("reviewer", { model: "claude-cli:sonnet" });

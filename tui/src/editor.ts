@@ -1,8 +1,8 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { shell } from "@furb/engine";
 import type { CliRenderer } from "@opentui/core";
+import { shell } from "furb";
 
 export async function externalEditor(
   renderer: Pick<CliRenderer, "suspend" | "resume">,
