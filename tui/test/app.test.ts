@@ -1,7 +1,7 @@
 import { afterAll, expect, setSystemTime, test } from "bun:test";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { RGBA } from "@opentui/core";
+import { type Renderable, RGBA } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import { highlighting } from "../script/stage.ts";
@@ -15,6 +15,19 @@ import { type SessionEntry, Workspaces } from "../src/workspaces.ts";
 import { cellAt, composing, withDemo } from "./composing.ts";
 import { idle } from "./idle.ts";
 import { transcriptOf } from "./transcript.ts";
+
+/** Draws the App until a frame and the next are the same, with each code of the frame highlighted in between, since a
+ * card that the App draws anew shows its markdown only once its highlighting ends. */
+async function drawn(frame: () => Promise<string>, root: Renderable): Promise<string> {
+  let shown = await frame();
+  for (let tries = 0; tries < 20; tries++) {
+    await Promise.all(highlighting(root));
+    const next = await frame();
+    if (next === shown) return next;
+    shown = next;
+  }
+  return shown;
+}
 
 afterAll(removeDemoDirectories);
 
@@ -220,8 +233,7 @@ test("operator answers and program edits act through the binding", () =>
       });
       await until(session.host, () => session.host.prompts.has(id));
       await session.refresh();
-      await frame();
-      await Promise.all(highlighting(screen.renderer.root));
+      await drawn(frame, screen.renderer.root);
       expect(await frame()).toContain("Continue with the change?");
       await session.submit("yes");
       expect(await session.engine.result(id)).toBe(true);
@@ -250,8 +262,7 @@ test("a prompt of None to the operator is a notice with no field, done at once, 
       await until(session.host, () => session.host.notices.has(id));
       await session.refresh();
       expect(session.operatorPrompt).toBeUndefined();
-      await frame();
-      await Promise.all(highlighting(screen.renderer.root));
+      await drawn(frame, screen.renderer.root);
       const shown = await frame();
       expect(shown).toContain("Notice");
       expect(shown).toContain("The build is green.");
@@ -301,8 +312,7 @@ test("the markdown of a message draws each element with no marks, and a code blo
       });
       await until(session.host, () => session.host.notices.has(id));
       await session.refresh();
-      await frame();
-      await Promise.all(highlighting(screen.renderer.root));
+      await drawn(frame, screen.renderer.root);
       const rows = (await frame()).split("\n");
       const shown = rows.join("\n");
       for (const mark of ["##", "**", "`", "[the guide]", "| ---", "> a quote"])
