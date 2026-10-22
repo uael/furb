@@ -185,6 +185,9 @@ pub struct Model {
   fenced: bool,
   /// How it takes the most tokens of thought of one turn, when it takes one.
   thought: Option<Thought>,
+  /// Whether it reads its earlier turns with no thought, as a model of a local server, whose own template drops the
+  /// thought of each earlier turn, and whose thought of each turn would else fill its window in a few turns.
+  forgets: bool,
   answers: Answers,
   /// The native search of the web of its provider, which the extension web asks for an actor that names it.
   search: Option<Searches>,
@@ -222,6 +225,7 @@ impl Model {
       ends: false,
       tagged: false,
       fenced: false,
+      forgets: false,
       thought: None,
       answers,
       search: None,
@@ -582,8 +586,9 @@ fn thinks((model, mut asked): (Model, Asked), thinking: Thinking) -> (Model, Ask
 
 /// The turns of a chain as messages of rig. The engine phrases every turn as python and the provider renders
 /// nothing: a user turn goes as its python and the images that the prompts it opens name, and one that holds
-/// nothing goes not at all; an assistant turn goes as the blocks its provider gave, or as its python when a
-/// provider of another kind gave them. A model that takes no image refuses a turn that names one.
+/// nothing goes not at all; an assistant turn goes as the blocks its provider gave, less its thought for a model that
+/// forgets it, or as its python when a provider of another kind gave them. A model that takes no image refuses a turn
+/// that names one.
 fn messages(
   turns: ObjectRef<'_>,
   model: &Model,
@@ -596,6 +601,12 @@ fn messages(
     if role == "assistant" {
       let blocks = entry(&turn, 3)
         .and_then(|one| serde_json::from_value::<Vec<AssistantContent>>(wire::record(one)).ok())
+        .map(|mut blocks| {
+          if model.forgets {
+            blocks.retain(|one| !matches!(one, AssistantContent::Reasoning(_)));
+          }
+          blocks
+        })
         .filter(|blocks| !blocks.is_empty())
         .unwrap_or_else(|| vec![AssistantContent::text(python)]);
       messages.push(Message::Assistant { id: None, content: blocks });
