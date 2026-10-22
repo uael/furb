@@ -40,7 +40,7 @@ pub use provider::{
 };
 pub use scratch::{SCRATCH, Scratch};
 pub(crate) use store::database;
-pub use store::{Lines, Sqlite, Store, keeping, kept, store};
+pub use store::{Lines, MADE, Sqlite, Store, engine, keeping, kept, made, store};
 pub use time::time;
 
 use crate::{

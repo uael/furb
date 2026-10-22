@@ -12,7 +12,8 @@ API of its own:
   makes from the contract, and `Ear`, the one trait of an ear, which a host writes as a generator of rust with `ear`.
 - `src/world/` holds the ears of the World that the crate writes, one file each: the files in `files.rs`, the
   commands in `bash.rs`, time in `time.rs`, the store of the record in `store.rs`, as a file of lines or a database
-  of SQLite, each a `Store` that the suite in `store.test.rs` holds to its laws, the log of a life beside its record
+  of SQLite, each a `Store` that the suite in `store.test.rs` holds to its laws, whose ear names in the record the
+  engine that made it, the log of a life beside its record
   in `log.rs`, and the provider of models in `provider.rs`, which asks each model through rig and streams what it writes. Its catalog, `provider/catalog.rs`,
   knows the models of every provider that pi-ai serves and those of the claude command line, and it offers each
   model whose credential stands in the environment, the claude command line when it finds the program, and each
@@ -27,7 +28,8 @@ API of its own:
   contract and a suite, and `src/extension/` holds the ear of the World of each that has one. `docs/extensions.md` says how an extension works.
 - `src/life.rs` opens a life as every host opens one: the record, and the ears of the crate after the ears of the
   host, the provider among them, on the default actor and the roster that the host names from the catalog, or every
-  model that the catalog offers when the host names no roster, or on a model of its own, and the extensions. A host adds only its own ears, such as the console of its operator. Every
+  model that the catalog offers when the host names no roster, or on a model of its own, and the extensions. A host adds only its own ears, such as the console of its operator.
+  A life on a record that another engine made is refused before any replay, with both engines. Every
   host gives it as one `Opening`, and each door gives it as `opened` and as `Engine.open`.
 - `src/snapshot.rs` holds the snapshot of a life beside its record: the session of the sandbox that monty dumps and
   what the engine holds of the ears, which a later life on the same record and build opens from with no replay.

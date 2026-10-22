@@ -660,6 +660,11 @@ def boot(record=(), **outside):
   due = [e for (e,) in record[::-1] if first.get(e[1]) is not e]
   kept = {e[1]: e for (e,) in record if question(e)}
 
+  def drift(name):
+    return Drift(
+      f"{name} drifts: the life made {get(name)!r:.300}, the record holds {kept.get(name) or first.get(name)!r:.300}"
+    )
+
   def owed():
     while due and question(due[-1]) and due[-1][1] in known:
       due.pop()
@@ -675,7 +680,7 @@ def boot(record=(), **outside):
                 born.setdefault(kind, {})[name] = name
                 continue
               if not callable(verb := (module(on) or globals()).get(kind)) or re.fullmatch(r"\w+?\d+", by):
-                raise Drift(name + " drifts")
+                raise drift(name)
               with site.set(by):
                 try:
                   verb(*words, on=on)
@@ -686,7 +691,7 @@ def boot(record=(), **outside):
         match a := (yield):
           case (kind, about, by, *_) if about in known and by != "journal":
             if not by and (owed() or about in first):
-              raise Drift(about + " drifts")
+              raise drift(about)
             if by not in known and by not in driven:
               if about not in kept:
                 yield "keep", "", (kept.setdefault(about, known[about]),)
