@@ -227,7 +227,11 @@ export class Session extends EventEmitter {
     this.sessionName = basename(host.directory);
     const path = host.record;
     this.preferences =
-      preferences ?? new Preferences(demo && path ? join(dirname(path), "ui-preferences.json") : undefined);
+      // A recorded life keeps nothing beside its log, so its demo reads the preferences of the user.
+      preferences ??
+      new Preferences(
+        demo && path && !host.recorded ? join(dirname(path), "ui-preferences.json") : undefined,
+      );
     if (path) {
       const { view, damage } = savedView(path);
       Object.assign(this, Object.fromEntries(kept.flatMap((key) => (key in view ? [[key, view[key]]] : []))));
@@ -1094,7 +1098,8 @@ export class Session extends EventEmitter {
   save(): void {
     this.preferences.save(this.theme);
     const record = this.host.record;
-    if (!record) return;
+    // A recorded life keeps no view beside its log, which a later reader takes as it was made.
+    if (!record || this.host.recorded) return;
     const path = `${record}.ui.json`;
     this.savedCost = this.cost;
     const view: SavedView = {

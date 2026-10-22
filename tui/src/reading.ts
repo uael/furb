@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from "node:fs";
 import { Activity, type Call, type Entry, type Fact, isQuestion, type Turn, WORK } from "@furb/engine";
 
 /** Why a record opens to read: the engine that made it, as the record names it, the engine of this build, and what
@@ -9,6 +10,18 @@ export interface Reading {
   /** Whether the facts are those of the log, which holds every fact that the life said, or those that the record
    * kept, with the acts that they name. */
   logged: boolean;
+}
+
+/** Whether a record is a recorded life: a log of a life whose first line is a header that says so, which a host reads
+ * and runs not. tui/script/fixture.ts makes one from the log of a real life. */
+export function isRecorded(record: string): boolean {
+  if (!existsSync(record)) return false;
+  const first = readFileSync(record, "utf8").slice(0, 4096).split("\n")[0] ?? "";
+  try {
+    return (JSON.parse(first) as { recorded?: unknown }).recorded === true;
+  } catch {
+    return false;
+  }
 }
 
 /** What a session that only reads does not do. */
@@ -32,13 +45,28 @@ export class Reader {
     facts: unknown[],
     readonly directory: string,
     readonly record: string,
-    readonly reading: Reading,
+    readonly reading?: Reading,
   ) {
     for (const fact of facts as Fact[]) this.hear(fact);
     // The life stopped where the record ends, and nothing runs on a record open to read, so the work that is not done
-    // waits, as paused work does. A chain is no work, and stays as it is.
-    for (const act of this.activity.acts.values())
-      if (!act.done && WORK.includes(act.kind)) act.paused = true;
+    // waits, as paused work does. A chain is no work, and stays as it is. A recorded life shows a moment of a life,
+    // so its work stands as it stood at that moment.
+    if (reading)
+      for (const act of this.activity.acts.values())
+        if (!act.done && WORK.includes(act.kind)) act.paused = true;
+  }
+  /** A recorded life, read from its file: a log of a life whose first line is a header that says so, which the
+   * reader shows at the moment where the log ends. */
+  static recorded(path: string, directory: string): Reader {
+    const facts = readFileSync(path, "utf8")
+      .split("\n")
+      .filter((line) => line.startsWith("["))
+      .map((line) => JSON.parse(line) as Fact);
+    return new Reader(facts, directory, path);
+  }
+  /** Whether the reader shows a recorded life, which keeps nothing beside its file. */
+  get recorded(): boolean {
+    return !this.reading;
   }
   get imageDirectory(): string {
     return `${this.record}.images`;
@@ -86,7 +114,8 @@ export class Reader {
   standing(): [unknown[], string, string] {
     const stood = this.facts.findLast(([kind, about]) => kind === "done" && isQuestion("stand", about));
     const [roster = [], directory = this.directory, actor = "operator"] = (stood?.[3] ?? []) as unknown[];
-    return [roster as unknown[], String(directory), String(actor)];
+    // A recorded life names no path of this machine, so it stands where the host opens it.
+    return [roster as unknown[], this.recorded ? this.directory : String(directory), String(actor)];
   }
 
   /** The word of each rung of a chain, by the rung, as each run of the chain ran it since its last module. */

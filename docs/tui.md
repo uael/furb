@@ -19,28 +19,44 @@ session does and offers the keys that act now, each a button that does what its 
 
 ## Feed
 
-The board over the feed shows each chain of the life on one row, in the order of its tree: its mark, its name,
-what it does now, and the pulse of its acts over the life. A chain that asks you a question shows the question in
-yellow. A chain at work shows the act that it waits on, a chain that failed shows why, and a chain that finished
-shows the first line of its answer. A click on a row shows that chain. The board shows when the life has more than
-one chain, or when a question waits for you. In a long life, it keeps the rows that need a look and counts the
-chains at rest.
+The captures of the feed show a real life: a conductor and the workers that it hired, recorded from the log of a
+life of furb, with 23 chains, 21 of them at work, and ladders of up to 76 rungs. `tui/fixtures/conductor.jsonl`
+holds it, with no key and no path of a home in it, and `bun run demo` opens it beside the scripted life.
+
+The board over the feed says the whole life at a glance. Its first line counts the chains by what they do: the
+chains that ask you, then those that failed, are paused, work, are done, or rest. Under it, each chain that needs a
+look stands on one row: the chains that ask you first, then those that failed, are paused or work, in the order of
+their tree. A row shows the mark of the chain, its name, what it does now, and how many answers its models gave for
+how many dollars. A chain that asks you shows its question in yellow. A chain at work shows the act that it waits
+on: a command, a wait with its time and the acts that it waits for, or a rung that its model writes. A chain that
+failed shows why, and a chain that finished shows the first line of its answer. The board takes at most a third of
+the screen, keeps the chain on screen, and counts the chains that it leaves out, which ⌃B lists. A click on a row
+shows that chain. The board shows when the life has more than one chain, or when a question waits for you.
 
 Under the board, the feed shows the ladder of the chain: your message in a panel, each rung of the ladder on one
 row, and the answer under the name of the model that gave it. The row of a rung shows its mark, its name, the first
-line of its Python in the colors of its grammar, the count of the lines after it, and the acts that it made, each in the color of its state. Once it is
-done, it says how long it ran and what the answers of its model cost. A
-rung opens while it runs, and shows the last lines that its model writes or that its command prints. It folds to
-its row when it completes. A click on its heading, or ⌥D, opens it to show its numbered Python, and under it each
-act that it made with a preview of its output. Each act says what it did: a read its path and the count of its
-lines, a write its path and the lines that it added and removed, and a command its line, its exit, and how long it
-ran. The time is known for the work that the TUI saw run, since the record holds no time. The fold stays the same
-across views and after a reopen.
-`/autocollapse` turns the automatic fold off, and on again. A right click on an act inspects it, edits its program,
-or branches after it. The board and the feed come from the model of a life that `@furb/engine/life` gives, so each
-host shows the same life. The sidebar shows the chains, the context and the cost, and the workspaces.
+line of its Python in the colors of its grammar, the count of the lines after it, and the acts that it made, each in
+the color of its state. Once it is done, it says how long it ran and what the answers of its model cost. A rung opens
+while it runs, and shows the last lines that its model writes or that its command prints. It folds to its row when
+it completes. A click on its heading, or ⌥D, opens it to show its numbered Python, and under it each act that it made
+with a preview of its output. Each act says what it did: a read its path and the count of its lines, a write its path
+and the lines that it added and removed, and a command its line, its exit, and how long it ran. The time is known for
+the work that the TUI saw run, since the record holds no time. The fold stays the same across views and after a
+reopen. `/autocollapse` turns the automatic fold off, and on again. A right click on an act inspects it, edits its
+program, or branches after it.
+
+A long thread stays short. The feed shows the last six steps of the chain and of each rung, and the last four rungs
+of each ladder, and one line in place of each run of earlier ones, as "28 earlier messages". A click on the line
+shows them. A step that asks you or runs always shows. A long message shows its first eight rows, and the word of a
+rung that runs shows its first twelve, each with a line that shows the rest. A jump to an act opens each fold over
+it. The board and the feed come from the model of a life that `@furb/engine/life` gives, so each host shows the same
+life. The sidebar shows the chains, the context and the cost, and the workspaces.
 
 ![Feed](screenshots/02-feed.png)
+
+![A long ladder](screenshots/60-long-ladder.png)
+
+![Folded steps](screenshots/61-folded-steps.png)
 
 ## Transcript
 
