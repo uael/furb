@@ -132,8 +132,8 @@ export const keys = [
     ],
   },
   {
-    chord: "↑, ↓, Tab, Enter after / or @",
-    action: "Choose a slash command, its value, or a project file as it is typed",
+    chord: "↑, ↓, Tab, Enter after /, @ or :",
+    action: "Choose a slash command, its value, a project file, or an emoji as it is typed",
   },
   {
     chord: "⌃F / PageUp / PageDown",
