@@ -2,6 +2,7 @@
  * square brackets may be left out. */
 export const commands = {
   new: ["New session", "", "Start a fresh life"],
+  watch: ["Watch a life", "", "Play a short life that asks no model and costs nothing"],
   model: ["Choose model", "[model]", "Choose the model that answers on this chain"],
   effort: ["Choose effort", "[level]", "Set the reasoning effort of the selected model"],
   shape: ["Response shape", "[type]", "Choose the result type of the next prompt"],

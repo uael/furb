@@ -20,6 +20,7 @@ API of its own:
   knows the models of every provider that pi-ai serves and those of the claude command line, and it offers each
   model whose credential stands in the environment, the claude command line when it finds the program, and each
   model for chat that a local server lists when `FURB_LOCAL_URL` names its address, which `provider/local.rs` asks.
+  It says too what a first run checks of each: `setup` in `src/binding.rs` gives it to a host.
   `provider/search.rs` holds the native search of the web of each provider that has one, which the extension `web`
   asks.
   `operator.rs` holds the rules by which every console reads what the operator answers, and `scratch.rs` the

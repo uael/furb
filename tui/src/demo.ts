@@ -52,24 +52,62 @@ export async function removeDemoDirectories(): Promise<void> {
  * in the folder of its record by default, and with the conversation of the demo when it is seeded. */
 export async function demoSession({
   seed = false,
+  watch = false,
   record,
   cwd,
   preferences,
 }: {
   seed?: boolean;
+  /** Whether the operator watches the session, which streams each turn and spends nothing. */
+  watch?: boolean;
   record?: string;
   cwd?: string;
   preferences?: Preferences;
 } = {}): Promise<Session> {
   const { engine, host } = await openEngine({
     demo: true,
+    watch,
     record,
     cwd: cwd ?? (record ? undefined : await demoDirectory()),
   });
   const session = new Session(engine, host, true, preferences);
+  session.watching = watch;
   await session.refresh();
   if (seed) await seedDemo(session);
   return session;
+}
+
+/** The models that the word of the tour asks, which the roster of the demo holds. */
+const asked = ["claude-cli:haiku", "claude-cli:sonnet", "claude-cli:fable"];
+
+/** The life that the operator watches, which plays by itself and asks no model: a first message, then a word that is
+ * a program and asks three models at once, then a branch from the point before that word, which goes another way. A
+ * pause between two steps lets each one be read. */
+export async function tour(session: Session, pause = 1500): Promise<void> {
+  const { engine } = session;
+  const on = engine.root;
+  const wait = () => new Promise<void>((resolve) => setTimeout(resolve, pause));
+  await engine.result(await engine.prompt("str", { message: "Read this project and say what it does.", on }));
+  await session.refresh();
+  // The point after the first answer, which the branch goes back to.
+  const point = session.activity.at(-1)?.id;
+  await wait();
+  const word = [
+    "# One word is a program: it asks three models at once, and waits for each answer.",
+    `asks = {m: prompt(str, "In one line, what would you change first?", to=m) for m in ${JSON.stringify(asked).replaceAll(",", ", ")}}`,
+    "answers = {m: await a for m, a in asks.items()}",
+  ].join("\n");
+  await engine.result(await engine.rung({ word, on }));
+  await session.refresh();
+  await wait();
+  if (!point) throw new Error("The first answer made no act.");
+  // The branch keeps the chain up to the point, and the chain after it stays as it is.
+  const branch = await session.rewind(point, "Another way");
+  await wait();
+  await engine.result(
+    await engine.prompt("str", { message: "Add the search shortcut, Ctrl+K.", on: branch }),
+  );
+  await session.refresh();
 }
 
 /** A library that holds a demo session in the workspace of its directory, with the session selected, as the command

@@ -54,7 +54,8 @@ with a refusal that says it was interrupted, and run it no more. Only the openin
 of a life makes the files of a record again in its scratch directory, and gives a life with no record a directory that
 goes with it. A session has the scratch directory of its record, in the cache of furb, which `scratch(record)` gives,
 so a host removes it when it deletes the record. Time gives the clock and a chance, and ends a wait. The provider asks
-the models of the catalog of the crate, which `models(claude?)` lists and `model(name)` finds, and it preserves
+the models of the catalog of the crate, which `models(claude?)` lists, `model(name)` finds, and `setup(claude?)`
+checks for a first run, and it preserves
 provider response blocks in the record. The catalog offers the models of a provider when a credential
 of it stands in the environment, such as `ANTHROPIC_API_KEY`, the models of the claude command line when it finds
 the program, and the models of the local server that `FURB_LOCAL_URL` names, each named `local:` and its id. The host

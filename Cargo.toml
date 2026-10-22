@@ -9,7 +9,10 @@ repository = "https://github.com/uael/furb"
 
 [workspace]
 # The command line is a program of its own on this crate, so the library takes none of its dependencies.
+# The desktop app is a workspace of its own, since its web view needs libraries of the system that the gates of the
+# crate do not install.
 members = ["cli"]
+exclude = ["gui/src-tauri"]
 
 # The one version of furb: each crate takes it, and maturin gives it to the wheel of each crate.
 [workspace.package]
