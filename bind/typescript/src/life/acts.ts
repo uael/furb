@@ -61,3 +61,10 @@ export function cancelled(act: LiveAct): boolean {
   const value = act.value;
   return Boolean(value && typeof value === "object" && "is" in value && value.is === "CancelledError");
 }
+
+/** The measure of a chain from the answers of its models, in order: the dollars of each answer, how many answers it
+ * had, and the actor of the last one. */
+export function measureOf(answers: readonly { actor: string; usage: readonly number[] }[]): Measure {
+  const dollars = answers.reduce((sum, answer) => sum + (answer.usage[4] ?? 0), 0);
+  return { dollars, spent: dollars, answers: answers.length, actor: answers.at(-1)?.actor };
+}

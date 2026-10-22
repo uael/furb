@@ -3,16 +3,20 @@ import { basename, join, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import { type App, follow } from "../src/app.ts";
-import { demoSession, removeDemoDirectories, seedDemo, seedDemoFiles } from "../src/demo.ts";
+import { openEngine } from "../src/bridge.ts";
+import { demoSession, removeDemoDirectories, seedDemo, seedDemoFiles, tour } from "../src/demo.ts";
 import { loadParsers } from "../src/parsers.ts";
 import { Preferences } from "../src/preferences.ts";
-import type { Exit, Session } from "../src/session.ts";
+import type { Exit } from "../src/session.ts";
+import { Session } from "../src/session.ts";
 import { palettes } from "../src/theme.ts";
 import { Workspaces } from "../src/workspaces.ts";
 import { idle } from "../test/idle.ts";
 import { rasterize } from "./raster.ts";
 import { click, find, highlighting, home, mount } from "./stage.ts";
 
+/** The recorded life of a conductor, from the fixtures of the TUI. */
+const conductor = resolve(import.meta.dir, "..", "fixtures", "conductor.jsonl");
 // The model of the demo writes slowly, so that its work stays in progress while a capture shows it. The session runs
 // in a worker, which reads the environment once, as it starts.
 const projects = await home("furb-gallery", { FURB_DEMO_PACE: "200" });
@@ -90,7 +94,6 @@ try {
   await session.command("/name Explore project");
   await idle(session);
   await session.refresh();
-  await capture("02-feed");
   session.show("transcript");
   await capture("03-transcript");
   const written = session.host.changes;
@@ -201,9 +204,6 @@ try {
   app().help();
   await capture("16-help");
   app().closeOverlay();
-  test.resize(82, 32);
-  await capture("17-narrow");
-  test.resize(152, 46);
   app().toggleMode();
   app().composer.setText("");
   const command = await session.engine.bash(
@@ -238,6 +238,13 @@ try {
   await session.refresh();
   await capture("19-model-progress");
   await session.engine.result(progress);
+  // A call of a model that failed for a cause that passes waits for its next attempt, which the footer counts down.
+  // The streams hold the retry while the capture reads the life again, which sends the streams of the life anew.
+  const retry = { attempt: 2, most: 10, until: Date.now() + 3600, why: "connection reset" };
+  const retrying = new Map([["rung0", { chain: session.selected, text: "", thinking: "", retry }]]);
+  Object.defineProperty(session.host, "streams", { configurable: true, get: () => retrying, set: () => {} });
+  await capture("62-model-retry");
+  Object.defineProperty(session.host, "streams", { configurable: true, writable: true, value: new Map() });
   await session.submit("/run this is invalid python !!!").catch(session.fail);
   await capture("20-gate-findings");
   const record = session.host.record;
@@ -586,6 +593,70 @@ try {
   await until(session, () => session.acts.some((act) => act.id === message && act.done));
   await rest();
   await capture("59-take-back");
+
+  // The feed of a real life: a life of the conductor, recorded from its log, with a score of chains at work, which
+  // shows and runs nothing. The library of the demo ends first, with the sessions and the workers that it holds.
+  app().dispose();
+  await library.dispose();
+  const life = await openEngine({ record: conductor, cwd: await project("conductor") });
+  session = new Session(life.engine, life.host, true);
+  await session.refresh();
+  ({ library, app } = await mount(session, test.renderer));
+  await capture("02-feed");
+  // A worker of the life, whose ladders are long: the earlier rungs of a ladder fold into one line.
+  await session.select(session.chains.find((chain) => session.labelOf(chain.id) === "life3/feed")?.id ?? "");
+  await capture("60-long-ladder");
+  // The conductor runs one long word, under which its messages pile up, and the earlier ones fold into one line.
+  await session.select(session.engine.root);
+  app().render();
+  await test.flush();
+  const fold = app()
+    .scroll.getChildren()
+    .find((node) => node.id.startsWith("more-"));
+  app().scroll.stickyScroll = false;
+  app().scroll.scrollTo(Math.max(0, (fold?.y ?? 0) - app().scroll.y + app().scroll.scrollTop - 6));
+  await test.flush();
+  await capture("61-folded-steps");
+  test.resize(82, 32);
+  await capture("17-narrow");
+  test.resize(152, 46);
+
+  // A first run on a machine that holds no model: the welcome checks the setup, with a fix for each part that is
+  // missing. The demo needs no model and checks nothing, so the check is the one of a machine with nothing.
+  app().dispose();
+  await library.dispose();
+  const bare = await demoSession({ cwd: await project("first-run") });
+  await until(bare, () => bare.setup === null && bare.catalogRead);
+  bare.setup = {
+    claude: false,
+    providers: [
+      { provider: "anthropic", env: ["ANTHROPIC_API_KEY"], offered: 0 },
+      { provider: "openai", env: ["OPENAI_API_KEY"], offered: 0 },
+      { provider: "google", env: ["GOOGLE_API_KEY", "GEMINI_API_KEY"], offered: 0 },
+      { provider: "openrouter", env: ["OPENROUTER_API_KEY"], offered: 0 },
+    ],
+  };
+  await show(bare);
+  await capture("63-setup-no-model");
+
+  // Watch a life: the demo plays by itself, asks no model, and costs nothing.
+  app().dispose();
+  await library.dispose();
+  const watched = await demoSession({ watch: true, cwd: await project("watch") });
+  await show(watched);
+  const playing = tour(watched, 300);
+  await until(
+    watched,
+    () => watched.acts.filter((act) => act.kind === "prompt" && act.words[2] && !act.done).length === 3,
+  );
+  await rest();
+  await capture("64-watch-a-life");
+  await playing;
+  await watched.select(watched.engine.root);
+  // The moment goes back to the word as it began, before it asked any model.
+  const asks = () => watched.at(watched.activity).some((act) => act.kind === "prompt" && act.words[2]);
+  while (asks()) watched.travel(-1);
+  await capture("65-watch-earlier");
 } finally {
   app().dispose();
   test.renderer.destroy();

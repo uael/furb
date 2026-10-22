@@ -147,6 +147,54 @@ test("the views say each quantity one way, read a page of changes once, and set 
     { width: 150, height: 40 },
   ));
 
+test("a damaged journal of file changes says what broke, with no word of the parser, and a click repairs it", () =>
+  composing(
+    async ({ session, frame, click }) => {
+      await session.engine.result(
+        await session.engine.rung({ word: 'write(Text("note.txt", "one\\n"))', on: session.engine.root }),
+      );
+      await until(session.host, () => session.host.changes === 1);
+      await writeFile(`${session.host.record}.changes.jsonl`, "{ damaged journal }");
+      session.show("changes");
+      await session.refresh().catch(session.fail);
+      const shown = await frame();
+      expect(shown).toContain("The journal of file changes is damaged");
+      // The message wraps where the path of the journal ends, which differs from one machine to the next.
+      expect(session.damagedJournal).toEndWith("is damaged: change 1 cannot be read.");
+      expect(shown).toContain("cannot be read");
+      expect(shown).toContain("Repair the journal");
+      expect(shown).toContain("Start a new journal");
+      expect(shown).not.toContain("JSON");
+      await click("Repair the journal");
+      await until(session, () => session.notice.startsWith("The journal is repaired"));
+      expect(session.notice).toBe(
+        "The journal is repaired: 1 damaged line is removed, and each change that it held stays.",
+      );
+      expect(session.error).toBe("");
+      expect(await frame()).not.toContain("The journal of file changes is damaged");
+    },
+    { width: 150, height: 40 },
+  ));
+
+test("the footer counts down the wait of a call of a model that the provider makes again, with its attempt and why", () =>
+  composing(async ({ session, app, frame }) => {
+    const retry = { attempt: 2, most: 10, until: Date.now() + 3500, why: "connection reset" };
+    session.host.streams = new Map([["rung1", { chain: session.selected, text: "", thinking: "", retry }]]);
+    app.render();
+    expect(await frame()).toContain("Retrying in 4 s, attempt 2 of 10, connection reset");
+  }));
+
+test("a word of the operator that the gate refused says in one more line what to do", () =>
+  composing(
+    async ({ session, frame }) => {
+      await session.submit("/run this is invalid python !!!").catch(session.fail);
+      await until(session, () => session.findings.length > 0);
+      await session.refresh();
+      expect(await frame()).toContain("Press ↑ in the input to bring the word back");
+    },
+    { width: 150, height: 44 },
+  ));
+
 test("a relative path that the operator types is read from the directory of the selected chain", () =>
   withDemo(async (session) => {
     const directory = join(session.host.directory, "sub");
@@ -287,6 +335,8 @@ test("the feed left at its end opens at its end, and one left above its end open
       await show(context, "transcript");
       for (let i = 0; i < 12; i++) await session.command(`/run grown${i} = ${i}`);
       await until(session, () => Object.values(session.program).includes("grown11 = 11"));
+      // The earlier words stand open, so that the feed is longer than its view.
+      session.folds[`prompts:${session.selected}`] = false;
       await show(context, "feed");
       expect(end()).toBeGreaterThan(0);
       expect(app.scroll.scrollTop).toBe(end());
@@ -307,6 +357,8 @@ test("the feed at its end stays at its end when the input grows, and a turn of t
       await show(context, "transcript");
       for (let i = 0; i < 12; i++) await session.command(`/run grown${i} = ${i}`);
       await until(session, () => Object.values(session.program).includes("grown11 = 11"));
+      // The earlier words stand open, so that the feed is longer than its view.
+      session.folds[`prompts:${session.selected}`] = false;
       await show(context, "feed");
       const tall = app.scroll.viewport.height;
       app.composer.setText("one\ntwo\nthree\nfour\nfive");

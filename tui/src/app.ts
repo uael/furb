@@ -13,6 +13,7 @@ import {
 import {
   beside,
   type Chip,
+  condense,
   gist,
   type Line,
   ladder,
@@ -54,7 +55,8 @@ import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import type { Token, Tokens } from "marked";
 import { clipboardImage } from "./clipboard.ts";
 import { commands, slashes } from "./commands.ts";
-import { conversation } from "./conversation.ts";
+import { conversation, refusal } from "./conversation.ts";
+import { demoSession, tour } from "./demo.ts";
 import { externalEditor, openFile } from "./editor.ts";
 import { emojiNamed, emojis } from "./emoji.ts";
 import { shortenHome, shortenHomes } from "./files.ts";
@@ -68,6 +70,8 @@ import {
   kibibytes,
   lineCounts,
   modelName,
+  plainFailure,
+  retryLine,
   share,
 } from "./format.ts";
 import { type Action, bindings, chords, keys, shown } from "./keys.ts";
@@ -86,6 +90,7 @@ import {
   views,
   working,
 } from "./session.ts";
+import { type Check, checks } from "./setup.ts";
 import { publishShare } from "./share.ts";
 import {
   theme as c,
@@ -147,6 +152,21 @@ const boardMarks: Record<RowState, [() => string, () => RGBA]> = {
   paused: [() => glyph.held, () => c.warning],
   done: [() => glyph.done, () => c.success],
   idle: [() => glyph.ring, () => c.faint],
+};
+/** How many rows of the feed a long message takes until a click opens it. */
+const MESSAGE_ROWS = 8;
+/** How many rows of the feed the word of a rung that stands open by itself takes until a click shows all of it. */
+const WORD_ROWS = 12;
+/** The states of the chains on the count line of the board, in the order of their need of a look. */
+const boardOrder: RowState[] = ["asks", "failed", "paused", "working", "done", "idle"];
+/** What the count line of the board says of a count of chains in a state. */
+const boardWords: Record<RowState, (count: number) => string> = {
+  asks: (count) => (count === 1 ? "asks you" : "ask you"),
+  failed: () => "failed",
+  paused: () => "paused",
+  working: () => "at work",
+  done: () => "done",
+  idle: () => "at rest",
 };
 /** The color of a tone of the loom: a question, a failure, work that runs, work of the past, or nothing. */
 const toneColors: Record<Tone, () => RGBA> = {
@@ -218,6 +238,8 @@ const inputColors = (ground: RGBA) => ({
   cursorColor: c.accent,
 });
 /** The suggestions of an empty feed: what each says, and the prompt it puts in the composer. */
+/** The card that plays a life to watch, which the welcome offers first. */
+const watching = ["Watch a life", "Play a short life on a small project. No model, no cost."] as const;
 const starters = [
   ["Explore a codebase", "Read the README and explain how this project works."],
   ["Make something better", "Find one useful improvement in this project and implement it."],
@@ -450,6 +472,8 @@ export class App {
   private rich = false;
   private redraw?: ReturnType<typeof setTimeout>;
   private lastView = "";
+  /** Whether this run is the first one, whose welcome shows the check of the setup. */
+  private readonly firstRun: boolean;
   private submitting = false;
   private historyIndex = -1;
   private historyDraft = "";
@@ -476,6 +500,7 @@ export class App {
   ) {
     setTheme(session.theme);
     this.theme = session.theme;
+    this.firstRun = !session.preferences.setupSeen;
     this.style = syntax();
     this.root = this.box({
       id: "furb",
@@ -1241,16 +1266,23 @@ export class App {
     // A refresh follows each fact, so the footer says Loading only while the chain has nothing to show yet.
     const loading = w.loading && !w.turns.length;
     const status = loading ? "opening" : w.status(w.selected);
-    const moving = status === "working" || status === "opening";
+    // A call of a model that waits to be made again counts its wait down in the footer, on the selected chain first.
+    const retries = [...w.host.streams.values()].filter((stream) => stream.retry);
+    const retry = loading
+      ? undefined
+      : (retries.find((stream) => stream.chain === w.selected) ?? retries[0])?.retry;
+    const moving = status === "working" || status === "opening" || Boolean(retry);
     this.statusMoves = moving;
-    const [mark, color] = statusMark(status);
+    const [mark, color] = retry ? [`${glyph.held} `, c.warning] : statusMark(status);
     const label = loading
       ? "Loading"
-      : status === "error"
-        ? w.error
-          ? "The view could not load"
-          : "The last act failed"
-        : statusLabels[status];
+      : retry
+        ? retryLine(retry)
+        : status === "error"
+          ? w.error
+            ? "The view could not load"
+            : "The last act failed"
+          : statusLabels[status];
     // The footer offers the keys of the top layer that offers any, each of which does what its key does, and under
     // the layer of the table, the wake of a paused chain.
     type Offer = readonly [chord: string, action: string, run: () => void];
@@ -1286,7 +1318,7 @@ export class App {
     // The state stays in the footer, and a notice stands after it, cut at its end where the footer has no room for it
     // beside the keys.
     const state: Part[] = [
-      [moving ? `${spin()} ` : mark, color],
+      [moving && !retry ? `${spin()} ` : mark, color],
       [label, moving ? c.text : c.muted],
     ];
     const room =
@@ -1602,16 +1634,39 @@ export class App {
           }),
         );
       });
-    if (w.error)
+    if (w.error && w.view === "changes" && w.damagedJournal)
+      // A damaged journal of file changes says what broke, and offers to repair it or to start a new one.
+      add("view-error", `${w.view}:${w.damagedJournal}`, [], (box) =>
+        this.banner(
+          box,
+          c.danger,
+          [
+            [`${glyph.failed} `, c.danger],
+            ["The journal of file changes is damaged", c.text, bold],
+          ],
+          this.text(w.damagedJournal, c.muted),
+          [
+            "Repair the journal",
+            "keeps each change that it can read",
+            () => void w.repairJournal().catch(w.fail),
+          ],
+          [
+            "Start a new journal",
+            "keeps the damaged one beside it",
+            () => void w.renewJournal().catch(w.fail),
+          ],
+        ),
+      );
+    else if (w.error)
       add("view-error", `${w.view}:${w.error}`, [], (box) =>
         this.banner(
           box,
           c.danger,
           [
             [`${glyph.failed} `, c.danger],
-            [`Error in the ${viewLabels[w.view].toLowerCase()} view`, c.text, bold],
+            [`The ${viewLabels[w.view].toLowerCase()} view could not load`, c.text, bold],
           ],
-          this.text(w.error, c.muted),
+          this.text(plainFailure(w.error), c.muted),
           [
             "Refresh view",
             "reads the view again",
@@ -1623,15 +1678,29 @@ export class App {
         ),
       );
     if (w.view === "feed") {
-      const rows = new Map(w.acts.map((one) => [one.id, one]));
+      // The feed shows the acts as they stood at the moment that the operator moved to, or as they stand now.
+      const shown = w.at(w.acts);
+      const rows = new Map(shown.map((one) => [one.id, one]));
+      if (w.watching) {
+        add("watch", `watch:${w.moment}:${w.cost}:${this.theme}`, [], (box) => this.watchBanner(box));
+      }
       // The feed of a chain is its ladder, which the model of a life gives every host: each prompt with the rungs of
       // its ladder, the acts of each rung, and what the prompt closed with.
-      const lines = ladder(
-        w.selected,
-        w.acts,
-        (rung) => this.subject(rung),
-        w.host.streams,
-        new Set(w.host.prompts.keys()),
+      // A fold that the operator opened shows the earlier prompts of the thread, or the earlier rungs of a ladder.
+      const opened = new Set(
+        Object.entries(w.folds).flatMap(([key, closed]) =>
+          closed === false && /^(prompts|rungs):/.test(key) ? [key] : [],
+        ),
+      );
+      const lines = condense(
+        ladder(
+          w.selected,
+          shown,
+          (rung) => this.subject(rung),
+          w.host.streams,
+          new Set(w.host.prompts.keys()),
+        ),
+        opened,
       );
       const actCard = (act: ActRow, indent: number) =>
         add(
@@ -1717,9 +1786,34 @@ export class App {
             closed ? this.rungLabel(line, indent) : this.actLabel(act, false, indent, code);
           add(
             act.id,
-            `${code}\n${act.run?.reason ?? ""}\n${line.acts.map((chip) => chip.label + chip.state).join(" ")}`,
+            `${code}\n${act.run?.reason ?? ""}\n${this.gateHint(act) ?? ""}\n${line.acts.map((chip) => chip.label + chip.state).join(" ")}\n${w.folds[`word:${act.id}`]}`,
             label(),
-            (box) => this.word(box, code, act.run?.reason),
+            (box) => {
+              // A rung that stands open by itself, as one that runs, shows the first rows of a long word, and a click
+              // on it shows all of it.
+              const [shown, rest] =
+                w.folds[act.id] === undefined && w.folds[`word:${act.id}`] !== false
+                  ? this.firstRows(code, WORD_ROWS)
+                  : [code, 0];
+              this.word(box, shown, act.run?.reason, this.gateHint(act));
+              if (rest)
+                box.add(
+                  this.inset(
+                    space.between * 2,
+                    this.link(
+                      [
+                        [`${glyph.closed} `, c.faint],
+                        [`${rest} more ${rest === 1 ? "line" : "lines"} of the word`, c.muted],
+                      ],
+                      () => {
+                        w.folds[`word:${act.id}`] = false;
+                        w.save();
+                        this.renderContent();
+                      },
+                    ),
+                  ),
+                );
+            },
             // Folded rungs in a row stand one under the other, with no row between them.
             {
               collapsible: true,
@@ -1732,7 +1826,7 @@ export class App {
             },
           );
           if (!closed)
-            for (const child of w.acts)
+            for (const child of shown)
               if (child.by === act.id && !(child.kind === "prompt" && child.on === w.selected))
                 actCard(child, indent + space.between);
         } else if (line.type === "tail") {
@@ -1740,20 +1834,20 @@ export class App {
           if (line.model) {
             // A model shows the last lines that it writes, or of its thinking until it writes, with a cursor.
             const thinking = !w.host.streams.get(act.id)?.text;
-            add(`stream-${act.id}`, line.text, [], (box) =>
-              box.add(
-                this.inset(
-                  indent + space.between,
-                  this.text(
-                    [
-                      [line.text, thinking ? c.faint : c.muted, thinking ? italic : 0],
-                      [glyph.mark, c.accent],
-                    ],
-                    c.muted,
-                  ),
+            add(`stream-${act.id}`, line.text, [], (box) => {
+              // A column holds the lines, so that a long line wraps at the width of the feed.
+              const tail = this.box({ paddingLeft: indent + space.between });
+              tail.add(
+                this.text(
+                  [
+                    [line.text, thinking ? c.faint : c.muted, thinking ? italic : 0],
+                    [glyph.mark, c.accent],
+                  ],
+                  c.muted,
                 ),
-              ),
-            );
+              );
+              box.add(tail);
+            });
           } else if (maker?.kind === "rung" && this.folded(maker.id, maker))
             // A command that runs shows its last lines under the folded rung that made it.
             add(`tail-${act.id}`, line.text, [], (box) => this.excerpt(box, line.text, true), { indent });
@@ -1774,7 +1868,11 @@ export class App {
                 ]
               : this.answerLabel(act, false),
             (box) => {
-              if (!answered || !short) box.add(this.inset(space.between, this.markdown(value)));
+              if (answered && short) return;
+              // A column, and not a row, holds the answer, so that its paragraphs wrap at the width of the feed.
+              const answer = this.box({ paddingLeft: space.between });
+              answer.add(this.markdown(value));
+              box.add(answer);
             },
             {
               group: answered ? "question" : "assistant",
@@ -1803,6 +1901,43 @@ export class App {
             ],
             () => {},
             { heading: true, indent, shown: `${act.by} ${span}` },
+          );
+        } else if (line.type === "more") {
+          // The earlier prompts of a long thread, or the earlier rungs of a long ladder, stand as one line until a click
+          // opens them.
+          const { key, count, heads } = line;
+          // The line names what it holds: messages, words, or steps of both.
+          const noun =
+            heads.length === 1 && heads[0] === "rung"
+              ? count === 1
+                ? "rung"
+                : "rungs"
+              : heads.length === 1 && heads[0] === "prompt"
+                ? count === 1
+                  ? "message"
+                  : "messages"
+                : count === 1
+                  ? "step"
+                  : "steps";
+          add(
+            `more-${key}`,
+            `${key}:${count}:${this.theme}`,
+            [],
+            (box) =>
+              box.add(
+                this.link(
+                  [
+                    [`${glyph.closed} `, c.faint],
+                    [`${count} earlier ${noun}`, c.muted],
+                  ],
+                  () => {
+                    w.folds[key] = false;
+                    w.save();
+                    this.renderContent();
+                  },
+                ),
+              ),
+            { indent },
           );
         } else if (line.type === "act") {
           // The ceiling of a grant stands in the sidebar, so the feed shows no grant.
@@ -1880,9 +2015,13 @@ export class App {
           const line =
             !message.includes("\n") && Bun.stringWidth(message) + Bun.stringWidth(sent) < this.feedWidth - 8;
           const state = user ? this.promptState(act) : [];
+          // A long message shows its first rows until a click opens it, so that a brief of a page leaves the feed
+          // readable at a glance.
+          const [shortened, rest] =
+            w.folds[`message:${act.id}`] === false ? [message, 0] : this.firstRows(message, MESSAGE_ROWS);
           add(
             act.id,
-            `${message}\n${line}\n${sent}\n${plain(state)}`,
+            `${message}\n${line}\n${sent}\n${plain(state)}\n${rest}`,
             user
               ? [["You", c.muted]]
               : [
@@ -1902,7 +2041,7 @@ export class App {
                       this.actActions(this.session.acts.find((one) => one.id === act.id) ?? act);
                   },
                 });
-                const text = this.message(message);
+                const text = this.message(shortened);
                 text.flexGrow = 1;
                 text.flexShrink = 1;
                 row.add(text);
@@ -1910,9 +2049,26 @@ export class App {
                 this.panel(box, c.accent).add(row);
               } else if (!line) {
                 const note = this.box({ paddingLeft: space.between });
-                note.add(this.markdown(message, c.muted));
+                note.add(this.markdown(shortened, c.muted));
                 box.add(note);
               }
+              if (rest)
+                box.add(
+                  this.inset(
+                    space.between,
+                    this.link(
+                      [
+                        [`${glyph.closed} `, c.faint],
+                        [`${rest} more ${rest === 1 ? "line" : "lines"}`, c.muted],
+                      ],
+                      () => {
+                        w.folds[`message:${act.id}`] = false;
+                        w.save();
+                        this.renderContent();
+                      },
+                    ),
+                  ),
+                );
             },
             { group: user ? "user" : "sent", act, heading: user ? false : undefined, indent, shown: message },
           );
@@ -2088,15 +2244,21 @@ export class App {
     color: RGBA,
     heading: Part[],
     detail: Renderable | undefined,
-    [label, does, run]: [string, string, () => void],
+    ...actions: [label: string, does: string, run: () => void][]
   ): void {
     const panel = this.panel(box, color);
     panel.add(this.text(heading));
     if (detail) panel.add(this.inset(space.between, detail));
-    const row = this.box({ flexDirection: "row", marginTop: space.section, paddingLeft: space.between });
-    row.add(this.link([[label, c.accent, bold]], run));
-    row.add(this.text(`  ${does}`, c.faint));
-    panel.add(row);
+    for (const [index, [label, does, run]] of actions.entries()) {
+      const row = this.box({
+        flexDirection: "row",
+        marginTop: index ? 0 : space.section,
+        paddingLeft: space.between,
+      });
+      row.add(this.link([[label, c.accent, bold]], run));
+      row.add(this.text(`  ${does}`, c.faint));
+      panel.add(row);
+    }
   }
   /** A text that lights under the pointer, and runs an action at a click. */
   private link(content: string | Part[], run: () => void): TextRenderable {
@@ -2165,15 +2327,43 @@ export class App {
         () => `${shortenHome(w.workingDirectory)}   ${model}`,
       ),
     );
-    // Each way to start is a card of two lines that a click puts in the composer. The cards are as wide as their
-    // longest line, and stand in the middle as one block.
-    const widest = Math.max(...starters.flat().map((line) => Bun.stringWidth(line)));
+    // The check of the setup shows on the first run, and on each run while no model answers, once the worker said
+    // what this machine holds. The demo needs no model and checks nothing.
+    const setup = w.setup;
+    const found = setup && w.catalogRead ? checks(setup, w.catalog.length) : [];
+    // With no model, a prompt has nothing to answer it, so the welcome offers only the life to watch.
+    const none = Boolean(found.length) && !w.catalog.length;
+    if (found.length && (this.firstRun || none)) {
+      column.add(this.setupCheck(found, width));
+      if (!w.preferences.setupSeen) {
+        w.preferences.setupSeen = true;
+        try {
+          w.preferences.save();
+        } catch (error) {
+          this.report(error);
+        }
+      }
+    }
+    // Each way to start is a card of two lines. The first plays a life to watch, and a click on each other one puts
+    // its prompt in the composer. The cards are as wide as their longest line, and stand in the middle as one block.
+    const cards: [label: string, line: string, run: () => void][] = [
+      ...(w.watching ? [] : [[...watching, () => void this.watch()] as [string, string, () => void]]),
+      ...(none ? [] : starters).map(([label, prompt]): [string, string, () => void] => [
+        label,
+        prompt,
+        () => this.insert(prompt),
+      ]),
+    ];
+    const widest = Math.max(
+      ...cards.flatMap(([label, line]) => [label, line].map((one) => Bun.stringWidth(one))),
+    );
     const starts = this.box({
       width: Math.min(width, widest + space.between * 2 + 1),
       marginTop: space.section * 2,
       gap: space.section,
     });
-    for (const [label, prompt] of starters) {
+    for (const [index, [label, prompt, run]] of cards.entries()) {
+      const lead = index === 0 && !w.watching;
       // The pointer lifts a card onto a panel, and its bar takes the accent.
       const card = this.box({
         paddingX: space.between,
@@ -2181,17 +2371,19 @@ export class App {
         border: ["left"],
         borderColor: c.border,
         customBorderChars: { ...noBorder, vertical: glyph.bar },
-        onMouseUp: this.click(() => this.insert(prompt)),
+        onMouseUp: this.click(run),
         onMouseOver() {
           this.backgroundColor = c.panel;
           this.borderColor = c.accent;
         },
         onMouseOut() {
           this.backgroundColor = c.background;
-          this.borderColor = c.border;
+          this.borderColor = lead ? c.accent : c.border;
         },
       });
-      card.add(this.text([[label, c.text, bold]], c.text, { truncate: true }));
+      // The card that plays a life leads, with its bar in the accent.
+      if (lead) card.borderColor = c.accent;
+      card.add(this.text([[label, lead ? c.accent : c.text, bold]], c.text, { truncate: true }));
       card.add(this.text(prompt, c.muted, { truncate: true }));
       starts.add(card);
     }
@@ -2217,6 +2409,95 @@ export class App {
     column.add(keys);
     this.centered(box, height, column);
   }
+
+  /** The check of the setup: each way to a model that this machine holds or lacks, with a fix for each one that is
+   * missing, and a clear word when no model answers. */
+  private setupCheck(found: Check[], width: number): BoxRenderable {
+    const none = found.at(-1)?.state === "missing";
+    const panel = this.box({
+      width,
+      marginTop: space.section * 2,
+      paddingX: space.between,
+      gap: space.section,
+    });
+    panel.add(
+      this.text(
+        none
+          ? [
+              [`${glyph.failed} `, c.danger],
+              ["No model answers yet", c.text, bold],
+            ]
+          : [
+              [`${glyph.done} `, c.success],
+              ["Setup", c.text, bold],
+            ],
+        c.text,
+      ),
+    );
+    const marks: Record<Check["state"], Part> = {
+      ready: [glyph.done, c.success],
+      missing: [glyph.failed, c.danger],
+      optional: [glyph.ring, c.faint],
+    };
+    // A check and its fix stand together, and a line of space stands between two checks.
+    for (const check of found) {
+      const [mark, color] = marks[check.state];
+      const one = this.box({});
+      one.add(
+        this.text(
+          [
+            [`${mark} `, color],
+            [check.label, c.text],
+            [`  ${check.found}`, c.muted],
+          ],
+          c.text,
+        ),
+      );
+      if (check.fix && check.state !== "ready") one.add(this.text(check.fix, c.faint, { paddingLeft: 2 }));
+      panel.add(one);
+    }
+    return panel;
+  }
+  /** The bar at the top of the feed of a life that the operator watches: what it costs, which is nothing, what it
+   * shows, in common words, and where the moment stands when the operator moved back in time. */
+  private watchBanner(box: BoxRenderable): void {
+    const w = this.session;
+    const panel = this.panel(box, c.accent);
+    // The demo asks no model: its script answers each turn, so no call goes out and nothing is spent.
+    panel.add(
+      this.text([
+        [`${glyph.running} `, c.accent],
+        ["Watching a life", c.text, bold],
+        [`   0 model calls, ${dollars(w.cost)}`, c.muted],
+      ]),
+    );
+    panel.add(
+      this.text(
+        "Many models answer in one life. A word of Python is a program. Any point can start a new branch.",
+        c.muted,
+        { paddingLeft: space.between },
+      ),
+    );
+    panel.add(
+      this.text(
+        w.moment === undefined
+          ? "Press [ to step back in time, then b to start a branch from there."
+          : "This is an earlier moment. Press ] to step on, b to start a branch here, or Esc to come back to now.",
+        w.moment === undefined ? c.faint : c.warning,
+        { paddingLeft: space.between },
+      ),
+    );
+  }
+  /** Watch a life: a new demo that plays by itself, asks no model, and shows in a workspace of its own. */
+  private watch = async (): Promise<void> => {
+    try {
+      const session = await demoSession({ watch: true, preferences: this.session.preferences });
+      await this.options.workspaces.show(session);
+      void tour(session).catch(session.fail);
+    } catch (error) {
+      this.report(error);
+    }
+  };
 
   private preview(text: string, reserve = 2): string {
     return clip(text.replace(/\s+/g, " "), Math.max(8, this.feedWidth - reserve));
@@ -2300,6 +2581,21 @@ export class App {
     if (act.paused && act.kind !== "bash") return stateOf("held");
     return running();
   }
+  /** The first lines of a text that take at most a count of rows of the feed, and how many lines are left out. */
+  private firstRows(text: string, rows: number): [string, number] {
+    const lines = text.split("\n");
+    const width = Math.max(20, this.feedWidth - 8);
+    let used = 0;
+    let taken = 0;
+    for (const line of lines) {
+      used += Math.max(1, Math.ceil(Bun.stringWidth(line) / width));
+      if (used > rows) break;
+      taken++;
+    }
+    // A message that is a row or two too long shows whole, since a fold of so little hides nothing.
+    if (taken >= lines.length - 2) return [text, 0];
+    return [lines.slice(0, Math.max(1, taken)).join("\n"), lines.length - Math.max(1, taken)];
+  }
   /** The acts of a rung as chips, each in the color of its state, as many as the room holds. */
   private chipParts(chips: readonly Chip[], room: number): Part[] {
     const parts: Part[] = [];
@@ -2378,18 +2674,18 @@ export class App {
       [tail, color],
     ];
   }
-  /** The board over the feed: each chain of the life in the order of its tree, with its state, what it does now, and
-   * the pulse of its acts over the life. A row that asks the operator leads in the color of a question, and a click on
-   * a row shows its chain. The board shows once the life holds more than one chain, or a question waits. */
+  /** The board over the feed: a line that counts the chains of the life by what they do, then a row for each chain
+   * that needs a look, the chains that ask the operator first and the others in the order of their tree. A row says the
+   * state of its chain, its name, what it does now, and how many answers its models gave for how many dollars. A click
+   * on a row shows its chain. The board shows once the life holds more than one chain, or a question waits. */
   private renderBoard(): void {
     const w = this.session;
-    const cells = Math.max(8, Math.min(32, Math.floor(this.feedWidth / 6)));
     const loom = weave({
       acts: w.acts,
       prompts: [...w.host.prompts.values()],
-      measures: {},
+      measures: w.host.measures,
       folds: new Set(),
-      width: cells,
+      width: 1,
       pending: w.host.pending,
       label: (id) => w.labelOf(id),
     });
@@ -2400,79 +2696,95 @@ export class App {
       this.boardKey = "";
       return;
     }
-    // A long life keeps the rows that need a look, and counts the chains at rest that it leaves out.
-    const cap = Math.max(3, Math.floor((this.renderer.height - 14) / 3));
-    const needs = (row: (typeof rows)[number]) =>
-      row.id === w.selected || !["done", "idle"].includes(row.state);
-    const kept =
-      rows.length <= cap
-        ? rows
-        : rows
-            .filter((row) => needs(row))
-            .slice(0, cap - 1)
-            .concat(
-              rows.filter((row) => !needs(row)).slice(0, Math.max(0, cap - 1 - rows.filter(needs).length)),
-            );
-    const order = new Map(rows.map((row, index) => [row.id, index]));
-    kept.sort((one, other) => (order.get(one.id) ?? 0) - (order.get(other.id) ?? 0));
-    const rest = rows.length - kept.length;
+    // The rows that the board holds: each chain that asks, then each chain that needs a look, then the others, as
+    // many as a third of the screen holds, and the chain shown always.
+    const room = Math.max(3, Math.floor((this.renderer.height - 16) / 3));
+    const asking = rows.filter((row) => row.state === "asks");
+    const others = rows.filter((row) => row.state !== "asks");
+    const looks = (row: (typeof rows)[number]) => ["failed", "paused", "working"].includes(row.state);
+    const chosen = [...asking, ...others.filter(looks), ...others.filter((row) => !looks(row))].slice(
+      0,
+      room,
+    );
+    const selected = rows.find((row) => row.id === w.selected);
+    if (selected && !chosen.includes(selected)) chosen.splice(Math.max(0, room - 1), 1, selected);
+    const kept = new Set(chosen.map((row) => row.id));
+    const shown = [...asking, ...others].filter((row) => kept.has(row.id));
+    const left = rows.length - shown.length;
     const word = (rung: ActRow) => this.subject(rung);
-    const name = Math.min(24, Math.max(...kept.map((row) => Bun.stringWidth(row.lines + row.label))));
-    const shown = kept.map((row) => ({ row, now: nowOf(row, loom, w.acts, word) }));
-    const key = JSON.stringify([shown, rest, w.selected, this.feedWidth, this.theme]);
+    const lines = shown.map((row) => ({
+      row,
+      now: nowOf(row, loom, w.acts, word),
+      depth: row.lines.length / 2,
+    }));
+    const counts = boardOrder.flatMap((state) => {
+      const count = rows.filter((row) => row.state === state).length;
+      return count ? [[state, count] as const] : [];
+    });
+    const key = JSON.stringify([lines, counts, left, w.selected, this.feedWidth, this.theme]);
     if (key === this.boardKey) return;
     this.boardKey = key;
     this.board.backgroundColor = c.panel;
     this.clear(this.board);
     const pad = (text: string, width: number) =>
       text + " ".repeat(Math.max(0, width - Bun.stringWidth(text)));
-    for (const { row, now } of shown) {
+    // The count line says the whole life at a glance, and a question to the operator leads it.
+    this.board.add(
+      this.line(
+        [
+          ...counts.flatMap(([state, count], index): Part[] => {
+            const [mark, color] = boardMarks[state];
+            return [
+              [index ? "   " : " ", c.faint],
+              [`${mark()} `, color()],
+              [
+                `${count} ${boardWords[state](count)}`,
+                state === "asks" ? c.warning : c.muted,
+                state === "asks" ? bold : 0,
+              ],
+            ];
+          }),
+          [left ? `   ${left} more, ⌃B lists every chain` : "", c.faint],
+        ],
+        c.muted,
+        { paddingX: space.inset, marginBottom: space.stack },
+      ),
+    );
+    const name = Math.min(
+      28,
+      Math.max(...lines.map(({ row, depth }) => Bun.stringWidth(row.label) + 2 * depth)),
+    );
+    for (const { row, now, depth } of lines) {
       const here = row.id === w.selected;
       const [mark, color] = boardMarks[row.state];
+      const measure = row.measure
+        ? `${row.measure.answers} ${row.measure.answers === 1 ? "answer" : "answers"}  ${row.measure.dollars < 0.01 ? "<$0.01" : `$${row.measure.dollars.toFixed(2)}`}`
+        : "";
       const id = now.act && now.tone === "work" ? `${now.act}  ` : "";
       const said = now.tone === "work" && !now.text ? "writing" : shortenHomes(now.text);
       const more = now.more ? `  +${now.more}` : "";
-      const room = Math.max(8, this.feedWidth - 2 * space.inset - name - cells - 9 - Bun.stringWidth(more));
+      const label = pad(clip(row.label, name - 2 * depth), name - 2 * depth);
+      const room = Math.max(8, this.feedWidth - 2 * space.inset - 23 - name - Bun.stringWidth(more));
       const text = clip(id + said, room);
+      const rest = text.slice(Math.min(id.length, text.length));
       this.board.add(
         this.line(
           [
             [here ? glyph.mark : " ", c.accent],
-            [row.lines, c.faint],
+            ["  ".repeat(depth), c.faint],
             [`${mark()} `, color()],
-            [
-              pad(clip(row.label, name - Bun.stringWidth(row.lines)), name - Bun.stringWidth(row.lines)),
-              here ? c.text : c.muted,
-              here ? bold : 0,
-            ],
+            [label, here ? c.text : c.muted, here ? bold : 0],
             ["  ", c.faint],
-            [id ? clip(id, room) : "", c.faint],
-            [
-              pad(text.slice(Math.min(id.length, text.length)), room - Math.min(Bun.stringWidth(id), room)),
-              toneColors[now.tone](),
-            ],
+            [text.slice(0, Math.min(id.length, text.length)), c.faint],
+            [pad(rest, room - Math.min(Bun.stringWidth(id), room)), toneColors[now.tone]()],
             [more, c.faint],
-            ["  ", c.faint],
-            ...row.cells.map((cell): Part => [cell.mark, toneColors[cell.tone]()]),
+            [measure.padStart(18), c.faint],
           ],
           c.text,
           { paddingX: space.inset, run: () => void w.select(row.id).catch(w.fail) },
         ),
       );
     }
-    if (rest)
-      this.board.add(
-        this.line(
-          [
-            [" ", c.faint],
-            [`${glyph.ring} `, c.faint],
-            [`${rest} more ${rest === 1 ? "chain" : "chains"} at rest`, c.faint],
-            ["  ⌃B lists them", c.faint],
-          ],
-          c.faint,
-          { paddingX: space.inset, run: () => this.chains() },
-        ),
-      );
   }
   /** The desk over the input: one mark for each ask that waits for the operator, in the order that they came, then
    * the ask that he acts on, from which chain, and what it wants, the first line of its message, and its choices or
@@ -2729,8 +3041,9 @@ export class App {
       ],
     ];
   }
-  /** A word of Python in a card: its numbered lines, and the reason it failed. */
-  private word(box: BoxRenderable, word: string, reason?: string): void {
+  /** A word of Python in a card: its numbered lines, the reason it failed, and what to do after a refusal of the
+   * gate. */
+  private word(box: BoxRenderable, word: string, reason?: string, hint?: string): void {
     // The code starts under the name of its rung, past the fold and the glyph of the heading.
     const inner = this.box({ gap: space.stack, paddingLeft: space.inset });
     // A rung whose word has not come yet shows no code.
@@ -2738,11 +3051,36 @@ export class App {
     // The parser names the word as <string> and says its line twice, which the reason leaves out.
     if (reason)
       inner.add(this.branched(shortenHomes(reason.replace(/\s*\(<string>, line \d+\)$/, "")), c.danger));
+    // The line of what to do stands under the reason, at the column of its text.
+    if (hint) inner.add(this.inset(space.between, this.text(hint, c.muted)));
     box.add(inner);
+  }
+  /** Whether the gate refused the word of each rung of the turns shown, by rung, read once for each set of turns. */
+  private refused: { turns: unknown; rungs: Map<string, boolean> } = { turns: undefined, rungs: new Map() };
+  /** The one line that says what to do after the gate refused the word of a rung, and nothing for any other rung:
+   * the operator fixes his own word, and the chain asks a model for its word again with the findings. */
+  private gateHint(act: ActRow): string | undefined {
+    const { turns } = this.session;
+    if (act.kind !== "rung" || !act.done) return undefined;
+    if (this.refused.turns !== turns) this.refused = { turns, rungs: new Map() };
+    let refused = this.refused.rungs.get(act.id);
+    if (refused === undefined) {
+      refused = refusal(turns, act.id).length > 0;
+      this.refused.rungs.set(act.id, refused);
+    }
+    if (!refused) return undefined;
+    return act.by === "operator"
+      ? "Press ↑ in the input to bring the word back, fix the line that the gate names, and send it again."
+      : "The chain tells the model these findings and asks it for its word again.";
   }
   private actDetails(box: BoxRenderable, act: ActRow): void {
     if (act.kind === "rung") {
-      this.word(box, String(this.session.program[act.id] || act.words[0] || ""), act.run?.reason);
+      this.word(
+        box,
+        String(this.session.program[act.id] || act.words[0] || ""),
+        act.run?.reason,
+        this.gateHint(act),
+      );
       return;
     }
     const details = this.box({ paddingLeft: space.between * 2, gap: space.stack });
@@ -3579,6 +3917,7 @@ export class App {
       new: () => library.create(),
       sidebar: () => library.toggle(),
       workspace: this.workspacePicker,
+      watch: this.watch,
     };
     if (name && !argument && Object.hasOwn(bare, name)) {
       await bare[name]?.();
@@ -4960,8 +5299,25 @@ export class App {
     });
     this.closeTree();
     this.session.show(view);
+    if (id) this.reveal(id);
     this.render();
     if (id) this.scrollAfterLayout({ card: id });
+  }
+  /** Open each fold of the feed that holds an act, so that a jump to it finds its card: the earlier steps of its
+   * chain, the earlier steps of each prompt and rung over it, and the rung that made it. */
+  private reveal(id: string): void {
+    const w = this.session;
+    const rows = new Map(w.acts.map((one) => [one.id, one]));
+    let at = rows.get(id);
+    if (!at || at.on !== w.selected) return;
+    w.folds[`prompts:${w.selected}`] = false;
+    for (let step = 0; at && step < 64; step++) {
+      const maker = rows.get(at.by);
+      if (!maker || maker.on !== w.selected) break;
+      if (maker.kind === "prompt") w.folds[`rungs:${maker.id}`] = false;
+      if (maker.kind === "rung") w.folds[at.kind === "prompt" ? `prompts:${maker.id}` : maker.id] = false;
+      at = maker;
+    }
   }
   private async back(): Promise<void> {
     const previous = this.navigation.pop();
@@ -5541,6 +5897,29 @@ export class App {
     layer(() => bare() && Boolean(this.session.editing), "edit", [
       { on: ["return", "enter"], run: () => void this.submit(), hint: ["Enter", "run"] },
       { on: "escape", run: this.escape, hint: ["Esc", "leave the program"] },
+    ]);
+    // While the operator watches a life and the input is empty, [ and ] move the moment of the feed, b starts a
+    // branch there, and Escape comes back to now.
+    const watched = () => bare() && this.session.watching && !this.composer.plainText;
+    const past = () => this.session.moment !== undefined;
+    layer(watched, "watch", [
+      { on: "[", run: () => this.session.travel(-1), hint: ["[ ]", "move in time"] },
+      { on: "]", run: () => this.session.travel(1) },
+      {
+        on: "b",
+        run: () => void this.session.branchHere().catch(this.report),
+        when: past,
+        hint: ["b", "branch here"],
+      },
+      {
+        on: "escape",
+        run: () => {
+          this.session.moment = undefined;
+          this.renderContent();
+        },
+        when: past,
+        hint: ["Esc", "now"],
+      },
     ]);
     layer(bare, "", [
       // As in Claude Code, Ctrl+D acts on an empty input.

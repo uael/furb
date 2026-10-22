@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import type { FileChange, ImageAttachment, LiveAct, Turn } from "@furb/engine";
+import type { FileChange, ImageAttachment, LiveAct, SetupInfo, Turn } from "@furb/engine";
 import {
   actorParts,
   decodeRecord,
@@ -186,6 +186,16 @@ export class Session extends EventEmitter {
   roster: [string, string[], number][] = [];
   /** The models the catalog of the crate offers, which the operator may add to the roster of the session. */
   catalog: [string, string[], number][] = [];
+  /** Whether the worker said what the catalog offers. */
+  catalogRead = false;
+  /** What the first run checks of this machine, once the worker says it, and null in the demo, which needs no
+   * model. */
+  setup?: SetupInfo | null;
+  /** Whether the operator watches this session: the demo that plays a life by itself and asks no model. */
+  watching = false;
+  /** The moment of the life that the feed shows, as the count of facts that the life had said then, or nothing for
+   * now. */
+  moment?: number;
   /** The models the operator added to the roster of the session from the catalog, which each later life offers. */
   models: string[] = [];
   findings: string[] = [];
@@ -227,7 +237,11 @@ export class Session extends EventEmitter {
     this.sessionName = basename(host.directory);
     const path = host.record;
     this.preferences =
-      preferences ?? new Preferences(demo && path ? join(dirname(path), "ui-preferences.json") : undefined);
+      // A recorded life keeps nothing beside its log, so its demo reads the preferences of the user.
+      preferences ??
+      new Preferences(
+        demo && path && !host.recorded ? join(dirname(path), "ui-preferences.json") : undefined,
+      );
     if (path) {
       const { view, damage } = savedView(path);
       Object.assign(this, Object.fromEntries(kept.flatMap((key) => (key in view ? [[key, view[key]]] : []))));
@@ -248,6 +262,11 @@ export class Session extends EventEmitter {
     });
     void host.catalog().then((catalog) => {
       this.catalog = catalog;
+      this.catalogRead = true;
+      this.emit("change");
+    }, this.fail);
+    void host.setup().then((found) => {
+      this.setup = found;
       this.emit("change");
     }, this.fail);
     this.save();
@@ -292,6 +311,9 @@ export class Session extends EventEmitter {
   };
   fail = (error: unknown) => {
     this.error = error instanceof Error ? error.message : String(error);
+    // A damaged journal is no failure of the view alone: the view offers to repair it or to start a new one.
+    this.damaged[`${this.selected}:${this.view}`] =
+      (error as { name?: unknown } | undefined)?.name === "DamagedJournal";
     this.emit("change");
   };
   get error(): string {
@@ -299,6 +321,33 @@ export class Session extends EventEmitter {
   }
   set error(value: string) {
     this.errors[`${this.selected}:${this.view}`] = value;
+    if (!value) delete this.damaged[`${this.selected}:${this.view}`];
+  }
+  /** Whether the error of each view of a chain is a damaged journal of file changes. */
+  private readonly damaged: Record<string, boolean> = {};
+  /** Why the journal of file changes cannot be read, which the view shown offers to repair; empty when it reads. */
+  get damagedJournal(): string {
+    return this.damaged[`${this.selected}:${this.view}`] ? this.error : "";
+  }
+
+  /** The journal of file changes written again with each change that it holds, and the view read again. */
+  async repairJournal(): Promise<void> {
+    const lost = await this.host.repairChanges();
+    await this.journalMended(
+      `The journal is repaired: ${lost} damaged ${lost === 1 ? "line is" : "lines are"} removed, and each change that it held stays.`,
+    );
+  }
+  /** A new journal of file changes, with the damaged one kept beside it, and the view read again. */
+  async renewJournal(): Promise<void> {
+    const aside = await this.host.renewChanges();
+    await this.journalMended(`A new journal is started. The damaged one is kept at ${shortenHome(aside)}.`);
+  }
+  private async journalMended(notice: string): Promise<void> {
+    this.error = "";
+    this.changesRead = "";
+    this.changePage = 0;
+    this.notice = notice;
+    await this.refresh();
   }
 
   refresh(): Promise<void> {
@@ -342,11 +391,11 @@ export class Session extends EventEmitter {
         }
         const page = `${this.changePage}:${this.host.changes}`;
         if (this.view === "changes" && page !== this.changesRead) {
-          this.changesRead = page;
           this.changes = (await this.host.readChanges(this.changePage * 20, 20)).map((change) => ({
             ...change,
             patch: createTwoFilesPatch(change.path, change.path, change.before, change.after),
           }));
+          this.changesRead = page;
         }
         const rows = this.acts;
         for (const act of rows) {
@@ -593,6 +642,8 @@ export class Session extends EventEmitter {
       : String(this.chains.find((chain) => chain.id === id)?.words[0] || "Chain");
   }
   async select(id: string): Promise<void> {
+    // The moment that the feed shows is one of the chain shown, so another chain is shown as it stands now.
+    if (id !== this.selected) this.moment = undefined;
     // The turns and the program of the chain left are not the chain selected, which shows them once it has read them.
     if (id !== this.selected) {
       this.editing = undefined;
@@ -746,6 +797,45 @@ export class Session extends EventEmitter {
       ? "The message is back in the input on a new branch. The module and the files keep their state."
       : `The new branch reads the transcript through ${id}. The module and the files keep their state.`;
     return branch;
+  }
+  /** The acts as they stood at the moment that the feed shows: an act that began later is not there yet, and an act
+   * that ended later still runs, with no value yet. */
+  at(acts: ActRow[]): ActRow[] {
+    const moment = this.moment;
+    if (moment === undefined) return acts;
+    return acts
+      .filter((act) => act.began < moment)
+      .map((act) =>
+        act.ended === undefined || act.ended < moment
+          ? act
+          : { ...act, done: false, value: null, run: act.run && { status: "running", reason: "" } },
+      );
+  }
+  /** Move the moment that the feed shows one step back or on in the selected chain: a step is a moment when an act of
+   * the chain began or ended. A step on to the last moment returns to now. */
+  travel(by: -1 | 1): void {
+    const moments = [
+      ...new Set(
+        this.acts
+          .filter((act) => act.on === this.selected)
+          .flatMap((act) => [act.began + 1, ...(act.ended === undefined ? [] : [act.ended + 1])]),
+      ),
+    ].sort((one, other) => one - other);
+    const last = moments.at(-1);
+    const now = this.moment ?? last;
+    if (now === undefined) return;
+    const next =
+      by < 0 ? (moments.findLast((one) => one < now) ?? moments[0]) : moments.find((one) => one > now);
+    this.moment = next === undefined || next === last ? undefined : next;
+    this.emit("change");
+  }
+  /** A new branch of the selected chain at the moment that the feed shows, which the session selects: it reads the
+   * transcript through the last act that began before that moment, as a rewind to that act does. */
+  async branchHere(): Promise<string> {
+    const last = this.at(this.activity).findLast((act) => !["chain", "grant"].includes(act.kind));
+    if (!last) throw new Error("Nothing happened before this moment, so there is nothing to branch from.");
+    this.moment = undefined;
+    return this.rewind(last.id);
   }
   /** A message sent before as the draft of the composer, with the images it referred to attached again. */
   private async restore(text: string): Promise<void> {
@@ -1094,7 +1184,8 @@ export class Session extends EventEmitter {
   save(): void {
     this.preferences.save(this.theme);
     const record = this.host.record;
-    if (!record) return;
+    // A recorded life keeps no view beside its log, which a later reader takes as it was made.
+    if (!record || this.host.recorded) return;
     const path = `${record}.ui.json`;
     this.savedCost = this.cost;
     const view: SavedView = {

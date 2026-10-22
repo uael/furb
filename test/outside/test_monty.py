@@ -474,7 +474,7 @@ async def test_a_key_of_the_client_makes_its_act_once_in_a_life_and_in_a_later_l
 
 def test_the_door_gives_the_catalog_of_the_crate(tmp_path: Path) -> None:
   """The door gives the catalog of the crate, as the door to TypeScript gives it: the levels of effort, a model by
-  its name whether this machine offers it or not, and the models this machine offers."""
+  its name whether this machine offers it or not, the models this machine offers, and what a first run checks."""
   assert _monty.levels() == ["off", "minimal", "low", "medium", "high", "xhigh", "max"]
   efforts = ["low", "medium", "high", "xhigh", "max"]
   haiku = {"name": "claude-cli:haiku", "efforts": efforts, "window": 200000, "images": True, "price": None}
@@ -485,6 +485,10 @@ def test_the_door_gives_the_catalog_of_the_crate(tmp_path: Path) -> None:
   claude.chmod(0o755)
   opus = {"name": "claude-cli:opus", "efforts": efforts, "window": 1000000, "images": True, "price": None}
   assert opus in _monty.models(str(claude))
+  found = _monty.setup(str(claude))
+  assert found["claude"] is True
+  anthropic = next(one for one in found["providers"] if one["provider"] == "anthropic")
+  assert "ANTHROPIC_API_KEY" in anthropic["env"]
 
 
 async def test_a_raise_after_a_try_whose_assert_captures_a_local_is_not_caught_by_its_handler() -> None:

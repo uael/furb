@@ -520,6 +520,57 @@ pub fn models(claude: Option<String>) -> Vec<ModelInfo> {
   catalog.offered().iter().map(ModelInfo::of).collect()
 }
 
+/// What a first run checks of this machine, as a host reads it: whether the catalog found the claude command line,
+/// each provider of the network with the names of its credential and how many of its models the catalog offers, and
+/// the local server that `FURB_LOCAL_URL` names, with the models it offers or why it listed none.
+#[cfg_attr(feature = "typescript", napi(object, object_from_js = false))]
+#[cfg_attr(feature = "python", derive(pyo3::IntoPyObject))]
+pub struct SetupInfo {
+  pub claude: bool,
+  pub providers: Vec<ProviderInfo>,
+  pub local: Option<LocalInfo>,
+}
+
+/// A provider of the network as a first run checks it: its name, the names of its credential in the environment, and
+/// how many of its models the catalog offers.
+#[cfg_attr(feature = "typescript", napi(object, object_from_js = false))]
+#[cfg_attr(feature = "python", derive(pyo3::IntoPyObject))]
+pub struct ProviderInfo {
+  pub provider: String,
+  pub env: Vec<String>,
+  pub offered: i64,
+}
+
+/// The local server as a first run checks it: its address, how many models the catalog offers of it, and why it
+/// listed none, when it did not answer.
+#[cfg_attr(feature = "typescript", napi(object, object_from_js = false))]
+#[cfg_attr(feature = "python", derive(pyo3::IntoPyObject))]
+pub struct LocalInfo {
+  pub address: String,
+  pub offered: i64,
+  pub failed: Option<String>,
+}
+
+/// What a first run checks of this machine, with the claude command line at a path when it is given. It asks the
+/// local server for what it lists, so it waits for that server.
+#[cfg_attr(feature = "python", pyfunction, pyo3(signature = (claude = None)))]
+#[cfg_attr(feature = "typescript", napi)]
+pub fn setup(claude: Option<String>) -> SetupInfo {
+  let count = |n: usize| i64::try_from(n).unwrap_or(i64::MAX);
+  let found = world::Catalog::load().claude(claude.map(Into::into), None).setup();
+  SetupInfo {
+    claude: found.claude,
+    providers: (found.providers.into_iter())
+      .map(|one| ProviderInfo { provider: one.provider, env: one.env, offered: count(one.offered) })
+      .collect(),
+    local: found.local.map(|one| LocalInfo {
+      address: one.address,
+      offered: count(one.offered),
+      failed: one.failed,
+    }),
+  }
+}
+
 /// The model the catalog knows by a name, as `provider:id` or as an id that one model alone holds, which for a model of
 /// the local server holds a colon, whether it offers that model or not; nothing when it knows none.
 #[cfg_attr(feature = "python", pyfunction)]

@@ -10,37 +10,75 @@ generators are in `tui/script/`.
 
 ## Welcome
 
-An empty feed shows the logo of furb, what it does, the project and the model, three ways to start, and the keys
-to know. A click on a way to start puts its prompt in the input. The top line names the session, the chain, and the
+An empty feed shows the logo of furb, what it does, the project and the model, the ways to start, and the keys to
+know. The first way plays a life to watch, which asks no model. A click on each other way puts its prompt in the
+input. The top line names the session, the chain, and the
 directory of the chain, and the toggle at its right switches the three views of the chain. The footer says what the
 session does and offers the keys that act now, each a button that does what its key does. GitHub Dark is the default.
 
 ![Welcome](screenshots/01-welcome.png)
 
+## First run
+
+On the first run, and on each run while no model answers, the welcome checks the setup: the claude command line,
+the keys in the environment, the local server, and the models that answer. Each part that is missing shows its fix.
+When no model answers, the welcome says so, and offers only the life to watch, which needs no model.
+
+![Setup with no model](screenshots/63-setup-no-model.png)
+
+## Watch a life
+
+"Watch a life", or `/watch`, plays a short life on a small project by itself. It asks no model, so the bar at the
+top counts 0 model calls and $0.00. Three models answer one word of Python, which runs as a program, and a branch
+then goes another way from an earlier point.
+
+![Watch a life](screenshots/64-watch-a-life.png)
+
+While the input is empty, `[` and `]` move the feed back and on in time: an act that began later is not there yet,
+and an act that ended later still runs. `b` starts a branch at the moment shown, and Esc comes back to now.
+
+![An earlier moment](screenshots/65-watch-earlier.png)
+
 ## Feed
 
-The board over the feed shows each chain of the life on one row, in the order of its tree: its mark, its name,
-what it does now, and the pulse of its acts over the life. A chain that asks you a question shows the question in
-yellow. A chain at work shows the act that it waits on, a chain that failed shows why, and a chain that finished
-shows the first line of its answer. A click on a row shows that chain. The board shows when the life has more than
-one chain, or when a question waits for you. In a long life, it keeps the rows that need a look and counts the
-chains at rest.
+The captures of the feed show a real life: a conductor and the workers that it hired, recorded from the log of a
+life of furb, with 23 chains, 21 of them at work, and ladders of up to 76 rungs. `tui/fixtures/conductor.jsonl`
+holds it, with no key and no path of a home in it, and `bun run demo` opens it beside the scripted life.
+
+The board over the feed says the whole life at a glance. Its first line counts the chains by what they do: the
+chains that ask you, then those that failed, are paused, work, are done, or rest. Under it, each chain that needs a
+look stands on one row: the chains that ask you first, then those that failed, are paused or work, in the order of
+their tree. A row shows the mark of the chain, its name, what it does now, and how many answers its models gave for
+how many dollars. A chain that asks you shows its question in yellow. A chain at work shows the act that it waits
+on: a command, a wait with its time and the acts that it waits for, or a rung that its model writes. A chain that
+failed shows why, and a chain that finished shows the first line of its answer. The board takes at most a third of
+the screen, keeps the chain on screen, and counts the chains that it leaves out, which ⌃B lists. A click on a row
+shows that chain. The board shows when the life has more than one chain, or when a question waits for you.
 
 Under the board, the feed shows the ladder of the chain: your message in a panel, each rung of the ladder on one
 row, and the answer under the name of the model that gave it. The row of a rung shows its mark, its name, the first
-line of its Python in the colors of its grammar, the count of the lines after it, and the acts that it made, each in the color of its state. Once it is
-done, it says how long it ran and what the answers of its model cost. A
-rung opens while it runs, and shows the last lines that its model writes or that its command prints. It folds to
-its row when it completes. A click on its heading, or ⌥D, opens it to show its numbered Python, and under it each
-act that it made with a preview of its output. Each act says what it did: a read its path and the count of its
-lines, a write its path and the lines that it added and removed, and a command its line, its exit, and how long it
-ran. The time is known for the work that the TUI saw run, since the record holds no time. The fold stays the same
-across views and after a reopen.
-`/autocollapse` turns the automatic fold off, and on again. A right click on an act inspects it, edits its program,
-or branches after it. The board and the feed come from the model of a life that `@furb/engine/life` gives, so each
-host shows the same life. The sidebar shows the chains, the context and the cost, and the workspaces.
+line of its Python in the colors of its grammar, the count of the lines after it, and the acts that it made, each in
+the color of its state. Once it is done, it says how long it ran and what the answers of its model cost. A rung opens
+while it runs, and shows the last lines that its model writes or that its command prints. It folds to its row when
+it completes. A click on its heading, or ⌥D, opens it to show its numbered Python, and under it each act that it made
+with a preview of its output. Each act says what it did: a read its path and the count of its lines, a write its path
+and the lines that it added and removed, and a command its line, its exit, and how long it ran. The time is known for
+the work that the TUI saw run, since the record holds no time. The fold stays the same across views and after a
+reopen. `/autocollapse` turns the automatic fold off, and on again. A right click on an act inspects it, edits its
+program, or branches after it.
+
+A long thread stays short. The feed shows the last six steps of the chain and of each rung, and the last four rungs
+of each ladder, and one line in place of each run of earlier ones, as "28 earlier messages". A click on the line
+shows them. A step that asks you or runs always shows. A long message shows its first eight rows, and the word of a
+rung that runs shows its first twelve, each with a line that shows the rest. A jump to an act opens each fold over
+it. The board and the feed come from the model of a life that `@furb/engine/life` gives, so each host shows the same
+life. The sidebar shows the chains, the context and the cost, and the workspaces.
 
 ![Feed](screenshots/02-feed.png)
+
+![A long ladder](screenshots/60-long-ladder.png)
+
+![Folded steps](screenshots/61-folded-steps.png)
 
 ## Transcript
 
@@ -168,7 +206,14 @@ On a narrow terminal the sidebar is hidden, and the top line keeps the session, 
 ## Work in progress
 
 A command streams its output while it runs, and a model shows the last lines that it writes. A word that the gate
-refuses shows the line and the reason.
+refuses shows the line and the reason, and one more line that says what to do: press ↑ to bring your word back to the
+input, fix it and send it again, or wait while the chain asks the model again with the findings.
+
+When a call of a model fails for a cause that passes, as a lost connection, a provider that is overloaded or a limit
+of the rate, the provider asks the model again after a wait that doubles each time, up to ten attempts. The footer
+counts the wait down, as `Retrying in 4 s, attempt 2 of 10, connection reset`.
+
+![Model retry](screenshots/62-model-retry.png)
 
 ![Command streaming](screenshots/18-live-command.png)
 
@@ -221,8 +266,11 @@ the chain through that act. The module and the files keep their state.
 
 ## Empty, loading, and failed views
 
-A view with nothing to show says why in its middle. An act that fails keeps its failure in the feed, and a view
-that cannot load offers to read it again.
+A view with nothing to show says why in its middle. An act that fails keeps its failure in the feed. A view that
+cannot load says what broke in plain words, and never the words of the parser of JSON, and offers to read it again.
+When the journal of file changes beside the record is damaged, the view of changes names the change that it cannot
+read, and offers to repair the journal, which keeps each change that it can read, or to start a new journal, which
+keeps the damaged one beside it.
 
 ![Empty results](screenshots/24-empty-results.png)
 

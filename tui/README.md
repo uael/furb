@@ -9,13 +9,29 @@ Rendering, input, and syntax coloring stay responsive while the sandbox gates an
 uv sync
 bun install
 bun run build
-bun run demo                 # A local, scripted life. No model request.
+bun run demo                 # A local, scripted life, and a real life recorded from its log. No model request.
 bun run tui                  # A real life, on the models of the catalog of the crate.
 bun run tui -- --resume .furb/sessions/example.jsonl
 ```
 
+The welcome of an empty chain offers "Watch a life" first: a short life on a small project that plays by itself
+and asks no model, so it costs nothing. Several models answer in it, a word of Python runs as a program, and a branch
+starts from an earlier point. While it plays and the input is empty, `[` and `]` move the feed back and on in time,
+`b` starts a branch at the moment shown, and Esc comes back to now. `/watch` plays it too. On the first run, and on
+each run while no model answers, the welcome checks the setup: the claude command line, the keys in the
+environment, the local server that `FURB_LOCAL_URL` names, and the models that the catalog offers, with a fix for each
+part that is missing.
+
 `furb`, the command line, opens this TUI when it has no command, with `--demo`, `--record`, `--cwd`, the model and the
 effort of its `--model` as `--model` and `--effort`, each `--roster`, and the words after `--`.
+
+A recorded life is a log of a life whose first line is a header that says `"recorded": true`. The TUI reads it as it
+reads a record that another engine made, from its acts, and runs nothing: what you send to it fails with the
+reason. The demo opens
+`fixtures/conductor.jsonl`, a life of a conductor of furb with 23 chains, beside its scripted life, when it has no
+`--cwd` and no record. `bun run tui/script/fixture.ts <record>.jsonl.log [out]` makes such a fixture from the log of
+a real life: it keeps the acts that the model of a life reads, cuts each word, message and output to its first lines,
+replaces each key, address of mail and home directory, and ends at the moment with the most chains at work.
 
 Use `--cwd`, `--model provider:model`, `--effort`, `--record`, and repeated `--roster` options to configure
 a new life. A session offers every model that the catalog offers, with its model first: the default model when you
@@ -100,6 +116,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | Command | Action |
 | --- | --- |
 | `/new` | Start a fresh life |
+| `/watch` | Play a short life that asks no model and costs nothing |
 | `/model [model]` | Choose the model that answers on this chain |
 | `/effort [level]` | Set the reasoning effort of the selected model |
 | `/shape [type]` | Choose the result type of the next prompt |

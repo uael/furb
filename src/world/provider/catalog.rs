@@ -157,8 +157,34 @@ enum Dialect {
 /// thought of a model in one turn that the environment gives as `MAX_THINKING_TOKENS`.
 pub struct Catalog {
   models: Vec<(Model, bool)>,
+  /// Each provider of the network, with the names of its credential.
+  providers: Vec<(String, Vec<String>)>,
   local: Option<Arc<Server>>,
   thinking: Option<String>,
+}
+
+/// What this machine holds of each way to a model, as a first run checks it: whether the catalog found the claude
+/// command line, each provider of the network, and the local server that the environment names.
+pub struct Setup {
+  pub claude: bool,
+  pub providers: Vec<Ready>,
+  pub local: Option<Local>,
+}
+
+/// A provider of the network as a first run checks it: its name, the names of its credential, and how many of its
+/// models the catalog offers, which is none when no credential of it stands in the environment.
+pub struct Ready {
+  pub provider: String,
+  pub env: Vec<String>,
+  pub offered: usize,
+}
+
+/// The local server that the environment names, as a first run checks it: its address, how many models for chat the
+/// catalog offers of it, and why it listed none, when it did not answer.
+pub struct Local {
+  pub address: String,
+  pub offered: usize,
+  pub failed: Option<String>,
 }
 
 impl Catalog {
@@ -200,7 +226,9 @@ impl Catalog {
     let found = claude.is_some();
     let claude = claude.unwrap_or_else(|| Claude::with(None, None)).models().into_iter();
     let mut models: Vec<_> = claude.map(|model| (model, found)).collect();
+    let mut providers = Vec::new();
     for (provider, one) in listed {
+      providers.push((provider.clone(), one.env.clone()));
       let credential = one.credential(&env);
       for (id, listing) in &one.models {
         let Some(client) = listing.client(one.rig).filter(|_| listing.kept()) else { continue };
@@ -209,7 +237,31 @@ impl Catalog {
         models.push((model(provider, id, listing, client, reach), offered));
       }
     }
-    Catalog { models, local, thinking: env(super::ENV_THINKING) }
+    Catalog { models, providers, local, thinking: env(super::ENV_THINKING) }
+  }
+
+  /// What a first run checks: the claude command line, each provider of the network, and the local server, which it
+  /// asks for what it lists, so it never runs on the thread of the reactor.
+  pub fn setup(&self) -> Setup {
+    let offered = |provider: &str| {
+      let of = |model: &Model| model.name.split_once(':').is_some_and(|(one, _)| one == provider);
+      self.models.iter().filter(|(model, offered)| *offered && of(model)).count()
+    };
+    let providers = self.providers.iter();
+    Setup {
+      claude: offered(claude::CLAUDE) > 0,
+      providers: providers
+        .map(|(provider, env)| Ready {
+          provider: provider.clone(),
+          env: env.clone(),
+          offered: offered(provider),
+        })
+        .collect(),
+      local: self.local.as_ref().map(|server| {
+        let heard = server.heard(None);
+        Local { address: server.root.clone(), offered: heard.models.len(), failed: heard.failed }
+      }),
+    }
   }
 
   /// What the local server lists, for the name that the catalog wants of it, if any; and nothing when the environment

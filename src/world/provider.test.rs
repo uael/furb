@@ -27,8 +27,8 @@ use rig_core::{
 use serde_json::{Value, json};
 
 use super::{
-  Hosted, Model, Provider, Thinking, Writes, catalog::Catalog, images, local::Server, thinking,
-  unfenced,
+  Backoff, Hosted, Model, Provider, Retries, Retry, Thinking, Writes, catalog::Catalog, images,
+  local::Server, passing, thinking, unfenced,
 };
 use crate::{Act, Ear, Engine, Fact, Object, SYSTEM, verbs, world};
 
@@ -505,6 +505,114 @@ fn a_function_of_the_host_answers_a_request_with_a_turn_in_place_of_the_model() 
   let expected = "('assistant', 'close(7)', (10, 2, 0, 0, 1.0), None)";
   assert_eq!(said(&mut engine)[1], ("done".into(), "reply1".into(), expected.into()));
   assert_eq!(told.lock().expect("the parts told").len(), 1);
+}
+
+/// A function of the host that fails with these reasons, one call each, and then answers `close(7)`, and how many
+/// times it was called.
+fn failing(reasons: &[&str]) -> (Hosted, Arc<AtomicUsize>) {
+  let calls = Arc::new(AtomicUsize::new(0));
+  let (counted, reasons) =
+    (Arc::clone(&calls), reasons.iter().map(|one| one.to_string()).collect::<Vec<_>>());
+  let host: Hosted = Arc::new(move |_, told| {
+    let call = counted.fetch_add(1, Ordering::SeqCst);
+    if let Some(why) = reasons.get(call).cloned() {
+      told("clo", "");
+      return async move { Err(why) }.boxed();
+    }
+    told("close(7)", "");
+    let usage = Object::list([10, 2, 0, 0, 1].map(Object::int));
+    let turn = [Object::string("assistant"), Object::string("close(7)"), usage, Object::none()];
+    async move { Ok(Object::list(turn)) }.boxed()
+  });
+  (host, calls)
+}
+
+/// The retries that a test was told, each as its rung, its chain and the retry.
+type Told = Arc<Mutex<Vec<(String, String, Retry)>>>;
+
+/// Whom a test tells each retry, and what it was told.
+fn retried() -> (Retries, Told) {
+  let heard: Told = Arc::default();
+  let kept = Arc::clone(&heard);
+  let retries: Retries = Arc::new(move |rung, chain, retry| {
+    kept.lock().expect("the retries told").push((rung.to_owned(), chain.to_owned(), retry.clone()));
+  });
+  (retries, heard)
+}
+
+/// The rung that the first reply of the root answers.
+fn replying(engine: &mut Engine) -> String {
+  let root = engine.root().to_owned();
+  let facts =
+    engine.transcript(verbs::Transcript { on: on(&root), of: None }).expect("a transcript");
+  facts.iter().find(|one| one.kind() == "reply").map(|one| one.by().to_owned()).expect("a reply")
+}
+
+#[test]
+fn a_call_that_fails_twice_for_a_cause_that_passes_is_made_again_after_its_backoff_and_the_host_is_told_each_retry()
+ {
+  let (host, calls) =
+    failing(&["Connection reset by peer (os error 54)", "API Error: 529 Overloaded"]);
+  let (retries, told) = retried();
+  let at = yard("retried");
+  let model = scripted(&MockCompletionModel::default()).hosted(host);
+  let backoff = Backoff { most: 10, first: Duration::from_millis(5) };
+  let provider =
+    Provider::new(at.display().to_string(), vec![model]).backoff(backoff).retries(retries);
+  let mut engine = lived(provider);
+  let id = asked(&mut engine);
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  assert_eq!(got.as_ref().as_int(), Some(7));
+  assert_eq!(calls.load(Ordering::SeqCst), 3);
+  let (rung, root) = (replying(&mut engine), engine.root().to_owned());
+  let retry = |attempt, millis, why: &str| {
+    let wait = Duration::from_millis(millis);
+    (rung.clone(), root.clone(), Retry { attempt, most: 10, wait, why: why.to_owned() })
+  };
+  let expected = vec![retry(2, 5, "connection reset"), retry(3, 10, "the provider is overloaded")];
+  assert_eq!(*told.lock().expect("the retries told"), expected);
+  let kinds: Vec<_> = said(&mut engine).into_iter().map(|(kind, about, _)| (kind, about)).collect();
+  assert_eq!(
+    kinds,
+    [("started", "reply1"), ("done", "reply1")].map(|(k, a)| (k.to_owned(), a.to_owned()))
+  );
+}
+
+#[test]
+fn a_call_whose_attempts_are_spent_is_refused_with_its_last_failure() {
+  let (host, calls) = failing(&["503 Service Unavailable"; 3]);
+  let (retries, told) = retried();
+  let model = scripted(&MockCompletionModel::default()).hosted(host);
+  let backoff = Backoff { most: 3, first: Duration::from_millis(1) };
+  let provider = Provider::new(yard("spent").display().to_string(), vec![model])
+    .backoff(backoff)
+    .retries(retries);
+  let mut engine = lived(provider);
+  asked(&mut engine);
+  assert!(until(&mut engine, |engine| said(engine).len() >= 2), "{:?}", said(&mut engine));
+  // The chain asks again after the refusal, and the function answers that later call.
+  assert!(calls.load(Ordering::SeqCst) >= 3);
+  let attempts: Vec<_> =
+    told.lock().expect("the retries told").iter().map(|one| one.2.attempt).take(2).collect();
+  assert_eq!(attempts, [2, 3]);
+  let refused = "Refused(args=('m/high answered nothing: ProviderError: 503 Service Unavailable'))";
+  assert_eq!(said(&mut engine)[1], ("done".into(), "reply1".into(), refused.into()));
+}
+
+#[test]
+fn only_a_failure_of_the_network_or_of_the_side_of_the_provider_passes() {
+  let provider = |why: &str| passing(&CompletionError::ProviderError(why.to_owned()));
+  assert_eq!(
+    provider("error sending request: connection reset").as_deref(),
+    Some("connection reset")
+  );
+  assert_eq!(provider("the request timed out").as_deref(), Some("timed out"));
+  assert_eq!(provider("429 Too Many Requests").as_deref(), Some("rate limited"));
+  assert_eq!(provider("Invalid status code 502 Bad Gateway").as_deref(), Some("server error 502"));
+  assert_eq!(provider("unavailable"), None);
+  assert_eq!(provider("boom"), None);
+  assert_eq!(provider("No model is m/x."), None);
+  assert_eq!(passing(&CompletionError::ResponseError("the stream stopped, 503".into())), None);
 }
 
 /// A provider on a port of this machine, which reads one request and streams these events. It gives the request it
@@ -1038,6 +1146,35 @@ fn a_model_of_a_local_server_with_a_most_thought_of_zero_is_asked_with_its_thoug
     (&first["chat_template_kwargs"], first.get("reasoning_effort")),
     (&json!({"enable_thinking": false}), None),
     "the first request turns the thought off"
+  );
+}
+
+#[test]
+fn a_local_model_reads_its_earlier_turn_with_no_thought() {
+  let usage = json!({"id": "c", "object": "chat.completion.chunk", "created": 0, "model": "qwen", "choices": [],
+    "usage": {"prompt_tokens": 100, "completion_tokens": 5, "total_tokens": 105}});
+  let ended = format!("data: {usage}\n\ndata: [DONE]\n\n");
+  let first = [
+    chunk(json!({"role": "assistant", "reasoning_content": "a"}), Value::Null),
+    chunk(json!({"content": "x = 1"}), json!("stop")),
+    ended.clone(),
+  ];
+  let again = [chunk(json!({"role": "assistant", "content": "close(x)"}), json!("stop")), ended];
+  let (mut engine, id, asked_of) = rethinking(first.concat(), again.concat());
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  assert_eq!(got.as_ref().as_int(), Some(1));
+  let [_, _, second] = asked_of.join().expect("the server read the requests");
+  let body: Value =
+    serde_json::from_str(second.split("\r\n\r\n").nth(1).unwrap_or_default()).expect("a JSON body");
+  let earlier = body["messages"]
+    .as_array()
+    .and_then(|messages| messages.iter().find(|one| one["role"] == "assistant"))
+    .cloned()
+    .unwrap_or_default();
+  assert_eq!(
+    (&earlier["content"], earlier.get("reasoning_content")),
+    (&json!([{"type": "text", "text": "x = 1"}]), None),
+    "the earlier turn goes with its word and no thought"
   );
 }
 
