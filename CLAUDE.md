@@ -229,6 +229,9 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 - `uv run python script/bench/replay.py <task> --out <directory>`: the bench of replay. One life of the local model
   works a task of DeepSWE, later lives open on its record, one more opens after a change of the World, and Claude
   Code on the same model works the task as the baseline. Its docstring says how to run it.
+- `python script/bench/audit.py <record> <sha256>`: the audit of a record. It checks the sha256 of the record, replays
+  it in a life that only inspects it, with no model and no network, and checks that each word and each answer hashes
+  as the record says. It imports furb alone, so an outsider runs it on `pip install furb`, as `docs/audit.md` says.
 - `script/real.py` is no command: it holds what `smoke.py`, `play.py` and `deepswe.py` share, which is the life
   they open on the engine of this interpreter, the claude they ask, and what the answers of a record cost.
 - `uv run python script/catalog.py`: make the snapshot of the catalog, `src/world/provider/catalog.json`, again from
@@ -246,7 +249,9 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 - `bun run docs`: write the tables of keys and commands in `tui/README.md` again from `tui/src/keys.ts` and
   `tui/src/commands.ts`.
 - `bun run screenshots` and `bun run animation`: capture `docs/screenshots/` and `docs/furb.gif` again from the
-  real renderer. Run both after a change that a screen shows, and read each capture.
+  real renderer. Run both after a change that a screen shows, and read each capture. One run of each at a time holds
+  its home in `/tmp`, and a second run waits until the first ends. A screen that does not come in three minutes ends
+  the run with an error that names the screen, and a run never waits past thirty minutes.
 
 Every pull request and every push to `main` runs the gates in `.github/workflows/gates.yml`: the hooks, which
 include the gates of the crate and the type check. The suite runs on Linux, on macOS and on Windows, and the gates

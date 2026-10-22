@@ -8,11 +8,13 @@ import { palettes } from "../src/theme.ts";
 import { idle } from "../test/idle.ts";
 import { gif, pack, type Still } from "./gif.ts";
 import { pixels } from "./raster.ts";
-import { click, highlighting, home, mount } from "./stage.ts";
+import { click, end, highlighting, home, mount, watch } from "./stage.ts";
 
 // The model of the demo writes its words as a stream in the animation, as a real model does.
 process.env.FURB_DEMO_STREAM = "1";
 const directory = join(await home("furb-animation"), "fieldnotes");
+/** What the script waits for: a picture whose state never comes ends the script with an error that names it. */
+const waits = watch();
 
 /** The terminal of the animation, and the scale of its pictures, which a screen of high density shows sharp. */
 const columns = 138,
@@ -29,6 +31,7 @@ const stills: Still[] = [];
 let size = { width: 0, height: 0 };
 /** The screen as it is now, which stays for a time in hundredths of a second. */
 async function still(delay: number): Promise<void> {
+  waits(`picture ${stills.length + 1}`);
   // The input is colored by a parser off the main thread, which a moment lets finish.
   await new Promise((done) => setTimeout(done, 30));
   app().render();
@@ -64,6 +67,7 @@ async function working(delay = 8): Promise<void> {
   await session.refresh();
 }
 
+let failed = false;
 try {
   await loadParsers();
   await still(180);
@@ -147,9 +151,15 @@ try {
   // The lights of the title bar are rare pixels, which the palette keeps all the same.
   await writeFile(output, gif(stills, size.width, size.height, [0xff5f57, 0xfebc2e, 0x28c840]));
   console.log(`${output}: ${stills.length} pictures`);
-} finally {
-  app().dispose();
-  test.renderer.destroy();
-  await library.dispose();
-  await removeDemoDirectories();
+} catch (error) {
+  console.error(error);
+  failed = true;
 }
+waits("the end of the script");
+await end(
+  failed,
+  () => app().dispose(),
+  () => test.renderer.destroy(),
+  () => library.dispose(),
+  removeDemoDirectories,
+);
