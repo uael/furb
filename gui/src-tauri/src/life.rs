@@ -36,7 +36,8 @@ use crate::{demo, places};
 pub enum Source {
   /// The demo project, whose models answer from a script; `pace` is how long a model of it thinks.
   Demo { pace: Duration },
-  /// A record to read, with no life: the app reads the facts that the record kept, asks no model and runs no command.
+  /// A record to read, with no life: the app reads the facts of its log, or those that the record kept when the log
+  /// does not agree with it, and asks no model and runs no command.
   Record(PathBuf),
   /// A life in a project directory, on the record it keeps there, on the models of the catalog.
   Live { directory: PathBuf, record: PathBuf },
@@ -149,13 +150,21 @@ impl Teller {
   }
 }
 
-/// A record read with no life: its facts, as the store kept them, told to the app in parts, so no word runs again and
-/// a record of any engine opens. The record keeps only what the outside said, so the view of it has gaps that the app
-/// says.
+/// A record read with no life, told to the app in parts, so no word runs again and a record of any engine opens. While
+/// the log beside the record agrees with it, the app hears every fact of the log as a live life tells it, so the record
+/// shows whole: the ladders, the runs and the end of each thread. Else it hears the facts that the store kept, which
+/// hold only what the outside said, so the view of them has gaps that the app says.
 fn read_record(path: &std::path::Path, tell: &Teller) -> Result<(), String> {
   use std::io::BufRead;
-  let file = std::fs::File::open(path).map_err(|no| format!("{}: {no}", path.display()))?;
   let directory = places::project_of(path).display().to_string();
+  if let Some(facts) = furb::world::logged(path).map_err(|no| no.to_string())? {
+    tell.tell(Event::Opened { root: "chain1".to_owned(), directory, works: false, kept: false });
+    for part in facts.chunks(4000) {
+      tell.tell(Event::Facts(part.iter().map(|one| wire::outward(one.as_ref())).collect()));
+    }
+    return Ok(());
+  }
+  let file = std::fs::File::open(path).map_err(|no| format!("{}: {no}", path.display()))?;
   tell.tell(Event::Opened { root: "chain1".to_owned(), directory, works: false, kept: true });
   let mut part = Vec::new();
   for line in std::io::BufReader::new(file).lines() {
@@ -412,3 +421,7 @@ impl Held {
     self.flush();
   }
 }
+
+#[cfg(test)]
+#[path = "life.test.rs"]
+mod test;
