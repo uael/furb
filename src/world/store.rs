@@ -12,11 +12,15 @@ use std::{
 };
 
 use serde_json::value::RawValue;
+use sha2::{Digest, Sha256};
 
 use monty_types::unstable::{MontyGraph, MontyNode};
 
 use crate::{
-  ear::{Ear, hear, hearing},
+  ENGINE, KERNEL,
+  ear::{Ear, hear, hearing, say},
+  engine::ROOT,
+  fact::Fact,
   value::{Fault, Object, ObjectRef},
   wire::{built, whole},
 };
@@ -58,17 +62,51 @@ pub fn kept(path: impl AsRef<Path>) -> Result<Vec<Object>, Fault> {
   }
 }
 
+/// The kind of the fact by which a record names the engine that made it: `("made", "chain1", "store", engine)`, where
+/// engine is what [`engine`] gives. No contract holds it, so this is the one home of its shape.
+pub const MADE: &str = "made";
+
+/// The engine of this build, which a record names: a digest of the engine and of the Kernel, which make each act of
+/// a replay. Another engine can make other acts from the same record, so a record replays only on the engine that
+/// made it.
+pub fn engine() -> String {
+  let mut digest = Sha256::new();
+  for one in [ENGINE, KERNEL] {
+    digest.update(one.as_bytes());
+    digest.update([0]);
+  }
+  format!("{:x}", digest.finalize())
+}
+
+/// The engine that a record names, and nothing when it names none, as a record of a build before the fact made.
+pub fn made(record: &[Object]) -> Option<String> {
+  record.iter().find_map(|entry| {
+    let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
+    (fact.kind() == MADE).then(|| fact.word(0)?.as_str().map(str::to_owned)).flatten()
+  })
+}
+
 /// The record that a store holds, and the ear that keeps in the store what the journal says to keep.
+///
+/// A new record names the engine of this build: the ear says it as it hears the root at its birth, so a later life
+/// says it again at the same place. A record of a build before the fact made names no engine, and stays so, since
+/// this engine did not make it.
 pub fn keeping(mut store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>), Fault> {
   let entries = store.entries()?;
-  let kept = hearing(&["keep"], move |mut co| async move {
+  let new = entries.is_empty();
+  let kept = hearing(&["keep", "chain"], move |mut co| async move {
     loop {
       let a = hear(&mut co).await;
-      if a.kind() != "keep" {
-        continue;
+      match a.kind() {
+        "keep" => {
+          let Some(entry) = a.word(0) else { continue };
+          store.keep(entry)?;
+        }
+        "chain" if new && a.about() == ROOT => {
+          say(&mut co, Fact::says(MADE, ROOT, [Object::string(engine())]));
+        }
+        _ => {}
       }
-      let Some(entry) = a.word(0) else { continue };
-      store.keep(entry)?;
     }
   });
   Ok((entries, kept))

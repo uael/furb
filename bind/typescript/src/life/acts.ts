@@ -26,6 +26,8 @@ export interface LiveAct {
    * is the order of the record, so a later life gives the same places. */
   began: number;
   ended?: number;
+  /** The dollars of the answers of the models that wrote the word of a rung, once one is done. */
+  cost?: number;
 }
 /** What a command came to: its code, and what it printed on each stream. */
 export type Exit = { stdout?: { content: string }; stderr?: { content: string }; code?: number };
@@ -58,4 +60,11 @@ export function cancelled(act: LiveAct): boolean {
   if (act.run) return act.run.status === "failed" && /^CancelledError\b/.test(act.run.reason ?? "");
   const value = act.value;
   return Boolean(value && typeof value === "object" && "is" in value && value.is === "CancelledError");
+}
+
+/** The measure of a chain from the answers of its models, in order: the dollars of each answer, how many answers it
+ * had, and the actor of the last one. */
+export function measureOf(answers: readonly { actor: string; usage: readonly number[] }[]): Measure {
+  const dollars = answers.reduce((sum, answer) => sum + (answer.usage[4] ?? 0), 0);
+  return { dollars, spent: dollars, answers: answers.length, actor: answers.at(-1)?.actor };
 }

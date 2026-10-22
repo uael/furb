@@ -47,3 +47,18 @@ fn a_project_that_the_app_opened_comes_first() {
   remember(&config, &other).expect("the project is kept");
   assert_eq!(projects(&config), vec![other, one]);
 }
+
+#[test]
+fn the_projects_are_those_that_the_tui_lists_and_that_stand() {
+  let config = folder("listed");
+  let one = folder("standing");
+  let gone = std::env::temp_dir().join("furb-gui-places-gone");
+  let listed = format!(
+    r#"{{"workspaces":[{{"directory":{:?}}},{{"directory":{:?}}},{{"directory":{:?}}}]}}"#,
+    one.display().to_string(),
+    gone.display().to_string(),
+    one.display().to_string()
+  );
+  fs::write(config.join("workspaces.json"), listed).expect("the list of the TUI is written");
+  assert_eq!(projects(&config), vec![one]);
+}

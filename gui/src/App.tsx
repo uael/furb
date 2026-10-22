@@ -59,13 +59,15 @@ export function App() {
     window.addEventListener("keydown", keys);
     return () => window.removeEventListener("keydown", keys);
   }, [moment.at, moment.marks, held.len]);
-  // The window tells the core what it drew, which a check of the app reads.
+  // Once the window took the last part of a record, or each part of a life that works, and painted it, it tells the
+  // core what it drew, which a check of the app prints.
+  const whole = held.state === "open" && held.read && (!held.works || moment.chains.length > 0);
   useEffect(() => {
-    if (tauri && held.state === "open")
-      void call("drew", { threads: moment.threads.length, chains: moment.chains.length }).catch(
-        () => undefined,
-      );
-  }, [held.state, moment.threads.length, moment.chains.length]);
+    if (!tauri || !whole) return;
+    const counts = { chains: moment.chains.length, threads: moment.threads.length, acts: moment.acts.length };
+    const frame = requestAnimationFrame(() => void call("drew", counts).catch(() => undefined));
+    return () => cancelAnimationFrame(frame);
+  }, [whole, moment.chains.length, moment.threads.length, moment.acts.length]);
   if (held.state !== "open" || query.get("picker"))
     return (
       <Picker key={held.len} said={held.said} opening={held.state === "opening" ? held.what : undefined} />
@@ -97,7 +99,7 @@ export function App() {
           }}
         />
         <main className="relative flex min-w-0 flex-1 flex-col border-l border-hair bg-bg">
-          <TopBar moment={moment} thread={thread?.act.id ?? ""} mode={mode} onMode={setMode} />
+          <TopBar life={held} moment={moment} thread={thread?.act.id ?? ""} mode={mode} onMode={setMode} />
           <Scrubber moment={moment} len={held.len} onTravel={setAt} />
           <div className="relative min-h-0 flex-1">
             {thread && mode === "thread" ? (
@@ -131,7 +133,11 @@ export function App() {
             ) : null}
             {!thread && mode !== "programs" ? (
               <div className="grid h-full place-items-center pb-40 text-[14px] text-faint">
-                No thread yet. Ask the life below.
+                {held.works
+                  ? "No thread yet. Ask the life below."
+                  : held.read
+                    ? "This record holds no thread."
+                    : "Reading the record"}
               </div>
             ) : null}
             {answering ? null : (

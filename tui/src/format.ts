@@ -1,3 +1,22 @@
+import type { Retry } from "@furb/engine";
+
+/** What the footer says of a retry of the call of a model: the seconds left of its wait, its attempt, and why the
+ * attempt before it failed. */
+export function retryLine(retry: Retry, now = Date.now()): string {
+  const seconds = Math.max(0, Math.ceil((retry.until - now) / 1000));
+  return `Retrying in ${seconds} s, attempt ${retry.attempt} of ${retry.most}, ${retry.why}`;
+}
+
+/** A failure in plain words: a file that holds data that cannot be read says so, in place of the words of the parser
+ * of JSON, and any other failure says its own message. */
+export function plainFailure(message: string): string {
+  return /JSON Parse error|is not valid JSON|JSON\.parse|Unexpected (token|end of JSON|character|identifier)/.test(
+    message,
+  )
+    ? "A file of this session holds data that cannot be read. Refresh the view to read it again."
+    : message;
+}
+
 /** A count of tokens, short: 1234 is 1.2k. */
 export function count(value: number): string {
   return value >= 1_000_000
@@ -19,6 +38,16 @@ const cents = money(2),
 /** An amount of dollars: to four places under a dollar, where each fraction of a cent counts, and to the cent above. */
 export function dollars(value: number): string {
   return (value !== 0 && Math.abs(value) < 1 ? fractions : cents).format(value);
+}
+
+/** The lines that a patch adds and removes, with no header of a file or a hunk. */
+export function lineCounts(patch: string): { added: number; removed: number } {
+  let added = 0,
+    removed = 0;
+  for (const line of patch.split("\n"))
+    if (line.startsWith("+") && !line.startsWith("+++")) added++;
+    else if (line.startsWith("-") && !line.startsWith("---")) removed++;
+  return { added, removed };
 }
 
 /** A size in bytes, in KiB. */

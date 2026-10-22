@@ -29,7 +29,7 @@ async def test_the_world_stands_a_life_on_the_provider_of_the_crate_and_its_mode
   root = life(live)
   assert await engine.prompt(int, "count", on=root) == 3
   roster, directory, actor = engine.standing()
-  assert [name for name, _, _ in roster] == ["claude-cli:opus", OPERATOR]
+  assert [entry[0] for entry in roster] == ["claude-cli:opus", OPERATOR]
   assert (directory, actor) == (str(yard), "claude-cli:opus/xhigh")
   assert [one[0] for one in live.calls] == ["stand", "reply"]
   (request,) = seen

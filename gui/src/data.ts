@@ -40,7 +40,10 @@ export type Wire =
   | {
       state: "open";
       generation: number;
-      said: string[];
+      /** Whether the part holds the whole life that the core holds, or what changed after the last part. */
+      whole: boolean;
+      /** The last lines that the app said, in a part that is whole or when they changed. */
+      said?: string[];
       /** The count of changes that the acts held before this part, and after it. */
       from: number;
       count: number;
@@ -50,13 +53,19 @@ export type Wire =
       place: string;
       directory: string;
       works: boolean;
-      /** Whether the facts are what a record kept, read with no life, so the view of it has gaps that the app says. */
-      kept: boolean;
+      /** Whether the facts are those of a whole log: those of a life that works, or of the log beside a record. Else
+       * they are what the record kept, so a thread that a word closed has no end that the record shows. */
+      logged: boolean;
+      /** The engine that made a record to read, as the record names it. */
+      made: string | null;
+      /** Whether the core read every fact of a record, which a life that works holds from its opening. */
+      read: boolean;
       acts: LiveAct[];
       words: Record<string, string>;
       owed: string[];
-      measures: Record<string, Measure>;
-      streams: Record<string, { text: string; thinking: string }>;
+      /** The measures, and what the models write now, in a part that is whole or when they changed. */
+      measures?: Record<string, Measure>;
+      streams?: Record<string, { text: string; thinking: string }>;
       breaks: Break[];
     };
 

@@ -30,15 +30,16 @@ fn a_record_whose_log_agrees_shows_every_fact_of_the_log() {
   )
   .expect("the log is written");
   let events = heard(&path);
-  assert!(matches!(&events[0], Event::Opened { works: false, kept: false, .. }));
+  assert!(matches!(&events[0], Event::Opened { works: false, logged: true, .. }));
   let Event::Facts(facts) = &events[1] else { panic!("no facts") };
   assert_eq!(facts, &vec![json!(["rung", "rung1", "chain1", "chain1", "x = 1"])]);
 }
 
 #[test]
-fn a_record_whose_log_does_not_agree_shows_what_the_record_kept() {
+fn a_record_whose_log_does_not_agree_shows_what_the_record_kept_and_its_end() {
   let (path, log) = record("unlogged");
   std::fs::write(&log, "{\"entries\": 3}\n").expect("the log is written");
   let events = heard(&path);
-  assert!(matches!(&events[0], Event::Opened { works: false, kept: true, .. }));
+  assert!(matches!(&events[0], Event::Opened { works: false, logged: false, .. }));
+  assert!(matches!(events.last(), Some(Event::Read)));
 }

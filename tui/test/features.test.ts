@@ -180,20 +180,17 @@ test("clipboard import and share publication use bounded files and the explicitl
   await mkdir(bin);
   const oldPath = process.env.PATH;
   const data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=";
-  // One reader of the clipboard under the name of each system's reader: AppKit and PowerShell print base64.
+  // One program under the name of each system's reader of the clipboard, where AppKit and PowerShell print base64,
+  // and under the name gh, where it keeps what it uploads beside its folder. One program compiles once.
   await writeFile(
-    join(directory, "clipboard.ts"),
-    `import { basename } from "node:path"; const data = ${JSON.stringify(data)}; process.stdout.write(/^(osascript|powershell)(\\.exe)?$/.test(basename(process.execPath)) ? data : Buffer.from(data, "base64"));\n`,
+    join(directory, "fake.ts"),
+    `import { readFileSync, writeFileSync } from "node:fs"; import { basename, dirname, join } from "node:path"; const name = basename(process.execPath).replace(/\\.exe$/, ""); const data = ${JSON.stringify(data)}; if (name === "gh") { const args = process.argv.slice(2); writeFileSync(join(dirname(process.execPath), "..", "uploaded.json"), JSON.stringify({ args, markdown: readFileSync(args.at(-2), "utf8"), html: readFileSync(args.at(-1), "utf8") })); console.log("https://gist.github.com/furb/test-link"); } else process.stdout.write(/^(osascript|powershell)$/.test(name) ? data : Buffer.from(data, "base64"));\n`,
   );
-  const reader = executable(join(directory, "clipboard.ts"), directory, "reader");
+  const reader = executable(join(directory, "fake.ts"), directory, "reader");
   for (const name of ["osascript", "powershell", "wl-paste", "xclip"])
     await link(reader, join(bin, `${name}${extname(reader)}`));
   const log = join(directory, "uploaded.json");
-  await writeFile(
-    join(directory, "gh.ts"),
-    `import { readFileSync, writeFileSync } from "node:fs"; const args = process.argv.slice(2); writeFileSync(${JSON.stringify(log)}, JSON.stringify({ args, markdown: readFileSync(args.at(-2), "utf8"), html: readFileSync(args.at(-1), "utf8") })); console.log("https://gist.github.com/furb/test-link");\n`,
-  );
-  const gh = executable(join(directory, "gh.ts"), bin, "gh");
+  const gh = executable(join(directory, "fake.ts"), bin, "gh");
 
   try {
     process.env.PATH = `${bin}${delimiter}${oldPath ?? ""}`;
@@ -362,18 +359,21 @@ test("file and shell shortcuts, an external editor, and a safe standalone share 
   }
 });
 
-test("/extensions lists what a life runs, and a cancel of the work of a chain leaves the watcher of its memory", async () => {
+test("/extensions lists what a life runs, and a cancel of a word of the operator leaves the watcher of its memory", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-extensions-"));
   try {
     const opened = await openEngine({ cwd: directory, record: join(directory, "session.jsonl") });
     await composing(
-      async ({ session, frame }) => {
+      async ({ session, frame, click }) => {
         await session.command("/extensions");
         expect(session.notice).toBe(
           "This life runs memory with remember(), skills with counted(), compaction, ouroboros with ouroboros(), web. Run a word of one with /run.",
         );
         await session.command("/run await wait(60)");
+        // The wait runs under the word, so the cancel asks first.
+        await until(session, () => session.activity.some((act) => act.kind === "wait" && !act.done));
         await session.command("/cancel");
+        await click("Cancel it");
         await until(session, () => session.activity.every((act) => act.kind !== "wait" || act.done));
         await session.refresh();
         // The watcher lives on, and shows no work in the feed.
@@ -403,7 +403,7 @@ test("an act that ended and told nothing shows nothing in the feed, as a questio
         );
         await session.refresh();
         const shown = await frame();
-        expect(shown).toContain("read1");
+        expect(shown).toContain('read("a.txt")');
         // The word of the rung that defines memory still shows, but no act named memory does.
         expect(shown).not.toContain("✓ memory");
       },

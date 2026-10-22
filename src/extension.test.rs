@@ -238,10 +238,15 @@ fn a_life_enables_at_its_tip_each_extension_it_is_given_and_plays_its_word_then_
   let facts =
     kept.iter().map(|one| Fact::of(crate::value::entry(&one.as_ref(), 0).unwrap()).unwrap());
   let facts = facts.map(|one| (one.kind().to_owned(), one.by().to_owned())).collect::<Vec<_>>();
-  let expected =
-    [("chain", "operator"), ("stand", "operator"), ("done", "stand"), ("enable", "extensions")];
-  assert_eq!(facts[..4], expected.map(|(kind, by)| (kind.to_owned(), by.to_owned())));
-  let enable = Fact::of(crate::value::entry(&kept[3].as_ref(), 0).unwrap()).unwrap();
+  let expected = [
+    ("chain", "operator"),
+    ("made", "store"),
+    ("stand", "operator"),
+    ("done", "stand"),
+    ("enable", "extensions"),
+  ];
+  assert_eq!(facts[..5], expected.map(|(kind, by)| (kind.to_owned(), by.to_owned())));
+  let enable = Fact::of(crate::value::entry(&kept[4].as_ref(), 0).unwrap()).unwrap();
   let words: Vec<_> = (0..3).map(|at| enable.word(at).and_then(|one| one.as_str())).collect();
   assert_eq!(
     (enable.about(), words),
@@ -249,7 +254,7 @@ fn a_life_enables_at_its_tip_each_extension_it_is_given_and_plays_its_word_then_
     "the fact is about the root, and carries the name, the word and the life word"
   );
   assert_eq!(
-    facts[4],
+    facts[5],
     ("rung".to_owned(), "extensions".to_owned()),
     "the rung stands after the fact"
   );

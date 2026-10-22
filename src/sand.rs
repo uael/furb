@@ -10,6 +10,8 @@
 //! any depth, since the session holds each call of the host that waits. A value of the sandbox with no data form, and
 //! a class of the sandbox, crosses to the host as a handle, which the session holds until the host releases it.
 
+use std::time::Duration;
+
 use monty::{MontyRepl, ReplFunctionCall, ReplProgress, ReplStartError};
 use monty_types::{
   CallArgs, CompileOptions, ExcType, MontyException, MontyUuid, NameLookupResult, NamedValues,
@@ -22,6 +24,19 @@ use crate::value::{Fault, Object};
 /// allocations by default, and each run walks every candidate of a cycle and all that it reaches, which in a life
 /// is most of the heap.
 const GC_INTERVAL: usize = 10_000_000;
+
+/// The longest stretch of the code of the sandbox between two round trips to the host. Past it, monty raises a
+/// `TimeoutError` where the code stands, which the code may catch, so its `finally` blocks run on a new stretch; a
+/// second excess in the same stretch ends the run. So a word that never yields ends there with the exception, and the
+/// life goes on. The longest stretch of a legal life is about 180 ms in the dev profile, over the replay of a record of
+/// 96322 entries, so the bound stands far above every legal one, on a slower machine too.
+pub(crate) const TURN: Duration = Duration::from_secs(30);
+
+#[cfg(test)]
+thread_local! {
+  /// The bound of each sandbox that this thread makes, which a test sets short.
+  pub(crate) static BOUND: std::cell::Cell<Duration> = const { std::cell::Cell::new(TURN) };
+}
 
 /// The name of the function of the host that an entry calls first, whose answer is the body of the entry.
 const ENTER: &str = "__enter";
@@ -68,7 +83,8 @@ pub(crate) struct Sand {
 impl Sand {
   /// A sandbox with the limits of monty, which holds handles, and nothing in it yet.
   pub(crate) fn new() -> Self {
-    let limits = ResourceTracker::new(ResourceLimits::default().gc_interval(GC_INTERVAL));
+    let limits = ResourceLimits::default().gc_interval(GC_INTERVAL).max_turn_duration(turn());
+    let limits = ResourceTracker::new(limits);
     let repl = MontyRepl::new("furb", limits, CompileOptions::default()).with_handles();
     Self { idle: Some(repl), answering: None, ended: None, fed: 0 }
   }
@@ -83,7 +99,8 @@ impl Sand {
       .map_err(|no| Fault::refused(no.to_string()))
   }
 
-  /// A sandbox on the session of a dump, between two runs.
+  /// A sandbox on the session of a dump, between two runs. The dump holds the limits of its session, so the sandbox
+  /// keeps the bound of the turn that the build that made it set.
   pub(crate) fn loaded(bytes: &[u8]) -> Result<Self, Fault> {
     let dump = monty::Dump::load(bytes).map_err(|no| Fault::refused(no.to_string()))?;
     match dump.state {
@@ -237,6 +254,15 @@ impl Sand {
     self.ended = Some(fault.clone());
     fault
   }
+}
+
+/// The bound of the turn of a sandbox: [`TURN`], or what the test set.
+fn turn() -> Duration {
+  #[cfg(test)]
+  let bound = BOUND.get();
+  #[cfg(not(test))]
+  let bound = TURN;
+  bound
 }
 
 /// What the sandbox raised, as a fault: its name, the name of the class of the session it was raised from when it was

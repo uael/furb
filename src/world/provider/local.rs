@@ -6,11 +6,14 @@
 //! `FURB_LOCAL_KEY` gives its key when it takes one. `FURB_LOCAL_WINDOW` gives the window of each of its models in
 //! place of the one that the server gives, and `FURB_LOCAL_TOKENS` the most that a model of it writes in one turn,
 //! which is a quarter of its window when it is unsaid; vLLM refuses a turn whose prompt and that most pass the
-//! window. `FURB_LOCAL_THOUGHT` gives the most tokens of thought of a model of it in one turn, which is 8192 when it
-//! is unsaid, and 0 gives no most: past it, the provider asks the model again with that thought and with its thought
-//! turned off, as llama.cpp and vLLM read `enable_thinking` in `chat_template_kwargs`, so it writes its word at
-//! once. Each of its models is named `local:` and the id that the server lists, takes no effort, and costs
-//! nothing.
+//! window. A model of it thinks at most the tokens of thought in one turn that `MAX_THINKING_TOKENS` or the key
+//! `max_thinking_tokens` of `.furb/config.json` gives, 32768 by default: past it, the provider asks the model again
+//! with that thought and with its thought turned off, as llama.cpp and vLLM read `enable_thinking` in
+//! `chat_template_kwargs`, so it writes its word at once, and at 0 the provider asks with its thought off from the
+//! first request. Each of its models is named `local:` and the id that the server lists, and costs nothing. It takes
+//! the efforts `off`, `low`, `medium` and `high`: `off` turns its thought off with `enable_thinking` false, and each
+//! other level is the effort of reasoning of OpenAI, `reasoning_effort`, which the server hands the template of its
+//! chat, so the level bounds how long it thinks before each word.
 //!
 //! A model reads the window that the server gives it: `meta.n_ctx` of llama.cpp or `max_model_len` of vLLM in the list,
 //! or, from a server that gives none there, `default_generation_settings.n_ctx` at `/props` of llama.cpp, the window of
@@ -30,7 +33,7 @@ use std::{
 
 use rig_core::http_client::ReqwestClient;
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 use super::{
   Model,
@@ -54,13 +57,6 @@ const ENV_WINDOW: &str = "FURB_LOCAL_WINDOW";
 /// The name of the environment that gives the most that a model of the server writes in one turn.
 const ENV_TOKENS: &str = "FURB_LOCAL_TOKENS";
 
-/// The name of the environment that gives the most tokens of thought of a model of the server in one turn.
-const ENV_THOUGHT: &str = "FURB_LOCAL_THOUGHT";
-
-/// The most tokens of thought of a model of the server in one turn, when the environment gives none: a model that
-/// thinks more than this rarely writes a word in the turn.
-const THOUGHT: u64 = 8192;
-
 /// How long the catalog waits to connect to the server.
 const CONNECT: Duration = Duration::from_secs(1);
 
@@ -79,14 +75,12 @@ const AGAIN: Duration = Duration::from_secs(30);
 const AGAIN: Duration = Duration::from_secs(1);
 
 /// A local server as the environment names it: its address with no `/v1` at its end, its key, which is empty for a
-/// server that takes none, the window, the most tokens of a turn and the most tokens of thought of a turn that the
-/// environment gives each of its models, and what it listed and when, or why it listed nothing.
+/// server that takes none, the window and the most tokens of a turn that the environment gives each of its models, and what it listed and when, or why it listed nothing.
 pub(super) struct Server {
-  root: String,
+  pub(super) root: String,
   key: String,
   window: Option<u64>,
   tokens: Option<u64>,
-  thought: Option<u64>,
   listed: Mutex<Option<Answered>>,
 }
 
@@ -98,7 +92,7 @@ type Answered = (Instant, Result<Vec<Offer>, String>);
 #[derive(Default)]
 pub(super) struct Heard {
   pub(super) models: Vec<Model>,
-  failed: Option<String>,
+  pub(super) failed: Option<String>,
   unlisted: Vec<(String, String)>,
 }
 
@@ -161,15 +155,11 @@ impl Server {
     let host = authority.rsplit_once('@').map_or(authority, |(_, host)| host);
     let root = format!("{scheme}://{host}{path}");
     let count = |name: &str| env(name)?.trim().parse::<u64>().ok().filter(|one| *one > 0);
-    let most = |given: String| {
-      given.trim().parse::<u64>().map_or(Some(THOUGHT), |one| (one > 0).then_some(one))
-    };
     Some(Server {
       root,
       key: env(ENV_KEY).unwrap_or_default(),
       window: count(ENV_WINDOW),
       tokens: count(ENV_TOKENS),
-      thought: env(ENV_THOUGHT).map_or(Some(THOUGHT), most),
       listed: Mutex::default(),
     })
   }
@@ -235,9 +225,10 @@ impl Server {
 
   /// A model of the server under its name, with its window: its chat completions are asked with the key of the
   /// server, it writes a quarter of its window at most in one turn, or what the environment gives, it costs nothing,
-  /// it says why each turn ended, it may write its thought in its text, it may wrap its word in a fence, and it is
-  /// asked again with its thought off once its thought passes the most of the server, or once its turn ended with a
-  /// thought and no word.
+  /// it says why each turn ended, it may write its thought in its text, it may wrap its word in a fence, and its thought
+  /// turns off with `enable_thinking` false, which the provider asks with from the first request when the most tokens
+  /// of thought of a turn is 0, else once its thought passes that most, or once its turn ended with a thought and no
+  /// word. It takes the efforts of [`efforts`], and it reads its earlier turns with no thought.
   fn model(&self, name: String, offer: &Offer, window: u64) -> Model {
     let api = Some(format!("{}/v1", self.root));
     let reach = Reach { key: self.key.clone(), api, id: offer.id.clone(), ..Reach::default() };
@@ -248,8 +239,10 @@ impl Server {
     model.ends = true;
     model.tagged = true;
     model.fenced = true;
+    model.forgets = true;
+    model.efforts = efforts();
     let off = json!({"reasoning_effort": null, "chat_template_kwargs": {"enable_thinking": false}});
-    model.thought = self.thought.map(|most| (most, off.as_object().cloned().unwrap_or_default()));
+    model.thought = Some(super::Thought::Off(off.as_object().cloned().unwrap_or_default()));
     model
   }
 
@@ -390,6 +383,18 @@ fn names(name: &str, id: &str) -> bool {
   };
   let leveled = |(model, level): (&str, &str)| LEVELS.contains(&level) && is(model);
   is(name) || name.rsplit_once('/').is_some_and(leveled)
+}
+
+/// The efforts that a model of a local server takes, each with what its request says: `off` turns its thought off as
+/// the template of its chat reads it, and each other level is the effort of reasoning of OpenAI, which the server hands
+/// that template.
+fn efforts() -> Vec<(String, Map<String, Value>)> {
+  let off = ("off", json!({"chat_template_kwargs": {"enable_thinking": false}}));
+  let levels = ["low", "medium", "high"].map(|level| (level, json!({"reasoning_effort": level})));
+  let each = [off].into_iter().chain(levels);
+  each
+    .map(|(level, settings)| (level.to_owned(), settings.as_object().cloned().unwrap_or_default()))
+    .collect()
 }
 
 /// A count of JSON that is more than zero.

@@ -256,6 +256,7 @@ def gate(word: str, on: str = "") -> list[str]:
   Each finding names the line of the word it is found on, and quotes that line, cut to 80 characters, so a model reads what the gate read.
   A word that is not python and that holds a fence of markdown, the markup of a tool call or a sentence of prose finds that a reply is python and quotes only, with no fence, no markup and no prose.
   An open mark of a quote that has no close mark is a finding of its own, which names that mark and the close mark it wants.
+  A word that binds a name that the transcript binds, the name of an act of its chain or a name of a value that a tell of that act binds, as bash12_stdout, finds that the transcript binds that name, also for an act that the chain did not tell yet.
   The gate gives no finding when the gate accepts the rung.
   The journal keeps what the gate found, since the gate is of the outside, so a later life reads the same findings and asks the gate nothing again.
   """
@@ -448,7 +449,7 @@ def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[No
   The World closes with a refusal a prompt it cannot put to the operator; which shapes the operator answers is the World's law.
   The World closes a prompt of shape None to the operator with None as it takes it, since that prompt asks nothing: the operator reads it as a notice, and no word that awaits it waits for the operator.
   The shape left unsaid is None, which the acknowledgment uses, and any value responds to it.
-  A prompt takes any shape, which a close is read against as python reads an instance: of the shape, or of the origin of a generic one, and a union as any of its members, each read the same way.
+  A prompt takes any shape, which a close is read against as python reads an instance: of the shape, or of the origin of a generic one, a Literal as one of its values of the same type, and a union as any of its members, each read the same way.
   A prompt carries the name of its shape as a word, and takes the name as well as the shape, so the journal makes it again.
   The name of a shape is the word a chain says it by, so a shape that holds a class of the engine or of the chain names it as the chain does, under no module.
   The acknowledgment carries no shape and a message that names the act and what happened to it, as prompt3 done.
@@ -552,7 +553,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   A write of a door that drops no rung that ran, since the gate refused each rung that it drops, keeps the module and every rung of the chain as they stand, and makes only the rung of what is new.
   Before every reply the chain tells the last paragraph of the turn, whose header says what the answer is for, as #rung5 advance on prompt1, which names the one that made the rung.
   The advance binds the share of the window that the last reply on the chain read, as rung5_share = 0.25: the tokens that reply read over the window that the roster gives its actor, to two places, and no share before a reply that read a token.
-  The advance of a reply to an actor whose roster entry holds a doctrine binds that doctrine, as rung5_doctrine, unless the transcript holds a reply to an actor of the same doctrine, so the model reads it once, in its user turn, just before it answers, and a chain that asks no such actor tells nothing of it.
+  The advance of a reply to an actor whose roster entry holds a doctrine tells that doctrine as the quote doctrine, unless the transcript holds a reply to an actor of the same doctrine, so the model reads it once, in its user turn, just before it answers, and a chain that asks no such actor tells nothing of it.
   When nothing was told on the chain since the word of the last rung that the chain did not make was ready, the chain tells that rung under the header told nothing before the advance, so the model sees that the word showed it nothing.
   The chain holds the text of each paragraph told on it, in order.
   At the first ready of the next rung, the chain runs that text as the told rung of that rung, before its word, and holds nothing more.
@@ -701,6 +702,7 @@ class Refused(Exception):
 class Drift(Exception):
   """What a life fails with when an act of it is not the one the record holds, which the journal raises, so that it comes out of the entry the operator went in by and the life goes on with nothing.
   An act whose words are not the ones the record holds under its name is a drift, which it raises.
+  Its message names the act that drifted, the fact that the life made under that name and the fact that the record holds under it, which is the act or else its first answer, each cut to 300 characters, so a drift says the fact that differs.
   A drift breaks the journal, which keeps nothing more, and the life runs on with nothing kept.
   """
 
@@ -877,7 +879,7 @@ The transcript of the chain holds the facts of its prefix where the prefix stand
 """
 type Gate = tuple[Literal["gate"], str, str, str, str]
 """A gate is the question of whether a word may run, which the ear named gate answers with its findings, apart from the Kernel, so a word may ask it while the Kernel runs that word.
-A gate carries the word alone, and the gate reads the program of the chain before that rung when it takes the gate, and the word after it, so the Kernel keeps no ladder of its own, the journal keeps no program, and a word of a program made again is read after the rungs that stand.
+A gate carries the word alone, and the gate reads the program of the chain before that rung and the names of its acts when it takes the gate, and the word after it, so the Kernel keeps no ladder of its own, the journal keeps no program, and a word of a program made again is read after the rungs that stand.
 The refused paragraph binds the findings that refused the word of a rung, one line for each, as rungN_findings.
 The chain has the word of a rung gated before it runs, but a word it wrote itself, and a refused word runs never.
 A rung that retells stands with the gate where the one it retells stood, so the gate reads a word once in a life, and a replay makes no copy of a refused word, which never ran, so the chain tells nothing of that word again.
@@ -1065,5 +1067,3 @@ The program rebinds actor like any name, and the last binding wins.
 raised: BaseException | None
 """raised is the exception object that the last rung raised, rebound at each raise but a CancelledError.
 raised is None at the birth of the module of a chain, so a word reads it before any rung raised."""
-doctrine: str
-"""doctrine is the quote after the engine in the system prompt, which says how a model works in furb and holds no law."""

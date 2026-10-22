@@ -721,7 +721,7 @@ def cached(tmp_path_factory: pytest.TempPathFactory) -> None:
   """The cache that the catalog of each life of the suite reads, of its own, and not the one of the machine, and no
   local server of the machine."""
   os.environ["XDG_CACHE_HOME"] = str(tmp_path_factory.mktemp("cache"))
-  for name in ("FURB_LOCAL_URL", "FURB_LOCAL_KEY", "FURB_LOCAL_WINDOW", "FURB_LOCAL_TOKENS", "FURB_LOCAL_THOUGHT"):
+  for name in ("FURB_LOCAL_URL", "FURB_LOCAL_KEY", "FURB_LOCAL_WINDOW", "FURB_LOCAL_TOKENS", "MAX_THINKING_TOKENS"):
     os.environ.pop(name, None)
 
 

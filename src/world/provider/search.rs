@@ -113,8 +113,12 @@ pub(super) fn claude(bin: Arc<Path>, model: String) -> Searches {
         .kill_on_drop(true);
       let mut child =
         command.spawn().map_err(|no| format!("{} did not start: {no}", bin.display()))?;
-      if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(query.as_bytes()).await.map_err(|no| no.to_string())?;
+      // A command line that ends before it reads the query closes its stdin, and its exit says why.
+      if let Some(mut stdin) = child.stdin.take()
+        && let Err(no) = stdin.write_all(query.as_bytes()).await
+        && no.kind() != std::io::ErrorKind::BrokenPipe
+      {
+        return Err(no.to_string());
       }
       let out = child.wait_with_output().await.map_err(|no| no.to_string())?;
       let text = String::from_utf8_lossy(&out.stdout).trim().to_owned();

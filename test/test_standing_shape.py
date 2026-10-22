@@ -46,5 +46,5 @@ async def test_a_standing_holds_no_source() -> None:
     ((*fact[:4], "echo other", *fact[5:]), *rest) if fact[0] == "bash" else (fact, *rest)
     for fact, *rest in plain(sand.record)
   ]
-  with pytest.raises(Drift, match=r"^bash1 drifts$"):
+  with pytest.raises(Drift, match=r"^bash1 drifts: "):
     life(Sand(), kept)

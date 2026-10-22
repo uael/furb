@@ -31,7 +31,7 @@ use crate::{
   Ear, Engine, Fact, Fault, Heard, Object, ObjectRef, Step,
   ear::{Call, Spoken},
   engine::{Life, handed, lending},
-  life::{Answer, Log, Opening, Stream},
+  life::{Answer, Log, Opening, Retrying, Stream},
   value::{IS, entry, field, marked, templated},
 };
 
@@ -246,6 +246,25 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Stream {
     Ok(Stream(Arc::new(move |rung, chain, text, thinking| {
       Python::attach(|py| {
         if let Err(no) = stream.call1(py, (rung, chain, text, thinking)) {
+          no.write_unraisable(py, None);
+        }
+      });
+    })))
+  }
+}
+
+impl<'a, 'py> FromPyObject<'a, 'py> for Retrying {
+  type Error = PyErr;
+
+  /// A function of python, told on a thread of the models with the rung, the chain, the attempt that comes next, the
+  /// most attempts, the seconds of the wait and why; what it raised goes to the hook of python for what no one can
+  /// raise.
+  fn extract(value: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
+    let retry = value.to_owned().unbind();
+    Ok(Retrying(Arc::new(move |rung, chain, one| {
+      Python::attach(|py| {
+        let said = (rung, chain, one.attempt, one.most, one.wait.as_secs_f64(), one.why.as_str());
+        if let Err(no) = retry.call1(py, said) {
           no.write_unraisable(py, None);
         }
       });
@@ -1047,7 +1066,7 @@ fn of_python(value: &Bound<'_, PyAny>) -> PyResult<Object> {
     return Ok(marked("name", [("name", Object::string(name))]));
   }
   let kind = value.get_type().name()?.to_string();
-  if matches!(kind.as_str(), "GenericAlias" | "UnionType" | "Union") {
+  if matches!(kind.as_str(), "GenericAlias" | "UnionType" | "Union" | "_LiteralGenericAlias") {
     return Ok(Object::string(bare(&value.repr()?.to_string())));
   }
   if let Ok(held) = value.cast::<NativeEar>() {
@@ -1168,7 +1187,7 @@ fn called(f: &Py<PyAny>, args: Vec<Object>) -> Result<Object, Fault> {
 }
 
 /// The name of a shape as the engine names one: what python shows, with every module stripped, since the word of
-/// a chain says a class of the engine or of the chain by its bare name.
+/// a chain says a class of the engine or of the chain by its bare name, and with each string of a Literal kept whole.
 fn bare(shown: &str) -> String {
   /// A run of name characters, cut after its last dot.
   fn cut(run: &str) -> &str {
@@ -1176,8 +1195,17 @@ fn bare(shown: &str) -> String {
   }
   let mut out = String::new();
   let mut run = String::new();
+  let mut quote = None;
   for c in shown.chars() {
-    if c.is_alphanumeric() || matches!(c, '_' | '.' | ':' | '/') {
+    if let Some(mark) = quote {
+      out.push(c);
+      quote = (c != mark).then_some(mark);
+    } else if matches!(c, '\'' | '"') {
+      out.push_str(cut(&run));
+      run.clear();
+      out.push(c);
+      quote = Some(c);
+    } else if c.is_alphanumeric() || matches!(c, '_' | '.' | ':' | '/') {
       run.push(c);
     } else {
       out.push_str(cut(&run));
@@ -1211,6 +1239,7 @@ fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
     wrap_pyfunction!(kept, module)?,
     wrap_pyfunction!(log, module)?,
     wrap_pyfunction!(logged, module)?,
+    wrap_pyfunction!(retold, module)?,
     wrap_pyfunction!(decode_record, module)?,
     wrap_pyfunction!(opened, module)?,
     wrap_pyfunction!(gate, module)?,
@@ -1222,10 +1251,12 @@ fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
     wrap_pyfunction!(config_directory, module)?,
     wrap_pyfunction!(shell, module)?,
     wrap_pyfunction!(shapes, module)?,
+    wrap_pyfunction!(answers, module)?,
     wrap_pyfunction!(answered, module)?,
     wrap_pyfunction!(models, module)?,
     wrap_pyfunction!(model, module)?,
     wrap_pyfunction!(levels, module)?,
+    wrap_pyfunction!(setup, module)?,
     wrap_pyfunction!(attach_image, module)?,
     wrap_pyfunction!(image_content, module)?,
     wrap_pyfunction!(image_path, module)?,

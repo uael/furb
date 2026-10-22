@@ -28,7 +28,9 @@ export interface Held {
   place: string;
   directory: string;
   works: boolean;
-  kept: boolean;
+  logged: boolean;
+  made: string | null;
+  read: boolean;
   acts: Map<string, LiveAct>;
   words: Map<string, string>;
   owed: string[];
@@ -48,7 +50,9 @@ const empty: Held = {
   place: "",
   directory: "",
   works: false,
-  kept: false,
+  logged: false,
+  made: null,
+  read: false,
   acts: new Map(),
   words: new Map(),
   owed: [],
@@ -57,9 +61,11 @@ const empty: Held = {
   breaks: [],
 };
 
-/** A part that the core sent, taken into what the window holds: a part of another life starts again from nothing. */
+/** A part that the core sent, taken into what the window holds: a part of another life starts again from nothing.
+ * The acts and the words of the life grow in place, so a part of a large record copies none of them, and the count of
+ * changes says to a view that they changed. */
 function merged(held: Held, part: Wire): Held {
-  const base = part.generation === held.generation ? held : empty;
+  const base = part.generation === held.generation && held.state === "open" ? held : empty;
   if (part.state !== "open")
     return {
       ...empty,
@@ -68,27 +74,29 @@ function merged(held: Held, part: Wire): Held {
       said: part.said,
       what: part.state === "opening" ? part.what : "",
     };
-  const acts = new Map(base.acts);
+  const acts = base === empty ? new Map<string, LiveAct>() : base.acts;
   for (const act of part.acts) acts.set(act.id, act);
-  const words = new Map(base.words);
+  const words = base === empty ? new Map<string, string>() : base.words;
   for (const [id, word] of Object.entries(part.words)) words.set(id, word);
   return {
     state: "open",
     generation: part.generation,
     what: "",
-    said: part.said,
+    said: part.said ?? base.said,
     count: Math.max(base.count, part.count),
     len: part.len,
     root: part.root,
     place: part.place,
     directory: part.directory,
     works: part.works,
-    kept: part.kept,
+    logged: part.logged,
+    made: part.made,
+    read: part.read,
     acts,
     words,
     owed: part.owed,
-    measures: part.measures,
-    streams: part.streams,
+    measures: part.measures ?? base.measures,
+    streams: part.streams ?? base.streams,
     breaks: part.breaks,
   };
 }
@@ -156,17 +164,39 @@ export interface Moment {
   word: (rung: LiveAct) => string;
 }
 
+/** How often the views of a record are derived again while the core reads it. */
+const PACE = 1000;
+
+/** The count of changes that the views stand on: each count once the core read the whole record, and in a life that
+ * works, and while the core reads a record, the count at most once each PACE milliseconds, so a large record is not
+ * derived again at each part. */
+function useSettled(held: Held): number {
+  const [settled, setSettled] = useState(held.count);
+  useEffect(() => {
+    if (held.read || held.count === 0) {
+      setSettled(held.count);
+      return;
+    }
+    const timer = setTimeout(() => setSettled(held.count), PACE);
+    return () => clearTimeout(timer);
+  }, [held.count, held.read]);
+  return held.read ? held.count : settled;
+}
+
 /** The life as it stood at a moment, or now. */
 export function useMoment(held: Held, at: number | null): Moment {
+  const count = useSettled(held);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the acts grow in place, and the count says when.
   const all = useMemo(
     () => [...held.acts.values()].sort((one, other) => one.began - other.began),
-    [held.acts],
+    [held.acts, held.generation, count],
   );
   const marked = useMemo(() => {
     const owedNow = new Set(held.owed);
     const ids = new Set(outline(threads(all, owedNow), new Set()).map((one) => one.act.id));
     return marks(all, ids);
   }, [all, held.owed]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the words grow in place, and the count says when.
   return useMemo(() => {
     const now = at === null || at >= held.len;
     const acts = now ? all : asOf(all, at);
@@ -187,7 +217,7 @@ export function useMoment(held: Held, at: number | null): Moment {
       chains: acts.filter((act) => act.kind === "chain"),
       word,
     };
-  }, [all, at, held.len, held.owed, held.words, held.works, marked]);
+  }, [all, at, held.len, held.owed, held.words, held.works, marked, count]);
 }
 
 /** The state of an act, as a glyph shows it. */

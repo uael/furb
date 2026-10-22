@@ -82,7 +82,7 @@ export function CodeView({
   const told = useTold(chain, held.count);
   const groups = watch(told, moment.at);
   const frames = stack(chain, moment.acts);
-  const ladder = steps(moment, thread.act, held.directory, held.streams);
+  const ladder = steps(moment, thread.act, held.directory, held.streams, held.works && moment.now);
   const text = program(thread.act.id, moment.acts, moment.word);
   const toggle = () => {
     const next: Break[] = stepping

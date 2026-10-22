@@ -7,7 +7,7 @@ Each name has one meaning, which the contract's sentences use as given here.
 `CLAUDE.md` at the root gives the meanings of fact, question, act, owner, started, query and view, under The
 meanings. The entry of such a name here gives only its form in the engine.
 
-- engine: the program in engine.py, which is the system prompt of a model, with the doctrine at its end.
+- engine: the program in engine.py, which is the system prompt of a model.
 - operator: the person or program that calls the engine from outside a rung.
 - outside: a host that makes acts under a site of its own, which is neither the operator nor an act; an act of the
   outside is one that neither the operator nor an act made.
@@ -84,8 +84,8 @@ meanings. The entry of such a name here gives only its form in the engine.
 - header: the first line of a paragraph: # and, with no space, the id of the act it is of, then what happened to
   the act, or the maker of a rung whose word it tells, and no text that the act tells.
 - advance: the paragraph the chain tells last before a reply, whose header names the rung it asks for and the prompt
-  that rung advances, and which binds the share that the last reply read, and the doctrine of its actor at the first
-  reply of the chain to an actor of that doctrine.
+  that rung advances, and which binds the share that the last reply read, and which tells the doctrine of its actor,
+  as the quote doctrine, at the first reply of the chain to an actor of that doctrine.
 - binding: a statement that binds the name of an act to the act, or a value that the act tells to the id of the act
   and the word of the value, as bash1_command, which a turn shows and a rung the chain writes runs.
 - tell: the one fact that carries notes, about the act it is of, which the turns are folded from; a control tells
@@ -130,9 +130,8 @@ meanings. The entry of such a name here gives only its form in the engine.
   differs make the shows of the file.
 - quote: a string between two marks, <s:name> and </s:name>, which binds its name when it runs; a word writes one,
   and the transcript tells each string of more than one line as one.
-- doctrine: prose that says how a model works in furb, and holds no law: the doctrine of the engine, the last
-  statement of engine.py, which the system prompt shows as a quote after the engine, and the doctrine of an actor,
-  which the World gives in the roster entry of that actor and a chain tells in the advance of its first reply to it.
+- doctrine: prose that says how a model works in furb, and holds no law: `DOCTRINE.md` at the root, which the World
+  gives in the roster entry of each model, and which a chain tells in the advance of its first reply to that model.
 - template: a python template string, each interpolation of which carries an expression and its value.
 - debug: the verb that tells the interpolations of a template, a tell and no act.
 - control: a pause, a wake, a cancel or a close; a close is a cancel with a value, and a cancel a close with
@@ -158,6 +157,9 @@ meanings. The entry of such a name here gives only its form in the engine.
   which the record keeps; the World says it at the tip, and when a write of the config of the project lands that
   turns on an extension by its path, and it plays the extension as a rung on every chain there is when it hears the
   fact, and after it on each chain at its birth, before the call that made the chain returns.
+- made: the fact by which the store names in the record the engine that made it, a digest of the engine and of the
+  Kernel, which the store says as it hears the root of a new record at its birth; a life on a record that names
+  another engine is refused before any replay, since that engine can make other acts from the same record.
 - life word: the python of an extension that its rung runs after its word, and that the World plays alone on a chain
   whose origin had the extension, since that chain made the rung of its origin again.
 
@@ -165,8 +167,7 @@ meanings. The entry of such a name here gives only its form in the engine.
 
 - A model does everything with the python that the model writes.
 - The engine hosts itself.
-- The system prompt a model reads is the engine, minified with its program kept as it is, with the doctrine as a quote
-  at its end, and nothing else.
+- The system prompt a model reads is the engine, minified with its program kept as it is, and nothing else.
 - The engine phrases everything that a model reads, as python, and the World renders nothing.
 - Everything that the file defines is public, and what is in engine.py is the API, the same for the model and for the
   operator.
@@ -183,7 +184,7 @@ meanings. The entry of such a name here gives only its form in the engine.
 - Compaction is not in the core.
 - engine.pyi is the specification of engine.py: it says what the engine is, what is always true of it and what its
   surface is, and never how it is made; it names the ears and the facts as python reads them, and holds every law, so
-  engine.py holds no sentence and no comment but the doctrine, which holds no law.
+  engine.py holds no sentence and no comment.
 - engine.py depends only on the python interpreter and on the ears of the outside that boot is given, the World, the
   Kernel and the gate among them, which are held by no verb and bound to no name of the engine.
 - A fact is a tuple, its kind first, deconstructed only by match, and nothing of the engine is a class but a text, an
@@ -196,7 +197,8 @@ meanings. The entry of such a name here gives only its form in the engine.
 - There is one root per record, and one process at a time owns a record.
 - A chain is a function of the record, and a later boot must offer the same interpreter and the same outside, since a
   record is made again by running its words, or loaded from the snapshot that a run of those words made on the same
-  record, interpreter and outside, which the opening of the life checks against the record.
+  record, interpreter and outside, which the opening of the life checks against the record. A record names the
+  engine that made it, and a life on another engine is refused before any replay.
 - A chain is one conversation, and the transcript that a provider caches grows at one end.
 - Nothing is told twice, and nothing tells what it does not know: an act tells of itself, and a chain of the rungs it
   asks a model for, with the message of the prompt each advances, of a word that told nothing, of the prompts and the
@@ -214,5 +216,5 @@ meanings. The entry of such a name here gives only its form in the engine.
   from the disk, so a later life makes it again at the same place; what the disk holds reaches a chain through a
   question that the World answers and that the journal answers again.
 - The word of an extension only defines, holds no comment, and binds no name of the engine, and it holds no
-  sentence but one doctrine of its own, a quote that holds no law, as engine.py holds its own; its contract holds
+  sentence but one doctrine of its own, a quote that holds no law, as furb holds its own in DOCTRINE.md; its contract holds
   its laws.

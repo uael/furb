@@ -19,6 +19,7 @@ use std::{
   collections::{HashMap, HashSet},
   path::PathBuf,
   sync::Arc,
+  time::Duration,
 };
 
 use futures::{Stream, StreamExt, future::BoxFuture, stream};
@@ -43,12 +44,140 @@ use crate::{
   wire,
 };
 
+/// The name of the environment that gives the most tokens of thought of a model in one turn, as Claude Code reads it.
+pub(super) const ENV_THINKING: &str = "MAX_THINKING_TOKENS";
+
+/// The key of `.furb/config.json` that gives the most tokens of thought of a model in one turn, and the setting under
+/// which the provider tells it to the claude command line.
+pub(super) const KEY_THINKING: &str = "max_thinking_tokens";
+
+/// The most tokens of thought of a model in one turn when neither the environment nor the config gives one: a model
+/// that thinks more than this rarely writes a word in the turn.
+pub const THINKING: u64 = 32_768;
+
+/// The most tokens of thought of a model in one turn, as Claude Code means it, 0 turning the thought off, and whether
+/// the environment of furb gave it, so the claude command line inherits it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Thinking {
+  pub most: u64,
+  pub inherited: bool,
+}
+
+impl Default for Thinking {
+  fn default() -> Thinking {
+    Thinking { most: THINKING, inherited: false }
+  }
+}
+
+/// The most tokens of thought of a model in one turn, as the environment gives it, which wins, else as the key
+/// `max_thinking_tokens` of `.furb/config.json` in the directory of the life gives it, else [`THINKING`]. A value that
+/// is no count of tokens is as unsaid.
+pub(super) fn thinking(env: Option<&str>, directory: &std::path::Path) -> Thinking {
+  let given = env.and_then(|one| one.trim().parse::<u64>().ok());
+  let config = || {
+    let text = std::fs::read_to_string(directory.join(".furb").join("config.json")).ok()?;
+    serde_json::from_str::<Value>(&text).ok()?.get(KEY_THINKING)?.as_u64()
+  };
+  Thinking { most: given.or_else(config).unwrap_or(THINKING), inherited: env.is_some() }
+}
+
+/// How a model takes the most tokens of thought of one turn.
+#[derive(Clone)]
+pub(super) enum Thought {
+  /// Its server streams its thought one token in each part, so the provider cuts its thought at the most and asks it
+  /// again with these settings, which turn its thought off, or asks it with them from the first request when the most
+  /// is 0. A setting of null takes that setting off the request.
+  Off(Map<String, Value>),
+  /// It takes the most as the setting `max_thinking_tokens`, which the provider gives it unless the environment of
+  /// furb gave the most, which it then inherits.
+  Told,
+}
+
+/// The settings with these settings put in, a setting of null taking that setting off.
+fn merged(settings: &mut Map<String, Value>, with: &Map<String, Value>) {
+  for (key, value) in with {
+    match value {
+      Value::Null => settings.remove(key),
+      one => settings.insert(key.clone(), one.clone()),
+    };
+  }
+}
+
 /// What a turn of a model tells as it streams: what it added to its text, and what it added to its thought.
 pub type Told = Arc<dyn Fn(&str, &str) + Send + Sync>;
 
 /// What the host is told while a model writes: the rung it writes for, the chain of that rung, and what it added to
 /// its text and to its thought. It is no fact, and the turn that the reply is done with holds all of it.
 pub type Writes = Arc<dyn Fn(&str, &str, &str, &str) + Send + Sync>;
+
+/// What the host is told when a call of a model failed for a cause that passes, and the provider asks the model
+/// again after a wait: the rung the reply is for, the chain of that rung, and the retry. What the model wrote before
+/// the failure is void, and the turn of the reply holds none of it.
+pub type Retries = Arc<dyn Fn(&str, &str, &Retry) + Send + Sync>;
+
+/// A retry of a call of a model: the attempt that comes next, the most attempts of the call, the time the provider
+/// waits before that attempt, and why the attempt before it failed, in a few words.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Retry {
+  pub attempt: u32,
+  pub most: u32,
+  pub wait: Duration,
+  pub why: String,
+}
+
+/// How the provider asks a model again after a failure that passes: the most attempts of one call, and the wait
+/// before the second attempt, which doubles before each later attempt, to a minute at most.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Backoff {
+  pub most: u32,
+  pub first: Duration,
+}
+
+/// The backoff of a provider that is given none: ten attempts, and four seconds before the second.
+pub const BACKOFF: Backoff = Backoff { most: 10, first: Duration::from_secs(4) };
+
+impl Backoff {
+  /// The wait before an attempt, from the second on.
+  fn wait(self, attempt: u32) -> Duration {
+    let doubled = self.first.saturating_mul(1 << attempt.saturating_sub(2).min(16));
+    doubled.min(Duration::from_secs(60))
+  }
+}
+
+/// Why a call of a model failed, in a few words, when the cause passes: the connection was lost or timed out, or the
+/// provider is overloaded, limits the rate, or failed on its side. A failure of the request, of the turn, or of a
+/// model that the provider cannot make does not pass, and the model is not asked again.
+fn passing(no: &CompletionError) -> Option<String> {
+  let said = match no {
+    CompletionError::HttpError(no) => no.to_string(),
+    CompletionError::ProviderError(why) => why.clone(),
+    _ => return None,
+  }
+  .to_lowercase();
+  let has = |words: &[&str]| words.iter().any(|one| said.contains(one));
+  let status = said
+    .split(|one: char| !one.is_ascii_digit())
+    .find(|one| matches!(*one, "408" | "429" | "500" | "502" | "503" | "504" | "529"));
+  let why = if has(&["connection reset", "reset by peer"]) {
+    "connection reset".to_owned()
+  } else if has(&["timed out", "timeout"]) || status == Some("408") {
+    "timed out".to_owned()
+  } else if has(&["overloaded"]) || status == Some("529") {
+    "the provider is overloaded".to_owned()
+  } else if has(&["rate limit", "too many requests"]) || status == Some("429") {
+    "rate limited".to_owned()
+  } else if has(&["connection closed", "connection error", "broken pipe", "error sending request"])
+  {
+    "connection lost".to_owned()
+  } else if let Some(code) = status {
+    format!("server error {code}")
+  } else if matches!(no, CompletionError::HttpError(_)) {
+    "network error".to_owned()
+  } else {
+    return None;
+  };
+  Some(why)
+}
 
 /// A function of the host that stands in for a model: it is given a request, as JSON, and what it tells as it
 /// writes, and it answers with the turn of the model, or with why it gives none.
@@ -78,6 +207,7 @@ fn streams<M: CompletionModel + 'static>(model: M) -> Streams {
 
 /// One turn asked of a model: the actor and the chain it answers, the request, what it tells as it streams, and the
 /// budget of its thought.
+#[derive(Clone)]
 struct Asked {
   actor: String,
   chain: String,
@@ -121,13 +251,14 @@ pub struct Model {
   /// Whether its server may write its thought in its text, between `<think>` and `</think>`, which the host is told as
   /// text while it streams.
   tagged: bool,
-  /// Whether it may wrap its word in a fence, as a model of a local server does, so its turn loses an opening fence
-  /// at its start, and the closing fence at its end when it has one.
+  /// Whether it may wrap its word in a fence or in a tag of markup, as a model of a local server does, so its turn
+  /// loses those marks, as [`unfenced`] says.
   fenced: bool,
-  /// The most parts of thought it streams in one turn, each a token as a local server streams it, and the settings
-  /// with which the provider asks it again once its thought passed that most: a setting of null takes that setting
-  /// off the request.
-  thought: Option<(u64, Map<String, Value>)>,
+  /// How it takes the most tokens of thought of one turn, when it takes one.
+  thought: Option<Thought>,
+  /// Whether it reads its earlier turns with no thought, as a model of a local server, whose own template drops the
+  /// thought of each earlier turn, and whose thought of each turn would else fill its window in a few turns.
+  forgets: bool,
   answers: Answers,
   /// The native search of the web of its provider, which the extension web asks for an actor that names it.
   search: Option<Searches>,
@@ -165,6 +296,7 @@ impl Model {
       ends: false,
       tagged: false,
       fenced: false,
+      forgets: false,
       thought: None,
       answers,
       search: None,
@@ -269,20 +401,39 @@ impl Model {
   }
 }
 
-/// The provider: the directory the life stands on, the models it offers, the default actor, the directory of the
-/// images that a turn names, and whom it tells what a model writes.
+/// The provider: the directory the life stands on, the models it offers, the default actor, the most tokens of thought
+/// of a model in one turn, the directory of the images that a turn names, and whom it tells what a model writes.
 pub struct Provider {
   directory: String,
   models: Vec<Model>,
   actor: Option<String>,
+  thinking: Thinking,
   images: Option<PathBuf>,
   writes: Option<Writes>,
+  backoff: Backoff,
+  retries: Option<Retries>,
 }
 
 impl Provider {
-  /// A provider of these models, on a directory.
+  /// A provider of these models, on a directory, whose model thinks [`THINKING`] tokens at most in one turn.
   pub fn new(directory: impl Into<String>, models: Vec<Model>) -> Provider {
-    Provider { directory: directory.into(), models, actor: None, images: None, writes: None }
+    let directory = directory.into();
+    Provider {
+      directory,
+      models,
+      actor: None,
+      thinking: Thinking::default(),
+      images: None,
+      writes: None,
+      backoff: BACKOFF,
+      retries: None,
+    }
+  }
+
+  /// The most tokens of thought of a model in one turn.
+  pub fn thinking(mut self, thinking: Thinking) -> Provider {
+    self.thinking = thinking;
+    self
   }
 
   /// The actor a prompt goes to when it names none, which is the first model at the level of an actor that names
@@ -301,6 +452,18 @@ impl Provider {
   /// Whom the provider tells what a model writes, as it writes it.
   pub fn writes(mut self, writes: Writes) -> Provider {
     self.writes = Some(writes);
+    self
+  }
+
+  /// How the provider asks a model again after a failure that passes.
+  pub fn backoff(mut self, backoff: Backoff) -> Provider {
+    self.backoff = backoff;
+    self
+  }
+
+  /// Whom the provider tells each retry of a call of a model, before its wait.
+  pub fn retries(mut self, retries: Retries) -> Provider {
+    self.retries = Some(retries);
     self
   }
 
@@ -325,7 +488,7 @@ impl Provider {
   /// the turn of the model, or with a refusal, and a second refusal in a row of the same actor on a chain pauses the
   /// chain first. A done of a reply that the ear did not say ends the call of its model.
   pub fn ear(self) -> Box<dyn Ear> {
-    let Provider { directory, models, actor, images, writes } = self;
+    let Provider { directory, models, actor, thinking, images, writes, backoff, retries } = self;
     let actor = actor.unwrap_or_else(|| {
       models.first().map_or_else(|| OPERATOR.to_owned(), |model| model.at(None))
     });
@@ -343,6 +506,13 @@ impl Provider {
           Next::Worked(Replied::Wrote { id, text, thinking }) => {
             if let (Some(writes), Some(reply)) = (&writes, replies.get(&id)) {
               writes(&reply.rung, &reply.chain, &text, &thinking);
+            }
+            continue;
+          }
+          // A retry of the call of the model of a reply that still stands, told to the host under its rung.
+          Next::Worked(Replied::Retried { id, retry }) => {
+            if let (Some(retries), Some(reply)) = (&retries, replies.get(&id)) {
+              retries(&reply.rung, &reply.chain, &retry);
             }
             continue;
           }
@@ -373,10 +543,11 @@ impl Provider {
             let wrote = written(writes.is_some(), &about, &tells);
             let key = format!("{life}/{chain}");
             let asked =
-              requested(&models, &actor, &chain, turns.as_ref(), &key, &mut images, wrote);
+              requested(&models, &actor, &chain, turns.as_ref(), &key, &mut images, wrote)
+                .map(|one| thinks(one, thinking));
             let again = mute.get(&chain) == Some(&actor);
             let (stop, stopped) = oneshot::channel();
-            co.work(answered(about.clone(), asked, tells, told, stopped));
+            co.work(answered(about.clone(), asked, backoff, tells, told, stopped));
             let rung = a.by().to_owned();
             replies.insert(about, Reply { chain, actor, rung, again, _stop: stop });
           }
@@ -415,9 +586,11 @@ struct Reply {
   _stop: oneshot::Sender<()>,
 }
 
-/// What the work of a reply gives: a part that its model wrote, or what the reply came to.
+/// What the work of a reply gives: a part that its model wrote, a retry of the call of its model, or what the reply
+/// came to.
 enum Replied {
   Wrote { id: String, text: String, thinking: String },
+  Retried { id: String, retry: Retry },
   Came { id: String, got: Result<Object, CompletionError> },
 }
 
@@ -433,14 +606,14 @@ fn written(heard: bool, id: &str, tells: &mpsc::UnboundedSender<Replied>) -> Tol
   })
 }
 
-/// What the chains stand on: the models and the operator, the directory, and the default actor. The entry of a model
-/// of a family that reads a doctrine holds that doctrine after its window.
+/// What the chains stand on: the models and the operator, the directory, and the default actor. The entry of each
+/// model holds its doctrine after its window.
 fn standing(models: &[Model], directory: &str, actor: &str) -> Object {
   let offered = models.iter().map(|model| {
     let efforts = model.efforts.iter().map(|(effort, _)| Object::string(effort));
     let window = i64::try_from(model.window).unwrap_or(i64::MAX);
     let entry = [Object::string(&model.name), Object::list(efforts), Object::int(window)];
-    Object::list(entry.into_iter().chain(catalog::doctrine(&model.name).map(Object::string)))
+    Object::list(entry.into_iter().chain([Object::string(catalog::DOCTRINE)]))
   });
   // The operator answers in person, with no effort, and reads the window of the engine.
   let operator = Object::list([Object::string(OPERATOR), Object::list([]), Object::int(WINDOW)]);
@@ -480,15 +653,38 @@ fn requested(
     output_schema: None,
     record_telemetry_content: false,
   };
-  let thought = model.thought.clone();
-  let asked = Asked { actor: actor.to_owned(), chain: chain.to_owned(), request, told, thought };
+  let asked =
+    Asked { actor: actor.to_owned(), chain: chain.to_owned(), request, told, thought: None };
   Ok((model.clone(), asked))
+}
+
+/// What a reply asks a model, with the most tokens of thought of the turn as the model takes it.
+fn thinks((model, mut asked): (Model, Asked), thinking: Thinking) -> (Model, Asked) {
+  let mut settings = match asked.request.additional_params.take() {
+    Some(Value::Object(settings)) => settings,
+    _ => Map::new(),
+  };
+  asked.thought = match &model.thought {
+    Some(Thought::Off(off)) if thinking.most == 0 => {
+      merged(&mut settings, off);
+      None
+    }
+    Some(Thought::Off(off)) => Some((thinking.most, off.clone())),
+    Some(Thought::Told) if !thinking.inherited => {
+      settings.insert(KEY_THINKING.to_owned(), Value::from(thinking.most));
+      None
+    }
+    _ => None,
+  };
+  asked.request.additional_params = (!settings.is_empty()).then_some(Value::Object(settings));
+  (model, asked)
 }
 
 /// The turns of a chain as messages of rig. The engine phrases every turn as python and the provider renders
 /// nothing: a user turn goes as its python and the images that the prompts it opens name, and one that holds
-/// nothing goes not at all; an assistant turn goes as the blocks its provider gave, or as its python when a
-/// provider of another kind gave them. A model that takes no image refuses a turn that names one.
+/// nothing goes not at all; an assistant turn goes as the blocks its provider gave, less its thought for a model that
+/// forgets it, or as its python when a provider of another kind gave them. A model that takes no image refuses a turn
+/// that names one.
 fn messages(
   turns: ObjectRef<'_>,
   model: &Model,
@@ -501,6 +697,12 @@ fn messages(
     if role == "assistant" {
       let blocks = entry(&turn, 3)
         .and_then(|one| serde_json::from_value::<Vec<AssistantContent>>(wire::record(one)).ok())
+        .map(|mut blocks| {
+          if model.forgets {
+            blocks.retain(|one| !matches!(one, AssistantContent::Reasoning(_)));
+          }
+          blocks
+        })
         .filter(|blocks| !blocks.is_empty())
         .unwrap_or_else(|| vec![AssistantContent::text(python)]);
       messages.push(Message::Assistant { id: None, content: blocks });
@@ -603,12 +805,7 @@ async fn rethought(
     Some(Value::Object(settings)) => settings,
     _ => Map::new(),
   };
-  for (key, value) in again {
-    match value {
-      Value::Null => settings.remove(key),
-      one => settings.insert(key.clone(), one.clone()),
-    };
-  }
+  merged(&mut settings, again);
   request.additional_params = (!settings.is_empty()).then_some(Value::Object(settings));
   let thought = AssistantContent::Reasoning(Reasoning::new(&thinking));
   // rig sends no turn that holds no text, so the turn of the thought holds an empty text too.
@@ -630,19 +827,32 @@ async fn rethought(
   Ok(response)
 }
 
-/// A text less the fence that opens it: an opening line of three backticks, alone or with `python`, at its start, and
-/// a closing line of three backticks at its end when it has one; and nothing for a text that no fence opens, so a text
-/// before the fence keeps the text as it is.
-fn unfenced(text: &str) -> Option<&str> {
+/// A text less the marks that wrap it: an opening line of three backticks, alone or with `python`, at its start, and
+/// a closing line of three backticks at its end when it has one; or a tag of markup alone on its first line, as
+/// `<answer>` or a bare `<`, and each line that is that tag alone, as it opens or closes, since a model of a local
+/// server wraps each part of its word in it. A text that no such mark opens gets nothing, so a text before the mark
+/// keeps the text as it is, and the mark of a quote is no tag.
+fn unfenced(text: &str) -> Option<String> {
   let text = text.trim();
   let (opening, rest) = text.split_once('\n').unwrap_or((text, ""));
-  if !matches!(opening.trim_end(), "```" | "```python") {
+  let (opening, rest) = (opening.trim_end(), rest.trim_end());
+  if matches!(opening, "```" | "```python") {
+    let closed =
+      rest.strip_suffix("```").filter(|inside| inside.is_empty() || inside.ends_with('\n'));
+    return Some(closed.unwrap_or(rest).trim_end().to_owned());
+  }
+  let name = opening.strip_prefix('<')?;
+  let name = name.strip_suffix('>').unwrap_or(name);
+  if !name.chars().all(|one| one.is_ascii_alphanumeric() || one == '_') {
     return None;
   }
-  let rest = rest.trim_end();
-  let closed =
-    rest.strip_suffix("```").filter(|inside| inside.is_empty() || inside.ends_with('\n'));
-  Some(closed.unwrap_or(rest).trim_end())
+  let tag = |line: &str| {
+    let line = line.trim();
+    let bare = line.strip_prefix("</").or_else(|| line.strip_prefix('<'));
+    bare.is_some_and(|inside| inside.strip_suffix('>').unwrap_or(inside) == name)
+  };
+  let kept: Vec<&str> = rest.lines().filter(|line| !tag(line)).collect();
+  Some(kept.join("\n").trim_end().to_owned())
 }
 
 /// The terminal record of a stream of a provider, from a response of it that came whole.
@@ -655,11 +865,14 @@ fn ended(provider: &str, response: CompletionResponse) -> StreamFinal {
   record
 }
 
-/// The work of a reply: each part its model writes, then the turn of the model or why it answered nothing, in the
-/// order they came; and nothing more once the reply went, which ends the call of the model.
+/// The work of a reply: each part its model writes, each retry of the call of its model, then the turn of the model
+/// or why it answered nothing, in the order they came; and nothing more once the reply went, which ends the call of
+/// the model. A call that failed for a cause that passes is made again after the wait of its backoff, until its
+/// attempts are spent.
 fn answered(
   id: String,
   asked: Result<(Model, Asked), CompletionError>,
+  backoff: Backoff,
   tells: mpsc::UnboundedSender<Replied>,
   mut told: mpsc::UnboundedReceiver<Replied>,
   stopped: oneshot::Receiver<()>,
@@ -667,12 +880,23 @@ fn answered(
   let came = async move {
     let got = async {
       let (model, asked) = asked?;
-      match (model.answers)(asked).await? {
-        Answer::Response(response) => turn(&model, &response),
-        Answer::Turn(turn) => hosted(turn.as_ref()),
+      let mut attempt = 1;
+      loop {
+        let no = match (model.answers)(asked.clone()).await {
+          Ok(Answer::Response(response)) => return turn(&model, &response),
+          Ok(Answer::Turn(turn)) => return hosted(turn.as_ref()),
+          Err(no) => no,
+        };
+        let Some(why) = passing(&no).filter(|_| attempt < backoff.most) else { return Err(no) };
+        attempt += 1;
+        let wait = backoff.wait(attempt);
+        let retry = Retry { attempt, most: backoff.most, wait, why };
+        let _ = tells.send(Replied::Retried { id: id.clone(), retry });
+        tokio::time::sleep(wait).await;
       }
     };
-    let _ = tells.send(Replied::Came { id, got: got.await });
+    let got = got.await;
+    let _ = tells.send(Replied::Came { id, got });
   };
   // The reply comes through the channel alone, so it comes after all that its model wrote before it.
   let told = stream::poll_fn(move |cx| told.poll_recv(cx));
@@ -707,7 +931,7 @@ fn turn(model: &Model, response: &CompletionResponse) -> Result<Object, Completi
   }
   let mut text = texts(&choice);
   if model.fenced
-    && let Some(word) = unfenced(&text).map(str::to_owned)
+    && let Some(word) = unfenced(&text)
   {
     let mut worded = Vec::new();
     for one in choice {

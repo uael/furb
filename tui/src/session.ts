@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import type { FileChange, ImageAttachment, LiveAct, Turn } from "@furb/engine";
+import type { FileChange, ImageAttachment, LiveAct, SetupInfo, Turn } from "@furb/engine";
 import {
   actorParts,
   decodeRecord,
@@ -17,6 +17,7 @@ import {
   shapes,
   WORK,
 } from "@furb/engine";
+import { type Ask, aimed, beside, type Desk, desk } from "@furb/engine/life";
 import { createTwoFilesPatch } from "diff";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { refusal } from "./conversation.ts";
@@ -31,7 +32,15 @@ export const views = ["feed", "transcript", "changes"] as const;
 export type View = (typeof views)[number];
 /** An act as the views read it. A command that printed more than a row carries holds the tail of each stream, and
  * the length of all it printed; the view reads the whole act when it shows the output. */
-export type ActRow = LiveAct & { output?: number };
+export type ActRow = LiveAct & {
+  output?: number;
+  /** The lines of the text that a read gave or that a write wrote, whose text the row leaves out. */
+  count?: number;
+  /** The lines that the change of a write added and removed. */
+  lines?: { added: number; removed: number };
+  /** How many milliseconds the act took, when this life ran it. */
+  took?: number;
+};
 /** What a command gave: what it printed to each stream, and its exit code once it is over. */
 export type Exit = { stdout?: { content: string }; stderr?: { content: string }; code?: number };
 /** A change of a file, with the patch that shows it. */
@@ -76,6 +85,18 @@ export function cancelled(act: ActRow): boolean {
   return Boolean(value && typeof value === "object" && "is" in value && value.is === "CancelledError");
 }
 
+/** The running work that a cancel of an act ends, and the chains that it stands on. */
+export interface Reach {
+  acts: ActRow[];
+  chains: string[];
+}
+/** A cancel of an act: the work that it ends, and whether it takes back the last message of the operator. */
+export interface Cancel {
+  act: ActRow;
+  reach: Reach;
+  back: boolean;
+}
+
 export interface FollowUp {
   id: string;
   chain: string;
@@ -99,6 +120,7 @@ const kept = [
   "histories",
   "stashes",
   "started",
+  "took",
   "queued",
   "queueError",
   "images",
@@ -164,6 +186,16 @@ export class Session extends EventEmitter {
   roster: [string, string[], number][] = [];
   /** The models the catalog of the crate offers, which the operator may add to the roster of the session. */
   catalog: [string, string[], number][] = [];
+  /** Whether the worker said what the catalog offers. */
+  catalogRead = false;
+  /** What the first run checks of this machine, once the worker says it, and null in the demo, which needs no
+   * model. */
+  setup?: SetupInfo | null;
+  /** Whether the operator watches this session: the demo that plays a life by itself and asks no model. */
+  watching = false;
+  /** The moment of the life that the feed shows, as the count of facts that the life had said then, or nothing for
+   * now. */
+  moment?: number;
   /** The models the operator added to the roster of the session from the catalog, which each later life offers. */
   models: string[] = [];
   findings: string[] = [];
@@ -178,6 +210,9 @@ export class Session extends EventEmitter {
   private savedCost = 0;
   histories: Record<string, string[]> = {};
   started: Record<string, number> = {};
+  /** How many milliseconds each act took that a life of the session ran, which a later life does not know, since the
+   * record holds no time. */
+  took: Record<string, number> = {};
   directory = "";
   private refreshTask?: Promise<void>;
   /** The count of changes of the act table that `acts` holds. */
@@ -186,6 +221,8 @@ export class Session extends EventEmitter {
   private closed = false;
   /** The page of changes and the count of changes that `changes` was read at. */
   private changesRead = "";
+  /** Whether the dialog of a record open to read was shown, so it shows once for each life of the session. */
+  readingTold = false;
   /** The actor the operator chose for each chain, which the session shows until the rung that sets it has run. */
   private readonly choices = new Map<string, { actor: string; rung?: string }>();
   constructor(
@@ -200,7 +237,11 @@ export class Session extends EventEmitter {
     this.sessionName = basename(host.directory);
     const path = host.record;
     this.preferences =
-      preferences ?? new Preferences(demo && path ? join(dirname(path), "ui-preferences.json") : undefined);
+      // A recorded life keeps nothing beside its log, so its demo reads the preferences of the user.
+      preferences ??
+      new Preferences(
+        demo && path && !host.recorded ? join(dirname(path), "ui-preferences.json") : undefined,
+      );
     if (path) {
       const { view, damage } = savedView(path);
       Object.assign(this, Object.fromEntries(kept.flatMap((key) => (key in view ? [[key, view[key]]] : []))));
@@ -221,13 +262,27 @@ export class Session extends EventEmitter {
     });
     void host.catalog().then((catalog) => {
       this.catalog = catalog;
+      this.catalogRead = true;
+      this.emit("change");
+    }, this.fail);
+    void host.setup().then((found) => {
+      this.setup = found;
       this.emit("change");
     }, this.fail);
     this.save();
   }
   private changed = () => {
+    // A notice asks nothing, so it settles as the console takes it, and no key of the operator dismisses it.
+    for (const id of this.host.notices.keys())
+      if (!this.settled.has(id)) {
+        this.settled.add(id);
+        void this.host.dismiss(id).catch(this.fail);
+      }
+    for (const id of this.settled) if (!this.host.notices.has(id)) this.settled.delete(id);
     this.emit("change");
   };
+  /** The notices that the session dismissed, until the console drops them. */
+  private readonly settled = new Set<string>();
   get theme(): ThemeName {
     return this.preferences.theme;
   }
@@ -256,6 +311,9 @@ export class Session extends EventEmitter {
   };
   fail = (error: unknown) => {
     this.error = error instanceof Error ? error.message : String(error);
+    // A damaged journal is no failure of the view alone: the view offers to repair it or to start a new one.
+    this.damaged[`${this.selected}:${this.view}`] =
+      (error as { name?: unknown } | undefined)?.name === "DamagedJournal";
     this.emit("change");
   };
   get error(): string {
@@ -263,6 +321,33 @@ export class Session extends EventEmitter {
   }
   set error(value: string) {
     this.errors[`${this.selected}:${this.view}`] = value;
+    if (!value) delete this.damaged[`${this.selected}:${this.view}`];
+  }
+  /** Whether the error of each view of a chain is a damaged journal of file changes. */
+  private readonly damaged: Record<string, boolean> = {};
+  /** Why the journal of file changes cannot be read, which the view shown offers to repair; empty when it reads. */
+  get damagedJournal(): string {
+    return this.damaged[`${this.selected}:${this.view}`] ? this.error : "";
+  }
+
+  /** The journal of file changes written again with each change that it holds, and the view read again. */
+  async repairJournal(): Promise<void> {
+    const lost = await this.host.repairChanges();
+    await this.journalMended(
+      `The journal is repaired: ${lost} damaged ${lost === 1 ? "line is" : "lines are"} removed, and each change that it held stays.`,
+    );
+  }
+  /** A new journal of file changes, with the damaged one kept beside it, and the view read again. */
+  async renewJournal(): Promise<void> {
+    const aside = await this.host.renewChanges();
+    await this.journalMended(`A new journal is started. The damaged one is kept at ${shortenHome(aside)}.`);
+  }
+  private async journalMended(notice: string): Promise<void> {
+    this.error = "";
+    this.changesRead = "";
+    this.changePage = 0;
+    this.notice = notice;
+    await this.refresh();
   }
 
   refresh(): Promise<void> {
@@ -306,14 +391,17 @@ export class Session extends EventEmitter {
         }
         const page = `${this.changePage}:${this.host.changes}`;
         if (this.view === "changes" && page !== this.changesRead) {
-          this.changesRead = page;
           this.changes = (await this.host.readChanges(this.changePage * 20, 20)).map((change) => ({
             ...change,
             patch: createTwoFilesPatch(change.path, change.path, change.before, change.after),
           }));
+          this.changesRead = page;
         }
         const rows = this.acts;
-        for (const act of rows) if (!act.done) this.started[act.id] ??= Date.now();
+        for (const act of rows) {
+          if (!act.done) this.started[act.id] ??= Date.now();
+          if (act.took !== undefined) this.took[act.id] = act.took;
+        }
         const lastWord = rows
           .filter((act) => act.on === this.selected && act.kind === "rung" && act.by === "operator")
           .at(-1);
@@ -454,16 +542,67 @@ export class Session extends EventEmitter {
       this.roster.map(([name]) => name),
     );
   }
-  get operatorPrompt() {
-    return [...this.host.prompts.values()].find(
-      (prompt) => this.acts.find((act) => act.id === prompt.id)?.on === this.selected,
-    );
+  /** The ask that the operator points at on the desk, which the input answers while its chain is shown. */
+  pointed?: string;
+  /** What waits for the operator in the life: each question of every chain, the oldest first. A notice asks nothing,
+   * so it settles at once and waits on no desk. */
+  get desk(): Desk {
+    // An ask that the operator answered leaves the desk at once, though the console holds it until it hears the close.
+    for (const id of this.gone) if (!this.host.prompts.has(id)) this.gone.delete(id);
+    const held = (one: { id: string }) => !this.gone.has(one.id);
+    const { acts, host } = this;
+    const gone = [...this.gone].join(" ");
+    const cached = this.deskRead;
+    if (cached?.acts === acts && cached.prompts === host.prompts && cached.gone === gone) return cached.desk;
+    const made = desk({
+      acts,
+      prompts: [...host.prompts.values()].filter(held),
+      notices: [],
+      label: (id) => this.labelOf(id),
+    });
+    this.deskRead = { acts, prompts: host.prompts, gone, desk: made };
+    return made;
   }
-  /** The notice of the chain shown that the operator did not dismiss yet: a prompt of None, which asks nothing. */
-  get operatorNotice() {
-    return [...this.host.notices.values()].find(
-      (notice) => this.acts.find((act) => act.id === notice.id)?.on === this.selected,
-    );
+  /** The desk as it was last read, with what it was read from, since every draw reads it many times. */
+  private deskRead?: { acts: unknown; prompts: unknown; gone: string; desk: Desk };
+  /** The questions that the operator answered, until the console drops them. */
+  private readonly gone = new Set<string>();
+  /** The question that the operator acts on, on the chain shown: the one that he points at, else the oldest. */
+  get aimed(): Ask | undefined {
+    return aimed(this.desk.asks, this.selected, this.pointed);
+  }
+  /** The question that the input answers: the question aimed. */
+  get operatorPrompt(): Ask | undefined {
+    return this.aimed;
+  }
+  /** Point at an ask of the desk, and show its chain. */
+  async point(id: string): Promise<void> {
+    const ask = this.desk.asks.find((one) => one.id === id);
+    if (!ask) return;
+    this.pointed = id;
+    if (ask.chain !== this.selected) await this.select(ask.chain);
+    else this.emit("change");
+  }
+  /** Point at the ask a step after or before the one aimed, round from the last to the first, or at the first ask of
+   * the life when the chain shown has none. */
+  async step(by: number): Promise<Ask | undefined> {
+    const next = beside(this.desk.asks, this.aimed?.id, by);
+    if (next) await this.point(next.id);
+    return next;
+  }
+  /** A line of the operator as the answer of a question, which the console reads in the shape of the question. The
+   * notice says where the answer went and what still waits. */
+  async answer(ask: Ask, line: string): Promise<void> {
+    await this.host.answer(ask.id, line);
+    this.landed(ask, `Your answer went to ${ask.id} on ${ask.label}.`);
+  }
+  /** What the operator did to an ask, and what waits after it, in the notice. The pointer goes on to what waits next
+   * on the chain shown. */
+  private landed(ask: Ask, said: string): void {
+    if (this.pointed === ask.id) this.pointed = undefined;
+    this.gone.add(ask.id);
+    const rest = this.desk.asks.length;
+    this.notice = `${said} ${rest ? `${rest} more ${rest === 1 ? "waits" : "wait"}.` : "Nothing else waits."}`;
   }
   isUserPrompt(act: ActRow): boolean {
     return act.kind === "prompt" && act.by === "operator";
@@ -503,6 +642,8 @@ export class Session extends EventEmitter {
       : String(this.chains.find((chain) => chain.id === id)?.words[0] || "Chain");
   }
   async select(id: string): Promise<void> {
+    // The moment that the feed shows is one of the chain shown, so another chain is shown as it stands now.
+    if (id !== this.selected) this.moment = undefined;
     // The turns and the program of the chain left are not the chain selected, which shows them once it has read them.
     if (id !== this.selected) {
       this.editing = undefined;
@@ -528,7 +669,8 @@ export class Session extends EventEmitter {
       .then(
         () => {},
         async (error: unknown) => {
-          if (this.closed) return;
+          // A cancel that the operator chose said what it ended already.
+          if (this.closed || this.cancels.delete(id)) return;
           this.notice = "";
           // A finished act carries its failure in the record and in the feed.
           if (!(await this.engine.outcome(id)).done) throw error;
@@ -656,6 +798,45 @@ export class Session extends EventEmitter {
       : `The new branch reads the transcript through ${id}. The module and the files keep their state.`;
     return branch;
   }
+  /** The acts as they stood at the moment that the feed shows: an act that began later is not there yet, and an act
+   * that ended later still runs, with no value yet. */
+  at(acts: ActRow[]): ActRow[] {
+    const moment = this.moment;
+    if (moment === undefined) return acts;
+    return acts
+      .filter((act) => act.began < moment)
+      .map((act) =>
+        act.ended === undefined || act.ended < moment
+          ? act
+          : { ...act, done: false, value: null, run: act.run && { status: "running", reason: "" } },
+      );
+  }
+  /** Move the moment that the feed shows one step back or on in the selected chain: a step is a moment when an act of
+   * the chain began or ended. A step on to the last moment returns to now. */
+  travel(by: -1 | 1): void {
+    const moments = [
+      ...new Set(
+        this.acts
+          .filter((act) => act.on === this.selected)
+          .flatMap((act) => [act.began + 1, ...(act.ended === undefined ? [] : [act.ended + 1])]),
+      ),
+    ].sort((one, other) => one - other);
+    const last = moments.at(-1);
+    const now = this.moment ?? last;
+    if (now === undefined) return;
+    const next =
+      by < 0 ? (moments.findLast((one) => one < now) ?? moments[0]) : moments.find((one) => one > now);
+    this.moment = next === undefined || next === last ? undefined : next;
+    this.emit("change");
+  }
+  /** A new branch of the selected chain at the moment that the feed shows, which the session selects: it reads the
+   * transcript through the last act that began before that moment, as a rewind to that act does. */
+  async branchHere(): Promise<string> {
+    const last = this.at(this.activity).findLast((act) => !["chain", "grant"].includes(act.kind));
+    if (!last) throw new Error("Nothing happened before this moment, so there is nothing to branch from.");
+    this.moment = undefined;
+    return this.rewind(last.id);
+  }
   /** A message sent before as the draft of the composer, with the images it referred to attached again. */
   private async restore(text: string): Promise<void> {
     let message = text;
@@ -667,6 +848,72 @@ export class Session extends EventEmitter {
       message = message.replace(reference.text, "");
     }
     this.emit("compose", message.trimEnd());
+  }
+  /** The last act that the operator made on the chain shown and that is not over: the message, the word or the
+   * command of his that the feed shows last. A cancel that names no act ends it. */
+  get lastOwn(): ActRow | undefined {
+    return this.activity.findLast((act) => act.by === "operator" && !act.done && WORK.includes(act.kind));
+  }
+  /** The running work that a cancel of an act ends besides the act: each act under it that is not over and whose work
+   * takes time, on any chain, with the chains that they stand on. The rungs of a prompt are its own answer, and no
+   * running work of their own. An act stands under the act that made it, a prompt on a thread under its thread, and
+   * an act on a chain under that chain, as a control of the engine reaches them. */
+  reach(id: string): Reach {
+    const byId = new Map(this.acts.map((act) => [act.id, act]));
+    const steps = byId.get(id)?.kind === "prompt";
+    const under = (act: ActRow): boolean => {
+      if (act.on === id) return true;
+      for (let up: ActRow | undefined = act; up; up = byId.get(up.by))
+        for (let at: ActRow | undefined = up; at; at = at.thread ? byId.get(at.thread) : undefined)
+          if (at.id === id) return true;
+      return false;
+    };
+    const acts = this.acts.filter(
+      (act) =>
+        act.id !== id &&
+        !act.done &&
+        WORK.includes(act.kind) &&
+        !(steps && act.kind === "rung" && act.by === id) &&
+        under(act),
+    );
+    return { acts, chains: [...new Set(acts.map((act) => act.on))] };
+  }
+  /** A cancel of the act that the operator names, or of his last act on the chain shown when he names none, and of
+   * that act alone with what stands under it: never the thread or the chain that it stands on. A cancel that names
+   * no act and ends a message takes the message back, so the operator writes it again. A cancel that ends running
+   * work asks him first, and ends it once he confirms. */
+  async cancel(id = ""): Promise<void> {
+    const act = id ? this.acts.find((one) => one.id === id) : this.lastOwn;
+    if (!act || act.done) {
+      this.notice = id
+        ? `${id} is no act that runs.`
+        : "Nothing that you sent runs on this chain. /cancel <id> ends another act.";
+      return;
+    }
+    const cancel: Cancel = { act, reach: this.reach(act.id), back: !id && this.isUserPrompt(act) };
+    if (cancel.reach.acts.length) this.emit("confirm", cancel);
+    else await this.end(cancel);
+  }
+  /** A cancel that the operator chose, or confirmed when it ends running work. */
+  async end({ act, reach, back }: Cancel): Promise<void> {
+    this.cancels.add(act.id);
+    await this.engine.cancel(act.id);
+    const ended = reach.acts.length;
+    const under = `${ended} ${ended === 1 ? "act" : "acts"} under it on ${this.chainsOf(reach)}`;
+    if (back) {
+      await this.restore(String(act.words[1] ?? ""));
+      this.notice = `You took back ${act.id}${ended ? `, and ended ${under}` : ""}. Change it in the input, and send it again.`;
+    } else this.notice = `${act.id} is cancelled${ended ? `, and ${under}` : ""}.`;
+    await this.refresh();
+  }
+  /** The acts that a cancel of the operator ended, whose notice that cancel gave. */
+  private readonly cancels = new Set<string>();
+  /** The chains that a cancel reaches, each with its label, in the order of the chains. */
+  chainsOf(reach: Reach): string {
+    return this.chains
+      .filter((chain) => reach.chains.includes(chain.id))
+      .map((chain) => `${chain.id} (${this.labelOf(chain.id)})`)
+      .join(", ");
   }
   async undo(): Promise<void> {
     if (this.paused || this.activity.some((act) => !act.done && ["prompt", "rung"].includes(act.kind)))
@@ -714,7 +961,7 @@ export class Session extends EventEmitter {
     } else if (text.startsWith("!")) await this.command(`/bash ${text.slice(1).trimStart()}`);
     else {
       const pending = this.operatorPrompt;
-      if (pending) await this.host.answer(pending.id, input);
+      if (pending) await this.answer(pending, input);
       else {
         await this.attachFiles(input);
         this.redo = [];
@@ -754,8 +1001,7 @@ export class Session extends EventEmitter {
         this.notice = "Work resumed.";
         break;
       case "cancel":
-        await (argument ? this.engine.cancel(argument) : this.host.interrupt(this.selected));
-        this.notice = "Work cancelled.";
+        await this.cancel(argument);
         break;
       case "extensions": {
         const each = enabled(await this.engine.transcript({ on: ROOT })).map(({ name, life }) =>
@@ -938,7 +1184,8 @@ export class Session extends EventEmitter {
   save(): void {
     this.preferences.save(this.theme);
     const record = this.host.record;
-    if (!record) return;
+    // A recorded life keeps no view beside its log, which a later reader takes as it was made.
+    if (!record || this.host.recorded) return;
     const path = `${record}.ui.json`;
     this.savedCost = this.cost;
     const view: SavedView = {

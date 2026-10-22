@@ -63,14 +63,22 @@ furb turns --record session.jsonl    # The turns of a life made again from its r
 furb extensions                      # The extensions that a life runs here.
 ```
 
+`MAX_THINKING_TOKENS` gives the most tokens of thought of a model in one turn, as it does for Claude Code, and 0 turns
+the thought off. The key `max_thinking_tokens` of `.furb/config.json` gives it for a project, and the environment wins
+over the config. When neither gives it, it is 32768. The claude command line inherits it from the environment of furb,
+and else furb sets it for claude to the number of the config or to 32768. Claude Code reads it as a fixed budget of
+thought beside the effort: a model with adaptive reasoning, as Opus 5.5, Sonnet 5.5, Haiku 5.5 or a Fable model, thinks
+as its effort says and cannot turn its thought off.
+
 A local server serves the chat completions of OpenAI under `/v1` and lists its models at `/v1/models`, as llama.cpp, LM
 Studio, Ollama, vLLM and Strata do. `FURB_LOCAL_KEY` gives its key when it takes one. furb names each model for chat
-that the server lists `local:` and its id, as in `--model local:qwen3`. Such a model takes no effort, costs nothing, and
-writes a quarter of its window at most in one turn, or the number that `FURB_LOCAL_TOKENS` gives. It thinks 8192 tokens
-at most in one turn, or the number that `FURB_LOCAL_THOUGHT` gives, and 0 sets no most: past it, furb asks the model
-again with that thought and with its thought turned off, so it writes its word at once. A model of a family that
-furb teaches, as qwen, reads the doctrine of that family once on each chain that asks it, in the paragraph that asks
-it for its first word, and a chain of any other model reads nothing of it. Its window is the one
+that the server lists `local:` and its id, as in `--model local:qwen3`. Such a model costs nothing, takes the efforts `off`, `low`, `medium` and
+`high`, which it reads as `enable_thinking` false or as `reasoning_effort`, as in `--model local:qwen3/medium`, and
+writes a quarter of its window at most in one turn, or the number that `FURB_LOCAL_TOKENS` gives. Past the most tokens
+of thought of a turn, furb asks the model again with that thought and with its thought turned off, so it writes its word
+at once, and at a most of 0 furb asks it with its thought off from the first request. Every model reads the
+doctrine of furb, `DOCTRINE.md`, once on each chain that asks it, in the paragraph that asks it for its first word,
+and it reads nothing more of it. Its window is the one
 that the server gives, or the number that `FURB_LOCAL_WINDOW` gives, and furb offers no model whose window neither
 gives. Ollama serves a model in the `num_ctx` of its parameters, or in `OLLAMA_CONTEXT_LENGTH`: set it to 32768 or more,
 since the system prompt of furb is about 9000 tokens. Ollama tells that window only for a model that it loaded, so give

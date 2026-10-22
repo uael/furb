@@ -36,8 +36,8 @@ use crate::{demo, places};
 pub enum Source {
   /// The demo project, whose models answer from a script; `pace` is how long a model of it thinks.
   Demo { pace: Duration },
-  /// A record to read, with no life: the app reads the facts of its log, or those that the record kept when the log
-  /// does not agree with it, and asks no model and runs no command.
+  /// A record to read, with no life: the crate reads it with `furb::world::retold`, the one reader of a record that
+  /// the TUI reads too, so the app asks no model and runs no command.
   Record(PathBuf),
   /// A life in a project directory, on the record it keeps there, on the models of the catalog.
   Live { directory: PathBuf, record: PathBuf },
@@ -93,13 +93,15 @@ pub enum Command {
 /// What the life tells the app.
 #[derive(Debug, Clone)]
 pub enum Event {
-  /// The life is open: its root, its directory, whether it does work, and whether its facts are what a record kept,
-  /// read with no life.
-  Opened { root: String, directory: String, works: bool, kept: bool },
+  /// The life is open: its root, its directory, whether it does work, whether its facts are those of a whole log, and
+  /// for a record the engine that made it, as the record names it.
+  Opened { root: String, directory: String, works: bool, logged: bool, made: Option<String> },
   /// The facts that the life said since the last event, in order.
   Facts(Vec<Value>),
   /// What a model wrote for a rung, as it writes it: its text and its thought.
   Writing { rung: String, text: String, thinking: String },
+  /// The app heard every fact of a record to read.
+  Read,
   /// A report for the operator: a refusal, or why the life did not open.
   Said(String),
 }
@@ -150,34 +152,18 @@ impl Teller {
   }
 }
 
-/// A record read with no life, told to the app in parts, so no word runs again and a record of any engine opens. While
-/// the log beside the record agrees with it, the app hears every fact of the log as a live life tells it, so the record
-/// shows whole: the ladders, the runs and the end of each thread. Else it hears the facts that the store kept, which
-/// hold only what the outside said, so the view of them has gaps that the app says.
+/// A record read with no life, told to the app in parts, then the end of them, so no word runs again and a record of
+/// any engine opens. The crate reads it with `furb::world::retold`: the facts of the log when the log agrees with the
+/// record, else those that the record kept, with what they do not keep made again.
 fn read_record(path: &std::path::Path, tell: &Teller) -> Result<(), String> {
-  use std::io::BufRead;
   let directory = places::project_of(path).display().to_string();
-  if let Some(facts) = furb::world::logged(path).map_err(|no| no.to_string())? {
-    tell.tell(Event::Opened { root: "chain1".to_owned(), directory, works: false, kept: false });
-    for part in facts.chunks(4000) {
-      tell.tell(Event::Facts(part.iter().map(|one| wire::outward(one.as_ref())).collect()));
-    }
-    return Ok(());
+  let furb::world::Retold { made, logged, facts } =
+    furb::world::retold(path).map_err(|no| no.to_string())?;
+  tell.tell(Event::Opened { root: "chain1".to_owned(), directory, works: false, logged, made });
+  for part in facts.chunks(4000) {
+    tell.tell(Event::Facts(part.iter().map(|one| wire::outward(one.as_ref())).collect()));
   }
-  let file = std::fs::File::open(path).map_err(|no| format!("{}: {no}", path.display()))?;
-  tell.tell(Event::Opened { root: "chain1".to_owned(), directory, works: false, kept: true });
-  let mut part = Vec::new();
-  for line in std::io::BufReader::new(file).lines() {
-    let line = line.map_err(|no| no.to_string())?;
-    let Ok(entry) = serde_json::from_str::<Value>(&line) else { continue };
-    if let Some(fact) = entry.get(0).filter(|one| one.is_array()) {
-      part.push(fact.clone());
-    }
-    if part.len() >= 4000 {
-      tell.tell(Event::Facts(std::mem::take(&mut part)));
-    }
-  }
-  tell.tell(Event::Facts(part));
+  tell.tell(Event::Read);
   Ok(())
 }
 
@@ -215,7 +201,7 @@ fn lived(
   let ears = [("observer", observer(heard.clone())), ("console", console())];
   let (engine, _) = opening.boot(ears).map_err(|no| no.to_string())?;
   let root = engine.root().to_owned();
-  tell.tell(Event::Opened { root: root.clone(), directory, works: true, kept: false });
+  tell.tell(Event::Opened { root: root.clone(), directory, works: true, logged: true, made: None });
   let mut held = Held {
     engine,
     root,

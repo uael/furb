@@ -3,7 +3,9 @@
 The engine is `src/furb/engine.py`, one file. It depends only on the python interpreter and on the ears of the outside
 that boot is given, each a generator under a name: the ears of the World, the Kernel and the gate among them. It is
 derived from the contract, `src/furb/engine.pyi`, and the suite in `test/` proves it. `src/furb/CLAUDE.md` holds the
-technical names of the engine and the laws that no test can hold. `script/CLAUDE.md` says how to run the DeepSWE rig.
+technical names of the engine and the laws that no test can hold. `DOCTRINE.md` is the doctrine of furb, which says
+how a model works in furb: every model reads it once on each chain, in the paragraph that asks it for its first word.
+`script/CLAUDE.md` says how to run the DeepSWE rig.
 
 The crate at the root, `furb`, runs the same file in monty, a python interpreter written in rust, behind an async
 API of its own:
@@ -12,11 +14,13 @@ API of its own:
   makes from the contract, and `Ear`, the one trait of an ear, which a host writes as a generator of rust with `ear`.
 - `src/world/` holds the ears of the World that the crate writes, one file each: the files in `files.rs`, the
   commands in `bash.rs`, time in `time.rs`, the store of the record in `store.rs`, as a file of lines or a database
-  of SQLite, each a `Store` that the suite in `store.test.rs` holds to its laws, the log of a life beside its record
-  in `log.rs`, and the provider of models in `provider.rs`, which asks each model through rig and streams what it writes. Its catalog, `provider/catalog.rs`,
+  of SQLite, each a `Store` that the suite in `store.test.rs` holds to its laws, whose ear names in the record the
+  engine that made it, the log of a life beside its record
+  in `log.rs`, the reader of a record with no life in `reader.rs`, which opens a record of any engine to read, and the provider of models in `provider.rs`, which asks each model through rig and streams what it writes, and asks it again with a backoff after a failure that passes, as a lost connection. Its catalog, `provider/catalog.rs`,
   knows the models of every provider that pi-ai serves and those of the claude command line, and it offers each
   model whose credential stands in the environment, the claude command line when it finds the program, and each
   model for chat that a local server lists when `FURB_LOCAL_URL` names its address, which `provider/local.rs` asks.
+  It says too what a first run checks of each: `setup` in `src/binding.rs` gives it to a host.
   `provider/search.rs` holds the native search of the web of each provider that has one, which the extension `web`
   asks.
   `operator.rs` holds the rules by which every console reads what the operator answers, and `scratch.rs` the
@@ -27,7 +31,8 @@ API of its own:
   contract and a suite, and `src/extension/` holds the ear of the World of each that has one. `docs/extensions.md` says how an extension works.
 - `src/life.rs` opens a life as every host opens one: the record, and the ears of the crate after the ears of the
   host, the provider among them, on the default actor and the roster that the host names from the catalog, or every
-  model that the catalog offers when the host names no roster, or on a model of its own, and the extensions. A host adds only its own ears, such as the console of its operator. Every
+  model that the catalog offers when the host names no roster, or on a model of its own, and the extensions. A host adds only its own ears, such as the console of its operator.
+  A life on a record that another engine made is refused before any replay, with both engines. Every
   host gives it as one `Opening`, and each door gives it as `opened` and as `Engine.open`.
 - `src/snapshot.rs` holds the snapshot of a life beside its record: the session of the sandbox that monty dumps and
   what the engine holds of the ears, which a later life on the same record and build opens from with no replay.
@@ -163,12 +168,12 @@ is the folder `test` beside it.
 2. Every test carries a sentence of the contract.
 3. Every definition has a file of its own and at least one sentence. Two definitions never share a file.
 4. The module docstring of each contract is empty.
-5. `engine.py` less its doctrine, minified with its program kept as it is, costs fewer than 6500 tokens of
-   `o200k_base`, the tokenizer of OpenAI, and the doctrine costs at most 2000. The test counts with `o200k_base`
+5. `engine.py`, minified with its program kept as it is, costs fewer than 6500 tokens of `o200k_base`, the
+   tokenizer of OpenAI, and the doctrine of furb, `DOCTRINE.md`, costs at most 2000. The test counts with `o200k_base`
    because it is local and the same on each machine: the tokenizer of Claude is not public, and only the network
    counts with it. The wall is a proxy for the cost to Claude, which reads about 1.5 tokens for each token of
    `o200k_base` in the engine.
-6. The system prompt, unquoted, parses to the same program as `engine.py` on disk.
+6. The system prompt parses to the same program as `engine.py` on disk.
 7. No name in `engine.py` is bound again beneath a scope that already binds it: a parameter, a local, a loop
    target or an import never takes the spelling of a name of an enclosing function or of the module. Every word
    keeps one meaning.
@@ -221,6 +226,9 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 - `uv run python script/play.py`: one real life that uses every part of the runtime, and a second life on its
   record.
 - `uv run python script/deepswe.py`: the DeepSWE rig, which `script/CLAUDE.md` says how to run.
+- `uv run python script/bench/replay.py <task> --out <directory>`: the bench of replay. One life of the local model
+  works a task of DeepSWE, later lives open on its record, one more opens after a change of the World, and Claude
+  Code on the same model works the task as the baseline. Its docstring says how to run it.
 - `script/real.py` is no command: it holds what `smoke.py`, `play.py` and `deepswe.py` share, which is the life
   they open on the engine of this interpreter, the claude they ask, and what the answers of a record cost.
 - `uv run python script/catalog.py`: make the snapshot of the catalog, `src/world/provider/catalog.json`, again from

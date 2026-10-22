@@ -1,5 +1,7 @@
 import { type Engine, type Fact, isQuestion, type LiveAct, questionKind, type Session } from "@furb/engine";
+import { createTwoFilesPatch } from "diff";
 import type { Snapshot, Usage } from "./bridge.ts";
+import { lineCounts } from "./format.ts";
 import { queueDispatches } from "./queue.ts";
 import type { ActRow, Exit } from "./session.ts";
 
@@ -15,8 +17,27 @@ interface ChainView {
 /** How many of the last characters of each stream of a command a row carries. */
 const TAIL = 2000;
 
-/** An act as a row of a snapshot: a command that printed more than a tail carries the tail of each stream. */
-function row(act: LiveAct): ActRow {
+/** An act as a row of a snapshot: a write carries the lines that its change added and removed, and a command that
+ * printed more than a tail carries the tail of each stream. An act carries its time when this life ran it. */
+function row(act: LiveAct, lines?: ActRow["lines"], took?: number): ActRow {
+  if (took !== undefined) return row({ ...act, took } as ActRow, lines);
+  // A read and a write carry the count of the lines of their text, and leave the text out, which the view reads whole
+  // when it shows it.
+  if (act.kind === "read" || act.kind === "write") {
+    const text = (act.kind === "write" ? act.words[0] : act.value) as { content?: unknown } | null;
+    const bare = (one: unknown) =>
+      one && typeof one === "object" && "content" in one ? { ...one, content: "" } : one;
+    const content = typeof text?.content === "string" ? text.content : undefined;
+    return {
+      ...act,
+      words: act.words.map(bare),
+      value: bare(act.value),
+      ...(content === undefined
+        ? {}
+        : { count: content ? content.replace(/\n$/, "").split("\n").length : 0 }),
+      ...(lines ? { lines } : {}),
+    };
+  }
   const exit: Exit = act.kind === "bash" ? (act.value as Exit) : {};
   const streams = [exit?.stdout?.content ?? "", exit?.stderr?.content ?? ""];
   if (streams.every((content) => content.length <= TAIL)) return act;
@@ -29,6 +50,15 @@ function row(act: LiveAct): ActRow {
   };
 }
 
+/** The views of a life that a snapshot reads: those of an engine, or those of a record that is open to read. */
+export type Views = Pick<Engine, "root" | "standing" | "program" | "turns" | "cwd" | "verb"> & {
+  inspect(name: string, chain?: string): { value?: unknown };
+};
+/** What a snapshot reads of a session: the facts, the activity and the entries of its life, and, of a life that runs,
+ * the changes of its files and the facts that it says as it says them. */
+export type Lived = Pick<Session, "facts" | "activity" | "entries" | "isPaused" | "pending"> &
+  Partial<Pick<Session, "on">> & { changes?: Pick<Session["changes"], "length" | "read"> };
+
 /** Views belong to changes of the life, not to frames or refresh requests. */
 export class Snapshots {
   private readonly chains = new Map<string, ChainView>();
@@ -36,13 +66,40 @@ export class Snapshots {
   private readonly answers = new Map<string, Usage[]>();
   /** The last reply of each chain that an answer with a usage settled, by the chain that the reply stands on. */
   private readonly replies = new Map<string, string>();
+  /** The lines that each write added and removed, by the write, and how many changes of files they are read from. */
+  private readonly lines = new Map<string, NonNullable<ActRow["lines"]>>();
+  private changes = 0;
+  /** When this life saw each act begin, and how long each act that it saw begin took to be done, in the time of the
+   * machine. The record holds no time, so an act that the life replayed as it opened took no time that it knows. */
+  private readonly began = new Map<string, number>();
+  private readonly took = new Map<string, number>();
+  /** How many facts the life said as it opened, which it replayed, and how many facts the times have heard. */
+  private readonly replayed: number;
+  private timed = 0;
   private heard = 0;
   private entries = -1;
   private dispatched: string[] = [];
   constructor(
-    private readonly engine: Engine,
-    private readonly session: Session,
-  ) {}
+    private readonly engine: Views,
+    private readonly session: Lived,
+  ) {
+    this.replayed = session.facts.length;
+    session.on?.("facts", (facts: Fact[]) => this.time(facts));
+  }
+
+  /** The time of the facts that the life said, as the session gives them to its host. */
+  private time(facts: readonly Fact[]): void {
+    const now = Date.now();
+    for (const [kind, id] of facts) {
+      if (this.timed++ < this.replayed) continue;
+      const began = this.began.get(id);
+      if (isQuestion(kind, id)) this.began.set(id, now);
+      else if (kind === "done" && began !== undefined) {
+        this.began.delete(id);
+        this.took.set(id, now - began);
+      }
+    }
+  }
 
   private changed(fact: Fact): void {
     const [kind, id] = fact;
@@ -106,13 +163,29 @@ export class Snapshots {
       this.entries = this.session.entries.length;
       this.dispatched = [...queueDispatches(this.session.entries).keys()];
     }
+    const files = this.session.changes;
+    // A journal that a repair or a new journal made shorter is read again from its start.
+    if ((files?.length ?? 0) < this.changes) this.changes = 0;
+    try {
+      for (const change of files?.read(this.changes, files.length - this.changes) ?? [])
+        if (change.act)
+          this.lines.set(
+            change.act,
+            lineCounts(createTwoFilesPatch(change.path, change.path, change.before, change.after)),
+          );
+      this.changes = files?.length ?? 0;
+    } catch (error) {
+      // A damaged journal is the failure of the view of changes alone, which offers to repair it: the rows keep the
+      // counts that they hold, and the journal is read again once it reads.
+      if ((error as { name?: unknown } | undefined)?.name !== "DamagedJournal") throw error;
+    }
     const { acts, count } = this.session.activity.since(since);
     // The share of the window has one home, filled of the engine, which the advance binds too.
     const reply = this.replies.get(selected);
     const filled = reply === undefined ? undefined : this.engine.verb("filled", [reply]);
     return {
       selected,
-      acts: acts.map(row),
+      acts: acts.map((act) => row(act, this.lines.get(act.id), this.took.get(act.id))),
       count,
       paused: this.session.isPaused(selected) || this.session.pending.size > 0,
       dispatched: this.dispatched,

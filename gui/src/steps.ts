@@ -17,8 +17,8 @@ export interface Line {
   acts: ActMark[];
 }
 
-/** One step of a thread: a rung, with what it did, its lines, why it failed, what its model writes now, and the
- * threads that it asked. */
+/** One step of a thread: a rung, with what it did, its lines, why it failed, what its model writes now, or whether its
+ * model had no word for it when a record ends, and the threads that it asked. */
 export interface Step {
   id: string;
   state: State;
@@ -67,12 +67,14 @@ function said(rung: LiveAct, made: readonly LiveAct[], word: string): string {
   );
 }
 
-/** The steps of the ladder of a prompt, from the source of its chain: each rung with its lines and their acts. */
+/** The steps of the ladder of a prompt, from the source of its chain: each rung with its lines and their acts. A step
+ * whose model has no word yet writes it in a life that works now, and wrote none in a record or in the past. */
 export function steps(
   moment: Moment,
   prompt: LiveAct,
   directory: string,
   streams: Record<string, { text: string; thinking: string }>,
+  live: boolean,
 ): Step[] {
   const label = (chain: string) => chainName(moment, chain);
   const mark = (act: LiveAct): ActMark => ({
@@ -94,7 +96,13 @@ export function steps(
       step = {
         id: rung.id,
         state: glyphOf(actState(rung, moment.owed)),
-        said: thinks ? "Writing the next step" : why ? clip(why, 80) : said(rung, made, word),
+        said: thinks
+          ? live
+            ? "Writing the next step"
+            : "Its model wrote no word for this step"
+          : why
+            ? clip(why, 80)
+            : said(rung, made, word),
         lines: [],
         why,
         thinks,

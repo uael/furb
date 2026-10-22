@@ -1,4 +1,6 @@
 import { cancelled, failed, type LiveAct, type Measure, WORK } from "./acts.js";
+import { gist } from "./asks.js";
+import { valueText } from "./ladder.js";
 
 /** What a row of the loom does now: it asks the operator, it failed, it works, a pause holds it, its prompts are
  * all closed, or it rests. */
@@ -283,4 +285,79 @@ export function momentsOf(acts: readonly LiveAct[]): number[] {
   return [...new Set(acts.flatMap((act) => [act.began, ...(act.ended === undefined ? [] : [act.ended])]))]
     .filter((moment) => moment > 0)
     .sort((one, other) => one - other);
+}
+
+/** What a chain does now, in one line: the question that it asks the operator, the act that it waits on while it
+ * works, the failure that stopped it, or the answer of its last prompt. The act is the one that the line is about,
+ * and more counts the other questions that the chain asks. */
+export interface Now {
+  tone: Tone;
+  text: string;
+  act?: string;
+  more: number;
+}
+
+/** What an act is about, on one line: the first line of the word of a rung, of the message of a prompt, or of the
+ * command of a bash, and the seconds of a wait. */
+export function subjectOf(act: LiveAct, word: (rung: LiveAct) => string): string {
+  const text =
+    act.kind === "rung"
+      ? word(act)
+      : act.kind === "wait"
+        ? `up to ${duration(Number(act.words[0] ?? 0))}${act.words.length > 1 ? ` for ${act.words.slice(1).map(String).join(", ")}` : ""}`
+        : String(act.kind === "prompt" ? (act.words[1] ?? "") : (act.words[0] ?? ""));
+  return (
+    text
+      .split("\n")
+      .find((line) => line.trim())
+      ?.trim() ?? ""
+  );
+}
+
+/** What the chain of a row does now, from the loom and the acts of the life. */
+export function nowOf(row: Row, loom: Loom, acts: readonly LiveAct[], word: (rung: LiveAct) => string): Now {
+  const asks = loom.owed.filter((prompt) => prompt.chain === row.id);
+  const [first] = asks;
+  if (first)
+    return {
+      tone: "asks",
+      act: first.id,
+      more: asks.length - 1,
+      text: gist(first.message),
+    };
+  const byId = new Map(acts.map((act) => [act.id, act]));
+  const waits = row.waits ? byId.get(row.waits) : undefined;
+  if (row.state === "working" && waits)
+    return { tone: "work", act: waits.id, more: 0, text: subjectOf(waits, word) };
+  const work = acts.filter((act) => act.on === row.id && WORK.includes(act.kind));
+  if (row.state === "failed") {
+    const fault = work.findLast((act) => failed(act) && !cancelled(act));
+    const value = fault?.value as { is?: string; args?: unknown[] } | null | undefined;
+    const reason =
+      fault?.run?.reason || (value?.is ? `${value.is}: ${(value.args ?? []).map(String).join(", ")}` : "");
+    return { tone: "failed", act: fault?.id, more: 0, text: reason.split("\n")[0]?.trim() ?? "" };
+  }
+  if (row.state === "done") {
+    const last = work.findLast((act) => act.kind === "prompt" && act.done && !asksOperator(act));
+    const value = last ? valueText(last.value) : "";
+    return { tone: "past", act: last?.id, more: 0, text: readable(value) };
+  }
+  return { tone: "none", more: 0, text: "" };
+}
+
+/** The first line of a text that holds words, as a person reads it: with no marks of a heading, of emphasis, or of
+ * code of markdown. */
+export function readable(text: string): string {
+  const line = text.split("\n").find((one) => one.trim()) ?? "";
+  return line
+    .replace(/^\s*#{1,6}\s+/, "")
+    .replace(/(\*\*|__|\*|`)(\S(?:.*?\S)?)\1/g, "$2")
+    .trim();
+}
+
+/** A count of seconds as a person reads it: seconds under two minutes, minutes under two hours, and hours. */
+export function duration(seconds: number): string {
+  if (seconds < 120) return `${Math.round(seconds)}s`;
+  if (seconds < 7200) return `${Math.round(seconds / 60)}m`;
+  return `${Math.round(seconds / 360) / 10}h`;
 }

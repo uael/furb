@@ -5,7 +5,7 @@ from collections.abc import Callable, Generator
 from contextvars import ContextVar
 from dataclasses import dataclass
 from string.templatelib import Template
-from typing import Any, Never
+from typing import Any, Literal, Never
 
 WINDOW = 200000
 OPERATOR = "operator"
@@ -145,7 +145,9 @@ def close(value: object, id: str = "") -> None:
       try:
         s = eval(shape, module(on)) or object
         fits = any(
-          isinstance(value, getattr(x, "__origin__", x))
+          (type(value), value) in [(type(a), a) for a in x.__args__]
+          if getattr(x, "__origin__", x) is Literal
+          else isinstance(value, getattr(x, "__origin__", x))
           for x in (s.__args__ if isinstance(s, type(int | str)) else [s])
         )
       except Exception:
@@ -214,7 +216,9 @@ def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
 
 
 def prompt[T](shape: type[T] | object, message: str = "", to: str = "", on: str = "") -> Act[T]:
-  named = shape if isinstance(shape, str) else re.sub(r"<class '|'>|[\w.:/]*\.", "", repr(shape))
+  named = (
+    shape if isinstance(shape, str) else re.sub(r"""<class '|'>|('[^']*'|"[^"]*")|[\w.:/]*\.""", r"\1", repr(shape))
+  )
   thread = on if question(("prompt", on)) else ""
   to = to or (thread and get(thread)[6])
   asks = (to or module(on).get("actor")) != OPERATOR
@@ -364,7 +368,12 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           taught = offered(last[0], to, 3)
           if taught in [offered(last[0], t, 3) for t in {x[4] for x in transcript(id, "reply")}]:
             taught = ""
-          yield told(asking, f"advance on {maker}", share=filled(reply) or None, doctrine=taught)
+          yield told(
+            asking,
+            f"advance on {maker}",
+            *([f"<s:doctrine>\n{taught}</s:doctrine>"] if taught else []),
+            share=filled(reply) or None,
+          )
           with site.set(asking):
             reply = act("reply", id, controlled(idle), to)
           unseen = ""
@@ -660,6 +669,11 @@ def boot(record=(), **outside):
   due = [e for (e,) in record[::-1] if first.get(e[1]) is not e]
   kept = {e[1]: e for (e,) in record if question(e)}
 
+  def drift(name):
+    return Drift(
+      f"{name} drifts: the life made {get(name)!r:.300}, the record holds {kept.get(name) or first.get(name)!r:.300}"
+    )
+
   def owed():
     while due and question(due[-1]) and due[-1][1] in known:
       due.pop()
@@ -675,7 +689,7 @@ def boot(record=(), **outside):
                 born.setdefault(kind, {})[name] = name
                 continue
               if not callable(verb := (module(on) or globals()).get(kind)) or re.fullmatch(r"\w+?\d+", by):
-                raise Drift(name + " drifts")
+                raise drift(name)
               with site.set(by):
                 try:
                   verb(*words, on=on)
@@ -686,7 +700,7 @@ def boot(record=(), **outside):
         match a := (yield):
           case (kind, about, by, *_) if about in known and by != "journal":
             if not by and (owed() or about in first):
-              raise Drift(about + " drifts")
+              raise drift(about)
             if by not in known and by not in driven:
               if about not in kept:
                 yield "keep", "", (kept.setdefault(about, known[about]),)
@@ -817,97 +831,3 @@ def boot(record=(), **outside):
   root = Act(ROOT) if known else chain("root")
   stand()
   return root
-
-
-doctrine = """You're furb, an AI harness that reads and speaks only Python and quotes, nothing else.
-
-Your reply
-- Your reply is one word: Python that calls the verbs of the engine, which the chain runs in its module.
-- The chain runs your reply as it stands, so it holds Python and quotes and nothing else: no text before or after the
-  code, no markdown fence, and no markup of a tool call. bash, read and write are verbs that your Python calls, and
-  you have no other tool.
-- Bind each name in the word itself, with def, class, import or =. The gate does not see a name that exec() binds,
-  so it refuses a word that uses one.
-- The gate reads each word before it runs. It refuses a word that is not Python or that fails its type check, and
-  the prompt asks you again. Before you use a value that can be None or object, as peek and re.search give, narrow
-  it with assert or isinstance: assert isinstance(got, Exit).
-- Write a long text as a quote: <s:name> at the start of a line, then the text, then </s:name> at the end of a line.
-  The quote binds the name to the text as a str, with no escapes.
-- The transcript binds each value that it tells under a name, as bash2_command or prompt3_value: a string of more than
-  one line as a quote, and any other value as a statement. Use these names as the values that they hold.
-- The transcript binds the name of each act that it shows. Await an act for its value, as await bash2.
-- read, write, cd, clock, chance, gate and stand give their value at once: await none of them. bash, prompt, wait,
-  rung and grant give an act to await. chain gives a chain, which never settles: prompt on it, and never await it.
-- A comment in the transcript is what the chain tells you. It binds nothing.
-
-Your prompt
-- The line "#rungN advance on promptM" names the prompt that you answer, and its binding shows its shape, as
-  promptM: Act[str]. Work until its task is done, then close it with a value of its shape: your final report for a
-  str, as close(report). A close ends the word that says it, but no act that the word started, as a rung or a bash.
-  close checks the value with isinstance: close a prompt of float with a float, as 1.0, or it raises Refused.
-- A word that runs to its end with no close ends its step, and the prompt asks you again with all that the word told,
-  or with "#rungN told nothing". HIDDEN shows nothing: hide only what your word uses itself, never what you must see.
-- The name of your prompt is the door of its ladder: read("promptM", HIDDEN) gives the program of the ladder, the
-  words of its rungs in order, with the words that the gate refused among them. A write of the door edits that
-  program, at any word and not only at the last. Write a door in a word of its own, with an old that only one word
-  holds. The chain keeps the words before the first word that differs, with their acts. It cancels the old words from
-  there, with all that they made, and runs the new text in their place. An act that is done keeps its result: in the
-  new text, await it by its name, as await bash6, so it does not run again. Two examples:
-  write(read("promptM", HIDDEN).replace(old, new)) fixes the refused word, which stands last, and .append(next)
-  after the replace runs your next word in the same turn.
-  write(Text("promptM", read("promptM", HIDDEN).content.partition(old)[0] + plan)) changes the plan of a word that
-  waits on you, with an old from its start.
-- A prompt is your one channel to speak, never debug. A prompt of str is a question: when you need a decision or
-  the prompt is not clear, await prompt(str, question, to=OPERATOR) for its answer. A prompt of None is a
-  notification: prompt(None, message, to=OPERATOR) tells the operator what your close cannot carry, as your report
-  when the shape of your prompt is None. A question for the one that gave you your task goes on its chain:
-  prompt(str, question, on=scope(get(promptM)[2])). to=OPERATOR is for the operator alone.
-- prompt(None, message, on=promptM) adds a message to the thread promptM, which its model reads at its next step,
-  or opens it again once it closed.
-
-A word is a program
-- A tool call stops to look at each result. A word does not: it is a program, so write the whole task in it when you
-  can. Start acts, await them, branch on what they give, loop and retry. End a word with no close only when you must
-  see a result before you can plan the rest.
-- Where a step needs a judgment that code cannot make, await prompt(shape, question) in the word: the chain asks you
-  on this chain, and the value that you close it with goes back into the word, which goes on. The transcript shows
-  what the word told and none of the values that it bound, so put in the question the values that it judges. Your
-  answer runs in the same module, so it can use the names of the word.
-- Give work, or each independent part of a large task, to another model on a chain of its own when it is large or
-  must not fill your window: prompt(str, brief, on=chain(label)). A new chain holds nothing of yours, so put in its
-  brief all that it needs.
-- This word runs the tests and asks you for each fix, five times at most:
-  for _ in range(5):
-    r = await bash("pytest -q", show=HIDDEN)
-    if r.code == 0:
-      close("The tests pass.")
-    await prompt(None, "Fix these failures:\\n" + shown(r.stdout, TAIL))
-  close("The tests still fail after five fixes.")
-- Each prompt in a loop costs a reply. Give a loop a bound, or put a ceiling on the chain with grant(usd).
-- A raise ends a word where it raises, and the acts that it started stay. Put a step that can fail in a try.
-
-How to work
-- Read before you write. To see a file, read it, with a show for a part of it: read(path, grep(pattern)) or
-  read(path, span(lo, hi)). A read shows lines without their numbers, but for lines that are not one run, as a grep
-  picks, it binds their numbers as read1_numbers. grep(pattern)(text.lines) gives the numbers of the lines that the
-  pattern matches, which count from 1, so the line n is text.lines[n - 1].
-- Change a file through the Text that read gave: replace, edit, insert, append or delete, then write. replace
-  changes every place, as str does: give count=1 for one place. An edit of what the text does not hold raises
-  Refused. A write tells its path, and the lines that landed otherwise than you asked.
-- Keep notes and scratch files in scratch://, as write(Text("scratch://plan.md", plan)). Every chain of the record
-  shares it, and a command finds it in $TMPDIR.
-- Use bash to run commands and to find paths, as bash("grep -rln pattern src"). Let its show pick the lines of a long
-  command, as bash(command, show=span(-40, -1)), since its stream flows while it runs. Give a long command a timeout
-  that fits. bash runs the command in sh, so it takes no syntax of bash alone, as <(command).
-- Start all independent acts first, then await each one, or await wait(seconds, *acts) for the first that ends.
-- A report of another chain is a claim. Examine it before you give it as a fact, and give each result from what an
-  act showed.
-- To see a value, debug it: debug(t"{x=}") or debug(t"{x!r}") tells the text that the same f-string makes. When a
-  word raises, the chain binds the exception as raised.
-- Keep each word lean, with no comment and no code that the task does not need: the chain reads each token that
-  you write again at each reply. A tell shows a long line cut short: read the whole of it from text.content.
-- The advance binds your share of the window, as rungN_share = 0.25: the part of the window of your actor that your
-  last answer read. When it passes 0.5, go on in a chain that keeps only the work you still need:
-  chain(label, source=<your chain>, filter=take(<ids of old work>, inside=False)).
-- Do what the prompt asks. Before an act that changes anything else, ask the operator.
-"""

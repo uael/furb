@@ -3,16 +3,20 @@ import { basename, join, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import { type App, follow } from "../src/app.ts";
-import { demoSession, removeDemoDirectories, seedDemo, seedDemoFiles } from "../src/demo.ts";
+import { openEngine } from "../src/bridge.ts";
+import { demoSession, removeDemoDirectories, seedDemo, seedDemoFiles, tour } from "../src/demo.ts";
 import { loadParsers } from "../src/parsers.ts";
 import { Preferences } from "../src/preferences.ts";
-import type { Exit, Session } from "../src/session.ts";
+import type { Exit } from "../src/session.ts";
+import { Session } from "../src/session.ts";
 import { palettes } from "../src/theme.ts";
 import { Workspaces } from "../src/workspaces.ts";
 import { idle } from "../test/idle.ts";
 import { rasterize } from "./raster.ts";
 import { click, find, highlighting, home, mount } from "./stage.ts";
 
+/** The recorded life of a conductor, from the fixtures of the TUI. */
+const conductor = resolve(import.meta.dir, "..", "fixtures", "conductor.jsonl");
 // The model of the demo writes slowly, so that its work stays in progress while a capture shows it. The session runs
 // in a worker, which reads the environment once, as it starts.
 const projects = await home("furb-gallery", { FURB_DEMO_PACE: "200" });
@@ -44,7 +48,7 @@ async function show(next: Session): Promise<void> {
 await show(session);
 
 /** The shots whose notice tells what the step did, which keep it. The others show no notice of an earlier step. */
-const notices = /^(34|36|37|42|43|44|45|50)-/;
+const notices = /^(34|36|37|42|43|44|45|50|55|58)-/;
 /** The work of the chain completes, and the queue sends what waits in it, until nothing is left to do. */
 async function settle(): Promise<void> {
   await session.refresh();
@@ -72,6 +76,9 @@ async function capture(name: string): Promise<void> {
   await test.flush();
   // Code is colored by a parser off the main thread: the frame is taken once every code block is highlighted.
   await Promise.all(highlighting(test.renderer.root));
+  // The folded rungs color the first line of their word off the main thread too, and the view draws them again.
+  await app().colorsDone();
+  app().render();
   await test.flush();
   if (only && !only.test(name)) return;
   await writeFile(`${output}/${name}.png`, rasterize(test.captureSpans(), palettes[session.theme], "furb"));
@@ -87,7 +94,6 @@ try {
   await session.command("/name Explore project");
   await idle(session);
   await session.refresh();
-  await capture("02-feed");
   session.show("transcript");
   await capture("03-transcript");
   const written = session.host.changes;
@@ -169,11 +175,15 @@ try {
     on: session.selected,
     to: "operator",
   });
-  await until(session.host, () => session.host.notices.has(markdown));
+  // A notice settles as a quiet line, which opens to its whole message.
+  await until(session.host, () => session.acts.some((act) => act.id === markdown && act.done));
+  session.folds[markdown] = false;
   await session.refresh();
   await capture("51-markdown");
-  app().question();
-  await until(session.host, () => !session.host.notices.size);
+  // The rung that wrote the file opens to its read and its write, each with what it did.
+  session.folds[markdown] = true;
+  const wrote = session.acts.find((act) => act.kind === "write")?.by;
+  if (wrote) session.folds[wrote] = false;
   app().toggleMode();
   app().composer.setText('notes = read("README.md")\nprint(notes.content)');
   await capture("10-python-input");
@@ -194,9 +204,6 @@ try {
   app().help();
   await capture("16-help");
   app().closeOverlay();
-  test.resize(82, 32);
-  await capture("17-narrow");
-  test.resize(152, 46);
   app().toggleMode();
   app().composer.setText("");
   const command = await session.engine.bash(
@@ -231,6 +238,13 @@ try {
   await session.refresh();
   await capture("19-model-progress");
   await session.engine.result(progress);
+  // A call of a model that failed for a cause that passes waits for its next attempt, which the footer counts down.
+  // The streams hold the retry while the capture reads the life again, which sends the streams of the life anew.
+  const retry = { attempt: 2, most: 10, until: Date.now() + 3600, why: "connection reset" };
+  const retrying = new Map([["rung0", { chain: session.selected, text: "", thinking: "", retry }]]);
+  Object.defineProperty(session.host, "streams", { configurable: true, get: () => retrying, set: () => {} });
+  await capture("62-model-retry");
+  Object.defineProperty(session.host, "streams", { configurable: true, writable: true, value: new Map() });
   await session.submit("/run this is invalid python !!!").catch(session.fail);
   await capture("20-gate-findings");
   const record = session.host.record;
@@ -468,6 +482,181 @@ try {
   await test.mockInput.typeText(" notes");
   await rest();
   await capture("50-rename-session");
+  // A life at the scale of a real one: many chains, and questions to the owner open on three of them at once, one of
+  // which a conductor relays at its length. The desk over the input counts them, and says which one the input answers.
+  test.mockInput.pressEscape();
+  app().dispose();
+  await library.dispose();
+  await show(await gallerySession());
+  await seedDemo(session);
+  await session.command("/name Conduct the work");
+  await idle(session);
+  const chains: Record<string, string> = {};
+  for (const label of [
+    "life3/feed",
+    "life3/answers",
+    "life3/fix305",
+    "life2/literal",
+    "life2/rpc",
+    "life2/cache",
+  ])
+    chains[label] = await session.engine.chain({ label });
+  const ask = async (shape: string, message: string, on: string) =>
+    session.engine.rung({ word: `await prompt(${shape}, ${JSON.stringify(message)}, to=OPERATOR)`, on });
+  await ask(
+    "str",
+    [
+      "chain30 asks the operator:",
+      "",
+      "A question on the item answers, before I build. The owner asks that the operator answers each question by its shape, a choice of a Literal among them. No host can answer a prompt of a Literal today:",
+      "",
+      "1. monty cannot subscript `Literal`, so the word fails before its prompt.",
+      "2. `close` checks `isinstance(value, Literal)`, which never fits.",
+      "3. The console answers no shape outside `SHAPES`, so it refuses the prompt at once.",
+      "",
+      "- **A.** One stack: the engine, monty and the crate first, then this PR on top.",
+      "- **B.** This PR builds the flow on the shapes that the console answers now, and a separate item adds the Literal.",
+      "",
+      "Answer A or B, with any change.",
+    ].join("\n"),
+    session.engine.root,
+  );
+  await ask("bool", "Merge #305 into main now that its checks are green?", chains["life3/feed"] ?? "");
+  await ask(
+    "int",
+    "The test of a stable heading failed 2 times in 40 runs. How many retries should it get?",
+    chains["life3/fix305"] ?? "",
+  );
+  await ask("None", "#306 stands on w/feed again, and its checks run.", chains["life3/feed"] ?? "");
+  await until(session.host, () => session.host.prompts.size === 3 && session.host.notices.size === 1);
+  await session.select(session.engine.root);
+  await rest();
+  await capture("52-many-questions");
+  app().question();
+  await capture("53-question-dialog");
+  // Tab goes to the next question, and shows its chain under the dialog.
+  test.mockInput.pressTab();
+  await until(session, () => session.selected === chains["life3/feed"]);
+  await capture("54-next-question");
+  const merge = session.aimed?.id ?? "";
+  test.mockInput.pressEnter();
+  await until(session.host, () => !session.host.prompts.has(merge));
+  app().closeOverlay();
+  await capture("55-answer-landed");
+
+  // A record that an earlier engine made drifts on a replay, so it opens to read, with a dialog that names both engines.
+  const older = await demoSession({ cwd: await project("fieldnotes-old") });
+  await seedDemo(older);
+  const drifts = older.host.record ?? "";
+  await older.dispose();
+  const kept = await readFile(drifts, "utf8");
+  await writeFile(drifts, kept.replace(/("bash","bash\d+","rung\d+","chain\d+","[^"]*"),""/, "$1,false"));
+  await library.import(drifts, await library.add(older.host.directory));
+  session = library.current?.session ?? session;
+  await capture("56-record-to-read");
+
+  app().dispose();
+  await library.dispose();
+  await show(await gallerySession());
+  // A thread of the owner whose model hires two workers, each on a chain of its own, and a later message of his.
+  await session.submit("Hire two workers.");
+  await until(
+    session,
+    () =>
+      session.acts.filter((act) => act.kind === "rung" && act.on !== session.engine.root && !act.done)
+        .length === 2,
+  );
+  const thread = session.activity.find((act) => session.isUserPrompt(act))?.id ?? "";
+  await session.submit("Think until I cancel.");
+  await until(session, () => {
+    const last = session.lastOwn;
+    return Boolean(
+      last && last.id !== thread && session.activity.some((act) => act.by === last.id && !act.done),
+    );
+  });
+  await session.refresh();
+  app().render();
+  await test.flush();
+  // A right click on the message offers to take it back.
+  const [column, row] = find(test, "┃ Think until I cancel.");
+  await test.mockMouse.click(column + 4, row, 2);
+  await capture("57-message-menu");
+  app().closeOverlay();
+  // A cancel of the thread reaches the workers, so it asks first.
+  await session.command(`/cancel ${thread}`);
+  await rest();
+  await capture("58-cancel-confirm");
+  app().closeOverlay();
+  // ⌃C takes back the last message alone, and the workers go on.
+  const message = session.lastOwn?.id;
+  await session.command("/cancel");
+  await until(session, () => session.acts.some((act) => act.id === message && act.done));
+  await rest();
+  await capture("59-take-back");
+
+  // The feed of a real life: a life of the conductor, recorded from its log, with a score of chains at work, which
+  // shows and runs nothing. The library of the demo ends first, with the sessions and the workers that it holds.
+  app().dispose();
+  await library.dispose();
+  const life = await openEngine({ record: conductor, cwd: await project("conductor") });
+  session = new Session(life.engine, life.host, true);
+  await session.refresh();
+  ({ library, app } = await mount(session, test.renderer));
+  await capture("02-feed");
+  // A worker of the life, whose ladders are long: the earlier rungs of a ladder fold into one line.
+  await session.select(session.chains.find((chain) => session.labelOf(chain.id) === "life3/feed")?.id ?? "");
+  await capture("60-long-ladder");
+  // The conductor runs one long word, under which its messages pile up, and the earlier ones fold into one line.
+  await session.select(session.engine.root);
+  app().render();
+  await test.flush();
+  const fold = app()
+    .scroll.getChildren()
+    .find((node) => node.id.startsWith("more-"));
+  app().scroll.stickyScroll = false;
+  app().scroll.scrollTo(Math.max(0, (fold?.y ?? 0) - app().scroll.y + app().scroll.scrollTop - 6));
+  await test.flush();
+  await capture("61-folded-steps");
+  test.resize(82, 32);
+  await capture("17-narrow");
+  test.resize(152, 46);
+
+  // A first run on a machine that holds no model: the welcome checks the setup, with a fix for each part that is
+  // missing. The demo needs no model and checks nothing, so the check is the one of a machine with nothing.
+  app().dispose();
+  await library.dispose();
+  const bare = await demoSession({ cwd: await project("first-run") });
+  await until(bare, () => bare.setup === null && bare.catalogRead);
+  bare.setup = {
+    claude: false,
+    providers: [
+      { provider: "anthropic", env: ["ANTHROPIC_API_KEY"], offered: 0 },
+      { provider: "openai", env: ["OPENAI_API_KEY"], offered: 0 },
+      { provider: "google", env: ["GOOGLE_API_KEY", "GEMINI_API_KEY"], offered: 0 },
+      { provider: "openrouter", env: ["OPENROUTER_API_KEY"], offered: 0 },
+    ],
+  };
+  await show(bare);
+  await capture("63-setup-no-model");
+
+  // Watch a life: the demo plays by itself, asks no model, and costs nothing.
+  app().dispose();
+  await library.dispose();
+  const watched = await demoSession({ watch: true, cwd: await project("watch") });
+  await show(watched);
+  const playing = tour(watched, 300);
+  await until(
+    watched,
+    () => watched.acts.filter((act) => act.kind === "prompt" && act.words[2] && !act.done).length === 3,
+  );
+  await rest();
+  await capture("64-watch-a-life");
+  await playing;
+  await watched.select(watched.engine.root);
+  // The moment goes back to the word as it began, before it asked any model.
+  const asks = () => watched.at(watched.activity).some((act) => act.kind === "prompt" && act.words[2]);
+  while (asks()) watched.travel(-1);
+  await capture("65-watch-earlier");
 } finally {
   app().dispose();
   test.renderer.destroy();

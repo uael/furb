@@ -13,19 +13,19 @@ async def test_what_a_life_fails_with_when_an_act_of_it_is_not_the_one_the_recor
   assert await engine.prompt(int, "roll", on=root) == 0
   await settle()
   later = Sand()
-  with pytest.raises(Drift, match=r"^bash1 drifts$"):
+  with pytest.raises(Drift, match=r"^bash1 drifts: "):
     life(later, list(sand.record))
   assert later.record == []
   torn, _, root = born(auto=False)
   step = engine.rung("x = bash('sleep 9')", on=root)
   await settle()
-  with pytest.raises(Drift, match=r"^bash1 drifts$"):
+  with pytest.raises(Drift, match=r"^bash1 drifts: "):
     life(Sand(), [e for e in torn.record if e[0][1] != step])
   wrote, _, root = born()
   await engine.rung("made = write(Text('made.txt', 'x'))", on=root)
   engine.read("a.txt", on=root)
   later = Sand()
-  with pytest.raises(Drift, match=r"^write1 drifts$"):
+  with pytest.raises(Drift, match=r"^write1 drifts: "):
     life(later, [e for e in wrote.record if e[0][1] != "write1"])
   assert "/w/made.txt" not in later.files and [a for a in later.calls if a[0] == "write"] == []
 
@@ -35,10 +35,32 @@ async def test_an_act_whose_words_are_not_the_ones_the_record_holds_is_a_drift()
   sand, _, root = born()
   assert await engine.rung("t = read('a.txt')", on=root) is None
   kept = [((*e[0][:4], "b.txt"),) if e[0][:2] == ("read", "read1") else e for e in plain(sand.record)]
-  with pytest.raises(Drift, match=r"^read1 drifts$"):
+  with pytest.raises(Drift, match=r"^read1 drifts: "):
     life(Sand(), kept)
   _, over = await relived(Sand(), plain(sand.record))
   assert over == root and engine.module(over)["t"].content == "one\ntwo\n"
+
+
+async def test_its_message_names_the_act_that_drifted_and_both_facts() -> None:
+  """Its message names the act that drifted, the fact that the life made under that name and the fact that the record holds under it, which is the act or else its first answer, each cut to 300 characters, so a drift says the fact that differs."""
+  sand, _, root = born()
+  assert await engine.rung("t = read('a.txt')", on=root) is None
+  made = next(e[0] for e in plain(sand.record) if e[0][:2] == ("read", "read1"))
+  held = (*made[:4], "b.txt")
+  kept = [(held,) if e[0][:2] == ("read", "read1") else e for e in plain(sand.record)]
+  with pytest.raises(Drift) as raised:
+    life(Sand(), kept)
+  assert str(raised.value) == f"read1 drifts: the life made {made!r}, the record holds {held!r}"
+  sand, _, root = born()
+  await engine.rung("x = bash('echo ' + 'x' * 400)", on=root)
+  await settle()
+  made = next(e[0] for e in plain(sand.record) if e[0][:2] == ("bash", "bash1"))
+  held = (*made[:4], "echo " + "y" * 400, *made[5:])
+  kept = [(held,) if e[0][:2] == ("bash", "bash1") else e for e in plain(sand.record)]
+  with pytest.raises(Drift) as raised:
+    life(Sand(), kept)
+  assert str(raised.value) == f"bash1 drifts: the life made {repr(made)[:300]}, the record holds {repr(held)[:300]}"
+  assert len(repr(made)) > 300
 
 
 async def test_a_drift_breaks_the_journal_which_keeps_nothing_more() -> None:
@@ -63,7 +85,7 @@ async def test_a_drift_breaks_the_journal_which_keeps_nothing_more() -> None:
   await engine.prompt(None, "roll", on=root)
   await settle()
   left = Sand()
-  with pytest.raises(Drift, match=r"^bash1 drifts$"):
+  with pytest.raises(Drift, match=r"^bash1 drifts: "):
     life(left, list(sand.record))
   await chained("two")
   await settle(200)

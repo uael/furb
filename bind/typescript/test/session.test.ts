@@ -1,11 +1,13 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { FileChanges } from "../src/changes.ts";
 import {
   Activity,
   actorParts,
   boot,
+  DamagedJournal,
   type Ear,
   enabled,
   type Fact,
@@ -212,7 +214,11 @@ test("what a model writes streams into the session under its rung until its repl
         actor: "claude-cli:sonnet/high",
         chain: engine.root,
         messages: [expect.objectContaining({ role: "user" })],
-        settings: { effort: "high", session: expect.stringMatching(/\/chain1$/) },
+        settings: {
+          effort: "high",
+          max_thinking_tokens: 32768,
+          session: expect.stringMatching(/\/chain1$/),
+        },
       },
     ]);
     release();
@@ -253,6 +259,42 @@ test("what a model writes after its reply is done streams nothing", async () => 
     release();
     expect(await second).toBe(2);
     expect(session.streams.size).toBe(0);
+  } finally {
+    await session.dispose();
+    await rm(cwd, { recursive: true });
+  }
+});
+
+test("a model call that fails for a cause that passes is asked again, and its stream holds the retry until it writes", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-retry-"));
+  let calls = 0;
+  const session = new Session({
+    cwd,
+    record: join(cwd, "life.jsonl"),
+    ...modeled,
+    answer: async (_, write) => {
+      calls++;
+      write({ text: "close(" });
+      if (calls === 1) throw new Error("read ECONNRESET: connection reset by peer");
+      return said("close(5)");
+    },
+  });
+  try {
+    const engine = session.open();
+    const asked = Date.now();
+    const answer = engine.prompt("int", { message: "count", on: engine.root });
+    await until(session, () => [...session.streams.values()].some((stream) => stream.retry));
+    const [stream] = [...session.streams.values()];
+    // What the model wrote before the failure is void.
+    expect({ ...stream, retry: { ...stream?.retry, until: 0 } }).toEqual({
+      chain: engine.root,
+      text: "",
+      thinking: "",
+      retry: { attempt: 2, most: 10, until: 0, why: "connection reset" },
+    });
+    expect(stream?.retry?.until).toBeGreaterThanOrEqual(asked + 4000);
+    expect(await answer).toBe(5);
+    expect(calls).toBe(2);
   } finally {
     await session.dispose();
     await rm(cwd, { recursive: true });
@@ -421,6 +463,41 @@ test("a function of the host that throws answers nothing, and two in a row pause
     expect(reasons).toContain("Refused: claude-cli:sonnet/high answered nothing: ProviderError: unavailable");
   } finally {
     await broken.dispose();
+  }
+});
+
+test("a damaged journal of file changes opens, names the change it cannot read, and is repaired or started anew", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-damaged-"));
+  const record = join(cwd, "life.jsonl");
+  const journal = `${record}.changes.jsonl`;
+  const change = (after: string) => JSON.stringify({ path: "a", before: "", after });
+  await writeFile(journal, `${change("one")}\n{ damaged }\n${change("two")}\n`);
+  const repaired = new FileChanges(record);
+  try {
+    expect(repaired.length).toBe(3);
+    expect(() => repaired.read()).toThrow(new DamagedJournal(journal, 1));
+    expect(repaired.read(0, 1).map((one) => one.after)).toEqual(["one"]);
+    // The repair keeps each change in its order, and a change appended after it reads with them.
+    expect(repaired.repair()).toBe(1);
+    repaired.append({ path: "a", before: "two", after: "three" });
+    expect(repaired.read().map((one) => one.after)).toEqual(["one", "two", "three"]);
+  } finally {
+    repaired.dispose();
+  }
+  await writeFile(journal, `${change("one")}\nnull\n`);
+  const renewed = new FileChanges(record);
+  try {
+    const aside = renewed.renew();
+    expect(renewed.length).toBe(0);
+    expect(await readFile(aside, "utf8")).toBe(`${change("one")}\nnull\n`);
+    renewed.append({ path: "b", before: "", after: "new" });
+    expect(renewed.read()).toEqual([{ path: "b", before: "", after: "new" }]);
+    expect((await readdir(cwd)).sort()).toEqual(
+      [aside.slice(cwd.length + 1), "life.jsonl.changes.jsonl"].sort(),
+    );
+  } finally {
+    renewed.dispose();
+    await rm(cwd, { recursive: true });
   }
 });
 
@@ -787,4 +864,19 @@ test("the activity places each act in time by the count of facts, and keeps the 
     { at: 4, actor: "claude-cli:opus/high", usage: [100, 10, 80, 0, 0.5] },
   ]);
   expect(activity.cost).toBe(0.5);
+});
+
+test("a rung costs the dollars of the answers that wrote its word", () => {
+  const activity = new Activity();
+  const hear = (fact: Fact) => {
+    const heard = activity.hear(fact);
+    while (!heard.next().done);
+  };
+  hear(["rung", "rung1", "prompt1", ROOT, "", "", "claude-cli:opus/high"]);
+  expect(activity.acts.get("rung1")?.cost).toBeUndefined();
+  hear(["reply", "reply1", "rung1", ROOT, "claude-cli:opus/high"]);
+  hear(["done", "reply1", "world", ["assistant", "close(1)", [100, 10, 80, 0, 0.5], null]]);
+  hear(["reply", "reply2", "rung1", ROOT, "claude-cli:opus/high"]);
+  hear(["done", "reply2", "world", ["assistant", "close(1)", [100, 10, 80, 0, 0.25], null]]);
+  expect(activity.acts.get("rung1")?.cost).toBe(0.75);
 });

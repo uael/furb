@@ -30,27 +30,31 @@ The owner chose the stack: Tauri 2, with a UI of web components.
   models of the catalog, in a new record that the app names as the TUI does. A record goes on where its life
   stopped, or opens to read. Open a project and Read a record pick one with the dialog of the system.
 - A record to read opens with no life, so no word runs again, no model is asked, no command runs, and a record of
-  any engine opens. While the log of the life beside the record agrees with it, as `logged` says, the core reads
-  every fact of the log as a live life tells it, so the record shows whole: each ladder, each run, and the end of
-  each thread. Else the core reads the facts that the record kept. The record keeps only what the World, the
-  models and the operator said, so the core makes what it lacks: each rung that a kept act names as its maker, on
-  the open prompt of its chain, with the word of the reply that it asked for, and done when the next rung starts; a
-  refusal of the gate on the rung whose word it read; and each chain that a kept act stands on. A thread that a word
-  closed, and a raise of a word, are not in the record: the thread shows a note where its answer would stand, and
-  the graph folds the chains that hold no thread into one note.
+  any engine opens. The core reads it with `furb::world::retold`, the one reader of a record that both doors expose
+  as `retold` and the TUI reads too. While the log beside the record agrees with it, the reader gives every fact of
+  the log, so the record shows whole: each ladder, each run, and the end of each thread. Else it gives the facts that
+  the record kept, and the facts that the engine said and the record does not keep, as far as the kept facts show
+  them. A thread that a word closed has no end in such a record: the thread shows a note where its answer would
+  stand, and the graph folds the chains that hold no thread into one note. The header says Read only.
 - `furb-gui --live DIRECTORY`, `--continue RECORD` and `--record RECORD` open the same from the command line, and
   `--demo` opens the demo: a small project, and models that answer from a script, so no model is asked.
 - The core sends the window the acts that changed since its last part, as the event `life`, at most once each 80
-  milliseconds, with the words of their rungs, the prompts that the operator owes, the measure of each chain, and
-  what each model writes now. A window that misses a part asks the core with `life` for all that changed since what
-  it holds. `watch` gives what a chain told, `send` carries each command of the operator, `open` and `close` open a
-  life and go back to the picker, and `places` lists the projects.
-- `furb-gui --check` ends the app once its window drew a life, and fails after 45 seconds, so a bundle is proved
-  before anyone opens it.
+  milliseconds and only when something changed, with the words of their rungs and the prompts that the operator
+  owes, and the measure of each chain and what each model writes now when they changed. Each part says whether the
+  core read the whole record, which a life that works holds from its opening. A window that misses a part asks the
+  core with `life` for all that changed since what it holds. `watch` gives what a chain told, `send` carries each
+  command of the operator, `open` and `close` open a life and go back to the picker, and `places` lists the projects.
+- The rail and the ladder of a thread draw only the rows that they show. The core cuts the text of each file to 2048
+  characters and keeps the count of its lines, and the window grows its acts in place and derives its views once a
+  second while the core reads a record. So a record of 185 MB opens in a window of about 250 MB.
+- `furb-gui --check` ends the app once its window drew the life, or the whole record, and prints the count of its
+  chains, its threads and its acts. It fails after 600 seconds, so a bundle is proved before anyone opens it. The
+  test `gui/src-tauri/tests/check.rs` runs it on the record that `FURB_RECORD` names, compares the counts with those
+  of `furb facts` on the same record, and holds the WebContent of the window under 300 MB, as its comment says.
 - `furb-gui --view PATH` runs the demo with no window until it rests, and writes the life as the window takes it,
   with the watch of each chain. `gui/src/data/demo.json` is such a fixture: a browser shows the UI on it, and
-  `bun run shots` takes the captures. With `--record RECORD`, it writes the fixture of that record, with the places
-  of the picker; `FURB_FIXTURE` gives it to the build of the UI.
+  `bun run shots` takes the captures, each with its text beside it. With `--record RECORD`, it writes the fixture of
+  that record, with the places of the picker; `FURB_FIXTURE` gives it to the build of the UI.
 
 ## Time
 

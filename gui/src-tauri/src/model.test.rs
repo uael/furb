@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-use super::{LONG, Life, lean, literal};
+use super::{LONG, Life, TEXT, lean, literal};
 
 /// A small life: the operator asks the root, whose model reads a file, runs a command and asks the operator.
 fn facts() -> Vec<Value> {
@@ -134,82 +134,54 @@ fn the_turn_of_a_reply_reads_as_a_tuple_of_the_wire() {
 }
 
 #[test]
-fn a_record_read_with_no_life_makes_each_rung_that_an_act_names() {
-  let mut life = Life { kept: true, ..Life::default() };
-  let kept = [
+fn a_rung_takes_the_word_of_its_run_when_no_ready_said_it() {
+  let facts = [
     json!(["chain", "chain1", "operator", "", "root", ""]),
-    json!(["prompt", "prompt1", "operator", "chain1", "str", "Do it", ""]),
-    json!(["reply", "reply1", "rung1", "chain1", "claude-cli:opus/high"]),
-    json!(["done", "reply1", "provider", ["assistant", "x = read('a')", [10, 1, 0, 0, 0.1], null]]),
-    json!(["read", "read1", "rung1", "chain1", "a"]),
-    json!(["reply", "reply2", "rung2", "chain1", "claude-cli:opus/high"]),
+    json!(["rung", "rung1", "prompt1", "chain1", "", "", ""]),
+    json!(["run", "run1", "reader", "chain1", "rung1", "x = read('a')", ""]),
   ];
-  for fact in &kept {
-    life.add(fact);
-  }
-  let rung = life.act("rung1").expect("the rung is made");
-  assert_eq!((rung.by.as_str(), rung.ended), ("prompt1", Some(6)));
+  assert_eq!(Life::of(&facts).words.get("rung1").map(String::as_str), Some("x = read('a')"));
+}
+
+#[test]
+fn the_word_that_a_rung_said_ready_stands_before_the_word_of_its_run() {
+  let life = Life::of(&facts());
+  let word = life.words.get("rung1").map(String::as_str);
+  assert_eq!(word, Some("x = read('a')\nq = await prompt(str, 'Which?', to=OPERATOR)"));
+}
+
+/// A record that the store kept, with no log beside it: the operator asks the root, and its model reads a file.
+fn kept_record(name: &str) -> std::path::PathBuf {
+  let folder = std::env::temp_dir().join(format!("furb-gui-model-{name}-{}", std::process::id()));
+  let _ = std::fs::remove_dir_all(&folder);
+  std::fs::create_dir_all(&folder).expect("the folder of the test is made");
+  let path = folder.join("a.jsonl");
+  let kept = [
+    json!([["chain", "chain1", "operator", "", "root", ""], 1]),
+    json!([["prompt", "prompt1", "operator", "chain1", "str", "Do it", ""], 2]),
+    json!([["reply", "reply1", "rung1", "chain1", "claude-cli:opus/high"], 3]),
+    json!([
+      ["done", "reply1", "provider", ["assistant", "x = read('a')", [10, 1, 0, 0, 0.1], null]],
+      4
+    ]),
+    json!([["read", "read1", "rung1", "chain1", "a"], 5]),
+    json!([["done", "read1", "files", {"is": "Text", "path": "a", "content": "1"}], 6]),
+  ];
+  let text: String = kept.iter().map(|one| format!("{one}\n")).collect();
+  std::fs::write(&path, text).expect("the record is written");
+  path
+}
+
+#[test]
+fn a_record_that_the_crate_retold_shows_the_rungs_that_it_does_not_keep() {
+  let retold = furb::world::retold(kept_record("retold")).expect("the record reads");
+  let facts: Vec<Value> =
+    retold.facts.iter().map(|one| furb::wire::outward(one.as_ref())).collect();
+  let life = Life::of(&facts);
+  let rung = life.act("rung1").expect("the reader made the rung");
+  assert_eq!(rung.by, "prompt1");
   assert_eq!(life.words.get("rung1").map(String::as_str), Some("x = read('a')"));
-}
-
-#[test]
-fn a_record_read_with_no_life_makes_each_chain_that_an_act_stands_on() {
-  let mut life = Life { kept: true, ..Life::default() };
-  let kept = [
-    json!(["chain", "chain1", "operator", "", "root", ""]),
-    json!(["reply", "reply1", "rung1", "chain1", "claude-cli:opus/high"]),
-    json!(["prompt", "prompt2", "rung1", "chain2", "str", "Work", ""]),
-  ];
-  for fact in &kept {
-    life.add(fact);
-  }
-  let chain = life.act("chain2").expect("the chain is made");
-  assert_eq!(chain.by, "rung1");
-  assert_eq!(life.act("rung1").map(|one| one.on.as_str()), Some("chain1"));
-}
-
-#[test]
-fn a_chain_with_no_maker_is_hired_by_the_rung_of_its_first_prompt() {
-  let mut life = Life { kept: true, ..Life::default() };
-  let kept = [
-    json!(["rung", "rung1", "extensions", "chain2", "def x(): pass", "", ""]),
-    json!(["prompt", "prompt2", "rung9", "chain2", "str", "Work", ""]),
-  ];
-  for fact in &kept {
-    life.add(fact);
-  }
-  assert_eq!(life.act("chain2").map(|one| one.by.as_str()), Some("rung9"));
-}
-
-#[test]
-fn a_made_rung_joins_no_question_to_the_operator() {
-  let mut life = Life { kept: true, ..Life::default() };
-  let kept = [
-    json!(["prompt", "prompt1", "operator", "chain1", "str", "Do it", ""]),
-    json!(["prompt", "prompt2", "rung1", "chain1", "str", "Which?", "operator"]),
-    json!(["reply", "reply1", "rung2", "chain1", "claude-cli:opus/high"]),
-  ];
-  for fact in &kept {
-    life.add(fact);
-  }
-  assert_eq!(life.act("rung2").map(|one| one.by.as_str()), Some("prompt1"));
-}
-
-#[test]
-fn a_record_read_with_no_life_refuses_the_word_that_its_gate_found_wrong() {
-  let mut life = Life { kept: true, ..Life::default() };
-  let kept = [
-    json!(["prompt", "prompt1", "operator", "chain1", "str", "Do it", ""]),
-    json!(["reply", "reply1", "rung1", "chain1", "claude-cli:opus/high"]),
-    json!(["done", "reply1", "provider", ["assistant", "x", [10, 1, 0, 0, 0.1], null]]),
-    json!(["gate", "gate1", "chain1", "chain1", "x"]),
-    json!(["done", "gate1", "gate", ["line 1: no name x"]]),
-  ];
-  for fact in &kept {
-    life.add(fact);
-  }
-  let rung = life.act("rung1").expect("the rung is made");
-  assert_eq!(life.run(rung), ("failed", "line 1: no name x".to_owned()));
+  assert_eq!(life.run(rung).0, "running");
 }
 
 #[test]
@@ -230,11 +202,35 @@ fn a_binding_belongs_to_the_act_its_name_starts_with() {
 }
 
 #[test]
-fn a_long_text_of_a_fact_is_cut_and_keeps_its_count_of_lines() {
-  let content = "line\n".repeat(LONG / 4);
+fn a_long_text_of_a_file_is_cut_and_keeps_its_count_of_lines() {
+  let content = "line\n\n".repeat(TEXT);
   let kept = lean(json!(["done", "read1", "files", {"is": "Text", "content": content}]));
-  assert_eq!(kept[3]["lines"], LONG / 4);
-  assert!(kept[3]["content"].as_str().is_some_and(|one| one.chars().count() == LONG + 1));
+  assert_eq!(kept[3]["lines"], TEXT);
+  assert!(kept[3]["content"].as_str().is_some_and(|one| one.chars().count() == TEXT + 1));
+}
+
+#[test]
+fn the_text_that_a_write_asks_for_is_cut_as_a_file() {
+  let content = "é".repeat(TEXT + 1);
+  let kept = lean(
+    json!(["write", "write1", "rung1", "chain1", {"is": "Text", "path": "a", "content": content}]),
+  );
+  assert_eq!(kept[4]["lines"], 1);
+  assert_eq!(kept[4]["content"], format!("{}…", "é".repeat(TEXT)));
+}
+
+#[test]
+fn a_long_text_of_a_fact_is_cut() {
+  let kept = lean(json!(["done", "bash1", "bash", "x".repeat(LONG + 5)]));
+  assert!(kept[3].as_str().is_some_and(|one| one.chars().count() == LONG + 1));
+}
+
+#[test]
+fn the_word_of_a_rung_and_the_message_of_a_prompt_stay_whole() {
+  let long = "x".repeat(LONG + 5);
+  let rung = json!(["rung", "rung1", "prompt1", "chain1", long, "", ""]);
+  let prompt = json!(["prompt", "prompt1", "operator", "chain1", "str", long, ""]);
+  assert_eq!((lean(rung.clone()), lean(prompt.clone())), (rung, prompt));
 }
 
 #[test]

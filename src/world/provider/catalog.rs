@@ -49,17 +49,9 @@ pub const LEVELS: [&str; 7] = ["off", "minimal", "low", "medium", "high", "xhigh
 /// The level of an actor that names none.
 pub const LEVEL: &str = "high";
 
-/// The doctrine of each family of models that reads one, as a word that the id of a model of the family holds: how
-/// a model of the family works in furb, beside the doctrine of the engine, which each chain tells once to that model.
-const DOCTRINES: [(&str, &str); 1] = [(
-  "qwen",
-  "Work in two words at least, since you see no file until a word shows it.
-Your first word looks: read(path) shows each file of the task whole, and bash(command) runs its check. It ends with no
-close, and the chain asks you again with all that it showed.
-A later word reads each file again for the Text that it changes, changes it from the lines that you saw, runs the
-check again, and closes.
-Never guess what a file holds, and never hide what you must see.",
-)];
+/// The doctrine of furb, which says how a model works in furb and holds no law: `DOCTRINE.md` at the root of the
+/// repository. Every model reads it, once on each chain, in the paragraph that asks it for its first word.
+pub const DOCTRINE: &str = include_str!("../../../DOCTRINE.md");
 
 /// The snapshot of the catalog that the crate carries.
 const SNAPSHOT: &str = include_str!("catalog.json");
@@ -161,10 +153,38 @@ enum Dialect {
 }
 
 /// The models this machine can ask, each with whether the catalog offers it: those of the claude command line and of
-/// the network, and the local server that the environment names, which holds what it listed.
+/// the network, the local server that the environment names, which holds what it listed, and the most tokens of
+/// thought of a model in one turn that the environment gives as `MAX_THINKING_TOKENS`.
 pub struct Catalog {
   models: Vec<(Model, bool)>,
+  /// Each provider of the network, with the names of its credential.
+  providers: Vec<(String, Vec<String>)>,
   local: Option<Arc<Server>>,
+  thinking: Option<String>,
+}
+
+/// What this machine holds of each way to a model, as a first run checks it: whether the catalog found the claude
+/// command line, each provider of the network, and the local server that the environment names.
+pub struct Setup {
+  pub claude: bool,
+  pub providers: Vec<Ready>,
+  pub local: Option<Local>,
+}
+
+/// A provider of the network as a first run checks it: its name, the names of its credential, and how many of its
+/// models the catalog offers, which is none when no credential of it stands in the environment.
+pub struct Ready {
+  pub provider: String,
+  pub env: Vec<String>,
+  pub offered: usize,
+}
+
+/// The local server that the environment names, as a first run checks it: its address, how many models for chat the
+/// catalog offers of it, and why it listed none, when it did not answer.
+pub struct Local {
+  pub address: String,
+  pub offered: usize,
+  pub failed: Option<String>,
 }
 
 impl Catalog {
@@ -206,7 +226,9 @@ impl Catalog {
     let found = claude.is_some();
     let claude = claude.unwrap_or_else(|| Claude::with(None, None)).models().into_iter();
     let mut models: Vec<_> = claude.map(|model| (model, found)).collect();
+    let mut providers = Vec::new();
     for (provider, one) in listed {
+      providers.push((provider.clone(), one.env.clone()));
       let credential = one.credential(&env);
       for (id, listing) in &one.models {
         let Some(client) = listing.client(one.rig).filter(|_| listing.kept()) else { continue };
@@ -215,7 +237,31 @@ impl Catalog {
         models.push((model(provider, id, listing, client, reach), offered));
       }
     }
-    Catalog { models, local }
+    Catalog { models, providers, local, thinking: env(super::ENV_THINKING) }
+  }
+
+  /// What a first run checks: the claude command line, each provider of the network, and the local server, which it
+  /// asks for what it lists, so it never runs on the thread of the reactor.
+  pub fn setup(&self) -> Setup {
+    let offered = |provider: &str| {
+      let of = |model: &Model| model.name.split_once(':').is_some_and(|(one, _)| one == provider);
+      self.models.iter().filter(|(model, offered)| *offered && of(model)).count()
+    };
+    let providers = self.providers.iter();
+    Setup {
+      claude: offered(claude::CLAUDE) > 0,
+      providers: providers
+        .map(|(provider, env)| Ready {
+          provider: provider.clone(),
+          env: env.clone(),
+          offered: offered(provider),
+        })
+        .collect(),
+      local: self.local.as_ref().map(|server| {
+        let heard = server.heard(None);
+        Local { address: server.root.clone(), offered: heard.models.len(), failed: heard.failed }
+      }),
+    }
   }
 
   /// What the local server lists, for the name that the catalog wants of it, if any; and nothing when the environment
@@ -277,7 +323,7 @@ impl Catalog {
     if let Some(model) = self.served(actor) {
       return Some((model, None));
     }
-    // A model of the local server takes no effort, so a word after its slash is a level of effort or no name of it.
+    // A model of the local server is named by its id, so a word after its slash is a level of effort or no name of it.
     let (name, level) = split.filter(|(_, level)| LEVELS.contains(level))?;
     Some((self.served(name)?, Some(level)))
   }
@@ -323,7 +369,8 @@ impl Catalog {
   }
 
   /// The provider of a roster of the catalog on a directory, with the default actor of the roster, whose models a
-  /// function of the host answers in place of the models when it gives one.
+  /// function of the host answers in place of the models when it gives one, and whose model thinks at most the tokens
+  /// in one turn that the environment gives, else the config of the project in the directory, else 32768.
   pub fn provider(
     &self,
     directory: impl Into<String>,
@@ -336,7 +383,9 @@ impl Catalog {
       Some(host) => models.into_iter().map(|model| model.hosted(Arc::clone(&host))).collect(),
       None => models,
     };
-    Ok(Provider::new(directory, models).actor(actor))
+    let directory = directory.into();
+    let thinking = super::thinking(self.thinking.as_deref(), std::path::Path::new(&directory));
+    Ok(Provider::new(directory, models).actor(actor).thinking(thinking))
   }
 }
 
@@ -353,12 +402,6 @@ fn named<'a>(models: &[&'a Model], name: &str) -> Option<&'a Model> {
   }
 }
 
-/// The doctrine of a model by its name: that of the family whose word the id of the model holds, in any case, and
-/// none for a model of no such family.
-pub fn doctrine(name: &str) -> Option<&'static str> {
-  let id = name.split_once(':').map_or(name, |(_, id)| id).to_lowercase();
-  DOCTRINES.iter().find(|(family, _)| id.contains(family)).map(|(_, text)| *text)
-}
 /// The level of these efforts nearest a level: the level itself when a model takes it, the next one up that it
 /// takes, or the next one down; and nothing for a model that takes no effort.
 pub fn clamp<'a>(efforts: &[&'a str], level: &str) -> Option<&'a str> {

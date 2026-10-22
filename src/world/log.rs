@@ -1,7 +1,9 @@
 //! The log of a life, `<record>.log`: every fact that the life says, in the order of the log, as an ear of a host
 //! hears it, so a reader shows the life whole with no life. It holds what the record leaves out, as the rungs of each
 //! ladder, each run, and each tell of a chain. It is a cache, which each life on the record writes again from its
-//! first line, since a later life says every fact of its record again, before it says its own.
+//! first line, since a later life says every fact of its record again, before it says its own. A life writes it in
+//! `<record>.log.new`, which takes the place of the log when the life keeps its first entry, after its replay, so a
+//! life whose replay drifts leaves the log of the life before it as it was.
 //!
 //! Its first line is a map that holds under `entries` how many entries the record held when the life opened. Each
 //! other line is one fact, as JSON reads a value of the sandbox, but for the line `["keep", "", n]`, which says that
@@ -56,6 +58,8 @@ fn heard(mut log: Log) -> Box<dyn Ear> {
 struct Log {
   path: PathBuf,
   file: Option<File>,
+  /// The file that a life writes the log again in, beside the log, until it keeps its first entry.
+  fresh: Option<PathBuf>,
   /// How many entries the record holds.
   entries: usize,
   /// Each name that a line of the log shows as an act, or that names no act.
@@ -66,8 +70,9 @@ impl Log {
   /// The log of the record at a path, written again from its first line.
   fn open(record: &Path, entries: usize) -> Log {
     let path = PathBuf::from(format!("{}.log", record.display()));
-    let file = OpenOptions::new().create(true).write(true).truncate(true).open(&path).ok();
-    let mut log = Log { path, file, entries, seen: HashSet::new() };
+    let fresh = PathBuf::from(format!("{}.log.new", record.display()));
+    let file = OpenOptions::new().create(true).write(true).truncate(true).open(&fresh).ok();
+    let mut log = Log { path, file, fresh: Some(fresh), entries, seen: HashSet::new() };
     log.line(&serde_json::json!({ "entries": entries }));
     log
   }
@@ -83,7 +88,7 @@ impl Log {
       seen.extend(about.filter(|one| !one.is_empty()));
     }
     let file = OpenOptions::new().append(true).open(&path).ok();
-    Log { path, file, entries, seen }
+    Log { path, file, fresh: None, entries, seen }
   }
 
   /// A fact that the ear heard, after the act it is about when no line shows that act yet.
@@ -114,6 +119,13 @@ impl Log {
 
   /// The line that says the record kept its next entry.
   fn kept(&mut self) {
+    if let Some(fresh) = self.fresh.take()
+      && self.file.is_some()
+      && std::fs::rename(&fresh, &self.path).is_err()
+    {
+      self.file = None;
+      let _ = std::fs::remove_file(&fresh);
+    }
     self.entries += 1;
     self.line(&serde_json::json!(["keep", "", self.entries]));
   }
@@ -123,15 +135,15 @@ impl Log {
     let Some(file) = self.file.as_mut() else { return };
     if file.write_all(format!("{value}\n").as_bytes()).is_err() {
       self.file = None;
-      let _ = std::fs::remove_file(&self.path);
+      let _ = std::fs::remove_file(self.fresh.as_ref().unwrap_or(&self.path));
     }
   }
 }
 
 /// The facts of the log of the record at a path, read with no lease, when the log agrees with the record: each entry
 /// that the record holds is one that the log counts. Nothing when the record has no log, or a log that does not agree,
-/// as one that an older life left, or one that a life that wrote no log made old. A last line that a crash tore is
-/// left out.
+/// as one that an older life left, one that a life that wrote no log made old, or one that a life whose replay drifted
+/// left short of an act that the record holds. A last line that a crash tore is left out.
 pub fn logged(path: impl AsRef<Path>) -> Result<Option<Vec<Object>>, Fault> {
   let path = path.as_ref();
   let Ok(text) = std::fs::read_to_string(format!("{}.log", path.display())) else {
@@ -161,7 +173,18 @@ pub fn logged(path: impl AsRef<Path>) -> Result<Option<Vec<Object>>, Fault> {
     }
     facts.push(fact);
   }
-  Ok((usize::try_from(entries).ok() == Some(kept(path)?.len())).then_some(facts))
+  let record = kept(path)?;
+  let shown: HashSet<String> = facts
+    .iter()
+    .filter_map(|one| Fact::of(one.as_ref()))
+    .filter(Fact::question)
+    .map(|one| one.about().to_owned())
+    .collect();
+  let whole = record.iter().all(|entry| {
+    let fact = entry.as_ref().items().and_then(|held| Fact::of(*held.first()?));
+    fact.is_none_or(|one| !one.question() || shown.contains(one.about()))
+  });
+  Ok((whole && usize::try_from(entries).ok() == Some(record.len())).then_some(facts))
 }
 
 #[cfg(test)]

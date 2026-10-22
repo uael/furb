@@ -14,7 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 # The engine, the ears of the World and the provider of models, linked directly: the life runs in this process.
-furb = { path = "../..", version = "0.1.0" }
+furb = { path = "../..", version = "0.2.0" }
 # The window and the web view, which show the UI of gui/src and carry its commands and the views of the life.
 tauri = { version = "2", features = [] }
 # The native dialog that picks a project or a record to open.

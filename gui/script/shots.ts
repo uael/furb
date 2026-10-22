@@ -1,8 +1,9 @@
 // Captures of the screens of the app, in WebKit, the engine of the web view of Tauri on macOS, on the fixture of the
 // demo, or on the one that the build took from FURB_FIXTURE: run `vite build` in gui, then `bun run shots [directory]`.
+// Each capture has its text beside it, in a file of the same name.
 
 import { spawn } from "node:child_process";
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { webkit } from "playwright";
 
@@ -36,6 +37,8 @@ try {
     await page.goto(`http://localhost:4174/?${query}`);
     await page.waitForTimeout(Number(process.env.FURB_SHOTS_WAIT ?? 1200));
     await page.screenshot({ path: join(out, `${name}.png`) });
+    // The text of each capture beside it, so a reader with no eyes on the image reads what it shows.
+    await writeFile(join(out, `${name}.txt`), await page.evaluate(() => document.body.innerText));
   }
 } finally {
   await browser.close();

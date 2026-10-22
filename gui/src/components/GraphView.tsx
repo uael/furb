@@ -87,7 +87,9 @@ function Program({ data }: NodeProps<Node<ProgramData>>) {
   const threads = moment.threads.filter(
     (one) => one.chain === chain.id && moment.rows.get(one.act.by)?.kind !== "chain",
   );
-  const ladder = thread ? steps(moment, thread.act, held.directory, held.streams) : [];
+  const ladder = thread
+    ? steps(moment, thread.act, held.directory, held.streams, held.works && moment.now)
+    : [];
   const step = excerpt(ladder.findLast((one) => one.lines.some((line) => line.here)) ?? ladder.at(-1));
   const live = held.works && moment.now;
   const paused = state === "paused";
@@ -296,7 +298,7 @@ export function GraphView({
   const { nodes, edges } = useMemo(() => {
     // A record shows only the chains that hold a thread, and folds the others into one note.
     const holds = (chain: LiveAct) =>
-      !held.kept || chain.id === held.root || moment.threads.some((one) => one.chain === chain.id);
+      held.logged || chain.id === held.root || moment.threads.some((one) => one.chain === chain.id);
     const shown = moment.chains.filter(holds);
     const folded = moment.chains.length - shown.length;
     const grid = places(shown, (chain) => hirer(moment, chain));

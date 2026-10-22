@@ -1,6 +1,7 @@
 import { Braces, MessagesSquare, Workflow } from "lucide-react";
-import { chainName, type Moment, threadState } from "../life.ts";
+import { chainName, type Held, type Moment, threadState } from "../life.ts";
 import { Glyph } from "./Glyph.tsx";
+import { Tip } from "./Tip.tsx";
 
 export type Mode = "thread" | "programs" | "code";
 
@@ -10,14 +11,16 @@ const modes: { id: Mode; label: string; icon: typeof Braces; key: string }[] = [
   { id: "code", label: "Code", icon: Braces, key: "3" },
 ];
 
-/** The bar over the view: the thread that the operator reads, and the switch of views. Each empty part of it moves
- * the window. */
+/** The bar over the view: the thread that the operator reads, the switch of views, and for a record whether the core
+ * still reads it and the mark that says that it runs nothing. Each empty part of it moves the window. */
 export function TopBar({
+  life,
   moment,
   thread,
   mode,
   onMode,
 }: {
+  life: Held;
   moment: Moment;
   thread: string;
   mode: Mode;
@@ -52,7 +55,24 @@ export function TopBar({
           </button>
         ))}
       </nav>
-      <div data-tauri-drag-region className="flex-1" />
+      <div data-tauri-drag-region className="flex flex-1 items-center justify-end gap-4">
+        {life.read ? null : (
+          <span className="flex items-center gap-2 text-[12px] text-faint">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+            Reading the record
+          </span>
+        )}
+        {life.works ? null : (
+          <Tip
+            side="bottom"
+            text="A record opens with no life: no word runs again, no model is asked, and no command runs."
+          >
+            <span className="rounded-md border border-accent/40 bg-accent/10 px-2 py-0.5 text-[11.5px] font-medium text-accent">
+              Read only
+            </span>
+          </Tip>
+        )}
+      </div>
     </header>
   );
 }

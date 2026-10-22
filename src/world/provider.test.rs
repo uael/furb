@@ -26,7 +26,10 @@ use rig_core::{
 };
 use serde_json::{Value, json};
 
-use super::{Hosted, Model, Provider, Writes, catalog::Catalog, images, local::Server, unfenced};
+use super::{
+  Backoff, Hosted, Model, Provider, Retries, Retry, Thinking, Writes, catalog::Catalog, images,
+  local::Server, passing, thinking, unfenced,
+};
 use crate::{Act, Ear, Engine, Fact, Object, SYSTEM, verbs, world};
 
 /// A waker that unparks the thread of the test, so what an ear waits for wakes the poll when it is ready.
@@ -145,22 +148,21 @@ fn the_provider_answers_a_stand_with_its_roster_its_directory_and_its_default_ac
   let standing = engine.standing().expect("the life stands");
   // The default actor is the first model, at the level of an actor that names none. Python shows each backslash of a path of Windows twice.
   let expected = format!(
-    "[[['m', ['low', 'high'], 1000], ['operator', [], 200000]], '{}', 'm/high']",
+    "[[['m', ['low', 'high'], 1000, {}], ['operator', [], 200000]], '{}', 'm/high']",
+    Object::string(super::catalog::DOCTRINE).py_repr(),
     at.display().to_string().replace('\\', "\\\\")
   );
   assert_eq!(standing.py_repr(), expected);
 }
 
 #[test]
-fn the_entry_of_a_model_of_a_family_that_reads_a_doctrine_holds_that_doctrine_after_its_window() {
+fn the_entry_of_each_model_holds_its_doctrine_after_its_window() {
   let qwen = Model::new("local:qwen3", 1000, MockCompletionModel::new([]));
   let (mut engine, _) = life("doctrine", vec![qwen, scripted(&MockCompletionModel::new([]))]);
   let standing = engine.standing().expect("the life stands");
-  let taught =
-    Object::string(super::catalog::doctrine("local:qwen3").expect("qwen reads a doctrine"))
-      .py_repr();
+  let taught = Object::string(super::catalog::DOCTRINE).py_repr();
   let expected = format!(
-    "[[['local:qwen3', [], 1000, {taught}], ['m', ['low', 'high'], 1000], ['operator', [], 200000]]"
+    "[[['local:qwen3', [], 1000, {taught}], ['m', ['low', 'high'], 1000, {taught}], ['operator', [], 200000]]"
   );
   assert!(standing.py_repr().starts_with(&expected), "{}", standing.py_repr());
 }
@@ -385,6 +387,31 @@ fn the_replies_of_a_chain_keep_one_process_of_the_claude_command_line_and_each_l
 
 #[cfg(unix)]
 #[test]
+fn the_claude_command_line_is_told_the_most_thought_of_the_provider_unless_the_environment_gave_it()
+{
+  use super::claude::test::Yard;
+  let fake = Yard::new("most");
+  let claude = fake.claude(10_000);
+  let inherited = Thinking { most: 4096, inherited: true };
+  for (name, most) in [("most-told", Thinking::default()), ("most-inherited", inherited)] {
+    let provider = Provider::new(yard(name).display().to_string(), claude.models());
+    let mut engine = lived(provider.thinking(most).actor(Some("claude-cli:opus/high".into())));
+    let root = engine.root().to_owned();
+    let with = verbs::Prompt { message: Some("task".into()), on: on(&root), ..Default::default() };
+    block_on(engine.prompt(Object::string("str"), with).expect("a prompt is made"))
+      .expect("an answer");
+  }
+  let thinking: Vec<String> = fake
+    .pids()
+    .iter()
+    .map(|pid| fs::read_to_string(fake.at.join(format!("thinking.{pid}"))).unwrap_or_default())
+    .collect();
+  let given = std::env::var("MAX_THINKING_TOKENS").unwrap_or_else(|_| "unset".to_owned());
+  assert_eq!(thinking, ["32768".to_owned(), given], "a most that the environment gave goes untold");
+}
+
+#[cfg(unix)]
+#[test]
 fn the_word_of_the_claude_command_line_is_the_text_it_settled_over_the_parts_it_streamed() {
   use super::claude::test::Yard;
   let yard = Yard::new("gap");
@@ -478,6 +505,114 @@ fn a_function_of_the_host_answers_a_request_with_a_turn_in_place_of_the_model() 
   let expected = "('assistant', 'close(7)', (10, 2, 0, 0, 1.0), None)";
   assert_eq!(said(&mut engine)[1], ("done".into(), "reply1".into(), expected.into()));
   assert_eq!(told.lock().expect("the parts told").len(), 1);
+}
+
+/// A function of the host that fails with these reasons, one call each, and then answers `close(7)`, and how many
+/// times it was called.
+fn failing(reasons: &[&str]) -> (Hosted, Arc<AtomicUsize>) {
+  let calls = Arc::new(AtomicUsize::new(0));
+  let (counted, reasons) =
+    (Arc::clone(&calls), reasons.iter().map(|one| one.to_string()).collect::<Vec<_>>());
+  let host: Hosted = Arc::new(move |_, told| {
+    let call = counted.fetch_add(1, Ordering::SeqCst);
+    if let Some(why) = reasons.get(call).cloned() {
+      told("clo", "");
+      return async move { Err(why) }.boxed();
+    }
+    told("close(7)", "");
+    let usage = Object::list([10, 2, 0, 0, 1].map(Object::int));
+    let turn = [Object::string("assistant"), Object::string("close(7)"), usage, Object::none()];
+    async move { Ok(Object::list(turn)) }.boxed()
+  });
+  (host, calls)
+}
+
+/// The retries that a test was told, each as its rung, its chain and the retry.
+type Told = Arc<Mutex<Vec<(String, String, Retry)>>>;
+
+/// Whom a test tells each retry, and what it was told.
+fn retried() -> (Retries, Told) {
+  let heard: Told = Arc::default();
+  let kept = Arc::clone(&heard);
+  let retries: Retries = Arc::new(move |rung, chain, retry| {
+    kept.lock().expect("the retries told").push((rung.to_owned(), chain.to_owned(), retry.clone()));
+  });
+  (retries, heard)
+}
+
+/// The rung that the first reply of the root answers.
+fn replying(engine: &mut Engine) -> String {
+  let root = engine.root().to_owned();
+  let facts =
+    engine.transcript(verbs::Transcript { on: on(&root), of: None }).expect("a transcript");
+  facts.iter().find(|one| one.kind() == "reply").map(|one| one.by().to_owned()).expect("a reply")
+}
+
+#[test]
+fn a_call_that_fails_twice_for_a_cause_that_passes_is_made_again_after_its_backoff_and_the_host_is_told_each_retry()
+ {
+  let (host, calls) =
+    failing(&["Connection reset by peer (os error 54)", "API Error: 529 Overloaded"]);
+  let (retries, told) = retried();
+  let at = yard("retried");
+  let model = scripted(&MockCompletionModel::default()).hosted(host);
+  let backoff = Backoff { most: 10, first: Duration::from_millis(5) };
+  let provider =
+    Provider::new(at.display().to_string(), vec![model]).backoff(backoff).retries(retries);
+  let mut engine = lived(provider);
+  let id = asked(&mut engine);
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  assert_eq!(got.as_ref().as_int(), Some(7));
+  assert_eq!(calls.load(Ordering::SeqCst), 3);
+  let (rung, root) = (replying(&mut engine), engine.root().to_owned());
+  let retry = |attempt, millis, why: &str| {
+    let wait = Duration::from_millis(millis);
+    (rung.clone(), root.clone(), Retry { attempt, most: 10, wait, why: why.to_owned() })
+  };
+  let expected = vec![retry(2, 5, "connection reset"), retry(3, 10, "the provider is overloaded")];
+  assert_eq!(*told.lock().expect("the retries told"), expected);
+  let kinds: Vec<_> = said(&mut engine).into_iter().map(|(kind, about, _)| (kind, about)).collect();
+  assert_eq!(
+    kinds,
+    [("started", "reply1"), ("done", "reply1")].map(|(k, a)| (k.to_owned(), a.to_owned()))
+  );
+}
+
+#[test]
+fn a_call_whose_attempts_are_spent_is_refused_with_its_last_failure() {
+  let (host, calls) = failing(&["503 Service Unavailable"; 3]);
+  let (retries, told) = retried();
+  let model = scripted(&MockCompletionModel::default()).hosted(host);
+  let backoff = Backoff { most: 3, first: Duration::from_millis(1) };
+  let provider = Provider::new(yard("spent").display().to_string(), vec![model])
+    .backoff(backoff)
+    .retries(retries);
+  let mut engine = lived(provider);
+  asked(&mut engine);
+  assert!(until(&mut engine, |engine| said(engine).len() >= 2), "{:?}", said(&mut engine));
+  // The chain asks again after the refusal, and the function answers that later call.
+  assert!(calls.load(Ordering::SeqCst) >= 3);
+  let attempts: Vec<_> =
+    told.lock().expect("the retries told").iter().map(|one| one.2.attempt).take(2).collect();
+  assert_eq!(attempts, [2, 3]);
+  let refused = "Refused(args=('m/high answered nothing: ProviderError: 503 Service Unavailable'))";
+  assert_eq!(said(&mut engine)[1], ("done".into(), "reply1".into(), refused.into()));
+}
+
+#[test]
+fn only_a_failure_of_the_network_or_of_the_side_of_the_provider_passes() {
+  let provider = |why: &str| passing(&CompletionError::ProviderError(why.to_owned()));
+  assert_eq!(
+    provider("error sending request: connection reset").as_deref(),
+    Some("connection reset")
+  );
+  assert_eq!(provider("the request timed out").as_deref(), Some("timed out"));
+  assert_eq!(provider("429 Too Many Requests").as_deref(), Some("rate limited"));
+  assert_eq!(provider("Invalid status code 502 Bad Gateway").as_deref(), Some("server error 502"));
+  assert_eq!(provider("unavailable"), None);
+  assert_eq!(provider("boom"), None);
+  assert_eq!(provider("No model is m/x."), None);
+  assert_eq!(passing(&CompletionError::ResponseError("the stream stopped, 503".into())), None);
 }
 
 /// A provider on a port of this machine, which reads one request and streams these events. It gives the request it
@@ -770,6 +905,15 @@ fn chunk(delta: Value, finish: Value) -> String {
 /// A life whose root prompts local:qwen, the one model of a local server of the tests, which lists it with a window of
 /// 1000 and streams these events for its one reply; the prompt, and the two requests the server read.
 fn local(name: &str, events: String) -> (Engine, String, std::thread::JoinHandle<[String; 2]>) {
+  thinking_local(name, events, Thinking::default())
+}
+
+/// The life of [`local`], whose model thinks at most so many tokens in one turn.
+fn thinking_local(
+  name: &str,
+  events: String,
+  most: Thinking,
+) -> (Engine, String, std::thread::JoinHandle<[String; 2]>) {
   let listener = TcpListener::bind("127.0.0.1:0").expect("a port of this machine");
   let port = listener.local_addr().expect("the port").port();
   let listing =
@@ -782,9 +926,14 @@ fn local(name: &str, events: String) -> (Engine, String, std::thread::JoinHandle
     Catalog::of(&super::catalog::parsed("{}", None), None, Server::named(env).map(Arc::new), env);
   let (models, actor) =
     catalog.roster(None, Some("local:qwen/high")).expect("the model is offered");
-  assert_eq!(actor.as_deref(), Some("local:qwen"), "a model of a local server takes no effort");
+  assert_eq!(
+    actor.as_deref(),
+    Some("local:qwen/high"),
+    "a model of a local server takes the effort that its actor names"
+  );
   assert_eq!(models[0].priced(), Some([0.0; 4]), "a model of a local server costs nothing");
-  let mut engine = lived(Provider::new(yard(name).display().to_string(), models).actor(actor));
+  let provider = Provider::new(yard(name).display().to_string(), models).actor(actor);
+  let mut engine = lived(provider.thinking(most));
   let id = asked(&mut engine);
   (engine, id, asked_of)
 }
@@ -850,8 +999,8 @@ fn a_model_of_a_local_server_is_asked_with_no_key_and_a_cap_and_the_thought_in_i
     (&body["model"], &body["max_tokens"], body.get("cache_prompt"), body.get("reasoning_effort"));
   assert_eq!(
     asked,
-    (&json!("qwen"), &json!(250), None, None),
-    "a model writes a quarter of its window at most"
+    (&json!("qwen"), &json!(250), None, Some(&json!("high"))),
+    "a model writes a quarter of its window at most, and thinks at the effort of its actor"
   );
 }
 
@@ -897,16 +1046,12 @@ fn rethinking(
     [listing.to_string(), first, again].map(|one| exchanged(&listener, &one))
   });
   let address = format!("http://127.0.0.1:{port}");
-  let env = |name: &str| match name {
-    "FURB_LOCAL_URL" => Some(address.clone()),
-    "FURB_LOCAL_THOUGHT" => Some("2".to_owned()),
-    _ => None,
-  };
+  let env = |name: &str| (name == "FURB_LOCAL_URL").then(|| address.clone());
   let catalog =
     Catalog::of(&super::catalog::parsed("{}", None), None, Server::named(env).map(Arc::new), env);
   let (models, actor) = catalog.roster(None, Some("local:qwen")).expect("the model is offered");
-  let mut engine =
-    lived(Provider::new(yard("rethought").display().to_string(), models).actor(actor));
+  let provider = Provider::new(yard("rethought").display().to_string(), models).actor(actor);
+  let mut engine = lived(provider.thinking(Thinking { most: 2, inherited: false }));
   let id = asked(&mut engine);
   (engine, id, asked_of)
 }
@@ -957,6 +1102,79 @@ fn a_model_whose_thought_passes_its_most_is_asked_again_with_that_thought_and_no
     ),
     (&json!("assistant"), &json!("abc"), &json!({"enable_thinking": false}), None),
     "the model is asked again with its thought and no more thought"
+  );
+}
+
+#[test]
+fn the_most_thought_of_a_turn_is_that_of_the_environment_else_that_of_the_config_else_32768() {
+  let at = yard("thinking");
+  assert_eq!(thinking(None, &at), Thinking { most: 32_768, inherited: false });
+  fs::create_dir_all(at.join(".furb")).expect("the folder of the config");
+  fs::write(at.join(".furb").join("config.json"), r#"{"max_thinking_tokens": 0}"#)
+    .expect("the config");
+  assert_eq!(thinking(None, &at), Thinking { most: 0, inherited: false }, "the config gives it");
+  assert_eq!(
+    thinking(Some("4096"), &at),
+    Thinking { most: 4096, inherited: true },
+    "the environment wins over the config"
+  );
+  assert_eq!(
+    thinking(Some("much"), &at),
+    Thinking { most: 0, inherited: true },
+    "a value that is no count is as unsaid, and claude inherits it"
+  );
+}
+
+#[test]
+fn a_model_of_a_local_server_with_a_most_thought_of_zero_is_asked_with_its_thought_off_from_the_first_request()
+ {
+  let usage = json!({"id": "c", "object": "chat.completion.chunk", "created": 0, "model": "qwen", "choices": [],
+    "usage": {"prompt_tokens": 100, "completion_tokens": 5, "total_tokens": 105}});
+  let events = [
+    chunk(json!({"role": "assistant", "content": "close(3)"}), json!("stop")),
+    format!("data: {usage}\n\ndata: [DONE]\n\n"),
+  ];
+  let none = Thinking { most: 0, inherited: false };
+  let (mut engine, id, asked_of) = thinking_local("unthought", events.concat(), none);
+  replied(&mut engine);
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  assert_eq!(got.as_ref().as_int(), Some(3));
+  let [_, first] = asked_of.join().expect("the server read the requests");
+  let first: Value =
+    serde_json::from_str(first.split("\r\n\r\n").nth(1).unwrap_or_default()).expect("a JSON body");
+  assert_eq!(
+    (&first["chat_template_kwargs"], first.get("reasoning_effort")),
+    (&json!({"enable_thinking": false}), None),
+    "the first request turns the thought off"
+  );
+}
+
+#[test]
+fn a_local_model_reads_its_earlier_turn_with_no_thought() {
+  let usage = json!({"id": "c", "object": "chat.completion.chunk", "created": 0, "model": "qwen", "choices": [],
+    "usage": {"prompt_tokens": 100, "completion_tokens": 5, "total_tokens": 105}});
+  let ended = format!("data: {usage}\n\ndata: [DONE]\n\n");
+  let first = [
+    chunk(json!({"role": "assistant", "reasoning_content": "a"}), Value::Null),
+    chunk(json!({"content": "x = 1"}), json!("stop")),
+    ended.clone(),
+  ];
+  let again = [chunk(json!({"role": "assistant", "content": "close(x)"}), json!("stop")), ended];
+  let (mut engine, id, asked_of) = rethinking(first.concat(), again.concat());
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  assert_eq!(got.as_ref().as_int(), Some(1));
+  let [_, _, second] = asked_of.join().expect("the server read the requests");
+  let body: Value =
+    serde_json::from_str(second.split("\r\n\r\n").nth(1).unwrap_or_default()).expect("a JSON body");
+  let earlier = body["messages"]
+    .as_array()
+    .and_then(|messages| messages.iter().find(|one| one["role"] == "assistant"))
+    .cloned()
+    .unwrap_or_default();
+  assert_eq!(
+    (&earlier["content"], earlier.get("reasoning_content")),
+    (&json!([{"type": "text", "text": "x = 1"}]), None),
+    "the earlier turn goes with its word and no thought"
   );
 }
 
@@ -1022,16 +1240,36 @@ fn a_turn_with_a_thought_and_no_word_is_asked_again_with_that_thought_and_no_tho
 
 #[test]
 fn the_fence_that_opens_a_text_goes_with_its_closing_fence_at_its_end_and_any_other_text_stays() {
-  assert_eq!(unfenced("```python\nclose(3)\n```"), Some("close(3)"));
-  assert_eq!(unfenced("\n```\nx = 1\ny = 2\n```\n"), Some("x = 1\ny = 2"));
-  assert_eq!(unfenced("```python\nclose(3)\n"), Some("close(3)"), "a fence with no close goes");
-  assert_eq!(unfenced("```python\nx = '```'"), Some("x = '```'"), "backticks inside a line stay");
-  assert_eq!(unfenced("```python\nclose(3)\n```\nDone."), Some("close(3)\n```\nDone."));
+  assert_eq!(unfenced("```python\nclose(3)\n```").as_deref(), Some("close(3)"));
+  assert_eq!(unfenced("\n```\nx = 1\ny = 2\n```\n").as_deref(), Some("x = 1\ny = 2"));
   assert_eq!(
-    unfenced("```python\nx = 1\n```\n```python\nclose(x)\n```"),
+    unfenced("```python\nclose(3)\n").as_deref(),
+    Some("close(3)"),
+    "a fence with no close goes"
+  );
+  assert_eq!(
+    unfenced("```python\nx = '```'").as_deref(),
+    Some("x = '```'"),
+    "backticks inside a line stay"
+  );
+  assert_eq!(unfenced("```python\nclose(3)\n```\nDone.").as_deref(), Some("close(3)\n```\nDone."));
+  assert_eq!(
+    unfenced("```python\nx = 1\n```\n```python\nclose(x)\n```").as_deref(),
     Some("x = 1\n```\n```python\nclose(x)")
   );
-  assert_eq!(unfenced("Here:\n```python\nclose(3)\n```"), None);
-  assert_eq!(unfenced("```js\nclose(3)\n```"), None);
-  assert_eq!(unfenced("close(3)"), None);
+  assert_eq!(unfenced("Here:\n```python\nclose(3)\n```").as_deref(), None);
+  assert_eq!(unfenced("```js\nclose(3)\n```").as_deref(), None);
+  assert_eq!(unfenced("close(3)").as_deref(), None);
+  assert_eq!(
+    unfenced("<\nread(\"a\")\n</\n<\nclose(1)\n</").as_deref(),
+    Some("read(\"a\")\nclose(1)"),
+    "a bare tag that wraps each part of a word goes, each time"
+  );
+  assert_eq!(unfenced("<answer>\nclose(3)\n</answer>").as_deref(), Some("close(3)"));
+  assert_eq!(unfenced("<s:x>\nhi\n</s:x>\nclose(x)"), None, "the mark of a quote is no tag");
+  assert_eq!(
+    unfenced("<answer>\nx = '<b>'\n<b>\nclose(x)").as_deref(),
+    Some("x = '<b>'\n<b>\nclose(x)"),
+    "a line of another tag stays"
+  );
 }

@@ -382,6 +382,27 @@ pub fn logged(path: String) -> Result<Option<Value>, Fault> {
   Ok(world::logged(&path)?.map(|facts| Value(Object::list(facts))))
 }
 
+/// What the record at a path tells, read with no life, so no word runs again and a record of any engine opens: the
+/// engine that made it, as the record names it, and nothing when it names none; the engine of this build; whether
+/// the facts are those of its log; and the facts, in order. The facts are those of the log when it agrees with the
+/// record, and else those that the record kept, with the chains, the rungs, the runs and the dones that they name.
+#[cfg_attr(feature = "python", pyfunction)]
+#[cfg_attr(
+  feature = "typescript",
+  napi(
+    ts_return_type = "{ made: string | null; engine: string; logged: boolean; facts: unknown[] }"
+  )
+)]
+pub fn retold(path: String) -> Result<Value, Fault> {
+  let world::Retold { made, logged, facts } = world::retold(&path)?;
+  Ok(Value(Object::dict([
+    (Object::string("made"), made.map_or_else(Object::none, Object::string)),
+    (Object::string("engine"), Object::string(world::engine())),
+    (Object::string("logged"), Object::bool(logged)),
+    (Object::string("facts"), Object::list(facts)),
+  ])))
+}
+
 /// One line of a record, read with every number exact, as the record keeps it.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi(ts_return_type = "unknown"))]
@@ -474,6 +495,13 @@ pub fn shapes() -> Vec<&'static str> {
   world::SHAPES.to_vec()
 }
 
+/// Whether the operator answers a shape: one of the shapes it offers, or a Literal of values that a line names.
+#[cfg_attr(feature = "python", pyfunction)]
+#[cfg_attr(feature = "typescript", napi)]
+pub fn answers(shape: String) -> bool {
+  world::answers(&shape)
+}
+
 /// A line of the operator as a value of the shape a prompt wants, by the rules every console of the crate reads a
 /// line by, as the record keeps it; or the refusal of a line that is no value of the shape, and of a shape the
 /// operator answers not.
@@ -490,6 +518,57 @@ pub fn answered(shape: String, line: String) -> Result<Record, Fault> {
 pub fn models(claude: Option<String>) -> Vec<ModelInfo> {
   let catalog = world::Catalog::load().claude(claude.map(Into::into), None);
   catalog.offered().iter().map(ModelInfo::of).collect()
+}
+
+/// What a first run checks of this machine, as a host reads it: whether the catalog found the claude command line,
+/// each provider of the network with the names of its credential and how many of its models the catalog offers, and
+/// the local server that `FURB_LOCAL_URL` names, with the models it offers or why it listed none.
+#[cfg_attr(feature = "typescript", napi(object, object_from_js = false))]
+#[cfg_attr(feature = "python", derive(pyo3::IntoPyObject))]
+pub struct SetupInfo {
+  pub claude: bool,
+  pub providers: Vec<ProviderInfo>,
+  pub local: Option<LocalInfo>,
+}
+
+/// A provider of the network as a first run checks it: its name, the names of its credential in the environment, and
+/// how many of its models the catalog offers.
+#[cfg_attr(feature = "typescript", napi(object, object_from_js = false))]
+#[cfg_attr(feature = "python", derive(pyo3::IntoPyObject))]
+pub struct ProviderInfo {
+  pub provider: String,
+  pub env: Vec<String>,
+  pub offered: i64,
+}
+
+/// The local server as a first run checks it: its address, how many models the catalog offers of it, and why it
+/// listed none, when it did not answer.
+#[cfg_attr(feature = "typescript", napi(object, object_from_js = false))]
+#[cfg_attr(feature = "python", derive(pyo3::IntoPyObject))]
+pub struct LocalInfo {
+  pub address: String,
+  pub offered: i64,
+  pub failed: Option<String>,
+}
+
+/// What a first run checks of this machine, with the claude command line at a path when it is given. It asks the
+/// local server for what it lists, so it waits for that server.
+#[cfg_attr(feature = "python", pyfunction, pyo3(signature = (claude = None)))]
+#[cfg_attr(feature = "typescript", napi)]
+pub fn setup(claude: Option<String>) -> SetupInfo {
+  let count = |n: usize| i64::try_from(n).unwrap_or(i64::MAX);
+  let found = world::Catalog::load().claude(claude.map(Into::into), None).setup();
+  SetupInfo {
+    claude: found.claude,
+    providers: (found.providers.into_iter())
+      .map(|one| ProviderInfo { provider: one.provider, env: one.env, offered: count(one.offered) })
+      .collect(),
+    local: found.local.map(|one| LocalInfo {
+      address: one.address,
+      offered: count(one.offered),
+      failed: one.failed,
+    }),
+  }
 }
 
 /// The model the catalog knows by a name, as `provider:id` or as an id that one model alone holds, which for a model of

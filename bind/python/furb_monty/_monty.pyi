@@ -28,6 +28,30 @@ class ModelInfo(TypedDict):
   images: bool
   price: list[float] | None
 
+class ProviderInfo(TypedDict):
+  """A provider of the network as a first run checks it: its name, the names of its credential in the environment,
+  and how many of its models the catalog offers."""
+
+  provider: str
+  env: list[str]
+  offered: int
+
+class LocalInfo(TypedDict):
+  """The local server as a first run checks it: its address, how many models the catalog offers of it, and why it
+  listed none, when it did not answer."""
+
+  address: str
+  offered: int
+  failed: str | None
+
+class SetupInfo(TypedDict):
+  """What a first run checks of this machine: whether the catalog found the claude command line, each provider of
+  the network, and the local server that FURB_LOCAL_URL names."""
+
+  claude: bool
+  providers: list[ProviderInfo]
+  local: LocalInfo | None
+
 class ImageAttachment(TypedDict):
   """An image a host attached: the name of its file, the uri a message names it by, its media type, and its size in
   bytes."""
@@ -96,6 +120,7 @@ class Opening(TypedDict):
   images: NotRequired[str | None]
   answer: NotRequired[Callable[[dict, Callable[..., None]], object] | None]
   stream: NotRequired[Callable[[str, str, str, str], None] | None]
+  retrying: NotRequired[Callable[[str, str, int, int, float, str], None] | None]
   snapshot: NotRequired[bool | None]
   log: NotRequired[Callable[[str], None] | None]
 
@@ -231,6 +256,21 @@ def logged(path: str) -> list[list[object]] | None:
   that the life that wrote it said, as an ear of a host hears it, the rungs of each ladder among them. Nothing when
   the record has no log, or a log that does not agree with it."""
 
+class Retold(TypedDict):
+  """What a record tells, read with no life: the engine that made it, the engine of this build, whether its facts are
+  those of its log, and its facts."""
+
+  made: str | None
+  engine: str
+  logged: bool
+  facts: list[list[object]]
+
+def retold(path: str) -> Retold:
+  """What the record at a path tells, read with no life, so no word runs again and a record of any engine opens: the
+  engine that made it, as the record names it, and nothing when it names none; the engine of this build; whether
+  the facts are those of its log; and the facts, in order. The facts are those of the log when it agrees with the
+  record, and else those that the record kept, with the chains, the rungs, the runs and the dones that they name."""
+
 def decode_record(line: str) -> object:
   """One line of a record, read with every number exact, as the record keeps it."""
 
@@ -268,6 +308,9 @@ def shell() -> str:
 def shapes() -> list[str]:
   """Every shape the operator answers, by its name."""
 
+def answers(shape: str) -> bool:
+  """Whether the operator answers a shape: one of the shapes it offers, or a Literal of values that a line names."""
+
 def answered(shape: str, line: str) -> object:
   """A line of the operator as a value of the shape a prompt wants, by the rules every console of the crate reads a
   line by. It raises Refused for a line that is no value of the shape, and for a shape the operator answers not."""
@@ -280,6 +323,9 @@ def model(name: str) -> ModelInfo | None:
 
 def levels() -> list[str]:
   """The levels of effort, from least to most, which an actor names after its model."""
+
+def setup(claude: str | None = None) -> SetupInfo:
+  """What a first run checks of this machine, with the claude command line at a path when it is given."""
 
 def attach_image(directory: str, path: str) -> ImageAttachment:
   """An image copied into a directory of images under the digest of its bytes, as a message attaches it."""

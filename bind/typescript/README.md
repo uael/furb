@@ -54,7 +54,8 @@ with a refusal that says it was interrupted, and run it no more. Only the openin
 of a life makes the files of a record again in its scratch directory, and gives a life with no record a directory that
 goes with it. A session has the scratch directory of its record, in the cache of furb, which `scratch(record)` gives,
 so a host removes it when it deletes the record. Time gives the clock and a chance, and ends a wait. The provider asks
-the models of the catalog of the crate, which `models(claude?)` lists and `model(name)` finds, and it preserves
+the models of the catalog of the crate, which `models(claude?)` lists, `model(name)` finds, and `setup(claude?)`
+checks for a first run, and it preserves
 provider response blocks in the record. The catalog offers the models of a provider when a credential
 of it stands in the environment, such as `ANTHROPIC_API_KEY`, the models of the claude command line when it finds
 the program, and the models of the local server that `FURB_LOCAL_URL` names, each named `local:` and its id. The host
@@ -87,14 +88,19 @@ const session = new Session({ model: first, effort: "high", roster: others.slice
 ```
 
 Pass `answer` to replace only model requests, or `operator` to supply operator answers. `answer` gets the actor,
-the chain, the messages and the settings of the effort as the provider would send them, and a `write` that tells
+the chain, the messages and the settings of the request as the provider would send them, its effort, its conversation
+and the most tokens of thought of a claude model among them, and a `write` that tells
 what it writes as it writes it, and gives a turn. The host still names the models that `answer` stands in for. With
 no `operator`, questions stand in `session.console.prompts`; call `session.console.answer(id, text)` to read an
 answer by the rules that every console of the crate reads a line by, which `answered(shape, line)` gives, for each
-of the `shapes()` that the operator answers. A prompt of `None` asks nothing: the console closes it with `None` as
+shape that `answers(shape)` holds for: the `shapes()` that the operator offers, and a `Literal` of values that a line
+names, as `Literal['a', 'b']`. A prompt of `None` asks nothing: the console closes it with `None` as
 it takes it, so no word waits for the operator, and keeps it in `session.console.notices` until
 `session.console.dismiss(id)`, or gives it to `operator` and waits for no answer. `session` emits `change` and `facts`, and `fault` tells what the life refused when the console
 said what an act came to. `session.streams` holds what a model writes for each rung, until the done of its reply.
+When the call of a model fails for a cause that passes, the provider asks the model again after a wait, and the
+stream of its rung holds the `retry`: the attempt that comes next, the most attempts, when the wait ends, and why,
+with none of what the model wrote before the failure. The option `retrying` of `Engine.open` is told each retry.
 `session.facts` holds every fact of the life, every act among them, since the session drives the ear that keeps
 them as an ear of the engine. A view reads the life and says nothing, so a listener that reads the life hears no
 change of its own. A failed outside act carries its refusal in the record. The store writes and syncs one complete
@@ -157,7 +163,10 @@ in this life or in a later life on the record. When the host crashed after it ke
 act, the call makes the act. The record's
 `.session.json` companion holds the directory, the model and the effort that the host chose last, and no stream,
 since a stream lives only while its reply runs. File snapshots append to `.changes.jsonl`;
-`session.changes.read` loads a page of them. Keep both companions with the JSONL record.
+`session.changes.read` loads a page of them, and throws a `DamagedJournal` when the page holds a line that is no
+change. `session.changes.repair()` writes the journal again with each change that it can read, and
+`session.changes.renew()` starts a new journal and keeps the damaged one beside it. Keep both companions with the JSONL
+record.
 
 The ear of the log writes the log of the life beside its record, `<record>.log`, in each life that keeps its record,
 and `log(record)` gives it to a host that boots an engine by hand: every fact that the life said, in the order
@@ -169,6 +178,12 @@ with no life, and opens an inspection when the log does not agree. An `Activity`
 but for the question `covers`, which a reader with no life answers from the acts of the log, as the engine does: a
 pause, a wake or a cancel covers the act that it names, each act that this act made at any depth, and each act on the
 chain that it names; a close covers the act that it names, each rung that this act made, and each reply that one of these made.
+`retold(record)` reads a record with no life, so a record of any engine opens: it gives the engine that made the
+record, as the record names it, and `null` when it names none, the engine of this build, whether its facts are those
+of the log, and the facts. The facts are those of the log while the log agrees with the record, and else those that
+the record kept, with the facts that the engine said and the record does not keep, as far as the kept facts show
+them: each chain and each rung that a kept act names, the run of the word of each rung that the gate let run, the
+findings of a word that the gate refused, and the done of each act that the operator closed or cancelled.
 
 A life that keeps its record keeps a snapshot of its state beside it, `<record>.snapshot`: the session of the sandbox
 and what the engine holds of its ears, with the key of the build and of the ears, and digests of the record and of
@@ -200,10 +215,18 @@ The model of a life is the views that a host derives from the acts of a life, in
 gives. It holds no native code and no module of node, so a terminal and a window of the web read the same views:
 
 - `acts`: the act as a view reads it, `LiveAct`, the kinds of work, `WORK`, what a command came to, `Exit`, the
-  measure of a chain, `Measure`, and whether an act failed or was cancelled.
+  measure of a chain, `Measure`, which `measureOf` gives from the answers of its models, and whether an act failed or
+  was cancelled.
+- `asks`: the desk of the operator, `desk`: each question that waits for him and each notice that he did not dismiss,
+  the oldest first, each with its chain and the choices of its shape, `choicesOf`: yes and no for a bool, and each
+  value of a Literal. `aimed` gives the ask that the operator acts on, on the chain that he reads, `beside` the ask a
+  step after or before it, and `wants` what an ask wants of him, in words.
 - `loom`: the rows of the loom, one for the operator and one for each chain in the order of the tree, with the cells
-  of their moments, and the acts as they stood at a moment, `asOf`.
-- `ladder`: the lines of the thread of a chain, each prompt with the rungs of its ladder and their acts.
+  of their moments, what each chain does now, `nowOf`, in words that a person reads, a count of seconds as a person
+  reads it, `duration`, and the acts as they stood at a moment, `asOf`.
+- `ladder`: the lines of the thread of a chain, each prompt with the rungs of its ladder and their acts, and a long
+  thread as a person reads it at a glance, `condense`: the last steps at each level, and one line in place of each
+  run of earlier ones.
 - `threads`: the tree of the threads of a life, where a thread is a prompt and a prompt that a rung of a thread makes
   is its sub-thread, each with its anchor, its messages, its progress, what waits for the operator and its pull
   requests.

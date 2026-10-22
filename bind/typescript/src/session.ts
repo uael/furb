@@ -16,11 +16,18 @@ function* silent(): Ear {
 }
 
 /** A function that answers each request of the provider in place of a model: it is given the request, the actor,
- * the chain, the messages and the settings of the effort, and a function that tells what it writes as it writes it,
+ * the chain, the messages and the settings of the request, its effort, its conversation and the most tokens of thought
+ * of a claude model among them, and a function that tells what it writes as it writes it,
  * and gives the turn of the model. */
 export type Answer = NonNullable<Opening["answer"]>;
 /** What a model writes while it answers a rung, on the chain of the rung. */
-export type Stream = { chain: string; text: string; thinking: string };
+/** A retry of the call of a model, which the provider waits for: the attempt that comes next, the most attempts, when
+ * the wait ends, in milliseconds since the epoch, and why the attempt before it failed. */
+export type Retry = { attempt: number; most: number; until: number; why: string };
+
+/** What a model wrote for a rung while its reply runs, its chain, and the retry that the call of its model waits
+ * for, until the model writes again. */
+export type Stream = { chain: string; text: string; thinking: string; retry?: Retry };
 
 export interface SessionOptions {
   /** Replay a record for inspection without owning it or starting outside work. */
@@ -160,6 +167,8 @@ export class Session extends EventEmitter {
         images: this.imageDirectory,
         answer: this.options.answer,
         stream: (rung, chain, text, thinking) => this.wrote(rung, chain, text, thinking),
+        retrying: (rung, chain, attempt, most, seconds, why) =>
+          this.retried(rung, chain, { attempt, most, until: Date.now() + seconds * 1000, why }),
         log: (line) => this.emit("log", line),
       });
       this.engine = this.console.engine = engine;
@@ -209,7 +218,16 @@ export class Session extends EventEmitter {
     const held = this.streams.get(rung) ?? { chain, text: "", thinking: "" };
     held.text += text;
     held.thinking += thinking;
+    delete held.retry;
     this.streams.set(rung, held);
+    this.changed();
+  }
+
+  /** A retry of the call of the model of a rung: what the model wrote before it is void, and the stream holds the
+   * retry until the model writes again. */
+  private retried(rung: string, chain: string, retry: Retry): void {
+    if (this.stopped || ![...this.replies.values()].includes(rung)) return;
+    this.streams.set(rung, { chain, text: "", thinking: "", retry });
     this.changed();
   }
 

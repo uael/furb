@@ -15,7 +15,7 @@ use super::{
       test::{dropping, fake},
     },
   },
-  Catalog, DOCTRINES, SNAPSHOT, clamp, doctrine, parsed,
+  Catalog, SNAPSHOT, clamp, parsed,
 };
 use crate::ear::reactor;
 
@@ -422,7 +422,11 @@ fn the_catalog_asks_the_local_server_only_when_a_name_needs_it_or_a_host_lists_w
     "a word after a slash that is no level names nothing"
   );
   let high = catalog.roster(None, Some("local:qwen/high")).map(|(_, actor)| actor);
-  assert_eq!(high, Ok(Some("local:qwen".to_owned())));
+  assert_eq!(
+    high,
+    Ok(Some("local:qwen/high".to_owned())),
+    "a level after a slash is an effort of the model"
+  );
   assert_eq!(catalog.find("local:qwen").map(|one| one.window), Some(1000));
   assert_eq!(told.try_iter().count(), 0, "a catalog asks the server once");
 }
@@ -517,12 +521,36 @@ fn an_id_alone_of_the_local_server_whose_part_before_its_colon_is_a_provider_is_
 }
 
 #[test]
-fn a_model_reads_the_doctrine_of_the_family_that_its_id_names_and_a_model_of_no_family_reads_none()
-{
-  let qwen = DOCTRINES[0].1;
-  assert_eq!(doctrine("local:qwen3.8-flash-next-iq2_xs"), Some(qwen));
-  assert_eq!(doctrine("openrouter:Qwen/Qwen3-Coder"), Some(qwen));
-  assert_eq!(doctrine("qwen3"), Some(qwen));
-  assert_eq!(doctrine("claude-cli:opus"), None);
-  assert_eq!(doctrine("qwen:llama3"), None);
+fn a_first_run_checks_the_claude_command_line_each_provider_and_the_local_server() {
+  let none = catalog(&["ANTHROPIC_API_KEY"]).setup();
+  assert!(!none.claude, "no claude command line is found");
+  let ready: Vec<_> = none
+    .providers
+    .iter()
+    .map(|one| (one.provider.as_str(), one.env.join(" "), one.offered))
+    .collect();
+  assert_eq!(
+    ready[0],
+    ("anthropic", "ANTHROPIC_API_KEY".to_owned(), 3),
+    "a provider whose credential stands"
+  );
+  assert_eq!(
+    ready[1],
+    ("openai", "OPENAI_API_KEY".to_owned(), 0),
+    "a provider whose credential is missing"
+  );
+  assert_eq!(ready[2].1, "GOOGLE_API_KEY GEMINI_API_KEY", "each name of a credential");
+  assert!(none.local.is_none(), "the environment names no local server");
+  let claude = catalog(&[]).claude(Some(PathBuf::from("/bin/true")), None).setup();
+  assert!(claude.claude, "the claude command line is found at its path");
+  let (url, _) = qwen();
+  let local = catalog(&[&url]).setup().local.expect("the environment names a local server");
+  assert_eq!((local.offered, local.failed), (1, None), "the local server lists its models");
+  let gone =
+    catalog(&["FURB_LOCAL_URL=http://127.0.0.1:9"]).setup().local.expect("a local server is named");
+  assert_eq!((gone.address.as_str(), gone.offered), ("http://127.0.0.1:9", 0));
+  assert!(
+    gone.failed.is_some_and(|why| why.contains("lists no model")),
+    "a server that does not answer says why"
+  );
 }

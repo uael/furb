@@ -1,6 +1,17 @@
 import { EventEmitter } from "node:events";
-import type { Act, FileChange, ImageAttachment, LiveAct, Engine as Native, Stream, Turn } from "@furb/engine";
+import type {
+  Act,
+  FileChange,
+  ImageAttachment,
+  LiveAct,
+  Engine as Native,
+  SetupInfo,
+  Stream,
+  Turn,
+} from "@furb/engine";
+import type { Measure } from "@furb/engine/life";
 import type { EngineOptions } from "./models.ts";
+import type { Reading } from "./reading.ts";
 import type { ActRow, FollowUp } from "./session.ts";
 
 /** What one answer of a model read and wrote: its whole prompt, its output, the reads and the writes of the cache,
@@ -51,6 +62,12 @@ interface Plain {
   record?: string;
   /** How many file changes the session holds. */
   changes: number;
+  /** Why the record is open to read, when a life on it was refused for a drift, as on a record of another engine. */
+  reading?: Reading;
+  /** Whether the life is a recording, which shows its log and runs nothing. */
+  recorded?: boolean;
+  /** The measure of each chain whose models answered, by the chain. */
+  measures: Record<string, Measure>;
 }
 /** What the session in the worker holds, as it sends it to the host, and how many facts the life said since the last
  * state, which the host needs to know of and not to hold. */
@@ -71,6 +88,9 @@ export class HostView extends EventEmitter implements Plain {
   actor = "";
   record?: string;
   changes = 0;
+  reading?: Reading;
+  recorded?: boolean;
+  measures: Record<string, Measure> = {};
   prompts = new Map<string, Prompt>();
   notices = new Map<string, Notice>();
   streams = new Map<string, Stream>();
@@ -96,6 +116,8 @@ export class HostView extends EventEmitter implements Plain {
   sees = (actor: string) => this.ask<boolean>("library", "sees", actor);
   /** The models the catalog of the crate offers, each as its name, its efforts and its window. */
   catalog = () => this.ask<[string, string[], number][]>("library", "catalog");
+  /** What the first run checks of this machine, and nothing in the demo, which needs no model. */
+  setup = () => this.ask<SetupInfo | null>("library", "setup");
   /** The name of the model that a name gives in the roster or in the catalog, and nothing when it gives none. */
   model = (name: string) => this.ask<string | null>("library", "model", name);
   answer = (id: string, value: string) => this.ask<unknown>("console", "answer", id, value);
@@ -104,11 +126,13 @@ export class HostView extends EventEmitter implements Plain {
   attachImage = (path: string) => this.ask<ImageAttachment>("session", "attachImage", path);
   sendQueued = (entry: FollowUp) => this.ask<string>("library", "queue", entry);
   resume = () => this.ask<unknown>("session", "resume");
-  /** The work of a chain cancelled, and not the acts that an extension started on it. */
-  interrupt = (chain: string) => this.ask<unknown>("session", "interrupt", chain);
   source = () => this.ask<string>("library", "source");
   snapshot = (chain: string, since = 0) => this.ask<Snapshot>("library", "snapshot", chain, since);
   readChanges = (start: number, count: number) => this.ask<FileChange[]>("library", "changes", start, count);
+  /** The journal of file changes written again with each change that it holds, and the count of lines it lost. */
+  repairChanges = () => this.ask<number>("library", "repairChanges");
+  /** A new journal of file changes, and the path that the damaged one is kept at. */
+  renewChanges = () => this.ask<string>("library", "renewChanges");
   /** An act whole, with all that a command printed, and nothing when the life holds no such act. */
   act = (id: string) => this.ask<LiveAct | undefined>("library", "act", id);
   /** The text the World reads at a path, from where a chain stands, which makes no act and keeps nothing. */
@@ -148,7 +172,8 @@ export async function openEngine(options: EngineOptions): Promise<{ engine: Engi
     }
     const promise = waiting.get(data.id);
     waiting.delete(data.id);
-    if (data.error) promise?.reject(new Error(data.error));
+    if (data.error)
+      promise?.reject(Object.assign(new Error(data.error), data.name ? { name: data.name } : {}));
     else promise?.resolve(data.value);
     if (data.disposed) {
       closed = true;
