@@ -73,7 +73,7 @@ export function steps(
   moment: Moment,
   prompt: LiveAct,
   directory: string,
-  streams: Record<string, { text: string; thinking: string }>,
+  streams: Record<string, { text: string }>,
   live: boolean,
 ): Step[] {
   const label = (chain: string) => chainName(moment, chain);

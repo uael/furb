@@ -1,4 +1,4 @@
-use std::sync::{Arc, mpsc};
+use std::sync::mpsc;
 
 use serde_json::json;
 
@@ -7,7 +7,7 @@ use super::{Event, Teller, read_record};
 /// What the app hears when it reads the record at a path.
 fn heard(path: &std::path::Path) -> Vec<Event> {
   let (events, told) = mpsc::channel();
-  read_record(path, &Teller { events, woke: Arc::new(|| {}) }).expect("the record reads");
+  read_record(path, &Teller { events }).expect("the record reads");
   told.try_iter().collect()
 }
 

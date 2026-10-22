@@ -98,8 +98,8 @@ pub enum Event {
   Opened { root: String, directory: String, works: bool, logged: bool, made: Option<String> },
   /// The facts that the life said since the last event, in order.
   Facts(Vec<Value>),
-  /// What a model wrote for a rung, as it writes it: its text and its thought.
-  Writing { rung: String, text: String, thinking: String },
+  /// What a model wrote for a rung, as it writes it: its text, since the window shows no thought.
+  Writing { rung: String, text: String },
   /// The app heard every fact of a record to read.
   Read,
   /// A report for the operator: a refusal, or why the life did not open.
@@ -112,16 +112,12 @@ pub struct Life {
 }
 
 impl Life {
-  /// A life on its own thread, and what it tells. `woke` is called after each event, so the app draws again.
-  pub fn open(
-    source: Source,
-    woke: impl Fn() + Send + Sync + 'static,
-  ) -> (Life, mpsc::Receiver<Event>) {
+  /// A life on its own thread, and what it tells.
+  pub fn open(source: Source) -> (Life, mpsc::Receiver<Event>) {
     let (commands, heard) = channel::unbounded();
     let (events, told) = mpsc::channel();
-    let woke: Arc<dyn Fn() + Send + Sync> = Arc::new(woke);
     let spawned = thread::Builder::new().name("furb-life".to_owned()).spawn(move || {
-      let tell = Teller { events, woke };
+      let tell = Teller { events };
       if let Err(no) = lived(source, heard, tell.clone()) {
         tell.tell(Event::Said(no));
       }
@@ -138,17 +134,15 @@ impl Life {
   }
 }
 
-/// The way to tell the app an event, and to wake it.
+/// The way to tell the app an event.
 #[derive(Clone)]
 struct Teller {
   events: mpsc::Sender<Event>,
-  woke: Arc<dyn Fn() + Send + Sync>,
 }
 
 impl Teller {
   fn tell(&self, event: Event) {
     let _ = self.events.send(event);
-    (self.woke)();
   }
 }
 
@@ -190,13 +184,12 @@ fn lived(
     ),
   };
   let writer = tell.clone();
-  opening.stream =
-    Some(Stream(Arc::new(move |rung: &str, _: &str, text: &str, thinking: &str| {
-      if !text.is_empty() || !thinking.is_empty() {
-        let (rung, text, thinking) = (rung.to_owned(), text.to_owned(), thinking.to_owned());
-        writer.tell(Event::Writing { rung, text, thinking });
-      }
-    })));
+  opening.stream = Some(Stream(Arc::new(move |rung: &str, _: &str, text: &str, _: &str| {
+    if !text.is_empty() {
+      let (rung, text) = (rung.to_owned(), text.to_owned());
+      writer.tell(Event::Writing { rung, text });
+    }
+  })));
   let directory = opening.directory.clone();
   let ears = [("observer", observer(heard.clone())), ("console", console())];
   let (engine, _) = opening.boot(ears).map_err(|no| no.to_string())?;

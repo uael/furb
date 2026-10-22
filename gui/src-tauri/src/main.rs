@@ -33,14 +33,20 @@ use life::{Break, Command, Event, Life, Source};
 use serde_json::{Value, json};
 use tauri::{Emitter, Manager};
 
+/// How much of the text that a model writes for a rung the window holds: its last units, as JavaScript counts a
+/// string. The window keeps as much.
+const KEPT: usize = 8000;
+
 /// How many of the last lines that the app said it keeps and sends the window.
 const SAID: usize = 50;
 
-/// What a model writes for a rung while its reply runs: its text and its thought.
-#[derive(Debug, Default, Clone, PartialEq, serde::Serialize)]
+/// What a model writes for a rung while its reply runs, and how much of it the app sent the window: its bytes, and
+/// its units as JavaScript counts a string.
+#[derive(Debug, Default)]
 struct Writing {
   text: String,
-  thinking: String,
+  sent: usize,
+  units: usize,
 }
 
 /// The life as the app holds it: its acts, what it is, how far the app read it, what its models write now, the
@@ -58,17 +64,16 @@ struct Seen {
   /// Whether the app read every fact of a record, which a life that works holds from its opening.
   read: bool,
   writing: HashMap<String, Writing>,
+  /// The rungs whose writing ended after the last part that the app sent the window.
+  ended: Vec<String>,
   breaks: Vec<Break>,
   said: Vec<String>,
-  /// Whether the app said a line, and whether what the models write or the breakpoints changed, after the last part
-  /// that it sent the window.
+  /// Whether the app said a line after the last part that it sent the window.
   told: bool,
-  wrote: bool,
-  /// What the app last sent the window of the measures and of the prompts that the operator owes, and whether it told
-  /// the window that it read every fact.
-  shown: Value,
-  owed: Vec<String>,
-  ended: bool,
+  /// What the app last sent the window of the prompts that the operator owes, of the measures and of the breakpoints,
+  /// and whether it told the window that it read every fact.
+  shown: [Value; 3],
+  finished: bool,
   /// What the app opens, until the life is open.
   opening: Option<String>,
   open: bool,
@@ -96,20 +101,14 @@ impl Seen {
       }
       Event::Facts(facts) => {
         for fact in facts {
-          if fact[0] == "ready"
-            && self.writing.remove(fact[1].as_str().unwrap_or_default()).is_some()
-          {
-            self.wrote = true;
+          let rung = fact[1].as_str().unwrap_or_default();
+          if fact[0] == "ready" && self.writing.remove(rung).is_some() {
+            self.ended.push(rung.to_owned());
           }
           self.now.add(&model::lean(fact));
         }
       }
-      Event::Writing { rung, text, thinking } => {
-        let held = self.writing.entry(rung).or_default();
-        held.text.push_str(&text);
-        held.thinking.push_str(&thinking);
-        self.wrote = true;
-      }
+      Event::Writing { rung, text } => self.writing.entry(rung).or_default().text.push_str(&text),
       Event::Read => self.read = true,
       Event::Said(line) => {
         eprintln!("furb-gui: {line}");
@@ -124,8 +123,7 @@ impl Seen {
     }
   }
 
-  /// What every part of an open life carries: what it is, where it stands, how far the app read it, the prompts that
-  /// the operator owes, and the breakpoints.
+  /// What every part of an open life carries: what it is, where it stands, and how far the app read it.
   fn head(&self, whole: bool, from: u64) -> Value {
     json!({
       "state": "open",
@@ -141,8 +139,6 @@ impl Seen {
       "logged": self.logged,
       "made": self.made,
       "read": self.read,
-      "owed": self.now.owed(),
-      "breaks": self.breaks,
     })
   }
 
@@ -158,7 +154,8 @@ impl Seen {
   }
 
   /// The life as the window takes it whole: what the app shows, and for an open life the acts that changed after a
-  /// count, with the words of their rungs, the measures of the chains, and what the models write now.
+  /// count, with the words of their rungs, the prompts that the operator owes, the measures of the chains, the end of
+  /// what the models write now, and the breakpoints.
   fn life(&self, since: u64) -> Value {
     let mut life = match (&self.opening, self.open) {
       (_, true) => self.head(true, since),
@@ -171,43 +168,58 @@ impl Seen {
       let (acts, words) = self.changed(since);
       life["acts"] = json!(acts);
       life["words"] = words;
+      life["owed"] = json!(self.now.owed());
       life["measures"] = self.now.measures();
-      life["streams"] = json!(self.writing);
+      life["breaks"] = json!(self.breaks);
+      let streams: serde_json::Map<String, Value> =
+        self.writing.iter().map(|(rung, held)| (rung.clone(), kept(&held.text))).collect();
+      life["streams"] = Value::Object(streams);
     }
     life
   }
 
   /// What changed after the last part that the app sent the window, or nothing when nothing changed: the acts that
-  /// changed, with the words of their rungs, and the measures, what the models write, the end of the reading and the
-  /// last lines that the app said, each when it changed.
+  /// changed, with the words of their rungs, the new text of each stream and the streams that ended, and the prompts
+  /// that the operator owes, the measures, the breakpoints, the end of the reading and the last lines that the app
+  /// said, each when it changed.
   fn frame(&mut self) -> Option<Value> {
     if !self.open {
       return std::mem::take(&mut self.told).then(|| self.life(0));
     }
+    let mut streams = serde_json::Map::new();
+    for (rung, held) in &mut self.writing {
+      if let Some(piece) = held.text.get(held.sent..).filter(|piece| !piece.is_empty()) {
+        streams.insert(rung.clone(), json!([held.units, piece]));
+        held.units += piece.encode_utf16().count();
+        held.sent = held.text.len();
+      }
+    }
     let (acts, words) = self.changed(self.sent);
-    let mut changed = !acts.is_empty();
+    let mut changed = !acts.is_empty() || !streams.is_empty() || !self.ended.is_empty();
     let mut part = self.head(false, self.sent);
     part["acts"] = json!(acts);
     part["words"] = words;
-    if self.sent != self.now.count {
-      let measures = self.now.measures();
-      if measures != self.shown {
-        part["measures"] = measures.clone();
-        self.shown = measures;
+    part["streams"] = Value::Object(streams);
+    part["ended"] = json!(std::mem::take(&mut self.ended));
+    let facts = self.sent != self.now.count;
+    let now = [
+      facts.then(|| json!(self.now.owed())),
+      facts.then(|| self.now.measures()),
+      Some(json!(self.breaks)),
+    ];
+    for ((key, value), held) in
+      ["owed", "measures", "breaks"].into_iter().zip(now).zip(&mut self.shown)
+    {
+      if let Some(value) = value
+        && value != *held
+      {
+        part[key] = value.clone();
+        *held = value;
         changed = true;
       }
     }
-    if std::mem::take(&mut self.wrote) {
-      part["streams"] = json!(self.writing);
-      changed = true;
-    }
-    let owed = self.now.owed();
-    if owed != self.owed {
-      self.owed = owed;
-      changed = true;
-    }
-    if self.read != self.ended {
-      self.ended = self.read;
+    if self.read != self.finished {
+      self.finished = self.read;
       changed = true;
     }
     if std::mem::take(&mut self.told) {
@@ -280,6 +292,20 @@ fn opened(config: &Path, pick: Pick) -> Result<(Source, String), String> {
   }
 }
 
+/// The end of a text that the window holds: where it starts, in units of JavaScript, and the text from there.
+fn kept(text: &str) -> Value {
+  let over = text.encode_utf16().count().saturating_sub(KEPT);
+  let (mut from, mut start) = (0, 0);
+  for one in text.chars() {
+    if from >= over {
+      break;
+    }
+    from += one.len_utf16();
+    start += one.len_utf8();
+  }
+  json!([from, &text[start..]])
+}
+
 /// A new life, in place of the one that the app held: the app forgets what it saw, opens the life, and tells the
 /// window what changed in it, at most once each 80 milliseconds, and only when something changed.
 fn start(app: &tauri::AppHandle, held: &Held, source: Source, what: String) {
@@ -292,10 +318,7 @@ fn start(app: &tauri::AppHandle, held: &Held, source: Source, what: String) {
     *seen = Seen { opening: Some(what), generation, ..Seen::default() };
     let _ = app.emit("life", seen.life(0));
   }
-  let woke = app.clone();
-  let (life, events) = Life::open(source, move || {
-    let _ = woke.emit("woke", ());
-  });
+  let (life, events) = Life::open(source);
   let (shared, handle, current) = (held.seen.clone(), app.clone(), held.generation.clone());
   let spawned = std::thread::Builder::new().name("furb-view".to_owned()).spawn(move || {
     while let Ok(event) = events.recv() {
@@ -362,7 +385,9 @@ fn send(app: tauri::AppHandle, held: tauri::State<'_, Held>, command: Command) {
     && let Ok(mut seen) = held.seen.lock()
   {
     seen.breaks.clone_from(breaks);
-    let _ = app.emit("life", seen.life(seen.sent));
+    if let Some(part) = seen.frame() {
+      let _ = app.emit("life", part);
+    }
   }
   if let Ok(life) = held.life.lock()
     && let Some(life) = life.as_ref()
@@ -410,7 +435,7 @@ fn asked(words: &[String]) -> Result<(Option<Pick>, Option<PathBuf>), String> {
 /// operator, and no model writes and no command runs for a second; a record rests once the app read all of it.
 fn dumped(source: Source, path: &Path) -> Result<(), String> {
   let demo = matches!(source, Source::Demo { .. });
-  let (life, events) = Life::open(source, || {});
+  let (life, events) = Life::open(source);
   let mut seen = Seen { opening: Some("the life".to_owned()), ..Seen::default() };
   let end = Instant::now() + Duration::from_secs(if demo { 90 } else { 900 });
   let mut rests: Option<Instant> = None;

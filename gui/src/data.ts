@@ -62,12 +62,27 @@ export type Wire =
       read: boolean;
       acts: LiveAct[];
       words: Record<string, string>;
-      owed: string[];
-      /** The measures, and what the models write now, in a part that is whole or when they changed. */
+      /** The prompts that the operator owes, the measures and the breakpoints, in a part that is whole or when they
+       * changed. */
+      owed?: string[];
       measures?: Record<string, Measure>;
-      streams?: Record<string, { text: string; thinking: string }>;
-      breaks: Break[];
+      breaks?: Break[];
+      /** What the models write now: for each rung, where a piece starts in its text and the piece, which is the end of
+       * the text in a part that is whole and the new text in another part. */
+      streams?: Record<string, [number, string]>;
+      /** The rungs whose text ended, in a part that is not whole. */
+      ended?: string[];
     };
+
+/** The end of what a model writes for a rung, as the window holds it: where it starts in the whole text, and the
+ * text from there. */
+export interface Stream {
+  from: number;
+  text: string;
+}
+
+/** How many units of what a model writes for a rung the window holds, as many as the core sends whole. */
+export const KEPT = 8000;
 
 /** One record of a project, as the picker lists it. */
 export interface Record_ {

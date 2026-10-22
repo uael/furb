@@ -14,7 +14,18 @@ import {
   threads,
 } from "@furb/engine/life";
 import { useEffect, useMemo, useState } from "react";
-import { type Break, call, demo, type State, shown, type Told, tauri, type Wire } from "./data.ts";
+import {
+  type Break,
+  call,
+  demo,
+  KEPT,
+  type State,
+  type Stream,
+  shown,
+  type Told,
+  tauri,
+  type Wire,
+} from "./data.ts";
 
 /** The life as the window holds it: the acts that the core sent, merged, and what came with the last part. */
 export interface Held {
@@ -35,7 +46,7 @@ export interface Held {
   words: Map<string, string>;
   owed: string[];
   measures: Record<string, Measure>;
-  streams: Record<string, { text: string; thinking: string }>;
+  streams: Record<string, Stream>;
   breaks: Break[];
 }
 
@@ -94,11 +105,35 @@ function merged(held: Held, part: Wire): Held {
     read: part.read,
     acts,
     words,
-    owed: part.owed,
+    owed: part.owed ?? base.owed,
     measures: part.measures ?? base.measures,
-    streams: part.streams ?? base.streams,
-    breaks: part.breaks,
+    streams: streamed(part.whole ? {} : base.streams, part),
+    breaks: part.breaks ?? base.breaks,
   };
+}
+
+/** What the models write now, after a part: each piece grows the end of its stream, or starts it again after a gap,
+ * a stream that ended goes, and the window keeps the last KEPT units of each. A part that changes no stream keeps
+ * them as they were. */
+function streamed(
+  held: Record<string, Stream>,
+  part: Extract<Wire, { state: "open" }>,
+): Record<string, Stream> {
+  const pieces = Object.entries(part.streams ?? {});
+  const ended = new Set(part.ended ?? []);
+  if (!pieces.length && !ended.size) return held;
+  const streams = Object.fromEntries(Object.entries(held).filter(([id]) => !ended.has(id)));
+  for (const [id, [at, piece]] of pieces) {
+    const now = streams[id];
+    const end = now ? now.from + now.text.length : at;
+    const grown =
+      now && at <= end
+        ? { from: now.from, text: now.text + piece.slice(end - at) }
+        : { from: at, text: piece };
+    const cut = Math.max(grown.text.length - KEPT, 0);
+    streams[id] = { from: grown.from + cut, text: grown.text.slice(cut) };
+  }
+  return streams;
 }
 
 /** A fixture that a browser fetches in place of the demo, as a record too large to build into the UI. */
