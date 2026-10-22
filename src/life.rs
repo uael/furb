@@ -20,7 +20,7 @@ use crate::{
   ear::{hear, hearing},
   extension::{self, Places, memory::memory, skills::skills, web::web},
   snapshot::{self, Keeper},
-  world::{self, Catalog, Scratch, Writes},
+  world::{self, Catalog, Retries, Scratch, Writes},
 };
 
 /// The ears of a life, each under the name the engine hears it by, in the order of boot.
@@ -33,6 +33,11 @@ pub struct Answer(pub world::Hosted);
 /// A function of the host that is told what a model writes, as it writes it: the rung it writes for, the chain of
 /// that rung, and what it added to its text and to its thought.
 pub struct Stream(pub Writes);
+
+/// A function of the host that is told each retry of a call of a model, before its wait: the rung the reply is for,
+/// the chain of that rung, the attempt that comes next, the most attempts, the seconds of the wait, and why the
+/// attempt before it failed. What the model wrote for that rung before the retry is void.
+pub struct Retrying(pub Retries);
 
 /// A function of the host that is told each report of the life that no model reads, one line each, such as a file
 /// of the record that the scratch directory leaves out. The host shows it in its log.
@@ -104,6 +109,15 @@ pub struct Opening {
   )]
   #[cfg_attr(feature = "python", pyo3(default))]
   pub stream: Option<Stream>,
+  /// A function of the host that is told each retry of a call of a model, before its wait.
+  #[cfg_attr(
+    feature = "typescript",
+    napi(
+      ts_type = "(rung: string, chain: string, attempt: number, most: number, seconds: number, why: string) => void"
+    )
+  )]
+  #[cfg_attr(feature = "python", pyo3(default))]
+  pub retrying: Option<Retrying>,
   /// Whether the life opens from the snapshot of its record when the snapshot agrees with the record, and keeps one
   /// when it keeps its record; true when unsaid.
   #[cfg_attr(feature = "python", pyo3(default))]
@@ -227,6 +241,9 @@ impl Opening {
     }
     if let Some(stream) = self.stream {
       provider = provider.writes(stream.0);
+    }
+    if let Some(retrying) = self.retrying {
+      provider = provider.retries(retrying.0);
     }
     let search = provider.search();
     Ok((provider.ear(), search))

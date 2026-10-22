@@ -9,6 +9,8 @@ export class Preferences {
   sidebarWidth = 32;
   /** Whether a rung that is over starts folded in the feed. */
   foldRungs = true;
+  /** Whether the welcome showed the check of the first run, which it shows once, and again while no model answers. */
+  setupSeen = false;
   notice = "";
   private saved = "";
   constructor(readonly path = join(configDirectory(), "ui.json")) {
@@ -18,10 +20,12 @@ export class Preferences {
         sidebar?: boolean;
         sidebarWidth?: number;
         foldRungs?: boolean;
+        setupSeen?: boolean;
       } | null;
       if (saved?.theme && Object.hasOwn(palettes, saved.theme)) this.theme = saved.theme as ThemeName;
       if (typeof saved?.sidebar === "boolean") this.sidebar = saved.sidebar;
       if (typeof saved?.foldRungs === "boolean") this.foldRungs = saved.foldRungs;
+      if (typeof saved?.setupSeen === "boolean") this.setupSeen = saved.setupSeen;
       if (typeof saved?.sidebarWidth === "number")
         this.sidebarWidth = Math.max(26, Math.min(48, saved.sidebarWidth));
     } catch (error) {
@@ -36,6 +40,7 @@ export class Preferences {
       sidebar: this.sidebar,
       sidebarWidth: this.sidebarWidth,
       foldRungs: this.foldRungs,
+      setupSeen: this.setupSeen,
     });
   }
   save(theme = this.theme): void {

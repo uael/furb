@@ -19,6 +19,7 @@ use std::{
   collections::{HashMap, HashSet},
   path::PathBuf,
   sync::Arc,
+  time::Duration,
 };
 
 use futures::{Stream, StreamExt, future::BoxFuture, stream};
@@ -109,6 +110,75 @@ pub type Told = Arc<dyn Fn(&str, &str) + Send + Sync>;
 /// its text and to its thought. It is no fact, and the turn that the reply is done with holds all of it.
 pub type Writes = Arc<dyn Fn(&str, &str, &str, &str) + Send + Sync>;
 
+/// What the host is told when a call of a model failed for a cause that passes, and the provider asks the model
+/// again after a wait: the rung the reply is for, the chain of that rung, and the retry. What the model wrote before
+/// the failure is void, and the turn of the reply holds none of it.
+pub type Retries = Arc<dyn Fn(&str, &str, &Retry) + Send + Sync>;
+
+/// A retry of a call of a model: the attempt that comes next, the most attempts of the call, the time the provider
+/// waits before that attempt, and why the attempt before it failed, in a few words.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Retry {
+  pub attempt: u32,
+  pub most: u32,
+  pub wait: Duration,
+  pub why: String,
+}
+
+/// How the provider asks a model again after a failure that passes: the most attempts of one call, and the wait
+/// before the second attempt, which doubles before each later attempt, to a minute at most.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Backoff {
+  pub most: u32,
+  pub first: Duration,
+}
+
+/// The backoff of a provider that is given none: ten attempts, and four seconds before the second.
+pub const BACKOFF: Backoff = Backoff { most: 10, first: Duration::from_secs(4) };
+
+impl Backoff {
+  /// The wait before an attempt, from the second on.
+  fn wait(self, attempt: u32) -> Duration {
+    let doubled = self.first.saturating_mul(1 << attempt.saturating_sub(2).min(16));
+    doubled.min(Duration::from_secs(60))
+  }
+}
+
+/// Why a call of a model failed, in a few words, when the cause passes: the connection was lost or timed out, or the
+/// provider is overloaded, limits the rate, or failed on its side. A failure of the request, of the turn, or of a
+/// model that the provider cannot make does not pass, and the model is not asked again.
+fn passing(no: &CompletionError) -> Option<String> {
+  let said = match no {
+    CompletionError::HttpError(no) => no.to_string(),
+    CompletionError::ProviderError(why) => why.clone(),
+    _ => return None,
+  }
+  .to_lowercase();
+  let has = |words: &[&str]| words.iter().any(|one| said.contains(one));
+  let status = said
+    .split(|one: char| !one.is_ascii_digit())
+    .find(|one| matches!(*one, "408" | "429" | "500" | "502" | "503" | "504" | "529"));
+  let why = if has(&["connection reset", "reset by peer"]) {
+    "connection reset".to_owned()
+  } else if has(&["timed out", "timeout"]) || status == Some("408") {
+    "timed out".to_owned()
+  } else if has(&["overloaded"]) || status == Some("529") {
+    "the provider is overloaded".to_owned()
+  } else if has(&["rate limit", "too many requests"]) || status == Some("429") {
+    "rate limited".to_owned()
+  } else if has(&["connection closed", "connection error", "broken pipe", "error sending request"])
+  {
+    "connection lost".to_owned()
+  } else if let Some(code) = status {
+    format!("server error {code}")
+  } else if matches!(no, CompletionError::HttpError(_)) {
+    "network error".to_owned()
+  } else {
+    return None;
+  };
+  Some(why)
+}
+
 /// A function of the host that stands in for a model: it is given a request, as JSON, and what it tells as it
 /// writes, and it answers with the turn of the model, or with why it gives none.
 pub type Hosted =
@@ -137,6 +207,7 @@ fn streams<M: CompletionModel + 'static>(model: M) -> Streams {
 
 /// One turn asked of a model: the actor and the chain it answers, the request, what it tells as it streams, and the
 /// budget of its thought.
+#[derive(Clone)]
 struct Asked {
   actor: String,
   chain: String,
@@ -339,6 +410,8 @@ pub struct Provider {
   thinking: Thinking,
   images: Option<PathBuf>,
   writes: Option<Writes>,
+  backoff: Backoff,
+  retries: Option<Retries>,
 }
 
 impl Provider {
@@ -352,6 +425,8 @@ impl Provider {
       thinking: Thinking::default(),
       images: None,
       writes: None,
+      backoff: BACKOFF,
+      retries: None,
     }
   }
 
@@ -380,6 +455,18 @@ impl Provider {
     self
   }
 
+  /// How the provider asks a model again after a failure that passes.
+  pub fn backoff(mut self, backoff: Backoff) -> Provider {
+    self.backoff = backoff;
+    self
+  }
+
+  /// Whom the provider tells each retry of a call of a model, before its wait.
+  pub fn retries(mut self, retries: Retries) -> Provider {
+    self.retries = Some(retries);
+    self
+  }
+
   /// The native search of the web of the model that an actor names, or none when its provider has none or no
   /// model of the provider is that actor.
   pub fn search(&self) -> Search {
@@ -401,7 +488,7 @@ impl Provider {
   /// the turn of the model, or with a refusal, and a second refusal in a row of the same actor on a chain pauses the
   /// chain first. A done of a reply that the ear did not say ends the call of its model.
   pub fn ear(self) -> Box<dyn Ear> {
-    let Provider { directory, models, actor, thinking, images, writes } = self;
+    let Provider { directory, models, actor, thinking, images, writes, backoff, retries } = self;
     let actor = actor.unwrap_or_else(|| {
       models.first().map_or_else(|| OPERATOR.to_owned(), |model| model.at(None))
     });
@@ -419,6 +506,13 @@ impl Provider {
           Next::Worked(Replied::Wrote { id, text, thinking }) => {
             if let (Some(writes), Some(reply)) = (&writes, replies.get(&id)) {
               writes(&reply.rung, &reply.chain, &text, &thinking);
+            }
+            continue;
+          }
+          // A retry of the call of the model of a reply that still stands, told to the host under its rung.
+          Next::Worked(Replied::Retried { id, retry }) => {
+            if let (Some(retries), Some(reply)) = (&retries, replies.get(&id)) {
+              retries(&reply.rung, &reply.chain, &retry);
             }
             continue;
           }
@@ -453,7 +547,7 @@ impl Provider {
                 .map(|one| thinks(one, thinking));
             let again = mute.get(&chain) == Some(&actor);
             let (stop, stopped) = oneshot::channel();
-            co.work(answered(about.clone(), asked, tells, told, stopped));
+            co.work(answered(about.clone(), asked, backoff, tells, told, stopped));
             let rung = a.by().to_owned();
             replies.insert(about, Reply { chain, actor, rung, again, _stop: stop });
           }
@@ -492,9 +586,11 @@ struct Reply {
   _stop: oneshot::Sender<()>,
 }
 
-/// What the work of a reply gives: a part that its model wrote, or what the reply came to.
+/// What the work of a reply gives: a part that its model wrote, a retry of the call of its model, or what the reply
+/// came to.
 enum Replied {
   Wrote { id: String, text: String, thinking: String },
+  Retried { id: String, retry: Retry },
   Came { id: String, got: Result<Object, CompletionError> },
 }
 
@@ -769,11 +865,14 @@ fn ended(provider: &str, response: CompletionResponse) -> StreamFinal {
   record
 }
 
-/// The work of a reply: each part its model writes, then the turn of the model or why it answered nothing, in the
-/// order they came; and nothing more once the reply went, which ends the call of the model.
+/// The work of a reply: each part its model writes, each retry of the call of its model, then the turn of the model
+/// or why it answered nothing, in the order they came; and nothing more once the reply went, which ends the call of
+/// the model. A call that failed for a cause that passes is made again after the wait of its backoff, until its
+/// attempts are spent.
 fn answered(
   id: String,
   asked: Result<(Model, Asked), CompletionError>,
+  backoff: Backoff,
   tells: mpsc::UnboundedSender<Replied>,
   mut told: mpsc::UnboundedReceiver<Replied>,
   stopped: oneshot::Receiver<()>,
@@ -781,12 +880,23 @@ fn answered(
   let came = async move {
     let got = async {
       let (model, asked) = asked?;
-      match (model.answers)(asked).await? {
-        Answer::Response(response) => turn(&model, &response),
-        Answer::Turn(turn) => hosted(turn.as_ref()),
+      let mut attempt = 1;
+      loop {
+        let no = match (model.answers)(asked.clone()).await {
+          Ok(Answer::Response(response)) => return turn(&model, &response),
+          Ok(Answer::Turn(turn)) => return hosted(turn.as_ref()),
+          Err(no) => no,
+        };
+        let Some(why) = passing(&no).filter(|_| attempt < backoff.most) else { return Err(no) };
+        attempt += 1;
+        let wait = backoff.wait(attempt);
+        let retry = Retry { attempt, most: backoff.most, wait, why };
+        let _ = tells.send(Replied::Retried { id: id.clone(), retry });
+        tokio::time::sleep(wait).await;
       }
     };
-    let _ = tells.send(Replied::Came { id, got: got.await });
+    let got = got.await;
+    let _ = tells.send(Replied::Came { id, got });
   };
   // The reply comes through the channel alone, so it comes after all that its model wrote before it.
   let told = stream::poll_fn(move |cx| told.poll_recv(cx));

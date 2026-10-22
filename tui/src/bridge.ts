@@ -1,5 +1,14 @@
 import { EventEmitter } from "node:events";
-import type { Act, FileChange, ImageAttachment, LiveAct, Engine as Native, Stream, Turn } from "@furb/engine";
+import type {
+  Act,
+  FileChange,
+  ImageAttachment,
+  LiveAct,
+  Engine as Native,
+  SetupInfo,
+  Stream,
+  Turn,
+} from "@furb/engine";
 import type { Measure } from "@furb/engine/life";
 import type { EngineOptions } from "./models.ts";
 import type { Reading } from "./reading.ts";
@@ -107,6 +116,8 @@ export class HostView extends EventEmitter implements Plain {
   sees = (actor: string) => this.ask<boolean>("library", "sees", actor);
   /** The models the catalog of the crate offers, each as its name, its efforts and its window. */
   catalog = () => this.ask<[string, string[], number][]>("library", "catalog");
+  /** What the first run checks of this machine, and nothing in the demo, which needs no model. */
+  setup = () => this.ask<SetupInfo | null>("library", "setup");
   /** The name of the model that a name gives in the roster or in the catalog, and nothing when it gives none. */
   model = (name: string) => this.ask<string | null>("library", "model", name);
   answer = (id: string, value: string) => this.ask<unknown>("console", "answer", id, value);
@@ -118,6 +129,10 @@ export class HostView extends EventEmitter implements Plain {
   source = () => this.ask<string>("library", "source");
   snapshot = (chain: string, since = 0) => this.ask<Snapshot>("library", "snapshot", chain, since);
   readChanges = (start: number, count: number) => this.ask<FileChange[]>("library", "changes", start, count);
+  /** The journal of file changes written again with each change that it holds, and the count of lines it lost. */
+  repairChanges = () => this.ask<number>("library", "repairChanges");
+  /** A new journal of file changes, and the path that the damaged one is kept at. */
+  renewChanges = () => this.ask<string>("library", "renewChanges");
   /** An act whole, with all that a command printed, and nothing when the life holds no such act. */
   act = (id: string) => this.ask<LiveAct | undefined>("library", "act", id);
   /** The text the World reads at a path, from where a chain stands, which makes no act and keeps nothing. */
@@ -157,7 +172,8 @@ export async function openEngine(options: EngineOptions): Promise<{ engine: Engi
     }
     const promise = waiting.get(data.id);
     waiting.delete(data.id);
-    if (data.error) promise?.reject(new Error(data.error));
+    if (data.error)
+      promise?.reject(Object.assign(new Error(data.error), data.name ? { name: data.name } : {}));
     else promise?.resolve(data.value);
     if (data.disposed) {
       closed = true;

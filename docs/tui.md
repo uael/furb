@@ -10,12 +10,34 @@ generators are in `tui/script/`.
 
 ## Welcome
 
-An empty feed shows the logo of furb, what it does, the project and the model, three ways to start, and the keys
-to know. A click on a way to start puts its prompt in the input. The top line names the session, the chain, and the
+An empty feed shows the logo of furb, what it does, the project and the model, the ways to start, and the keys to
+know. The first way plays a life to watch, which asks no model. A click on each other way puts its prompt in the
+input. The top line names the session, the chain, and the
 directory of the chain, and the toggle at its right switches the three views of the chain. The footer says what the
 session does and offers the keys that act now, each a button that does what its key does. GitHub Dark is the default.
 
 ![Welcome](screenshots/01-welcome.png)
+
+## First run
+
+On the first run, and on each run while no model answers, the welcome checks the setup: the claude command line,
+the keys in the environment, the local server, and the models that answer. Each part that is missing shows its fix.
+When no model answers, the welcome says so, and offers only the life to watch, which needs no model.
+
+![Setup with no model](screenshots/63-setup-no-model.png)
+
+## Watch a life
+
+"Watch a life", or `/watch`, plays a short life on a small project by itself. It asks no model, so the bar at the
+top counts 0 model calls and $0.00. Three models answer one word of Python, which runs as a program, and a branch
+then goes another way from an earlier point.
+
+![Watch a life](screenshots/64-watch-a-life.png)
+
+While the input is empty, `[` and `]` move the feed back and on in time: an act that began later is not there yet,
+and an act that ended later still runs. `b` starts a branch at the moment shown, and Esc comes back to now.
+
+![An earlier moment](screenshots/65-watch-earlier.png)
 
 ## Feed
 
@@ -184,7 +206,14 @@ On a narrow terminal the sidebar is hidden, and the top line keeps the session, 
 ## Work in progress
 
 A command streams its output while it runs, and a model shows the last lines that it writes. A word that the gate
-refuses shows the line and the reason.
+refuses shows the line and the reason, and one more line that says what to do: press ↑ to bring your word back to the
+input, fix it and send it again, or wait while the chain asks the model again with the findings.
+
+When a call of a model fails for a cause that passes, as a lost connection, a provider that is overloaded or a limit
+of the rate, the provider asks the model again after a wait that doubles each time, up to ten attempts. The footer
+counts the wait down, as `Retrying in 4 s, attempt 2 of 10, connection reset`.
+
+![Model retry](screenshots/62-model-retry.png)
 
 ![Command streaming](screenshots/18-live-command.png)
 
@@ -237,8 +266,11 @@ the chain through that act. The module and the files keep their state.
 
 ## Empty, loading, and failed views
 
-A view with nothing to show says why in its middle. An act that fails keeps its failure in the feed, and a view
-that cannot load offers to read it again.
+A view with nothing to show says why in its middle. An act that fails keeps its failure in the feed. A view that
+cannot load says what broke in plain words, and never the words of the parser of JSON, and offers to read it again.
+When the journal of file changes beside the record is damaged, the view of changes names the change that it cannot
+read, and offers to repair the journal, which keeps each change that it can read, or to start a new journal, which
+keeps the damaged one beside it.
 
 ![Empty results](screenshots/24-empty-results.png)
 
