@@ -26,6 +26,8 @@ export interface LiveAct {
    * is the order of the record, so a later life gives the same places. */
   began: number;
   ended?: number;
+  /** The dollars of the answers of the models that wrote the word of a rung, once one is done. */
+  cost?: number;
 }
 /** What a command came to: its code, and what it printed on each stream. */
 export type Exit = { stdout?: { content: string }; stderr?: { content: string }; code?: number };

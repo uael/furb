@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
 import {
   actorParts,
   display,
@@ -58,7 +58,18 @@ import { conversation } from "./conversation.ts";
 import { externalEditor, openFile } from "./editor.ts";
 import { emojiNamed, emojis } from "./emoji.ts";
 import { shortenHome, shortenHomes } from "./files.ts";
-import { ago, clip, count, dollars, elapsed, graphemes, kibibytes, modelName, share } from "./format.ts";
+import {
+  ago,
+  clip,
+  count,
+  dollars,
+  elapsed,
+  graphemes,
+  kibibytes,
+  lineCounts,
+  modelName,
+  share,
+} from "./format.ts";
 import { type Action, bindings, chords, keys, shown } from "./keys.ts";
 import { loadParsers } from "./parsers.ts";
 import {
@@ -89,7 +100,7 @@ import {
   type ThemeName,
   themeLabels,
 } from "./theme.ts";
-import { bold, italic, lineCounts, logo, mix, type Part, plain, styled, underline } from "./ui.ts";
+import { bold, italic, logo, mix, type Part, plain, styled, underline } from "./ui.ts";
 import type { SessionEntry, Workspace, Workspaces } from "./workspaces.ts";
 
 const exitNotice = "Press ⌃D again to exit.";
@@ -1747,6 +1758,8 @@ export class App {
             // A command that runs shows its last lines under the folded rung that made it.
             add(`tail-${act.id}`, line.text, [], (box) => this.excerpt(box, line.text, true), { indent });
         } else if (line.type === "value") {
+          // A notice closes with nothing, which its quiet line says already.
+          if (act.words[0] === "None") continue;
           const value = typeof act.value === "boolean" ? (act.value ? "yes" : "no") : display(act.value);
           const answered = asksOperator(act);
           const short = !value.includes("\n") && Bun.stringWidth(value) < this.feedWidth - 20 - indent;
@@ -1795,40 +1808,29 @@ export class App {
           // The ceiling of a grant stands in the sidebar, so the feed shows no grant.
           if (act.kind !== "grant") actCard(act, indent);
         } else if (asksOperator(act) && act.words[0] === "None") {
-          // A prompt of None asks nothing: the console closed it as it took it, and it is a notice that the operator
-          // reads and dismisses, with no field to answer.
+          // A prompt of None asks nothing: the console closed it as it took it, and it settles as a quiet line, its
+          // first line, which opens to the whole message. No key dismisses it.
           const message = String(act.words[1] ?? "");
-          const unread = w.host.notices.has(act.id);
-          const ask = w.desk.asks.find((one) => one.id === act.id);
+          const from = act.by === "operator" ? "for you" : `from ${act.by}`;
+          const lines = message.split("\n").filter((one) => one.trim()).length;
+          const more = lines > 1 ? `  +${lines - 1} ${lines === 2 ? "line" : "lines"}` : "";
+          const room = this.feedWidth - indent - 12 - Bun.stringWidth(from + more);
           add(
             act.id,
-            `${message}\n${unread}`,
+            `${message}\n${this.feedWidth}\n${this.theme}`,
             [
-              [`${glyph.asks} `, unread ? c.warning : c.faint],
-              ["Notice", c.text, bold],
-              [`  ${act.by === "operator" ? "for you" : `from ${act.by}`}`, c.faint],
+              [`${glyph.notice} `, c.faint],
+              ["Notice", c.muted],
+              [`  ${from}`, c.faint],
+              [`  ${clip(shortenHomes(gist(message)), room)}`, c.muted],
+              [more, c.faint],
             ],
             (box) => {
-              this.panel(box, unread ? c.warning : c.border).add(
-                this.markdown(message, c.text, c.background),
-              );
-              if (unread)
-                box.add(
-                  this.inset(
-                    space.between,
-                    this.text(
-                      [
-                        ["Nothing to answer. Press ", c.muted],
-                        ["⌃A", c.muted],
-                        [" or click here to dismiss it", c.faint],
-                      ],
-                      c.muted,
-                      { run: () => ask && void w.dismiss(ask).catch(this.report) },
-                    ),
-                  ),
-                );
+              const body = this.box({ paddingLeft: space.between });
+              body.add(this.markdown(message, c.muted));
+              box.add(body);
             },
-            { group: "question", act, shown: message },
+            { compact: true, group: "notice", act, indent, shown: message },
           );
         } else if (asksOperator(act)) {
           const message = String(act.words[1] ?? "");
@@ -2361,7 +2363,8 @@ export class App {
     const first = line.word.trim() || (working(act) ? "writing" : "");
     const more = line.more ? `  +${line.more}` : "";
     const tail = word ? `  ${word}` : "";
-    const room = this.feedWidth - indent - 8 - Bun.stringWidth(act.id + more + tail);
+    const did = this.did(act);
+    const room = this.feedWidth - indent - 8 - Bun.stringWidth(act.id + more + tail + plain(did));
     // The acts take at most half the row, and the first line of the word takes the rest.
     const chips = this.chipParts(line.acts, Math.floor(room / 2));
     const shown = this.preview(first, this.feedWidth - room + Bun.stringWidth(plain(chips)));
@@ -2371,6 +2374,7 @@ export class App {
       ...this.colored(shown),
       [more, c.faint],
       ...chips,
+      ...did,
       [tail, color],
     ];
   }
@@ -2476,7 +2480,7 @@ export class App {
    * the ask whole. */
   private renderDesk(): void {
     const w = this.session;
-    const { asks, questions, notices } = w.desk;
+    const { asks, questions } = w.desk;
     const ask = w.aimed;
     const visible = asks.length > 0 && !this.tree;
     if (this.deskBox.visible !== visible) this.deskBox.visible = visible;
@@ -2495,16 +2499,11 @@ export class App {
     head.add(marks);
     for (const one of asks)
       marks.add(
-        this.text(one.notice ? glyph.notice : glyph.asks, one.id === ask?.id ? c.warning : c.faint, {
+        this.text(glyph.asks, one.id === ask?.id ? c.warning : c.faint, {
           run: () => void w.point(one.id).catch(this.report),
         }),
       );
-    const count = [
-      questions ? `${questions} ${questions === 1 ? "question" : "questions"}` : "",
-      notices ? `${notices} ${notices === 1 ? "notice" : "notices"}` : "",
-    ]
-      .filter(Boolean)
-      .join(" and ");
+    const count = `${questions} ${questions === 1 ? "question" : "questions"}`;
     if (!ask) {
       head.add(
         this.line(
@@ -2521,12 +2520,12 @@ export class App {
       return;
     }
     const place = `${asks.findIndex((one) => one.id === ask.id) + 1} of ${asks.length}`;
-    const wanted = ask.notice ? "tells, and asks nothing" : `wants ${wants(ask)}`;
+    const wanted = `wants ${wants(ask)}`;
     head.add(
       this.line(
         [
           ["  ", c.faint],
-          [ask.notice ? "Notice" : "Question", c.text, bold],
+          ["Question", c.text, bold],
           [` ${place}`, c.muted],
           ["  from ", c.faint],
           [ask.label, c.text],
@@ -2551,18 +2550,7 @@ export class App {
       ),
     );
     const act = this.row({ gap: space.between });
-    if (ask.notice)
-      act.add(
-        this.line(
-          [
-            ["Dismiss", c.warning, bold],
-            ["  ⌃A", c.faint],
-          ],
-          c.warning,
-          { run: () => void w.dismiss(ask).catch(this.report) },
-        ),
-      );
-    else if (ask.choices.length) {
+    if (ask.choices.length) {
       for (const choice of ask.choices)
         act.add(
           this.line([[choice, c.warning, bold]], c.warning, {
@@ -2615,14 +2603,46 @@ export class App {
           ? `  ${this.sender(act)}`
           : "";
     const tail = word ? `  ${word}` : "";
-    const reserve = indent + 2 + 2 + Bun.stringWidth(name) + 2 + Bun.stringWidth(tail) + 1;
+    const did = this.did(act);
+    const reserve =
+      indent + 2 + 2 + Bun.stringWidth(name) + 2 + Bun.stringWidth(tail + author + plain(did)) + 1;
     return [
       [`${mark} `, color],
       [name, act.kind === "rung" || !failed(act) ? c.text : c.danger, bold],
       [subject && !observation ? `  ${this.preview(subject, reserve)}` : "", c.muted],
       [author, c.faint],
+      ...did,
       [tail, color],
     ];
+  }
+  /** What a done act did, after its subject: the lines of a read, the lines that a write added and removed, the exit
+   * and the time of a command, and the time and the dollars of a rung. */
+  private did(act: ActRow): Part[] {
+    if (!act.done || failed(act) || cancelled(act)) return [];
+    const took = this.session.took[act.id];
+    // An act that took no millisecond says no time.
+    const time: Part = [!took ? "" : `  ${took < 1000 ? `${took}ms` : elapsed(took)}`, c.faint];
+    const lines = act.count ?? 0;
+    if (act.kind === "read") return [[`  ${lines} ${lines === 1 ? "line" : "lines"}`, c.faint]];
+    if (act.kind === "write")
+      return act.lines
+        ? [
+            [`  +${act.lines.added}`, act.lines.added ? c.success : c.faint],
+            [` -${act.lines.removed}`, act.lines.removed ? c.danger : c.faint],
+          ]
+        : [[`  ${lines} ${lines === 1 ? "line" : "lines"}`, c.faint]];
+    if (act.kind === "bash") {
+      const code = (act.value as Exit | null)?.code;
+      return [
+        [
+          code === undefined || code === null ? "  timed out" : `  exit ${code}`,
+          code === 0 ? c.faint : c.danger,
+        ],
+        time,
+      ];
+    }
+    if (act.kind === "rung") return [time, [act.cost ? `  ${dollars(act.cost)}` : "", c.faint]];
+    return [];
   }
   /** The words that the turns of the chain shown tell of its rungs, by rung, which the program of the chain does not
    * hold for a word that the gate refused. */
@@ -2647,6 +2667,13 @@ export class App {
     if (act.kind === "rung")
       return String(this.session.program[act.id] || this.toldWord(act.id) || act.words[0] || "");
     if (act.kind === "wait") return seconds(Number(act.words[0]));
+    if (act.kind === "write") {
+      // A write names the path of the Text that it writes, which a read gave whole, so the path drops the directory of
+      // the chain.
+      const path = String((act.words[0] as { path?: unknown } | null)?.path ?? "");
+      const inside = isAbsolute(path) ? relative(this.session.directory, path) : path;
+      return inside && !inside.startsWith("..") && !isAbsolute(inside) ? inside : shortenHomes(path);
+    }
     if (act.kind === "grant")
       return [
         act.words[0] === null ? "" : `${dollars(Number(act.words[0]))} ceiling`,
@@ -2724,6 +2751,10 @@ export class App {
       this.commandDetails(details, act);
       return;
     }
+    if ((act.kind === "read" || act.kind === "write") && !failed(act)) {
+      this.textDetails(details, act);
+      return;
+    }
     const fields: Record<string, string[]> = {
       prompt: ["shape", "message", "actor"],
       rung: ["word", "retells", "actor", "returns"],
@@ -2745,7 +2776,22 @@ export class App {
         this.text(display(act.value), failed(act) ? c.danger : c.text, { marginTop: space.section }),
       );
   }
-  /** What a command printed, and under it its name and how it ended. The command says its line in its heading. What it
+  /** The text that a read gave or that a write wrote, and under it its name. The row leaves the text out, so the card
+   * reads the whole act. */
+  private textDetails(details: BoxRenderable, act: ActRow): void {
+    const node = this.text("", c.text);
+    details.add(node);
+    details.add(this.reference(act.id, act.id));
+    void this.session.host.act(act.id).then((whole) => {
+      const text = (whole?.kind === "write" ? whole.words[0] : whole?.value) as
+        | { content?: unknown }
+        | undefined;
+      if (!node.isDestroyed && typeof text?.content === "string")
+        node.content = safeText(text.content.replace(/\n$/, ""));
+    }, this.report);
+  }
+  /** What a command printed, and under it its name and how it was run. The command says its line, its exit and its time
+   * in its heading. What it
    * printed to stderr takes the color of a failure, and each stream is named only when the command printed to both. */
   private commandDetails(details: BoxRenderable, act: ActRow): void {
     const exit = (act.value && typeof act.value === "object" ? act.value : {}) as Exit;
@@ -2771,13 +2817,8 @@ export class App {
     const meta = this.box({ flexDirection: "row", marginTop: shown.length ? space.section : 0 });
     meta.add(this.reference(act.id, act.id));
     const [, input, timeout] = act.words;
+    // The heading says the exit of a command and its time, so its card says only how it was run.
     const notes: Part[] = [
-      ...(act.done
-        ? ([
-            ["   exit ", c.faint],
-            [String(exit.code ?? "timeout"), exit.code === 0 ? c.success : c.danger],
-          ] as Part[])
-        : []),
       [input === null ? "   input open" : "", c.faint],
       [typeof timeout === "number" && timeout !== TIMEOUT ? `   times out after ${timeout}s` : "", c.faint],
     ];
@@ -4340,36 +4381,29 @@ export class App {
   };
   /** The dialog of an ask: its whole message, and the field of its answer or the choices of its shape. Its title says
    * which ask of the desk it is, and from which chain. Tab and ⇧Tab go to the next and the previous ask, and an
-   * answer goes on to the next ask that waits, until none waits. A notice asks nothing, so it is dismissed at once,
-   * but when the dialog goes on to it, where it offers its dismissal. */
-  question(ask = this.session.aimed ?? this.session.desk.asks[0], onward = false): void {
+   * answer goes on to the next ask that waits, until none waits. */
+  question(ask = this.session.aimed ?? this.session.desk.asks[0]): void {
     const w = this.session;
     if (!ask) return;
-    if (ask.notice && !onward) {
-      void w.dismiss(ask).catch(this.report);
-      return;
-    }
     if (w.pointed !== ask.id || ask.chain !== w.selected) void w.point(ask.id).catch(this.report);
     const { asks } = w.desk;
-    const title = `${ask.notice ? "Notice" : "Question"} ${asks.findIndex((one) => one.id === ask.id) + 1} of ${asks.length} from ${ask.label}`;
+    const title = `Question ${asks.findIndex((one) => one.id === ask.id) + 1} of ${asks.length} from ${ask.label}`;
     const moves = asks.length > 1 ? " Tab goes to the next one." : "";
     // An answer goes on to the ask after this one, or closes the dialog when no other ask waits.
     const next = () => {
       const rest = w.desk.asks;
       const after = rest.find((one) => one.began > ask.began) ?? rest[0];
-      if (after) this.question(after, true);
+      if (after) this.question(after);
       else this.closeOverlay();
     };
-    if (ask.notice || ask.choices.length) {
+    if (ask.choices.length) {
       this.openPalette(
         title,
-        ask.notice
-          ? [{ label: "Dismiss", detail: `It asks nothing.${moves}`, run: () => w.dismiss(ask).then(next) }]
-          : ask.choices.map((choice) => ({
-              label: choice,
-              detail: "",
-              run: () => w.answer(ask, choice).then(next),
-            })),
+        ask.choices.map((choice) => ({
+          label: choice,
+          detail: "",
+          run: () => w.answer(ask, choice).then(next),
+        })),
       );
       this.showQuestionText(ask.message);
       this.answering = ask.id;
@@ -4402,7 +4436,7 @@ export class App {
   /** The dialog of the ask a step after or before the one that it shows. */
   private moveAsk = (key?: KeyEvent) => {
     const next = beside(this.session.desk.asks, this.answering, key?.shift ? -1 : 1);
-    if (next && next.id !== this.answering) this.question(next, true);
+    if (next && next.id !== this.answering) this.question(next);
   };
   private showQuestionText(message: string): void {
     if (!this.overlay || !this.paletteInput) return;
@@ -5390,11 +5424,7 @@ export class App {
       [`${spin(0)} Working`, c.accent, "A model or a command runs"],
       [`${glyph.running} Running`, c.accent, "A chain or a session has work in progress"],
       [`${glyph.asks} Input needed`, c.warning, "A question waits for your answer"],
-      [
-        `${glyph.notice} Notice`,
-        c.warning,
-        "A notice tells you something and asks nothing, until you dismiss it",
-      ],
+      [`${glyph.notice} Notice`, c.faint, "A notice tells you something and asks nothing"],
       [`${glyph.held} Paused`, c.warning, "Work waits until you wake it"],
       [`${glyph.done} Done`, c.success, "The act ended and gave its value"],
       [

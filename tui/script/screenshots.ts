@@ -172,11 +172,15 @@ try {
     on: session.selected,
     to: "operator",
   });
-  await until(session.host, () => session.host.notices.has(markdown));
+  // A notice settles as a quiet line, which opens to its whole message.
+  await until(session.host, () => session.acts.some((act) => act.id === markdown && act.done));
+  session.folds[markdown] = false;
   await session.refresh();
   await capture("51-markdown");
-  app().question();
-  await until(session.host, () => !session.host.notices.size);
+  // The rung that wrote the file opens to its read and its write, each with what it did.
+  session.folds[markdown] = true;
+  const wrote = session.acts.find((act) => act.kind === "write")?.by;
+  if (wrote) session.folds[wrote] = false;
   app().toggleMode();
   app().composer.setText('notes = read("README.md")\nprint(notes.content)');
   await capture("10-python-input");
