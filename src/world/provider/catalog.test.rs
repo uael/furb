@@ -519,3 +519,38 @@ fn an_id_alone_of_the_local_server_whose_part_before_its_colon_is_a_provider_is_
     "what it listed holds it"
   );
 }
+
+#[test]
+fn a_first_run_checks_the_claude_command_line_each_provider_and_the_local_server() {
+  let none = catalog(&["ANTHROPIC_API_KEY"]).setup();
+  assert!(!none.claude, "no claude command line is found");
+  let ready: Vec<_> = none
+    .providers
+    .iter()
+    .map(|one| (one.provider.as_str(), one.env.join(" "), one.offered))
+    .collect();
+  assert_eq!(
+    ready[0],
+    ("anthropic", "ANTHROPIC_API_KEY".to_owned(), 3),
+    "a provider whose credential stands"
+  );
+  assert_eq!(
+    ready[1],
+    ("openai", "OPENAI_API_KEY".to_owned(), 0),
+    "a provider whose credential is missing"
+  );
+  assert_eq!(ready[2].1, "GOOGLE_API_KEY GEMINI_API_KEY", "each name of a credential");
+  assert!(none.local.is_none(), "the environment names no local server");
+  let claude = catalog(&[]).claude(Some(PathBuf::from("/bin/true")), None).setup();
+  assert!(claude.claude, "the claude command line is found at its path");
+  let (url, _) = qwen();
+  let local = catalog(&[&url]).setup().local.expect("the environment names a local server");
+  assert_eq!((local.offered, local.failed), (1, None), "the local server lists its models");
+  let gone =
+    catalog(&["FURB_LOCAL_URL=http://127.0.0.1:9"]).setup().local.expect("a local server is named");
+  assert_eq!((gone.address.as_str(), gone.offered), ("http://127.0.0.1:9", 0));
+  assert!(
+    gone.failed.is_some_and(|why| why.contains("lists no model")),
+    "a server that does not answer says why"
+  );
+}

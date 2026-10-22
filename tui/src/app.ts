@@ -56,6 +56,7 @@ import type { Token, Tokens } from "marked";
 import { clipboardImage } from "./clipboard.ts";
 import { commands, slashes } from "./commands.ts";
 import { conversation, refusal } from "./conversation.ts";
+import { demoSession, tour } from "./demo.ts";
 import { externalEditor, openFile } from "./editor.ts";
 import { emojiNamed, emojis } from "./emoji.ts";
 import { shortenHome, shortenHomes } from "./files.ts";
@@ -89,6 +90,7 @@ import {
   views,
   working,
 } from "./session.ts";
+import { type Check, checks } from "./setup.ts";
 import { publishShare } from "./share.ts";
 import {
   theme as c,
@@ -236,6 +238,8 @@ const inputColors = (ground: RGBA) => ({
   cursorColor: c.accent,
 });
 /** The suggestions of an empty feed: what each says, and the prompt it puts in the composer. */
+/** The card that plays a life to watch, which the welcome offers first. */
+const watching = ["Watch a life", "Play a short life on a small project. No model, no cost."] as const;
 const starters = [
   ["Explore a codebase", "Read the README and explain how this project works."],
   ["Make something better", "Find one useful improvement in this project and implement it."],
@@ -468,6 +472,8 @@ export class App {
   private rich = false;
   private redraw?: ReturnType<typeof setTimeout>;
   private lastView = "";
+  /** Whether this run is the first one, whose welcome shows the check of the setup. */
+  private readonly firstRun: boolean;
   private submitting = false;
   private historyIndex = -1;
   private historyDraft = "";
@@ -494,6 +500,7 @@ export class App {
   ) {
     setTheme(session.theme);
     this.theme = session.theme;
+    this.firstRun = !session.preferences.setupSeen;
     this.style = syntax();
     this.root = this.box({
       id: "furb",
@@ -1671,7 +1678,12 @@ export class App {
         ),
       );
     if (w.view === "feed") {
-      const rows = new Map(w.acts.map((one) => [one.id, one]));
+      // The feed shows the acts as they stood at the moment that the operator moved to, or as they stand now.
+      const shown = w.at(w.acts);
+      const rows = new Map(shown.map((one) => [one.id, one]));
+      if (w.watching) {
+        add("watch", `watch:${w.moment}:${w.cost}:${this.theme}`, [], (box) => this.watchBanner(box));
+      }
       // The feed of a chain is its ladder, which the model of a life gives every host: each prompt with the rungs of
       // its ladder, the acts of each rung, and what the prompt closed with.
       // A fold that the operator opened shows the earlier prompts of the thread, or the earlier rungs of a ladder.
@@ -1683,7 +1695,7 @@ export class App {
       const lines = condense(
         ladder(
           w.selected,
-          w.acts,
+          shown,
           (rung) => this.subject(rung),
           w.host.streams,
           new Set(w.host.prompts.keys()),
@@ -1814,7 +1826,7 @@ export class App {
             },
           );
           if (!closed)
-            for (const child of w.acts)
+            for (const child of shown)
               if (child.by === act.id && !(child.kind === "prompt" && child.on === w.selected))
                 actCard(child, indent + space.between);
         } else if (line.type === "tail") {
@@ -2315,15 +2327,43 @@ export class App {
         () => `${shortenHome(w.workingDirectory)}   ${model}`,
       ),
     );
-    // Each way to start is a card of two lines that a click puts in the composer. The cards are as wide as their
-    // longest line, and stand in the middle as one block.
-    const widest = Math.max(...starters.flat().map((line) => Bun.stringWidth(line)));
+    // The check of the setup shows on the first run, and on each run while no model answers, once the worker said
+    // what this machine holds. The demo needs no model and checks nothing.
+    const setup = w.setup;
+    const found = setup && w.catalogRead ? checks(setup, w.catalog.length) : [];
+    // With no model, a prompt has nothing to answer it, so the welcome offers only the life to watch.
+    const none = Boolean(found.length) && !w.catalog.length;
+    if (found.length && (this.firstRun || none)) {
+      column.add(this.setupCheck(found, width));
+      if (!w.preferences.setupSeen) {
+        w.preferences.setupSeen = true;
+        try {
+          w.preferences.save();
+        } catch (error) {
+          this.report(error);
+        }
+      }
+    }
+    // Each way to start is a card of two lines. The first plays a life to watch, and a click on each other one puts
+    // its prompt in the composer. The cards are as wide as their longest line, and stand in the middle as one block.
+    const cards: [label: string, line: string, run: () => void][] = [
+      ...(w.watching ? [] : [[...watching, () => void this.watch()] as [string, string, () => void]]),
+      ...(none ? [] : starters).map(([label, prompt]): [string, string, () => void] => [
+        label,
+        prompt,
+        () => this.insert(prompt),
+      ]),
+    ];
+    const widest = Math.max(
+      ...cards.flatMap(([label, line]) => [label, line].map((one) => Bun.stringWidth(one))),
+    );
     const starts = this.box({
       width: Math.min(width, widest + space.between * 2 + 1),
       marginTop: space.section * 2,
       gap: space.section,
     });
-    for (const [label, prompt] of starters) {
+    for (const [index, [label, prompt, run]] of cards.entries()) {
+      const lead = index === 0 && !w.watching;
       // The pointer lifts a card onto a panel, and its bar takes the accent.
       const card = this.box({
         paddingX: space.between,
@@ -2331,17 +2371,19 @@ export class App {
         border: ["left"],
         borderColor: c.border,
         customBorderChars: { ...noBorder, vertical: glyph.bar },
-        onMouseUp: this.click(() => this.insert(prompt)),
+        onMouseUp: this.click(run),
         onMouseOver() {
           this.backgroundColor = c.panel;
           this.borderColor = c.accent;
         },
         onMouseOut() {
           this.backgroundColor = c.background;
-          this.borderColor = c.border;
+          this.borderColor = lead ? c.accent : c.border;
         },
       });
-      card.add(this.text([[label, c.text, bold]], c.text, { truncate: true }));
+      // The card that plays a life leads, with its bar in the accent.
+      if (lead) card.borderColor = c.accent;
+      card.add(this.text([[label, lead ? c.accent : c.text, bold]], c.text, { truncate: true }));
       card.add(this.text(prompt, c.muted, { truncate: true }));
       starts.add(card);
     }
@@ -2367,6 +2409,95 @@ export class App {
     column.add(keys);
     this.centered(box, height, column);
   }
+
+  /** The check of the setup: each way to a model that this machine holds or lacks, with a fix for each one that is
+   * missing, and a clear word when no model answers. */
+  private setupCheck(found: Check[], width: number): BoxRenderable {
+    const none = found.at(-1)?.state === "missing";
+    const panel = this.box({
+      width,
+      marginTop: space.section * 2,
+      paddingX: space.between,
+      gap: space.section,
+    });
+    panel.add(
+      this.text(
+        none
+          ? [
+              [`${glyph.failed} `, c.danger],
+              ["No model answers yet", c.text, bold],
+            ]
+          : [
+              [`${glyph.done} `, c.success],
+              ["Setup", c.text, bold],
+            ],
+        c.text,
+      ),
+    );
+    const marks: Record<Check["state"], Part> = {
+      ready: [glyph.done, c.success],
+      missing: [glyph.failed, c.danger],
+      optional: [glyph.ring, c.faint],
+    };
+    // A check and its fix stand together, and a line of space stands between two checks.
+    for (const check of found) {
+      const [mark, color] = marks[check.state];
+      const one = this.box({});
+      one.add(
+        this.text(
+          [
+            [`${mark} `, color],
+            [check.label, c.text],
+            [`  ${check.found}`, c.muted],
+          ],
+          c.text,
+        ),
+      );
+      if (check.fix && check.state !== "ready") one.add(this.text(check.fix, c.faint, { paddingLeft: 2 }));
+      panel.add(one);
+    }
+    return panel;
+  }
+  /** The bar at the top of the feed of a life that the operator watches: what it costs, which is nothing, what it
+   * shows, in common words, and where the moment stands when the operator moved back in time. */
+  private watchBanner(box: BoxRenderable): void {
+    const w = this.session;
+    const panel = this.panel(box, c.accent);
+    // The demo asks no model: its script answers each turn, so no call goes out and nothing is spent.
+    panel.add(
+      this.text([
+        [`${glyph.running} `, c.accent],
+        ["Watching a life", c.text, bold],
+        [`   0 model calls, ${dollars(w.cost)}`, c.muted],
+      ]),
+    );
+    panel.add(
+      this.text(
+        "Many models answer in one life. A word of Python is a program. Any point can start a new branch.",
+        c.muted,
+        { paddingLeft: space.between },
+      ),
+    );
+    panel.add(
+      this.text(
+        w.moment === undefined
+          ? "Press [ to step back in time, then b to start a branch from there."
+          : "This is an earlier moment. Press ] to step on, b to start a branch here, or Esc to come back to now.",
+        w.moment === undefined ? c.faint : c.warning,
+        { paddingLeft: space.between },
+      ),
+    );
+  }
+  /** Watch a life: a new demo that plays by itself, asks no model, and shows in a workspace of its own. */
+  private watch = async (): Promise<void> => {
+    try {
+      const session = await demoSession({ watch: true, preferences: this.session.preferences });
+      await this.options.workspaces.show(session);
+      void tour(session).catch(session.fail);
+    } catch (error) {
+      this.report(error);
+    }
+  };
 
   private preview(text: string, reserve = 2): string {
     return clip(text.replace(/\s+/g, " "), Math.max(8, this.feedWidth - reserve));
@@ -3786,6 +3917,7 @@ export class App {
       new: () => library.create(),
       sidebar: () => library.toggle(),
       workspace: this.workspacePicker,
+      watch: this.watch,
     };
     if (name && !argument && Object.hasOwn(bare, name)) {
       await bare[name]?.();
@@ -5765,6 +5897,29 @@ export class App {
     layer(() => bare() && Boolean(this.session.editing), "edit", [
       { on: ["return", "enter"], run: () => void this.submit(), hint: ["Enter", "run"] },
       { on: "escape", run: this.escape, hint: ["Esc", "leave the program"] },
+    ]);
+    // While the operator watches a life and the input is empty, [ and ] move the moment of the feed, b starts a
+    // branch there, and Escape comes back to now.
+    const watched = () => bare() && this.session.watching && !this.composer.plainText;
+    const past = () => this.session.moment !== undefined;
+    layer(watched, "watch", [
+      { on: "[", run: () => this.session.travel(-1), hint: ["[ ]", "move in time"] },
+      { on: "]", run: () => this.session.travel(1) },
+      {
+        on: "b",
+        run: () => void this.session.branchHere().catch(this.report),
+        when: past,
+        hint: ["b", "branch here"],
+      },
+      {
+        on: "escape",
+        run: () => {
+          this.session.moment = undefined;
+          this.renderContent();
+        },
+        when: past,
+        hint: ["Esc", "now"],
+      },
     ]);
     layer(bare, "", [
       // As in Claude Code, Ctrl+D acts on an empty input.

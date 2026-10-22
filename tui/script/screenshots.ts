@@ -4,7 +4,7 @@ import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import { type App, follow } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
-import { demoSession, removeDemoDirectories, seedDemo, seedDemoFiles } from "../src/demo.ts";
+import { demoSession, removeDemoDirectories, seedDemo, seedDemoFiles, tour } from "../src/demo.ts";
 import { loadParsers } from "../src/parsers.ts";
 import { Preferences } from "../src/preferences.ts";
 import type { Exit } from "../src/session.ts";
@@ -620,6 +620,43 @@ try {
   test.resize(82, 32);
   await capture("17-narrow");
   test.resize(152, 46);
+
+  // A first run on a machine that holds no model: the welcome checks the setup, with a fix for each part that is
+  // missing. The demo needs no model and checks nothing, so the check is the one of a machine with nothing.
+  app().dispose();
+  await library.dispose();
+  const bare = await demoSession({ cwd: await project("first-run") });
+  await until(bare, () => bare.setup === null && bare.catalogRead);
+  bare.setup = {
+    claude: false,
+    providers: [
+      { provider: "anthropic", env: ["ANTHROPIC_API_KEY"], offered: 0 },
+      { provider: "openai", env: ["OPENAI_API_KEY"], offered: 0 },
+      { provider: "google", env: ["GOOGLE_API_KEY", "GEMINI_API_KEY"], offered: 0 },
+      { provider: "openrouter", env: ["OPENROUTER_API_KEY"], offered: 0 },
+    ],
+  };
+  await show(bare);
+  await capture("63-setup-no-model");
+
+  // Watch a life: the demo plays by itself, asks no model, and costs nothing.
+  app().dispose();
+  await library.dispose();
+  const watched = await demoSession({ watch: true, cwd: await project("watch") });
+  await show(watched);
+  const playing = tour(watched, 300);
+  await until(
+    watched,
+    () => watched.acts.filter((act) => act.kind === "prompt" && act.words[2] && !act.done).length === 3,
+  );
+  await rest();
+  await capture("64-watch-a-life");
+  await playing;
+  await watched.select(watched.engine.root);
+  // The moment goes back to the word as it began, before it asked any model.
+  const asks = () => watched.at(watched.activity).some((act) => act.kind === "prompt" && act.words[2]);
+  while (asks()) watched.travel(-1);
+  await capture("65-watch-earlier");
 } finally {
   app().dispose();
   test.renderer.destroy();

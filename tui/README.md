@@ -14,6 +14,14 @@ bun run tui                  # A real life, on the models of the catalog of the 
 bun run tui -- --resume .furb/sessions/example.jsonl
 ```
 
+The welcome of an empty chain offers "Watch a life" first: a short life on a small project that plays by itself
+and asks no model, so it costs nothing. Several models answer in it, a word of Python runs as a program, and a branch
+starts from an earlier point. While it plays and the input is empty, `[` and `]` move the feed back and on in time,
+`b` starts a branch at the moment shown, and Esc comes back to now. `/watch` plays it too. On the first run, and on
+each run while no model answers, the welcome checks the setup: the claude command line, the keys in the
+environment, the local server that `FURB_LOCAL_URL` names, and the models that the catalog offers, with a fix for each
+part that is missing.
+
 `furb`, the command line, opens this TUI when it has no command, with `--demo`, `--record`, `--cwd`, the model and the
 effort of its `--model` as `--model` and `--effort`, each `--roster`, and the words after `--`.
 
@@ -108,6 +116,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | Command | Action |
 | --- | --- |
 | `/new` | Start a fresh life |
+| `/watch` | Play a short life that asks no model and costs nothing |
 | `/model [model]` | Choose the model that answers on this chain |
 | `/effort [level]` | Set the reasoning effort of the selected model |
 | `/shape [type]` | Choose the result type of the next prompt |

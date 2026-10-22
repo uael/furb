@@ -283,6 +283,16 @@ export declare const LARGEST: number
 /** The levels of effort, from least to most, which an actor names after its model. */
 export declare function levels(): Array<string>
 
+/**
+ * The local server as a first run checks it: its address, how many models the catalog offers of it, and why it
+ * listed none, when it did not answer.
+ */
+export interface LocalInfo {
+  address: string
+  offered: number
+  failed?: string
+}
+
 /** The ear of the log of the life beside the record at a path, which writes it again from its first line. */
 export declare function log(path: string): NativeEar
 
@@ -427,6 +437,16 @@ export interface Outcome {
 }
 
 /**
+ * A provider of the network as a first run checks it: its name, the names of its credential in the environment, and
+ * how many of its models the catalog offers.
+ */
+export interface ProviderInfo {
+  provider: string
+  env: Array<string>
+  offered: number
+}
+
+/**
  * What the record at a path tells, read with no life, so no word runs again and a record of any engine opens: the
  * engine that made it, as the record names it, and nothing when it names none; the engine of this build; whether
  * the facts are those of its log; and the facts, in order. The facts are those of the log when it agrees with the
@@ -442,6 +462,23 @@ export declare const ROOT: string
  * record; nothing when the machine has no cache of furb.
  */
 export declare function scratch(record: string): string | null
+
+/**
+ * What a first run checks of this machine, with the claude command line at a path when it is given. It asks the
+ * local server for what it lists, so it waits for that server.
+ */
+export declare function setup(claude?: string | undefined | null): SetupInfo
+
+/**
+ * What a first run checks of this machine, as a host reads it: whether the catalog found the claude command line,
+ * each provider of the network with the names of its credential and how many of its models the catalog offers, and
+ * the local server that `FURB_LOCAL_URL` names, with the models it offers or why it listed none.
+ */
+export interface SetupInfo {
+  claude: boolean
+  providers: Array<ProviderInfo>
+  local?: LocalInfo
+}
 
 /** Every shape the operator answers, by its name. */
 export declare function shapes(): Array<string>
