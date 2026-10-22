@@ -961,28 +961,77 @@ fn a_model_whose_thought_passes_its_most_is_asked_again_with_that_thought_and_no
 }
 
 #[test]
-fn a_fence_in_a_turn_of_the_first_request_stays_for_the_gate() {
+fn a_turn_of_a_local_model_loses_the_fence_that_opens_it_with_no_closing_fence() {
   let usage = json!({"id": "c", "object": "chat.completion.chunk", "created": 0, "model": "qwen", "choices": [],
     "usage": {"prompt_tokens": 100, "completion_tokens": 5, "total_tokens": 105}});
   let events = [
-    chunk(json!({"role": "assistant", "content": "```python\nclose(3)\n```"}), json!("stop")),
+    chunk(json!({"role": "assistant", "content": "```python\nclose(3)\n"}), json!("stop")),
     format!("data: {usage}\n\ndata: [DONE]\n\n"),
   ];
-  let (mut engine, _, asked_of) = local("fenced", events.concat());
+  let (mut engine, id, asked_of) = local("fenced", events.concat());
   let turn = replied(&mut engine);
-  assert!(turn.starts_with(r"('assistant', '```python\nclose(3)\n```'"), "{turn}");
-  assert!(!ran(&mut engine, "close(3)"), "the gate refuses the fenced word");
-  drop(engine);
-  let _ = asked_of.join();
+  assert!(
+    turn.starts_with(
+      "('assistant', 'close(3)', (100, 5, 0, 0, 0.0), [{'type': 'text', 'text': 'close(3)'}]"
+    ),
+    "{turn}"
+  );
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  assert_eq!(got.as_ref().as_int(), Some(3));
+  asked_of.join().expect("the server read the requests");
 }
 
 #[test]
-fn one_fence_that_wraps_the_whole_text_goes_and_any_other_text_stays() {
+fn a_turn_with_a_thought_and_no_word_is_asked_again_with_that_thought_and_no_thought() {
+  let thought = ["a", "b"].map(|one| chunk(json!({"reasoning_content": one}), Value::Null));
+  let first_usage = json!({"id": "c", "object": "chat.completion.chunk", "created": 0, "model": "qwen",
+    "choices": [], "usage": {"prompt_tokens": 100, "completion_tokens": 2, "total_tokens": 102}});
+  let first = [
+    thought.concat(),
+    chunk(json!({"content": ""}), json!("stop")),
+    format!("data: {first_usage}\n\ndata: [DONE]\n\n"),
+  ];
+  let usage = json!({"id": "c", "object": "chat.completion.chunk", "created": 0, "model": "qwen", "choices": [],
+    "usage": {"prompt_tokens": 100, "completion_tokens": 5, "total_tokens": 105,
+      "prompt_tokens_details": {"cached_tokens": 0}}});
+  let again = [
+    chunk(json!({"role": "assistant", "content": "close(3)"}), json!("stop")),
+    format!("data: {usage}\n\ndata: [DONE]\n\n"),
+  ];
+  let (mut engine, id, asked_of) = rethinking(first.concat(), again.concat());
+  let turn = replied(&mut engine);
+  let reasoning =
+    "{'type': 'reasoning', 'id': None, 'content': [{'type': 'text', 'content': {'text': 'ab'}}]}";
+  let expected = format!(
+    "('assistant', 'close(3)', (100, 7, 0, 0, 0.0), [{reasoning}, {{'type': 'text', 'text': 'close(3)'}}])"
+  );
+  assert_eq!(turn, expected, "the turn holds the thought and the word, and counts what both wrote");
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  assert_eq!(got.as_ref().as_int(), Some(3));
+  let [_, _, second] = asked_of.join().expect("the server read the requests");
+  let second: Value =
+    serde_json::from_str(second.split("\r\n\r\n").nth(1).unwrap_or_default()).expect("a JSON body");
+  let last =
+    second["messages"].as_array().and_then(|messages| messages.last()).cloned().unwrap_or_default();
+  assert_eq!(
+    (&last["role"], &last["reasoning_content"], &second["chat_template_kwargs"]),
+    (&json!("assistant"), &json!("ab"), &json!({"enable_thinking": false})),
+    "the model is asked again with its thought and no more thought"
+  );
+}
+
+#[test]
+fn the_fence_that_opens_a_text_goes_with_its_closing_fence_at_its_end_and_any_other_text_stays() {
   assert_eq!(unfenced("```python\nclose(3)\n```"), Some("close(3)"));
   assert_eq!(unfenced("\n```\nx = 1\ny = 2\n```\n"), Some("x = 1\ny = 2"));
+  assert_eq!(unfenced("```python\nclose(3)\n"), Some("close(3)"), "a fence with no close goes");
+  assert_eq!(unfenced("```python\nx = '```'"), Some("x = '```'"), "backticks inside a line stay");
+  assert_eq!(unfenced("```python\nclose(3)\n```\nDone."), Some("close(3)\n```\nDone."));
+  assert_eq!(
+    unfenced("```python\nx = 1\n```\n```python\nclose(x)\n```"),
+    Some("x = 1\n```\n```python\nclose(x)")
+  );
   assert_eq!(unfenced("Here:\n```python\nclose(3)\n```"), None);
-  assert_eq!(unfenced("```python\nclose(3)\n```\nDone."), None);
-  assert_eq!(unfenced("```python\nx = 1\n```\n```python\nclose(x)\n```"), None);
   assert_eq!(unfenced("```js\nclose(3)\n```"), None);
   assert_eq!(unfenced("close(3)"), None);
 }
