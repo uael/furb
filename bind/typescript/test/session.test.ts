@@ -10,6 +10,7 @@ import {
   enabled,
   type Fact,
   inspectRecord,
+  Life,
   ROOT,
   Session,
   type Turn,
@@ -677,6 +678,20 @@ test("a session with no model puts to the operator every prompt that names no ac
     expect(await acknowledgment).toBe("bash1 done");
   } finally {
     await session.dispose();
+    await rm(cwd, { recursive: true });
+  }
+});
+
+test("a wait of a program on a life throws once the life ended, and so does a wait that starts after the end", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-ended-"));
+  const life = new Life(boot({ cwd, record: join(cwd, "work.jsonl"), roster: [] }));
+  try {
+    const waits = life.until(() => false);
+    await tick();
+    await life.end();
+    await expect(waits).rejects.toThrow("The life ended.");
+    await expect(life.until(() => false)).rejects.toThrow("The life ended.");
+  } finally {
     await rm(cwd, { recursive: true });
   }
 });

@@ -172,6 +172,7 @@ export class Session extends EventEmitter {
     } catch (error) {
       this.stopped = true;
       this.engine?.dispose();
+      this.console.dispose();
       this.changes.dispose();
       throw error;
     }
