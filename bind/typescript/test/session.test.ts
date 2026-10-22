@@ -212,7 +212,11 @@ test("what a model writes streams into the session under its rung until its repl
         actor: "claude-cli:sonnet/high",
         chain: engine.root,
         messages: [expect.objectContaining({ role: "user" })],
-        settings: { effort: "high", session: expect.stringMatching(/\/chain1$/) },
+        settings: {
+          effort: "high",
+          max_thinking_tokens: 32768,
+          session: expect.stringMatching(/\/chain1$/),
+        },
       },
     ]);
     release();

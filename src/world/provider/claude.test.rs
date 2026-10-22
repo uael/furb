@@ -345,6 +345,25 @@ fn a_new_effort_ends_the_process_of_the_conversation_and_the_next_process_resume
 }
 
 #[test]
+fn a_most_of_thought_that_a_turn_names_is_the_max_thinking_tokens_of_its_process_and_a_new_most_ends_the_process()
+ {
+  let yard = Yard::new("thinking");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let mut messages = vec![user("first")];
+  let one = asked(&model, &messages, json!({"session": "chain"})).unwrap();
+  messages.extend([Message::Assistant { id: None, content: one.choice }, user("second")]);
+  asked(&model, &messages, json!({"session": "chain", "max_thinking_tokens": 0})).unwrap();
+  let pids = yard.pids();
+  let thinking: Vec<String> = pids
+    .iter()
+    .map(|pid| fs::read_to_string(yard.at.join(format!("thinking.{pid}"))).unwrap_or_default())
+    .collect();
+  let inherited = std::env::var("MAX_THINKING_TOKENS").unwrap_or_else(|_| "unset".to_owned());
+  assert_eq!(thinking, [inherited, "0".to_owned()], "a turn that names no most inherits it");
+  assert!(gone(&pids[0]), "a new most ends the process");
+}
+
+#[test]
 fn an_effort_that_the_command_line_does_not_take_is_refused_before_any_process_starts() {
   let yard = Yard::new("effort");
   let model = yard.claude(10_000).completion_model("sonnet");

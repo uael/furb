@@ -57,16 +57,27 @@ test("the real native life drives the feed, the transcript, and responsive views
       expect(screen.captureCharFrame()).toContain("● sonnet");
       for (
         let pass = 0;
-        pass < 100 && !screen.captureCharFrame().includes("A clear starting point");
+        pass < 100 &&
+        screen.captureCharFrame().lastIndexOf("A clear starting point") <
+          screen.captureCharFrame().indexOf("Explore this project");
         pass++
       ) {
         await new Promise((done) => setTimeout(done, 20));
         await frame();
       }
       const conversation = screen.captureCharFrame();
+      // The board over the feed says the answer of the chain too, so the feed holds its last mention.
       expect(conversation.indexOf("Explore this project")).toBeLessThan(
-        conversation.indexOf("A clear starting point"),
+        conversation.lastIndexOf("A clear starting point"),
       );
+      // A rung that is over folds to one row, and the acts that it made stand under it once it opens.
+      const rung = app.scroll
+        .getChildren()
+        .find((node) => /^rung\d+$/.test(node.id))
+        ?.getChildren()[0];
+      if (!rung) throw new Error("No rung heading.");
+      await screen.mockMouse.click(rung.x, rung.y);
+      await screen.flush();
       // A command that is over folds to its heading, and its output shows once it opens.
       expect(conversation).not.toContain("└ ✓ capture");
       const command = app.scroll.getChildren().find((node) => /^bash\d+$/.test(node.id));
@@ -289,6 +300,52 @@ test("a prompt of None to the operator is a notice with no field, done at once, 
       const read = await drawn(frame, screen.renderer.root);
       expect(read).toContain("The build is green.");
       expect(read).not.toContain("Nothing to answer");
+    },
+    { width: 120, height: 40 },
+  ));
+
+test("many questions wait on the desk, which says which one the input answers, and the dialog goes from one to the next", () =>
+  composing(
+    async ({ session, app, screen, frame }) => {
+      const root = session.engine.root;
+      const side = await session.engine.chain({ label: "Side" });
+      const base = await session.engine.prompt("str", { message: "Which base?", to: "operator", on: root });
+      const merge = await session.engine.prompt("bool", { message: "Merge it?", to: "operator", on: side });
+      const count = await session.engine.prompt("int", {
+        message: "How many retries?",
+        to: "operator",
+        on: root,
+      });
+      await until(session.host, () => session.host.prompts.size === 3);
+      await session.refresh();
+      const first = await drawn(frame, screen.renderer.root);
+      expect(first).toContain("◆ ◆ ◆  Question 1 of 3  from Main");
+      expect(first).toContain(`answers ${base}`);
+      expect(first).toContain("The input below answers this question, as str");
+      expect(first).toContain("Click here to answer this question in the input below");
+      await session.submit("main");
+      expect(await session.engine.result(base)).toBe("main");
+      expect(session.notice).toBe(`Your answer went to ${base} on Main. 2 more wait.`);
+      await until(session.host, () => !session.host.prompts.has(base));
+      await session.refresh();
+      expect(await drawn(frame, screen.renderer.root)).toContain(`answers ${count}`);
+      app.question();
+      screen.mockInput.pressTab();
+      await until(session, () => session.selected === side);
+      const next = await drawn(frame, screen.renderer.root);
+      expect(next).toContain("Question 1 of 2 from Side");
+      expect(next).toContain("Merge it?");
+      screen.mockInput.pressEnter();
+      expect(await session.engine.result(merge)).toBe(true);
+      await until(session.host, () => !session.host.prompts.has(merge));
+      await until(session, () => session.selected === root);
+      expect(await drawn(frame, screen.renderer.root)).toContain("Question 1 of 1 from Main");
+      await screen.mockInput.typeText("3");
+      screen.mockInput.pressEnter();
+      expect(await session.engine.result(count)).toBe(3);
+      await until(session.host, () => !session.host.prompts.size);
+      await session.refresh();
+      expect(await drawn(frame, screen.renderer.root)).not.toContain("Question 1 of");
     },
     { width: 120, height: 40 },
   ));

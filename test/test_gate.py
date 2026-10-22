@@ -170,3 +170,17 @@ async def test_the_journal_keeps_what_the_gate_found() -> None:
   again, over = await relived(Sand(), list(sand.record))
   assert over == root and gated(again) == ["close(1)"] and findings(again) == [[]]
   assert [a[2] for a in said(again, "done") if a[1] == "gate1"] == ["journal"]
+
+
+async def test_a_word_that_binds_a_name_that_the_transcript_binds_finds_that_the_transcript_binds_it() -> None:
+  """A word that binds a name that the transcript binds, the name of an act of its chain or a name of a value that a tell of that act binds, as bash12_stdout, finds that the transcript binds that name, also for an act that the chain did not tell yet."""
+  _, _, root = born()
+  act = engine.rung("k = 1", on=root)
+  told = "error[transcript-name] the transcript binds `{}`: a word reads it and never binds it"
+  word = f"{act}_value = 2"
+  assert engine.gate(word, on=root) == [f"line 1: {told.format(act + '_value')}, in {word!r}"]
+  await act
+  assert engine.gate(f"k = 2\nfor {act} in []:\n  pass", on=root) == [
+    f"line 2: {told.format(act)}, in 'for {act} in []:'"
+  ]
+  assert engine.gate(f"{act}x = 1\nbash99_stdout = ''", on=root) == []

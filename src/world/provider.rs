@@ -43,6 +43,65 @@ use crate::{
   wire,
 };
 
+/// The name of the environment that gives the most tokens of thought of a model in one turn, as Claude Code reads it.
+pub(super) const ENV_THINKING: &str = "MAX_THINKING_TOKENS";
+
+/// The key of `.furb/config.json` that gives the most tokens of thought of a model in one turn, and the setting under
+/// which the provider tells it to the claude command line.
+pub(super) const KEY_THINKING: &str = "max_thinking_tokens";
+
+/// The most tokens of thought of a model in one turn when neither the environment nor the config gives one: a model
+/// that thinks more than this rarely writes a word in the turn.
+pub const THINKING: u64 = 32_768;
+
+/// The most tokens of thought of a model in one turn, as Claude Code means it, 0 turning the thought off, and whether
+/// the environment of furb gave it, so the claude command line inherits it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Thinking {
+  pub most: u64,
+  pub inherited: bool,
+}
+
+impl Default for Thinking {
+  fn default() -> Thinking {
+    Thinking { most: THINKING, inherited: false }
+  }
+}
+
+/// The most tokens of thought of a model in one turn, as the environment gives it, which wins, else as the key
+/// `max_thinking_tokens` of `.furb/config.json` in the directory of the life gives it, else [`THINKING`]. A value that
+/// is no count of tokens is as unsaid.
+pub(super) fn thinking(env: Option<&str>, directory: &std::path::Path) -> Thinking {
+  let given = env.and_then(|one| one.trim().parse::<u64>().ok());
+  let config = || {
+    let text = std::fs::read_to_string(directory.join(".furb").join("config.json")).ok()?;
+    serde_json::from_str::<Value>(&text).ok()?.get(KEY_THINKING)?.as_u64()
+  };
+  Thinking { most: given.or_else(config).unwrap_or(THINKING), inherited: env.is_some() }
+}
+
+/// How a model takes the most tokens of thought of one turn.
+#[derive(Clone)]
+pub(super) enum Thought {
+  /// Its server streams its thought one token in each part, so the provider cuts its thought at the most and asks it
+  /// again with these settings, which turn its thought off, or asks it with them from the first request when the most
+  /// is 0. A setting of null takes that setting off the request.
+  Off(Map<String, Value>),
+  /// It takes the most as the setting `max_thinking_tokens`, which the provider gives it unless the environment of
+  /// furb gave the most, which it then inherits.
+  Told,
+}
+
+/// The settings with these settings put in, a setting of null taking that setting off.
+fn merged(settings: &mut Map<String, Value>, with: &Map<String, Value>) {
+  for (key, value) in with {
+    match value {
+      Value::Null => settings.remove(key),
+      one => settings.insert(key.clone(), one.clone()),
+    };
+  }
+}
+
 /// What a turn of a model tells as it streams: what it added to its text, and what it added to its thought.
 pub type Told = Arc<dyn Fn(&str, &str) + Send + Sync>;
 
@@ -124,10 +183,8 @@ pub struct Model {
   /// Whether it may wrap its word in a fence, as a model of a local server does, so its turn loses an opening fence
   /// at its start, and the closing fence at its end when it has one.
   fenced: bool,
-  /// The most parts of thought it streams in one turn, each a token as a local server streams it, and the settings
-  /// with which the provider asks it again once its thought passed that most: a setting of null takes that setting
-  /// off the request.
-  thought: Option<(u64, Map<String, Value>)>,
+  /// How it takes the most tokens of thought of one turn, when it takes one.
+  thought: Option<Thought>,
   answers: Answers,
   /// The native search of the web of its provider, which the extension web asks for an actor that names it.
   search: Option<Searches>,
@@ -269,20 +326,35 @@ impl Model {
   }
 }
 
-/// The provider: the directory the life stands on, the models it offers, the default actor, the directory of the
-/// images that a turn names, and whom it tells what a model writes.
+/// The provider: the directory the life stands on, the models it offers, the default actor, the most tokens of thought
+/// of a model in one turn, the directory of the images that a turn names, and whom it tells what a model writes.
 pub struct Provider {
   directory: String,
   models: Vec<Model>,
   actor: Option<String>,
+  thinking: Thinking,
   images: Option<PathBuf>,
   writes: Option<Writes>,
 }
 
 impl Provider {
-  /// A provider of these models, on a directory.
+  /// A provider of these models, on a directory, whose model thinks [`THINKING`] tokens at most in one turn.
   pub fn new(directory: impl Into<String>, models: Vec<Model>) -> Provider {
-    Provider { directory: directory.into(), models, actor: None, images: None, writes: None }
+    let directory = directory.into();
+    Provider {
+      directory,
+      models,
+      actor: None,
+      thinking: Thinking::default(),
+      images: None,
+      writes: None,
+    }
+  }
+
+  /// The most tokens of thought of a model in one turn.
+  pub fn thinking(mut self, thinking: Thinking) -> Provider {
+    self.thinking = thinking;
+    self
   }
 
   /// The actor a prompt goes to when it names none, which is the first model at the level of an actor that names
@@ -325,7 +397,7 @@ impl Provider {
   /// the turn of the model, or with a refusal, and a second refusal in a row of the same actor on a chain pauses the
   /// chain first. A done of a reply that the ear did not say ends the call of its model.
   pub fn ear(self) -> Box<dyn Ear> {
-    let Provider { directory, models, actor, images, writes } = self;
+    let Provider { directory, models, actor, thinking, images, writes } = self;
     let actor = actor.unwrap_or_else(|| {
       models.first().map_or_else(|| OPERATOR.to_owned(), |model| model.at(None))
     });
@@ -373,7 +445,8 @@ impl Provider {
             let wrote = written(writes.is_some(), &about, &tells);
             let key = format!("{life}/{chain}");
             let asked =
-              requested(&models, &actor, &chain, turns.as_ref(), &key, &mut images, wrote);
+              requested(&models, &actor, &chain, turns.as_ref(), &key, &mut images, wrote)
+                .map(|one| thinks(one, thinking));
             let again = mute.get(&chain) == Some(&actor);
             let (stop, stopped) = oneshot::channel();
             co.work(answered(about.clone(), asked, tells, told, stopped));
@@ -480,9 +553,31 @@ fn requested(
     output_schema: None,
     record_telemetry_content: false,
   };
-  let thought = model.thought.clone();
-  let asked = Asked { actor: actor.to_owned(), chain: chain.to_owned(), request, told, thought };
+  let asked =
+    Asked { actor: actor.to_owned(), chain: chain.to_owned(), request, told, thought: None };
   Ok((model.clone(), asked))
+}
+
+/// What a reply asks a model, with the most tokens of thought of the turn as the model takes it.
+fn thinks((model, mut asked): (Model, Asked), thinking: Thinking) -> (Model, Asked) {
+  let mut settings = match asked.request.additional_params.take() {
+    Some(Value::Object(settings)) => settings,
+    _ => Map::new(),
+  };
+  asked.thought = match &model.thought {
+    Some(Thought::Off(off)) if thinking.most == 0 => {
+      merged(&mut settings, off);
+      None
+    }
+    Some(Thought::Off(off)) => Some((thinking.most, off.clone())),
+    Some(Thought::Told) if !thinking.inherited => {
+      settings.insert(KEY_THINKING.to_owned(), Value::from(thinking.most));
+      None
+    }
+    _ => None,
+  };
+  asked.request.additional_params = (!settings.is_empty()).then_some(Value::Object(settings));
+  (model, asked)
 }
 
 /// The turns of a chain as messages of rig. The engine phrases every turn as python and the provider renders
@@ -603,12 +698,7 @@ async fn rethought(
     Some(Value::Object(settings)) => settings,
     _ => Map::new(),
   };
-  for (key, value) in again {
-    match value {
-      Value::Null => settings.remove(key),
-      one => settings.insert(key.clone(), one.clone()),
-    };
-  }
+  merged(&mut settings, again);
   request.additional_params = (!settings.is_empty()).then_some(Value::Object(settings));
   let thought = AssistantContent::Reasoning(Reasoning::new(&thinking));
   // rig sends no turn that holds no text, so the turn of the thought holds an empty text too.
