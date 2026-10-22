@@ -113,6 +113,9 @@ test("the views say each quantity one way, read a page of changes once, and set 
         await session.submit("/grant 1.5");
         await session.refresh();
         expect(await frame()).toContain("$1.50");
+        // The word of a folded rung takes its colors off the main thread, which change its heading once.
+        await app.colorsDone();
+        await frame();
         const card = app.scroll.getChildren().find((node) => /^rung\d+$/.test(node.id));
         const heading = card?.getChildren()[0] as TextRenderable | undefined;
         if (!heading) throw new Error("No card for the rung.");
