@@ -21,6 +21,9 @@ const STEPS: [&str; 8] = ["stand", "clock", "chance", "gate", "merged", "run", "
 /// memory.
 pub const LONG: usize = 16_384;
 
+/// How many characters the text of a file keeps: the window shows only its path and the count of its lines.
+pub const TEXT: usize = 2048;
+
 /// One act of the life, as its question said it and as its facts settled it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Act {
@@ -111,19 +114,20 @@ fn display(value: &Value) -> String {
 
 /// A text cut to a number of characters, with an ellipsis when it was cut.
 fn cut(text: &str, most: usize) -> String {
-  if text.len() <= most {
-    return text.to_owned();
+  match text.char_indices().nth(most) {
+    Some((at, _)) => format!("{}…", &text[..at]),
+    None => text.to_owned(),
   }
-  let mut short: String = text.chars().take(most).collect();
-  short.push('…');
-  short
 }
 
-/// A fact as the app keeps it: each text of a done, a tell or an output cut to [`LONG`] characters, and each text of a
-/// file with the count of its lines. The words of a question and of a ready, which are the code, stay whole.
+/// A fact as the app keeps it: the text of each file cut to [`TEXT`] characters with the count of its lines that are
+/// not empty, and each other long text cut to [`LONG`] characters. The words of a rung, of a prompt and of a chain, and
+/// the word that a rung said ready, which are the code and the messages that the window shows whole, stay whole.
 pub fn lean(fact: Value) -> Value {
-  let kind = fact.get(0).and_then(Value::as_str).unwrap_or_default();
-  if !matches!(kind, "done" | "tell" | "out") {
+  let word = |at: usize| fact.get(at).and_then(Value::as_str).unwrap_or_default();
+  let whole = word(0) == "ready"
+    || (question(word(0), word(1)) && matches!(word(0), "rung" | "prompt" | "chain"));
+  if whole {
     return fact;
   }
   fn shorter(value: Value) -> Value {
@@ -131,10 +135,12 @@ pub fn lean(fact: Value) -> Value {
       Value::String(text) if text.len() > LONG => Value::String(cut(&text, LONG)),
       Value::Array(items) => Value::Array(items.into_iter().map(shorter).collect()),
       Value::Object(mut map) => {
-        let long = map.get("content").and_then(Value::as_str).filter(|one| one.len() > LONG);
+        let long = map.get("content").and_then(Value::as_str).filter(|one| one.len() > TEXT);
         if let Some(content) = long {
-          let lines = content.lines().count();
+          let lines = content.lines().filter(|line| !line.is_empty()).count();
+          let short = cut(content, TEXT);
           map.insert("lines".to_owned(), Value::from(lines));
+          map.insert("content".to_owned(), Value::String(short));
         }
         Value::Object(map.into_iter().map(|(key, one)| (key, shorter(one))).collect())
       }

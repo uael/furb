@@ -1,6 +1,7 @@
 import { reason, type Thread } from "@furb/engine/life";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronRight, CornerDownRight } from "lucide-react";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { actorName } from "../data.ts";
 import { chainName, type Held, type Moment, threadState } from "../life.ts";
 import { steps } from "../steps.ts";
@@ -36,8 +37,23 @@ export function ThreadView({
   };
   const answer = thread.act.done ? thread.act.value : undefined;
   const failed = threadState(moment, thread) === "failed";
+  // The ladder draws only the steps that the view shows, so a thread of hundreds of steps stays light.
+  const scroller = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLOListElement>(null);
+  const [margin, setMargin] = useState(0);
+  useLayoutEffect(() => {
+    setMargin(list.current?.offsetTop ?? 0);
+  });
+  const rows = useVirtualizer({
+    count: ladder.length,
+    getScrollElement: () => scroller.current,
+    estimateSize: () => 44,
+    overscan: 6,
+    scrollMargin: margin,
+    getItemKey: (at) => ladder[at]?.id ?? at,
+  });
   return (
-    <div className="h-full overflow-y-auto">
+    <div ref={scroller} className="h-full overflow-y-auto">
       <article className="mx-auto max-w-[760px] px-10 pt-9 pb-56">
         <div className="mb-2.5 flex items-center gap-2 text-[12.5px] text-faint">
           <span>{asker}</span>
@@ -70,12 +86,21 @@ export function ThreadView({
           </div>
         ) : null}
         {ladder.length > 0 ? (
-          <ol className="relative mt-8">
+          <ol ref={list} className="relative mt-8" style={{ height: rows.getTotalSize() }}>
             <span className="absolute top-2 bottom-2 left-[6px] w-px bg-hair" aria-hidden />
-            {ladder.map((step, n) => {
+            {rows.getVirtualItems().map((row) => {
+              const step = ladder[row.index];
+              if (!step) return null;
+              const n = row.index;
               const shown = open.has(step.id) || step.thinks;
               return (
-                <li key={step.id} className="relative pb-5 pl-8">
+                <li
+                  key={step.id}
+                  data-index={row.index}
+                  ref={rows.measureElement}
+                  className="absolute left-0 w-full pb-5 pl-8"
+                  style={{ top: row.start - margin }}
+                >
                   <span className="absolute top-[5px] left-0 grid h-[13px] w-[13px] place-items-center bg-bg">
                     <Glyph state={step.state} size={12} />
                   </span>

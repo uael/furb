@@ -50,9 +50,11 @@ const empty: Held = {
   measures: {},
 };
 
-/** A part that the core sent, taken into what the window holds: a part of another life starts again from nothing. */
+/** A part that the core sent, taken into what the window holds: a part of another record starts again from nothing.
+ * The acts and the words of the record grow in place, so a part of a large record copies none of them, and the count
+ * of changes says to a view that they changed. */
 function merged(held: Held, part: Wire): Held {
-  const base = part.generation === held.generation ? held : empty;
+  const base = part.generation === held.generation && held.state === "open" ? held : empty;
   if (part.state !== "open")
     return {
       ...empty,
@@ -61,11 +63,10 @@ function merged(held: Held, part: Wire): Held {
       said: part.said,
       what: part.state === "opening" ? part.what : "",
     };
-  const acts = part.acts.length ? new Map(base.acts) : base.acts;
+  const acts = base === empty ? new Map<string, LiveAct>() : base.acts;
   for (const act of part.acts) acts.set(act.id, act);
-  const given = Object.entries(part.words);
-  const words = given.length ? new Map(base.words) : base.words;
-  for (const [id, word] of given) words.set(id, word);
+  const words = base === empty ? new Map<string, string>() : base.words;
+  for (const [id, word] of Object.entries(part.words)) words.set(id, word);
   return {
     state: "open",
     generation: part.generation,
@@ -144,8 +145,29 @@ export interface Moment {
   word: (rung: LiveAct) => string;
 }
 
+/** How often the views of a record are derived again while the core reads it. */
+const PACE = 1000;
+
+/** The count of changes that the views of a record stand on: each count once the core read the whole record, and
+ * while it reads, the count at most once each PACE milliseconds, so a large record is not derived again at each
+ * part. */
+function useSettled(held: Held): number {
+  const [settled, setSettled] = useState(held.count);
+  useEffect(() => {
+    if (held.read || held.count === 0) {
+      setSettled(held.count);
+      return;
+    }
+    const timer = setTimeout(() => setSettled(held.count), PACE);
+    return () => clearTimeout(timer);
+  }, [held.count, held.read]);
+  return held.read ? held.count : settled;
+}
+
 /** The views of the record that the window holds. */
 export function useMoment(held: Held): Moment {
+  const count = useSettled(held);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the acts and the words grow in place, and the count says when.
   return useMemo(() => {
     const acts = [...held.acts.values()].sort((one, other) => one.began - other.began);
     const owed = new Set(owedAt(acts).map((one) => one.id));
@@ -161,7 +183,7 @@ export function useMoment(held: Held): Moment {
       chains: acts.filter((act) => act.kind === "chain"),
       word,
     };
-  }, [held.acts, held.words]);
+  }, [held.acts, held.words, held.generation, count]);
 }
 
 /** The state of an act, as a glyph shows it. */

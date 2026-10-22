@@ -178,3 +178,22 @@ test("the source of a chain heads the words of each ladder with its prompt, mark
   ]);
   expect(outcome(acts[3] as never, (id) => id)).toBe("");
 });
+
+test("the outcome of a read counts the lines that a host kept of a text that it cut", () => {
+  const read = {
+    id: "read1",
+    kind: "read",
+    by: "rung1",
+    on: "chain1",
+    words: ["src/a.py"],
+    done: true,
+    value: { is: "Text", path: "src/a.py", content: "one\n\ntwo…", lines: 812 },
+    paused: false,
+    began: 3,
+    ended: 4,
+  };
+  expect(outcome(read as never, (id) => id)).toBe("a.py  812 lines");
+  expect(
+    outcome({ ...read, value: { is: "Text", path: "src/a.py", content: "one\n\ntwo" } } as never, (id) => id),
+  ).toBe("a.py  2 lines");
+});

@@ -1,6 +1,8 @@
 import { actState } from "@furb/engine/life";
 import * as Menu from "@radix-ui/react-dropdown-menu";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronDown, FolderOpen } from "lucide-react";
+import { useRef } from "react";
 import { call, dollars } from "../data.ts";
 import { chainName, glyphOf, type Held, type Moment, threadState } from "../life.ts";
 import { clip } from "../steps.ts";
@@ -69,6 +71,14 @@ export function Rail({
   onSelect: (thread: string) => void;
 }) {
   const owed = moment.threads.filter((one) => moment.owed.has(one.act.id));
+  // The tree of the threads draws only the rows that the rail shows, so a record of many threads stays light.
+  const nav = useRef<HTMLElement>(null);
+  const rows = useVirtualizer({
+    count: moment.threads.length,
+    getScrollElement: () => nav.current,
+    estimateSize: () => 46,
+    overscan: 12,
+  });
   const spent = Object.values(held.measures).reduce((sum, one) => sum + one.dollars, 0);
   const ceiling = held.measures[held.root]?.ceiling;
   const share = ceiling ? Math.min(spent / ceiling, 1) : 0;
@@ -134,51 +144,62 @@ export function Rail({
         </div>
       ) : null}
       <div className="mt-5 px-6 pb-1.5 text-[11.5px] text-faint">Threads</div>
-      <nav className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
-        {moment.threads.map((thread) => {
-          const on = thread.act.id === selected;
-          const to = thread.to === "operator" ? "asks you" : chainName(moment, thread.chain);
-          return (
-            <Tip
-              key={thread.act.id}
-              side="right"
-              text={
-                thread.title.length > 30 ? (
-                  <span className="block whitespace-pre-wrap">
-                    {clip(String(thread.act.words[1] ?? ""), 400)}
-                  </span>
-                ) : null
-              }
-            >
-              <button
-                type="button"
-                onClick={() => onSelect(thread.act.id)}
-                className={`group relative flex w-full items-center gap-2.5 rounded-lg py-[7px] pr-1.5 text-left transition-colors duration-150 ${
-                  on ? "bg-panel shadow-[var(--shadow)]" : "hover:bg-text/[0.04]"
-                }`}
-                style={{ paddingLeft: 8 + Math.min(thread.depth, 6) * 14 }}
+      <nav ref={nav} className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+        <div className="relative w-full" style={{ height: rows.getTotalSize() }}>
+          {rows.getVirtualItems().map((row) => {
+            const thread = moment.threads[row.index];
+            if (!thread) return null;
+            const on = thread.act.id === selected;
+            const to = thread.to === "operator" ? "asks you" : chainName(moment, thread.chain);
+            return (
+              <div
+                key={thread.act.id}
+                data-index={row.index}
+                ref={rows.measureElement}
+                className="absolute left-0 w-full"
+                style={{ top: row.start }}
               >
-                {thread.depth > 0 ? (
-                  <span
-                    className="absolute top-0 bottom-0 w-px bg-hair"
-                    style={{ left: 13 + (Math.min(thread.depth, 6) - 1) * 14 }}
-                    aria-hidden
-                  />
-                ) : null}
-                <Glyph state={threadState(moment, thread)} size={12} />
-                <span className="min-w-0 flex-1">
-                  <span
-                    className={`block truncate text-[13.5px] ${on ? "text-text" : "text-muted group-hover:text-text"}`}
+                <Tip
+                  side="right"
+                  text={
+                    thread.title.length > 30 ? (
+                      <span className="block whitespace-pre-wrap">
+                        {clip(String(thread.act.words[1] ?? ""), 400)}
+                      </span>
+                    ) : null
+                  }
+                >
+                  <button
+                    type="button"
+                    onClick={() => onSelect(thread.act.id)}
+                    className={`group relative flex w-full items-center gap-2.5 rounded-lg py-[7px] pr-1.5 text-left transition-colors duration-150 ${
+                      on ? "bg-panel shadow-[var(--shadow)]" : "hover:bg-text/[0.04]"
+                    }`}
+                    style={{ paddingLeft: 8 + Math.min(thread.depth, 6) * 14 }}
                   >
-                    {thread.title}
-                  </span>
-                  <span className="block truncate text-[11.5px] text-faint">{to}</span>
-                </span>
-                <Ticks moment={moment} thread={thread.act.id} />
-              </button>
-            </Tip>
-          );
-        })}
+                    {thread.depth > 0 ? (
+                      <span
+                        className="absolute top-0 bottom-0 w-px bg-hair"
+                        style={{ left: 13 + (Math.min(thread.depth, 6) - 1) * 14 }}
+                        aria-hidden
+                      />
+                    ) : null}
+                    <Glyph state={threadState(moment, thread)} size={12} />
+                    <span className="min-w-0 flex-1">
+                      <span
+                        className={`block truncate text-[13.5px] ${on ? "text-text" : "text-muted group-hover:text-text"}`}
+                      >
+                        {thread.title}
+                      </span>
+                      <span className="block truncate text-[11.5px] text-faint">{to}</span>
+                    </span>
+                    <Ticks moment={moment} thread={thread.act.id} />
+                  </button>
+                </Tip>
+              </div>
+            );
+          })}
+        </div>
       </nav>
       <div className="border-t border-hair px-6 py-3.5">
         <div className="flex items-baseline justify-between text-[12px]">

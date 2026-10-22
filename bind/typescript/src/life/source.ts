@@ -108,13 +108,19 @@ export function outcome(act: LiveAct, label: (chain: string) => string): string 
     return exit?.code === undefined ? "" : `exit ${exit.code}`;
   }
   if (act.kind === "read" || act.kind === "write") {
-    const text = value as { content?: string; path?: string } | undefined;
+    // A host that cut a long text keeps the count of its lines that are not empty.
+    const text = value as { content?: string; path?: string; lines?: number } | undefined;
     const path = String(
       act.words[0] && typeof act.words[0] === "object"
         ? (act.words[0] as { path?: string }).path
         : (act.words[0] ?? text?.path ?? ""),
     );
-    const lines = typeof text?.content === "string" ? text.content.split("\n").filter(Boolean).length : 0;
+    const lines =
+      typeof text?.lines === "number"
+        ? text.lines
+        : typeof text?.content === "string"
+          ? text.content.split("\n").filter(Boolean).length
+          : 0;
     return `${path.split("/").at(-1) ?? path}${lines ? `  ${lines} lines` : ""}`;
   }
   if (act.kind === "prompt") {

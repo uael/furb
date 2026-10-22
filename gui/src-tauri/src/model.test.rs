@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-use super::{LONG, Life, lean, literal};
+use super::{LONG, Life, TEXT, lean, literal};
 
 /// A small life: the operator asks the root, whose model reads a file, runs a command and asks the operator.
 fn facts() -> Vec<Value> {
@@ -180,11 +180,35 @@ fn a_record_that_the_crate_retold_shows_the_rungs_that_it_does_not_keep() {
 }
 
 #[test]
-fn a_long_text_of_a_fact_is_cut_and_keeps_its_count_of_lines() {
-  let content = "line\n".repeat(LONG / 4);
+fn a_long_text_of_a_file_is_cut_and_keeps_its_count_of_lines() {
+  let content = "line\n\n".repeat(TEXT);
   let kept = lean(json!(["done", "read1", "files", {"is": "Text", "content": content}]));
-  assert_eq!(kept[3]["lines"], LONG / 4);
-  assert!(kept[3]["content"].as_str().is_some_and(|one| one.chars().count() == LONG + 1));
+  assert_eq!(kept[3]["lines"], TEXT);
+  assert!(kept[3]["content"].as_str().is_some_and(|one| one.chars().count() == TEXT + 1));
+}
+
+#[test]
+fn the_text_that_a_write_asks_for_is_cut_as_a_file() {
+  let content = "é".repeat(TEXT + 1);
+  let kept = lean(
+    json!(["write", "write1", "rung1", "chain1", {"is": "Text", "path": "a", "content": content}]),
+  );
+  assert_eq!(kept[4]["lines"], 1);
+  assert_eq!(kept[4]["content"], format!("{}…", "é".repeat(TEXT)));
+}
+
+#[test]
+fn a_long_text_of_a_fact_is_cut() {
+  let kept = lean(json!(["done", "bash1", "bash", "x".repeat(LONG + 5)]));
+  assert!(kept[3].as_str().is_some_and(|one| one.chars().count() == LONG + 1));
+}
+
+#[test]
+fn the_word_of_a_rung_and_the_message_of_a_prompt_stay_whole() {
+  let long = "x".repeat(LONG + 5);
+  let rung = json!(["rung", "rung1", "prompt1", "chain1", long, "", ""]);
+  let prompt = json!(["prompt", "prompt1", "operator", "chain1", "str", long, ""]);
+  assert_eq!((lean(rung.clone()), lean(prompt.clone())), (rung, prompt));
 }
 
 #[test]
