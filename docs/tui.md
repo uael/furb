@@ -214,11 +214,15 @@ moves it to the trash of its workspace and removes its scratch directory.
 
 ## Suggestions
 
-`@` suggests project files, and `/` suggests slash commands, as you type.
+`@` suggests project files, `/` suggests slash commands, and `:` at the start of a word suggests emojis by their
+shortcodes of GitHub, as you type.
 
 ![File suggestions](screenshots/40-file-picker.png)
 
 ![Command suggestions](screenshots/41-slash-suggestions.png)
+
+Tab or Enter puts the emoji in place of `:` and its shortcode, and a whole `:shortcode:` becomes its emoji. Escape, a
+space, or a shortcode that matches no emoji closes the list and keeps the text as it is.
 
 A space after a command whose values are known lists them: the models, the efforts, the shapes, the themes, the
 paths of the project, the chains, and the acts. Enter on a value runs the command.
