@@ -701,6 +701,7 @@ class Refused(Exception):
 class Drift(Exception):
   """What a life fails with when an act of it is not the one the record holds, which the journal raises, so that it comes out of the entry the operator went in by and the life goes on with nothing.
   An act whose words are not the ones the record holds under its name is a drift, which it raises.
+  Its message names the act that drifted, the fact that the life made under that name and the fact that the record holds under it, which is the act or else its first answer, each cut to 300 characters, so a drift says the fact that differs.
   A drift breaks the journal, which keeps nothing more, and the life runs on with nothing kept.
   """
 

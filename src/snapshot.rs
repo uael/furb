@@ -6,8 +6,8 @@
 //! A snapshot is one line of JSON, its head, then the session of the sandbox as monty dumps it. The head holds the
 //! version of its form, the key of the build that wrote it, how many entries of the record it covers and a digest of
 //! the bytes of the record, the length and a digest of the log of the life that it covers, and what the engine holds of the side of the
-//! host. The key of the build is a digest of the engine, the sheet and the Kernel, of the version of the dumps of
-//! monty and of the crate, and of the names of the ears in the order of boot, since a replay on another build or on
+//! host. The key of the build is a digest of the engine that a record names, which is of the engine and the Kernel,
+//! of the sheet, of the version of the dumps of monty and of the crate, and of the names of the ears in the order of boot, since a replay on another build or on
 //! other ears could give another life.
 
 use std::{
@@ -19,7 +19,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::{ENGINE, KERNEL, SHEET, engine::Table, sand::Sand, value::Object, wire, world};
+use crate::{SHEET, engine::Table, sand::Sand, value::Object, wire, world};
 
 /// The version of the form of a snapshot.
 const VERSION: u64 = 1;
@@ -59,7 +59,7 @@ pub(crate) fn path(record: &Path) -> PathBuf {
 /// The key of this build, on the ears of a life in the order of boot.
 pub(crate) fn build(names: &[String]) -> String {
   let mut digest = Sha256::new();
-  for one in [ENGINE, SHEET, KERNEL, env!("CARGO_PKG_VERSION")] {
+  for one in [&world::engine(), SHEET, env!("CARGO_PKG_VERSION")] {
     digest.update(one.as_bytes());
     digest.update([0]);
   }

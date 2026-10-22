@@ -318,6 +318,78 @@ fn a_snapshot_of_another_build_or_on_another_log_is_not_taken_and_the_life_repla
   assert!(!open().restored(), "a snapshot of another log is not taken");
 }
 
+/// The engines that a record names, in its order.
+fn engines(record: &Path) -> Vec<String> {
+  let kept = world::kept(record).unwrap();
+  let fact = |one: &Object| entry(&one.as_ref(), 0).and_then(Fact::of).unwrap();
+  let named = |one: Fact| one.word(0).and_then(|word| word.as_str().map(str::to_owned));
+  kept.iter().map(fact).filter(|one| one.kind() == world::MADE).filter_map(named).collect()
+}
+
+#[test]
+fn a_record_names_the_engine_that_made_it_once_in_a_file_of_lines_and_in_a_database() {
+  for name in ["record.jsonl", "record.db"] {
+    let at = place(&format!("made-{name}"));
+    let record = at.join(name);
+    let open = || {
+      let path = Some(record.display().to_string());
+      Opening { record: path, extensions: Some(false), ..opening(&at, true) }.boot::<String>([])
+    };
+    drop(open().unwrap());
+    assert_eq!(engines(&record), [world::engine()]);
+    drop(open().unwrap());
+    assert_eq!(engines(&record), [world::engine()], "a later life names it no more");
+  }
+}
+
+#[test]
+fn a_record_that_names_no_engine_replays_as_before_and_names_none() {
+  let at = place("unnamed");
+  let record = at.join("record.jsonl");
+  let open = || Opening { extensions: Some(false), snapshot: Some(false), ..opening(&at, true) };
+  let mut first = open().boot::<String>([]).unwrap().0;
+  closed(&mut first, "x = 1\nclose(x)");
+  drop(first);
+  let text = fs::read_to_string(&record).unwrap();
+  let old: String = text
+    .lines()
+    .filter(|one| !one.contains("[\"made\""))
+    .map(|one| one.to_owned() + "\n")
+    .collect();
+  fs::write(&record, &old).unwrap();
+  let mut later = open().boot::<String>([]).unwrap().0;
+  assert_eq!(closed(&mut later, "close(x + 1)").as_ref().as_int(), Some(2));
+  drop(later);
+  assert_eq!(engines(&record), Vec::<String>::new(), "this engine did not make it");
+}
+
+#[test]
+fn a_life_on_a_record_of_another_engine_is_refused_before_any_replay_and_says_both_engines_and_what_to_do()
+ {
+  let at = place("other");
+  let record = at.join("record.jsonl");
+  let open = || Opening { extensions: Some(false), ..opening(&at, true) };
+  let mut first = open().boot::<String>([]).unwrap().0;
+  closed(&mut first, "close(1)");
+  drop(first);
+  let other = "0".repeat(64);
+  let text = fs::read_to_string(&record).unwrap().replace(&world::engine(), &other);
+  fs::write(&record, &text).unwrap();
+  for life in [open(), Opening { inspecting: Some(true), ..open() }] {
+    let refused = life.boot::<String>([]).map(|_| ()).unwrap_err();
+    assert_eq!(
+      refused.to_string(),
+      format!(
+        "Drift: the record {} was made by the engine 000000000000, and this build runs the engine {:.12}, so a \
+         replay would drift. Open the record with the build that made it, or start a new life.",
+        record.display(),
+        world::engine()
+      )
+    );
+  }
+  assert_eq!(fs::read_to_string(&record).unwrap(), text, "it keeps nothing");
+}
+
 #[test]
 #[ignore = "a measure, which a person runs in release"]
 fn measure_how_long_a_life_opens_from_its_snapshot_and_by_a_replay() {
