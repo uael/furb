@@ -87,7 +87,17 @@ test("the real native life drives the feed, the transcript, and responsive views
       expect(app.scroll.getChildren().some((child) => /^bash\d+$/.test(child.id))).toBe(true);
       expect(screen.captureCharFrame()).not.toContain("failed");
       session.show("transcript");
-      expect(await frame()).toContain('notes = read("README.md")');
+      // The transcript opens at its start, and the doctrine of the first reply stands before the word, so the test
+      // scrolls down a page at a time until the word shows.
+      let page = await frame();
+      while (
+        !page.includes('notes = read("README.md")') &&
+        app.scroll.scrollTop < app.scroll.scrollHeight - app.scroll.viewport.height
+      ) {
+        app.scroll.scrollBy(app.scroll.viewport.height);
+        page = await frame();
+      }
+      expect(page).toContain('notes = read("README.md")');
       session.show("feed");
       screen.resize(80, 30);
       await frame();
