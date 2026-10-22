@@ -133,6 +133,47 @@ try {
   await capture("22-operator-notice");
   app().question();
   await until(session.host, () => !session.host.notices.size);
+  const markdown = await session.engine.prompt("None", {
+    message: [
+      "## The search shortcut",
+      "",
+      "Press **Ctrl+K** to find a note, as `search.py` binds it. See [the guide](https://example.com/guide).",
+      "",
+      "- It reads each note",
+      "  - in the folder `notes/`",
+      "- It shows the *first* match",
+      "",
+      "> The index is built once.",
+      "",
+      "| Key | Action |",
+      "| --- | --- |",
+      "| Ctrl+K | Find |",
+      "",
+      "```python",
+      "def search(notes: list[str], word: str) -> str | None:",
+      "    for note in notes:",
+      "        if word in note:  # the first match",
+      "            return note",
+      "    return None",
+      "```",
+      "",
+      "```sh",
+      "uv run pytest -q test/test_search.py",
+      "```",
+      "",
+      "```",
+      "notes/",
+      "    shortcuts.md",
+      "```",
+    ].join("\n"),
+    on: session.selected,
+    to: "operator",
+  });
+  await until(session.host, () => session.host.notices.has(markdown));
+  await session.refresh();
+  await capture("51-markdown");
+  app().question();
+  await until(session.host, () => !session.host.notices.size);
   app().toggleMode();
   app().composer.setText('notes = read("README.md")\nprint(notes.content)');
   await capture("10-python-input");
