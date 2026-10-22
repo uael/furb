@@ -1,7 +1,7 @@
 import { afterAll, expect, setSystemTime, test } from "bun:test";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { type Renderable, RGBA } from "@opentui/core";
+import { CodeRenderable, type Renderable, RGBA } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import { highlighting } from "../script/stage.ts";
@@ -16,14 +16,20 @@ import { cellAt, composing, withDemo } from "./composing.ts";
 import { idle } from "./idle.ts";
 import { transcriptOf } from "./transcript.ts";
 
-/** Draws the App until a frame and the next are the same, with each code of the frame highlighted in between, since a
- * card that the App draws anew shows its markdown only once its highlighting ends. */
+/** Whether a code of a node, or of a node that it holds, is still being highlighted. */
+function busy(node: Renderable): boolean {
+  return (node instanceof CodeRenderable && node.isHighlighting) || node.getChildren().some(busy);
+}
+
+/** Draws the App until no code of it is being highlighted and a frame and the next are the same, since a card that the
+ * App draws anew shows its markdown only once its highlighting ends. */
 async function drawn(frame: () => Promise<string>, root: Renderable): Promise<string> {
   let shown = await frame();
-  for (let tries = 0; tries < 20; tries++) {
+  for (let tries = 0; tries < 200; tries++) {
     await Promise.all(highlighting(root));
+    await Bun.sleep(5);
     const next = await frame();
-    if (next === shown) return next;
+    if (next === shown && !busy(root)) return next;
     shown = next;
   }
   return shown;
