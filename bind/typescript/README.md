@@ -92,7 +92,8 @@ and the most tokens of thought of a claude model among them, and a `write` that 
 what it writes as it writes it, and gives a turn. The host still names the models that `answer` stands in for. With
 no `operator`, questions stand in `session.console.prompts`; call `session.console.answer(id, text)` to read an
 answer by the rules that every console of the crate reads a line by, which `answered(shape, line)` gives, for each
-of the `shapes()` that the operator answers. A prompt of `None` asks nothing: the console closes it with `None` as
+shape that `answers(shape)` holds for: the `shapes()` that the operator offers, and a `Literal` of values that a line
+names, as `Literal['a', 'b']`. A prompt of `None` asks nothing: the console closes it with `None` as
 it takes it, so no word waits for the operator, and keeps it in `session.console.notices` until
 `session.console.dismiss(id)`, or gives it to `operator` and waits for no answer. `session` emits `change` and `facts`, and `fault` tells what the life refused when the console
 said what an act came to. `session.streams` holds what a model writes for each rung, until the done of its reply.
@@ -170,6 +171,12 @@ with no life, and opens an inspection when the log does not agree. An `Activity`
 but for the question `covers`, which a reader with no life answers from the acts of the log, as the engine does: a
 pause, a wake or a cancel covers the act that it names, each act that this act made at any depth, and each act on the
 chain that it names; a close covers the act that it names, each rung that this act made, and each reply that one of these made.
+`retold(record)` reads a record with no life, so a record of any engine opens: it gives the engine that made the
+record, as the record names it, and `null` when it names none, the engine of this build, whether its facts are those
+of the log, and the facts. The facts are those of the log while the log agrees with the record, and else those that
+the record kept, with the facts that the engine said and the record does not keep, as far as the kept facts show
+them: each chain and each rung that a kept act names, the run of the word of each rung that the gate let run, the
+findings of a word that the gate refused, and the done of each act that the operator closed or cancelled.
 
 A life that keeps its record keeps a snapshot of its state beside it, `<record>.snapshot`: the session of the sandbox
 and what the engine holds of its ears, with the key of the build and of the ears, and digests of the record and of

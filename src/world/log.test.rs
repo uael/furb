@@ -19,16 +19,30 @@ fn a_log_agrees_when_it_counts_each_entry_of_its_record_and_a_torn_last_line_sta
   let record =
     "[[\"stand\",\"stand1\",\"operator\",\"chain1\"]]\n[[\"done\",\"stand1\",\"provider\",1]]\n";
   fs::write(&at, record).unwrap();
-  let lines = "{\"entries\":1}\n[\"rung\",\"rung1\",\"operator\",\"chain1\",\"x = 1\",\"\",\"\"]\n[\"keep\",\"\",2]\n[\"do";
+  let lines = "{\"entries\":1}\n[\"stand\",\"stand1\",\"operator\",\"chain1\"]\n[\"rung\",\"rung1\",\"operator\",\"chain1\",\"x = 1\",\"\",\"\"]\n[\"keep\",\"\",2]\n[\"do";
   fs::write(&log, lines).unwrap();
   let facts = logged(&at).unwrap().expect("the log counts both entries");
-  assert_eq!(facts.len(), 1);
+  assert_eq!(facts.len(), 2);
   assert_eq!(
-    facts[0].as_ref().py_repr(),
+    facts[1].as_ref().py_repr(),
     "['rung', 'rung1', 'operator', 'chain1', 'x = 1', '', '']"
   );
-  fs::write(&log, "{\"entries\":1}\n[\"keep\",\"\",3]\n").unwrap();
+  fs::write(
+    &log,
+    "{\"entries\":1}\n[\"stand\",\"stand1\",\"operator\",\"chain1\"]\n[\"keep\",\"\",3]\n",
+  )
+  .unwrap();
   assert!(logged(&at).unwrap().is_none(), "a log that skips an entry does not agree");
   fs::remove_file(&log).unwrap();
   assert!(logged(&at).unwrap().is_none(), "a record with no log has none");
+}
+
+#[test]
+fn a_log_that_a_drifted_replay_left_short_of_an_act_of_its_record_does_not_agree() {
+  let at = place("short");
+  let log = format!("{}.log", at.display());
+  let record = "[[\"stand\",\"stand1\",\"operator\",\"chain1\"]]\n[[\"bash\",\"bash1\",\"rung1\",\"chain1\",\"ls\",\"\",600]]\n";
+  fs::write(&at, record).unwrap();
+  fs::write(&log, "{\"entries\":2}\n[\"stand\",\"stand1\",\"operator\",\"chain1\"]\n").unwrap();
+  assert!(logged(&at).unwrap().is_none(), "the log shows no bash1");
 }

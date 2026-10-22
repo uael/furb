@@ -532,6 +532,17 @@ try {
   await until(session.host, () => !session.host.prompts.has(merge));
   app().closeOverlay();
   await capture("55-answer-landed");
+
+  // A record that an earlier engine made drifts on a replay, so it opens to read, with a dialog that names both engines.
+  const older = await demoSession({ cwd: await project("fieldnotes-old") });
+  await seedDemo(older);
+  const drifts = older.host.record ?? "";
+  await older.dispose();
+  const kept = await readFile(drifts, "utf8");
+  await writeFile(drifts, kept.replace(/("bash","bash\d+","rung\d+","chain\d+","[^"]*"),""/, "$1,false"));
+  await library.import(drifts, await library.add(older.host.directory));
+  session = library.current?.session ?? session;
+  await capture("56-record-to-read");
 } finally {
   app().dispose();
   test.renderer.destroy();

@@ -151,7 +151,7 @@ class Live:
       return
     try:
       line = ""
-      if shape in _monty.shapes():
+      if _monty.answers(shape):
         async with self.reading:
           sys.stdout.write(f"{about} wants a {shape}: {message}\n> ")
           sys.stdout.flush()

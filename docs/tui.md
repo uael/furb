@@ -178,6 +178,15 @@ A session that opens with unfinished work stays paused until you resume it.
 
 ![Paused resume](screenshots/21-paused-resume.png)
 
+## A record to read
+
+A record whose replay drifts, as a record that an earlier engine made, opens to read. The TUI shows what the record
+kept: each chain, each rung with its word, and each act. No word runs again, no model is asked, and a command that
+would change the life is refused. A dialog names the engine that made the record and the engine of this build, and
+offers to read the record or to start a new life in its workspace.
+
+![A record to read](screenshots/56-record-to-read.png)
+
 ## Rewind
 
 Escape twice opens the rewind tree in the feed. Each act stands under the act that made it, and each branch under

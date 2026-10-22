@@ -29,6 +29,13 @@ function row(act: LiveAct): ActRow {
   };
 }
 
+/** The views of a life that a snapshot reads: those of an engine, or those of a record that is open to read. */
+export type Views = Pick<Engine, "root" | "standing" | "program" | "turns" | "cwd" | "verb"> & {
+  inspect(name: string, chain?: string): { value?: unknown };
+};
+/** What a snapshot reads of a session: the facts, the activity and the entries of its life. */
+export type Lived = Pick<Session, "facts" | "activity" | "entries" | "isPaused" | "pending">;
+
 /** Views belong to changes of the life, not to frames or refresh requests. */
 export class Snapshots {
   private readonly chains = new Map<string, ChainView>();
@@ -40,8 +47,8 @@ export class Snapshots {
   private entries = -1;
   private dispatched: string[] = [];
   constructor(
-    private readonly engine: Engine,
-    private readonly session: Session,
+    private readonly engine: Views,
+    private readonly session: Lived,
   ) {}
 
   private changed(fact: Fact): void {
