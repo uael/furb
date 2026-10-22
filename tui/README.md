@@ -25,6 +25,10 @@ a `.gitignore` that keeps it out of version control. Keep the `.jsonl`, `.sessio
 `.ui.json` files together. The last file keeps the view of the session as you left it. Keep its `.images` directory
 too when the session has image attachments. An unfinished session opens paused and offers a resume choice. The
 native engine replays completed work from the record.
+A record whose replay drifts, as a record that another engine made, opens to read: the TUI shows what the record
+kept, runs no word again, asks no model, and refuses each command that would change the life. A dialog names the
+engine that made the record and the engine of this build, and offers to read it or to start a new life in its
+workspace.
 ⌃W lists the workspaces and their sessions, each with its state, save time, cost, and record size. It reads
 unfinished work through native replay without locking or changing the saved record. The record shows what remains
 unfinished. The list shows at once, and each saved session shows its state when its replay ends.

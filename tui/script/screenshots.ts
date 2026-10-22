@@ -532,6 +532,18 @@ try {
   await until(session.host, () => !session.host.prompts.has(merge));
   app().closeOverlay();
   await capture("55-answer-landed");
+
+  // A record that an earlier engine made drifts on a replay, so it opens to read, with a dialog that names both engines.
+  const older = await demoSession({ cwd: await project("fieldnotes-old") });
+  await seedDemo(older);
+  const drifts = older.host.record ?? "";
+  await older.dispose();
+  const kept = await readFile(drifts, "utf8");
+  await writeFile(drifts, kept.replace(/("bash","bash\d+","rung\d+","chain\d+","[^"]*"),""/, "$1,false"));
+  await library.import(drifts, await library.add(older.host.directory));
+  session = library.current?.session ?? session;
+  await capture("56-record-to-read");
+
   app().dispose();
   await library.dispose();
   await show(await gallerySession());
@@ -557,19 +569,19 @@ try {
   // A right click on the message offers to take it back.
   const [column, row] = find(test, "┃ Think until I cancel.");
   await test.mockMouse.click(column + 4, row, 2);
-  await capture("56-message-menu");
+  await capture("57-message-menu");
   app().closeOverlay();
   // A cancel of the thread reaches the workers, so it asks first.
   await session.command(`/cancel ${thread}`);
   await rest();
-  await capture("57-cancel-confirm");
+  await capture("58-cancel-confirm");
   app().closeOverlay();
   // ⌃C takes back the last message alone, and the workers go on.
   const message = session.lastOwn?.id;
   await session.command("/cancel");
   await until(session, () => session.acts.some((act) => act.id === message && act.done));
   await rest();
-  await capture("58-take-back");
+  await capture("59-take-back");
 } finally {
   app().dispose();
   test.renderer.destroy();

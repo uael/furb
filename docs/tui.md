@@ -178,6 +178,15 @@ A session that opens with unfinished work stays paused until you resume it.
 
 ![Paused resume](screenshots/21-paused-resume.png)
 
+## A record to read
+
+A record whose replay drifts, as a record that an earlier engine made, opens to read. The TUI shows what the record
+kept: each chain, each rung with its word, and each act. No word runs again, no model is asked, and a command that
+would change the life is refused. A dialog names the engine that made the record and the engine of this build, and
+offers to read the record or to start a new life in its workspace.
+
+![A record to read](screenshots/56-record-to-read.png)
+
 ## Cancel and take back
 
 ⌃C on an empty input cancels the last message, word or command that you sent on the chain shown and that still
@@ -187,15 +196,15 @@ it back: the message is cancelled and its text goes back to the input, so you ch
 other work of the life goes on. A right click on a message opens its menu, which offers Take back for your last
 message that runs, and Cancel for another act that runs. `/cancel <id>` cancels the act that you name.
 
-![Message menu](screenshots/56-message-menu.png)
+![Message menu](screenshots/57-message-menu.png)
 
 A cancel that reaches running work asks first: the acts under the act that are not over, as the workers that a
 thread hired on their chains. The dialog says how many acts the cancel ends and on which chains. Keep ends nothing.
 A cancel of an act with no running work under it, as a message that its model still answers, asks nothing.
 
-![Cancel confirmation](screenshots/57-cancel-confirm.png)
+![Cancel confirmation](screenshots/58-cancel-confirm.png)
 
-![Take back a message](screenshots/58-take-back.png)
+![Take back a message](screenshots/59-take-back.png)
 
 ## Rewind
 
