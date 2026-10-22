@@ -1,7 +1,8 @@
 // The claude command line of the tests of the examples, which answers from a script, as src/world/provider/fake-claude.sh
 // does where a shell runs it. The word of a turn is the JSON text in the file word.N beside it, for the Nth turn of all,
-// and each turn costs the dollars of the file cost beside it. When the file deaf stands beside it, it writes the file
-// asked, reads no input and lives on until the file deaf goes.
+// and each turn costs the dollars of the file cost beside it. When the file deaf stands beside it, it writes its pid
+// in the file asked, reads no input and lives on until the file deaf goes or its parent ends, as a test that is
+// killed removes no file.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
@@ -20,8 +21,18 @@ const usage = {
 };
 
 if (existsSync(beside("deaf"))) {
-  writeFileSync(beside("asked"), "");
-  setInterval(() => existsSync(beside("deaf")) || process.exit(0), 20);
+  // Windows gives a process no new parent when its parent ends, so the parent is asked whether it lives.
+  const parent = process.ppid;
+  const lives = () => {
+    try {
+      process.kill(parent, 0);
+      return process.ppid === parent;
+    } catch {
+      return false;
+    }
+  };
+  writeFileSync(beside("asked"), String(process.pid));
+  setInterval(() => (existsSync(beside("deaf")) && lives()) || process.exit(0), 20);
 } else {
   const cost = existsSync(beside("cost")) ? Number(readFileSync(beside("cost"), "utf8")) : 0.01;
   let n = 0;
