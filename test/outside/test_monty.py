@@ -12,6 +12,7 @@ ear that the collector of cycles drops on another thread. What the ears of the c
 proves.
 """
 
+import asyncio
 import builtins
 import gc
 import json
@@ -414,7 +415,10 @@ async def test_the_ear_of_commands_closes_as_interrupted_a_command_that_its_reco
     world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears(),
   )
   engine.bash("printf x >> count; exec sleep 30", on=root)
-  await settle()
+  for _ in range(200):
+    if (tmp_path / "count").exists():
+      break
+    await asyncio.sleep(0.05)
   kept = _monty.kept(path)
   furb_monty.engine.boot(
     kept, bash=_monty.bash(str(tmp_path), kept), world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears()
