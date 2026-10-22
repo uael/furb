@@ -16,7 +16,8 @@ use crate::{
 /// The ear of the files: it answers a cd with the directory that the path names, a read with the text at the path
 /// and a write with the text as it stands after, but a write of a door of a command, which the ear of the commands
 /// answers, each resolved against the working directory of the chain, or with
-/// the refusal. The path of a read or a write that is `~` or starts with `~/` resolves against the home of the user,
+/// the refusal. The path of a read or a write that is `~` or starts with `~/`, or with `~\\` on Windows, resolves
+/// against the home of the user,
 /// and one of `scratch://` against the scratch directory of the life, which no chain stands in. A file whose every
 /// line ends with CRLF reads with LF, and a write to it writes CRLF. A path whose first part is the name of an act
 /// of the life is a door that no ear of the engine served, and never a file, so the ear refuses it with the chain of
@@ -165,12 +166,14 @@ pub(super) fn text(at: &Path, name: String) -> Result<Text, Fault> {
   Ok(Text::new(name, content))
 }
 
-/// A path that is `~` or starts with `~/`, resolved against the home of the user, as a shell reads it, or the refusal
-/// when the user has no home; and nothing for any other path, which resolves against the working directory.
+/// A path that is `~` or starts with `~/`, or with `~\\` on Windows, resolved against the home of the user, as a shell
+/// reads it, or the refusal when the user has no home; and nothing for any other path, which resolves against the
+/// working directory.
 fn homed(path: &str, home: Option<PathBuf>) -> Option<Result<PathBuf, Fault>> {
-  let rest = path.strip_prefix('~').filter(|rest| rest.is_empty() || rest.starts_with('/'))?;
+  let slash = |one: char| one == '/' || cfg!(windows) && one == '\\';
+  let rest = path.strip_prefix('~').filter(|rest| rest.is_empty() || rest.starts_with(slash))?;
   let refused = || Fault::refused(format!("There is no home of the user for {path}."));
-  Some(home.map(|home| resolved(&home, rest.trim_start_matches('/'))).ok_or_else(refused))
+  Some(home.map(|home| resolved(&home, rest.trim_start_matches(slash))).ok_or_else(refused))
 }
 
 /// What the machine refused at a path, under its name, in plain words, which the model and the operator both read.

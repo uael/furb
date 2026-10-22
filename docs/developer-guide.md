@@ -44,6 +44,7 @@ uv run pre-commit install
 | `src/furb/CLAUDE.md` | The technical names of the engine, and the laws that no test can hold. |
 | `src/furb/__init__.py` | The switch: `FURB_ENGINE` picks the engine that `from furb import engine` gives. |
 | `src/engine.rs`, `src/sand.rs` | One life of `engine.py` in the sandbox of monty, how each value crosses, and the verbs that a host says. |
+| `src/snapshot.rs` | The snapshot of a life beside its record: the state that a later life on the same record, build and ears opens from with no replay, which it checks against the record. |
 | `src/ear.rs`, `src/fact.rs` | The ear, the one thing a life hears by, and a fact as the engine says it. |
 | `src/value.rs`, `src/wire.rs` | A value that crosses between the engine and a host, and that value as JSON. |
 
@@ -65,6 +66,7 @@ uv run pre-commit install
 | `src/world/bash.rs` | The commands: each runs in a shell of the machine, in the working directory of its chain, with `TMPDIR` set to the scratch directory. |
 | `src/world/time.rs` | The clock, a chance, and a wait. |
 | `src/world/store.rs` | The store: the record on the disk, one fact on each line with the time the store kept it after the fact, which one process at a time owns. |
+| `src/world/log.rs` | The log of a life beside its record: every fact that the life said, which `logged` reads while it agrees with the record. |
 | `src/world/operator.rs` | The rules by which every console reads what the operator answers. |
 | `src/world/provider.rs`, `src/world/provider/` | The provider of models, which [Changing the provider](#changing-the-provider) gives file by file. |
 | `src/life.rs` | The opening of a life, which every host shares: the record, the ears of the crate, and the extensions. |

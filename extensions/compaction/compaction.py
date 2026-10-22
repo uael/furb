@@ -118,7 +118,7 @@ def compacted(on: str = "") -> Act:
           going = [
             x[1]
             for x in transcript(here)
-            if x[0] == "prompt" and x[3] == here and not over(x[1]) and x[6] != OPERATOR and not under(id, x[1])
+            if x[0] == "prompt" and scope(x[1]) == here and not over(x[1]) and x[6] != OPERATOR and not under(id, x[1])
           ]
           if going:
             made = compact(on=here)

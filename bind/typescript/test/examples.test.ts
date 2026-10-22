@@ -71,6 +71,30 @@ test("a life goes on in a second process after its first process ends", async ()
   }
 });
 
+test("the deaf claude of a life ends when the process of the life is killed", async () => {
+  const { root, home, start } = await yard();
+  try {
+    await writeFile(join(home, "deaf"), "");
+    const first = start("durable");
+    while (!existsSync(join(home, "asked"))) await Bun.sleep(20);
+    first.kill("SIGKILL");
+    await first.exited;
+    const pid = Number(await readFile(join(home, "asked"), "utf8"));
+    const lives = () => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    for (let n = 0; n < 60 && lives(); n++) await Bun.sleep(50);
+    expect(lives()).toBe(false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("a reviewer on a chain of its own reviews the draft of the root", async () => {
   const { root, run } = await yard('close("Login is twice as fast.")', 'close("The notes read well.")');
   try {

@@ -28,7 +28,7 @@ A fact is on the scope of the act it is about, so the chain it is on is no slot 
 A control is about the act it is over, a done, a tell and the facts of the World about the act they settle, tell of or come from, and a question about itself.
 A verb takes a chain, and the act it makes is on that chain.
 A model calls a verb from a rung, and the operator calls the same verb outside a rung.
-An act is on the chain that the verb names.
+An act is on the chain or the thread that the verb names, and a thread is a prompt.
 An act is on a chain, and its facts are on its scope.
 A chain is on no chain, and its scope is itself.
 The World is given the id of the act, and the facts about the act carry the same id.
@@ -118,7 +118,7 @@ def transcript(on: str = "", of: str = "") -> list[Fact]:
   transcript(on, of) gives the facts on a chain whose kind is of or that of said, in order, and the view of pause holds the wakes too.
   transcript gives a new list at each call, so a word that changes the list it was given changes no transcript.
   The transcript is the whole state of a chain: its module, its program, its working directory and its turns are read off it, and the standing is read off the transcript of the root.
-  A name of no chain gives no fact.
+  The name of an act gives the facts on its scope, and a name of no act gives no fact.
   """
 
 def ask(kind: str, on: str, *words: object) -> object:
@@ -272,7 +272,7 @@ def cd(path: str, on: str = "") -> str:
 def cwd(on: str = "") -> str:
   """The working directory of a chain is the directory that the closest cd back in its transcript came to.
   The working directory of a chain is the directory of the standing it stands on while no cd stands in its transcript, so a later standing moves no chain that a cd moved.
-  The World resolves the path of a read, a write and a command against the working directory of the chain, which it reads, and the path of a read or a write that is ~ or starts with ~/ against the home of the user, and one of scratch:// against the scratch directory.
+  The World resolves the path of a read, a write and a command against the working directory of the chain, which it reads, and the path of a read or a write that is ~ or starts with ~/, or with ~\\ on Windows, against the home of the user, and one of scratch:// against the scratch directory.
   cwd gives the working directory that the paths of the chain resolve against.
   cwd reads the transcript of the chain and asks nothing, so no act is made and the journal keeps nothing.
   """
@@ -306,7 +306,7 @@ def wake(id: str) -> None:
   A wake gates and runs a held response.
   A wake makes a prompt ask its model with the transcript as it grew.
   A wake makes no reply twice and loses none.
-  A wake that this life says, and not one that the journal says again, puts every pending act it is over on to the outside, so the World takes each command, wait, prompt to the operator and reply of them, and a model reads the transcript as it grew.
+  A wake that this life says, and not one that the journal says again, puts every pending act it is over on to the outside, so the World takes each wait, prompt to the operator and reply of them and closes each command of them as interrupted, and a model reads the transcript as it grew.
   """
 
 def cancel(id: str) -> None:
@@ -430,7 +430,7 @@ def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[No
   A model answers any shape.
   A model asked with the shape None reads the message, works, and closes with nothing.
   A rung need not wait for a prompt of shape None.
-  The actor left unsaid is the default actor of the chain when each rung of the prompt is made, which that rung writes into its actor word, so a rung asks the actor the chain stands on then, a prompt that names an actor asks that one at every rung, and every life asks the actor the record holds.
+  The actor that a prompt leaves unsaid, and that its thread leaves unsaid too, is the default actor of the chain when each rung of the prompt is made, which that rung writes into its actor word, so a rung asks the actor the chain stands on then, a prompt that names an actor asks that one at every rung, and every life asks the actor the record holds.
   A prompt to a model runs in steps until the prompt completes.
   The binding of a prompt gives the shape as python shows the expression, as prompt1: Act[int] = Act('prompt1').
   A rung whose word closes nothing ends its step, and the engine asks the model again.
@@ -452,7 +452,13 @@ def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[No
   A prompt carries the name of its shape as a word, and takes the name as well as the shape, so the journal makes it again.
   The name of a shape is the word a chain says it by, so a shape that holds a class of the engine or of the chain names it as the chain does, under no module.
   The acknowledgment carries no shape and a message that names the act and what happened to it, as prompt3 done.
-  The acknowledgment goes to the actor of the rung that made the act, so the model that made it sees it, and to the default actor of the chain when that rung names no actor.
+  The acknowledgment is a prompt on the thread that made the rung that made the act, so the actor of that thread sees it in that thread, and a prompt on the chain when that rung answers no prompt.
+  A prompt on a thread is on the chain of that thread, and goes to the actor of the thread unless it names one.
+  A prompt on a thread tells the thread it is on under the word thread, as prompt4_thread = 'prompt1'.
+  A prompt of None on a thread that is open and that a model answers is a message of that thread: it tells its message, makes no rung, and is done with None at once, so the model of the thread reads it at its next step.
+  Every other prompt on a thread is answered in steps, with a ladder and a door of its own, and on a thread that is closed it opens the thread again, so the model of the thread goes on with the whole transcript of its chain.
+  A thread is a prompt and the prompts on it, in order, and the record keeps each done as it landed, so a later life makes each prompt on a thread again at its place, as a message or as a prompt in steps as the thread stood there.
+  A prompt that a rung of a thread makes is a thread under it, by its lineage.
   The turns of the chain hold the result of the command that the acknowledgment names.
   A cancelled result is no orphan.
   The response of an acknowledgment is no orphan.
@@ -608,10 +614,10 @@ def bash(
   A command without a timeout has the timeout TIMEOUT that the file names.
   The World that takes a command answers it: it says it done with its Exit, the code and the streams it kept, since the owner of an act is the one that answers it.
   A stdin of None stays open, and the door bash1/stdin is writable while the command runs.
-  The World feeds a command the text of each write of its stdin that it answers, and a write of nothing closes that stdin; a later life feeds it again, in order, each such text of the record, which the World hears in the done that the journal says, when a wake starts the command again.
-  The doors bash1/stdout and bash1/stderr of a command bash1 are readable while the command runs and after it: a read gives that stream of the Exit once the command exited, and otherwise the out facts of that stream since the World last started it, so a command that runs again starts its streams again.
+  The World feeds a command the text of each write of its stdin that it answers, and a write of nothing closes that stdin.
+  The doors bash1/stdout and bash1/stderr of a command bash1 are readable while the command runs and after it: a read gives that stream of the Exit once the command exited, and otherwise the out facts of that stream, so the doors of a command that a crash cut give what it wrote before the crash.
   A wake on a chain with a source starts no inherited command again, since only the owner starts an act.
-  The World takes it, and a later life has the World take it again only when the record shows it started and not ended, and then only at a wake.
+  The World takes it once: a later life never runs it again, and at a wake the World closes a command that the record shows started and not ended with a refusal that says the command was interrupted, so the model sees that outcome and runs the command again if it wants.
   With a hidden show it tells its header and its binding alone, and not its command and not its close.
   The chain that a read of a door of the command is on answers that read, while the command runs and after it, and the World answers a write of a door of it, so the ear of the command lives only until it hears the done of the command, and a cancel ends the command as it ends every other act.
   A read of a door of a command that an ear makes while the chain of that read speaks finds no ear of the engine that answers it, as a read of the door of a prompt finds none, since an ear that speaks hears nothing until it is done.
@@ -619,7 +625,7 @@ def bash(
   A pause stops no command: it runs on, the World says it done when it ends, and its ear tells its exit at the wake.
   Its close tells what its stdout shows, and what its stderr shows when that stream has a show of its own that is no hidden one, so a merged command tells no stderr.
   The stdout of a command without a show is told as TAIL, which is the span of its last 250 lines.
-  The World refuses a write to the door bash1/stdout or bash1/stderr, and a write to bash1/stdin once the command ended or was cancelled, or once its stdin is closed, as a stdin of text is from the start.
+  The World refuses a write to the door bash1/stdout or bash1/stderr, and a write to bash1/stdin once the command ended or was cancelled, once its stdin is closed, as a stdin of text is from the start, or once a crash cut the command.
   The World asks a command whether its stderr flows into its stdout, and the command answers from what its verb was given.
   The World hears the bash itself, with the command, the stdin and the timeout, and no working directory and no show.
   """
@@ -911,7 +917,7 @@ def question(a: Saying) -> bool:
   """Whether a fact is a question, which its name says: a question is about itself, and its name is under its kind."""
 
 def scope(name: str) -> str:
-  """The scope of a question, from its name: the chain it is on, and itself for a chain, and nothing for a name of no question of the life."""
+  """The scope of a question, from its name: the chain it is on, or the scope of the thread it is on, and itself for a chain, and nothing for a name of no question of the life."""
 
 def answer[T](kind: str, on: str, empty: T) -> T:
   """The answer of the last question of a kind on a chain that is of the type of empty, and empty when no such question stands."""
@@ -976,6 +982,7 @@ def offered(roster: list[Actor], to: str, at: int = 2) -> int | str | None:
 def covers(a: Fact, id: str) -> bool:
   """Whether a control is over an act: over the act it names and everything under it, and over every act on the chain it names; a close is over the act it names, each rung that act made and each reply that asks for the word of one of those, where a cancel is over everything under it.
   A rung that a word makes is an act of that word, as a command is, so a close of the prompt of that word is not over it, on whatever chain it runs.
+  A control over a thread is over each prompt on it too, and over what a control over that prompt is over.
   """
 
 def paused(id: str) -> bool:

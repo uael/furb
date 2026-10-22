@@ -146,7 +146,7 @@ async def test_a_statement_that_a_paragraph_shows_binds_the_name_of_an_act_in_th
   told = [
     "#bash1\nbash1_command = 'echo hi'\nbash1: Act[Exit] = Act('bash1')",
     "#prompt1 closed\nprompt1_value = 1",
-    "#prompt2\nprompt2_message = 'bash1 done'\nprompt2: Act[None] = Act('prompt2')",
+    "#prompt2\nprompt2_message = 'bash1 done'\nprompt2_thread = 'prompt1'\nprompt2: Act[None] = Act('prompt2')",
     "#bash1 exited 0\nbash1_stdout = 'ran echo hi'",
     "#rung2 advance on prompt2",
   ]

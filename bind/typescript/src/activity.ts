@@ -51,8 +51,8 @@ export class Activity {
    * name alone, so an earlier control of the same name decides nothing more. */
   private readonly controls = new Map<string, Fact>();
   private readonly children = new Map<string, Set<string>>();
-  /** The chain each question stands on, which is the chain itself for a chain, so a fact about any question finds
-   * the transcript it stands in. */
+  /** The chain each question stands on, which is the chain itself for a chain and the chain of its thread for a prompt
+   * on a thread, so a fact about any question finds the transcript it stands in. */
   private readonly scopes = new Map<string, string>();
   /** The rung each run runs the word of, and what the word of each rung gave when its run is done. */
   private readonly runs = new Map<string, string>();
@@ -78,7 +78,7 @@ export class Activity {
     const [kind, id, by] = fact;
     const at = ++this.clock;
     const question = isQuestion(kind, id);
-    if (question) this.scopes.set(id, kind === "chain" ? id : String(fact[3]));
+    if (question) this.scopes.set(id, kind === "chain" ? id : this.scope(String(fact[3])) || String(fact[3]));
     if (question && kind === "run") this.runs.set(id, String(fact[4]));
     if (question && kind === "reply") this.replies.set(id, [String(fact[3]), String(fact[4])]);
     if (question && !STEPS.has(kind)) {
@@ -86,7 +86,8 @@ export class Activity {
         id,
         kind,
         by,
-        on: kind === "chain" ? id : String(fact[3]),
+        on: this.scope(id),
+        ...(kind === "prompt" && fact[3] !== this.scope(id) ? { thread: String(fact[3]) } : {}),
         words: fact.slice(4),
         done: false,
         value: null,

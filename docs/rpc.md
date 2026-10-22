@@ -158,9 +158,11 @@ record holds a pause of the root, or work that an earlier life started and did n
 of the client. `state` says whether a pause stands over the root, and `pending` names the work of an earlier life that
 waits, each act as its name and its kind, such as `["bash1", "bash"]`: among each act that the World started and did
 not end, and the acts that made it, each prompt, rung, command and wait that is not done and that no pause holds. An
-act is pending no more once a `wake` puts it to the World again.
+act is pending no more once a `wake` puts it to the World again. A `wake` runs no command again: the World closes a
+command that an earlier life did not end with a refusal that says it was interrupted, and the model runs it again if it
+wants.
 
-A run of a word, a command or a reply that the record shows started in five lives and not done is parked, since each
+A run of a word or a reply that the record shows started in five lives and not done is parked, since each
 of those lives ended while it ran, so it may be what ended them. `parked` names each such act as `pending` names an
 act, and a parked act is pending no more. A `wake` puts no parked act to the World, so a client that wakes the work of
 a life as it opens does not run it again and end furb again. `retry` runs a parked act again: it is parked no more in

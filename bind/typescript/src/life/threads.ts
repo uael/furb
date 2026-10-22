@@ -25,7 +25,7 @@ export interface Thread {
   /** How deep it stands in the tree of threads, from 0 at the top. */
   depth: number;
   anchor?: Anchor;
-  /** The prompts of None that came to the thread while it was open, in order. */
+  /** The prompts on the thread, in order: its messages, and the prompts that opened it again. */
   messages: LiveAct[];
   /** The prompts that the rungs of its ladder made, in the order they began. */
   children: Thread[];
@@ -49,15 +49,13 @@ export function pullsOf(text: string): Pull[] {
   return [...text.matchAll(pulled)].map((match) => ({ number: Number(match[1]), url: match[0] }));
 }
 
-/** Where a prompt hangs: the act that its `on` names, when it names an act and not a chain, or else the first act of
- * the life that its message names, the first place in a file, and the first pull request. */
+/** Where a prompt hangs: the first act of the life that its message names, the first place in a file, and the first
+ * pull request. */
 export function anchorOf(prompt: LiveAct, rows: ReadonlyMap<string, LiveAct>): Anchor | undefined {
   const message = String(prompt.words[1] ?? "");
-  const on = rows.get(prompt.on);
-  const act =
-    on && on.kind !== "chain"
-      ? on.id
-      : [...message.matchAll(named)].map((match) => match[0]).find((id) => id !== prompt.id && rows.has(id));
+  const act = [...message.matchAll(named)]
+    .map((match) => match[0])
+    .find((id) => id !== prompt.id && rows.has(id));
   const file = message.match(place);
   const [pull] = pullsOf(message);
   if (!act && !file && !pull) return undefined;
@@ -68,21 +66,35 @@ export function anchorOf(prompt: LiveAct, rows: ReadonlyMap<string, LiveAct>): A
   };
 }
 
-/** The prompt of the ladder that an act stands in: the prompt that a rung over it advances, walking up the makers. A
+/** The first prompt of the thread that a prompt stands in: the prompt itself, or the prompt that its thread starts
+ * at, walking up the threads. */
+export function rootOf(prompt: LiveAct, rows: ReadonlyMap<string, LiveAct>): string {
+  let at = prompt;
+  for (let step = 0; step < 64; step++) {
+    const up = at.thread ? rows.get(at.thread) : undefined;
+    if (!up) break;
+    at = up;
+  }
+  return at.id;
+}
+
+/** The thread that an act stands in: the first prompt of the thread whose rung is over it, walking up the makers. A
  * prompt that the operator, an ear or a chain made stands in none. */
 export function threadOf(act: LiveAct, rows: ReadonlyMap<string, LiveAct>): string | undefined {
   let maker = rows.get(act.by);
   for (let step = 0; maker && step < 64; step++) {
-    if (maker.kind === "prompt") return maker.id;
+    if (maker.kind === "prompt") return rootOf(maker, rows);
     if (maker.kind !== "rung") return undefined;
     maker = rows.get(maker.by);
   }
   return undefined;
 }
 
-/** Whether a prompt is a message of a thread and no thread of its own: a prompt of None that a chain made, as the
- * acknowledgment of an act that one of its rungs made, which belongs to the thread of that act. */
+/** Whether a prompt is a message of a thread and no thread of its own: a prompt on a thread, which the engine makes a
+ * message of that thread or a prompt that opens it again, or a prompt of None that a chain made on the chain, as the
+ * acknowledgment of an act that a rung of the operator made, which belongs to the thread of that act. */
 function messageOf(act: LiveAct, rows: ReadonlyMap<string, LiveAct>): string | undefined {
+  if (act.thread) return rootOf(act, rows);
   if (act.words[0] !== "None" || rows.get(act.by)?.kind !== "chain") return undefined;
   const about = String(act.words[1] ?? "").match(/^(\w+?\d+) /)?.[1];
   const subject = about ? rows.get(about) : undefined;

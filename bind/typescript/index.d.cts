@@ -166,9 +166,10 @@ export declare function attachImage(directory: string, path: string): ImageAttac
 
 /**
  * The ear of commands, which runs each in a shell of this machine, with `TMPDIR` set to the scratch directory that
- * the host names, which the ear of the files is given too.
+ * the host names, which the ear of the files is given too. It is given the record that the life opens on, so it
+ * closes as interrupted each command that the record shows started and not done, at the wake.
  */
-export declare function bash(scratch: string): NativeEar
+export declare function bash(scratch: string, record: Array<any>): NativeEar
 
 /**
  * The config directory of the user for this process, where the configs, the extensions of the user and the
@@ -278,6 +279,16 @@ export declare const LARGEST: number
 
 /** The levels of effort, from least to most, which an actor names after its model. */
 export declare function levels(): Array<string>
+
+/** The ear of the log of the life beside the record at a path, which writes it again from its first line. */
+export declare function log(path: string): NativeEar
+
+/**
+ * The facts of the log of the record at a path, read with no lease, when the log agrees with the record: every fact
+ * that the life that wrote it said, as an ear of a host hears it, the rungs of each ladder among them. Nothing when
+ * the record has no log, or a log that does not agree with it.
+ */
+export declare function logged(path: string): unknown[] | null
 
 /** The ear of the memory extension, which finds the memory of a path in its folders and in the config directory. */
 export declare function memory(config: string): NativeEar
@@ -389,6 +400,11 @@ export interface Opening {
   answer?: (request: { actor: string; chain: string; messages: unknown[]; settings: Record<string, unknown> }, write: (delta: { text?: string; thinking?: string }) => void) => Promise<unknown>
   /** A function of the host that is told what a model writes, as it writes it. */
   stream?: (rung: string, chain: string, text: string, thinking: string) => void
+  /**
+   * Whether the life opens from the snapshot of its record when the snapshot agrees with the record, and keeps one
+   * when it keeps its record; true when unsaid.
+   */
+  snapshot?: boolean
   /**
    * A function of the host that is told each report of the life that no model reads, one line each; the stderr of
    * this process when unsaid.

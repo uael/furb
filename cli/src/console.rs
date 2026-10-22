@@ -18,7 +18,8 @@ use futures::{Stream, stream};
 use tokio::io::{AsyncBufReadExt, BufReader, Lines, Stdin};
 use unsync::oneshot;
 
-/// A prompt put to the operator: its act, the chain it is on, its shape and its message.
+/// A prompt put to the operator: its act, the chain it is on, which is the chain of its thread for a prompt on a
+/// thread, its shape and its message.
 pub struct Asked {
   pub about: String,
   pub on: String,
@@ -37,9 +38,10 @@ impl Asked {
       return Ok(None);
     }
     let word = |at: usize| a.word(at).and_then(|one| one.as_str().map(str::to_owned));
+    let scope = co.call("scope", vec![Object::string(a.about())], vec![]).await?;
     let asked = Asked {
       about: a.about().to_owned(),
-      on: a.on().to_owned(),
+      on: scope.as_ref().as_str().unwrap_or(a.on()).to_owned(),
       shape: word(1).unwrap_or_default(),
       message: word(2).unwrap_or_default(),
     };

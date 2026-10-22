@@ -2,7 +2,7 @@
 
 from conftest import WORLD, Sand, born, keeping, life, plain, relived, said, settle, sown
 from furb import engine
-from furb.engine import Act, Exit
+from furb.engine import Refused
 
 
 async def test_what_an_ear_says_to_take_an_act_whose_done_comes_later() -> None:
@@ -37,7 +37,7 @@ async def test_the_journal_keeps_a_started_of_the_outside() -> None:
   assert said(later.calls, "bash") == [] and engine.peek(command, ...) is ... and engine.peek(step) is None
   engine.wake(over)
   await settle()
-  assert [a[1] for a in said(later.calls, "bash")] == [command] and (await Act[Exit](command)).code == 0
+  assert [a[1] for a in said(later.calls, "bash")] == [command] and isinstance(engine.peek(command), Refused)
   assert [a for a in said(heard, "started") if a[1] == command] == [("started", command, WORLD)]
   ended, _, root = born()
   one = engine.bash("echo hi", on=root)

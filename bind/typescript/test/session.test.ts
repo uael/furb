@@ -753,7 +753,7 @@ test("a session enables the extensions of the configs, and a later session on it
   }
 });
 
-test("the activity starts the streams of a command again at each started of it, as a wake that runs it again does", () => {
+test("the activity starts the streams of a command again at each started of it, as a World that runs it again does", () => {
   const activity = new Activity();
   const hear = (fact: Fact) => {
     // No control stands, so the activity asks the engine nothing while it hears these facts.
