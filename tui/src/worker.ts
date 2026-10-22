@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { Engine, SessionOptions, Turn } from "@furb/engine";
-import { Act, actorParts, ENGINE, model, models, retold, Session } from "@furb/engine";
+import { Act, actorParts, ENGINE, model, models, retold, Session, setup } from "@furb/engine";
 import { measureOf } from "@furb/engine/life";
 import type { HostState } from "./bridge.ts";
 import { type EngineOptions, roster } from "./models.ts";
@@ -93,7 +93,16 @@ const replies: [cue: string, thinking: string, answer: string][] = [
     "The checks finished and all three passed, so the project is ready for the search shortcut.",
   ],
 ];
-function reply(turn: string): [thinking: string, answer: string] {
+/** What each model of the demo answers when a word asks every model what it would change first, by its name. */
+const views: [model: string, answer: string][] = [
+  ["haiku", "Add a test for a search that finds nothing."],
+  ["sonnet", "Save the notes to a file, so they stay after a restart."],
+  ["fable", "Give search a shortcut, Ctrl+K, so it is one key away."],
+];
+function reply(turn: string, actor: string, chain: string): [thinking: string, answer: string] {
+  // Three rungs of one chain answer the word, so each reads the question in the turns of its chain.
+  const view = chain.includes("change first") && views.find(([name]) => actor.includes(name));
+  if (view) return ["One change comes first, so the answer names it.", view[1]];
   const found = replies.find(([cue]) => turn.includes(cue));
   return found
     ? [found[1], found[2]]
@@ -108,8 +117,9 @@ function reply(turn: string): [thinking: string, answer: string] {
 const held = new Set<(turn: Turn) => void>();
 
 /** A session whose models are the demo, which asks no model and answers each turn from the script above. It enables
- * no extension, so the demo shows the same on every machine. */
-function scriptedSession(options: SessionOptions): Session {
+ * no extension, so the demo shows the same on every machine. A session that the operator watches streams each turn,
+ * as a model writes it, and each of its answers costs nothing, since no model is asked. */
+function scriptedSession(options: SessionOptions, watch = false): Session {
   const { record, cwd } = options;
   const directory = cwd ?? (record ? dirname(record) : undefined);
   if (!directory) throw new Error("A demo session needs a directory or a record.");
@@ -119,7 +129,7 @@ function scriptedSession(options: SessionOptions): Session {
     roster: roster({ ...options, demo: true }),
     cwd: directory,
     record: record ?? join(directory, "demo.jsonl"),
-    answer: async ({ messages }, write): Promise<Turn> => {
+    answer: async ({ actor, messages }, write): Promise<Turn> => {
       const pause = (milliseconds: number) =>
         new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
       const last = JSON.stringify(messages.at(-1));
@@ -130,12 +140,12 @@ function scriptedSession(options: SessionOptions): Session {
       // Only the turn that asks for live progress is slow, and not every later turn of its chain: it thinks, then
       // writes its word a few words at a time, as a model streams it. FURB_DEMO_STREAM=1 makes every turn so, for a
       // recording of the demo.
-      const slow = process.env.FURB_DEMO_STREAM === "1" || last.includes("show live progress");
+      const slow = watch || process.env.FURB_DEMO_STREAM === "1" || last.includes("show live progress");
       await pause(slow ? 300 : 180);
       const first = !messages.some((message) => (message as { role?: string }).role === "assistant");
       const [thinking, answer] = first
         ? ["I read the README and run the checks before I answer.", ""]
-        : reply(last);
+        : reply(last, actor, JSON.stringify(messages));
       // A message that asks for an answer in a fence gets one, as a model sometimes writes it, which the gate refuses,
       // and the model answers again once it reads the refusal.
       const fenced = !first && last.includes("an answer in a fence");
@@ -166,7 +176,7 @@ function scriptedSession(options: SessionOptions): Session {
         }
         await pause(200);
       }
-      return ["assistant", code, [3240, 184, 2800, 0, 0.0024], null];
+      return ["assistant", code, [3240, 184, 2800, 0, watch ? 0 : 0.0024], null];
     },
   });
 }
@@ -179,7 +189,7 @@ function measuresOf(answers: ReadonlyMap<string, readonly { actor: string; usage
 /** What a request of the session comes to. */
 async function answer(data: { target: string; method: string; args: unknown[] }): Promise<unknown> {
   if (data.method === "open") {
-    const { demo: scripted, ...options } = data.args[0] as EngineOptions;
+    const { demo: scripted, watch, ...options } = data.args[0] as EngineOptions;
     // A recorded life is a log of a life that a host reads and runs not, at the moment where it ends.
     if (options.record && isRecorded(options.record)) {
       reader = Reader.recorded(options.record, options.cwd ?? dirname(options.record));
@@ -188,8 +198,10 @@ async function answer(data: { target: string; method: string; args: unknown[] })
       return reader.root;
     }
     claude = options.claude;
-    demo = scripted ?? false;
-    const opened = demo ? scriptedSession(options) : new Session({ ...options, roster: roster(options) });
+    demo = (scripted || watch) ?? false;
+    const opened = demo
+      ? scriptedSession(options, watch)
+      : new Session({ ...options, roster: roster(options) });
     try {
       engine = opened.open();
     } catch (error) {
@@ -233,6 +245,8 @@ async function answer(data: { target: string; method: string; args: unknown[] })
   // The demo asks no model, so it offers its roster and nothing of the catalog of this machine.
   if (data.target === "library" && data.method === "catalog")
     return demo ? [] : models(claude).map(({ name, efforts, window }) => [name, efforts, window]);
+  // The first run checks this machine, which the demo does not need.
+  if (data.target === "library" && data.method === "setup") return demo ? null : setup(claude);
   if (data.target === "library" && (data.method === "model" || data.method === "sees")) {
     if (!engine) throw new Error("The session is not open.");
     const [standing] = engine.standing() as [[string][]];
@@ -284,6 +298,7 @@ function read(data: { target: string; method: string; args: unknown[] }): unknow
     return snapshots?.take(String(data.args[0]), Number(data.args[1]));
   if (data.target === "library" && data.method === "source") return ENGINE;
   if (data.target === "library" && data.method === "catalog") return [];
+  if (data.target === "library" && data.method === "setup") return null;
   if (data.target === "library" && data.method === "sees") return false;
   if (data.target === "library" && data.method === "model") return null;
   if (data.target === "library" && data.method === "changes") return [];

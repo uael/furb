@@ -92,6 +92,9 @@ export class Workspaces extends EventEmitter {
   private closed = false;
   /** Whether the list file could not be read, so that this run leaves it as it is. */
   private damaged = false;
+  /** The directories of the sessions that the list shows while they run and never saves, as the demo that the
+   * operator watches, whose directory goes when the process ends. */
+  private readonly passing = new Set<string>();
   readonly path: string;
   constructor(
     readonly preferences = new Preferences(),
@@ -125,6 +128,7 @@ export class Workspaces extends EventEmitter {
   }
   /** Apply a change to the list as the file holds it now, so that what another instance saved stays. */
   private save(change: ListChange): void {
+    if (this.passing.has(change.directory)) return;
     let list: SavedWorkspace[];
     try {
       list = readList(this.path);
@@ -332,6 +336,14 @@ export class Workspaces extends EventEmitter {
     })();
     this.opening.set(entry.path, opening);
     return opening;
+  }
+  /** Show a session that is open already, in a workspace of its directory that the list holds while this process
+   * runs and never saves, and select it. */
+  async show(session: Session): Promise<void> {
+    const directory = await realpath(resolve(session.host.directory));
+    this.passing.add(directory);
+    const group = await this.add(directory);
+    await this.select(this.adopt(session, group));
   }
   async select(entry: SessionEntry): Promise<void> {
     const group = this.groupOf(entry);

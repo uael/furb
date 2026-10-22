@@ -1,5 +1,14 @@
 import { EventEmitter } from "node:events";
-import type { Act, FileChange, ImageAttachment, LiveAct, Engine as Native, Stream, Turn } from "@furb/engine";
+import type {
+  Act,
+  FileChange,
+  ImageAttachment,
+  LiveAct,
+  Engine as Native,
+  SetupInfo,
+  Stream,
+  Turn,
+} from "@furb/engine";
 import type { Measure } from "@furb/engine/life";
 import type { EngineOptions } from "./models.ts";
 import type { Reading } from "./reading.ts";
@@ -107,6 +116,8 @@ export class HostView extends EventEmitter implements Plain {
   sees = (actor: string) => this.ask<boolean>("library", "sees", actor);
   /** The models the catalog of the crate offers, each as its name, its efforts and its window. */
   catalog = () => this.ask<[string, string[], number][]>("library", "catalog");
+  /** What the first run checks of this machine, and nothing in the demo, which needs no model. */
+  setup = () => this.ask<SetupInfo | null>("library", "setup");
   /** The name of the model that a name gives in the roster or in the catalog, and nothing when it gives none. */
   model = (name: string) => this.ask<string | null>("library", "model", name);
   answer = (id: string, value: string) => this.ask<unknown>("console", "answer", id, value);

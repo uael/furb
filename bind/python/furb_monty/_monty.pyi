@@ -28,6 +28,30 @@ class ModelInfo(TypedDict):
   images: bool
   price: list[float] | None
 
+class ProviderInfo(TypedDict):
+  """A provider of the network as a first run checks it: its name, the names of its credential in the environment,
+  and how many of its models the catalog offers."""
+
+  provider: str
+  env: list[str]
+  offered: int
+
+class LocalInfo(TypedDict):
+  """The local server as a first run checks it: its address, how many models the catalog offers of it, and why it
+  listed none, when it did not answer."""
+
+  address: str
+  offered: int
+  failed: str | None
+
+class SetupInfo(TypedDict):
+  """What a first run checks of this machine: whether the catalog found the claude command line, each provider of
+  the network, and the local server that FURB_LOCAL_URL names."""
+
+  claude: bool
+  providers: list[ProviderInfo]
+  local: LocalInfo | None
+
 class ImageAttachment(TypedDict):
   """An image a host attached: the name of its file, the uri a message names it by, its media type, and its size in
   bytes."""
@@ -299,6 +323,9 @@ def model(name: str) -> ModelInfo | None:
 
 def levels() -> list[str]:
   """The levels of effort, from least to most, which an actor names after its model."""
+
+def setup(claude: str | None = None) -> SetupInfo:
+  """What a first run checks of this machine, with the claude command line at a path when it is given."""
 
 def attach_image(directory: str, path: str) -> ImageAttachment:
   """An image copied into a directory of images under the digest of its bytes, as a message attaches it."""
