@@ -57,16 +57,27 @@ test("the real native life drives the feed, the transcript, and responsive views
       expect(screen.captureCharFrame()).toContain("● sonnet");
       for (
         let pass = 0;
-        pass < 100 && !screen.captureCharFrame().includes("A clear starting point");
+        pass < 100 &&
+        screen.captureCharFrame().lastIndexOf("A clear starting point") <
+          screen.captureCharFrame().indexOf("Explore this project");
         pass++
       ) {
         await new Promise((done) => setTimeout(done, 20));
         await frame();
       }
       const conversation = screen.captureCharFrame();
+      // The board over the feed says the answer of the chain too, so the feed holds its last mention.
       expect(conversation.indexOf("Explore this project")).toBeLessThan(
-        conversation.indexOf("A clear starting point"),
+        conversation.lastIndexOf("A clear starting point"),
       );
+      // A rung that is over folds to one row, and the acts that it made stand under it once it opens.
+      const rung = app.scroll
+        .getChildren()
+        .find((node) => /^rung\d+$/.test(node.id))
+        ?.getChildren()[0];
+      if (!rung) throw new Error("No rung heading.");
+      await screen.mockMouse.click(rung.x, rung.y);
+      await screen.flush();
       // A command that is over folds to its heading, and its output shows once it opens.
       expect(conversation).not.toContain("└ ✓ capture");
       const command = app.scroll.getChildren().find((node) => /^bash\d+$/.test(node.id));

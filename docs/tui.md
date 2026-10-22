@@ -19,13 +19,22 @@ session does and offers the keys that act now, each a button that does what its 
 
 ## Feed
 
-Your message stands in a panel. Each rung shows the numbered Python that the model wrote, and the acts that it
-made stand under it with a preview of their output. The answer comes under the name of the model that gave it.
-An act that no turn tells yet, such as a command that you started, stands at the end of the feed until a turn tells
-it. A rung opens while it runs, and folds to its mark, its name, and its first line when it completes. A click on its
-heading, or ⌥D, opens or folds it, and the fold stays the same across views and after a reopen. `/autocollapse` turns
-the automatic fold off, and on again. A right click on an act inspects it, edits its program, or branches after it.
-The sidebar shows the chains, the context and the cost, and the workspaces.
+The board over the feed shows each chain of the life on one row, in the order of its tree: its mark, its name,
+what it does now, and the pulse of its acts over the life. A chain that asks you a question shows the question in
+yellow. A chain at work shows the act that it waits on, a chain that failed shows why, and a chain that finished
+shows the first line of its answer. A click on a row shows that chain. The board shows when the life has more than
+one chain, or when a question waits for you. In a long life, it keeps the rows that need a look and counts the
+chains at rest.
+
+Under the board, the feed shows the ladder of the chain: your message in a panel, each rung of the ladder on one
+row, and the answer under the name of the model that gave it. The row of a rung shows its mark, its name, the first
+line of its Python in the colors of its grammar, the count of the lines after it, and the acts that it made, each in the color of its state. A
+rung opens while it runs, and shows the last lines that its model writes or that its command prints. It folds to
+its row when it completes. A click on its heading, or ⌥D, opens it to show its numbered Python, and under it each
+act that it made with a preview of its output. The fold stays the same across views and after a reopen.
+`/autocollapse` turns the automatic fold off, and on again. A right click on an act inspects it, edits its program,
+or branches after it. The board and the feed come from the model of a life that `@furb/engine/life` gives, so each
+host shows the same life. The sidebar shows the chains, the context and the cost, and the workspaces.
 
 ![Feed](screenshots/02-feed.png)
 
@@ -130,7 +139,7 @@ On a narrow terminal the sidebar is hidden, and the top line keeps the session, 
 
 ## Work in progress
 
-A command streams its output while it runs, and a model shows each word as it writes it. A word that the gate
+A command streams its output while it runs, and a model shows the last lines that it writes. A word that the gate
 refuses shows the line and the reason.
 
 ![Command streaming](screenshots/18-live-command.png)
