@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
 import {
   actorParts,
   display,
@@ -2671,8 +2671,8 @@ export class App {
       // A write names the path of the Text that it writes, which a read gave whole, so the path drops the directory of
       // the chain.
       const path = String((act.words[0] as { path?: unknown } | null)?.path ?? "");
-      const here = `${this.session.directory}/`;
-      return path.startsWith(here) ? path.slice(here.length) : shortenHomes(path);
+      const inside = isAbsolute(path) ? relative(this.session.directory, path) : path;
+      return inside && !inside.startsWith("..") && !isAbsolute(inside) ? inside : shortenHomes(path);
     }
     if (act.kind === "grant")
       return [
