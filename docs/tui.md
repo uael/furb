@@ -72,6 +72,13 @@ word that sent it goes on, and the notice stands in the feed with no field to an
 
 ![Operator notice](screenshots/22-operator-notice.png)
 
+A message, a question, a notice, and an answer show as markdown, with no marks left: headings, emphasis, links,
+lists, quotes, and tables. A code block stands on a surface of its own, with its language as a label above it. The
+TUI colors the code of Python, TypeScript, JavaScript, and JSON. The code of another language keeps its lines and
+its indentation, and a line too long for the block does not wrap.
+
+![Markdown](screenshots/51-markdown.png)
+
 ## Python input
 
 The input grows as you type, and its bar and the line under it name the mode: Prompt, Python, Answer, or Edit

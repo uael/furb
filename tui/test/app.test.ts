@@ -1,15 +1,18 @@
 import { afterAll, expect, setSystemTime, test } from "bun:test";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { RGBA } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
+import { highlighting } from "../script/stage.ts";
 import { App, sessionDetail } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { demoLibrary, demoSession, removeDemoDirectories, seedDemo } from "../src/demo.ts";
 import { Preferences } from "../src/preferences.ts";
 import type { Session } from "../src/session.ts";
+import { palettes } from "../src/theme.ts";
 import { type SessionEntry, Workspaces } from "../src/workspaces.ts";
-import { composing, withDemo } from "./composing.ts";
+import { cellAt, composing, withDemo } from "./composing.ts";
 import { idle } from "./idle.ts";
 import { transcriptOf } from "./transcript.ts";
 
@@ -245,6 +248,8 @@ test("a prompt of None to the operator is a notice with no field, done at once, 
       await until(session.host, () => session.host.notices.has(id));
       await session.refresh();
       expect(session.operatorPrompt).toBeUndefined();
+      await frame();
+      await Promise.all(highlighting(screen.renderer.root));
       const shown = await frame();
       expect(shown).toContain("Notice");
       expect(shown).toContain("The build is green.");
@@ -257,6 +262,73 @@ test("a prompt of None to the operator is a notice with no field, done at once, 
       expect(read).not.toContain("Nothing to answer");
     },
     { width: 120, height: 40 },
+  ));
+
+test("the markdown of a message draws each element with no marks, and a code block on a surface of its own", () =>
+  composing(
+    async ({ session, screen, frame }) => {
+      const long = `    return ${"note + ".repeat(20)}note`;
+      const id = await session.engine.prompt("None", {
+        message: [
+          "## The shortcut",
+          "",
+          "Press **Ctrl+K**, as `search.py` binds it, *once*. See [the guide](https://example.com).",
+          "",
+          "- one",
+          "  - nested",
+          "",
+          "> a quote",
+          "",
+          "| Key | Action |",
+          "| --- | --- |",
+          "| Ctrl+K | Find |",
+          "",
+          "```python",
+          "def search(note):",
+          long,
+          "        pass",
+          "```",
+          "",
+          "```",
+          "plain/",
+          "    kept",
+          "```",
+        ].join("\n"),
+        to: "operator",
+        on: session.engine.root,
+      });
+      await until(session.host, () => session.host.notices.has(id));
+      await session.refresh();
+      await frame();
+      await Promise.all(highlighting(screen.renderer.root));
+      const rows = (await frame()).split("\n");
+      const shown = rows.join("\n");
+      for (const mark of ["##", "**", "`", "[the guide]", "| ---", "> a quote"])
+        expect(shown).not.toContain(mark);
+      for (const text of [
+        "The shortcut",
+        "Press Ctrl+K, as search.py binds it, once.",
+        "- one",
+        "  - nested",
+        "│ a quote",
+      ])
+        expect(shown).toContain(text);
+      expect(shown).toMatch(/│Key +│Action +│/);
+      const label = rows.findIndex((row) => row.includes(" python "));
+      const code = rows[label + 1] ?? "";
+      const x = code.indexOf("def search(note):");
+      expect(x).toBe(rows[label]?.indexOf("python") ?? -1);
+      expect(rows[label + 2]?.slice(x)).toStartWith("    return note + note");
+      expect(rows[label + 3]?.slice(x)).toStartWith("        pass");
+      const plain = rows.findIndex((row) => row.includes("plain/"));
+      expect(rows[plain + 1]?.slice(rows[plain]?.indexOf("plain/"))).toStartWith("    kept");
+      const spans = screen.captureSpans();
+      const palette = palettes.github;
+      expect(cellAt(spans, x, label + 1).fg?.equals(RGBA.fromHex(palette.syntaxKeyword))).toBe(true);
+      expect(cellAt(spans, x - 1, label + 1).bg?.equals(RGBA.fromHex(palette.background))).toBe(true);
+      expect(cellAt(spans, x, label - 2).bg?.equals(RGBA.fromHex(palette.panel))).toBe(true);
+    },
+    { width: 100, height: 60 },
   ));
 
 test("resume preserves chains, programs, theme, and input drafts while unfinished work stays paused", async () => {
