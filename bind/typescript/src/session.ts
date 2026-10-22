@@ -16,7 +16,8 @@ function* silent(): Ear {
 }
 
 /** A function that answers each request of the provider in place of a model: it is given the request, the actor,
- * the chain, the messages and the settings of the effort, and a function that tells what it writes as it writes it,
+ * the chain, the messages and the settings of the request, its effort, its conversation and the most tokens of thought
+ * of a claude model among them, and a function that tells what it writes as it writes it,
  * and gives the turn of the model. */
 export type Answer = NonNullable<Opening["answer"]>;
 /** What a model writes while it answers a rung, on the chain of the rung. */

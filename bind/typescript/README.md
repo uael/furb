@@ -87,7 +87,8 @@ const session = new Session({ model: first, effort: "high", roster: others.slice
 ```
 
 Pass `answer` to replace only model requests, or `operator` to supply operator answers. `answer` gets the actor,
-the chain, the messages and the settings of the effort as the provider would send them, and a `write` that tells
+the chain, the messages and the settings of the request as the provider would send them, its effort, its conversation
+and the most tokens of thought of a claude model among them, and a `write` that tells
 what it writes as it writes it, and gives a turn. The host still names the models that `answer` stands in for. With
 no `operator`, questions stand in `session.console.prompts`; call `session.console.answer(id, text)` to read an
 answer by the rules that every console of the crate reads a line by, which `answered(shape, line)` gives, for each

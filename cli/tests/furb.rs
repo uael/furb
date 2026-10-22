@@ -68,12 +68,13 @@ impl Yard {
   }
 
   /// furb with these words, in the yard, on the fake claude and on the config directory and the cache of the yard,
-  /// and with no TUI and no local server that the machine names.
+  /// and with no TUI, no local server and no most of thought that the machine names.
   fn furb(&self, words: &[&str]) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_furb"));
     command.args(words).current_dir(&self.at);
     command.env("FURB_CLAUDE_BIN", self.fake.join("claude")).env_remove("FURB_TUI");
-    for name in ["FURB_LOCAL_URL", "FURB_LOCAL_KEY", "FURB_LOCAL_WINDOW", "FURB_LOCAL_TOKENS"] {
+    let names = ["FURB_LOCAL_URL", "FURB_LOCAL_KEY", "FURB_LOCAL_WINDOW", "FURB_LOCAL_TOKENS"];
+    for name in names.into_iter().chain(["MAX_THINKING_TOKENS"]) {
       command.env_remove(name);
     }
     command.env("FURB_CONFIG_DIR", self.config()).env("XDG_CACHE_HOME", self.at.join("cache"));
