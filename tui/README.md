@@ -9,13 +9,21 @@ Rendering, input, and syntax coloring stay responsive while the sandbox gates an
 uv sync
 bun install
 bun run build
-bun run demo                 # A local, scripted life. No model request.
+bun run demo                 # A local, scripted life, and a real life recorded from its log. No model request.
 bun run tui                  # A real life, on the models of the catalog of the crate.
 bun run tui -- --resume .furb/sessions/example.jsonl
 ```
 
 `furb`, the command line, opens this TUI when it has no command, with `--demo`, `--record`, `--cwd`, the model and the
 effort of its `--model` as `--model` and `--effort`, each `--roster`, and the words after `--`.
+
+A recorded life is a log of a life whose first line is a header that says `"recorded": true`. The TUI reads it as it
+reads a record that another engine made, from its acts, and runs nothing: what you send to it fails with the
+reason. The demo opens
+`fixtures/conductor.jsonl`, a life of a conductor of furb with 23 chains, beside its scripted life, when it has no
+`--cwd` and no record. `bun run tui/script/fixture.ts <record>.jsonl.log [out]` makes such a fixture from the log of
+a real life: it keeps the acts that the model of a life reads, cuts each word, message and output to its first lines,
+replaces each key, address of mail and home directory, and ends at the moment with the most chains at work.
 
 Use `--cwd`, `--model provider:model`, `--effort`, `--record`, and repeated `--roster` options to configure
 a new life. A session offers every model that the catalog offers, with its model first: the default model when you
@@ -81,8 +89,8 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | ↑, ↓, Tab, Enter after /, @ or : | Choose a slash command, its value, a project file, or an emoji as it is typed |
 | ⌃F / PageUp / PageDown | Filter the current view / scroll |
 | ⌃R / ⌃Space | Python input / complete a name |
-| ⌃L / ⌃A | Edit a prompt program / answer the questions that wait, or dismiss a notice |
-| Tab / ⇧Tab in an answer | Next / previous question or notice that waits |
+| ⌃L / ⌃A | Edit a prompt program / answer the questions that wait |
+| Tab / ⇧Tab in an answer | Next / previous question that waits |
 | ⌃G / ⌃click a name | Inspect a value and follow its definition |
 | Drag / ⌃Y | Select text and copy it / copy the selected text again |
 | Click / right-click an act | Fold or expand it / inspect its value or prompt program |

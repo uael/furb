@@ -13,6 +13,8 @@ export type ActState = "running" | "stands" | "done" | "failed" | "cancelled" | 
  *   acts that they made.
  * - `tail`: the last lines that a command that runs printed, or that a model writes while it answers.
  * - `value`: what a prompt closed with.
+ * - `more`: the earlier prompts of a long thread, or the earlier rungs of a long ladder, which a fold holds as one
+ *   line until it opens, with how many it holds.
  */
 export type Line =
   | { type: "prompt"; act: LiveAct; depth: number; state: ActState }
@@ -20,7 +22,17 @@ export type Line =
   | { type: "act"; act: LiveAct; depth: number; state: ActState }
   | { type: "ear"; act: LiveAct; depth: number; state: ActState; rungs: LiveAct[]; acts: Chip[] }
   | { type: "tail"; act: LiveAct; depth: number; text: string; model: boolean }
-  | { type: "value"; act: LiveAct; depth: number; text: string };
+  | { type: "value"; act: LiveAct; depth: number; text: string }
+  | {
+      type: "more";
+      act: LiveAct;
+      depth: number;
+      count: number;
+      of: "prompts" | "rungs";
+      key: string;
+      /** The kinds of the acts that head the lines the fold holds, as prompt for a message and rung for a word. */
+      heads: string[];
+    };
 /** The acts of a rung, by name: one act, or a run of acts of one kind and one state, as read3…7. */
 export interface Chip {
   ids: string[];
@@ -161,4 +173,93 @@ export function ladder(
       );
     }
   return lines;
+}
+
+/** How many of the last prompts of a thread, and of the last rungs of each ladder, a condensed thread shows. */
+export const SHOWN = { prompts: 6, rungs: 4 };
+
+/** A long thread as a person reads it at a glance: the last steps at each level of the thread, and a line of more in
+ * place of each run of earlier ones, which a key of the opened set opens. At the top and under a rung, a step is a
+ * prompt, or another line that heads lines of its own, and the last prompts show; under a prompt, a step is a rung,
+ * and the last rungs show. A step that asks the operator or runs stays shown, and a fold holds two steps in a row at
+ * least. The key of a fold is prompts: or rungs: and the act that the steps stand under, or the chain at the top. */
+export function condense(
+  lines: readonly Line[],
+  opened: ReadonlySet<string>,
+  shown: { prompts: number; rungs: number } = SHOWN,
+): Line[] {
+  return level(lines, 0, `prompts:${lines[0]?.act.on ?? ""}`, opened, shown);
+}
+
+/** The lines of one level of a thread, condensed, with each level under them condensed in turn. */
+function level(
+  lines: readonly Line[],
+  depth: number,
+  key: string,
+  opened: ReadonlySet<string>,
+  shown: { prompts: number; rungs: number },
+): Line[] {
+  const heads = (line: Line) => line.depth === depth && ["prompt", "rung", "act", "ear"].includes(line.type);
+  const groups: Line[][] = [];
+  for (const line of lines) {
+    if (heads(line) || !groups.length) groups.push([line]);
+    else groups.at(-1)?.push(line);
+  }
+  const stays = (group: Line[]) =>
+    !heads(group[0] as Line) ||
+    group.some(
+      (line) => (line.type === "prompt" || line.type === "rung") && ["asks", "running"].includes(line.state),
+    );
+  const rungs = key.startsWith("rungs:");
+  const keep = rungs ? shown.rungs : shown.prompts;
+  const folds = opened.has(key)
+    ? new Set<number>()
+    : new Set(
+        groups.flatMap((group, index) => (index < groups.length - keep && !stays(group) ? [index] : [])),
+      );
+  for (const index of [...folds]) if (!folds.has(index - 1) && !folds.has(index + 1)) folds.delete(index);
+  const out: Line[] = [];
+  let hidden: Line[][] = [];
+  const flush = () => {
+    const [head] = hidden[0] ?? [];
+    if (head)
+      out.push({
+        type: "more",
+        act: head.act,
+        depth,
+        count: hidden.length,
+        of: rungs ? "rungs" : "prompts",
+        key,
+        heads: [...new Set(hidden.map((group) => group[0]?.act.kind ?? ""))],
+      });
+    hidden = [];
+  };
+  for (const [index, group] of groups.entries()) {
+    if (folds.has(index)) {
+      hidden.push(group);
+      continue;
+    }
+    flush();
+    const [head, ...under] = group as [Line, ...Line[]];
+    out.push(head);
+    if (!heads(head)) {
+      out.push(...under);
+      continue;
+    }
+    // A value or a tail at the level of the head stays with it; the lines under it form the next level.
+    const next = under.filter((line) => line.depth > depth);
+    const after = under.filter((line) => line.depth <= depth);
+    out.push(
+      ...level(
+        next,
+        depth + 1,
+        `${head.type === "prompt" ? "rungs" : "prompts"}:${head.act.id}`,
+        opened,
+        shown,
+      ),
+    );
+    out.push(...after);
+  }
+  flush();
+  return out;
 }

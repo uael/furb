@@ -19,24 +19,44 @@ session does and offers the keys that act now, each a button that does what its 
 
 ## Feed
 
-The board over the feed shows each chain of the life on one row, in the order of its tree: its mark, its name,
-what it does now, and the pulse of its acts over the life. A chain that asks you a question shows the question in
-yellow. A chain at work shows the act that it waits on, a chain that failed shows why, and a chain that finished
-shows the first line of its answer. A click on a row shows that chain. The board shows when the life has more than
-one chain, or when a question waits for you. In a long life, it keeps the rows that need a look and counts the
-chains at rest.
+The captures of the feed show a real life: a conductor and the workers that it hired, recorded from the log of a
+life of furb, with 23 chains, 21 of them at work, and ladders of up to 76 rungs. `tui/fixtures/conductor.jsonl`
+holds it, with no key and no path of a home in it, and `bun run demo` opens it beside the scripted life.
+
+The board over the feed says the whole life at a glance. Its first line counts the chains by what they do: the
+chains that ask you, then those that failed, are paused, work, are done, or rest. Under it, each chain that needs a
+look stands on one row: the chains that ask you first, then those that failed, are paused or work, in the order of
+their tree. A row shows the mark of the chain, its name, what it does now, and how many answers its models gave for
+how many dollars. A chain that asks you shows its question in yellow. A chain at work shows the act that it waits
+on: a command, a wait with its time and the acts that it waits for, or a rung that its model writes. A chain that
+failed shows why, and a chain that finished shows the first line of its answer. The board takes at most a third of
+the screen, keeps the chain on screen, and counts the chains that it leaves out, which ⌃B lists. A click on a row
+shows that chain. The board shows when the life has more than one chain, or when a question waits for you.
 
 Under the board, the feed shows the ladder of the chain: your message in a panel, each rung of the ladder on one
 row, and the answer under the name of the model that gave it. The row of a rung shows its mark, its name, the first
-line of its Python in the colors of its grammar, the count of the lines after it, and the acts that it made, each in the color of its state. A
-rung opens while it runs, and shows the last lines that its model writes or that its command prints. It folds to
-its row when it completes. A click on its heading, or ⌥D, opens it to show its numbered Python, and under it each
-act that it made with a preview of its output. The fold stays the same across views and after a reopen.
-`/autocollapse` turns the automatic fold off, and on again. A right click on an act inspects it, edits its program,
-or branches after it. The board and the feed come from the model of a life that `@furb/engine/life` gives, so each
-host shows the same life. The sidebar shows the chains, the context and the cost, and the workspaces.
+line of its Python in the colors of its grammar, the count of the lines after it, and the acts that it made, each in
+the color of its state. Once it is done, it says how long it ran and what the answers of its model cost. A rung opens
+while it runs, and shows the last lines that its model writes or that its command prints. It folds to its row when
+it completes. A click on its heading, or ⌥D, opens it to show its numbered Python, and under it each act that it made
+with a preview of its output. Each act says what it did: a read its path and the count of its lines, a write its path
+and the lines that it added and removed, and a command its line, its exit, and how long it ran. The time is known for
+the work that the TUI saw run, since the record holds no time. The fold stays the same across views and after a
+reopen. `/autocollapse` turns the automatic fold off, and on again. A right click on an act inspects it, edits its
+program, or branches after it.
+
+A long thread stays short. The feed shows the last six steps of the chain and of each rung, and the last four rungs
+of each ladder, and one line in place of each run of earlier ones, as "28 earlier messages". A click on the line
+shows them. A step that asks you or runs always shows. A long message shows its first eight rows, and the word of a
+rung that runs shows its first twelve, each with a line that shows the rest. A jump to an act opens each fold over
+it. The board and the feed come from the model of a life that `@furb/engine/life` gives, so each host shows the same
+life. The sidebar shows the chains, the context and the cost, and the workspaces.
 
 ![Feed](screenshots/02-feed.png)
+
+![A long ladder](screenshots/60-long-ladder.png)
+
+![Folded steps](screenshots/61-folded-steps.png)
 
 ## Transcript
 
@@ -68,9 +88,10 @@ The model picker names the current model and the window of each. ⇧Tab chooses 
 ## Questions and notices for you
 
 A model asks you a question with a prompt to the operator, and a prompt of None is a notice, which tells you
-something and asks nothing. Many of them can wait at once, on many chains. The desk over the input shows what waits:
-a mark for each, `◆` for a question and `◇` for a notice, in the order that they came, and the one that you act on
-in the color of a question, with its place, its chain, its id, and what it wants. Under it stand the first line of
+something and asks nothing. A notice waits for nothing: it settles in the feed as a quiet line, `◇ Notice`, with the
+first line of its message and the count of its other lines, and a click opens it to its whole message. No key
+dismisses it. Many questions can wait at once, on many chains. The desk over the input shows what waits: a mark `◆`
+for each question, in the order that they came, and the one that you act on in the color of a question, with its place, its chain, its id, and what it wants. Under it stand the first line of
 its message, the count of its other lines, and its choices or where the input sends its answer. A click on a mark
 goes to its ask and shows its chain, and a click on the message opens it whole.
 
@@ -82,15 +103,14 @@ the input answers it. A click on the card of another question points the input a
 
 Each question takes an answer of its shape. A str, an int, a float, a list, or a dict takes a line of the input,
 which the console reads in that shape. A choice offers its values: a bool offers yes and no, and a Literal offers
-each of its values, once the console answers a Literal. A click on a choice of the desk sends it. A notice takes no
-answer: ⌃A or a click dismisses it.
+each of its values, once the console answers a Literal. A click on a choice of the desk sends it.
 
 ![Operator question](screenshots/08-operator-question.png)
 
 ![Operator notice](screenshots/22-operator-notice.png)
 
 ⌃A opens the dialog of the question that you act on, with its whole message. Tab and ⇧Tab go to the next and the
-previous ask, and show its chain under the dialog. An answer goes on to the next ask that waits, and the dialog
+previous question, and show its chain under the dialog. An answer goes on to the next question that waits, and the dialog
 closes when none waits.
 
 ![Answer dialog](screenshots/53-question-dialog.png)
@@ -98,7 +118,7 @@ closes when none waits.
 ![The next question](screenshots/54-next-question.png)
 
 Each answer lands where you can see it: the card of the question shows your answer, the desk drops its mark, and the
-footer says where the answer went and how many asks still wait.
+footer says where the answer went and how many questions still wait.
 
 ![An answer that landed](screenshots/55-answer-landed.png)
 
@@ -148,7 +168,7 @@ under Finished.
 ## Keys, marks, and commands
 
 One mark means one state in every view, dialog, and sidebar: a spinner for work that runs, `◉` for a chain or a
-session at work, `◆` for a question that waits for you, `◇` for a notice that you did not dismiss, `◌` for paused
+session at work, `◆` for a question that waits for you, `◇` for a notice, `◌` for paused
 work, `✓` for a done act, `✗` for a failure, `●` for a chain you started or a session that finished while you were
 away, and `○` for rest. F1 lists the chords that the terminal in use sends, what each mark means, and every slash
 command.

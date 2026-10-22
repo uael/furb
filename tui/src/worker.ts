@@ -3,10 +3,11 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { Engine, SessionOptions, Turn } from "@furb/engine";
 import { Act, actorParts, ENGINE, model, models, retold, Session } from "@furb/engine";
+import { measureOf } from "@furb/engine/life";
 import type { HostState } from "./bridge.ts";
 import { type EngineOptions, roster } from "./models.ts";
 import { queueDispatches, queueHash } from "./queue.ts";
-import { Reader } from "./reading.ts";
+import { isRecorded, Reader } from "./reading.ts";
 import type { FollowUp } from "./session.ts";
 import { Snapshots } from "./snapshots.ts";
 
@@ -38,6 +39,8 @@ const state = () => {
         pending: [],
         changes: 0,
         reading: reader.reading,
+        recorded: reader.recorded,
+        measures: measuresOf(reader.activity.answers),
       } satisfies HostState,
     });
     return;
@@ -57,6 +60,7 @@ const state = () => {
     streams: [...owner.streams],
     pending: [...owner.pending],
     changes: owner.changes.length,
+    measures: measuresOf(owner.activity.answers),
   };
   sentFacts = owner.facts.length;
   self.postMessage({ state: snapshot });
@@ -167,10 +171,22 @@ function scriptedSession(options: SessionOptions): Session {
   });
 }
 
+/** The measure of each chain whose models answered, from the answers of the activity of a life. */
+function measuresOf(answers: ReadonlyMap<string, readonly { actor: string; usage: readonly number[] }[]>) {
+  return Object.fromEntries([...answers].map(([chain, list]) => [chain, measureOf(list)]));
+}
+
 /** What a request of the session comes to. */
 async function answer(data: { target: string; method: string; args: unknown[] }): Promise<unknown> {
   if (data.method === "open") {
     const { demo: scripted, ...options } = data.args[0] as EngineOptions;
+    // A recorded life is a log of a life that a host reads and runs not, at the moment where it ends.
+    if (options.record && isRecorded(options.record)) {
+      reader = Reader.recorded(options.record, options.cwd ?? dirname(options.record));
+      demo = true;
+      snapshots = new Snapshots(reader, reader);
+      return reader.root;
+    }
     claude = options.claude;
     demo = scripted ?? false;
     const opened = demo ? scriptedSession(options) : new Session({ ...options, roster: roster(options) });

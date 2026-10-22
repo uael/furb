@@ -83,10 +83,12 @@ test("the real native life drives the feed, the transcript, and responsive views
       const command = app.scroll.getChildren().find((node) => /^bash\d+$/.test(node.id));
       const heading = command?.getChildren()[0];
       if (!heading) throw new Error("No command heading.");
+      // The heading of a command says its exit, open or folded.
+      expect(screen.captureCharFrame()).toMatch(/✓ bash .*exit 0/);
+      expect(screen.captureCharFrame()).not.toMatch(/^ +✓ search *$/m);
       await screen.mockMouse.click(heading.x, heading.y);
       await screen.flush();
-      expect(screen.captureCharFrame()).toContain("exit 0");
-      expect(screen.captureCharFrame()).toContain("✓ local storage");
+      expect(screen.captureCharFrame()).toMatch(/^ +✓ search *$/m);
       const expanded = app.scroll
         .getChildren()
         .find((node) => node.id === command?.id)
@@ -94,7 +96,7 @@ test("the real native life drives the feed, the transcript, and responsive views
       expect(expanded?.visible).toBe(true);
       if (expanded) await screen.mockMouse.click(expanded.x, expanded.y);
       await screen.flush();
-      expect(screen.captureCharFrame()).not.toContain("exit 0");
+      expect(screen.captureCharFrame()).not.toMatch(/^ +✓ search *$/m);
       expect(app.scroll.getChildren().some((child) => /^bash\d+$/.test(child.id))).toBe(true);
       expect(screen.captureCharFrame()).not.toContain("failed");
       session.show("transcript");
@@ -277,29 +279,28 @@ test("operator answers and program edits act through the binding", () =>
     { width: 120, height: 40, exitOnCtrlC: false },
   ));
 
-test("a prompt of None to the operator is a notice with no field, done at once, that ⌃A dismisses", () =>
+test("a prompt of None to the operator is a notice that settles as a quiet line, which no key dismisses", () =>
   composing(
     async ({ session, screen, frame }) => {
       const id = await session.engine.prompt("None", {
-        message: "The build is green.",
+        message: "The build is green.\n\nEach check passed.",
         to: "operator",
         on: session.engine.root,
       });
       expect(await session.engine.result(id)).toBeNull();
-      await until(session.host, () => session.host.notices.has(id));
+      // The session dismisses the notice as the console takes it, so it waits on no desk.
+      await until(
+        session.host,
+        () => !session.host.notices.has(id) && session.acts.some((act) => act.id === id),
+      );
       await session.refresh();
       expect(session.operatorPrompt).toBeUndefined();
-      await drawn(frame, screen.renderer.root);
-      const shown = await frame();
-      expect(shown).toContain("Notice");
-      expect(shown).toContain("The build is green.");
-      expect(shown).toContain("Nothing to answer");
-      expect(shown).not.toContain("Answer in the input below");
-      screen.mockInput.pressKey("a", { ctrl: true });
-      await until(session.host, () => !session.host.notices.has(id));
-      const read = await drawn(frame, screen.renderer.root);
-      expect(read).toContain("The build is green.");
-      expect(read).not.toContain("Nothing to answer");
+      expect(session.desk.asks).toEqual([]);
+      const shown = await drawn(frame, screen.renderer.root);
+      expect(shown).toMatch(/▸ ◇ Notice {2}for you {2}The build is green\. {2}\+1 line/);
+      expect(shown).not.toContain("Each check passed.");
+      expect(shown).not.toContain("You answered");
+      expect(shown).not.toContain("⌃A");
     },
     { width: 120, height: 40 },
   ));
@@ -383,7 +384,9 @@ test("the markdown of a message draws each element with no marks, and a code blo
         to: "operator",
         on: session.engine.root,
       });
-      await until(session.host, () => session.host.notices.has(id));
+      await until(session.host, () => session.acts.some((act) => act.id === id && act.done));
+      // A notice settles folded, and opens to its message.
+      session.folds[id] = false;
       await session.refresh();
       await drawn(frame, screen.renderer.root);
       const rows = (await frame()).split("\n");
@@ -410,8 +413,9 @@ test("the markdown of a message draws each element with no marks, and a code blo
       const spans = screen.captureSpans();
       const palette = palettes.github;
       expect(cellAt(spans, x, label + 1).fg?.equals(RGBA.fromHex(palette.syntaxKeyword))).toBe(true);
-      expect(cellAt(spans, x - 1, label + 1).bg?.equals(RGBA.fromHex(palette.background))).toBe(true);
-      expect(cellAt(spans, x, label - 2).bg?.equals(RGBA.fromHex(palette.panel))).toBe(true);
+      // The notice stands on the background, and its code block on the panel.
+      expect(cellAt(spans, x - 1, label + 1).bg?.equals(RGBA.fromHex(palette.panel))).toBe(true);
+      expect(cellAt(spans, x, label - 2).bg?.equals(RGBA.fromHex(palette.background))).toBe(true);
     },
     { width: 100, height: 60 },
   ));
@@ -658,4 +662,27 @@ test("slash commands and project files are suggested above the input as they are
     },
     // In the kitty protocol an Escape is a key of its own, which the parser need not wait on to tell from Alt.
     { width: 120, height: 40, kittyKeyboard: true },
+  ));
+
+test("each act row says what it did: a read its path and its lines, a write its path and the lines it added and removed, and a command its exit", () =>
+  composing(
+    async ({ session, screen, frame }) => {
+      const id = await session.engine.rung({
+        word: [
+          'write(Text("notes.md", "one\\ntwo\\n"))',
+          'write(read("notes.md").replace("two", "three\\nfour"))',
+          'await bash("true")',
+        ].join("\n"),
+        on: session.engine.root,
+      });
+      await session.engine.result(id);
+      await session.refresh();
+      session.folds[id] = false;
+      const shown = await drawn(frame, screen.renderer.root);
+      expect(shown).toMatch(/✓ write {2}notes\.md {2}\+2 -0/);
+      expect(shown).toMatch(/✓ read {2}notes\.md {2}2 lines/);
+      expect(shown).toMatch(/✓ write {2}notes\.md {2}\+2 -1/);
+      expect(shown).toMatch(/✓ bash {2}true {2}exit 0/);
+    },
+    { width: 120, height: 40 },
   ));

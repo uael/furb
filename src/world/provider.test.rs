@@ -1042,6 +1042,35 @@ fn a_model_of_a_local_server_with_a_most_thought_of_zero_is_asked_with_its_thoug
 }
 
 #[test]
+fn a_local_model_reads_its_earlier_turn_with_no_thought() {
+  let usage = json!({"id": "c", "object": "chat.completion.chunk", "created": 0, "model": "qwen", "choices": [],
+    "usage": {"prompt_tokens": 100, "completion_tokens": 5, "total_tokens": 105}});
+  let ended = format!("data: {usage}\n\ndata: [DONE]\n\n");
+  let first = [
+    chunk(json!({"role": "assistant", "reasoning_content": "a"}), Value::Null),
+    chunk(json!({"content": "x = 1"}), json!("stop")),
+    ended.clone(),
+  ];
+  let again = [chunk(json!({"role": "assistant", "content": "close(x)"}), json!("stop")), ended];
+  let (mut engine, id, asked_of) = rethinking(first.concat(), again.concat());
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  assert_eq!(got.as_ref().as_int(), Some(1));
+  let [_, _, second] = asked_of.join().expect("the server read the requests");
+  let body: Value =
+    serde_json::from_str(second.split("\r\n\r\n").nth(1).unwrap_or_default()).expect("a JSON body");
+  let earlier = body["messages"]
+    .as_array()
+    .and_then(|messages| messages.iter().find(|one| one["role"] == "assistant"))
+    .cloned()
+    .unwrap_or_default();
+  assert_eq!(
+    (&earlier["content"], earlier.get("reasoning_content")),
+    (&json!([{"type": "text", "text": "x = 1"}]), None),
+    "the earlier turn goes with its word and no thought"
+  );
+}
+
+#[test]
 fn a_turn_of_a_local_model_loses_the_fence_that_opens_it_with_no_closing_fence() {
   let usage = json!({"id": "c", "object": "chat.completion.chunk", "created": 0, "model": "qwen", "choices": [],
     "usage": {"prompt_tokens": 100, "completion_tokens": 5, "total_tokens": 105}});
@@ -1103,16 +1132,36 @@ fn a_turn_with_a_thought_and_no_word_is_asked_again_with_that_thought_and_no_tho
 
 #[test]
 fn the_fence_that_opens_a_text_goes_with_its_closing_fence_at_its_end_and_any_other_text_stays() {
-  assert_eq!(unfenced("```python\nclose(3)\n```"), Some("close(3)"));
-  assert_eq!(unfenced("\n```\nx = 1\ny = 2\n```\n"), Some("x = 1\ny = 2"));
-  assert_eq!(unfenced("```python\nclose(3)\n"), Some("close(3)"), "a fence with no close goes");
-  assert_eq!(unfenced("```python\nx = '```'"), Some("x = '```'"), "backticks inside a line stay");
-  assert_eq!(unfenced("```python\nclose(3)\n```\nDone."), Some("close(3)\n```\nDone."));
+  assert_eq!(unfenced("```python\nclose(3)\n```").as_deref(), Some("close(3)"));
+  assert_eq!(unfenced("\n```\nx = 1\ny = 2\n```\n").as_deref(), Some("x = 1\ny = 2"));
   assert_eq!(
-    unfenced("```python\nx = 1\n```\n```python\nclose(x)\n```"),
+    unfenced("```python\nclose(3)\n").as_deref(),
+    Some("close(3)"),
+    "a fence with no close goes"
+  );
+  assert_eq!(
+    unfenced("```python\nx = '```'").as_deref(),
+    Some("x = '```'"),
+    "backticks inside a line stay"
+  );
+  assert_eq!(unfenced("```python\nclose(3)\n```\nDone.").as_deref(), Some("close(3)\n```\nDone."));
+  assert_eq!(
+    unfenced("```python\nx = 1\n```\n```python\nclose(x)\n```").as_deref(),
     Some("x = 1\n```\n```python\nclose(x)")
   );
-  assert_eq!(unfenced("Here:\n```python\nclose(3)\n```"), None);
-  assert_eq!(unfenced("```js\nclose(3)\n```"), None);
-  assert_eq!(unfenced("close(3)"), None);
+  assert_eq!(unfenced("Here:\n```python\nclose(3)\n```").as_deref(), None);
+  assert_eq!(unfenced("```js\nclose(3)\n```").as_deref(), None);
+  assert_eq!(unfenced("close(3)").as_deref(), None);
+  assert_eq!(
+    unfenced("<\nread(\"a\")\n</\n<\nclose(1)\n</").as_deref(),
+    Some("read(\"a\")\nclose(1)"),
+    "a bare tag that wraps each part of a word goes, each time"
+  );
+  assert_eq!(unfenced("<answer>\nclose(3)\n</answer>").as_deref(), Some("close(3)"));
+  assert_eq!(unfenced("<s:x>\nhi\n</s:x>\nclose(x)"), None, "the mark of a quote is no tag");
+  assert_eq!(
+    unfenced("<answer>\nx = '<b>'\n<b>\nclose(x)").as_deref(),
+    Some("x = '<b>'\n<b>\nclose(x)"),
+    "a line of another tag stays"
+  );
 }
