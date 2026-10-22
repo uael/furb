@@ -1103,16 +1103,36 @@ fn a_turn_with_a_thought_and_no_word_is_asked_again_with_that_thought_and_no_tho
 
 #[test]
 fn the_fence_that_opens_a_text_goes_with_its_closing_fence_at_its_end_and_any_other_text_stays() {
-  assert_eq!(unfenced("```python\nclose(3)\n```"), Some("close(3)"));
-  assert_eq!(unfenced("\n```\nx = 1\ny = 2\n```\n"), Some("x = 1\ny = 2"));
-  assert_eq!(unfenced("```python\nclose(3)\n"), Some("close(3)"), "a fence with no close goes");
-  assert_eq!(unfenced("```python\nx = '```'"), Some("x = '```'"), "backticks inside a line stay");
-  assert_eq!(unfenced("```python\nclose(3)\n```\nDone."), Some("close(3)\n```\nDone."));
+  assert_eq!(unfenced("```python\nclose(3)\n```").as_deref(), Some("close(3)"));
+  assert_eq!(unfenced("\n```\nx = 1\ny = 2\n```\n").as_deref(), Some("x = 1\ny = 2"));
   assert_eq!(
-    unfenced("```python\nx = 1\n```\n```python\nclose(x)\n```"),
+    unfenced("```python\nclose(3)\n").as_deref(),
+    Some("close(3)"),
+    "a fence with no close goes"
+  );
+  assert_eq!(
+    unfenced("```python\nx = '```'").as_deref(),
+    Some("x = '```'"),
+    "backticks inside a line stay"
+  );
+  assert_eq!(unfenced("```python\nclose(3)\n```\nDone.").as_deref(), Some("close(3)\n```\nDone."));
+  assert_eq!(
+    unfenced("```python\nx = 1\n```\n```python\nclose(x)\n```").as_deref(),
     Some("x = 1\n```\n```python\nclose(x)")
   );
-  assert_eq!(unfenced("Here:\n```python\nclose(3)\n```"), None);
-  assert_eq!(unfenced("```js\nclose(3)\n```"), None);
-  assert_eq!(unfenced("close(3)"), None);
+  assert_eq!(unfenced("Here:\n```python\nclose(3)\n```").as_deref(), None);
+  assert_eq!(unfenced("```js\nclose(3)\n```").as_deref(), None);
+  assert_eq!(unfenced("close(3)").as_deref(), None);
+  assert_eq!(
+    unfenced("<\nread(\"a\")\n</\n<\nclose(1)\n</").as_deref(),
+    Some("read(\"a\")\nclose(1)"),
+    "a bare tag that wraps each part of a word goes, each time"
+  );
+  assert_eq!(unfenced("<answer>\nclose(3)\n</answer>").as_deref(), Some("close(3)"));
+  assert_eq!(unfenced("<s:x>\nhi\n</s:x>\nclose(x)"), None, "the mark of a quote is no tag");
+  assert_eq!(
+    unfenced("<answer>\nx = '<b>'\n<b>\nclose(x)").as_deref(),
+    Some("x = '<b>'\n<b>\nclose(x)"),
+    "a line of another tag stays"
+  );
 }

@@ -180,8 +180,8 @@ pub struct Model {
   /// Whether its server may write its thought in its text, between `<think>` and `</think>`, which the host is told as
   /// text while it streams.
   tagged: bool,
-  /// Whether it may wrap its word in a fence, as a model of a local server does, so its turn loses an opening fence
-  /// at its start, and the closing fence at its end when it has one.
+  /// Whether it may wrap its word in a fence or in a tag of markup, as a model of a local server does, so its turn
+  /// loses those marks, as [`unfenced`] says.
   fenced: bool,
   /// How it takes the most tokens of thought of one turn, when it takes one.
   thought: Option<Thought>,
@@ -720,19 +720,32 @@ async fn rethought(
   Ok(response)
 }
 
-/// A text less the fence that opens it: an opening line of three backticks, alone or with `python`, at its start, and
-/// a closing line of three backticks at its end when it has one; and nothing for a text that no fence opens, so a text
-/// before the fence keeps the text as it is.
-fn unfenced(text: &str) -> Option<&str> {
+/// A text less the marks that wrap it: an opening line of three backticks, alone or with `python`, at its start, and
+/// a closing line of three backticks at its end when it has one; or a tag of markup alone on its first line, as
+/// `<answer>` or a bare `<`, and each line that is that tag alone, as it opens or closes, since a model of a local
+/// server wraps each part of its word in it. A text that no such mark opens gets nothing, so a text before the mark
+/// keeps the text as it is, and the mark of a quote is no tag.
+fn unfenced(text: &str) -> Option<String> {
   let text = text.trim();
   let (opening, rest) = text.split_once('\n').unwrap_or((text, ""));
-  if !matches!(opening.trim_end(), "```" | "```python") {
+  let (opening, rest) = (opening.trim_end(), rest.trim_end());
+  if matches!(opening, "```" | "```python") {
+    let closed =
+      rest.strip_suffix("```").filter(|inside| inside.is_empty() || inside.ends_with('\n'));
+    return Some(closed.unwrap_or(rest).trim_end().to_owned());
+  }
+  let name = opening.strip_prefix('<')?;
+  let name = name.strip_suffix('>').unwrap_or(name);
+  if !name.chars().all(|one| one.is_ascii_alphanumeric() || one == '_') {
     return None;
   }
-  let rest = rest.trim_end();
-  let closed =
-    rest.strip_suffix("```").filter(|inside| inside.is_empty() || inside.ends_with('\n'));
-  Some(closed.unwrap_or(rest).trim_end())
+  let tag = |line: &str| {
+    let line = line.trim();
+    let bare = line.strip_prefix("</").or_else(|| line.strip_prefix('<'));
+    bare.is_some_and(|inside| inside.strip_suffix('>').unwrap_or(inside) == name)
+  };
+  let kept: Vec<&str> = rest.lines().filter(|line| !tag(line)).collect();
+  Some(kept.join("\n").trim_end().to_owned())
 }
 
 /// The terminal record of a stream of a provider, from a response of it that came whole.
@@ -797,7 +810,7 @@ fn turn(model: &Model, response: &CompletionResponse) -> Result<Object, Completi
   }
   let mut text = texts(&choice);
   if model.fenced
-    && let Some(word) = unfenced(&text).map(str::to_owned)
+    && let Some(word) = unfenced(&text)
   {
     let mut worded = Vec::new();
     for one in choice {
