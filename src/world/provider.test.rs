@@ -1042,6 +1042,35 @@ fn a_model_of_a_local_server_with_a_most_thought_of_zero_is_asked_with_its_thoug
 }
 
 #[test]
+fn a_local_model_reads_its_earlier_turn_with_no_thought() {
+  let usage = json!({"id": "c", "object": "chat.completion.chunk", "created": 0, "model": "qwen", "choices": [],
+    "usage": {"prompt_tokens": 100, "completion_tokens": 5, "total_tokens": 105}});
+  let ended = format!("data: {usage}\n\ndata: [DONE]\n\n");
+  let first = [
+    chunk(json!({"role": "assistant", "reasoning_content": "a"}), Value::Null),
+    chunk(json!({"content": "x = 1"}), json!("stop")),
+    ended.clone(),
+  ];
+  let again = [chunk(json!({"role": "assistant", "content": "close(x)"}), json!("stop")), ended];
+  let (mut engine, id, asked_of) = rethinking(first.concat(), again.concat());
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  assert_eq!(got.as_ref().as_int(), Some(1));
+  let [_, _, second] = asked_of.join().expect("the server read the requests");
+  let body: Value =
+    serde_json::from_str(second.split("\r\n\r\n").nth(1).unwrap_or_default()).expect("a JSON body");
+  let earlier = body["messages"]
+    .as_array()
+    .and_then(|messages| messages.iter().find(|one| one["role"] == "assistant"))
+    .cloned()
+    .unwrap_or_default();
+  assert_eq!(
+    (&earlier["content"], earlier.get("reasoning_content")),
+    (&json!([{"type": "text", "text": "x = 1"}]), None),
+    "the earlier turn goes with its word and no thought"
+  );
+}
+
+#[test]
 fn a_turn_of_a_local_model_loses_the_fence_that_opens_it_with_no_closing_fence() {
   let usage = json!({"id": "c", "object": "chat.completion.chunk", "created": 0, "model": "qwen", "choices": [],
     "usage": {"prompt_tokens": 100, "completion_tokens": 5, "total_tokens": 105}});

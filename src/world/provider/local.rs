@@ -228,7 +228,7 @@ impl Server {
   /// it says why each turn ended, it may write its thought in its text, it may wrap its word in a fence, and its thought
   /// turns off with `enable_thinking` false, which the provider asks with from the first request when the most tokens
   /// of thought of a turn is 0, else once its thought passes that most, or once its turn ended with a thought and no
-  /// word. It takes the efforts of [`efforts`].
+  /// word. It takes the efforts of [`efforts`], and it reads its earlier turns with no thought.
   fn model(&self, name: String, offer: &Offer, window: u64) -> Model {
     let api = Some(format!("{}/v1", self.root));
     let reach = Reach { key: self.key.clone(), api, id: offer.id.clone(), ..Reach::default() };
@@ -239,6 +239,7 @@ impl Server {
     model.ends = true;
     model.tagged = true;
     model.fenced = true;
+    model.forgets = true;
     model.efforts = efforts();
     let off = json!({"reasoning_effort": null, "chat_template_kwargs": {"enable_thinking": false}});
     model.thought = Some(super::Thought::Off(off.as_object().cloned().unwrap_or_default()));
