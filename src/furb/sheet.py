@@ -13,6 +13,7 @@ The word stands on a sheet of its own::
     <each name of the engine that is not private> = __engine__.<that name>
     actor = ""
     raised: BaseException | None = None
+    __acts = (<the name of each act of the chain>, ...)
     try:
       acting()
       <a word of the program of the chain before the word>
@@ -28,7 +29,9 @@ so the body declares each of them and never binds it: ty refuses a word that rea
 every engine. The module of a chain holds every name of the engine, an import of the engine among them, so the
 body binds each of them next, with the type the engine gives it. Each is a plain binding, as it is in the module
 of a chain, so a word may read a name of the engine and bind it again to any value, as the contract lets it. The
-two names a chain binds of its own come next, with the types the contract gives them. Each word of the program
+two names a chain binds of its own come next, with the types the contract gives them. The names of the acts of the
+chain come next, as ACTS, which the gate reads: the transcript binds the name of each act and each name of a value
+that a tell of it binds, as bash12_stdout, so a word that binds one says what no act gave, and the gate refuses it. Each word of the program
 stands in a try of its own, since a rung that raised keeps what it bound before the raise and the word after it
 runs all the same: ty reads the next word through the except, with every name the words before it bound before
 they raised, so a word that raises at its top level hides no name a later word binds, and a rung that never ends
@@ -64,6 +67,9 @@ ty adds itself. A chain in the sandbox holds __name__, which the engine binds, a
 __loader__ and __debug__, which the module of the engine holds before the engine runs. A word is judged the same on
 every engine, in the vocabulary of the sandbox, so the gate of python refuses these names too, though python runs
 some of them."""
+ACTS = "__acts"
+"""ACTS is the name the sheet binds to the names of the acts of the chain, which the gate reads to refuse a word that
+binds a name that the transcript binds."""
 BOUND = '  actor = ""\n  raised: BaseException | None = None\n'
 """BOUND binds the two names a chain binds of its own."""
 OPENED = "  try:\n    acting()\n"
@@ -129,34 +135,42 @@ def laid(text: str, depth: int) -> str:
   return "".join(f"{' ' * depth}{line}\n" if line.strip() else "\n" for line in text.split("\n"))
 
 
-def sheet(engine: dict[str, object], program: Sequence[str], word: str) -> tuple[str, int]:
+def sheet(engine: dict[str, object], program: Sequence[str], word: str, acts: Sequence[str] = ()) -> tuple[str, int]:
   """The word on its sheet, laid out as this module says, and how many lines stand above the word, which every
   finding is counted back by."""
   unbound = "".join(f"  {name}: object\n" for name in UNBOUND)
   names = "".join(f"  {name} = {MODULE}.{name}\n" for name in engine if not name.startswith("_"))
   words = "".join(OPENED + laid(one, 4) + CAUGHT for one in program)
-  above = f"import {MODULE}\nasync def __body():\n{unbound}{names}{BOUND}{words or OPENED + CAUGHT}"
+  above = f"import {MODULE}\nasync def __body():\n{unbound}{names}{BOUND}  {ACTS} = {tuple(acts)!r}\n{words or OPENED + CAUGHT}"
   return above + laid(word, 2), above.count("\n")
 
 
-def gate(engine: dict[str, object], program: Sequence[str], word: str, checked: Checked) -> list[str]:
+def gate(
+  engine: dict[str, object], program: Sequence[str], word: str, checked: Checked, acts: Sequence[str] = ()
+) -> list[str]:
   """What the gate finds against a word: the word is read for what the interpreter will take, and then ty reads it
   on its sheet after the program of its chain, and each finding below the word is counted back to its line."""
   if found := python(word):
     return found
-  text, above = sheet(engine, program, word)
+  text, above = sheet(engine, program, word, acts)
   return [quoted(word, n - above, why) for n, why in checked(text) if n > above]
 
 
 def gating(engine: dict[str, object], checked: Checked) -> Ear:
   """The gate as the ear of a life: it answers each gate with what it finds against the word on the sheet of the
-  engine whose names it is given, after the program of the chain as it stands when the gate takes it."""
-  program = engine["program"]
+  engine whose names it is given, after the program of the chain as it stands when the gate takes it, with the names
+  of the acts of the chain."""
+  program, question = engine["program"], engine["question"]
   assert callable(program)
+  assert callable(question)
   gates = {"gate"}
   while True:
     match (yield gates):
       case ("gate", qid, _, on, word):
-        words = program(on)
+        words, transcript = program(on), engine["transcript"]
         assert isinstance(words, dict)
-        yield "done", qid, gate(engine, [*words.values()], word, checked)
+        assert callable(transcript)
+        facts = transcript(on)
+        assert isinstance(facts, list)
+        acts = [str(x[1]) for x in facts if question(x)]
+        yield "done", qid, gate(engine, [*words.values()], word, checked, acts)

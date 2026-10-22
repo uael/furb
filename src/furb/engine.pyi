@@ -256,6 +256,7 @@ def gate(word: str, on: str = "") -> list[str]:
   Each finding names the line of the word it is found on, and quotes that line, cut to 80 characters, so a model reads what the gate read.
   A word that is not python and that holds a fence of markdown, the markup of a tool call or a sentence of prose finds that a reply is python and quotes only, with no fence, no markup and no prose.
   An open mark of a quote that has no close mark is a finding of its own, which names that mark and the close mark it wants.
+  A word that binds a name that the transcript binds, the name of an act of its chain or a name of a value that a tell of that act binds, as bash12_stdout, finds that the transcript binds that name, also for an act that the chain did not tell yet.
   The gate gives no finding when the gate accepts the rung.
   The journal keeps what the gate found, since the gate is of the outside, so a later life reads the same findings and asks the gate nothing again.
   """
@@ -878,7 +879,7 @@ The transcript of the chain holds the facts of its prefix where the prefix stand
 """
 type Gate = tuple[Literal["gate"], str, str, str, str]
 """A gate is the question of whether a word may run, which the ear named gate answers with its findings, apart from the Kernel, so a word may ask it while the Kernel runs that word.
-A gate carries the word alone, and the gate reads the program of the chain before that rung when it takes the gate, and the word after it, so the Kernel keeps no ladder of its own, the journal keeps no program, and a word of a program made again is read after the rungs that stand.
+A gate carries the word alone, and the gate reads the program of the chain before that rung and the names of its acts when it takes the gate, and the word after it, so the Kernel keeps no ladder of its own, the journal keeps no program, and a word of a program made again is read after the rungs that stand.
 The refused paragraph binds the findings that refused the word of a rung, one line for each, as rungN_findings.
 The chain has the word of a rung gated before it runs, but a word it wrote itself, and a refused word runs never.
 A rung that retells stands with the gate where the one it retells stood, so the gate reads a word once in a life, and a replay makes no copy of a refused word, which never ran, so the chain tells nothing of that word again.

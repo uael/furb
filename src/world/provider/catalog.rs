@@ -153,10 +153,12 @@ enum Dialect {
 }
 
 /// The models this machine can ask, each with whether the catalog offers it: those of the claude command line and of
-/// the network, and the local server that the environment names, which holds what it listed.
+/// the network, the local server that the environment names, which holds what it listed, and the most tokens of
+/// thought of a model in one turn that the environment gives as `MAX_THINKING_TOKENS`.
 pub struct Catalog {
   models: Vec<(Model, bool)>,
   local: Option<Arc<Server>>,
+  thinking: Option<String>,
 }
 
 impl Catalog {
@@ -207,7 +209,7 @@ impl Catalog {
         models.push((model(provider, id, listing, client, reach), offered));
       }
     }
-    Catalog { models, local }
+    Catalog { models, local, thinking: env(super::ENV_THINKING) }
   }
 
   /// What the local server lists, for the name that the catalog wants of it, if any; and nothing when the environment
@@ -315,7 +317,8 @@ impl Catalog {
   }
 
   /// The provider of a roster of the catalog on a directory, with the default actor of the roster, whose models a
-  /// function of the host answers in place of the models when it gives one.
+  /// function of the host answers in place of the models when it gives one, and whose model thinks at most the tokens
+  /// in one turn that the environment gives, else the config of the project in the directory, else 32768.
   pub fn provider(
     &self,
     directory: impl Into<String>,
@@ -328,7 +331,9 @@ impl Catalog {
       Some(host) => models.into_iter().map(|model| model.hosted(Arc::clone(&host))).collect(),
       None => models,
     };
-    Ok(Provider::new(directory, models).actor(actor))
+    let directory = directory.into();
+    let thinking = super::thinking(self.thinking.as_deref(), std::path::Path::new(&directory));
+    Ok(Provider::new(directory, models).actor(actor).thinking(thinking))
   }
 }
 

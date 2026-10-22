@@ -225,6 +225,9 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 - `uv run python script/play.py`: one real life that uses every part of the runtime, and a second life on its
   record.
 - `uv run python script/deepswe.py`: the DeepSWE rig, which `script/CLAUDE.md` says how to run.
+- `uv run python script/bench/replay.py <task> --out <directory>`: the bench of replay. One life of the local model
+  works a task of DeepSWE, later lives open on its record, one more opens after a change of the World, and Claude
+  Code on the same model works the task as the baseline. Its docstring says how to run it.
 - `script/real.py` is no command: it holds what `smoke.py`, `play.py` and `deepswe.py` share, which is the life
   they open on the engine of this interpreter, the claude they ask, and what the answers of a record cost.
 - `uv run python script/catalog.py`: make the snapshot of the catalog, `src/world/provider/catalog.json`, again from

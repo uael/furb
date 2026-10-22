@@ -165,6 +165,7 @@ export const glyph = {
   ring: "○",
   held: "◌",
   asks: "◆",
+  notice: "◇",
   done: "✓",
   failed: "✗",
   cancelled: "⊘",

@@ -17,6 +17,7 @@ import {
   shapes,
   WORK,
 } from "@furb/engine";
+import { type Ask, aimed, beside, type Desk, desk } from "@furb/engine/life";
 import { createTwoFilesPatch } from "diff";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { refusal } from "./conversation.ts";
@@ -454,16 +455,86 @@ export class Session extends EventEmitter {
       this.roster.map(([name]) => name),
     );
   }
-  get operatorPrompt() {
-    return [...this.host.prompts.values()].find(
-      (prompt) => this.acts.find((act) => act.id === prompt.id)?.on === this.selected,
-    );
+  /** The ask that the operator points at on the desk, which the input answers while its chain is shown. */
+  pointed?: string;
+  /** What waits for the operator in the life: each question and each notice that he did not dismiss, of every chain,
+   * the oldest first. */
+  get desk(): Desk {
+    // An ask that the operator answered leaves the desk at once, though the console holds it until it hears the close.
+    for (const id of this.gone)
+      if (!this.host.prompts.has(id) && !this.host.notices.has(id)) this.gone.delete(id);
+    const held = (one: { id: string }) => !this.gone.has(one.id);
+    const { acts, host } = this;
+    const gone = [...this.gone].join(" ");
+    const cached = this.deskRead;
+    if (
+      cached?.acts === acts &&
+      cached.prompts === host.prompts &&
+      cached.notices === host.notices &&
+      cached.gone === gone
+    )
+      return cached.desk;
+    const made = desk({
+      acts,
+      prompts: [...host.prompts.values()].filter(held),
+      notices: [...host.notices.values()].filter(held),
+      label: (id) => this.labelOf(id),
+    });
+    this.deskRead = { acts, prompts: host.prompts, notices: host.notices, gone, desk: made };
+    return made;
   }
-  /** The notice of the chain shown that the operator did not dismiss yet: a prompt of None, which asks nothing. */
-  get operatorNotice() {
-    return [...this.host.notices.values()].find(
-      (notice) => this.acts.find((act) => act.id === notice.id)?.on === this.selected,
-    );
+  /** The desk as it was last read, with what it was read from, since every draw reads it many times. */
+  private deskRead?: { acts: unknown; prompts: unknown; notices: unknown; gone: string; desk: Desk };
+  /** The asks that the operator answered or dismissed, until the console drops them. */
+  private readonly gone = new Set<string>();
+  /** The ask that the operator acts on, on the chain shown: the one that he points at, else the oldest question, else
+   * the oldest notice. */
+  get aimed(): Ask | undefined {
+    return aimed(this.desk.asks, this.selected, this.pointed);
+  }
+  /** The question that the input answers: the ask aimed, when it asks for an answer. */
+  get operatorPrompt(): Ask | undefined {
+    const ask = this.aimed;
+    return ask && !ask.notice ? ask : undefined;
+  }
+  /** The notice aimed, which a prompt of None makes, and which asks nothing. */
+  get operatorNotice(): Ask | undefined {
+    const ask = this.aimed;
+    return ask?.notice ? ask : undefined;
+  }
+  /** Point at an ask of the desk, and show its chain. */
+  async point(id: string): Promise<void> {
+    const ask = this.desk.asks.find((one) => one.id === id);
+    if (!ask) return;
+    this.pointed = id;
+    if (ask.chain !== this.selected) await this.select(ask.chain);
+    else this.emit("change");
+  }
+  /** Point at the ask a step after or before the one aimed, round from the last to the first, or at the first ask of
+   * the life when the chain shown has none. */
+  async step(by: number): Promise<Ask | undefined> {
+    const next = beside(this.desk.asks, this.aimed?.id, by);
+    if (next) await this.point(next.id);
+    return next;
+  }
+  /** A line of the operator as the answer of a question, which the console reads in the shape of the question. The
+   * notice says where the answer went and what still waits. */
+  async answer(ask: Ask, line: string): Promise<void> {
+    await this.host.answer(ask.id, line);
+    this.landed(ask, `Your answer went to ${ask.id} on ${ask.label}.`);
+  }
+  /** A notice that the operator read, which the desk shows no more. */
+  async dismiss(ask: Ask): Promise<void> {
+    await this.host.dismiss(ask.id);
+    this.landed(ask, `The notice of ${ask.label} is dismissed.`);
+  }
+  /** What the operator did to an ask, and what waits after it, in the notice. The pointer goes on to what waits next
+   * on the chain shown. */
+  private landed(ask: Ask, said: string): void {
+    if (this.pointed === ask.id) this.pointed = undefined;
+    this.gone.add(ask.id);
+    const rest = this.desk.asks.length;
+    this.notice = `${said} ${rest ? `${rest} more ${rest === 1 ? "waits" : "wait"}.` : "Nothing else waits."}`;
   }
   isUserPrompt(act: ActRow): boolean {
     return act.kind === "prompt" && act.by === "operator";
@@ -714,7 +785,7 @@ export class Session extends EventEmitter {
     } else if (text.startsWith("!")) await this.command(`/bash ${text.slice(1).trimStart()}`);
     else {
       const pending = this.operatorPrompt;
-      if (pending) await this.host.answer(pending.id, input);
+      if (pending) await this.answer(pending, input);
       else {
         await this.attachFiles(input);
         this.redo = [];
