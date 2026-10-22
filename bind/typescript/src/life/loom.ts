@@ -1,4 +1,5 @@
 import { cancelled, failed, type LiveAct, type Measure, WORK } from "./acts.js";
+import { gist } from "./asks.js";
 import { valueText } from "./ladder.js";
 
 /** What a row of the loom does now: it asks the operator, it failed, it works, a pause holds it, its prompts are
@@ -322,7 +323,7 @@ export function nowOf(row: Row, loom: Loom, acts: readonly LiveAct[], word: (run
       tone: "asks",
       act: first.id,
       more: asks.length - 1,
-      text: first.message.split("\n")[0]?.trim() ?? "",
+      text: gist(first.message),
     };
   const byId = new Map(acts.map((act) => [act.id, act]));
   const waits = row.waits ? byId.get(row.waits) : undefined;
