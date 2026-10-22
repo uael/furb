@@ -28,7 +28,7 @@ chains at rest.
 
 Under the board, the feed shows the ladder of the chain: your message in a panel, each rung of the ladder on one
 row, and the answer under the name of the model that gave it. The row of a rung shows its mark, its name, the first
-line of its Python, the count of the lines after it, and the acts that it made, each in the color of its state. A
+line of its Python in the colors of its grammar, the count of the lines after it, and the acts that it made, each in the color of its state. A
 rung opens while it runs, and shows the last lines that its model writes or that its command prints. It folds to
 its row when it completes. A click on its heading, or ⌥D, opens it to show its numbered Python, and under it each
 act that it made with a preview of its output. The fold stays the same across views and after a reopen.

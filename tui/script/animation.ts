@@ -33,6 +33,9 @@ async function still(delay: number): Promise<void> {
   app().render();
   await test.flush();
   await Promise.all(highlighting(test.renderer.root));
+  // The folded rungs color the first line of their word off the main thread too, and the view draws them again.
+  await app().colorsDone();
+  app().render();
   await test.flush();
   const image = pixels(test.captureSpans(), palettes[session.theme], "furb", zoom);
   size = { width: image.width, height: image.height };

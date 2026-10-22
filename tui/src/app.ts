@@ -36,6 +36,7 @@ import {
   type TextChunk,
   type TextOptions,
   TextRenderable,
+  treeSitterToTextChunks,
 } from "@opentui/core";
 import type { Keymap } from "@opentui/keymap";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
@@ -2230,6 +2231,46 @@ export class App {
     }
     return parts;
   }
+  /** The colors of the grammar of Python on one line of a word, which a parser gives off the main thread. The line
+   * shows in the color of text until its colors come, and then the view draws again. */
+  private readonly colors = new Map<string, Part[]>();
+  private readonly coloring = new Map<string, Promise<void>>();
+  private colored(text: string): Part[] {
+    const key = `${this.theme}\n${text}`;
+    const known = this.colors.get(key);
+    if (known) return known;
+    if (!this.coloring.has(key)) {
+      if (this.colors.size > 500) this.colors.clear();
+      this.coloring.set(
+        key,
+        // The parser of Python loads once, as the view starts, so the line waits for it.
+        loadParsers()
+          .then(() => getTreeSitterClient().highlightOnce(text, "python"))
+          .then(
+            (result) => {
+              this.coloring.delete(key);
+              if (this.closed) return;
+              const chunks = treeSitterToTextChunks(text, result.highlights ?? [], this.style, {
+                enabled: false,
+              });
+              this.colors.set(
+                key,
+                chunks.map((chunk): Part => [chunk.text, chunk.fg ?? c.text, chunk.attributes ?? 0]),
+              );
+              this.schedule();
+            },
+            () => {
+              this.coloring.delete(key);
+            },
+          ),
+      );
+    }
+    return [[text, c.text]];
+  }
+  /** Once each line of a word that the view asked to color has its colors. */
+  async colorsDone(): Promise<void> {
+    while (this.coloring.size) await Promise.all(this.coloring.values());
+  }
   /** The row of a folded rung: its state, the first line of its word and how many lines follow it, the acts that it
    * made, and the word of its state. */
   private rungLabel(line: Extract<Line, { type: "rung" }>, indent: number): Part[] {
@@ -2245,7 +2286,7 @@ export class App {
     return [
       [`${mark} `, color],
       [`${act.id}  `, c.faint],
-      [shown, failed(act) && !this.retry(act) ? c.danger : c.text],
+      ...this.colored(shown),
       [more, c.faint],
       ...chips,
       [tail, color],

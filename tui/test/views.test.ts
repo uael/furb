@@ -419,3 +419,28 @@ test("the board over the feed shows each chain with what it does now, a question
     { width: 140, height: 44, useMouse: true },
     true,
   ));
+
+test("a folded rung shows the first line of its word in the colors of its grammar", () =>
+  composing(
+    async ({ session, app, screen, frame }) => {
+      await idle(session);
+      await frame();
+      await app.colorsDone();
+      app.render();
+      await screen.flush();
+      const line = screen.captureSpans().lines.find((one) =>
+        one.spans
+          .map((span) => span.text)
+          .join("")
+          .includes('notes = read("README.md")'),
+      );
+      const colors = new Set(
+        line?.spans
+          .filter((span) => /read|README|notes/.test(span.text))
+          .map((span) => JSON.stringify(span.fg)),
+      );
+      expect(colors.size).toBeGreaterThan(1);
+    },
+    { width: 140, height: 44 },
+    true,
+  ));

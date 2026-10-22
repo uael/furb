@@ -72,6 +72,9 @@ async function capture(name: string): Promise<void> {
   await test.flush();
   // Code is colored by a parser off the main thread: the frame is taken once every code block is highlighted.
   await Promise.all(highlighting(test.renderer.root));
+  // The folded rungs color the first line of their word off the main thread too, and the view draws them again.
+  await app().colorsDone();
+  app().render();
   await test.flush();
   if (only && !only.test(name)) return;
   await writeFile(`${output}/${name}.png`, rasterize(test.captureSpans(), palettes[session.theme], "furb"));
