@@ -21,16 +21,6 @@ export function plain(parts: readonly Part[]): string {
   return parts.map(([text]) => text).join("");
 }
 
-/** The lines that a patch adds and removes, with no header of a file or a hunk. */
-export function lineCounts(patch: string): { added: number; removed: number } {
-  let added = 0,
-    removed = 0;
-  for (const line of patch.split("\n"))
-    if (line.startsWith("+") && !line.startsWith("+++")) added++;
-    else if (line.startsWith("-") && !line.startsWith("---")) removed++;
-  return { added, removed };
-}
-
 /** A color between two colors, at a share of the way from the first to the second. */
 export function mix(from: RGBA, to: RGBA, share: number): RGBA {
   const at = (one: number, other: number) => one + (other - one) * share;

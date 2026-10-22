@@ -173,3 +173,22 @@ test("a new standing drops the roster, the directory and the actor that the view
     },
     { model: "claude-cli:sonnet" },
   ));
+
+test("a row of a read or a write carries the count of the lines of its text and leaves the text out, a write the lines that its change added and removed, and an act that the life ran its time", () =>
+  withLife(async ({ engine, snapshots }) => {
+    const before = snapshots.take(engine.root).count;
+    engine.write({ path: "notes.md", content: "one\ntwo\n" }, { on: engine.root });
+    engine.read("notes.md", { on: engine.root });
+    const command = engine.bash("sleep 0.2", { on: engine.root }).id;
+    await engine.result(command);
+    engine.write({ path: "notes.md", content: "one\nthree\nfour\n" }, { on: engine.root });
+    await Promise.resolve();
+    const rows = snapshots.take(engine.root, before).acts;
+    expect(rows.filter((act) => act.kind === "write").map((act) => act.lines)).toEqual([
+      { added: 2, removed: 0 },
+      { added: 2, removed: 1 },
+    ]);
+    expect(rows.find((act) => act.id === command)?.took).toBeGreaterThanOrEqual(150);
+    const read = rows.find((act) => act.kind === "read");
+    expect([read?.count, (read?.value as { content?: string }).content]).toEqual([2, ""]);
+  }));

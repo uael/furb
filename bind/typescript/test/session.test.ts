@@ -792,3 +792,18 @@ test("the activity places each act in time by the count of facts, and keeps the 
   ]);
   expect(activity.cost).toBe(0.5);
 });
+
+test("a rung costs the dollars of the answers that wrote its word", () => {
+  const activity = new Activity();
+  const hear = (fact: Fact) => {
+    const heard = activity.hear(fact);
+    while (!heard.next().done);
+  };
+  hear(["rung", "rung1", "prompt1", ROOT, "", "", "claude-cli:opus/high"]);
+  expect(activity.acts.get("rung1")?.cost).toBeUndefined();
+  hear(["reply", "reply1", "rung1", ROOT, "claude-cli:opus/high"]);
+  hear(["done", "reply1", "world", ["assistant", "close(1)", [100, 10, 80, 0, 0.5], null]]);
+  hear(["reply", "reply2", "rung1", ROOT, "claude-cli:opus/high"]);
+  hear(["done", "reply2", "world", ["assistant", "close(1)", [100, 10, 80, 0, 0.25], null]]);
+  expect(activity.acts.get("rung1")?.cost).toBe(0.75);
+});
