@@ -32,7 +32,15 @@ export const views = ["feed", "transcript", "changes"] as const;
 export type View = (typeof views)[number];
 /** An act as the views read it. A command that printed more than a row carries holds the tail of each stream, and
  * the length of all it printed; the view reads the whole act when it shows the output. */
-export type ActRow = LiveAct & { output?: number };
+export type ActRow = LiveAct & {
+  output?: number;
+  /** The lines of the text that a read gave or that a write wrote, whose text the row leaves out. */
+  count?: number;
+  /** The lines that the change of a write added and removed. */
+  lines?: { added: number; removed: number };
+  /** How many milliseconds the act took, when this life ran it. */
+  took?: number;
+};
 /** What a command gave: what it printed to each stream, and its exit code once it is over. */
 export type Exit = { stdout?: { content: string }; stderr?: { content: string }; code?: number };
 /** A change of a file, with the patch that shows it. */
@@ -112,6 +120,7 @@ const kept = [
   "histories",
   "stashes",
   "started",
+  "took",
   "queued",
   "queueError",
   "images",
@@ -191,6 +200,9 @@ export class Session extends EventEmitter {
   private savedCost = 0;
   histories: Record<string, string[]> = {};
   started: Record<string, number> = {};
+  /** How many milliseconds each act took that a life of the session ran, which a later life does not know, since the
+   * record holds no time. */
+  took: Record<string, number> = {};
   directory = "";
   private refreshTask?: Promise<void>;
   /** The count of changes of the act table that `acts` holds. */
@@ -241,8 +253,17 @@ export class Session extends EventEmitter {
     this.save();
   }
   private changed = () => {
+    // A notice asks nothing, so it settles as the console takes it, and no key of the operator dismisses it.
+    for (const id of this.host.notices.keys())
+      if (!this.settled.has(id)) {
+        this.settled.add(id);
+        void this.host.dismiss(id).catch(this.fail);
+      }
+    for (const id of this.settled) if (!this.host.notices.has(id)) this.settled.delete(id);
     this.emit("change");
   };
+  /** The notices that the session dismissed, until the console drops them. */
+  private readonly settled = new Set<string>();
   get theme(): ThemeName {
     return this.preferences.theme;
   }
@@ -328,7 +349,10 @@ export class Session extends EventEmitter {
           }));
         }
         const rows = this.acts;
-        for (const act of rows) if (!act.done) this.started[act.id] ??= Date.now();
+        for (const act of rows) {
+          if (!act.done) this.started[act.id] ??= Date.now();
+          if (act.took !== undefined) this.took[act.id] = act.took;
+        }
         const lastWord = rows
           .filter((act) => act.on === this.selected && act.kind === "rung" && act.by === "operator")
           .at(-1);
@@ -471,50 +495,36 @@ export class Session extends EventEmitter {
   }
   /** The ask that the operator points at on the desk, which the input answers while its chain is shown. */
   pointed?: string;
-  /** What waits for the operator in the life: each question and each notice that he did not dismiss, of every chain,
-   * the oldest first. */
+  /** What waits for the operator in the life: each question of every chain, the oldest first. A notice asks nothing,
+   * so it settles at once and waits on no desk. */
   get desk(): Desk {
     // An ask that the operator answered leaves the desk at once, though the console holds it until it hears the close.
-    for (const id of this.gone)
-      if (!this.host.prompts.has(id) && !this.host.notices.has(id)) this.gone.delete(id);
+    for (const id of this.gone) if (!this.host.prompts.has(id)) this.gone.delete(id);
     const held = (one: { id: string }) => !this.gone.has(one.id);
     const { acts, host } = this;
     const gone = [...this.gone].join(" ");
     const cached = this.deskRead;
-    if (
-      cached?.acts === acts &&
-      cached.prompts === host.prompts &&
-      cached.notices === host.notices &&
-      cached.gone === gone
-    )
-      return cached.desk;
+    if (cached?.acts === acts && cached.prompts === host.prompts && cached.gone === gone) return cached.desk;
     const made = desk({
       acts,
       prompts: [...host.prompts.values()].filter(held),
-      notices: [...host.notices.values()].filter(held),
+      notices: [],
       label: (id) => this.labelOf(id),
     });
-    this.deskRead = { acts, prompts: host.prompts, notices: host.notices, gone, desk: made };
+    this.deskRead = { acts, prompts: host.prompts, gone, desk: made };
     return made;
   }
   /** The desk as it was last read, with what it was read from, since every draw reads it many times. */
-  private deskRead?: { acts: unknown; prompts: unknown; notices: unknown; gone: string; desk: Desk };
-  /** The asks that the operator answered or dismissed, until the console drops them. */
+  private deskRead?: { acts: unknown; prompts: unknown; gone: string; desk: Desk };
+  /** The questions that the operator answered, until the console drops them. */
   private readonly gone = new Set<string>();
-  /** The ask that the operator acts on, on the chain shown: the one that he points at, else the oldest question, else
-   * the oldest notice. */
+  /** The question that the operator acts on, on the chain shown: the one that he points at, else the oldest. */
   get aimed(): Ask | undefined {
     return aimed(this.desk.asks, this.selected, this.pointed);
   }
-  /** The question that the input answers: the ask aimed, when it asks for an answer. */
+  /** The question that the input answers: the question aimed. */
   get operatorPrompt(): Ask | undefined {
-    const ask = this.aimed;
-    return ask && !ask.notice ? ask : undefined;
-  }
-  /** The notice aimed, which a prompt of None makes, and which asks nothing. */
-  get operatorNotice(): Ask | undefined {
-    const ask = this.aimed;
-    return ask?.notice ? ask : undefined;
+    return this.aimed;
   }
   /** Point at an ask of the desk, and show its chain. */
   async point(id: string): Promise<void> {
@@ -536,11 +546,6 @@ export class Session extends EventEmitter {
   async answer(ask: Ask, line: string): Promise<void> {
     await this.host.answer(ask.id, line);
     this.landed(ask, `Your answer went to ${ask.id} on ${ask.label}.`);
-  }
-  /** A notice that the operator read, which the desk shows no more. */
-  async dismiss(ask: Ask): Promise<void> {
-    await this.host.dismiss(ask.id);
-    this.landed(ask, `The notice of ${ask.label} is dismissed.`);
   }
   /** What the operator did to an ask, and what waits after it, in the notice. The pointer goes on to what waits next
    * on the chain shown. */

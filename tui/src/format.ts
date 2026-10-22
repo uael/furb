@@ -21,6 +21,16 @@ export function dollars(value: number): string {
   return (value !== 0 && Math.abs(value) < 1 ? fractions : cents).format(value);
 }
 
+/** The lines that a patch adds and removes, with no header of a file or a hunk. */
+export function lineCounts(patch: string): { added: number; removed: number } {
+  let added = 0,
+    removed = 0;
+  for (const line of patch.split("\n"))
+    if (line.startsWith("+") && !line.startsWith("+++")) added++;
+    else if (line.startsWith("-") && !line.startsWith("---")) removed++;
+  return { added, removed };
+}
+
 /** A size in bytes, in KiB. */
 export function kibibytes(bytes: number): string {
   return `${(bytes / 1024).toFixed(1)} KiB`;

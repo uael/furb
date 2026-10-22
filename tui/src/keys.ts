@@ -167,13 +167,13 @@ export const keys = [
   },
   {
     chord: "⌃L / ⌃A",
-    action: "Edit a prompt program / answer the questions that wait, or dismiss a notice",
+    action: "Edit a prompt program / answer the questions that wait",
     bindings: [
       { on: ["ctrl+l"], run: "ladders", chord: "⌃L", command: "edit" },
       { on: ["ctrl+a"], run: "answer", chord: "⌃A", hint: "answer" },
     ],
   },
-  { chord: "Tab / ⇧Tab in an answer", action: "Next / previous question or notice that waits" },
+  { chord: "Tab / ⇧Tab in an answer", action: "Next / previous question that waits" },
   {
     chord: "⌃G / ⌃click a name",
     action: "Inspect a value and follow its definition",

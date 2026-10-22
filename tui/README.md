@@ -81,8 +81,8 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | ↑, ↓, Tab, Enter after /, @ or : | Choose a slash command, its value, a project file, or an emoji as it is typed |
 | ⌃F / PageUp / PageDown | Filter the current view / scroll |
 | ⌃R / ⌃Space | Python input / complete a name |
-| ⌃L / ⌃A | Edit a prompt program / answer the questions that wait, or dismiss a notice |
-| Tab / ⇧Tab in an answer | Next / previous question or notice that waits |
+| ⌃L / ⌃A | Edit a prompt program / answer the questions that wait |
+| Tab / ⇧Tab in an answer | Next / previous question that waits |
 | ⌃G / ⌃click a name | Inspect a value and follow its definition |
 | Drag / ⌃Y | Select text and copy it / copy the selected text again |
 | Click / right-click an act | Fold or expand it / inspect its value or prompt program |

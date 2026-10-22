@@ -14,20 +14,9 @@ function* covers(control: Fact, id: string): Generator<Call, boolean, unknown> {
   return Boolean(yield call("covers", [control, id]));
 }
 /** The questions the engine asks on the way to what an act does, which are no acts a person follows: each is
- * answered for the act that asked it, which shows what it came to. */
-const STEPS = new Set([
-  "stand",
-  "read",
-  "write",
-  "clock",
-  "chance",
-  "gate",
-  "cd",
-  "merged",
-  "run",
-  "wants",
-  "reply",
-]);
+ * answered for the act that asked it, which shows what it came to. A read and a write are acts that a person follows,
+ * since each says which file it read or changed. */
+const STEPS = new Set(["stand", "clock", "chance", "gate", "cd", "merged", "run", "wants", "reply"]);
 
 /** The observable state of the acts a person follows, updated once as facts enter the life. It asks the engine
  * what a fact alone cannot say: covers, for a pause or a wake and each live act whose state it would change, and
@@ -41,8 +30,9 @@ export class Activity {
   readonly answers = new Map<string, Answered[]>();
   /** How many facts the activity has heard, which is the place in time of the fact that it hears. */
   private clock = 0;
-  /** The chain and the actor of each reply that is not done. */
-  private readonly replies = new Map<string, [string, string]>();
+  /** The chain, the actor and the maker of each reply that is not done. The maker of a reply is the rung that waits
+   * for the word that the reply writes. */
+  private readonly replies = new Map<string, [string, string, string]>();
   /** How many changes of a row the table has made, and the count at the last change of each row, so that a reader
    * takes only the rows that changed since it last read. */
   private changes = 0;
@@ -80,7 +70,7 @@ export class Activity {
     const question = isQuestion(kind, id);
     if (question) this.scopes.set(id, kind === "chain" ? id : this.scope(String(fact[3])) || String(fact[3]));
     if (question && kind === "run") this.runs.set(id, String(fact[4]));
-    if (question && kind === "reply") this.replies.set(id, [String(fact[3]), String(fact[4])]);
+    if (question && kind === "reply") this.replies.set(id, [String(fact[3]), String(fact[4]), by]);
     if (question && !STEPS.has(kind)) {
       const act: LiveAct = {
         id,
@@ -124,10 +114,16 @@ export class Activity {
       if (reply && Array.isArray(fact[3]) && Array.isArray(fact[3][2])) {
         const usage = fact[3][2].map(Number) as Answered["usage"];
         this.cost += usage[4] ?? 0;
-        const [chain, actor] = reply;
+        const [chain, actor, maker] = reply;
         const answers = this.answers.get(chain) ?? [];
         answers.push({ at, actor, usage });
         this.answers.set(chain, answers);
+        // A rung costs the dollars of the answers that wrote its word.
+        const wrote = this.acts.get(maker);
+        if (wrote?.kind === "rung") {
+          wrote.cost = (wrote.cost ?? 0) + (usage[4] ?? 0);
+          this.mark(wrote);
+        }
       }
       const rung = this.runs.get(id);
       if (rung !== undefined) {
