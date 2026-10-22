@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { LiveAct } from "../../src/life/acts.ts";
 import { ladder } from "../../src/life/ladder.ts";
-import { asOf, momentsOf, owedAt, spans, weave } from "../../src/life/loom.ts";
+import { asOf, momentsOf, nowOf, owedAt, spans, subjectOf, weave } from "../../src/life/loom.ts";
 import { act } from "./acts.ts";
 
 const loomOf = (
@@ -204,4 +204,80 @@ test("the acts as they stood at a moment hold what began by then, and an act tha
   });
   expect(owedAt(then)).toEqual([{ id: "prompt1", shape: "str", message: "Which?" }]);
   expect(owedAt(asOf(acts, 9))).toEqual([]);
+});
+
+test("a chain that asks the operator says its first question now, and counts the others", () => {
+  const acts = [
+    act("chain1", "chain", "", "operator", 1),
+    act("prompt1", "prompt", "chain1", "operator", 2, undefined, {
+      words: ["bool", "Apply it?\nIt is safe.", "operator"],
+    }),
+    act("prompt2", "prompt", "chain1", "operator", 3, undefined, {
+      words: ["str", "Which name?", "operator"],
+    }),
+  ];
+  const loom = loomOf(acts, {
+    prompts: [
+      { id: "prompt1", shape: "bool", message: "Apply it?\nIt is safe." },
+      { id: "prompt2", shape: "str", message: "Which name?" },
+    ],
+  });
+  const row = loom.rows.find((one) => one.id === "chain1");
+  expect(row && nowOf(row, loom, acts, () => "")).toEqual({
+    tone: "asks",
+    act: "prompt1",
+    more: 1,
+    text: "Apply it?",
+  });
+});
+
+test("a chain at work says the act that it waits on, and a chain at rest says nothing", () => {
+  const acts = [
+    act("chain1", "chain", "", "operator", 1),
+    act("chain2", "chain", "", "operator", 2),
+    act("prompt1", "prompt", "chain1", "operator", 3),
+    act("rung1", "rung", "chain1", "prompt1", 4),
+    act("bash1", "bash", "chain1", "rung1", 5, undefined, { words: ["\nuv run pytest -q\necho done"] }),
+  ];
+  const loom = loomOf(acts);
+  const of = (id: string) => {
+    const row = loom.rows.find((one) => one.id === id);
+    return row && nowOf(row, loom, acts, () => "");
+  };
+  expect(of("chain1")).toEqual({ tone: "work", act: "bash1", more: 0, text: "uv run pytest -q" });
+  expect(of("chain2")).toEqual({ tone: "none", more: 0, text: "" });
+});
+
+test("a chain that failed says why, and a chain whose prompts closed says the first line of its last answer", () => {
+  const acts = [
+    act("chain1", "chain", "", "operator", 1),
+    act("prompt1", "prompt", "chain1", "operator", 2, 5),
+    act("rung1", "rung", "chain1", "prompt1", 3, 4, {
+      run: { status: "failed", reason: "NameError: BAD\nline 2" },
+    }),
+    act("chain2", "chain", "", "operator", 6),
+    act("prompt2", "prompt", "chain2", "operator", 7, 9, { value: "\n## The **tests** pass.\nAll of them." }),
+    act("rung2", "rung", "chain2", "prompt2", 8, 9),
+  ];
+  const loom = loomOf(acts);
+  const of = (id: string) => {
+    const row = loom.rows.find((one) => one.id === id);
+    return row && nowOf(row, loom, acts, () => "");
+  };
+  expect(of("chain1")).toEqual({ tone: "failed", act: "rung1", more: 0, text: "NameError: BAD" });
+  expect(of("chain2")).toEqual({ tone: "past", act: "prompt2", more: 0, text: "The tests pass." });
+});
+
+test("an act says what it is about on one line: the word of a rung, the message of a prompt, the seconds of a wait", () => {
+  const word = (rung: LiveAct) => (rung.id === "rung1" ? "\nx = 1\ny = 2" : "");
+  expect(subjectOf(act("rung1", "rung", "chain1", "operator", 1), word)).toBe("x = 1");
+  expect(
+    subjectOf(
+      act("prompt1", "prompt", "chain1", "operator", 1, undefined, { words: ["str", "Go on.\nNow."] }),
+      word,
+    ),
+  ).toBe("Go on.");
+  expect(subjectOf(act("wait1", "wait", "chain1", "operator", 1, undefined, { words: [30] }), word)).toBe(
+    "30s",
+  );
 });

@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
+import { until } from "../../bind/typescript/test/until.ts";
 import { demoSession, removeDemoDirectories, seedDemoFiles } from "../src/demo.ts";
 import { loadParsers } from "../src/parsers.ts";
 import { palettes } from "../src/theme.ts";
@@ -33,7 +34,14 @@ async function still(delay: number): Promise<void> {
   app().render();
   await test.flush();
   await Promise.all(highlighting(test.renderer.root));
+  // The folded rungs color the first line of their word off the main thread too, and the view draws them again.
+  await app().colorsDone();
+  app().render();
   await test.flush();
+  // The text of each picture goes to a folder that FURB_ANIMATION_TEXT names, to read the animation without its pictures.
+  const texts = process.env.FURB_ANIMATION_TEXT;
+  if (texts)
+    await writeFile(join(texts, `${String(stills.length).padStart(3, "0")}.txt`), test.captureCharFrame());
   const image = pixels(test.captureSpans(), palettes[session.theme], "furb", zoom);
   size = { width: image.width, height: image.height };
   stills.push(pack(image.pixels, delay));
@@ -73,6 +81,32 @@ try {
   await working();
   test.mockInput.pressKey("r", { ctrl: true });
   await still(150);
+  // Two questions wait at once, on two chains: the desk over the input counts them, and the input answers the one of
+  // the chain shown. A click on the desk opens the other, and its choice answers it.
+  await type("Ask me first, then add a test for the shortcut.", 2, 4);
+  test.mockInput.pressEnter();
+  await until(session.host, () => session.host.prompts.size === 1);
+  const checks = await session.engine.chain({ label: "Checks" });
+  await session.engine.rung({
+    word: 'await prompt(bool, "Run the slow checks too?", to=OPERATOR)',
+    on: checks,
+  });
+  await until(session.host, () => session.host.prompts.size === 2);
+  await session.refresh();
+  await still(260);
+  await type("high", 1, 10);
+  await still(40);
+  test.mockInput.pressEnter();
+  await until(session.host, () => session.host.prompts.size === 1);
+  await session.refresh();
+  await still(160);
+  await click(test, "waits on other chains");
+  await still(160);
+  test.mockInput.pressEnter();
+  await until(session.host, () => !session.host.prompts.size);
+  await session.select(session.engine.root);
+  await working();
+  await still(220);
   await click(test, "Changes");
   await still(200);
   await click(test, "Transcript");
