@@ -648,10 +648,17 @@ def of(got: Sequence[tuple], name: str) -> list[str]:
   return [one for one in paragraphs(got) if re.fullmatch(f"#{named}", one.split("\n", 1)[0].split(" ", 1)[0])]
 
 
-def prompted(id: str, shape: str, message: str = "") -> str:
-  """The paragraph a prompt tells of its open: its header, the binding of a message of one line, and its own
-  binding."""
-  return "\n".join([f"#{id}", *[f"{id}_message = {message!r}"] * bool(message), engine.bound(id, shape)])
+def prompted(id: str, shape: str, message: str = "", thread: str = "") -> str:
+  """The paragraph a prompt tells of its open: its header, the binding of a message of one line, the binding of the
+  thread it is on, and its own binding."""
+  return "\n".join(
+    [
+      f"#{id}",
+      *[f"{id}_message = {message!r}"] * bool(message),
+      *[f"{id}_thread = {thread!r}"] * bool(thread),
+      engine.bound(id, shape),
+    ]
+  )
 
 
 def written(id: str, word: str, by: str = "operator") -> str:

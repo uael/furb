@@ -2,10 +2,11 @@
 
 from conftest import born, said, settle
 from furb import engine
+from furb.engine import OPERATOR
 
 
 async def test_the_scope_of_a_question_from_its_name() -> None:
-  """The scope of a question, from its name: the chain it is on, and itself for a chain, and nothing for a name of no question of the life."""
+  """The scope of a question, from its name: the chain it is on, or the scope of the thread it is on, and itself for a chain, and nothing for a name of no question of the life."""
   _, log, root = born()
   assert engine.scope(root) == root
   act = engine.bash("echo hi", on=root)
@@ -17,3 +18,6 @@ async def test_the_scope_of_a_question_from_its_name() -> None:
   assert engine.scope(asking) == root
   assert engine.scope("bash://operator.9") == ""
   assert engine.scope("") == ""
+  thread = engine.prompt(str, "ask", to=OPERATOR, on=root)
+  more = engine.prompt(str, "and", on=thread)
+  assert engine.scope(more) == root and engine.scope(engine.prompt(None, "note", on=more)) == root
