@@ -220,6 +220,8 @@ test("operator answers and program edits act through the binding", () =>
       });
       await until(session.host, () => session.host.prompts.has(id));
       await session.refresh();
+      await frame();
+      await Promise.all(highlighting(screen.renderer.root));
       expect(await frame()).toContain("Continue with the change?");
       await session.submit("yes");
       expect(await session.engine.result(id)).toBe(true);
