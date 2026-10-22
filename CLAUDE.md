@@ -229,6 +229,9 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 - `uv run python script/bench/replay.py <task> --out <directory>`: the bench of replay. One life of the local model
   works a task of DeepSWE, later lives open on its record, one more opens after a change of the World, and Claude
   Code on the same model works the task as the baseline. Its docstring says how to run it.
+- `python script/bench/audit.py <record> <sha256>`: the audit of a record. It checks the sha256 of the record, replays
+  it in a life that only inspects it, with no model and no network, and checks that each word and each answer hashes
+  as the record says. It imports furb alone, so an outsider runs it on `pip install furb`, as `docs/audit.md` says.
 - `script/real.py` is no command: it holds what `smoke.py`, `play.py` and `deepswe.py` share, which is the life
   they open on the engine of this interpreter, the claude they ask, and what the answers of a record cost.
 - `uv run python script/catalog.py`: make the snapshot of the catalog, `src/world/provider/catalog.json`, again from
