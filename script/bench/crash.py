@@ -6,7 +6,7 @@ Run it from the root of the repository, one task at a time, through the lock of 
     .venv/bin/python script/bench/crash.py report --out <directory>
 
 `run` puts the task to a life on the local model as the rig of DeepSWE puts it, with no extension, in a process of
-its own. It kills the group of that process at a random point of the life, a number of times, and opens a new life on
+its own. It kills the group of that process at a random point after the first answer of the life, a number of times, and opens a new life on
 the record each time, which wakes the work that the record holds. When the last life ends, it grades the checkout.
 `report` reads what each run kept, and gives for each task: whether the work ended before the cap, each command that
 ran again after a kill, the extra calls to the model, and the seconds from the start of a process to the wake.
@@ -44,8 +44,8 @@ KILLS = 3
 """KILLS is how many times a run is killed."""
 CAP = 1200.0
 """CAP is the seconds that the lives of a run may work, summed, from the wake of each to its end."""
-EARLY, LATE = 20.0, 360.0
-"""EARLY and LATE bound the seconds from the wake of a life to its kill, which the bench draws at random."""
+EARLY, LATE = 0.0, 300.0
+"""EARLY and LATE bound the seconds from the first answer of a life to its kill, which the bench draws at random."""
 
 
 def server() -> dict[str, float]:
@@ -133,6 +133,21 @@ def woken(run: Path, n: int, child: subprocess.Popen) -> float:
     time.sleep(0.5)
 
 
+def answers(record: Path) -> int:
+  """How many answers of a model the record holds."""
+  return len(answered(kept(record))) if record.is_file() else 0
+
+
+def answered_once(record: Path, before: int, child: subprocess.Popen) -> float:
+  """The time at which the record holds an answer more than it held before, or nothing when the process ended first,
+  so that each life works before its kill."""
+  while child.poll() is None:
+    if answers(record) > before:
+      return time.time()
+    time.sleep(2.0)
+  return 0.0
+
+
 def crash(args: argparse.Namespace) -> int:
   """A run of a task: a life, killed at random points and opened again on its record, then the grade of the checkout."""
   run = args.out / args.task
@@ -160,11 +175,12 @@ def crash(args: argparse.Namespace) -> int:
         stderr=subprocess.STDOUT,
         start_new_session=True,
       )
+      held = answers(record)
       woke = woken(run, n, child)
       delay, killed = draw.uniform(EARLY, LATE), False
-      if n < args.kills and woke:
+      if n < args.kills and woke and (first := answered_once(record, held, child)):
         try:
-          child.wait(timeout=max(delay - (time.time() - woke), 0.0))
+          child.wait(timeout=max(delay - (time.time() - first), 0.0))
         except subprocess.TimeoutExpired:
           os.killpg(child.pid, signal.SIGKILL)
           child.wait()
