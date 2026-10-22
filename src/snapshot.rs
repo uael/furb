@@ -116,6 +116,13 @@ impl Keeper {
     Keeper { record, build, last: None, covered: None }
   }
 
+  /// Whether the life said a fact since the last snapshot, which the length of its log says alone: a life writes its
+  /// log on at its end and never cuts it, so a log of the length that the last snapshot covers holds nothing new.
+  pub(crate) fn grew(&self) -> bool {
+    let size = fs::metadata(format!("{}.log", self.record.display())).map(|one| one.len());
+    size.map_or(true, |size| self.covered != Some(size))
+  }
+
   /// Whether a snapshot is due: now, or when the interval passed since the last one, which starts again.
   pub(crate) fn due(&mut self, now: bool) -> bool {
     let due = now || self.last.is_none_or(|last| last.elapsed() >= INTERVAL);
@@ -133,9 +140,6 @@ impl Keeper {
 
   fn written(&mut self, table: &Table, dump: &[u8]) -> Option<()> {
     let (log, logs) = log(&self.record)?;
-    if self.covered == Some(log) {
-      return Some(());
-    }
     let (entries, record) = record(&self.record)?;
     let head = Written { version: VERSION, build: &self.build, entries, record, log, logs, table };
     let mut bytes = serde_json::to_vec(&head).ok()?;
