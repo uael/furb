@@ -185,8 +185,12 @@ fn each_model_for_chat_that_the_server_lists_is_offered_with_the_window_and_the_
     heard.models.iter().map(|one| (one.efforts().len(), one.priced(), one.at(Some("high"))));
   assert_eq!(
     each.collect::<Vec<_>>(),
-    ["local:qwen", "local:llama", "local:odd"].map(|name| (0, Some([0.0; 4]), name.to_owned())),
-    "a model of a local server takes no effort and costs nothing"
+    ["local:qwen", "local:llama", "local:odd"].map(|name| (
+      4,
+      Some([0.0; 4]),
+      format!("{name}/high")
+    )),
+    "a model of a local server takes the efforts off, low, medium and high, and costs nothing"
   );
   let requests: Vec<String> = told.try_iter().collect();
   assert_eq!(
