@@ -268,9 +268,7 @@ def measured(run: Path) -> Measure:
     for cut in interrupted
     if (later := [b for b in commands if number(b) > number(cut) and commands[b] == commands[cut]])
   ]
-  reasked = sorted(
-    {p for one in lives if one.get("life", 0) > 0 for p in one.get("pending", []) if p.startswith("reply")}
-  )
+  reasked = [p for one in lives if one.get("life", 0) > 0 for p in one.get("pending", []) if p.startswith("reply")]
   done = ran[-1] if ran else {}
   calls, answers = done.get("server", {}).get("requests"), done.get("answers")
   graded = done.get("reward", {})
