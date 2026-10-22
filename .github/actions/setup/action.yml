@@ -5,8 +5,11 @@ inputs:
   python:
     description: >-
       The environment that uv syncs: `none`, for a gate with no python; `tools`, the tools of the checks with no
-      package of the workspace, so the crate is not built; or `all`, every package, which builds the crate.
-    default: all
+      package of the workspace, so the crate is not built; or `suite`, each package that the suite imports, which
+      builds the crate with its python feature. The suite runs no program furb, so `suite` does not build furb-cli:
+      its build is a second build of most dependencies, since maturin links the module of python with flags of its
+      own on macOS.
+    default: suite
 
 runs:
   using: composite
@@ -19,26 +22,33 @@ runs:
         version: ${{ env.UV_VERSION }}
         enable-cache: true
         cache-python: ${{ runner.os != 'Windows' }}
-    # The rust of rust-toolchain.toml. The cache is the step after it, so that its key can leave out the rust of the
-    # machine.
+    # The rust of rust-toolchain.toml. The cache is the step after it, so that its key holds this rust alone.
     - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
       with:
         cache: false
+    # The key of the cache holds a hash of each rust that rustup lists, and the image of a runner has a rust of its own,
+    # which no build uses. Two images of one runner have each another rust, so the jobs of one key saved two caches,
+    # which took the store of the repository past its 10 GB. The step removes each rust but the one of
+    # rust-toolchain.toml, so the hash is the same on each image.
+    - run: |
+        active=$(rustup show active-toolchain | cut -d ' ' -f 1)
+        rustup toolchain list --quiet | while read -r toolchain; do
+          if [ "${toolchain%% *}" != "$active" ]; then rustup toolchain uninstall "${toolchain%% *}"; fi
+        done
+      shell: bash
     # The cache of what cargo built of the dependencies the last time.
-    # The key of the cache holds the files that tell cargo what to build, because the action does not read them, and
-    # rust-toolchain.toml, which names the one rust that builds. The key holds no hash of the rust environment: that
-    # hash holds each rust that the image of the runner has, which the build does not use. Two images of one runner
-    # have each its own rust, so the jobs of one key saved two caches, which took the store of the repository past
-    # its 10 GB. The store then dropped caches, and a job that found none built every crate again, in up to 25
-    # minutes.
+    # The key of the cache is the job, the system, a hash of the rust and of the variables of cargo, and a hash of
+    # each Cargo.toml, of Cargo.lock and of rust-toolchain.toml. When a lock or a manifest changes, the job restores
+    # the cache of the same job, system and rust under its old hash, and cargo builds only the crates that changed.
+    # A key of files that are not those of cargo restores nothing when one of them changes: a change of a
+    # pyproject.toml then made every job build every crate again, in up to 25 minutes, and a change of Cargo.lock
+    # made no new key, so main never saved the cache again and each job built the new crates each time.
     # Only main saves the cache, and a pull request reads the cache of main.
     # Only a job that passes saves it. A job that fails or is cancelled holds part of the build, and a key that
     # matches whole is never saved again, so every later run would build again what that part lacks.
     - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       with:
-        key: >-
-          ${{ hashFiles('rust-toolchain.toml', '.github/workflows/gates.yml', '.github/actions/setup/action.yml', '.pre-commit-config.yaml', 'pyproject.toml', 'bind/python/pyproject.toml', 'cli/pyproject.toml', 'bind/typescript/build.ts') }}
-        add-rust-environment-hash-key: false
+        add-rust-environment-hash-key: true
         save-if: ${{ github.ref == 'refs/heads/main' }}
         cache-on-failure: false
     - if: inputs.python != 'none'
@@ -47,6 +57,6 @@ runs:
     - if: inputs.python == 'tools'
       run: uv sync --locked --no-install-workspace
       shell: bash
-    - if: inputs.python == 'all'
-      run: uv sync --locked
+    - if: inputs.python == 'suite'
+      run: uv sync --locked --no-install-package furb-cli
       shell: bash

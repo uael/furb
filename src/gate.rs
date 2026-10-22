@@ -10,15 +10,15 @@
 //! the typeshed of monty, which describes what the sandbox runs but for its modules: it holds stubs that its other
 //! stubs import, `types` among them, which the sandbox does not run, and it lacks some modules that the sandbox
 //! runs, `ast` among them. So the sandbox alone says which import runs: each import of the sheet runs in a sandbox
-//! of its own, and one that raises is refused before the word runs. The errors alone count, since a warning refuses
-//! no word.
+//! of its own, and one that raises is refused before the word runs. A word that binds a name that the transcript
+//! binds, which the sheet names, is refused too. The errors alone count, since a warning refuses no word.
 
 use std::cell::RefCell;
 
 use monty_type_checking::{SourceFile, TypeChecker};
 use monty_types::{NamedValues, TypeCheckingConfig, TypeCheckingFormat};
 use ruff_python_ast::{
-  ExceptHandler, Expr, Stmt,
+  ExceptHandler, Expr, ExprContext, Parameter, Pattern, Stmt,
   statement_visitor::{StatementVisitor, walk_stmt},
   visitor::{self, Visitor},
 };
@@ -43,6 +43,12 @@ const IMPORT: &str = "error[unresolved-import]";
 /// The rule of a finding on an await in a function that is not async.
 const AWAIT: &str = "error[await-outside-async]";
 
+/// The rule of a finding on a name that the transcript binds.
+const TOLD: &str = "error[transcript-name]";
+
+/// The name the sheet binds to the names of the acts of the chain, which is `ACTS` of `furb.sheet`.
+const ACTS: &str = "__acts";
+
 thread_local! {
   /// The one checker of this thread, which every life of the thread and the Kernel of a python host read with,
   /// and nothing before its first reading. It holds one reading of the typeshed and one of the engine, which cost
@@ -53,12 +59,13 @@ thread_local! {
 
 /// What the gate found on a sheet, in the order of its lines: each error of the checker by the line it stands on,
 /// in the concise form it writes, and no warning, since a warning refuses no word; each import that the
-/// sandbox cannot run, in place of what the checker says of the imports; and each await in a function that is not
-/// async.
+/// sandbox cannot run, in place of what the checker says of the imports; each await in a function that is not
+/// async; and each name that the word binds and that the transcript binds.
 pub fn checked(sheet: &str) -> Result<Vec<(usize, String)>, Fault> {
   let mut found = typed(sheet)?;
   found.extend(unrun(sheet));
   found.extend(unawaited(sheet));
+  found.extend(told(sheet));
   found.sort_by_key(|(line, _)| *line);
   Ok(found)
 }
@@ -296,6 +303,115 @@ impl<'a> Visitor<'a> for Awaits<'a> {
   }
 }
 
+/// Each name that the word binds and that the transcript binds, by the line it stands on.
+///
+/// The transcript binds the name of each act of the chain, which the sheet binds as `ACTS`, and each name of a value
+/// that a tell of that act binds, as `bash12_stdout`: the name of the act, an underscore and a word. A word that binds
+/// one says what no act gave, as the output of a command that did not run, and a model reads it as true, so the gate
+/// refuses it, also for an act that the chain did not tell yet. The word is what stands after the last try of a word
+/// of the program, and a name that it binds at any depth counts.
+fn told(sheet: &str) -> Vec<(usize, String)> {
+  let Ok(parsed) = parse_module(sheet) else { return vec![] };
+  let Some(body) = parsed.syntax().body.iter().find_map(|stmt| match stmt {
+    Stmt::FunctionDef(def) if def.is_async => Some(&def.body),
+    _ => None,
+  }) else {
+    return vec![];
+  };
+  let acts: Vec<&str> = body
+    .iter()
+    .find_map(|stmt| match stmt {
+      Stmt::Assign(one) if matches!(one.targets.as_slice(), [Expr::Name(name)] if name.id.as_str() == ACTS) => {
+        match &*one.value {
+          Expr::Tuple(names) => Some(
+            names
+              .elts
+              .iter()
+              .filter_map(|one| match one {
+                Expr::StringLiteral(name) => Some(name.value.to_str()),
+                _ => None,
+              })
+              .collect(),
+          ),
+          _ => None,
+        }
+      }
+      _ => None,
+    })
+    .unwrap_or_default();
+  let word = body
+    .iter()
+    .rposition(|stmt| matches!(stmt, Stmt::Try(one) if worded(one)))
+    .map_or(&body[body.len()..], |at| &body[at + 1..]);
+  let mut bound = Bound(vec![]);
+  bound.visit_body(word);
+  let line = |at: usize| sheet[..at].matches('\n').count() + 1;
+  bound
+    .0
+    .into_iter()
+    .filter(|(_, name)| {
+      acts.iter().any(|act| {
+        name.strip_prefix(act).is_some_and(|rest| rest.is_empty() || rest.starts_with('_'))
+      })
+    })
+    .map(|(at, name)| {
+      (
+        line(at),
+        format!("{TOLD} the transcript binds `{name}`: a word reads it and never binds it"),
+      )
+    })
+    .collect()
+}
+
+/// The names that a body binds at any depth, each by where it starts: each target of a statement or of an
+/// expression, a def, a class, an import, a parameter, the name of an except and each capture of a pattern.
+struct Bound<'a>(Vec<(usize, &'a str)>);
+
+impl<'a> Visitor<'a> for Bound<'a> {
+  fn visit_stmt(&mut self, stmt: &'a Stmt) {
+    match stmt {
+      Stmt::FunctionDef(one) => self.0.push((one.name.start().to_usize(), one.name.as_str())),
+      Stmt::ClassDef(one) => self.0.push((one.name.start().to_usize(), one.name.as_str())),
+      Stmt::Import(_) | Stmt::ImportFrom(_) => {
+        self.0.extend(binds(stmt).into_iter().map(|name| (stmt.start().to_usize(), name)));
+      }
+      _ => {}
+    }
+    visitor::walk_stmt(self, stmt);
+  }
+
+  fn visit_expr(&mut self, expr: &'a Expr) {
+    let stored = match expr {
+      Expr::Name(one) if matches!(one.ctx, ExprContext::Store) => Some(one),
+      _ => None,
+    };
+    self.0.extend(stored.map(|one| (one.start().to_usize(), one.id.as_str())));
+    visitor::walk_expr(self, expr);
+  }
+
+  fn visit_parameter(&mut self, parameter: &'a Parameter) {
+    self.0.push((parameter.name.start().to_usize(), parameter.name.as_str()));
+    visitor::walk_parameter(self, parameter);
+  }
+
+  fn visit_except_handler(&mut self, handler: &'a ExceptHandler) {
+    let ExceptHandler::ExceptHandler(one) = handler;
+    self.0.extend(one.name.iter().map(|name| (name.start().to_usize(), name.as_str())));
+    visitor::walk_except_handler(self, handler);
+  }
+
+  fn visit_pattern(&mut self, pattern: &'a Pattern) {
+    let name = match pattern {
+      Pattern::MatchAs(one) => one.name.as_ref(),
+      Pattern::MatchStar(one) => one.name.as_ref(),
+      Pattern::MatchMapping(one) => one.rest.as_ref(),
+      _ => None,
+    };
+    self.0.extend(name.map(|name| (name.start().to_usize(), name.as_str())));
+    visitor::walk_pattern(self, pattern);
+  }
+}
+
 /// The imports of a body and of every body beneath it, each by where it stands.
 struct Imports(Vec<TextRange>);
 
@@ -322,12 +438,18 @@ mod tests {
   /// The sheet of one word after a program, and how many lines stand above the word, as `furb.sheet` writes it in
   /// the sandbox from the module of the engine, made as a life makes it.
   fn sheet(program: &[&str], word: &str) -> (String, usize) {
-    let code = "__engine = {}\nexec(__source, __engine)\n__sheet = {}\nexec(__sheet_source, __sheet)\n__sheet['sheet'](__engine, __program, __word)";
+    acted(program, &[], word)
+  }
+
+  /// The sheet of one word after a program, on a chain whose acts have the names it is given.
+  fn acted(program: &[&str], acts: &[&str], word: &str) -> (String, usize) {
+    let code = "__engine = {}\nexec(__source, __engine)\n__sheet = {}\nexec(__sheet_source, __sheet)\n__sheet['sheet'](__engine, __program, __word, __acts)";
     let mut named = NamedValues::new();
     named.push("__source", Object::string(ENGINE));
     named.push("__sheet_source", Object::string(SOURCE));
     named.push("__program", Object::list(program.iter().map(|one| Object::string(*one))));
     named.push("__word", Object::string(word));
+    named.push("__acts", Object::list(acts.iter().map(|one| Object::string(*one))));
     let got =
       Sand::new().run(code, named, &mut Nobody("the sheet")).expect("furb.sheet writes the sheet");
     let got = got.as_ref();
@@ -442,6 +564,24 @@ mod tests {
     let found = said(&["x = 1", "if chance() > 0.5:\n  def x() -> int:\n    return 1"], "x()");
     assert_eq!(found.len(), 1, "{found:?}");
     assert!(found[0].1.starts_with("error[call-non-callable]"), "{found:?}");
+  }
+
+  #[test]
+  fn a_name_that_the_transcript_binds_is_a_finding_of_the_line_that_binds_it() {
+    let word = "x = bash1\nbash1_stdout = 'made up'\nfor prompt2 in []:\n  pass\ndef f(bash12: int) -> int:\n  return bash12\nprompt21 = 2\nimport json as prompt2_value\nclose(x)";
+    let (text, above) = acted(&["bash1 = 1"], &["bash1", "prompt2"], word);
+    let got: Vec<_> = found(&text)
+      .into_iter()
+      .filter(|(line, _)| *line > above)
+      .map(|(line, why)| (line - above, why))
+      .collect();
+    let told = |name: &str| {
+      format!("{TOLD} the transcript binds `{name}`: a word reads it and never binds it")
+    };
+    assert_eq!(
+      got,
+      vec![(2, told("bash1_stdout")), (3, told("prompt2")), (8, told("prompt2_value"))]
+    );
   }
 
   #[test]
