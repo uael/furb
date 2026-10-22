@@ -191,6 +191,17 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
   case. This build, `cargo test`
   and `bun run build` take the dev profile, which optimizes every dependency, the interpreter among them, so a word
   runs as fast as in a release while the crates of the workspace build quickly. A wheel for PyPI takes the release.
+- `script/worktree.sh <path> <branch> [base]`: make a git worktree on a new branch from `base`, `origin/main` by
+  default, whose build starts warm. Run it from any directory. It copies on write the build directories of the main
+  checkout into the worktree: the `target` of cargo, which maturin and napi share, with its timestamps, the
+  `node_modules` of bun, the build of the TypeScript package, and the cache of the tests of the TUI. A copy on write
+  shares the blocks of each file until a build changes it, so it takes less than 1 GiB of the disk. Then cargo builds
+  only the crates of the workspace again, because their path changed, and no dependency. The script does not copy
+  `.venv`, whose scripts name the path of the main checkout: `uv sync` makes it again on the warm `target`. The copy on
+  write works on APFS on macOS and on Btrfs or XFS on Linux. On another file system, the script makes a plain worktree.
+  Use it for each new worktree of this repository: a first build takes about 6 minutes, against about 35 in a worktree
+  that `git worktree add` makes. Remove such a worktree with `git worktree remove --force <path>`, since its build
+  directories are not in git, then `git branch -D <branch>`.
 - `uv run pytest -q`: the suite on both engines, with the coverage of `furb` and of `furb_monty`, which must be
   whole.
 - `uv run pytest -q test/test_hygiene.py`: the hygiene laws alone.

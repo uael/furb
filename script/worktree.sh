@@ -1,0 +1,55 @@
+#!/bin/sh
+# Make a git worktree whose build starts warm: its build directories are a copy on write of those of the main
+# checkout, so cargo, maturin and bun build only what changed.
+# Usage: script/worktree.sh <path> <branch> [base, origin/main by default]
+set -eu
+
+if [ $# -lt 2 ] || [ $# -gt 3 ]; then
+  echo "usage: $0 <path> <branch> [base]" >&2
+  exit 2
+fi
+path=$1
+branch=$2
+base=${3:-origin/main}
+case $path in
+  /*) ;;
+  *) path=$PWD/$path ;;
+esac
+
+common=$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-common-dir)
+main=$(dirname "$common")
+
+git -C "$main" fetch -q origin
+git -C "$main" worktree add -q -b "$branch" "$path" "$base"
+
+# A copy on write: clonefile on APFS, a reflink on Btrfs or XFS. Each keeps the timestamps, which cargo compares.
+case $(uname) in
+  Darwin) clone() { cp -cRp "$1" "$2"; } ;;
+  *) clone() { cp -a --reflink=always "$1" "$2"; } ;;
+esac
+if ! clone "$main/Cargo.toml" "$path/.worktree-probe" 2>/dev/null; then
+  echo "This file system has no copy on write: $path builds from nothing."
+  exit 0
+fi
+rm -f "$path/.worktree-probe"
+
+# The output of cargo, which maturin and napi share, the packages of bun, the build of the TypeScript package, and
+# the cache of the tests of the TUI. The environment of python is not copied: its scripts name the path of the main
+# checkout, and uv sync makes it again on the warm target.
+for dir in target node_modules bind/typescript/node_modules tui/node_modules bind/typescript/dist .furb/tests; do
+  if [ -e "$main/$dir" ] && [ ! -e "$path/$dir" ]; then
+    mkdir -p "$(dirname "$path/$dir")"
+    clone "$main/$dir" "$path/$dir"
+  fi
+done
+for node in "$main"/bind/typescript/*.node; do
+  if [ -e "$node" ]; then
+    clone "$node" "$path/bind/typescript/"
+  fi
+done
+# Each member of the workspace builds again in a new path, so its incremental state is of no use.
+if [ -d "$path/target" ]; then
+  find "$path/target" -type d -name incremental -prune -exec rm -rf {} +
+fi
+
+echo "$path is ready on $branch. Run uv sync there, and bun run build for the TUI."

@@ -22,6 +22,9 @@ Then set up a clone as the [README](../README.md#try-it) says, and install the h
 uv run pre-commit install
 ```
 
+To work on a branch beside a checkout that is built, make its worktree with `script/worktree.sh`, which
+[`CLAUDE.md`](../CLAUDE.md#commands) describes: its first build is warm.
+
 ## How a word runs
 
 1. A prompt asks a model for a response of a shape, such as `str`.
