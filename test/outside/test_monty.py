@@ -7,9 +7,9 @@ while a word calls it, which crosses whole, a class a word defined held as a typ
 and its instances as objects of it, both ways, the Kernel of this interpreter refused, since the engine of monty
 holds its own, a gate that accepts a builtin or a name of a module exactly when the sandbox runs it, an ear the
 crate writes, which serves a life of either engine, a life longer than the tables of its session could count, a
-word that awaits in a lambda, which the gate lets pass and the sandbox refuses as python does, and an engine and an
-ear that the collector of cycles drops on another thread. What the ears of the crate do, the crate
-proves.
+word that awaits in a lambda, which the gate lets pass and the sandbox refuses as python does, an engine and an
+ear that the collector of cycles drops on another thread, and a value too deep or that holds its parts too often,
+which a host is given cut. What the ears of the crate do, the crate proves.
 """
 
 import asyncio
@@ -187,6 +187,45 @@ async def test_a_map_that_holds_the_key_is_crosses_both_ways_as_the_map_it_is() 
   assert await engine.rung(f"close(peek({act!r}) == {refusal!r})", on=root) is True
   verb = {"is": "name", "name": "bash"}
   assert await engine.rung(f"close({verb!r})", on=root) == verb
+
+
+async def test_a_value_deeper_than_a_host_is_given_crosses_with_its_first_levels_and_the_mark_of_monty_at_the_last() -> (
+  None
+):
+  """A value that a word makes deeper than a host is given crosses with its first 64 levels, and the last holds what
+  monty gives a part deeper than its recursion, so no walk of the door ends the process."""
+  sand = Sand(stands=STANDS)
+  root = engine.boot((), world=sand.hears())
+  sand.script[root] = ["x = []\nfor _ in range(1000):\n  x = [x]\nclose(x)"]
+  cut: object = "Repr('<deeply nested>')"
+  for _ in range(63):
+    cut = [cut]
+  assert await engine.prompt(object, "deep", on=root) == cut
+
+
+@pytest.mark.timeout(60)
+async def test_a_value_that_holds_its_parts_too_often_crosses_to_an_ear_within_its_bound() -> None:
+  """A value that holds its parts more often than a host can walk crosses to an ear within 64 times its parts, the
+  rest as the mark of a part repeated too often, so the ear hears it at once."""
+  sand, heard = Sand(stands=STANDS), []
+
+  def listening() -> Generator[tuple | None, tuple | None]:
+    while True:
+      if (a := (yield)) is not None and a[0] == "shared":
+        heard.append(a[3])
+
+  root = engine.boot((), world=sand.hears(), listening=listening())
+  sand.script[root] = ["x = []\nfor _ in range(30):\n  x = [x, x]\nsay('shared', acting(), x)\nclose(1)"]
+  assert await engine.prompt(int, "share", on=root) == 1
+  [got] = heard
+  parts, marks, left = 0, 0, [got]
+  while left:
+    one = left.pop()
+    parts += 1
+    marks += one == "Repr('<repeated too often>')"
+    if isinstance(one, list):
+      left.extend(one)
+  assert marks > 0 and parts <= 2 * 31 * 64
 
 
 @pytest.mark.timeout(600)
