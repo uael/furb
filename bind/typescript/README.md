@@ -202,7 +202,8 @@ gives. It holds no native code and no module of node, so a terminal and a window
 - `acts`: the act as a view reads it, `LiveAct`, the kinds of work, `WORK`, what a command came to, `Exit`, the
   measure of a chain, `Measure`, and whether an act failed or was cancelled.
 - `loom`: the rows of the loom, one for the operator and one for each chain in the order of the tree, with the cells
-  of their moments, and the acts as they stood at a moment, `asOf`.
+  of their moments, what each chain does now, `nowOf`, in words that a person reads, and the acts as they stood at a
+  moment, `asOf`.
 - `ladder`: the lines of the thread of a chain, each prompt with the rungs of its ladder and their acts.
 - `threads`: the tree of the threads of a life, where a thread is a prompt and a prompt that a rung of a thread makes
   is its sub-thread, each with its anchor, its messages, its progress, what waits for the operator and its pull

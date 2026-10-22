@@ -403,7 +403,7 @@ test("an act that ended and told nothing shows nothing in the feed, as a questio
         );
         await session.refresh();
         const shown = await frame();
-        expect(shown).toContain("read1");
+        expect(shown).toContain('read("a.txt")');
         // The word of the rung that defines memory still shows, but no act named memory does.
         expect(shown).not.toContain("✓ memory");
       },

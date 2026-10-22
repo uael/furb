@@ -315,7 +315,8 @@ test("the feed at its end stays at its end when the input grows, and a turn of t
       // A render that changes nothing on the screen draws no frame, and the wheel still moves the feed.
       app.render();
       await screen.flush();
-      await screen.mockMouse.scroll(10, 5, "up");
+      // The wheel turns over the feed, below the board of the chains.
+      await screen.mockMouse.scroll(10, app.scroll.y + 1, "up");
       await screen.flush();
       await screen.flush();
       expect(app.scroll.scrollTop).toBeLessThan(end());
@@ -388,4 +389,33 @@ test("the root chain stands in the list of chains when it rests, and the other r
       expect(rows.slice(1, 4)).toEqual(["○ Main", "▎ ○ Side", "▸ Finished  1"]);
     },
     { width: 140, height: 30 },
+  ));
+
+test("the board over the feed shows each chain with what it does now, a question first, and a click on a row shows its chain", () =>
+  composing(
+    async ({ session, frame, click }) => {
+      await idle(session);
+      let shown = await frame();
+      expect(shown.split("\n").filter((line) => line.includes("✓ Main"))).toContainEqual(
+        expect.stringContaining("A clear starting point"),
+      );
+      expect(shown).toContain("○ Search shortcut");
+      const question = await session.engine.prompt("bool", {
+        message: "Apply the search shortcut?",
+        on: session.engine.root,
+        to: "operator",
+      });
+      await until(session.host, () => session.host.prompts.has(question));
+      await session.refresh();
+      shown = await frame();
+      // The sidebar marks the chain too, so the board is the row that says the question.
+      expect(shown.split("\n").filter((line) => line.includes("◆ Main"))).toContainEqual(
+        expect.stringContaining("Apply the search shortcut?"),
+      );
+      await click("Review notes");
+      await until(session, () => session.label === "Review notes");
+      expect(session.selected).not.toBe(session.engine.root);
+    },
+    { width: 140, height: 44, useMouse: true },
+    true,
   ));
