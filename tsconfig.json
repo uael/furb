@@ -11,5 +11,5 @@
     "skipLibCheck": true,
     "types": ["bun"]
   },
-  "include": ["bind/typescript/**/*.ts", "tui/**/*.ts"]
+  "include": ["bind/typescript/**/*.ts", "tui/**/*.ts", "docs/examples/**/*.ts"]
 }

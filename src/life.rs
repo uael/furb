@@ -213,6 +213,9 @@ fn silent() -> Box<dyn Ear> {
   })
 }
 
+mod host;
+pub use host::{Chain, Life, LifeAct, Open, Question, Shape, Thread};
+
 #[cfg(test)]
 #[path = "life.test.rs"]
 mod test;

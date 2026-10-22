@@ -14,7 +14,8 @@
 # holds the stdout and the stderr open, writes the id of that process in the file orphan beside it, says so on the
 # stderr, and ends it with a failure. When the file loud stands beside it, it writes more on the stderr than its pipe
 # holds before it reads any input, when the file odd stands beside it, it writes a line that is no JSON before it reads
-# any input, and when the file deaf stands beside it, it reads no input and lives on.
+# any input, and when the file deaf stands beside it, it reads no input and lives on. When the file cost stands beside
+# it, each turn costs the dollars that it holds.
 here=$(dirname "$0")
 printf '%s\0' "$@" > "$here/args.$$"
 echo "$$" >> "$here/pids"
@@ -77,5 +78,7 @@ while IFS= read -r line; do
   say "{\"type\":\"content_block_stop\",\"index\":$at}"
   say '{"type":"message_stop"}'
   settle "{\"type\":\"text\",\"text\":$word}" "{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_input_tokens\":20,\"cache_creation_input_tokens\":3}"
-  printf '%s\n' "{\"type\":\"result\",\"session_id\":\"$id\",\"total_cost_usd\":0.0$n,\"usage\":$used}"
+  paid="0.0$n"
+  if [ -f "$here/cost" ]; then paid=$(awk "BEGIN { print $n * $(cat "$here/cost") }"); fi
+  printf '%s\n' "{\"type\":\"result\",\"session_id\":\"$id\",\"total_cost_usd\":$paid,\"usage\":$used}"
 done

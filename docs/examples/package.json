@@ -1,0 +1,8 @@
+{
+  "name": "furb-examples",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@furb/engine": "workspace:*"
+  }
+}

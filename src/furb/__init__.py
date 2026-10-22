@@ -19,3 +19,7 @@ MONTY = os.environ.get("FURB_ENGINE") == "monty"
 # `from furb.engine import ...` both give it, and nothing but this switch says which one it is.
 sys.modules["furb.engine"] = importlib.import_module("furb_monty.engine") if MONTY else python
 globals()["engine"] = sys.modules["furb.engine"]
+
+from furb.life import Chain, Life, LifeAct, Question, Thread, open  # noqa: E402
+
+__all__ = ["MONTY", "Chain", "Life", "LifeAct", "Question", "Thread", "engine", "open", "python"]

@@ -65,6 +65,8 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup
       - run: uv run pytest -q
+        env:
+          FURB_UNCOUNTED: ${{ runner.os == 'Windows' && '*/src/furb/life.py' || '' }}
 
   crate:
     # The hooks run the gates of the crate and of the command line on Linux. Windows has a job of its own, since a
