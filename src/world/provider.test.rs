@@ -26,7 +26,10 @@ use rig_core::{
 };
 use serde_json::{Value, json};
 
-use super::{Hosted, Model, Provider, Writes, catalog::Catalog, images, local::Server, unfenced};
+use super::{
+  Hosted, Model, Provider, Thinking, Writes, catalog::Catalog, images, local::Server, thinking,
+  unfenced,
+};
 use crate::{Act, Ear, Engine, Fact, Object, SYSTEM, verbs, world};
 
 /// A waker that unparks the thread of the test, so what an ear waits for wakes the poll when it is ready.
@@ -380,6 +383,31 @@ fn the_replies_of_a_chain_keep_one_process_of_the_claude_command_line_and_each_l
     super::claude::test::gone(&pids[0]),
     "the process ends with the last hold of the command line"
   );
+}
+
+#[cfg(unix)]
+#[test]
+fn the_claude_command_line_is_told_the_most_thought_of_the_provider_unless_the_environment_gave_it()
+{
+  use super::claude::test::Yard;
+  let fake = Yard::new("most");
+  let claude = fake.claude(10_000);
+  let inherited = Thinking { most: 4096, inherited: true };
+  for (name, most) in [("most-told", Thinking::default()), ("most-inherited", inherited)] {
+    let provider = Provider::new(yard(name).display().to_string(), claude.models());
+    let mut engine = lived(provider.thinking(most).actor(Some("claude-cli:opus/high".into())));
+    let root = engine.root().to_owned();
+    let with = verbs::Prompt { message: Some("task".into()), on: on(&root), ..Default::default() };
+    block_on(engine.prompt(Object::string("str"), with).expect("a prompt is made"))
+      .expect("an answer");
+  }
+  let thinking: Vec<String> = fake
+    .pids()
+    .iter()
+    .map(|pid| fs::read_to_string(fake.at.join(format!("thinking.{pid}"))).unwrap_or_default())
+    .collect();
+  let given = std::env::var("MAX_THINKING_TOKENS").unwrap_or_else(|_| "unset".to_owned());
+  assert_eq!(thinking, ["32768".to_owned(), given], "a most that the environment gave goes untold");
 }
 
 #[cfg(unix)]
@@ -769,6 +797,15 @@ fn chunk(delta: Value, finish: Value) -> String {
 /// A life whose root prompts local:qwen, the one model of a local server of the tests, which lists it with a window of
 /// 1000 and streams these events for its one reply; the prompt, and the two requests the server read.
 fn local(name: &str, events: String) -> (Engine, String, std::thread::JoinHandle<[String; 2]>) {
+  thinking_local(name, events, Thinking::default())
+}
+
+/// The life of [`local`], whose model thinks at most so many tokens in one turn.
+fn thinking_local(
+  name: &str,
+  events: String,
+  most: Thinking,
+) -> (Engine, String, std::thread::JoinHandle<[String; 2]>) {
   let listener = TcpListener::bind("127.0.0.1:0").expect("a port of this machine");
   let port = listener.local_addr().expect("the port").port();
   let listing =
@@ -781,9 +818,14 @@ fn local(name: &str, events: String) -> (Engine, String, std::thread::JoinHandle
     Catalog::of(&super::catalog::parsed("{}", None), None, Server::named(env).map(Arc::new), env);
   let (models, actor) =
     catalog.roster(None, Some("local:qwen/high")).expect("the model is offered");
-  assert_eq!(actor.as_deref(), Some("local:qwen"), "a model of a local server takes no effort");
+  assert_eq!(
+    actor.as_deref(),
+    Some("local:qwen/high"),
+    "a model of a local server takes the effort that its actor names"
+  );
   assert_eq!(models[0].priced(), Some([0.0; 4]), "a model of a local server costs nothing");
-  let mut engine = lived(Provider::new(yard(name).display().to_string(), models).actor(actor));
+  let provider = Provider::new(yard(name).display().to_string(), models).actor(actor);
+  let mut engine = lived(provider.thinking(most));
   let id = asked(&mut engine);
   (engine, id, asked_of)
 }
@@ -849,8 +891,8 @@ fn a_model_of_a_local_server_is_asked_with_no_key_and_a_cap_and_the_thought_in_i
     (&body["model"], &body["max_tokens"], body.get("cache_prompt"), body.get("reasoning_effort"));
   assert_eq!(
     asked,
-    (&json!("qwen"), &json!(250), None, None),
-    "a model writes a quarter of its window at most"
+    (&json!("qwen"), &json!(250), None, Some(&json!("high"))),
+    "a model writes a quarter of its window at most, and thinks at the effort of its actor"
   );
 }
 
@@ -896,16 +938,12 @@ fn rethinking(
     [listing.to_string(), first, again].map(|one| exchanged(&listener, &one))
   });
   let address = format!("http://127.0.0.1:{port}");
-  let env = |name: &str| match name {
-    "FURB_LOCAL_URL" => Some(address.clone()),
-    "FURB_LOCAL_THOUGHT" => Some("2".to_owned()),
-    _ => None,
-  };
+  let env = |name: &str| (name == "FURB_LOCAL_URL").then(|| address.clone());
   let catalog =
     Catalog::of(&super::catalog::parsed("{}", None), None, Server::named(env).map(Arc::new), env);
   let (models, actor) = catalog.roster(None, Some("local:qwen")).expect("the model is offered");
-  let mut engine =
-    lived(Provider::new(yard("rethought").display().to_string(), models).actor(actor));
+  let provider = Provider::new(yard("rethought").display().to_string(), models).actor(actor);
+  let mut engine = lived(provider.thinking(Thinking { most: 2, inherited: false }));
   let id = asked(&mut engine);
   (engine, id, asked_of)
 }
@@ -956,6 +994,50 @@ fn a_model_whose_thought_passes_its_most_is_asked_again_with_that_thought_and_no
     ),
     (&json!("assistant"), &json!("abc"), &json!({"enable_thinking": false}), None),
     "the model is asked again with its thought and no more thought"
+  );
+}
+
+#[test]
+fn the_most_thought_of_a_turn_is_that_of_the_environment_else_that_of_the_config_else_32768() {
+  let at = yard("thinking");
+  assert_eq!(thinking(None, &at), Thinking { most: 32_768, inherited: false });
+  fs::create_dir_all(at.join(".furb")).expect("the folder of the config");
+  fs::write(at.join(".furb").join("config.json"), r#"{"max_thinking_tokens": 0}"#)
+    .expect("the config");
+  assert_eq!(thinking(None, &at), Thinking { most: 0, inherited: false }, "the config gives it");
+  assert_eq!(
+    thinking(Some("4096"), &at),
+    Thinking { most: 4096, inherited: true },
+    "the environment wins over the config"
+  );
+  assert_eq!(
+    thinking(Some("much"), &at),
+    Thinking { most: 0, inherited: true },
+    "a value that is no count is as unsaid, and claude inherits it"
+  );
+}
+
+#[test]
+fn a_model_of_a_local_server_with_a_most_thought_of_zero_is_asked_with_its_thought_off_from_the_first_request()
+ {
+  let usage = json!({"id": "c", "object": "chat.completion.chunk", "created": 0, "model": "qwen", "choices": [],
+    "usage": {"prompt_tokens": 100, "completion_tokens": 5, "total_tokens": 105}});
+  let events = [
+    chunk(json!({"role": "assistant", "content": "close(3)"}), json!("stop")),
+    format!("data: {usage}\n\ndata: [DONE]\n\n"),
+  ];
+  let none = Thinking { most: 0, inherited: false };
+  let (mut engine, id, asked_of) = thinking_local("unthought", events.concat(), none);
+  replied(&mut engine);
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  assert_eq!(got.as_ref().as_int(), Some(3));
+  let [_, first] = asked_of.join().expect("the server read the requests");
+  let first: Value =
+    serde_json::from_str(first.split("\r\n\r\n").nth(1).unwrap_or_default()).expect("a JSON body");
+  assert_eq!(
+    (&first["chat_template_kwargs"], first.get("reasoning_effort")),
+    (&json!({"enable_thinking": false}), None),
+    "the first request turns the thought off"
   );
 }
 

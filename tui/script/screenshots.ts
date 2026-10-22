@@ -44,7 +44,7 @@ async function show(next: Session): Promise<void> {
 await show(session);
 
 /** The shots whose notice tells what the step did, which keep it. The others show no notice of an earlier step. */
-const notices = /^(34|36|37|42|43|44|45|50)-/;
+const notices = /^(34|36|37|42|43|44|45|50|55)-/;
 /** The work of the chain completes, and the queue sends what waits in it, until nothing is left to do. */
 async function settle(): Promise<void> {
   await session.refresh();
@@ -72,6 +72,9 @@ async function capture(name: string): Promise<void> {
   await test.flush();
   // Code is colored by a parser off the main thread: the frame is taken once every code block is highlighted.
   await Promise.all(highlighting(test.renderer.root));
+  // The folded rungs color the first line of their word off the main thread too, and the view draws them again.
+  await app().colorsDone();
+  app().render();
   await test.flush();
   if (only && !only.test(name)) return;
   await writeFile(`${output}/${name}.png`, rasterize(test.captureSpans(), palettes[session.theme], "furb"));
@@ -468,6 +471,67 @@ try {
   await test.mockInput.typeText(" notes");
   await rest();
   await capture("50-rename-session");
+  // A life at the scale of a real one: many chains, and questions to the owner open on three of them at once, one of
+  // which a conductor relays at its length. The desk over the input counts them, and says which one the input answers.
+  test.mockInput.pressEscape();
+  app().dispose();
+  await library.dispose();
+  await show(await gallerySession());
+  await seedDemo(session);
+  await session.command("/name Conduct the work");
+  await idle(session);
+  const chains: Record<string, string> = {};
+  for (const label of [
+    "life3/feed",
+    "life3/answers",
+    "life3/fix305",
+    "life2/literal",
+    "life2/rpc",
+    "life2/cache",
+  ])
+    chains[label] = await session.engine.chain({ label });
+  const ask = async (shape: string, message: string, on: string) =>
+    session.engine.rung({ word: `await prompt(${shape}, ${JSON.stringify(message)}, to=OPERATOR)`, on });
+  await ask(
+    "str",
+    [
+      "chain30 asks the operator:",
+      "",
+      "A question on the item answers, before I build. The owner asks that the operator answers each question by its shape, a choice of a Literal among them. No host can answer a prompt of a Literal today:",
+      "",
+      "1. monty cannot subscript `Literal`, so the word fails before its prompt.",
+      "2. `close` checks `isinstance(value, Literal)`, which never fits.",
+      "3. The console answers no shape outside `SHAPES`, so it refuses the prompt at once.",
+      "",
+      "- **A.** One stack: the engine, monty and the crate first, then this PR on top.",
+      "- **B.** This PR builds the flow on the shapes that the console answers now, and a separate item adds the Literal.",
+      "",
+      "Answer A or B, with any change.",
+    ].join("\n"),
+    session.engine.root,
+  );
+  await ask("bool", "Merge #305 into main now that its checks are green?", chains["life3/feed"] ?? "");
+  await ask(
+    "int",
+    "The test of a stable heading failed 2 times in 40 runs. How many retries should it get?",
+    chains["life3/fix305"] ?? "",
+  );
+  await ask("None", "#306 stands on w/feed again, and its checks run.", chains["life3/feed"] ?? "");
+  await until(session.host, () => session.host.prompts.size === 3 && session.host.notices.size === 1);
+  await session.select(session.engine.root);
+  await rest();
+  await capture("52-many-questions");
+  app().question();
+  await capture("53-question-dialog");
+  // Tab goes to the next question, and shows its chain under the dialog.
+  test.mockInput.pressTab();
+  await until(session, () => session.selected === chains["life3/feed"]);
+  await capture("54-next-question");
+  const merge = session.aimed?.id ?? "";
+  test.mockInput.pressEnter();
+  await until(session.host, () => !session.host.prompts.has(merge));
+  app().closeOverlay();
+  await capture("55-answer-landed");
 } finally {
   app().dispose();
   test.renderer.destroy();

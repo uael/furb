@@ -4,7 +4,9 @@
 //! A conversation is keyed by its model, its system prompt and the conversation the request names, which the provider
 //! names as a chain of its life, so a chain holds one conversation and at most one process, whatever the effort. A
 //! process spends the effort it started at, so a new effort ends it, and the next process resumes the same
-//! conversation. A process that is gone leaves its conversation on the disk under its id, so a later turn resumes
+//! conversation. A process sets `MAX_THINKING_TOKENS` to the most tokens of thought that its turns name, and
+//! inherits it from the environment of furb when they name none, and a new most ends it as a new effort does. A
+//! process that is gone leaves its conversation on the disk under its id, so a later turn resumes
 //! it, and a new conversation that grows out of one the command line holds forks it. A subscription pays for the
 //! turns, and no key is read.
 
@@ -132,8 +134,8 @@ impl Claude {
   }
 
   /// The models of the command line as the provider offers them, each named `claude-cli:` and its alias: each with
-  /// its window, every effort, and the images of a turn, and the conversation of a reply under the setting
-  /// `session`. The command line counts what it read of the cache apart from the rest of what it read.
+  /// its window, every effort, and the images of a turn, the conversation of a reply under the setting `session`, and
+  /// the most tokens of thought of a turn under the setting `max_thinking_tokens`. The command line counts what it read of the cache apart from the rest of what it read.
   pub fn models(&self) -> Vec<Model> {
     FAMILY
       .iter()
@@ -143,6 +145,7 @@ impl Claude {
           Model::new(named, *window, self.completion_model(*alias)).conversation("session");
         let mut model = model.searches(search::claude(Arc::clone(&self.bin), (*alias).to_owned()));
         model.apart = true;
+        model.thought = Some(super::Thought::Told);
         EFFORTS
           .iter()
           .fold(model.images(), |model, effort| model.effort(*effort, json!({"effort": effort})))
@@ -153,7 +156,8 @@ impl Claude {
 
 /// One model of the claude command line, as a completion model of rig.
 ///
-/// The request names its conversation under the setting `session`, and its effort under `effort`. It takes no tool
+/// The request names its conversation under the setting `session`, its effort under `effort`, and the most tokens of
+/// thought of the turn under `max_thinking_tokens`. It takes no tool
 /// and no document, since furb asks for completions alone.
 #[derive(Clone)]
 pub struct Completion {
@@ -218,6 +222,8 @@ impl Claude {
       let efforts = EFFORTS.join(", ");
       return Err(failed(format!("{name} spends one of {efforts} on a turn, never {effort}.")));
     }
+    let thinking = settings.get(super::KEY_THINKING).and_then(Value::as_u64);
+    let spend = Spend { effort, thinking };
     let session = settings.get("session").and_then(Value::as_str).map_or_else(uuid, str::to_owned);
     let system = request.preamble.unwrap_or_default();
     let messages: Vec<Message> = request
@@ -232,7 +238,7 @@ impl Claude {
     self.keeper.send(asked).map_err(|_| gone())?;
     let conversation = borrowed.await.map_err(|_| gone())?;
     let mut lent = Lent { key, conversation: Some(conversation), keeper: self.keeper.clone() };
-    lent.conversation().turn(&messages, effort, &self.bin, self.stall, self.gone, deltas).await
+    lent.conversation().turn(&messages, spend, &self.bin, self.stall, self.gone, deltas).await
   }
 }
 
@@ -460,7 +466,7 @@ impl Conversation {
     }
   }
 
-  /// One turn at an effort: the messages that the command line has not heard, written as one line, and the reply it
+  /// One turn at what it spends: the messages that the command line has not heard, written as one line, and the reply it
   /// streams.
   ///
   /// A request that continues neither the reply of the last turn nor the last request begins a new conversation. A
@@ -471,7 +477,7 @@ impl Conversation {
   async fn turn(
     &mut self,
     messages: &[Message],
-    effort: Option<String>,
+    spend: Spend,
     bin: &Path,
     stall: Duration,
     gone: Duration,
@@ -509,7 +515,7 @@ impl Conversation {
     let again = again && !anew;
     let mut flight =
       Flight { conversation: self, incoming, asked, again, heard: false, reply: None };
-    let got = flight.run(delta, effort, bin, stall, gone, deltas).await;
+    let got = flight.run(delta, spend, bin, stall, gone, deltas).await;
     if let Ok(response) = &got {
       let reply = Message::Assistant { id: None, content: response.choice.clone() };
       flight.reply = Some(canonical(&reply));
@@ -517,13 +523,13 @@ impl Conversation {
     got
   }
 
-  /// A process of the conversation at an effort: a new one, a resumed one, or the fork of its parent. When its program
+  /// A process of the conversation at what it spends: a new one, a resumed one, or the fork of its parent. When its program
   /// is missing or does not run, it tries again after a pause that grows, until the program starts or [`GONE`]
   /// passed.
   async fn start(
     &mut self,
     bin: &Path,
-    effort: Option<String>,
+    spend: Spend,
     gone: Duration,
   ) -> Result<Process, CompletionError> {
     let mut command = Command::new(bin);
@@ -538,8 +544,11 @@ impl Conversation {
       (Some(parent), false) => command.args(["--resume", parent, "--fork-session"]),
       (None, false) => command.args(["--session-id", &self.id]),
     };
-    if let Some(effort) = &effort {
+    if let Some(effort) = &spend.effort {
       command.args(["--effort", effort]);
+    }
+    if let Some(most) = spend.thinking {
+      command.env(super::ENV_THINKING, most.to_string());
     }
     // The command line serves completions alone, so its skills and its traffic of no use go.
     command.env("CLAUDE_CODE_DISABLE_BUNDLED_SKILLS", "1");
@@ -579,7 +588,7 @@ impl Conversation {
     self.resumed = true;
     let out = Out { reader: BufReader::new(stdout), read: Vec::new() };
     let tail = Tail { stderr: Some(stderr), kept: String::new() };
-    Ok(Process { effort, child, stdin, out, tail, paid: 0.0 })
+    Ok(Process { spend, child, stdin, out, tail, paid: 0.0 })
   }
 }
 
@@ -591,11 +600,19 @@ enum Line {
   Over(Option<String>),
 }
 
-/// One process of the command line: the effort it spends, the child, its stdin, its stdout, the tail of its stderr,
+/// What a process of the command line spends on each of its turns, which it started at: its effort, and the most
+/// tokens of thought that it sets as `MAX_THINKING_TOKENS` when its turns name one.
+#[derive(Clone, PartialEq)]
+struct Spend {
+  effort: Option<String>,
+  thinking: Option<u64>,
+}
+
+/// One process of the command line: what it spends, the child, its stdin, its stdout, the tail of its stderr,
 /// and the running cost it said last, since it says the cost of all its turns.
 struct Process {
-  /// The effort of each turn of the process, which it started at.
-  effort: Option<String>,
+  /// What each turn of the process spends, which it started at.
+  spend: Spend,
   child: Child,
   stdin: ChildStdin,
   out: Out,
@@ -755,7 +772,7 @@ impl Flight<'_> {
   async fn run(
     &mut self,
     delta: &[Message],
-    effort: Option<String>,
+    spend: Spend,
     bin: &Path,
     stall: Duration,
     gone: Duration,
@@ -763,12 +780,12 @@ impl Flight<'_> {
   ) -> Result<CompletionResponse, CompletionError> {
     let line = input(delta)?;
     let held = &mut *self.conversation;
-    // A process spends the effort it started at, so a turn at another effort ends it.
-    if held.process.as_mut().is_some_and(|one| one.effort != effort || !one.stands()) {
+    // A process spends what it started at, so a turn at another effort or another most of thought ends it.
+    if held.process.as_mut().is_some_and(|one| one.spend != spend || !one.stands()) {
       held.process = None;
     }
     if held.process.is_none() {
-      held.process = Some(held.start(bin, effort, gone).await?);
+      held.process = Some(held.start(bin, spend, gone).await?);
     }
     let Conversation { process: Some(process), id, name, .. } = held else {
       return Err(failed("claude is not running"));
