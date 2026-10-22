@@ -8,7 +8,7 @@ import { Console, type ConsoleOptions } from "./console.js";
 import { driving, type Ear } from "./ears.js";
 import { WORK } from "./life/acts.js";
 import { furbDirectory, saveFile } from "./project.js";
-import { actorParts, type Entry, type Fact, isQuestion } from "./types.js";
+import { actorParts, type Entry, type Fact, isQuestion, standingOf } from "./types.js";
 
 /** An ear that takes nothing and says nothing. */
 function* silent(): Ear {
@@ -119,8 +119,7 @@ export class Session extends EventEmitter {
   /** The actor a prompt goes to when it names none, which the standing of every chain says, and the operator before
    * the life stands. */
   get actor(): string {
-    const standing = this.engine?.standing() as [unknown, string, string] | [];
-    return standing?.[2] ?? "operator";
+    return (this.engine && standingOf(this.engine)[2]) ?? "operator";
   }
 
   get imageDirectory(): string {

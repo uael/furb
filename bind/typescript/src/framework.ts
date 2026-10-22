@@ -1,7 +1,7 @@
 import type { Engine } from "../index.cjs";
 import { over } from "./ears.js";
 import { Session } from "./session.js";
-import { type Fact, isQuestion } from "./types.js";
+import { type Fact, isQuestion, standingOf } from "./types.js";
 
 /** The kinds of the acts that a program makes, which a later run of it finds again in the record. */
 const MADE = ["chain", "prompt", "grant", "rung"];
@@ -60,7 +60,7 @@ export class Chain {
         return String(word)
           .slice("actor = ".length)
           .replace(/^['"]|['"]$/g, "");
-    return String((this.engine.standing() as unknown[])[2]);
+    return String(standingOf(this.engine)[2]);
   }
 
   /** The dollars of the answers of the models on this chain. */

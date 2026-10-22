@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { Engine, SessionOptions, Turn } from "@furb/engine";
-import { Act, actorParts, ENGINE, model, models, Session } from "@furb/engine";
+import { Act, actorParts, ENGINE, model, models, Session, standingOf } from "@furb/engine";
 import type { HostState } from "./bridge.ts";
 import { type EngineOptions, roster } from "./models.ts";
 import { queueDispatches, queueHash } from "./queue.ts";
@@ -180,8 +180,8 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     return demo ? [] : models(claude).map(({ name, efforts, window }) => [name, efforts, window]);
   if (data.target === "library" && (data.method === "model" || data.method === "sees")) {
     if (!engine) throw new Error("The session is not open.");
-    const [standing] = engine.standing() as [[string][]];
-    const names = standing.map(([name]) => name);
+    const [roster = []] = standingOf(engine);
+    const names = roster.map(([name]) => name);
     // A name of the roster is found by the rule the catalog finds every model by, and an actor by its model.
     const name =
       data.method === "sees" ? actorParts(String(data.args[0]), names).model : String(data.args[0]);

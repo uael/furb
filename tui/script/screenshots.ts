@@ -1,12 +1,13 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
+import type { Exit } from "@furb/engine/life";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import { type App, follow } from "../src/app.ts";
 import { demoSession, removeDemoDirectories, seedDemo, seedDemoFiles } from "../src/demo.ts";
 import { loadParsers } from "../src/parsers.ts";
 import { Preferences } from "../src/preferences.ts";
-import type { Exit, Session } from "../src/session.ts";
+import type { Session } from "../src/session.ts";
 import { palettes } from "../src/theme.ts";
 import { Workspaces } from "../src/workspaces.ts";
 import { idle } from "../test/idle.ts";

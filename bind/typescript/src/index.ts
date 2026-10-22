@@ -7,7 +7,7 @@ export { Chain, Life, type LifeAct, type LifeOptions, open, Question, Thread } f
 export { type LiveAct, type RunState, WORK } from "./life/acts.js";
 export { furbDirectory, saveFile } from "./project.js";
 export { type Answer, boot, inspectRecord, Session, type SessionOptions, type Stream } from "./session.js";
-export type { Entry, Fact, Paragraph, Turn } from "./types.js";
+export type { Actor, Entry, Fact, Paragraph, Standing, Turn } from "./types.js";
 export {
   actorParts,
   bound,
@@ -19,4 +19,5 @@ export {
   plain,
   questionKind,
   safeText,
+  standingOf,
 } from "./types.js";

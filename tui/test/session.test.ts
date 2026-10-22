@@ -53,6 +53,31 @@ test("a view that cannot be read opens the record with the default view and name
   }
 });
 
+test("a view whose field has another form opens that field empty and names it, and keeps the others", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-view-form-"));
+  const record = join(directory, "life.jsonl");
+  let session: Session | undefined;
+  try {
+    session = await demoSession({ record });
+    await session.dispose();
+    const view = JSON.parse(await readFile(`${record}.ui.json`, "utf8"));
+    await writeFile(
+      `${record}.ui.json`,
+      JSON.stringify({ ...view, sessionName: "Kept", queued: "one", models: [1] }),
+    );
+    session = await demoSession({ record });
+    expect(session.notice).toBe(
+      `${record}.ui.json holds queued, models in a form this release does not read: each opened empty.`,
+    );
+    expect([session.sessionName, session.queued, session.models]).toEqual(["Kept", [], []]);
+    await session.dispose();
+    session = undefined;
+  } finally {
+    await session?.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("a session that cannot save its view still ends its life, its commands and its lease", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-dispose-"));
   const record = join(directory, "life.jsonl");

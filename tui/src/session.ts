@@ -17,7 +17,7 @@ import {
   shapes,
   WORK,
 } from "@furb/engine";
-import { type Ask, aimed, beside, type Desk, desk } from "@furb/engine/life";
+import { type Ask, aimed, beside, type Desk, desk, failed } from "@furb/engine/life";
 import { createTwoFilesPatch } from "diff";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { refusal } from "./conversation.ts";
@@ -33,8 +33,6 @@ export type View = (typeof views)[number];
 /** An act as the views read it. A command that printed more than a row carries holds the tail of each stream, and
  * the length of all it printed; the view reads the whole act when it shows the output. */
 export type ActRow = LiveAct & { output?: number };
-/** What a command gave: what it printed to each stream, and its exit code once it is over. */
-export type Exit = { stdout?: { content: string }; stderr?: { content: string }; code?: number };
 /** A change of a file, with the patch that shows it. */
 export type ShownChange = FileChange & { patch: string };
 
@@ -59,23 +57,6 @@ export const statusLabels: Record<SessionStatus, string> = {
 };
 /** Whether an act is at work: it lives, no pause holds it, and its kind is one whose work takes time. */
 export const working = (act: ActRow): boolean => !act.done && !act.paused && WORK.includes(act.kind);
-/** Whether an act failed: a rung that the gate refused or whose run raised, or an act done with an exception other
- * than a cancel. */
-export function failed(act: ActRow): boolean {
-  if (act.run) return act.run.status === "failed" && !cancelled(act);
-  const value = act.value;
-  return Boolean(
-    value && typeof value === "object" && "is" in value && "args" in value && value.is !== "CancelledError",
-  );
-}
-
-/** Whether an act was cancelled: a rung whose run ended with a cancel, or an act done with a cancel. A cancel is what
- * the operator asked for, so it is no failure. */
-export function cancelled(act: ActRow): boolean {
-  if (act.run) return act.run.status === "failed" && /^CancelledError\b/.test(act.run.reason ?? "");
-  const value = act.value;
-  return Boolean(value && typeof value === "object" && "is" in value && value.is === "CancelledError");
-}
 
 export interface FollowUp {
   id: string;
@@ -112,14 +93,68 @@ const kept = [
 /** What `<record>.ui.json` holds: the kept fields of a session, and what the session had cost. */
 export type SavedView = Partial<Pick<Session, (typeof kept)[number]>> & { cost?: number };
 
-/** The saved view of a record: nothing when it has none, and the defaults with the reason when its file holds no
- * view that can be read. */
+/** The form of each field that `<record>.ui.json` keeps, which a field must have to be read: a text, a flag, a
+ * number, a map, a list of texts, or a list of maps. */
+const forms: Record<(typeof kept)[number] | "cost", "text" | "flag" | "number" | "map" | "texts" | "maps"> = {
+  sessionName: "text",
+  demo: "flag",
+  selected: "text",
+  actor: "text",
+  view: "text",
+  mode: "text",
+  shape: "text",
+  editing: "text",
+  histories: "map",
+  stashes: "map",
+  started: "map",
+  queued: "maps",
+  queueError: "text",
+  images: "map",
+  redo: "maps",
+  drafts: "map",
+  scrolls: "map",
+  folds: "map",
+  models: "texts",
+  cost: "number",
+};
+
+/** Whether a value has a form. */
+function formed(value: unknown, form: (typeof forms)[keyof typeof forms]): boolean {
+  const map = (one: unknown) => Boolean(one) && typeof one === "object" && !Array.isArray(one);
+  switch (form) {
+    case "text":
+      return typeof value === "string";
+    case "flag":
+      return typeof value === "boolean";
+    case "number":
+      return typeof value === "number";
+    case "map":
+      return map(value);
+    case "texts":
+      return Array.isArray(value) && value.every((one) => typeof one === "string");
+    case "maps":
+      return Array.isArray(value) && value.every(map);
+  }
+}
+
+/** The saved view of a record: nothing when it has none, the defaults with the reason when its file holds no view
+ * that can be read, and the view less each field of another form, with the names of those fields. */
 export function savedView(record: string): { view: SavedView; damage?: string } {
   const path = `${record}.ui.json`;
   try {
     const view: unknown = JSON.parse(readFileSync(path, "utf8"));
-    if (view && typeof view === "object" && !Array.isArray(view)) return { view };
-    throw new Error("It holds no map.");
+    if (!view || typeof view !== "object" || Array.isArray(view)) throw new Error("It holds no map.");
+    const held = view as Record<string, unknown>;
+    const wrong = Object.entries(forms).flatMap(([key, form]) =>
+      key in held && !formed(held[key], form) ? [key] : [],
+    );
+    for (const key of wrong) delete held[key];
+    if (!wrong.length) return { view: held };
+    const fields = wrong.join(", ");
+    return {
+      view: held,
+      damage: `${path} holds ${fields} in a form this release does not read: each opened empty.`,
+    };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return { view: {} };
     const reason = error instanceof Error ? error.message : String(error);

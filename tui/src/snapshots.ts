@@ -1,7 +1,16 @@
-import { type Engine, type Fact, isQuestion, type LiveAct, questionKind, type Session } from "@furb/engine";
+import {
+  type Engine,
+  type Fact,
+  isQuestion,
+  type LiveAct,
+  questionKind,
+  type Session,
+  standingOf,
+} from "@furb/engine";
+import type { Exit } from "@furb/engine/life";
 import type { Snapshot, Usage } from "./bridge.ts";
 import { queueDispatches } from "./queue.ts";
-import type { ActRow, Exit } from "./session.ts";
+import type { ActRow } from "./session.ts";
 
 /** What a snapshot knows of one chain. A value it must read again is undefined. */
 interface ChainView {
@@ -97,7 +106,11 @@ export class Snapshots {
       this.session.activity.acts.get(requested)?.kind === "chain" ? requested : this.engine.root;
     const view = this.chains.get(selected) ?? {};
     this.chains.set(selected, view);
-    view.roster ??= (this.engine.standing() as [Snapshot["roster"], string, string])[0];
+    view.roster ??= (standingOf(this.engine)[0] ?? []).map(([name, efforts, window]) => [
+      name,
+      efforts,
+      window,
+    ]);
     view.program ??= this.engine.program({ on: selected }) as Snapshot["program"];
     view.turns ??= this.engine.turns({ on: selected });
     view.directory ??= this.engine.cwd({ on: selected });
