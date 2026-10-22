@@ -291,10 +291,19 @@ fn a_prompt_of_the_operator_is_answered_at_the_terminal() {
     said.ends_with("furb: Refused: the operator cannot be read: the input is over\n"),
     "{said}"
   );
+  let pick = ["prompt", "pick one", "--to", "operator", "--shape", "Literal['a', 'b']"];
+  let output = ran(yard.furb(&pick), "b\n");
+  assert_eq!(
+    String::from_utf8_lossy(&output.stdout),
+    "'b'\n",
+    "a Literal is answered by one of its values"
+  );
+  let said = refused(yard.furb(&pick), "c\n");
+  assert!(said.ends_with("furb: Refused: \"c\" is none of Literal['a', 'b']\n"), "{said}");
   let said = refused(yard.furb(&["prompt", "a set", "--to", "operator", "--shape", "set"]), "");
   assert_eq!(
     said, "furb: Refused: the operator answers no set\n",
-    "a shape outside SHAPES is not shown"
+    "a shape the operator answers not is not shown"
   );
 }
 
@@ -563,7 +572,11 @@ fn a_prompt_to_the_operator_is_sent_and_the_close_of_the_client_answers_it() {
   let set = json!({"type": "prompt", "message": "a set", "shape": "set", "to": "operator"});
   let set = client.data("12", set)["act"].as_str().expect("the act").to_owned();
   let raised = json!({"is": "Refused", "args": ["the operator answers no set"]});
-  assert_eq!(client.done(&set)["raised"], raised, "a shape outside SHAPES is refused at once");
+  assert_eq!(
+    client.done(&set)["raised"],
+    raised,
+    "a shape the operator answers not is refused at once"
+  );
   let sent = client.held.iter().any(|one| one["type"] == "prompt" && one["act"] == set);
   assert!(!sent, "a prompt the operator answers not is sent not");
 }

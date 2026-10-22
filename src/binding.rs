@@ -474,6 +474,13 @@ pub fn shapes() -> Vec<&'static str> {
   world::SHAPES.to_vec()
 }
 
+/// Whether the operator answers a shape: one of the shapes it offers, or a Literal of values that a line names.
+#[cfg_attr(feature = "python", pyfunction)]
+#[cfg_attr(feature = "typescript", napi)]
+pub fn answers(shape: String) -> bool {
+  world::answers(&shape)
+}
+
 /// A line of the operator as a value of the shape a prompt wants, by the rules every console of the crate reads a
 /// line by, as the record keeps it; or the refusal of a line that is no value of the shape, and of a shape the
 /// operator answers not.
