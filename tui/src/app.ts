@@ -688,6 +688,36 @@ export class App {
       })
       .catch(session.fail);
     if (session.host.pending.size) this.resume();
+    if (session.host.reading && !session.readingTold) this.readOrRenew();
+  }
+
+  /** The dialog of a record that a life refused for a drift, as a record that another engine made, which opens to
+   * read: it names both engines, and offers to read the record, or to start a new life in its workspace. */
+  private readOrRenew(): void {
+    const reading = this.session.host.reading;
+    if (!reading) return;
+    this.session.readingTold = true;
+    const ours = reading.engine.slice(0, 12);
+    const same = reading.made === reading.engine;
+    const theirs = reading.made
+      ? `the engine ${reading.made.slice(0, 12)}`
+      : "an earlier engine, which the record does not name";
+    const note = same
+      ? `This build runs the engine ${ours}, which made it, and its replay drifts: ${clip(reading.why, 240)}`
+      : `It was made by ${theirs}, and this build runs the engine ${ours}. A replay would drift, so it opens to read.`;
+    const library = this.options.workspaces;
+    this.openPalette(
+      same ? "This record does not replay" : "This record was made by another engine",
+      [
+        { label: "Read it", detail: "See what it kept. No word runs again.", run: () => {} },
+        {
+          label: "Start a new life from it",
+          detail: "A new session in its workspace",
+          run: () => library.create().then(() => {}, this.session.fail),
+        },
+      ],
+      { note },
+    );
   }
 
   private box(options: BoxOptions = {}): BoxRenderable {

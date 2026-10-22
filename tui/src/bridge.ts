@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import type { Act, FileChange, ImageAttachment, LiveAct, Engine as Native, Stream, Turn } from "@furb/engine";
 import type { EngineOptions } from "./models.ts";
+import type { Reading } from "./reading.ts";
 import type { ActRow, FollowUp } from "./session.ts";
 
 /** What one answer of a model read and wrote: its whole prompt, its output, the reads and the writes of the cache,
@@ -51,6 +52,8 @@ interface Plain {
   record?: string;
   /** How many file changes the session holds. */
   changes: number;
+  /** Why the record is open to read, when a life on it was refused for a drift, as on a record of another engine. */
+  reading?: Reading;
 }
 /** What the session in the worker holds, as it sends it to the host, and how many facts the life said since the last
  * state, which the host needs to know of and not to hold. */
@@ -71,6 +74,7 @@ export class HostView extends EventEmitter implements Plain {
   actor = "";
   record?: string;
   changes = 0;
+  reading?: Reading;
   prompts = new Map<string, Prompt>();
   notices = new Map<string, Notice>();
   streams = new Map<string, Stream>();

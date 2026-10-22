@@ -12,7 +12,7 @@ use std::{
 use furb::{
   Ear, Fact, Fault, Object,
   ear::{Co, Next, hearing, say},
-  world::{SHAPES, answered},
+  world::{answered, answers},
 };
 use futures::{Stream, stream};
 use tokio::io::{AsyncBufReadExt, BufReader, Lines, Stdin};
@@ -29,7 +29,7 @@ pub struct Asked {
 
 impl Asked {
   /// The prompt a fact asks the operator, when it is one that no ear before the console took, as a console takes it:
-  /// the console says its started, and closes at once a prompt of a shape outside SHAPES, with the refusal of that
+  /// the console says its started, and closes at once a prompt of a shape it answers not, with the refusal of that
   /// shape, and gives it not. So every console of furb puts to the operator the same shapes. A prompt of None asks
   /// nothing, so the console closes it with None at once and gives it, as a notice that the operator reads and
   /// answers not.
@@ -50,7 +50,7 @@ impl Asked {
       co.call("close", vec![Object::none()], vec![("id", Object::string(&asked.about))]).await?;
       return Ok(Some(asked));
     }
-    if SHAPES.contains(&asked.shape.as_str()) {
+    if answers(&asked.shape) {
       return Ok(Some(asked));
     }
     let no = answered(&asked.shape, "").unwrap_or_else(|no| no.object());

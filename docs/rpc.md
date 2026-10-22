@@ -133,7 +133,8 @@ The life says its events as they happen, after the response of the command that 
 
 - `prompt`: each prompt to the operator, which the client answers with `close`. It comes from a `prompt` of the
   client to `operator`, or from a word of a model that asks the operator. The operator answers the shapes `str`,
-  `None`, `bool`, `int`, `float`, `list` and `dict`, as at the terminal. A prompt to the operator of another shape
+  `None`, `bool`, `int`, `float`, `list` and `dict`, and a `Literal` whose values are strings, whole numbers, truths
+  or `None`, as `Literal['a', 'b']`, as at the terminal. A prompt to the operator of another shape
   is not sent: furb closes it at once with a refusal, such as `the operator answers no set`. A prompt of the shape
   `None` asks nothing: furb closes it with `None` as it sends it, so the client shows it as a notice and answers it
   not.
