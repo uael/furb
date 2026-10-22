@@ -77,6 +77,18 @@ export function cancelled(act: ActRow): boolean {
   return Boolean(value && typeof value === "object" && "is" in value && value.is === "CancelledError");
 }
 
+/** The running work that a cancel of an act ends, and the chains that it stands on. */
+export interface Reach {
+  acts: ActRow[];
+  chains: string[];
+}
+/** A cancel of an act: the work that it ends, and whether it takes back the last message of the operator. */
+export interface Cancel {
+  act: ActRow;
+  reach: Reach;
+  back: boolean;
+}
+
 export interface FollowUp {
   id: string;
   chain: string;
@@ -601,7 +613,8 @@ export class Session extends EventEmitter {
       .then(
         () => {},
         async (error: unknown) => {
-          if (this.closed) return;
+          // A cancel that the operator chose said what it ended already.
+          if (this.closed || this.cancels.delete(id)) return;
           this.notice = "";
           // A finished act carries its failure in the record and in the feed.
           if (!(await this.engine.outcome(id)).done) throw error;
@@ -741,6 +754,72 @@ export class Session extends EventEmitter {
     }
     this.emit("compose", message.trimEnd());
   }
+  /** The last act that the operator made on the chain shown and that is not over: the message, the word or the
+   * command of his that the feed shows last. A cancel that names no act ends it. */
+  get lastOwn(): ActRow | undefined {
+    return this.activity.findLast((act) => act.by === "operator" && !act.done && WORK.includes(act.kind));
+  }
+  /** The running work that a cancel of an act ends besides the act: each act under it that is not over and whose work
+   * takes time, on any chain, with the chains that they stand on. The rungs of a prompt are its own answer, and no
+   * running work of their own. An act stands under the act that made it, a prompt on a thread under its thread, and
+   * an act on a chain under that chain, as a control of the engine reaches them. */
+  reach(id: string): Reach {
+    const byId = new Map(this.acts.map((act) => [act.id, act]));
+    const steps = byId.get(id)?.kind === "prompt";
+    const under = (act: ActRow): boolean => {
+      if (act.on === id) return true;
+      for (let up: ActRow | undefined = act; up; up = byId.get(up.by))
+        for (let at: ActRow | undefined = up; at; at = at.thread ? byId.get(at.thread) : undefined)
+          if (at.id === id) return true;
+      return false;
+    };
+    const acts = this.acts.filter(
+      (act) =>
+        act.id !== id &&
+        !act.done &&
+        WORK.includes(act.kind) &&
+        !(steps && act.kind === "rung" && act.by === id) &&
+        under(act),
+    );
+    return { acts, chains: [...new Set(acts.map((act) => act.on))] };
+  }
+  /** A cancel of the act that the operator names, or of his last act on the chain shown when he names none, and of
+   * that act alone with what stands under it: never the thread or the chain that it stands on. A cancel that names
+   * no act and ends a message takes the message back, so the operator writes it again. A cancel that ends running
+   * work asks him first, and ends it once he confirms. */
+  async cancel(id = ""): Promise<void> {
+    const act = id ? this.acts.find((one) => one.id === id) : this.lastOwn;
+    if (!act || act.done) {
+      this.notice = id
+        ? `${id} is no act that runs.`
+        : "Nothing that you sent runs on this chain. /cancel <id> ends another act.";
+      return;
+    }
+    const cancel: Cancel = { act, reach: this.reach(act.id), back: !id && this.isUserPrompt(act) };
+    if (cancel.reach.acts.length) this.emit("confirm", cancel);
+    else await this.end(cancel);
+  }
+  /** A cancel that the operator chose, or confirmed when it ends running work. */
+  async end({ act, reach, back }: Cancel): Promise<void> {
+    this.cancels.add(act.id);
+    await this.engine.cancel(act.id);
+    const ended = reach.acts.length;
+    const under = `${ended} ${ended === 1 ? "act" : "acts"} under it on ${this.chainsOf(reach)}`;
+    if (back) {
+      await this.restore(String(act.words[1] ?? ""));
+      this.notice = `You took back ${act.id}${ended ? `, and ended ${under}` : ""}. Change it in the input, and send it again.`;
+    } else this.notice = `${act.id} is cancelled${ended ? `, and ${under}` : ""}.`;
+    await this.refresh();
+  }
+  /** The acts that a cancel of the operator ended, whose notice that cancel gave. */
+  private readonly cancels = new Set<string>();
+  /** The chains that a cancel reaches, each with its label, in the order of the chains. */
+  chainsOf(reach: Reach): string {
+    return this.chains
+      .filter((chain) => reach.chains.includes(chain.id))
+      .map((chain) => `${chain.id} (${this.labelOf(chain.id)})`)
+      .join(", ");
+  }
   async undo(): Promise<void> {
     if (this.paused || this.activity.some((act) => !act.done && ["prompt", "rung"].includes(act.kind)))
       throw new Error("Let the current prompt finish, or cancel and wake it before undo.");
@@ -827,8 +906,7 @@ export class Session extends EventEmitter {
         this.notice = "Work resumed.";
         break;
       case "cancel":
-        await (argument ? this.engine.cancel(argument) : this.host.interrupt(this.selected));
-        this.notice = "Work cancelled.";
+        await this.cancel(argument);
         break;
       case "extensions": {
         const each = enabled(await this.engine.transcript({ on: ROOT })).map(({ name, life }) =>

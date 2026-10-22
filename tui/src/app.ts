@@ -63,6 +63,7 @@ import { type Action, bindings, chords, keys, shown } from "./keys.ts";
 import { loadParsers } from "./parsers.ts";
 import {
   type ActRow,
+  type Cancel,
   cancelled,
   type Exit,
   failed,
@@ -657,6 +658,7 @@ export class App {
     session.on("compose", this.compose);
     session.on("resume", this.resume);
     session.on("shared", this.shared);
+    session.on("confirm", this.confirm);
     this.keymap = keymapOf(renderer);
     this.layersOff = this.layers();
     renderer.on("resize", this.render);
@@ -1890,7 +1892,14 @@ export class App {
               // A message shows as the operator typed it, with each image it attached named by a mark that opens it.
               // Its first line says at its right the type of the answer that it asks for, and where it stands.
               if (user) {
-                const row = this.box({ flexDirection: "row" });
+                // A right click on a message opens its menu, as on the heading of any other act.
+                const row = this.box({
+                  flexDirection: "row",
+                  onMouseDown: (event) => {
+                    if (event.button === 2)
+                      this.actActions(this.session.acts.find((one) => one.id === act.id) ?? act);
+                  },
+                });
                 const text = this.message(message);
                 text.flexGrow = 1;
                 text.flexShrink = 1;
@@ -3402,6 +3411,26 @@ export class App {
     if (!focused || focused === renaming.input || focused.isDestroyed) this.composer.focus();
     this.render();
   }
+  /** A cancel that ends running work asks first: it says how many acts it ends, and on which chains. */
+  private confirm = (cancel: Cancel): void => {
+    const { act, reach, back } = cancel;
+    const ended = reach.acts.length;
+    const acts = `${ended} running ${ended === 1 ? "act" : "acts"}`;
+    const where = reach.chains.length === 1 ? "one chain" : `${reach.chains.length} chains`;
+    this.openPalette(
+      `${back ? "Take back" : "Cancel"} ${act.id}, and end ${acts} on ${where}?`,
+      [
+        {
+          label: back ? "Take it back" : "Cancel it",
+          color: c.danger,
+          detail: `End ${act.id} and the ${acts} under it`,
+          run: () => this.session.end(cancel),
+        },
+        { label: "Keep", detail: "Return without changes", run() {} },
+      ],
+      { note: `It ends work on ${this.session.chainsOf(reach)}.` },
+    );
+  };
   /** Ask how to remove a session, or whether a workspace leaves the list. */
   private removeItem(item: SessionEntry | Workspace): void {
     if (!("sessions" in item)) {
@@ -3729,6 +3758,21 @@ export class App {
               detail: "Change the Python the model wrote for it, and replay it",
               run: () => this.action(`/edit ${act.id}`),
             },
+          ]
+        : []),
+      ...(!act.done && WORK.includes(act.kind)
+        ? [
+            w.lastOwn?.id === act.id && message
+              ? {
+                  label: "Take back",
+                  detail: "Cancel this message alone, and give it back to the input to write again",
+                  run: () => this.action("/cancel"),
+                }
+              : {
+                  label: "Cancel",
+                  detail: "End this act and the work under it, and not the thread or the chain it stands on",
+                  run: () => this.action(`/cancel ${act.id}`),
+                },
           ]
         : []),
       ...(this.isPoint(act)
@@ -5555,7 +5599,8 @@ export class App {
       `\n${before.match(/^\s*/)?.[0] ?? ""}${before.trimEnd().endsWith(":") ? "  " : ""}`,
     );
   };
-  /** Ctrl+C closes a dialog or the rewind tree, or clears the input, or cancels the work of the chain. */
+  /** Ctrl+C closes a dialog or the rewind tree, or clears the input, or cancels the last act that the operator made on
+   * the chain, which takes back a message of his. */
   private cancel(): void {
     if (this.overlay) this.closeOverlay();
     else if (this.tree) this.closeTree();
@@ -5755,6 +5800,7 @@ export class App {
     this.session.off("compose", this.compose);
     this.session.off("resume", this.resume);
     this.session.off("shared", this.shared);
+    this.session.off("confirm", this.confirm);
     for (const off of this.layersOff) off();
     this.renderer.off("resize", this.render);
     this.renderer.off("selection", this.copySelection);
