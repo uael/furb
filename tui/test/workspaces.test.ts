@@ -354,7 +354,7 @@ test("a session that opens keeps its row through a refresh that comes before its
     expect(created.session?.sessionName).toBe("Second");
   }));
 
-test("a session whose record another engine made is refused before any replay, and its row says both engines and what to do", () =>
+test("a session whose record another engine made opens to read before any replay, and names both engines", () =>
   withLibrary(async ({ directory, open }) => {
     let library = open();
     const made = await library.create(await library.add(directory), "Made elsewhere");
@@ -368,10 +368,13 @@ test("a session whose record another engine made is refused before any replay, a
     const row = group.sessions.find((entry) => entry.path === made.path);
     if (!row) throw new Error("No row for the record.");
     const said = `was made by the engine 000000000000, and this build runs the engine ${engine.slice(0, 12)}, so a replay would drift. Open the record with the build that made it, or start a new life.`;
-    await expect(library.select(row)).rejects.toThrow(said);
-    expect(row.status).toBe("error");
-    expect(row.error).toStartWith("Drift: the record ");
-    expect(row.error).toEndWith(said);
+    await library.select(row);
+    const reading = row.session?.host.reading;
+    expect(reading?.made).toBe("0".repeat(64));
+    expect(reading?.engine).toBe(engine);
+    expect(reading?.why).toStartWith("Drift: the record ");
+    expect(reading?.why).toEndWith(said);
+    expect(row.error).toBeUndefined();
     expect(await readFile(made.path, "utf8")).toBe(text.replaceAll(engine, "0".repeat(64)));
   }));
 

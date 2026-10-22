@@ -187,6 +187,8 @@ export class Session extends EventEmitter {
   private closed = false;
   /** The page of changes and the count of changes that `changes` was read at. */
   private changesRead = "";
+  /** Whether the dialog of a record open to read was shown, so it shows once for each life of the session. */
+  readingTold = false;
   /** The actor the operator chose for each chain, which the session shows until the rung that sets it has run. */
   private readonly choices = new Map<string, { actor: string; rung?: string }>();
   constructor(

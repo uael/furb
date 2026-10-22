@@ -424,6 +424,14 @@ export interface Outcome {
   value: unknown
 }
 
+/**
+ * What the record at a path tells, read with no life, so no word runs again and a record of any engine opens: the
+ * engine that made it, as the record names it, and nothing when it names none; the engine of this build; whether
+ * the facts are those of its log; and the facts, in order. The facts are those of the log when it agrees with the
+ * record, and else those that the record kept, with the chains, the rungs, the runs and the dones that they name.
+ */
+export declare function retold(path: string): { made: string | null; engine: string; logged: boolean; facts: unknown[] }
+
 /** ROOT is the name of the root, which every life opens first under that one name, and on which boot stands the life. */
 export declare const ROOT: string
 

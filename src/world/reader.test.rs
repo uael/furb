@@ -1,0 +1,184 @@
+//! The reader of a record, proved where no life reaches it: the facts that it says of what a record kept.
+
+use std::{fs, path::PathBuf};
+
+use super::{retold, told};
+use crate::{value::Object, wire::parsed};
+
+/// The facts of lines of JSON, as a record keeps them.
+fn facts(lines: &[&str]) -> Vec<Object> {
+  lines.iter().map(|one| parsed(one).unwrap()).collect()
+}
+
+/// Each fact as python shows it.
+fn shown(facts: &[Object]) -> Vec<String> {
+  facts.iter().map(|one| one.as_ref().py_repr()).collect()
+}
+
+/// A record of its own for one test, which does not stand yet.
+fn place(name: &str) -> PathBuf {
+  let at = std::env::temp_dir().join(format!("furb-reader-{name}-{}", std::process::id()));
+  let _ = fs::remove_dir_all(&at);
+  fs::create_dir_all(&at).unwrap();
+  at.join("record.jsonl")
+}
+
+/// The opening of a life: its root chain, a prompt of the operator on it, and the reply that rung1 asked for.
+const OPENS: [&str; 3] = [
+  r#"["chain", "chain1", "operator", "", "root", ""]"#,
+  r#"["prompt", "prompt1", "operator", "chain1", "str", "Go.", ""]"#,
+  r#"["reply", "reply1", "rung1", "chain1", "opus"]"#,
+];
+
+/// The done of reply1 with a word, as a record keeps a tuple.
+fn answered(word: &str) -> String {
+  format!(
+    r#"["done", "reply1", "provider", {{"is": "tuple", "args": [["assistant", "{word}", [1, 2, 3, 4, 0.5], null]]}}]"#
+  )
+}
+
+#[test]
+fn a_kept_rung_takes_its_place_on_the_open_prompt_with_the_run_of_the_word_that_the_gate_let_run() {
+  let done = answered("x = 1");
+  let kept = facts(&[
+    OPENS[0],
+    OPENS[1],
+    OPENS[2],
+    &done,
+    r#"["gate", "gate1", "chain1", "chain1", "x = 1"]"#,
+    r#"["done", "gate1", "gate", []]"#,
+    r#"["bash", "bash1", "rung1", "chain1", "ls", "", 600]"#,
+    r#"["reply", "reply2", "rung2", "chain1", "opus"]"#,
+  ]);
+  let told = shown(&told(&kept));
+  assert_eq!(told[2], "['rung', 'rung1', 'prompt1', 'chain1', '', '', '']");
+  assert_eq!(told[3], "['reply', 'reply1', 'rung1', 'chain1', 'opus']");
+  assert_eq!(
+    told[7..],
+    [
+      "['run', 'run1', 'chain1', 'chain1', 'rung1', 'x = 1', '']",
+      "['bash', 'bash1', 'rung1', 'chain1', 'ls', '', 600]",
+      "['done', 'run1', 'reader', None]",
+      "['done', 'rung1', 'reader', None]",
+      "['rung', 'rung2', 'prompt1', 'chain1', '', '', '']",
+      "['reply', 'reply2', 'rung2', 'chain1', 'opus']",
+    ]
+    .map(str::to_owned)
+  );
+}
+
+#[test]
+fn a_chain_that_the_record_does_not_hold_is_made_by_the_rung_of_its_first_prompt() {
+  let kept = facts(&[
+    OPENS[0],
+    OPENS[1],
+    OPENS[2],
+    r#"["prompt", "prompt2", "rung1", "chain2", "str", "Help.", ""]"#,
+  ]);
+  assert_eq!(
+    shown(&told(&kept))[4..],
+    [
+      "['chain', 'chain2', 'rung1', 'chain1', '', '']",
+      "['prompt', 'prompt2', 'rung1', 'chain2', 'str', 'Help.', '']",
+    ]
+    .map(str::to_owned)
+  );
+}
+
+#[test]
+fn a_word_that_the_gate_refused_tells_its_findings_and_runs_not() {
+  let done = answered("BAD");
+  let kept = facts(&[
+    OPENS[0],
+    OPENS[1],
+    OPENS[2],
+    &done,
+    r#"["gate", "gate1", "chain1", "chain1", "BAD"]"#,
+    r#"["done", "gate1", "gate", ["line 1: BAD is unbound"]]"#,
+  ]);
+  assert_eq!(
+    shown(&told(&kept))[7..],
+    [
+      "['tell', 'rung1', 'reader', [\"#rung1 refused\\nrung1_findings = 'line 1: BAD is unbound'\"]]",
+      "['done', 'rung1', 'reader', {'is': 'Refused', 'args': []}]",
+    ]
+    .map(str::to_owned)
+  );
+}
+
+#[test]
+fn a_prompt_that_the_operator_closed_is_done_with_its_value_and_ends_its_rung() {
+  let kept = facts(&[
+    OPENS[0],
+    OPENS[1],
+    OPENS[2],
+    r##"["close", "prompt1", "console", "done", ["#prompt1 closed"]]"##,
+    r#"["cancel", "chain1", "operator"]"#,
+  ]);
+  assert_eq!(
+    shown(&told(&kept))[4..],
+    [
+      "['close', 'prompt1', 'console', 'done', ['#prompt1 closed']]",
+      "['done', 'prompt1', 'reader', 'done']",
+      "['done', 'rung1', 'reader', None]",
+      "['cancel', 'chain1', 'operator']",
+      "['done', 'chain1', 'reader', {'is': 'CancelledError', 'args': []}]",
+    ]
+    .map(str::to_owned)
+  );
+}
+
+#[test]
+fn a_record_names_its_engine_and_reads_its_log_while_the_log_agrees() {
+  let at = place("retold");
+  fs::write(
+    &at,
+    "[[\"made\",\"chain1\",\"store\",\"abc\"]]\n[[\"stand\",\"stand1\",\"operator\",\"chain1\"]]\n",
+  )
+  .unwrap();
+  let read = retold(&at).unwrap();
+  assert_eq!(read.made.as_deref(), Some("abc"));
+  assert!(!read.logged);
+  assert_eq!(
+    shown(&read.facts),
+    [
+      "['made', 'chain1', 'store', 'abc']",
+      "['chain', 'chain1', 'operator', '', '', '']",
+      "['stand', 'stand1', 'operator', 'chain1']",
+    ]
+    .map(str::to_owned)
+  );
+  fs::write(
+    format!("{}.log", at.display()),
+    "{\"entries\":2}\n[\"stand\",\"stand1\",\"operator\",\"chain1\"]\n[\"tell\",\"chain1\",\"chain1\",[\"#chain1\"]]\n",
+  )
+  .unwrap();
+  let read = retold(&at).unwrap();
+  assert!(read.logged);
+  assert_eq!(
+    shown(&read.facts),
+    ["['stand', 'stand1', 'operator', 'chain1']", "['tell', 'chain1', 'chain1', ['#chain1']]"]
+      .map(str::to_owned)
+  );
+}
+
+#[test]
+fn a_kept_rung_with_a_word_runs_it_once_the_gate_lets_it_run() {
+  let kept = facts(&[
+    OPENS[0],
+    r#"["rung", "rung1", "operator", "chain1", "x = 1", "", ""]"#,
+    r#"["gate", "gate1", "chain1", "chain1", "x = 1"]"#,
+    r#"["done", "gate1", "gate", []]"#,
+  ]);
+  assert_eq!(shown(&told(&kept))[4], "['run', 'run1', 'chain1', 'chain1', 'rung1', 'x = 1', '']");
+}
+
+#[test]
+fn a_rung_takes_no_place_on_a_prompt_that_it_made() {
+  let kept = facts(&[
+    OPENS[0],
+    r#"["prompt", "prompt1", "rung1", "chain1", "str", "Ask.", ""]"#,
+    r#"["bash", "bash1", "rung1", "chain1", "ls", "", 600]"#,
+  ]);
+  assert_eq!(shown(&told(&kept))[2], "['rung', 'rung1', 'chain1', 'chain1', '', '', '']");
+}
