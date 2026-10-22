@@ -365,6 +365,23 @@ pub fn kept(path: String) -> Result<Record, Fault> {
   Ok(Record(Object::list(world::kept(&path)?)))
 }
 
+/// The ear of the log of the life beside the record at a path, which writes it again from its first line.
+#[cfg_attr(feature = "python", pyfunction)]
+#[cfg_attr(feature = "typescript", napi)]
+pub fn log(path: String) -> Result<NativeEar, Fault> {
+  let entries = world::kept(&path)?.len();
+  Ok(NativeEar::of(world::log(&path, entries)))
+}
+
+/// The facts of the log of the record at a path, read with no lease, when the log agrees with the record: every fact
+/// that the life that wrote it said, as an ear of a host hears it, the rungs of each ladder among them. Nothing when
+/// the record has no log, or a log that does not agree with it.
+#[cfg_attr(feature = "python", pyfunction)]
+#[cfg_attr(feature = "typescript", napi(ts_return_type = "unknown[] | null"))]
+pub fn logged(path: String) -> Result<Option<Value>, Fault> {
+  Ok(world::logged(&path)?.map(|facts| Value(Object::list(facts))))
+}
+
 /// One line of a record, read with every number exact, as the record keeps it.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi(ts_return_type = "unknown"))]

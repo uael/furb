@@ -280,6 +280,16 @@ export declare const LARGEST: number
 /** The levels of effort, from least to most, which an actor names after its model. */
 export declare function levels(): Array<string>
 
+/** The ear of the log of the life beside the record at a path, which writes it again from its first line. */
+export declare function log(path: string): NativeEar
+
+/**
+ * The facts of the log of the record at a path, read with no lease, when the log agrees with the record: every fact
+ * that the life that wrote it said, as an ear of a host hears it, the rungs of each ladder among them. Nothing when
+ * the record has no log, or a log that does not agree with it.
+ */
+export declare function logged(path: string): unknown[] | null
+
 /** The ear of the memory extension, which finds the memory of a path in its folders and in the config directory. */
 export declare function memory(config: string): NativeEar
 

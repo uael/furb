@@ -221,6 +221,14 @@ def store(path: str) -> tuple[list[list[list[object]]], NativeEar]:
 def kept(path: str) -> list[list[list[object]]]:
   """What the store kept at a path, read with no lease and changed in nothing."""
 
+def log(path: str) -> NativeEar:
+  """The ear of the log of the life beside the record at a path, which writes it again from its first line."""
+
+def logged(path: str) -> list[list[object]] | None:
+  """The facts of the log of the record at a path, read with no lease, when the log agrees with the record: every fact
+  that the life that wrote it said, as an ear of a host hears it, the rungs of each ladder among them. Nothing when
+  the record has no log, or a log that does not agree with it."""
+
 def decode_record(line: str) -> object:
   """One line of a record, read with every number exact, as the record keeps it."""
 

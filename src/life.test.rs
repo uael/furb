@@ -99,7 +99,7 @@ fn the_ears_of_the_crate_come_after_the_ears_of_the_host_each_under_the_name_eve
   let names: Vec<&str> = ears.iter().map(|(name, _)| name.as_str()).collect();
   assert_eq!(
     names,
-    ["provider", "extensions", "memory", "skills", "web", "files", "bash", "time", "store"]
+    ["provider", "extensions", "memory", "skills", "web", "files", "bash", "time", "store", "log"]
   );
   drop(ears);
   let (mut engine, _) = opening(&at, true).boot([("mine", mine())]).unwrap();
@@ -136,4 +136,49 @@ fn a_life_that_keeps_a_record_writes_a_new_file_and_a_new_file_in_a_new_folder_t
   assert_eq!(note, Text::new("scratch://notes/new.md", "note\n"));
   let read = verbs::Read { on: on(), ..Default::default() };
   assert_eq!(engine.read("scratch://", read).unwrap(), Text::new("scratch://", "notes/\nplan.md"));
+}
+
+#[test]
+fn a_life_that_keeps_a_record_writes_the_log_of_every_fact_beside_it_and_a_later_life_writes_it_again_from_its_start()
+ {
+  let at = place("log");
+  let record = at.join("record.jsonl");
+  let open =
+    || Opening { extensions: Some(false), ..opening(&at, true) }.boot::<String>([]).unwrap().0;
+  let mut engine = open();
+  let word = Some("x = 1\nclose(x)".to_owned());
+  let rung =
+    engine.rung(verbs::Rung { word, on: Some("chain1".to_owned()), ..Default::default() }).unwrap();
+  assert_eq!(futures::executor::block_on(rung).unwrap().as_ref().as_int(), Some(1));
+  drop(engine);
+  let shown =
+    |facts: Vec<Object>| facts.iter().map(|one| one.as_ref().py_repr()).collect::<Vec<_>>();
+  let first = shown(world::logged(&record).unwrap().expect("the log agrees with the record"));
+  let rung =
+    first.iter().position(|one| one.starts_with("['rung', 'rung1', 'operator', 'chain1', 'x = 1"));
+  let run = first.iter().position(|one| one.starts_with("['run', 'run1', "));
+  assert!(
+    rung.is_some_and(|rung| run.is_some_and(|run| rung < run)),
+    "the log holds the rung and its run"
+  );
+  assert!(
+    !world::kept(&record).unwrap().iter().any(|one| one.as_ref().py_repr().contains("'run1'"))
+  );
+  drop(open());
+  let again = shown(world::logged(&record).unwrap().expect("a later life writes the log again"));
+  // A fact that the journal says again is its own, so a later life says each fact again with its kind and its name.
+  let head = |one: &String| one.splitn(3, ", ").take(2).collect::<Vec<_>>().join(", ");
+  let heads = |facts: &[String]| facts.iter().map(head).collect::<Vec<_>>();
+  assert_eq!(
+    heads(&again[..first.len()]),
+    heads(&first),
+    "a later life says the log again before its own facts"
+  );
+  let mut kept = fs::OpenOptions::new().append(true).open(&record).unwrap();
+  std::io::Write::write_all(&mut kept, b"[[\"stand\",\"stand9\",\"operator\",\"chain1\"]]\n")
+    .unwrap();
+  assert!(
+    world::logged(&record).unwrap().is_none(),
+    "a log that its record outgrew does not agree"
+  );
 }

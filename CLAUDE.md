@@ -12,8 +12,8 @@ API of its own:
   makes from the contract, and `Ear`, the one trait of an ear, which a host writes as a generator of rust with `ear`.
 - `src/world/` holds the ears of the World that the crate writes, one file each: the files in `files.rs`, the
   commands in `bash.rs`, time in `time.rs`, the store of the record in `store.rs`, as a file of lines or a database
-  of SQLite, each a `Store` that the suite in `store.test.rs` holds to its laws, and the provider of models in
-  `provider.rs`, which asks each model through rig and streams what it writes. Its catalog, `provider/catalog.rs`,
+  of SQLite, each a `Store` that the suite in `store.test.rs` holds to its laws, the log of a life beside its record
+  in `log.rs`, and the provider of models in `provider.rs`, which asks each model through rig and streams what it writes. Its catalog, `provider/catalog.rs`,
   knows the models of every provider that pi-ai serves and those of the claude command line, and it offers each
   model whose credential stands in the environment, the claude command line when it finds the program, and each
   model for chat that a local server lists when `FURB_LOCAL_URL` names its address, which `provider/local.rs` asks.
@@ -107,6 +107,9 @@ engine does not serve its meaning, the name is wrong, and the name changes.
 - started or done is ownership, and the owner of an act answers it. The life refuses an act that no ear owns.
 - A view reads the life, and makes nothing and keeps nothing: get, peek and transcript, and all that is derived
   from them.
+- The record is the one truth of a life. A cache of a life is derived from its record and checked against it, and a
+  reader drops a cache that does not agree: the log of a life holds every fact that the life said, and each later
+  life writes it again from the record.
 
 ## The bar
 
