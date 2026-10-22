@@ -74,7 +74,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | ⌥D / ⌥E | Fold or expand details / external editor |
 | ⌃V | Paste a clipboard image |
 | @ or ! | Find a project file, or run a shell command |
-| ↑, ↓, Tab, Enter after / or @ | Choose a slash command, its value, or a project file as it is typed |
+| ↑, ↓, Tab, Enter after /, @ or : | Choose a slash command, its value, a project file, or an emoji as it is typed |
 | ⌃F / PageUp / PageDown | Filter the current view / scroll |
 | ⌃R / ⌃Space | Python input / complete a name |
 | ⌃L / ⌃A | Edit a prompt program / answer an operator question or dismiss a notice |

@@ -40,6 +40,7 @@ import { clipboardImage } from "./clipboard.ts";
 import { commands, slashes } from "./commands.ts";
 import { conversation } from "./conversation.ts";
 import { externalEditor, openFile } from "./editor.ts";
+import { emojiNamed, emojis } from "./emoji.ts";
 import { shortenHome, shortenHomes } from "./files.ts";
 import { ago, clip, count, dollars, elapsed, graphemes, kibibytes, modelName, share } from "./format.ts";
 import { type Action, bindings, chords, keys, shown } from "./keys.ts";
@@ -3378,8 +3379,9 @@ export class App {
     for (const _ of graphemes.segment(old)) this.composer.deleteCharBackward();
     this.composer.insertText(replacement);
   }
-  /** The token the cursor ends: a `/command` that opens the input, or an `@path` that starts a word of a prompt. */
-  private token(): { kind: "/" | "@" | "value"; text: string; command?: string } | undefined {
+  /** The token the cursor ends: a `/command` that opens the input, or an `@path` or a `:shortcode` that starts a word
+   * of a prompt. */
+  private token(): { kind: "/" | "@" | ":" | "value"; text: string; command?: string } | undefined {
     const before = this.beforeCursor();
     const slash = before.match(/^\/([\w-]*)$/);
     if (slash) return { kind: "/", text: slash[1] ?? "" };
@@ -3390,6 +3392,9 @@ export class App {
     const at = before.match(/(?:^|\s)@([^\s"']*)$/);
     if (at && this.session.mode === "prompt" && !this.session.editing)
       return { kind: "@", text: at[1] ?? "" };
+    const colon = before.match(/(?:^|\s):([\w+-]*)$/);
+    if (colon && this.session.mode === "prompt" && !this.session.editing)
+      return { kind: ":", text: colon[1] ?? "" };
     return undefined;
   }
   /** The token before the cursor as it is now, replaced with the text of a suggestion. */
@@ -3507,6 +3512,14 @@ export class App {
     }));
   }
   private suggest = (): void => {
+    // A whole `:shortcode:` of a prompt that names an emoji becomes that emoji.
+    const whole = this.beforeCursor().match(/(?:^|\s)(:([\w+-]+):)$/);
+    const named =
+      whole && this.session.mode === "prompt" && !this.session.editing && emojiNamed(whole[2] ?? "");
+    if (whole && named) {
+      this.replaceBefore(whole[1] ?? "", named);
+      return;
+    }
     const token = this.token();
     const key = token ? `${token.kind}${token.text}` : "";
     const started = key === "@" && this.lastToken !== "@";
@@ -3558,6 +3571,14 @@ export class App {
                 },
               }),
         }));
+    } else if (token.kind === ":") {
+      this.suggestions = emojis(token.text)
+        .slice(0, 50)
+        .map(({ emoji, name, description }) => ({
+          label: `${emoji} :${name}:`,
+          detail: description,
+          text: emoji,
+        }));
     } else {
       const wanted = token.text.toLowerCase();
       this.suggestions = this.paths(
@@ -3578,19 +3599,21 @@ export class App {
     const token = this.overlay || this.dismissed ? undefined : this.token();
     const shown = token ? this.suggestions : [];
     const files = this.session.files;
-    const state = !token
-      ? ""
-      : (token.kind === "@" || pathCommands.has(token.command ?? "")) && files?.error
-        ? files.error
-        : (token.kind === "@" || pathCommands.has(token.command ?? "")) && !files?.paths
-          ? "Finding project files..."
-          : shown.length
-            ? ""
-            : token.kind === "/"
-              ? "No command starts with that name."
-              : token.kind === "value"
-                ? "No known value matches. Enter sends what is typed."
-                : "No project file matches.";
+    // An emoji list that matches nothing closes.
+    const state =
+      !token || token.kind === ":"
+        ? ""
+        : (token.kind === "@" || pathCommands.has(token.command ?? "")) && files?.error
+          ? files.error
+          : (token.kind === "@" || pathCommands.has(token.command ?? "")) && !files?.paths
+            ? "Finding project files..."
+            : shown.length
+              ? ""
+              : token.kind === "/"
+                ? "No command starts with that name."
+                : token.kind === "value"
+                  ? "No known value matches. Enter sends what is typed."
+                  : "No project file matches.";
     if (
       !this.paneChanged(this.suggestionBox, [
         this.theme,
