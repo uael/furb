@@ -15,7 +15,7 @@ use super::{
       test::{dropping, fake},
     },
   },
-  Catalog, DOCTRINES, SNAPSHOT, clamp, doctrine, parsed,
+  Catalog, SNAPSHOT, clamp, parsed,
 };
 use crate::ear::reactor;
 
@@ -514,15 +514,4 @@ fn an_id_alone_of_the_local_server_whose_part_before_its_colon_is_a_provider_is_
     (Some("local:google:gemma3"), 0),
     "what it listed holds it"
   );
-}
-
-#[test]
-fn a_model_reads_the_doctrine_of_the_family_that_its_id_names_and_a_model_of_no_family_reads_none()
-{
-  let qwen = DOCTRINES[0].1;
-  assert_eq!(doctrine("local:qwen3.8-flash-next-iq2_xs"), Some(qwen));
-  assert_eq!(doctrine("openrouter:Qwen/Qwen3-Coder"), Some(qwen));
-  assert_eq!(doctrine("qwen3"), Some(qwen));
-  assert_eq!(doctrine("claude-cli:opus"), None);
-  assert_eq!(doctrine("qwen:llama3"), None);
 }

@@ -3,7 +3,9 @@
 The engine is `src/furb/engine.py`, one file. It depends only on the python interpreter and on the ears of the outside
 that boot is given, each a generator under a name: the ears of the World, the Kernel and the gate among them. It is
 derived from the contract, `src/furb/engine.pyi`, and the suite in `test/` proves it. `src/furb/CLAUDE.md` holds the
-technical names of the engine and the laws that no test can hold. `script/CLAUDE.md` says how to run the DeepSWE rig.
+technical names of the engine and the laws that no test can hold. `DOCTRINE.md` is the doctrine of furb, which says
+how a model works in furb: every model reads it once on each chain, in the paragraph that asks it for its first word.
+`script/CLAUDE.md` says how to run the DeepSWE rig.
 
 The crate at the root, `furb`, runs the same file in monty, a python interpreter written in rust, behind an async
 API of its own:
@@ -165,12 +167,12 @@ is the folder `test` beside it.
 2. Every test carries a sentence of the contract.
 3. Every definition has a file of its own and at least one sentence. Two definitions never share a file.
 4. The module docstring of each contract is empty.
-5. `engine.py` less its doctrine, minified with its program kept as it is, costs fewer than 6500 tokens of
-   `o200k_base`, the tokenizer of OpenAI, and the doctrine costs at most 2000. The test counts with `o200k_base`
+5. `engine.py`, minified with its program kept as it is, costs fewer than 6500 tokens of `o200k_base`, the
+   tokenizer of OpenAI, and the doctrine of furb, `DOCTRINE.md`, costs at most 2000. The test counts with `o200k_base`
    because it is local and the same on each machine: the tokenizer of Claude is not public, and only the network
    counts with it. The wall is a proxy for the cost to Claude, which reads about 1.5 tokens for each token of
    `o200k_base` in the engine.
-6. The system prompt, unquoted, parses to the same program as `engine.py` on disk.
+6. The system prompt parses to the same program as `engine.py` on disk.
 7. No name in `engine.py` is bound again beneath a scope that already binds it: a parameter, a local, a loop
    target or an import never takes the spelling of a name of an enclosing function or of the module. Every word
    keeps one meaning.

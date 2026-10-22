@@ -552,7 +552,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   A write of a door that drops no rung that ran, since the gate refused each rung that it drops, keeps the module and every rung of the chain as they stand, and makes only the rung of what is new.
   Before every reply the chain tells the last paragraph of the turn, whose header says what the answer is for, as #rung5 advance on prompt1, which names the one that made the rung.
   The advance binds the share of the window that the last reply on the chain read, as rung5_share = 0.25: the tokens that reply read over the window that the roster gives its actor, to two places, and no share before a reply that read a token.
-  The advance of a reply to an actor whose roster entry holds a doctrine binds that doctrine, as rung5_doctrine, unless the transcript holds a reply to an actor of the same doctrine, so the model reads it once, in its user turn, just before it answers, and a chain that asks no such actor tells nothing of it.
+  The advance of a reply to an actor whose roster entry holds a doctrine tells that doctrine as the quote doctrine, unless the transcript holds a reply to an actor of the same doctrine, so the model reads it once, in its user turn, just before it answers, and a chain that asks no such actor tells nothing of it.
   When nothing was told on the chain since the word of the last rung that the chain did not make was ready, the chain tells that rung under the header told nothing before the advance, so the model sees that the word showed it nothing.
   The chain holds the text of each paragraph told on it, in order.
   At the first ready of the next rung, the chain runs that text as the told rung of that rung, before its word, and holds nothing more.
@@ -1066,5 +1066,3 @@ The program rebinds actor like any name, and the last binding wins.
 raised: BaseException | None
 """raised is the exception object that the last rung raised, rebound at each raise but a CancelledError.
 raised is None at the birth of the module of a chain, so a word reads it before any rung raised."""
-doctrine: str
-"""doctrine is the quote after the engine in the system prompt, which says how a model works in furb and holds no law."""

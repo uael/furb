@@ -28,7 +28,7 @@ The manifest is a JSON map with three keys:
 - `word` is the file of the word, relative to the folder. It is a python module that imports what it uses from
   `furb.engine`, so an editor, ruff and ty read it. The word is that file less its imports of furb, with its line
   ends made LF. It only defines, holds no comment, and binds no name of the engine. It holds no sentence but one
-  doctrine of its own, a quote that holds no law, as `engine.py` holds its own. Its contract holds its laws, as
+  doctrine of its own, a quote that holds no law, as furb holds its own in `DOCTRINE.md`. Its contract holds its laws, as
   `engine.pyi` holds those of the engine.
 - `life` is the life word, python that starts the work of the extension, such as `remember()`. It can be absent.
 

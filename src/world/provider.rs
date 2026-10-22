@@ -433,14 +433,14 @@ fn written(heard: bool, id: &str, tells: &mpsc::UnboundedSender<Replied>) -> Tol
   })
 }
 
-/// What the chains stand on: the models and the operator, the directory, and the default actor. The entry of a model
-/// of a family that reads a doctrine holds that doctrine after its window.
+/// What the chains stand on: the models and the operator, the directory, and the default actor. The entry of each
+/// model holds its doctrine after its window.
 fn standing(models: &[Model], directory: &str, actor: &str) -> Object {
   let offered = models.iter().map(|model| {
     let efforts = model.efforts.iter().map(|(effort, _)| Object::string(effort));
     let window = i64::try_from(model.window).unwrap_or(i64::MAX);
     let entry = [Object::string(&model.name), Object::list(efforts), Object::int(window)];
-    Object::list(entry.into_iter().chain(catalog::doctrine(&model.name).map(Object::string)))
+    Object::list(entry.into_iter().chain([Object::string(catalog::DOCTRINE)]))
   });
   // The operator answers in person, with no effort, and reads the window of the engine.
   let operator = Object::list([Object::string(OPERATOR), Object::list([]), Object::int(WINDOW)]);
