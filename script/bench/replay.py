@@ -64,10 +64,10 @@ def counted(before: dict[str, float]) -> dict[str, float]:
   return {name: after[name] - before[name] for name in COUNTS}
 
 
-def told(task: str) -> tuple[Path, str]:
-  """A fresh checkout of the task, and its instruction as the task wrote it."""
-  _, path, _, _ = deepswe.seeded(task)
-  return deepswe.WORK / task / "app", (path / "instruction.md").read_text(encoding="utf-8").rstrip()
+def told(task: str) -> tuple[Path, str, str]:
+  """A fresh checkout of the task, its instruction as the task wrote it, and the commit of its base."""
+  _, path, _, syn = deepswe.seeded(task)
+  return deepswe.WORK / task / "app", (path / "instruction.md").read_text(encoding="utf-8").rstrip(), syn
 
 
 async def first(app: Path, message: str, record: Path, cap: float) -> object:
@@ -111,15 +111,20 @@ def life(record: Path, app: Path) -> dict[str, object]:
   return {"code": ran.returncode, "seconds": seconds, **counted(before), "said": ran.stderr[-2000:]}
 
 
-def drifted(record: Path, app: Path) -> dict[str, object]:
-  """One more life after a change of the first file of the World that the first life read, and the act where it
-  stops: the line of the record that holds that act, of all its lines."""
+def drifted(record: Path, app: Path, base: str) -> dict[str, object]:
+  """One more life after a change of one file of the World that the first life touched, and the act where it stops:
+  the line of the record that holds that act, of all its lines. The file is the first that a read or a write of the
+  first life names by a path of the disk, or else the first that the checkout changed from its base, through bash."""
   facts = [entry[0] for entry in kept(record)]
   paths = [
     Path(fact[3].path)
     for fact in facts
     if fact[0] == "done" and fact[1].startswith(("read", "write")) and isinstance(fact[3], engine.Text)
   ]
+  ran = subprocess.run(  # noqa: S603
+    [*deepswe.gits(app), "diff", "--name-only", base], capture_output=True, text=True, check=False
+  )
+  paths += [app / one for one in ran.stdout.splitlines()]
   read = next((one for one in paths if one.is_absolute() and one.is_file()), None)
   if read is None:
     return {"changed": None}
@@ -136,7 +141,7 @@ def drifted(record: Path, app: Path) -> dict[str, object]:
 
 def baseline(task: str, cap: float) -> dict[str, object]:
   """Claude Code on the same model, on a fresh checkout of the task, and what it cost."""
-  app, message = told(task)
+  app, message, _ = told(task)
   before, began = server(), time.monotonic()
   try:
     ran = subprocess.run(  # noqa: S603
@@ -175,7 +180,7 @@ def main() -> int:
   def keep() -> None:
     results.write_text(json.dumps(found, indent=2, default=repr) + "\n", encoding="utf-8")
 
-  app, message = told(args.task)
+  app, message, base = told(args.task)
   if (app / ".venv" / "bin").is_dir():
     os.environ["PATH"] = os.pathsep.join([str(app / ".venv" / "bin"), os.environ["PATH"]])
   os.chdir(app)
@@ -200,7 +205,7 @@ def main() -> int:
     found["lives"].append(one)
     keep()
     say(f"[replay] life {n + 1}: { ({k: v for k, v in one.items() if k != 'said'}) }")
-  found["drift"] = drifted(record, app)
+  found["drift"] = drifted(record, app, base)
   keep()
   say(f"[replay] the life after a change: { ({k: v for k, v in found['drift'].items() if k != 'said'}) }")
   found["baseline"] = []
