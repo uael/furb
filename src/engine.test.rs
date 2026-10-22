@@ -3,8 +3,8 @@
 //! What the engine does is the suite's to prove, on both engines. What this proves is the crate: an engine boots on
 //! the ears of the World that the crate writes, and on a provider that the test writes as a coroutine, as a host
 //! does. The files read and write, a command runs on this machine and speaks as it writes, a wait ends at its
-//! due, a function of the host is called back, a fault crosses as itself, and the record the store kept opens a
-//! second life.
+//! due, a function of the host is called back, a fault crosses as itself, a word that never yields raises at the
+//! bound of its turn, and the record the store kept opens a second life.
 
 use std::{
   cell::RefCell,
@@ -1024,4 +1024,78 @@ fn a_generator_that_a_builtin_steps_waits_on_an_act() {
   let with = verbs::Prompt { on: on(&root), ..Default::default() };
   let act = lived.engine.prompt(Object::string("int"), with).unwrap();
   assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(8));
+}
+
+/// A fact as a later life says it again: its kind, its act and its words, and not who said it, since the journal
+/// says the done of what the record holds, with no started before it.
+fn said(fact: &Fact) -> Option<String> {
+  let words = (0..).map_while(|at| fact.word(at)).map(|one| one.to_owned().py_repr());
+  (fact.kind() != "started")
+    .then(|| format!("{} {} {:?}", fact.kind(), fact.about(), words.collect::<Vec<_>>()))
+}
+
+/// Each sandbox that this thread makes from now on, with a turn bound short enough for a test.
+fn bounded() {
+  crate::sand::BOUND.set(Duration::from_millis(500));
+}
+
+#[test]
+fn a_word_that_never_yields_raises_at_the_bound_and_the_chain_asks_again() {
+  bounded();
+  let mut lived = Lived::new("spun", &["while True:\n  pass", "close(8)"], true).unwrap();
+  let root = lived.root();
+  let with = verbs::Prompt { on: on(&root), ..Default::default() };
+  let act = lived.engine.prompt(Object::string("int"), with).unwrap();
+  assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(8));
+  let read = lived.read.borrow();
+  assert!(read[1].contains("TimeoutError('turn time limit exceeded: 500ms')"), "{}", read[1]);
+}
+
+#[test]
+fn a_word_that_never_yields_on_another_chain_raises_and_the_root_goes_on() {
+  bounded();
+  let word =
+    "c = chain('w')\nr = rung('while True:\\n  pass', on=c)\nawait wait(1)\nclose(repr(peek(r)))";
+  let mut lived = Lived::new("apart", &[word], true).unwrap();
+  let root = lived.root();
+  let with = verbs::Prompt { on: on(&root), ..Default::default() };
+  let act = lived.engine.prompt(Object::string("str"), with).unwrap();
+  let got = block_on(act).unwrap();
+  assert_eq!(got.as_ref().as_str(), Some("TimeoutError('turn time limit exceeded: 500ms')"));
+}
+
+#[test]
+fn the_bound_in_code_of_the_engine_and_no_word_is_a_fault_that_names_it() {
+  bounded();
+  let word = "def spin():\n  yield\n  while True:\n    pass\ndrive(spin(), 'spin')";
+  let mut lived = Lived::new("ear", &[word], true).unwrap();
+  let root = lived.root();
+  let with = verbs::Prompt { on: on(&root), ..Default::default() };
+  let got = lived.engine.prompt(Object::string("int"), with).and_then(block_on);
+  let fault = got.expect_err("an ear that spins outside every word ends the life with a fault");
+  assert_eq!(fault.name, "TimeoutError");
+  assert_eq!(fault.message(), "turn time limit exceeded: 500ms");
+}
+
+#[test]
+fn a_record_whose_word_never_yields_replays_to_the_same_facts() {
+  bounded();
+  let (root, facts) = {
+    let mut first = Lived::new("replayed", &["while True:\n  pass", "close(8)"], true).unwrap();
+    let root = first.root();
+    let with = verbs::Prompt { on: on(&root), ..Default::default() };
+    let act = first.engine.prompt(Object::string("int"), with).unwrap();
+    assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(8));
+    let facts = first.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
+    (root, facts.iter().filter_map(said).collect::<Vec<_>>())
+  };
+  let mut second = Lived::new("replayed", &[], false).unwrap();
+  assert!(second.engine.raised().is_none(), "{:?}", second.engine.raised());
+  assert_eq!(second.read.borrow().len(), 0, "a later life asks no model for what the record holds");
+  let again = second.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
+  let again = again.iter().filter_map(said).collect::<Vec<_>>();
+  // After the record, the later life stands again at its tip.
+  let (made, tip) = again.split_at(facts.len().min(again.len()));
+  assert_eq!(made, facts);
+  assert!(tip.first().is_some_and(|one| one.starts_with("stand ")), "{tip:?}");
 }
