@@ -170,6 +170,12 @@ with no life, and opens an inspection when the log does not agree. An `Activity`
 but for the question `covers`, which a reader with no life answers from the acts of the log, as the engine does: a
 pause, a wake or a cancel covers the act that it names, each act that this act made at any depth, and each act on the
 chain that it names; a close covers the act that it names, each rung that this act made, and each reply that one of these made.
+`retold(record)` reads a record with no life, so a record of any engine opens: it gives the engine that made the
+record, as the record names it, and `null` when it names none, the engine of this build, whether its facts are those
+of the log, and the facts. The facts are those of the log while the log agrees with the record, and else those that
+the record kept, with the facts that the engine said and the record does not keep, as far as the kept facts show
+them: each chain and each rung that a kept act names, the run of the word of each rung that the gate let run, the
+findings of a word that the gate refused, and the done of each act that the operator closed or cancelled.
 
 A life that keeps its record keeps a snapshot of its state beside it, `<record>.snapshot`: the session of the sandbox
 and what the engine holds of its ears, with the key of the build and of the ears, and digests of the record and of

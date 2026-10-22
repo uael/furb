@@ -231,6 +231,21 @@ def logged(path: str) -> list[list[object]] | None:
   that the life that wrote it said, as an ear of a host hears it, the rungs of each ladder among them. Nothing when
   the record has no log, or a log that does not agree with it."""
 
+class Retold(TypedDict):
+  """What a record tells, read with no life: the engine that made it, the engine of this build, whether its facts are
+  those of its log, and its facts."""
+
+  made: str | None
+  engine: str
+  logged: bool
+  facts: list[list[object]]
+
+def retold(path: str) -> Retold:
+  """What the record at a path tells, read with no life, so no word runs again and a record of any engine opens: the
+  engine that made it, as the record names it, and nothing when it names none; the engine of this build; whether
+  the facts are those of its log; and the facts, in order. The facts are those of the log when it agrees with the
+  record, and else those that the record kept, with the chains, the rungs, the runs and the dones that they name."""
+
 def decode_record(line: str) -> object:
   """One line of a record, read with every number exact, as the record keeps it."""
 
