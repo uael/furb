@@ -16,6 +16,7 @@ pub mod fact;
 pub mod gate;
 pub mod life;
 mod sand;
+mod snapshot;
 pub mod value;
 pub mod wire;
 pub mod world;

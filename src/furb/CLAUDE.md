@@ -192,7 +192,8 @@ meanings. The entry of such a name here gives only its form in the engine.
 - ty check passes on engine.py.
 - There is one root per record, and one process at a time owns a record.
 - A chain is a function of the record, and a later boot must offer the same interpreter and the same outside, since a
-  record is made again by running its words.
+  record is made again by running its words, or loaded from the snapshot that a run of those words made on the same
+  record, interpreter and outside, which the opening of the life checks against the record.
 - A chain is one conversation, and the transcript that a provider caches grows at one end.
 - Nothing is told twice, and nothing tells what it does not know: an act tells of itself, and a chain of the rungs it
   asks a model for, with the message of the prompt each advances, of a word that told nothing, of the prompts and the

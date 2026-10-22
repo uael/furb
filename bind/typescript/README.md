@@ -168,7 +168,15 @@ line, and a host can delete it, since the next life writes it again. `logged(rec
 with no life, and opens an inspection when the log does not agree. An `Activity` reads them as it reads a live life,
 but for the question `covers`, which a reader with no life answers from the acts of the log, as the engine does: a
 pause, a wake or a cancel covers the act that it names, each act that this act made at any depth, and each act on the
-chain that it names; a close covers the act that it names, each rung that this act made, and each reply that one of these made. The session saves
+chain that it names; a close covers the act that it names, each rung that this act made, and each reply that one of these made.
+
+A life that keeps its record keeps a snapshot of its state beside it, `<record>.snapshot`: the session of the sandbox
+and what the engine holds of its ears, with the key of the build and of the ears, and digests of the record and of
+the log that it covers. A later life on the record opens from it with no replay when it agrees with all of them,
+tells each ear the past of the life from the log, and stands again at its tip; else it replays the record, and keeps
+a new snapshot. A life writes it when it opens, at most once each thirty seconds while it does work, and when it
+ends, but not while work of the outside runs, as a command or a reply. `snapshot: false` in the opening turns it off.
+A `Session` keeps none yet: its observer is an ear that a verb was given, which a later process cannot give again. The session saves
 `.session.json` whole with `saveFile(path, text)`, which writes `<path>.tmp` and gives it the name of the file. A
 save that fails throws an error that names the file, with the error of the system as its cause. The TUI saves its
 own files with it.

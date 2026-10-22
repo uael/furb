@@ -182,3 +182,168 @@ fn a_life_that_keeps_a_record_writes_the_log_of_every_fact_beside_it_and_a_later
     "a log that its record outgrew does not agree"
   );
 }
+
+/// What a word that a rung runs on the root closes with.
+fn closed(engine: &mut Engine, word: &str) -> Object {
+  let word = Some(word.to_owned());
+  let rung =
+    engine.rung(verbs::Rung { word, on: Some("chain1".to_owned()), ..Default::default() }).unwrap();
+  futures::executor::block_on(rung).unwrap()
+}
+
+/// The kind and the name of each fact of the log of a record, after the facts that a number of them leave out.
+fn heads(record: &Path, after: usize) -> Vec<String> {
+  let facts = world::logged(record).unwrap().expect("the log agrees with the record");
+  let head =
+    |one: &Object| one.as_ref().py_repr().splitn(3, ", ").take(2).collect::<Vec<_>>().join(", ");
+  facts.iter().skip(after).map(head).collect()
+}
+
+#[test]
+fn a_later_life_opens_from_the_snapshot_that_agrees_with_its_record_and_goes_on_as_a_replay_goes_on()
+ {
+  for extensions in [false, true] {
+    goes_on(&place(&format!("snapshot-{extensions}")), extensions);
+  }
+}
+
+/// A life that keeps a snapshot, and two later lives on its record, one from the snapshot and one that replays.
+fn goes_on(at: &Path, extensions: bool) {
+  let (record, again) = (at.join("record.jsonl"), at.join("again.jsonl"));
+  for (name, text) in [("a.txt", "a\n"), ("b.txt", "b\n"), ("CLAUDE.md", "the memory\n")] {
+    fs::write(at.join(name), text).unwrap();
+  }
+  let open = |record: &Path, snapshot: bool| {
+    let record = Some(record.display().to_string());
+    let opening = Opening {
+      extensions: Some(extensions),
+      snapshot: Some(snapshot),
+      record,
+      ..opening(at, true)
+    };
+    opening.boot::<String>([]).unwrap().0
+  };
+  let mut first = open(&record, true);
+  assert!(!first.restored(), "a new record has no snapshot");
+  assert_eq!(closed(&mut first, "x = 41\nread('a.txt')\nclose(x)").as_ref().as_int(), Some(41));
+  drop(first);
+  // A later life says each fact of the first life again, or holds it from the snapshot, before its own.
+  let one = heads(&record, 0).len();
+  for end in ["", ".log", ".snapshot"] {
+    fs::copy(format!("{}{end}", record.display()), format!("{}{end}", again.display())).unwrap();
+  }
+  let mut restored = open(&record, true);
+  let mut replayed = open(&again, false);
+  assert!(restored.restored(), "the snapshot agrees with the record");
+  assert!(!replayed.restored(), "a life that takes no snapshot replays");
+  let word = "read('b.txt')\nclose(x + 1)";
+  assert_eq!(
+    closed(&mut restored, word).as_ref().as_int(),
+    Some(42),
+    "the module holds what the word bound"
+  );
+  assert_eq!(closed(&mut replayed, word).as_ref().as_int(), Some(42));
+  drop((restored, replayed));
+  let (restored, replayed) = (heads(&record, one), heads(&again, one));
+  assert_eq!(restored, replayed, "both lives go on with the same facts");
+  let facts = world::logged(&record).unwrap().unwrap();
+  let told =
+    facts[one..].iter().filter(|one| one.as_ref().py_repr().contains("the memory")).count();
+  let first =
+    facts[..one].iter().filter(|one| one.as_ref().py_repr().contains("the memory")).count();
+  assert!(!extensions || first > 0, "the first life told the memory");
+  assert_eq!(told, 0, "the memory ear heard the past, so it tells no chain again what it holds");
+}
+
+#[test]
+fn a_snapshot_that_its_record_outgrew_is_dropped_and_the_life_replays() {
+  let at = place("outgrew");
+  let record = at.join("record.jsonl");
+  let open =
+    || Opening { extensions: Some(false), ..opening(&at, true) }.boot::<String>([]).unwrap().0;
+  let mut first = open();
+  closed(&mut first, "x = 1\nclose(x)");
+  drop(first);
+  let snapshot = fs::read(format!("{}.snapshot", record.display())).unwrap();
+  let mut second = open();
+  assert!(second.restored());
+  closed(&mut second, "close(x)");
+  drop(second);
+  fs::write(format!("{}.snapshot", record.display()), snapshot).unwrap();
+  let mut third = open();
+  assert!(!third.restored(), "the record holds entries after those that the snapshot covers");
+  assert_eq!(closed(&mut third, "close(x + 1)").as_ref().as_int(), Some(2));
+}
+
+#[test]
+fn a_life_whose_outside_works_keeps_no_snapshot_of_that_work() {
+  let at = place("works");
+  let open =
+    || Opening { extensions: Some(false), ..opening(&at, true) }.boot::<String>([]).unwrap().0;
+  let mut first = open();
+  let wait = first.wait(&[], verbs::Wait { seconds: Some(60.0), on: Some("chain1".to_owned()) });
+  drop(wait.unwrap());
+  drop(first);
+  let second = open();
+  assert!(
+    !second.restored(),
+    "the snapshot that the life kept before the wait covers fewer entries than the record"
+  );
+}
+
+#[test]
+fn a_snapshot_of_another_build_or_on_another_log_is_not_taken_and_the_life_replays() {
+  let at = place("another");
+  let record = at.join("record.jsonl");
+  let open =
+    || Opening { extensions: Some(false), ..opening(&at, true) }.boot::<String>([]).unwrap().0;
+  let mut first = open();
+  closed(&mut first, "x = 1\nclose(x)");
+  drop(first);
+  let snapshot = PathBuf::from(format!("{}.snapshot", record.display()));
+  let held = fs::read(&snapshot).unwrap();
+  let line = held.iter().position(|one| *one == b'\n').unwrap();
+  let head = String::from_utf8(held[..line].to_vec()).unwrap();
+  let build = head.split("\"build\":\"").nth(1).unwrap().split('"').next().unwrap().to_owned();
+  let other =
+    [head.replace(&build, &"0".repeat(build.len())).into_bytes(), held[line..].to_vec()].concat();
+  fs::write(&snapshot, other).unwrap();
+  let second = open();
+  assert!(!second.restored(), "a snapshot of another build is not taken");
+  drop(second);
+  assert!(open().restored(), "the life that replayed kept a snapshot of this build");
+  let log = format!("{}.log", record.display());
+  let text = fs::read_to_string(&log).unwrap();
+  fs::write(&log, text.replacen("\"chain1\"", "\"chain1\" ", 1)).unwrap();
+  assert!(!open().restored(), "a snapshot of another log is not taken");
+}
+
+#[test]
+#[ignore = "a measure, which a person runs in release"]
+fn measure_how_long_a_life_opens_from_its_snapshot_and_by_a_replay() {
+  let at = place("measure");
+  let open = |snapshot: bool| {
+    let opening =
+      Opening { extensions: Some(false), snapshot: Some(snapshot), ..opening(&at, true) };
+    opening.boot::<String>([]).unwrap().0
+  };
+  let n: usize = std::env::var("RUNGS").ok().and_then(|one| one.parse().ok()).unwrap_or(200);
+  let mut engine = open(true);
+  for i in 0..n {
+    closed(&mut engine, &format!("x{i} = [{i}] * 50\nclose(len(x{i}))"));
+  }
+  drop(engine);
+  let entries = world::kept(at.join("record.jsonl")).unwrap().len();
+  let size = fs::metadata(at.join("record.jsonl.snapshot")).unwrap().len();
+  let t = std::time::Instant::now();
+  let restored = open(true);
+  let from = t.elapsed();
+  assert!(restored.restored());
+  drop(restored);
+  let t = std::time::Instant::now();
+  drop(open(false));
+  eprintln!(
+    "rungs {n}, entries {entries}, snapshot {size} bytes: from the snapshot {from:?}, by a replay {:?}",
+    t.elapsed()
+  );
+}

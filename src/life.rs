@@ -4,8 +4,9 @@
 //! a question in the place of an ear of the crate, or wraps it.
 //!
 //! Every life hears the ear of the extensions and the ear of each official extension, whatever it enables, since a
-//! record is made again by running its words: a life whose host turns the extensions off enables nothing new, and
-//! runs what its record enables all the same. The ears are named as every host names them, so the record of one
+//! record is made again by running its words, or loaded from the snapshot that a run of those words made on the same
+//! record, the same build and the same ears, which the life checks against the record: a life whose host turns the
+//! extensions off enables nothing new, and runs what its record enables all the same. The ears are named as every host names them, so the record of one
 //! host opens in another.
 
 use std::{
@@ -18,6 +19,7 @@ use crate::{
   Ear, Engine, Fault, Object,
   ear::{hear, hearing},
   extension::{self, Places, memory::memory, skills::skills, web::web},
+  snapshot::{self, Keeper},
   world::{self, Catalog, Scratch, Writes},
 };
 
@@ -102,6 +104,10 @@ pub struct Opening {
   )]
   #[cfg_attr(feature = "python", pyo3(default))]
   pub stream: Option<Stream>,
+  /// Whether the life opens from the snapshot of its record when the snapshot agrees with the record, and keeps one
+  /// when it keeps its record; true when unsaid.
+  #[cfg_attr(feature = "python", pyo3(default))]
+  pub snapshot: Option<bool>,
   /// A function of the host that is told each report of the life that no model reads, one line each; the stderr of
   /// this process when unsaid.
   #[cfg_attr(feature = "typescript", napi(ts_type = "(line: string) => void"))]
@@ -124,6 +130,27 @@ impl Opening {
   /// record, and else one of its own, which goes with the life. A new record starts with an empty scratch directory,
   /// and the files of the record are made again in one that is missing.
   pub fn parts(self) -> Result<(Vec<Object>, Ears), Fault> {
+    self.parted(false)
+  }
+
+  /// Whether the life keeps what it says to its record.
+  fn keeps(&self) -> bool {
+    self.keeps != Some(false) && self.works() && self.record.is_some()
+  }
+
+  /// The names of the ears of the crate, in the order of boot.
+  fn names(&self) -> Vec<String> {
+    let mut names =
+      vec!["provider", "extensions", "memory", "skills", "web", "files", "bash", "time"];
+    if self.keeps() {
+      names.extend(["store", "log"]);
+    }
+    names.into_iter().map(str::to_owned).collect()
+  }
+
+  /// The record and the ears of the crate, as [`Opening::parts`] gives them, with an ear of the log that writes it on
+  /// after the lines that it holds when the life is `continued` from a snapshot.
+  fn parted(self, continued: bool) -> Result<(Vec<Object>, Ears), Fault> {
     let works = self.works();
     let keeps = self.keeps != Some(false) && works;
     let (record, store) = match (&self.record, keeps) {
@@ -149,7 +176,10 @@ impl Opening {
       true => extension::configured(&places, self.directory.as_ref())?,
       false => Vec::new(),
     };
-    let logs = self.record.as_ref().filter(|_| keeps).map(|path| world::log(path, record.len()));
+    let logs = self.record.as_ref().filter(|_| keeps).map(|path| match continued {
+      true => world::continued(path, record.len()),
+      false => world::log(path, record.len()),
+    });
     let (provider, search) = self.provider()?;
     let working = |made: Option<Box<dyn Ear>>| made.unwrap_or_else(silent);
     let config = places.config;
@@ -193,17 +223,52 @@ impl Opening {
 
   /// The life, booted on the ears of the host and then on the ears of the crate, and the record it opened on. A life
   /// whose record drifted is refused, since it would keep nothing more.
+  ///
+  /// A life opens from the snapshot of its record when the snapshot agrees with the record, its log, this build and
+  /// these ears, as [`crate::snapshot`] says, and stands again at its tip, as boot does; else it replays the record.
+  /// A life that keeps its record keeps its snapshot: after it opens, as it goes on, and when it ends. A snapshot
+  /// that agrees and that the ears of this host cannot take, as an ear that speaks at its birth, is dropped, and the
+  /// life is refused, so the next life on the record replays.
   pub fn boot<N: Into<String>>(
     self,
     host: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
   ) -> Result<(Engine, Vec<Object>), Fault> {
-    let (record, ears) = self.parts()?;
-    let host = host.into_iter().map(|(name, ear)| (name.into(), ear));
-    let engine = Engine::boot(record.clone(), host.chain(ears))?;
-    match engine.raised() {
-      Some(no) => Err(no.clone()),
-      None => Ok((engine, record)),
+    let host: Vec<(String, Box<dyn Ear>)> =
+      host.into_iter().map(|(name, ear)| (name.into(), ear)).collect();
+    let mut names: Vec<String> = host.iter().map(|(name, _)| name.clone()).collect();
+    names.extend(self.names());
+    let build = snapshot::build(&names);
+    let (keeps, snapshots) = (self.keeps(), self.snapshot != Some(false));
+    let path = self.record.clone().filter(|_| snapshots).map(PathBuf::from);
+    let restore = path.as_ref().and_then(|path| snapshot::restore(path, &build));
+    let (record, ears) = self.parted(restore.is_some() && keeps)?;
+    let ears = host.into_iter().chain(ears);
+    let mut engine = match restore {
+      Some(restore) if restore.entries == record.len() => {
+        let opened =
+          Engine::from_snapshot(&record, ears, &restore.table, restore.sand, &restore.past)
+            .and_then(|mut engine| engine.verb("stand", vec![], vec![]).map(|_| engine));
+        match (opened, &path) {
+          (Ok(engine), _) => engine,
+          (Err(fault), Some(path)) if keeps => {
+            snapshot::dropped(path);
+            return Err(fault);
+          }
+          (Err(fault), _) => return Err(fault),
+        }
+      }
+      Some(_) => {
+        return Err(Fault::refused("the record changed while the life opened on its snapshot"));
+      }
+      None => Engine::boot(record.clone(), ears)?,
+    };
+    if let Some(no) = engine.raised() {
+      return Err(no.clone());
     }
+    if let Some(path) = path.filter(|_| keeps) {
+      engine.keep(Keeper::new(path, build));
+    }
+    Ok((engine, record))
   }
 }
 

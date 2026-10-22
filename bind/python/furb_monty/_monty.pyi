@@ -79,8 +79,9 @@ class Inspection(TypedDict):
 
 class Opening(TypedDict):
   """What a life is opened on, which every host gives the same. Each part that is unsaid takes its default: no
-  record, a life that keeps and does work and enables the extensions that the configs turn on, the config directory
-  of this process, and the first model the catalog offers."""
+  record, a life that keeps and does work and enables the extensions that the configs turn on, a life that opens from
+  the snapshot of its record and keeps one, the config directory of this process, and the first model the catalog
+  offers."""
 
   directory: str
   record: NotRequired[str | None]
@@ -95,6 +96,7 @@ class Opening(TypedDict):
   images: NotRequired[str | None]
   answer: NotRequired[Callable[[dict, Callable[..., None]], object] | None]
   stream: NotRequired[Callable[[str, str, str, str], None] | None]
+  snapshot: NotRequired[bool | None]
   log: NotRequired[Callable[[str], None] | None]
 
 type Ears = Iterable[tuple[str, object]]
