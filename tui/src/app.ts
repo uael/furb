@@ -19,12 +19,14 @@ import {
   getTreeSitterClient,
   InputRenderable,
   InputRenderableEvents,
+  infoStringToFiletype,
   type KeyEvent,
   type LineNumberOptions,
   LineNumberRenderable,
   MarkdownRenderable,
   type MouseEvent,
   type Renderable,
+  type RenderNodeContext,
   RGBA,
   type ScrollBoxOptions,
   ScrollBoxRenderable,
@@ -36,6 +38,7 @@ import {
 } from "@opentui/core";
 import type { Keymap } from "@opentui/keymap";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
+import type { Token, Tokens } from "marked";
 import { clipboardImage } from "./clipboard.ts";
 import { commands, slashes } from "./commands.ts";
 import { conversation } from "./conversation.ts";
@@ -1344,12 +1347,58 @@ export class App {
     };
     return node;
   }
-  private markdown(content: string, fg = c.prose): MarkdownRenderable {
+  /** Markdown on a surface, whose code blocks stand out from it on the surface of a code block, or on the surface
+   * that a code block takes in a panel. */
+  private markdown(content: string, fg = c.prose, surface = c.panel): MarkdownRenderable {
     return new MarkdownRenderable(this.renderer, {
       content: safeText(content),
       syntaxStyle: this.style,
       fg,
+      // OpenTUI draws a code block as bare lines in the color of the prose, so the TUI draws each one as a block. A
+      // renderer that OpenTUI does not mark as one of code blocks alone parts the rest into blocks with no space
+      // between them, so the mark keeps the prose as OpenTUI draws it.
+      renderNode: Object.assign(
+        (token: Token, context: RenderNodeContext) =>
+          token.type === "code"
+            ? this.codeBlock(
+                token as Tokens.Code,
+                context,
+                surface,
+                !content.trimEnd().endsWith(token.raw.trimEnd()),
+              )
+            : undefined,
+        { codeBlockOnly: true },
+      ),
     });
+  }
+  /** A code block: a surface of its own with an inset, its language as a label, the colors of its grammar, and its
+   * lines as they are. A line too long for the block does not wrap, so that it keeps the indentation of each line. */
+  private codeBlock(
+    { text, lang }: Tokens.Code,
+    context: RenderNodeContext,
+    surface: RGBA,
+    followed: boolean,
+  ): BoxRenderable {
+    const language = lang?.trim().split(/\s+/)[0] ?? "";
+    const block = this.box({
+      backgroundColor: surface,
+      paddingX: space.inset,
+      marginBottom: followed ? space.section : 0,
+    });
+    if (language) block.add(this.text(language, c.faint));
+    block.add(
+      new CodeRenderable(this.renderer, {
+        content: text,
+        filetype: infoStringToFiletype(language),
+        syntaxStyle: context.syntaxStyle,
+        treeSitterClient: context.treeSitterClient,
+        fg: c.text,
+        wrapMode: "none",
+        drawUnstyledText: true,
+        width: "100%",
+      }),
+    );
+    return block;
   }
 
   /** Whether a card is folded: by the operator's click, or else as its kind starts. A rung that runs, or that failed
@@ -1560,7 +1609,9 @@ export class App {
               [`  ${act.by === "operator" ? "for you" : `from ${act.by}`}`, c.faint],
             ],
             (box) => {
-              this.panel(box, unread ? c.warning : c.border).add(this.text(message));
+              this.panel(box, unread ? c.warning : c.border).add(
+                this.markdown(message, c.text, c.background),
+              );
               if (unread)
                 box.add(
                   this.inset(
@@ -1592,7 +1643,9 @@ export class App {
               [`  ${act.by === "operator" ? "for you" : `from ${act.by}`}`, c.faint],
             ],
             (box) => {
-              this.panel(box, waiting ? c.warning : c.border).add(this.text(message));
+              this.panel(box, waiting ? c.warning : c.border).add(
+                this.markdown(message, c.text, c.background),
+              );
               if (waiting)
                 box.add(
                   this.inset(
