@@ -65,7 +65,7 @@ fn lived(provider: Provider) -> Engine {
   let ears: [(&str, Box<dyn Ear>); 4] = [
     ("provider", provider.ear()),
     ("files", world::files(scratch.clone())),
-    ("bash", world::bash(scratch)),
+    ("bash", world::bash(scratch, &[])),
     ("time", world::time()),
   ];
   Engine::boot(Vec::<Object>::new(), ears).expect("the life opens")

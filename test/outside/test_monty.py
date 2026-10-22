@@ -12,6 +12,7 @@ ear that the collector of cycles drops on another thread. What the ears of the c
 proves.
 """
 
+import asyncio
 import builtins
 import gc
 import json
@@ -374,32 +375,60 @@ async def test_the_door_names_the_work_that_an_earlier_life_left_pending(tmp_pat
   assert furb_monty.engine.pending() == [("wait1", "wait")]
 
 
-async def test_the_door_parks_a_command_that_five_lives_left_and_runs_it_again_at_a_retry(tmp_path: Path) -> None:
-  """A later life on a record that shows a command started five times and not done, as five lives that ended while it
+async def test_the_door_parks_a_reply_that_five_lives_left_and_runs_it_again_at_a_retry(tmp_path: Path) -> None:
+  """A later life on a record that shows a reply started five times and not done, as five lives that ended while it
   ran leave it, names it parked and not pending, a wake starts it not, and a retry starts it, as the engine of the
   crate does."""
   path = str(tmp_path / "record.jsonl")
   record, store = _monty.store(path)
-  root = furb_monty.engine.boot(record, bash=_monty.bash(str(tmp_path)), store=store, world=Dead(stands=STANDS).hears())
-  engine.bash("sleep 30", on=root)
+  root = furb_monty.engine.boot(record, store=store, world=Sand().hears())
+  engine.prompt(int, "count", on=root)
   await settle()
   lines = Path(path).read_text().splitlines(keepends=True)
-  started = next(i for i, line in enumerate(lines) if json.loads(line)[0][:2] == ["started", "bash1"])
+  started = next(i for i, line in enumerate(lines) if json.loads(line)[0][:2] == ["started", "reply1"])
   crashed = tmp_path / "crashed.jsonl"
   crashed.write_text("".join(lines[: started + 1]) + lines[started] * 4)
-  furb_monty.engine.boot(_monty.kept(str(crashed)), bash=_monty.bash(str(tmp_path)), world=Dead(stands=STANDS).hears())
-  assert (furb_monty.engine.parked(), furb_monty.engine.pending()) == ([("bash1", "bash")], [])
+  furb_monty.engine.boot(_monty.kept(str(crashed)), world=Sand().hears())
+  assert (furb_monty.engine.parked(), furb_monty.engine.pending()) == ([("reply1", "reply")], [])
 
   def started() -> list[tuple]:
-    return [x for x in engine.transcript(root) if x[:2] == ("started", "bash1") and x[2] != "journal"]
+    return [x for x in engine.transcript(root) if x[:2] == ("started", "reply1") and x[2] != "journal"]
 
   engine.wake(root)
   await settle()
   assert started() == []
-  furb_monty.engine.retry("bash1")
+  furb_monty.engine.retry("reply1")
   await settle()
   assert len(started()) == 1
   assert furb_monty.engine.parked() == []
+
+
+async def test_the_ear_of_commands_closes_as_interrupted_a_command_that_its_record_shows_cut(tmp_path: Path) -> None:
+  """The ear of commands that is given the record of a life that ended while a command ran closes that command, at
+  the wake, with a refusal that says it was interrupted, and runs it no more, as the opening of the crate gives it."""
+  path = str(tmp_path / "record.jsonl")
+  record, store = _monty.store(path)
+  root = furb_monty.engine.boot(
+    record,
+    bash=_monty.bash(str(tmp_path), record),
+    store=store,
+    world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears(),
+  )
+  engine.bash("printf x >> count; exec sleep 30", on=root)
+  for _ in range(200):
+    if (tmp_path / "count").exists():
+      break
+    await asyncio.sleep(0.05)
+  kept = _monty.kept(path)
+  furb_monty.engine.boot(
+    kept, bash=_monty.bash(str(tmp_path), kept), world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears()
+  )
+  assert furb_monty.engine.pending() == [("bash1", "bash")]
+  engine.wake(root)
+  await settle()
+  got = engine.peek("bash1")
+  assert isinstance(got, Refused) and str(got).endswith("was interrupted: the life that ran it ended before it did")
+  assert (tmp_path / "count").read_text() == "x"
 
 
 async def test_a_key_of_the_client_makes_its_act_once_in_a_life_and_in_a_later_life(tmp_path: Path) -> None:

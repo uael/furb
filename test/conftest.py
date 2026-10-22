@@ -148,7 +148,8 @@ class Sand:
   its two streams as they came. `gone`
   names the directories that are not there, which a cd into is refused; every other directory is there. `home` is
   the home of its user, which a read or a write of a path that is ~ or starts with ~/ resolves against. `timers`
-  holds the timer of each wait that it took, which a done of that wait stops. `loop` is the loop of the life it
+  holds the timer of each wait that it took, which a done of that wait stops. `cut` holds each command that the record
+  of its life shows started and not done, which a crash cut, by its name, so it runs it no more. `loop` is the loop of the life it
   hears.
   """
 
@@ -167,6 +168,7 @@ class Sand:
   gone: set[str] = field(default_factory=set)
   home: str = "/h"
   timers: dict[str, asyncio.TimerHandle] = field(default_factory=dict)
+  cut: dict[str, tuple] = field(default_factory=dict)
   loop: asyncio.AbstractEventLoop = field(init=False, repr=False, compare=False)
 
   def writes(self, about: str, text: str, stream: str) -> None:
@@ -198,7 +200,12 @@ class Sand:
     of a command whose stdin is None takes a write, while the command is not over and until a write of nothing
     closes it."""
     command, _, stream = path.partition("/")
-    if stream != "stdin" or engine.over(command) or engine.get(command)[5] is not None or command in self.shut:
+    if (
+      stream != "stdin"
+      or engine.over(command)
+      or engine.get(command)[5] is not None
+      or command in self.shut | self.cut.keys()
+    ):
       return Refused(path + " takes no write")
     self.feeds(command, content)
     return None
@@ -209,6 +216,13 @@ class Sand:
     self.fed.append(content or None)
     if not content:
       self.shut.add(command)
+
+  def interrupts(self, about: str, command: str) -> World:
+    """A command that a crash cut, which the World takes and closes with a refusal that says it was interrupted, and
+    runs no more."""
+    self.cut.pop(about)
+    yield "started", about
+    engine.close(Refused(f"{command!r} was interrupted: the life that ran it ended before it did"), about)
 
   def placed(self, on: str, path: str) -> str:
     """The path of a read or a write: one that is ~ or starts with ~/ hangs off the home of the user, and any other
@@ -223,6 +237,8 @@ class Sand:
     """
 
     match a:
+      case ("bash", about, _, _, command, *_) if self.cut.get(about) == a:
+        yield from self.interrupts(about, command)
       case ("bash", about, _, on, command, stdin, timeout):
         yield "started", about
         self.outs[about] = [engine.ask("merged", on, about), "", ""]
@@ -253,10 +269,6 @@ class Sand:
         re.fullmatch(r"bash\d+/std(in|out|err)", path) and engine.get(path.split("/")[0]) is not None
       ):
         yield "done", qid, self.door(path, content) or took
-      case ("done", about, "journal", Text(path=path, content=content)) if engine.question(("write", about)) and (
-        re.fullmatch(r"bash\d+/stdin", path)
-      ):
-        self.feeds(path.split("/")[0], content)
       case ("write", qid, _, on, Text(path=path, content=content)) if (
         "://" not in path and engine.get(path.split("/")[0]) is None
       ):
@@ -413,6 +425,9 @@ def life(world: Sand, record: Sequence[tuple] = (), **ears: World) -> tuple[list
   every fact said in it, and the ears it is given after them; it gives what was said and the id of the root.
   """
   log: list[tuple] = []
+  ended = {fact[1] for (fact,) in record if fact[0] == "done"}
+  left = {fact[1] for (fact,) in record if fact[0] == "started" and fact[1] not in ended}
+  world.cut = {fact[1]: tuple(fact) for (fact,) in record if fact[0] == "bash" and fact[1] in left}
   return log, engine.boot(record, **kernel(), probe=watched(log), world=world.hears(), **ears)
 
 

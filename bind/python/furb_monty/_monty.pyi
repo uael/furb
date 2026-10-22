@@ -201,9 +201,10 @@ def files(scratch: str) -> NativeEar:
   """The ear of the files, which reads and writes a path, and a path of `scratch://` in the scratch directory that
   the host names, which the ear of commands is given too."""
 
-def bash(scratch: str) -> NativeEar:
+def bash(scratch: str, record: Iterable[object]) -> NativeEar:
   """The ear of commands, which runs each in a shell of this machine, with `TMPDIR` set to the scratch directory that
-  the host names, which the ear of the files is given too."""
+  the host names, which the ear of the files is given too. It is given the record that the life opens on, so it
+  closes as interrupted each command that the record shows started and not done, at the wake."""
 
 def scratch(record: str) -> str | None:
   """The scratch directory of the record at a path, in the cache of furb, which a host removes when it deletes the

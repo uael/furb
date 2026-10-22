@@ -166,9 +166,10 @@ export declare function attachImage(directory: string, path: string): ImageAttac
 
 /**
  * The ear of commands, which runs each in a shell of this machine, with `TMPDIR` set to the scratch directory that
- * the host names, which the ear of the files is given too.
+ * the host names, which the ear of the files is given too. It is given the record that the life opens on, so it
+ * closes as interrupted each command that the record shows started and not done, at the wake.
  */
-export declare function bash(scratch: string): NativeEar
+export declare function bash(scratch: string, record: Array<any>): NativeEar
 
 /**
  * The config directory of the user for this process, where the configs, the extensions of the user and the
