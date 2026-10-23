@@ -501,8 +501,8 @@ export class App {
     {
       node: BoxRenderable;
       heading: TextRenderable;
-      /** The text of the heading, set again only when it changes. */
-      label: string;
+      /** The line of the heading, set again only when it changes. */
+      label: (string | number | undefined)[];
       title?: () => Part[];
       marker: Part[];
       key: string;
@@ -1526,11 +1526,28 @@ export class App {
       this.hints.add(this.line(buttons[index] ?? [], c.faint, { run }));
   }
 
-  /** The heading of a card set to a line, only when the line changed. */
-  private label(card: { heading: TextRenderable; label: string }, parts: Part[]): void {
-    const key = JSON.stringify(parts.map(([text, fg, attributes]) => [text, fg?.toInts(), attributes]));
-    if (card.label === key) return;
-    card.label = key;
+  /** The heading of a card set to a line, only when the line changed. A frame reads each card, so the line is held
+   * as a flat list of its texts, the numbers of its colors and its attributes, which it compares with no copy. */
+  private label(
+    card: { heading: TextRenderable; label: (string | number | undefined)[] },
+    parts: Part[],
+  ): void {
+    const held = card.label;
+    let at = 0;
+    const same = (value: string | number | undefined) => held[at++] === value;
+    const color = (one?: RGBA) =>
+      one ? same(one.r) && same(one.g) && same(one.b) && same(one.a) : same(undefined);
+    if (
+      held.length === parts.reduce((count, [, fg, , bg]) => count + 2 + (fg ? 4 : 1) + (bg ? 4 : 1), 0) &&
+      parts.every(([text, fg, attributes, bg]) => same(text) && color(fg) && same(attributes) && color(bg))
+    )
+      return;
+    card.label = parts.flatMap(([text, fg, attributes, bg]) => [
+      text,
+      ...(fg ? [fg.r, fg.g, fg.b, fg.a] : [undefined]),
+      attributes,
+      ...(bg ? [bg.r, bg.g, bg.b, bg.a] : [undefined]),
+    ]);
     card.heading.content = styled(parts);
   }
   private card(
@@ -1586,7 +1603,7 @@ export class App {
       key,
       node: box,
       heading: labelNode,
-      label: "",
+      label: [],
       marker,
       title: options.title,
       compact: options.compact ?? false,
@@ -1900,6 +1917,20 @@ export class App {
       // The acts of now are found by the index of the session, and those of a moment of the past by a map of their own.
       const then = shown === w.acts ? undefined : new Map(shown.map((one) => [one.id, one]));
       const rows = { get: (id: string) => (then ? then.get(id) : w.actOf(id)) };
+      // The acts that each act made, in the order of the acts, which each open rung reads once the first one asks.
+      let makers: Map<string, ActRow[]> | undefined;
+      const madeBy = (id: string): readonly ActRow[] => {
+        if (!makers) {
+          const by = new Map<string, ActRow[]>();
+          for (const one of shown) {
+            const list = by.get(one.by);
+            if (list) list.push(one);
+            else by.set(one.by, [one]);
+          }
+          makers = by;
+        }
+        return makers.get(id) ?? [];
+      };
       if (w.watching) {
         add("watch", `watch:${w.moment}:${w.cost}:${this.theme}`, [], (box) => this.watchBanner(box));
       }
@@ -2045,8 +2076,8 @@ export class App {
             },
           );
           if (!closed)
-            for (const child of shown)
-              if (child.by === act.id && !(child.kind === "prompt" && child.on === w.selected))
+            for (const child of madeBy(act.id))
+              if (!(child.kind === "prompt" && child.on === w.selected))
                 actCard(child, indent + space.between);
         } else if (line.type === "tail") {
           const maker = rows.get(act.by);
@@ -2957,6 +2988,11 @@ export class App {
    * on a row shows its chain. The board shows once the life holds more than one chain, or a question waits. */
   /** The loom that the board read last, and what it was woven of, which a frame of the same life reads again. */
   private boardLoom?: { of: unknown[]; loom: Loom };
+  /** What each chain of the board does now, and what it was read of. */
+  private boardNow: { of: unknown[]; now: Map<string, ReturnType<typeof nowOf>> } = {
+    of: [],
+    now: new Map(),
+  };
   private renderBoard(): void {
     const w = this.session;
     const of = [
@@ -3011,11 +3047,18 @@ export class App {
     const shown = [...asking, ...others].filter((row) => kept.has(row.id));
     const left = rows.length - shown.length;
     const word = (rung: ActRow) => this.subject(rung);
-    const lines = shown.map((row) => ({
-      row,
-      now: nowOf(row, loom, w.acts, word),
-      depth: row.lines.length / 2,
-    }));
+    // What a chain does now holds while its loom, the program and the turns stay, since it reads the acts that start,
+    // end, pause or wake, and the words of the rungs.
+    const read = [woven, w.program, w.turns];
+    const held = this.boardNow.of;
+    if (held.length !== read.length || !held.every((one, at) => one === read[at]))
+      this.boardNow = { of: read, now: new Map() };
+    const known = this.boardNow.now;
+    const lines = shown.map((row) => {
+      const now = known.get(row.id) ?? nowOf(row, loom, w.acts, word);
+      known.set(row.id, now);
+      return { row, now, depth: row.lines.length / 2 };
+    });
     const counts = boardOrder.flatMap((state) => {
       const count = rows.filter((row) => row.state === state).length;
       return count ? [[state, count] as const] : [];

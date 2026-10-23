@@ -93,6 +93,30 @@ function phaseOf(act?: ActRow): string {
     : "";
 }
 
+/** Whether two lists of turns say the same: each turn the same role, the same python, and the same usage. */
+function sameTurns(one: readonly Turn[], other: readonly Turn[]): boolean {
+  return (
+    one.length === other.length &&
+    one.every(
+      (turn, at) =>
+        turn.length === other[at]?.length &&
+        turn.every(
+          (part, place) =>
+            part === other[at]?.[place] || JSON.stringify(part) === JSON.stringify(other[at]?.[place]),
+        ),
+    )
+  );
+}
+
+/** Whether two programs hold the same word for each rung. */
+function sameProgram(
+  one: Readonly<Record<string, string>>,
+  other: Readonly<Record<string, string>>,
+): boolean {
+  const keys = Object.keys(one);
+  return keys.length === Object.keys(other).length && keys.every((key) => one[key] === other[key]);
+}
+
 /** Whether an act was cancelled: a rung whose run ended with a cancel, or an act done with a cancel. A cancel is what
  * the operator asked for, so it is no failure. */
 export function cancelled(act: ActRow): boolean {
@@ -389,7 +413,11 @@ export class Session extends EventEmitter {
           this.dirty = true;
           continue;
         }
+        const { turns, program } = this;
         Object.assign(this, snapshot);
+        // Turns and a program that did not change keep their objects, which a view that reads them keys on.
+        if (sameTurns(turns, this.turns)) this.turns = turns;
+        if (sameProgram(program, this.program)) this.program = program;
         // A snapshot carries the acts that changed since the session last read them, in the order of the table.
         if (acts.length) {
           // Each act that changed takes its place, and a new act stands after the others.
