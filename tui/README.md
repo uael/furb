@@ -113,7 +113,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | ↑↓←→ / Enter / Esc after ⌥G | Move, fold or zoom / zoom in / zoom out or go back |
 | [ ] / { } after ⌥G | Move the cursor in time by one / ten moments |
 | Space / x / n / b after ⌥G | Pause or wake / cancel / step / branch at the cursor the chain |
-| ⌃PageUp / ⌃PageDown | Previous / next page of file changes |
+| ⌃PageUp / ⌃PageDown | Previous / next scope of file changes: this turn, this chain, the life, the branch |
 | ⌃C | Clear the input, close a dialog, or cancel what you sent last (a message goes back to the input) |
 | Esc | Close a dialog or pause current model work |
 | F1 / ⌃Q / ⌃D twice | Help / save and quit / save and quit from an empty input |
@@ -143,6 +143,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/run <python>` | Write a rung through the gate |
 | `/bash <command>` | Stream a shell command |
 | `/read <path>` | Show a file to this chain |
+| `/changes [turn|chain|life|branch]` | Show the files that this turn, this chain, the life or the branch against main changed |
 | `/cd <path>` | Change this chain's working directory |
 | `/edit [prompt id]` | Change a prompt's program and replay it |
 | `/inspect <name>` | Read a value from this chain's module |

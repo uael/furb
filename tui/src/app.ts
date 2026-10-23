@@ -71,7 +71,6 @@ import {
   elapsed,
   graphemes,
   kibibytes,
-  lineCounts,
   modelName,
   plainFailure,
   retryLine,
@@ -91,6 +90,7 @@ import {
   shortActor,
 } from "./overview.ts";
 import { loadParsers } from "./parsers.ts";
+import { commentStart, type Hunk, hunkPatch, lines, type Scope, scopeLabels, scopes } from "./review.ts";
 import {
   type ActRow,
   type Cancel,
@@ -2172,67 +2172,101 @@ export class App {
         );
       });
     } else if (w.view === "changes") {
-      if (w.host.changes > 20)
-        add("change-pages", String(w.changePage), [], (box) => {
-          const row = this.row({ gap: space.between });
-          row.add(
-            this.text(
-              `Writes ${w.changePage * 20 + 1} to ${Math.min((w.changePage + 1) * 20, w.host.changes)} of ${w.host.changes}`,
-              c.muted,
-            ),
-          );
-          row.add(this.link("Previous page", () => this.changePage(-1)));
-          row.add(this.link("Next page", () => this.changePage(1)));
-          box.add(row);
-        });
       const root = w.host.directory;
-      for (const [index, change] of w.changes.entries()) {
-        // A change never changes once it is written, so its position in the life keys its card.
-        const position = String(w.changePage * 20 + index);
-        const { added, removed } = lineCounts(change.patch);
-        const path = change.path.startsWith(`${root}/`) ? change.path.slice(root.length + 1) : change.path;
-        // The heading of a change is a bar of the panel: the path, what the write did to the file, and the lines it
+      const relative = (path: string) => (path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path);
+      // The scopes of the review stand first, and in the middle of an empty view under why it is empty.
+      if (w.changes.length)
+        add("change-scopes", `${w.scope}:${this.theme}`, [], (box) => box.add(this.scopes()));
+      const counts = (added: number, removed: number): Part[] => [
+        [`+${added}`, added ? c.success : c.faint],
+        [` -${removed}`, removed ? c.danger : c.faint],
+      ];
+      if (w.changes.length) {
+        // The list of the files: each with the lines that it added and removed, and a click that goes to its diff.
+        const added = w.changes.reduce((sum, change) => sum + change.added, 0);
+        const removed = w.changes.reduce((sum, change) => sum + change.removed, 0);
+        const files = w.changes.length === 1 ? "1 file" : `${w.changes.length} files`;
+        add(
+          "change-files",
+          `${w.scope}:${this.theme}:${w.changes.map((change) => `${change.path}:${change.added}:${change.removed}`).join()}`,
+          [[`${files}  `, c.text, bold], ...counts(added, removed)],
+          (box) => {
+            const width = Math.max(...w.changes.map((change) => Bun.stringWidth(relative(change.path))));
+            for (const change of w.changes) {
+              const path = relative(change.path);
+              const row = this.row({ paddingLeft: space.between });
+              row.add(this.link(path, () => this.jumpTo(`change:${path}`)));
+              row.add(
+                this.text([
+                  [" ".repeat(width - Bun.stringWidth(path) + 2), c.text],
+                  ...counts(change.added, change.removed),
+                ]),
+              );
+              box.add(row);
+            }
+          },
+        );
+      }
+      for (const change of w.changes) {
+        const path = relative(change.path);
+        // The heading of a change is a bar of the panel: the path, what the change did to the file, and the lines it
         // added and removed at its right.
         const [what, color] = !change.before
           ? ["created", c.success]
           : !change.after
             ? ["deleted", c.danger]
             : ["modified", c.warning];
-        const counts = `+${added} -${removed} `;
+        const tail = `+${change.added} -${change.removed} `;
         const fill = Math.max(
           1,
-          this.feedWidth - Bun.stringWidth(` ${glyph.dot} ${path}  ${what}`) - Bun.stringWidth(counts),
+          this.feedWidth - Bun.stringWidth(` ${glyph.dot} ${path}  ${what}`) - Bun.stringWidth(tail),
         );
+        // Two sides need room for two lines of code side by side, and one side reads better below that.
+        const split = this.renderer.width >= 140;
         add(
-          `change-${position}`,
-          position,
+          `change:${path}`,
+          `${w.scope}:${change.before.length}:${change.after.length}:${change.added}:${change.removed}:${split}:${this.theme}`,
           [
             [` ${glyph.dot} `, color, 0, c.panel],
             [path, c.text, bold, c.panel],
             [`  ${what}`, c.muted, 0, c.panel],
             [" ".repeat(fill), c.text, 0, c.panel],
-            [`+${added}`, added ? c.success : c.faint, 0, c.panel],
-            [` -${removed} `, removed ? c.danger : c.faint, 0, c.panel],
+            [`+${change.added}`, change.added ? c.success : c.faint, 0, c.panel],
+            [` -${change.removed} `, change.removed ? c.danger : c.faint, 0, c.panel],
           ],
-          (box) =>
-            box.add(
-              new DiffRenderable(this.renderer, {
-                diff: change.patch,
-                // Two sides need room for two lines of code side by side, and one side reads better below that.
-                view: this.feedWidth >= 160 ? "split" : "unified",
-                syntaxStyle: this.style,
-                fg: c.text,
-                showLineNumbers: true,
-                lineNumberFg: c.faint,
-                lineNumberBg: c.background,
-                contextBg: c.background,
-                addedBg: c.added,
-                removedBg: c.removed,
-                addedSignColor: c.success,
-                removedSignColor: c.danger,
-                wrapMode: "word",
-              }),
-            ),
+          (box) => {
+            for (const hunk of change.hunks) {
+              // Each hunk has a bar: where it stands in both files, a revert through the World, and a comment on
+              // one of its lines, which goes to the chain as a prompt.
+              const bar = this.row({ gap: space.between, paddingLeft: space.between });
+              bar.add(
+                this.text(
+                  `@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`,
+                  c.faint,
+                ),
+              );
+              bar.add(this.link("Revert", () => void w.revert(change, hunk).catch(this.report)));
+              bar.add(this.link("Comment a line", () => this.commentLine(path, hunk)));
+              box.add(bar);
+              box.add(
+                new DiffRenderable(this.renderer, {
+                  diff: hunkPatch(path, hunk),
+                  view: split ? "split" : "unified",
+                  syntaxStyle: this.style,
+                  fg: c.text,
+                  showLineNumbers: true,
+                  lineNumberFg: c.faint,
+                  lineNumberBg: c.background,
+                  contextBg: c.background,
+                  addedBg: c.added,
+                  removedBg: c.removed,
+                  addedSignColor: c.success,
+                  removedSignColor: c.danger,
+                  wrapMode: "word",
+                }),
+              );
+            }
+          },
           { shown: change.path },
         );
       }
@@ -2259,12 +2293,30 @@ export class App {
       const empty: Record<View, [string, string]> = {
         feed: ["Nothing here yet", "Send a message, or run Python with ⌃R."],
         transcript: ["No transcript yet", "The model reads its first turn here once a prompt runs."],
-        changes: ["No file changes yet", "Each file that the life writes shows here as a diff."],
+        changes: (
+          {
+            turn: [
+              "No file changes in this turn",
+              "Each file that this chain writes after your last message shows here.",
+            ],
+            chain: [
+              "No file changes on this chain",
+              "Each file that this chain writes shows here as a diff.",
+            ],
+            life: ["No file changes yet", "Each file that the life writes shows here as a diff."],
+            branch: [
+              "No change on this branch",
+              "Each file that differs from main in git shows here as a diff.",
+            ],
+          } satisfies Record<Scope, [string, string]>
+        )[w.scope],
       };
       const [title, hint] = w.search
         ? [`Nothing matches “${w.search}”`, "Change the filter, or press Esc to clear it."]
         : empty[w.view];
-      add("empty", `${title}:${height}:${this.theme}`, [], (box) =>
+      // An empty review offers its other scopes under its hint, where the eye already is.
+      const scoped = w.view === "changes" && !w.search;
+      add("empty", `${title}:${height}:${this.theme}:${scoped && w.scope}`, [], (box) =>
         this.centered(
           box,
           height,
@@ -2273,6 +2325,7 @@ export class App {
             [title, c.text, bold],
           ]),
           this.text(hint, c.muted),
+          ...(scoped ? [this.scopes()] : []),
         ),
       );
     }
@@ -6497,7 +6550,7 @@ export class App {
     },
     back: () => void this.back().catch(this.report),
     jump: (key) => this.jumpMessage(["]", "n"].includes(key?.name ?? "") ? 1 : -1),
-    page: (key) => this.changePage(key?.name === "pageup" ? -1 : 1),
+    scope: (key) => this.session.review(key?.name === "pageup" ? -1 : 1),
     pause: this.escape,
     help: () => this.help(),
     quit: () => void this.options.quit(),
@@ -6508,7 +6561,7 @@ export class App {
    * input, and the footer does not offer it. */
   private readonly when: Partial<Record<Action, () => boolean>> = {
     answer: () => this.session.desk.asks.length > 0,
-    page: () => this.session.view === "changes",
+    scope: () => this.session.view === "changes",
     pause: () => !this.searchRow.visible && this.pausing(),
   };
   /** The view shown, with the rewind tree closed. */
@@ -6602,11 +6655,45 @@ export class App {
     this.root.destroyRecursively();
     this.style.destroy();
   };
-  private changePage(step: number): void {
-    this.session.changePage = Math.max(
-      0,
-      Math.min(Math.ceil(this.session.host.changes / 20) - 1, this.session.changePage + step),
+  /** The scopes of the review of the changes: the one shown in bold, and each other one a link to it. */
+  private scopes(): BoxRenderable {
+    const w = this.session;
+    const row = this.row({ gap: space.between, flexShrink: 0 });
+    for (const scope of scopes)
+      row.add(
+        scope === w.scope
+          ? this.text([[scopeLabels[scope], c.text, bold | underline]])
+          : this.link(scopeLabels[scope], () => w.review(scope)),
+      );
+    row.add(this.text("⌃PageUp / ⌃PageDown", c.faint));
+    return row;
+  }
+  /** The feed scrolled so that the card of an id stands at its top. */
+  private jumpTo(id: string): void {
+    const node = this.scroll.getChildren().find((one) => one.id === id);
+    if (node) this.scroll.scrollBy(node.y - this.scroll.viewport.y);
+  }
+  /** A comment on one line of a hunk: the operator picks the line, and the input holds the start of a message that
+   * names it, which Enter sends to the chain as a prompt. */
+  private commentLine(path: string, hunk: Hunk): void {
+    const shown = lines(hunk);
+    this.openPalette(
+      `Comment a line of ${path}`,
+      shown.map((line) => ({
+        label: `${line.sign} ${line.text}`.trimEnd(),
+        detail: `${line.sign === "-" ? "removed " : ""}line ${line.number}`,
+        run: () => {
+          const start = commentStart(path, line);
+          this.insert(start);
+          this.composer.cursorOffset = start.length;
+        },
+      })),
+      {
+        selected: Math.max(
+          0,
+          shown.findIndex((line) => line.sign !== " "),
+        ),
+      },
     );
-    void this.session.refresh().catch(this.session.fail);
   }
 }

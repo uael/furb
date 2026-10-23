@@ -20,6 +20,11 @@ export const commands = {
   run: ["Run Python", "<python>", "Write a rung through the gate"],
   bash: ["Run command", "<command>", "Stream a shell command"],
   read: ["Read file", "<path>", "Show a file to this chain"],
+  changes: [
+    "Review changes",
+    "[turn|chain|life|branch]",
+    "Show the files that this turn, this chain, the life or the branch against main changed",
+  ],
   cd: ["Change directory", "<path>", "Change this chain's working directory"],
   edit: ["Edit program", "[prompt id]", "Change a prompt's program and replay it"],
   inspect: ["Inspect a name", "<name>", "Read a value from this chain's module"],

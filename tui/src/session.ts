@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import type { FileChange, ImageAttachment, LiveAct, SetupInfo, Turn } from "@furb/engine";
+import type { ImageAttachment, LiveAct, SetupInfo, Turn } from "@furb/engine";
 import {
   actorParts,
   decodeRecord,
@@ -18,12 +18,12 @@ import {
   WORK,
 } from "@furb/engine";
 import { type Ask, aimed, beside, type Desk, desk } from "@furb/engine/life";
-import { createTwoFilesPatch } from "diff";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { refusal } from "./conversation.ts";
 import { expandHome, fileReferences, projectFiles, shortenHome } from "./files.ts";
 import { dollars } from "./format.ts";
 import { Preferences } from "./preferences.ts";
+import { type Hunk, type Reviewed, revertWord, reviewed, type Scope, scopes } from "./review.ts";
 import { shareHtml, shareMarkdown } from "./share.ts";
 import { palettes, type ThemeName } from "./theme.ts";
 
@@ -43,8 +43,8 @@ export type ActRow = LiveAct & {
 };
 /** What a command gave: what it printed to each stream, and its exit code once it is over. */
 export type Exit = { stdout?: { content: string }; stderr?: { content: string }; code?: number };
-/** A change of a file, with the patch that shows it. */
-export type ShownChange = FileChange & { patch: string };
+/** The net change of a file in the scope of the review, with its hunks. */
+export type ShownChange = Reviewed;
 
 export type SessionStatus =
   | "saved"
@@ -114,6 +114,7 @@ const kept = [
   "selected",
   "actor",
   "view",
+  "scope",
   "mode",
   "shape",
   "editing",
@@ -163,8 +164,10 @@ export class Session extends EventEmitter {
   /** The share of the window that the last answer of the chain filled, as filled of the engine gives it, which the
    * advance binds too. Nothing before the first answer. */
   filled?: number;
+  /** The net change of each file in the scope of the review. */
   changes: ShownChange[] = [];
-  changePage = 0;
+  /** Which changes the view of changes reviews: this turn, this chain, the life, or the branch against main. */
+  scope: Scope = "chain";
   program: Record<string, string> = {};
   /** The text of the search box, which the rows of the view must hold. */
   search = "";
@@ -219,7 +222,7 @@ export class Session extends EventEmitter {
   private counted = 0;
   private dirty = false;
   private closed = false;
-  /** The page of changes and the count of changes that `changes` was read at. */
+  /** The scope, the writes and the count of changes that `changes` was read at. */
   private changesRead = "";
   /** Whether the dialog of a record open to read was shown, so it shows once for each life of the session. */
   readingTold = false;
@@ -345,7 +348,6 @@ export class Session extends EventEmitter {
   private async journalMended(notice: string): Promise<void> {
     this.error = "";
     this.changesRead = "";
-    this.changePage = 0;
     this.notice = notice;
     await this.refresh();
   }
@@ -389,13 +391,16 @@ export class Session extends EventEmitter {
           }
           this.save();
         }
-        const page = `${this.changePage}:${this.host.changes}`;
-        if (this.view === "changes" && page !== this.changesRead) {
-          this.changes = (await this.host.readChanges(this.changePage * 20, 20)).map((change) => ({
-            ...change,
-            patch: createTwoFilesPatch(change.path, change.path, change.before, change.after),
-          }));
-          this.changesRead = page;
+        if (this.view === "changes") {
+          const writes = this.scope === "branch" ? null : this.writes();
+          const read = `${this.scope}:${this.host.changes}:${writes ? `${writes[0]}:${writes.length}:${writes.at(-1)}` : ""}`;
+          if (read !== this.changesRead) {
+            const changes = await (this.scope === "branch"
+              ? this.host.branchChanges()
+              : this.host.netChanges(this.scope === "life" ? null : writes));
+            this.changes = changes.map(reviewed);
+            this.changesRead = read;
+          }
         }
         const rows = this.acts;
         for (const act of rows) {
@@ -654,6 +659,37 @@ export class Session extends EventEmitter {
     }
     this.selected = id;
     this.search = "";
+    await this.refresh();
+  }
+  /** The writes of the scope of the review on the chain shown: those since the last message of the operator for this
+   * turn, and those of the chain for this chain. */
+  private writes(): string[] {
+    const writes = this.activity.filter((act) => act.kind === "write");
+    const message =
+      this.scope === "turn" ? this.activity.findLast((act) => this.isUserPrompt(act)) : undefined;
+    return writes.filter((act) => !message || act.began > message.began).map((act) => act.id);
+  }
+  /** The scope of the review set, or moved one step through the scopes, and the changes read again. The branch is read
+   * again each time that it is chosen, since git may change with no act of the life. */
+  review(scope: Scope | -1 | 1): void {
+    this.scope =
+      typeof scope === "string"
+        ? scope
+        : (scopes[(scopes.indexOf(this.scope) + scope + scopes.length) % scopes.length] ?? "chain");
+    this.changesRead = "";
+    this.save();
+    this.show("changes");
+  }
+  /** One hunk of a change reverted by a word of the operator on the chain shown, so the World writes the file and the
+   * record keeps the write. The word refuses when the file no longer holds the hunk where the review showed it. */
+  async revert(change: ShownChange, hunk: Hunk): Promise<void> {
+    const at = this.host.directory;
+    const path = change.path.startsWith(`${at}/`) ? change.path.slice(at.length + 1) : change.path;
+    await this.engine.result(
+      await this.engine.rung({ word: revertWord(change.path, hunk), on: this.selected }),
+    );
+    this.notice = `The hunk at line ${hunk.newStart} of ${path} is reverted.`;
+    this.changesRead = "";
     await this.refresh();
   }
   show(view: View): void {
@@ -1108,6 +1144,11 @@ export class Session extends EventEmitter {
       case "shape":
         if (!shapes().includes(argument)) throw new Error(`Choose ${shapes().join(", ")}.`);
         this.shape = argument;
+        break;
+      case "changes":
+        if (argument && !(scopes as readonly string[]).includes(argument))
+          throw new Error(`Choose ${scopes.join(", ")}.`);
+        this.review((argument as Scope) || this.scope);
         break;
       case "theme":
         if (!Object.hasOwn(palettes, argument))

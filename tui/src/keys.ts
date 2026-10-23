@@ -222,8 +222,8 @@ export const keys = [
   },
   {
     chord: "⌃PageUp / ⌃PageDown",
-    action: "Previous / next page of file changes",
-    bindings: [{ on: ["ctrl+pageup", "ctrl+pagedown"], run: "page", always: true }],
+    action: "Previous / next scope of file changes: this turn, this chain, the life, the branch",
+    bindings: [{ on: ["ctrl+pageup", "ctrl+pagedown"], run: "scope", always: true }],
   },
   {
     chord: "⌃C",

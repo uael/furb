@@ -95,14 +95,14 @@ test("a command that printed more than a row holds sends the tail and its length
     { width: 120, height: 40, useMouse: true },
   ));
 
-test("the views say each quantity one way, read a page of changes once, and set a heading only when it changes", () =>
+test("the views say each quantity one way, read the changes of a scope once, and set a heading only when it changes", () =>
   composing(
     async ({ session, app, frame }) => {
-      const reads: number[] = [];
-      const readChanges = session.host.readChanges.bind(session.host);
-      session.host.readChanges = (start, count) => {
-        reads.push(start);
-        return readChanges(start, count);
+      const reads: (string[] | null)[] = [];
+      const netChanges = session.host.netChanges.bind(session.host);
+      session.host.netChanges = (writes) => {
+        reads.push(writes);
+        return netChanges(writes);
       };
       try {
         // The sidebar says the ceiling of the grant that holds now: a share of the context, then a sum of dollars.
@@ -129,19 +129,22 @@ test("the views say each quantity one way, read a page of changes once, and set 
         session.show("changes");
         await session.refresh();
         await session.refresh();
-        expect(reads).toEqual([0]);
-        expect(session.changes[0]?.patch).toContain("+one");
+        expect(reads.length).toBe(1);
+        expect(session.changes.map((change) => [change.added, change.removed])).toEqual([[1, 0]]);
         // A view that shows a change says no word of an empty view.
-        expect(await frame()).not.toContain("No file changes yet");
+        expect(await frame()).not.toContain("No file changes");
         await session.engine.result(
           await session.engine.rung({ word: 'write(Text("note.txt", "two\\n"))', on: session.engine.root }),
         );
         await until(session.host, () => session.host.changes === 2);
         await session.refresh();
-        expect(reads).toEqual([0, 0]);
-        expect(session.changes[1]?.patch).toContain("+two");
+        expect(reads.length).toBe(2);
+        // The review shows the net change of the file: the second write replaced the first.
+        expect(session.changes.map((change) => change.hunks.flatMap((hunk) => hunk.lines))).toEqual([
+          ["+two"],
+        ]);
       } finally {
-        session.host.readChanges = readChanges;
+        session.host.netChanges = netChanges;
       }
     },
     { width: 150, height: 40 },

@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
@@ -106,6 +107,22 @@ try {
   await session.refresh();
   session.show("transcript");
   await capture("03-transcript");
+  // The project is a repository of git on a branch of its own, so the review compares the branch with main.
+  const git = (...args: string[]) =>
+    spawnSync("git", [
+      "-C",
+      session.host.directory,
+      "-c",
+      "user.name=furb",
+      "-c",
+      "user.email=furb@example.com",
+      ...args,
+    ]);
+  await writeFile(join(session.host.directory, ".gitignore"), "demo.jsonl*\n");
+  git("init", "-q", "-b", "main");
+  git("add", ".");
+  git("commit", "-q", "-m", "Field notes");
+  git("checkout", "-q", "-b", "keyboard");
   const written = session.host.changes;
   await session.engine.result(
     await session.engine.rung({
@@ -116,6 +133,35 @@ try {
   await until(session.host, () => session.host.changes > written);
   session.show("changes");
   await capture("04-changes");
+  // The review in each other scope: this turn, the life, and the branch against main, then a comment on a line.
+  session.review("turn");
+  await capture("74-changes-turn");
+  // A note that another chain writes stands in the life, and not in this chain.
+  const reviewChain = session.chains.find((one) => one.words[0] === "Review notes")?.id;
+  if (!reviewChain) throw new Error("The gallery has no chain Review notes.");
+  await session.engine.result(
+    await session.engine.rung({
+      word: 'write(Text("review.md", "# Review\\n\\n- The README names the key that finds a note.\\n"))',
+      on: reviewChain,
+    }),
+  );
+  await until(session.host, () => session.host.changes > written + 1);
+  session.review("life");
+  await capture("75-changes-life");
+  session.review("branch");
+  await capture("76-changes-branch");
+  session.review("chain");
+  await capture("04-changes");
+  await click(test, "Comment a line");
+  await rest();
+  for (let step = 0; step < 4; step++) test.mockInput.pressArrow("down");
+  await test.flush();
+  await capture("77-changes-comment");
+  test.mockInput.pressEnter();
+  await test.flush();
+  await capture("78-changes-comment-input");
+  app().composer.setText("");
+  await rest();
   session.show("feed");
   app().palette();
   await capture("05-command-palette");
