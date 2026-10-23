@@ -230,7 +230,16 @@ def measured(run: Path) -> Measure:
   lives, spawns, ran = lines(run / "lives.jsonl"), lines(run / "spawns.jsonl"), lines(run / "run.jsonl")
   ends = [one for one in lives if "end" in one]
   commands = {str(x[1]): str(x[4]) for x in record if x[0] == "bash"}
-  interrupted = [str(x[1]) for x in record if x[0] == "done" and "was interrupted" in repr(x[3])]
+  interrupted = list(
+    dict.fromkeys(
+      str(x[1])
+      for x in record
+      if x[0] in ("close", "done")
+      and str(x[1]) in commands
+      and isinstance(x[3], BaseException)
+      and "was interrupted" in str(x[3])
+    )
+  )
   lived_in: dict[str, list[int]] = {}
   for one in spawns:
     entries, said = logged(run / f"life{one['life']}.log")
