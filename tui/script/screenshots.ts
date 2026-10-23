@@ -185,6 +185,17 @@ try {
   app().closeOverlay();
   await session.host.answer(session.operatorPrompt?.id ?? "", "yes");
   await until(session.host, () => !session.host.prompts.size);
+  // A question of a choice offers its values as a list in place of the input, and Other for the words of the operator.
+  const runner = await session.engine.prompt("Literal['vitepress', 'mkdocs', 'plain']", {
+    message: "Which runner builds the docs of the project?",
+    on: session.selected,
+    to: "operator",
+  });
+  await until(session.host, () => session.host.prompts.has(runner));
+  await session.refresh();
+  await capture("09-choice-question");
+  await session.host.answer(runner, "mkdocs");
+  await until(session.host, () => !session.host.prompts.size);
   const notice = await session.engine.prompt("None", {
     message: "The search shortcut is on the main chain.",
     on: session.selected,

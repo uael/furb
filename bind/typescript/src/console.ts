@@ -97,6 +97,17 @@ export class Console {
     this.options.changed?.();
   }
 
+  /** The operator takes none of the values that the prompt it names offers, and answers in his own words: the prompt
+   * closes with Refused of those words, which the await of the word that asked raises, so its model reads them. The
+   * engine takes an exception of any value as the close of a prompt of any shape. */
+  decline(id: string, words: string): void {
+    const prompt = this.prompts.get(id);
+    if (!prompt) throw new Error("This prompt is no longer open.");
+    this.prompts.delete(id);
+    prompt.reject(new Error(words));
+    this.options.changed?.();
+  }
+
   /** The notice that the operator read, which the console shows no more. */
   dismiss(id: string): void {
     if (this.notices.delete(id)) this.options.changed?.();

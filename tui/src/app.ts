@@ -40,6 +40,7 @@ import {
   WORK,
 } from "furb";
 import {
+  type Ask,
   beside,
   type Chip,
   condense,
@@ -462,6 +463,11 @@ export class App {
   /** The rows of half blocks above and below the composer, and its bar, which the mode colors. */
   private readonly composeEdges: BoxRenderable[];
   private readonly composeBox: BoxRenderable;
+  /** The values of a question of a choice, which the box of the prompt offers in place of its input. */
+  private readonly pickBox: BoxRenderable;
+  /** The question that the list offers the values of, the row of its pointer, and whether Other takes the input. */
+  private choice = { id: "", at: 0, other: false };
+  private pickKey = "";
   private readonly queueBox: BoxRenderable;
   private readonly imageBox: BoxRenderable;
   /** The suggestions for a `/command` or an `@path` typed in the input, drawn above it while the input keeps focus. */
@@ -758,6 +764,8 @@ export class App {
         void this.submit();
       },
     });
+    this.pickBox = this.box({ id: "choices", visible: false });
+    this.composeBox.add(this.pickBox);
     this.composeBox.add(this.composer);
     this.meta = this.row({ overflow: "hidden", flexGrow: 1 });
     // The line under the text holds the switch of the mode and where the input goes, a row of space under the text.
@@ -1120,7 +1128,10 @@ export class App {
     // The text leaves its draft as it is sent, so what is typed while it is sent stays in the composer.
     this.composer.setText("");
     try {
-      if (!(await this.globalCommand(content.trim()))) {
+      const declined = this.picking();
+      if (declined && this.choice.other && !content.startsWith("/")) {
+        if (content.trim()) await this.session.decline(declined, content);
+      } else if (!(await this.globalCommand(content.trim()))) {
         const woke = !content.startsWith("/") && (await this.session.wakeForInput());
         await this.session.submit(python ? `/run ${content}` : content);
         if (woke) this.session.notice = "This message woke the paused chain.";
@@ -1219,14 +1230,15 @@ export class App {
         ),
       );
     }
+    const choosing = this.picking();
     const [mode, modeColor, placeholder] = w.editing
       ? ["Edit program", c.warning, "Edit this prompt's Python program"]
       : pending
         ? [
             "Answer",
             c.warning,
-            pending.choices.length
-              ? `Answer ${wants(pending)}`
+            choosing
+              ? `Your own words in place of ${wants(pending)}. Esc goes back to the values.`
               : `Your answer to ${pending.id}, as ${pending.shape}`,
           ]
         : w.mode === "python"
@@ -1235,11 +1247,16 @@ export class App {
     for (const edge of this.composeEdges) if (edge.borderColor !== modeColor) edge.borderColor = modeColor;
     this.composer.cursorColor = modeColor;
     this.composer.placeholder = placeholder;
-    // The box holds the lines of the text, up to six, a row of space, and the line under the text.
+    this.renderPick(choosing);
+    // The box holds the values of a choice, or the lines of the text, up to six, then a row of space and the line
+    // under the text. While Other takes the words of the operator, it holds both.
+    const typed = Math.min(
+      6,
+      Math.max(space.bar, this.composer.lineCount, this.composer.lineInfo.lineSources.length),
+    );
+    const listed = choosing ? choosing.choices.length + 1 : 0;
     this.composeBox.height =
-      Math.min(6, Math.max(space.bar, this.composer.lineCount, this.composer.lineInfo.lineSources.length)) +
-      space.section +
-      space.bar;
+      (choosing && !this.choice.other ? listed : listed + typed) + space.section + space.bar;
     this.renderMeta(mode, modeColor);
     this.renderDock();
     this.renderDesk();
@@ -3673,7 +3690,11 @@ export class App {
       ),
     );
     const act = this.row({ gap: space.between });
-    if (ask.choices.length) {
+    if (ask.choices.length && ask.id === this.picking()?.id)
+      act.add(
+        this.text("Choose below with ↑↓ and Enter, or its number, or Other for your own words", c.faint),
+      );
+    else if (ask.choices.length) {
       for (const choice of ask.choices)
         act.add(
           this.line([[choice, c.warning, bold]], c.warning, {
@@ -3695,6 +3716,67 @@ export class App {
         ),
       );
     this.deskBox.add(act);
+  }
+  /** The question whose values the input offers as a list in place of the box of the prompt: the question aimed, when
+   * its shape is a choice, a Literal or a bool, and no program is under edit. */
+  private picking(): Ask | undefined {
+    const ask = this.session.operatorPrompt;
+    if (!ask?.choices.length || this.session.editing) return undefined;
+    if (this.choice.id !== ask.id) this.choice = { id: ask.id, at: 0, other: false };
+    return ask;
+  }
+  /** The values of a question of a choice, each after its number, and a last row, Other, whose words go in place of
+   * every value. The row of the pointer is lit. While Other is chosen, the input under the list takes the words. */
+  private renderPick(ask: Ask | undefined): void {
+    if (this.pickBox.visible !== Boolean(ask)) this.pickBox.visible = Boolean(ask);
+    const typing = !ask || this.choice.other;
+    if (this.composer.visible !== typing) {
+      this.composer.visible = typing;
+      // The input takes the keys again once no list holds them.
+      if (typing && !this.overlay) this.composer.focus();
+      else this.composer.blur();
+    }
+    if (!ask) {
+      this.pickKey = "";
+      return;
+    }
+    const key = JSON.stringify([ask.id, ask.choices, this.choice, this.theme]);
+    if (key === this.pickKey) return;
+    this.pickKey = key;
+    this.clear(this.pickBox);
+    for (const [index, label] of [...ask.choices, "Other"].entries()) {
+      const here = index === this.choice.at;
+      this.pickBox.add(
+        this.line(
+          [
+            [here ? glyph.pointer : " ", c.warning],
+            [` ${index + 1}  `, here ? c.muted : c.faint],
+            [label, here ? c.text : c.muted, here ? bold : 0],
+            [index === ask.choices.length ? "  in your own words" : "", c.faint],
+          ],
+          c.text,
+          { truncate: true, run: () => void this.takePick(index) },
+        ),
+      );
+    }
+  }
+  /** The pointer of the list moves a step, round from the last row to the first. */
+  private stepPick(by: number): void {
+    const ask = this.picking();
+    if (!ask) return;
+    const rows = ask.choices.length + 1;
+    this.choice = { ...this.choice, at: (this.choice.at + by + rows) % rows };
+    this.render();
+  }
+  /** The row at a place, the pointer by default, answers: a value answers the question with it, and Other gives the
+   * input to the words of the operator. */
+  private async takePick(at = this.choice.at): Promise<void> {
+    const ask = this.picking();
+    if (!ask) return;
+    const value = ask.choices[at];
+    this.choice = { id: ask.id, at, other: value === undefined };
+    if (value !== undefined) await this.session.answer(ask, value).catch(this.report);
+    this.render();
   }
   /** The rung that took the place of a rung of a model that failed: a later rung for the same prompt, which the model
    * wrote once it read the failure, so the failure no longer stands. */
@@ -6783,6 +6865,32 @@ export class App {
           this.endRename(true);
           void this.options.quit();
         },
+      },
+    ]);
+    // While a question of a choice is aimed, its list takes the arrows, Enter and the numbers, and Escape gives the
+    // list back the keys that Other gave the input.
+    const choosing = () => bare() && !this.tree && Boolean(this.picking());
+    layer(() => choosing() && !this.choice.other, "choices", [
+      { on: "up", run: () => this.stepPick(-1), hint: ["↑↓", "choose"] },
+      { on: "down", run: () => this.stepPick(1) },
+      { on: ["return", "enter"], run: () => void this.takePick(), hint: ["Enter", "answer"] },
+      ...Array.from(
+        { length: 9 },
+        (_, at): KeyCommand => ({
+          on: String(at + 1),
+          run: () => void this.takePick(at),
+          when: () => at <= (this.picking()?.choices.length ?? -1),
+        }),
+      ),
+    ]);
+    layer(() => choosing() && this.choice.other, "other", [
+      {
+        on: "escape",
+        run: () => {
+          this.choice = { ...this.choice, other: false };
+          this.render();
+        },
+        hint: ["Esc", "back to the values"],
       },
     ]);
     layer(() => bare() && Boolean(this.tree), "tree", [

@@ -847,6 +847,12 @@ export class Session extends EventEmitter {
     await this.host.answer(ask.id, line);
     this.landed(ask, `Your answer went to ${ask.id} on ${ask.label}.`);
   }
+  /** The operator takes none of the values that a question offers and answers in his own words, which close it as
+   * Refused: the await of the word that asked raises them, and its model reads them. */
+  async decline(ask: Ask, words: string): Promise<void> {
+    await this.host.decline(ask.id, words);
+    this.landed(ask, `Your words went to ${ask.id} on ${ask.label}.`);
+  }
   /** What the operator did to an ask, and what waits after it, in the notice. The pointer goes on to what waits next
    * on the chain shown. */
   private landed(ask: Ask, said: string): void {

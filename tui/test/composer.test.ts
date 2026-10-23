@@ -549,11 +549,11 @@ test("the footer offers the keys of the top layer that acts, and a click on one 
       });
       await until(session.host, () => session.host.prompts.has(id));
       await session.refresh();
-      expect(await footer()).toEndWith("⌃P commands   ⌃A answer   F1 help");
-      await click("⌃A answer");
-      expect(await frame()).toContain("Answer yes or no");
-      app.closeOverlay();
-      await session.submit("yes");
+      expect(await footer()).toEndWith("↑↓ choose   Enter answer");
+      await click("Enter answer");
+      expect(await session.engine.result(id)).toBe(true);
+      await until(session, () => !session.operatorPrompt);
+      await frame();
       await screen.mockInput.typeText("/mo");
       expect(await footer()).toEndWith("↑↓ choose   Tab complete   Esc hide");
       await click("Esc hide");

@@ -1,4 +1,6 @@
 default_install_hook_types: [pre-commit, commit-msg]
+# A vendored skill stays as its source wrote it, so a later update is a clean diff: no hook reads it.
+exclude: ^\.agents/skills/
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks

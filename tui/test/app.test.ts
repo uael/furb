@@ -279,6 +279,41 @@ test("operator answers and program edits act through the binding", () =>
     { width: 120, height: 40, exitOnCtrlC: false },
   ));
 
+test("a question of a choice offers its values as a list in place of the input, and Other takes the words of the operator, which close it as Refused", () =>
+  composing(
+    async ({ session, app, screen, frame }) => {
+      const root = session.engine.root;
+      const runner = await session.engine.prompt("Literal['vitepress', 'mkdocs', 'plain']", {
+        message: "Which runner for the docs?",
+        to: "operator",
+        on: root,
+      });
+      await until(session.host, () => session.host.prompts.has(runner));
+      await session.refresh();
+      const listed = await frame();
+      expect(listed).toContain("❯ 1  vitepress");
+      expect(listed).toContain("  2  mkdocs");
+      expect(listed).toContain("  4  Other  in your own words");
+      expect(app.composer.visible).toBe(false);
+      screen.mockInput.pressArrow("down");
+      expect(await frame()).toContain("❯ 2  mkdocs");
+      screen.mockInput.pressEnter();
+      expect(await session.engine.result(runner)).toBe("mkdocs");
+      const merge = await session.engine.prompt("bool", { message: "Merge it?", to: "operator", on: root });
+      await until(session.host, () => session.host.prompts.has(merge));
+      await session.refresh();
+      expect(await frame()).toContain("  3  Other");
+      screen.mockInput.pressKey("3");
+      await frame();
+      expect(app.composer.visible).toBe(true);
+      await screen.mockInput.typeText("Not yet: the checks run.");
+      screen.mockInput.pressEnter();
+      await expect(session.engine.result(merge)).rejects.toThrow("Not yet: the checks run.");
+      await until(session, () => session.notice.startsWith(`Your words went to ${merge}`));
+    },
+    { width: 120, height: 40 },
+  ));
+
 test("a prompt of None to the operator is a notice that settles as a quiet line, which no key dismisses", () =>
   composing(
     async ({ session, screen, frame }) => {

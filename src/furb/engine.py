@@ -216,12 +216,14 @@ def prompt[T](shape: type[T] | object, message: str = "", to: str = "", on: str 
   )
   thread = on if question(("prompt", on)) else ""
   to = to or (thread and get(thread)[6])
-  asks = (to or module(on).get("actor")) != OPERATOR
+  who = to or module(on).get("actor")
+  asks = who != OPERATOR
   says = asks and thread and named == "None" and not over(thread)
 
   def ear(id):
     if asks:
       yield "started", id
+      teach(scope(id), who)
     yield told(id, "", bound(id, named), message=message, thread=thread)
     while not says:
       if asks and not (paused(id) or any(id in x[2:4] and not over(x[1]) for x in transcript(id, "rung"))):
@@ -328,17 +330,21 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         case ("tell", *_, notes):
           heard.append("\n".join(notes))
         case ("ready", rid, _, word):
-          if heard:
-            act("run", id, None, name := rid + "_told", unquoted(rungs.setdefault(name, "\n\n".join(heard))), "")
-            heard = []
-          ran = tells(rid) and rid
-          rungs[(donor := r[5]) or rid] = word
-          if ran and (found := gate(word)):
+          try:
+            if heard:
+              act("run", id, None, name := rid + "_told", unquoted(rungs.setdefault(name, "\n\n".join(heard))), "")
+              heard = []
+            ran = tells(rid) and rid
+            rungs[(donor := r[5]) or rid] = word
+            found = ran and gate(word)
+            if not found:
+              running[rid] = act("run", id, None, rid, unquoted(word), donor)
+          except Exception as e:
+            found = [f"{e}"]
+          if found:
             yield told(rid, "refused", findings="\n".join(found))
             refused.add(rid)
             close(Refused(), rid)
-          else:
-            running[rid] = act("run", id, None, rid, unquoted(word), donor)
         case ("done", _, "", Refused()) if r[0] == "reply":
           pause(id)
       if r[0] == "run":
@@ -354,16 +360,8 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         else:
           if ran and not heard:
             yield told(ran, "told nothing")
-          yield told(
-            asking,
-            f"advance on {maker}",
-            *[
-              f"<s:doctrine>\n{taught}</s:doctrine>"
-              for taught in {offered(last[0], to, 3)}
-              - {"", *(offered(last[0], x[4], 3) for x in transcript(id, "reply"))}
-            ],
-            share=filled(reply) or None,
-          )
+          teach(id, to)
+          yield told(asking, f"advance on {maker}", share=filled(reply) or None)
           with site.set(asking):
             reply = act("reply", id, controlled(idle), to)
           unseen = ""
@@ -554,6 +552,13 @@ def over(id):
 
 def tells(id):
   return get(id)[2] != scope(id)
+
+
+def teach(on, to):
+  if (taught := offered(standing()[0], to, 3)) and (quote := f"<s:doctrine>\n{taught}</s:doctrine>") not in [
+    n for x in transcript(on, "tell") for n in x[3]
+  ]:
+    say(*told(on, "doctrine", quote))
 
 
 def told(id, what="", *notes, **words):
