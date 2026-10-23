@@ -38,8 +38,17 @@ const heldOf = (life: Life | null, change: Partial<Held> = {}): Held => ({
 });
 
 /** The markup of the composer under a chain. */
-const composer = (held: Held, chain = "chain1") =>
-  renderToStaticMarkup(createElement(Composer, { held, chain, label: "Main", onSent: () => undefined }));
+const composer = (held: Held, chain = "chain1", mine = false) =>
+  renderToStaticMarkup(
+    createElement(Composer, {
+      held,
+      chain,
+      label: "Main",
+      mine,
+      onSent: () => undefined,
+      onChain: () => undefined,
+    }),
+  );
 
 test("the composer sends a message to the chain shown", () => {
   const markup = composer(heldOf(lifeOf()));
@@ -62,6 +71,29 @@ test("the composer answers the question that waits on the chain shown, and not o
   const held = heldOf(lifeOf({ asks: [ask] }));
   expect(composer(held)).toContain('placeholder="Answer: Which effort should the next step take?"');
   expect(composer(held, "chain2")).toContain('placeholder="Message Main"');
+});
+
+test("a question of a choice gives a button for each of its values, and a notice gives none", () => {
+  const ask = {
+    id: "prompt4",
+    chain: "chain1",
+    label: "Main",
+    by: "rung3",
+    shape: "Literal['low', 'high']",
+    message: "Which effort?",
+    notice: false,
+    choices: ["low", "high"],
+    began: 9,
+  };
+  const markup = composer(heldOf(lifeOf({ asks: [ask] })));
+  expect(markup).toContain(">low</button>");
+  expect(markup).toContain(">high</button>");
+  expect(composer(heldOf(lifeOf()))).not.toContain(">low</button>");
+});
+
+test("the composer takes back your last message only on a chain that holds one", () => {
+  expect(composer(heldOf(lifeOf()), "chain1", true)).toContain('aria-label="Take back your last message"');
+  expect(composer(heldOf(lifeOf()), "chain1", false)).not.toContain("Take back");
 });
 
 test("a record that opens to read takes no message, and says why", () => {

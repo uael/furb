@@ -84,8 +84,19 @@ export interface Part {
   ended: string[];
 }
 
-/** A word of the host that is no answer of a call: a part. */
-export type Said = { part: Part };
+/** A word of the host that is no answer of a call: a part, a cancel that waits for the operator to confirm it since it
+ * ends running work, or a message that the operator took back, which returns to the composer of its chain. */
+export type Said =
+  | { part: Part }
+  | { confirm: { act: string; acts: string[]; chains: string } }
+  | { compose: { chain: string; text: string } };
+
+/** What a rewind to an act gives back of the files: each file that a write changed after it, and how many commands
+ * ran after it, whose changes stay. */
+export interface Restore {
+  files: { path: string; made: boolean }[];
+  commands: number;
+}
 
 /** The answer of a call, by the number of the call. */
 export type Answer = { id: number; value?: unknown; error?: string };

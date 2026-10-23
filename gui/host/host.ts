@@ -6,7 +6,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import type { LiveAct, Stream } from "@furb/engine";
-import type { Session } from "@furb/tui/src/session.ts";
+import type { Cancel, Session } from "@furb/tui/src/session.ts";
 import type { Workspace, Workspaces } from "@furb/tui/src/workspaces.ts";
 import type { Life, Part, Project, Said, StreamPart } from "../src/wire.ts";
 
@@ -47,6 +47,8 @@ export class Host {
   private projects = "";
   private timer?: ReturnType<typeof setTimeout>;
   private last = 0;
+  /** The cancel that waits for the operator to confirm it, since it ends running work. */
+  private cancelling?: Cancel;
   constructor(readonly workspaces: Workspaces) {
     workspaces.on("change", this.changed);
     workspaces.on("select", this.changed);
@@ -65,14 +67,36 @@ export class Host {
     const session = this.workspaces.current?.session;
     if (session === this.shown) return;
     this.shown?.off("change", this.changed);
+    this.shown?.off("confirm", this.confirming);
+    this.shown?.off("compose", this.composing);
     this.shown = session;
+    this.cancelling = undefined;
     session?.on("change", this.changed);
+    session?.on("confirm", this.confirming);
+    session?.on("compose", this.composing);
     this.generation++;
     this.acts = new Map();
     this.streams = new Map();
     this.life = "";
     for (const send of this.windows) send({ part: this.whole() });
   }
+
+  /** A word for each window. */
+  private tell(said: Said): void {
+    for (const send of this.windows) send(said);
+  }
+
+  /** A cancel that ends running work, which the session asks the operator to confirm first, as the TUI does. */
+  private confirming = (cancel: Cancel): void => {
+    this.cancelling = cancel;
+    const chains = this.shown?.chainsOf(cancel.reach) ?? "";
+    this.tell({ confirm: { act: cancel.act.id, acts: cancel.reach.acts.map((act) => act.id), chains } });
+  };
+
+  /** A message that the operator took back, which goes back to the composer of its chain. */
+  private composing = (text: string): void => {
+    this.tell({ compose: { chain: this.shown?.selected ?? "", text } });
+  };
 
   /** A change of the life or of the list: a part goes out once PACE passed since the last one. */
   private changed = (): void => {
@@ -271,6 +295,51 @@ export class Host {
         case "resume":
           await session.host.resume();
           return await session.refresh();
+        case "answer": {
+          // A button of a choice answers the question that it names, as a line of the composer answers it.
+          const ask = session.desk.asks.find((one) => one.id === text(0));
+          if (!ask) throw new Error(`${text(0)} waits for no answer.`);
+          return await session.answer(ask, text(1));
+        }
+        case "pause":
+        case "wake":
+          // A control names the act that the operator picked, and reaches that act alone with what stands under it.
+          if (!text(0)) throw new Error(`A ${name} names the act that it holds.`);
+          return await session.command(`/${name} ${text(0)}`);
+        case "cancel":
+          if (!text(0)) throw new Error("A cancel names the act that it ends.");
+          return await session.cancel(text(0));
+        case "confirm": {
+          const cancel = this.cancelling;
+          this.cancelling = undefined;
+          if (cancel && args[0] === true) await session.end(cancel);
+          return;
+        }
+        case "takeBack": {
+          // The last message of the operator on the chain: one that runs is cancelled and comes back to the
+          // composer, and one that is done leaves a new branch of the chain, as the undo of the TUI does.
+          if (session.selected !== text(0)) await session.select(text(0));
+          const own = session.lastOwn;
+          if (own && session.isUserPrompt(own)) await session.cancel();
+          else await session.undo();
+          return session.selected;
+        }
+        case "files": {
+          const { files, commands } = await session.filesAt(text(0));
+          return { files: files.map(({ path, made }) => ({ path, made: made ?? false })), commands };
+        }
+        case "rewind": {
+          // What a rewind gives back, as the tree of the TUI offers it: the conversation, the files, or both.
+          const mode = text(1);
+          if (mode === "files") await session.restoreAt(text(0));
+          else
+            await session.rewind(
+              text(0),
+              undefined,
+              mode === "both" ? await session.filesAt(text(0)) : undefined,
+            );
+          return session.selected;
+        }
       }
     } catch (error) {
       session.fail(error);
@@ -284,6 +353,8 @@ export class Host {
     clearTimeout(this.timer);
     this.windows.clear();
     this.shown?.off("change", this.changed);
+    this.shown?.off("confirm", this.confirming);
+    this.shown?.off("compose", this.composing);
     await this.workspaces.dispose();
   }
 }

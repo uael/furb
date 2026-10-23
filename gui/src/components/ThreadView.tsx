@@ -6,6 +6,7 @@ import { actorName } from "../data.ts";
 import { chainName, type Held, type Moment, type Streamed, threadState } from "../life.ts";
 import { steps } from "../steps.ts";
 import { Code } from "./Code.tsx";
+import { ActMenu, type Rewinding } from "./Controls.tsx";
 import { Glyph } from "./Glyph.tsx";
 
 /** How many characters of what a model writes, or of what a command prints, a step shows while it runs. */
@@ -38,13 +39,16 @@ function Writing({ stream }: { stream: Streamed }) {
 }
 
 /** What a command that runs prints, as it prints it. */
-function Printing({ act }: { act: LiveAct }) {
+function Printing({ act, live }: { act: LiveAct; live: boolean }) {
   const exit = act.value as Exit | null;
   const out = `${exit?.stdout?.content ?? ""}${exit?.stderr?.content ?? ""}`;
   const command = String(act.words[0] ?? "").split("\n")[0] ?? "";
   return (
     <div className="mt-2.5 overflow-hidden rounded-xl bg-well px-3.5 py-2.5">
-      <div className="mb-1 truncate font-mono text-[12px] text-muted">$ {command}</div>
+      <div className="mb-1 flex items-center gap-2">
+        <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-muted">$ {command}</span>
+        <ActMenu act={act} live={live} onRewind={() => undefined} />
+      </div>
       <pre
         data-output
         className="font-mono text-[12px] leading-[1.55] break-words whitespace-pre-wrap text-muted"
@@ -63,11 +67,13 @@ export function ThreadView({
   moment,
   thread,
   onSelect,
+  onRewind,
 }: {
   held: Held;
   moment: Moment;
   thread: Thread;
   onSelect: (thread: string) => void;
+  onRewind: (rewinding: Rewinding | string) => void;
 }) {
   const life = held.life;
   const directory = life?.directory ?? "";
@@ -129,6 +135,8 @@ export function ThreadView({
           <span className="rounded-md bg-text/[0.06] px-1.5 py-px font-mono text-[11px] text-muted">
             {thread.shape}
           </span>
+          <span className="flex-1" />
+          <ActMenu act={thread.act} live={live} onRewind={onRewind} />
         </div>
         <h1 className="text-[21px] leading-[1.35] font-semibold tracking-[-0.01em] text-text">
           {thread.title}
@@ -178,22 +186,29 @@ export function ThreadView({
                   <span className="absolute top-[5px] left-0 grid h-[13px] w-[13px] place-items-center bg-bg">
                     <Glyph state={step.state} size={12} />
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => toggle(step.id)}
-                    className="group flex w-full items-center gap-2 text-left"
-                  >
-                    <span className={`text-[14px] ${step.state === "failed" ? "text-failed" : "text-text"}`}>
-                      {said}
-                    </span>
-                    <span className="text-[12px] text-faint">Step {n + 1}</span>
-                    {step.thinks ? null : (
-                      <ChevronRight
-                        size={14}
-                        className={`text-faint transition-transform duration-200 ease-[var(--ease-out-soft)] ${shown ? "rotate-90" : ""}`}
-                      />
-                    )}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toggle(step.id)}
+                      className="group flex min-w-0 flex-1 items-center gap-2 text-left"
+                    >
+                      <span
+                        className={`text-[14px] ${step.state === "failed" ? "text-failed" : "text-text"}`}
+                      >
+                        {said}
+                      </span>
+                      <span className="text-[12px] text-faint">Step {n + 1}</span>
+                      {step.thinks ? null : (
+                        <ChevronRight
+                          size={14}
+                          className={`text-faint transition-transform duration-200 ease-[var(--ease-out-soft)] ${shown ? "rotate-90" : ""}`}
+                        />
+                      )}
+                    </button>
+                    {moment.rows.get(step.id) ? (
+                      <ActMenu act={moment.rows.get(step.id) as LiveAct} live={live} onRewind={onRewind} />
+                    ) : null}
+                  </div>
                   {shown && !step.thinks ? (
                     <div className="mt-2.5 overflow-hidden rounded-xl bg-well py-2 pr-3">
                       <Code steps={[step]} heads={false} wrap />
@@ -201,11 +216,21 @@ export function ThreadView({
                   ) : null}
                   {step.thinks && stream ? <Writing stream={stream} /> : null}
                   {running.map((act) => (
-                    <Printing key={act.id} act={act} />
+                    <Printing key={act.id} act={act} live={live} />
                   ))}
                   {step.asks.map((id) => {
                     const asked = moment.threads.find((one) => one.act.id === id);
                     if (!asked) return null;
+                    // A notice to you asks nothing, so it reads as a quiet line, and opens no thread.
+                    if (asked.to === "operator" && asked.shape === "None")
+                      return (
+                        <div key={id} className="mt-2 flex items-start gap-2 pl-0.5 text-[13px] text-muted">
+                          <span className="pt-[1px] text-faint">·</span>
+                          <span className="whitespace-pre-wrap">
+                            {String(asked.act.words[1] ?? asked.title)}
+                          </span>
+                        </div>
+                      );
                     return (
                       <button
                         key={id}

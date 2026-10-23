@@ -12,6 +12,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { connect, type State } from "./data.ts";
 import { empty, type Held, merged } from "./held.ts";
+import type { Said } from "./wire.ts";
 
 export type { Held, Streamed } from "./held.ts";
 
@@ -21,8 +22,12 @@ export function useHeld(): Held {
   useEffect(() => {
     let mine = empty;
     return connect(
-      ({ part }) => {
-        mine = merged(mine, part);
+      (said) => {
+        if (!("part" in said)) {
+          window.dispatchEvent(new CustomEvent<Said>("furb", { detail: said }));
+          return;
+        }
+        mine = merged(mine, said.part);
         setHeld(mine);
       },
       (connected) => {
@@ -32,6 +37,15 @@ export function useHeld(): Held {
     );
   }, []);
   return held;
+}
+
+/** A word of the host that is no part, as a cancel to confirm or a message taken back, heard while a view stands. */
+export function useSaid(hear: (said: Said) => void): void {
+  useEffect(() => {
+    const heard = (event: Event) => hear((event as CustomEvent<Said>).detail);
+    window.addEventListener("furb", heard);
+    return () => window.removeEventListener("furb", heard);
+  }, [hear]);
 }
 
 /** The life as the views read it: its acts in the order of their place in time, its threads, and what waits for

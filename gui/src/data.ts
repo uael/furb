@@ -45,7 +45,7 @@ export function connect(hear: (said: Said) => void, open: (open: boolean) => voi
     one.onopen = () => open(true);
     one.onmessage = (event) => {
       const said = JSON.parse(String(event.data)) as Said | Answer;
-      if ("part" in said) return hear(said);
+      if (!("id" in said)) return hear(said);
       const call = waiting.get(said.id);
       waiting.delete(said.id);
       if (said.error !== undefined) call?.reject(new Error(said.error));
