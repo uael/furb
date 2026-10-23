@@ -15,7 +15,7 @@ use std::time::Duration;
 use monty::{MontyRepl, ReplFunctionCall, ReplProgress, ReplStartError};
 use monty_types::{
   CallArgs, CompileOptions, ExcType, MontyException, MontyUuid, NameLookupResult, NamedValues,
-  PrintWriter, ResourceLimits, ResourceTracker,
+  OsFunctionCall, PrintWriter, ResourceLimits, ResourceTracker,
 };
 
 use crate::value::{Fault, Object};
@@ -95,7 +95,7 @@ impl Sand {
       .idle
       .as_ref()
       .ok_or_else(|| Fault::refused("a sandbox dumps its session between two runs"))?;
-    monty::dump("furb", None, monty::SessionRef::Idle(repl))
+    monty::dump("furb", None, &[], monty::SessionRef::Idle(repl))
       .map_err(|no| Fault::refused(no.to_string()))
   }
 
@@ -227,6 +227,12 @@ impl Sand {
         // sandbox does not hold.
         ReplProgress::NameLookup(asked) => {
           asked.resume(NameLookupResult::Undefined, PrintWriter::Disabled)
+        }
+        // A module that monty does not hold is one no life holds, so its import raises `ModuleNotFoundError`, as
+        // monty raises it with no host.
+        ReplProgress::OsCall(call) if matches!(call.function_call, OsFunctionCall::Import(_)) => {
+          let missing = call.function_call.on_no_handler();
+          call.resume(missing, PrintWriter::Disabled)
         }
         // A life asks nothing of the operating system, so the call raises where the word made it: an abort would
         // end every frame of the run, the bus among them, and the life would hear nothing more.
