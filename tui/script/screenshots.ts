@@ -317,6 +317,25 @@ try {
   app().rewind();
   await capture("23-rewind-tree");
   app().closeTree();
+  // A message whose answer writes the README: a rewind to it asks what comes back, the conversation, the files, or
+  // both. The files then come back, so the later captures read the README as it was.
+  await session.engine.result(
+    await session.engine.prompt("str", { message: "Add the search shortcut, Ctrl+K.", on: session.selected }),
+  );
+  await session.refresh();
+  const shortcut = session.activity.findLast((act) => session.isUserPrompt(act))?.id ?? "";
+  app().rewind();
+  app().render();
+  await test.flush();
+  test.mockInput.pressEnter();
+  for (let tries = 0; tries < 400 && !test.captureCharFrame().includes("Restore the files"); tries++) {
+    await Bun.sleep(10);
+    app().render();
+    await test.flush();
+  }
+  await capture("74-rewind-files");
+  app().closeOverlay();
+  await session.restoreAt(shortcut);
 
   app().dispose();
   await library.dispose();

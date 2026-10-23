@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
-import type { ImageAttachment, LiveAct, SetupInfo, Turn } from "@furb/engine";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import type { FileChange, ImageAttachment, LiveAct, SetupInfo, Turn } from "@furb/engine";
 import {
   actorParts,
   decodeRecord,
@@ -45,6 +45,14 @@ export type ActRow = LiveAct & {
 export type Exit = { stdout?: { content: string }; stderr?: { content: string }; code?: number };
 /** The net change of a file in the scope of the review, with its hunks. */
 export type ShownChange = Reviewed;
+/** What a rewind to a point gives back of the files: for each file that a write changed after the point, the change
+ * whose text it replaced first, and how many commands ran after the point, whose changes stay. */
+export interface Restore {
+  files: FileChange[];
+  commands: number;
+}
+/** A path as a word of the shell, between single quotes. */
+const quoted = (path: string) => `'${path.replaceAll("'", "'\\''")}'`;
 
 export type SessionStatus =
   | "saved"
@@ -814,7 +822,7 @@ export class Session extends EventEmitter {
   /** A new branch of the chain of an act, which the session selects. The branch reads the transcript of that chain
    * through the act, or up to a message of the operator, whose text returns to the composer to be sent again. The
    * module and the files keep the state they have. */
-  async rewind(id: string, label?: string): Promise<string> {
+  async rewind(id: string, label?: string, files?: Restore): Promise<string> {
     if (this.paused) throw new Error("Wake this chain before rewinding.");
     const chain = this.acts.find((act) => act.id === id)?.on;
     if (!chain) throw new Error(`There is no act ${id} to rewind to.`);
@@ -827,11 +835,75 @@ export class Session extends EventEmitter {
     // and no branch that came later.
     const omitted = this.activity.slice(message ? at : at + 1).map((later) => later.id);
     const branch = await this.branch(label ?? this.branchLabel(), omitted);
+    if (files) await this.restoreFiles(files, branch);
     if (message) await this.restore(String(act.words[1] ?? ""));
+    const kept = files
+      ? `${this.restored(files)} The module keeps its state.`
+      : "The module and the files keep their state.";
     this.notice = message
-      ? "The message is back in the input on a new branch. The module and the files keep their state."
-      : `The new branch reads the transcript through ${id}. The module and the files keep their state.`;
+      ? `The message is back in the input on a new branch. ${kept}`
+      : `The new branch reads the transcript through ${id}. ${kept}`;
     return branch;
+  }
+  /** What a rewind to an act gives back of the files: the files as they stood when the act was made, or before the
+   * message for a message of the operator. A write after the point counts, on any chain, but a write that the act
+   * itself made, which the branch keeps. A change that an older session kept names no write, and stays. */
+  async filesAt(id: string): Promise<Restore> {
+    const byId = new Map(this.acts.map((act) => [act.id, act]));
+    const point = byId.get(id);
+    if (!point) return { files: [], commands: 0 };
+    const message = this.isUserPrompt(point);
+    const under = (act: ActRow): boolean => {
+      for (let up: ActRow | undefined = act; up; up = byId.get(up.by)) if (up.id === id) return true;
+      return false;
+    };
+    const after = (act: ActRow | undefined): act is ActRow =>
+      !!act && act.began >= point.began && (message || !under(act));
+    const files = new Map<string, FileChange>();
+    for (let at = 0; at < this.host.changes; at += 100)
+      for (const change of await this.host.readChanges(at, 100))
+        if (change.act && after(byId.get(change.act)) && !files.has(change.path))
+          files.set(change.path, change);
+    const commands = this.acts.filter((act) => act.kind === "bash" && after(act)).length;
+    return { files: [...files.values()], commands };
+  }
+  /** The files given back as a rewind found them, by a rung of the operator on a chain, so that the record holds each
+   * write and the chain reads it. A write puts back the text of a file, and a command removes a file that a write
+   * made. */
+  async restoreFiles({ files }: Restore, on = this.selected): Promise<void> {
+    if (!files.length) return;
+    const word = files
+      .map((change) =>
+        change.made
+          ? `await bash(${JSON.stringify(`rm -f -- ${quoted(change.path)}`)})`
+          : `write(Text(${JSON.stringify(this.near(change.path))}, ${JSON.stringify(change.before)}))`,
+      )
+      .join("\n");
+    const rung = await this.engine.rung({ word, on });
+    await this.engine.result(rung);
+    await this.refresh();
+    const run = this.acts.find((act) => act.id === rung)?.run;
+    if (run?.status === "failed") throw new Error(`The files were not restored: ${run.reason}`);
+  }
+  /** A path as a word names it: from the directory of the chain shown when it stands under it, and whole else. */
+  private near(path: string): string {
+    const near = relative(this.workingDirectory, path);
+    return near && !near.startsWith("..") && !isAbsolute(near) ? near : path;
+  }
+  /** What a restore of the files did, in words, with the changes that it could not undo. */
+  restored({ files, commands }: Restore): string {
+    const count =
+      files.length === 1 ? "1 file is back as it was." : `${files.length} files are back as they were.`;
+    const stays = commands
+      ? ` ${commands} ${commands === 1 ? "command" : "commands"} ran after that point, and a change that a command made is not restored.`
+      : "";
+    return `${count}${stays}`;
+  }
+  /** The files of the selected chain given back as they stood at an act, with no branch. */
+  async restoreAt(id: string, files?: Restore): Promise<void> {
+    const found = files ?? (await this.filesAt(id));
+    await this.restoreFiles(found);
+    this.notice = `${this.restored(found)} The conversation goes on as it stands.`;
   }
   /** The acts as they stood at the moment that the feed shows: an act that began later is not there yet, and an act
    * that ended later still runs, with no value yet. */

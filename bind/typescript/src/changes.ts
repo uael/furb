@@ -24,6 +24,9 @@ export interface FileChange {
   after: string;
   /** The write that made the change. A change that an older session kept names none. */
   act?: string;
+  /** Whether the write made the file, which did not stand before it. A change that an older session kept says
+   * nothing of it. */
+  made?: boolean;
 }
 
 /** A journal of file changes that holds a line that is no change, as a crash or another program leaves it. Its message
@@ -91,7 +94,7 @@ export class FileChanges {
   /** The ear of the changes, for a life that stands on this directory: it says nothing, so each write goes on to the
    * ear that takes it. */
   *ear(directory: string, changed?: () => void): Ear {
-    const before = new Map<string, { path: string; before: string }>();
+    const before = new Map<string, { path: string; before: string; made?: boolean }>();
     for (;;) {
       const fact = (yield null) as Fact | undefined;
       if (!fact) continue;
@@ -102,10 +105,13 @@ export class FileChanges {
         const here = String(yield call("cwd", [], { on: words[0] }));
         const path = resolve(directory, here, text.path);
         let old = "";
+        let made = false;
         try {
           old = readFileSync(path, "utf8");
-        } catch {}
-        before.set(id, { path, before: old });
+        } catch {
+          made = !existsSync(path);
+        }
+        before.set(id, { path, before: old, ...(made ? { made } : {}) });
       } else if (kind === "done" && before.has(id)) {
         const held = before.get(id);
         before.delete(id);

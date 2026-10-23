@@ -88,7 +88,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | ↑ / ↓ | Previous / next sent input, from the first or the last line |
 | ↑ in an empty input | Take the last queued message back to edit it |
 | ⌃S | Put the input aside, or bring it back |
-| Esc twice | Rewind: branch from an earlier point of the chain |
+| Esc twice | Rewind: go back to an earlier point of the chain, with its files or not |
 | ⌃1-3 or ⌥1-3 | Feed / transcript / changes view |
 | ⌃Tab / ⇧⌃Tab | Next / previous chain |
 | ⌃P | Search all actions |
@@ -133,7 +133,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/chain <label>` | A conversation with its own state |
 | `/fork <label>` | Copy this chain's current transcript and program |
 | `/tree` | Browse the chains and their turns, and open or branch from one |
-| `/rewind` | Branch from an earlier message or act of this chain |
+| `/rewind` | Go back to an earlier message or act of this chain, with its files or not |
 | `/undo` | Remove the last user message from a new transcript branch |
 | `/redo` | Return to the branch before undo |
 | `/queue [text]` | Send after current work, or manage queued messages |
@@ -197,7 +197,10 @@ the queue sends, asks the actor that the chain has then.
 
 The engine contract takes a chain as a fork source. A fork is not a filesystem rollback or an arbitrary
 historical checkpoint. A branch that the rewind tree makes uses the engine's `take` filter and runs as an operator
-rung, so the filter is made again after a reopen. Its module and files keep their current state. `/undo` uses the
+rung, so the filter is made again after a reopen. Its module keeps its current state. When a write changed a file
+after the point, the rewind tree offers to restore the conversation, the files, or both. It reads the text that each
+write replaced in the journal of file changes beside the record, and writes it back by an operator rung, so the
+record holds the restore. A change that a command made is not restored. `/undo` uses the
 same durable filter to remove the last user message from a new branch; `/redo` returns to its origin. These commands
 change the model's conversation. The module and filesystem remain current. The TUI does not add a separate
 permission or tool protocol to the engine.

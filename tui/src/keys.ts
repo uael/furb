@@ -56,7 +56,7 @@ export const keys = [
   },
   {
     chord: "Esc twice",
-    action: "Rewind: branch from an earlier point of the chain",
+    action: "Rewind: go back to an earlier point of the chain, with its files or not",
     bindings: [{ chord: "Esc Esc", command: "rewind" }],
   },
   {

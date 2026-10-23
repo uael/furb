@@ -128,6 +128,7 @@ export class HostView extends EventEmitter implements Plain {
   resume = () => this.ask<unknown>("session", "resume");
   source = () => this.ask<string>("library", "source");
   snapshot = (chain: string, since = 0) => this.ask<Snapshot>("library", "snapshot", chain, since);
+  readChanges = (start: number, count: number) => this.ask<FileChange[]>("library", "changes", start, count);
   /** The net change of each file across the changes that the writes made, or across every change of the life when
    * no list of writes is given. */
   netChanges = (writes: string[] | null) => this.ask<FileChange[]>("library", "net", writes);
