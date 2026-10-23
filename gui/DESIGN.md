@@ -15,7 +15,7 @@ The owner chose the stack: Tauri 2, with a UI of web components.
   app and the TUI have one host of a life, and a life that opens, a message that goes, an answer that the console
   reads, and a record of another engine that opens to read, each goes by the same code in both.
 - The UI is React and TypeScript, styled with Tailwind on the primitives of Radix. The code of a step is CodeMirror 6.
-- The UI derives each view from the acts with the model of a life, `@furb/engine/life` in `bind/typescript/src/life`,
+- The UI derives each view from the acts with the model of a life, `furb/life` in `bind/typescript/src/life`,
   which the TUI reads too: the tree of the threads, the source of a chain with each act on its line, the desk of the
   questions, and a message as a person reads it. The model holds no native code, so the UI takes it from its source.
   When the app needs a view that the model does not give, the view goes into the model: the word of each rung, which

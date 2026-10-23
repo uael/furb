@@ -8,7 +8,7 @@ import {
   rowState,
   type Thread,
   threads,
-} from "@furb/engine/life";
+} from "furb/life";
 import { useEffect, useMemo, useState } from "react";
 import { connect, type State } from "./data.ts";
 import { empty, type Held, merged } from "./held.ts";

@@ -1,9 +1,9 @@
 // The worker loads no module that loads OpenTUI, whose native library belongs to the thread that draws.
 import { type FSWatcher, readFileSync, watch as watchFile } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import type { Engine, FileChange, SessionOptions, Turn } from "@furb/engine";
-import { Act, actorParts, ENGINE, model, models, retold, Session, setup } from "@furb/engine";
-import { measureOf } from "@furb/engine/life";
+import type { Engine, FileChange, SessionOptions, Turn } from "furb";
+import { Act, actorParts, ENGINE, model, models, retold, Session, setup } from "furb";
+import { measureOf } from "furb/life";
 import type { HostState } from "./bridge.ts";
 import { type EngineOptions, roster } from "./models.ts";
 import { queueDispatches, queueHash } from "./queue.ts";

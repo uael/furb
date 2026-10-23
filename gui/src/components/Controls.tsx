@@ -1,5 +1,5 @@
-import type { LiveAct } from "@furb/engine/life";
 import * as Menu from "@radix-ui/react-dropdown-menu";
+import type { LiveAct } from "furb/life";
 import { MoreHorizontal } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
 import { call } from "../data.ts";

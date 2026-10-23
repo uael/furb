@@ -5,9 +5,9 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
-import type { LiveAct, Stream } from "@furb/engine";
 import type { Cancel, Session } from "@furb/tui/src/session.ts";
 import type { Workspace, Workspaces } from "@furb/tui/src/workspaces.ts";
+import type { LiveAct, Stream } from "furb";
 import type { Life, Part, Project, Said, StreamPart } from "../src/wire.ts";
 
 /** How many milliseconds at least stand between two parts that the host sends while the life changes. */

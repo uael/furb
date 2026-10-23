@@ -978,6 +978,7 @@ def unquoted(word: str) -> str:
   The value of a quote is the text between its marks, less a line break just after the open mark.
   A quote becomes its name bound to its value as python writes it, on the line of the open mark, and each other line of the quote becomes an empty line, so every line after it keeps its number.
   An open mark that has no close mark stays as it is, and the gate reads it as the python it is not.
+  A word unquotes in a time that grows with its length alone, so a chain that was told a text of any length goes on.
   The engine unquotes a word before the gate reads it and before the Kernel runs it, and the door of a ladder and the turns keep the quotes as the word wrote them.
   """
 

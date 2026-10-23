@@ -1,4 +1,4 @@
-import { open } from "@furb/engine";
+import { open } from "furb";
 
 await using life = await open("door.jsonl");
 const release = life.prompt("str", "Release version 2 in one hour.");

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { store } from "@furb/engine";
+import { store } from "furb";
 import { alive, printPid, remove } from "../../bind/typescript/test/processes.ts";
 
 /** The moment a condition holds, read again every 20 ms: a process in a terminal tells its state by no event. */

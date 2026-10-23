@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
-import type { FileChange, ImageAttachment, LiveAct, SetupInfo, Turn } from "@furb/engine";
+import type { FileChange, ImageAttachment, LiveAct, SetupInfo, Turn } from "furb";
 import {
   actorParts,
   decodeRecord,
@@ -16,8 +16,8 @@ import {
   saveFile,
   shapes,
   WORK,
-} from "@furb/engine";
-import { type ActIndex, type Ask, aimed, beside, type Desk, desk } from "@furb/engine/life";
+} from "furb";
+import { type ActIndex, type Ask, aimed, beside, type Desk, desk } from "furb/life";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { refusal } from "./conversation.ts";
 import { expandHome, fileReferences, fromDirectory, projectFiles, shortenHome } from "./files.ts";

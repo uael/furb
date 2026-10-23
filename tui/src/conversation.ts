@@ -1,4 +1,4 @@
-import { bound, opens, type Paragraph, paragraphs, plain, type Turn } from "@furb/engine";
+import { bound, opens, type Paragraph, paragraphs, plain, type Turn } from "furb";
 import { type ActRow, failed } from "./session.ts";
 
 /** One thing the conversation shows, read off the python of the turns of a chain.

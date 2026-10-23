@@ -1,6 +1,6 @@
-import type { Measure, Owed, Row, RowState, Tone } from "@furb/engine/life";
-import { asksOperator, gist, type Loom } from "@furb/engine/life";
 import type { RGBA } from "@opentui/core";
+import type { Measure, Owed, Row, RowState, Tone } from "furb/life";
+import { asksOperator, gist, type Loom } from "furb/life";
 import { clip } from "./format.ts";
 import type { ActRow } from "./session.ts";
 import { theme as c, spin } from "./theme.ts";

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { Entry, Fact } from "@furb/engine";
+import type { Entry, Fact } from "furb";
 
 /** The hash of the words of a prompt, which the begin fact of a follow-up holds. */
 export function queueHash(chain: string, shape: string, message: string, to: string): string {

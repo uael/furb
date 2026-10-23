@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { configDirectory, saveFile } from "@furb/engine";
 import type { ThemeMode } from "@opentui/core";
+import { configDirectory, saveFile } from "furb";
 import { isLifeView, type LifeView } from "./overview.ts";
 import { isThemeChoice, type ThemeChoice } from "./theme.ts";
 

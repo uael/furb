@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { mkdir, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import { furbDirectory, saveFile, scratch, store } from "@furb/engine";
+import { furbDirectory, saveFile, scratch, store } from "furb";
 import { openEngine } from "./bridge.ts";
 import { expandHome } from "./files.ts";
 import { type EngineOptions, roster } from "./models.ts";
