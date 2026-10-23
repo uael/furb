@@ -255,6 +255,45 @@ fn a_command_on_a_record_of_another_version_runs_the_build_of_that_version_that_
 }
 
 #[test]
+fn a_command_on_a_record_of_an_older_version_has_its_build_write_a_checkpoint_and_goes_on_from_it_on_this_build()
+ {
+  let yard = Yard::new("upgraded");
+  assert_eq!(printed(yard.kept(&["run", "kept = [1, 2]\nclose(len(kept))"]), ""), "2\n");
+  let older = furb::world::VERSION - 1;
+  let text = fs::read_to_string(yard.record()).unwrap();
+  let ours = format!("\"{}\",{}]", furb::world::engine(), furb::world::VERSION);
+  let theirs = format!("\"{}\",{older}]", "0".repeat(64));
+  fs::write(yard.record(), text.replace(&ours, &theirs)).unwrap();
+  // The build of the older version in the store: it says how it was asked, and writes the checkpoint as that build
+  // would, with this program on the record as that build made it.
+  let store = yard.at.join(format!("cache/furb/builds/{older}"));
+  fs::create_dir_all(&store).unwrap();
+  let script = format!(
+    "#!/bin/sh\nprintf '%s\\n' \"$@\" > asked.txt\nperl -pi -e 's/\\Q{theirs}\\E/{ours}/' \"$3\"\nexec {} \"$@\"\n",
+    env!("CARGO_BIN_EXE_furb")
+  );
+  program(&store.join("furb"), &script);
+  assert_eq!(
+    printed(yard.kept(&["run", "close(kept + [3])"]), ""),
+    "[1, 2, 3]\n",
+    "this build goes on with the module"
+  );
+  let asked = fs::read_to_string(yard.at.join("asked.txt")).unwrap();
+  assert_eq!(asked, format!("checkpoint\n--record\n{}\n", yard.record().display()));
+  let record = fs::read_to_string(yard.record()).unwrap();
+  let after = record.split("[[\"checkpoint\",").nth(1).expect("a checkpoint");
+  assert!(
+    after.contains(&format!("[[\"made\",\"chain1\",\"store\",{ours}")),
+    "this build names itself after it"
+  );
+  assert_eq!(
+    printed(yard.kept(&["run", "close(kept)"]), ""),
+    "[1, 2]\n",
+    "and a later life replays on it"
+  );
+}
+
+#[test]
 fn a_checkpoint_at_the_tip_of_a_record_carries_the_module_of_its_root_to_the_next_life() {
   let yard = Yard::new("checkpoint");
   assert_eq!(printed(yard.kept(&["run", "kept = [1, 2]\nclose(len(kept))"]), ""), "2\n");
