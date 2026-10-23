@@ -197,7 +197,8 @@ the log that it covers. A later life on the record opens from it with no replay 
 tells each ear the past of the life from the log, and stands again at its tip; else it replays the record, and keeps
 a new snapshot. A life writes it when it opens, at most once each thirty seconds while it does work, and when it
 ends, but not while work of the outside runs, as a command or a reply. `snapshot: false` in the opening turns it off.
-A `Session` keeps none yet: its observer is an ear that a verb was given, which a later process cannot give again. The session saves
+A `Session` keeps one too: its observer is an ear of the outside, which a later process gives again by its name, and
+which reads by `get` each act that an ear before it took. The session saves
 `.session.json` whole with `saveFile(path, text)`, which writes `<path>.tmp` and gives it the name of the file. A
 save that fails throws an error that names the file, with the error of the system as its cause. The TUI saves its
 own files with it.
