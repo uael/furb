@@ -188,12 +188,20 @@ checkpoint. An agent of the user starts the host again after a reboot.
 
 ### 3.6 The versions of the formats
 
+The version 2 of the record holds a chain of digests, which the owner ruled for the item bench-audit: the store
+writes beside each entry the sha256 of the entry before it, and a host that ends writes a closing fact with the
+digest of the last entry. So a record proves by itself that no entry was changed or cut, and a cut by hand, as the
+one of 10-23 (C7), shows. A checkpoint holds the digest of the entry before it, so the chain goes on across each
+segment, and a segment that the store moves to a file of its own stays proved by the checkpoint after it. The cut of
+C7 is not needed any more: the provider makes a lost conversation again (PR 10), and an upgrade replaces the hand edit
+of the fact `made`.
+
 Each file of a life names the version of its form. Each later build reads each older version, or migrates it with no
 loss, with a test for each version:
 
 | File | Version |
 | --- | --- |
-| record | the fact `made` gains the version of the form of the record: 2 with segments, and a record with no version is 1 |
+| record | the fact `made` gains the version of the form of the record: 2 with segments and a chain of digests, and a record with no version is 1 |
 | log `<record>.log` | its head line gains `version` |
 | snapshot | `version`, as now, and its key gains the revision of monty |
 | journal of changes | a first line `{"version": n}` |
@@ -356,7 +364,8 @@ Each enables the next, and each carries its tests.
 1. This design, with the label owner-merge.
 2. fix(crate): the log agrees with its record after a reopen (C13), so a snapshot restores.
 3. fix(typescript): a `Session` keeps a snapshot, with its observer as an ear of the host by its name (C13).
-4. feat(crate): each format names its version, and each reader reads each older one, with a test for each (C10).
+4. feat(crate): each format names its version, the record holds its chain of digests with the work of the item
+   bench-audit, and each reader reads each older version, with a test for each (C10).
 5. feat(engine): a chain supersedes its source, and compaction makes a successor (C3, C9).
 6. feat(engine): a record goes on from its last checkpoint (C4, C9, C15).
 7. feat(crate): the upgrade of a running life at a checkpoint, and a tail that replays on the engine of its segment
