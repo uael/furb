@@ -1,11 +1,13 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { configDirectory, saveFile } from "@furb/engine";
+import type { ThemeMode } from "@opentui/core";
 import { isLifeView, type LifeView } from "./overview.ts";
-import { defaultTheme, palettes, type ThemeName } from "./theme.ts";
+import { isThemeChoice, type ThemeChoice } from "./theme.ts";
 
 export class Preferences {
-  theme: ThemeName = defaultTheme;
+  /** The theme that every session shows: one by its name, or the one that follows the terminal. */
+  theme: ThemeChoice = "terminal";
   sidebar = true;
   sidebarWidth = 32;
   /** Whether a rung that is over starts folded in the feed. */
@@ -14,6 +16,12 @@ export class Preferences {
   setupSeen = false;
   /** The view of the life that the TUI shows: the board of main, the loom, or the graph. */
   view: LifeView = "main";
+  /** Whether the view serves a screen reader: one column of text, with no box, no spinner, and nothing that moves. */
+  screenReader = false;
+  /** Whether the view holds still: no spinner turns, and no part of the view moves with time. */
+  reducedMotion = false;
+  /** The mode of the terminal, dark or light, as it said it last, which no file keeps. */
+  terminalMode: ThemeMode | null = null;
   notice = "";
   private saved = "";
   constructor(readonly path = join(configDirectory(), "ui.json")) {
@@ -25,8 +33,12 @@ export class Preferences {
         foldRungs?: boolean;
         setupSeen?: boolean;
         view?: string;
+        screenReader?: boolean;
+        reducedMotion?: boolean;
       } | null;
-      if (saved?.theme && Object.hasOwn(palettes, saved.theme)) this.theme = saved.theme as ThemeName;
+      if (isThemeChoice(saved?.theme)) this.theme = saved.theme;
+      if (typeof saved?.screenReader === "boolean") this.screenReader = saved.screenReader;
+      if (typeof saved?.reducedMotion === "boolean") this.reducedMotion = saved.reducedMotion;
       if (typeof saved?.sidebar === "boolean") this.sidebar = saved.sidebar;
       if (typeof saved?.foldRungs === "boolean") this.foldRungs = saved.foldRungs;
       if (typeof saved?.setupSeen === "boolean") this.setupSeen = saved.setupSeen;
@@ -35,11 +47,15 @@ export class Preferences {
         this.sidebarWidth = Math.max(26, Math.min(48, saved.sidebarWidth));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT")
-        this.notice = `Could not read preferences at ${path}. Using GitHub Dark for this run. The file is unchanged. Click to dismiss.`;
+        this.notice = `Could not read preferences at ${path}. Using the theme of the terminal for this run. The file is unchanged. Click to dismiss.`;
     }
     this.saved = this.serialize(this.theme);
   }
-  private serialize(theme: ThemeName): string {
+  /** Whether the view holds still, as reduced motion asks, and as the mode of a screen reader asks too. */
+  get still(): boolean {
+    return this.reducedMotion || this.screenReader;
+  }
+  private serialize(theme: ThemeChoice): string {
     return JSON.stringify({
       theme,
       sidebar: this.sidebar,
@@ -47,9 +63,11 @@ export class Preferences {
       foldRungs: this.foldRungs,
       setupSeen: this.setupSeen,
       view: this.view,
+      screenReader: this.screenReader,
+      reducedMotion: this.reducedMotion,
     });
   }
-  save(theme = this.theme): void {
+  save(theme: ThemeChoice = this.theme): void {
     const data = this.serialize(theme);
     if (data === this.saved) return;
     mkdirSync(dirname(this.path), { recursive: true });

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, openSync, readFileSync, readSync } from "node:fs";
 import { Activity, type Call, type Entry, type Fact, isQuestion, type Turn, WORK } from "@furb/engine";
 
 /** Why a record opens to read: the engine that made it, as the record names it, the engine of this build, and what
@@ -58,11 +58,35 @@ export class Reader {
   /** A recorded life, read from its file: a log of a life whose first line is a header that says so, which the
    * reader shows at the moment where the log ends. */
   static recorded(path: string, directory: string): Reader {
-    const facts = readFileSync(path, "utf8")
-      .split("\n")
-      .filter((line) => line.startsWith("["))
-      .map((line) => JSON.parse(line) as Fact);
-    return new Reader(facts, directory, path);
+    const reader = new Reader([], directory, path);
+    reader.follow();
+    return reader;
+  }
+  /** The bytes of the file of a recorded life that the reader heard, up to the end of its last whole line. */
+  private heard = 0;
+  /** The reader of a recorded life hears each fact that a line added to its file since it read the file last, as the
+   * life said it. A line that is not whole yet waits for the next read. It gives whether it heard a fact. */
+  follow(): boolean {
+    if (!this.recorded) return false;
+    const file = openSync(this.record, "r");
+    try {
+      const size = fstatSync(file).size;
+      if (size <= this.heard) return false;
+      const added = Buffer.alloc(size - this.heard);
+      const got = readSync(file, added, 0, added.length, this.heard);
+      const end = added.subarray(0, got).lastIndexOf(10) + 1;
+      if (!end) return false;
+      this.heard += end;
+      const facts = added
+        .subarray(0, end)
+        .toString("utf8")
+        .split("\n")
+        .filter((line) => line.startsWith("["));
+      for (const line of facts) this.hear(JSON.parse(line) as Fact);
+      return facts.length > 0;
+    } finally {
+      closeSync(file);
+    }
   }
   /** Whether the reader shows a recorded life, which keeps nothing beside its file. */
   get recorded(): boolean {

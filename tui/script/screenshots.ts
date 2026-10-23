@@ -11,7 +11,7 @@ import { loadParsers } from "../src/parsers.ts";
 import { Preferences } from "../src/preferences.ts";
 import type { Exit } from "../src/session.ts";
 import { Session } from "../src/session.ts";
-import { palettes } from "../src/theme.ts";
+import { colorless, palettes } from "../src/theme.ts";
 import { Workspaces } from "../src/workspaces.ts";
 import { idle } from "../test/idle.ts";
 import { rasterize } from "./raster.ts";
@@ -805,6 +805,33 @@ try {
   await writeFile(join(folder, "tui.ts"), "export default (furb) => { furb.panel(");
   while (!app().parts.loaded[0]?.error) await Bun.sleep(10);
   await capture("75-extension-part-error");
+  app().dispose();
+  await library.dispose();
+
+  // Access: the mode of a screen reader, a terminal with no color, and the theme of a light terminal, on a life of
+  // the demo that holds a conversation and a question.
+  const access = await gallerySession();
+  await seedDemo(access);
+  await show(access);
+  await access.engine.prompt("str", {
+    message: "Which name should the search shortcut show, Ctrl+K or ⌘K?",
+    to: "operator",
+    on: access.engine.root,
+  });
+  await until(access, () => access.desk.asks.length > 0);
+  access.preferences.screenReader = true;
+  library.emit("access");
+  await capture("76-screen-reader");
+  access.preferences.screenReader = false;
+  colorless.on = true;
+  library.emit("access");
+  await capture("77-no-color");
+  colorless.on = false;
+  library.emit("access");
+  access.theme = "terminal";
+  test.renderer.emit("theme_mode", "light");
+  await capture("78-terminal-light");
+  test.renderer.emit("theme_mode", "dark");
 } catch (error) {
   console.error(error);
   failed = true;

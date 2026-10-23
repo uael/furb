@@ -1,5 +1,5 @@
 import { safeText } from "@furb/engine";
-import { RGBA, StyledText } from "@opentui/core";
+import { RGBA, StyledText, type TextChunk } from "@opentui/core";
 
 /** One run of text in a line, with its color, its attributes, and the color behind it. */
 export type Part = readonly [text: string, fg?: RGBA, attributes?: number, bg?: RGBA];
@@ -7,13 +7,25 @@ export const bold = 1,
   italic = 4,
   underline = 8;
 
-/** The parts as one styled line, each part made safe for the terminal. */
+/** An address of the web in a text, which ends before a space, a quote, a bracket, or a mark that ends a sentence. */
+const address = /https?:\/\/[^\s"'`<>()[\]{}]+[^\s"'`<>()[\]{}.,;:!?]/g;
+
+/** The parts as one styled line, each part made safe for the terminal. Each address of the web in a part is a link,
+ * which a terminal that knows OSC 8 opens at a click. */
 export function styled(parts: readonly Part[]): StyledText {
-  return new StyledText(
-    parts
-      .filter(([text]) => text)
-      .map(([text, fg, attributes, bg]) => ({ __isChunk: true, text: safeText(text), fg, bg, attributes })),
-  );
+  const chunks: TextChunk[] = [];
+  for (const [whole, fg, attributes, bg] of parts) {
+    const text = safeText(whole);
+    let at = 0;
+    for (const found of text.matchAll(address)) {
+      if (found.index > at)
+        chunks.push({ __isChunk: true, text: text.slice(at, found.index), fg, bg, attributes });
+      chunks.push({ __isChunk: true, text: found[0], fg, bg, attributes, link: { url: found[0] } });
+      at = found.index + found[0].length;
+    }
+    if (at < text.length) chunks.push({ __isChunk: true, text: text.slice(at), fg, bg, attributes });
+  }
+  return new StyledText(chunks);
 }
 
 /** The text of the parts, with no style. */
@@ -23,6 +35,8 @@ export function plain(parts: readonly Part[]): string {
 
 /** A color between two colors, at a share of the way from the first to the second. */
 export function mix(from: RGBA, to: RGBA, share: number): RGBA {
+  // A default color of the terminal has no value to mix, so the nearer of the two stands.
+  if (from.intent !== "rgb" || to.intent !== "rgb") return share < 0.5 ? from : to;
   const at = (one: number, other: number) => one + (other - one) * share;
   return RGBA.fromValues(at(from.r, to.r), at(from.g, to.g), at(from.b, to.b), 1);
 }

@@ -1,5 +1,5 @@
 // The worker loads no module that loads OpenTUI, whose native library belongs to the thread that draws.
-import { readFileSync } from "node:fs";
+import { type FSWatcher, readFileSync, watch as watchFile } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { Engine, FileChange, SessionOptions, Turn } from "@furb/engine";
 import { Act, actorParts, ENGINE, model, models, retold, Session, setup } from "@furb/engine";
@@ -34,6 +34,8 @@ let reader: Reader | undefined;
 let claude: string | undefined;
 let demo = false;
 let timer: ReturnType<typeof setTimeout> | undefined;
+/** The watch on the file of a recorded life, which hears each line that the file adds. */
+let follower: FSWatcher | undefined;
 let sentFacts = 0;
 const state = () => {
   if (reader) {
@@ -210,10 +212,20 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     const { demo: scripted, watch, ...options } = data.args[0] as EngineOptions;
     // A recorded life is a log of a life that a host reads and runs not, at the moment where it ends.
     if (options.record && isRecorded(options.record)) {
-      reader = Reader.recorded(options.record, options.cwd ?? dirname(options.record));
+      const recorded = Reader.recorded(options.record, options.cwd ?? dirname(options.record));
+      reader = recorded;
       demo = true;
-      snapshots = new Snapshots(reader, reader);
-      return reader.root;
+      snapshots = new Snapshots(recorded, recorded);
+      // A recorded life follows its file: each fact that a later line adds is heard as the life said it, and the view
+      // hears of it as it hears of a life that runs.
+      follower = watchFile(options.record, () => {
+        if (recorded.follow())
+          timer ??= setTimeout(() => {
+            timer = undefined;
+            state();
+          }, 20);
+      });
+      return recorded.root;
     }
     claude = options.claude;
     demo = (scripted || watch) ?? false;
@@ -358,6 +370,8 @@ self.onmessage = async ({ data }) => {
   }
   // A session whose save failed has ended its life, its commands and its lease all the same, so the worker ends too.
   if (timer) clearTimeout(timer);
+  follower?.close();
+  follower = undefined;
   session = undefined;
   engine = undefined;
   snapshots = undefined;

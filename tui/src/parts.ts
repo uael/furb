@@ -160,9 +160,14 @@ export class Parts {
     this.timer = setTimeout(() => void this.load(), 30);
   }
 
+  /** The list of acts that the parts heard last. */
+  private heardActs?: readonly LiveAct[];
   /** Hears the acts of the life: a write that lands in the folder `.furb` of the project or in the folder of a part
    * loads the parts again. */
   heard(acts: readonly LiveAct[]): void {
+    // The acts of a life change as a new list, so a list that the parts heard holds nothing new.
+    if (acts === this.heardActs) return;
+    this.heardActs = acts;
     let fresh = false;
     for (const act of acts) {
       if (act.kind !== "write" || !act.done || this.heardWrites.has(act.id)) continue;

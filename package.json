@@ -16,6 +16,7 @@
     "docs": "bun run tui/script/docs.ts",
     "check": "tsc --noEmit && tsc --noEmit -p gui",
     "test": "bun run tui/script/test.ts",
+    "bench": "bun run tui/script/bench.ts",
     "format": "biome format --write bind/typescript tui gui docs/examples package.json tsconfig.json biome.json",
     "lint": "biome check bind/typescript tui gui docs/examples package.json tsconfig.json biome.json"
   },
