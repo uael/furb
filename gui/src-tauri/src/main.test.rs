@@ -23,7 +23,8 @@ fn a_word_that_the_app_does_not_take_is_refused() {
 fn a_check_reads_a_record_on_a_list_of_its_own() {
   let words: Vec<String> = ["--check", "--record", "r.jsonl"].map(str::to_owned).to_vec();
   let list = Path::new("/tmp/x").join("workspaces.json").display().to_string();
-  let host = ["--record", "r.jsonl", "--list", list.as_str()].map(str::to_owned).to_vec();
+  let host =
+    ["--record", "r.jsonl", "--list", list.as_str(), "--no-extensions"].map(str::to_owned).to_vec();
   assert_eq!(asked(&words, Path::new("/tmp/x")), Ok((true, host)));
   assert_eq!(asked(&words[..1], Path::new("/tmp/x")), Err("--check needs --record.".to_owned()));
 }

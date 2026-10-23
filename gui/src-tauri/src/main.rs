@@ -6,7 +6,8 @@
 //! `furb-gui` opens on the projects and their records. `--record RECORD` goes on with a record, `--cwd DIRECTORY`
 //! starts a new life in a project, and `--demo` starts the demo of the TUI, which asks no model. `--model`, `--effort`
 //! and `--roster` name the models, as the TUI takes them. `--check` ends the app once its window drew the whole life of
-//! `--record`, and prints the count of its chains, threads and acts.
+//! `--record`, and prints the process of its web view and the count of its chains, threads and acts.
+//! `FURB_GUI_HIDDEN` starts the window hidden.
 
 mod host;
 
@@ -38,9 +39,30 @@ struct Held {
 /// Whether the app runs as a check: it ends once its window drew the whole life, or fails after a while.
 static CHECK: AtomicBool = AtomicBool::new(false);
 
-/// The address of the socket of the host, once the host said it.
+/// The process of the web content of a web view, which a check prints, so a test measures that process alone.
+#[cfg(target_os = "macos")]
+fn content(webview: &tauri::Webview) {
+  let _ = webview.with_webview(|view| {
+    let inner = view.inner().cast::<objc2::runtime::AnyObject>();
+    if inner.is_null() {
+      return;
+    }
+    // `_webProcessIdentifier` is the property of WKWebView, private to WebKit, that names its WebContent process.
+    let pid: i32 = unsafe { objc2::msg_send![&*inner, _webProcessIdentifier] };
+    println!("furb-gui: the web view runs in process {pid}");
+  });
+}
+
+/// The address of the socket of the host, once the host said it. The window asks for it once its page loaded, so its
+/// web content runs then, and a check prints its process.
 #[tauri::command(async)]
-fn host(held: tauri::State<'_, Held>) -> Result<String, String> {
+fn host(webview: tauri::Webview, held: tauri::State<'_, Held>) -> Result<String, String> {
+  #[cfg(target_os = "macos")]
+  if CHECK.load(Ordering::Relaxed) {
+    content(&webview);
+  }
+  #[cfg(not(target_os = "macos"))]
+  let _ = webview;
   let mut address = held.address.lock().map_err(|_| "the core lost its host".to_owned())?;
   while address.is_none() {
     address = held.said.wait(address).map_err(|_| "the core lost its host".to_owned())?;
@@ -49,18 +71,22 @@ fn host(held: tauri::State<'_, Held>) -> Result<String, String> {
 }
 
 /// What the window drew of the whole life, which it tells once the host read it: the chains, the threads and the
-/// acts. A check prints them and ends.
+/// acts, and whether they are those of the log of the life or those that its record kept. A check prints them and
+/// ends the app, which ends its host first, so the log of the life stands whole when the check ends.
 #[tauri::command]
-fn drew(chains: usize, threads: usize, acts: usize) {
+fn drew(app: tauri::AppHandle, chains: usize, threads: usize, acts: usize, logged: bool) {
   if CHECK.load(Ordering::Relaxed) {
-    println!("furb-gui: the window drew {chains} chains, {threads} threads and {acts} acts");
-    std::process::exit(0);
+    let of = if logged { "its log" } else { "its record" };
+    println!(
+      "furb-gui: the window drew {chains} chains, {threads} threads and {acts} acts of {of}"
+    );
+    app.exit(0);
   }
 }
 
 /// Whether the words of the command line ask for a check, and the words of the host that they ask for. A check needs
-/// a record, and keeps the list of the projects of its life apart from the list of the operator, which it leaves as
-/// it is.
+/// a record, keeps the list of the projects of its life apart from the list of the operator, which it leaves as it is,
+/// and enables no extension that the record does not run, so the life that it draws is the one of the record.
 fn asked(words: &[String], scratch: &std::path::Path) -> Result<(bool, Vec<String>), String> {
   let mut out = Vec::new();
   let (mut check, mut record) = (false, false);
@@ -82,6 +108,7 @@ fn asked(words: &[String], scratch: &std::path::Path) -> Result<(bool, Vec<Strin
       return Err("--check needs --record.".to_owned());
     }
     out.extend(["--list".to_owned(), scratch.join("workspaces.json").display().to_string()]);
+    out.push("--no-extensions".to_owned());
   }
   Ok((check, out))
 }
@@ -100,7 +127,7 @@ fn main() {
       std::process::exit(2);
     }
   };
-  let app = tauri::Builder::default()
+  let mut app = tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
     .setup(move |app| {
       if CHECK.load(Ordering::Relaxed) {
@@ -111,6 +138,13 @@ fn main() {
         });
       }
       app.manage(Held::default());
+      // A window that starts hidden stands for a window behind others, where WebKit draws no frame, which a test of
+      // the check holds.
+      if std::env::var_os("FURB_GUI_HIDDEN").is_some()
+        && let Some(window) = app.get_webview_window("main")
+      {
+        let _ = window.hide();
+      }
       let handle = app.handle().clone();
       // The host starts beside the window, which asks for its address and waits for it.
       std::thread::spawn(move || {
@@ -135,6 +169,13 @@ fn main() {
     .invoke_handler(tauri::generate_handler![host, drew])
     .build(tauri::generate_context!())
     .expect("the window of furb opens");
+  // A check runs as an accessory of the system from its launch: it has no tile in the Dock, no place in the switcher
+  // of apps, and takes the front from no app, so no quit that the Dock sends for the name of the app reaches the app
+  // that the operator has open, and a check ends only by its own exit.
+  #[cfg(target_os = "macos")]
+  if CHECK.load(Ordering::Relaxed) {
+    app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+  }
   app.run(|handle, event| {
     // The host ends when its stdin ends, and saves each life that it holds before it ends.
     if let tauri::RunEvent::Exit = event
