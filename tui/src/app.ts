@@ -54,13 +54,14 @@ import {
   owedAt,
   type RowState,
   type Tone,
+  thread,
   wants,
   weave,
 } from "furb/life";
 import type { Token, Tokens } from "marked";
 import { clipboardImage } from "./clipboard.ts";
 import { commands, slashes } from "./commands.ts";
-import { conversation, refusal } from "./conversation.ts";
+import { conversation } from "./conversation.ts";
 import { demoSession, tour } from "./demo.ts";
 import { externalEditor, openFile } from "./editor.ts";
 import { emojiNamed, emojis } from "./emoji.ts";
@@ -381,6 +382,26 @@ export function follow(renderer: CliRenderer, options: AppOptions): () => App {
   // The mode of a screen reader shapes each part of the view, so a change of it draws a new view of the session.
   options.workspaces.on("access", () => swap(app.session));
   return () => app;
+}
+
+/** The rows of the chains of a loom of the board in the orders that the board reads them: every row, the rows that
+ * ask, then those that need a look, then the others, each in the order of the tree, the place of each row, and how
+ * many rows hold each state, in the order of the count line. */
+function boardOrderOf(loom: Loom) {
+  const rows = loom.rows.filter((row) => row.id !== "operator");
+  const looks = (row: (typeof rows)[number]) => ["failed", "paused", "working"].includes(row.state);
+  const counts = boardOrder.flatMap((state) => {
+    const count = rows.filter((row) => row.state === state).length;
+    return count ? [[state, count] as const] : [];
+  });
+  return {
+    rows,
+    asking: rows.filter((row) => row.state === "asks"),
+    looking: rows.filter((row) => row.state !== "asks" && looks(row)),
+    resting: rows.filter((row) => row.state !== "asks" && !looks(row)),
+    place: new Map(rows.map((row, at) => [row.id, at])),
+    counts,
+  };
 }
 
 /** What the choice of the theme of the terminal says in a picker. */
@@ -1135,7 +1156,7 @@ export class App {
   render = (): void => {
     if (this.closed) return;
     const w = this.session;
-    this.parts.heard(w.acts);
+    this.parts.heard(w.written);
     motion.still = w.preferences.still;
     if (w.theme !== this.theme) this.applyTheme(w.theme);
     this.call(w.desk.asks);
@@ -1992,17 +2013,12 @@ export class App {
           closed === false && /^(prompts|rungs):/.test(key) ? [key] : [],
         ),
       );
-      const lines = condense(
-        ladder(
-          w.selected,
-          shown,
-          (rung) => this.subject(rung),
-          w.host.streams,
-          new Set(w.host.prompts.keys()),
-          index,
-        ),
-        opened,
-      );
+      // The thread of now is read from the index, in the time of what it shows, and that of a moment of the past whole.
+      const owed = new Set(w.host.prompts.keys());
+      const word = (rung: ActRow) => this.subject(rung);
+      const lines = index
+        ? thread(w.selected, word, w.host.streams, owed, opened, index)
+        : condense(ladder(w.selected, shown, word, w.host.streams, owed), opened);
       const actCard = (act: ActRow, indent: number) =>
         add(
           act.id,
@@ -2020,18 +2036,23 @@ export class App {
             same: [act, indent, w.folds[act.id], w.took[act.id]],
           },
         );
-      // The marks of the parts stand before the first act that began after their place: a rule with the title of the
-      // mark, then its lines.
+      // The marks of the parts stand after the last act that began before their place: a rule with the title of the
+      // mark, then its lines. A line that only shows more of an act, or a fold of earlier lines, places no mark.
       const moment = w.moment;
       const marks = this.parts.marks(this.seen()).filter((one) => moment === undefined || one.at < moment);
-      let marked = 0;
-      const markTo = (began: number) => {
-        for (; marked < marks.length && (marks[marked]?.at ?? 0) < began; marked++) {
-          const mark = marks[marked] as PartMark;
-          const lines = JSON.stringify(mark.lines ?? []);
+      const placing = (line: (typeof lines)[number]) =>
+        line.type !== "tail" && line.type !== "value" && line.type !== "more";
+      const before = new Map<number, PartMark[]>();
+      for (const mark of marks) {
+        const at = lines.findLastIndex((line) => placing(line) && line.act.began < mark.at) + 1;
+        before.set(at, [...(before.get(at) ?? []), mark]);
+      }
+      const markAt = (at: number) => {
+        for (const mark of before.get(at) ?? []) {
+          const said = JSON.stringify(mark.lines ?? []);
           add(
             `mark-${mark.chain}-${mark.at}`,
-            `${mark.title}\n${lines}`,
+            `${mark.title}\n${said}`,
             [],
             (box) => {
               box.add(
@@ -2050,15 +2071,15 @@ export class App {
               for (const one of mark.lines ?? [])
                 box.add(this.inset(space.between * 2, this.text(this.partLine(one), c.muted)));
             },
-            { same: [mark.title, lines] },
+            { same: [mark.title, said] },
           );
         }
       };
       let retold = false;
-      for (const line of lines) {
+      for (const [at, line] of lines.entries()) {
         const act = line.act as ActRow;
         const indent = line.depth * space.between;
-        if (line.type !== "tail" && line.type !== "value" && line.type !== "more") markTo(act.began);
+        markAt(at);
         if (line.type === "rung") {
           const code = this.subject(act);
           // The words that a chain wrote to retell its source stand as one line, which names the source.
@@ -2413,7 +2434,7 @@ export class App {
           );
         }
       }
-      markTo(Number.POSITIVE_INFINITY);
+      markAt(lines.length);
       // A paused chain says so at the end of its feed, with the reason that the last failure gave, and a button that
       // wakes it, since nothing new runs on it until then.
       if (w.paused && !w.search) {
@@ -3077,7 +3098,7 @@ export class App {
    * state of its chain, its name, what it does now, and how many answers its models gave for how many dollars. A click
    * on a row shows its chain. The board shows once the life holds more than one chain, or a question waits. */
   /** The loom that the board read last, and what it was woven of, which a frame of the same life reads again. */
-  private boardLoom?: { of: unknown[]; loom: Loom };
+  private boardLoom?: { of: unknown[]; loom: Loom; order: ReturnType<typeof boardOrderOf> };
   /** What each chain of the board does now, and what it was read of. */
   private boardNow: { of: unknown[]; now: Map<string, ReturnType<typeof nowOf>> } = {
     of: [],
@@ -3102,14 +3123,13 @@ export class App {
         width: 0,
         pending: w.host.pending,
         label: (id) => id,
+        index: w.boardIndex,
       });
-    this.boardLoom = { of, loom: woven };
-    // A chain that the operator names again keeps its loom, so each label is read again.
-    const loom = {
-      ...woven,
-      rows: woven.rows.map((row) => (row.id === "operator" ? row : { ...row, label: w.labelOf(row.id) })),
-    };
-    const rows = loom.rows.filter((row) => row.id !== "operator");
+    // The rows of the chains in their orders, and how many of each state, are read once for each loom.
+    const order = same && this.boardLoom ? this.boardLoom.order : boardOrderOf(woven);
+    this.boardLoom = { of, loom: woven, order };
+    const loom = woven;
+    const { rows, asking, looking, resting, place, counts } = order;
     this.renderStage();
     const visible =
       this.lifeView === "main" &&
@@ -3124,17 +3144,19 @@ export class App {
     // The rows that the board holds: each chain that asks, then each chain that needs a look, then the others, as
     // many as a third of the screen holds, and the chain shown always.
     const room = Math.max(3, Math.floor((this.renderer.height - 16) / 3));
-    const asking = rows.filter((row) => row.state === "asks");
-    const others = rows.filter((row) => row.state !== "asks");
-    const looks = (row: (typeof rows)[number]) => ["failed", "paused", "working"].includes(row.state);
-    const chosen = [...asking, ...others.filter(looks), ...others.filter((row) => !looks(row))].slice(
+    const chosen = [...asking.slice(0, room), ...looking.slice(0, room), ...resting.slice(0, room)].slice(
       0,
       room,
     );
-    const selected = rows.find((row) => row.id === w.selected);
+    const selected = rows[place.get(w.selected) ?? -1];
     if (selected && !chosen.includes(selected)) chosen.splice(Math.max(0, room - 1), 1, selected);
-    const kept = new Set(chosen.map((row) => row.id));
-    const shown = [...asking, ...others].filter((row) => kept.has(row.id));
+    // The rows shown keep the order of the board: the chains that ask, then the others in the order of their tree. A
+    // chain that the operator names again keeps its loom, so each label is read again.
+    const rank = (row: (typeof rows)[number]) =>
+      (row.state === "asks" ? 0 : rows.length) + (place.get(row.id) ?? 0);
+    const shown = [...new Set(chosen)]
+      .sort((one, other) => rank(one) - rank(other))
+      .map((row) => ({ ...row, label: w.labelOf(row.id) }));
     const left = rows.length - shown.length;
     const word = (rung: ActRow) => this.subject(rung);
     // What a chain does now holds while its loom, the program and the turns stay, since it reads the acts that start,
@@ -3145,13 +3167,9 @@ export class App {
       this.boardNow = { of: read, now: new Map() };
     const known = this.boardNow.now;
     const lines = shown.map((row) => {
-      const now = known.get(row.id) ?? nowOf(row, loom, w.acts, word);
+      const now = known.get(row.id) ?? nowOf(row, loom, w.acts, word, w.boardIndex);
       known.set(row.id, now);
       return { row, now, depth: row.lines.length / 2 };
-    });
-    const counts = boardOrder.flatMap((state) => {
-      const count = rows.filter((row) => row.state === state).length;
-      return count ? [[state, count] as const] : [];
     });
     const key = JSON.stringify([
       lines,
@@ -3262,7 +3280,7 @@ export class App {
   /** The actor of a chain, as its last answer, its rungs or its prompts name it. */
   private actorOf(chain: string): string {
     const w = this.session;
-    return actorOf(chain, w.acts, w.host.measures, chain === w.selected ? w.actor : w.host.actor);
+    return actorOf(chain, w.actsOn(chain), w.host.measures, chain === w.selected ? w.actor : w.host.actor);
   }
   /** The acts of the life as they stood at the time cursor, which the loom and the graph read. */
   private stageActs: readonly ActRow[] = [];
@@ -3819,8 +3837,7 @@ export class App {
    * wrote once it read the failure, so the failure no longer stands. */
   private retry(act: ActRow): ActRow | undefined {
     if (act.kind !== "rung" || act.by === "operator" || !failed(act)) return undefined;
-    const acts = this.session.acts;
-    return acts.slice(acts.indexOf(act) + 1).find((other) => other.kind === "rung" && other.by === act.by);
+    return this.session.madeAfter(act, (other) => other.kind === "rung");
   }
   /** The heading of an act: its state, its kind, what it is about, and the word of its state. A rung is named by its
    * id, and says its first line while it is folded. */
@@ -3921,7 +3938,7 @@ export class App {
     if (label !== undefined) return label;
     if (act.kind === "prompt") return String(act.words[1] ?? "");
     if (act.kind === "rung")
-      return String(this.session.program[act.id] || this.toldWord(act.id) || act.words[0] || "");
+      return String(this.session.program[act.id] || act.word || this.toldWord(act.id) || act.words[0] || "");
     if (act.kind === "wait") return seconds(Number(act.words[0]));
     if (act.kind === "write") {
       // A write names the path of the Text that it writes, which a read gave whole, so the path drops the directory of
@@ -3999,20 +4016,10 @@ export class App {
     if (hint) inner.add(this.inset(space.between, this.text(hint, c.muted)));
     box.add(inner);
   }
-  /** Whether the gate refused the word of each rung of the turns shown, by rung, read once for each set of turns. */
-  private refused: { turns: unknown; rungs: Map<string, boolean> } = { turns: undefined, rungs: new Map() };
   /** The one line that says what to do after the gate refused the word of a rung, and nothing for any other rung:
    * the operator fixes his own word, and the chain asks a model for its word again with the findings. */
   private gateHint(act: ActRow): string | undefined {
-    const { turns } = this.session;
-    if (act.kind !== "rung" || !act.done) return undefined;
-    if (this.refused.turns !== turns) this.refused = { turns, rungs: new Map() };
-    let refused = this.refused.rungs.get(act.id);
-    if (refused === undefined) {
-      refused = refusal(turns, act.id).length > 0;
-      this.refused.rungs.set(act.id, refused);
-    }
-    if (!refused) return undefined;
+    if (act.kind !== "rung" || !act.done || !act.run?.refused) return undefined;
     return act.by === "operator"
       ? "Press ↑ in the input to bring the word back, fix the line that the gate names, and send it again."
       : "The chain tells the model these findings and asks it for its word again.";
@@ -4254,6 +4261,11 @@ export class App {
     const window = w.filled;
     const grant = w.activity.find((act) => act.kind === "grant" && !act.done);
     const width = w.preferences.sidebarWidth;
+    // The root chain, the chain that is shown, and a chain that has something to say stand in the list, and the other
+    // finished chains fold under a row of their own, which a click opens.
+    const { active, resting } = w.activeChains();
+    const finished = this.unfolded.has("finished") ? w.restingChains(12) : [];
+    const states = new Map(active.map(([chain, status]) => [chain.id, status]));
     if (
       !this.paneChanged(this.railSession, [
         this.theme,
@@ -4261,7 +4273,9 @@ export class App {
         w.spend,
         window,
         width,
-        w.chains.map((chain) => [chain.id, w.labelOf(chain.id), this.session.chainStatus(chain.id)]),
+        active.map(([chain, status]) => [chain.id, w.labelOf(chain.id), status]),
+        resting,
+        finished.map((chain) => [chain.id, w.labelOf(chain.id)]),
         grant?.words,
         this.unfolded.has("finished"),
       ])
@@ -4287,15 +4301,8 @@ export class App {
     const section = (name: string, value = "", note = "", run?: () => void) =>
       spread([name, c.text, bold], note, [value, c.faint], { run });
     section("Chains", "⌃B", "", () => this.chains());
-    // The root chain, the chain that is shown, and a chain that has something to say stand in the list, and the other
-    // finished chains fold under a row of their own, which a click opens. The list takes six rows at most, and the rest
-    // wait behind a button that lists them all.
-    const states = new Map(w.chains.map((chain) => [chain.id, this.session.chainStatus(chain.id)]));
-    const active = w.chains.filter(
-      (chain) => chain.id === w.engine.root || chain.id === w.selected || states.get(chain.id) !== "idle",
-    );
-    const resting = w.chains.filter((chain) => !active.includes(chain));
-    // A row of a chain spans the sidebar past its padding.
+    // The list takes six rows at most, and the rest wait behind a button that lists them all. A row of a chain spans
+    // the sidebar past its padding.
     const edge = { marginX: -space.between, paddingX: space.inset };
     const chainLine = (chain: ActRow) => {
       const selected = chain.id === w.selected;
@@ -4319,7 +4326,7 @@ export class App {
       );
     };
     const shown = active.length > 7 ? 6 : active.length;
-    for (const chain of active.slice(0, shown)) chainLine(chain);
+    for (const [chain] of active.slice(0, shown)) chainLine(chain);
     if (active.length > shown)
       add(
         [
@@ -4328,11 +4335,11 @@ export class App {
         ],
         { run: () => this.chains() },
       );
-    if (resting.length) {
+    if (resting) {
       // The row of the finished chains stands as a chain row does: its fold mark in the column of the bar of the
       // selected chain, and its name where the names of the chains start.
-      this.railSession.add(this.foldRow("finished", " Finished", resting.length, edge));
-      if (this.unfolded.has("finished")) for (const chain of resting.slice(0, 12)) chainLine(chain);
+      this.railSession.add(this.foldRow("finished", " Finished", resting, edge));
+      for (const chain of finished) chainLine(chain);
     }
     target = this.railUsage;
     const spend = w.spend;

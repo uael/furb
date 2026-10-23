@@ -144,8 +144,8 @@ export default function (furb) {
   text after the kind and the lines that its card shows when it opens. The rows of a rung and of a prompt stay the
   TUI's own.
 - `furb.mark(draw)` marks places in the feed of a chain: `draw(seen)` gives a list of `{ chain, at, title, lines }`.
-  The feed of that chain shows each mark as a rule with its title, then its lines, before the first act that began
-  after `at`, or at its end. `at` is a place in time, as the `began` of an act, so a mark stands between the acts
+  The feed of that chain shows each mark as a rule with its title, then its lines, after the last act that began
+  before `at`, or at its start. `at` is a place in time, as the `began` of an act, so a mark stands between the acts
   before it and the acts after it. When the feed shows a moment of the past, it shows only the marks before that
   moment. A mark that throws shows its error as its title.
 - `furb.key(on, run)` adds a key, as `ctrl+e` or `+`, which acts while no dialog is open. A key with no ctrl, meta or

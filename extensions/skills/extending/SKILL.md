@@ -79,7 +79,7 @@ export default function (furb) {
 A panel stands over the input and gives its lines, each a text or a list of `[text, tone]`, where a tone is `text`,
 `muted`, `faint`, `accent`, `success`, `warning` or `danger`. A row gives the label and the details of each act of
 its kind in the feed. `furb.mark(draw)` gives marks, each `{ chain, at, title, lines }`: the feed of that chain shows
-a rule with the title and the lines under it, before the first act whose `began` is after `at`. A key acts while no dialog is open, and a command runs from the palette or as `/name`. A key or
+a rule with the title and the lines under it, after the last act whose `began` is before `at`. A key acts while no dialog is open, and a command runs from the palette or as `/name`. A key or
 a command of the TUI wins. A module that fails shows its error in its panel. `extend(name, *rungs, tui=module)`
 writes the part with the word.
 

@@ -57,8 +57,8 @@ export interface Furb {
   /** The row of each act of a kind in the feed. The rows of a rung and of a prompt are the TUI's own. */
   row(kind: string, draw: (act: LiveAct, seen: Seen) => Row): void;
   /** Marks in the feed: `draw(seen)` gives each mark, and the feed of its chain shows it as a rule with its title,
-   * then its lines, before the first act that began after its place, or at its end. A moment of the past shows only
-   * the marks of that moment or before it. The TUI draws the marks again with the life. */
+   * then its lines, after the last act that began before its place, or at its start. A moment of the past shows only
+   * the marks before that moment. The TUI draws the marks again with the life. */
   mark(draw: (seen: Seen) => readonly Mark[]): void;
   /** A key, as `ctrl+t`, which acts while no dialog is open. A key with no ctrl, meta or alt acts on an empty input
    * alone, and a key of the TUI wins. */
@@ -195,16 +195,17 @@ export class Parts {
     this.timer = setTimeout(() => void this.load(), 30);
   }
 
-  /** The list of acts that the parts heard last. */
-  private heardActs?: readonly LiveAct[];
-  /** Hears the acts of the life: a write that lands in the folder `.furb` of the project or in the folder of a part
-   * loads the parts again. */
-  heard(acts: readonly LiveAct[]): void {
-    // The acts of a life change as a new list, so a list that the parts heard holds nothing new.
-    if (acts === this.heardActs) return;
-    this.heardActs = acts;
-    let fresh = false;
-    for (const act of acts) {
+  /** The list of writes that the parts heard last, and how many of it. */
+  private heardList?: readonly LiveAct[];
+  private heardCount = 0;
+  /** Hears the writes of the life that are done, in a list that only grows: a write that lands in the folder `.furb`
+   * of the project or in the folder of a part loads the parts again. */
+  heard(writes: readonly LiveAct[]): void {
+    if (writes !== this.heardList) [this.heardList, this.heardCount] = [writes, 0];
+    const fresh = writes.slice(this.heardCount);
+    this.heardCount = writes.length;
+    let loads = false;
+    for (const act of fresh) {
       if (act.kind !== "write" || !act.done || this.heardWrites.has(act.id)) continue;
       this.heardWrites.add(act.id);
       const path = (act.words[0] as { path?: unknown } | null)?.path;
@@ -215,9 +216,9 @@ export class Parts {
         return !way.startsWith("..") && !isAbsolute(way);
       };
       if (inside(join(this.project, ".furb")) || this.loaded.some((one) => inside(dirname(one.file))))
-        fresh = true;
+        loads = true;
     }
-    if (fresh) this.soon();
+    if (loads) this.soon();
   }
 
   /** The command of a part of that name. */

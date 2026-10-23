@@ -147,7 +147,8 @@ jobs:
         working-directory: gui/src-tauri
         run: FURB_CLI="$GITHUB_WORKSPACE/target/$CARGO_BUILD_TARGET/debug/furb" cargo test --features tauri/custom-protocol -- --test-threads 1
       # The budget of the speed of the TUI holds on Linux, whose machines of the gates run no other work: the first
-      # frame of a life of 30000 facts, and the frames of the renderer at 60 each second while it scrolls and streams,
-      # each against a measure of the same machine, since one runner of ubuntu-latest is half as fast as another.
+      # frame of a life of 160000 facts, the frames of the renderer at 60 each second while it scrolls and streams,
+      # and the cost of a new fact against that in a life of a tenth of the size, each against a measure of the same
+      # machine, since one runner of ubuntu-latest is half as fast as another.
       - if: runner.os == 'Linux'
         run: bun run bench

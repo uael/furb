@@ -7,6 +7,8 @@ export const WORK = ["prompt", "rung", "bash", "wait"];
 export interface RunState {
   status: "running" | "failed" | "done";
   reason: string;
+  /** Whether the gate refused the word, so that the reason holds its findings, one for each line. */
+  refused?: boolean;
 }
 export interface LiveAct {
   id: string;
