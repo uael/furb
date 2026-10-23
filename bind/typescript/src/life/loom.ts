@@ -144,7 +144,7 @@ export function rowState(
   pending: ReadonlyMap<string, string>,
 ): RowState {
   if (owes) return "asks";
-  const live = work.filter((act) => WORK.includes(act.kind));
+  const live = work.filter((act) => WORK.includes(act.kind) && !act.unfinished);
   if (live.some((act) => pending.has(act.id) || (act.paused && !act.done))) return "paused";
   if (live.some((act) => !act.done)) return "working";
   const latest = live.at(-1);
@@ -339,7 +339,7 @@ function board(
     )
       return kept;
     const work = (act?: LiveAct): act is LiveAct =>
-      act !== undefined && act.on === id && WORK.includes(act.kind);
+      act !== undefined && act.on === id && WORK.includes(act.kind) && !act.unfinished;
     const waiting = [...(openOn.get(id) ?? []), ...(held.get(id) ?? []).map((one) => ids.get(one))].filter(
       work,
     );

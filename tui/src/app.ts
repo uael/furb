@@ -101,6 +101,7 @@ import {
   type Row,
   type Seen,
 } from "./parts.ts";
+import { readingNote, readOnly, sameBuild } from "./reading.ts";
 import { commentStart, type Hunk, hunkPatch, lines, type Scope, scopeLabels, scopes } from "./review.ts";
 import {
   type ActRow,
@@ -159,6 +160,18 @@ const stateOf = (state: "failed" | "cancelled" | "done" | "held"): State =>
     done: { word: "", mark: glyph.done, color: c.success },
     held: { word: "waits for a wake", mark: glyph.held, color: c.warning },
   })[state];
+/** A text cut into lines of at most a width, at its spaces. */
+function wrapped(text: string, width: number): string[] {
+  const lines: string[] = [];
+  let line = "";
+  for (const word of text.split(" ")) {
+    if (line && Bun.stringWidth(`${line} ${word}`) > width) {
+      lines.push(line);
+      line = word;
+    } else line = line ? `${line} ${word}` : word;
+  }
+  return [...lines, line];
+}
 /** The mark of a state in its color, one shape for each: at work, waiting on the operator, paused, failed, finished
  * and not yet seen, and at rest. */
 const statusMark = (status: SessionStatus): Part =>
@@ -169,6 +182,7 @@ const statusMark = (status: SessionStatus): Part =>
       blocked: [`${glyph.asks} `, c.warning],
       paused: [`${glyph.held} `, c.warning],
       error: [`${glyph.failed} `, c.danger],
+      reading: [`${glyph.ring} `, c.warning],
       done: [`${glyph.dot} `, c.success],
       idle: [`${glyph.ring} `, c.faint],
       saved: [`${glyph.ring} `, c.faint],
@@ -752,6 +766,11 @@ export class App {
       ],
       syntaxStyle: this.style,
       onContentChange: () => {
+        // A record open to read takes no text: its composer stays empty.
+        if (this.session.host.reading && this.composer.plainText) {
+          this.composer.setText("");
+          return;
+        }
         this.schedule();
         void this.highlightEditor();
         this.suggest();
@@ -864,38 +883,32 @@ export class App {
   }
 
   /** The dialog of a record that a life refused for a drift, as a record that a build of another version made, which
-   * opens to read: it names both versions, or both engines for a record of a build before the versions, and offers
-   * to read the record, or to start a new life in its workspace. */
+   * opens to read: it names the build that made the record and this build, each on a line of its own, says what a new
+   * life from the record carries, and offers to read the record, or to start a new life in its workspace. */
   private readOrRenew(): void {
     const reading = this.session.host.reading;
     if (!reading) return;
     this.session.readingTold = true;
-    const ours = reading.engine.slice(0, 12);
-    const same =
-      reading.version === null ? reading.made === reading.engine : reading.version === reading.current;
-    const theirs =
-      reading.version !== null
-        ? `a build of version ${reading.version}`
-        : reading.made
-          ? `the engine ${reading.made.slice(0, 12)}`
-          : "an earlier engine, which the record does not name";
-    const build = reading.version !== null ? `is of version ${reading.current}` : `runs the engine ${ours}`;
-    const note = same
-      ? `This build ${build}, which made it, and its replay drifts: ${clip(reading.why, 240)}`
-      : `It was made by ${theirs}, and this build ${build}. A replay would drift, so it opens to read.`;
-    const library = this.options.workspaces;
     this.openPalette(
-      same ? "This record does not replay" : "This record was made by another build",
+      sameBuild(reading) ? "This record does not replay" : "This record was made by another build",
       [
         { label: "Read it", detail: "See what it kept. No word runs again.", run: () => {} },
         {
           label: "Start a new life from it",
-          detail: "A new session in its workspace",
-          run: () => library.create().then(() => {}, this.session.fail),
+          detail: "A new session in its workspace, with the earlier work of the record",
+          run: () => this.startFrom(),
         },
       ],
-      { note },
+      { note: readingNote(reading) },
     );
+  }
+  /** A new life in the workspace of a record open to read, whose first word carries the earlier work of the record. */
+  private startFrom(): void {
+    const library = this.options.workspaces;
+    void this.session.host
+      .carry()
+      .then((carry) => library.create(library.groupOf(), undefined, carry))
+      .then(() => {}, this.session.fail);
   }
 
   private box(options: BoxOptions = {}): BoxRenderable {
@@ -1120,7 +1133,7 @@ export class App {
       .filter(Boolean);
   }
   async submit(): Promise<void> {
-    if (this.submitting) return;
+    if (this.submitting || this.session.host.reading) return;
     this.submitting = true;
     const key = this.draftKey;
     const content = this.composer.plainText;
@@ -1246,7 +1259,7 @@ export class App {
           : ["Prompt", c.accent, "Ask anything, or type / for commands"];
     for (const edge of this.composeEdges) if (edge.borderColor !== modeColor) edge.borderColor = modeColor;
     this.composer.cursorColor = modeColor;
-    this.composer.placeholder = placeholder;
+    this.composer.placeholder = w.host.reading ? readOnly(w.host.reading) : placeholder;
     this.renderPick(choosing);
     // The box holds the values of a choice, or the lines of the text, up to six, then a row of space and the line
     // under the text. While Other takes the words of the operator, it holds both.
@@ -1515,11 +1528,13 @@ export class App {
       ? "Loading"
       : retry
         ? retryLine(retry)
-        : status === "error"
-          ? w.error
-            ? "The view could not load"
-            : "The last act failed"
-          : statusLabels[status];
+        : w.host.reading
+          ? readOnly(w.host.reading)
+          : status === "error"
+            ? w.error
+              ? "The view could not load"
+              : "The last act failed"
+            : statusLabels[status];
     // The footer offers the keys of the top layer that offers any, each of which does what its key does, and under
     // the layer of the table, the wake of a paused chain.
     type Offer = readonly [chord: string, action: string, run: () => void];
@@ -1532,6 +1547,7 @@ export class App {
       });
     const group = offered[0]?.hint[2];
     const keys: readonly Offer[] = [
+      ...(w.host.reading ? ([["/new", "Start a new life", () => this.startFrom()]] as readonly Offer[]) : []),
       ...(group === "" && w.paused
         ? ([["/wake", "wake the chain", () => this.action("/wake")]] as const)
         : []),
@@ -2939,6 +2955,10 @@ export class App {
     // Only work moves: an act of another kind that lives, as a grant or the watcher of an extension, lives until
     // something ends it, as a chain does, and shows a dot.
     if (!act.done && !WORK.includes(act.kind)) return { word: "", mark: glyph.dot, color: c.accent };
+    // In a record open to read, the work that had no end when the record ended has none to come: it neither runs nor
+    // waits for a wake.
+    if (act.unfinished && !act.done)
+      return { word: "not finished when the record ends", mark: glyph.ring, color: c.faint };
     // A rung that a pause holds waits for the wake, and says so, where it would otherwise seem to run.
     if (act.kind === "rung")
       return cancelled(act)
@@ -3905,6 +3925,8 @@ export class App {
    * for, and a mark and a word only when a cancel or a failure ended it, or a pause holds it. */
   private promptState(act: ActRow): Part[] {
     const shape: Part = [String(act.words[0] ?? ""), c.faint];
+    if (act.unfinished && !act.done)
+      return [shape, [`   ${glyph.ring} not finished when the record ends`, c.faint]];
     const state = act.done
       ? failed(act)
         ? stateOf("failed")
@@ -5071,7 +5093,7 @@ export class App {
             },
           ]
         : []),
-      ...(!act.done && WORK.includes(act.kind)
+      ...(!act.done && !act.unfinished && WORK.includes(act.kind)
         ? [
             w.lastOwn?.id === act.id && message
               ? {
@@ -5131,6 +5153,16 @@ export class App {
         });
     }
     const choices: Choice[] = [
+      ...(this.session.host.reading
+        ? [
+            {
+              label: "Read only",
+              detail: "Why this record opens to read, and how to start a new life from it",
+              command: "",
+              run: () => this.readOrRenew(),
+            },
+          ]
+        : []),
       { label: "New session", detail: commands.new[2], command: "/new", run: () => this.action("/new") },
     ];
     // One key names the three views, as 1-3.
@@ -6421,7 +6453,7 @@ export class App {
       note = "",
       rich = false,
       at,
-    }: { selected?: number; note?: string; rich?: boolean; at?: { x: number; y: number } } = {},
+    }: { selected?: number; note?: string | string[]; rich?: boolean; at?: { x: number; y: number } } = {},
   ): void {
     // A dialog or a menu takes the keys, so a name that a row takes ends first, and is kept.
     this.endRename(true);
@@ -6496,9 +6528,15 @@ export class App {
     heading.add(this.text(label, c.text, { attributes: bold, truncate: true, flexGrow: 1, flexShrink: 1 }));
     heading.add(this.text("Esc", c.faint, { run: () => this.closeOverlay() }));
     this.overlay.add(heading);
-    this.paletteNote = note ? space.bar : 0;
-    if (note)
-      this.overlay.add(this.inset(space.between, this.line(clip(note, this.paletteWidth - 8), c.muted)));
+    // A note in a list lays out on as many lines as its items need, and a single text takes one line.
+    const notes = Array.isArray(note)
+      ? note.flatMap((item) => wrapped(item, this.paletteWidth - 8))
+      : note
+        ? [clip(note, this.paletteWidth - 8)]
+        : [];
+    this.paletteNote = notes.length * space.bar;
+    for (const line of notes)
+      this.overlay.add(this.inset(space.between, this.line(clip(line, this.paletteWidth - 8), c.muted)));
     // A short list shows its filter only once the operator types in it, and until then the filter takes no row.
     const quiet = choices.length <= 5;
     this.paletteInputRow = this.row({
@@ -7121,7 +7159,11 @@ export class App {
   /** Whether Escape pauses the chain: a model is at work on it, and no pause holds it. */
   private pausing(): boolean {
     const w = this.session;
-    return !w.paused && w.activity.some((act) => act.kind === "prompt" && !act.done && !asksOperator(act));
+    return (
+      !w.host.reading &&
+      !w.paused &&
+      w.activity.some((act) => act.kind === "prompt" && !act.done && !asksOperator(act))
+    );
   }
   /** What each action of the table of keys does, with the key that ran it. */
   private readonly actions: Record<Action, (key?: KeyEvent) => unknown> = {

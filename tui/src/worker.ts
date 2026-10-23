@@ -1,5 +1,5 @@
 // The worker loads no module that loads OpenTUI, whose native library belongs to the thread that draws.
-import { type FSWatcher, readFileSync, watch as watchFile } from "node:fs";
+import { existsSync, type FSWatcher, readFileSync, watch as watchFile } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { Engine, FileChange, SessionOptions, Turn } from "furb";
 import { Act, actorParts, ENGINE, model, models, retold, Session, setup, standingOf } from "furb";
@@ -7,7 +7,7 @@ import { type Measure, measureOf } from "furb/life";
 import type { HostState } from "./bridge.ts";
 import { type EngineOptions, roster } from "./models.ts";
 import { queueDispatches, queueHash } from "./queue.ts";
-import { isRecorded, Reader } from "./reading.ts";
+import { guard, isRecorded, Reader } from "./reading.ts";
 import { branchChanges, net } from "./review.ts";
 import type { FollowUp } from "./session.ts";
 import { Snapshots } from "./snapshots.ts";
@@ -243,13 +243,24 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     const opened = demo
       ? scriptedSession(options, watch)
       : new Session({ ...options, roster: roster(options) });
+    // A life that opens on a record writes beside it before a replay drifts, so the guard gives back what it changed
+    // when the record opens to read.
+    let held: ReturnType<typeof guard> | undefined;
+    try {
+      held = opened.record && existsSync(opened.record) ? guard(opened.record) : undefined;
+    } catch {}
     try {
       engine = opened.open();
+      held?.keep();
     } catch (error) {
       // A record that a build of another version made drifts on a replay, so it opens to read, with the facts that
       // it kept.
       const why = error instanceof Error ? error.message : String(error);
-      if (!why.startsWith("Drift") || !opened.record) throw error;
+      if (!why.startsWith("Drift") || !opened.record) {
+        held?.keep();
+        throw error;
+      }
+      held?.undo();
       const { facts, made, engine: ours, version, current, logged } = retold(opened.record);
       reader = new Reader(facts, opened.directory, opened.record, {
         made,
@@ -354,6 +365,7 @@ function read(data: { target: string; method: string; args: unknown[] }): unknow
     return snapshots?.take(String(data.args[0]), Number(data.args[1]), Number(data.args[2] ?? 0));
   if (data.target === "library" && data.method === "source") return ENGINE;
   if (data.target === "library" && data.method === "made") return open.reading?.made ?? null;
+  if (data.target === "library" && data.method === "carry") return open.carry();
   if (data.target === "library" && data.method === "catalog") return [];
   if (data.target === "library" && data.method === "setup") return null;
   if (data.target === "library" && data.method === "sees") return false;

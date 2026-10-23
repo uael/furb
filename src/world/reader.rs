@@ -7,7 +7,9 @@
 //! and the operator. So the reader says, after the facts that name them, the facts that the engine said and the record
 //! does not keep, as far as the kept facts show them:
 //!
-//! - each chain that a kept act stands on, made by the rung that makes the first prompt on it, or by the operator;
+//! - each chain that a kept act stands on, made by the rung that makes the first prompt on it, or by the operator,
+//!   named by the first line of that prompt, or by its own name when the record keeps no prompt on it, and standing
+//!   under the chain that its maker ran on;
 //! - each rung that a kept act names as its maker, on the open prompt of its chain that is no question to the
 //!   operator, or on its chain, which ends the rung before it of the same maker;
 //! - the run of the word of each rung, which the rung holds or the reply that it asked for gives, once the gate lets it
@@ -105,17 +107,41 @@ pub fn told(kept: &[Object]) -> Vec<Object> {
       makers.entry(one.on().to_owned()).or_insert_with(|| one.by().to_owned());
     }
   }
-  let mut life = Reader { makers, ..Reader::default() };
+  let mut homes: HashMap<String, String> = HashMap::new();
+  let mut labels: HashMap<String, String> = HashMap::new();
+  for one in facts.iter().filter(|one| one.question() && named(one.on(), "chain")) {
+    if named(one.by(), "rung") && one.kind() != "prompt" {
+      homes.entry(one.by().to_owned()).or_insert_with(|| one.on().to_owned());
+    }
+    if one.kind() == "prompt" {
+      labels.entry(one.on().to_owned()).or_insert_with(|| titled(&text(one, 2)));
+    }
+  }
+  let mut life = Reader { makers, homes, labels, ..Reader::default() };
   for fact in &facts {
     life.hear(fact);
   }
   life.out
 }
 
+/// The label of a chain from the message of its first prompt: its first line that says something, in at most 80
+/// characters.
+fn titled(message: &str) -> String {
+  let line = message.lines().map(str::trim).find(|one| !one.is_empty()).unwrap_or_default();
+  match line.char_indices().nth(80) {
+    Some((at, _)) => format!("{}…", line[..at].trim_end()),
+    None => line.to_owned(),
+  }
+}
+
 /// What the reader knows of the facts that it heard.
 #[derive(Default)]
 struct Reader {
   out: Vec<Object>,
+  /// The chain of each rung that a kept act on a chain names as its maker, which is the chain that the rung ran on.
+  homes: HashMap<String, String>,
+  /// The label of each chain that the record does not hold: the first line of the first prompt that it kept on it.
+  labels: HashMap<String, String>,
   /// The maker of each chain that the record does not hold, when a rung makes the first prompt on it.
   makers: HashMap<String, String>,
   /// Each act that a fact names, and the chain of each.
@@ -179,8 +205,10 @@ impl Reader {
     let (kind, about, by, on) = (fact.kind(), fact.about(), fact.by(), fact.on());
     if kind != "chain" && named(on, "chain") && !self.scopes.contains_key(on) {
       let maker = self.makers.get(on).cloned().unwrap_or_else(|| "operator".to_owned());
-      let under = self.scopes.get(&maker).cloned().unwrap_or_default();
-      self.out.push(question("chain", on, &maker, [under.as_str(), "", ""]));
+      let under =
+        self.scopes.get(&maker).or_else(|| self.homes.get(&maker)).cloned().unwrap_or_default();
+      let label = self.labels.get(on).cloned().unwrap_or_else(|| on.to_owned());
+      self.out.push(question("chain", on, &maker, [under.as_str(), label.as_str(), ""]));
       self.scopes.insert(on.to_owned(), on.to_owned());
     }
     let chain = self.scope(on);
