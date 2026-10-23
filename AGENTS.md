@@ -22,6 +22,7 @@ API of its own:
   knows the models of every provider that pi-ai serves and those of the claude command line, and it offers each
   model whose credential stands in the environment, the claude command line when it finds the program, and each
   model for chat that a local server lists when `FURB_LOCAL_URL` names its address, which `provider/local.rs` asks.
+  `docs/models.md` tells a user how furb finds a model and how to choose one.
   It says too what a first run checks of each: `setup` in `src/binding.rs` gives it to a host.
   `provider/search.rs` holds the native search of the web of each provider that has one, which the extension `web`
   asks.
@@ -69,7 +70,7 @@ on both engines too, and its conftest, `extensions/conftest.py`, hands it the ho
 only the suites of the extensions need. `test/outside/test_monty.py` proves what the door carries that no sentence of
 the contract says.
 
-The TypeScript side is a bun workspace at the root, with two packages:
+The TypeScript side is a bun workspace at the root, with three packages:
 
 - `bind/typescript` is the crate through N-API. Its views, its queries and its controls are synchronous, and an
   act that is answered later can be awaited. It includes a `Session`: an engine on the ears of the crate, the
@@ -78,6 +79,11 @@ The TypeScript side is a bun workspace at the root, with two packages:
   code. The TUI imports its build in `bind/typescript/dist`, which `bun run build` makes again.
 - `tui` is the OpenTUI application on that package. `tui/README.md` says what the TUI does, and `docs/tui.md` shows
   each screen.
+- `gui` is the desktop app, which runs a life in a window as the TUI runs one in a terminal: its core in
+  `gui/src-tauri`, a Cargo workspace of its own on Tauri 2, holds the window and starts the host of a life in
+  `gui/host`, a program of bun on the `Workspaces` and the `Session` of the TUI, and its UI in `gui/src` reads the
+  model of a life from its source. `gui/README.md` says how to build it, start it and use it, and `gui/DESIGN.md`
+  says its design.
 
 `docs/examples/` holds the examples of the framework: five short programs for each door, in `python/`,
 `typescript/` and `rust/`, which a user runs as they stand, and which `docs/examples/README.md` shows. They stand on

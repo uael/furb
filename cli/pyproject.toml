@@ -3,6 +3,7 @@ name = "furb-cli"
 # maturin takes the version of the crate, which is the version of the workspace.
 dynamic = ["version"]
 description = "furb, the command line: the TUI, a JSON-RPC on stdin and stdout, and one command on one life."
+readme = "README.md"
 requires-python = ">=3.14"
 # The license of the repository stands over this too; maturin reads no file above its own directory, so the
 # distribution names the license and carries none of its own.
