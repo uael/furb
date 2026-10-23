@@ -18,57 +18,31 @@ import { transcriptOf } from "./transcript.ts";
 
 afterAll(removeDemoDirectories);
 
-test("rungs retain clicked folds across views and reopen, with running, failed, and done labels and gate findings", async () => {
-  let rung = "";
+test("a word of the operator stands as its program under You ran: its line that waits is lit until its act ends, then says what the act came to, in each view and in a later life, and a word that the gate refused shows a cross and its finding", async () => {
   let record: string | undefined;
+  const line = (shown: string) => shown.split("\n").find((row) => row.includes("await wait(60)")) ?? "";
   await composing(
-    async ({ session, app, screen, frame }) => {
-      rung = await session.engine.rung({ word: "await wait(60)", on: session.engine.root });
+    async ({ session, app, frame }) => {
+      const rung = await session.engine.rung({ word: "await wait(60)", on: session.engine.root });
       await session.refresh();
-      await frame();
-      let card = app.scroll.getChildren().find((card) => card.id === rung);
-      let heading = card?.getChildren()[0];
-      if (!heading) throw new Error("No rung header.");
-      expect(screen.captureCharFrame()).toContain(`${rung}  by you  running`);
-      expect(card?.getChildren().length).toBeGreaterThan(1);
-      await screen.mockMouse.click(heading.x + 1, heading.y);
-      await frame();
-      expect(
-        app.scroll
-          .getChildren()
-          .find((card) => card.id === rung)
-          ?.getChildren(),
-      ).toHaveLength(1);
+      const running = await frame();
+      expect(running).toContain("You ran");
+      expect(line(running)).toMatch(/◉ +1 await wait\(60\) +# waits 60s/);
+      expect(app.scroll.getChildren().some((card) => card.id === `program-${rung}`)).toBe(true);
       const wait = session.acts.find((act) => act.kind === "wait" && act.by === rung);
       if (!wait) throw new Error("No pending wait.");
       await session.engine.close(null, { id: wait.id });
       await session.engine.result(rung);
       await session.refresh();
-      expect(await frame()).toContain(`✓ ${rung}`);
-      expect(screen.captureCharFrame()).not.toContain(`${rung}  by you  running`);
-      expect(
-        app.scroll
-          .getChildren()
-          .find((card) => card.id === rung)
-          ?.getChildren(),
-      ).toHaveLength(1);
+      const done = line(await frame());
+      expect(done).not.toContain("◉");
+      expect(done).toMatch(/ 1 await wait\(60\) +# woke/);
       session.show("transcript");
       await session.refresh();
       await frame();
       session.show("feed");
       await session.refresh();
-      await frame();
-      card = app.scroll.getChildren().find((card) => card.id === rung);
-      expect(card?.getChildren()).toHaveLength(1);
-      heading = card?.getChildren()[0];
-      if (heading) await screen.mockMouse.click(heading.x + 1, heading.y);
-      await frame();
-      expect(
-        app.scroll
-          .getChildren()
-          .find((card) => card.id === rung)
-          ?.getChildren().length,
-      ).toBeGreaterThan(1);
+      expect(line(await frame())).toBe(done);
       await session.submit("/run this is invalid python !!!");
       const refused = session.activity.findLast(
         (act) => act.kind === "rung" && act.words[0] === "this is invalid python !!!",
@@ -77,8 +51,10 @@ test("rungs retain clicked folds across views and reopen, with running, failed, 
       expect(session.error).toBe("");
       expect(session.findings.join("\n")).toContain("line 1");
       await session.refresh();
-      expect(await frame()).toContain("line 1");
-      expect(screen.captureCharFrame()).toContain("failed");
+      const rows = (await frame()).split("\n");
+      const at = rows.findIndex((row) => /✗ +1 this is invalid python !!!/.test(row));
+      expect(at).toBeGreaterThan(0);
+      expect(rows[at + 1]).toMatch(/^ +# \S/);
       record = session.host.record;
     },
     { width: 140, height: 42, useMouse: true },
@@ -86,15 +62,10 @@ test("rungs retain clicked folds across views and reopen, with running, failed, 
   if (!record) throw new Error("No record.");
   const session = await demoSession({ record });
   await composing(
-    async ({ app }) => {
-      expect(session.folds[rung]).toBe(false);
-      expect(session.acts.find((act) => act.id === rung)?.run?.status).toBe("done");
-      expect(
-        app.scroll
-          .getChildren()
-          .find((card) => card.id === rung)
-          ?.getChildren().length,
-      ).toBeGreaterThan(1);
+    async ({ frame }) => {
+      const shown = line(await frame());
+      expect(shown).not.toContain("◉");
+      expect(shown).toMatch(/ 1 await wait\(60\) +# woke/);
     },
     { width: 140, height: 42, useMouse: true },
     session,

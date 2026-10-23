@@ -10,8 +10,8 @@ export class Preferences {
   theme: ThemeChoice = "terminal";
   sidebar = true;
   sidebarWidth = 44;
-  /** Whether a rung that is over starts folded in the feed. */
-  foldRungs = true;
+  /** Whether a thread that is over, and is not the last of its chain, starts folded in the feed. */
+  foldThreads = true;
   /** Whether the welcome showed the check of the first run, which it shows once, and again while no model answers. */
   setupSeen = false;
   /** The view of the life that the TUI shows: main, the loom, or the graph. */
@@ -30,6 +30,7 @@ export class Preferences {
         theme?: string;
         sidebar?: boolean;
         sidebarWidth?: number;
+        foldThreads?: boolean;
         foldRungs?: boolean;
         setupSeen?: boolean;
         view?: string;
@@ -40,7 +41,9 @@ export class Preferences {
       if (typeof saved?.screenReader === "boolean") this.screenReader = saved.screenReader;
       if (typeof saved?.reducedMotion === "boolean") this.reducedMotion = saved.reducedMotion;
       if (typeof saved?.sidebar === "boolean") this.sidebar = saved.sidebar;
-      if (typeof saved?.foldRungs === "boolean") this.foldRungs = saved.foldRungs;
+      // A file of an earlier version names the fold of what is over foldRungs.
+      const fold = saved?.foldThreads ?? saved?.foldRungs;
+      if (typeof fold === "boolean") this.foldThreads = fold;
       if (typeof saved?.setupSeen === "boolean") this.setupSeen = saved.setupSeen;
       if (isLifeView(saved?.view)) this.view = saved.view;
       if (typeof saved?.sidebarWidth === "number")
@@ -60,7 +63,7 @@ export class Preferences {
       theme,
       sidebar: this.sidebar,
       sidebarWidth: this.sidebarWidth,
-      foldRungs: this.foldRungs,
+      foldThreads: this.foldThreads,
       setupSeen: this.setupSeen,
       view: this.view,
       screenReader: this.screenReader,

@@ -24,7 +24,6 @@ import {
   type TextChunk,
   type TextOptions,
   TextRenderable,
-  treeSitterToTextChunks,
 } from "@opentui/core";
 import type { Keymap } from "@opentui/keymap";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
@@ -48,15 +47,17 @@ import {
   condense,
   doingOf,
   gist,
-  type Line,
   type Loom,
   ladder,
   makers,
   momentsOf,
   nowOf,
   owedAt,
+  type ProgramLine,
   type RowState,
+  stepLines,
   thread,
+  threadProgram,
   wants,
   weave,
 } from "furb/life";
@@ -203,13 +204,24 @@ const threadMarks = (thread: ChainThread): [string, RGBA] =>
       ? [glyph.held, c.warning]
       : thread.state === "failed"
         ? [glyph.failed, c.danger]
-        : thread.resolved
-          ? [glyph.done, c.faint]
-          : [glyph.running, c.accent];
+        : thread.state === "cancelled"
+          ? [glyph.cancelled, c.faint]
+          : thread.resolved
+            ? [glyph.done, c.faint]
+            : [glyph.running, c.accent];
+/** How many of the last steps of a thread its program shows until a click shows the earlier ones. */
+const PROGRAM_STEPS = 6;
+/** A time in a few characters: milliseconds under a second, tenths under ten seconds, then seconds and minutes. */
+const spell = (ms: number) =>
+  ms < 1000
+    ? `${Math.round(ms)}ms`
+    : ms < 10000
+      ? `${(ms / 1000).toFixed(1)}s`
+      : ms < 60000
+        ? `${Math.round(ms / 1000)}s`
+        : `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;
 /** How many rows of the feed a long message takes until a click opens it. */
-const MESSAGE_ROWS = 8;
-/** How many rows of the feed the word of a rung that stands open by itself takes until a click shows all of it. */
-const WORD_ROWS = 12;
+const MESSAGE_ROWS = 3;
 /** The lines of a text cut at its words to a width, at most a count of them, the last one cut where the text goes
  * on. */
 function wrapped(text: string, width: number, most: number): string[] {
@@ -439,6 +451,9 @@ export class App {
   private readonly railUsage: BoxRenderable;
   /** What the sidebar of the session drew last, which a frame that would draw the same leaves as it is. */
   private railKey = "";
+  /** The program of each thread and each word of the operator, as it stood at a version of the acts and of the words
+   * that its models write. */
+  private programs = new Map<string, { version: number; live: string; lines: ProgramLine[] }>();
   /** The chain whose threads the sidebar lists in place of the tree of the chains, once a click or Enter chose it. */
   private railChain?: string;
   /** Whether the keys move in the sidebar, after ⌥T, and the row that they stand on: a chain in the tree, or a thread in
@@ -1858,7 +1873,9 @@ export class App {
     return (
       this.session.folds[state] ??
       (rung
-        ? this.session.preferences.foldRungs && !working(rung) && (!failed(rung) || Boolean(this.retry(rung)))
+        ? this.session.preferences.foldThreads &&
+          !working(rung) &&
+          (!failed(rung) || Boolean(this.retry(rung)))
         : compact)
     );
   }
@@ -2053,11 +2070,131 @@ export class App {
           },
         );
       let retold = false;
-      // A thread that the operator collapsed shows its header line alone.
+      // The feed is one program of threads: each thread is its header, then the words of its steps as python, with
+      // what each line came to as a quiet comment beside it. A thread that the operator collapsed shows its header
+      // line alone.
+      const threadsOwn = this.chainThreadsBy(w.selected);
+      const waiting = new Set(w.desk.asks.map((ask) => ask.id));
+      const named = (chain: string) => w.labelOf(chain);
+      const madeMap = () => {
+        made ??= makers(shown);
+        return made;
+      };
+      // The words that the models of a thread write change its program with no new act.
+      const liveOf = (ids: readonly string[]) =>
+        ids
+          .flatMap((id) =>
+            madeBy(id)
+              .filter((one) => one.kind === "rung" && !one.done)
+              .map((one) => one.id),
+          )
+          .join(" ");
+      const programFor = (key: string, live: string, make: () => ProgramLine[]): ProgramLine[] => {
+        const known = this.programs.get(key);
+        if (!then && known?.version === w.version && known.live === live) return known.lines;
+        const made = make();
+        if (this.programs.size > 2000) this.programs.clear();
+        this.programs.set(key, { version: then ? -1 : w.version, live, lines: made });
+        return made;
+      };
+      const programCard = (id: string, given: readonly ProgramLine[], indent: number) => {
+        // What a model writes changes at each token, so it stands in a card of its own under the program, and the
+        // program stays as it was drawn.
+        const all = given.filter((line) => line.kind !== "writes");
+        const writing = given.filter((line) => line.kind === "writes");
+        const tails = () => {
+          for (const line of writing) {
+            const stream = w.host.streams.get(line.step.id);
+            const tail =
+              (stream?.text || stream?.thinking || "").replace(/\n+$/, "").split("\n").at(-1)?.trim() ||
+              line.text;
+            add(
+              `writes-${line.step.id}`,
+              `${tail}:${this.feedWidth}:${this.theme}`,
+              [],
+              (box) =>
+                box.add(
+                  this.inset(
+                    space.between,
+                    this.text([
+                      [`${glyph.running} `, c.accent],
+                      [`# ${clip(tail, this.feedWidth - indent - 12)}`, c.syntaxComment],
+                    ]),
+                  ),
+                ),
+              { indent },
+            );
+          }
+        };
+        if (!all.length) return tails();
+        const steps = [...new Set(all.filter((line) => line.kind !== "note").map((line) => line.step))];
+        const hide =
+          w.folds[`steps:${id}`] !== false && steps.length > PROGRAM_STEPS ? steps.length - PROGRAM_STEPS : 0;
+        // The notes that came before the first step shown fold with the earlier steps.
+        const from = hide ? all.findIndex((line) => line.step === steps[hide]) : 0;
+        const program = hide ? all.slice(from) : all;
+        const took = (step: ActRow) =>
+          step.kind !== "rung" || !step.done
+            ? ""
+            : [
+                w.took[step.id] === undefined ? "" : spell(w.took[step.id] ?? 0),
+                step.cost ? dollars(step.cost) : "",
+              ]
+                .filter(Boolean)
+                .join(" ");
+        const since = (act?: ActRow) => {
+          const began = act && w.started[act.id];
+          const ms = began ? Date.now() - began : 0;
+          return ms >= 1000 ? spell(Math.floor(ms / 1000) * 1000) : "";
+        };
+        const room = this.feedWidth - indent - 8;
+        const key = [
+          hide,
+          room,
+          ...program.map((line) =>
+            line.kind === "code"
+              ? `${line.text}|${this.lineHint(line)}|${line.runs ? since(line.acts.at(-1)) : ""}|${line.fails ?? ""}|${took(line.step)}`
+              : `${line.kind}|${line.text}`,
+          ),
+        ].join("\n");
+        add(
+          `program-${id}`,
+          key,
+          [],
+          (box) => {
+            if (hide)
+              box.add(
+                this.link(
+                  [
+                    [`${glyph.closed} `, c.faint],
+                    [`# ${hide} earlier ${hide === 1 ? "step" : "steps"}`, c.syntaxComment],
+                  ],
+                  () => {
+                    w.folds[`steps:${id}`] = false;
+                    w.save();
+                    this.renderContent();
+                  },
+                ),
+              );
+            box.add(this.programView(program, room, took, since));
+          },
+          { indent, same: [key] },
+        );
+        tails();
+      };
       let collapsed = -1;
       for (const line of lines) {
         if (collapsed >= 0 && line.depth > collapsed) continue;
         collapsed = -1;
+        // The steps of a thread stand in its program, and its messages as comments there. What a thread closed with
+        // and a question that waits for the operator stand on their own.
+        if (
+          line.depth > 0 &&
+          !(line.type === "value" && threadsOwn.by.has(line.act.id)) &&
+          !(line.type === "prompt" && waiting.has(line.act.id))
+        )
+          continue;
+        if (line.type === "prompt" && threadsOwn.of.has(line.act.id)) continue;
         const depth = line.depth;
         const act = line.act as ActRow;
         const indent = line.depth * space.between;
@@ -2120,56 +2257,30 @@ export class App {
           // its whole word, and each act that it made stands under it.
           // A rung that a cancel ended before its model wrote a word shows nothing, since the message says the cancel.
           if (!code.trim() && cancelled(act)) continue;
-          const closed = this.folded(act.id, act);
-          const label = () =>
-            closed ? this.rungLabel(line, indent) : this.actLabel(act, false, indent, code);
-          const key = `${code}\n${act.run?.reason ?? ""}\n${this.gateHint(act) ?? ""}\n${line.acts.map((chip) => chip.label + chip.state).join(" ")}\n${w.folds[`word:${act.id}`]}`;
+          // A word of the operator stands as its program under a quiet header.
           add(
             act.id,
-            key,
-            label,
-            (box) => {
-              // A rung that stands open by itself, as one that runs, shows the first rows of a long word, and a click
-              // on it shows all of it.
-              const [shown, rest] =
-                w.folds[act.id] === undefined && w.folds[`word:${act.id}`] !== false
-                  ? this.firstRows(code, WORD_ROWS)
-                  : [code, 0];
-              this.word(box, shown, act.run?.reason, this.gateHint(act));
-              if (rest)
-                box.add(
-                  this.inset(
-                    space.between * 2,
-                    this.link(
-                      [
-                        [`${glyph.closed} `, c.faint],
-                        [`${rest} more ${rest === 1 ? "line" : "lines"} of the word`, c.muted],
-                      ],
-                      () => {
-                        w.folds[`word:${act.id}`] = false;
-                        w.save();
-                        this.renderContent();
-                      },
-                    ),
-                  ),
-                );
-            },
-            // Folded rungs in a row stand one under the other, with no row between them.
-            {
-              collapsible: true,
-              act,
-              indent,
-              title: working(act) ? label : undefined,
-              shown: code,
-              group: closed ? "rung" : undefined,
-              heading: true,
-              same: [act, indent, key, closed, line.more, w.took[act.id], this.retry(act)],
-            },
+            `you:${this.theme}`,
+            [
+              [glyph.mark, threadTone(act.id)],
+              ["You ran", c.muted],
+            ],
+            () => {},
+            { indent, heading: true, shown: code },
           );
-          if (!closed)
-            for (const child of madeBy(act.id))
-              if (!(child.kind === "prompt" && child.on === w.selected))
-                actCard(child, indent + space.between);
+          programCard(
+            act.id,
+            programFor(act.id, `${act.done}:${w.host.streams.get(act.id)?.text.length ?? 0}`, () =>
+              stepLines(act, madeMap(), word, owed, named, w.host.streams),
+            ),
+            indent,
+          );
+          // A word of the operator that the gate refused says what to do under it.
+          const hint = this.gateHint(act);
+          if (hint)
+            add(`hint-${act.id}`, `${hint}:${this.theme}`, [], (box) =>
+              box.add(this.inset(space.between, this.text(hint, c.muted))),
+            );
         } else if (line.type === "tail") {
           const maker = rows.get(act.by);
           if (line.model) {
@@ -2356,7 +2467,7 @@ export class App {
           const thread = own.by.get(act.id);
           const host = thread ?? own.of.get(act.id);
           const tone = threadTone(host?.act.id ?? act.id);
-          if (host && w.folds[`thread:${host.act.id}`]) {
+          if (host && this.threadFolded(host.act.id)) {
             collapsed = depth;
             if (!thread) continue;
             const [mark, color] = thread ? threadMarks(thread) : [glyph.ring, c.faint];
@@ -2375,6 +2486,11 @@ export class App {
                       [`${glyph.closed} `, c.faint],
                       [clip(shortenHomes(gist(message)), room), c.muted],
                       [steps ? `  ${steps} ${steps === 1 ? "step" : "steps"}` : "", c.faint],
+                      // A folded thread that a cancel or a failure ended says so in words, beside its mark.
+                      [
+                        thread.state === "cancelled" || thread.state === "failed" ? `  ${thread.state}` : "",
+                        thread.state === "failed" ? c.danger : c.faint,
+                      ],
                     ],
                     () => this.foldThread(act.id, false),
                   ),
@@ -2450,6 +2566,14 @@ export class App {
               if (controls) box.add(controls);
             },
             { group: user ? "user" : "sent", act, heading: user ? false : undefined, indent, shown: message },
+          );
+          const parts = [act, ...(thread?.messages ?? [])];
+          programCard(
+            act.id,
+            programFor(act.id, liveOf(parts.map((one) => one.id)), () =>
+              threadProgram(parts, madeMap(), word, owed, named),
+            ),
+            indent,
           );
         }
       }
@@ -3048,68 +3172,10 @@ export class App {
     }
     return parts;
   }
-  /** The colors of the grammar of Python on one line of a word, which a parser gives off the main thread. The line
-   * shows in the color of text until its colors come, and then the view draws again. */
-  private readonly colors = new Map<string, Part[]>();
   private readonly coloring = new Map<string, Promise<void>>();
-  private colored(text: string): Part[] {
-    const key = `${this.theme}\n${text}`;
-    const known = this.colors.get(key);
-    if (known) return known;
-    if (!this.coloring.has(key)) {
-      if (this.colors.size > 500) this.colors.clear();
-      this.coloring.set(
-        key,
-        // The parser of Python loads once, as the view starts, so the line waits for it.
-        loadParsers()
-          .then(() => getTreeSitterClient().highlightOnce(text, "python"))
-          .then(
-            (result) => {
-              this.coloring.delete(key);
-              if (this.closed) return;
-              const chunks = treeSitterToTextChunks(text, result.highlights ?? [], this.style, {
-                enabled: false,
-              });
-              this.colors.set(
-                key,
-                chunks.map((chunk): Part => [chunk.text, chunk.fg ?? c.text, chunk.attributes ?? 0]),
-              );
-              this.schedule();
-            },
-            () => {
-              this.coloring.delete(key);
-            },
-          ),
-      );
-    }
-    return [[text, c.text]];
-  }
   /** Once each line of a word that the view asked to color has its colors. */
   async colorsDone(): Promise<void> {
     while (this.coloring.size) await Promise.all(this.coloring.values());
-  }
-  /** The row of a folded rung: its state, the first line of its word and how many lines follow it, the acts that it
-   * made, and the word of its state. */
-  private rungLabel(line: Extract<Line, { type: "rung" }>, indent: number): Part[] {
-    const act = line.act as ActRow;
-    const { word, mark, color } = this.actState(act);
-    const first = line.word.trim() || (working(act) ? "writing" : "");
-    const more = line.more ? `  +${line.more}` : "";
-    const tail = word ? `  ${word}` : "";
-    const did = this.did(act);
-    const room = this.feedWidth - indent - 8 - Bun.stringWidth(act.id + more + tail + plain(did));
-    // The acts take at most half the row, and the first line of the word takes the rest.
-    const chips = this.chipParts(line.acts, Math.floor(room / 2));
-    const shown = this.preview(first, this.feedWidth - room + Bun.stringWidth(plain(chips)));
-    return [
-      [`${mark} `, color],
-      [`${act.id}  `, c.faint],
-      ...this.colored(shown),
-      [more, c.faint],
-      ...chips,
-      ...did,
-      [tail, color],
-    ];
   }
   /** The loom that the threads of the sidebar read last, and what it was woven of, which a frame of the same life
    * reads again. */
@@ -4015,6 +4081,91 @@ export class App {
       }, this.report);
   }
 
+  /** A program of the feed: its lines as one block of python, each numbered as a line of its word, with what the
+   * acts of a line came to as a quiet comment beside it, the line that runs lit with its time, and the line that failed
+   * marked, with its reason under it as a comment. */
+  private programView(
+    lines: readonly ProgramLine[],
+    room: number,
+    took: (step: ActRow) => string,
+    since: (act?: ActRow) => string,
+  ): Renderable {
+    const texts: string[] = [];
+    const numbers = new Map<number, number>();
+    const hidden = new Set<number>();
+    const colors = new Map<number, { content: RGBA; gutter: RGBA }>();
+    const signs = new Map<number, { before: string; beforeColor: RGBA }>();
+    const widest = Math.max(
+      0,
+      ...lines.map((line) => (line.kind === "code" ? Bun.stringWidth(line.text) : 0)),
+    );
+    const column = Math.max(24, Math.min(100, widest, room - 30));
+    const fit = (text: string, most: number) => clip(text, Math.max(4, most));
+    const push = (text: string, number?: number) => {
+      const at = texts.length;
+      texts.push(text);
+      if (number === undefined) hidden.add(at);
+      else numbers.set(at, number);
+      return at;
+    };
+    let step: ActRow | undefined;
+    for (const line of lines) {
+      const first = line.step !== step;
+      step = line.step;
+      if (line.kind === "code") {
+        const note = [
+          this.lineHint(line),
+          line.runs ? since(line.acts.at(-1)) : "",
+          first ? took(line.step) : "",
+        ]
+          .filter(Boolean)
+          .join("  ");
+        const code = fit(line.text, column);
+        const at = push(
+          note
+            ? `${code}${" ".repeat(Math.max(0, column - Bun.stringWidth(code)))}  # ${fit(note, room - column - 4)}`
+            : code,
+          line.number,
+        );
+        if (line.runs) {
+          colors.set(at, { content: c.selected, gutter: c.selected });
+          signs.set(at, { before: glyph.running, beforeColor: c.accent });
+        }
+        if (line.fails) {
+          signs.set(at, { before: glyph.failed, beforeColor: c.danger });
+          for (const why of line.fails
+            .split("\n")
+            .filter((one) => one.trim())
+            .slice(0, 3))
+            push(`# ${fit(why.replace(/^line \d+: /, ""), room - 4)}`);
+        }
+      } else if (line.kind === "quote")
+        push(
+          `${line.name} = "${fit(line.text, column - line.name.length - 6)}"  # ${line.lines} lines`,
+          line.number,
+        );
+      else if (line.kind === "output") push(`#   ${fit(line.text, room - 6)}`);
+      else if (line.kind === "writes") {
+        const at = push(`# ${fit(line.text, room - 4)}`);
+        signs.set(at, { before: glyph.running, beforeColor: c.accent });
+      } else push(fit(line.text, room - 2));
+    }
+    return this.numbered(texts.join("\n"), {
+      fg: c.faint,
+      minWidth: 3,
+      lineNumbers: numbers,
+      hideLineNumbers: hidden,
+      lineColors: colors,
+      lineSigns: signs,
+    });
+  }
+  /** The quiet hint of a line of a program: what a part of an extension draws as the row of each act of the line, and
+   * else what its acts came to. */
+  private lineHint(line: Extract<ProgramLine, { kind: "code" }>): string {
+    if (!this.partRows) return line.hint;
+    const drawn = line.acts.map((act) => this.partRow(act as ActRow)?.label).filter(Boolean);
+    return drawn.length ? drawn.join("  ") : line.hint;
+  }
   /** Python with the number of each line. */
   private numbered(
     word: string,
@@ -4465,13 +4616,7 @@ export class App {
       this.railKeys && this.railAt,
       from,
       room,
-      list.map((one) => [
-        one.act.id,
-        one.state,
-        one.resolved,
-        one.title,
-        w.folds[`thread:${one.act.id}`] === true,
-      ]),
+      list.map((one) => [one.act.id, one.state, one.resolved, one.title, this.threadFolded(one.act.id)]),
     ]);
     if (key === this.railKey) return;
     this.railKey = key;
@@ -4523,7 +4668,7 @@ export class App {
     for (const one of list.slice(from, from + room)) {
       const id = one.act.id;
       const chosen = w.thread === id;
-      const folded = w.folds[`thread:${id}`] === true;
+      const folded = this.threadFolded(id);
       const [mark, tone] = threadMarks(one);
       const text = clip(shortenHomes(one.title) || id, Math.max(4, width - 6 - space.inset));
       this.railSession.add(
@@ -4578,18 +4723,27 @@ export class App {
     const w = this.session;
     this.railAt = id;
     w.thread = id;
-    if (w.folds[`thread:${id}`]) {
-      delete w.folds[`thread:${id}`];
+    if (this.threadFolded(id)) {
+      w.folds[`thread:${id}`] = false;
       w.save();
     }
     if (this.railKeys) this.railSteer(false);
     this.go("feed", id);
   }
-  /** A thread folds in the feed to its header line alone, or unfolds. */
-  private foldThread(id: string, fold = !this.session.folds[`thread:${id}`]): void {
+  /** Whether a thread stands folded to its header in the feed: as the operator left it, and else when it is resolved,
+   * is not the last thread of its chain, and the preference folds what is over. */
+  private threadFolded(id: string): boolean {
     const w = this.session;
-    if (fold) w.folds[`thread:${id}`] = true;
-    else delete w.folds[`thread:${id}`];
+    const set = w.folds[`thread:${id}`];
+    if (set !== undefined) return set;
+    const own = this.chainThreadsBy(w.selected);
+    const thread = own.by.get(id);
+    return Boolean(w.preferences.foldThreads && thread?.resolved && own.list.at(-1) !== thread);
+  }
+  /** A thread folds in the feed to its header line alone, or unfolds. */
+  private foldThread(id: string, fold = !this.threadFolded(id)): void {
+    const w = this.session;
+    w.folds[`thread:${id}`] = fold;
     w.save();
     this.renderContent();
     this.render();
@@ -5876,20 +6030,33 @@ export class App {
       "More effort thinks longer and costs more. ⇧Tab moves to the next.",
     );
   details = (): void => {
-    this.openPalette(
-      "Details",
-      [...this.cards]
+    const w = this.session;
+    // Each thread of the chain folds to its header and opens to its program, as a click on its header does.
+    const threads = w.view === "feed" ? this.chainThreadList(w.selected) : [];
+    this.openPalette("Details", [
+      ...threads.map((one) => {
+        const folded = this.threadFolded(one.act.id);
+        return {
+          label: clip(shortenHomes(gist(one.title)) || one.act.id, 72),
+          detail: folded ? "Expand" : "Collapse",
+          run: () => {
+            this.foldThread(one.act.id, !folded);
+            this.scrollAfterLayout({ card: one.act.id });
+          },
+        };
+      }),
+      ...[...this.cards]
         .filter(([, card]) => card.compact || card.collapsible)
         .map(([id, card]) => ({
           label: card.heading.plainText.replace(/^[▸▾] /, ""),
           detail: card.closed ? "Expand" : "Collapse",
           run: () => {
-            this.session.folds[card.state] = !card.closed;
+            w.folds[card.state] = !card.closed;
             this.renderContent();
             this.scrollAfterLayout({ card: id });
           },
         })),
-    );
+    ]);
   };
   themes(): void {
     // The theme of the terminal comes first, then the dark themes, then the light ones.

@@ -81,7 +81,7 @@ test("after ⌥T the keys open the threads of a chain, Space collapses a thread 
       expect(folded).toContain(`${glyph.closed} Explore this project`);
       screen.mockInput.pressKey(" ");
       await frame();
-      expect(session.folds[`thread:${id}`]).toBeUndefined();
+      expect(session.folds[`thread:${id}`]).toBe(false);
       // The feed lays the thread out again over a few frames, and its folded line goes.
       let shown = await frame();
       for (let step = 0; step < 40 && shown.includes(`${glyph.closed} Explore this project`); step++) {

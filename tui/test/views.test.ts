@@ -257,7 +257,7 @@ test("the standing of a chain is no card of the conversation, though its turns b
     true,
   ));
 
-test("a card that the view goes to, or that Details expands, is in view once the view has laid it out", () =>
+test("a card that the view goes to, or a thread that Details expands, is in view once the view has laid it out", () =>
   composing(
     async ({ session, app, screen, frame }) => {
       const laid = async () => {
@@ -291,24 +291,24 @@ test("a card that the view goes to, or that Details expands, is in view once the
       expect(session.view).toBe("feed");
       expect(app.scroll.scrollHeight).toBeGreaterThan(app.scroll.viewport.height * 2);
       expect(seen(rung)).toBe(true);
-      // Folded rungs take a row each, so that the heading of one stands at the foot of the view.
-      session.preferences.foldRungs = true;
+      // A thread folded to its header, far above the foot of the view, opens from Details and comes into view.
+      const thread = session.acts.find(
+        (act) => act.kind === "prompt" && String(act.words[1]).startsWith("Explore"),
+      );
+      if (!thread) throw new Error("No thread of the demo.");
+      session.folds[`thread:${thread.id}`] = true;
+      app.renderContent();
       app.scroll.scrollTo(app.scroll.scrollHeight);
       await laid();
-      const view = app.scroll.viewport;
-      const last = app.scroll
-        .getChildren()
-        .filter((node) => /^rung\d+$/.test(node.id) && node.y >= view.y && node.y < view.y + view.height)
-        .at(-1);
-      if (!last) throw new Error("No folded rung at the foot of the view.");
-      const shut = card(last.id).height;
+      expect(app.scroll.getChildren().some((node) => node.id === `program-${thread.id}`)).toBe(false);
+      expect(seen(thread.id)).toBe(false);
       app.details();
-      const heading = (last.getChildren()[0] as TextRenderable).plainText.replace(/^[▸▾] /, "");
-      await screen.mockInput.typeText(heading);
+      await screen.mockInput.typeText("Explore this project");
       screen.mockInput.pressEnter();
       await laid();
-      expect(card(last.id).height).toBeGreaterThan(shut);
-      expect(seen(last.id)).toBe(true);
+      expect(session.folds[`thread:${thread.id}`]).toBe(false);
+      expect(app.scroll.getChildren().some((node) => node.id === `program-${thread.id}`)).toBe(true);
+      expect(seen(thread.id)).toBe(true);
     },
     { width: 120, height: 24 },
     true,
@@ -403,7 +403,7 @@ test("the feed at its end stays at its end when the input grows, and a turn of t
     true,
   ));
 
-test("the keys of the footer and the palette answer the mouse, and a drag over a heading selects and copies its text", () =>
+test("the keys of the footer and the palette answer the mouse, and a drag over the header of a thread selects and copies its text", () =>
   composing(
     async ({ session, app, screen, frame, click }) => {
       await idle(session);
@@ -422,33 +422,23 @@ test("the keys of the footer and the palette answer the mouse, and a drag over a
       session.show("feed");
       // The screen draws the feed, with the palette gone, before the pointer acts on it again.
       await frame();
-      // A drag over the heading of a card selects its text and leaves the card as it was.
-      const card = app.scroll.getChildren().find((node) => /^rung\d+$/.test(node.id));
-      const heading = card?.getChildren()[0];
-      if (!card || !(heading instanceof TextRenderable)) throw new Error("No rung in the feed.");
-      const open = card.getChildren().length;
+      // A drag over the header of a thread selects its text and leaves the thread as it was.
+      const texts = (node: Renderable): TextRenderable[] => [
+        ...(node instanceof TextRenderable ? [node] : []),
+        ...node.getChildren().flatMap(texts),
+      ];
+      const card = app.scroll.getChildren().find((node) => /^prompt\d+$/.test(node.id));
+      const heading = card && texts(card).find((node) => node.plainText.includes("Explore this project"));
+      if (!card || !heading) throw new Error("No thread in the feed.");
+      const program = () => app.scroll.getChildren().some((node) => node.id === `program-${card.id}`);
+      expect(program()).toBe(true);
       await screen.mockMouse.drag(heading.x, heading.y, heading.x + 6, heading.y);
       await frame();
-      expect(
-        app.scroll
-          .getChildren()
-          .find((node) => node.id === card.id)
-          ?.getChildren().length,
-      ).toBe(open);
+      expect(program()).toBe(true);
       const selected = screen.renderer.getSelection()?.getSelectedText() ?? "";
       expect(selected.length).toBeGreaterThan(0);
       expect(heading.plainText).toContain(selected);
       expect(session.notice).toStartWith("Copied");
-      // A rung that is over starts folded to its heading, and a click on the heading opens it.
-      expect(open).toBe(1);
-      await screen.mockMouse.click(heading.x + 2, heading.y);
-      await frame();
-      expect(
-        app.scroll
-          .getChildren()
-          .find((node) => node.id === card.id)
-          ?.getChildren().length,
-      ).toBeGreaterThan(1);
     },
     { width: 140, height: 40, useMouse: true },
     true,

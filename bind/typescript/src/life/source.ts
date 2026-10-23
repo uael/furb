@@ -20,8 +20,6 @@ export type SourceLine =
     }
   | { type: "value"; act: LiveAct; text: string };
 
-/** The verbs that make an act, which a line of a word calls. */
-const calls = /\b(bash|read|write|prompt|chain|wait|rung|grant|cd)\s*\(/g;
 /** The kinds of the acts that a person follows in the margin. */
 const followed = new Set(["bash", "read", "write", "prompt", "chain", "wait", "rung", "grant", "cd"]);
 
@@ -29,13 +27,16 @@ const followed = new Set(["bash", "read", "write", "prompt", "chain", "wait", "r
  * line that a loop runs again, the last line that calls it, or else the last line. */
 export function placed(text: string, made: readonly LiveAct[]): LiveAct[][] {
   const lines = text.split("\n");
+  // A verb of an extension, as todo, stands on a line that calls it by its name, and a def of that name calls nothing.
+  const verbs = new Set([...followed, ...made.map((act) => act.kind).filter((kind) => /^\w+$/.test(kind))]);
+  const calls = new RegExp(`(?<!\\bdef )\\b(${[...verbs].join("|")})\\s*\\(`, "g");
   const slots: [line: number, kind: string][] = [];
   for (const [index, line] of lines.entries())
     for (const match of line.matchAll(calls)) slots.push([index, match[1] ?? ""]);
   const out = lines.map((): LiveAct[] => []);
   let next = 0;
   for (const act of made) {
-    if (!followed.has(act.kind)) continue;
+    if (!followed.has(act.kind) && !slots.some(([, kind]) => kind === act.kind)) continue;
     const ahead = slots.findIndex(([, kind], index) => index >= next && kind === act.kind);
     if (ahead >= 0) {
       out[slots[ahead]?.[0] ?? 0]?.push(act);

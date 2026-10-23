@@ -70,34 +70,31 @@ test("the real native life drives the feed, the transcript, and responsive views
       expect(conversation.indexOf("Explore this project")).toBeLessThan(
         conversation.lastIndexOf("A clear starting point"),
       );
-      // A rung that is over folds to one row, and the acts that it made stand under it once it opens.
-      const rung = app.scroll
-        .getChildren()
-        .find((node) => /^rung\d+$/.test(node.id))
-        ?.getChildren()[0];
-      if (!rung) throw new Error("No rung heading.");
-      await screen.mockMouse.click(rung.x, rung.y);
-      await screen.flush();
-      // A command that is over folds to its heading, and its output shows once it opens.
-      expect(conversation).not.toContain("└ ✓ capture");
-      const command = app.scroll.getChildren().find((node) => /^bash\d+$/.test(node.id));
-      const heading = command?.getChildren()[0];
-      if (!heading) throw new Error("No command heading.");
-      // The heading of a command says its exit, open or folded.
-      expect(screen.captureCharFrame()).toMatch(/✓ bash .*exit 0/);
-      expect(screen.captureCharFrame()).not.toMatch(/^ +✓ search *$/m);
-      await screen.mockMouse.click(heading.x, heading.y);
-      await screen.flush();
-      expect(screen.captureCharFrame()).toMatch(/^ +✓ search *$/m);
-      const expanded = app.scroll
-        .getChildren()
-        .find((node) => node.id === command?.id)
-        ?.getChildren()[0];
-      expect(expanded?.visible).toBe(true);
-      if (expanded) await screen.mockMouse.click(expanded.x, expanded.y);
-      await screen.flush();
-      expect(screen.captureCharFrame()).not.toMatch(/^ +✓ search *$/m);
-      expect(app.scroll.getChildren().some((child) => /^bash\d+$/.test(child.id))).toBe(true);
+      // A thread is the unit of the feed: its prompt heads it, and the words of its steps stand under it as one
+      // program, each line with what its acts came to as a quiet hint. No step and no act stands as a row of its own.
+      const ids = app.scroll.getChildren().map((node) => node.id);
+      expect(ids).toContain("program-prompt1");
+      expect(ids.some((id) => /^(rung|bash|read)\d+$/.test(id))).toBe(false);
+      const program = await drawn(frame, screen.renderer.root);
+      expect(program).toMatch(/ 1 notes = read\("README\.md"\) +# 7 lines/);
+      expect(program).toMatch(/ 2 check = await bash\(.*# exit 0, 3 lines/);
+      // A command that is over shows its output no more: its hint says what it came to.
+      expect(program).not.toMatch(/# {3}✓ search/);
+      // The control on the header of a thread folds it to its header, and a click on that header opens it again.
+      const control = async () => {
+        const rows = (await frame()).split("\n");
+        const at = /▾ Collapse|▸ Explore this project/;
+        const y = rows.findIndex((row) => at.test(row));
+        const x = rows[y]?.search(at) ?? -1;
+        if (y < 0 || x < 0) throw new Error("No control on the header of the thread.");
+        await screen.mockMouse.click(x + 2, y);
+        await screen.flush();
+        return frame();
+      };
+      const folded = await control();
+      expect(folded).toContain("Explore this project");
+      expect(folded).not.toContain('notes = read("README.md")');
+      expect(await control()).toContain('notes = read("README.md")');
       expect(screen.captureCharFrame()).not.toContain("failed");
       session.show("transcript");
       // The transcript opens at its start, and the doctrine of the first reply stands before the word, so the test
@@ -699,7 +696,7 @@ test("slash commands and project files are suggested above the input as they are
     { width: 120, height: 40, kittyKeyboard: true },
   ));
 
-test("each act row says what it did: a read its path and its lines, a write its path and the lines it added and removed, and a command its exit", () =>
+test("each line of a word says what its acts did as a quiet hint: a read its lines, a write the lines it added and removed, and a command its exit", () =>
   composing(
     async ({ session, screen, frame }) => {
       const id = await session.engine.rung({
@@ -714,10 +711,9 @@ test("each act row says what it did: a read its path and its lines, a write its 
       await session.refresh();
       session.folds[id] = false;
       const shown = await drawn(frame, screen.renderer.root);
-      expect(shown).toMatch(/✓ write {2}notes\.md {2}\+2 -0/);
-      expect(shown).toMatch(/✓ read {2}notes\.md {2}2 lines/);
-      expect(shown).toMatch(/✓ write {2}notes\.md {2}\+2 -1/);
-      expect(shown).toMatch(/✓ bash {2}true {2}exit 0/);
+      expect(shown).toMatch(/ 1 write\(Text\("notes\.md".*# \+2 -0/);
+      expect(shown).toMatch(/ 2 write\(read\("notes\.md"\).*# 2 lines {2}\+2 -1/);
+      expect(shown).toMatch(/ 3 await bash\("true"\) +# exit 0/);
     },
     { width: 120, height: 40 },
   ));

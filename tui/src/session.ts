@@ -1500,11 +1500,11 @@ export class Session extends EventEmitter {
         this.enqueue(argument);
         break;
       case "autocollapse":
-        this.preferences.foldRungs = !this.preferences.foldRungs;
+        this.preferences.foldThreads = !this.preferences.foldThreads;
         this.preferences.save();
-        this.notice = this.preferences.foldRungs
-          ? "Completed rungs collapse automatically."
-          : "Rungs keep their open state.";
+        this.notice = this.preferences.foldThreads
+          ? "The threads that are over fold automatically."
+          : "The threads that are over stay open.";
         break;
       case "grant": {
         const amount = Number(argument);

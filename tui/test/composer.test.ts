@@ -625,14 +625,15 @@ test("a cancelled message keeps its place in the feed, and its cancel reads as a
     // before it wrote a word shows nothing.
     const lines = shown.split("\n");
     const first = lines.findIndex((line) => line.includes("Think until I cancel."));
-    expect(lines[first]).toContain("⊘ cancelled");
+    expect(lines[first]).toContain("⊘ ▸ Think until I cancel.");
+    expect(lines[first]).not.toContain("✗");
     expect(first).toBeLessThan(lines.findIndex((line) => line.includes("A second message.")));
     expect(lines.filter((line) => line.includes(" cancelled") && line.includes("⊘"))).toHaveLength(1);
     // A message that its answer closed says no state, only the type of its answer.
     expect(lines.find((line) => line.includes("A second message."))).not.toContain("✓");
   }));
 
-test("a word that the gate refused and that a later word of the same prompt replaced folds, and reads as retried", () =>
+test("a word that the gate refused shows a cross on the line that the refusal names and the reason under it, and the word that replaced it follows in the program of its thread", () =>
   composing(
     async ({ session, frame }) => {
       await session.submit("Give me an answer in a fence.");
@@ -641,10 +642,14 @@ test("a word that the gate refused and that a later word of the same prompt repl
       );
       await idle(session);
       await session.refresh();
-      const shown = await frame();
-      expect(shown).toMatch(/▸ ✗ rung\d+ .*retried as rung\d+/);
-      expect(shown).not.toContain("failed");
-      expect(shown).not.toContain("Got unexpected token");
+      const lines = (await frame()).split("\n");
+      const refused = lines.findIndex((line) => /✗ 1 ```python/.test(line));
+      expect(refused).toBeGreaterThan(0);
+      expect(lines[refused + 1]).toMatch(/^ +# Got unexpected token/);
+      const retried = lines.findIndex((line) => / 1 close\("Here it is again as plain Python/.test(line));
+      expect(retried).toBeGreaterThan(refused + 1);
+      expect(lines.slice(retried).join("\n")).not.toContain("✗");
+      expect(lines.join("\n")).not.toContain("failed");
     },
     { width: 140, height: 44 },
     true,
