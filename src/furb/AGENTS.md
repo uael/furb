@@ -79,6 +79,8 @@ meanings. The entry of such a name here gives only its form in the engine.
 - module: the fact that carries the globals of a chain, which the chain says at its birth and at each replay.
 - prefix: the fact that carries what a chain with a source holds of the transcript of its origin, which the chain
   says at its birth, before its open; the transcript of the chain holds those facts where the prefix stands.
+- carried turn: a fact on a chain about a name that no act of the life holds, as a turn that the chain took from
+  another record or from a checkpoint; a chain with a source holds it whole.
 - note: one thing a tell says: a paragraph, or the binding of an act.
 - paragraph: what one fact that tells stands as in a turn: its notes, with a blank line between two paragraphs.
 - header: the first line of a paragraph: # and, with no space, the id of the act it is of, then what happened to

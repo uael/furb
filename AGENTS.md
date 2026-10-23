@@ -34,7 +34,9 @@ API of its own:
   `extensions`, which enables each by a fact that the record keeps and plays its word as a rung on each chain, and
   `parts`, the part for the TUI of each extension, which `tui/src/parts.ts` loads live.
   `extensions/` holds the official extensions, `memory`, `skills`, `compaction`, `ouroboros` and `web`, each a word, a
-  contract and a suite, and `src/extension/` holds the ear of the World of each that has one. `docs/extensions.md` says how an extension works.
+  contract and a suite, and `src/extension/` holds the ear of the World of each that has one: `compaction.rs` answers a
+  carry with the turns and the open prompts of a chain of another record, which the reader reads. `docs/extensions.md`
+  says how an extension works.
 - `src/life.rs` opens a life as every host opens one: the record, and the ears of the crate after the ears of the
   host, the provider among them, on the default actor and the roster that the host names from the catalog, or every
   model that the catalog offers when the host names no roster, or on a model of its own, and the extensions. A host adds only its own ears, such as the console of its operator.
