@@ -324,6 +324,16 @@ async function answer(data: { target: string; method: string; args: unknown[] })
   if (data.target === "library" && data.method === "renewChanges") return session?.changes.renew();
   if (data.target === "library" && data.method === "act")
     return session?.activity.acts.get(String(data.args[0]));
+  // The commands and the replies of the models that run, which a host waits for before it hands the life over.
+  if (data.target === "library" && data.method === "running")
+    return session
+      ? [
+          ...[...session.activity.acts.values()]
+            .filter((act) => !act.done && act.kind === "bash")
+            .map((act) => act.id),
+          ...session.replies.keys(),
+        ]
+      : [];
   if (data.target === "library" && data.method === "look") {
     if (!engine || !session) throw new Error("The session is not open.");
     // The host reads the path where the chain stands, as the files would, and no act is made, so nothing is kept.
