@@ -149,10 +149,15 @@ the input answers it. A click on the card of another question points the input a
 ![Many questions](screenshots/52-many-questions.png)
 
 Each question takes an answer of its shape. A str, an int, a float, a list, or a dict takes a line of the input,
-which the console reads in that shape. A choice offers its values: a bool offers yes and no, and a Literal offers
-each of its values, once the console answers a Literal. A click on a choice of the desk sends it.
+which the console reads in that shape. A choice offers its values as a list in place of the input: a bool offers yes
+and no, and a Literal offers each of its values. ↑ and ↓ move the pointer, Enter or a click sends the value, and a
+number sends the value at that place. The last row, Other, gives the input to your own words when no value fits:
+Enter closes the question with them as Refused, so the await of the word that asked raises them and its model reads
+them. Esc goes back to the values.
 
 ![Operator question](screenshots/08-operator-question.png)
+
+![A question of a choice](screenshots/09-choice-question.png)
 
 ![Operator notice](screenshots/22-operator-notice.png)
 

@@ -636,6 +636,27 @@ test("an operator question survives a resume and validates its answer", async ()
   }
 });
 
+test("an operator who takes none of the values of a question answers in his own words, which close it as Refused", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-operator-decline-"));
+  const session = new Session({ cwd, record: join(cwd, "life.jsonl") });
+  try {
+    const engine = session.open();
+    const question = engine.prompt("Literal['vitepress', 'mkdocs']", {
+      message: "Which runner for the docs?",
+      to: "operator",
+      on: engine.root,
+    }).id;
+    await until(session, () => session.console.prompts.has(question));
+    session.console.decline(question, "Neither: keep the plain Markdown.");
+    await expect(engine.result(question)).rejects.toThrow("Neither: keep the plain Markdown.");
+    expect(session.console.prompts.has(question)).toBe(false);
+    expect(() => session.console.decline(question, "again")).toThrow("This prompt is no longer open.");
+  } finally {
+    await session.dispose();
+    await rm(cwd, { recursive: true });
+  }
+});
+
 test("resume wakes no work that a pause of the operator holds, so that pause stands", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-own-pause-"));
   const record = join(cwd, "life.jsonl");
