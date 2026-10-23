@@ -1490,10 +1490,11 @@ impl Engine {
     self.kept_now(true);
   }
 
-  /// The snapshot of the life, written where its keeper says when one is due, or now: a failure leaves the snapshot
+  /// The snapshot of the life, written where its keeper says when one is due, or now, and only when the life said a
+  /// fact since the last one, which is known before the sandbox dumps its session: a failure leaves the snapshot
   /// before it, since a snapshot is a cache.
   fn kept_now(&mut self, now: bool) {
-    if !self.keeper.as_mut().is_some_and(|keeper| keeper.due(now)) {
+    if !self.keeper.as_mut().is_some_and(|keeper| keeper.due(now) && keeper.grew()) {
       return;
     }
     if let Some((table, dump)) = self.snapshot()
