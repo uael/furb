@@ -19,7 +19,6 @@ import {
 } from "furb";
 import { type ActIndex, type Ask, aimed, beside, type Desk, desk } from "furb/life";
 import type { Engine, HostView, Usage } from "./bridge.ts";
-import { refusal } from "./conversation.ts";
 import { expandHome, fileReferences, fromDirectory, projectFiles, shortenHome } from "./files.ts";
 import { dollars } from "./format.ts";
 import { Preferences } from "./preferences.ts";
@@ -93,28 +92,86 @@ function phaseOf(act?: ActRow): string {
     : "";
 }
 
-/** Whether two lists of turns say the same: each turn the same role, the same python, and the same usage. */
-function sameTurns(one: readonly Turn[], other: readonly Turn[]): boolean {
-  return (
-    one.length === other.length &&
-    one.every(
-      (turn, at) =>
-        turn.length === other[at]?.length &&
-        turn.every(
-          (part, place) =>
-            part === other[at]?.[place] || JSON.stringify(part) === JSON.stringify(other[at]?.[place]),
-        ),
-    )
-  );
+/** The acts of a life by their name, by the chain that they stand on, by their maker, and the chains, which the view
+ * reads many times in each frame, with the place of each act in each list, so that an act that changed takes its place
+ * with no pass over the list. */
+interface Index {
+  of: readonly ActRow[];
+  ids: Map<string, ActRow>;
+  /** The place of each act in the list of the acts, by its name. */
+  at: Map<string, number>;
+  on: Map<string, ActRow[]>;
+  /** The acts that each act made, in the order of the acts. */
+  made: Map<string, ActRow[]>;
+  chains: ActRow[];
+  /** The place of each act in its list of on, of made, and of the chains for a chain, and whether a write is done. */
+  places: Map<string, Place>;
+  /** The last word of the operator on each chain. */
+  words: Map<string, ActRow>;
+  /** The acts that are not done, and the rungs whose run runs, which the thread of a chain keeps shown. */
+  live: Map<string, ActRow>;
+  /** How many times an act that each act made came or changed, which tells the thread when to read a step again, and
+   * how many times an act on each chain came or changed, which tells the board when to read a chain again. */
+  stamps: Map<string, number>;
+  chained: Map<string, number>;
+  /** The writes that are done, in the order that the session saw them done. */
+  written: ActRow[];
+  /** The acts on each chain but its chains, as activity reads them, which only grows. */
+  work: Map<string, ActRow[]>;
+  /** The last act on each chain that is no chain and no grant, and the chains whose last act failed. */
+  latest: Map<string, ActRow>;
+  failing: Set<string>;
 }
 
-/** Whether two programs hold the same word for each rung. */
-function sameProgram(
-  one: Readonly<Record<string, string>>,
-  other: Readonly<Record<string, string>>,
-): boolean {
-  const keys = Object.keys(one);
-  return keys.length === Object.keys(other).length && keys.every((key) => one[key] === other[key]);
+/** The place of an act in each list of an index that holds it, and whether it is among the writes that are done. */
+interface Place {
+  on: number;
+  made: number;
+  work?: number;
+  chain?: number;
+  written: boolean;
+}
+
+/** An act that changed, or a new one, in its place in each list of an index. */
+function placed(index: Index, act: ActRow): void {
+  const at = index.places.get(act.id);
+  const into = (list: ActRow[], place?: number) => {
+    if (place === undefined) return list.push(act) - 1;
+    list[place] = act;
+    return place;
+  };
+  const listed = (lists: Map<string, ActRow[]>, key: string) => {
+    const list = lists.get(key) ?? [];
+    lists.set(key, list);
+    return list;
+  };
+  const written = Boolean(at?.written) || (act.kind === "write" && act.done);
+  if (written && !at?.written) index.written.push(act);
+  index.places.set(act.id, {
+    on: into(listed(index.on, act.on), at?.on),
+    made: into(listed(index.made, act.by), at?.made),
+    ...(act.kind === "chain"
+      ? { chain: into(index.chains, at?.chain) }
+      : { work: into(listed(index.work, act.on), at?.work) }),
+    written,
+  });
+  if (!act.done || act.run?.status === "running") index.live.set(act.id, act);
+  else index.live.delete(act.id);
+  index.stamps.set(act.by, (index.stamps.get(act.by) ?? 0) + 1);
+  index.chained.set(act.on, (index.chained.get(act.on) ?? 0) + 1);
+  const latest = index.latest.get(act.on);
+  if (
+    act.kind !== "chain" &&
+    act.kind !== "grant" &&
+    (!latest || (index.at.get(latest.id) ?? 0) <= (index.at.get(act.id) ?? 0))
+  ) {
+    index.latest.set(act.on, act);
+    if (failed(act)) index.failing.add(act.on);
+    else index.failing.delete(act.on);
+  }
+  if (act.kind !== "rung" || act.by !== "operator") return;
+  const word = index.words.get(act.on);
+  if (!word || (index.at.get(word.id) ?? 0) <= (index.at.get(act.id) ?? 0)) index.words.set(act.on, act);
 }
 
 /** Whether an act was cancelled: a rung whose run ended with a cancel, or an act done with a cancel. A cancel is what
@@ -320,6 +377,8 @@ export class Session extends EventEmitter {
   private refreshTask?: Promise<void>;
   /** The count of changes of the act table that `acts` holds. */
   private counted = 0;
+  /** The mark of the last snapshot that the session took, which tells the worker which parts of the chain it holds. */
+  private held = 0;
   private dirty = false;
   private closed = false;
   /** The scope, the writes and the count of changes that `changes` was read at. */
@@ -470,21 +529,31 @@ export class Session extends EventEmitter {
       do {
         this.dirty = false;
         const selected = this.selected;
-        const { acts, count, ...snapshot } = await this.host.snapshot(selected, this.counted);
+        const { acts, count, mark, turns, answers, program, ...snapshot } = await this.host.snapshot(
+          selected,
+          this.counted,
+          this.held,
+        );
         if (this.selected !== selected) {
           this.dirty = true;
           continue;
         }
-        const { turns, program } = this;
+        this.held = mark;
         Object.assign(this, snapshot);
-        // Turns and a program that did not change keep their objects, which a view that reads them keys on.
-        if (sameTurns(turns, this.turns)) this.turns = turns;
-        if (sameProgram(program, this.program)) this.program = program;
+        // The tails of the turns and of the answers take the place of what they follow, and the words that the program
+        // changed join it, so the parts that did not change keep their objects, which a view that reads them keys on.
+        if (turns.list.length || turns.from < this.turns.length)
+          this.turns = [...this.turns.slice(0, turns.from), ...turns.list];
+        if (answers.list.length || answers.from < this.answers.length)
+          this.answers = [...this.answers.slice(0, answers.from), ...answers.list];
+        if (program?.whole) this.program = program.words;
+        else if (program) Object.assign(this.program, program.words);
         // A snapshot carries the acts that changed since the session last read them, in the order of the table.
         if (acts.length) {
-          // Each act that changed takes its place, and a new act stands after the others.
+          // Each act that changed takes its place in the list of the acts, and a new act stands after the others, so
+          // the list and its index change in the time of the acts that changed.
           const index = this.indexed();
-          const next = [...this.acts];
+          const next = this.acts;
           let moved = false;
           for (const act of acts) {
             const place = index.at.get(act.id);
@@ -492,34 +561,16 @@ export class Session extends EventEmitter {
             if (place !== undefined) next[place] = act;
             else index.at.set(act.id, next.push(act) - 1);
             index.ids.set(act.id, act);
-            // The acts of a chain, and those of a maker, keep their order, and a new act stands after the others.
-            for (const [map, key] of [
-              [index.on, act.on],
-              [index.made, act.by],
-            ] as const) {
-              const list = map.get(key) ?? [];
-              map.set(key, list);
-              const mine = list.findLastIndex((one) => one.id === act.id);
-              if (mine < 0) list.push(act);
-              else list[mine] = act;
-            }
-            if (act.kind === "chain") {
-              const chain = index.chains.findIndex((one) => one.id === act.id);
-              if (chain < 0) index.chains.push(act);
-              else index.chains[chain] = act;
-            }
+            placed(index, act);
+            if (!act.done) this.started[act.id] ??= Date.now();
+            if (act.took !== undefined) this.took[act.id] = act.took;
           }
-          // The index follows the acts that changed, and the acts of the chain shown are read again.
-          index.of = next;
-          index.shown = undefined;
-          this.acts = next;
           if (moved) this.version++;
         }
         this.counted = count;
         // The acts and the actor of one snapshot are of one moment: the choice holds until its rung is done there.
         const choice = this.choices.get(selected);
-        if (choice?.rung && this.acts.find((act) => act.id === choice.rung)?.done)
-          this.choices.delete(selected);
+        if (choice?.rung && this.actOf(choice.rung)?.done) this.choices.delete(selected);
         else if (choice) this.actor = choice.actor;
         const dispatched = new Set(this.dispatched);
         const queued = this.queued.filter((entry) => !dispatched.has(entry.id));
@@ -542,15 +593,9 @@ export class Session extends EventEmitter {
             this.changesRead = read;
           }
         }
-        const rows = this.acts;
-        for (const act of rows) {
-          if (!act.done) this.started[act.id] ??= Date.now();
-          if (act.took !== undefined) this.took[act.id] = act.took;
-        }
-        const lastWord = rows
-          .filter((act) => act.on === this.selected && act.kind === "rung" && act.by === "operator")
-          .at(-1);
-        this.findings = lastWord ? refusal(this.turns, lastWord.id) : [];
+        // The findings of the gate that refused the last word of the operator on the chain shown.
+        const lastWord = this.indexed().words.get(this.selected);
+        this.findings = lastWord?.run?.refused ? lastWord.run.reason.split("\n") : [];
         this.rejectedWord = this.findings.length ? String(lastWord?.words[0] ?? "") : "";
         this.emit("change");
       } while (this.dirty && !this.closed);
@@ -623,17 +668,33 @@ export class Session extends EventEmitter {
     this.states.of.set(key, status);
     return status;
   }
+  /** The acts that are not done, by the chain that they stand on, as they stood at a version of the acts. */
+  private liveRead = { version: -1, on: new Map<string, ActRow[]>() };
+  private liveOn(): Map<string, ActRow[]> {
+    if (this.liveRead.version === this.version) return this.liveRead.on;
+    const on = new Map<string, ActRow[]>();
+    for (const act of this.indexed().live.values()) {
+      const list = on.get(act.on);
+      if (list) list.push(act);
+      else on.set(act.on, [act]);
+    }
+    this.liveRead = { version: this.version, on };
+    return on;
+  }
   /** The state of the acts of each chain, or of every chain, as actStatus read it at a version of the acts. */
   private states = { version: -1, of: new Map<string, SessionStatus>() };
   private statusOf(chain?: string): SessionStatus {
-    const acts = (chain ? (this.indexed().on.get(chain) ?? []) : this.acts).filter(
-      (act) => act.kind !== "chain" && act.kind !== "grant",
-    );
-    if (acts.some((act) => this.host.prompts.has(act.id))) return "blocked";
-    if (acts.some((act) => this.host.pending.has(act.id))) return "paused";
-    if (acts.some(working)) return "working";
-    if (acts.some((act) => act.paused && !act.done)) return "paused";
-    const latest = acts.at(-1);
+    const index = this.indexed();
+    const mine = (act?: ActRow): act is ActRow =>
+      act !== undefined && act.kind !== "chain" && act.kind !== "grant" && (!chain || act.on === chain);
+    const asked = (ids: Iterable<string>) => [...ids].some((id) => mine(index.ids.get(id)));
+    if (asked(this.host.prompts.keys())) return "blocked";
+    if (asked(this.host.pending.keys())) return "paused";
+    // Only an act that is not done works or waits under a pause, and the index holds each such act.
+    const live = (chain ? (this.liveOn().get(chain) ?? []) : [...index.live.values()]).filter(mine);
+    if (live.some(working)) return "working";
+    if (live.some((act) => act.paused && !act.done)) return "paused";
+    const latest = chain ? index.latest.get(chain) : this.acts.findLast(mine);
     return latest && failed(latest) ? "error" : "idle";
   }
   /** The state of a chain. A chain that the operator started, directly or by a word of their own, and that finished
@@ -647,6 +708,46 @@ export class Session extends EventEmitter {
     if (id === this.selected || status !== "idle") this.unread.delete(id);
     else if (before === "working" && mine) this.unread.add(id);
     return status === "idle" && this.unread.has(id) ? "done" : status;
+  }
+  /** The chains that a view of the chains shows apart, each with its state: the root, the chain shown, and each chain
+   * whose state is not idle, in the order of the chains, and how many other chains rest. It reads the state of each
+   * chain that can be other than idle: one with work that is not done or held, a question of the operator, a last act
+   * that failed, or a state that was not idle when it was read last, and no other chain. */
+  activeChains(): { active: [ActRow, SessionStatus][]; resting: number } {
+    const index = this.indexed();
+    const restless = new Set([
+      this.engine.root,
+      this.selected,
+      ...this.liveOn().keys(),
+      ...index.failing,
+      ...this.unread,
+      ...[...this.phases].flatMap(([id, phase]) => (phase === "idle" ? [] : [id])),
+      ...[...this.host.prompts.keys(), ...this.host.pending.keys()].flatMap(
+        (id) => index.ids.get(id)?.on ?? [],
+      ),
+    ]);
+    const active = [...restless]
+      .flatMap((id) => {
+        const chain = index.ids.get(id);
+        return chain?.kind === "chain" ? [[chain, this.chainStatus(id)] as [ActRow, SessionStatus]] : [];
+      })
+      .filter(
+        ([chain, status]) => chain.id === this.engine.root || chain.id === this.selected || status !== "idle",
+      )
+      .sort(
+        ([one], [other]) => (index.places.get(one.id)?.chain ?? 0) - (index.places.get(other.id)?.chain ?? 0),
+      );
+    return { active, resting: index.chains.length - active.length };
+  }
+  /** The first chains that rest, in the order of the chains, up to a count. */
+  restingChains(count: number): ActRow[] {
+    const shown = new Set(this.activeChains().active.map(([chain]) => chain.id));
+    const out: ActRow[] = [];
+    for (const chain of this.indexed().chains) {
+      if (out.length >= count) break;
+      if (!shown.has(chain.id)) out.push(chain);
+    }
+    return out;
   }
   /** A message or a word that the operator sends to a paused chain wakes the chain first, since the operator who
    * writes to it wants it to go on: work that a reopened record held starts again, and the pause over the chain ends.
@@ -666,60 +767,55 @@ export class Session extends EventEmitter {
   get chains(): ActRow[] {
     return this.indexed().chains;
   }
-  /** The acts by their name, by the chain that they stand on, and the chains, which the view reads many times in each
-   * frame. A snapshot that changes the acts gives a new list, which the index is made again for. */
-  private index?: {
-    of: readonly ActRow[];
-    ids: Map<string, ActRow>;
-    /** The place of each act in the list, by its name. */
-    at: Map<string, number>;
-    on: Map<string, ActRow[]>;
-    /** The acts that each act made, in the order of the acts. */
-    made: Map<string, ActRow[]>;
-    chains: ActRow[];
-    /** The acts of the chain shown, as activity reads them. */
-    shown?: { chain: string; acts: ActRow[] };
-  };
-  private indexed(): NonNullable<Session["index"]> {
+  /** The index of the acts. A snapshot that changes the acts places each act that changed, and a list of acts that
+   * the session did not index, as one that a test sets, is indexed whole. */
+  private index?: Index;
+  private indexed(): Index {
     if (this.index?.of === this.acts) return this.index;
-    const index = {
+    const index: Index = {
       of: this.acts,
-      ids: new Map<string, ActRow>(),
-      at: new Map<string, number>(),
-      on: new Map<string, ActRow[]>(),
-      made: new Map<string, ActRow[]>(),
-      chains: [] as ActRow[],
+      ids: new Map(),
+      at: new Map(),
+      on: new Map(),
+      made: new Map(),
+      chains: [],
+      places: new Map(),
+      words: new Map(),
+      live: new Map(),
+      stamps: new Map(),
+      chained: new Map(),
+      written: [],
+      work: new Map(),
+      latest: new Map(),
+      failing: new Set(),
     };
     for (const [place, act] of this.acts.entries()) {
       index.ids.set(act.id, act);
       index.at.set(act.id, place);
-      for (const [map, key] of [
-        [index.on, act.on],
-        [index.made, act.by],
-      ] as const) {
-        const list = map.get(key);
-        if (list) list.push(act);
-        else map.set(key, [act]);
-      }
-      if (act.kind === "chain") index.chains.push(act);
+      placed(index, act);
     }
     this.index = index;
     return index;
   }
   /** The index of the acts that the ladder of the chain shown reads, so that a frame makes no pass over every act. */
-  get ladderIndex(): ActIndex {
+  get ladderIndex(): ActIndex & { live: Iterable<ActRow>; stamp: (id: string) => number } {
     const index = this.indexed();
-    return { on: this.activity, made: index.made, ids: index.ids };
+    return {
+      on: this.activity,
+      made: index.made,
+      ids: index.ids,
+      live: index.live.values(),
+      stamp: (id) => index.stamps.get(id) ?? 0,
+    };
   }
-  /** The acts of the chain shown, but its chains, which the index keeps while the acts and the chain stay. */
+  /** The writes that are done, in the order that the session saw them done. */
+  get written(): readonly ActRow[] {
+    return this.indexed().written;
+  }
+  /** The acts of the chain shown, but its chains, as the index holds them: a list that grows as acts come, in which an
+   * act that changed takes its place. */
   get activity(): ActRow[] {
-    const index = this.indexed();
-    if (index.shown?.chain !== this.selected)
-      index.shown = {
-        chain: this.selected,
-        acts: (index.on.get(this.selected) ?? []).filter((act) => act.kind !== "chain"),
-      };
-    return index.shown.acts;
+    return this.indexed().work.get(this.selected) ?? [];
   }
   /** What the answers of the chain itself cost, each token counted once: a chain with a source does not count the
    * answers of its origin again. The first number of the usage of an answer is the whole prompt of that call, which
@@ -766,6 +862,7 @@ export class Session extends EventEmitter {
       return cached.desk;
     const made = desk({
       acts,
+      ids: this.indexed().ids,
       prompts: [...host.prompts.values()].filter(held),
       notices: [],
       label: (id) => this.labelOf(id),
@@ -831,6 +928,38 @@ export class Session extends EventEmitter {
       this.activity.some((rung) => rung.by === act.id && Object.hasOwn(this.program, rung.id))
     );
   }
+  /** The acts on a chain, its own act among them, in the order of the acts. */
+  actsOn(chain: string): readonly ActRow[] {
+    return this.indexed().on.get(chain) ?? [];
+  }
+  /** The first act after an act that the maker of that act made and that a test takes. */
+  madeAfter(act: ActRow, test: (other: ActRow) => boolean): ActRow | undefined {
+    const index = this.indexed();
+    const list = index.made.get(act.by) ?? [];
+    for (let at = (index.places.get(act.id)?.made ?? list.length) + 1; at < list.length; at++) {
+      const other = list[at];
+      if (other && test(other)) return other;
+    }
+    return undefined;
+  }
+  /** The acts by their name, by the chain that they stand on, and the chains, with the acts that are not done, which
+   * the board of the life reads in place of a pass over every act. */
+  get boardIndex(): {
+    ids: ReadonlyMap<string, ActRow>;
+    on: ReadonlyMap<string, readonly ActRow[]>;
+    chains: readonly ActRow[];
+    live: Iterable<ActRow>;
+    stamp: (chain: string) => number;
+  } {
+    const index = this.indexed();
+    return {
+      ids: index.ids,
+      on: index.on,
+      chains: index.chains,
+      live: index.live.values(),
+      stamp: (chain) => index.chained.get(chain) ?? 0,
+    };
+  }
   /** The act that a name or a door names: the act whose name is the first part of the path. */
   actOf(path: string): ActRow | undefined {
     const [name] = path.split("/");
@@ -853,9 +982,8 @@ export class Session extends EventEmitter {
     ].join("\n");
   }
   labelOf(id: string): string {
-    return id === this.engine.root
-      ? "Main"
-      : String(this.chains.find((chain) => chain.id === id)?.words[0] || "Chain");
+    const chain = this.indexed().ids.get(id);
+    return id === this.engine.root ? "Main" : String((chain?.kind === "chain" && chain.words[0]) || "Chain");
   }
   async select(id: string): Promise<void> {
     // The moment that the feed shows is one of the chain shown, so another chain is shown as it stands now.
@@ -863,6 +991,7 @@ export class Session extends EventEmitter {
     // The turns and the program of the chain left are not the chain selected, which shows them once it has read them.
     if (id !== this.selected) {
       this.editing = undefined;
+      this.held = 0;
       this.turns = [];
       this.answers = [];
       this.filled = undefined;
@@ -955,9 +1084,9 @@ export class Session extends EventEmitter {
         : this.queued.find(
             (entry) =>
               !passed.has(entry.id) &&
-              !this.acts.find((act) => act.id === entry.chain)?.paused &&
-              !this.acts.some(
-                (act) => act.on === entry.chain && !act.done && ["prompt", "rung"].includes(act.kind),
+              !this.actOf(entry.chain)?.paused &&
+              !(this.liveOn().get(entry.chain) ?? []).some(
+                (act) => !act.done && ["prompt", "rung"].includes(act.kind),
               ),
           );
     try {

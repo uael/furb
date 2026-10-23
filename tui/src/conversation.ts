@@ -97,11 +97,3 @@ function note(key: string, paragraph: Paragraph, act: ActRow | undefined, word: 
         body: plain(paragraph.lines),
       };
 }
-
-/** The findings that refused the word of a rung, one for each line that the paragraph its chain told of it binds. */
-export function refusal(turns: readonly Turn[], rung: string): string[] {
-  const told = turns
-    .flatMap(([role, python]) => (role === "user" ? paragraphs(python) : []))
-    .find((paragraph) => paragraph.name === rung && paragraph.words === "refused");
-  return told ? (bound(told.lines, `${rung}_findings`) ?? "").split("\n") : [];
-}
