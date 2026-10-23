@@ -3,11 +3,13 @@ import type { SessionOptions } from "furb";
 /** The models of the demo, which it names in the catalog of the crate and asks none of. */
 export const demoRoster = ["claude-cli:sonnet", "claude-cli:opus", "claude-cli:haiku", "claude-cli:fable"];
 
-/** What a session asks of its worker, as plain data: the options of the session in it, whether it is the demo, and
- * whether it is the demo that the operator watches, which streams each turn and spends nothing. */
+/** What a session asks of its worker, as plain data: the options of the session in it, whether it is the demo,
+ * whether it is the demo that the operator watches, which streams each turn and spends nothing, and whether the life
+ * runs in a host of its own, which outlives the window, where a socket serves. */
 export type EngineOptions = Omit<SessionOptions, "answer" | "operator" | "ears"> & {
   demo?: boolean;
   watch?: boolean;
+  host?: boolean;
 };
 
 /** The roster of a session of the TUI: the models the operator names, or those of the demo, and the models the

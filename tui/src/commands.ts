@@ -50,7 +50,8 @@ export const commands = {
   delete: ["Delete session", "", "Archive a session, or move it and its files to the workspace trash"],
   autocollapse: ["Automatic rung collapse", "", "Toggle collapse of completed rungs"],
   extensions: ["Extensions", "", "List the extensions that this life runs"],
-  exit: ["Exit", "", "Save every session and quit"],
+  end: ["End the lives", "", "End each open life, its commands and its models, then quit"],
+  exit: ["Exit", "", "Save every session and quit, while a life in a host of its own goes on"],
 } as const;
 /** Each slash command with its name, and as it is typed with its arguments. */
 export const slashes = Object.entries(commands).map(([name, [label, argument, detail]]) => ({

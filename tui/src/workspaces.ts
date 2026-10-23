@@ -438,7 +438,7 @@ export class Workspaces extends EventEmitter {
     }
     if (this.current === entry) await this.create(group);
   }
-  /** Close the open session of an entry, and tell whether it was open. */
+  /** End the life of the open session of an entry, and tell whether it was open. */
   private async release(entry: SessionEntry): Promise<boolean> {
     const session = entry.session;
     if (!session) return false;
@@ -446,7 +446,7 @@ export class Workspaces extends EventEmitter {
     if (listener) session.off("change", listener);
     this.subscriptions.delete(session);
     entry.session = undefined;
-    await session.dispose();
+    await session.dispose(true);
     return true;
   }
   /** Give a session or a workspace the name that the operator chose. The saved view of a session keeps its name,
@@ -538,12 +538,14 @@ export class Workspaces extends EventEmitter {
       lease.dispose();
     }
   }
-  async dispose(): Promise<void> {
+  /** Close the workspaces: the window detaches from each life, which goes on when it runs in a host of its own, or
+   * each life ends when end is set. */
+  async dispose(end = false): Promise<void> {
     this.closed = true;
     this.stop.abort(new Error("The workspaces are closed."));
     await Promise.allSettled([...this.opening.values()]);
     for (const [session, changed] of this.subscriptions) session.off("change", changed);
-    await Promise.all([...this.subscriptions.keys()].map((session) => session.dispose()));
+    await Promise.all([...this.subscriptions.keys()].map((session) => session.dispose(end)));
     this.subscriptions.clear();
     this.removeAllListeners();
   }

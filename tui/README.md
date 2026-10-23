@@ -80,8 +80,32 @@ the current workspace. `/delete` archives a chosen session, or moves it and its 
 removes its scratch directory from the cache of furb. The trash holds a `restore.json` with the original paths, and
 its record can be opened with `--resume`, which makes again the scratch files that its words wrote.
 
-Quit saves and closes all open sessions, and SIGINT, SIGTERM, SIGHUP, and SIGQUIT quit the same way. On Windows, a
-console that closes and Ctrl+Break quit the same way.
+Quit saves each open session and detaches the window from its life, and SIGINT, SIGTERM, SIGHUP, and SIGQUIT quit
+the same way. On Windows, a console that closes and Ctrl+Break quit the same way. `/end` ends the life of each open
+session, its commands and its models, then quits.
+
+### A host that outlives the window
+
+On macOS and Linux, the life of each session runs in a host of its own: a Bun process, `src/host.ts`, that holds the
+record, its lease, the World, the provider, the commands and the views of the life. The window draws and attaches to
+the host through a socket of Unix, so a quit, a crash or a new build of the window ends no command and no model of the
+life.
+
+- The host of a record listens at `hosts/<key>.sock` in the cache of furb, in a folder that only the user can open,
+  where `<key>` is the key of the scratch directory of the record. Beside it, `<key>.json` says the process of the
+  host, its record, its build, the engine of its life and the version of its protocol, and `<key>.log` holds what the
+  host writes. When the path of the socket is too long for the system, the folder is `furb-hosts-<uid>` in the
+  temporary directory.
+- A window that opens a record connects to its socket. When no host answers, the window starts one, as a process of
+  its own detached from the window, and waits until it listens. A host that cannot open the life, as on a record whose
+  lease another process holds, ends, and the window shows why.
+- Two windows can attach to one life. Each sees each change of the life, and the first answer to a question of the
+  operator wins. `/end` in one window ends the life, and each other window shows that the life ended.
+- When a host ends while the life goes on, as at a crash, the window starts a host again and reads the acts of the
+  life again from the start.
+- The demo of a new project, which `bun run demo` opens with no `--cwd` and no record, stays in the window, since its
+  folder goes when the window quits. A recorded life, which runs nothing, stays in the window too. On Windows, each
+  life stays in the window.
 
 A recorded life is a log of a life whose first line is a header that says `"recorded": true`. The TUI reads it as it
 reads a record that a build of another version made, from its acts, and runs nothing: what you send to it fails with the reason.
@@ -117,7 +141,7 @@ The TUI serves each person who uses it:
 
 ## Speed
 
-The TUI owns a Bun worker for each open session, which holds its life and its ears. So rendering, input, and
+A Bun worker holds the life and the ears of each open session, in the host of the life or in the window. So rendering, input, and
 syntax coloring stay responsive while the sandbox gates and runs Python. The renderer draws at 60 frames each second.
 `bun run bench` opens a recorded life of 30000 facts and measures the first frame, and the frames while the feed
 scrolls and a command streams. The gates hold it on Linux, against the pace of the same machine, the time that it
@@ -222,7 +246,8 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/delete` | Archive a session, or move it and its files to the workspace trash |
 | `/autocollapse` | Toggle collapse of completed rungs |
 | `/extensions` | List the extensions that this life runs |
-| `/exit` | Save every session and quit |
+| `/end` | End each open life, its commands and its models, then quit |
+| `/exit` | Save every session and quit, while a life in a host of its own goes on |
 
 <!-- commands:end -->
 

@@ -1,4 +1,4 @@
-import { closeSync, existsSync, fstatSync, openSync, readFileSync, readSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, openSync, readSync } from "node:fs";
 import { Activity, type Call, type Entry, type Fact, isQuestion, type Turn, WORK } from "furb";
 
 /** Why a record opens to read: the engine and the version of the build that made it, as the record names them, the
@@ -18,7 +18,17 @@ export interface Reading {
  * and runs not. tui/script/fixture.ts makes one from the log of a real life. */
 export function isRecorded(record: string): boolean {
   if (!existsSync(record)) return false;
-  const first = readFileSync(record, "utf8").slice(0, 4096).split("\n")[0] ?? "";
+  // Only the head of the record is read, since a record of a long life holds gigabytes.
+  const head = Buffer.alloc(4096);
+  const file = openSync(record, "r");
+  const size = (() => {
+    try {
+      return readSync(file, head, 0, head.length, 0);
+    } finally {
+      closeSync(file);
+    }
+  })();
+  const first = head.subarray(0, size).toString("utf8").split("\n")[0] ?? "";
   try {
     return (JSON.parse(first) as { recorded?: unknown }).recorded === true;
   } catch {

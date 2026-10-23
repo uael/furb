@@ -1,4 +1,7 @@
+import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
+import { closeSync, openSync, readFileSync } from "node:fs";
+import { createConnection, type Socket } from "node:net";
 import type {
   Act,
   FileChange,
@@ -10,8 +13,9 @@ import type {
   Turn,
 } from "furb";
 import type { Measure } from "furb/life";
+import { framed, type Hello, hostPlace, type Place, PROTOCOL } from "./hosting.ts";
 import type { EngineOptions } from "./models.ts";
-import type { Reading } from "./reading.ts";
+import { isRecorded, type Reading } from "./reading.ts";
 import type { ActRow, FollowUp } from "./session.ts";
 
 /** What one answer of a model read and wrote: its whole prompt, its output, the reads and the writes of the cache,
@@ -68,6 +72,8 @@ interface Plain {
   recorded?: boolean;
   /** The measure of each chain whose models answered, by the chain. */
   measures: Record<string, Measure>;
+  /** The count of facts that the life said, which each state carries, so a window knows what it missed. */
+  seq: number;
 }
 /** What the session in the worker holds, as it sends it to the host, and how many facts the life said since the last
  * state, which the host needs to know of and not to hold. */
@@ -91,6 +97,7 @@ export class HostView extends EventEmitter implements Plain {
   reading?: Reading;
   recorded?: boolean;
   measures: Record<string, Measure> = {};
+  seq = 0;
   prompts = new Map<string, Prompt>();
   notices = new Map<string, Notice>();
   streams = new Map<string, Stream>();
@@ -155,74 +162,239 @@ export class HostView extends EventEmitter implements Plain {
   /** The text the World reads at a path, from where a chain stands, which makes no act and keeps nothing. */
   look = (path: string, chain: string) =>
     this.ask<{ path: string; content: string }>("library", "look", path, chain);
+  /** The end of the window's hold on the life: a life in the window ends with it, and a life in a host of its own
+   * goes on. */
   dispose = () => this.ask<void>("session", "dispose");
+  /** The end of the life, its commands and its models, wherever it runs. */
+  end = () => this.ask<void>("session", "end");
 }
 
-export async function openEngine(options: EngineOptions): Promise<{ engine: Engine; host: HostView }> {
-  const worker = new Worker(new URL("worker.ts", import.meta.url).href, { type: "module" });
-  const waiting = new Map<number, { resolve(value: unknown): void; reject(error: Error): void }>();
-  let sequence = 0;
-  let closed = false;
-  const request = (target: string, method: string, args: unknown[]) =>
-    new Promise<unknown>((resolve, reject) => {
-      if (closed) {
-        reject(new Error("The session is disposed."));
+type Request = { id: number; target: string; method: string; args: unknown[] };
+/** What the holder of a life sends a window: an answer to a request, or a push of the life. */
+type Message = {
+  id?: number;
+  value?: unknown;
+  error?: string;
+  name?: string;
+  disposed?: boolean;
+  fault?: string;
+  log?: string;
+  state?: HostState;
+  ended?: string;
+};
+
+/** The requests of a window to the holder of its life, and what comes back: each request takes a number, and each
+ * answer goes to its request, while each push goes to the host view. */
+class Link {
+  closed = false;
+  /** Why the link ended, which each later request fails with. */
+  private why = "The session is disposed.";
+  readonly host: HostView;
+  private sequence = 0;
+  private readonly waiting = new Map<number, { resolve(value: unknown): void; reject(error: Error): void }>();
+  /** The requests that wait for a transport, as a window that attaches again holds them. */
+  private held: Request[] = [];
+  private sender?: (message: Request) => void;
+  constructor(local?: (target: string, method: string) => Promise<unknown> | undefined) {
+    this.host = new HostView(
+      (target, method, args) => local?.(target, method) ?? this.request(target, method, args),
+    );
+  }
+  set send(sender: ((message: Request) => void) | undefined) {
+    this.sender = sender;
+    if (sender) for (const message of this.held.splice(0)) sender(message);
+  }
+  request(target: string, method: string, args: unknown[]): Promise<unknown> {
+    return new Promise<unknown>((resolve, reject) => {
+      if (this.closed) {
+        reject(new Error(this.why));
         return;
       }
-      const id = ++sequence;
-      waiting.set(id, { resolve, reject });
-      worker.postMessage({ id, target, method, args });
+      const message = { id: ++this.sequence, target, method, args };
+      this.waiting.set(message.id, { resolve, reject });
+      if (this.sender) this.sender(message);
+      else this.held.push(message);
     });
-  const host = new HostView(request);
-  worker.onmessage = ({ data }) => {
+  }
+  receive(data: Message): void {
     if (data.fault) {
-      host.emit("fault", new Error(data.fault));
+      this.host.emit("fault", new Error(data.fault));
       return;
     }
     if (data.log) {
-      host.emit("log", data.log);
+      this.host.emit("log", data.log);
       return;
     }
     if (data.state) {
-      host.update(data.state as HostState);
+      this.host.update(data.state);
       return;
     }
-    const promise = waiting.get(data.id);
-    waiting.delete(data.id);
+    if (data.ended) {
+      this.end(data.ended);
+      this.host.emit("fault", new Error(data.ended));
+      return;
+    }
+    const promise = this.waiting.get(data.id ?? 0);
+    this.waiting.delete(data.id ?? 0);
     if (data.error)
       promise?.reject(Object.assign(new Error(data.error), data.name ? { name: data.name } : {}));
     else promise?.resolve(data.value);
-    if (data.disposed) {
-      closed = true;
-      for (const pending of waiting.values()) pending.reject(new Error("The session is disposed."));
-      waiting.clear();
-    }
-  };
+    if (data.disposed) this.end("The session is disposed.");
+  }
+  /** Each request that waits fails with a reason, as the holder of the life will not answer it. */
+  drop(why: string): void {
+    for (const pending of this.waiting.values()) pending.reject(new Error(why));
+    this.waiting.clear();
+    this.held = [];
+  }
+  /** The end of the link: no request goes any more. */
+  end(why: string): void {
+    this.closed = true;
+    this.why = why;
+    this.drop(why);
+  }
+  /** The engine of the life, as a proxy whose methods are requests. */
+  engine(root: string): Engine {
+    return new Proxy(
+      { root },
+      {
+        get: (target, key) => {
+          if (key === "root") return target.root;
+          if (key === "disposed") return this.closed;
+          if (key === "then") return undefined;
+          return (...args: unknown[]) => this.request("engine", String(key), args);
+        },
+      },
+    ) as Engine;
+  }
+}
+
+/** The life of a record, in a host of its own when the options ask it and a socket serves, or in a worker of the
+ * window. A recorded life runs nothing, so it stays in the window. */
+export async function openEngine(options: EngineOptions): Promise<{ engine: Engine; host: HostView }> {
+  const place =
+    options.host && options.record && !isRecorded(options.record) ? hostPlace(options.record) : undefined;
+  return place ? attach(options, place) : inWindow(options);
+}
+
+/** The life in a worker of the window, which ends with the window. */
+async function inWindow(options: EngineOptions): Promise<{ engine: Engine; host: HostView }> {
+  const worker = new Worker(new URL("worker.ts", import.meta.url).href, { type: "module" });
+  const link = new Link();
+  link.send = (message) => worker.postMessage(message);
+  worker.onmessage = ({ data }) => link.receive(data);
   worker.onerror = (event) => {
-    closed = true;
-    for (const promise of waiting.values()) promise.reject(new Error(event.message));
-    waiting.clear();
-    host.emit("fault", new Error(event.message));
+    link.end(event.message);
+    link.host.emit("fault", new Error(event.message));
   };
   let root: string;
   try {
-    root = (await request("session", "open", [options])) as string;
+    root = (await link.request("session", "open", [options])) as string;
   } catch (error) {
     // No caller holds a worker whose life did not open, so it ends here.
-    closed = true;
+    link.end("The session is disposed.");
     worker.terminate();
     throw error;
   }
-  const engine = new Proxy(
-    { root },
+  return { engine: link.engine(root), host: link.host };
+}
+
+/** A connection to the socket at a path, and nothing when no host answers there. */
+function connect(path: string): Promise<Socket | undefined> {
+  return new Promise((resolve) => {
+    const socket = createConnection(path);
+    socket.once("connect", () => {
+      socket.removeAllListeners("error");
+      resolve(socket);
+    });
+    socket.once("error", () => resolve(undefined));
+  });
+}
+
+/** A connection to the host of a life: the host that answers at its place, or a host that the window starts as a
+ * process of its own, detached from the window, which it waits for. A host that ends before it listens says why, as
+ * on a record whose lease another process holds: unless another window started a host meanwhile, the window then
+ * fails with that reason. */
+async function reach(options: EngineOptions, place: Place): Promise<Socket> {
+  const found = await connect(place.socket);
+  if (found) return found;
+  const log = openSync(place.log, "a", 0o600);
+  const child = spawn(
+    process.execPath,
+    [new URL("host.ts", import.meta.url).pathname, JSON.stringify(options)],
     {
-      get(target, key) {
-        if (key === "root") return target.root;
-        if (key === "disposed") return closed;
-        if (key === "then") return undefined;
-        return (...args: unknown[]) => request("engine", String(key), args);
-      },
+      detached: true,
+      stdio: ["ignore", log, log],
     },
-  ) as Engine;
-  return { engine, host };
+  );
+  closeSync(log);
+  child.unref();
+  let ended: number | undefined;
+  child.once("exit", (code, signal) => {
+    ended = code ?? (signal ? 128 : 1);
+  });
+  for (;;) {
+    const socket = await connect(place.socket);
+    if (socket) return socket;
+    if (ended !== undefined) {
+      const again = await connect(place.socket);
+      if (again) return again;
+      let failed: { pid?: number; error?: string } = {};
+      try {
+        failed = JSON.parse(readFileSync(place.failed, "utf8"));
+      } catch {}
+      throw new Error(
+        failed.pid === child.pid && failed.error
+          ? failed.error
+          : `The host of the life ended with ${ended} before it listened: ${place.log} says why.`,
+      );
+    }
+    await Bun.sleep(20);
+  }
+}
+
+/** The life in a host of its own, which outlives the window. A dispose of the window detaches it, and the life goes
+ * on; an end ends the life. When the host goes away with the life open, the window attaches again, to a host that it
+ * starts again when none answers, and reads the acts from the start when it is another host. */
+async function attach(options: EngineOptions, place: Place): Promise<{ engine: Engine; host: HostView }> {
+  let socket: Socket | undefined;
+  const link: Link = new Link((target, method) => {
+    if (target !== "session" || method !== "dispose") return undefined;
+    link.end("The session is disposed.");
+    socket?.end();
+    return Promise.resolve();
+  });
+  const hello = async (): Promise<Hello> => {
+    const held = await reach(options, place);
+    socket = held;
+    link.send = framed(held, (data: Message) => link.receive(data));
+    held.on("close", () => {
+      if (socket !== held) return;
+      link.send = undefined;
+      link.drop("The host of the life ended before it answered.");
+      if (!link.closed) void again();
+    });
+    held.on("error", () => {});
+    const said = (await link.request("host", "hello", [
+      { window: process.pid, protocol: PROTOCOL },
+    ])) as Hello;
+    if (said.protocol !== PROTOCOL) {
+      held.end();
+      throw new Error(
+        `The host of ${said.record} speaks the protocol ${said.protocol}, and this window ${PROTOCOL}. End the life in a window of its build first.`,
+      );
+    }
+    return said;
+  };
+  const first = await hello();
+  const again = async () => {
+    try {
+      const next = await hello();
+      if (next.pid !== first.pid || next.started !== first.started) link.host.emit("reset");
+    } catch (error) {
+      link.end(error instanceof Error ? error.message : String(error));
+      link.host.emit("fault", error instanceof Error ? error : new Error(String(error)));
+    }
+  };
+  return { engine: link.engine(first.root), host: link.host };
 }
