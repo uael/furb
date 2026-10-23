@@ -69,3 +69,16 @@ async def test_the_engine_unquotes_a_word_before_the_gate_reads_it_and_before_th
   assert [a[3] for a in said(log, "ready") if a[1] == "rung1"] == [word]
   assert engine.read(asking, on=root).content == word
   assert engine.turns(on=root)[1][1] == word
+
+
+async def test_a_word_unquotes_in_a_time_that_grows_with_its_length_alone() -> None:
+  """A word unquotes in a time that grows with its length alone, so a chain that was told a text of any length goes on."""
+  lines = "x\n" * 400000
+  assert engine.unquoted(f"<s:big>\n{lines}</s:big>\nk = 1") == f"big = {lines!r}" + "\n" * 400001 + "\nk = 1"
+  opened = f"<s:open>\n{lines}"
+  assert engine.unquoted(f"{opened}<s:a>\n{lines}</s:a>") == f"{opened}a = {lines!r}" + "\n" * 400001
+  sand, _, root = born()
+  laid = engine.rung("s = 'x\\n' * 400000\ndebug(t'{s}')", on=root)
+  assert await laid is None
+  sand.script[root] = [f"close(len({laid}_debug))"]
+  assert await engine.prompt(int, "count", on=root) == 800000

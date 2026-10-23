@@ -598,9 +598,14 @@ def shown(text, show):
 
 
 def unquoted(word):
-  while m := re.search(r"(?ms)^<s:(\w+)>\n?(.*?)</s:\1>$", word):
-    word = word[: m.start()] + f"{m[1]} = {m[2]!r}" + "\n" * m[0].count("\n") + word[m.end() :]
-  return word
+  kept = ""
+  while m := re.search(r"(?m)^<s:(\w+)>\n?", word):
+    head, word = word[: m.start() + 1], word[m.start() + 1 :]
+    if end := re.search(f"(?m)</s:{m[1]}>$", word):
+      head = head[:-1] + f"{m[1]} = {word[len(m[0]) - 1 : end.start()]!r}" + "\n" * word[: end.end()].count("\n")
+      word = word[end.end() :]
+    kept += head
+  return kept + word
 
 
 def offered(roster, to, at=2):
