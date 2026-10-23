@@ -1,17 +1,30 @@
 // The worker loads no module that loads OpenTUI, whose native library belongs to the thread that draws.
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import type { Engine, SessionOptions, Turn } from "@furb/engine";
+import type { Engine, FileChange, SessionOptions, Turn } from "@furb/engine";
 import { Act, actorParts, ENGINE, model, models, retold, Session, setup } from "@furb/engine";
 import { measureOf } from "@furb/engine/life";
 import type { HostState } from "./bridge.ts";
 import { type EngineOptions, roster } from "./models.ts";
 import { queueDispatches, queueHash } from "./queue.ts";
 import { isRecorded, Reader } from "./reading.ts";
+import { branchChanges, net } from "./review.ts";
 import type { FollowUp } from "./session.ts";
 import { Snapshots } from "./snapshots.ts";
 
 declare const self: Worker & { close(): void };
+
+/** Each change of a journal that one of the writes made, or each change when no list of writes is given, read a page
+ * at a time. */
+function* written(
+  changes: { length: number; read(start: number, count: number): FileChange[] },
+  writes: unknown,
+): Generator<FileChange> {
+  const named = Array.isArray(writes) ? new Set(writes.map(String)) : undefined;
+  for (let start = 0; start < changes.length; start += 50)
+    for (const change of changes.read(start, 50))
+      if (!named || (change.act && named.has(change.act))) yield change;
+}
 let session: Session | undefined;
 let engine: Engine | undefined;
 let snapshots: Snapshots | undefined;
@@ -269,6 +282,10 @@ async function answer(data: { target: string; method: string; args: unknown[] })
   if (data.target === "library" && data.method === "source") return ENGINE;
   if (data.target === "library" && data.method === "changes")
     return session?.changes.read(Number(data.args[0]), Number(data.args[1]));
+  if (data.target === "library" && data.method === "net")
+    return session ? net(written(session.changes, data.args[0])) : [];
+  if (data.target === "library" && data.method === "branch")
+    return session ? branchChanges(session.directory) : [];
   if (data.target === "library" && data.method === "repairChanges") return session?.changes.repair();
   if (data.target === "library" && data.method === "renewChanges") return session?.changes.renew();
   if (data.target === "library" && data.method === "act")
@@ -307,6 +324,8 @@ function read(data: { target: string; method: string; args: unknown[] }): unknow
   if (data.target === "library" && data.method === "sees") return false;
   if (data.target === "library" && data.method === "model") return null;
   if (data.target === "library" && data.method === "changes") return [];
+  if (data.target === "library" && data.method === "net") return [];
+  if (data.target === "library" && data.method === "branch") return branchChanges(open.directory);
   if (data.target === "library" && data.method === "act") return open.activity.acts.get(String(data.args[0]));
   if (data.target === "library" && data.method === "look") {
     const path = resolve(open.directory, open.cwd({ on: String(data.args[1]) }), String(data.args[0]));

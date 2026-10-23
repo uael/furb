@@ -88,9 +88,32 @@ The exact text that the provider sends to the model, turn by turn.
 
 ## Changes
 
-The lines that each write through the World added or removed. The toggle counts the changes.
+The review of the files that changed, in one of four scopes: this turn, which holds the writes of the chain shown
+since your last message, this chain, the life, and the branch, which holds each file that differs from the base of
+the branch against main in git, a file that git does not track yet among them. Click a scope, press ⌃PageUp or
+⌃PageDown, or type `/changes turn`, `chain`, `life` or `branch`. The toggle counts the writes of the life.
 
-![Changes](screenshots/04-changes.png)
+The list of the files comes first, each with the lines that it added and removed, and a click on a file goes to its
+diff. Each file shows the net change of the scope: from its text before the first write to its text after the last.
+At 140 columns or more, the two sides of a diff stand side by side, and below that one stands under the other.
+
+![This chain](screenshots/04-changes.png)
+
+![This turn](screenshots/76-changes-turn.png)
+
+![The life](screenshots/77-changes-life.png)
+
+![The branch](screenshots/78-changes-branch.png)
+
+Each hunk has two actions. **Revert** writes the old lines of the hunk back through the World, as a word of yours on
+the chain, so the record keeps the write. The word refuses when the file no longer holds the lines of the hunk where
+the review shows them. **Comment a line** lists the lines of the hunk. Choose one, and the input holds the start of a
+message that names the file, the line and its text: write your comment after it, and Enter sends it to the chain as a
+prompt.
+
+![Comment a line](screenshots/79-changes-comment.png)
+
+![The comment in the input](screenshots/80-changes-comment-input.png)
 
 ## Command palette
 
