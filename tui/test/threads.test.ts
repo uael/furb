@@ -25,8 +25,8 @@ const tree = (session: Composing["session"], frame: string) =>
 async function railClick({ session, screen, frame }: Composing, text: string): Promise<void> {
   const left = size.width - session.preferences.sidebarWidth;
   const rows = rail(session, await frame());
+  expect(rows.join("\n")).toContain(text);
   const y = rows.findIndex((line) => line.includes(text));
-  expect(y).toBeGreaterThan(-1);
   await screen.mockMouse.click(left + (rows[y] ?? "").indexOf(text) + 1, y);
   await frame();
 }

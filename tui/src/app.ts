@@ -4419,11 +4419,11 @@ export class App {
     const w = this.session;
     if (w.selected !== chain) return { acts: undefined, owed: "", list: [], by: new Map(), of: new Map() };
     const owed = [...w.host.prompts.keys()].join(" ");
-    if (this.threadList.acts !== w.acts || this.threadList.owed !== owed) {
+    if (this.threadList.acts !== w.version || this.threadList.owed !== owed) {
       const index = w.ladderIndex;
       const list = chainThreads(index.on, index.ids, new Set(w.host.prompts.keys()));
       this.threadList = {
-        acts: w.acts,
+        acts: w.version,
         owed,
         list,
         by: new Map(list.map((one) => [one.act.id, one])),
