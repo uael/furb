@@ -57,6 +57,9 @@ class World:
     self.judge: Callable[[str, str], object] = lambda message, to: []
     self.waited: Callable[[], None] = lambda: None
     self.made = 0
+    self.waits: list[list[str]] = []
+    self.pending: list[tuple[str, object]] = []
+    self.slow = False
     self.round = {
       "quietly": lambda verb, *args, **words: verb(*args, **words),
       "shq": lambda s: "'" + s.replace("'", "'\\''") + "'",
@@ -123,9 +126,13 @@ class World:
     self.prompts.append((shape, message, to, on))
     if shape is None:
       return self.act("prompt", None, on, "None", message, to)
-    return self.act("prompt", self.judge(message, to), on, str(shape), message, to)
+    name = self.act("prompt", self.judge(message, to), on, str(shape), message, to)
+    if self.slow:
+      self.pending.append((name, self.done.pop(name)))
+    return name
 
   def wait(self, seconds: float = 0.0, *acts: str) -> Done:
+    self.waits.append([a for a in acts if a in self.done])
     self.waited()
     return self.act("wait", None)
 
@@ -355,3 +362,16 @@ def test_a_message_to_a_model_has_no_blank_line_that_a_header_follows(world: Wor
   messages = [*world.judged(), *[m for shape, m, to, on in world.prompts if shape is None and on == "at-prompt80"]]
   assert len(messages) == 3
   assert not any(re.search(r"\n\n#\S", message) for message in messages)
+
+def test_a_wait_names_only_the_acts_that_still_run(world: World) -> None:
+  world.slow = True
+
+  def finish() -> None:
+    if world.pending:
+      name, value = world.pending.pop(0)
+      world.done[name] = value
+
+  world.waited = finish
+  book = world.run(8)
+  assert world.waits and all(done == [] for done in world.waits)
+  assert book["passes"] and world.pending == []

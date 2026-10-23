@@ -488,5 +488,5 @@ async def converge(target: dict, ticks: int = 0) -> dict:
     if not job:
       await wait(EVERY)
     else:
-      await wait(EVERY, *([job["act"]] if not job["asked"] else [a for a in job["asked"] if a != "none"]))
+      await wait(EVERY, *[a for a in ([job["act"]] if not job["asked"] else job["asked"]) if a != "none" and not over(a)])
   return book
