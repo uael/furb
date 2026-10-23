@@ -317,9 +317,9 @@ A session that opens with unfinished work stays paused until you resume it.
 
 ## A record to read
 
-A record whose replay drifts, as a record that an earlier engine made, opens to read. The TUI shows what the record
+A record whose replay drifts, as a record that a build of another version made, opens to read. The TUI shows what the record
 kept: each chain, each rung with its word, and each act. No word runs again, no model is asked, and a command that
-would change the life is refused. A dialog names the engine that made the record and the engine of this build, and
+would change the life is refused. A dialog names the version of the build that made the record and the version of this build, and
 offers to read the record or to start a new life in its workspace.
 
 ![A record to read](screenshots/56-record-to-read.png)

@@ -28,9 +28,9 @@ gave the gate and ran, from those answers alone.
 
 ## Run it
 
-The engine that made the record must be the engine that audits it. The record names that engine in its fact `made`,
-as a digest of `src/furb/engine.py` and `src/furb/kernel.py`. Another engine refuses the record before any replay,
-and the audit says so. So install the release of furb that made the record, in a clean virtual environment:
+The build that audits the record must be of the version of the build that made it. The record names that build in
+its fact `made`: the engine, as a digest of `src/furb/engine.py` and `src/furb/kernel.py`, and the version of the
+build. A build of another version refuses the record before any replay, and the audit says so. So install the release of furb that made the record, in a clean virtual environment:
 
 ```sh
 python3.14 -m venv clean

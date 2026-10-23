@@ -36,7 +36,8 @@ API of its own:
 - `src/life.rs` opens a life as every host opens one: the record, and the ears of the crate after the ears of the
   host, the provider among them, on the default actor and the roster that the host names from the catalog, or every
   model that the catalog offers when the host names no roster, or on a model of its own, and the extensions. A host adds only its own ears, such as the console of its operator.
-  A life on a record that another engine made is refused before any replay, with both engines. Every
+  A life on a record that a build of another version made is refused before any replay, with both versions, and
+  `tests/corpus` holds the records that each build of a version must replay with no drift. Every
   host gives it as one `Opening`, and each door gives it as `opened` and as `Engine.open`.
 - `src/snapshot.rs` holds the snapshot of a life beside its record: the session of the sandbox that monty dumps and
   what the engine holds of the ears, which a later life on the same record and build opens from with no replay.

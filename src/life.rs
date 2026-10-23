@@ -172,16 +172,29 @@ impl Opening {
       (Some(path), false) => (world::kept(path)?, None),
       (None, _) => (Vec::new(), None),
     };
-    if let Some(theirs) = world::made(&record).filter(|one| *one != world::engine()) {
-      let path = self.record.as_deref().unwrap_or_default();
-      return Err(Fault::new(
+    let path = self.record.as_deref().unwrap_or_default();
+    let refused = |why: String| {
+      Err(Fault::new(
         "Drift",
         vec![Object::string(format!(
-          "the record {path} was made by the engine {theirs:.12}, and this build runs the engine {:.12}, so a \
-         replay would drift. Open the record with the build that made it, or start a new life.",
-          world::engine()
+          "{why}, so a replay would drift. Open the record with the build that made it, or start a new life."
         ))],
-      ));
+      ))
+    };
+    match (world::version(&record), world::made(&record)) {
+      (Some(theirs), _) if theirs != world::VERSION => {
+        return refused(format!(
+          "the record {path} was made by a build of version {theirs}, and this build is of version {}",
+          world::VERSION
+        ));
+      }
+      (None, Some(theirs)) if theirs != world::engine() => {
+        return refused(format!(
+          "the record {path} was made by the engine {theirs:.12}, and this build runs the engine {:.12}",
+          world::engine()
+        ));
+      }
+      _ => {}
     }
     let log = self.log.as_ref().map(|log| log.0.clone());
     let told = |line: &str| match &log {

@@ -748,7 +748,7 @@ An actor takes an effort of its own, and any actor takes the effort that is not 
 type Standing = list[list[Actor] | str]
 """What a chain stands on: the actors the World offers, the directory the chain starts in, and the actor a prompt goes to when it names none.
 The roster, the directory and the actor that a model reads are in the transcript of its chain.
-A standing holds no source: the engine is one file the model imports, and a record made by another engine is a drift.
+A standing holds no source: the engine is one file the model imports, and a record replays only on an engine that makes each of its acts again, and else drifts.
 """
 type Entry = tuple[Fact]
 """One entry of the record: the fact, an act among them, and the answer of an act after it, as every other fact about it.
