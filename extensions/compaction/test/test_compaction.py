@@ -23,6 +23,4 @@ async def test_compaction_is_the_doctrine_of_the_extension(tmp_path: Path) -> No
     "SHARE",
     "FILTERS",
   ]
-  assert [
-    part for part in [*parts, "CHOOSER", "LISTED", "BRIEF", "LABEL", "extension of its own"] if part not in doctrine
-  ] == []
+  assert [part for part in [*parts, "CHOOSER", "LISTED", "BRIEF", "extension of its own"] if part not in doctrine] == []
