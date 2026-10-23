@@ -32,3 +32,13 @@ async def test_the_transcript_of_the_chain_holds_the_facts_of_its_prefix_where_t
     and said(held, "prefix") == []
     and held[len(prefix[3])][:2] == ("started", child)
   )
+
+
+async def test_a_prefix_takes_the_place_of_what_the_transcript_of_the_chain_that_it_is_said_on_held() -> None:
+  """A prefix takes the place of what the transcript of the chain that it is said on held, so a word that says a prefix on its own chain cuts its turns, and the chain goes on under its name, with its module, its ladders and its acts."""
+  _, log, root = born("say('prefix', ROOT, [a for a in transcript() if a[0] != 'tell'])\nclose(k)")
+  assert await engine.rung("k = 7", on=root) is None
+  chains = said(log, "chain")
+  assert await engine.prompt(int, "the k", on=root) == 7
+  assert said(log, "chain") == chains and engine.module(root)["k"] == 7
+  assert [a for a in engine.transcript(root) if a[0] == "tell" and a[1] == "rung1"] == []

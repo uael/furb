@@ -728,6 +728,7 @@ def boot(record=(), **outside):
     if about in known and kind in ("started", "done"):
       taken.setdefault(about, False)
       kind == "done" and done.setdefault(about, words[0])
+    kind == "prefix" and [held.pop(x) for x in [*held] if x[0] == about]
     holds(scope(about), words[0] if kind == "prefix" else [a])
     log.append((a, ()))
     dispatch()
