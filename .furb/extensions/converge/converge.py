@@ -1,4 +1,5 @@
 import json
+import re
 
 CONVERGING = """converge(target) runs one loop toward the words of the owner, and nothing else: no spec, no design, no plan.
 A target is a dict: its name; words, the numbers of the issues of the owner in the private repository of the decisions, whose bodies and comments are his ruling as they stand; paths, the files whose change it judges; capture(target, sha, out), the command that writes its captures at a sha as PNG files in out; checks, the commands that must pass at that sha; owners, the keys of the items of the round whose workers own its parts; and thread, the thread of its items.
@@ -247,9 +248,13 @@ def judges(target: dict, brief: str, lines: list[str], label: str) -> list[str]:
       where = str(quietly(chain, f"converge/{target['name']}/{label}"))
       quietly(rung, f"actor = {actor!r}", on=where)
       quietly(grant, EACH, on=where)
-      text = brief.replace("{captures}", "\n\n".join(lines[at : at + BATCH]))
+      text = safe(brief.replace("{captures}", "\n\n".join(lines[at : at + BATCH])))
       asked.append(str(quietly(prompt, list[tuple[str, str, str]], text, to=actor, on=where)))
   return asked
+
+
+def safe(text: str) -> str:
+  return re.sub(r"\n\n(?=#\S)", "\n\n ", text)
 
 
 def plain(text: str) -> str:
@@ -309,6 +314,7 @@ def stepped(target: dict, book: dict, gaps: list[list[str]], taken: dict[str, st
     ("{gaps}", listed(gaps, taken)),
   ):
     text = text.replace(key, value)
+  text = safe(text)
   owners = [w for w, key in c["working"].items() if key in target["owners"] and not over(w)]
   if owners:
     for w in owners:
@@ -443,6 +449,7 @@ async def screened(target: dict, book: dict, job: dict, gaps: list[list[str]], w
     f" with the label hold until a head shows none of the gaps below. Fix them, push, and leave the label: converge"
     f" takes it off itself.\n\n<words>\n{words}\n</words>\n\nThe gaps:\n\n{listed(gaps, job['taken'])}"
   )
+  told = safe(told)
   pr = c["prs"].get(n)
   own = c["owner_of"](pr) if pr else ""
   if own:

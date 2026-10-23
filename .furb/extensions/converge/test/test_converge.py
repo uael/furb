@@ -346,3 +346,12 @@ def test_the_list_of_the_captures_names_each_image_by_the_digest_of_its_bytes(tm
   digest = hashlib.sha256(b"\x89PNG one").hexdigest() + ".png"
   assert got.stdout.splitlines() == [f"S\tdemo/01-welcome\t{digest}", "F\tbuild\tcargo failed here"]
   assert (images / digest).read_bytes() == b"\x89PNG one"
+
+def test_a_message_to_a_model_has_no_blank_line_that_a_header_follows(world: World) -> None:
+  world.say(r"gh issue view", "## #17 I4. T\n\n> " + QUOTE + "\n\n## #18 U\n\n#393 is wrong")
+  world.judge = lambda message, to: gap()
+  world.round["working"]["prompt80"] = "tui-design"
+  world.run(1)
+  messages = [*world.judged(), *[m for shape, m, to, on in world.prompts if shape is None and on == "at-prompt80"]]
+  assert len(messages) == 3
+  assert not any(re.search(r"\n\n#\S", message) for message in messages)
