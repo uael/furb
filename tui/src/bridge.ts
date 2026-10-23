@@ -140,6 +140,8 @@ export class HostView extends EventEmitter implements Plain {
   /** The name of the model that a name gives in the roster or in the catalog, and nothing when it gives none. */
   model = (name: string) => this.ask<string | null>("library", "model", name);
   answer = (id: string, value: string) => this.ask<unknown>("console", "answer", id, value);
+  /** The words of the operator in place of each value that a question offers, which close it as Refused. */
+  decline = (id: string, words: string) => this.ask<unknown>("console", "decline", id, words);
   /** The notice that the operator read, which the TUI shows no more as unread. */
   dismiss = (id: string) => this.ask<unknown>("console", "dismiss", id);
   attachImage = (path: string) => this.ask<ImageAttachment>("session", "attachImage", path);
