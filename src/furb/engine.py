@@ -27,8 +27,7 @@ def ask(kind, on, *words):
 
 def span(lo: int, hi: int) -> Show:
   def picks(lines):
-    i, j = (x + len(lines) + 1 if x < 0 else x for x in (lo, hi))
-    return list(range(max(i, 1), min(j, len(lines)) + 1))
+    return list(range(1, len(lines) + 1)[lo - 1 if lo > 0 else lo : hi if hi >= 0 else hi + 1 or None])
 
   return picks
 
@@ -228,18 +227,11 @@ def prompt[T](shape: type[T] | object, message: str = "", to: str = "", on: str 
     if asks:
       yield "started", id
     yield told(id, "", bound(id, named), message=message, thread=thread)
-    if says:
-      yield "done", id, None
-      return
-    live = set()
-    while True:
-      if asks and not (live or paused(id)):
-        live.add(rung(to=to))
-      match (yield {id}):
-        case ("rung", r, *_):
-          live.add(r)
-        case ("done", r, *_):
-          live.discard(r)
+    while not says:
+      if asks and not (paused(id) or any(id in x[2:4] and not over(x[1]) for x in transcript(id, "rung"))):
+        rung(to=to)
+      yield {id}
+    yield "done", id, None
 
   return act("prompt", on, controlled(ear), named, message, to)
 
@@ -372,8 +364,8 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
             f"advance on {maker}",
             *[
               f"<s:doctrine>\n{taught}</s:doctrine>"
-              for taught in [offered(last[0], to, 3)]
-              if taught not in ["", *(offered(last[0], x[4], 3) for x in transcript(id, "reply"))]
+              for taught in {offered(last[0], to, 3)}
+              - {"", *(offered(last[0], x[4], 3) for x in transcript(id, "reply"))}
             ],
             share=filled(reply) or None,
           )
