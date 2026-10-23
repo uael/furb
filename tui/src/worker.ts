@@ -3,7 +3,7 @@ import { type FSWatcher, readFileSync, watch as watchFile } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { Engine, FileChange, SessionOptions, Turn } from "furb";
 import { Act, actorParts, ENGINE, model, models, retold, Session, setup } from "furb";
-import { measureOf } from "furb/life";
+import { type Measure, measureOf } from "furb/life";
 import type { HostState } from "./bridge.ts";
 import { type EngineOptions, roster } from "./models.ts";
 import { queueDispatches, queueHash } from "./queue.ts";
@@ -203,9 +203,18 @@ function scriptedSession(options: SessionOptions, watch = false): Session {
   });
 }
 
-/** The measure of each chain whose models answered, from the answers of the activity of a life. */
+/** How many answers the measure of each chain that the host holds counts. */
+const measured = new Map<string, number>();
+/** The measure of each chain whose models answered since the last state, from the answers of the activity of a life,
+ * which the host adds to the measures that it holds. */
 function measuresOf(answers: ReadonlyMap<string, readonly { actor: string; usage: readonly number[] }[]>) {
-  return Object.fromEntries([...answers].map(([chain, list]) => [chain, measureOf(list)]));
+  const changed: Record<string, Measure> = {};
+  for (const [chain, list] of answers)
+    if (measured.get(chain) !== list.length) {
+      measured.set(chain, list.length);
+      changed[chain] = measureOf(list);
+    }
+  return changed;
 }
 
 /** What a request of the session comes to. */
@@ -327,7 +336,7 @@ async function answer(data: { target: string; method: string; args: unknown[] })
   }
   if (data.target === "library" && data.method === "snapshot") {
     if (!snapshots) throw new Error("The session is not open.");
-    return snapshots.take(String(data.args[0]), Number(data.args[1]));
+    return snapshots.take(String(data.args[0]), Number(data.args[1]), Number(data.args[2] ?? 0));
   }
   const target = data.target === "session" ? session : data.target === "console" ? session?.console : engine;
   if (!target) throw new Error("The session is not open.");
@@ -342,7 +351,7 @@ function read(data: { target: string; method: string; args: unknown[] }): unknow
   const open = reader as Reader;
   const views = ["root", "standing", "program", "turns", "cwd", "inspect", "outcome", "transcript"];
   if (data.target === "library" && data.method === "snapshot")
-    return snapshots?.take(String(data.args[0]), Number(data.args[1]));
+    return snapshots?.take(String(data.args[0]), Number(data.args[1]), Number(data.args[2] ?? 0));
   if (data.target === "library" && data.method === "source") return ENGINE;
   if (data.target === "library" && data.method === "made") return open.reading?.made ?? null;
   if (data.target === "library" && data.method === "catalog") return [];
