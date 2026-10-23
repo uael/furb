@@ -7,7 +7,9 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use super::{Extension, Part, Places, configured, extensions, load, parts, word};
+use super::{
+  Extension, Part, Places, configured, definitions, enabled, extensions, load, parts, word,
+};
 use crate::{
   Ear, Engine, Fact, Object,
   ear::{ear, hear, say},
@@ -325,7 +327,7 @@ fn a_chain_takes_each_extension_at_its_birth_and_a_later_life_plays_the_same_run
     assert_eq!(played(&mut engine, &["chain1", "chain2", "chain3"]), expected);
   }
   let other = Extension { name: "other".to_owned(), word: "o = 1".to_owned(), life: String::new() };
-  let mut engine = lived(&at, vec![note("x = 0"), other]);
+  let mut engine = lived(&at, vec![note(NOTE), other]);
   let expected = [
     rung("rung1", "chain1", &full),
     rung("rung6", "chain1", "o = 1"),
@@ -337,6 +339,107 @@ fn a_chain_takes_each_extension_at_its_birth_and_a_later_life_plays_the_same_run
   assert_eq!(
     played(&mut engine, &["chain1", "chain2", "chain3"]),
     expected,
-    "the record wins for a name"
+    "a later life plays the same rungs again, and a new extension after them"
   );
+}
+
+#[test]
+fn the_definitions_of_a_word_are_its_imports_its_functions_its_classes_its_types_and_its_names_in_capitals()
+ {
+  let word = "import json\nfrom re import sub\n\nseen = []\nLIMIT = 2\nA = B = 3\nTOP: int = 4\nLATER: int\nmixed_Case = 5\n\n\
+              @staticmethod\ndef note(on=\"\"):\n  return read(\"note.txt\", on=on)\n\nclass Note:\n  x = 1\n\ntype Pair = \
+              tuple[int, int]\n\nnote()\nif LIMIT:\n  OTHER = 1";
+  assert_eq!(
+    definitions(word),
+    "import json\n\nfrom re import sub\n\nLIMIT = 2\n\nA = B = 3\n\nTOP: int = 4\n\n@staticmethod\ndef note(on=\"\"):\n  \
+     return read(\"note.txt\", on=on)\n\nclass Note:\n  x = 1\n\ntype Pair = tuple[int, int]"
+  );
+  assert_eq!(definitions("def broken(:"), "def broken(:", "a word that does not parse stays whole");
+}
+
+/// The chain and the word of each rung that the ear of the extensions made on these chains, in order.
+fn words(engine: &mut Engine, chains: &[&str]) -> Vec<(String, String)> {
+  played(engine, chains).into_iter().map(|(_, chain, word)| (chain, word)).collect()
+}
+
+/// The words of each fact enable that the record at a place keeps.
+fn enables(at: &Path) -> Vec<String> {
+  let kept = world::kept(at.join("record.jsonl")).unwrap();
+  let facts =
+    kept.iter().map(|one| Fact::of(crate::value::entry(&one.as_ref(), 0).unwrap()).unwrap());
+  let enabled = facts
+    .filter(|one| one.kind() == "enable")
+    .map(|one| one.word(1).unwrap().as_str().unwrap().to_owned());
+  enabled.collect()
+}
+
+#[test]
+fn a_later_life_given_a_new_word_reloads_it_and_each_chain_plays_its_definitions_alone_so_its_state_stays()
+ {
+  let at = place("reload");
+  fs::write(at.join("note.txt"), "noted\n").unwrap();
+  let first = format!("{NOTE}\n\nseen = ['first']");
+  let newer = "seen = []\n\ndef note(on=\"\"):\n  return read(\"other.txt\", on=on)\n\nLIMIT = 2";
+  let defined = "def note(on=\"\"):\n  return read(\"other.txt\", on=on)\n\nLIMIT = 2";
+  let full = format!("{first}\n\nnote()");
+  {
+    let mut engine = lived(&at, vec![note(&first)]);
+    engine.chain(verbs::Chain { label: Some("two".to_owned()), ..Default::default() }).unwrap();
+  }
+  let expected = [
+    ("chain1".to_owned(), full.clone()),
+    ("chain1".to_owned(), defined.to_owned()),
+    ("chain2".to_owned(), full.clone()),
+    ("chain2".to_owned(), defined.to_owned()),
+  ];
+  {
+    let mut engine = lived(&at, vec![note(newer)]);
+    assert_eq!(words(&mut engine, &["chain1", "chain2"]), expected);
+    let word = Some("write(Text('seen.txt', repr((seen, LIMIT))))".to_owned());
+    engine.rung(verbs::Rung { word, on: Some("chain1".to_owned()), ..Default::default() }).unwrap();
+    assert_eq!(
+      fs::read_to_string(at.join("seen.txt")).unwrap(),
+      "(['first'], 2)",
+      "a name of state keeps its value"
+    );
+  }
+  assert_eq!(enables(&at), [first.clone(), newer.to_owned()]);
+  let mut engine = lived(&at, vec![note(newer)]);
+  assert_eq!(
+    words(&mut engine, &["chain1", "chain2"]),
+    expected,
+    "a later life plays the same rungs again"
+  );
+  assert_eq!(enables(&at), [first, newer.to_owned()], "and enables nothing more");
+  let root =
+    engine.transcript(verbs::Transcript { on: Some("chain1".to_owned()), of: None }).unwrap();
+  assert_eq!(enabled(&root), [note(newer)], "the life runs the word that it enabled last");
+}
+
+#[test]
+fn a_write_of_the_life_in_the_folder_of_an_extension_that_a_config_turns_on_reloads_it() {
+  let at = place("rewrite");
+  fs::write(at.join("note.txt"), "noted\n").unwrap();
+  let root = at.join(".furb").join("extensions").join("note");
+  folder(&root, r#"{"name": "note", "word": "note.py", "life": "note()"}"#, NOTE);
+  config(&at.join(".furb").join("config.json"), r#"{"extensions": {"note": "extensions/note"}}"#);
+  let mut engine = lived(&at, vec![load("note", &root).unwrap()]);
+  let newer = "def note(on=\"\"):\n  return read(\"other.txt\", on=on)\n";
+  let file = root.join("note.py").display().to_string();
+  engine
+    .write(&crate::value::Text::new(file, newer), verbs::Write { on: Some("chain1".to_owned()) })
+    .unwrap();
+  let full = format!("{NOTE}\n\nnote()");
+  let expected = [("chain1".to_owned(), full), ("chain1".to_owned(), newer.trim_end().to_owned())];
+  assert_eq!(words(&mut engine, &["chain1"]), expected);
+  assert_eq!(enables(&at), [NOTE.to_owned(), newer.trim_end().to_owned()]);
+  fs::write(at.join("elsewhere.py"), "").unwrap();
+  let other = at.join("elsewhere.py").display().to_string();
+  engine
+    .write(
+      &crate::value::Text::new(other, "X = 1\n"),
+      verbs::Write { on: Some("chain1".to_owned()) },
+    )
+    .unwrap();
+  assert_eq!(enables(&at).len(), 2, "a write outside the folder of an extension reloads nothing");
 }
