@@ -254,6 +254,9 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 - `uv run python script/catalog.py`: make the snapshot of the catalog, `src/world/provider/catalog.json`, again from
   models.dev and from the data of pi-ai. A life refreshes its own copy of models.dev in the cache of furb once a
   day, and the newer of the two holds for each provider.
+- `uv run python script/links.py`: check that each link in a README that a package carries works on the page of the
+  package on PyPI, npm or crates.io, which read no relative link. It lists each package and its README from the
+  manifests, and fails on a relative link, which `--fix` writes as absolute, at `main` on GitHub. The hooks run it.
 - `bun install && bun run build`: install the TypeScript workspace, and build the N-API package that the TUI uses.
 - `bun run check`, `bun run lint` and `bun run test`: the type check, the lint, and the tests of the TypeScript
   side. Each test has thirty seconds, and the check and the lint have no limit. The tests read the configs and the
