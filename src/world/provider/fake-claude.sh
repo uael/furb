@@ -5,7 +5,7 @@
 # all. The word of a turn is the JSON text in the file word.N beside it, for the Nth turn of all, and else a close of
 # "reply n", for the nth turn of its process. A line that holds FAIL ends it with a failure, a line that holds WAIT
 # gets no answer, a line that holds LONG gets a line longer than a reader takes, a line that holds ERROR gets a result
-# that says an error, a line that holds BARE gets a result with no block before it, a line that holds THINK gets a
+# that says an error, a line that holds LIMIT gets, once, a result that says the usage limit ends a second from now, a line that holds BARE gets a result with no block before it, a line that holds THINK gets a
 # thought before the text, and a line that holds LOUD closes the stdout, writes more on the stderr than its pipe holds,
 # and ends it with a failure, and a line that holds GAP streams its text with its first part left out, and settles the
 # text whole. A line that holds LOOP gets a message that calls a tool before the last one, as a turn of many
@@ -45,6 +45,12 @@ while IFS= read -r line; do
     *ORPHAN*) sleep 60 & echo $! > "$here/orphan"; echo "orphan left" >&2; exit 4 ;;
     *LONG*) head -c 33554433 /dev/zero; echo; continue ;;
     *ERROR*) echo '{"type":"result","is_error":true,"result":"the model is overloaded"}'; continue ;;
+    *LIMIT*)
+      if [ ! -f "$here/limited" ]; then
+        touch "$here/limited"
+        echo "{\"type\":\"result\",\"is_error\":true,\"result\":\"Claude AI usage limit reached|$(( $(date +%s) + 1 ))\"}"
+        continue
+      fi ;;
     *BARE*) echo '{"type":"result","result":"close(1)","usage":{}}'; continue ;;
   esac
   n=$((n + 1))

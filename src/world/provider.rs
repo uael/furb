@@ -23,6 +23,7 @@ use std::{
 };
 
 use futures::{Stream, StreamExt, future::BoxFuture, stream};
+use jiff::{Timestamp, Zoned, civil, tz::TimeZone};
 use rig_core::{
   completion::{
     CompletionError, CompletionModel, CompletionRequest, CompletionResponse, FinishReason,
@@ -177,6 +178,69 @@ fn passing(no: &CompletionError) -> Option<String> {
     return None;
   };
   Some(why)
+}
+
+/// The wait before the claude command line is asked again when its message gives no moment for the end of a limit.
+const LIMIT_POLL: Duration = Duration::from_secs(300);
+
+/// The time after the end of a limit that the provider waits, so the call is not made before the limit lifts.
+const LIMIT_SLACK: Duration = Duration::from_secs(1);
+
+/// Whether a failure is the usage limit of the claude command line, and then the moment it ends, if its message names
+/// one. A limit passes at its reset, so the provider asks again then, however long that takes.
+fn limit(no: &CompletionError, now: &Zoned) -> Option<Option<Zoned>> {
+  let CompletionError::ProviderError(said) = no else { return None };
+  let lower = said.to_lowercase();
+  (lower.contains("usage limit reached") || (lower.contains("limit") && lower.contains("resets")))
+    .then(|| resets(said, now))
+}
+
+/// The moment a usage limit ends, from the message of the claude command line: `resets 5:10pm (Europe/Paris)`, with
+/// a day before the time, as `resets Oct 28, 3pm`, when it ends in a later day, a time with no zone being in the zone
+/// of the machine, or the older `usage limit reached|1760000000`. A time with no day is the next one after now.
+fn resets(said: &str, now: &Zoned) -> Option<Zoned> {
+  if let Some((_, epoch)) = said.rsplit_once('|')
+    && let Ok(second) = epoch.trim().parse::<i64>()
+  {
+    return Timestamp::from_second(second).ok().map(|at| at.to_zoned(now.time_zone().clone()));
+  }
+  let rest = said.split_once("resets")?.1.trim();
+  let (head, zone) = match rest.split_once('(') {
+    Some((head, zone)) => (head, TimeZone::get(zone.split_once(')')?.0.trim()).ok()?),
+    None => (rest, now.time_zone().clone()),
+  };
+  let now = now.with_time_zone(zone.clone());
+  let mut words: Vec<_> =
+    head.split([' ', ',']).filter(|one| !one.is_empty() && *one != "at").collect();
+  let time = words.pop()?.to_lowercase();
+  let (clock, pm) = match time.strip_suffix("pm") {
+    Some(clock) => (clock, true),
+    None => (time.strip_suffix("am")?, false),
+  };
+  let (hour, minute) = clock.split_once(':').unwrap_or((clock, "0"));
+  let (hour, minute): (i8, i8) = (hour.parse().ok()?, minute.parse().ok()?);
+  if !(1..=12).contains(&hour) {
+    return None;
+  }
+  let hour = hour % 12 + if pm { 12 } else { 0 };
+  let at = |date: civil::Date| date.at(hour, minute, 0, 0).to_zoned(zone.clone()).ok();
+  match words.as_slice() {
+    [] => {
+      let today = at(now.date())?;
+      if today > now { Some(today) } else { at(now.date().tomorrow().ok()?) }
+    }
+    [month, day] => {
+      const MONTHS: [&str; 12] =
+        ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+      let month =
+        i8::try_from(MONTHS.iter().position(|one| month.to_lowercase().starts_with(one))? + 1)
+          .ok()?;
+      let day = day.parse().ok()?;
+      let this = at(civil::Date::new(now.year(), month, day).ok()?)?;
+      if this > now { Some(this) } else { at(civil::Date::new(now.year() + 1, month, day).ok()?) }
+    }
+    _ => None,
+  }
 }
 
 /// A function of the host that stands in for a model: it is given a request, as JSON, and what it tells as it
@@ -510,9 +574,17 @@ impl Provider {
             continue;
           }
           // A retry of the call of the model of a reply that still stands, told to the host under its rung.
-          Next::Worked(Replied::Retried { id, retry }) => {
+          Next::Worked(Replied::Retried { id, retry, limit }) => {
             if let (Some(retries), Some(reply)) = (&retries, replies.get(&id)) {
               retries(&reply.rung, &reply.chain, &retry);
+            }
+            // A wait for the end of a limit lasts hours, so the chain is told once, before it.
+            if let (true, Some(reply)) = (limit, replies.get(&id)) {
+              let note = format!("#{} waits on {}: {}", reply.chain, reply.actor, retry.why);
+              say(
+                &mut co,
+                Fact::says("tell", &reply.chain, [Object::list([Object::string(&note)])]),
+              );
             }
             continue;
           }
@@ -590,7 +662,7 @@ struct Reply {
 /// came to.
 enum Replied {
   Wrote { id: String, text: String, thinking: String },
-  Retried { id: String, retry: Retry },
+  Retried { id: String, retry: Retry, limit: bool },
   Came { id: String, got: Result<Object, CompletionError> },
 }
 
@@ -868,7 +940,8 @@ fn ended(provider: &str, response: CompletionResponse) -> StreamFinal {
 /// The work of a reply: each part its model writes, each retry of the call of its model, then the turn of the model
 /// or why it answered nothing, in the order they came; and nothing more once the reply went, which ends the call of
 /// the model. A call that failed for a cause that passes is made again after the wait of its backoff, until its
-/// attempts are spent.
+/// attempts are spent. A call that a usage limit refused is made again at the reset that the limit names, however
+/// long that takes, and each such wait is no attempt.
 fn answered(
   id: String,
   asked: Result<(Model, Asked), CompletionError>,
@@ -881,17 +954,35 @@ fn answered(
     let got = async {
       let (model, asked) = asked?;
       let mut attempt = 1;
+      let mut limited = false;
       loop {
         let no = match (model.answers)(asked.clone()).await {
           Ok(Answer::Response(response)) => return turn(&model, &response),
           Ok(Answer::Turn(turn)) => return hosted(turn.as_ref()),
           Err(no) => no,
         };
+        if let Some(reset) = limit(&no, &Zoned::now()) {
+          let now = Zoned::now();
+          let wait = reset.as_ref().map_or(LIMIT_POLL, |at| {
+            let seconds = at.timestamp().as_second() - now.timestamp().as_second();
+            Duration::from_secs(u64::try_from(seconds).unwrap_or(0)) + LIMIT_SLACK
+          });
+          // The call that follows the end of a limit and meets it again waits a short time, not the next day.
+          let wait = if limited { wait.min(LIMIT_POLL) } else { wait };
+          let until =
+            reset.map_or(String::new(), |at| at.strftime(" until %Y-%m-%d %H:%M (%Q)").to_string());
+          let why = format!("usage limit{until}");
+          let retry = Retry { attempt: attempt + 1, most: backoff.most, wait, why };
+          let _ = tells.send(Replied::Retried { id: id.clone(), retry, limit: !limited });
+          limited = true;
+          tokio::time::sleep(wait).await;
+          continue;
+        }
         let Some(why) = passing(&no).filter(|_| attempt < backoff.most) else { return Err(no) };
         attempt += 1;
         let wait = backoff.wait(attempt);
         let retry = Retry { attempt, most: backoff.most, wait, why };
-        let _ = tells.send(Replied::Retried { id: id.clone(), retry });
+        let _ = tells.send(Replied::Retried { id: id.clone(), retry, limit: false });
         tokio::time::sleep(wait).await;
       }
     };
