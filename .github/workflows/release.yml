@@ -35,10 +35,10 @@ jobs:
           manifest-file: .release-please-manifest.json
       # The pull request of release-please changes the version in each manifest, and in Cargo.lock and uv.lock, and
       # bun.lock follows here, since it is no file that release-please reads. A pull request that the token of a
-      # workflow opens starts no gates, so the job starts them by hand on its branch, and their checks stand on its
-      # head. Each step after release-please runs only when release-please succeeded, and it reads the pull request
-      # through `|| '{}'`, since a failed or skipped step gives an empty output, which fromJSON refuses, and the runner
-      # reads the template of a step even when its condition skips it.
+      # workflow opens starts no gates, so the job starts them and the check of its title by hand on its branch, and
+      # their checks stand on its head. Each step after release-please runs only when release-please succeeded, and it
+      # reads the pull request through `|| '{}'`, since a failed or skipped step gives an empty output, which fromJSON
+      # refuses, and the runner reads the template of a step even when its condition skips it.
       - if: steps.release.outcome == 'success' && steps.release.outputs.prs_created == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -60,6 +60,7 @@ jobs:
             git push origin "HEAD:$BRANCH"
           fi
           gh workflow run gates.yml --ref "$BRANCH"
+          gh workflow run titles.yml --ref "$BRANCH"
       - if: steps.release.outcome == 'success' && steps.release.outputs.release_created == 'true'
         env:
           TAG: ${{ steps.release.outputs.tag_name }}
