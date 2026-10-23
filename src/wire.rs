@@ -6,7 +6,7 @@
 
 use crate::{
   Fault, Object, ObjectRef, Text,
-  value::{IS, marked},
+  value::{DEEPEST, IS, marked},
 };
 use monty_types::unstable::{self, MontyGraph, MontyNode, NodeId};
 use serde_json::{Value, json, value::RawValue};
@@ -200,10 +200,10 @@ pub(crate) fn record(value: ObjectRef<'_>) -> Value {
 /// Plain data crosses as itself. A value that JSON holds only in part crosses as a map that names its type under
 /// `is` and holds under `args` what that type makes it again from, as a fault does, so it comes back in whole: an
 /// int past the safe range, a float that is not finite, a map with a key that is no string. Anything else, and a
-/// value past 64 levels, crosses as python shows it, as the Python door does.
+/// part past the levels that a host is given, `DEEPEST`, crosses as python shows it, as the Python door gives it.
 fn outward_at(value: ObjectRef<'_>, depth: usize, durable: bool) -> Value {
   let mark = |name: &str, args: Value| json!({"is": name, "args": [args]});
-  if depth > 64 {
+  if depth >= DEEPEST {
     return json!(value.py_repr());
   }
   if let Some(text) = Text::of(value) {
