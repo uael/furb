@@ -437,6 +437,21 @@ export interface Outcome {
 }
 
 /**
+ * The part of an extension that a TUI loads: the name of the extension, and the path of its module of TypeScript,
+ * which the manifest names under `tui`, beside the word.
+ */
+export interface Part {
+  name: string
+  file: string
+}
+
+/**
+ * The part for a TUI of each extension that a life in the directory of a project runs and whose manifest names
+ * one, as the configs of the user and of the project say it now, which a TUI loads beside the life.
+ */
+export declare function parts(project: string): Array<Part>
+
+/**
  * A provider of the network as a first run checks it: its name, the names of its credential in the environment, and
  * how many of its models the catalog offers.
  */
