@@ -49,8 +49,20 @@ export function App() {
   useEffect(() => {
     if (!tauri || !whole) return;
     const counts = { chains: moment.chains.length, threads: moment.threads.length, acts: moment.acts.length };
-    const frame = requestAnimationFrame(() => void core("drew", counts).catch(() => undefined));
-    return () => cancelAnimationFrame(frame);
+    // WebKit draws no frame in a window that is hidden or behind others, and runs no callback of a frame there, so a
+    // timer tells the core too, whichever comes first, and a check ends in every run.
+    let told = false;
+    const tell = () => {
+      if (told) return;
+      told = true;
+      void core("drew", counts).catch(() => undefined);
+    };
+    const frame = requestAnimationFrame(tell);
+    const timer = setTimeout(tell, 500);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+    };
   }, [whole, moment.chains.length, moment.threads.length, moment.acts.length]);
   if (!life || picker) return <Picker held={held} onBack={life ? () => setPicker(false) : undefined} />;
   const pick = (id: string) => {

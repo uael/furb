@@ -49,11 +49,16 @@ The owner chose the stack: Tauri 2, with a UI of web components.
 - The window holds the acts in a map that grows in place, and derives its views once a second while the host still
   opens a life, so a large record opens light. Each act of a command that runs carries the tail of its output, as the
   rows of the TUI do, and a read or a write leaves its text out.
-- `furb-gui --check --record RECORD` ends the app once its window drew the whole life, and prints the count of its
-  chains, its threads and its acts. A check keeps the list of its projects in a folder of its own, so the list of the
-  operator stays as it is. It fails after 600 seconds. The test `gui/src-tauri/tests/check.rs` runs it on the record
-  that `FURB_RECORD` names, compares the counts with those of `furb facts` on the same record, and holds the
-  WebContent of the window under 300 MB.
+- `furb-gui --check --record RECORD` ends the app once its window drew the whole life, and prints the process of its
+  web view, which the private property `_webProcessIdentifier` of WKWebView gives, and the count of its chains, its
+  threads and its acts. A check keeps the list of its projects in a folder of its own, so the list of the operator
+  stays as it is, and enables no extension that the record does not run, so the life that it draws is the one of the
+  record. The window tells the core what it drew at its next frame, or after 500 milliseconds when no frame comes,
+  since WebKit draws no frame in a window that is hidden or behind others. A check fails after 600 seconds.
+- The test `gui/src-tauri/tests/check.rs` runs a check on a copy of the record of a life of the demo in
+  `tests/fixtures`, or on the record that `FURB_RECORD` names, compares the counts with those of `furb facts` on the
+  same record, and holds the footprint of the web view of the app, and of no other WebContent of the machine, under
+  300 MB. A second test runs a check in a window that `FURB_GUI_HIDDEN` hides. The gates run both on macOS.
 - `bun run web` shows the UI in a browser, on a host of its own, and `bun run shots` drives it in WebKit for the
   captures.
 
