@@ -84,8 +84,11 @@ gives, `bind/typescript/src/framework.ts`, and `src/life/host.rs`. `test/outside
 `bind/typescript/test/examples.test.ts` and `tests/examples.rs` run each example as a process, on a claude command
 line that answers from a script.
 
-`docs/developer-guide.md` is the guide for a person who changes the repository: the tools to install, how a word
-runs, and the files of each part. For everything else, it links to this file.
+`CONTRIBUTING.md` is the guide for a person who changes the repository: the tools to install, how to set up a clone,
+how a word runs, the files of each part, the gates, and how a pull request lands. For everything else, it links to
+this file. `.github/pull_request_template.md` holds the rules of a pull request, and `.github/ISSUE_TEMPLATE/` the
+forms of an issue: a defect and a request. `CHANGELOG.md` holds the releases, which release-please writes above the
+history of furb before 0.2.0.
 
 ## The contract
 
@@ -295,14 +298,8 @@ Write all prose in Simplified Technical English, for a general non-technical aud
 https://www.asd-ste100.org/, with no em dash and no en dash. This holds for everything you write: a message, a
 commit, a comment, a docstring, a document.
 
-The title of each pull request starts with a type of conventional commits, then its sentence: `feat: ` for what a
-user can do that he could not, `fix: ` for what was wrong, `perf: ` for what is faster or smaller, and `chore: ` for a
-change that no user of a package sees, as `fix: Reap the shell of a command that drops before its exit`. A squash
-merge carries the title into the commit on main, and release-please reads the types of those commits: below version
-1.0, a `feat:` raises the minor version of the next release and a `fix:` or a `perf:` its patch, and `CHANGELOG.md`
-lists each under its type. A `chore:` raises nothing and stays out of the changelog. A type may take a scope in
-parentheses and a `!` for a breaking change, as `feat(tui)!: `, and the sentence starts with a capital letter. The
-check `the title`, in `.github/workflows/titles.yml`, fails each other title, at each change of the pull request and
-at each edit of its title: `python3 script/title.py "<title>"` runs it on a title. The types have one home, the
-`changelog-sections` of `release-please-config.json`, which the check reads. The commits before this rule stay as
-they are.
+Each pull request follows `.github/pull_request_template.md`, the one home of the rules of a pull request: its scope,
+its title, which release-please reads, and its body. Read it whole before you open one. The check `the title`, in
+`.github/workflows/titles.yml`, runs `script/title.py` on each title, at each change of the pull request and at each
+edit of its title, and reads the types from their one home, the `changelog-sections` of `release-please-config.json`.
+The commits before this rule stay as they are.
