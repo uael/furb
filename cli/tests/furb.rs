@@ -268,6 +268,21 @@ fn a_checkpoint_at_the_tip_of_a_record_carries_the_module_of_its_root_to_the_nex
 }
 
 #[test]
+fn a_word_run_on_a_record_that_holds_pending_work_names_that_work_and_wakes_none_of_it() {
+  let yard = Yard::new("pending");
+  // The fake claude gives no answer to a turn that holds WAIT, so the reply runs until the life ends.
+  let said = printed(yard.kept(&["run", "prompt(str, 'WAIT', on=chain('w'))\nclose(1)"]), "");
+  assert_eq!(said, "1\n");
+  let output = ran(yard.kept(&["run", "close(2)"]), "");
+  assert!(output.status.success());
+  assert_eq!(String::from_utf8_lossy(&output.stdout), "2\n");
+  let err = String::from_utf8_lossy(&output.stderr);
+  assert!(err.starts_with("furb: an earlier life left "), "{err}");
+  assert!(err.contains("prompt1 on chain2") && err.contains("as wake(\"chain2\")"), "{err}");
+  assert_eq!(yard.answered(), 0, "the reply that waits is not asked again");
+}
+
+#[test]
 fn a_record_is_printed_as_facts_each_after_the_number_of_its_line() {
   let yard = Yard::new("facts");
   fs::create_dir_all(yard.at.join(".furb")).expect("the folder of the project");

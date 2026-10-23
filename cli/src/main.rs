@@ -129,7 +129,8 @@ enum Command {
     #[arg(long)]
     chain: Option<String>,
   },
-  /// Run a word the caller wrote on the root chain and print what it gave.
+  /// Run a word the caller wrote on the root chain and print what it gave. It wakes no work that an earlier life
+  /// left pending, and names that work on stderr.
   Run {
     /// The python of the word.
     word: String,
@@ -316,6 +317,19 @@ fn facts(record: &Path, act: Option<&str>, chain: Option<&str>) -> Result<(), St
 /// One word its caller wrote, run as a rung on the root of a life, awaited for what the word gave, as python shows it.
 fn run(opening: Opening, word: String) -> Result<(), String> {
   let mut life = Life::lived(opening)?;
+  let mut pending = Vec::new();
+  for (id, _) in life.engine.pending().map_err(|no| no.to_string())? {
+    let act = life.engine.get(&id).map_err(|no| no.to_string())?;
+    pending.push((id, act.map(|one| one.on().to_owned()).unwrap_or_default()));
+  }
+  if let Some((_, chain)) = pending.first() {
+    let named: Vec<String> = pending.iter().map(|(id, on)| format!("{id} on {on}")).collect();
+    eprintln!(
+      "furb: an earlier life left {} pending, and it runs again only at a wake: from the word, as wake({chain:?}), \
+       from the TUI, or from `furb --mode rpc`.",
+      named.join(", ")
+    );
+  }
   let with = verbs::Rung { word: Some(word), on: Some(life.root.clone()), ..Default::default() };
   let id = life.engine.rung(with).map_err(|no| no.to_string())?.id().to_owned();
   println!("{}", life.settled(&id)?.py_repr());

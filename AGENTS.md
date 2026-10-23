@@ -250,6 +250,10 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 - `uv run python script/play.py`: one real life that uses every part of the runtime, and a second life on its
   record.
 - `uv run python script/deepswe.py`: the DeepSWE rig, which `script/AGENTS.md` says how to run.
+- `uv run python script/bench/onelife.py`: the proof of one life. It builds the command line three times, with the
+  engine changed twice in a way that makes the same acts, and runs one record over the three builds on a claude that
+  answers from a script: the record goes on with no drift, reloads an extension and compacts a chain in place, and
+  no chain is lost and no command or turn runs twice. Its docstring says how to run it.
 - `uv run python script/bench/replay.py <task> --out <directory>`: the bench of replay. One life of the local model
   works a task of DeepSWE, later lives open on its record, one more opens after a change of the World, and Claude
   Code on the same model works the task as the baseline. Its docstring says how to run it.
@@ -280,14 +284,17 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 - `bun run demo` and `bun run tui`: the TUI on the demo session, which asks no model, or on a real life.
 - `bun run docs`: write the tables of keys and commands in `tui/README.md` again from `tui/src/keys.ts` and
   `tui/src/commands.ts`.
-- `bun run bench`: the speed of the TUI on a recorded life of 30000 facts: the first frame, cold and warm, and the frames
-  while the feed scrolls and a command streams. It fails over its budget, which the gates hold on Linux. Each budget
-  is set from a measure of the machine with no code of furb, so that it holds on a fast runner and on a slow one: the
-  pace, the time that the machine takes to parse each fact of the record, and the frames that the renderer draws with
-  nothing to show. The warm first frame takes less than 32 paces, the renderer draws at least 95 in each hundred of
-  the frames that it draws with nothing to show, and the 95th percentile of the frames takes less than a pace and
-  less than 16.7 ms. `FURB_BENCH_JSON` names a file that takes the measures of each run, from which the budgets are set
-  again.
+- `bun run bench`: the speed of the TUI on a recorded life at the weight of a real record, about 2.6 KB for each fact:
+  one of about 160000 facts and one of a tenth of that. It measures what a new fact costs in each life, a line of a
+  command, a new act and a token of a model, and in the long life the first frame, cold and warm, the frames while the
+  feed scrolls and a command streams, and the memory of a process that opened the life. It fails over its budget,
+  which the gates hold on Linux. Each budget is set from a measure of the machine with no code of furb, so that it holds
+  on a fast runner and on a slow one: the pace, the time that the machine takes to parse the facts of the long life,
+  and the frames that the renderer draws with nothing to show. The warm first frame takes less than 32 paces, the
+  renderer draws at least 95 in each hundred of the frames that it draws with nothing to show, the 95th percentile of
+  the frames takes less than a pace and less than 16.7 ms, and a new fact costs in the long life at most twice what it
+  costs in the short one, or 2 ms. `FURB_BENCH_JSON` names a file that takes the measures of each run, from which the
+  budgets are set again, and `FURB_BENCH_FACTS` sets the size of the long life.
 - `bun run screenshots` and `bun run animation`: capture `docs/screenshots/` and `docs/furb.gif` again from the
   real renderer. Run both after a change that a screen shows, and read each capture. One run of each at a time holds
   its home in `/tmp`, and a second run waits until the first ends. A screen that does not come in three minutes ends

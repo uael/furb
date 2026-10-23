@@ -93,14 +93,38 @@ test("a take reads the program, the turns and the directory of a chain again onc
     calls.length = 0;
     const view = snapshots.take(engine.root);
     expect(calls.filter((name) => name === "turns")).toEqual(["turns"]);
-    expect(Object.values(view.program)).toContain("answer = 17");
-    expect(view.turns.map(([, python]) => python).join("\n")).toContain("answer = 17");
-    expect(view.turns).toEqual(engine.turns({ on: engine.root }));
+    expect(Object.values(view.program?.words ?? {})).toContain("answer = 17");
+    expect(view.turns.list.map(([, python]) => python).join("\n")).toContain("answer = 17");
+    expect(view.turns).toEqual({ from: 0, list: engine.turns({ on: engine.root }) });
     // A cd the operator asks is of the moment, and the engine keeps no answer of it, so the cd is a rung, as /cd is.
     await mkdir(join(cwd, "sub"));
     await engine.rung({ word: 'cd("sub")', on: engine.root });
     await Promise.resolve();
     expect(snapshots.take(engine.root).directory).toBe(join(cwd, "sub"));
+  }));
+
+test("a take for the host that holds the last snapshot carries only what changed of the chain since then", () =>
+  withLife(async ({ engine, snapshots }) => {
+    const first = snapshots.take(engine.root);
+    await engine.rung({ word: "answer = 17", on: engine.root });
+    await Promise.resolve();
+    const second = snapshots.take(engine.root, first.count, first.mark);
+    const turns = engine.turns({ on: engine.root });
+    expect(second.roster).toBeUndefined();
+    expect(second.program?.whole).toBe(false);
+    expect(Object.values(second.program?.words ?? {})).toContain("answer = 17");
+    expect({ ...first.program?.words, ...second.program?.words }).toEqual(
+      engine.program({ on: engine.root }) as Record<string, string>,
+    );
+    expect([...first.turns.list.slice(0, second.turns.from), ...second.turns.list]).toEqual(turns);
+    const third = snapshots.take(engine.root, second.count, second.mark);
+    expect(third.program).toBeUndefined();
+    expect(third.turns).toEqual({ from: turns.length, list: [] });
+    // A host that does not hold the last snapshot takes the chain whole.
+    const again = snapshots.take(engine.root, second.count, first.mark);
+    expect(again.roster).toBeDefined();
+    expect(again.program?.whole).toBe(true);
+    expect(again.turns).toEqual({ from: 0, list: turns });
   }));
 
 test("an act of a kind an extension defines joins the act table, and what it tells reaches the view", () =>
@@ -119,8 +143,8 @@ test("an act of a kind an extension defines joins the act table, and what it tel
     const view = snapshots.take(engine.root);
     const note = view.acts.find((act) => act.kind === "note");
     expect(note).toMatchObject({ on: engine.root, done: true, value: "noted" });
-    expect(view.turns.map(([, python]) => python).join("\n")).toContain("# hello");
-    expect(view.turns).toEqual(engine.turns({ on: engine.root }));
+    expect(view.turns.list.map(([, python]) => python).join("\n")).toContain("# hello");
+    expect(view.turns).toEqual({ from: 0, list: engine.turns({ on: engine.root }) });
   }));
 
 test("a take carries the acts that changed after the count it is given, and every act after the table is derived again", () =>
@@ -151,7 +175,7 @@ test("a new standing drops the roster, the directory and the actor that the view
   withLife(
     async ({ engine, snapshots, cwd }) => {
       const before = snapshots.take(engine.root);
-      expect([before.roster.map(([name]) => name), before.directory, before.actor]).toEqual([
+      expect([before.roster?.map(([name]) => name), before.directory, before.actor]).toEqual([
         ["claude-cli:sonnet", "operator"],
         cwd,
         "claude-cli:sonnet/high",

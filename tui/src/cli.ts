@@ -8,9 +8,10 @@ import { efforts, furbDirectory, onConsoleEnd } from "furb";
 import { follow } from "./app.ts";
 import { demoDirectory, removeDemoDirectories } from "./demo.ts";
 import type { EngineOptions } from "./models.ts";
+import { opening } from "./opening.ts";
 import { isLifeView, lifeViews } from "./overview.ts";
 import { Preferences } from "./preferences.ts";
-import { colorless, fps, own, paletteOf, terminalPalette } from "./theme.ts";
+import { colorless, fps, own, paletteOf, terminalPalette, themeOf } from "./theme.ts";
 import { Workspaces } from "./workspaces.ts";
 
 const { values } = parseArgs({
@@ -71,6 +72,31 @@ const directory =
     ? await demoDirectory()
     : resolve(values.cwd ?? savedDirectory ?? process.cwd());
 if (values.demo) await mkdir(directory, { recursive: true });
+const shown = themeOf(preferences.theme, preferences.terminalMode);
+const renderer = await createCliRenderer({
+  exitOnCtrlC: false,
+  // The TUI ends on a signal by its own quit, since the view saves its draft before the renderer goes.
+  exitSignals: [],
+  backgroundColor: colorless.on ? RGBA.defaultBackground() : paletteOf(shown).background,
+  targetFps: fps,
+  useMouse: true,
+});
+// The first frame shows what opens before the record is read, which takes seconds for a long life.
+const opened = await opening(renderer, {
+  directory,
+  record: record && resolve(record),
+  name: shown,
+  quit: () => {
+    renderer.destroy();
+    process.exit(130);
+  },
+});
+// The theme that follows the terminal takes the colors that the terminal says, and a terminal that says none, or does
+// not answer in time, keeps the theme of its mode. The terminal answers while the life opens.
+const palette =
+  preferences.theme === "terminal" && !colorless.on
+    ? renderer.getPalette({ timeout: 300 }).catch(() => undefined)
+    : undefined;
 // Each life runs in a host of its own, which outlives the window, but the demo of a project that goes with the window.
 const engineOptions: EngineOptions = {
   model: values.model,
@@ -95,27 +121,22 @@ try {
     await library.import(recordedLife, group);
 } catch (error) {
   // A life that does not open ends the TUI with what it said, and with no trace of the stack.
+  renderer.destroy();
   console.error(`furb-tui: ${error instanceof Error ? error.message : String(error)}`);
   await library.dispose();
   process.exit(1);
 }
 const initial = library.current?.session;
-if (!initial) throw new Error("The session did not open.");
-const renderer = await createCliRenderer({
-  exitOnCtrlC: false,
-  // The TUI ends on a signal by its own quit, since the view saves its draft before the renderer goes.
-  exitSignals: [],
-  backgroundColor: colorless.on ? RGBA.defaultBackground() : paletteOf(initial.theme).background,
-  targetFps: fps,
-  useMouse: true,
-});
-// The theme that follows the terminal takes the colors that the terminal says, and a terminal that says none, or does
-// not answer in time, keeps the theme of its mode.
-if (initial.preferences.theme === "terminal" && !colorless.on) {
-  const colors = await renderer.getPalette({ timeout: 300 }).catch(() => undefined);
+if (!initial) {
+  renderer.destroy();
+  throw new Error("The session did not open.");
+}
+if (palette) {
+  const colors = await palette;
   own.palette = terminalPalette(colors?.defaultForeground ?? null, colors?.defaultBackground ?? null);
   if (own.palette) renderer.setBackgroundColor(own.palette.background);
 }
+opened();
 let closing = false;
 /** Each step runs whatever the steps before it came to, so that the sessions close even when the terminal is gone. The
  * window detaches from each life, and a life in a host of its own goes on, unless end is set, which ends each life. */
