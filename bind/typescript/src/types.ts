@@ -13,6 +13,16 @@ export function actorParts(actor: string, models: readonly string[] = []): { mod
 }
 
 export type Turn = ReturnType<Engine["turns"]>[number];
+/** One actor of the roster, as the World offers it: its name, its efforts, its window, and the doctrine of a model
+ * that reads one. */
+export type Actor = [name: string, efforts: string[], window: number, doctrine?: string];
+/** What the chains stand on, as standing gives it: the roster, the directory and the default actor, or nothing
+ * before the first stand. */
+export type Standing = [roster: Actor[], directory: string, actor: string] | [];
+/** The standing of an engine, in the one shape that every reader of it takes. */
+export function standingOf(engine: Pick<Engine, "standing">): Standing {
+  return engine.standing() as Standing;
+}
 export type Fact = ReturnType<Engine["say"]>;
 /** One entry of the record: one fact, an act among them. */
 export type Entry = [Fact];

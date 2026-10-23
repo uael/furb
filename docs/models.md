@@ -77,6 +77,11 @@ hold, and for a server that did not answer.
 When a call to a model fails for a cause that passes, such as a lost connection or a provider that is too busy, furb
 asks again after a wait that doubles each time, up to ten attempts. The TUI counts the wait down in its footer.
 
+When the claude command line says that you hit its usage limit, furb does not stop the chain. It tells the chain that
+it waits and until when, as `#chain1 waits on claude-cli:opus/high: usage limit until 2026-10-23 17:10 (Europe/Paris)`.
+It asks again when the limit resets, and the work goes on with no act from you. This wait is no attempt, and it has no
+end. A limit that still stands after its reset makes furb ask again every five minutes at most.
+
 The claude command line can be missing for a moment while it updates itself. Then a turn tries it again for 60
 seconds, or for the seconds that `FURB_CLAUDE_GONE` gives. A turn that makes no progress for 15 minutes fails, or
 after the seconds that `FURB_CLAUDE_STALL` gives.

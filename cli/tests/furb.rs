@@ -255,6 +255,19 @@ fn a_command_on_a_record_of_another_version_runs_the_build_of_that_version_that_
 }
 
 #[test]
+fn a_checkpoint_at_the_tip_of_a_record_carries_the_module_of_its_root_to_the_next_life() {
+  let yard = Yard::new("checkpoint");
+  assert_eq!(printed(yard.kept(&["run", "kept = [1, 2]\nclose(len(kept))"]), ""), "2\n");
+  printed(yard.furb(&["checkpoint", "--record", yard.record().to_str().unwrap()]), "");
+  let record = fs::read_to_string(yard.record()).unwrap();
+  assert!(
+    record.lines().last().unwrap().starts_with("[[\"checkpoint\",\"chain1\",\"store\","),
+    "{record}"
+  );
+  assert_eq!(printed(yard.kept(&["run", "close(kept + [3])"]), ""), "[1, 2, 3]\n");
+}
+
+#[test]
 fn a_word_run_on_a_record_that_holds_pending_work_names_that_work_and_wakes_none_of_it() {
   let yard = Yard::new("pending");
   // The fake claude gives no answer to a turn that holds WAIT, so the reply runs until the life ends.

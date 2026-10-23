@@ -15,7 +15,7 @@ export {
   type SessionOptions,
   type Stream,
 } from "./session.js";
-export type { Entry, Fact, Paragraph, Turn } from "./types.js";
+export type { Actor, Entry, Fact, Paragraph, Standing, Turn } from "./types.js";
 export {
   actorParts,
   bound,
@@ -27,4 +27,5 @@ export {
   plain,
   questionKind,
   safeText,
+  standingOf,
 } from "./types.js";

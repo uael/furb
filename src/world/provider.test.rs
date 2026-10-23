@@ -26,9 +26,11 @@ use rig_core::{
 };
 use serde_json::{Value, json};
 
+use jiff::{Zoned, civil};
+
 use super::{
   Backoff, Hosted, Model, Provider, Retries, Retry, Thinking, Writes, catalog::Catalog, images,
-  local::Server, passing, thinking, unfenced,
+  limit, local::Server, passing, resets, thinking, unfenced,
 };
 use crate::{Act, Ear, Engine, Fact, Object, SYSTEM, verbs, world};
 
@@ -1272,4 +1274,126 @@ fn the_fence_that_opens_a_text_goes_with_its_closing_fence_at_its_end_and_any_ot
     Some("x = '<b>'\n<b>\nclose(x)"),
     "a line of another tag stays"
   );
+}
+
+#[test]
+fn a_call_that_the_usage_limit_refuses_waits_for_its_reset_and_the_chain_is_told_until_when() {
+  let soon = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .expect("a time after the epoch")
+    .as_secs()
+    + 1;
+  let (host, calls) = failing(&[&format!("Claude AI usage limit reached|{soon}")]);
+  let (retries, told) = retried();
+  let model = scripted(&MockCompletionModel::default()).hosted(host);
+  let provider = Provider::new(yard("limit").display().to_string(), vec![model]).retries(retries);
+  let mut engine = lived(provider);
+  let id = asked(&mut engine);
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  assert_eq!(got.as_ref().as_int(), Some(7));
+  assert_eq!(calls.load(Ordering::SeqCst), 2);
+  let heard = told.lock().expect("the retries told").clone();
+  assert_eq!(heard.len(), 1);
+  assert_eq!((heard[0].2.attempt, heard[0].2.most), (2, 10));
+  assert!(heard[0].2.why.starts_with("usage limit until "), "{}", heard[0].2.why);
+  assert!(heard[0].2.wait <= Duration::from_secs(3), "{:?}", heard[0].2.wait);
+  let root = engine.root().to_owned();
+  let facts = said(&mut engine);
+  let kinds: Vec<_> =
+    facts.iter().map(|(kind, about, _)| (kind.as_str(), about.as_str())).collect();
+  assert_eq!(kinds, [("started", "reply1"), ("tell", root.as_str()), ("done", "reply1")]);
+  let note = &facts[1].2;
+  assert!(note.contains(&format!("#{root} waits on m/high: usage limit until ")), "{note}");
+}
+
+/// A moment in Paris.
+fn paris(month: i8, day: i8, hour: i8, minute: i8) -> Zoned {
+  civil::date(2026, month, day)
+    .at(hour, minute, 0, 0)
+    .in_tz("Europe/Paris")
+    .expect("a moment in Paris")
+}
+
+#[test]
+fn a_usage_limit_ends_at_the_next_time_its_message_names_in_its_zone() {
+  let said = "You've hit your session limit \u{b7} resets 5:10pm (Europe/Paris)";
+  assert_eq!(resets(said, &paris(10, 23, 16, 19)), Some(paris(10, 23, 17, 10)));
+  assert_eq!(resets(said, &paris(10, 23, 17, 11)), Some(paris(10, 24, 17, 10)));
+  let noon = "You've hit your limit \u{b7} resets 12am (Europe/Paris)";
+  assert_eq!(resets(noon, &paris(10, 23, 16, 19)), Some(paris(10, 24, 0, 0)));
+}
+
+#[test]
+fn a_usage_limit_ends_at_the_day_its_message_names() {
+  let said = "You've hit your weekly limit \u{b7} resets Oct 28, 3pm (Europe/Paris)";
+  assert_eq!(resets(said, &paris(10, 23, 16, 19)), Some(paris(10, 28, 15, 0)));
+  let past = "You've hit your weekly limit \u{b7} resets Oct 2 at 3pm (Europe/Paris)";
+  let next = civil::date(2027, 10, 2).at(15, 0, 0, 0).in_tz("Europe/Paris").expect("a moment");
+  assert_eq!(resets(past, &paris(10, 23, 16, 19)), Some(next));
+}
+
+#[test]
+fn a_usage_limit_ends_at_the_second_its_older_message_names() {
+  let said = "Claude AI usage limit reached|1792768200";
+  let at = resets(said, &paris(10, 23, 16, 19)).expect("a moment");
+  assert_eq!(at.timestamp().as_second(), 1_792_768_200);
+}
+
+#[test]
+fn a_usage_limit_whose_message_names_no_moment_has_none() {
+  let now = paris(10, 23, 16, 19);
+  assert_eq!(resets("You've hit your limit \u{b7} resets soon", &now), None);
+  assert_eq!(resets("You've hit your limit \u{b7} resets 5pm (Mars/Base)", &now), None);
+  assert_eq!(resets("You've hit your limit \u{b7} resets Mon 5pm", &now), None);
+}
+
+#[test]
+fn only_a_usage_limit_of_the_claude_command_line_is_a_limit_that_waits_for_its_reset() {
+  let now = paris(10, 23, 16, 19);
+  let failed = |why: &str| CompletionError::ProviderError(why.to_owned());
+  let said = failed("You've hit your session limit \u{b7} resets 5:10pm (Europe/Paris)");
+  assert_eq!(limit(&said, &now), Some(Some(paris(10, 23, 17, 10))));
+  assert_eq!(limit(&failed("You've hit your limit \u{b7} resets soon"), &now), Some(None));
+  assert_eq!(limit(&failed("429 rate limit exceeded"), &now), None);
+  assert_eq!(limit(&failed("boom"), &now), None);
+}
+
+#[test]
+fn a_limit_that_stands_after_its_reset_is_asked_again_soon_and_the_chain_is_told_once() {
+  let now = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .expect("a time after the epoch")
+    .as_secs();
+  let past = format!("Claude AI usage limit reached|{}", now - 3600);
+  let (host, calls) = failing(&[&past, &past]);
+  let (retries, told) = retried();
+  let model = scripted(&MockCompletionModel::default()).hosted(host);
+  let provider =
+    Provider::new(yard("limit-twice").display().to_string(), vec![model]).retries(retries);
+  let mut engine = lived(provider);
+  let id = asked(&mut engine);
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  assert_eq!(got.as_ref().as_int(), Some(7));
+  assert_eq!(calls.load(Ordering::SeqCst), 3);
+  assert_eq!(told.lock().expect("the retries told").len(), 2);
+  let kinds: Vec<_> = said(&mut engine).into_iter().map(|(kind, ..)| kind).collect();
+  assert_eq!(kinds, ["started", "tell", "done"]);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_claude_command_line_at_its_usage_limit_is_asked_again_at_the_reset_and_answers_with_no_pause()
+{
+  use super::claude::test::Yard;
+  let yard = Yard::new("limit");
+  let claude = yard.claude(10_000);
+  let (mut engine, _) = life("claude-limit", claude.models());
+  let root = engine.root().to_owned();
+  let with =
+    verbs::Prompt { message: Some("LIMIT task".into()), on: on(&root), ..Default::default() };
+  let act = engine.prompt(Object::string("str"), with).expect("a prompt is made");
+  assert_eq!(block_on(act).expect("the prompt is answered").py_repr(), "'reply 1'");
+  let kinds: Vec<_> = said(&mut engine).into_iter().map(|(kind, ..)| kind).collect();
+  assert_eq!(kinds, ["started", "tell", "done"]);
+  assert_eq!(yard.heard().len(), 2, "the reply asked the command line again after the reset");
 }
