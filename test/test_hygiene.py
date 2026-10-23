@@ -1,4 +1,4 @@
-"""The hygiene laws, which CLAUDE.md says: the contract and the suite agree, sentence for sentence."""
+"""The hygiene laws, which AGENTS.md says: the contract and the suite agree, sentence for sentence."""
 
 import ast
 import re

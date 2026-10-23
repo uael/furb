@@ -22,7 +22,7 @@ EXTENDING = (
 """EXTENDING is the line that the list of the skills holds of the skill that the extension carries."""
 
 
-SKILLED = (".furb/skills", ".claude/skills")
+SKILLED = (".furb/skills", ".agents/skills", ".claude/skills")
 """SKILLED is the folders of skills that the World finds in the working directory of a chain and in each folder above
 it."""
 
@@ -73,7 +73,7 @@ def extended(  # noqa: PLR0913
   return sand, life(sand, record, extensions=given, **({name: ear(str(at / "config"))} if ear else {}), files=files)[1]
 
 
-def noted(folder: Path, text: str, name: str = "CLAUDE.md") -> Path:
+def noted(folder: Path, text: str, name: str = "AGENTS.md") -> Path:
   """A memory file in a folder, which it makes with the folders above it, and the path of that file."""
   folder.mkdir(parents=True, exist_ok=True)
   (path := folder / name).write_text(text, encoding="utf-8", newline="")

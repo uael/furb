@@ -57,7 +57,7 @@ form, a folder with no manifest, a manifest of another name, and a missing word 
 
 ## How a life runs its extensions
 
-A life enables each extension by a fact, `enable`, which the record keeps. [`src/furb/CLAUDE.md`](../src/furb/CLAUDE.md)
+A life enables each extension by a fact, `enable`, which the record keeps. [`src/furb/AGENTS.md`](../src/furb/AGENTS.md)
 says what the fact means and when a life says it, under the names enable and life word and in its laws.
 The ear `extensions` of [`src/extension.rs`](../src/extension.rs) says the fact and plays it, and its documentation
 gives the shape of the fact. The extensions that a host gives the ear are those that the configs turn on. In the
@@ -73,14 +73,14 @@ journal answers again in a later life, so a replay is exact and the World is ask
 
 - `skills` defines `counted()`, which tells in one line how many skills the chain knows and that `skills()` lists
   them, and `skills()`, which reads `skills://`: one line for each skill that the World finds in
-  `.furb/skills` and `.claude/skills` of the working directory of the chain and of each folder above it, then in
+  `.furb/skills`, `.agents/skills` and `.claude/skills` of the working directory of the chain and of each folder above it, then in
   `skills` of the config directory. `skill(name)` reads the `SKILL.md` file of a skill. It carries one skill of its own, `extending`, which a
   skill of that name in a folder replaces: it shows a model, with an example each, how to extend furb by a def in a
   word and by an extension, and it points to this guide for the rest. Its life word is `counted()`.
 - `memory` defines `memory(path)`, which tells the chain the memory files that apply to a path: the memory of the
   user, in the config directory, then that of each folder from the root down to the working directory of the chain,
   then that of each folder under it down to the folder of the path, when the path is under it. The memory of a
-  folder is its `CLAUDE.md`, or its `AGENTS.md` when the folder holds no `CLAUDE.md`. A memory file enters the chain
+  folder is its `AGENTS.md`, or its `CLAUDE.md` when the folder holds no `AGENTS.md`. A memory file enters the chain
   whole the first time, and after that again whole, only when it changed. `remember()`
   is an act that tells the memory of the working directory when it is made, then the memory of the folder of each
   file that the chain reads, and the memory that changed at each stand. Its life word is `remember()`.
@@ -122,7 +122,7 @@ journal answers again in a later life, so a replay is exact and the World is ask
   text with its show when it is done. The extension has no life word. Its doctrine, the quote `web`, says each part
   in a few words.
 
-Each has a contract, `extensions/<name>/<name>.pyi`, which the hygiene laws 1 to 4 of `CLAUDE.md` hold to its suite
+Each has a contract, `extensions/<name>/<name>.pyi`, which the hygiene laws 1 to 4 of `AGENTS.md` hold to its suite
 as they hold the engine. Laws 5 to 7 are for `engine.py` alone, and laws 8 and 9 hold the word of each extension.
 `memory`, `skills` and `web` also have an ear of the World in the crate, `src/extension/<name>.rs`, which answers
 their questions from the disk, or from the network for `web`. The suite runs on both engines.

@@ -38,7 +38,7 @@ module, and each answer of the model is a program that runs in it.
   [ask you before an act](docs/extensions.md#permissions), but furb has none built in.
 - **The model can ask you.** A question to the operator waits in the feed until you answer it.
 - **Extensions are words.** An extension is Python that each chain runs as a rung, which the model reads in its turns.
-  The official ones tell a chain the `CLAUDE.md` files of its project and the skills it can read. The system prompt
+  The official ones tell a chain the `AGENTS.md` and `CLAUDE.md` files of its project and the skills it can read. The system prompt
   stays the engine alone, so an extension never breaks what a provider caches.
 - **One contract, proven twice.** `src/furb/engine.pyi` holds each law of the engine as one sentence, and the
   suite has one test for each sentence. The suite runs on CPython, and on monty, a Python interpreter written in
