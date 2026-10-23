@@ -667,3 +667,39 @@ fn a_record_of_another_version_opens_on_this_build_from_its_last_checkpoint() {
     "only the build after the checkpoint counts"
   );
 }
+
+#[test]
+#[cfg(unix)]
+fn a_record_of_an_older_version_whose_build_writes_no_checkpoint_is_refused_with_why() {
+  let at = place("unupgraded");
+  let path = at.join("record.jsonl");
+  let mut first = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  closed(&mut first, "close(1)");
+  drop(first);
+  let text = fs::read_to_string(&path).unwrap();
+  let ours = format!("\"{}\",{}]", world::engine(), world::VERSION);
+  fs::write(
+    &path,
+    text.replace(&ours, &format!("\"{}\",{}]", world::engine(), world::VERSION - 1)),
+  )
+  .unwrap();
+  let program = at.join("old-furb");
+  fs::write(&program, "#!/bin/sh\necho no such command >&2\nexit 2\n").unwrap();
+  #[cfg(unix)]
+  fs::set_permissions(&program, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+  let refused =
+    super::upgraded(&path, &at.display().to_string(), |_| Some(program.clone())).unwrap_err();
+  assert_eq!(
+    refused.to_string(),
+    format!(
+      "Refused: the build of version {} at {} wrote no checkpoint of {}: no such command",
+      world::VERSION - 1,
+      program.display(),
+      path.display()
+    )
+  );
+  assert!(
+    super::upgraded(&path, "", |_| None).is_ok(),
+    "a record whose build the store lacks stays as it is"
+  );
+}

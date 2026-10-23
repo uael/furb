@@ -7,8 +7,9 @@
 //! provider of the model of its default actor and of the models that `--roster` names, or of every model that the
 //! catalog of the crate offers when `--roster` names none.
 //!
-//! Each run puts the program in the store of builds of the machine under its version, and a command that opens a life
-//! on a record of another version runs the build of that version in its place, when the store holds one.
+//! Each run puts the program in the store of builds of the machine under its version. A life on a record of an older
+//! version is upgraded as it opens, and a command that opens a record of a newer version runs the build of that version
+//! in its place, when the store holds one.
 
 mod console;
 mod life;
@@ -234,44 +235,15 @@ fn opened(furb: &Furb) -> Option<&Path> {
   }
 }
 
-/// The directory of the life that a command opens, when the command names one.
-fn directory(furb: &Furb) -> Option<&Path> {
-  match &furb.command {
-    Some(
-      Command::Prompt { place, .. } | Command::Run { place, .. } | Command::Extensions { place },
-    ) => place.cwd.as_deref(),
-    Some(Command::Turns { cwd, .. } | Command::Checkpoint { cwd, .. }) => cwd.as_deref(),
-    Some(Command::Facts { .. }) => None,
-    None => furb.place.cwd.as_deref(),
-  }
-}
-
-/// How a record of another version that a command opens goes on, when the store of builds holds the build of that
-/// version: only that build replays the record with no drift. A record of an older version is upgraded: its build
-/// writes a checkpoint at its tip, and this build goes on from the checkpoint, which this gives as nothing. A record
-/// of a newer version, or of an older build that writes no checkpoint, is handed over: that build runs the command in
-/// the place of this one with the same words, and this gives how it ended. Nothing runs when the store holds no such
-/// build, and the life says why.
+/// How the build of a newer version ended, which ran this command in its place with the same words, when the record
+/// that the command opens names that version and the store of builds holds its program: only a build of that version
+/// replays the record with no drift. A record of an older version is upgraded as the life opens, as
+/// [`furb::life::Opening`] says. Nothing runs when the store holds no such build, and the life says why.
 fn handed(furb: &Furb) -> Option<ExitCode> {
-  let record = opened(furb)?;
-  let kept = world::kept(record).ok()?;
-  let theirs = world::version(checkpoint::segment(&kept)).filter(|one| *one != world::VERSION)?;
+  let kept = world::kept(opened(furb)?).ok()?;
+  let theirs = world::version(checkpoint::segment(&kept)).filter(|one| *one > world::VERSION)?;
   let program = world::stored(theirs)?;
-  let ran = |words: Vec<std::ffi::OsString>| process::Command::new(&program).args(words).status();
-  if theirs < world::VERSION {
-    let mut words: Vec<std::ffi::OsString> =
-      vec!["checkpoint".into(), "--record".into(), record.into()];
-    if let Some(cwd) = directory(furb) {
-      words.extend(["--cwd".into(), cwd.into()]);
-    }
-    if ran(words).is_ok_and(|status| status.success()) {
-      return None;
-    }
-    eprintln!(
-      "furb: the build of version {theirs} wrote no checkpoint, so it runs the command in the place of this one"
-    );
-  }
-  match ran(env::args_os().skip(1).collect()) {
+  match process::Command::new(&program).args(env::args_os().skip(1)).status() {
     Ok(status) => {
       Some(ExitCode::from(status.code().map_or(1, |code| u8::try_from(code).unwrap_or(1))))
     }

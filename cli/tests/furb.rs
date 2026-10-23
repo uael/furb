@@ -279,7 +279,14 @@ fn a_command_on_a_record_of_an_older_version_has_its_build_write_a_checkpoint_an
     "this build goes on with the module"
   );
   let asked = fs::read_to_string(yard.at.join("asked.txt")).unwrap();
-  assert_eq!(asked, format!("checkpoint\n--record\n{}\n", yard.record().display()));
+  let asked: Vec<&str> = asked.lines().collect();
+  let record = yard.record().display().to_string();
+  assert_eq!(
+    asked[..4],
+    ["checkpoint", "--record", record.as_str(), "--cwd"],
+    "the life asks the build of that version"
+  );
+  assert_eq!(fs::canonicalize(asked[4]).unwrap(), yard.at, "in the directory of the life");
   let record = fs::read_to_string(yard.record()).unwrap();
   let after = record.split("[[\"checkpoint\",").nth(1).expect("a checkpoint");
   assert!(
