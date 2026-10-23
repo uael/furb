@@ -7,7 +7,8 @@
 //! `cargo test --features tauri/custom-protocol --test check -- --nocapture`
 //!
 //! The command `furb` comes from `FURB_CLI`, else from the target of the repository, else from PATH. The web view is
-//! the WebContent of WebKit, a process of its own, whose id the app prints, so the test runs on macOS.
+//! the WebContent of WebKit, a process of its own, whose id the app prints, so the test runs on macOS. A check ends
+//! once its window drew and its stdin ended, so the test reads the web view after the window drew, while it stands.
 
 #![cfg(target_os = "macos")]
 
@@ -30,17 +31,13 @@ const MOST: f64 = 300.0;
 const STEPS: [&str; 9] =
   ["stand", "clock", "chance", "gate", "cd", "merged", "run", "wants", "reply"];
 
-/// The command of a process, as `ps` says it.
-fn command(pid: u32) -> String {
-  let out = Command::new("ps").args(["-o", "comm=", "-p", &pid.to_string()]).output();
-  out.map(|one| String::from_utf8_lossy(&one.stdout).into_owned()).unwrap_or_default()
-}
-
-/// The footprint of a process in megabytes, as `footprint` says it.
-fn footprint(pid: u32) -> Option<f64> {
+/// The name of a process and its footprint in megabytes, as one answer of `footprint` says them, so the footprint is
+/// that of the process that the name names, even when its id names another process later.
+fn footprint(pid: u32) -> Option<(String, f64)> {
   let out = Command::new("footprint").args(["-p", &pid.to_string()]).output().ok()?;
   let text = String::from_utf8_lossy(&out.stdout);
-  let said = text.split("Footprint: ").nth(1)?;
+  let (head, said) = text.split_once("Footprint: ")?;
+  let (name, _) = head.lines().last()?.split_once(&format!(" [{pid}]"))?;
   let mut words = said.split_whitespace();
   let number: f64 = words.next()?.parse().ok()?;
   let scale = match words.next()? {
@@ -50,7 +47,7 @@ fn footprint(pid: u32) -> Option<f64> {
     "GB" => 1024.0,
     _ => return None,
   };
-  Some(number * scale)
+  Some((name.trim().to_owned(), number * scale))
 }
 
 /// The command `furb` that prints the facts of a record.
@@ -151,10 +148,12 @@ fn the_check_draws_the_whole_record_and_its_web_view_stays_light() {
   let mut app = Command::new(env!("CARGO_BIN_EXE_furb-gui"))
     .args(["--check", "--record"])
     .arg(&record)
+    .stdin(Stdio::piped())
     .stdout(Stdio::piped())
     .stderr(Stdio::inherit())
     .spawn()
     .expect("furb-gui starts");
+  let mut input = app.stdin.take();
   // The app prints the process of its web view, then what its window drew, so the test reads its lines as they come
   // and measures that process alone, and no other WebContent of the machine.
   let (lines, heard) = mpsc::channel();
@@ -164,20 +163,27 @@ fn the_check_draws_the_whole_record_and_its_web_view_stays_light() {
       let _ = lines.send(line);
     }
   });
-  let (mut printed, mut content, mut most, mut seen) = (Vec::new(), None, 0.0_f64, false);
+  let (mut printed, mut content, mut most, mut names, mut last) =
+    (Vec::new(), None, 0.0_f64, HashSet::new(), None);
   let status = loop {
-    // A line wakes the test at once, so it reads the process of the web view while it still runs, as on a small
-    // record that the app ends in a second.
-    if let Ok(line) = heard.recv_timeout(Duration::from_millis(100)) {
+    // A line wakes the test at once, so it reads the process of the web view as soon as the app names it.
+    let line = heard.recv_timeout(Duration::from_millis(100)).ok();
+    if let Some(line) = &line {
       content = content.or_else(|| {
         line.strip_prefix("furb-gui: the web view runs in process ")?.parse::<u32>().ok()
       });
-      printed.push(line);
     }
-    if let Some(pid) = content {
-      most = most.max(footprint(pid).unwrap_or_default());
-      seen = seen || command(pid).contains("WebContent");
+    let read = content.and_then(footprint);
+    if let Some((name, megabytes)) = &read {
+      names.insert(name.clone());
+      most = most.max(*megabytes);
     }
+    // The app waits for the end of its stdin once its window drew, so this read finds its web view still there.
+    if line.as_deref().is_some_and(|one| one.starts_with("furb-gui: the window drew ")) {
+      last = read;
+      drop(input.take());
+    }
+    printed.extend(line);
     if let Some(status) = app.try_wait().expect("furb-gui is watched") {
       thread::sleep(Duration::from_millis(100));
       printed.extend(heard.try_iter());
@@ -196,7 +202,11 @@ fn the_check_draws_the_whole_record_and_its_web_view_stays_light() {
     if drew.ends_with("of its log") { logged(&record) } else { counted(&record) };
   assert_eq!(numbers, vec![chains, threads, acts]);
   assert!(content.is_some(), "the app said no process of its web view");
-  assert!(seen, "the process that the app said is no WebContent of WebKit");
+  assert!(last.is_some(), "no footprint of the web view of the app was read once its window drew");
+  assert!(
+    names.iter().all(|name| name.contains("WebContent")),
+    "the process that the app said is no WebContent of WebKit: {names:?}"
+  );
   assert!(most > 0.0, "no footprint of the web view of the app was read");
   assert!(most < MOST, "the WebContent took {most:.0} MB");
 }
@@ -208,6 +218,7 @@ fn a_check_ends_in_a_window_that_is_hidden_as_a_window_behind_others() {
     .args(["--check", "--record"])
     .arg(&record)
     .env("FURB_GUI_HIDDEN", "1")
+    .stdin(Stdio::null())
     .stdout(Stdio::piped())
     .stderr(Stdio::inherit())
     .spawn()
