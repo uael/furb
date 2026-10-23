@@ -300,5 +300,9 @@ user can do that he could not, `fix: ` for what was wrong, `perf: ` for what is 
 change that no user of a package sees, as `fix: Reap the shell of a command that drops before its exit`. A squash
 merge carries the title into the commit on main, and release-please reads the types of those commits: below version
 1.0, a `feat:` raises the minor version of the next release and a `fix:` or a `perf:` its patch, and `CHANGELOG.md`
-lists each under its type. A `chore:` raises nothing and stays out of the changelog. The commits before this rule
-stay as they are.
+lists each under its type. A `chore:` raises nothing and stays out of the changelog. A type may take a scope in
+parentheses and a `!` for a breaking change, as `feat(tui)!: `, and the sentence starts with a capital letter. The
+check `the title`, in `.github/workflows/titles.yml`, fails each other title, at each change of the pull request and
+at each edit of its title: `python3 script/title.py "<title>"` runs it on a title. The types have one home, the
+`changelog-sections` of `release-please-config.json`, which the check reads. The commits before this rule stay as
+they are.
