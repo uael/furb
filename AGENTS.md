@@ -4,7 +4,8 @@ The engine is `src/furb/engine.py`, one file. It depends only on the python inte
 that boot is given, each a generator under a name: the ears of the World, the Kernel and the gate among them. It is
 derived from the contract, `src/furb/engine.pyi`, and the suite in `test/` proves it. `src/furb/AGENTS.md` holds the
 technical names of the engine and the laws that no test can hold. `DOCTRINE.md` is the doctrine of furb, which says
-how a model works in furb: every model reads it once on each chain, in the paragraph that asks it for its first word.
+how a model works in furb: every model reads it once on each chain, in a paragraph that the chain tells just before
+its first prompt to that model.
 `script/AGENTS.md` says how to run the DeepSWE rig. Claude Code reads each `AGENTS.md` through a
 `CLAUDE.md` beside it that holds only `@AGENTS.md`, and the skills of `.agents/skills` through `.claude/skills`, a
 link to that folder.
