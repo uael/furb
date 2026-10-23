@@ -1,11 +1,13 @@
 import { closeSync, existsSync, fstatSync, openSync, readFileSync, readSync } from "node:fs";
 import { Activity, type Call, type Entry, type Fact, isQuestion, type Turn, WORK } from "furb";
 
-/** Why a record opens to read: the engine that made it, as the record names it, the engine of this build, and what
- * the life that opened on it raised. */
+/** Why a record opens to read: the engine and the version of the build that made it, as the record names them, the
+ * engine and the version of this build, and what the life that opened on it raised. */
 export interface Reading {
   made: string | null;
   engine: string;
+  version: number | null;
+  current: number;
   why: string;
   /** Whether the facts are those of the log, which holds every fact that the life said, or those that the record
    * kept, with the acts that they name. */

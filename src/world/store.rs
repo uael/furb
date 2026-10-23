@@ -62,9 +62,17 @@ pub fn kept(path: impl AsRef<Path>) -> Result<Vec<Object>, Fault> {
   }
 }
 
-/// The kind of the fact by which a record names the engine that made it: `("made", "chain1", "store", engine)`, where
-/// engine is what [`engine`] gives. No contract holds it, so this is the one home of its shape.
+/// The kind of the fact by which a record names the build that made it: `("made", "chain1", "store", engine,
+/// version)`, where engine is what [`engine`] gives and version is [`VERSION`]. A record of a build before the
+/// versions holds no version. No contract holds it, so this is the one home of its shape.
 pub const MADE: &str = "made";
+
+/// The version of this build, which a record names. A record replays on each build of the version that made it.
+///
+/// The gate of the corpus holds the versions few: each record of the corpus in `tests/corpus` replays with no drift
+/// on each build of its version. A change that makes a record of the corpus drift adds one to the version, and
+/// makes the corpus again in the same change, as `tests/corpus/README.md` says.
+pub const VERSION: i64 = 1;
 
 /// The engine of this build, which a record names: a digest of the engine and of the Kernel, which make each act of
 /// a replay. Another engine can make other acts from the same record, so a record replays only on the engine that
@@ -86,11 +94,20 @@ pub fn made(record: &[Object]) -> Option<String> {
   })
 }
 
+/// The version of the build that a record names, and nothing when it names none, as a record of a build before
+/// the versions.
+pub fn version(record: &[Object]) -> Option<i64> {
+  record.iter().find_map(|entry| {
+    let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
+    (fact.kind() == MADE).then(|| fact.word(1)?.as_int()).flatten()
+  })
+}
+
 /// The record that a store holds, and the ear that keeps in the store what the journal says to keep.
 ///
-/// A new record names the engine of this build: the ear says it as it hears the root at its birth, so a later life
-/// says it again at the same place. A record of a build before the fact made names no engine, and stays so, since
-/// this engine did not make it.
+/// A new record names the engine and the version of this build: the ear says them as it hears the root at its birth,
+/// so a later life says them again at the same place. A record of a build before the fact made names no engine, and
+/// stays so, since this engine did not make it.
 pub fn keeping(mut store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>), Fault> {
   let entries = store.entries()?;
   let new = entries.is_empty();
@@ -103,7 +120,7 @@ pub fn keeping(mut store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn 
           store.keep(entry)?;
         }
         "chain" if new && a.about() == ROOT => {
-          say(&mut co, Fact::says(MADE, ROOT, [Object::string(engine())]));
+          say(&mut co, Fact::says(MADE, ROOT, [Object::string(engine()), Object::int(VERSION)]));
         }
         _ => {}
       }
