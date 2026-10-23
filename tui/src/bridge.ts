@@ -22,23 +22,37 @@ import type { ActRow, FollowUp } from "./session.ts";
  * and its dollars. */
 export type Usage = NonNullable<Turn[2]>;
 
+/** The models of the roster, each as its name, its efforts and its window. */
+export type Roster = [string, string[], number][];
+/** The items of a list from a place on, which take the place of the items that the host holds from that place. */
+export interface Tail<T> {
+  from: number;
+  list: T[];
+}
+
+/** A view of a chain. A host that gives the mark of the last snapshot it took takes only what changed since then: the
+ * roster when it changed, the words that the program changed, and the tails of the turns and of the answers. */
 export interface Snapshot {
+  /** The mark of this snapshot, which the host gives with its next request once it holds this snapshot. */
+  mark: number;
   dispatched: string[];
   paused: boolean;
-  roster: [string, string[], number][];
+  roster?: Roster;
   /** The acts that changed after the count the session asked with. */
   acts: ActRow[];
   /** The count of changes of the act table that the acts are read at. */
   count: number;
   selected: string;
-  turns: ReturnType<Native["turns"]>;
+  turns: Tail<Turn>;
   /** The usage of each answer of the chain, in order. A chain with a source reads the answers of its origin in its
    * turns, and they are not among these. */
-  answers: Usage[];
+  answers: Tail<Usage>;
   /** The share of the window that the last answer of the chain filled, as filled of the engine gives it. Nothing
    * before the first answer. */
   filled?: number;
-  program: Record<string, string>;
+  /** The word of each rung of the program, whole, or the words that changed since the snapshot of the mark that the
+   * host gave. */
+  program?: { whole: boolean; words: Record<string, string> };
   actor: string;
   directory: string;
 }
@@ -76,7 +90,8 @@ interface Plain {
   seq: number;
 }
 /** What the session in the worker holds, as it sends it to the host, and how many facts the life said since the last
- * state, which the host needs to know of and not to hold. */
+ * state, which the host needs to know of and not to hold. Its measures are those of the chains whose models answered
+ * since the last state, which join the measures that the host holds. */
 export interface HostState extends Plain {
   facts: number;
   prompts: Prompt[];
@@ -116,7 +131,7 @@ export class HostView extends EventEmitter implements Plain {
   }
   update({ facts, prompts, notices, streams, pending, measures, ...plain }: HostState): void {
     Object.assign(this, plain);
-    if (this.changed("measures", measures)) this.measures = measures;
+    if (Object.keys(measures).length) this.measures = { ...this.measures, ...measures };
     if (this.changed("prompts", prompts))
       this.prompts = new Map(prompts.map((prompt) => [prompt.id, prompt]));
     if (this.changed("notices", notices))
@@ -148,7 +163,8 @@ export class HostView extends EventEmitter implements Plain {
   sendQueued = (entry: FollowUp) => this.ask<string>("library", "queue", entry);
   resume = () => this.ask<unknown>("session", "resume");
   source = () => this.ask<string>("library", "source");
-  snapshot = (chain: string, since = 0) => this.ask<Snapshot>("library", "snapshot", chain, since);
+  snapshot = (chain: string, since = 0, held = 0) =>
+    this.ask<Snapshot>("library", "snapshot", chain, since, held);
   readChanges = (start: number, count: number) => this.ask<FileChange[]>("library", "changes", start, count);
   /** The net change of each file across the changes that the writes made, or across every change of the life when
    * no list of writes is given. */

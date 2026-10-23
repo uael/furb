@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { store } from "furb";
@@ -137,3 +137,31 @@ for (const ending of endings)
       await remove(directory);
     }
   }, 60000);
+
+test("the first frame says which record the TUI opens and its size, and the life shows once it opens", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-opening-"));
+  const record = join(directory, "life.jsonl");
+  await copyFile(join(import.meta.dir, "../fixtures/conductor.jsonl"), record);
+  const cli = [
+    process.execPath,
+    join(import.meta.dir, "../src/cli.ts"),
+    "--record",
+    record,
+    "--cwd",
+    directory,
+  ];
+  const env = { ...process.env, FURB_CONFIG_DIR: join(directory, "config") };
+  const tui =
+    process.platform === "win32" ? windowsConsole(cli, env, directory) : terminal(cli, env, "SIGTERM");
+  try {
+    const size = ((await stat(record)).size / 2 ** 20).toFixed(1);
+    await eventually(() => tui.screen().includes(`life.jsonl, ${size} MB`), "the first frame");
+    expect(tui.screen()).toContain("Opening ");
+    await eventually(() => tui.screen().includes("Transcript"), "the life");
+    await tui.signal();
+    expect(await Promise.race([tui.exited, Bun.sleep(15000).then(() => "still running")])).toBe(0);
+  } finally {
+    tui.kill();
+    await remove(directory);
+  }
+}, 60000);
