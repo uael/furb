@@ -9,6 +9,10 @@ def test_undo_n_gives_a_new_text_without_its_last_n_edits() -> None:
   assert made.content == "one\ntwo\nthree\nfour\n"
   assert made.undo().content == "one\ntwo\nthree\n"
   assert made.undo(2) is TWO and made.undo(2).content == "one\ntwo\n"
+  long = TWO
+  for n in range(5000):
+    long = long.append(str(n))
+  assert long.undo(5000) is TWO and long.undo(4999).content == "one\ntwo\n0\n"
 
 
 def test_the_text_before_its_last_n_edits_and_the_text_itself_when_it_came_from_none() -> None:

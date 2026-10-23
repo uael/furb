@@ -33,6 +33,18 @@ def test_every_edit_of_it_gives_another_text_which_came_from_this_one() -> None:
   assert again.before is made and again.content == "two\nthree\nfour\n"
 
 
+def test_a_text_is_equal_to_a_text_of_the_same_path_and_content_and_its_repr_shows_its_path_and_its_content() -> None:
+  """A text is equal to a text of the same path and content, and its repr shows its path and its content, whatever texts each came from."""
+  long = Text("/w/n.txt")
+  for n in range(5000):
+    long = long.append(str(n))
+  plain = Text("/w/n.txt", long.content)
+  assert long == plain and long.before is not None and plain.before is None
+  assert repr(long) == repr(plain) == f"Text(path='/w/n.txt', content={long.content!r})"
+  assert ONE.append("four") == ONE.append("four") != ONE.append("five")
+  assert ONE.delete(1, 3) == Text("/w/n.txt") != Text("/w/m.txt")
+
+
 def test_a_method_of_a_text_that_has_the_name_of_a_method_of_str_gives_what_that_method_of_str_gives() -> None:
   """A method of a text that has the name of a method of str gives what that method of str gives, or is refused."""
   shared = {name for name in dir(Text) if not name.startswith("_")} & set(dir(str))

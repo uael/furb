@@ -277,16 +277,16 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
 
     if source:
       theirs = transcript(source)
-      picked = (filter or list)([x for x in theirs if question(x)])
+      kin = set()
+      for one in (filter or list)([x for x in theirs if question(x)]):
+        name = one[1]
+        while name not in kin and (b := get(name)):
+          kin.add(name)
+          name = b[2]
       yield (
         "prefix",
         id,
-        [
-          it
-          for it in theirs
-          if it[1] == source
-          or any(under(one[1], get(it[1])[2] if question(("reply", it[1])) else it[1]) for one in picked)
-        ],
+        [it for it in theirs if it[1] == source or (get(it[1])[2] if question(("reply", it[1])) else it[1]) in kin],
       )
     yield "started", id
     yield told(id, "", bound(id), label=label, source=source)
@@ -439,7 +439,7 @@ def bash(
 class Text:
   path: str
   content: str = ""
-  before: Text | None = None
+  before = None
 
   @property
   def lines(self) -> list[str]:
@@ -450,15 +450,20 @@ class Text:
     if not 1 <= lo <= hi + 1 <= len(now) + 1:
       raise Refused(f"{self.path} no lines {lo}:{hi}")
     now[lo - 1 : hi] = [text and text.removesuffix("\n") + "\n"]
-    return Text(self.path, "".join(now), self)
+    (made := Text(self.path, "".join(now))).before = self
+    return made
 
   def replace(self, old: str, new: str, count: int = -1) -> Text:
     if old not in self.content:
       raise Refused(f"{self.path} no {old!r}")
-    return Text(self.path, self.content.replace(old, new, count), self)
+    (made := Text(self.path, self.content.replace(old, new, count))).before = self
+    return made
 
   def undo(self, n: int = 1) -> Text:
-    return self.before.undo(n - 1) if n > 0 and self.before else self
+    made = self
+    for _ in range(n):
+      made = made.before or made
+    return made
 
   def append(self, text: str) -> Text:
     return self.insert(len(self.lines) + 1, text)
