@@ -144,12 +144,26 @@ The TUI serves each person who uses it:
 
 A Bun worker holds the life and the ears of each open session, in the host of the life or in the window. So rendering, input, and
 syntax coloring stay responsive while the sandbox gates and runs Python. The renderer draws at 60 frames each second.
-`bun run bench` opens a recorded life of 30000 facts and measures the first frame, and the frames while the feed
-scrolls and a command streams. The gates hold it on Linux, against the pace of the same machine, the time that it
-takes to parse each fact of the record: the warm first frame under 32 paces, at least 95 in each hundred of the frames
-that the renderer draws with nothing to show, since the timers of the runtime keep a loop of 60 frames a few frames
-under 60, and the 95th percentile of the frames under a pace and under 16.7 ms. A change of the life makes again only
-the cards of the acts that changed, so a frame of a long life takes about as long as a frame of a short one.
+The first frame shows at once, before the TUI reads the record: the top line, and which record opens with its size.
+
+A view costs what it shows, and not what the life holds. A new fact makes the worker send only what changed of the
+chain shown, the session places only the acts that changed in its index, the feed reads only the steps of the thread
+that it shows, and the board and the list of chains read only the chains that can have changed. A change of the life
+makes again only the cards of the acts that changed, so a frame of a long life takes about as long as a frame of a
+short one.
+
+`bun run bench` makes a recorded life at the weight of a real record, about 2.6 KB for each fact: one of about 160000
+facts, the size of a record of an orchestrator of two days, and one of a tenth of that. In each life it measures what
+a new fact costs, from the moment the view hears of it to the frame that shows it: a line of a command, a new act, and
+a token of a model. In the long life it measures the first frame, the frames while the feed scrolls and a command
+streams, and the memory of a process that opened the life. The gates hold it on Linux, against measures of the same
+machine: the pace, the time that it takes to parse the facts of the long life, and the frames that the renderer draws
+with nothing to show. The warm first frame takes under 32 paces, the renderer draws at least 95 in each hundred of
+the frames that it draws with nothing to show, since the timers of the runtime keep a loop of 60 frames a few frames
+under 60, the 95th percentile of the frames takes under a pace and under 16.7 ms, and a new fact of each kind costs in
+the long life at most twice what it costs in the short one, or 2 ms. It takes the two sides of each comparison in turn,
+so its budgets hold on a machine whose other work loads each core three times, as on macOS with other builds.
+`FURB_BENCH_FACTS` sets the size of the long life.
 
 ## Mouse and keys
 
