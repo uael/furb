@@ -172,11 +172,8 @@ export function weave({ acts, prompts, measures, folds, width, pending, label }:
     })
     .sort((one, other) => one.began - other.began);
   const owing = new Set(owed.map((prompt) => prompt.chain));
-  const moments = [
-    ...new Set(acts.flatMap((act) => [act.began, ...(act.ended === undefined ? [] : [act.ended])])),
-  ]
-    .filter((moment) => moment > 0)
-    .sort((one, other) => one - other);
+  // A loom of no width, as the board weaves it, has no cells, and reads no moment.
+  const moments = width > 0 ? momentsOf(acts) : [];
   // A short life stretches each moment over as many as three columns, so that its rows fill the loom.
   const stretch = Math.max(1, Math.min(3, Math.floor(width / Math.max(1, moments.length))));
   const times = spans(moments, Math.floor(width / stretch));
@@ -204,6 +201,8 @@ export function weave({ acts, prompts, measures, folds, width, pending, label }:
       pending,
     );
   const operatorActs = acts.filter(asksOperator);
+  // The acts that run, which each row that works reads for what it waits on.
+  const open = acts.filter((act) => !act.done);
   const rows: Row[] = [
     {
       id: "operator",
@@ -220,7 +219,11 @@ export function weave({ acts, prompts, measures, folds, width, pending, label }:
     const below = under(chain.id);
     const fold = folds.has(chain.id) && below.length > 0;
     const tally: Partial<Record<RowState, number>> = {};
-    if (fold) for (const id of below) tally[stateOf(id)] = (tally[stateOf(id)] ?? 0) + 1;
+    if (fold)
+      for (const id of below) {
+        const one = stateOf(id);
+        tally[one] = (tally[one] ?? 0) + 1;
+      }
     const own = (fold ? [chain.id, ...below] : [chain.id]).flatMap((id) =>
       (byChain.get(id) ?? []).filter((act) => act.kind !== "chain" || act.id !== id),
     );
@@ -233,7 +236,7 @@ export function weave({ acts, prompts, measures, folds, width, pending, label }:
       workers: below.length,
       folded: fold,
       tally,
-      waits: state === "working" ? waitsOn(chain.id, acts, byId) : undefined,
+      waits: state === "working" ? waitsOn(chain.id, open, byId) : undefined,
       cells: cells(own, times, stretch),
       measure: measures[chain.id],
     });
@@ -325,8 +328,7 @@ export function nowOf(row: Row, loom: Loom, acts: readonly LiveAct[], word: (run
       more: asks.length - 1,
       text: gist(first.message),
     };
-  const byId = new Map(acts.map((act) => [act.id, act]));
-  const waits = row.waits ? byId.get(row.waits) : undefined;
+  const waits = row.waits ? acts.find((act) => act.id === row.waits) : undefined;
   if (row.state === "working" && waits)
     return { tone: "work", act: waits.id, more: 0, text: subjectOf(waits, word) };
   const work = acts.filter((act) => act.on === row.id && WORK.includes(act.kind));

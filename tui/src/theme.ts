@@ -1,4 +1,4 @@
-import { RGBA, SyntaxStyle } from "@opentui/core";
+import { RGBA, SyntaxStyle, type ThemeMode } from "@opentui/core";
 
 /** The roles of a palette. Surfaces go from the background up: the panel of the sidebars and the composer, then the
  * raised surface of a dialog. Text goes from the text down: muted for what supports it, faint for what frames it. */
@@ -197,7 +197,21 @@ export const palettes = {
   },
 } satisfies Record<string, Palette>;
 export type ThemeName = keyof typeof palettes;
+/** The theme that a view shows when no choice and no terminal names one. */
 export const defaultTheme: ThemeName = "github";
+/** A choice of a theme: a theme by its name, or the one that follows the terminal. */
+export type ThemeChoice = ThemeName | "terminal";
+/** The themes that the choice "terminal" shows: a dark one on a dark terminal, and on a terminal that does not say
+ * its mode, and a light one on a light terminal. */
+export const terminalThemes: Record<ThemeMode, ThemeName> = { dark: defaultTheme, light: "day" };
+/** Whether a value names a choice of a theme. */
+export function isThemeChoice(value: unknown): value is ThemeChoice {
+  return value === "terminal" || (typeof value === "string" && Object.hasOwn(palettes, value));
+}
+/** The theme that a choice shows on a terminal in a mode, or on a terminal that does not say its mode. */
+export function themeOf(choice: ThemeChoice, mode: ThemeMode | null): ThemeName {
+  return choice === "terminal" ? terminalThemes[mode ?? "dark"] : choice;
+}
 /** The name of a theme as a picker shows it, and whether it is light or dark. */
 export const themeLabels: Record<ThemeName, [string, string]> = {
   github: ["GitHub Dark", "Dark"],
@@ -240,19 +254,44 @@ export const glyph = {
   remove: "×",
 } as const;
 const spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+/** The frames that the renderer draws in a second, which bun run bench holds each frame to. */
+export const fps = 60;
 /** The time between two frames of the spinner, which the view ticks at. */
 export const frame = 100;
-/** The frame of the spinner at a time. */
+/** Whether the view holds still, as reduced motion and the mode of a screen reader ask: no spinner turns, and no
+ * part of the view moves with time. */
+export const motion = { still: false };
+/** The frame of the spinner at a time, or the mark of work that runs when the view holds still. */
 export function spin(now = Date.now()): string {
+  if (motion.still) return glyph.running;
   return spinner[Math.floor(now / frame) % spinner.length] ?? "⠋";
 }
-// Each role has its own color object, even when two roles have the same RGB value.
+/** Whether the view shows no color, as NO_COLOR asks when it is set and not empty: each role takes the default color
+ * of the terminal, and a state shows by its glyph, its words and its weight alone. */
+export const colorless = { on: Boolean(process.env.NO_COLOR) };
+/** The roles that color a ground, which take the default background of the terminal when the view shows no color. */
+const grounds = new Set<keyof Palette>([
+  "background",
+  "panel",
+  "raised",
+  "selected",
+  "added",
+  "removed",
+  "backdrop",
+]);
+/** The color of a role of a theme. Each role has its own color object, even when two roles have the same value. */
+function colorOf(name: ThemeName, role: keyof Palette): RGBA {
+  if (!colorless.on) return RGBA.fromHex(palettes[name][role]);
+  return grounds.has(role) ? RGBA.defaultBackground() : RGBA.defaultForeground();
+}
 export const theme = Object.fromEntries(
-  Object.entries(palettes[defaultTheme]).map(([role, hex]) => [role, RGBA.fromHex(hex)]),
+  (Object.keys(palettes[defaultTheme]) as (keyof Palette)[]).map((role) => [
+    role,
+    colorOf(defaultTheme, role),
+  ]),
 ) as Record<keyof Palette, RGBA>;
 export function setTheme(name: ThemeName): void {
-  for (const role of Object.keys(theme) as (keyof Palette)[])
-    theme[role] = RGBA.fromHex(palettes[name][role]);
+  for (const role of Object.keys(theme) as (keyof Palette)[]) theme[role] = colorOf(name, role);
 }
 export function syntax(): SyntaxStyle {
   return SyntaxStyle.fromStyles({

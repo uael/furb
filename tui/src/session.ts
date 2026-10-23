@@ -25,7 +25,7 @@ import { dollars } from "./format.ts";
 import { Preferences } from "./preferences.ts";
 import { type Hunk, type Reviewed, revertWord, reviewed, type Scope, scopes } from "./review.ts";
 import { shareHtml, shareMarkdown } from "./share.ts";
-import { palettes, type ThemeName } from "./theme.ts";
+import { isThemeChoice, palettes, type ThemeChoice, type ThemeName, themeOf } from "./theme.ts";
 
 /** The views of a chain: the feed of what it did, the transcript that the model reads, and the files it changed. */
 export const views = ["feed", "transcript", "changes"] as const;
@@ -83,6 +83,38 @@ export function failed(act: ActRow): boolean {
   return Boolean(
     value && typeof value === "object" && "is" in value && "args" in value && value.is !== "CancelledError",
   );
+}
+
+/** The phase of an act that a view of the whole life reads: whether it is done or held, when it began and ended, and
+ * how its rung ran. The output that a command streams is no part of it. */
+function phaseOf(act?: ActRow): string {
+  return act
+    ? `${act.done}|${act.paused}|${act.began}|${act.ended}|${act.run?.status}|${act.run?.reason}`
+    : "";
+}
+
+/** Whether two lists of turns say the same: each turn the same role, the same python, and the same usage. */
+function sameTurns(one: readonly Turn[], other: readonly Turn[]): boolean {
+  return (
+    one.length === other.length &&
+    one.every(
+      (turn, at) =>
+        turn.length === other[at]?.length &&
+        turn.every(
+          (part, place) =>
+            part === other[at]?.[place] || JSON.stringify(part) === JSON.stringify(other[at]?.[place]),
+        ),
+    )
+  );
+}
+
+/** Whether two programs hold the same word for each rung. */
+function sameProgram(
+  one: Readonly<Record<string, string>>,
+  other: Readonly<Record<string, string>>,
+): boolean {
+  const keys = Object.keys(one);
+  return keys.length === Object.keys(other).length && keys.every((key) => one[key] === other[key]);
 }
 
 /** Whether an act was cancelled: a rung whose run ended with a cancel, or an act done with a cancel. A cancel is what
@@ -166,6 +198,10 @@ export class Session extends EventEmitter {
   actor: string;
   sessionName: string;
   acts: ActRow[] = [];
+  /** The count of the changes of the acts that a view of the whole life reads: an act that comes, or an act that
+   * starts, ends, pauses or wakes. An act whose output grows alone keeps it, so the board and the desk of a life
+   * whose command streams are not read again. */
+  version = 0;
   turns: Turn[] = [];
   /** The usage of each answer of the chain itself, which the turns of a chain with a source do not tell apart. */
   answers: Usage[] = [];
@@ -294,8 +330,9 @@ export class Session extends EventEmitter {
   };
   /** The notices that the session dismissed, until the console drops them. */
   private readonly settled = new Set<string>();
+  /** The theme that the session shows: the one that the preferences name, or the one of the mode of the terminal. */
   get theme(): ThemeName {
-    return this.preferences.theme;
+    return themeOf(this.preferences.theme, this.preferences.terminalMode);
   }
   get notice(): string {
     return this.message;
@@ -312,7 +349,7 @@ export class Session extends EventEmitter {
       this.noticeTimer.unref();
     }
   }
-  set theme(value: ThemeName) {
+  set theme(value: ThemeChoice) {
     this.preferences.save(value);
   }
   /** Each batch of facts that the host hears reads the view again, whatever kind of act, of the engine or of an
@@ -376,12 +413,40 @@ export class Session extends EventEmitter {
           this.dirty = true;
           continue;
         }
+        const { turns, program } = this;
         Object.assign(this, snapshot);
+        // Turns and a program that did not change keep their objects, which a view that reads them keys on.
+        if (sameTurns(turns, this.turns)) this.turns = turns;
+        if (sameProgram(program, this.program)) this.program = program;
         // A snapshot carries the acts that changed since the session last read them, in the order of the table.
         if (acts.length) {
-          const rows = new Map(this.acts.map((act) => [act.id, act]));
-          for (const act of acts) rows.set(act.id, act);
-          this.acts = [...rows.values()];
+          // Each act that changed takes its place, and a new act stands after the others.
+          const index = this.indexed();
+          const next = [...this.acts];
+          let moved = false;
+          for (const act of acts) {
+            const place = index.at.get(act.id);
+            moved ||= place === undefined || phaseOf(next[place]) !== phaseOf(act);
+            if (place !== undefined) next[place] = act;
+            else index.at.set(act.id, next.push(act) - 1);
+            index.ids.set(act.id, act);
+            // The acts of a chain keep their order, and a new act stands after the others of its chain.
+            const list = index.on.get(act.on) ?? [];
+            index.on.set(act.on, list);
+            const mine = list.findLastIndex((one) => one.id === act.id);
+            if (mine < 0) list.push(act);
+            else list[mine] = act;
+            if (act.kind === "chain") {
+              const chain = index.chains.findIndex((one) => one.id === act.id);
+              if (chain < 0) index.chains.push(act);
+              else index.chains[chain] = act;
+            }
+          }
+          // The index follows the acts that changed, and the acts of the chain shown are read again.
+          index.of = next;
+          index.shown = undefined;
+          this.acts = next;
+          if (moved) this.version++;
         }
         this.counted = count;
         // The acts and the actor of one snapshot are of one moment: the choice holds until its rung is done there.
@@ -482,8 +547,20 @@ export class Session extends EventEmitter {
   /** What the acts of a chain do, or the acts of every chain: one asks the operator, one waits for the resume of a
    * reopened record, one runs, a pause holds one, or the last act failed. */
   private actStatus(chain?: string): SessionStatus {
-    const acts = this.acts.filter(
-      (act) => act.kind !== "chain" && act.kind !== "grant" && (!chain || act.on === chain),
+    // The state holds while no act starts, ends, pauses or wakes, and the prompts and the held work stay as they are.
+    if (this.states.version !== this.version) this.states = { version: this.version, of: new Map() };
+    const key = `${chain ?? ""}\n${[...this.host.prompts.keys()].join(" ")}\n${[...this.host.pending.keys()].join(" ")}`;
+    const known = this.states.of.get(key);
+    if (known) return known;
+    const status = this.statusOf(chain);
+    this.states.of.set(key, status);
+    return status;
+  }
+  /** The state of the acts of each chain, or of every chain, as actStatus read it at a version of the acts. */
+  private states = { version: -1, of: new Map<string, SessionStatus>() };
+  private statusOf(chain?: string): SessionStatus {
+    const acts = (chain ? (this.indexed().on.get(chain) ?? []) : this.acts).filter(
+      (act) => act.kind !== "chain" && act.kind !== "grant",
     );
     if (acts.some((act) => this.host.prompts.has(act.id))) return "blocked";
     if (acts.some((act) => this.host.pending.has(act.id))) return "paused";
@@ -498,7 +575,7 @@ export class Session extends EventEmitter {
     const status = this.actStatus(id);
     const before = this.phases.get(id);
     this.phases.set(id, status);
-    const chain = this.acts.find((act) => act.id === id);
+    const chain = this.indexed().ids.get(id);
     const mine = chain?.by === "operator" || this.actOf(chain?.by ?? "")?.by === "operator";
     if (id === this.selected || status !== "idle") this.unread.delete(id);
     else if (before === "working" && mine) this.unread.add(id);
@@ -520,10 +597,49 @@ export class Session extends EventEmitter {
   private readonly unread = new Set<string>();
   private readonly phases = new Map<string, SessionStatus>();
   get chains(): ActRow[] {
-    return this.acts.filter((act) => act.kind === "chain");
+    return this.indexed().chains;
   }
+  /** The acts by their name, by the chain that they stand on, and the chains, which the view reads many times in each
+   * frame. A snapshot that changes the acts gives a new list, which the index is made again for. */
+  private index?: {
+    of: readonly ActRow[];
+    ids: Map<string, ActRow>;
+    /** The place of each act in the list, by its name. */
+    at: Map<string, number>;
+    on: Map<string, ActRow[]>;
+    chains: ActRow[];
+    /** The acts of the chain shown, as activity reads them. */
+    shown?: { chain: string; acts: ActRow[] };
+  };
+  private indexed(): NonNullable<Session["index"]> {
+    if (this.index?.of === this.acts) return this.index;
+    const index = {
+      of: this.acts,
+      ids: new Map<string, ActRow>(),
+      at: new Map<string, number>(),
+      on: new Map<string, ActRow[]>(),
+      chains: [] as ActRow[],
+    };
+    for (const [place, act] of this.acts.entries()) {
+      index.ids.set(act.id, act);
+      index.at.set(act.id, place);
+      const list = index.on.get(act.on);
+      if (list) list.push(act);
+      else index.on.set(act.on, [act]);
+      if (act.kind === "chain") index.chains.push(act);
+    }
+    this.index = index;
+    return index;
+  }
+  /** The acts of the chain shown, but its chains, which the index keeps while the acts and the chain stay. */
   get activity(): ActRow[] {
-    return this.acts.filter((act) => act.on === this.selected && act.kind !== "chain");
+    const index = this.indexed();
+    if (index.shown?.chain !== this.selected)
+      index.shown = {
+        chain: this.selected,
+        acts: (index.on.get(this.selected) ?? []).filter((act) => act.kind !== "chain"),
+      };
+    return index.shown.acts;
   }
   /** What the answers of the chain itself cost, each token counted once: a chain with a source does not count the
    * answers of its origin again. The first number of the usage of an answer is the whole prompt of that call, which
@@ -566,18 +682,19 @@ export class Session extends EventEmitter {
     const { acts, host } = this;
     const gone = [...this.gone].join(" ");
     const cached = this.deskRead;
-    if (cached?.acts === acts && cached.prompts === host.prompts && cached.gone === gone) return cached.desk;
+    if (cached?.version === this.version && cached.prompts === host.prompts && cached.gone === gone)
+      return cached.desk;
     const made = desk({
       acts,
       prompts: [...host.prompts.values()].filter(held),
       notices: [],
       label: (id) => this.labelOf(id),
     });
-    this.deskRead = { acts, prompts: host.prompts, gone, desk: made };
+    this.deskRead = { version: this.version, prompts: host.prompts, gone, desk: made };
     return made;
   }
   /** The desk as it was last read, with what it was read from, since every draw reads it many times. */
-  private deskRead?: { acts: unknown; prompts: unknown; gone: string; desk: Desk };
+  private deskRead?: { version: number; prompts: unknown; gone: string; desk: Desk };
   /** The questions that the operator answered, until the console drops them. */
   private readonly gone = new Set<string>();
   /** The question that the operator acts on, on the chain shown: the one that he points at, else the oldest. */
@@ -631,7 +748,7 @@ export class Session extends EventEmitter {
   /** The act that a name or a door names: the act whose name is the first part of the path. */
   actOf(path: string): ActRow | undefined {
     const [name] = path.split("/");
-    return this.acts.find((act) => act.id === name);
+    return this.indexed().ids.get(name ?? "");
   }
   async attachImage(path: string): Promise<void> {
     if (!(await this.host.sees(this.actor)))
@@ -1222,9 +1339,9 @@ export class Session extends EventEmitter {
         this.review((argument as Scope) || this.scope);
         break;
       case "theme":
-        if (!Object.hasOwn(palettes, argument))
-          throw new Error(`Choose ${Object.keys(palettes).join(", ")}.`);
-        this.theme = argument as ThemeName;
+        if (!isThemeChoice(argument))
+          throw new Error(`Choose terminal, ${Object.keys(palettes).join(", ")}.`);
+        this.theme = argument;
         break;
       case "bash":
         this.track(await this.engine.bash(argument, { on: this.selected }));
@@ -1294,7 +1411,7 @@ export class Session extends EventEmitter {
     return Math.max(this.savedCost, this.host.cost);
   }
   save(): void {
-    this.preferences.save(this.theme);
+    this.preferences.save();
     const record = this.host.record;
     // A recorded life keeps no view beside its log, which a later reader takes as it was made.
     if (!record || this.host.recorded) return;

@@ -194,13 +194,27 @@ definition.
 
 ## Themes
 
-Paper is light, and Midnight and Forest are dark. ⌃T opens the themes, each with a swatch of its colors.
+Terminal, the default, follows the mode of the terminal: GitHub Dark on a dark terminal, and Day on a light one.
+Paper and Day are light, and Midnight, Forest and Dusk are dark. ⌃T opens the themes, each with a swatch of its
+colors.
+
+![The theme of a light terminal](screenshots/78-terminal-light.png)
 
 ![Paper theme](screenshots/12-light-theme.png)
 
 ![Midnight theme](screenshots/13-midnight-theme.png)
 
 ![Color themes](screenshots/14-theme-picker.png)
+
+## Access
+
+`--screen-reader` or `/access reader` shows one column of text, with no sidebar, no box, no spinner, and nothing that
+moves, for a screen reader. `--reduced-motion` or `/access motion` stops each spinner. With `NO_COLOR` set, each
+surface takes the default colors of the terminal.
+
+![Screen reader mode](screenshots/76-screen-reader.png)
+
+![NO_COLOR](screenshots/77-no-color.png)
 
 ## Chains
 

@@ -253,6 +253,10 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 - `bun run demo` and `bun run tui`: the TUI on the demo session, which asks no model, or on a real life.
 - `bun run docs`: write the tables of keys and commands in `tui/README.md` again from `tui/src/keys.ts` and
   `tui/src/commands.ts`.
+- `bun run bench`: the speed of the TUI on a recorded life of 30000 facts: the first frame, cold and warm, and the frames
+  while the feed scrolls and a command streams. It fails over its budget, which the gates hold on Linux: the warm first
+  frame under 500 ms, at least 95 in each hundred of the frames that the renderer draws with nothing to show, and the
+  95th percentile of the frames under 16.7 ms.
 - `bun run screenshots` and `bun run animation`: capture `docs/screenshots/` and `docs/furb.gif` again from the
   real renderer. Run both after a change that a screen shows, and read each capture. One run of each at a time holds
   its home in `/tmp`, and a second run waits until the first ends. A screen that does not come in three minutes ends

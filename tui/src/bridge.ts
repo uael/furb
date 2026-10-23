@@ -98,12 +98,24 @@ export class HostView extends EventEmitter implements Plain {
   constructor(private request: (target: string, method: string, args: unknown[]) => Promise<unknown>) {
     super();
   }
-  update({ facts, prompts, notices, streams, pending, ...plain }: HostState): void {
+  /** The text of each part of the state as the host read it last. A part that did not change keeps its object, which
+   * a view that reads the whole life keys on. */
+  private read: Record<string, string> = {};
+  private changed(part: string, value: unknown): boolean {
+    const text = JSON.stringify(value);
+    if (this.read[part] === text) return false;
+    this.read[part] = text;
+    return true;
+  }
+  update({ facts, prompts, notices, streams, pending, measures, ...plain }: HostState): void {
     Object.assign(this, plain);
-    this.prompts = new Map(prompts.map((prompt) => [prompt.id, prompt]));
-    this.notices = new Map(notices.map((notice) => [notice.id, notice]));
+    if (this.changed("measures", measures)) this.measures = measures;
+    if (this.changed("prompts", prompts))
+      this.prompts = new Map(prompts.map((prompt) => [prompt.id, prompt]));
+    if (this.changed("notices", notices))
+      this.notices = new Map(notices.map((notice) => [notice.id, notice]));
     this.streams = new Map(streams);
-    this.pending = new Map(pending);
+    if (this.changed("pending", pending)) this.pending = new Map(pending);
     if (facts) this.emit("facts");
     this.emit("change");
   }

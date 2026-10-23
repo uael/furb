@@ -66,10 +66,31 @@ and SIGQUIT quit the same way. On Windows, a console that closes and Ctrl+Break 
 the preferences file sets the width of the sidebar, from 26 to 48 columns. On a terminal narrower than 100 columns the
 sidebar is hidden, and `/workspace` keeps all sessions available from the keyboard.
 
-Python words have offline Tree-sitter colors. GitHub Dark is the default. Sessions share the theme, and the TUI saves
-it in `$XDG_CONFIG_HOME/furb/ui.json` (or `~/.config/furb/ui.json`, and `%APPDATA%\furb\ui.json` on Windows).
+Python words have offline Tree-sitter colors. The default theme, Terminal, follows the terminal: GitHub Dark on a dark
+terminal or on one that does not say its mode, and Day on a light one, and it changes when the terminal changes. ⌃T
+or `/theme` chooses another. Sessions share the theme, and the TUI saves it in `$XDG_CONFIG_HOME/furb/ui.json` (or `~/.config/furb/ui.json`, and `%APPDATA%\furb\ui.json` on Windows).
 `FURB_CONFIG_DIR` selects another configuration directory. Tests and screenshot generation use isolated
 preferences; the CLI shares the user's choice across sessions, including demos.
+
+The TUI serves each person who uses it:
+
+- `--screen-reader`, or `/access reader`, shows one column of text for a screen reader: no sidebar, no box, no
+  spinner, no logo in blocks, and nothing that moves. The view of the life is the board of main.
+- `--reduced-motion`, or `/access motion`, stops each spinner, and no part of the view moves with time. The mark of
+  work that runs, ◉, stays.
+- `NO_COLOR`, when it is set and not empty, turns every color off: each surface takes the default colors of the
+  terminal, and the glyphs, the words, and the weight of the text show each state.
+- An address of the web in the TUI is a link of OSC 8, which a terminal that knows OSC 8 opens at a click.
+- A question to you that comes while the terminal has no focus shows a notification of the terminal, as OSC 9 does,
+  or rings the bell where the terminal shows none.
+
+`/access` with no argument lists both choices, and the preferences keep them for every session.
+
+The renderer draws at 60 frames each second. `bun run bench` opens a recorded life of 30000 facts and measures the
+first frame, and the frames while the feed scrolls and a command streams. The gates hold it on Linux: the warm first
+frame under 500 ms, at least 95 in each hundred of the frames that the renderer draws with nothing to show, since the
+timers of the runtime keep a loop of 60 frames a few frames under 60, and the 95th percentile of the frames under
+16.7 ms.
 
 The mouse reaches every control: a click is a press and a release on one control, and a drag selects text instead.
 The text that a drag selects goes to the clipboard through OSC 52 when the drag ends, where the terminal supports
@@ -129,7 +150,8 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/model [model]` | Choose the model that answers on this chain |
 | `/effort [level]` | Set the reasoning effort of the selected model |
 | `/shape [type]` | Choose the result type of the next prompt |
-| `/theme [name]` | Change the palette of every surface |
+| `/theme [name]` | Change the palette of every surface, or follow the terminal |
+| `/access [reader|motion]` | Turn the screen reader mode or reduced motion on or off |
 | `/chain <label>` | A conversation with its own state |
 | `/fork <label>` | Copy this chain's current transcript and program |
 | `/tree` | Browse the chains and their turns, and open or branch from one |

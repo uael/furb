@@ -117,15 +117,19 @@ import { type Check, checks } from "./setup.ts";
 import { publishShare } from "./share.ts";
 import {
   theme as c,
+  colorless,
   defaultTheme,
   frame,
   glyph,
+  motion,
   palettes,
   setTheme,
   spacing as space,
   spin,
   syntax,
+  type ThemeChoice,
   type ThemeName,
+  terminalThemes,
   themeLabels,
 } from "./theme.ts";
 import { bold, italic, logo, mix, type Part, plain, styled, underline } from "./ui.ts";
@@ -337,6 +341,9 @@ interface TreeRow {
 export interface AppOptions {
   quit(): void | Promise<void>;
   workspaces: Workspaces;
+  /** Rings the bell of the terminal, which calls the operator to a question when the terminal can show no
+   * notification. By default it writes BEL to the standard output. */
+  bell?(): void;
 }
 
 /** What the picker of the workspaces says of a session: its state, whether it is the current one, the time since
@@ -359,14 +366,20 @@ export function follow(renderer: CliRenderer, options: AppOptions): () => App {
   const session = options.workspaces.current?.session;
   if (!session) throw new Error("The library has no session selected.");
   let app = new App(renderer, session, options);
-  options.workspaces.on("select", (next: Session) => {
-    if (app.session === next) return;
+  const swap = (next: Session) => {
     app.dispose();
     app = new App(renderer, next, options);
+  };
+  options.workspaces.on("select", (next: Session) => {
+    if (app.session !== next) swap(next);
   });
+  // The mode of a screen reader shapes each part of the view, so a change of it draws a new view of the session.
+  options.workspaces.on("access", () => swap(app.session));
   return () => app;
 }
 
+/** What the choice of the theme of the terminal says in a picker. */
+const terminalDetail = `${themeLabels[terminalThemes.dark][0]} on a dark terminal, ${themeLabels[terminalThemes.light][0]} on a light one`;
 /** The commands whose value is a path of the project, which the suggestions wait for. */
 const pathCommands = new Set(["read", "image", "cd"]);
 /** What each effort of a model does, which the picker of the effort says beside it. */
@@ -488,8 +501,8 @@ export class App {
     {
       node: BoxRenderable;
       heading: TextRenderable;
-      /** The text of the heading, set again only when it changes. */
-      label: string;
+      /** The line of the heading, set again only when it changes. */
+      label: (string | number | undefined)[];
       title?: () => Part[];
       marker: Part[];
       key: string;
@@ -533,6 +546,12 @@ export class App {
   /** The whole text of the footer, which a notice cut to its room shows in a tip. */
   private statusWhole = "";
   private readonly tick: ReturnType<typeof setInterval>;
+  /** Whether the view serves a screen reader, as the preferences said when the view was made. */
+  private readonly reader: boolean;
+  /** Whether the terminal has the focus, as it said last, or null while it said nothing. */
+  private focused: boolean | null = null;
+  /** The questions to the operator that the view saw, so that it calls him once for each new one. */
+  private readonly called = new Set<string>();
   private readonly navigation: {
     chain: string;
     view: View;
@@ -546,6 +565,10 @@ export class App {
     readonly session: Session,
     readonly options: AppOptions,
   ) {
+    // The theme that follows the terminal reads the mode that the terminal said, and each later change of it.
+    session.preferences.terminalMode = renderer.themeMode ?? session.preferences.terminalMode;
+    this.reader = session.preferences.screenReader;
+    motion.still = session.preferences.still;
     setTheme(session.theme);
     this.theme = session.theme;
     this.firstRun = !session.preferences.setupSeen;
@@ -683,7 +706,7 @@ export class App {
     this.modeBox = this.row();
     // The composer is a panel, whose three rows the mode colors.
     this.composeBox = this.panel(center, c.accent, { id: "composer-box" });
-    this.composeEdges = center.getChildren().slice(-3) as BoxRenderable[];
+    this.composeEdges = this.reader ? [] : (center.getChildren().slice(-3) as BoxRenderable[]);
     this.composer = new TextareaRenderable(renderer, {
       id: "composer",
       flexGrow: 1,
@@ -771,6 +794,10 @@ export class App {
     void this.parts.load();
     renderer.on("resize", this.render);
     renderer.on("selection", this.copySelection);
+    renderer.on("theme_mode", this.modeChanged);
+    renderer.setFrameCallback(this.drawDue);
+    renderer.on("focus", this.focusTaken);
+    renderer.on("blur", this.focusLost);
     // A renderer that ends on its own, as on a signal, ends the App before it frees the buffers of the view.
     renderer.on("destroy", this.dispose);
     // A label that moves with time is read again, and no other part of the view is drawn again.
@@ -832,7 +859,14 @@ export class App {
   }
 
   private box(options: BoxOptions = {}): BoxRenderable {
-    return new BoxRenderable(this.renderer, { flexDirection: "column", flexShrink: 0, ...options });
+    // The mode of a screen reader draws no border, since a reader reads each glyph of a border aloud. A box with no
+    // border takes no color and no glyph of a border, since either of them draws a whole border.
+    const { border, borderColor, borderStyle, customBorderChars, ...plain } = options;
+    return new BoxRenderable(this.renderer, {
+      flexDirection: "column",
+      flexShrink: 0,
+      ...(this.reader ? plain : { border, borderColor, borderStyle, customBorderChars, ...plain }),
+    });
   }
   /** A box that lays out what it holds in a row one bar high. */
   private row(options: BoxOptions = {}): BoxRenderable {
@@ -868,6 +902,72 @@ export class App {
     };
     return node;
   }
+  /** The mode of the terminal changed, so the theme that follows it changes too. */
+  private modeChanged = (mode: "dark" | "light"): void => {
+    this.session.preferences.terminalMode = mode;
+    this.render();
+  };
+  /** The terminal took the focus, as it says. */
+  private focusTaken = (): void => {
+    this.focused = true;
+  };
+  /** The terminal lost the focus, as it says. */
+  private focusLost = (): void => {
+    this.focused = false;
+  };
+  /** Each new question to the operator calls him while the terminal has no focus: a notification of the terminal, as
+   * OSC 9 shows it, or the bell where the terminal shows none. A question that waited when the view was made calls
+   * nobody. */
+  private call(asks: readonly { id: string; chain: string; label: string; message: string }[]): void {
+    const fresh = asks.filter((ask) => !this.called.has(ask.id));
+    for (const ask of fresh) this.called.add(ask.id);
+    const first = fresh[0];
+    if (!first || this.focused !== false || this.closed) return;
+    const text = `${first.label || first.chain} asks: ${first.message}`.replace(/\s+/g, " ").slice(0, 200);
+    if (this.renderer.triggerNotification(text, "furb")) return;
+    if (this.options.bell) this.options.bell();
+    else process.stdout.write("\x07");
+  }
+  /** The mode of a screen reader or reduced motion, turned on or off, which every session keeps. A change of the mode
+   * of a screen reader draws a new view of the session. */
+  private toggleAccess(which: "reader" | "motion"): void {
+    const preferences = this.session.preferences;
+    if (which === "reader") preferences.screenReader = !preferences.screenReader;
+    else preferences.reducedMotion = !preferences.reducedMotion;
+    preferences.save();
+    const on = which === "reader" ? preferences.screenReader : preferences.reducedMotion;
+    this.session.notice = `${which === "reader" ? "Screen reader mode" : "Reduced motion"} is ${on ? "on" : "off"}.`;
+    if (which === "reader") this.options.workspaces.emit("access");
+    else this.render();
+  }
+  /** The choices of access: the mode of a screen reader, and reduced motion. */
+  private accessPicker = (): void => {
+    const preferences = this.session.preferences;
+    this.openPalette(
+      "Access",
+      [
+        {
+          label: "Screen reader",
+          detail: "One column of text, with no box, no spinner, and nothing that moves",
+          mark: this.current(preferences.screenReader),
+          command: "/access reader",
+          run: () => this.toggleAccess("reader"),
+        },
+        {
+          label: "Reduced motion",
+          detail: "No spinner turns, and no part of the view moves with time",
+          mark: this.current(preferences.reducedMotion),
+          command: "/access motion",
+          run: () => this.toggleAccess("motion"),
+        },
+      ],
+      {
+        note: colorless.on
+          ? "NO_COLOR is set, so the view shows the colors of the terminal alone."
+          : "Every session shares these choices. NO_COLOR turns every color off.",
+      },
+    );
+  };
   /** The text that a drag selected goes to the clipboard as the drag ends. */
   private copySelection = (selection: { getSelectedText(): string } | null): void => {
     const text = selection?.getSelectedText() ?? "";
@@ -950,13 +1050,23 @@ export class App {
     this.showDraft(this.session.draftKey, text);
     this.composer.focus();
   };
+  /** A change of the session draws the view again once the changes of 35 ms are in, at the start of the next frame
+   * of the renderer, so that the work of the view and the frame that shows it share the time of one frame. */
   private schedule = () => {
     if (this.closed) return;
     if (!this.redraw)
       this.redraw = setTimeout(() => {
         this.redraw = undefined;
-        this.render();
+        this.due = true;
+        this.renderer.requestRender();
       }, 35);
+  };
+  /** Whether a change waits for the next frame to draw the view again. */
+  private due = false;
+  private drawDue = async (): Promise<void> => {
+    if (!this.due || this.closed) return;
+    this.due = false;
+    this.render();
   };
   /** What the input sent on this chain in this mode. A chain that holds messages the input did not send, as a record
    * that opens with no saved input, walks those messages instead. */
@@ -1003,9 +1113,12 @@ export class App {
     if (this.closed) return;
     const w = this.session;
     this.parts.heard(w.acts);
+    motion.still = w.preferences.still;
     if (w.theme !== this.theme) this.applyTheme(w.theme);
+    this.call(w.desk.asks);
     if (this.draftKey !== w.draftKey) this.showDraft(w.draftKey);
-    this.rail.visible = w.preferences.sidebar && this.renderer.width >= 100;
+    // The mode of a screen reader shows one column of text, and no sidebar beside it.
+    this.rail.visible = w.preferences.sidebar && !this.reader && this.renderer.width >= 100;
     this.rail.width = w.preferences.sidebarWidth;
     this.renderTop();
     const pending = w.operatorPrompt;
@@ -1413,11 +1526,28 @@ export class App {
       this.hints.add(this.line(buttons[index] ?? [], c.faint, { run }));
   }
 
-  /** The heading of a card set to a line, only when the line changed. */
-  private label(card: { heading: TextRenderable; label: string }, parts: Part[]): void {
-    const key = JSON.stringify(parts.map(([text, fg, attributes]) => [text, fg?.toInts(), attributes]));
-    if (card.label === key) return;
-    card.label = key;
+  /** The heading of a card set to a line, only when the line changed. A frame reads each card, so the line is held
+   * as a flat list of its texts, the numbers of its colors and its attributes, which it compares with no copy. */
+  private label(
+    card: { heading: TextRenderable; label: (string | number | undefined)[] },
+    parts: Part[],
+  ): void {
+    const held = card.label;
+    let at = 0;
+    const same = (value: string | number | undefined) => held[at++] === value;
+    const color = (one?: RGBA) =>
+      one ? same(one.r) && same(one.g) && same(one.b) && same(one.a) : same(undefined);
+    if (
+      held.length === parts.reduce((count, [, fg, , bg]) => count + 2 + (fg ? 4 : 1) + (bg ? 4 : 1), 0) &&
+      parts.every(([text, fg, attributes, bg]) => same(text) && color(fg) && same(attributes) && color(bg))
+    )
+      return;
+    card.label = parts.flatMap(([text, fg, attributes, bg]) => [
+      text,
+      ...(fg ? [fg.r, fg.g, fg.b, fg.a] : [undefined]),
+      attributes,
+      ...(bg ? [bg.r, bg.g, bg.b, bg.a] : [undefined]),
+    ]);
     card.heading.content = styled(parts);
   }
   private card(
@@ -1448,7 +1578,7 @@ export class App {
       Object.assign(prior, { marker, title: options.title, closed });
       if (prior.heading.visible !== visible) prior.heading.visible = visible;
       if (prior.node.marginTop !== margin) prior.node.marginTop = margin;
-      if (this.scroll.getChildren()[index] !== prior.node) this.scroll.add(prior.node, index);
+      if (this.feedChild(index) !== prior.node) this.placeCard(prior.node, index);
       return;
     }
     prior?.node.destroyRecursively();
@@ -1468,12 +1598,12 @@ export class App {
     box.add(labelNode);
     if (!closed) body(box);
     else if (!rung) options.preview?.(box);
-    this.scroll.add(box, index);
+    this.placeCard(box, index);
     const card = {
       key,
       node: box,
       heading: labelNode,
-      label: "",
+      label: [],
       marker,
       title: options.title,
       compact: options.compact ?? false,
@@ -1484,6 +1614,29 @@ export class App {
     };
     this.label(card, heading);
     this.cards.set(id, card);
+  }
+  /** The cards of the feed in their order, read once while no card moves, since each read of them copies them. */
+  private feedOrder?: Renderable[];
+  /** The card at a place of the feed. */
+  private feedChild(index: number): Renderable | undefined {
+    this.feedOrder ??= this.scroll.getChildren();
+    return this.feedOrder[index];
+  }
+  /** A card moved to a place of the feed, or added there. */
+  private placeCard(node: Renderable, index: number): void {
+    this.scroll.add(node, index);
+    this.feedOrder = undefined;
+  }
+  /** The text of an act, which its card keys on and the filter reads, kept for each act, since an act that changes is
+   * a new object. */
+  private readonly actTexts = new WeakMap<ActRow, string>();
+  private actText(act: ActRow): string {
+    let text = this.actTexts.get(act);
+    if (text === undefined) {
+      text = JSON.stringify(act);
+      this.actTexts.set(act, text);
+    }
+    return text;
   }
   /** A panel in a box: a bar of a color at its left, and half a row of the panel above and below what it holds. */
   private panel(box: BoxRenderable, color: RGBA, options: BoxOptions = {}): BoxRenderable {
@@ -1514,6 +1667,11 @@ export class App {
       backgroundColor: c.panel,
       ...options,
     });
+    // The mode of a screen reader draws the panel with no bar and no edge, as text alone.
+    if (this.reader) {
+      box.add(inner);
+      return inner;
+    }
     box.add(edge("top"));
     box.add(inner);
     box.add(edge("bottom"));
@@ -1663,6 +1821,7 @@ export class App {
       return;
     }
     const existing = new Set(this.cards.keys());
+    this.feedOrder = undefined;
     const used = new Map<string, number>();
     const matches = (text: string) => !w.search || text.toLowerCase().includes(w.search.toLowerCase());
     let order = 0,
@@ -1755,7 +1914,23 @@ export class App {
     if (w.view === "feed") {
       // The feed shows the acts as they stood at the moment that the operator moved to, or as they stand now.
       const shown = w.at(w.acts);
-      const rows = new Map(shown.map((one) => [one.id, one]));
+      // The acts of now are found by the index of the session, and those of a moment of the past by a map of their own.
+      const then = shown === w.acts ? undefined : new Map(shown.map((one) => [one.id, one]));
+      const rows = { get: (id: string) => (then ? then.get(id) : w.actOf(id)) };
+      // The acts that each act made, in the order of the acts, which each open rung reads once the first one asks.
+      let makers: Map<string, ActRow[]> | undefined;
+      const madeBy = (id: string): readonly ActRow[] => {
+        if (!makers) {
+          const by = new Map<string, ActRow[]>();
+          for (const one of shown) {
+            const list = by.get(one.by);
+            if (list) list.push(one);
+            else by.set(one.by, [one]);
+          }
+          makers = by;
+        }
+        return makers.get(id) ?? [];
+      };
       if (w.watching) {
         add("watch", `watch:${w.moment}:${w.cost}:${this.theme}`, [], (box) => this.watchBanner(box));
       }
@@ -1780,7 +1955,7 @@ export class App {
       const actCard = (act: ActRow, indent: number) =>
         add(
           act.id,
-          JSON.stringify(act),
+          this.actText(act),
           this.actLabel(act, false, indent),
           (box) => this.actDetails(box, act),
           {
@@ -1790,7 +1965,7 @@ export class App {
             act,
             title: moving(act, indent),
             indent,
-            shown: JSON.stringify(act),
+            shown: this.actText(act),
           },
         );
       let retold = false;
@@ -1901,8 +2076,8 @@ export class App {
             },
           );
           if (!closed)
-            for (const child of shown)
-              if (child.by === act.id && !(child.kind === "prompt" && child.on === w.selected))
+            for (const child of madeBy(act.id))
+              if (!(child.kind === "prompt" && child.on === w.selected))
                 actCard(child, indent + space.between);
         } else if (line.type === "tail") {
           const maker = rows.get(act.by);
@@ -2423,18 +2598,21 @@ export class App {
     const w = this.session;
     const width = Math.min(72, this.feedWidth);
     const column = this.box({ width, alignItems: "center" });
-    // The logo shades from the accent to the color of Python, one column at a time.
+    // The logo shades from the accent to the color of Python, one column at a time. The mode of a screen reader says
+    // the name, since a reader reads the blocks of the logo as glyphs.
     const columns = Math.max(...logo.map((line) => line.length));
-    for (const line of logo)
-      column.add(
-        this.text(
-          [...line].map(
-            (cell, at): Part => [cell, mix(c.accent, c.secondary, at / Math.max(1, columns - 1))],
+    if (this.reader) column.add(this.text([["furb", c.accent, bold]]));
+    else
+      for (const line of logo)
+        column.add(
+          this.text(
+            [...line].map(
+              (cell, at): Part => [cell, mix(c.accent, c.secondary, at / Math.max(1, columns - 1))],
+            ),
+            c.accent,
+            { width: columns },
           ),
-          c.accent,
-          { width: columns },
-        ),
-      );
+        );
     column.add(
       this.text("The model answers in Python. Read and steer each word it runs.", c.muted, {
         marginTop: space.section,
@@ -2490,6 +2668,8 @@ export class App {
       marginTop: space.section * 2,
       gap: space.section,
     });
+    // A card has a bar at its left, but in the mode of a screen reader.
+    const framed = !this.reader;
     for (const [index, [label, prompt, run]] of cards.entries()) {
       const lead = index === 0 && !w.watching;
       // The pointer lifts a card onto a panel, and its bar takes the accent.
@@ -2502,15 +2682,15 @@ export class App {
         onMouseUp: this.click(run),
         onMouseOver() {
           this.backgroundColor = c.panel;
-          this.borderColor = c.accent;
+          if (framed) this.borderColor = c.accent;
         },
         onMouseOut() {
           this.backgroundColor = c.background;
-          this.borderColor = lead ? c.accent : c.border;
+          if (framed) this.borderColor = lead ? c.accent : c.border;
         },
       });
       // The card that plays a life leads, with its bar in the accent.
-      if (lead) card.borderColor = c.accent;
+      if (lead && framed) card.borderColor = c.accent;
       card.add(this.text([[label, lead ? c.accent : c.text, bold]], c.text, { truncate: true }));
       card.add(this.text(prompt, c.muted, { truncate: true }));
       starts.add(card);
@@ -2806,17 +2986,39 @@ export class App {
    * that needs a look, the chains that ask the operator first and the others in the order of their tree. A row says the
    * state of its chain, its name, what it does now, and how many answers its models gave for how many dollars. A click
    * on a row shows its chain. The board shows once the life holds more than one chain, or a question waits. */
+  /** The loom that the board read last, and what it was woven of, which a frame of the same life reads again. */
+  private boardLoom?: { of: unknown[]; loom: Loom };
+  /** What each chain of the board does now, and what it was read of. */
+  private boardNow: { of: unknown[]; now: Map<string, ReturnType<typeof nowOf>> } = {
+    of: [],
+    now: new Map(),
+  };
   private renderBoard(): void {
     const w = this.session;
-    const loom = weave({
-      acts: w.acts,
-      prompts: [...w.host.prompts.values()],
-      measures: w.host.measures,
-      folds: new Set(),
-      width: 1,
-      pending: w.host.pending,
-      label: (id) => w.labelOf(id),
-    });
+    const of = [
+      w.version,
+      [...w.host.prompts.keys()].join(" "),
+      w.host.measures,
+      [...w.host.pending.keys()].join(" "),
+    ];
+    const same = this.boardLoom?.of.every((one, at) => one === of[at]) ? this.boardLoom.loom : undefined;
+    const woven =
+      same ??
+      weave({
+        acts: w.acts,
+        prompts: [...w.host.prompts.values()],
+        measures: w.host.measures,
+        folds: new Set(),
+        width: 0,
+        pending: w.host.pending,
+        label: (id) => id,
+      });
+    this.boardLoom = { of, loom: woven };
+    // A chain that the operator names again keeps its loom, so each label is read again.
+    const loom = {
+      ...woven,
+      rows: woven.rows.map((row) => (row.id === "operator" ? row : { ...row, label: w.labelOf(row.id) })),
+    };
     const rows = loom.rows.filter((row) => row.id !== "operator");
     this.renderStage();
     const visible =
@@ -2845,11 +3047,18 @@ export class App {
     const shown = [...asking, ...others].filter((row) => kept.has(row.id));
     const left = rows.length - shown.length;
     const word = (rung: ActRow) => this.subject(rung);
-    const lines = shown.map((row) => ({
-      row,
-      now: nowOf(row, loom, w.acts, word),
-      depth: row.lines.length / 2,
-    }));
+    // What a chain does now holds while its loom, the program and the turns stay, since it reads the acts that start,
+    // end, pause or wake, and the words of the rungs.
+    const read = [woven, w.program, w.turns];
+    const held = this.boardNow.of;
+    if (held.length !== read.length || !held.every((one, at) => one === read[at]))
+      this.boardNow = { of: read, now: new Map() };
+    const known = this.boardNow.now;
+    const lines = shown.map((row) => {
+      const now = known.get(row.id) ?? nowOf(row, loom, w.acts, word);
+      known.set(row.id, now);
+      return { row, now, depth: row.lines.length / 2 };
+    });
     const counts = boardOrder.flatMap((state) => {
       const count = rows.filter((row) => row.state === state).length;
       return count ? [[state, count] as const] : [];
@@ -2926,8 +3135,10 @@ export class App {
     }
   }
   /** The view of the life that shows: the board of main, the loom, or the graph. */
+  /** The view of the life: the one that the preferences keep, or the board of main in the mode of a screen reader,
+   * which reads text in lines and no picture of the life in time. */
   get lifeView(): LifeView {
-    return this.session.preferences.view;
+    return this.reader ? "main" : this.session.preferences.view;
   }
   /** The view of the life switched to the one named, or to the next one, which the preferences keep. */
   switchView(view?: LifeView): void {
@@ -3213,7 +3424,10 @@ export class App {
    * where its answer goes. A click on a mark points at its ask and shows its chain, and a click on the message opens
    * the ask whole. */
   /** The parts once they loaded: their keys again, and each card again, since a part may draw the row of its act. */
+  /** The count of the loads of the parts, which a label that a part gives keys on. */
+  private partsLoaded = 0;
   private partsChanged = (): void => {
+    this.partsLoaded++;
     if (this.closed) return;
     this.partKeysOff?.();
     const keys = this.parts.loaded.flatMap((part) => part.keys);
@@ -3442,7 +3656,19 @@ export class App {
   }
   /** The heading of an act: its state, its kind, what it is about, and the word of its state. A rung is named by its
    * id, and says its first line while it is folded. */
+  /** The labels of the acts that are done, which stay as they are while the view keeps its theme, its width and its
+   * parts, since an act that changes is a new object. */
+  private readonly labels = new WeakMap<ActRow, Map<string, Part[]>>();
   private actLabel(act: ActRow, closed = false, indent = 0, code?: string): Part[] {
+    if (!act.done) return this.labelNow(act, closed, indent, code);
+    const key = `${closed}|${indent}|${code}|${this.theme}|${this.feedWidth}|${this.partsLoaded}`;
+    const kept = this.labels.get(act) ?? new Map<string, Part[]>();
+    this.labels.set(act, kept);
+    const label = kept.get(key) ?? this.labelNow(act, closed, indent, code);
+    kept.set(key, label);
+    return label;
+  }
+  private labelNow(act: ActRow, closed: boolean, indent: number, code?: string): Part[] {
     const { word, mark, color } = this.actState(act);
     const observation = act.kind === "prompt" && !this.session.isUserPrompt(act);
     // A rung says its first line while it is folded, and a message of a chain names the act that it tells done.
@@ -4478,6 +4704,12 @@ export class App {
       await bare[name]?.();
       return true;
     }
+    if (name === "access") {
+      if (!argument) this.accessPicker();
+      else if (argument === "reader" || argument === "motion") this.toggleAccess(argument);
+      else throw new Error("Choose reader or motion.");
+      return true;
+    }
     if (name === "view") {
       if (!argument) this.viewPicker();
       else if (isLifeView(argument)) this.switchView(argument);
@@ -4893,10 +5125,17 @@ export class App {
         current: shape === this.session.shape,
       })),
     theme: () =>
-      (Object.keys(palettes) as ThemeName[]).map((name) => ({
+      (["terminal", ...Object.keys(palettes)] as ThemeChoice[]).map((name) => ({
         value: name,
-        detail: themeLabels[name].join(", "),
-        current: name === this.theme,
+        detail: name === "terminal" ? terminalDetail : themeLabels[name].join(", "),
+        current: name === this.session.preferences.theme,
+      })),
+    access: () =>
+      (["reader", "motion"] as const).map((name) => ({
+        value: name,
+        detail: name === "reader" ? "Screen reader mode, on or off" : "Reduced motion, on or off",
+        current:
+          name === "reader" ? this.session.preferences.screenReader : this.session.preferences.reducedMotion,
       })),
     read: () => this.paths(),
     image: () => this.paths((paths) => paths.filter((path) => /\.(png|jpe?g|gif|webp)$/i.test(path))),
@@ -5159,18 +5398,20 @@ export class App {
     );
   };
   themes(): void {
-    // The dark themes come first, then the light one.
+    // The theme of the terminal comes first, then the dark themes, then the light ones.
     const names = (Object.keys(palettes) as ThemeName[]).sort(
       (one, other) => Number(themeLabels[one][1] === "Light") - Number(themeLabels[other][1] === "Light"),
     );
+    const choices: ThemeChoice[] = ["terminal", ...names];
+    const chosen = this.session.preferences.theme;
     this.openPalette(
       "Color theme",
-      names.map((name) => {
-        const palette = palettes[name];
+      choices.map((name) => {
+        const palette = palettes[name === "terminal" ? this.theme : name];
         return {
-          label: themeLabels[name][0],
-          detail: themeLabels[name][1],
-          mark: this.current(name === this.theme),
+          label: name === "terminal" ? "Terminal" : themeLabels[name][0],
+          detail: name === "terminal" ? terminalDetail : themeLabels[name][1],
+          mark: this.current(name === chosen),
           swatch: [palette.accent, palette.secondary, palette.success, palette.warning, palette.danger],
           run: () => {
             this.session.theme = name;
@@ -5179,7 +5420,12 @@ export class App {
           },
         };
       }),
-      { selected: names.indexOf(this.theme), note: "Every session shares this choice." },
+      {
+        selected: choices.indexOf(chosen),
+        note: colorless.on
+          ? "NO_COLOR is set, so every theme shows the colors of the terminal alone."
+          : "Every session shares this choice.",
+      },
     );
   }
   shapes = (): void =>
@@ -6875,6 +7121,10 @@ export class App {
     this.parts.dispose();
     this.renderer.off("resize", this.render);
     this.renderer.off("selection", this.copySelection);
+    this.renderer.off("theme_mode", this.modeChanged);
+    this.renderer.removeFrameCallback(this.drawDue);
+    this.renderer.off("focus", this.focusTaken);
+    this.renderer.off("blur", this.focusLost);
     this.root.destroyRecursively();
     this.style.destroy();
   };
