@@ -36,18 +36,24 @@ jobs:
       # The pull request of release-please changes the version in each manifest, and in Cargo.lock and uv.lock, and
       # bun.lock follows here, since it is no file that release-please reads. A pull request that the token of a
       # workflow opens starts no gates, so the job starts them by hand on its branch, and their checks stand on its
-      # head.
-      - if: steps.release.outputs.prs_created == 'true'
+      # head. The branch is read in the shell, since a template that reads an empty output fails the job even where
+      # the step does not run.
+      - id: pr
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          PR: ${{ steps.release.outputs.pr }}
+        run: echo "branch=$(printf '%s' "$PR" | jq -r '.headBranchName // empty')" >> "$GITHUB_OUTPUT"
+      - if: steps.pr.outputs.branch != ''
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
-      - if: steps.release.outputs.prs_created == 'true'
+          ref: ${{ steps.pr.outputs.branch }}
+      - if: steps.pr.outputs.branch != ''
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: "1.4.2"
-      - if: steps.release.outputs.prs_created == 'true'
+      - if: steps.pr.outputs.branch != ''
         env:
-          BRANCH: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+          BRANCH: ${{ steps.pr.outputs.branch }}
           GH_TOKEN: ${{ github.token }}
         run: |
           bun install --lockfile-only
@@ -58,7 +64,7 @@ jobs:
             git push origin "HEAD:$BRANCH"
           fi
           gh workflow run gates.yml --ref "$BRANCH"
-      - if: steps.release.outputs.release_created == 'true'
+      - if: steps.release.outputs.release_created == 'true' && steps.release.outputs.tag_name != ''
         env:
           TAG: ${{ steps.release.outputs.tag_name }}
           GH_TOKEN: ${{ github.token }}
