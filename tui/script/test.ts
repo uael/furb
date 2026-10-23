@@ -4,7 +4,8 @@
 // lists its tests. Then the tests of all the files go into runs of at most one size, about four runs for each core,
 // the runs of the largest files first. Twice as many runs go at once as the machine has cores, since a test waits for
 // its session as much as it works. A word given filters the files by their path, and a flag goes to each run. A test
-// that passes shows its line, a run that fails shows all that it wrote, and one failed run fails them all.
+// that passes shows its line, a run that fails shows all that it wrote, and one failed run fails them all. Each
+// program that a test runs compiles first, all at once, so that no compile takes the machine from a test.
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { availableParallelism, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -50,6 +51,22 @@ async function deal<T, R>(works: T[], slots: number, work: (one: T) => Promise<R
   return results;
 }
 
+const programs = join(import.meta.dir, "../../bind/typescript/test/programs");
+const compiling = Promise.all(
+  [...new Glob("*.ts").scanSync(programs)].map(async (file) => {
+    const run = Bun.spawn([process.execPath, join(programs, "../executable.ts"), join(programs, file)], {
+      env,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [out, err, code] = await Promise.all([
+      new Response(run.stdout).text(),
+      new Response(run.stderr).text(),
+      run.exited,
+    ]);
+    return { file: join(programs, file), text: out + err, passed: code === 0 };
+  }),
+);
 const listing = await mkdtemp(join(tmpdir(), "furb-tests-"));
 const listed = await deal(files, cores, async (file) => {
   const report = join(listing, `${files.indexOf(file)}.xml`);
@@ -78,8 +95,13 @@ const runs = listed.flatMap(({ file, names }) =>
     names: names.slice(at * size, (at + 1) * size),
   })),
 );
-// A file that lists no test failed to load, and its listing says why.
+// A file that lists no test failed to load, and its listing says why, as a program that does not compile does.
 const failed: string[] = [];
+for (const { file, text, passed } of await compiling)
+  if (!passed) {
+    process.stdout.write(text);
+    failed.push(file);
+  }
 for (const { file, names, text } of listed)
   if (names.length === 0) {
     process.stdout.write(text);
