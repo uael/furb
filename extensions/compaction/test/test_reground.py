@@ -22,5 +22,5 @@ async def test_reground_reads_again_each_file_that_the_chain_holds_a_read_or_wri
   told = [re.sub(r"read\d+", "readN", one) for one in of(engine.turns(on=two), "read")[-2:]]
   assert told == [
     f"#readN\nreadN_path = {f'{work}/a.txt'!r}\nreadN_text = 'fresh'",
-    f"#readN\nreadN_path = {f'{work}/b.txt'!r}",
+    f"#readN\nreadN_path = {f'{work}/b.txt'!r}\nreadN_lines = 1",
   ]

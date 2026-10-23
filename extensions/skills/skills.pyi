@@ -3,7 +3,7 @@ from furb.engine import HEAD, Show, Text
 def skills(on: str = "") -> Text:
   """The skills of a chain, as a text that the chain reads: one line for each skill that the World finds, with its name and what it is for.
   skills reads the path skills:// on its chain, so it tells the list as every read does.
-  The World answers skills:// with the skills of the folders .furb/skills and .claude/skills of the working directory of the chain and of each folder above it, nearest first, then of the folder skills of the config directory of the user, and then the skill extending, which the extension carries and which says how a model extends furb.
+  The World answers skills:// with the skills of the folders .furb/skills, .agents/skills and .claude/skills of the working directory of the chain and of each folder above it, nearest first, then of the folder skills of the config directory of the user, and then the skill extending, which the extension carries and which says how a model extends furb.
   A skill is a folder that holds a SKILL.md file, whose frontmatter gives its name and its description, and a skill with no name there takes the name of its folder.
   A name that an earlier folder holds wins, and the lines stand in the order of the names.
   A chain that finds no skill in a folder reads a list that holds the one line of extending.

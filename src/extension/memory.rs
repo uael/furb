@@ -1,4 +1,4 @@
-//! The ear of the memory extension, which answers a memory question from the CLAUDE.md and AGENTS.md files on the
+//! The ear of the memory extension, which answers a memory question from the AGENTS.md and CLAUDE.md files on the
 //! disk.
 
 use std::{
@@ -15,7 +15,7 @@ use crate::{
 };
 
 /// The files that hold the memory of a folder: the first of them that the folder holds.
-const NAMES: [&str; 2] = ["CLAUDE.md", "AGENTS.md"];
+const NAMES: [&str; 2] = ["AGENTS.md", "CLAUDE.md"];
 
 /// The ear of the memory: it answers a memory question with the texts of the memory files that apply to its path
 /// and whose content its chain does not hold at any path, which are the memory of the config directory of the user, then
@@ -150,7 +150,7 @@ fn folders(here: &Path, target: &Path) -> Vec<PathBuf> {
   out
 }
 
-/// The memory of a folder: its CLAUDE.md file, or its AGENTS.md file when it holds no CLAUDE.md, when the World reads
+/// The memory of a folder: its AGENTS.md file, or its CLAUDE.md file when it holds no AGENTS.md, when the World reads
 /// it as a text. A file holds the memory under that name exactly, on a disk that ignores the case of a name too, so a
 /// folder has the same memory on every machine.
 fn of(folder: &Path) -> Option<Text> {
