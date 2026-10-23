@@ -2,10 +2,12 @@
 
 The engine is `src/furb/engine.py`, one file. It depends only on the python interpreter and on the ears of the outside
 that boot is given, each a generator under a name: the ears of the World, the Kernel and the gate among them. It is
-derived from the contract, `src/furb/engine.pyi`, and the suite in `test/` proves it. `src/furb/CLAUDE.md` holds the
+derived from the contract, `src/furb/engine.pyi`, and the suite in `test/` proves it. `src/furb/AGENTS.md` holds the
 technical names of the engine and the laws that no test can hold. `DOCTRINE.md` is the doctrine of furb, which says
 how a model works in furb: every model reads it once on each chain, in the paragraph that asks it for its first word.
-`script/CLAUDE.md` says how to run the DeepSWE rig.
+`script/AGENTS.md` says how to run the DeepSWE rig. Claude Code reads each `AGENTS.md` through a
+`CLAUDE.md` beside it that holds only `@AGENTS.md`, and the skills of `.agents/skills` through `.claude/skills`, a
+link to that folder.
 
 The crate at the root, `furb`, runs the same file in monty, a python interpreter written in rust, behind an async
 API of its own:
@@ -229,7 +231,7 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
   local server that `FURB_LOCAL_URL` names. It is no test of the suite and spends one prompt.
 - `uv run python script/play.py`: one real life that uses every part of the runtime, and a second life on its
   record.
-- `uv run python script/deepswe.py`: the DeepSWE rig, which `script/CLAUDE.md` says how to run.
+- `uv run python script/deepswe.py`: the DeepSWE rig, which `script/AGENTS.md` says how to run.
 - `uv run python script/bench/replay.py <task> --out <directory>`: the bench of replay. One life of the local model
   works a task of DeepSWE, later lives open on its record, one more opens after a change of the World, and Claude
   Code on the same model works the task as the baseline. Its docstring says how to run it.
@@ -294,12 +296,29 @@ until then it says why it skips.
 
 ## Prose
 
-Write all prose in Simplified Technical English, for a general non-technical audience, per ASD-STE100 at
-https://www.asd-ste100.org/, with no em dash and no en dash. This holds for everything you write: a message, a
-commit, a comment, a docstring, a document.
+**Write all prose in Simplified Technical English**, for a general non-technical audience. The
+rules are ASD-STE100, at <https://www.asd-ste100.org/>. This holds for a chat message, a commit
+message, a pull request, a review comment, a code comment and a document.
 
-Each pull request follows `.github/pull_request_template.md`, the one home of the rules of a pull request: its scope,
-its title, which release-please reads, and its body. Read it whole before you open one. The check `the title`, in
-`.github/workflows/titles.yml`, runs `script/title.py` on each title, at each change of the pull request and at each
-edit of its title, and reads the types from their one home, the `changelog-sections` of `release-please-config.json`.
-The commits before this rule stay as they are.
+Prose here uses no em dash and no en dash. A docstring is a document.
+
+## Pull Requests
+
+Read `.github/pull_request_template.md` whole and apply it strictly.
+
+It is the one home of the rules of a pull request: its scope, its title, which release-please reads, and its body.
+The check `the title`, in `.github/workflows/titles.yml`, runs `script/title.py` on each title, at each change of the
+pull request and at each edit of its title, and reads the types from their one home, the `changelog-sections` of
+`release-please-config.json`. The commits before this rule stay as they are.
+
+## Comments
+
+A comment says what the code cannot tell by itself. It is a disclaimer: the code does not behave as a reader would
+assume, and one sentence spares them a debugging session. Documentation adds edges to symbols and enumerates the
+invariants; a public type of furb always gets it, because a client developer reads it: a type of the contract
+`src/furb/engine.pyi`, and a type of a door, the crate in `src/lib.rs`, `bind/python` or `bind/typescript`. Everything
+else the code, its names, the module tree and `git log` already say.
+
+A comment older than your change is not yours to remove. `TODO` and `FIXME` go with the change that completes the
+work they name. Write for the reader a year out: state what is true, never what changed. No em dash. Fill each line to
+column 120, the width that the formatters keep here, then wrap; a docstring of a contract keeps one sentence per line.

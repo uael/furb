@@ -148,7 +148,7 @@ act stands in the margin, at the line that made it. The chains of the life are t
  ▾ conduct  ◉      │   1  r = await bash("git fetch -q origin main && git worktree …")  │ bash111 ✓ 0.8s
    ├ w tui   ⠦     │   2  if r.code == 0:                                               │
    ├ w docs  ✓     │   3    cd("/Users/uael/src/github.com/uael/furb-w-tui")            │ cd6 ✓
-   ├ w ui    ◆     │   4    for path in ["src/furb/CLAUDE.md", "src/furb/engine.pyi"]:  │
+   ├ w ui    ◆     │   4    for path in ["src/furb/AGENTS.md", "src/furb/engine.pyi"]:  │
    └ w gif   ◌     │   5      read(path, span(1, -1))                                   │ read111-112 ✓
                    │  ┄┄ rung242 ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
  watch             │   6  build = bash("nice -n 20 bun run build", timeout=3600)       │ bash123 ⠦ 8m54s

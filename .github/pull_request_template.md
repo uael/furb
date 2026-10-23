@@ -28,7 +28,7 @@ Title: `type(area): What changed`, 70 characters or fewer, as
 Body: keep Why and Outcome. Delete Breaking changes when nothing breaks. Write up to 300 words.
 The checklist, Breaking changes, a table and a diagram label do not count. Cut by deleting a whole
 paragraph, not by compressing a sentence. A large diff does not need a large body. A section that
-grows with the diff repeats the diff. Write it as CLAUDE.md says under "Prose".
+grows with the diff repeats the diff. Write it as AGENTS.md says under "Prose".
 
 Do not give the how. The diff and the commit messages hold the mechanism. When the diff is hard to
 read, the PR is too large. Divide it.
@@ -75,7 +75,7 @@ A box you cannot tick names work to do. -->
 
 - [ ] I am accountable for this diff, whoever or whatever wrote it.
 - [ ] It is one change. No part belongs in another PR. No part could be its own PR.
-- [ ] Its comments obey CLAUDE.md: none, or each one prevents a debugging session.
-- [ ] Its prose obeys CLAUDE.md: Simplified Technical English, for a general non-technical audience.
+- [ ] Its comments obey AGENTS.md: none, or each one prevents a debugging session.
+- [ ] Its prose obeys AGENTS.md: Simplified Technical English, for a general non-technical audience.
 - [ ] Every flaw I know of is fixed in this diff or named in `## Outcome`.
 - [ ] I checked each statement above. I did not assume it.

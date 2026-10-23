@@ -4,7 +4,7 @@
 
 Each name has one meaning, which the contract's sentences use as given here.
 
-`CLAUDE.md` at the root gives the meanings of fact, question, act, owner, started, query and view, under The
+`AGENTS.md` at the root gives the meanings of fact, question, act, owner, started, query and view, under The
 meanings. The entry of such a name here gives only its form in the engine.
 
 - engine: the program in engine.py, which is the system prompt of a model.

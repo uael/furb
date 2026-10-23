@@ -39,13 +39,14 @@ async def test_skills_reads_the_path_skills_on_its_chain(tmp_path: Path) -> None
 
 
 async def test_the_world_answers_skills_with_the_skills_of_the_folders_of_the_chain(tmp_path: Path) -> None:
-  """The World answers skills:// with the skills of the folders .furb/skills and .claude/skills of the working directory of the chain and of each folder above it, nearest first, then of the folder skills of the config directory of the user, and then the skill extending, which the extension carries and which says how a model extends furb."""
+  """The World answers skills:// with the skills of the folders .furb/skills, .agents/skills and .claude/skills of the working directory of the chain and of each folder above it, nearest first, then of the folder skills of the config directory of the user, and then the skill extending, which the extension carries and which says how a model extends furb."""
   skilled(tmp_path / "work" / ".furb" / "skills", "a", "description: One.")
-  skilled(tmp_path / "work" / ".claude" / "skills", "b", "description: Two.")
-  skilled(tmp_path / ".claude" / "skills", "c", "description: Three.")
-  skilled(tmp_path / "config" / "skills", "d", "description: Four.")
+  skilled(tmp_path / "work" / ".agents" / "skills", "b", "description: Two.")
+  skilled(tmp_path / "work" / ".claude" / "skills", "c", "description: Three.")
+  skilled(tmp_path / ".claude" / "skills", "d", "description: Four.")
+  skilled(tmp_path / "config" / "skills", "f", "description: Five.")
   skilled(tmp_path / "work" / "skills", "e", "description: Not a folder of skills.")
-  assert await lines(tmp_path) == ["a: One.", "b: Two.", "c: Three.", "d: Four.", EXTENDING]
+  assert await lines(tmp_path) == ["a: One.", "b: Two.", "c: Three.", "d: Four.", EXTENDING, "f: Five."]
 
 
 async def test_a_skill_is_a_folder_that_holds_a_skill_md_file(tmp_path: Path) -> None:

@@ -300,7 +300,7 @@ pub fn enabled(root: &[Fact]) -> Vec<Extension> {
   out
 }
 
-/// The ear of the extensions, which says and hears the fact enable. `src/furb/CLAUDE.md` says what the fact means and
+/// The ear of the extensions, which says and hears the fact enable. `src/furb/AGENTS.md` says what the fact means and
 /// when a life says it, under the names enable and life word and in its laws.
 ///
 /// The fact is `("enable", "chain1", "extensions", name, word, life)`. No contract holds it, so this is the one home

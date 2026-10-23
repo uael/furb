@@ -20,7 +20,7 @@ def remember(on: str = "") -> Act:
 type Memory = tuple[Literal["memory"], str, str, str, str]
 """A memory is the question of the memory files that apply to a path, which carries the path, and which the World answers with a list of texts.
 The World answers with the memory of the user first, then of each folder from the root of the file system down to the working directory of the chain, then of each folder under it down to the folder of the path, when the path stands under it.
-The memory of a folder is its CLAUDE.md file, or its AGENTS.md file when the folder holds no CLAUDE.md, and the memory of the user is that of the config directory of the user.
+The memory of a folder is its AGENTS.md file, or its CLAUDE.md file when the folder holds no AGENTS.md, and the memory of the user is that of the config directory of the user.
 The World leaves out a memory file whose content the chain holds at any path: one that a memory question told it, or that it read or wrote, with that content, its prefix among them, so one text in two folders, as in a checkout and its worktree, enters a chain once.
 A path of a scheme adds no folder of its own.
 """

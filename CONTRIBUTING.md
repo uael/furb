@@ -4,9 +4,9 @@ Thank you for your interest in furb. This guide is for each person who wants to 
 defect, to add a feature, or to make a document clearer. It tells you what to install, how to set up a clone, how a
 word runs, where each part lives, which gates to run, and how a pull request lands.
 
-[`CLAUDE.md`](CLAUDE.md) holds the full rules of the repository: the map of its parts, the contract, the meanings of
+[`AGENTS.md`](AGENTS.md) holds the full rules of the repository: the map of its parts, the contract, the meanings of
 the words, the suite, the hygiene laws, every command, and the rules of prose. This guide gives you the start. When
-the two do not agree, `CLAUDE.md` is right, and this guide must change.
+the two do not agree, `AGENTS.md` is right, and this guide must change.
 
 To report a defect or to ask for a feature, open an issue with its form. A small fix needs no issue first. For a
 large change, open an issue first, so we can agree on its shape before you do the work.
@@ -62,7 +62,7 @@ contract needs a request of the owner.
 | --- | --- |
 | `src/furb/engine.pyi` | The contract: the typed surface of the engine, and the laws of each definition. Only the owner changes it. |
 | `src/furb/engine.py` | The engine, one file, which is the system prompt of a model. |
-| `src/furb/CLAUDE.md` | The technical names of the engine, and the laws that no test can hold. |
+| `src/furb/AGENTS.md` | The technical names of the engine, and the laws that no test can hold. |
 | `DOCTRINE.md` | The doctrine of furb, which each model reads once on each chain. |
 | `src/furb/__init__.py` | The switch: `FURB_ENGINE` picks the engine that `from furb import engine` gives. |
 | `src/engine.rs`, `src/sand.rs` | One life of `engine.py` in the sandbox of monty, how each value crosses, and the verbs that a host says. |
@@ -165,7 +165,7 @@ says its design. Its core in `gui/src-tauri/` links the crate `furb`, and its wi
 
 ### The suite
 
-`CLAUDE.md` gives the rules of the suite: one test file for each definition of the contract, and one test for each
+`AGENTS.md` gives the rules of the suite: one test file for each definition of the contract, and one test for each
 sentence.
 
 | File | What it holds |
@@ -216,8 +216,8 @@ pull request.
 
 ## Where to read next
 
-- [`CLAUDE.md`](CLAUDE.md): every rule and every command of the repository.
-- [`src/furb/CLAUDE.md`](src/furb/CLAUDE.md): the technical names of the engine.
+- [`AGENTS.md`](AGENTS.md): every rule and every command of the repository.
+- [`src/furb/AGENTS.md`](src/furb/AGENTS.md): the technical names of the engine.
 - [`tui/README.md`](tui/README.md) and [`docs/tui.md`](docs/tui.md): what the TUI does, and a picture of each screen.
 - [`bind/typescript/README.md`](bind/typescript/README.md): the TypeScript API.
 - [`docs/extensions.md`](docs/extensions.md): how an extension works.
