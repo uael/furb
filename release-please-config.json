@@ -3,6 +3,13 @@
   "bootstrap-sha": "27c2b17b745836d2e3bcbb3db895117da92828f9",
   "include-component-in-tag": false,
   "include-v-in-tag": true,
+  "pull-request-title-pattern": "chore${scope}: Release${component} ${version}",
+  "changelog-sections": [
+    { "type": "feat", "section": "Features" },
+    { "type": "fix", "section": "Fixes" },
+    { "type": "perf", "section": "Performance" },
+    { "type": "chore", "section": "Chores", "hidden": true }
+  ],
   "packages": {
     ".": {
       "release-type": "simple",

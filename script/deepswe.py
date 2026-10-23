@@ -1,6 +1,6 @@
 """furb against a DeepSWE task: seed a checkout, let one life work in it, grade it with the task's own verifier.
 
-`script/CLAUDE.md` says how to run it: its verbs, its one law, and where everything stands.
+`script/AGENTS.md` says how to run it: its verbs, its one law, and where everything stands.
 """
 
 import argparse

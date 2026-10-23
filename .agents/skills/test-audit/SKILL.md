@@ -13,7 +13,7 @@ tests.
 
 ## The suites of furb
 
-`CLAUDE.md` gives the laws of each suite. Read it first, and read `src/furb/CLAUDE.md` for the laws of the engine.
+`AGENTS.md` gives the laws of each suite. Read it first, and read `src/furb/AGENTS.md` for the laws of the engine.
 
 - The contract suite, `test/`, holds one test for each sentence of `src/furb/engine.pyi`, and the suite of each
   extension, `extensions/<name>/test/`, does the same for its contract. `test/test_hygiene.py` holds each suite to
@@ -138,7 +138,7 @@ turn a candidate you are not sure of into a cleanup to raise a count.
 
 ## Validation
 
-The commands are in `CLAUDE.md`, and the `testing` skill says which one proves which change.
+The commands are in `AGENTS.md`, and the `testing` skill says which one proves which change.
 
 1. Run the tests of the owner and of its siblings: `uv run pytest -q <path>`, `cargo test <filter>`, or
    `bun run test`, which gives the tests the config and the cache of `.furb/tests`.

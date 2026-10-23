@@ -23,6 +23,6 @@ async def test_reground_reads_again_each_file_of_each_read_or_write_whose_tell_t
   told = [re.sub(r"read\d+", "readN", one) for one in of(engine.turns(on=root), "read")[-2:]]
   assert told == [
     f"#readN\nreadN_path = {f'{work}/a.txt'!r}\nreadN_text = 'fresh'",
-    f"#readN\nreadN_path = {f'{work}/b.txt'!r}",
+    f"#readN\nreadN_path = {f'{work}/b.txt'!r}\nreadN_lines = 1",
   ]
   assert len([a for a in engine.transcript(root) if a[0] == "read"]) == reads + 3
