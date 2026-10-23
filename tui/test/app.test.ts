@@ -120,6 +120,32 @@ test("the real native life drives the feed, the transcript, and responsive views
     { width: 145, height: 45, useMouse: true },
   ));
 
+test("a click on a line of a program opens it in place, with its whole text and what each of its acts gave, and a second click folds it", () =>
+  composing(
+    async ({ session, screen, frame }) => {
+      await seedDemo(session);
+      const row = async () => {
+        const rows = (await drawn(frame, screen.renderer.root)).split("\n");
+        const y = rows.findIndex((one) => / 2 check = await bash\(/.test(one));
+        return { rows, y, x: rows[y]?.indexOf("check") ?? -1 };
+      };
+      await until(session, () => session.turns.some((turn) => turn[0] === "assistant"));
+      const shut = await row();
+      expect(shut.y).toBeGreaterThan(0);
+      expect(shut.rows.join("\n")).not.toMatch(/^ +✓ search *$/m);
+      await screen.mockMouse.click(shut.x, shut.y);
+      await screen.flush();
+      const open = await row();
+      expect(open.rows.join("\n")).toMatch(/^ +✓ search *$/m);
+      // The whole line shows, cut into rows at the column of the code, past the mark where it was cut.
+      expect(open.rows[open.y]).not.toContain("…");
+      await screen.mockMouse.click(open.x, open.y);
+      await screen.flush();
+      expect((await row()).rows.join("\n")).not.toMatch(/^ +✓ search *$/m);
+    },
+    { width: 145, height: 45, useMouse: true },
+  ));
+
 test("model and effort change independently, a model is named by its id alone, and a theme preference applies to a new session", async () => {
   const first = await demoSession();
   let second: Session | undefined;

@@ -198,7 +198,8 @@ export function threadProgram(
   for (const step of steps) {
     const message = first(String(step.words[1] ?? ""));
     if (step.kind === "prompt" && step.by !== "operator") {
-      notices.push(message);
+      // The end of an act shows on its own line, so a notice that says only that an act is done tells nothing more.
+      if (!/^\w+\d+ done$/.test(message)) notices.push(message);
       last = step;
       continue;
     }

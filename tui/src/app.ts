@@ -2148,38 +2148,70 @@ export class App {
           return ms >= 1000 ? spell(Math.floor(ms / 1000) * 1000) : "";
         };
         const room = this.feedWidth - indent - 8;
-        const key = [
-          hide,
-          room,
-          ...program.map((line) =>
-            line.kind === "code"
-              ? `${line.text}|${this.lineHint(line)}|${line.runs ? since(line.acts.at(-1)) : ""}|${line.fails ?? ""}|${took(line.step)}`
-              : `${line.kind}|${line.text}`,
-          ),
-        ].join("\n");
-        add(
-          `program-${id}`,
-          key,
-          [],
-          (box) => {
-            if (hide)
-              box.add(
-                this.link(
-                  [
-                    [`${glyph.closed} `, c.faint],
-                    [`# ${hide} earlier ${hide === 1 ? "step" : "steps"}`, c.syntaxComment],
-                  ],
-                  () => {
-                    w.folds[`steps:${id}`] = false;
-                    w.save();
-                    this.renderContent();
-                  },
-                ),
-              );
-            box.add(this.programView(program, room, took, since));
-          },
-          { indent, same: [key] },
-        );
+        // A click on a line opens it in place: its whole text, and under it what each act of the line gave. The
+        // program parts at each open line, so that the cards of its acts stand under it.
+        const segments: ProgramLine[][] = [[]];
+        for (const line of program) {
+          segments.at(-1)?.push(line);
+          if (this.lineOpen(line)) segments.push([]);
+        }
+        // The time and the cost of a step stand on its first line alone, in whichever part of the program it falls.
+        const heads = new Set<ProgramLine>();
+        let before: ActRow | undefined;
+        for (const line of program)
+          if (line.kind === "code" && line.step !== before) {
+            heads.add(line);
+            before = line.step;
+          }
+        for (const [at, segment] of segments.entries()) {
+          if (!segment.length) continue;
+          const key = [
+            at ? 0 : hide,
+            room,
+            ...segment.map((line) =>
+              line.kind === "code"
+                ? `${line.text}|${this.lineHint(line)}|${line.runs ? since(line.acts.at(-1)) : ""}|${line.fails ?? ""}|${took(line.step)}|${this.lineOpen(line)}`
+                : `${line.kind}|${line.text}`,
+            ),
+          ].join("\n");
+          add(
+            at ? `program-${id}-${at}` : `program-${id}`,
+            key,
+            [],
+            (box) => {
+              if (hide && !at)
+                box.add(
+                  this.link(
+                    [
+                      [`${glyph.closed} `, c.faint],
+                      [`# ${hide} earlier ${hide === 1 ? "step" : "steps"}`, c.syntaxComment],
+                    ],
+                    () => {
+                      w.folds[`steps:${id}`] = false;
+                      w.save();
+                      this.renderContent();
+                    },
+                  ),
+                );
+              box.add(this.programView(segment, room, took, since, heads));
+            },
+            { indent, same: [key] },
+          );
+          const open = segment.at(-1);
+          if (open?.kind === "code" && this.lineOpen(open) && open.acts.length)
+            add(
+              `opened-${id}-${at}`,
+              open.acts.map((one) => `${one.id}:${one.done}:${(one as ActRow).output ?? ""}`).join(" ") +
+                this.theme,
+              [],
+              (box) => {
+                const inner = this.box({ paddingLeft: space.between * 2, gap: space.stack });
+                for (const one of open.acts) this.actDetails(inner, one as ActRow);
+                box.add(inner);
+              },
+              { indent },
+            );
+        }
         tails();
       };
       let collapsed = -1;
@@ -4089,6 +4121,7 @@ export class App {
     room: number,
     took: (step: ActRow) => string,
     since: (act?: ActRow) => string,
+    heads: ReadonlySet<ProgramLine>,
   ): Renderable {
     const texts: string[] = [];
     const numbers = new Map<number, number>();
@@ -4099,34 +4132,46 @@ export class App {
       0,
       ...lines.map((line) => (line.kind === "code" ? Bun.stringWidth(line.text) : 0)),
     );
-    const column = Math.max(24, Math.min(100, widest, room - 30));
+    const noteOf = (line: Extract<ProgramLine, { kind: "code" }>) =>
+      [this.lineHint(line), line.runs ? since(line.acts.at(-1)) : "", heads.has(line) ? took(line.step) : ""]
+        .filter(Boolean)
+        .join("  ");
+    // The code takes the room that its hints leave, and the hints take 30 columns at most: a longer hint is cut.
+    const notes = Math.max(
+      0,
+      ...lines.map((line) => (line.kind === "code" ? Bun.stringWidth(noteOf(line)) : 0)),
+    );
+    const column = Math.max(24, Math.min(100, widest, room - (notes ? Math.min(notes, 26) + 4 : 0)));
     const fit = (text: string, most: number) => clip(text, Math.max(4, most));
-    const push = (text: string, number?: number) => {
+    // The line of the program that each row shows, which a click opens or folds.
+    const sources: (ProgramLine | undefined)[] = [];
+    const push = (text: string, number?: number, source?: ProgramLine) => {
       const at = texts.length;
       texts.push(text);
+      sources.push(source);
       if (number === undefined) hidden.add(at);
       else numbers.set(at, number);
       return at;
     };
-    let step: ActRow | undefined;
     for (const line of lines) {
-      const first = line.step !== step;
-      step = line.step;
       if (line.kind === "code") {
-        const note = [
-          this.lineHint(line),
-          line.runs ? since(line.acts.at(-1)) : "",
-          first ? took(line.step) : "",
-        ]
-          .filter(Boolean)
-          .join("  ");
-        const code = fit(line.text, column);
+        const note = noteOf(line);
+        const open = this.lineOpen(line);
+        // An open line shows its whole text, cut at the column into rows of their own.
+        const parts = open
+          ? Array.from({ length: Math.max(1, Math.ceil(line.text.length / column)) }, (_, k) =>
+              line.text.slice(k * column, (k + 1) * column),
+            )
+          : [fit(line.text, column)];
+        const code = parts[0] ?? "";
         const at = push(
           note
             ? `${code}${" ".repeat(Math.max(0, column - Bun.stringWidth(code)))}  # ${fit(note, room - column - 4)}`
             : code,
           line.number,
+          line,
         );
+        for (const more of parts.slice(1)) push(more, undefined, line);
         if (line.runs) {
           colors.set(at, { content: c.selected, gutter: c.selected });
           signs.set(at, { before: glyph.running, beforeColor: c.accent });
@@ -4150,7 +4195,7 @@ export class App {
         signs.set(at, { before: glyph.running, beforeColor: c.accent });
       } else push(fit(line.text, room - 2));
     }
-    return this.numbered(texts.join("\n"), {
+    const view = this.numbered(texts.join("\n"), {
       fg: c.faint,
       minWidth: 3,
       lineNumbers: numbers,
@@ -4158,6 +4203,25 @@ export class App {
       lineColors: colors,
       lineSigns: signs,
     });
+    // A press that ends a drag selects text and opens nothing.
+    view.onMouseUp = (event) => {
+      const line = sources[event.y - view.y];
+      if (line?.kind !== "code" || this.renderer.getSelection()?.getSelectedText()) return;
+      if (line.acts.length || Bun.stringWidth(line.text) > column) this.openLine(line);
+    };
+    return view;
+  }
+  /** Whether a line of a program stands open: its whole text, and what its acts gave under it. */
+  private lineOpen(line: ProgramLine): boolean {
+    return line.kind === "code" && this.session.folds[`line:${line.step.id}:${line.number}`] === false;
+  }
+  /** A line of a program opens, or folds again. */
+  private openLine(line: ProgramLine): void {
+    if (line.kind !== "code") return;
+    const w = this.session;
+    w.folds[`line:${line.step.id}:${line.number}`] = this.lineOpen(line);
+    w.save();
+    this.renderContent();
   }
   /** The quiet hint of a line of a program: what a part of an extension draws as the row of each act of the line, and
    * else what its acts came to. */
