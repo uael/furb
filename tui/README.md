@@ -87,10 +87,12 @@ The TUI serves each person who uses it:
 `/access` with no argument lists both choices, and the preferences keep them for every session.
 
 The renderer draws at 60 frames each second. `bun run bench` opens a recorded life of 30000 facts and measures the
-first frame, and the frames while the feed scrolls and a command streams. The gates hold it on Linux: the warm first
-frame under 500 ms, at least 95 in each hundred of the frames that the renderer draws with nothing to show, since the
-timers of the runtime keep a loop of 60 frames a few frames under 60, and the 95th percentile of the frames under
-16.7 ms.
+first frame, and the frames while the feed scrolls and a command streams. The gates hold it on Linux, against the
+pace of the same machine, the time that it takes to parse each fact of the record: the warm first frame under 32
+paces, at least 95 in each hundred of the frames that the renderer draws with nothing to show, since the timers of
+the runtime keep a loop of 60 frames a few frames under 60, and the 95th percentile of the frames under a pace and
+under 16.7 ms. A change of the life makes again only the cards of the acts that changed, so a frame of a long life
+takes about as long as a frame of a short one.
 
 The mouse reaches every control: a click is a press and a release on one control, and a drag selects text instead.
 The text that a drag selects goes to the clipboard through OSC 52 when the drag ends, where the terminal supports

@@ -17,7 +17,7 @@ import {
   shapes,
   WORK,
 } from "@furb/engine";
-import { type Ask, aimed, beside, type Desk, desk } from "@furb/engine/life";
+import { type ActIndex, type Ask, aimed, beside, type Desk, desk } from "@furb/engine/life";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { refusal } from "./conversation.ts";
 import { expandHome, fileReferences, fromDirectory, projectFiles, shortenHome } from "./files.ts";
@@ -430,12 +430,17 @@ export class Session extends EventEmitter {
             if (place !== undefined) next[place] = act;
             else index.at.set(act.id, next.push(act) - 1);
             index.ids.set(act.id, act);
-            // The acts of a chain keep their order, and a new act stands after the others of its chain.
-            const list = index.on.get(act.on) ?? [];
-            index.on.set(act.on, list);
-            const mine = list.findLastIndex((one) => one.id === act.id);
-            if (mine < 0) list.push(act);
-            else list[mine] = act;
+            // The acts of a chain, and those of a maker, keep their order, and a new act stands after the others.
+            for (const [map, key] of [
+              [index.on, act.on],
+              [index.made, act.by],
+            ] as const) {
+              const list = map.get(key) ?? [];
+              map.set(key, list);
+              const mine = list.findLastIndex((one) => one.id === act.id);
+              if (mine < 0) list.push(act);
+              else list[mine] = act;
+            }
             if (act.kind === "chain") {
               const chain = index.chains.findIndex((one) => one.id === act.id);
               if (chain < 0) index.chains.push(act);
@@ -607,6 +612,8 @@ export class Session extends EventEmitter {
     /** The place of each act in the list, by its name. */
     at: Map<string, number>;
     on: Map<string, ActRow[]>;
+    /** The acts that each act made, in the order of the acts. */
+    made: Map<string, ActRow[]>;
     chains: ActRow[];
     /** The acts of the chain shown, as activity reads them. */
     shown?: { chain: string; acts: ActRow[] };
@@ -618,18 +625,29 @@ export class Session extends EventEmitter {
       ids: new Map<string, ActRow>(),
       at: new Map<string, number>(),
       on: new Map<string, ActRow[]>(),
+      made: new Map<string, ActRow[]>(),
       chains: [] as ActRow[],
     };
     for (const [place, act] of this.acts.entries()) {
       index.ids.set(act.id, act);
       index.at.set(act.id, place);
-      const list = index.on.get(act.on);
-      if (list) list.push(act);
-      else index.on.set(act.on, [act]);
+      for (const [map, key] of [
+        [index.on, act.on],
+        [index.made, act.by],
+      ] as const) {
+        const list = map.get(key);
+        if (list) list.push(act);
+        else map.set(key, [act]);
+      }
       if (act.kind === "chain") index.chains.push(act);
     }
     this.index = index;
     return index;
+  }
+  /** The index of the acts that the ladder of the chain shown reads, so that a frame makes no pass over every act. */
+  get ladderIndex(): ActIndex {
+    const index = this.indexed();
+    return { on: this.activity, made: index.made, ids: index.ids };
   }
   /** The acts of the chain shown, but its chains, which the index keeps while the acts and the chain stay. */
   get activity(): ActRow[] {

@@ -18,6 +18,7 @@ import {
   type Line,
   type Loom,
   ladder,
+  makers,
   momentsOf,
   nowOf,
   owedAt,
@@ -512,6 +513,8 @@ export class App {
       closed: boolean;
       /** The act that the card shows. */
       act?: string;
+      /** What the card of a done act is made of, which a later render compares to make it again only on a change. */
+      same?: readonly unknown[];
     }
   >();
   /** Where the view scrolls to, or the card it brings into view, once the scroll box has laid out its cards. */
@@ -1828,12 +1831,15 @@ export class App {
       items = 0,
       group = "";
     // A card that shows an item of the view says the text that the filter reads, and counts as an item once it shows.
+    // A card of a done act names in same what its card is made of, and it is made again only when one of these, or
+    // its place, changed: a change of the life makes again only the cards of the acts that changed, so that a frame
+    // takes the same time in a long life as in a short one.
     const add = (
       id: string,
       key: string,
-      label: Part[],
+      label: Part[] | (() => Part[]),
       body: (box: BoxRenderable) => void,
-      options: BlockOptions & { shown?: string } = {},
+      options: BlockOptions & { shown?: string; same?: readonly unknown[] } = {},
     ) => {
       if (options.shown !== undefined) {
         if (!matches(options.shown)) return;
@@ -1846,11 +1852,34 @@ export class App {
       existing.delete(id);
       const heading = !options.group || group !== options.group;
       group = options.group ?? "";
-      this.card(id, key, label, body, order, {
+      const shape = {
         ...options,
         heading: options.heading ?? heading,
         separate: order > 0 && (options.separate ?? heading),
-      });
+      };
+      const same = options.same && [
+        ...options.same,
+        shape.heading,
+        shape.separate,
+        this.theme,
+        this.feedWidth,
+        this.partsLoaded,
+      ];
+      const prior = this.cards.get(id);
+      if (
+        same &&
+        prior?.same?.length === same.length &&
+        same.every((one, at) => prior.same?.[at] === one) &&
+        this.feedChild(order) === prior.node
+      ) {
+        // The label of an act that works moves with time, which a render reads again as the tick does.
+        if (options.title) this.label(prior, [...prior.marker, ...options.title()]);
+        order++;
+        return;
+      }
+      this.card(id, key, typeof label === "function" ? label() : label, body, order, shape);
+      const made = this.cards.get(id);
+      if (made) made.same = same;
       order++;
     };
     // The label of an act that works moves with time, so the tick reads it again.
@@ -1917,19 +1946,14 @@ export class App {
       // The acts of now are found by the index of the session, and those of a moment of the past by a map of their own.
       const then = shown === w.acts ? undefined : new Map(shown.map((one) => [one.id, one]));
       const rows = { get: (id: string) => (then ? then.get(id) : w.actOf(id)) };
+      // The acts of now are read from the index of the session, which spares a pass over every act in each frame, and
+      // those of a moment of the past from an index of their own.
+      const index = then ? undefined : w.ladderIndex;
       // The acts that each act made, in the order of the acts, which each open rung reads once the first one asks.
-      let makers: Map<string, ActRow[]> | undefined;
+      let made: ReadonlyMap<string, readonly ActRow[]> | undefined = index?.made;
       const madeBy = (id: string): readonly ActRow[] => {
-        if (!makers) {
-          const by = new Map<string, ActRow[]>();
-          for (const one of shown) {
-            const list = by.get(one.by);
-            if (list) list.push(one);
-            else by.set(one.by, [one]);
-          }
-          makers = by;
-        }
-        return makers.get(id) ?? [];
+        made ??= makers(shown);
+        return made?.get(id) ?? [];
       };
       if (w.watching) {
         add("watch", `watch:${w.moment}:${w.cost}:${this.theme}`, [], (box) => this.watchBanner(box));
@@ -1949,6 +1973,7 @@ export class App {
           (rung) => this.subject(rung),
           w.host.streams,
           new Set(w.host.prompts.keys()),
+          index,
         ),
         opened,
       );
@@ -1956,7 +1981,7 @@ export class App {
         add(
           act.id,
           this.actText(act),
-          this.actLabel(act, false, indent),
+          () => this.actLabel(act, false, indent),
           (box) => this.actDetails(box, act),
           {
             compact: true,
@@ -1966,6 +1991,7 @@ export class App {
             title: moving(act, indent),
             indent,
             shown: this.actText(act),
+            same: [act, indent, w.folds[act.id], w.took[act.id]],
           },
         );
       let retold = false;
@@ -2034,10 +2060,11 @@ export class App {
           const closed = this.folded(act.id, act);
           const label = () =>
             closed ? this.rungLabel(line, indent) : this.actLabel(act, false, indent, code);
+          const key = `${code}\n${act.run?.reason ?? ""}\n${this.gateHint(act) ?? ""}\n${line.acts.map((chip) => chip.label + chip.state).join(" ")}\n${w.folds[`word:${act.id}`]}`;
           add(
             act.id,
-            `${code}\n${act.run?.reason ?? ""}\n${this.gateHint(act) ?? ""}\n${line.acts.map((chip) => chip.label + chip.state).join(" ")}\n${w.folds[`word:${act.id}`]}`,
-            label(),
+            key,
+            label,
             (box) => {
               // A rung that stands open by itself, as one that runs, shows the first rows of a long word, and a click
               // on it shows all of it.
@@ -2073,6 +2100,7 @@ export class App {
               shown: code,
               group: closed ? "rung" : undefined,
               heading: true,
+              same: [act, indent, key, closed, line.more, w.took[act.id], this.retry(act)],
             },
           );
           if (!closed)

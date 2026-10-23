@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { LiveAct } from "../../src/life/acts.ts";
 import { measureOf } from "../../src/life/acts.ts";
-import { condense, ladder } from "../../src/life/ladder.ts";
+import { condense, ladder, makers } from "../../src/life/ladder.ts";
 import { asOf, duration, momentsOf, nowOf, owedAt, spans, subjectOf, weave } from "../../src/life/loom.ts";
 import { act } from "./acts.ts";
 
@@ -175,6 +175,34 @@ test("the rungs in a row that an ear made on a chain stand on one line, with the
   expect(lines[0]?.type === "ear" && lines[0].acts.map((chip) => [chip.label, chip.state])).toEqual([
     ["remember1", "stands"],
   ]);
+});
+
+test("a ladder that reads the index of a host gives the lines that it gives from every act", () => {
+  const acts = [
+    act("chain1", "chain", "", "operator", 1),
+    act("prompt1", "prompt", "chain1", "operator", 2, 12, { words: ["str", "Explore", ""], value: "Done." }),
+    act("rung1", "rung", "chain1", "prompt1", 3, 11),
+    act("read1", "read", "chain1", "rung1", 4, 4),
+    act("chain2", "chain", "", "rung1", 5),
+    act("prompt2", "prompt", "chain2", "rung1", 6, undefined, { words: ["str", "Look", ""] }),
+    act("rung2", "rung", "chain2", "prompt2", 7),
+    act("rung3", "rung", "chain1", "extensions", 8, 9),
+    act("bash1", "bash", "chain1", "rung3", 9, undefined, {
+      words: ["make"],
+      value: { stdout: { content: "one\n" }, stderr: { content: "" } },
+    }),
+  ];
+  for (const chain of ["chain1", "chain2"]) {
+    const index = {
+      on: acts.filter((one) => one.on === chain && one.kind !== "chain"),
+      made: makers(acts),
+      ids: new Map(acts.map((one) => [one.id, one])),
+    };
+    const word = (rung: LiveAct) => rung.id;
+    expect(ladder(chain, acts, word, new Map(), new Set(["prompt2"]), index)).toEqual(
+      ladder(chain, acts, word, new Map(), new Set(["prompt2"])),
+    );
+  }
 });
 
 test("the acts as they stood at a moment hold what began by then, and an act that ended later runs, with no value yet", () => {

@@ -86,25 +86,40 @@ export function tailOf(act: LiveAct, count = 3): string {
   return lines.slice(-count).join("\n");
 }
 
+/** What a host already holds of the acts of a life, which the ladder reads in place of a pass over every act: the acts
+ * on the chain but its chains, the acts that each act made, and each act by its name, each in the order of the acts. */
+export type ActIndex = {
+  on: readonly LiveAct[];
+  made: ReadonlyMap<string, readonly LiveAct[]>;
+  ids: ReadonlyMap<string, LiveAct>;
+};
+
+/** The acts that each act made, in the order of the acts. */
+export function makers(acts: readonly LiveAct[]): Map<string, LiveAct[]> {
+  const made = new Map<string, LiveAct[]>();
+  for (const act of acts) {
+    const list = made.get(act.by);
+    if (list) list.push(act);
+    else made.set(act.by, [act]);
+  }
+  return made;
+}
+
 /** The thread of a chain: each act on it that no act on it made, in the order it began, and under a prompt each rung
  * of its ladder, under a rung each prompt that it made on the chain, and the chips of every other act that it made.
- * A command that runs shows its tail, and a model that answers shows what it writes. */
+ * A command that runs shows its tail, and a model that answers shows what it writes. The index of a host that holds
+ * one spares a pass over every act, so that a long life draws its thread as fast as a short one. */
 export function ladder(
   chain: string,
   acts: readonly LiveAct[],
   word: (rung: LiveAct) => string,
   streams: ReadonlyMap<string, { text: string; thinking: string }>,
   owed: ReadonlySet<string>,
+  index?: ActIndex,
 ): Line[] {
-  const on = acts.filter((act) => act.on === chain && act.kind !== "chain");
+  const on = index?.on ?? acts.filter((act) => act.on === chain && act.kind !== "chain");
   const local = new Set(on.map((act) => act.id));
-  const made = new Map<string, LiveAct[]>();
-  for (const act of acts) {
-    if (act.id === chain) continue;
-    const list = made.get(act.by) ?? [];
-    list.push(act);
-    made.set(act.by, list);
-  }
+  const made = index?.made ?? makers(acts);
   const lines: Line[] = [];
   const emit = (act: LiveAct, depth: number): void => {
     const state = actState(act, owed);
@@ -151,7 +166,7 @@ export function ladder(
     if (act.kind === "bash" && !act.done && tailOf(act))
       lines.push({ type: "tail", act, depth: depth + 1, text: tailOf(act), model: false });
   };
-  const rows = new Map(acts.map((act) => [act.id, act]));
+  const rows = index?.ids ?? new Map(acts.map((act) => [act.id, act]));
   for (const act of on) {
     if (local.has(act.by)) continue;
     // The rungs that an ear made, as the words of the extensions, stand together on one line.
