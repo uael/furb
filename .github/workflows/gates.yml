@@ -7,10 +7,12 @@ on:
   push:
     branches: [main]
 
-# One run of the gates for one branch: a push that follows another ends the run before it.
+# One run of the gates for one branch: a push that follows another ends the run before it, but on main. Only a run of
+# main that passes saves the caches of rust, and a run that a push ends during its save leaves a key that no later run
+# can save: a cancel on main made the bindings on Windows build their dependencies again on each run, in 12 minutes.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
@@ -72,7 +74,8 @@ jobs:
 
   crate:
     # The hooks run the gates of the crate and of the command line on Linux. Windows has a job of its own, since a
-    # path, a line end and a process are of another form there.
+    # path, a line end and a process are of another form there. It builds the crate with the feature of the bindings
+    # of TypeScript too, so it runs their clippy and their tests, and Windows builds the crate for its tests once.
     name: the crate on windows-latest
     runs-on: windows-latest
     timeout-minutes: 60
@@ -86,8 +89,9 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           python: none
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
+          key: typescript
+      - run: cargo clippy --workspace --all-targets --features furb/typescript -- -D warnings
+      - run: cargo test --workspace --features furb/typescript
 
   typescript:
     name: the bindings and the TUI on ${{ matrix.os }}
@@ -108,9 +112,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # On Windows the job builds the package alone, so its cache holds other artifacts than on the other systems.
       - uses: ./.github/actions/setup
         with:
           python: none
+          key: ${{ runner.os == 'Windows' && 'package' || '' }}
       # napi builds for the triple of the machine, in a folder of its own: cargo builds for it too, so the tests and
       # the package share every dependency.
       - run: |
@@ -122,9 +128,12 @@ jobs:
         with:
           bun-version: "1.4.2"
       - run: bun install --frozen-lockfile
-      # The hooks check the format of the crate, and the features do not change it.
-      - run: cargo clippy --all-targets --features typescript -- -D warnings
-      - run: cargo test --features typescript
+      # The hooks check the format of the crate, and the features do not change it. On Windows the job of the crate
+      # runs these two.
+      - if: runner.os != 'Windows'
+        run: cargo clippy --all-targets --features typescript -- -D warnings
+      - if: runner.os != 'Windows'
+        run: cargo test --features typescript
       - run: bun run build
       - run: bun run docs
       - run: git diff --exit-code -- bind/typescript/index.d.cts tui/README.md
