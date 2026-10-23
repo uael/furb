@@ -1,17 +1,24 @@
-"""The bench of a loop: one word of furb that triages support tickets, against Claude Code on the same model.
+"""The bench of a loop: furb that triages support tickets, against Claude Code on the same model.
 
-The rig makes the tickets from a seed, with a known label for each. The arm `furb` runs one word on a life of furb: the
-word loops on the tickets and asks the model one prompt per ticket, on a chain of its own, whose shape is `str`, the
-label alone. The arm `claude` gives every ticket to the claude command line in one session, through a wrapper that
-points it at the same server, as `~/.claude/strata-claude` does, and the session writes a label for each ticket to a
-file. Both arms read the same instructions, `BRIEF`.
+The rig makes the tickets from a seed, with a known label for each. Three arms run on a life of furb:
+
+- `furb` runs one word that loops on the tickets and asks the model one prompt per ticket, on a chain of its own,
+  whose shape is `str`, the label alone.
+- `furb-own` gives the life the same task as the arm `claude`, as one prompt of the operator, so its model writes its
+  own words.
+- `furb-batch` runs one word that asks for `BATCH` labels at a time, as one prompt of the shape `dict` per batch, all
+  on one chain.
+
+The arm `claude` gives every ticket to the claude command line in one session, through a wrapper that points it at the
+same server, as `~/.claude/strata-claude` does, and the session writes a label for each ticket to a file. Every arm
+reads the same instructions, `BRIEF`.
 
 The server measures each arm: the rig reads the totals of its `/metrics` before and after the arm, as Strata gives
 them, so the tokens and the seconds are those of the server. Run each arm alone on the server, since the totals count
 every client. The scores compare each label with the known one.
 
     python script/bench/loop.py make <dir> [--seed 7] [--count 200]
-    python script/bench/loop.py furb <dir> --model local:<model>/<effort>
+    python script/bench/loop.py furb|furb-own|furb-batch <dir> --model local:<model>/<effort>
     python script/bench/loop.py claude <dir> [--claude ~/.claude/strata-claude]
     python script/bench/loop.py score <dir>
 
@@ -59,12 +66,31 @@ for one in tickets:
 len(labels)"""
 """FURB is the word of the arm furb: it loops on the tickets and asks one prompt of the shape str for each."""
 
+BATCH = 50
+"""BATCH is the number of tickets that one prompt of the arm furb-batch asks a label for."""
+
+BATCHED = """import json
+tickets = json.loads(read("tickets.json", HIDDEN).content)
+brief = {brief!r}
+labels = {{}}
+here = chain("batches")
+for start in range(0, len(tickets), {batch}):
+  listed = "\\n".join(one["id"] + ": " + one["text"] for one in tickets[start:start + {batch}])
+  listed = "\\n\\nThe tickets, each after its id:\\n" + listed + "\\n\\nClose with a dict that maps each id to its label."
+  got = await prompt(dict, brief + listed, on=here)
+  assert isinstance(got, dict)
+  labels.update({{str(k): str(v) for k, v in got.items()}})
+  write(Text("labels.json", json.dumps(labels, indent=1) + "\\n"))
+len(labels)"""
+"""BATCHED is the word of the arm furb-batch: it asks one prompt of the shape dict for each batch, all on one chain."""
+
 CLAUDE = (
   BRIEF
   + "\n\nThe tickets are in tickets.json, a list of objects with an id and a text. Write labels.json: one JSON object"
   " that maps the id of each ticket to its label."
 )
-"""CLAUDE is what the arm claude asks: the same instructions, and the files that hold the tickets and the labels."""
+"""CLAUDE is what the arms claude and furb-own ask: the same instructions, and the files that hold the tickets and the
+labels."""
 
 OPENERS = ["Hi,", "Hello there.", "Good morning,", "Hey support,", "Hi team,", "", "Dear support,", "Hello,"]
 CLOSERS = ["Thanks.", "Thank you!", "Regards, {name}", "Cheers, {name}", "", "Thanks in advance.", "{name}"]
@@ -218,7 +244,7 @@ def score(folder: Path) -> dict:
   """The share of right labels of each arm, and its tokens and seconds per ticket as the server counted them."""
   known = json.loads((folder / "answers.json").read_text(encoding="utf-8"))
   out = {}
-  for name in ("furb", "claude"):
+  for name in ("furb", "furb-own", "furb-batch", "claude"):
     home = folder / name
     if not (home / "run.json").is_file():
       continue
@@ -249,11 +275,11 @@ def score(folder: Path) -> dict:
 def main() -> int:
   """Parse the command line and run its step."""
   given = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-  given.add_argument("step", choices=["make", "furb", "claude", "score"])
+  given.add_argument("step", choices=["make", "furb", "furb-own", "furb-batch", "claude", "score"])
   given.add_argument("folder", type=Path)
   given.add_argument("--seed", type=int, default=7)
   given.add_argument("--count", type=int, default=200)
-  given.add_argument("--model", help="The actor of the arm furb, as local:<model>/<effort>.")
+  given.add_argument("--model", help="The actor of the arms of furb, as local:<model>/<effort>.")
   given.add_argument("--cap", type=float, default=14400.0, help="The seconds that an arm may take.")
   given.add_argument("--claude", default=str(Path.home() / ".claude" / "strata-claude"))
   args = given.parse_args()
@@ -261,13 +287,17 @@ def main() -> int:
   env = dict(os.environ)
   if args.step == "make":
     make(folder, args.seed, args.count)
-  elif args.step == "furb":
+  elif args.step.startswith("furb"):
     if not args.model:
-      given.error("the arm furb needs --model")
-    word = FURB.format(brief=BRIEF)
+      given.error(f"the arm {args.step} needs --model")
     furb = str(Path(sys.executable).with_name("furb"))
-    record = str(folder / "furb" / "record.jsonl")
-    arm(folder, "furb", [furb, "run", word, "--model", args.model, "--record", record], env, args.cap)
+    life = ["--model", args.model, "--record", str(folder / args.step / "record.jsonl")]
+    if args.step == "furb-own":
+      command = [furb, "prompt", CLAUDE, "--to", args.model, "--shape", "str", *life]
+    else:
+      word = FURB.format(brief=BRIEF) if args.step == "furb" else BATCHED.format(brief=BRIEF, batch=BATCH)
+      command = [furb, "run", word, *life]
+    arm(folder, args.step, command, env, args.cap)
   elif args.step == "claude":
     command = [args.claude, "-p", CLAUDE, "--permission-mode", "bypassPermissions", "--output-format", "json"]
     arm(folder, "claude", command, env, args.cap)
