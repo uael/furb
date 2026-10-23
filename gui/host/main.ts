@@ -23,6 +23,7 @@ const { values } = parseArgs({
     roster: { type: "string", multiple: true },
     list: { type: "string" },
     port: { type: "string" },
+    "no-extensions": { type: "boolean" },
   },
 });
 // The demo stands in a project of its own, which a list of its own holds, as in the TUI.
@@ -33,6 +34,8 @@ const options: EngineOptions = {
   effort: values.effort,
   roster: values.roster,
   demo: values.demo,
+  // A check opens a record as it stands: it enables no extension that the record does not run.
+  ...(values["no-extensions"] ? { extensions: false } : {}),
 };
 const list =
   values.list ?? (values.demo && directory ? join(furbDirectory(directory), "workspaces.json") : undefined);
