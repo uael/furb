@@ -62,7 +62,7 @@ import { conversation, refusal } from "./conversation.ts";
 import { demoSession, tour } from "./demo.ts";
 import { externalEditor, openFile } from "./editor.ts";
 import { emojiNamed, emojis } from "./emoji.ts";
-import { shortenHome, shortenHomes } from "./files.ts";
+import { fromDirectory, shortenHome, shortenHomes } from "./files.ts";
 import {
   ago,
   clip,
@@ -2173,7 +2173,7 @@ export class App {
       });
     } else if (w.view === "changes") {
       const root = w.host.directory;
-      const relative = (path: string) => (path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path);
+      const relative = (path: string) => fromDirectory(root, path);
       // The scopes of the review stand first, and in the middle of an empty view under why it is empty.
       if (w.changes.length)
         add("change-scopes", `${w.scope}:${this.theme}`, [], (box) => box.add(this.scopes()));

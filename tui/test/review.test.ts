@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { until } from "../../bind/typescript/test/until.ts";
 import { removeDemoDirectories } from "../src/demo.ts";
 import { branchChanges, commentStart, lines, net, revertWord } from "../src/review.ts";
@@ -98,7 +98,7 @@ test("the branch against main holds each file that differs from the base of the 
     git("commit", "-q", "-am", "work");
     await writeFile(join(directory, "new.txt"), "fresh\n");
     const changes = branchChanges(directory).map(({ path, before, after }) => [
-      path.split("/").at(-1),
+      basename(path),
       before,
       after,
     ]);

@@ -20,7 +20,7 @@ import {
 import { type Ask, aimed, beside, type Desk, desk } from "@furb/engine/life";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { refusal } from "./conversation.ts";
-import { expandHome, fileReferences, projectFiles, shortenHome } from "./files.ts";
+import { expandHome, fileReferences, fromDirectory, projectFiles, shortenHome } from "./files.ts";
 import { dollars } from "./format.ts";
 import { Preferences } from "./preferences.ts";
 import { type Hunk, type Reviewed, revertWord, reviewed, type Scope, scopes } from "./review.ts";
@@ -683,8 +683,7 @@ export class Session extends EventEmitter {
   /** One hunk of a change reverted by a word of the operator on the chain shown, so the World writes the file and the
    * record keeps the write. The word refuses when the file no longer holds the hunk where the review showed it. */
   async revert(change: ShownChange, hunk: Hunk): Promise<void> {
-    const at = this.host.directory;
-    const path = change.path.startsWith(`${at}/`) ? change.path.slice(at.length + 1) : change.path;
+    const path = fromDirectory(this.host.directory, change.path);
     await this.engine.result(
       await this.engine.rung({ word: revertWord(change.path, hunk), on: this.selected }),
     );
