@@ -140,7 +140,7 @@ def pr_box(box: str, check: str) -> str:
   said = check.strip()
   if said.lower().startswith("not:"):
     return f"- [ ] {box}\n  Not yet: {said[4:].strip()}"
-  return f"- [x] {box}\n  Checked: {said}"
+  return f"- [x] {box}"
 
 
 def pr_body(why: str, outcome: list[str], breaking: list[str], fixes: int, checks: list[str]) -> str:
