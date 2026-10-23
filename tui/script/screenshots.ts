@@ -446,13 +446,12 @@ try {
   await capture("28-workspace-tree");
   app().render();
   await test.flush();
-  const word = app()
-    .scroll.getChildren()
-    .find((node) => /^rung\d+$/.test(node.id) && app().scroll.viewport.y <= node.y);
-  const heading = word?.getChildren()[0];
-  if (heading) await test.mockMouse.click(heading.x + 1, heading.y);
+  // A click on a line of a program that made an act opens it in place, with what the act gave.
+  const rows = test.captureCharFrame().split("\n");
+  const line = rows.findIndex((row) => /^ +\d+ .*\b(bash|read)\(/.test(row));
+  if (line >= 0) await test.mockMouse.click((rows[line]?.search(/\d+ /) ?? 0) + 4, line);
   await rest();
-  await capture("29-collapsed-rung");
+  await capture("29-open-line");
   library.toggle(second);
   await capture("30-collapsed-workspace");
   library.toggle();
@@ -792,8 +791,8 @@ try {
   while (asks()) watched.travel(-1);
   await capture("65-watch-earlier");
 
-  // A project extension gives the TUI a part, which loads live: the panel of a todo list over the input, and the row
-  // of each act todo in the feed. A module that breaks shows its error in its panel.
+  // A project extension gives the TUI a part, which loads live: the panel of a todo list over the input, and the hint
+  // of the line of each act todo in the feed. A module that breaks shows its error in its panel.
   app().dispose();
   await library.dispose();
   const listed = await project("todo");
@@ -810,10 +809,9 @@ try {
   );
   await settle();
   while (!app().parts.version) await Bun.sleep(10);
-  // The rung opens, so the capture shows the row of each act todo under its word.
+  // The line of each act todo says what the part draws as its row.
   app().render();
   await test.flush();
-  await click(test, "rung1");
   await rest();
   await capture("74-extension-part");
   await writeFile(join(folder, "tui.ts"), "export default (furb) => { furb.panel(");

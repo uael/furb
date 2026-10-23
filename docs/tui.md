@@ -65,29 +65,37 @@ again. Under the thread chosen, Collapse folds it in the feed to its header line
 the header of the thread in the feed holds the same controls. At the foot of the sidebar, Context says how full the
 window of the chain shown is and where a grant pauses it, its tokens, and what it spent.
 
-The feed shows the ladder of the chain, each thread in its color: your message in a panel, each rung of the ladder on one
-row, and the answer under the name of the model that gave it. The row of a rung shows its mark, its name, the first
-line of its Python in the colors of its grammar, the count of the lines after it, and the acts that it made, each in
-the color of its state. Once it is done, it says how long it ran and what the answers of its model cost. A rung opens
-while it runs, and shows the last lines that its model writes or that its command prints. It folds to its row when
-it completes. A click on its heading, or ⌥D, opens it to show its numbered Python, and under it each act that it made
-with a preview of its output. Each act says what it did: a read its path and the count of its lines, a write its path
-and the lines that it added and removed, and a command its line, its exit, and how long it ran. The time is known for
-the work that the TUI saw run, since the record holds no time. The fold stays the same across views and after a
-reopen. `/autocollapse` turns the automatic fold off, and on again. A right click on an act inspects it, edits its
-program, or branches after it.
+The feed shows the threads of the chain, each in its color. A thread is a prompt: its message heads it in a panel,
+and under it the words of its steps stand as one Python program, line by line, with the number of each line in the
+gutter. No step and no act takes a row of its own. Each line ends with a quiet hint of what its acts came to: a read
+the count of its lines, a write the lines that it added and removed, a command its exit and the count of the lines
+that it printed, a question its answer or what it waits for, and a loop its count, as x6. The first line of each
+step says how long the step ran and what the answers of its model cost. The time is known for the work that the TUI
+saw run, since the record holds no time. The line that runs is lit, with a mark in the gutter and, after a second,
+its time, and the last lines that its command prints stream under it. A line that the gate refused has a red cross in
+the gutter, and the reason stands under it as a comment. A message that you send to the thread, and each notice of
+the chain, stands as a comment among the steps, and what the model writes before its word comes stands under the
+program. The answer of the thread stands under the name of the model that gave it. A word that you run stands in the
+same way under You ran.
 
-A long thread stays short. The feed shows the last six steps of the chain and of each rung, and the last four rungs
-of each ladder, and one line in place of each run of earlier ones, as "28 earlier messages". A click on the line
-shows them. A step that asks you or runs always shows. A long message shows its first eight rows, and the word of a
-rung that runs shows its first twelve, each with a line that shows the rest. A jump to an act opens each fold over
-it. The sidebar and the feed come from the model of a life that `furb/life` gives, so each host shows the same
-life. Under the chains, the sidebar shows the workspaces, each with the session shown, each session that works,
-asks or failed, and its newest sessions up to three, and the older ones fold under Earlier.
+A click on a line opens it in place: its whole text, cut into rows at the column of the code, and under it what each
+of its acts gave, as the output of a command or the text of a read. A second click folds it. Collapse on the header
+of a thread, or ⌥D, which lists the threads, folds the thread to its header line, which says its state, the first
+line of its message and the count of its steps, and a click on that line opens it again. A resolved thread that is
+not the last of its chain starts folded, and `/autocollapse` turns that fold off, and on again. A right click on a
+name inspects it.
+
+A long thread stays short. The program of a thread shows its last six steps, and one line in place of the earlier
+ones, as "# 35 earlier steps", and the feed shows one line in place of its earlier threads, as "28 earlier
+messages". A click on the line shows them. A long message shows its first rows, with a line that shows the rest. A
+jump to an act opens each fold over it. The sidebar and the feed come from the model of a life that `furb/life`
+gives, so each host shows the same life. Under the chains, the sidebar shows the workspaces, each with the session
+shown, each session that works, asks or failed, and its newest sessions up to three, and the older ones fold under
+Earlier.
 
 ![Feed](screenshots/02-feed.png)
 
-![A long ladder](screenshots/60-long-ladder.png)
+![A long thread](screenshots/60-long-ladder.png)
 
 ![Folded steps](screenshots/61-folded-steps.png)
 
@@ -402,8 +410,8 @@ The sidebar groups sessions under project folders, and its list scrolls on its o
 sessions, and a click on a session opens it. Open sessions keep running while another is selected. A dot shows the
 state of each session and workspace, from live work and saved records: blue for work, yellow for input needed or
 paused work, green for an unread completion, and red for an error. An open grey dot means ready or saved, and a click
-on a completed session clears its unread mark. A rung folds its program to one line and
-keeps its acts, a workspace folds to its name, and ⌃\ hides the sidebar. ⌃W lists the workspaces and their
+on a completed session clears its unread mark. A line of a program opens in place with what its acts gave, a
+workspace folds to its name, and ⌃\ hides the sidebar. ⌃W lists the workspaces and their
 sessions, each with its state, the time since its last save, its cost, and its size.
 
 On macOS and Linux, each session is a life in a host of its own, which outlives the window. A quit detaches the
@@ -415,7 +423,7 @@ then quits.
 
 ![Workspace tree](screenshots/28-workspace-tree.png)
 
-![Collapsed rung](screenshots/29-collapsed-rung.png)
+![An open line](screenshots/29-open-line.png)
 
 ![Collapsed workspace](screenshots/30-collapsed-workspace.png)
 
