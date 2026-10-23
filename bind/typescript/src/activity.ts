@@ -69,7 +69,12 @@ export class Activity {
     const at = ++this.clock;
     const question = isQuestion(kind, id);
     if (question) this.scopes.set(id, kind === "chain" ? id : this.scope(String(fact[3])) || String(fact[3]));
-    if (question && kind === "run") this.runs.set(id, String(fact[4]));
+    if (question && kind === "run") {
+      this.runs.set(id, String(fact[4]));
+      // A record that keeps no ready holds the word of a rung in the run of that word.
+      const rung = this.acts.get(String(fact[4]));
+      if (rung?.kind === "rung" && rung.word === undefined) this.worded(rung, fact[5]);
+    }
     if (question && kind === "reply") this.replies.set(id, [String(fact[3]), String(fact[4]), by]);
     if (question && !STEPS.has(kind)) {
       const act: LiveAct = {
@@ -143,6 +148,8 @@ export class Activity {
           if (row) this.updateRun(row);
         }
       }
+    } else if (kind === "ready" && act?.kind === "rung" && typeof fact[3] === "string") {
+      this.worded(act, fact[3]);
     } else if (kind === "tell" && act?.kind === "rung" && Array.isArray(fact[3])) {
       // The chain tells the findings that refused a word under the header refused, and binds them one line for each.
       const [header, ...lines] = String(fact[3][0] ?? "").split("\n");
@@ -172,6 +179,11 @@ export class Activity {
       if (yield* covers(control, id)) return control[0] === "pause";
     }
     return false;
+  }
+  /** The word of a rung, as the chain took it to run or to refuse. */
+  private worded(act: LiveAct, word: unknown): void {
+    act.word = String(word ?? "");
+    this.mark(act);
   }
   private updateRun(act: LiveAct): void {
     if (act.kind !== "rung") return;

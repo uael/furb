@@ -1,52 +1,55 @@
 # The desktop app of furb: a design
 
-The desktop app of furb is a preview: it reads the records of furb. A user picks a record of a project and reads its
-threads, each top to bottom with the steps that its model took. The app runs no life: no word runs again, no model
-is asked, and no command runs. The title of its window and each of its screens say that it is a preview.
-
-The TUI reads the same records with the same model of a life.
+The desktop app of furb runs a life of furb in a window. A user starts a new life in a project or goes on with a
+record, sends messages to its chains, sees each model and each command at work, and answers each question of a model.
+The TUI does the same in a terminal, with the same host of a life and the same model of a life.
 
 ## The stack
 
 The owner chose the stack: Tauri 2, with a UI of web components.
 
-- The core is Rust. It links the crate `furb` directly, with no N-API. It reads a record with `furb::world::retold`,
-  the one reader of a record that both doors expose as `retold` and the TUI reads too, on a thread of its own. It
-  reads the acts from the facts that the reader gives, and sends them to the window.
+- The core is Rust, in `gui/src-tauri`. It holds the window and the dialogs of the system, and it starts the host of a
+  life as a process of its own. It links no engine: a life runs in the host alone.
+- The host is a program of bun, `gui/host`. It opens the projects and the lives with the `Workspaces` and the
+  `Session` of the TUI, in `tui/src`, which drive the `Session` of `bind/typescript` in the worker of the TUI. So the
+  app and the TUI have one host of a life, and a life that opens, a message that goes, an answer that the console
+  reads, and a record of another engine that opens to read, each goes by the same code in both.
 - The UI is React and TypeScript, styled with Tailwind on the primitives of Radix. The code of a step is CodeMirror 6.
 - The UI derives each view from the acts with the model of a life, `@furb/engine/life` in `bind/typescript/src/life`,
-  which the TUI reads too: the tree of the threads, the source of a chain with each act on its line, and a message as
-  a person reads it. The model holds no native code, so the UI takes it from its source, and a view of the app and of
-  the TUI never disagree. When the app needs a view that the model does not give, the view goes into the model.
+  which the TUI reads too: the tree of the threads, the source of a chain with each act on its line, the desk of the
+  questions, and a message as a person reads it. The model holds no native code, so the UI takes it from its source.
+  When the app needs a view that the model does not give, the view goes into the model: the word of each rung, which
+  the app draws on every chain, is `LiveAct.word`.
 - The web view is the one of the system: WKWebView on macOS, WebView2 on Windows, and WebKitGTK on Linux. So the
   app is small, and macOS, Windows and Linux run the same UI.
 - The app is a Cargo workspace of its own, in `gui/src-tauri`, since the gates of the crate do not install the
-  libraries of a web view on Linux. It builds in the target of the repository, so it shares the dependencies that the
-  crate built.
+  libraries of a web view on Linux. It builds in the target of the repository.
 
-## How the app reads a record
+## The host and the window
 
-- `furb-gui` opens on the picker: the projects that the TUI lists in its `workspaces.json`, each with the records of
-  its `.furb/sessions`, the newest first. Read a record picks one with the dialog of the system.
-- The reader of the crate reads a record with no life, so a record of any engine opens. While the log beside the
-  record agrees with it, it gives every fact of the log, so the record shows whole. Else it gives the facts that the
-  record kept, and the facts that the engine said and the record does not keep, as far as the kept facts show them.
-  A thread that a word closed has no end in such a record: the thread shows a note where its answer would stand.
-- `furb-gui --record RECORD` opens a record from the command line.
-- The core sends the window the acts that changed since its last part, as the event `life`, at most once each 80
-  milliseconds, with the words of their rungs and the measure of each chain, and says in each part whether it read
-  the whole record. A window that misses a part asks the core with `life` for all that changed since what it holds.
-  `open` and `close` open a record and go back to the picker, and `places` lists the projects.
-- `furb-gui --check` ends the app once its window drew the whole record, and prints the count of its chains, its
-  threads and its acts. It fails after 600 seconds, so a bundle is proved before anyone opens it. The test
-  `gui/src-tauri/tests/check.rs` runs it on the record that `FURB_RECORD` names, compares the counts with those of
-  `furb facts` on the same record, and holds the WebContent of the window under 300 MB, as its comment says.
-- The rail and the ladder of a thread draw only the rows that they show. The core cuts the text of each file to 2048
-  characters and keeps the count of its lines, and the window grows its acts in place and derives its views once a
-  second while the core reads. So a record of 185 MB opens in a window of about 250 MB.
-- `furb-gui --record RECORD --view PATH` reads the record with no window and writes it as the window takes it, with
-  the places of the picker. `gui/src/data/demo.json` is such a fixture, of the demo of the TUI: a browser shows the UI
-  on it, and `bun run shots` takes the captures. `FURB_FIXTURE` gives another fixture to the build of the UI.
+- The core starts `bun gui/host/main.ts` with the words of the command line, and holds its stdin open: the host ends
+  when its stdin ends, and saves each life first. The first line of the host is the address of its socket, which the
+  window asks the core for with the command `host`.
+- The socket is one WebSocket on 127.0.0.1, at a free port. A page of any origin can open a socket to 127.0.0.1, so
+  only a window that holds the token of the address gets in.
+- The host sends each window parts (`gui/src/wire.ts`). The first part of a window holds the whole life. Each later
+  part holds what changed: the acts that the session put in place of others, the new text of each stream after the
+  place that the window holds, the streams that ended, the life when one of its words changed, and the projects when
+  they changed. A part goes at most once each 50 milliseconds, and no part goes when nothing changed. A new life is a
+  new generation, which the window takes from nothing.
+- The window sends calls, each answered once by its number: `open` a record, `create` a life in a project, `add` a
+  project, `show` a chain, `send` a line to a chain, and `resume` the work that an earlier life left. `send` is the
+  `submit` of the TUI: a line answers the question that waits on the chain, and else goes to its model.
+- The window holds the acts in a map that grows in place, and derives its views once a second while the host still
+  opens a life, so a large record opens light. Each act of a command that runs carries the tail of its output, as the
+  rows of the TUI do, and a read or a write leaves its text out.
+- `furb-gui --check --record RECORD` ends the app once its window drew the whole life, and prints the count of its
+  chains, its threads and its acts. A check keeps the list of its projects in a folder of its own, so the list of the
+  operator stays as it is. It fails after 600 seconds. The test `gui/src-tauri/tests/check.rs` runs it on the record
+  that `FURB_RECORD` names, compares the counts with those of `furb facts` on the same record, and holds the
+  WebContent of the window under 300 MB.
+- `bun run web` shows the UI in a browser, on a host of its own, and `bun run shots` drives it in WebKit for the
+  captures.
 
 ## The look
 
@@ -57,11 +60,10 @@ and not their layout or their look.
 - One family of type in two forms: Atkinson Hyperlegible Next for the interface and Atkinson Hyperlegible Mono for
   the code. The Braille Institute made it to be legible: a 0 and an O, a 1 and an l, must never be read as each
   other.
-- One accent, a violet, marks the selection and the mark of the preview. Amber marks only a question to the
-  operator.
-- Each state has a shape and a color, so a state reads without its color: a dot for work that was open when the
-  record ends, a diamond for a question to the operator, a cross for a failure, a check for an end, two bars for a
-  pause, and a ring for a wait.
+- One accent, a violet, marks the selection, the composer and a record that opens to read. Amber marks only a
+  question to the operator.
+- Each state has a shape and a color, so a state reads without its color: a dot for work that runs, a diamond for a
+  question to the operator, a cross for a failure, a check for an end, two bars for a pause, and a ring for a wait.
 - An error reads as a person reads it, once: no name of an exception around it, and no path of the directory of
   the life.
 - Panes differ by tone, with a hairline between two of them. Motion is short and answers an action of the user.
@@ -69,10 +71,11 @@ and not their layout or their look.
 
 ## The screens
 
-- Picker: the projects and their records, each of which opens to read, and the button that picks a record with the
-  dialog of the system.
+- Picker: the projects and their records, a new life in each project, each record that opens, and the buttons that
+  pick a folder or a record with the dialog of the system.
 - Thread: one thread read top to bottom: what was asked, each step that its model took, folded to what it did and
-  open to its code, the threads that a step asked, and the answer.
-- The rail at the left holds the record and what its life spent, the questions to the operator that were open when
-  the record ends, and the tree of threads, each with its whole title and what its steps came to in a tip.
-- The header says the thread, while the core reads the record, and the mark Preview: read only.
+  open to its code, the word of a model as it writes it, the output of a command as it prints it, the threads that a
+  step asked, and the answer. The composer under it sends to its chain.
+- The rail at the left holds the life and what it spent, the questions that wait for you, and the tree of threads,
+  each with its whole title and what its steps came to in a tip.
+- The header says the thread, the last notice of the session, and the mark Read only on a record of another engine.

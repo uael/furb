@@ -1,15 +1,63 @@
-import { reason, type Thread } from "@furb/engine/life";
+import { type Exit, type LiveAct, reason, type Thread } from "@furb/engine/life";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronRight, CornerDownRight } from "lucide-react";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { actorName } from "../data.ts";
-import { chainName, type Held, type Moment, threadState } from "../life.ts";
+import { chainName, type Held, type Moment, type Streamed, threadState } from "../life.ts";
 import { steps } from "../steps.ts";
 import { Code } from "./Code.tsx";
 import { Glyph } from "./Glyph.tsx";
 
+/** How many characters of what a model writes, or of what a command prints, a step shows while it runs. */
+const TAIL = 4000;
+
+/** The last lines of a text, at most TAIL characters of it. */
+const tail = (text: string) => (text.length > TAIL ? `…${text.slice(-TAIL)}` : text);
+
+/** What a model writes for a step while its reply runs: its word as it comes, or its thought before it writes, and
+ * the retry of its call when one waits. */
+function Writing({ stream }: { stream: Streamed }) {
+  const text = stream.text || stream.thinking;
+  return (
+    <div className="mt-2.5 overflow-hidden rounded-xl bg-well px-3.5 py-2.5">
+      {stream.retry ? (
+        <div className="mb-1.5 text-[12px] text-asks">
+          The call of the model failed: {stream.retry.why}. Attempt {stream.retry.attempt} of{" "}
+          {stream.retry.most} comes next.
+        </div>
+      ) : null}
+      <pre
+        data-stream
+        className={`font-mono text-[12.5px] leading-[1.6] break-words whitespace-pre-wrap ${stream.text ? "text-text" : "text-faint italic"}`}
+      >
+        {tail(text)}
+        <span className="ml-px inline-block h-[1.05em] w-[7px] translate-y-[2px] animate-pulse bg-accent" />
+      </pre>
+    </div>
+  );
+}
+
+/** What a command that runs prints, as it prints it. */
+function Printing({ act }: { act: LiveAct }) {
+  const exit = act.value as Exit | null;
+  const out = `${exit?.stdout?.content ?? ""}${exit?.stderr?.content ?? ""}`;
+  const command = String(act.words[0] ?? "").split("\n")[0] ?? "";
+  return (
+    <div className="mt-2.5 overflow-hidden rounded-xl bg-well px-3.5 py-2.5">
+      <div className="mb-1 truncate font-mono text-[12px] text-muted">$ {command}</div>
+      <pre
+        data-output
+        className="font-mono text-[12px] leading-[1.55] break-words whitespace-pre-wrap text-muted"
+      >
+        {out ? tail(out) : "Nothing printed yet"}
+      </pre>
+    </div>
+  );
+}
+
 /** One thread read top to bottom: what was asked, each step that its model took, folded to what it did and open to
- * its code, the threads that a step asked, and the answer. */
+ * its code, what a model writes and what a command prints while they run, the threads that a step asked, and the
+ * answer. */
 export function ThreadView({
   held,
   moment,
@@ -21,7 +69,10 @@ export function ThreadView({
   thread: Thread;
   onSelect: (thread: string) => void;
 }) {
-  const ladder = steps(moment, thread.act, held.directory);
+  const life = held.life;
+  const directory = life?.directory ?? "";
+  const live = Boolean(life && !life.reading && !life.recorded);
+  const ladder = steps(moment, thread.act, directory);
   const last = ladder.at(-1)?.id;
   const [open, setOpen] = useState<Set<string>>(() => new Set(last ? [last] : []));
   const [whole, setWhole] = useState(false);
@@ -29,7 +80,7 @@ export function ThreadView({
   const maker = moment.rows.get(thread.act.by);
   const asker = maker?.kind === "rung" ? `${chainName(moment, maker.on)} asked at ${maker.id}` : "You asked";
   const owed = moment.owed.has(thread.act.id);
-  const actor = held.measures[thread.chain]?.actor ?? "";
+  const actor = life?.measures[thread.chain]?.actor ?? "";
   const toggle = (id: string) => {
     const next = new Set(open);
     if (!next.delete(id)) next.add(id);
@@ -44,6 +95,12 @@ export function ThreadView({
   useLayoutEffect(() => {
     setMargin(list.current?.offsetTop ?? 0);
   });
+  // A view that stands at its end stays there while the thread grows, as a model writes or a command prints.
+  const end = useRef(true);
+  useEffect(() => {
+    const one = scroller.current;
+    if (one && end.current) one.scrollTop = one.scrollHeight;
+  });
   const rows = useVirtualizer({
     count: ladder.length,
     getScrollElement: () => scroller.current,
@@ -53,7 +110,14 @@ export function ThreadView({
     getItemKey: (at) => ladder[at]?.id ?? at,
   });
   return (
-    <div ref={scroller} className="h-full overflow-y-auto">
+    <div
+      ref={scroller}
+      onScroll={(event) => {
+        const one = event.currentTarget;
+        end.current = one.scrollHeight - one.scrollTop - one.clientHeight < 80;
+      }}
+      className="h-full overflow-y-auto"
+    >
       <article className="mx-auto max-w-[760px] px-10 pt-9 pb-56">
         <div className="mb-2.5 flex items-center gap-2 text-[12.5px] text-faint">
           <span>{asker}</span>
@@ -93,6 +157,16 @@ export function ThreadView({
               if (!step) return null;
               const n = row.index;
               const shown = open.has(step.id) || step.thinks;
+              const stream = held.streams.get(step.id);
+              const said =
+                step.thinks && live
+                  ? stream?.text
+                    ? "Its model writes this step"
+                    : "Its model thinks"
+                  : step.said;
+              const running = moment.acts.filter(
+                (act) => act.by === step.id && act.kind === "bash" && !act.done,
+              );
               return (
                 <li
                   key={step.id}
@@ -110,7 +184,7 @@ export function ThreadView({
                     className="group flex w-full items-center gap-2 text-left"
                   >
                     <span className={`text-[14px] ${step.state === "failed" ? "text-failed" : "text-text"}`}>
-                      {step.said}
+                      {said}
                     </span>
                     <span className="text-[12px] text-faint">Step {n + 1}</span>
                     {step.thinks ? null : (
@@ -125,6 +199,10 @@ export function ThreadView({
                       <Code steps={[step]} heads={false} wrap />
                     </div>
                   ) : null}
+                  {step.thinks && stream ? <Writing stream={stream} /> : null}
+                  {running.map((act) => (
+                    <Printing key={act.id} act={act} />
+                  ))}
                   {step.asks.map((id) => {
                     const asked = moment.threads.find((one) => one.act.id === id);
                     if (!asked) return null;
@@ -149,7 +227,11 @@ export function ThreadView({
             })}
           </ol>
         ) : null}
-        {!held.logged && held.read && !thread.act.done && thread.to !== "operator" ? (
+        {life?.reading &&
+        !life.reading.logged &&
+        !life.loading &&
+        !thread.act.done &&
+        thread.to !== "operator" ? (
           <div className="mt-6 ml-8 rounded-xl border border-dashed border-hair-strong px-4 py-3 text-[13px] leading-relaxed text-muted">
             The record shows no end of this thread. A word may have closed it, or raised, and the record does
             not say which: it keeps only what the World, the models and the operator said, and no log beside
@@ -162,7 +244,7 @@ export function ThreadView({
               className={`text-[15px] leading-[1.65] whitespace-pre-wrap ${failed ? "text-failed" : "text-text"}`}
             >
               {failed
-                ? reason(thread.act, held.directory)
+                ? reason(thread.act, directory)
                 : typeof answer === "string"
                   ? answer
                   : JSON.stringify(answer)}

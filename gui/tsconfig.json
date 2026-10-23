@@ -14,8 +14,7 @@
     "skipLibCheck": true,
     "types": [],
     "paths": {
-      "@furb/engine/life": ["../bind/typescript/src/life/index.ts"],
-      "@fixture": ["./src/data/demo.json"]
+      "@furb/engine/life": ["../bind/typescript/src/life/index.ts"]
     }
   },
   "include": ["src", "vite.config.ts"]

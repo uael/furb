@@ -3,7 +3,7 @@ name = "furb-gui"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.95"
-description = "furb, the desktop app: a preview that reads the records of furb, on the crate linked directly, with a UI of the web."
+description = "furb, the desktop app: a window that runs a life of furb on the host of the TUI, with a UI of the web."
 license = "AGPL-3.0-only"
 repository = "https://github.com/uael/furb"
 publish = false
@@ -13,13 +13,10 @@ name = "furb-gui"
 path = "src/main.rs"
 
 [dependencies]
-# The crate, linked directly: its reader of a record, `furb::world::retold`, gives the facts that the app shows.
-furb = { path = "../..", version = "0.2.0" }
-# The window and the web view, which show the UI of gui/src and carry its commands and the views of the record.
+# The window and the web view, which show the UI of gui/src, and give it the address of the host of the life.
 tauri = { version = "2", features = [] }
-# The native dialog that picks a record to read.
+# The native dialog that picks a project or a record.
 tauri-plugin-dialog = "2"
-serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 [build-dependencies]
@@ -28,8 +25,7 @@ tauri-build = { version = "2", features = [] }
 # A workspace of its own: Tauri needs the web view of the system, which the gates of the crate do not install.
 [workspace]
 
-# As the crate builds them: each dependency optimized, the interpreter among them, so a word runs as fast as in a
-# release while the app builds quickly.
+# Each dependency optimized, so the window runs as fast as in a release while the app builds quickly.
 [profile.dev.package."*"]
 opt-level = 3
 debug-assertions = false

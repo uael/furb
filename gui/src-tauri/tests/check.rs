@@ -1,6 +1,7 @@
-//! The check of the app on a real record, which `FURB_RECORD` names: `furb-gui --check` reads the whole record, and
-//! the counts that it prints are those that `furb facts` shows of the same record, while the web view stays under
-//! [`MOST`] megabytes. Run it on a copy of a record, after `bun run build` in `gui`:
+//! The check of the app on a real record, which `FURB_RECORD` names: `furb-gui --check` opens the record through its
+//! host, as the TUI opens it, and the counts that it prints are those that `furb facts` shows of the same record,
+//! while the web view stays under [`MOST`] megabytes. Run it on a copy of a record, after `bun run build` at the root
+//! and in `gui`:
 //!
 //! `FURB_RECORD=<copy> cargo test --features tauri/custom-protocol --test check -- --ignored --nocapture`
 //!
@@ -21,8 +22,10 @@ use std::{
 /// it.
 const MOST: f64 = 300.0;
 
-/// The questions that the engine asks on the way to what an act does, which the app shows as no act.
-const STEPS: [&str; 8] = ["stand", "clock", "chance", "gate", "merged", "run", "wants", "reply"];
+/// The questions that the engine asks on the way to what an act does, which the model of a life, and so the app,
+/// shows as no act: those of `STEPS` in `bind/typescript/src/activity.ts`.
+const STEPS: [&str; 9] =
+  ["stand", "clock", "chance", "gate", "cd", "merged", "run", "wants", "reply"];
 
 /// The processes of WebContent that stand now.
 fn webcontents() -> HashSet<u32> {

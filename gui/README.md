@@ -1,16 +1,15 @@
-# furb preview
+# furb, the desktop app
 
-The desktop app of furb, as a preview: it reads the records of furb in a window. Pick a record of a project, and read
-each thread from top to bottom, with each step that its model took, the threads that a step asked, and the answer.
+The desktop app of furb runs a life of furb in a window, as the TUI runs one in a terminal. Start a new life in a
+project, or go on with a record. Send a message to a chain, and see each model write its step and each command print
+as they work. When a model asks you a question, the composer answers it.
 
-The preview only reads. It runs no word again, asks no model, and runs no command, so it is safe to open any record,
-also a large one or one that an earlier engine made. The title of its window and each of its screens say so.
-
-![A thread of a real record in the preview](docs/screenshots/preview-real-thread.png)
+![A life on the demo, while its model writes its step](docs/screenshots/2-streams.png)
 
 ## What you need
 
-- A clone of this repository, and the tools of [the developer guide](../docs/developer-guide.md#what-you-need): Rust and Bun.
+- A clone of this repository, and the tools of [the developer guide](../docs/developer-guide.md#what-you-need): Rust and
+  Bun 1.4.2 or later.
 - The web view of your system. macOS has it. Windows 10 and 11 have WebView2. Linux needs WebKitGTK and the other
   libraries of the [prerequisites of Tauri](https://v2.tauri.app/start/prerequisites/).
 
@@ -21,48 +20,79 @@ The app is proved on macOS. It builds for Windows and Linux too, but no gate run
 From the root of the clone:
 
 ```sh
-bun install                          # The packages of the UI, with the rest of the workspace.
+bun install                          # The packages of the UI and of the host, with the rest of the workspace.
+bun run build                        # The package of the crate, which the host of a life runs on.
 cd gui
 bun run tauri build --debug          # The UI, then the app. The first build takes some minutes.
 ../target/debug/furb-gui             # Start it.
 ```
 
 The build writes the program `furb-gui` in `target/debug` at the root of the clone, and on macOS the app
-`target/debug/bundle/macos/furb preview.app` too, which you can open with a double click or move to Applications.
-The debug build optimizes each dependency, so it reads a record as fast as a release. `bun run tauri build`, with no
-`--debug`, makes the release in `target/release`.
+`target/debug/bundle/macos/furb.app` too, which you can open with a double click or move to Applications.
+`bun run tauri build`, with no `--debug`, makes the release in `target/release`.
+
+The app runs its host of a life, `gui/host/main.ts`, on bun, from the clone that it was built from. It finds bun in
+`FURB_BUN`, else on PATH, else in `~/.bun/bin`, `/opt/homebrew/bin` or `/usr/local/bin`, since an app that the Finder
+opens has a short PATH. `FURB_GUI_HOST` names another program of the host.
 
 To change the app, run `bun run tauri dev` in `gui`. It starts the UI on a server of its own and the app on it, and
-shows each change of the UI at once. Give the app its words after `-- --`, as
-`bun run tauri dev -- -- --record path/to/session.jsonl`.
+shows each change of the UI at once. Give the app its words after `-- --`, as `bun run tauri dev -- -- --demo`.
 
-## Open a record
+## Start a life
 
-The app opens on the picker. It lists the projects that the TUI knows, each with the records in its
-`.furb/sessions`, the newest first. Click a record to read it, or click **Read a record** to choose any file with the
-dialog of your system.
+The app opens on the projects that the TUI and the app know, each with its records, the newest first. **New life**
+starts a life in a project on the models that this machine offers, as the TUI does. **Open** goes on with a record as
+a life. **Start a life in a project** and **Open a record** pick a folder or a record with the dialog of your system.
 
-![The picker](docs/screenshots/preview-real-picker.png)
+![The projects and their records](docs/screenshots/7-picker.png)
 
-You can also give the record when you start the app:
+You can also give the app what to open when you start it:
 
 ```sh
-furb-gui --record path/to/session.jsonl
+furb-gui --cwd path/to/project         # A new life in a project.
+furb-gui --record path/to/session.jsonl # A record, which goes on as a life.
+furb-gui --demo                        # The demo of the TUI, which asks no model and spends nothing.
 ```
 
-Two more words help a script or a test:
+`--model`, `--effort` and `--roster` name the models of a new life, as the TUI takes them.
 
-- `--check` ends the app once its window drew the whole record, and prints how many chains, threads and acts it
-  drew.
-- `--view PATH` reads the record that `--record` names with no window, and writes it to `PATH` as the window takes
-  it. The UI shows such a file in a browser: `FURB_FIXTURE=PATH bun run dev` in `gui`, then open
-  http://localhost:5174. With no `FURB_FIXTURE`, the browser shows the demo of the TUI.
+A record that another engine made opens to read, as in the TUI: no word runs again, no model is asked, no command
+runs, and the composer takes no message. The rail and the bar say **Read only**.
+
+## In a life
+
+- The rail holds the life and what it spent, the questions that wait for you, and the tree of the threads.
+- A thread shows what was asked, each step that its model took, folded to what it did and open to its code, the
+  threads that a step asked, and the answer. While a model writes a step, the step shows its word as it comes, and
+  while a command runs, it shows what the command prints.
+- The composer at the bottom sends a message to the chain of the thread shown. Enter sends it, and Shift+Enter adds a
+  line. When a question waits for you on that chain, the composer answers it, and says so.
+
+![A question of the model to you](docs/screenshots/4-asks.png)
+
+The window speaks to the host over a WebSocket on 127.0.0.1 that only a window with the token of the host opens.
+
+## Show the UI in a browser
+
+`bun run web` in `gui` starts a host on the demo and the dev server of the UI, and prints the address of the page,
+which names the socket of the host. Give it the words of the host to show another life, as
+`bun run web --record path/to/session.jsonl`.
+
+## Prove it
+
+- `bun run test gui` from the root: the tests of the host, which drive a life of the demo through its socket, and of
+  the window.
+- `bun run shots [directory]` in `gui`, after `bun run build`: the captures of `docs/screenshots`. It drives a life on
+  the demo in WebKit, the engine of the web view of macOS: it starts the life, sends a message, captures the model as
+  it writes and its answer, asks a question, answers it, and captures the thread as it goes on.
+- `furb-gui --check --record RECORD` ends the app once its window drew the whole life, and prints how many chains,
+  threads and acts it drew. `gui/src-tauri/tests/check.rs` runs it on the record that `FURB_RECORD` names and compares
+  the counts with those of `furb facts`, as its comment says.
 
 ## What it does not do yet
 
-- It does not run a life: you cannot send a message, answer a question, or pause, cancel or rewind work. Use
-  [the TUI](../tui/README.md) for that.
-- It shows a record as it stands when you open it, and does not follow a life that still runs.
+- It does not pause, wake or cancel an act, take back a message, or rewind: use [the TUI](../tui/README.md) for
+  that.
 - It has no loom, no graph, and no view of the program of a chain, which the TUI has.
 - No release ships it yet: build it from a clone.
 

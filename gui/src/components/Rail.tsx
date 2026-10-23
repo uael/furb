@@ -3,7 +3,7 @@ import * as Menu from "@radix-ui/react-dropdown-menu";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronDown, FolderOpen } from "lucide-react";
 import { useRef } from "react";
-import { call, dollars } from "../data.ts";
+import { dollars } from "../data.ts";
 import { chainName, glyphOf, type Held, type Moment, threadState } from "../life.ts";
 import { clip } from "../steps.ts";
 import { Glyph } from "./Glyph.tsx";
@@ -57,19 +57,33 @@ function Ticks({ moment, thread }: { moment: Moment; thread: string }) {
   );
 }
 
-/** The rail: the record and what its life spent, the questions to you that were open when it ends, and the threads
- * as a tree. */
+/** What a life does, in the words of the TUI. */
+const statusWords: Record<string, string> = {
+  saved: "Saved",
+  idle: "Ready",
+  working: "Working",
+  blocked: "Waits for you",
+  paused: "Paused",
+  done: "Finished",
+  error: "An error stands",
+  opening: "Opening",
+};
+
+/** The rail: the life and what it spent, the questions that wait for you, and the threads as a tree. */
 export function Rail({
   held,
   moment,
   selected,
   onSelect,
+  onPicker,
 }: {
   held: Held;
   moment: Moment;
   selected: string;
   onSelect: (thread: string) => void;
+  onPicker: () => void;
 }) {
+  const life = held.life;
   const owed = moment.threads.filter((one) => moment.owed.has(one.act.id));
   // The tree of the threads draws only the rows that the rail shows, so a record of many threads stays light.
   const nav = useRef<HTMLElement>(null);
@@ -79,8 +93,10 @@ export function Rail({
     estimateSize: () => 46,
     overscan: 12,
   });
-  const spent = Object.values(held.measures).reduce((sum, one) => sum + one.dollars, 0);
-  const ceiling = held.measures[held.root]?.ceiling;
+  const measures = life?.measures ?? {};
+  const spent = life?.cost ?? 0;
+  const ceiling = life ? measures[life.root]?.ceiling : undefined;
+  const ended = Boolean(life?.reading || life?.recorded);
   const share = ceiling ? Math.min(spent / ceiling, 1) : 0;
   return (
     <aside className="flex h-full w-[272px] shrink-0 flex-col bg-rail">
@@ -96,9 +112,15 @@ export function Rail({
                 f
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[14px] font-semibold">{held.place}</span>
-                <span className="block text-[11.5px] text-faint">
-                  {held.logged ? "A record and its log" : "A record, as it kept its facts"}
+                <span className="block truncate text-[14px] font-semibold">{life?.place}</span>
+                <span className="block truncate text-[11.5px] text-faint">
+                  {life?.reading
+                    ? life.reading.logged
+                      ? "Read only: a record and its log"
+                      : "Read only: a record, as it kept its facts"
+                    : life?.recorded
+                      ? "A recorded life"
+                      : `${life?.name ?? ""} · ${statusWords[life?.status ?? ""] ?? life?.status ?? ""}`}
                 </span>
               </span>
               <ChevronDown size={14} className="text-faint" />
@@ -111,11 +133,11 @@ export function Rail({
               className="z-50 min-w-[220px] rounded-xl border border-hair bg-raised p-1 text-[13px] shadow-[var(--shadow)]"
             >
               <Menu.Item
-                onSelect={() => void call("close")}
+                onSelect={onPicker}
                 className="flex cursor-default items-center gap-2 rounded-lg px-2.5 py-1.5 outline-none data-[highlighted]:bg-text/5"
               >
                 <FolderOpen size={14} strokeWidth={1.8} />
-                Read another record
+                Projects and records
               </Menu.Item>
             </Menu.Content>
           </Menu.Portal>
@@ -124,9 +146,13 @@ export function Rail({
       {owed.length > 0 ? (
         <div className="mx-4 mt-4 rounded-xl border border-asks/25 bg-asks/[0.07] p-1.5">
           <div className="px-2 pt-1 pb-1.5 text-[11.5px] font-medium text-asks">
-            {owed.length === 1
-              ? "One question to you was open when the record ends"
-              : `${owed.length} questions to you were open when the record ends`}
+            {ended
+              ? owed.length === 1
+                ? "One question to you was open when the record ends"
+                : `${owed.length} questions to you were open when the record ends`
+              : owed.length === 1
+                ? "One question waits for you"
+                : `${owed.length} questions wait for you`}
           </div>
           {owed.map((thread) => (
             <button

@@ -1,71 +1,82 @@
-// The record as the core of the app hands it to the window: what the app shows, and for an open record its acts, as
-// the model of a life reads them, with the words of the rungs and the measures of the chains. A browser shows the
-// fixture of a record; the window of the app hears the record that the core reads.
+// The window and the host of a life: the socket that carries the parts of the host and the calls of the window, and
+// what the views say in words. The window of the app opens the socket of the host that its core started; a browser
+// opens the one that the address of the page names, as http://localhost:5174/?host=ws://...
 
-import fixture from "@fixture";
-import type { LiveAct, Measure } from "@furb/engine/life";
+import type { Answer, Said } from "./wire.ts";
 
-/** The record as the core sends it: the picker, a record that opens, or an open record and what changed in it. */
-export type Wire =
-  | { state: "picker"; generation: number; said: string[] }
-  | { state: "opening"; generation: number; said: string[]; what: string }
-  | {
-      state: "open";
-      generation: number;
-      /** Whether the part holds the whole record that the core read, or what changed after the last part. */
-      whole: boolean;
-      /** The last lines that the app said, in a part that is whole or when they changed. */
-      said?: string[];
-      /** The count of changes that the acts held before this part, and after it. */
-      from: number;
-      count: number;
-      /** How many facts the record told, which is its last moment. */
-      len: number;
-      root: string;
-      place: string;
-      directory: string;
-      /** Whether the facts are those of the log beside the record, which holds every fact that the life said. Else
-       * they are what the record kept, so a thread that a word closed has no end that the record shows. */
-      logged: boolean;
-      /** The engine that made the record, as the record names it. */
-      made: string | null;
-      /** Whether the core read every fact of the record. */
-      read: boolean;
-      acts: LiveAct[];
-      words: Record<string, string>;
-      /** The measures, in a part that is whole or when they changed. */
-      measures?: Record<string, Measure>;
-    };
+/** Whether the UI runs in the window of the app, whose core started the host, or in a browser. */
+export const tauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
-/** One record of a project, as the picker lists it. */
-export interface Record_ {
-  path: string;
-  name: string;
-  title: string;
-  changed: number;
-  size: number;
-}
-
-/** The projects that the picker lists, each with its records. */
-export interface Places {
-  projects: { directory: string; name: string; records: Record_[] }[];
-}
-
-/** The fixture of a browser: a record as the core sends it whole, and the places to pick. */
-export const demo = fixture as unknown as Extract<Wire, { state: "open" }> & { places?: Places };
-
-/** The fixture that a browser shows: the one built in, or the one that it fetched at ?fixture=, as for a large
- * record. */
-export const shown: { fixture: typeof demo } = { fixture: demo };
-
-/** Whether the UI runs in the window of the app, which hears a record, or in a browser, which shows the fixture. */
-export const tauri = "__TAURI_INTERNALS__" in window;
-
-/** A call of the core, in the window of the app; nothing in a browser. */
-export async function call<T>(name: string, args?: Record<string, unknown>): Promise<T | undefined> {
+/** A command of the core of the app, in its window; nothing in a browser. */
+export async function core<T>(name: string, args?: Record<string, unknown>): Promise<T | undefined> {
   if (!tauri) return undefined;
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<T>(name, args);
+}
+
+/** The address of the socket of the host: the one that the core of the app gives, or the one that the page names. */
+async function address(): Promise<string> {
+  if (tauri) return (await core<string>("host")) ?? "";
+  return new URLSearchParams(window.location.search).get("host") ?? "";
+}
+
+/** How many milliseconds the window waits before it opens the socket again, once it closed. */
+const AGAIN = 1000;
+
+let socket: WebSocket | undefined;
+let calls = 0;
+const waiting = new Map<number, { resolve(value: unknown): void; reject(error: Error): void }>();
+
+/** The socket of the host, opened, and opened again each time that it closes until the returned stop. The window
+ * hears each word of the host, and whether the socket is open. */
+export function connect(hear: (said: Said) => void, open: (open: boolean) => void): () => void {
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const start = async () => {
+    const url = await address().catch(() => "");
+    if (stopped) return;
+    if (!url) {
+      open(false);
+      timer = setTimeout(() => void start(), AGAIN);
+      return;
+    }
+    const one = new WebSocket(url);
+    socket = one;
+    one.onopen = () => open(true);
+    one.onmessage = (event) => {
+      const said = JSON.parse(String(event.data)) as Said | Answer;
+      if ("part" in said) return hear(said);
+      const call = waiting.get(said.id);
+      waiting.delete(said.id);
+      if (said.error !== undefined) call?.reject(new Error(said.error));
+      else call?.resolve(said.value);
+    };
+    one.onclose = () => {
+      if (socket === one) socket = undefined;
+      for (const call of waiting.values()) call.reject(new Error("The host of the life is gone."));
+      waiting.clear();
+      open(false);
+      if (!stopped) timer = setTimeout(() => void start(), AGAIN);
+    };
+  };
+  void start();
+  return () => {
+    stopped = true;
+    clearTimeout(timer);
+    socket?.close();
+  };
+}
+
+/** A call of the host, and what it comes to. */
+export function call<T = unknown>(name: string, ...args: unknown[]): Promise<T> {
+  const open = socket;
+  if (!open || open.readyState !== WebSocket.OPEN)
+    return Promise.reject(new Error("The host of the life is not connected."));
+  const id = ++calls;
+  return new Promise<T>((resolve, reject) => {
+    waiting.set(id, { resolve: resolve as (value: unknown) => void, reject });
+    open.send(JSON.stringify({ id, name, args }));
+  });
 }
 
 /** The words a state reads as, for a tip. */
