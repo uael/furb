@@ -636,12 +636,14 @@ class Text:
   """A text: its path, what stands at it, of which its lines are the lines, and the text it came from.
   The lines of a text derive from its content.
   Every edit of it gives another text, which came from this one.
+  A text is equal to a text of the same path and content, and its repr shows its path and its content, whatever texts each came from.
   A method of a text that has the name of a method of str gives what that method of str gives, or is refused.
   """
 
   path: str
   content: str = ""
-  before: Text | None = None
+  @property
+  def before(self) -> Text | None: ...
   @property
   def lines(self) -> list[str]: ...
   def edit(self, lo: int, hi: int, text: str) -> Text:
