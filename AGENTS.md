@@ -41,6 +41,9 @@ API of its own:
   A life on a record that a build of another version made is refused before any replay, with both versions, and
   `tests/corpus` holds the records that each build of a version must replay with no drift. Every
   host gives it as one `Opening`, and each door gives it as `opened` and as `Engine.open`.
+- `src/checkpoint.rs` holds the checkpoint of a life, a fact at the tip of its record that python of its
+  own makes in the names of the engine: each chain that lives, with its turns, its module and its open prompts, as facts that
+  the journal of any engine replays, so a later life goes on from it on any build. `furb checkpoint` writes one.
 - `src/snapshot.rs` holds the snapshot of a life beside its record: the session of the sandbox that monty dumps and
   what the engine holds of the ears, which a later life on the same record and build opens from with no replay.
 - `src/engine.rs` opens a life in the sandbox: it loads the engine, the sheet and the Kernel, each in a namespace of
@@ -63,6 +66,7 @@ API of its own:
   it was built from. `--mode rpc` serves one life as a JSON-RPC on stdin and stdout, as Pi does, which
   `docs/rpc.md` says. `prompt`, `turns`, `run` and `extensions` each open one life on the record they are given, and `facts` prints
   each fact of a record after the number of its line, filtered by an act or by a chain, and opens no life.
+  `checkpoint` writes the checkpoint of a life at the tip of its record.
   Every life runs on the ears of the crate, on the model of its default actor and the models that `--roster` names,
   or every model of the catalog when `--roster` names none, and on a console of the operator. The package `furb` depends on the wheel of `furb-cli`, so `pip install furb`
   gives the command `furb`.
