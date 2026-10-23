@@ -20,11 +20,11 @@ import { Preferences } from "../src/preferences.ts";
 import { guard, Reader } from "../src/reading.ts";
 import { Workspaces } from "../src/workspaces.ts";
 
-/** What the folder of a record holds that belongs to it: each file by name, with its bytes. */
-async function folder(record: string): Promise<Map<string, string>> {
+/** What the folder of a record holds that belongs to it: each file by name, with its time and its bytes. */
+async function folder(record: string): Promise<Map<string, { time: number; bytes: string }>> {
   const directory = join(record, "..");
   const base = record.slice(directory.length + 1);
-  const held = new Map<string, string>();
+  const held = new Map<string, { time: number; bytes: string }>();
   for (const name of (await readdir(directory)).sort()) {
     if (name !== base && !name.startsWith(`${base}.`)) continue;
     const info = await stat(join(directory, name));
@@ -32,11 +32,24 @@ async function folder(record: string): Promise<Map<string, string>> {
     held.set(
       name,
       info.isFile()
-        ? `${info.mtimeMs}:${(await readFile(join(directory, name))).toString("base64")}`
-        : "folder",
+        ? { time: info.mtimeMs, bytes: (await readFile(join(directory, name))).toString("base64") }
+        : { time: 0, bytes: "folder" },
     );
   }
   return held;
+}
+
+/** Whether a folder is as it was. A time that is put back goes through seconds in a double, so a file system that
+ * keeps the time finer than a double reads it back a few microseconds off: the times agree within a millisecond. */
+function expectKept(
+  got: Map<string, { time: number; bytes: string }>,
+  was: Map<string, { time: number; bytes: string }>,
+) {
+  expect([...got.keys()]).toEqual([...was.keys()]);
+  for (const [name, one] of was) {
+    expect(got.get(name)?.bytes).toBe(one.bytes);
+    expect(Math.abs((got.get(name)?.time ?? Number.NaN) - one.time)).toBeLessThan(1);
+  }
 }
 
 /** A record of a demo life with a message of the operator, a write and a command, which an earlier engine could keep. */
@@ -182,12 +195,12 @@ test("a read leaves the record and the files beside it as they were", async () =
     try {
       expect(open.session.host.reading).toBeDefined();
       open.session.save();
-      expect(await folder(record)).toEqual(before);
+      expectKept(await folder(record), before);
       expect([...before.keys()].filter((name) => /\.log\.new$|\.ui\.json$/.test(name))).toEqual([]);
     } finally {
       await open.close();
     }
-    expect(await folder(record)).toEqual(before);
+    expectKept(await folder(record), before);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -279,11 +292,11 @@ test("the guard gives back a record that a life wrote beside before its replay d
       else await appendFile(`${record}.log`, "more\n");
       await writeFile(`${record}.snapshot`, "state");
       held.undo();
-      expect(await folder(record)).toEqual(before);
+      expectKept(await folder(record), before);
       expect((await stat(record)).mtimeMs).toBe(1_700_000_000_000);
       const clean = guard(record);
       clean.keep();
-      expect(await folder(record)).toEqual(before);
+      expectKept(await folder(record), before);
     }
   } finally {
     await rm(directory, { recursive: true, force: true });
