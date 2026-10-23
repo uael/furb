@@ -942,6 +942,7 @@ def tell(on: str, path: str, got: object = None, show: Show = HEAD) -> None:
   The question that tell names is the last question on its chain that the run made.
   A text is told by the lines that its show picks, under the word text, and any other answer under the word value.
   When the lines that a show picks of a text are not one run, the tell binds their numbers too, under the word numbers, before the text, so a model can place each line.
+  When the show of a read picks no line of a text, the tell binds the number of its lines, under the word lines, so a model knows where the text ends, or that it holds none.
   """
 
 def tells(id: str) -> bool:

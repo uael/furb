@@ -540,9 +540,13 @@ def tell(on, path, got=None, show=HEAD):
   if (who := acting()) and tells(who):
     say(
       *told(
-        asked(who, on)[-1],
+        q := asked(who, on)[-1],
         path=path,
-        **{"numbers": at if (at := show(got.lines)) and at[-1] - at[0] >= len(at) else None, "text": shown(got, show)}
+        **{
+          "numbers": at if (at := show(got.lines)) and at[-1] - at[0] >= len(at) else None,
+          "lines": None if at or not question(("read", q)) else len(got.lines),
+          "text": shown(got, show),
+        }
         if isinstance(got, Text)
         else {"value": got},
       )
