@@ -1169,18 +1169,33 @@ async def test_the_advance_binds_the_share_of_the_window_that_the_last_reply_rea
   assert f"#{first} advance on {act}" in told and f"#{second} advance on {act}\n{second}_share = 0.25" in told
 
 
-async def test_the_advance_of_a_reply_to_an_actor_of_a_doctrine_tells_that_doctrine() -> None:
-  """The advance of a reply to an actor whose roster entry holds a doctrine tells that doctrine as the quote doctrine, unless the transcript holds a reply to an actor of the same doctrine, so the model reads it once, in its user turn, just before it answers, and a chain that asks no such actor tells nothing of it."""
+async def test_the_chain_tells_a_doctrine_before_the_first_prompt_to_its_actor() -> None:
+  """Before the first prompt to an actor whose roster entry holds a doctrine, the chain tells that doctrine as the quote doctrine, in a paragraph headed doctrine, so the doctrine stands before the message that changes from chain to chain, and each chain that starts the same holds it in the same prefix."""
   taught = [*STANDS[0], ["q", ["low", "high"], 300000, "Look first.\nThen fix."]]
-  _, log, root = born("a = 1", "close(1)", "close(2)", "close(3)", stands=[taught, "/w", "q/low"])
-  one = engine.prompt(int, "count", on=root)
-  assert await one == 1
+  prefixes = []
+  for message in ("count", "tally"):
+    _, _, root = born("close(1)", stands=[taught, "/w", "q/low"])
+    one = engine.prompt(int, message, on=root)
+    assert await one == 1
+    told = paragraphs(engine.turns(on=root))
+    at = told.index(f"#{root} doctrine\n<s:doctrine>\nLook first.\nThen fix.</s:doctrine>")
+    assert told[at + 1] == f"#{one}\n{one}_message = {message!r}\n{one}: Act[int] = Act({one!r})"
+    prefixes.append(told[: at + 1])
+  assert prefixes[0] == prefixes[1]
+
+
+async def test_the_chain_tells_a_doctrine_once_before_the_advance_when_no_prompt_told_it() -> None:
+  """Before the advance of a reply to such an actor, the chain tells its doctrine when no prompt told it, and the chain never tells a doctrine that its transcript tells already, so the model reads it once, and a chain that asks no such actor tells nothing of it."""
+  taught = [*STANDS[0], ["q", ["low", "high"], 300000, "Look first.\nThen fix."]]
+  _, log, root = born("a = 1", "close(2)", "close(3)", stands=[taught, "/w", "m/low"])
+  await engine.rung(to="q/low", on=root)
   assert await engine.prompt(int, "again", to="q/high", on=root) == 2
-  assert await engine.prompt(int, "plain", to="m/low", on=root) == 3
+  assert await engine.prompt(int, "plain", on=root) == 3
   first = said(log, "reply")[0][2]
-  advances = [one for one in paragraphs(engine.turns(on=root)) if " advance on " in one]
-  assert advances[0] == f"#{first} advance on {one}\n<s:doctrine>\nLook first.\nThen fix.</s:doctrine>"
-  assert len(advances) == 4 and not any("<s:doctrine>" in one for one in advances[1:])
+  doctrine = f"#{root} doctrine\n<s:doctrine>\nLook first.\nThen fix.</s:doctrine>"
+  told = paragraphs(engine.turns(on=root))
+  assert told[told.index(doctrine) + 1] == f"#{first} advance on operator"
+  assert told.count(doctrine) == 1 and sum("<s:doctrine>" in one for one in told) == 1
   _, _, root = born("close(1)")
   assert await engine.prompt(int, "count", on=root) == 1
   assert not any("<s:doctrine>" in one for one in paragraphs(engine.turns(on=root)))
