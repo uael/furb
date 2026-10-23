@@ -789,10 +789,16 @@ fn whole(stream: StreamingCompletionResponse) -> CompletionResponse {
   response
 }
 
+/// The line that ends a thought that the provider gives back to a model that thought past its budget, or that ended its
+/// turn with a thought and no word, in the voice of the model. A model that reads its thought cut in the middle starts
+/// a new step, as a read, and loses the plan that it thought; a thought that says it ends leads to the word that does
+/// that plan, as the budget forcing of s1 ends a thought.
+const ENDED: &str = "\n\nMy thought ends here. Now I write the word that does what I decided.";
+
 /// The turn of a model whose thought passed its budget. The provider asks it again with the same turns, its thought
-/// given back as a turn of its own that holds that thought and no word, and with the settings of its budget, which turn its
-/// thought off, so it writes its word at once. The turn holds that thought and the word, and what the model wrote
-/// counts each part of that thought.
+/// given back as a turn of its own that holds that thought, with [`ENDED`] at its end, and no word, and with the
+/// settings of its budget, which turn its thought off, so it writes its word at once. The turn holds the thought that
+/// the model wrote and the word, and what the model wrote counts each part of that thought.
 async fn rethought(
   streams: &Streams,
   mut request: CompletionRequest,
@@ -808,8 +814,9 @@ async fn rethought(
   merged(&mut settings, again);
   request.additional_params = (!settings.is_empty()).then_some(Value::Object(settings));
   let thought = AssistantContent::Reasoning(Reasoning::new(&thinking));
+  let ended = AssistantContent::Reasoning(Reasoning::new(&format!("{thinking}{ENDED}")));
   // rig sends no turn that holds no text, so the turn of the thought holds an empty text too.
-  let given = vec![thought.clone(), AssistantContent::text("")];
+  let given = vec![ended, AssistantContent::text("")];
   request.chat_history.push(Message::Assistant { id: None, content: given });
   let mut stream = streams(request).await?;
   while let Some(part) = stream.next().await {

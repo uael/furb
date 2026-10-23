@@ -1100,8 +1100,13 @@ fn a_model_whose_thought_passes_its_most_is_asked_again_with_that_thought_and_no
       &second["chat_template_kwargs"],
       second.get("reasoning_effort")
     ),
-    (&json!("assistant"), &json!("abc"), &json!({"enable_thinking": false}), None),
-    "the model is asked again with its thought and no more thought"
+    (
+      &json!("assistant"),
+      &json!(format!("abc{}", super::ENDED)),
+      &json!({"enable_thinking": false}),
+      None
+    ),
+    "the model is asked again with its thought, which says that it ends, and no more thought"
   );
 }
 
@@ -1233,8 +1238,12 @@ fn a_turn_with_a_thought_and_no_word_is_asked_again_with_that_thought_and_no_tho
     second["messages"].as_array().and_then(|messages| messages.last()).cloned().unwrap_or_default();
   assert_eq!(
     (&last["role"], &last["reasoning_content"], &second["chat_template_kwargs"]),
-    (&json!("assistant"), &json!("ab"), &json!({"enable_thinking": false})),
-    "the model is asked again with its thought and no more thought"
+    (
+      &json!("assistant"),
+      &json!(format!("ab{}", super::ENDED)),
+      &json!({"enable_thinking": false})
+    ),
+    "the model is asked again with its thought, which says that it ends, and no more thought"
   );
 }
 
