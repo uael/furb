@@ -36,6 +36,9 @@ export function isRecorded(record: string): boolean {
   }
 }
 
+/** How many bytes of the file of a recorded life the reader reads at a time. */
+const PART = 16 * 2 ** 20;
+
 /** What a session that only reads does not do. */
 const READS = "This record is open to read, so nothing runs on it. Start a new life from it to go on.";
 
@@ -83,19 +86,29 @@ export class Reader {
     const file = openSync(this.record, "r");
     try {
       const size = fstatSync(file).size;
-      if (size <= this.heard) return false;
-      const added = Buffer.alloc(size - this.heard);
-      const got = readSync(file, added, 0, added.length, this.heard);
-      const end = added.subarray(0, got).lastIndexOf(10) + 1;
-      if (!end) return false;
-      this.heard += end;
-      const facts = added
-        .subarray(0, end)
-        .toString("utf8")
-        .split("\n")
-        .filter((line) => line.startsWith("["));
-      for (const line of facts) this.hear(JSON.parse(line) as Fact);
-      return facts.length > 0;
+      let heard = false;
+      // The file is read a part at a time, so that a long life takes no copy of its whole file to open.
+      const part = Buffer.alloc(Math.min(PART, Math.max(0, size - this.heard)));
+      while (this.heard < size) {
+        const got = readSync(file, part, 0, Math.min(part.length, size - this.heard), this.heard);
+        let end = part.subarray(0, got).lastIndexOf(10) + 1;
+        // A line longer than a part is read whole.
+        const line = !end && got === part.length ? Buffer.alloc(size - this.heard) : undefined;
+        if (line) end = line.subarray(0, readSync(file, line, 0, line.length, this.heard)).indexOf(10) + 1;
+        if (!end) break;
+        this.heard += end;
+        // Each line is read alone, so that no text of a whole part stays in memory while its facts are heard.
+        const bytes = line ?? part;
+        for (let start = 0; start < end; ) {
+          const stop = bytes.indexOf(10, start);
+          if (bytes[start] === 91) {
+            this.hear(JSON.parse(bytes.toString("utf8", start, stop)) as Fact);
+            heard = true;
+          }
+          start = stop + 1;
+        }
+      }
+      return heard;
     } finally {
       closeSync(file);
     }
