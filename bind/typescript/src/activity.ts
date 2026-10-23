@@ -37,6 +37,14 @@ export class Activity {
    * takes only the rows that changed since it last read. */
   private changes = 0;
   private readonly changed = new Map<string, number>();
+  /** Each change of a row in order, as the count of the change and the name of the row, so that a reader finds the
+   * rows that changed after a count with no pass over every row. A row that changed again leaves its earlier entries,
+   * which the log drops once it holds twice as many entries as rows. */
+  private log: { count: number[]; name: string[] } = { count: [], name: [] };
+  /** The place of each row in the table. */
+  private readonly places = new Map<string, number>();
+  /** The rows that are not done, in the order of the table, which a pause or a wake can change. */
+  private readonly open = new Set<string>();
   /** The last pause or wake of each act it names, oldest first. A pause and a wake are over acts by the act they
    * name alone, so an earlier control of the same name decides nothing more. */
   private readonly controls = new Map<string, Fact>();
@@ -57,11 +65,34 @@ export class Activity {
 
   /** The rows that changed after a count of changes, and the count now. */
   since(count: number): { count: number; acts: LiveAct[] } {
-    const acts = [...this.acts.values()].filter((act) => (this.changed.get(act.id) ?? 0) > count);
+    const { log } = this;
+    let low = 0;
+    for (let high = log.count.length; low < high; ) {
+      const middle = (low + high) >> 1;
+      if ((log.count[middle] ?? 0) <= count) low = middle + 1;
+      else high = middle;
+    }
+    const acts: LiveAct[] = [];
+    for (let at = low; at < log.count.length; at++) {
+      const name = log.name[at] ?? "";
+      const act = this.acts.get(name);
+      if (act && this.changed.get(name) === log.count[at]) acts.push(act);
+    }
+    acts.sort((one, other) => (this.places.get(one.id) ?? 0) - (this.places.get(other.id) ?? 0));
     return { count: this.changes, acts };
   }
   private mark(act: LiveAct): void {
     this.changed.set(act.id, ++this.changes);
+    this.log.count.push(this.changes);
+    this.log.name.push(act.id);
+    if (this.log.count.length <= 2 * this.acts.size + 64) return;
+    const kept: { count: number[]; name: string[] } = { count: [], name: [] };
+    for (const [at, name] of this.log.name.entries())
+      if (this.changed.get(name) === this.log.count[at]) {
+        kept.count.push(this.log.count[at] ?? 0);
+        kept.name.push(name);
+      }
+    this.log = kept;
   }
 
   *hear(fact: Fact): Generator<Call, void, unknown> {
@@ -97,7 +128,9 @@ export class Activity {
           stdout: { is: "Text", path: `${id}/stdout`, content: "" },
           stderr: { is: "Text", path: `${id}/stderr`, content: "" },
         };
+      this.places.set(id, this.acts.size);
       this.acts.set(id, act);
+      this.open.add(id);
       this.mark(act);
       if (!this.children.has(by)) this.children.set(by, new Set());
       this.children.get(by)?.add(id);
@@ -108,11 +141,13 @@ export class Activity {
       const paused = kind === "pause";
       this.controls.delete(id);
       this.controls.set(id, fact);
-      for (const row of [...this.acts.values()])
-        if (!row.done && row.paused !== paused && (yield* covers(fact, row.id))) {
+      for (const name of [...this.open]) {
+        const row = this.acts.get(name);
+        if (row && row.paused !== paused && (yield* covers(fact, row.id))) {
           row.paused = paused;
           this.mark(row);
         }
+      }
     } else if (kind === "done") {
       const reply = this.replies.get(id);
       this.replies.delete(id);
@@ -139,6 +174,7 @@ export class Activity {
       if (act) {
         if (!act.done && WORK.includes(act.kind)) this.completed++;
         act.done = true;
+        this.open.delete(id);
         act.ended ??= at;
         act.value = fact[3];
         this.mark(act);
@@ -190,7 +226,7 @@ export class Activity {
     this.mark(act);
     const refused = this.refused.get(act.id);
     if (refused !== undefined) {
-      act.run = { status: "failed", reason: refused };
+      act.run = { status: "failed", reason: refused, refused: true };
       return;
     }
     const ran = this.ran.has(act.id);

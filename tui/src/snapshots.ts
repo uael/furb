@@ -1,17 +1,51 @@
 import { createTwoFilesPatch } from "diff";
-import { type Engine, type Fact, isQuestion, type LiveAct, questionKind, type Session } from "furb";
-import type { Snapshot, Usage } from "./bridge.ts";
+import {
+  type Engine,
+  type Fact,
+  isQuestion,
+  type LiveAct,
+  questionKind,
+  type Session,
+  type Turn,
+} from "furb";
+import type { Roster, Snapshot, Usage } from "./bridge.ts";
 import { lineCounts } from "./format.ts";
 import { queueDispatches } from "./queue.ts";
 import type { ActRow, Exit } from "./session.ts";
 
 /** What a snapshot knows of one chain. A value it must read again is undefined. */
 interface ChainView {
-  roster?: Snapshot["roster"];
-  program?: Snapshot["program"];
-  turns?: Snapshot["turns"];
+  roster?: Roster;
+  program?: Record<string, string>;
+  /** The words that the runs of the chain gave since the last snapshot, which the program holds too, or every word
+   * when the program was read again whole. */
+  worded?: { whole: boolean; words: Record<string, string> };
+  turns?: Turn[];
   directory?: string;
   actor?: string;
+}
+
+/** What the last snapshot gave, which the host holds once it takes that snapshot. */
+interface Given {
+  mark: number;
+  chain: string;
+  roster: Roster;
+  turns: readonly Turn[];
+  answers: number;
+}
+
+/** The place of the first turn of a list that differs from the turn at that place in another list: the length of the
+ * shorter list when one begins with the other. */
+function firstChange(held: readonly Turn[], turns: readonly Turn[]): number {
+  const same = (one: unknown, other: unknown) =>
+    one === other || JSON.stringify(one) === JSON.stringify(other);
+  let at = 0;
+  while (at < held.length && at < turns.length) {
+    const [one, other] = [held[at] as Turn, turns[at] as Turn];
+    if (one.length !== other.length || !one.every((part, place) => same(part, other[place]))) break;
+    at++;
+  }
+  return at;
 }
 
 /** How many of the last characters of each stream of a command a row carries. */
@@ -79,6 +113,9 @@ export class Snapshots {
   private heard = 0;
   private entries = -1;
   private dispatched: string[] = [];
+  /** What the last snapshot gave, and how many snapshots were taken. */
+  private given?: Given;
+  private marks = 0;
   constructor(
     private readonly engine: Views,
     private readonly session: Lived,
@@ -130,9 +167,20 @@ export class Snapshots {
     // A fact stands in the transcript of the chain its scope names, which is all that view reads.
     const view = this.chains.get(this.session.activity.scope(id));
     if (!view) return;
-    if (["tell", "pause", "wake", "cancel", "close", "reply"].includes(kind) || answered === "reply")
+    if (
+      ["tell", "pause", "wake", "cancel", "close", "reply", "prefix"].includes(kind) ||
+      answered === "reply"
+    )
       view.turns = undefined;
-    if (kind === "run" || kind === "module") view.program = undefined;
+    // A run adds its word to the program as the program reads it, which keeps the last word of each rung since the
+    // last module.
+    if (kind === "run" && isQuestion(kind, id) && view.program) {
+      const [rung, word, donor] = fact.slice(4).map(String);
+      const key = donor || rung || "";
+      view.program[key] = word ?? "";
+      view.worded ??= { whole: false, words: {} };
+      view.worded.words[key] = word ?? "";
+    } else if (kind === "run" || kind === "module" || kind === "prefix") view.program = undefined;
     if (kind === "cd") view.directory = undefined;
     // A write of the door of a prompt edits the program of its ladder and replays it.
     const written = kind === "write" ? fact[4] : answered === "write" ? fact[3] : undefined;
@@ -146,16 +194,21 @@ export class Snapshots {
       view.actor = undefined;
     }
   }
-  /** The view of a chain, with the acts that changed after a count of changes of the act table. */
-  take(requested: string, since = 0): Snapshot {
+  /** The view of a chain, with the acts that changed after a count of changes of the act table. A host that holds the
+   * snapshot of a mark takes only the parts of the chain that changed since that snapshot, which takes as long as the
+   * change and not as long as the chain. */
+  take(requested: string, since = 0, held = 0): Snapshot {
     for (const fact of this.session.facts.slice(this.heard)) this.changed(fact);
     this.heard = this.session.facts.length;
     const selected =
       this.session.activity.acts.get(requested)?.kind === "chain" ? requested : this.engine.root;
     const view = this.chains.get(selected) ?? {};
     this.chains.set(selected, view);
-    view.roster ??= (this.engine.standing() as [Snapshot["roster"], string, string])[0];
-    view.program ??= this.engine.program({ on: selected }) as Snapshot["program"];
+    view.roster ??= (this.engine.standing() as [Roster, string, string])[0];
+    if (!view.program) {
+      view.program = { ...(this.engine.program({ on: selected }) as Record<string, string>) };
+      view.worded = { whole: true, words: view.program };
+    }
     view.turns ??= this.engine.turns({ on: selected });
     view.directory ??= this.engine.cwd({ on: selected });
     view.actor ??= String(this.engine.inspect("actor", selected).value ?? "");
@@ -183,16 +236,25 @@ export class Snapshots {
     // The share of the window has one home, filled of the engine, which the advance binds too.
     const reply = this.replies.get(selected);
     const filled = reply === undefined ? undefined : this.engine.verb("filled", [reply]);
+    // A host that holds no snapshot of this chain, or not the last one, takes every part whole.
+    const given = this.given?.mark === held && this.given.chain === selected ? this.given : undefined;
+    const answers = this.answers.get(selected) ?? [];
+    const from = { turns: given ? firstChange(given.turns, view.turns) : 0, answers: given?.answers ?? 0 };
+    const program = given ? view.worded : { whole: true, words: view.program };
+    view.worded = undefined;
+    const mark = ++this.marks;
+    this.given = { mark, chain: selected, roster: view.roster, turns: view.turns, answers: answers.length };
     return {
+      mark,
       selected,
       acts: acts.map((act) => row(act, this.lines.get(act.id), this.took.get(act.id))),
       count,
       paused: this.session.isPaused(selected) || this.session.pending.size > 0,
       dispatched: this.dispatched,
-      roster: view.roster,
-      program: view.program,
-      turns: view.turns,
-      answers: [...(this.answers.get(selected) ?? [])],
+      ...(given?.roster === view.roster ? {} : { roster: view.roster }),
+      ...(program ? { program } : {}),
+      turns: { from: from.turns, list: view.turns.slice(from.turns) },
+      answers: { from: from.answers, list: answers.slice(from.answers) },
       filled: typeof filled === "number" ? filled : undefined,
       directory: view.directory,
       actor: view.actor,

@@ -41,7 +41,7 @@ use crate::{
   gate::checked,
   sand::{Answer, Host, Nobody, Sand, id, object},
   snapshot::Keeper,
-  value::{Exit, Fault, IS, Object, Text, entry, inward, marked},
+  value::{Exit, Fault, IS, Object, Text, carried, entry, inward, marked},
 };
 
 /// The views of the engine, which make nothing: the verbs that an ear calls while it hears the past at a restore,
@@ -929,10 +929,11 @@ impl Outside {
     }
   }
 
-  /// A value as it goes out to the host. A value with no data form that is not callable is let go of once the whole
-  /// value went out, since the value may hold it more than once.
+  /// A value as it goes out to the host, as a host is given one, so no walk of a host over it is deeper or longer
+  /// than the value bounds. A value with no data form that is not callable is let go of once the whole value went
+  /// out, since the value may hold it more than once.
   fn outward(&mut self, sand: &mut Sand, value: &Object) -> Result<Object, Fault> {
-    let (graph, root) = unstable::into_graph_parts(value.clone());
+    let (graph, root) = unstable::into_graph_parts(carried(value.clone()));
     let mut shown = HashMap::new();
     let got = self.goes(sand, &graph, root, &mut shown);
     for held in shown.into_keys() {

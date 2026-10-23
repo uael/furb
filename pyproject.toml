@@ -146,7 +146,7 @@ unresolved-attribute = "ignore"
 unresolved-import = "ignore"
 
 [tool.pytest.ini_options]
-testpaths = ["test", "extensions"]
+testpaths = ["test", "extensions", ".furb/extensions"]
 pythonpath = [".", "test"]
 # The suite runs on every core: a test opens a life of its own and leaves nothing behind, so the tests are independent.
 addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib", "-n", "auto", "--cov=furb", "--cov=furb_monty", "--cov-report=term-missing"]

@@ -90,16 +90,19 @@ export function wants(ask: Pick<Ask, "notice" | "shape" | "choices">): string {
  * first. A question waits until its act is done, though the console can hold it a moment longer. */
 export function desk({
   acts,
+  ids,
   prompts,
   notices,
   label,
 }: {
   acts: readonly LiveAct[];
+  /** The acts by their name, which a host that holds them gives in place of a pass over every act. */
+  ids?: ReadonlyMap<string, LiveAct>;
   prompts: Iterable<Held>;
   notices: Iterable<Held>;
   label(chain: string): string;
 }): Desk {
-  const byId = new Map(acts.map((act) => [act.id, act]));
+  const byId = ids ?? new Map(acts.map((act) => [act.id, act]));
   const made = (held: Held, notice: boolean): Ask[] => {
     const act = byId.get(held.id);
     if (!act || (!notice && act.done)) return [];
