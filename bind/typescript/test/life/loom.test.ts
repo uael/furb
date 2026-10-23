@@ -2,7 +2,18 @@ import { expect, test } from "bun:test";
 import type { LiveAct } from "../../src/life/acts.ts";
 import { measureOf } from "../../src/life/acts.ts";
 import { condense, ladder, makers, thread } from "../../src/life/ladder.ts";
-import { asOf, duration, momentsOf, nowOf, owedAt, spans, subjectOf, weave } from "../../src/life/loom.ts";
+import {
+  asOf,
+  commandDoing,
+  doingOf,
+  duration,
+  momentsOf,
+  nowOf,
+  owedAt,
+  spans,
+  subjectOf,
+  weave,
+} from "../../src/life/loom.ts";
 import { act } from "./acts.ts";
 
 const loomOf = (
@@ -537,4 +548,48 @@ test("the measure of a chain counts its answers, sums their dollars, and names t
 
 test("a count of seconds reads as seconds, minutes or hours", () => {
   expect([duration(45), duration(600), duration(10800)]).toEqual(["45s", "10m", "3h"]);
+});
+
+test("a command says what it does by its program, in a few words, and an unknown program says its name", () => {
+  expect(commandDoing("gh pr checks 364 --watch --interval 30")).toBe("checks of #364");
+  expect(commandDoing("cd ~/src/furb-w && bun run lint 2>&1 | tail -1; bun run test")).toBe(
+    "runs bun run lint",
+  );
+  expect(commandDoing("git push --force-with-lease origin w/feed")).toBe("pushes");
+  expect(commandDoing("sh $TMPDIR/build.sh cargo test --workspace")).toBe("runs cargo test");
+  expect(commandDoing("gh pr view 364 --json headRefOid,statusCheckRollup")).toBe("reads #364");
+  expect(commandDoing("cd /tmp/x && FOO=1 /usr/bin/rg -n theme src")).toBe("runs rg");
+  expect(commandDoing("(cd /tmp && PYTHONPATH=. python3 -c 'print(1)')")).toBe("runs python3");
+  expect(commandDoing("")).toBe("runs a command");
+});
+
+test("an act that runs says what it does: a question to the operator, the chains that it waits for, a command, a file", () => {
+  const label = (chain: string) => ({ chain2: "feed", chain3: "qwen" })[chain] ?? chain;
+  const asked = act("prompt1", "prompt", "chain2", "rung1", 1, undefined, {
+    words: ["str", "Go.", "claude-cli:opus"],
+  });
+  const other = act("prompt2", "prompt", "chain3", "rung1", 2, undefined, {
+    words: ["str", "Go.", "claude-cli:opus"],
+  });
+  const you = act("prompt3", "prompt", "chain1", "rung1", 3, undefined, {
+    words: ["bool", "Merge?", "operator"],
+  });
+  const acts = new Map([asked, other, you].map((one) => [one.id, one]));
+  const find = (id: string) => acts.get(id);
+  const wait = (...ids: string[]) =>
+    act("wait1", "wait", "chain1", "rung1", 4, undefined, { words: [300, ...ids] });
+  expect(doingOf(you, find, label)).toBe("asks you");
+  expect(doingOf(asked, find, label)).toBe("waits for feed");
+  expect(doingOf(wait("prompt1"), find, label)).toBe("waits for feed");
+  expect(doingOf(wait("prompt1", "prompt2"), find, label)).toBe("waits for 2 threads");
+  expect(doingOf(wait(), find, label)).toBe("waits 5m");
+  const read = act("read1", "read", "chain1", "rung1", 5, undefined, { words: ["tui/src/theme.ts"] });
+  expect(doingOf(read, find, label)).toBe("reads theme.ts");
+  const bash = act("bash1", "bash", "chain1", "rung1", 6, undefined, {
+    words: ["cargo clippy -- -D warnings"],
+  });
+  expect(doingOf(bash, find, label)).toBe("runs cargo clippy");
+  expect(doingOf(wait("bash1"), (id) => (id === "bash1" ? bash : acts.get(id)), label)).toBe(
+    "runs cargo clippy",
+  );
 });

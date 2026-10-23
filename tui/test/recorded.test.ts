@@ -15,20 +15,16 @@ async function recorded(): Promise<Session> {
   return new Session(engine, host, true);
 }
 
-test("the board of a real life counts its chains by what they do and says what each chain at work waits on, and the feed folds the earlier steps of a long thread into one line that a click opens", async () =>
+test("the threads of a real life count the chains at work and say what each does in a few words, and the feed folds the earlier steps of a long thread into one line that a click opens", async () =>
   // One test holds both, since each test runs in a process of its own and two demo libraries at once save one list.
   composing(
     async ({ session, app, frame, click }) => {
       await session.refresh();
       const shown = await frame();
       const lines = shown.split("\n");
-      expect(lines.find((line) => line.includes("at work"))).toContain("21 at work");
-      // A board of a third of the screen holds the chains that need a look, and counts the ones it leaves out.
-      expect(shown).toContain("more, ⌃B lists every chain");
-      // The sidebar names the chains too, so the row of the board is the one that says what the chain waits on.
-      expect(lines.some((line) => /◉ life3\/feed +bash361 .*95 answers {2}\$\d+\.\d\d/.test(line))).toBe(
-        true,
-      );
+      expect(lines.find((line) => line.includes("Threads"))).toContain("◉ 21");
+      // A thread at work says what its command does, and not the command.
+      expect(lines.some((line) => /◉ feed +runs bun/.test(line))).toBe(true);
       // The conductor runs one long word, under which its messages pile up: the earlier ones fold into one line.
       const folds = () => app.scroll.getChildren().filter((node) => node.id.startsWith("more-")).length;
       expect(folds()).toBeGreaterThan(0);

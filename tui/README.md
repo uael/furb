@@ -53,7 +53,7 @@ runs, and each follow-up that the queue sends, asks the actor that the chain has
 
 ## Three views of a life
 
-The TUI holds three views of the whole life side by side: the board of main, the loom of the chains in time, and the
+The TUI holds three views of the whole life side by side: main, with the threads in the sidebar, the loom of the chains in time, and the
 graph of the programs that run. `--view main|loom|graph` chooses one at the start, ⌥V switches it at run time,
 `/view` names one or lists the three, and the preferences keep the last one. Each view stands over the feed of the
 selected chain, and every other screen stays the same in each one. ⌥G gives the keys to the loom or the graph, and
@@ -129,13 +129,13 @@ its colors. Else it shows Ink on a dark terminal or on one that does not say its
 changes when the terminal changes. ⌃T or `/theme` chooses another. Sessions share the theme, and the TUI saves it in
 `$XDG_CONFIG_HOME/furb/ui.json`, or `~/.config/furb/ui.json`, and `%APPDATA%\furb\ui.json` on Windows.
 `FURB_CONFIG_DIR` selects another configuration directory. Tests and screenshot generation use isolated preferences.
-`sidebarWidth` in the preferences file sets the width of the sidebar, from 26 to 48 columns. On a terminal narrower
+`sidebarWidth` in the preferences file sets the width of the sidebar, from 26 to 56 columns, and 44 by default. On a terminal narrower
 than 100 columns the sidebar is hidden, and `/workspace` keeps all sessions available from the keyboard.
 
 The TUI serves each person who uses it:
 
 - `--screen-reader`, or `/access reader`, shows one column of text for a screen reader: no sidebar, no box, no
-  spinner, no logo in blocks, and nothing that moves. The view of the life is the board of main.
+  spinner, no logo in blocks, and nothing that moves. The view of the life is main.
 - `--reduced-motion`, or `/access motion`, stops each spinner, and no part of the view moves with time. The mark of
   work that runs, ◉, stays.
 - `NO_COLOR`, when it is set and not empty, turns every color off: each surface takes the default colors of the
@@ -262,8 +262,8 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/share [path]` | Export a standalone HTML conversation |
 | `/export <path>` | Write the transcript and program to a new JSON file |
 | `/workspace [path]` | Choose a workspace or add a project folder |
-| `/view [main|loom|graph]` | Show the life as the board of main, the loom, or the graph |
-| `/sidebar` | Show or hide the chains, the usage, and the workspaces |
+| `/view [main|loom|graph]` | Show the life as main, the loom, or the graph |
+| `/sidebar` | Show or hide the threads and the workspaces |
 | `/delete` | Archive a session, or move it and its files to the workspace trash |
 | `/autocollapse` | Toggle collapse of completed rungs |
 | `/extensions` | List the extensions that this life runs |

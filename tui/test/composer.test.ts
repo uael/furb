@@ -4,7 +4,6 @@ import { setRendererCapabilities } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import { removeDemoDirectories } from "../src/demo.ts";
 import { emojis } from "../src/emoji.ts";
-import { count } from "../src/format.ts";
 import { palettes } from "../src/theme.ts";
 import { cellAt, composing } from "./composing.ts";
 import { idle } from "./idle.ts";
@@ -459,24 +458,21 @@ test("the switch of the input shows Prompt and Python, ⌃R names it, and a clic
     await until(session, () => session.mode === "prompt");
   }));
 
-test("the meter of the context says its share and where the chain pauses when the pointer is over it", () =>
+test("the footer says the share of the context and where a grant pauses the chain", () =>
   composing(
-    async ({ session, screen, frame }) => {
+    async ({ session, frame }) => {
       await session.submit("/context 0.3");
       await until(session, () =>
         session.activity.some((act) => act.kind === "grant" && act.words[1] === 0.3),
       );
-      const lines = (await frame()).split("\n");
-      expect(lines.some((line) => line.includes("Pause at"))).toBe(false);
-      const row = lines.findIndex((line) => line.includes("━"));
-      expect(row).toBeGreaterThan(0);
-      await screen.mockMouse.moveTo((lines[row] ?? "").indexOf("━") + 2, row);
-      const tip = await frame();
-      expect(tip).toContain("of the context window");
-      expect(tip).toContain("pauses at 30%");
-      expect(tip).not.toContain("30.000000000000004");
+      await session.submit("Explore this project.");
+      await until(session, () => session.turns.some((turn) => turn[0] === "assistant"));
+      await session.refresh();
+      const footer = (await frame()).trimEnd().split("\n").at(-1) ?? "";
+      expect(footer).toContain("context 0%, pauses at 30%");
+      expect(footer).not.toContain("30.000000000000004");
     },
-    { width: 120, height: 44 },
+    { width: 160, height: 44 },
     true,
   ));
 
@@ -497,14 +493,9 @@ test("the usage counts each token once, and the context share shows from the fir
     expect(session.activity.some((act) => act.kind === "grant")).toBe(false);
     expect(session.filled).toBe(0);
     expect(session.context).toBe(3240);
-    const shown = await frame();
-    expect(shown).toContain("0%");
-    expect(shown).toContain("Cache read");
-    expect(shown).not.toContain("Cached");
-    expect(shown).toContain("━");
-    const lines = shown.split("\n");
-    expect(lines.find((line) => line.includes("Last prompt"))).toContain("3.2k");
-    expect(lines.find((line) => line.includes("Fresh input"))).toContain(count(440 * answers));
+    const footer = (await frame()).trimEnd().split("\n").at(-1) ?? "";
+    expect(footer).toContain("context 0%");
+    expect(footer).not.toContain("pauses at");
   }));
 
 test("the usage of a fork counts the answers of the fork alone, and not those of its origin", () =>
@@ -518,9 +509,8 @@ test("the usage of a fork counts the answers of the fork alone, and not those of
     await session.refresh();
     expect(session.turns.filter((turn) => turn[0] === "assistant").length).toBe(answered);
     expect(session.spend).toEqual({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, dollars: 0 });
-    const shown = await frame();
-    expect(shown).toContain("Last prompt");
-    expect(shown).not.toContain("Cache read");
+    const footer = (await frame()).trimEnd().split("\n").at(-1) ?? "";
+    expect(footer).not.toContain("$");
   }));
 
 test("a paused chain says so at the end of its feed and in the footer, and Wake wakes it", () =>
@@ -592,17 +582,20 @@ test("a message sent to a paused chain wakes it, and the answer comes", () =>
   }));
 
 test("a notice cut to the room of the footer keeps one line and the mark of its cut, and shows whole in a tip while the pointer is over it", () =>
-  composing(async ({ session, screen, frame }) => {
-    session.notice = `A notice longer than its line ${"and longer ".repeat(12)}to its very end`;
-    const lines = (await frame()).split("\n");
-    const row = lines.findIndex((line) => line.includes("A notice longer"));
-    expect(lines[row]).not.toContain("to its very end");
-    expect(lines[row]).toContain("…");
-    expect(lines[row]).toContain("F1 help");
-    expect(lines.filter((line) => line.includes("and longer"))).toHaveLength(1);
-    await screen.mockMouse.moveTo((lines[row] ?? "").indexOf("A notice") + 2, row);
-    expect(await frame()).toContain("to its very end");
-  }));
+  composing(
+    async ({ session, screen, frame }) => {
+      session.notice = `A notice longer than its line ${"and longer ".repeat(12)}to its very end`;
+      const lines = (await frame()).split("\n");
+      const row = lines.findIndex((line) => line.includes("A notice longer"));
+      expect(lines[row]).not.toContain("to its very end");
+      expect(lines[row]).toContain("…");
+      expect(lines[row]).toContain("F1 help");
+      expect(lines.filter((line) => line.includes("and longer"))).toHaveLength(1);
+      await screen.mockMouse.moveTo((lines[row] ?? "").indexOf("A notice") + 2, row);
+      expect(await frame()).toContain("to its very end");
+    },
+    { width: 152, height: 40 },
+  ));
 
 test("a cancelled message keeps its place in the feed, and its cancel reads as a cancel, not as a failure", () =>
   composing(async ({ session, app, frame }) => {

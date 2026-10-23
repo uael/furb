@@ -180,27 +180,32 @@ test("a damaged journal of file changes says what broke, with no word of the par
   ));
 
 test("the footer counts down the wait of a call of a model that the provider makes again, with its attempt and why", () =>
-  composing(async ({ session, frame }) => {
-    // The clock stands still, so the seconds left are what the test moves it by, however long the frames take.
-    const start = Date.now();
-    const retry = { attempt: 2, most: 10, until: start + 3500, why: "connection reset" };
-    // Each state of the worker carries the streams of its session, and a state that the opening of the demo sent can
-    // come after the test starts. So the stream that the test makes comes again with each state.
-    const stream = () => {
-      session.host.streams = new Map([["rung1", { chain: session.selected, text: "", thinking: "", retry }]]);
-    };
-    setSystemTime(new Date(start));
-    stream();
-    session.host.on("change", stream);
-    try {
-      expect(await frame()).toContain("Retrying in 4 s, attempt 2 of 10, connection reset");
-      setSystemTime(new Date(start + 1000));
-      expect(await frame()).toContain("Retrying in 3 s, attempt 2 of 10, connection reset");
-    } finally {
-      session.host.off("change", stream);
-      setSystemTime();
-    }
-  }));
+  composing(
+    async ({ session, frame }) => {
+      // The clock stands still, so the seconds left are what the test moves it by, however long the frames take.
+      const start = Date.now();
+      const retry = { attempt: 2, most: 10, until: start + 3500, why: "connection reset" };
+      // Each state of the worker carries the streams of its session, and a state that the opening of the demo sent can
+      // come after the test starts. So the stream that the test makes comes again with each state.
+      const stream = () => {
+        session.host.streams = new Map([
+          ["rung1", { chain: session.selected, text: "", thinking: "", retry }],
+        ]);
+      };
+      setSystemTime(new Date(start));
+      stream();
+      session.host.on("change", stream);
+      try {
+        expect(await frame()).toContain("Retrying in 4 s, attempt 2 of 10, connection reset");
+        setSystemTime(new Date(start + 1000));
+        expect(await frame()).toContain("Retrying in 3 s, attempt 2 of 10, connection reset");
+      } finally {
+        session.host.off("change", stream);
+        setSystemTime();
+      }
+    },
+    { width: 152, height: 40 },
+  ));
 
 test("a word of the operator that the gate refused says in one more line what to do", () =>
   composing(
@@ -388,7 +393,7 @@ test("the feed at its end stays at its end when the input grows, and a turn of t
       // A render that changes nothing on the screen draws no frame, and the wheel still moves the feed.
       app.render();
       await screen.flush();
-      // The wheel turns over the feed, below the board of the chains.
+      // The wheel turns over the feed.
       await screen.mockMouse.scroll(10, app.scroll.y + 1, "up");
       await screen.flush();
       await screen.flush();
@@ -449,7 +454,7 @@ test("the keys of the footer and the palette answer the mouse, and a drag over a
     true,
   ));
 
-test("the root chain stands in the list of chains when it rests, and the other resting chains fold under Finished", () =>
+test("the root chain stands in the threads when it rests, and the other resting chains fold under Finished", () =>
   composing(
     async ({ session, frame }) => {
       const { engine } = session;
@@ -459,12 +464,12 @@ test("the root chain stands in the list of chains when it rests, and the other r
       await session.select(side);
       const left = 140 - session.preferences.sidebarWidth;
       const rows = (await frame()).split("\n").map((line) => line.slice(left).trim());
-      expect(rows.slice(1, 4)).toEqual(["○ Main", "▎ ○ Side", "▸ Finished  1"]);
+      expect(rows.slice(1, 4)).toEqual(["▎○ Main", "▎○ Side", "▸ Finished  1"]);
     },
     { width: 140, height: 30 },
   ));
 
-test("the board over the feed shows each chain with what it does now, a question first, and a click on a row shows its chain", () =>
+test("the sidebar says what each thread came to, a question that waits stands first with its values, which a click answers, and a click on a thread shows its chain", () =>
   composing(
     async ({ session, frame, click }) => {
       await idle(session);
@@ -472,7 +477,6 @@ test("the board over the feed shows each chain with what it does now, a question
       expect(shown.split("\n").filter((line) => line.includes("✓ Main"))).toContainEqual(
         expect.stringContaining("A clear starting point"),
       );
-      expect(shown).toContain("○ Search shortcut");
       const question = await session.engine.prompt("bool", {
         message: "Apply the search shortcut?",
         on: session.engine.root,
@@ -481,10 +485,16 @@ test("the board over the feed shows each chain with what it does now, a question
       await until(session.host, () => session.host.prompts.has(question));
       await session.refresh();
       shown = await frame();
-      // The sidebar marks the chain too, so the board is the row that says the question.
-      expect(shown.split("\n").filter((line) => line.includes("◆ Main"))).toContainEqual(
-        expect.stringContaining("Apply the search shortcut?"),
-      );
+      const rows = shown.split("\n");
+      const needs = rows.findIndex((line) => line.includes("Needs you"));
+      expect(needs).toBeGreaterThan(-1);
+      expect(rows.findIndex((line) => line.includes("Threads"))).toBeGreaterThan(needs);
+      expect(rows[needs + 2]).toContain("◆ Main");
+      expect(shown).toContain("Apply the search shortcut?");
+      expect(shown).toContain(" 3 Other ");
+      await click(" 1 yes ");
+      expect(await session.engine.result(question)).toBe(true);
+      await click("Finished");
       await click("Review notes");
       await until(session, () => session.label === "Review notes");
       expect(session.selected).not.toBe(session.engine.root);

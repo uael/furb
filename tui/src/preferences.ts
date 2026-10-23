@@ -9,12 +9,12 @@ export class Preferences {
   /** The theme that every session shows: one by its name, or the one that follows the terminal. */
   theme: ThemeChoice = "terminal";
   sidebar = true;
-  sidebarWidth = 32;
+  sidebarWidth = 44;
   /** Whether a rung that is over starts folded in the feed. */
   foldRungs = true;
   /** Whether the welcome showed the check of the first run, which it shows once, and again while no model answers. */
   setupSeen = false;
-  /** The view of the life that the TUI shows: the board of main, the loom, or the graph. */
+  /** The view of the life that the TUI shows: main, the loom, or the graph. */
   view: LifeView = "main";
   /** Whether the view serves a screen reader: one column of text, with no box, no spinner, and nothing that moves. */
   screenReader = false;
@@ -44,7 +44,7 @@ export class Preferences {
       if (typeof saved?.setupSeen === "boolean") this.setupSeen = saved.setupSeen;
       if (isLifeView(saved?.view)) this.view = saved.view;
       if (typeof saved?.sidebarWidth === "number")
-        this.sidebarWidth = Math.max(26, Math.min(48, saved.sidebarWidth));
+        this.sidebarWidth = Math.max(26, Math.min(56, saved.sidebarWidth));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT")
         this.notice = `Could not read preferences at ${path}. Using the theme of the terminal for this run. The file is unchanged. Click to dismiss.`;
