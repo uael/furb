@@ -22,18 +22,19 @@ Five extensions come with furb, and each life runs them unless a config turns th
   directory. `skill(name)` reads the `SKILL.md` of one skill. Its life word, `counted()`, says in one line how many
   skills the chain has. It carries one skill of its own, `extending`, which shows a model how to extend furb, with an
   example for each way. A skill named `extending` in a folder takes its place.
-- **`compaction`** goes on in a new chain that keeps less of the old one, since a compaction in furb is a chain with
-  a source and a filter. `compact()` makes that chain: its filter applies `FILTERS` in order, and its first word binds
-  again what the module of the old chain holds with `restore(source)`, binds the summary that it is given, and reads
-  again with `reground()` each file that it kept a read or write of, and shows only what changed. `latest()` keeps the
-  last read or write of each path, `quiet()` drops the commands, `recent(n)` keeps the acts of the last `n` replies,
+- **`compaction`** cuts a chain to the work that it still needs, and the chain goes on under its name, since a
+  compaction in furb is a prefix said on the chain, which takes the place of its transcript. `supersede(keep)` says
+  that prefix: what the filter kept, all that made it, and every act. `compact()` supersedes the chain of the caller:
+  its filter applies `FILTERS` in order, and its next word binds the summary that it is given and reads again with
+  `reground()` each file that it kept a read or write of, and shows only what changed. `latest()` keeps the last read
+  or write of each path, `quiet()` drops the commands, `recent(n)` keeps the acts of the last `n` replies,
   `await chosen()` asks a model which acts to keep, and `together(*filters)` joins filters. `choice()` asks a model,
   on a chain of its own, which acts the work still needs and what the rest holds. `compacted()` watches one chain:
   after an answer that fills more than `SHARE`, 0.6, of the window of its model, it asks `choice()`, and at the next
-  reply after the answer, it compacts the chain to what the model chose, with its summary, and moves each open prompt
-  of a model to the new chain. It pauses nothing, so the workers that a conductor hired go on. No chain is watched
-  unless a word asks for it, so the extension has no life word. A project changes the defaults in an extension of its
-  own whose word rebinds `SHARE`, `FILTERS`, `CHOOSER`, `LISTED`, `BRIEF` or `LABEL`.
+  reply after the answer, it compacts the chain to what the model chose, with its summary. It moves, stops and pauses
+  nothing, so a loop such as `while True: await conduct()` goes on with its state, and the workers that a conductor
+  hired go on. No chain is watched unless a word asks for it, so the extension has no life word. A project changes
+  the defaults in an extension of its own whose word rebinds `SHARE`, `FILTERS`, `CHOOSER`, `LISTED` or `BRIEF`.
 - **`ouroboros`** teaches a model to extend furb. Its life word, `ouroboros()`, tells each chain once the three ways
   to extend furb and when to take each: a def in a word, which lives with its chain; `extend(name, *rungs)`, which
   writes the words of those rungs as an extension of the project and turns it on, so every later chain runs it; and
