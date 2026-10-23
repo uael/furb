@@ -211,6 +211,7 @@ export class Question {
 export class Life extends Chain {
   private made: Fact[];
   private readonly waiting: Array<() => void> = [];
+  private ended = false;
 
   constructor(readonly session: Session) {
     super(undefined as unknown as Life, (session.engine as Engine).root);
@@ -235,9 +236,13 @@ export class Life extends Chain {
     return one[1];
   }
 
-  /** Wait until a condition of the life holds, which the life checks again after each change. */
+  /** Wait until a condition of the life holds, which the life checks again after each change, or throw once the life
+   * ended, since nothing of it changes again. */
   async until(holds: () => boolean): Promise<void> {
-    while (!holds()) await new Promise<void>((wake) => this.waiting.push(wake));
+    while (!holds()) {
+      if (this.ended) throw new Error("The life ended.");
+      await new Promise<void>((wake) => this.waiting.push(wake));
+    }
   }
 
   /** The questions to the operator, as the models ask them, until the thread named is done. */
@@ -257,9 +262,13 @@ export class Life extends Chain {
     }
   }
 
-  /** End the life: its commands, its waits and its models end, and the store lets its record go. */
+  /** End the life: its commands, its waits and its models end, the store lets its record go, and each wait of the
+   * program on it throws that the life ended. */
   end(): Promise<void> {
-    return this.session.dispose();
+    this.ended = true;
+    const ended = this.session.dispose();
+    for (const wake of this.waiting.splice(0)) wake();
+    return ended;
   }
 
   [Symbol.asyncDispose](): Promise<void> {
