@@ -22,6 +22,8 @@ engine: ModuleType = importlib.import_module("furb_monty.engine")
 """engine is the engine of the crate, whose names the door gives at its import."""
 OPERATOR = "operator"
 """OPERATOR is the actor of a prompt that the operator answers, and the site of every act of the program."""
+ENDED = "The life ended."
+"""ENDED is what a wait of a program on a life raises once the life ended."""
 MADE = ("chain", "prompt", "grant", "rung")
 """MADE are the kinds of the acts that a program makes, which a later run of it finds again in the record."""
 
@@ -191,6 +193,7 @@ class Life(Chain):
 
   def __init__(self, ears: dict[str, _monty.NativeEar], record: list[tuple]) -> None:
     self.ears, self.asked, self.waiting = ears, list[Question](), list[asyncio.Future[None]]()
+    self.ended = False
     self.loop = asyncio.get_running_loop()
     self.made = [one for (one,) in record if one[2] == OPERATOR and one[0] in MADE and question(one[0], one[1])]
     self.made = [one for one in self.made if one[1] != "chain1"]
@@ -223,8 +226,11 @@ class Life(Chain):
     self.waiting.clear()
 
   async def until(self, holds: Callable[[], bool]) -> None:
-    """Wait until a condition of the life holds, which the life checks again after each fact."""
+    """Wait until a condition of the life holds, which the life checks again after each fact, or raise once the life
+    ended, since nothing of it moves again."""
     while not holds():
+      if self.ended:
+        raise RuntimeError(ENDED)
       one = self.loop.create_future()
       self.waiting.append(one)
       await one
@@ -238,9 +244,12 @@ class Life(Chain):
       await self.until(lambda: bool(self.asked) or (until is not None and until.done))
 
   def end(self) -> None:
-    """End the life: its commands, its waits and its models end, and the store lets its record go."""
+    """End the life: its commands, its waits and its models end, the store lets its record go, and each wait of the
+    program on it raises that the life ended."""
+    self.ended = True
     for one in self.ears.values():
       one.dispose()
+    self.moved()
 
 
 async def open(
