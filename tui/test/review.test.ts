@@ -36,7 +36,7 @@ async function reviewed(
 ): Promise<[string, number, number][]> {
   session.review(scope);
   await session.refresh();
-  return session.changes.map((change) => [change.path.split("/").at(-1) ?? "", change.added, change.removed]);
+  return session.changes.map((change) => [basename(change.path), change.added, change.removed]);
 }
 
 test("the net change of a file runs from its text before its first change to its text after its last", () => {
