@@ -11,5 +11,18 @@ async def test_compaction_is_the_doctrine_of_the_extension(tmp_path: Path) -> No
   sand, root, _ = compacting(tmp_path)
   sand.script[root] = ["close(compaction)"]
   doctrine = await engine.prompt(str, "doctrine", on=root)
-  parts = ["compact()", "latest()", "quiet()", "recent(n)", "chosen()", "together(", "compacted()", "SHARE", "FILTERS"]
-  assert [part for part in [*parts, "CHOOSER", "LABEL", "extension of its own"] if part not in doctrine] == []
+  parts = [
+    "compact()",
+    "latest()",
+    "quiet()",
+    "recent(n)",
+    "chosen()",
+    "choice()",
+    "together(",
+    "compacted()",
+    "SHARE",
+    "FILTERS",
+  ]
+  assert [
+    part for part in [*parts, "CHOOSER", "LISTED", "BRIEF", "LABEL", "extension of its own"] if part not in doctrine
+  ] == []

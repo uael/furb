@@ -482,7 +482,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   chain gives the new chain, which never completes.
   boot gives the root as an act of Never, and the root never completes.
   The engine makes a chain in one way: by running its rungs.
-  In a chain with a source the rungs of the origin up to that source run again in the module of the new chain.
+  In a chain with a source the rungs of the origin that are over at that source run again in the module of the new chain.
   A chain given a source stands on that one: it retells the words of it as they stand, each rung of it retelling a rung of that one, so that it makes the same acts and shares them, and what it holds of the transcript of that one is what its filter kept, though it runs every word all the same, so what it holds bound is more than its turns say.
   A prompt to an actor its roster does not hold it closes with the refusal.
   A chain that the word of a rung opens is a scope of its own: its words are on itself, though the chain fact itself stands on the chain of the rung that opened it; and when that rung is retold, the word makes the same chain, since a rung that retells another shares the acts it makes, so a word that opens a chain opens it once.
@@ -527,11 +527,12 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   The acts of the prefix of a chain with a source keep the ids they had on the origin.
   The globals of a chain with a source are those of a module of its own.
   The objects of a rung of a chain with a source are that chain's own, made again, and only code is shared.
-  The globals of a chain with a source are the origin's at that source, whatever the filter kept.
+  The globals of a chain with a source are what the rungs of the origin that are over at that source bound, whatever the filter kept.
   A chain with a source inherits the words its caller wrote with its prefix, wherever its source.
   A filter that skips a rung its caller wrote keeps it out of the turns of the new chain.
   A chain with a source holds the classes that its origin defined before that source.
   A chain with a source reads nothing that its origin did after that source.
+  A chain with a source retells no rung of its origin that is not over at its birth, so the word of that rung goes on in its origin alone, and no copy of it waits for it or runs it a second time.
   What a rung of a chain with a source binds lands on that chain and not on its origin.
   The origin holds the chain fact of a chain that a rung of it made, and nothing of that chain's own.
   Two names of the module are the chain's to bind: the actor it stands on, and what the last rung that raised raised, so that the word of a rung reads what the word before it came to.
@@ -547,7 +548,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   The chain retells the rungs of its origin through the program of the origin, and it makes the rungs it retells itself, so they tell nothing.
   A replay makes the rungs of a chain again from its donor: it keeps each rung of the ladder whose word is the next part of the words it is given, it makes one rung of what is left, and every other rung of the ladder is gone.
   A replay makes the module of the chain again, as it was at its birth but on the standing the chain stands on then, and makes its rungs in that one, so what a word it drops bound is gone, and a word that runs while it happens ends in the module it began in.
-  The donor of a replay is the rungs of the origin for a chain with a source, and the rungs of the chain as they stand for a write of the door of one of its prompts.
+  The donor of a replay is the rungs of the origin that are over at the birth of the chain for a chain with a source, and the rungs of the chain as they stand for a write of the door of one of its prompts.
   A write of a door gives the words of that ladder alone, so every rung of the chain that is no rung of that ladder stands as it did.
   A write of a door cancels each rung of that ladder that it drops, but the rung that writes, so the plan that it replaces ends wholly: a word that waits ends where it waits, with every act under it, the rung that writes among them when it answers that word, and a word that is done ends each act that it made and that is not done.
   A write of a door that drops no rung that ran, since the gate refused each rung that it drops, keeps the module and every rung of the chain as they stand, and makes only the rung of what is new.

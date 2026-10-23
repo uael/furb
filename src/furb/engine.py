@@ -249,7 +249,8 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
     raise Refused("no chain " + source)
 
   def ear(id):
-    rungs, refused, running, waiting, last, heard = program(source), set(), {}, {}, standing(), []
+    rungs = {x: w for x, w in program(source).items() if over(x) or not get(x)}
+    refused, running, waiting, last, heard = set(), {}, {}, standing(), []
     asking = unseen = ran = reply = ""
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 

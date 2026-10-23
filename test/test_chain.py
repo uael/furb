@@ -148,7 +148,7 @@ async def test_the_engine_makes_a_chain_in_one_way_by_running_its_ladder() -> No
 
 
 async def test_in_a_chain_with_a_source_the_ladder_of_the_origin_runs_again_in_its_module() -> None:
-  """In a chain with a source the rungs of the origin up to that source run again in the module of the new chain."""
+  """In a chain with a source the rungs of the origin that are over at that source run again in the module of the new chain."""
   _, log, root = born("a = 1", "close(a + 1)")
   one = engine.prompt(int, "count", on=root)
   assert await one == 2
@@ -738,7 +738,7 @@ async def test_the_objects_of_a_rung_of_a_chain_with_a_source_are_that_chains_ow
 
 
 async def test_the_globals_of_a_chain_with_a_source_are_the_origins_whatever_the_filter_kept() -> None:
-  """The globals of a chain with a source are the origin's at that source, whatever the filter kept."""
+  """The globals of a chain with a source are what the rungs of the origin that are over at that source bound, whatever the filter kept."""
   _, _, root = born()
   await engine.rung("k = 21", on=root)
   twin = engine.chain("twin", source=root, filter=take())
@@ -790,6 +790,21 @@ async def test_a_chain_with_a_source_reads_nothing_that_its_origin_did_after_tha
   assert engine.turns(on=twin) == told == [("user", "\n\n".join(paragraphs(told)), None, None)]
   assert paragraphs(told) == [opened(root, "root"), takes(root), opened(twin, "twin", root)]
   assert "after" not in engine.module(twin) and paragraphs(engine.turns(on=root))[-1:] == [written(after, "after = 1")]
+
+
+async def test_a_chain_with_a_source_retells_no_rung_of_its_origin_that_is_not_over_at_its_birth() -> None:
+  """A chain with a source retells no rung of its origin that is not over at its birth, so the word of that rung goes on in its origin alone, and no copy of it waits for it or runs it a second time."""
+  _, log, root = born()
+  await engine.rung("k = 1", on=root)
+  slow = engine.rung("x = 1\ny = await prompt(int, 'n', to=OPERATOR)\nz = y", on=root)
+  await settle()
+  twin = await chained("twin", root)
+  (asked,) = [a[1] for a in said(log, "prompt")]
+  engine.close(4, asked)
+  await settle()
+  assert [a for a in said(log, "rung") if a[5] == slow] == []
+  assert engine.module(root)["z"] == 4 and engine.module(twin)["k"] == 1
+  assert not {"x", "y", "z"} & set(engine.module(twin))
 
 
 async def test_what_a_rung_of_a_chain_with_a_source_binds_lands_on_that_chain() -> None:
@@ -1010,7 +1025,7 @@ async def test_a_replay_makes_the_rungs_of_a_chain_again_from_its_donor() -> Non
 
 
 async def test_the_donor_of_a_replay_is_the_ladder_of_the_origin_or_the_ladder_as_it_stands() -> None:
-  """The donor of a replay is the rungs of the origin for a chain with a source, and the rungs of the chain as they stand for a write of the door of one of its prompts."""
+  """The donor of a replay is the rungs of the origin that are over at the birth of the chain for a chain with a source, and the rungs of the chain as they stand for a write of the door of one of its prompts."""
   _, log, root = born()
   await engine.rung("k = 1", on=root)
   twin = await chained("twin", root, 300)

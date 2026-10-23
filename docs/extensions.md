@@ -95,14 +95,21 @@ journal answers again in a later life, so a replay is exact and the World is ask
 
 - `compaction` is a kit to go on in a new chain that keeps less of the old one, since in furb a compaction is a
   chain with a source and a filter. `compact()` makes that chain from the chain of the caller: its filter applies
-  `FILTERS` in order, and its first word, `reground(source)`, reads again each file that the old chain read or
-  wrote. Each filter is a small function that gives a filter: `latest()` keeps the last read or write of each path,
-  `quiet()` drops the commands, `recent(n)` keeps the acts of the last `n` replies, and `await chosen()` asks a model
-  on a chain of its own which acts to keep. `together(*filters)` applies filters in order. `compacted()` wraps one
-  chain: after an answer that reads more than `SHARE`, 0.6, of the window of its actor, it compacts the chain at its
-  next reply, moves each open prompt of a model to the new chain, and wraps that chain. No chain is wrapped unless a
-  word wraps it, so the extension has no life word and needs no ear of the World. A project changes the defaults in
-  an extension of its own whose word rebinds `SHARE`, `FILTERS`, `CHOOSER` or `LABEL`. Its doctrine, the quote
+  `FILTERS` in order, and its first word binds again what the module of the old chain holds with `restore(source)`,
+  binds the summary that it is given, and reads again with `reground()` each file that it kept a read or write of,
+  showing only what changed. Each filter is a small function that gives a filter: `latest()` keeps the last read or
+  write of each path, `quiet()` drops the commands, `recent(n)` keeps the acts of the last `n` replies, and
+  `await chosen()` asks a model which acts to keep. `together(*filters)` applies filters in order. `choice()` asks a
+  model, on a chain of its own, which acts the work still needs and what the rest holds: its prompt lists each open
+  prompt and each act, with the size of its text, each act of a step under that step. `compacted()` wraps one chain:
+  after an answer that reads more than `SHARE`, 0.6, of the window of its actor, it asks `choice()`, and at the next
+  reply once that came, it compacts the chain to what the model chose, with its summary, moves each open prompt of a
+  model to the new chain, and wraps that chain. It stops each open rung of a prompt that it moves with a close, which
+  reaches that rung alone, and it pauses nothing, so the workers that a conductor hired go on; the summary names each
+  rung that it stopped, and the module of the new chain holds what the module of the old one held, so a loop such as
+  `while True: await conduct()` runs again once, on that state. No chain is wrapped unless a word wraps it, so the
+  extension has no life word and needs no ear of the World. A project changes the defaults in an extension of its
+  own whose word rebinds `SHARE`, `FILTERS`, `CHOOSER`, `LISTED`, `BRIEF` or `LABEL`. Its doctrine, the quote
   `compaction`, says each part in a few words.
 
 - `web` searches the web and reads its pages. `web_search(query)` is an act that the World answers with the native
