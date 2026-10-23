@@ -340,7 +340,8 @@ interface TreeRow {
 }
 
 export interface AppOptions {
-  quit(): void | Promise<void>;
+  /** Close the window: each life detaches, and a life in a host of its own goes on, or each life ends when end is set. */
+  quit(end?: boolean): void | Promise<void>;
   workspaces: Workspaces;
   /** Rings the bell of the terminal, which calls the operator to a question when the terminal can show no
    * notification. By default it writes BEL to the standard output. */
@@ -4721,6 +4722,7 @@ export class App {
       shape: this.shapes,
       theme: () => this.themes(),
       exit: () => this.options.quit(),
+      end: () => this.options.quit(true),
       editor: () => this.editDraft(),
       files: this.filesPicker,
       new: () => library.create(),

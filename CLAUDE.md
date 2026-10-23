@@ -75,7 +75,10 @@ The TypeScript side is a bun workspace at the root, with two packages:
   model of a life, `furb/life` in `src/life`, gives the views of a life that every host draws, with no native
   code. The TUI imports its build in `bind/typescript/dist`, which `bun run build` makes again.
 - `tui` is the OpenTUI application on that package. `tui/README.md` says what the TUI does, and `docs/tui.md` shows
-  each screen.
+  each screen. A life of the TUI runs in the worker of `tui/src/worker.ts`, which `tui/src/host.ts`, the host of the
+  life, holds in a process of its own behind a socket that `tui/src/hosting.ts` places, so the life outlives each
+  window: `tui/src/bridge.ts` attaches a window to the host, or starts it, and keeps the worker in the window where no
+  socket serves.
 
 `docs/examples/` holds the examples of the framework: five short programs for each door, in `python/`,
 `typescript/` and `rust/`, which a user runs as they stand, and which `docs/examples/README.md` shows. They stand on

@@ -54,8 +54,8 @@ function importsOf(entry: string): Map<string, string> {
   return named;
 }
 
-test("no worker of the TUI loads OpenTUI, so its native library stays with the thread that draws", () => {
-  for (const worker of ["worker.ts", "record-worker.ts"]) {
+test("no worker and no host of the TUI loads OpenTUI, so its native library stays with the thread that draws", () => {
+  for (const worker of ["worker.ts", "record-worker.ts", "host.ts"]) {
     const named = importsOf(join(import.meta.dir, "../src", worker));
     expect(named.size).toBeGreaterThan(1);
     expect([...named].filter(([path]) => path.startsWith("@opentui/"))).toEqual([]);

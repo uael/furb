@@ -48,6 +48,7 @@ const state = () => {
         actor: reader.actor,
         record: reader.record,
         facts: reader.facts.length,
+        seq: reader.facts.length,
         prompts: [],
         notices: [],
         streams: [],
@@ -70,6 +71,7 @@ const state = () => {
     actor: owner.actor,
     record: owner.record,
     facts: owner.facts.length - sentFacts,
+    seq: owner.facts.length,
     prompts: [...owner.console.prompts.values()].map(({ id, shape, message }) => ({ id, shape, message })),
     notices: [...owner.console.notices.values()],
     streams: [...owner.streams],
@@ -292,6 +294,9 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     return offered ? held : null;
   }
   if (data.target === "library" && data.method === "source") return ENGINE;
+  // The engine that made the record, as its fact made names it, which the host of the life says.
+  if (data.target === "library" && data.method === "made")
+    return session?.entries.map(([fact]) => fact).find((fact) => fact?.[0] === "made")?.[3] ?? null;
   if (data.target === "library" && data.method === "changes")
     return session?.changes.read(Number(data.args[0]), Number(data.args[1]));
   if (data.target === "library" && data.method === "net")
@@ -331,6 +336,7 @@ function read(data: { target: string; method: string; args: unknown[] }): unknow
   if (data.target === "library" && data.method === "snapshot")
     return snapshots?.take(String(data.args[0]), Number(data.args[1]));
   if (data.target === "library" && data.method === "source") return ENGINE;
+  if (data.target === "library" && data.method === "made") return open.reading?.made ?? null;
   if (data.target === "library" && data.method === "catalog") return [];
   if (data.target === "library" && data.method === "setup") return null;
   if (data.target === "library" && data.method === "sees") return false;
@@ -356,6 +362,9 @@ function read(data: { target: string; method: string; args: unknown[] }): unknow
 }
 
 self.onmessage = async ({ data }) => {
+  // The end of the life is the dispose of its session: a window of its own ends it so, and a window of a host ends it
+  // by end, since a dispose there only detaches the window.
+  if (data.target === "session" && data.method === "end") data.method = "dispose";
   let reply: { value?: unknown; error?: string; name?: string };
   try {
     reply = { value: await answer(data) };

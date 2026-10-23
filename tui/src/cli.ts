@@ -71,11 +71,13 @@ const directory =
     ? await demoDirectory()
     : resolve(values.cwd ?? savedDirectory ?? process.cwd());
 if (values.demo) await mkdir(directory, { recursive: true });
+// Each life runs in a host of its own, which outlives the window, but the demo of a project that goes with the window.
 const engineOptions: EngineOptions = {
   model: values.model,
   effort: values.effort,
   roster: values.roster,
   demo: values.demo,
+  host: !(values.demo && !record && !values.cwd),
 };
 const library = new Workspaces(
   preferences,
@@ -108,15 +110,16 @@ const renderer = await createCliRenderer({
   useMouse: true,
 });
 let closing = false;
-/** Each step runs whatever the steps before it came to, so that the sessions close even when the terminal is gone. */
-const quit = async () => {
+/** Each step runs whatever the steps before it came to, so that the sessions close even when the terminal is gone. The
+ * window detaches from each life, and a life in a host of its own goes on, unless end is set, which ends each life. */
+const quit = async (end = false) => {
   if (closing) return;
   closing = true;
   const failures: unknown[] = [];
   for (const step of [
     () => app().dispose(),
     () => renderer.destroy(),
-    () => library.dispose(),
+    () => library.dispose(end),
     () => removeDemoDirectories(),
   ])
     try {

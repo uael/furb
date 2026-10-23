@@ -302,6 +302,12 @@ export class Session extends EventEmitter {
     host.on("change", this.changed);
     host.on("facts", this.factsChanged);
     host.on("fault", this.fail);
+    // A window that attached again to another host of its life reads its acts from the start, since the counts of the
+    // acts are of the host that made them.
+    host.on("reset", () => {
+      this.counted = 0;
+      void this.refresh();
+    });
     // A report of the life that no model reads, such as a file that the scratch directory leaves out, shows as a
     // notice, since a write to stderr would draw over the screen.
     host.on("log", (line: string) => {
@@ -1441,8 +1447,9 @@ export class Session extends EventEmitter {
     };
     saveFile(path, JSON.stringify(view));
   }
-  /** Save the view, then end the session whatever the save came to. */
-  async dispose(): Promise<void> {
+  /** Save the view, then let the session go whatever the save came to: the window detaches from the life, which goes
+   * on when it runs in a host of its own, or the life ends when end is set. */
+  async dispose(end = false): Promise<void> {
     clearTimeout(this.noticeTimer);
     this.closed = true;
     this.host.off("change", this.changed);
@@ -1452,7 +1459,7 @@ export class Session extends EventEmitter {
       this.save();
     } finally {
       await this.refreshTask?.catch(() => {});
-      await this.host.dispose();
+      await (end ? this.host.end() : this.host.dispose());
     }
   }
 }
