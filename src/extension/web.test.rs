@@ -114,7 +114,7 @@ fn standing() -> Box<dyn Ear> {
 }
 
 /// A server of this machine that answers each request for a page by its path: a page of HTML, a page that is not
-/// there, and an image. Its address.
+/// there, an image, and a page of text that tells no length and never ends. Its address.
 fn served() -> String {
   let listener = TcpListener::bind("127.0.0.1:0").unwrap();
   let at = format!("http://{}", listener.local_addr().unwrap());
@@ -125,6 +125,14 @@ fn served() -> String {
       let size = stream.read(&mut asked).unwrap_or_default();
       let asked = String::from_utf8_lossy(&asked[..size]);
       let path = asked.split_whitespace().nth(1).unwrap_or_default().to_owned();
+      if path == "/endless" {
+        let head =
+          "HTTP/1.1 200 OK\r\ncontent-type: text/plain\r\ntransfer-encoding: chunked\r\n\r\n";
+        let chunk = format!("100000\r\n{}\r\n", "a".repeat(1 << 20));
+        let _ = stream.write_all(head.as_bytes());
+        while stream.write_all(chunk.as_bytes()).is_ok() {}
+        continue;
+      }
       let (status, kind, body) = match path.as_str() {
         "/page" => ("200 OK", "text/html", "<h1>Rust</h1><p>Is fast.</p>"),
         "/image" => ("200 OK", "image/png", "PNG"),
@@ -172,4 +180,7 @@ fn a_life_searches_with_the_native_search_of_the_actor_and_fetches_a_page_of_a_s
   let no = closed(&mut engine, &format!("close(await act('web_fetch', '', None, '{at}/image'))"))
     .unwrap_err();
   assert!(no.contains("is no text: image/png"), "{no}");
+  let no = closed(&mut engine, &format!("close(await act('web_fetch', '', None, '{at}/endless'))"))
+    .unwrap_err();
+  assert!(no.contains(&format!("{at}/endless is larger than {} bytes", 10 << 20)), "{no}");
 }

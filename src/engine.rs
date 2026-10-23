@@ -68,11 +68,12 @@ const VIEWS: [&str; 18] = [
 ];
 
 /// For each fact of the past, the ears of the host that wait for it, among the ears `w`, each by its name and what it
-/// waits for, as the bus gives a fact: an ear that waits for nothing hears it, as does an ear that waits for its kind, its act, or the
-/// kind, the maker or the chain of that act, or the chain of that maker, and every ear hears a control.
-const HEARING: &str = "(lambda past, w: [(lambda a: (lambda k: [n for n, x in w if x is None or k & x or a[0] in \
-  ('pause', 'wake', 'cancel', 'close')])((lambda q: {a[0], *q[:4], scope(q[2])})(get(a[1]) or a[:1] * 4)))(a) \
-  for a in past])(past, w)";
+/// waits for, as the bus of the engine gives a fact, whose `ears` this rule is word for word: an ear that waits for
+/// nothing hears it, as does an ear that waits for its kind, its act, or the kind, the maker, the chain or the thread
+/// of that act, or the chain of that maker or of that chain or thread, and every ear hears a control.
+pub(crate) const HEARING: &str = "(lambda past, w: [(lambda a: (lambda k: [n for n, x in w if x is None or k & x or a[0] in \
+  ('pause', 'wake', 'cancel', 'close')])((lambda q: {a[0], *q[:4], scope(q[2]), scope(q[3])})(get(a[1]) or \
+  a[:1] * 4)))(a) for a in past])(past, w)";
 
 /// The prefix of the name a function of the host crosses in under: `call:` and its number.
 const CALL: &str = "call:";
