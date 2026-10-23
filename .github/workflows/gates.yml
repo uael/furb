@@ -131,6 +131,21 @@ jobs:
       - run: bun run check
       - run: bun run lint
       - run: bun run test
+      # The app on macOS, whose web view is the WKWebView of the system: furb-gui --check opens the record of a life of
+      # the demo that gui/src-tauri/tests/fixtures holds, through its host, draws it whole with the counts of furb facts,
+      # under the budget of its web view, and ends, in a window that shows and in one that is hidden, as a window
+      # behind others. The app is a workspace of its own, whose lints the hooks do not run.
+      - if: runner.os == 'macOS'
+        run: cargo build -p furb-cli
+      - if: runner.os == 'macOS'
+        working-directory: gui
+        run: bun run build
+      - if: runner.os == 'macOS'
+        working-directory: gui/src-tauri
+        run: cargo fmt --check && cargo clippy --all-targets -- -D warnings
+      - if: runner.os == 'macOS'
+        working-directory: gui/src-tauri
+        run: FURB_CLI="$GITHUB_WORKSPACE/target/$CARGO_BUILD_TARGET/debug/furb" cargo test --features tauri/custom-protocol -- --test-threads 1
       # The budget of the speed of the TUI holds on Linux, whose machines of the gates run no other work: the first
       # frame of a life of 30000 facts, and the frames of the renderer at 60 each second while it scrolls and streams,
       # each against a measure of the same machine, since one runner of ubuntu-latest is half as fast as another.

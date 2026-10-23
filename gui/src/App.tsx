@@ -46,12 +46,32 @@ export function App() {
   // Once the window took the whole life and painted it, it tells the core what it drew, which a check of the app
   // prints.
   const whole = Boolean(life && !life.loading);
+  // The acts of a life, and of a record whose log agrees with it, are those of the log, which holds every fact that
+  // the life said; the acts of a record that opens to read with no such log are those that the record kept.
+  const logged = !life?.reading || life.reading.logged;
   useEffect(() => {
     if (!tauri || !whole) return;
-    const counts = { chains: moment.chains.length, threads: moment.threads.length, acts: moment.acts.length };
-    const frame = requestAnimationFrame(() => void core("drew", counts).catch(() => undefined));
-    return () => cancelAnimationFrame(frame);
-  }, [whole, moment.chains.length, moment.threads.length, moment.acts.length]);
+    const counts = {
+      chains: moment.chains.length,
+      threads: moment.threads.length,
+      acts: moment.acts.length,
+      logged,
+    };
+    // WebKit draws no frame in a window that is hidden or behind others, and runs no callback of a frame there, so a
+    // timer tells the core too, whichever comes first, and a check ends in every run.
+    let told = false;
+    const tell = () => {
+      if (told) return;
+      told = true;
+      void core("drew", counts).catch(() => undefined);
+    };
+    const frame = requestAnimationFrame(tell);
+    const timer = setTimeout(tell, 500);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+    };
+  }, [whole, logged, moment.chains.length, moment.threads.length, moment.acts.length]);
   if (!life || picker) return <Picker held={held} onBack={life ? () => setPicker(false) : undefined} />;
   const pick = (id: string) => {
     setMoved(undefined);

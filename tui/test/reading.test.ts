@@ -8,7 +8,7 @@ import { openEngine } from "../src/bridge.ts";
 import { Preferences } from "../src/preferences.ts";
 import { Workspaces } from "../src/workspaces.ts";
 
-test("a record whose fact drifts opens to read, with what it kept, and a dialog that names both engines", async () => {
+test("a record whose fact drifts opens to read, with what it kept, and a dialog that names its version", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-drift-"));
   const record = join(directory, "drifts.jsonl");
   try {
@@ -30,6 +30,7 @@ test("a record whose fact drifts opens to read, with what it kept, and a dialog 
       const reading = session.host.reading;
       expect(reading?.why).toStartWith("Drift: bash1 drifts");
       expect(reading?.made).toBe(reading?.engine ?? "");
+      expect(reading?.version).toBe(reading?.current ?? -1);
       // The replay that drifted leaves the log of the life before it as it was.
       expect(await readFile(`${record}.log`, "utf8")).toBe(log);
       const bash = session.acts.find((act) => act.id === "bash1");
@@ -47,7 +48,7 @@ test("a record whose fact drifts opens to read, with what it kept, and a dialog 
         expect(frame).toContain("This record does not replay");
         expect(frame).toContain("Read it");
         expect(frame).toContain("Start a new life from it");
-        expect(frame).toContain(`This build runs the engine ${reading?.engine.slice(0, 12)}`);
+        expect(frame).toContain(`This build is of version ${reading?.current}, which made it`);
       } finally {
         app.dispose();
         screen.renderer.destroy();

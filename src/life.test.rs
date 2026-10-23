@@ -1,11 +1,13 @@
 //! The opening of a life: what it enables, what it keeps, and the ears it hears, on the record that the store keeps.
 
 use std::{
+  collections::VecDeque,
   fs,
   path::{Path, PathBuf},
+  sync::{Arc, Mutex},
 };
 
-use super::Opening;
+use super::{Answer, Opening};
 use crate::{
   Ear, Engine, Fact, Object, Text,
   ear::{ear, hear, say},
@@ -348,16 +350,20 @@ fn a_snapshot_of_another_build_or_on_another_log_is_not_taken_and_the_life_repla
   assert!(!open().restored(), "a snapshot of another log is not taken");
 }
 
-/// The engines that a record names, in its order.
-fn engines(record: &Path) -> Vec<String> {
+/// The build that each fact made of a record names, in its order: its engine, and its version when it names one.
+fn builds(record: &Path) -> Vec<(String, Option<i64>)> {
   let kept = world::kept(record).unwrap();
   let fact = |one: &Object| entry(&one.as_ref(), 0).and_then(Fact::of).unwrap();
-  let named = |one: Fact| one.word(0).and_then(|word| word.as_str().map(str::to_owned));
+  let named = |one: Fact| {
+    let engine = one.word(0).and_then(|word| word.as_str().map(str::to_owned))?;
+    Some((engine, one.word(1).and_then(|word| word.as_int())))
+  };
   kept.iter().map(fact).filter(|one| one.kind() == world::MADE).filter_map(named).collect()
 }
 
 #[test]
-fn a_record_names_the_engine_that_made_it_once_in_a_file_of_lines_and_in_a_database() {
+fn a_record_names_the_engine_and_the_version_that_made_it_once_in_a_file_of_lines_and_in_a_database()
+ {
   for name in ["record.jsonl", "record.db"] {
     let at = place(&format!("made-{name}"));
     let record = at.join(name);
@@ -366,9 +372,10 @@ fn a_record_names_the_engine_that_made_it_once_in_a_file_of_lines_and_in_a_datab
       Opening { record: path, extensions: Some(false), ..opening(&at, true) }.boot::<String>([])
     };
     drop(open().unwrap());
-    assert_eq!(engines(&record), [world::engine()]);
+    let made = vec![(world::engine(), Some(world::VERSION))];
+    assert_eq!(builds(&record), made);
     drop(open().unwrap());
-    assert_eq!(engines(&record), [world::engine()], "a later life names it no more");
+    assert_eq!(builds(&record), made, "a later life names it no more");
   }
 }
 
@@ -390,21 +397,74 @@ fn a_record_that_names_no_engine_replays_as_before_and_names_none() {
   let mut later = open().boot::<String>([]).unwrap().0;
   assert_eq!(closed(&mut later, "close(x + 1)").as_ref().as_int(), Some(2));
   drop(later);
-  assert_eq!(engines(&record), Vec::<String>::new(), "this engine did not make it");
+  assert_eq!(builds(&record), Vec::new(), "this engine did not make it");
+}
+
+/// A record of one rung that a life of a test kept, and the text of the record with its fact made changed.
+fn made_elsewhere(at: &Path, made: &str) -> (PathBuf, String) {
+  let record = at.join("record.jsonl");
+  let mut first = Opening { extensions: Some(false), snapshot: Some(false), ..opening(at, true) }
+    .boot::<String>([])
+    .unwrap()
+    .0;
+  closed(&mut first, "x = 1\nclose(x)");
+  drop(first);
+  let ours = format!("[\"made\",\"chain1\",\"store\",\"{}\",{}]", world::engine(), world::VERSION);
+  let text = fs::read_to_string(&record).unwrap();
+  assert!(text.contains(&ours), "the record names this build");
+  let text = text.replace(&ours, made);
+  fs::write(&record, &text).unwrap();
+  (record, text)
 }
 
 #[test]
-fn a_life_on_a_record_of_another_engine_is_refused_before_any_replay_and_says_both_engines_and_what_to_do()
+fn a_record_of_another_engine_of_the_same_version_replays_and_goes_on() {
+  let at = place("same-version");
+  let made = format!("[\"made\",\"chain1\",\"store\",\"{}\",{}]", "0".repeat(64), world::VERSION);
+  let (record, _) = made_elsewhere(&at, &made);
+  let open = || Opening { extensions: Some(false), snapshot: Some(false), ..opening(&at, true) };
+  let mut later = open().boot::<String>([]).unwrap().0;
+  assert_eq!(closed(&mut later, "close(x + 1)").as_ref().as_int(), Some(2));
+  drop(later);
+  assert_eq!(
+    builds(&record),
+    [("0".repeat(64), Some(world::VERSION))],
+    "the build that made it stays named"
+  );
+}
+
+#[test]
+fn a_life_on_a_record_of_another_version_is_refused_before_any_replay_and_says_both_versions_and_what_to_do()
+ {
+  let at = place("other-version");
+  let other = world::VERSION + 1;
+  let (record, text) = made_elsewhere(
+    &at,
+    &format!("[\"made\",\"chain1\",\"store\",\"{}\",{other}]", world::engine()),
+  );
+  let open = || Opening { extensions: Some(false), ..opening(&at, true) };
+  for life in [open(), Opening { inspecting: Some(true), ..open() }] {
+    let refused = life.boot::<String>([]).map(|_| ()).unwrap_err();
+    assert_eq!(
+      refused.to_string(),
+      format!(
+        "Drift: the record {} was made by a build of version {other}, and this build is of version {}, so a replay \
+         would drift. Open the record with the build that made it, or start a new life.",
+        record.display(),
+        world::VERSION
+      )
+    );
+  }
+  assert_eq!(fs::read_to_string(&record).unwrap(), text, "it keeps nothing");
+}
+
+#[test]
+fn a_life_on_a_record_of_another_engine_before_the_versions_is_refused_before_any_replay_and_says_both_engines()
  {
   let at = place("other");
-  let record = at.join("record.jsonl");
+  let (record, text) =
+    made_elsewhere(&at, &format!("[\"made\",\"chain1\",\"store\",\"{}\"]", "0".repeat(64)));
   let open = || Opening { extensions: Some(false), ..opening(&at, true) };
-  let mut first = open().boot::<String>([]).unwrap().0;
-  closed(&mut first, "close(1)");
-  drop(first);
-  let other = "0".repeat(64);
-  let text = fs::read_to_string(&record).unwrap().replace(&world::engine(), &other);
-  fs::write(&record, &text).unwrap();
   for life in [open(), Opening { inspecting: Some(true), ..open() }] {
     let refused = life.boot::<String>([]).map(|_| ()).unwrap_err();
     assert_eq!(
@@ -418,6 +478,91 @@ fn a_life_on_a_record_of_another_engine_is_refused_before_any_replay_and_says_bo
     );
   }
   assert_eq!(fs::read_to_string(&record).unwrap(), text, "it keeps nothing");
+}
+
+/// The corpus that the gate of the versions replays: the records in `tests/corpus`, which `tests/corpus/README.md`
+/// says.
+fn corpus() -> PathBuf {
+  Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("corpus")
+}
+
+/// A life of a test whose model answers each request with the next word of a script, and with close(None) once the
+/// script runs out.
+fn scripted(at: &Path, words: &[&str]) -> Opening {
+  let said: VecDeque<String> = words.iter().map(|one| (*one).to_owned()).collect();
+  let said = Arc::new(Mutex::new(said));
+  let answer = Answer(Arc::new(move |_, _| {
+    let word = said.lock().unwrap().pop_front().unwrap_or_else(|| "close(None)".to_owned());
+    let turn = Object::tuple([
+      Object::string("assistant"),
+      Object::string(word),
+      Object::none(),
+      Object::none(),
+    ]);
+    Box::pin(async move { Ok(turn) })
+  }));
+  Opening {
+    roster: Some(vec!["claude-cli:opus".to_owned()]),
+    answer: Some(answer),
+    ..opening(at, true)
+  }
+}
+
+/// The words of the model of the life of the corpus: the root writes, reads, runs a command, waits, reads the
+/// clock and chance, and asks a chain of its own, whose model answers in the second word.
+const WORK: [&str; 2] = [
+  "write(Text(\"notes.md\", \"one\\ntwo\\n\"))\nnotes = read(\"notes.md\")\nsaid = await bash(\"echo hi\")\nawait \
+   wait(0.01)\nhelper = chain(\"helper\")\ngot = await prompt(int, \"Give 2.\", on=helper)\nclose(got + \
+   len(notes.lines) + int(clock() > 0) + int(0 <= chance() < 1))",
+  "close(2)",
+];
+
+#[test]
+#[ignore = "it makes the corpus again, which a person runs after a change that adds one to the version"]
+fn make_the_corpus() {
+  let at = place("corpus");
+  let mut first = scripted(&at, &WORK).boot::<String>([]).unwrap().0;
+  assert_eq!(
+    closed(&mut first, "close(await prompt(int, 'Work in the directory.'))").as_ref().as_int(),
+    Some(6)
+  );
+  drop(first);
+  let mut later = scripted(&at, &["close('done')"]).boot::<String>([]).unwrap().0;
+  assert_eq!(
+    closed(&mut later, "close(await prompt(str, 'Say done.'))").as_ref().as_str(),
+    Some("done")
+  );
+  drop(later);
+  fs::create_dir_all(corpus()).unwrap();
+  fs::copy(at.join("record.jsonl"), corpus().join("work.jsonl")).unwrap();
+}
+
+#[test]
+fn each_record_of_the_corpus_names_this_version_and_replays_on_this_build_with_no_drift() {
+  let mut records: Vec<PathBuf> = fs::read_dir(corpus())
+    .unwrap()
+    .map(|one| one.unwrap().path())
+    .filter(|one| one.extension().is_some_and(|named| named == "jsonl"))
+    .collect();
+  records.sort();
+  assert!(!records.is_empty(), "the corpus holds no record");
+  for one in records {
+    let name = one.file_stem().unwrap().to_string_lossy().into_owned();
+    let at = place(&format!("corpus-{name}"));
+    fs::copy(&one, at.join("record.jsonl")).unwrap();
+    let kept = world::kept(at.join("record.jsonl")).unwrap();
+    assert_eq!(
+      world::version(&kept),
+      Some(world::VERSION),
+      "{name} is a record of another version: make the corpus again, as tests/corpus/README.md says"
+    );
+    let inspects = Opening { inspecting: Some(true), ..opening(&at, false) };
+    if let Err(drift) = inspects.boot::<String>([]) {
+      panic!(
+        "{name} drifts on this build: add one to world::VERSION and make the corpus again, as tests/corpus/README.md says. {drift}"
+      );
+    }
+  }
 }
 
 #[test]
