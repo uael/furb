@@ -232,6 +232,10 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 - `python script/bench/audit.py <record> <sha256>`: the audit of a record. It checks the sha256 of the record, replays
   it in a life that only inspects it, with no model and no network, and checks that each word and each answer hashes
   as the record says. It imports furb alone, so an outsider runs it on `pip install furb`, as `docs/audit.md` says.
+- `python script/bench/loop.py make|furb|claude|score <dir>`: the bench of a loop, which its docstring says how to run.
+  It makes support tickets from a seed with a known label each, triages them once with one word of furb that asks one
+  prompt per ticket and once with the claude command line on the same local server, and scores each arm on the
+  totals of the server and the share of right labels. It asks a model and spends what the server serves.
 - `script/real.py` is no command: it holds what `smoke.py`, `play.py` and `deepswe.py` share, which is the life
   they open on the engine of this interpreter, the claude they ask, and what the answers of a record cost.
 - `uv run python script/catalog.py`: make the snapshot of the catalog, `src/world/provider/catalog.json`, again from
