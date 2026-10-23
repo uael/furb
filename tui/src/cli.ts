@@ -10,7 +10,7 @@ import { demoDirectory, removeDemoDirectories } from "./demo.ts";
 import type { EngineOptions } from "./models.ts";
 import { isLifeView, lifeViews } from "./overview.ts";
 import { Preferences } from "./preferences.ts";
-import { colorless, fps, palettes } from "./theme.ts";
+import { colorless, fps, own, paletteOf, terminalPalette } from "./theme.ts";
 import { Workspaces } from "./workspaces.ts";
 
 const { values } = parseArgs({
@@ -105,10 +105,17 @@ const renderer = await createCliRenderer({
   exitOnCtrlC: false,
   // The TUI ends on a signal by its own quit, since the view saves its draft before the renderer goes.
   exitSignals: [],
-  backgroundColor: colorless.on ? RGBA.defaultBackground() : palettes[initial.theme].background,
+  backgroundColor: colorless.on ? RGBA.defaultBackground() : paletteOf(initial.theme).background,
   targetFps: fps,
   useMouse: true,
 });
+// The theme that follows the terminal takes the colors that the terminal says, and a terminal that says none, or does
+// not answer in time, keeps the theme of its mode.
+if (initial.preferences.theme === "terminal" && !colorless.on) {
+  const colors = await renderer.getPalette({ timeout: 300 }).catch(() => undefined);
+  own.palette = terminalPalette(colors?.defaultForeground ?? null, colors?.defaultBackground ?? null);
+  if (own.palette) renderer.setBackgroundColor(own.palette.background);
+}
 let closing = false;
 /** Each step runs whatever the steps before it came to, so that the sessions close even when the terminal is gone. The
  * window detaches from each life, and a life in a host of its own goes on, unless end is set, which ends each life. */

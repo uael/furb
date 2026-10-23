@@ -6,7 +6,7 @@ import { Marked } from "marked";
 import { conversation } from "./conversation.ts";
 import { escaped } from "./format.ts";
 import type { Session } from "./session.ts";
-import { palettes } from "./theme.ts";
+import { paletteOf } from "./theme.ts";
 
 const markdown = new Marked({
   gfm: true,
@@ -29,7 +29,7 @@ const prose = (text: string) => markdown.parse(text, { async: false });
 
 /** A standalone file with no scripts, network requests, or external assets. */
 export function shareHtml(session: Session): string {
-  const theme = palettes[session.theme];
+  const theme = paletteOf(session.theme);
   const sections: string[] = [];
   for (const item of conversation(session.turns, session.acts)) {
     if (item.type === "python")
