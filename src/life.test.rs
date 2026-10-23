@@ -183,6 +183,36 @@ fn a_life_that_keeps_a_record_writes_the_log_of_every_fact_beside_it_and_a_later
   );
 }
 
+#[test]
+fn a_later_life_writes_in_its_log_each_act_of_its_record_that_an_ear_of_the_outside_made_and_does_not_make_again()
+ {
+  let at = place("owed");
+  let record = at.join("record.jsonl");
+  let open = || {
+    let opening = Opening { extensions: Some(false), snapshot: Some(false), ..opening(&at, true) };
+    opening.boot::<String>([]).unwrap().0
+  };
+  let mut engine = open();
+  assert_eq!(
+    closed(&mut engine, "await bash('true', show=HIDDEN)\nclose(1)").as_ref().as_int(),
+    Some(1)
+  );
+  drop(engine);
+  let asked = |facts: &[Object]| {
+    facts.iter().any(|one| one.as_ref().py_repr().contains("['merged', 'merged1', 'bash'"))
+  };
+  assert!(
+    asked(&world::kept(&record).unwrap()),
+    "the record keeps the question that the ear of commands asked"
+  );
+  let mut engine = open();
+  assert_eq!(closed(&mut engine, "close(2)").as_ref().as_int(), Some(2));
+  drop(engine);
+  let facts =
+    world::logged(&record).unwrap().expect("the log of the later life agrees with the record");
+  assert!(asked(&facts), "the log of the later life holds the question that no ear asked again");
+}
+
 /// What a word that a rung runs on the root closes with.
 fn closed(engine: &mut Engine, word: &str) -> Object {
   let word = Some(word.to_owned());

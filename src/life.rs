@@ -203,7 +203,7 @@ impl Opening {
     };
     let logs = self.record.as_ref().filter(|_| keeps).map(|path| match continued {
       true => world::continued(path, record.len()),
-      false => world::log(path, record.len()),
+      false => world::log(path, &record),
     });
     let (provider, search) = self.provider()?;
     let working = |made: Option<Box<dyn Ear>>| made.unwrap_or_else(silent);

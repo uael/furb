@@ -369,8 +369,8 @@ pub fn kept(path: String) -> Result<Record, Fault> {
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn log(path: String) -> Result<NativeEar, Fault> {
-  let entries = world::kept(&path)?.len();
-  Ok(NativeEar::of(world::log(&path, entries)))
+  let held = world::kept(&path)?;
+  Ok(NativeEar::of(world::log(&path, &held)))
 }
 
 /// The facts of the log of the record at a path, read with no lease, when the log agrees with the record: every fact
