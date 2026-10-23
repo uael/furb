@@ -339,9 +339,9 @@ fn run(opening: Opening, word: String) -> Result<(), String> {
 /// The checkpoint of the life of a record, made in a life that only inspects it and kept at its tip.
 fn checkpoint(opening: Opening, record: &Path) -> Result<(), String> {
   let failed = |no: furb::Fault| no.to_string();
-  let (mut engine, _) =
+  let (mut engine, kept) =
     Opening { inspecting: Some(true), ..opening }.boot::<String>([]).map_err(failed)?;
-  let written = furb::checkpoint::written(&mut engine).map_err(failed)?;
+  let written = furb::checkpoint::written(&mut engine, &kept).map_err(failed)?;
   drop(engine);
   furb::checkpoint::keep(record, written).map_err(failed)
 }
