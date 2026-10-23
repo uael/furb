@@ -10,7 +10,7 @@ export const commands = {
   chain: ["New chain", "<label>", "A conversation with its own state"],
   fork: ["Fork chain", "<label>", "Copy this chain's current transcript and program"],
   tree: ["Session tree", "", "Browse the chains and their turns, and open or branch from one"],
-  rewind: ["Rewind", "", "Branch from an earlier message or act of this chain"],
+  rewind: ["Rewind", "", "Go back to an earlier message or act of this chain, with its files or not"],
   undo: ["Undo message", "", "Remove the last user message from a new transcript branch"],
   redo: ["Redo message", "", "Return to the branch before undo"],
   queue: ["Queue follow-up", "[text]", "Send after current work, or manage queued messages"],

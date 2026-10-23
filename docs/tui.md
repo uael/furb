@@ -309,9 +309,19 @@ A cancel of an act with no running work under it, as a message that its model st
 Escape twice opens the rewind tree in the feed. Each act stands under the act that made it, and each branch under
 the point it starts from. Up and Down move the pointer, Left and Right fold a branch, and a click points at a row.
 Enter on a message gives it back to the input on a new branch, and Enter on another act makes a new branch that reads
-the chain through that act. The module and the files keep their state.
+the chain through that act. The module keeps its state.
+
+When a write changed a file after the point, on any chain, Enter asks first what comes back. Restore the
+conversation makes the branch, and the files stay as they are. Restore the files puts back each file as it was at
+the point, and the conversation goes on as it stands. Both does the two. For a message, the point is before the
+message. The files come back by a rung of the operator on the chain, so the record holds each write and the model
+reads it. A write puts back the text of a file, and a command removes a file that a write made. A change that a
+command made is not restored, and the dialog says how many commands ran after the point. The journal of file
+changes beside the record holds each write that the rewind reads.
 
 ![Rewind tree](screenshots/23-rewind-tree.png)
+
+![Rewind with the files](screenshots/74-rewind-files.png)
 
 ## Empty, loading, and failed views
 

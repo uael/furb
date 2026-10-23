@@ -4687,7 +4687,7 @@ export class App {
               detail: message
                 ? "A new branch that has not read this message, with the message in the input"
                 : "A new branch that reads the chain up to this act",
-              run: () => w.rewind(act.id).then(() => {}),
+              run: () => this.rewindTo(act),
             },
           ]
         : []),
@@ -5547,6 +5547,50 @@ export class App {
     const last = points.findLast((act) => this.session.isUserPrompt(act)) ?? points.at(-1);
     this.openTree(last?.id ?? this.session.selected, "Rewind");
   };
+  /** A rewind to a point. When a write changed a file after it, it asks first what comes back: the conversation on a
+   * new branch, the files on this chain, or both. A change that a command made is not restored. */
+  private async rewindTo(act: ActRow): Promise<void> {
+    const w = this.session;
+    const found = await w.filesAt(act.id);
+    const { files, commands } = found;
+    if (!files.length) {
+      await w.rewind(act.id);
+      return;
+    }
+    const message = w.isUserPrompt(act);
+    const count = files.length === 1 ? "the file" : `the ${files.length} files`;
+    const named = files.map(({ path }) => {
+      const near = relative(w.workingDirectory, path);
+      return near.startsWith("..") || isAbsolute(near) ? shortenHome(path) : near;
+    });
+    const stays = commands
+      ? `${commands} ${commands === 1 ? "command" : "commands"} ran after it: a change that a command made is not restored.`
+      : "A change that a command made is not restored.";
+    this.openPalette(
+      `Rewind to ${act.id}`,
+      [
+        {
+          label: "Restore the conversation",
+          detail: message
+            ? "A new branch that has not read this message, with the message in the input. The files stay."
+            : "A new branch that reads the chain up to this point. The files stay as they are.",
+          run: () => w.rewind(act.id).then(() => {}),
+        },
+        {
+          label: "Restore the files",
+          detail: `Put back ${count} that a write changed after this point. The conversation stays.`,
+          run: () => w.restoreAt(act.id, found),
+        },
+        {
+          label: "Both",
+          detail: `A new branch from this point, and ${count} put back`,
+          run: () => w.rewind(act.id, undefined, found).then(() => {}),
+        },
+        { label: "Keep", detail: "Return without changes", run() {} },
+      ],
+      { note: `${clip(named.join(", "), 200)}. ${stays}` },
+    );
+  }
   /** The tree of the session in the feed, with the pointer on the chain shown. */
   sessionTree = (): void => this.openTree(this.session.selected, "Session tree");
   /** Whether an act is a point that a branch can start from: an act that a turn of its chain tells, which is no
@@ -5668,7 +5712,7 @@ export class App {
     }
     const branch = async () => {
       this.closeTree();
-      await w.rewind(act.id);
+      await this.rewindTo(act);
     };
     if (w.isUserPrompt(act) && !asksOperator(act))
       return {
@@ -5716,8 +5760,8 @@ export class App {
       this.clear(this.treeBar);
       const note =
         tree.title === "Rewind"
-          ? "Choose a point to branch from. The module and the files keep their state."
-          : "Open a chain, or branch from a point. The module and the files keep their state.";
+          ? "Choose a point to go back to, with the files as they were or not. A change by a command stays."
+          : "Open a chain, or go back to a point, with the files as they were or not. A change by a command stays.";
       // The note is cut at its end where the bar has no room for it beside the title and the key that leaves.
       const room =
         width - space.inset * 2 - Bun.stringWidth(tree.title) - space.between * 2 - Bun.stringWidth("Esc");
