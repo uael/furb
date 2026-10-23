@@ -174,6 +174,12 @@ export declare function attachImage(directory: string, path: string): ImageAttac
  */
 export declare function bash(scratch: string, record: Array<any>): NativeEar
 
+/** BUDGET is the number of bytes of the paragraph of a catch-up past which the paragraph gives the paths alone. */
+export declare const BUDGET: number
+
+/** CAP is the number of lines that differ in a file past which a catch-up tells the path of the file with that number alone. */
+export declare const CAP: number
+
 /**
  * The config directory of the user for this process, where the configs, the extensions of the user and the
  * preferences of the TUI stand.

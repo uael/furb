@@ -566,10 +566,17 @@ def dones(log: Sequence[tuple], kind: str) -> list[tuple]:
   return [a for a in said(log, "done") if engine.question((kind, a[1]))]
 
 
-def tip(name: str, root: str = "chain1", standing: list = STANDS) -> list[tuple]:
-  """What a life enters in the record at its tip when nothing else happens in it: the stand that boot makes, and the
-  answer of the World."""
-  return [(("stand", name, OPERATOR, root),), (("done", name, WORLD, standing),)]
+def tip(
+  name: str, root: str = "chain1", standing: list = STANDS, clock: str = "clock2", reading: float = 1001.0
+) -> list[tuple]:
+  """What a life enters in the record at its tip when nothing else happens in it: the stand that boot makes, the
+  answer of the World, and the clock that the root reads at that stand, with its answer."""
+  return [
+    (("stand", name, OPERATOR, root),),
+    (("done", name, WORLD, standing),),
+    (("clock", clock, root, root),),
+    (("done", clock, WORLD, reading),),
+  ]
 
 
 def lasting(facts: Sequence[tuple]) -> list[tuple]:

@@ -30,6 +30,7 @@ EVERY = (
   "close(1)\n"
 )
 EVENTS = {
+  "caught",
   "closed",
   "done",
   "exited",
@@ -118,8 +119,11 @@ async def test_the_header_of_a_paragraph_names_the_act_it_is_of_by_its_id() -> N
 
 
 async def test_the_headers_of_the_file() -> None:
-  """The headers of the file are the open of an act, closed, done, exited, timed out, raised, debugged, refused, ledger, standing, advance, paused, woke and cancelled."""
+  """The headers of the file are the open of an act, closed, done, exited, timed out, raised, debugged, refused, ledger, standing, caught up, advance, paused, woke and cancelled."""
   sand, _, root = born()
+  engine.read("a.txt", on=root)
+  sand.files["/w/a.txt"] = "one\nthree\n"
+  engine.stand()
   ceiling = engine.grant(usd=10.0, on=root)
   await settle()
   sand.script[root] = ["k = BAD", "raise ValueError('boom')", EVERY]

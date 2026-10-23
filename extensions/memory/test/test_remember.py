@@ -3,7 +3,7 @@
 from asyncio import CancelledError
 from pathlib import Path
 
-from conftest import heads, plain, settle
+from conftest import heads, paragraphs, plain, settle
 from extensions.conftest import extended, memorized, noted, recalled
 from furb import engine
 from furb_monty import _monty
@@ -89,3 +89,23 @@ async def test_a_later_life_tells_what_the_record_holds(tmp_path: Path) -> None:
   await settle()
   assert recalled(root, tmp_path) == [*first, f"#memory2\nmemory2_path = {str(top)!r}\nmemory2_text = 'three'"]
   assert first == [memorized("memory1", top, "one\ntwo\n")]
+
+
+async def test_at_a_stand_the_catch_up_of_the_chain_tells_each_memory_file_that_a_read_or_a_write_gave(
+  tmp_path: Path,
+) -> None:
+  """At a stand the catch-up of the chain tells each memory file that a read or a write on the chain gave, so remember tells again only a memory file that a memory question alone gave the chain, since the World leaves out the content that the catch-up read."""
+  top = noted(tmp_path / "work", "one\ntwo\n")
+  sub = noted(tmp_path / "work" / "sub", "sub\n")
+  (sub.parent / "a.txt").write_text("a\n", encoding="utf-8", newline="")
+  _, root = extended("memory", tmp_path, _monty.memory, lives=True)
+  await engine.rung(f"read({str(top)!r})", on=root)
+  await engine.rung('read("sub/a.txt")', on=root)
+  was = recalled(root, tmp_path)
+  assert was == [memorized("memory1", top, "one\ntwo\n"), memorized("memory3", sub, "sub\n")]
+  top.write_text("one\nthree\n", encoding="utf-8", newline="")
+  sub.write_text("sub!\n", encoding="utf-8", newline="")
+  engine.stand()
+  caught = [one for one in paragraphs(engine.turns(on=root)) if one.startswith("#chain1 caught up")]
+  assert caught == [f"#chain1 caught up\nchain1_changed = {{{str(top)!r}: {{2: 'three'}}}}"]
+  assert recalled(root, tmp_path)[2:] == [f"#memory5\nmemory5_path = {str(sub)!r}\nmemory5_text = 'sub!'"]

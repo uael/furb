@@ -13,6 +13,10 @@ TIMEOUT: Final[float] = 600.0
 """TIMEOUT is the timeout, in seconds, of a command that does not say one."""
 LARGEST: Final[int] = 524288
 """LARGEST is the largest number of bytes that a read tells of the lines that its show picks."""
+CAP: Final[int] = 40
+"""CAP is the number of lines that differ in a file past which a catch-up tells the path of the file with that number alone."""
+BUDGET: Final[int] = 4096
+"""BUDGET is the number of bytes of the paragraph of a catch-up past which the paragraph gives the paths alone."""
 ROOT: Final[str] = "chain1"
 """ROOT is the name of the root, which every life opens first under that one name, and on which boot stands the life."""
 site: Final[ContextVar[str]] = ContextVar("site", default=OPERATOR)
@@ -714,7 +718,7 @@ A paragraph is what one fact that tells stands as in a turn: its notes, one afte
 The first line of a paragraph is its header: # and, with no space, the id of the act it is of, then what happened to the act, as #bash1 exited 0 or #prompt1, and no text that the act tells.
 Every other line of a paragraph is python: a binding of each value that the act tells, and the binding of the act on its open.
 The header of a paragraph names the act it is of by its id, what the act tells and a control over it alike, and the paragraph of a read, a write or a cd stands at the place in the run where it was asked.
-The headers of the file are the open of an act, closed, done, exited, timed out, raised, debugged, refused, ledger, standing, advance, paused, woke and cancelled.
+The headers of the file are the open of an act, closed, done, exited, timed out, raised, debugged, refused, ledger, standing, caught up, advance, paused, woke and cancelled.
 A statement or a quote that a paragraph shows binds its name in the chain, and a comment binds nothing.
 A paragraph binds each value that it tells under a name: the id of the act, an underscore, and the word that holds the value, as prompt2_message, bash1_command, read3_text or prompt2_value.
 A paragraph binds a string of more than one line as a quote, and any other value as a statement of its repr.
@@ -872,6 +876,13 @@ Every chain hears the done of every stand, and a chain whose standing that answe
 A standing binds the default actor of the chain, under the name actor, when its actor differs from that of the standing before it, so a new roster or a new directory alone keeps the actor that a word chose.
 The chain tells each standing it takes in one paragraph headed standing, which binds its roster, its directory and its actor, as chain1_roster, chain1_cwd and chain1_actor, and its roster holds no doctrine, since a chain tells the doctrine of an actor only where it asks that actor.
 The standing a chain tells is what its transcript holds of it, and the stand itself tells nothing.
+At each stand the root reads the clock once it told the standing that the stand gives it, so the record holds a reading of the clock at the tip of every life.
+At each stand every chain catches up: it reads again, with a hidden show, the path of each text that the last read or write of that path on the chain gave, but a path of a scheme and a door, and it tells what changed in one paragraph headed caught up.
+The paragraph binds changed to the paths that changed, the most recent first, each to the lines that differ by their numbers, with None for a line past the new end, or to their count when they are more than CAP, or to gone when the read is refused.
+The paragraph binds hours to the hours between the last two readings of the clock of the root, to one decimal place, only when they are more than one, so it says the time since the life before.
+Past BUDGET bytes the paragraph gives the paths alone, the most recent first, as many as fit.
+A chain where nothing changed tells nothing at a stand, so its catch-up costs no token.
+The journal keeps each read and each clock of a catch-up, so a later life on the same record tells the same catch-up at the same place.
 """
 type Module = tuple[Literal["module"], str, str, dict[str, object]]
 """A module carries the globals of a chain, which the chain says at its birth and at each replay, so its transcript says which module each of its rungs ran in."""

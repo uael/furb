@@ -15,6 +15,7 @@ def remember(on: str = "") -> Act:
   The life word of the extension is remember(), so a chain tells its memory when the life enables the extension, and a chain born later tells it at its birth, before its first prompt asks a model.
   A memory file enters a chain once, and again only when it changed, by the lines that changed, since the World leaves out what the chain holds.
   A later life tells what the record holds, since the journal answers each memory question that the record holds, and a memory file that changed since enters the chain at the stand at the tip of that life.
+  At a stand the catch-up of the chain tells each memory file that a read or a write on the chain gave, so remember tells again only a memory file that a memory question alone gave the chain, since the World leaves out the content that the catch-up read.
   """
 
 type Memory = tuple[Literal["memory"], str, str, str, str]
