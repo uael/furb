@@ -11,6 +11,8 @@ WINDOW = 200000
 OPERATOR = "operator"
 TIMEOUT = 600.0
 LARGEST = 524288
+CAP = 40
+BUDGET = 4096
 ROOT = "chain1"
 site = ContextVar("site", default=OPERATOR)
 raised = None
@@ -145,9 +147,9 @@ def close(value: object, id: str = "") -> None:
       try:
         s = eval(shape, module(on)) or object
         fits = any(
-          (type(value), value) in [(type(a), a) for a in x.__args__]
-          if getattr(x, "__origin__", x) is Literal
-          else isinstance(value, getattr(x, "__origin__", x))
+          any(type(a) is type(value) and a == value for a in x.__args__)
+          if (origin := getattr(x, "__origin__", x)) is Literal
+          else isinstance(value, origin)
           for x in (s.__args__ if isinstance(s, type(int | str)) else [s])
         )
       except Exception:
@@ -295,18 +297,46 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
       yield takes()
     while True:
       match a := (yield {id, "stand", "reply"}):
-        case ("done", about, *_) if question(("stand", about)) and standing() != last:
-          if standing()[2:] != last[2:]:
-            stood = module()["actor"] = standing()[2]
-          last = standing()
-          yield takes()
+        case ("done", about, *_) if question(("stand", about)):
+          if standing() != last:
+            if standing()[2:] != last[2:]:
+              stood = module()["actor"] = standing()[2]
+            last = standing()
+            yield takes()
+          if id == ROOT:
+            act("clock", id, None)
+          seen = {}
+          for fact in transcript(id)[::-1]:
+            if (
+              fact[0] in ("read", "write") and (path := getattr(was := peek(fact[1]), "path", str(fact[4]))) not in seen
+            ):
+              seen[path] = 0
+              if isinstance(was, Text) and "://" not in path and not get(path.split("/")[0]):
+                try:
+                  now = read(path, HIDDEN, id).lines
+                  d = {i: now[i - 1] for i in differs(was.lines)(now)} | dict.fromkeys(
+                    range(len(now) + 1, len(was.lines) + 1)
+                  )
+                  seen[path] = (len(d) > CAP and len(d)) or d
+                except Refused:
+                  seen[path] = "gone"
+          c = [v for x in transcript(ROOT, "clock") if isinstance(v := peek(x[1]), float)][-2:] or [0]
+          c = (c[-1] - c[0]) / 3600
+          seen = {k: v for k, v in seen.items() if v}
+          while (
+            len((note := headed(id, "caught up", hours=(c > 1 and round(c, 1)) or None, changed=seen or None)).encode())
+            > BUDGET
+          ):
+            seen = [*seen][: (isinstance(seen, list) and -1) or None]
+          if "\n" in note:
+            yield "tell", id, [note]
         case ("done", about, _, value) if running.get(maker := (get(about) or a)[2]) is False and about not in [
           x[4] for x in transcript(id, "wants")
         ]:
           if scope(about) != id:
             yield "tell", maker, [headed(about, "done", value=value)]
           if not isinstance(value, CancelledError):
-            unseen = about + " done", get(maker)[2]
+            unseen = about + " done", maker
         case ("done", about, by, Refused() as why) if (
           question(("reply", about))
           and scope(about) != id
@@ -315,7 +345,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         ):
           yield "tell", maker, [headed(p, "paused", why=why)]
           if not running[maker]:
-            unseen = p + " paused", get(maker)[2]
+            unseen = p + " paused", maker
       if scope(a[1]) != id:
         continue
       match a:
@@ -329,8 +359,15 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         case ("read", about, *_, path) if (door := re.fullmatch(r"(bash\d+)/(stdout|stderr)", path)) and get(
           command := door[1]
         ):
-          part = "".join(x[3] for x in transcript(scope(command), "out") if x[1] == command and x[4] == door[2])
-          yield "done", about, getattr(peek(command), door[2], Text(path, part))
+          yield (
+            "done",
+            about,
+            getattr(
+              peek(command),
+              door[2],
+              Text(path, "".join(x[3] for x in transcript(command, "out") if x[1] == command and x[4] == door[2])),
+            ),
+          )
         case ("rung", rid, maker, _, "", _, to):
           waiting[rid] = maker, to
         case ("tell", *_, notes):
@@ -366,7 +403,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           if ran and not heard:
             yield told(ran, "told nothing")
           taught = offered(last[0], to, 3)
-          if taught in [offered(last[0], t, 3) for t in {x[4] for x in transcript(id, "reply")}]:
+          if taught in [offered(last[0], x[4], 3) for x in transcript(id, "reply")]:
             taught = ""
           yield told(
             asking,
@@ -378,7 +415,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
             reply = act("reply", id, controlled(idle), to)
           unseen = ""
       if unseen and not waiting and (r[2] in running or over(r[2]) or a[0] == "tell"):
-        prompt(None, unseen[0], on=ours if question(("prompt", ours := unseen[1])) else "")
+        prompt(None, unseen[0], on=ours if question(("prompt", ours := get(unseen[1])[2])) else "")
         unseen = ""
 
   return act("chain", on, ear, label, source)
@@ -491,8 +528,9 @@ class Act[T = object](str):
     f = get_running_loop().create_future()
 
     def waits():
-      while (got := peek(self, ...)) is ...:
+      while not over(self):
         yield
+      got = peek(self)
       (f.set_exception if isinstance(got, BaseException) else f.set_result)(got)
 
     drive(g := waits(), f"{self} waits {id(g)}")
