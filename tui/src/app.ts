@@ -2090,7 +2090,9 @@ export class App {
           if (one.done) done++;
           printed += one.output ?? 0;
         }
-        return `${rung.id}:${rung.done}:${rung.run?.status ?? ""}:${word(rung).length}:${acts.length}:${done}:${printed}`;
+        // The word of a step that runs can still come, and the word of a step that ended stays as it is.
+        const said = rung.done ? "" : (w.program[rung.id]?.length ?? 0);
+        return `${rung.id}:${rung.done}:${rung.run?.status ?? ""}:${said}:${acts.length}:${done}:${printed}`;
       };
       const liveOf = (ids: readonly string[]) =>
         ids
@@ -2141,12 +2143,17 @@ export class App {
           }
         };
         if (!all.length) return tails();
+        // A thread whose program made its last steps alone says how many came before them.
+        const earlier = all[0]?.kind === "earlier" ? all[0].count : 0;
         const steps = [...new Set(all.filter((line) => line.kind !== "note").map((line) => line.step))];
-        const hide =
-          w.folds[`steps:${id}`] !== false && steps.length > PROGRAM_STEPS ? steps.length - PROGRAM_STEPS : 0;
+        const hide = earlier
+          ? earlier
+          : w.folds[`steps:${id}`] !== false && steps.length > PROGRAM_STEPS
+            ? steps.length - PROGRAM_STEPS
+            : 0;
         // The notes that came before the first step shown fold with the earlier steps.
-        const from = hide ? all.findIndex((line) => line.step === steps[hide]) : 0;
-        const program = hide ? all.slice(from) : all;
+        const from = earlier ? 1 : hide ? all.findIndex((line) => line.step === steps[hide]) : 0;
+        const program = from ? all.slice(from) : all;
         const took = (step: ActRow) =>
           step.kind !== "rung" || !step.done
             ? ""
@@ -2616,8 +2623,16 @@ export class App {
           const parts = [act, ...(thread?.messages ?? [])];
           programCard(
             act.id,
-            programFor(act.id, liveOf(parts.map((one) => one.id)), () =>
-              threadProgram(parts, madeMap(), word, owed, named),
+            programFor(act.id, `${w.folds[`steps:${act.id}`]}|${liveOf(parts.map((one) => one.id))}`, () =>
+              threadProgram(
+                parts,
+                madeMap(),
+                word,
+                owed,
+                named,
+                undefined,
+                w.folds[`steps:${act.id}`] === false ? undefined : PROGRAM_STEPS,
+              ),
             ),
             indent,
           );

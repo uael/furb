@@ -101,3 +101,24 @@ test("an act of a verb of an extension stands on the line that calls that verb, 
   const on = lines.flatMap((line) => (line.kind === "code" && line.acts.length ? [line.number] : []));
   expect(on).toEqual([4]);
 });
+
+test("a program that keeps its last steps makes their lines alone, after the count of the earlier ones", () => {
+  const prompt = act("prompt1", "prompt", "chain1", "operator", 1, undefined, {
+    words: ["str", "Go", "opus"],
+  });
+  const steps = [1, 2, 3].map((n) => act(`rung${n}`, "rung", "chain1", "prompt1", n + 1, n + 1));
+  const lines = threadProgram(
+    [prompt],
+    makers([prompt, ...steps]),
+    (rung) => `x = ${rung.id}`,
+    new Set(),
+    label,
+    undefined,
+    2,
+  );
+  expect(lines.map((line) => [line.kind, line.text])).toEqual([
+    ["earlier", "# 1 earlier step"],
+    ["code", "x = rung2"],
+    ["code", "x = rung3"],
+  ]);
+});

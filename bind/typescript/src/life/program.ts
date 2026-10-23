@@ -11,6 +11,7 @@ import { placed } from "./source.js";
  * - `output`: a line that a command prints while its line runs.
  * - `writes`: what the model writes while its word has not come yet.
  * - `note`: a quiet comment: a message that came to the thread.
+ * - `earlier`: the steps before those that the program keeps, as their count, which stands first.
  *
  * Each line names its step: the rung of its word, or the prompt of its note. */
 export type ProgramLine =
@@ -27,7 +28,8 @@ export type ProgramLine =
   | { kind: "quote"; step: LiveAct; number: number; text: string; name: string; lines: number }
   | { kind: "output"; step: LiveAct; act: LiveAct; text: string }
   | { kind: "writes"; step: LiveAct; text: string }
-  | { kind: "note"; step: LiveAct; text: string };
+  | { kind: "note"; step: LiveAct; text: string }
+  | { kind: "earlier"; step: LiveAct; count: number; text: string };
 
 /** The verbs whose acts stand on the line that calls them. */
 const followed = new Set(["bash", "read", "write", "prompt", "chain", "wait", "rung", "grant", "cd"]);
@@ -180,14 +182,29 @@ export function threadProgram(
   owed: ReadonlySet<string>,
   label: (chain: string) => string,
   streams?: ReadonlyMap<string, { text: string; thinking: string }>,
+  keep?: number,
 ): ProgramLine[] {
-  const steps: LiveAct[] = [];
+  let steps: LiveAct[] = [];
   for (const [at, prompt] of prompts.entries()) {
     if (at > 0) steps.push(prompt);
     for (const rung of made.get(prompt.id) ?? []) if (rung.kind === "rung") steps.push(rung);
   }
   steps.sort((a, b) => a.began - b.began);
   const out: ProgramLine[] = [];
+  // A thread of many steps makes the lines of its last steps alone, and the messages that came before them fold with
+  // the earlier steps.
+  const rungs = steps.filter((step) => step.kind === "rung");
+  const head = keep !== undefined && rungs.length > keep ? rungs[rungs.length - keep] : undefined;
+  if (head) {
+    const count = rungs.length - (keep ?? 0);
+    out.push({
+      kind: "earlier",
+      step: head,
+      count,
+      text: `# ${count} earlier ${count === 1 ? "step" : "steps"}`,
+    });
+    steps = steps.slice(steps.indexOf(head));
+  }
   // The notices that a chain gives a thread in a row, as the end of each act of the operator, stand on one comment.
   let notices: string[] = [];
   const flush = (step: LiveAct | undefined) => {
