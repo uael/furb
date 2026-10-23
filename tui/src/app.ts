@@ -2080,18 +2080,32 @@ export class App {
         made ??= makers(shown);
         return made;
       };
-      // The words that the models of a thread write change its program with no new act.
+      // A program is made again only when what it shows changed: a step, its word, its state, or an act of it, as its
+      // state and what its command printed. A new act on another thread leaves it as it was.
+      const stepOf = (rung: ActRow) => {
+        const acts = madeBy(rung.id);
+        let done = 0;
+        let printed = 0;
+        for (const one of acts) {
+          if (one.done) done++;
+          printed += one.output ?? 0;
+        }
+        return `${rung.id}:${rung.done}:${rung.run?.status ?? ""}:${word(rung).length}:${acts.length}:${done}:${printed}`;
+      };
       const liveOf = (ids: readonly string[]) =>
         ids
-          .flatMap((id) =>
-            madeBy(id)
-              .filter((one) => one.kind === "rung" && !one.done)
-              .map((one) => one.id),
+          .map((id) =>
+            [
+              id,
+              ...madeBy(id)
+                .filter((one) => one.kind === "rung")
+                .map(stepOf),
+            ].join(" "),
           )
-          .join(" ");
+          .join("|");
       const programFor = (key: string, live: string, make: () => ProgramLine[]): ProgramLine[] => {
         const known = this.programs.get(key);
-        if (!then && known?.version === w.version && known.live === live) return known.lines;
+        if (!then && known?.version !== -1 && known?.live === live) return known.lines;
         const made = make();
         if (this.programs.size > 2000) this.programs.clear();
         this.programs.set(key, { version: then ? -1 : w.version, live, lines: made });
@@ -2302,7 +2316,7 @@ export class App {
           );
           programCard(
             act.id,
-            programFor(act.id, `${act.done}:${w.host.streams.get(act.id)?.text.length ?? 0}`, () =>
+            programFor(act.id, stepOf(act), () =>
               stepLines(act, madeMap(), word, owed, named, w.host.streams),
             ),
             indent,
