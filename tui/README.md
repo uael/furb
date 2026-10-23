@@ -248,7 +248,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/grant <dollars>` | Pause at a dollar ceiling |
 | `/context <fraction>` | Pause at a share of the model window |
 | `/pause [act or chain]` | Hold delivery while work completes |
-| `/wake [act or chain]` | Deliver pending work |
+| `/wake [act or chain]` | Wake every paused chain, or one |
 | `/cancel [id]` | End an act, or what you sent last on this chain |
 | `/feed <id> [text]` | Send a line of input to a command; no text closes its input |
 | `/close <id> <json>` | Close an act with a JSON value |
