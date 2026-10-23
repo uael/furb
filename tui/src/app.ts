@@ -41,9 +41,13 @@ import {
 } from "furb";
 import {
   type Ask,
+  asksOperator,
   beside,
   type Chip,
+  cancelled,
   condense,
+  type Exit,
+  failed,
   gist,
   type Line,
   type Loom,
@@ -105,9 +109,6 @@ import { commentStart, type Hunk, hunkPatch, lines, type Scope, scopeLabels, sco
 import {
   type ActRow,
   type Cancel,
-  cancelled,
-  type Exit,
-  failed,
   type Scroll,
   type Session,
   type SessionStatus,
@@ -147,8 +148,6 @@ const twice = 800;
 const viewLabels: Record<View, string> = { feed: "Feed", transcript: "Transcript", changes: "Changes" };
 /** A text with its first letter in upper case. */
 const title = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
-/** Whether an act is a question to the operator: a prompt whose actor is the operator. */
-const asksOperator = (act: ActRow) => act.kind === "prompt" && act.words[2] === "operator";
 /** What an act is doing: the word that says it, the glyph that shows it, and their color. */
 type State = { word: string; mark: string; color: RGBA };
 /** The state of an act that failed, that a cancel ended, that is done, or that a pause holds. */

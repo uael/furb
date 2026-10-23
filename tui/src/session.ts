@@ -17,7 +17,7 @@ import {
   shapes,
   WORK,
 } from "furb";
-import { type ActIndex, type Ask, aimed, beside, type Desk, desk } from "furb/life";
+import { type ActIndex, type Ask, aimed, beside, type Desk, desk, failed } from "furb/life";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { expandHome, fileReferences, fromDirectory, projectFiles, shortenHome } from "./files.ts";
 import { dollars } from "./format.ts";
@@ -40,8 +40,6 @@ export type ActRow = LiveAct & {
   /** How many milliseconds the act took, when this life ran it. */
   took?: number;
 };
-/** What a command gave: what it printed to each stream, and its exit code once it is over. */
-export type Exit = { stdout?: { content: string }; stderr?: { content: string }; code?: number };
 /** The net change of a file in the scope of the review, with its hunks. */
 export type ShownChange = Reviewed;
 /** What a rewind to a point gives back of the files: for each file that a write changed after the point, the change
@@ -74,16 +72,6 @@ export const statusLabels: Record<SessionStatus, string> = {
 };
 /** Whether an act is at work: it lives, no pause holds it, and its kind is one whose work takes time. */
 export const working = (act: ActRow): boolean => !act.done && !act.paused && WORK.includes(act.kind);
-/** Whether an act failed: a rung that the gate refused or whose run raised, or an act done with an exception other
- * than a cancel. */
-export function failed(act: ActRow): boolean {
-  if (act.run) return act.run.status === "failed" && !cancelled(act);
-  const value = act.value;
-  return Boolean(
-    value && typeof value === "object" && "is" in value && "args" in value && value.is !== "CancelledError",
-  );
-}
-
 /** The phase of an act that a view of the whole life reads: whether it is done or held, when it began and ended, and
  * how its rung ran. The output that a command streams is no part of it. */
 function phaseOf(act?: ActRow): string {
@@ -172,14 +160,6 @@ function placed(index: Index, act: ActRow): void {
   if (act.kind !== "rung" || act.by !== "operator") return;
   const word = index.words.get(act.on);
   if (!word || (index.at.get(word.id) ?? 0) <= (index.at.get(act.id) ?? 0)) index.words.set(act.on, act);
-}
-
-/** Whether an act was cancelled: a rung whose run ended with a cancel, or an act done with a cancel. A cancel is what
- * the operator asked for, so it is no failure. */
-export function cancelled(act: ActRow): boolean {
-  if (act.run) return act.run.status === "failed" && /^CancelledError\b/.test(act.run.reason ?? "");
-  const value = act.value;
-  return Boolean(value && typeof value === "object" && "is" in value && value.is === "CancelledError");
 }
 
 /** The running work that a cancel of an act ends, and the chains that it stands on. */

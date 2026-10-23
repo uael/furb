@@ -8,10 +8,11 @@ import {
   type Session,
   type Turn,
 } from "furb";
+import type { Exit } from "furb/life";
 import type { Roster, Snapshot, Usage } from "./bridge.ts";
 import { lineCounts } from "./format.ts";
 import { queueDispatches } from "./queue.ts";
-import type { ActRow, Exit } from "./session.ts";
+import type { ActRow } from "./session.ts";
 
 /** What a snapshot knows of one chain. A value it must read again is undefined. */
 interface ChainView {
