@@ -156,7 +156,11 @@ meanings. The entry of such a name here gives only its form in the engine.
 - enable: the fact by which the World turns an extension on in a life, with its name, its word and its life word,
   which the record keeps; the World says it at the tip, and when a write of the config of the project lands that
   turns on an extension by its path, and it plays the extension as a rung on every chain there is when it hears the
-  fact, and after it on each chain at its birth, before the call that made the chain returns.
+  fact, and after it on each chain at its birth, before the call that made the chain returns. The World says it again
+  for an extension that the life runs when its word changed: at a stand, for the word that the host gives, and when
+  a write of the life lands in the folder of an extension that a config turns on. That fact reloads the extension:
+  each chain plays the definitions of the new word alone, its imports, functions, classes, types and names in
+  capitals, so each other name keeps its value, and the life word does not run again.
 - made: the fact by which the store names in the record the build that made it, the digest of the engine and of the
   Kernel and the version of the build, `VERSION` in `src/world/store.rs`, which the store says as it hears the root of
   a new record at its birth. A life on a record that names another version is refused before any replay, since a
@@ -216,7 +220,8 @@ meanings. The entry of such a name here gives only its form in the engine.
 - An extension enters a life as rungs that the World plays, and never enters the module of the engine or the system
   prompt, so a chain that takes one grows at its end.
 - A life runs every extension that its record enables, whatever the configs say then, since a record is made again by
-  running its words; the World enables at the tip each extension that the host gives it and the record does not hold.
+  running its words; the World enables at the tip each extension that the host gives it and the record does not hold
+  as the host gives it, so a new word of an extension that the life runs reloads it there.
 - An ear that makes acts makes each one while it hears the fact that causes it, from what it heard alone and never
   from the disk, so a later life makes it again at the same place; what the disk holds reaches a chain through a
   question that the World answers and that the journal answers again.

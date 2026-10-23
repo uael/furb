@@ -13,6 +13,7 @@ def extend(name: str, *rungs: str, tui: str = "") -> Text:
   extend writes tui, when it is given, as tui.ts in the folder of the extension, the part that the TUI loads, and the manifest names tui.ts under tui whenever the folder holds that file.
   extend turns the extension on in .furb/config.json with the path of its folder from the folder of that config, and keeps every other entry of the config.
   When a write of the config of the project lands, the World enables each extension that it turns on by its path and that the life does not run, so it plays as a rung on every chain there is and on each chain at its birth, and the record keeps the fact for every later life.
+  When extend writes again the word of an extension that the life runs, the World enables it again with the new word, and each chain plays the definitions of that word alone, so a function and a name in capitals take their new value and every other name keeps its value.
   """
 
 def ouroboros(on: str = "") -> Act:

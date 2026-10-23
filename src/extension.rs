@@ -11,7 +11,8 @@
 //!
 //! An extension enters a life as rungs, and never enters the module of the engine or the system prompt, so a chain
 //! that takes one grows at its end, and what a provider caches of it stands. The ear [`extensions`] enables each
-//! extension by a fact that the record keeps, and plays the word and the life word as a rung on each chain.
+//! extension by a fact that the record keeps, and plays the word and the life word as a rung on each chain, and the
+//! definitions alone of a new word of an extension that the life runs, which reloads it.
 
 pub mod memory;
 pub mod skills;
@@ -23,6 +24,9 @@ use std::{
   path::{Path, PathBuf},
 };
 
+use ruff_python_ast::{Expr, Stmt};
+use ruff_python_parser::parse_module;
+use ruff_text_size::Ranged;
 use serde_json::Value;
 
 use crate::{
@@ -289,12 +293,41 @@ pub fn word(source: &str) -> String {
   out
 }
 
-/// The extensions that a life runs, in the order it enabled them, as the transcript of its root holds them.
+/// The definitions of a word: each statement at its top that defines a function, a class, a type or a constant, an
+/// import, and an assignment to names in capitals, in its order. A word that does not parse is its own definitions,
+/// so the gate says why it is refused.
+pub fn definitions(word: &str) -> String {
+  let Ok(parsed) = parse_module(word) else { return word.to_owned() };
+  let capital = |target: &Expr| match target {
+    Expr::Name(name) => {
+      let id = name.id.as_str();
+      id.chars().any(char::is_uppercase) && !id.chars().any(char::is_lowercase)
+    }
+    _ => false,
+  };
+  let defines = |one: &&Stmt| match one {
+    Stmt::FunctionDef(_)
+    | Stmt::ClassDef(_)
+    | Stmt::TypeAlias(_)
+    | Stmt::Import(_)
+    | Stmt::ImportFrom(_) => true,
+    Stmt::Assign(one) => one.targets.iter().all(capital),
+    Stmt::AnnAssign(one) => one.value.is_some() && capital(&one.target),
+    _ => false,
+  };
+  let kept: Vec<&str> =
+    parsed.syntax().body.iter().filter(defines).map(|one| &word[one.range()]).collect();
+  kept.join("\n\n")
+}
+
+/// The extensions that a life runs, in the order it first enabled them, each with the word and the life word that
+/// it last enabled, as the transcript of its root holds them.
 pub fn enabled(root: &[Fact]) -> Vec<Extension> {
   let mut out: Vec<Extension> = Vec::new();
   for one in root.iter().filter(|a| a.kind() == ENABLE).filter_map(Extension::of) {
-    if !out.iter().any(|two| two.name == one.name) {
-      out.push(one);
+    match out.iter_mut().find(|two| two.name == one.name) {
+      Some(two) => *two = one,
+      None => out.push(one),
     }
   }
   out
@@ -304,16 +337,20 @@ pub fn enabled(root: &[Fact]) -> Vec<Extension> {
 /// when a life says it, under the names enable and life word and in its laws.
 ///
 /// The fact is `("enable", "chain1", "extensions", name, word, life)`. No contract holds it, so this is the one home
-/// of its shape. The ear says it once for each extension it is given that the life does not run yet, at each stand
-/// that this life answers, the first of which is at the tip. The ear plays the rungs from the fact alone, so a later
-/// life plays the same rungs where the journal says the fact again.
+/// of its shape. The ear says it for each extension it is given that the life does not run as it is given, at each
+/// stand that this life answers, the first of which is at the tip, and for an extension of a folder that a config
+/// turns on, when a write of the life in that folder lands. The fact of an extension that the life runs already
+/// reloads it: each chain plays the definitions of its new word alone, so each name of state keeps its value, and its
+/// life word does not run again. The ear plays the rungs from the fact alone, so a later life plays the same rungs
+/// where the journal says the fact again.
 pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
   hearing(&["chain", "stand", "write", ENABLE], move |mut co| async move {
     // What the life enabled, in order, and each chain in the order of its birth, with the extensions it has.
     let (mut enabled, mut chains) = (Vec::<Extension>::new(), Vec::<(String, Vec<String>)>::new());
     loop {
       let a = hear(&mut co).await;
-      let runs = |one: &Extension| enabled.iter().any(|two| two.name == one.name);
+      let runs_name = |name: &str| enabled.iter().any(|two| two.name == name);
+      let runs = |one: &Extension| runs_name(&one.name);
       let new: Vec<Extension> = match a.kind() {
         // The ear hears a chain at its birth, before the call that made it returns, and the chain has what its
         // origin had, which it made again.
@@ -329,34 +366,58 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
           continue;
         }
         "done" if named(a.about(), "stand") && a.by() != JOURNAL => {
-          given.iter().filter(|one| !runs(one)).cloned().collect()
+          given.iter().filter(|one| !enabled.contains(one)).cloned().collect()
         }
         // A write of the config of the project that lands turns on each extension that it gives by its path and
         // that the life does not run, as the configs do at the tip.
+        // A write that lands of the config of the project turns on each extension that it gives by its path and that
+        // the life does not run, as the configs do at the tip. A write in the folder of an extension that the life
+        // runs and that a config turns on reloads it when its word changed.
         "done" if named(a.about(), "write") && a.by() != JOURNAL => {
           let Some(text) = a.word(0).and_then(Text::of) else { continue };
-          let got = co.call("standing", vec![], vec![]).await?;
-          let project = entry(&got.as_ref(), 1).and_then(|one| one.as_str().map(PathBuf::from));
           let file = PathBuf::from(&text.path);
-          if project.is_none_or(|one| file != one.join(".furb").join("config.json")) {
+          let config = file.ends_with(Path::new(".furb").join("config.json"));
+          if !config && !file.parent().is_some_and(|one| one.join("furb.json").is_file()) {
             continue;
           }
-          turned(&file, &text.content, &Places::here())
-            .into_iter()
-            .filter(|one| !runs(one))
-            .collect()
+          let got = co.call("standing", vec![], vec![]).await?;
+          let Some(project) =
+            entry(&got.as_ref(), 1).and_then(|one| one.as_str().map(PathBuf::from))
+          else {
+            continue;
+          };
+          let places = Places::here();
+          if file == project.join(".furb").join("config.json") {
+            turned(&file, &text.content, &places).into_iter().filter(|one| !runs(one)).collect()
+          } else {
+            let folders = turned_on(&places, &project).unwrap_or_default().into_iter();
+            let mine =
+              folders.filter(|(name, root)| root.as_deref() == file.parent() && runs_name(name));
+            let found = mine.filter_map(|(name, root)| load(&name, &root?).ok());
+            found.filter(|one| !enabled.contains(one)).collect()
+          }
         }
-        ENABLE => Extension::of(&a).filter(|one| !runs(one)).into_iter().collect(),
+        ENABLE => Extension::of(&a).filter(|one| !enabled.contains(one)).into_iter().collect(),
         _ => continue,
       };
       for one in new {
         if a.kind() != ENABLE {
           say(&mut co, one.enable());
         }
-        for chain in &mut chains {
-          play(&mut co, &one, chain).await?;
+        let Some(at) = enabled.iter().position(|two| two.name == one.name) else {
+          for chain in &mut chains {
+            play(&mut co, &one, chain).await?;
+          }
+          enabled.push(one);
+          continue;
+        };
+        if enabled[at].word != one.word {
+          let word = definitions(&one.word);
+          for (chain, _) in &chains {
+            ring(&mut co, chain, &word).await?;
+          }
         }
-        enabled.push(one);
+        enabled[at] = one;
       }
     }
   })
@@ -375,8 +436,13 @@ async fn play(
     had.push(one.name.clone());
     format!("{}\n\n{}", one.word, one.life).trim_matches('\n').to_owned()
   };
+  ring(co, chain, &word).await
+}
+
+/// A word played on a chain as a rung, unless it is empty.
+async fn ring(co: &mut Co, chain: &str, word: &str) -> Result<(), Fault> {
   if !word.is_empty() {
-    let on = vec![("on", Object::string(chain.as_str()))];
+    let on = vec![("on", Object::string(chain))];
     co.call("rung", vec![Object::string(word)], on).await?;
   }
   Ok(())
