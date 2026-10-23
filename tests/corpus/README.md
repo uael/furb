@@ -15,8 +15,8 @@ few.
 
   A life on a record of an older version is refused before any replay, with both versions. The command line runs the
   build of that version in its place when the store of builds of the machine holds it, and
-  `script/builds.sh <version>` puts it there. Once that build writes a checkpoint at the tip of the record, as the
-  command line has it do for an older version, the life goes on from the checkpoint on the new build.
+  `script/builds.sh <version>` puts it there. Once that build writes a checkpoint at the tip of the record, as a life
+  that keeps the record has it do as it opens, the life goes on from the checkpoint on the new build.
 
 `work.jsonl` is the life that `make_the_corpus` runs, on a model that answers from a script. Its root writes, reads,
 runs a command, waits, reads the clock and chance, and asks a chain of its own. A second life on the record takes

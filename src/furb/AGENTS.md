@@ -165,10 +165,10 @@ meanings. The entry of such a name here gives only its form in the engine.
   Kernel and the version of the build, `VERSION` in `src/world/store.rs`, which the store says as it hears the root of
   a new record at its birth. A life on a record that names another version is refused before any replay, since a
   build of that version can make other acts from the same record. The command line of each version puts its program
-  in the store of builds of the machine, and a command on a record of another version runs the program of that
-  version in its place when the store holds it. When that version is older, the program of that version writes a
-  checkpoint at the tip of the record first, and this build goes on from the checkpoint: an upgrade at a stand. A
-  build of a newer version, or an older one that writes no checkpoint, runs the command in its place. A record of a build before the versions names an
+  in the store of builds of the machine. A life that keeps a record whose last segment an older version made is
+  upgraded as it opens: the program of that version from the store writes a checkpoint at the tip of the record, and
+  the life goes on from it on this build. A command on a record of a newer version runs the program of that version in
+  its place when the store holds it. A record of a build before the versions names an
   engine alone, and a life on another engine refuses it. A build keeps the version while each record of the corpus,
   `tests/corpus`, replays on it with no drift. After a checkpoint, only the fact made of the segment after it counts,
   and the store says it again at the root of the first life that goes on from the checkpoint.
