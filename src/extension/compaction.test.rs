@@ -142,8 +142,8 @@ fn a_carry_of_a_record_that_does_not_stand_or_of_a_chain_that_it_does_not_hold_i
   let word = "out = []\nfor where, of in [('none.jsonl', 'chain1'), ('record.jsonl', 'chain9')]:\n  try:\n    await \
               carry(where, of)\n  except Refused as no:\n    out.append(str(no))\nclose(out)";
   let got = closed(&mut life, word).as_ref().py_repr();
-  let none = at.join("none.jsonl").display().to_string();
-  let held = at.join("record.jsonl").display().to_string();
+  let none = at.join("none.jsonl").display().to_string().replace('\\', "\\\\");
+  let held = at.join("record.jsonl").display().to_string().replace('\\', "\\\\");
   assert!(got.starts_with(&format!("['No record at {none}.'")), "{got}");
   assert!(got.ends_with(&format!("'the record {held} holds no chain chain9']")), "{got}");
 }
