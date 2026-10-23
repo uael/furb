@@ -31,7 +31,7 @@ hire(key, brief, thread) starts a worker from the base chain of its actor in bas
 A worker does one item in a worktree of its own, runs only the tests that its change touches, opens its PR, and closes with its URL.
 The round tells you a worker that ends, with its answer in results under its prompt, or that says nothing for 45 minutes, relays to you each question that a worker puts to the operator, and wakes a worker that paused.
 The round sends a conflict or a failed check at a new head to the worker that owns the PR, again after 30 minutes, and to a fixer after an hour, or at once when no worker owns it.
-The round merges each green PR into main from the lowest number when its branch is up to date with main, after it moves the PRs that stack on it onto main, and it updates a branch that is behind only when main is green.
+The round merges each green PR into main from the lowest number when no file that it changes changed on main since its branch forked, after it moves the PRs that stack on it onto main; else it updates the branch, and only when main is green.
 The label paused takes a PR out of the round. A draft, the label hold, a review that waits for its fix, and the label owner-merge, until the owner takes it off as his approval, keep a PR from a merge.
 The round tells you when main is red, when a PR fails to merge or has no change for 45 minutes, and each comment or issue of the owner in the private repository of the decisions, which PRIVATE names beside this word and git does not hold. await decide(title, text) opens a decision there as an issue, and news(line) adds a line at the top of its digest issue.
 Each round queues each open issue that the owner opened, or that he assigned to himself, as an item issueN, once, and its PR closes it.
@@ -47,6 +47,7 @@ CAP = 6
 ACTOR = "claude-cli:opus/medium"
 DECISIONS = "DECISIONS.md"
 NEWS = "No answer needed here. The newest line first.\n"
+GATE = "the hooks"
 FAILS = ("FAILURE", "ERROR", "TIMED_OUT", "STARTUP_FAILURE", "ACTION_REQUIRED")
 GREEN = ("SUCCESS", "SKIPPED", "NEUTRAL")
 queue: list[tuple[str, str, str]] = []
@@ -67,7 +68,7 @@ timers: dict[str, float] = {}
 noted: list[str] = []
 
 WORKER = """You are a worker on the repository {repo}. Do one item, and open its PR yourself.
-1. Make a worktree whose build starts warm: {repo}/script/worktree.sh {repo}-w-{key} w/{key}, then work there. If that worktree stands already, work in it, rebased onto origin/main. Run each build of Rust through sh $TMPDIR/build.sh <command>, which runs three at once at most.
+1. Make a worktree whose build starts warm: {repo}/script/worktree.sh {repo}-w-{key} w/{key}, then work there. Build on origin/main, and stack your branch on an open PR only when your change needs its code; say why in the body, since a stack lands one layer at a time. If that worktree stands already, work in it, rebased onto origin/main. Run each build of Rust through sh $TMPDIR/build.sh <command>, which runs three at once at most.
 2. Change it as the CLAUDE.md files of the repository say.
 3. Run only the tests that your change touches.
 4. Commit with the title of the PR as its message, and push the branch. Then open the PR, or update it when it stands, with pr(), which fills the template of the owner from what you give it and checks each of its rules: await pr(title, why, outcome, breaking=[], fixes=0, where=<your worktree>, labels="{labels}"). title is type(area): What changed, 70 characters or fewer: the type is feat, fix, perf, or chore for a change that no user sees, and the area is the part that owns the change (engine, crate, tui, gui, provider, ci, conductor, or an extension by its name). why is the problem and why it matters now, from your own work and not from git log. outcome is a list: what is true now that was not, each with the evidence of what you ran, and each gap that you leave. breaking lists each change that forces a caller of a door or of the contract to change code. 300 words at most, and no how, which the diff holds. A pr() that breaks a rule raises Refused and says why; never write the body of a PR by hand.
@@ -85,7 +86,7 @@ DEBRIEF = """Your work is done. As a user of furb, list each friction, defect or
 
 LABELS = "gh label create hold -c FBCA04 -d 'It waits for the fix of a review before a merge' 2>/dev/null; gh label create owner-merge -c 5319E7 -d 'The owner merges it or not' 2>/dev/null; gh label create paused -c BFBFBF -d 'The owner paused it: no fix and no merge' 2>/dev/null; true"
 
-PRS = """gh pr list --state open --limit 200 --json number,isDraft,labels,mergeable,mergeStateStatus,baseRefName,headRefName,headRefOid,statusCheckRollup,updatedAt --jq '[.[] | {n: .number, draft: .isDraft, labels: [.labels[].name], mergeable, state: .mergeStateStatus, base: .baseRefName, head: .headRefName, sha: .headRefOid, checks: [.statusCheckRollup[]? | (.conclusion // .state // "")], idle: ((now - (.updatedAt | fromdateiso8601)) / 60 | floor)}]'
+PRS = """gh pr list --state open --limit 200 --json number,isDraft,labels,mergeable,mergeStateStatus,baseRefName,headRefName,headRefOid,statusCheckRollup,updatedAt --jq '[.[] | {n: .number, draft: .isDraft, labels: [.labels[].name], mergeable, state: .mergeStateStatus, base: .baseRefName, head: .headRefName, sha: .headRefOid, checks: [.statusCheckRollup[]? | (.conclusion // .state // "")], names: [.statusCheckRollup[]? | (.name // .context // "")], idle: ((now - (.updatedAt | fromdateiso8601)) / 60 | floor)}]'
 echo ---
 gh pr list --state merged --limit 200 --json number --jq '[.[].number]'
 echo ---
@@ -247,21 +248,27 @@ def mend(pr: dict, now: float) -> str:
 
 async def land(pr: dict, red: bool) -> None:
   n, sha = pr["n"], pr["sha"]
-  behind = pr["state"] == "BEHIND"
-  if not behind and pr["verdict"] == "pass":
-    got = await bash(
-      f"gh api 'repos/{{owner}}/{{repo}}/compare/main...{sha}' --jq .behind_by", show=HIDDEN, timeout=120
-    )
-    if got.code != 0:
-      return
-    behind = got.stdout.content.strip() != "0"
-  if behind:
-    if not red and f"update {sha}" not in noticed:
-      noticed.add(f"update {sha}")
-      await bash(f"gh pr update-branch {n}", show=HIDDEN, timeout=120)
-    return
   if pr["verdict"] != "pass":
     return
+  same = await bash(
+    f"git fetch -q origin main refs/pull/{n}/head 2>/dev/null; [ \"$(git merge-tree --write-tree origin/main {sha} 2>/dev/null | head -1)\" = \"$(git rev-parse {sha}^{{tree}})\" ] && echo same",
+    show=HIDDEN,
+    timeout=180,
+  )
+  if "same" not in same.stdout.content:
+    got = await bash(
+      f"gh api 'repos/{{owner}}/{{repo}}/compare/{sha}...main' --jq '.files[].filename' && echo --- && gh pr view {n} --json files --jq '.files[].path'",
+      show=HIDDEN,
+      timeout=120,
+    )
+    if got.code != 0 or "---\n" not in got.stdout.content:
+      return
+    moved, _, own = got.stdout.content.partition("---\n")
+    if {x for x in moved.splitlines() if x and not x.endswith(".md")} & {x for x in own.splitlines() if x}:
+      if not red and f"update {sha}" not in noticed:
+        noticed.add(f"update {sha}")
+        await bash(f"gh pr update-branch {n}", show=HIDDEN, timeout=120)
+      return
   moves = "".join(f"gh pr edit {d} --base main >/dev/null 2>&1; " for d, up in prs.items() if up["base"] == pr["head"])
   got = await bash(
     f"{moves}gh pr merge {n} --squash --delete-branch >/dev/null 2>&1 || gh stack merge {n} --yes --squash >/dev/null 2>&1; sleep 5; gh pr view {n} --json state --jq .state",
@@ -271,6 +278,9 @@ async def land(pr: dict, red: bool) -> None:
   if "MERGED" in got.stdout.content:
     merged.add(n)
     landed.append(n)
+    kids = [d for d, up in prs.items() if up["base"] == pr["head"]]
+    if kids:
+      await bash("sleep 10; " + "; ".join(f"gh pr edit {d} --base main >/dev/null 2>&1; gh pr update-branch {d} >/dev/null 2>&1" for d in kids), show=HIDDEN, timeout=300)
   else:
     notice(f"unmerged {sha}", f"#{n} did not merge at {sha[:7]}. Look at it.")
 
@@ -328,14 +338,34 @@ async def decide(title: str, text: str) -> str:
 
 
 def audit(red: bool) -> None:
-  mine = [n for n, pr in prs.items() if "owner-merge" not in pr["labels"]]
+  def waits(pr: dict | None) -> bool:
+    for _ in range(20):
+      if not pr:
+        return False
+      if "owner-merge" in pr["labels"] or not pr["head"].startswith("w/"):
+        return True
+      pr = next((p for p in prs.values() if p["head"] == pr["base"]), None)
+    return False
+
+  mine = [n for n, pr in prs.items() if not waits(pr)]
   owner = [n for n in prs if n not in mine]
   stale = [n for n in mine if prs[n]["idle"] >= 60]
   measures.append(len(queue) + len(working) + len(mine))
+  def depth(pr: dict | None) -> int:
+    d = 0
+    for _ in range(20):
+      pr = next((p for p in prs.values() if pr and p["head"] == pr["base"]), None)
+      if not pr:
+        break
+      d += 1
+    return d
+
+  deep = sorted(n for n, pr in prs.items() if depth(pr) >= 2)
   issues = [
     text
     for text, bad in (
       ("main is red", red),
+      (f"PRs that stand on two or more open PRs: {deep}", bool(deep)),
       (f"PRs with no change for an hour: {stale}", bool(stale)),
       (
         f"the measure did not go down in two audits: {measures[-3:]}",
@@ -392,6 +422,7 @@ STATUS = {
   "s:checks": ("FBCA04", "Its checks run"),
   "s:red": ("D93F0B", "A check failed, and its worker fixes it"),
   "s:conflict": ("B60205", "It conflicts with its base, and its worker rebases it"),
+  "s:stacked": ("BFD4F2", "Green, and lands after the PR under it"),
   "s:ready": ("0E8A16", "Green: the round merges it"),
   "s:owner": ("5319E7", "Green, and waits for the merge of the owner"),
 }
@@ -408,10 +439,12 @@ async def mark() -> None:
       if pr["mergeable"] == "CONFLICTING"
       else "s:red"
       if pr["verdict"] == "fail"
-      else "s:checks"
-      if pr["verdict"] != "pass"
       else "s:owner"
       if "owner-merge" in pr["labels"] or pr["draft"]
+      else "s:stacked"
+      if pr["base"] != "main"
+      else "s:checks"
+      if pr["verdict"] != "pass"
       else "s:ready"
     )
   for key in handled:
@@ -480,6 +513,17 @@ async def ops_watch() -> None:
   timers["ops"] = clock()
 
 
+RUNS = r"""gh api 'repos/{owner}/{repo}/actions/runs?per_page=100' --jq '.workflow_runs[] | select(.event == "pull_request" and (.status == "queued" or .status == "in_progress" or .status == "waiting")) | "\(.id) \(.head_branch) \(.head_sha)"'"""
+
+
+async def prune_runs() -> None:
+  heads = {pr["head"]: pr["sha"] for pr in prs.values()}
+  got = await bash(RUNS, show=HIDDEN, timeout=120)
+  stale = [p[0] for p in (x.split(" ") for x in got.stdout.content.splitlines()) if len(p) == 3 and p[1] in heads and p[2] != heads[p[1]]]
+  if stale:
+    await bash("; ".join(f"gh run cancel {r} >/dev/null 2>&1" for r in stale), show=HIDDEN, timeout=300)
+
+
 async def sweep(every: float) -> None:
   got = await bash(PRS, show=HIDDEN, timeout=300)
   parts = got.stdout.content.split("\n---\n", 3)
@@ -493,7 +537,7 @@ async def sweep(every: float) -> None:
       "fail"
       if any(c in FAILS for c in pr["checks"])
       else "pass"
-      if pr["checks"] and all(c in GREEN for c in pr["checks"])
+      if GATE in pr.get("names", []) and all(c in GREEN for c in pr["checks"])
       else "pending"
     )
     prs[pr["n"]] = pr
@@ -533,6 +577,7 @@ async def sweep(every: float) -> None:
   await take_issues()
   await ops_watch()
   await mark()
+  await prune_runs()
   if now - timers.get("review", now - every) >= every:
     await review("review" not in timers)
     timers["review"] = now
