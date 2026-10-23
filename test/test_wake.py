@@ -1,5 +1,7 @@
 """wake, which ends a pause and gives what waited."""
 
+import pytest
+
 from conftest import (
   Sand,
   born,
@@ -162,3 +164,14 @@ async def test_a_wake_that_this_life_says_puts_every_pending_act_it_is_over_on_t
   assert [a[1] for a in later.calls if a[0] in TAKEN] == [command, waited, shown, pending]
   assert isinstance(engine.peek(command), Refused) and "interrupted" in str(engine.peek(command))
   assert "k = 1" in later.turns[pending][-1][1]
+
+
+async def test_a_wake_of_a_name_of_no_act_raises_refused_that_names_it() -> None:
+  """A wake of a name of no act of the life raises Refused, which names it, and says nothing."""
+  _, log, _ = born()
+  await settle()
+  before = len(log)
+  with pytest.raises(Refused, match="no act 'nothing9'"):
+    engine.wake("nothing9")
+  await settle()
+  assert log[before:] == []

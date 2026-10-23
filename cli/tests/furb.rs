@@ -720,6 +720,12 @@ fn a_command_that_does_nothing_says_why() {
     "No act is named bash9."
   );
   assert_eq!(client.asked("4", json!({"type": "rung", "word": 1}))["error"], "word is no string.");
+  for (at, kind) in ["close", "cancel", "pause", "wake"].into_iter().enumerate() {
+    let wrong =
+      client.asked(&(5 + at).to_string(), json!({"type": kind, "act": "bash9", "value": 1}));
+    assert_eq!(wrong["success"], false, "a {kind} of an id of no act fails: {wrong}");
+    assert_eq!(wrong["error"], "Refused: no act 'bash9'", "the error of a {kind} names the id");
+  }
 }
 
 #[test]

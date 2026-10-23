@@ -1,7 +1,10 @@
 """pause, which holds what the acts it is over hear until the wake."""
 
+import pytest
+
 from conftest import born, chained, heads, hushed, paragraphs, ran, said, settle, slow, stalled, world_says
 from furb import engine
+from furb.engine import Refused
 
 
 async def test_a_pause_while_it_stands_nothing_it_is_over_hears() -> None:
@@ -122,3 +125,14 @@ async def test_a_control_is_on_the_scope_of_what_it_is_over() -> None:
   assert (held[0], held[1], held[2]) == ("pause", act, engine.OPERATOR) and engine.scope(act) == two
   assert heads(engine.turns(on=two))[-2:] == [f"#{act}", f"#{act} paused"]
   assert heads(engine.turns(on=root)) == [f"#{root}", f"#{root} standing"]
+
+
+async def test_a_pause_of_a_name_of_no_act_raises_refused_that_names_it() -> None:
+  """A pause of a name of no act of the life raises Refused, which names it, and says nothing."""
+  _, log, _ = born()
+  await settle()
+  before = len(log)
+  with pytest.raises(Refused, match="no act 'nothing9'"):
+    engine.pause("nothing9")
+  await settle()
+  assert log[before:] == []

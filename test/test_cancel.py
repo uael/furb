@@ -6,7 +6,7 @@ import pytest
 
 from conftest import born, chained, paragraphs, posed, said, settle, slow, stalled
 from furb import engine
-from furb.engine import OPERATOR
+from furb.engine import OPERATOR, Refused
 
 
 async def test_a_cancel_of_that_prompt_reaches_the_acts_that_its_rungs_made_on_the_chain_with_a_source() -> None:
@@ -101,3 +101,14 @@ async def test_the_paragraph_of_a_cancel_names_in_its_header_the_one_that_said_i
   await settle()
   heads = [a[3][0] for a in said(log, "tell") if a[1] in (first, other) and " cancelled" in a[3][0]]
   assert heads == [f"#{first} cancelled by {word}", f"#{other} cancelled by operator"]
+
+
+async def test_a_cancel_of_a_name_of_no_act_raises_refused_that_names_it() -> None:
+  """A cancel of a name of no act of the life raises Refused, which names it, and says nothing."""
+  _, log, _ = born()
+  await settle()
+  before = len(log)
+  with pytest.raises(Refused, match="no act 'nothing9'"):
+    engine.cancel("nothing9")
+  await settle()
+  assert log[before:] == []

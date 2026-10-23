@@ -296,6 +296,7 @@ def pause(id: str) -> None:
   An act made in that time it hears at once, since an act is put to the ears while it is made and to no ear after the one that takes it, a chain apart, so a paused rung takes the wants of its run.
   A pause stands over what is made after it, until the wake.
   A control is on the scope of what it is over, so it takes no chain of its own.
+  A pause of a name of no act of the life raises Refused, which names it, and says nothing.
   """
 
 def wake(id: str) -> None:
@@ -307,6 +308,7 @@ def wake(id: str) -> None:
   A wake gates and runs a held response.
   A wake makes a prompt ask its model with the transcript as it grew.
   A wake makes no reply twice and loses none.
+  A wake of a name of no act of the life raises Refused, which names it, and says nothing.
   A wake that this life says, and not one that the journal says again, puts every pending act it is over on to the outside, so the World takes each wait, prompt to the operator and reply of them and closes each command of them as interrupted, and a model reads the transcript as it grew.
   """
 
@@ -319,6 +321,7 @@ def cancel(id: str) -> None:
   A cancel touches nothing else on the chain.
   The awaiter of a cancelled command raises CancelledError in its step.
   The paragraph of a cancel names in its header the one that said it, as #rung5 cancelled by operator, so a turn says what ended the act.
+  A cancel of a name of no act of the life raises Refused, which names it, and says nothing.
   """
 
 def close(value: object, id: str = "") -> None:
@@ -337,6 +340,7 @@ def close(value: object, id: str = "") -> None:
   A value closes an act with that value, and a prompt with a value that has its shape.
   A close that answers a prompt with a value that does not have the shape of the prompt raises Refused in the word that said it, so the prompt asks again.
   A close on an act that is over tells nothing, and reaches only the words that still run under it.
+  A close of a name of no act of the life raises Refused, which names it, and says nothing, so a caller that names a wrong act learns it.
   A close said from a word that names no act is over the prompt that made the rung of the word, and over the rung itself for a word its caller wrote, which answers no prompt.
   A close said from a word that retells reaches nothing and says nothing: it stops the word where it stands, so the rung is done with nothing and answers no prompt.
   A close of the prompt of the running word stops that word where it stands, as a raise does, and nothing after the call runs.
