@@ -258,7 +258,9 @@ def safe(text: str) -> str:
 
 
 def plain(text: str) -> str:
-  return " ".join(text.translate({ord(c): " " for c in ">*_`\"'“”"}).split()).lower()
+  for mark in ">*_`\"'“”":
+    text = text.replace(mark, " ")
+  return " ".join(text.split()).lower()
 
 
 def gaps_of(asked: list[str], words: str, names: set[str]) -> tuple[list[list[str]], list[str]]:
