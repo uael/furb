@@ -36,7 +36,7 @@ The round tells you a worker that ends, with its answer in results under its pro
 The round sends a conflict or a failed check at a new head to the worker that owns the PR, again after 30 minutes, and to a fixer after an hour, or at once when no worker owns it.
 The round merges each green PR into main from the lowest number when no file that it changes changed on main since its branch forked, after it moves the PRs that stack on it onto main; else it updates the branch, and only when main is green.
 The label paused takes a PR out of the round. A draft, the label hold, a review that waits for its fix, and the label owner-merge, until the owner takes it off as his approval, keep a PR from a merge.
-The round tells you when main is red, when a PR fails to merge or has no change for 45 minutes, and each comment or issue of the owner in the private repository of the decisions, which PRIVATE names beside this word and git does not hold. await decide(title, text) opens a decision there as an issue, and news(line) adds a line at the top of its digest issue.
+The round tells you when main is red, when a PR fails to merge, or when a PR on main with no hold has no change for 45 minutes, and each comment or issue of the owner in the private repository of the decisions, which PRIVATE names beside this word and git does not hold. await decide(title, text) opens a decision there as an issue, and news(line) adds a line at the top of its digest issue.
 Each round queues each open issue that the owner opened, or that he assigned to himself, as an item issueN, once, and its PR closes it.
 Each round sends each new comment of the owner on a PR or on his issue to the worker that owns it, puts the label hold on that PR, and tells you only the comments that no worker owns. A text on GitHub counts only when the owner wrote it with no 🤖 at its start, or when he put a 👍 on it; each worker starts what it writes there with 🤖.
 Each round sets one status label on each open PR and on each issue of the owner that it took: s:queued, s:working, s:checks, s:red, s:conflict, s:ready, or s:owner (green, waits for the owner).
@@ -807,7 +807,7 @@ async def sweep(every: float) -> None:
     live.add(boxes(pr, now))
     if "owner-merge" in pr["labels"]:
       continue
-    if pr["idle"] >= 45:
+    if pr["idle"] >= 45 and pr["base"] == "main" and "hold" not in pr["labels"]:
       notice(
         f"idle {pr['sha']}",
         f"#{n} has had no change for {pr['idle']} minutes{' as a draft' if pr['draft'] else ''}{' with the label hold' if 'hold' in pr['labels'] else ''}. Move it on, or say why it waits.",
