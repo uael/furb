@@ -41,7 +41,9 @@ impl Sqlite {
 
 impl Store for Sqlite {
   fn entries(&mut self) -> Result<Vec<Object>, Fault> {
-    rows(&self.db, &self.path)
+    let mut entries = Vec::new();
+    rows(&self.db, &self.path, &mut |one| entries.push(one))?;
+    Ok(entries)
   }
 
   fn keep(&mut self, entry: ObjectRef<'_>) -> Result<(), Fault> {
@@ -57,8 +59,16 @@ impl Store for Sqlite {
 /// What the database at a path holds, read with no lease and changed in nothing: nothing when no database or no
 /// table of entries stands there.
 pub(super) fn kept(path: &Path) -> Result<Vec<Object>, Fault> {
+  let mut entries = Vec::new();
+  each(path, &mut |one| entries.push(one))?;
+  Ok(entries)
+}
+
+/// Each entry of the database at a path, in the order of its rows, read with no lease and changed in nothing, one row
+/// at a time: none when no database or no table of entries stands there.
+pub(super) fn each(path: &Path, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
   if !path.exists() {
-    return Ok(Vec::new());
+    return Ok(());
   }
   let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
     .map_err(|no| failed(path, no))?;
@@ -70,18 +80,16 @@ pub(super) fn kept(path: &Path) -> Result<Vec<Object>, Fault> {
     )
     .map_err(|no| failed(path, no))?;
   match tables {
-    0 => Ok(Vec::new()),
-    _ => rows(&db, path),
+    0 => Ok(()),
+    _ => rows(&db, path, take),
   }
 }
 
-/// The entries of the database, in the order of their rows, each the fact it kept in a list of one, as boot takes
-/// them.
-fn rows(db: &Connection, path: &Path) -> Result<Vec<Object>, Fault> {
+/// Each entry of the database, in the order of its rows, each the fact it kept in a list of one, as boot takes them.
+fn rows(db: &Connection, path: &Path, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
   let mut asked =
     db.prepare("SELECT n, entry FROM entries ORDER BY n").map_err(|no| failed(path, no))?;
   let mut rows = asked.query([]).map_err(|no| failed(path, no))?;
-  let mut entries = Vec::new();
   while let Some(row) = rows.next().map_err(|no| failed(path, no))? {
     let n = row.get::<_, i64>(0).map_err(|no| failed(path, no))?;
     let invalid =
@@ -89,7 +97,7 @@ fn rows(db: &Connection, path: &Path) -> Result<Vec<Object>, Fault> {
     let text = row.get::<_, String>(1).map_err(|_| invalid())?;
     let held = serde_json::from_str::<Vec<&RawValue>>(&text).map_err(|_| invalid())?;
     let [fact] = held.as_slice() else { return Err(invalid()) };
-    entries.push(entry_of(fact).ok_or_else(invalid)?);
+    take(entry_of(fact).ok_or_else(invalid)?);
   }
-  Ok(entries)
+  Ok(())
 }

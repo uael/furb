@@ -147,3 +147,24 @@ fn a_carry_of_a_record_that_does_not_stand_or_of_a_chain_that_it_does_not_hold_i
   assert!(got.starts_with(&format!("['No record at {none}.'")), "{got}");
   assert!(got.ends_with(&format!("'the record {held} holds no chain chain9']")), "{got}");
 }
+
+#[test]
+#[ignore = "a measure, which a person runs on a copy of a real record, as RECORD=<path> CHAIN=<chain>"]
+fn measure_a_carry_of_a_record() {
+  let record = std::env::var("RECORD").expect("RECORD names a record");
+  let chain = std::env::var("CHAIN").unwrap_or_else(|_| "chain1".to_owned());
+  let t = std::time::Instant::now();
+  let got = super::carry(Path::new(&record), &chain, "carry1", "chain1").unwrap();
+  let count = |name: &str| {
+    let pairs = got.as_ref().pairs().unwrap();
+    let held = pairs.iter().find(|(key, _)| key.as_str() == Some(name)).map(|(_, one)| *one);
+    held.and_then(|one| one.items()).map_or(0, |one| one.len())
+  };
+  eprintln!(
+    "{record} {chain}: {:?}, {} turns, {} open prompts, {} bytes",
+    t.elapsed(),
+    count("turns"),
+    count("prompts"),
+    wire::record(got.as_ref()).to_string().len()
+  );
+}

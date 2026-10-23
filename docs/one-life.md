@@ -268,7 +268,11 @@ Measured on copies of real records, with `furb run` on a new record and a claude
 chain1 of life 3, imported, reads 1391 turns. A later life on the new record, with the record of life 3 moved away,
 reads the same 1391 turns. The 49 tells of life 3 are the findings of the gate that the reader says. Its 58 open
 prompts are messages of the owner to chain1 that its model never closed, and each opens again on the successor and
-asks its model. The memory peaks while the reader holds the whole log and the record.
+asks its model. The reader reads the record and its log one entry and one line at a time, so a carry holds only the
+chain that it carries. Measured with `measure_a_carry_of_a_record` in `src/extension/compaction.test.rs` on new
+copies, the carry of chain1 of life 3 takes 4.6 s and 163 MB at peak, against 7.1 s and 3.8 GB when the reader held
+the whole log and the record, and the carry of chain1 of life 4, at 249 MB and 2155 facts carried, takes 2.4 s and
+126 MB, against 2.5 s and 1.8 GB, with the same answer.
 
 ### 3.6 The versions of the formats
 
