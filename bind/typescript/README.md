@@ -2,7 +2,7 @@
 
 The engine of furb for Node.js 22 or later and Bun 1.4.2 or later, on macOS, Linux and Windows. It runs the same
 Rust crate and monty sandbox as the Python package, through N-API. Use it to open a life from a program, as
-[the examples](../../docs/examples/README.md) do, or to write a host of your own, as the TUI does.
+[the examples](https://github.com/uael/furb/blob/main/docs/examples/README.md) do, or to write a host of your own, as the TUI does.
 
 ## Install
 

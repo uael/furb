@@ -1,12 +1,12 @@
 # furb-monty
 
 The engine of furb for Python, run in monty, a Python interpreter written in Rust. Most programs do not import it
-directly: `pip install furb` installs it, and [`furb.open`](../../docs/examples/README.md) opens a life on it. Read on
+directly: `pip install furb` installs it, and [`furb.open`](https://github.com/uael/furb/blob/main/docs/examples/README.md) opens a life on it. Read on
 when you write a host of your own, which boots an engine on ears that you choose.
 
 ## What it gives
 
-- `furb_monty.engine` gives every name of the contract, [`engine.pyi`](../../src/furb/engine.pyi), over one life of
+- `furb_monty.engine` gives every name of the contract, [`engine.pyi`](https://github.com/uael/furb/blob/main/src/furb/engine.pyi), over one life of
   the engine in the sandbox of monty. The crate loads the Kernel there, so this package needs none of its own.
 - `furb_monty.gate` is the gate of the crate. The package `furb` reads a word with it too.
 - `furb_monty._monty` is the door itself. It gives the same host API as the package of TypeScript, each name in the
@@ -39,7 +39,7 @@ The words of `opened`, each of which can be left out:
 
 - `actor` is the default actor, and `roster` the models that the provider offers beside it. With no roster, it
   offers each model of the catalog, and with neither, the first of them is the default actor. A roster that names no
-  model offers the model of the actor alone, and with no actor, the operator alone. [Models](../../docs/models.md)
+  model offers the model of the actor alone, and with no actor, the operator alone. [Models](https://github.com/uael/furb/blob/main/docs/models.md)
   says how a model is named.
 - `keeps` false keeps nothing in the record, and `inspecting` true opens a life that keeps nothing, enables nothing
   new, and asks no model.
