@@ -169,6 +169,87 @@ pub(crate) fn inward(said: &Object) -> Object {
   walk(&graph, root)
 }
 
+/// The most levels of a value that a host is given. Each door walks a value one level at a time on the stack of its
+/// thread, so a deeper value can end the process of the host, and monty itself gives a value at most as deep as its
+/// recursion lets it. No fact, transcript, turn or standing of the engine comes near this depth.
+pub(crate) const DEEPEST: usize = 64;
+
+/// How many times its own parts a value that a host is given may hold at most. Monty gives a part that a value holds
+/// more than once as one part, and a host is given each of its places, so a value of few parts can stand for more
+/// parts than a host can walk: thirty lists, each of which holds the one before it twice, stand for a billion. A value
+/// that holds each of its parts once holds them once, so it is always under this bound.
+pub(crate) const REPEATS: usize = 64;
+
+/// What monty gives in the place of a part deeper than its recursion lets it go, which a part deeper than `DEEPEST`
+/// is given as too.
+pub(crate) const NESTED: &str = "<deeply nested>";
+
+/// What a part is given as in the place of a part past the bound of `REPEATS`.
+pub(crate) const REPEATED: &str = "<repeated too often>";
+
+/// A value as a host is given it: whole when it is at most `DEEPEST` levels deep and stands for at most `REPEATS`
+/// times its parts, and else cut, each part at the last level a host is given in the place of `NESTED`, and each
+/// part past the bound in the place of `REPEATED`, from the first place in the order of a walk. So every walk of a
+/// host over the value is bounded by its depth and by its size in the sandbox.
+pub(crate) fn carried(value: Object) -> Object {
+  let (graph, root) = unstable::graph_parts(&value);
+  let (mut height, mut size) = (vec![0usize; graph.len()], vec![0usize; graph.len()]);
+  // The arena holds each part after the parts it holds, so one pass gives each part its height and its size.
+  for (at, node) in graph.nodes().iter().enumerate() {
+    let (mut high, mut many) = (0usize, 1usize);
+    node.for_each_child(|one| {
+      high = high.max(height[one.index()] + 1);
+      many = many.saturating_add(size[one.index()]);
+    });
+    (height[at], size[at]) = (high, many);
+  }
+  let room = graph.len().saturating_mul(REPEATS);
+  if height[root.index()] < DEEPEST && size[root.index()] <= room {
+    return value;
+  }
+  let (mut cut, mut left) = (MontyGraph::new(), room);
+  let root = cutting(graph, root, 0, &mut left, &mut cut, false);
+  unstable::object_from_graph(cut, root).unwrap_or_else(|_| Object::repr(NESTED))
+}
+
+/// One part of a value as `carried` cuts it into the arena of the cut, at a level, from what is left of its bound.
+/// The class of an instance stays a class, since an instance names a class, and only what the class holds is cut.
+fn cutting(
+  graph: &MontyGraph,
+  id: NodeId,
+  level: usize,
+  left: &mut usize,
+  cut: &mut MontyGraph,
+  class: bool,
+) -> NodeId {
+  let node = graph.node(id);
+  if !node.is_leaf() && !class {
+    if level + 1 >= DEEPEST {
+      return cut.push(MontyNode::Repr(NESTED.to_owned()));
+    }
+    if *left == 0 {
+      return cut.push(MontyNode::Repr(REPEATED.to_owned()));
+    }
+  }
+  *left = left.saturating_sub(1);
+  let mut held = Vec::new();
+  node.for_each_child(|one| held.push(one));
+  let instance = matches!(node, MontyNode::ClassInstance { .. });
+  let held: Vec<NodeId> = held
+    .into_iter()
+    .enumerate()
+    .map(|(at, one)| cutting(graph, one, level + 1, left, cut, instance && at == 0))
+    .collect();
+  let mut node = node.clone();
+  let mut each = held.into_iter();
+  node.for_each_child_mut(|one| {
+    if let Some(made) = each.next() {
+      *one = made;
+    }
+  });
+  cut.push(node)
+}
+
 fn walk(graph: &MontyGraph, id: NodeId) -> Object {
   match graph.node(id) {
     MontyNode::List(held) => Object::list(held.iter().map(|one| walk(graph, *one))),
@@ -216,6 +297,50 @@ pub(crate) fn paired(pairs: impl IntoIterator<Item = (String, Object)>) -> Objec
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  /// A list that holds a list, and so on, as many lists deep as asked, around an empty list.
+  fn nested(lists: usize) -> Object {
+    let mut graph = MontyGraph::new();
+    let mut at = graph.push(MontyNode::List(vec![]));
+    for _ in 0..lists {
+      at = graph.push(MontyNode::List(vec![at]));
+    }
+    unstable::object_from_graph(graph, at).unwrap()
+  }
+
+  #[test]
+  fn a_value_under_both_bounds_is_given_whole() {
+    let pairs = [(Object::string("a"), nested(DEEPEST - 3)), (Object::string("b"), Object::int(1))];
+    let value = Object::list([Object::dict(pairs), Object::string("c")]);
+    assert_eq!(carried(value.clone()), value);
+    assert_eq!(carried(nested(DEEPEST - 1)), nested(DEEPEST - 1));
+  }
+
+  #[test]
+  fn a_value_deeper_than_deepest_is_given_its_first_levels_and_the_mark_of_monty_at_the_last() {
+    let mut cut = Object::repr(NESTED);
+    for _ in 0..DEEPEST - 1 {
+      cut = Object::list([cut]);
+    }
+    assert_eq!(carried(nested(DEEPEST)), cut);
+    assert_eq!(carried(nested(990)), cut);
+  }
+
+  #[test]
+  fn a_value_that_holds_its_parts_too_often_is_given_within_its_bound() {
+    let mut graph = MontyGraph::new();
+    let mut at = graph.push(MontyNode::List(vec![]));
+    for _ in 0..30 {
+      at = graph.push(MontyNode::List(vec![at, at]));
+    }
+    let room = graph.len() * REPEATS;
+    let cut = carried(unstable::object_from_graph(graph, at).unwrap());
+    let (graph, _) = unstable::graph_parts(&cut);
+    assert!(graph.len() <= 2 * room, "{} parts", graph.len());
+    let marks =
+      graph.nodes().iter().filter(|one| matches!(one, MontyNode::Repr(t) if t == REPEATED));
+    assert!(marks.count() > 0);
+  }
 
   #[test]
   fn a_builtin_exception_is_read_by_its_type_and_its_message() {
