@@ -175,6 +175,13 @@ The form of a checkpoint is one fact of the record, whose values are in the plai
 - `open` names the acts that are not over, in the order of the record, which the next build makes again through
   their verbs under their names. An open run is not in it: the checkpoint cuts it.
 
+As built (#this PR), the fact carries the same state in another form: its words hold `entries`, facts that the journal of
+any engine already replays, so the checkpoint costs no token of the engine. The root, each chain that lives, the last
+stand, each act that a carried value names with its answer, each open prompt as an open act, and a reserve of the
+names of each kind that no entry carries. Each carried chain then takes a rung that binds the definitions and the plain
+values of its module, and says a prefix of its turns, which keeps its module. A chain with an open prompt opens paused,
+and its prompt asks its model again at a wake. `src/checkpoint.rs` holds the shape.
+
 The entries before the last checkpoint are history. No life replays them, a reader reads them, and the store can
 move them to a file of their own beside the record.
 
@@ -443,7 +450,8 @@ under no prompt of the operator, which the conductor does in PR 6.
 
 - A successor takes the name of its source, so no name of a live act changes, no scope moves, and the engine pays
   23 tokens. A copy of the module, as `restore` of #317, goes, since it is a second truth of the same state.
-- A checkpoint carries plain data and no dump of monty, so no form of the interpreter binds a later build.
+- A checkpoint carries plain data and no dump of monty, so no form of the interpreter binds a later build. Its data is
+  facts that the journal of any engine replays, so the engine pays no token for it.
 - A word that a checkpoint cuts ends as interrupted, as a command that a crash cut (#290), and its model runs it
   again.
 - A version is a build, kept in a store, and a gate on a corpus of records keeps the versions few. The text of the

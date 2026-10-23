@@ -1,16 +1,18 @@
 //! The opening of a life: what it enables, what it keeps, and the ears it hears, on the record that the store keeps.
 
 use std::{
+  cell::RefCell,
   collections::VecDeque,
   fs,
   path::{Path, PathBuf},
+  rc::Rc,
   sync::{Arc, Mutex},
 };
 
 use super::{Answer, Opening};
 use crate::{
   Ear, Engine, Fact, Object, Text,
-  ear::{ear, hear, say},
+  ear::{ear, hear, hearing, say},
   extension::enabled,
   value::entry,
   verbs, world,
@@ -285,6 +287,45 @@ fn goes_on(at: &Path, extensions: bool) {
     facts[..one].iter().filter(|one| one.as_ref().py_repr().contains("the memory")).count();
   assert!(!extensions || first > 0, "the first life told the memory");
   assert_eq!(told, 0, "the memory ear heard the past, so it tells no chain again what it holds");
+}
+
+/// An ear of the host that waits for a chain by its name, and keeps the kind and the act of each fact it hears
+/// that is no act.
+fn listening(chain: &'static str, heard: Rc<RefCell<Vec<String>>>) -> Box<dyn Ear> {
+  hearing(&[chain], move |mut co| async move {
+    loop {
+      let a = hear(&mut co).await;
+      if !a.question() {
+        heard.borrow_mut().push(format!("{} {}", a.kind(), a.about()));
+      }
+    }
+  })
+}
+
+#[test]
+fn an_ear_that_a_life_from_its_snapshot_tells_the_past_hears_what_it_hears_in_a_replay() {
+  let at = place("hearing");
+  let (record, again) = (at.join("record.jsonl"), at.join("again.jsonl"));
+  let open = |record: &Path, snapshot: bool, heard: &Rc<RefCell<Vec<String>>>| {
+    let record = Some(record.display().to_string());
+    let opening = Opening { snapshot: Some(snapshot), record, ..opening(&at, true) };
+    opening.boot([("listening", listening("chain2", heard.clone()))]).unwrap().0
+  };
+  let mut first = open(&record, true, &Rc::default());
+  // A message on the thread of a prompt stands on that prompt, and the chain of that prompt names it alone.
+  let word = "side = chain('side')\nasked = prompt(None, 'ask', to=OPERATOR, on=side)\n\
+    more = prompt(None, 'more', on=asked)\nclose(None, more)\nclose(None, asked)\nclose(1)";
+  assert_eq!(closed(&mut first, word).as_ref().as_int(), Some(1));
+  drop(first);
+  for end in ["", ".log", ".snapshot"] {
+    fs::copy(format!("{}{end}", record.display()), format!("{}{end}", again.display())).unwrap();
+  }
+  let (told, replayed) = (Rc::default(), Rc::default());
+  let restored = open(&record, true, &told);
+  let replay = open(&again, false, &replayed);
+  assert!(restored.restored() && !replay.restored());
+  assert!(replayed.borrow().iter().any(|one| one == "tell prompt2"), "{:?}", replayed.borrow());
+  assert_eq!(*told.borrow(), *replayed.borrow());
 }
 
 #[test]
@@ -594,5 +635,76 @@ fn measure_how_long_a_life_opens_from_its_snapshot_and_by_a_replay() {
   eprintln!(
     "rungs {n}, entries {entries}, snapshot {size} bytes: from the snapshot {from:?}, by a replay {:?}",
     t.elapsed()
+  );
+}
+
+#[test]
+fn a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_prompt_of_each_chain() {
+  let at = place("checkpoint");
+  let mut first = scripted(&at, &["await wait(3600)\nclose('late')"]).boot::<String>([]).unwrap().0;
+  let word = "work = chain('work')\nran = await bash('echo one')\nqueue = [ran]\nCAP = 6\ndef f():\n  return CAP\n\
+              waiting = prompt(str, 'Wait.', on=work)\nawait wait(0.3)\nclose(str(waiting))";
+  let waiting = closed(&mut first, word).as_ref().as_str().unwrap().to_owned();
+  drop(first);
+  // The checkpoint is written as the command line writes it: in a life that only replays the record.
+  let (mut inspected, kept) =
+    Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap();
+  let written = crate::checkpoint::written(&mut inspected, &kept).unwrap();
+  drop(inspected);
+  crate::checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
+  let mut later = scripted(&at, &["close('again')"]).boot::<String>([]).unwrap().0;
+  let word = format!(
+    "wake('chain2')\nclose([str(ran), queue, f(), get('{waiting}')[:2], await waiting, str(chain('more')), str(bash('echo two'))])"
+  );
+  let exit = "Exit(code=0, stdout=Text(path='bash1/stdout', content='one\\n'), stderr=Text(path='bash1/stderr', content=''))";
+  assert_eq!(
+    closed(&mut later, &word).as_ref().py_repr(),
+    format!("[{exit:?}, [{exit}], 6, ('prompt', '{waiting}'), 'again', 'chain3', 'bash2']"),
+    "each name, value and answer of the past stands, the open prompt goes on, and a new act takes the next name"
+  );
+  assert_eq!(
+    closed(&mut later, "close([x[1] for x in transcript('chain1', 'merged')])").as_ref().py_repr(),
+    "['merged2']",
+    "a name that an ear of the outside took in the past stays taken"
+  );
+  drop(later);
+  let kept = world::kept(at.join("record.jsonl")).unwrap();
+  let made = |one: &Object| {
+    entry(&one.as_ref(), 0).and_then(Fact::of).is_some_and(|a| a.kind() == world::MADE)
+  };
+  assert_eq!(
+    crate::checkpoint::segment(&kept).iter().filter(|one| made(one)).count(),
+    1,
+    "the build that goes on names itself once"
+  );
+  let mut again = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  assert_eq!(
+    closed(&mut again, "close([f(), str(chain('last'))])").as_ref().py_repr(),
+    "[6, 'chain4']",
+    "a later life replays the segment after the checkpoint"
+  );
+}
+
+#[test]
+fn a_record_of_another_version_opens_on_this_build_from_its_last_checkpoint() {
+  let at = place("upgrade");
+  let path = at.join("record.jsonl");
+  let mut first = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  assert_eq!(closed(&mut first, "kept = 1\nclose(kept)").as_ref().as_int(), Some(1));
+  let written =
+    crate::checkpoint::written(&mut first, &world::kept(at.join("record.jsonl")).unwrap()).unwrap();
+  drop(first);
+  crate::checkpoint::keep(&path, written).unwrap();
+  let made =
+    |engine: &str, version: i64| format!("[\"made\",\"chain1\",\"store\",\"{engine}\",{version}]");
+  let text = fs::read_to_string(&path).unwrap();
+  let ours = made(&world::engine(), world::VERSION);
+  assert!(text.contains(&ours), "{text}");
+  fs::write(&path, text.replace(&ours, &made(&"0".repeat(64), world::VERSION + 1))).unwrap();
+  let mut later = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  assert_eq!(
+    closed(&mut later, "close(kept + 1)").as_ref().as_int(),
+    Some(2),
+    "only the build after the checkpoint counts"
   );
 }

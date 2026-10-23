@@ -10,6 +10,11 @@ inputs:
       its build is a second build of most dependencies, since maturin links the module of python with flags of its
       own on macOS.
     default: suite
+  key:
+    description: >-
+      What the build of the gate holds beyond its job and its system, as a feature of the crate, which the key of its
+      cache names: a build of other artifacts saves a cache of its own.
+    default: ""
 
 runs:
   using: composite
@@ -48,6 +53,7 @@ runs:
     # matches whole is never saved again, so every later run would build again what that part lacks.
     - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       with:
+        key: ${{ inputs.key }}
         add-rust-environment-hash-key: true
         save-if: ${{ github.ref == 'refs/heads/main' }}
         cache-on-failure: false

@@ -386,6 +386,9 @@ async function attach(options: EngineOptions, place: Place): Promise<{ engine: E
     socket?.end();
     return Promise.resolve();
   });
+  const lost = "The host of the life ended before it answered.";
+  let first: Hello | undefined;
+  let reaching: Promise<void> | undefined;
   const hello = async (): Promise<Hello> => {
     const held = await reach(options, place);
     socket = held;
@@ -393,10 +396,16 @@ async function attach(options: EngineOptions, place: Place): Promise<{ engine: E
     held.on("close", () => {
       if (socket !== held) return;
       link.send = undefined;
-      link.drop("The host of the life ended before it answered.");
-      if (!link.closed) void again();
+      link.drop(lost);
+      if (!link.closed && first && !reaching)
+        reaching = again().finally(() => {
+          reaching = undefined;
+        });
     });
     held.on("error", () => {});
+    // A host that ends its side of the socket ends it whole: bun closes no socket whose peer ended while a write of the
+    // window waits on it, so the socket would wait with no close.
+    held.on("end", () => held.destroy());
     const said = (await link.request("host", "hello", [
       { window: process.pid, protocol: PROTOCOL },
     ])) as Hello;
@@ -408,15 +417,22 @@ async function attach(options: EngineOptions, place: Place): Promise<{ engine: E
     }
     return said;
   };
-  const first = await hello();
+  // A host that a kill ends can take a connection while its process ends, and then drops it before it answers the
+  // hello: the window reaches the place again, where no host answers any more, and starts a new one.
   const again = async () => {
-    try {
-      const next = await hello();
-      if (next.pid !== first.pid || next.started !== first.started) link.host.emit("reset");
-    } catch (error) {
-      link.end(error instanceof Error ? error.message : String(error));
-      link.host.emit("fault", error instanceof Error ? error : new Error(String(error)));
+    for (let tries = 1; ; tries++) {
+      try {
+        const next = await hello();
+        if (next.pid !== first?.pid || next.started !== first?.started) link.host.emit("reset");
+        return;
+      } catch (error) {
+        if (error instanceof Error && error.message === lost && tries < 5 && !link.closed) continue;
+        link.end(error instanceof Error ? error.message : String(error));
+        link.host.emit("fault", error instanceof Error ? error : new Error(String(error)));
+        return;
+      }
     }
   };
+  first = await hello();
   return { engine: link.engine(first.root), host: link.host };
 }

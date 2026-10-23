@@ -112,7 +112,9 @@ pub fn version(record: &[Object]) -> Option<i64> {
 /// stays so, since this engine did not make it.
 pub fn keeping(mut store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>), Fault> {
   let entries = store.entries()?;
-  let new = entries.is_empty();
+  // A record whose last checkpoint has no fact made after it is new to the build that goes on from it.
+  let new = entries.is_empty()
+    || crate::checkpoint::last(&entries).is_some_and(|at| made(&entries[at + 1..]).is_none());
   let kept = hearing(&["keep", "chain"], move |mut co| async move {
     loop {
       let a = hear(&mut co).await;
