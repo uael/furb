@@ -79,6 +79,8 @@ Each command is an object whose `type` names it. An `id` is optional, and the re
   float. A value of another shape is refused, and the prompt stays open.
 - `cancel` ends an act and everything that it made, each with `CancelledError`.
 - `pause` holds an act, or every act on a chain, until a `wake` of the same act or chain.
+- A `close`, a `cancel`, a `pause` or a `wake` of an id that names no act fails, and its error names the id, as
+  `Refused: no act 'bash9'`.
 - `retry` runs again an act that a crash loop parked, which the part on a resumed life says.
 - `turns` gives the turns of a chain, as the model reads them: each is its role, its python, its usage and its blocks.
 - `transcript` gives the facts on a chain, in the order of the log.

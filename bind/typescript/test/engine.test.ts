@@ -99,6 +99,14 @@ test("a cancel rejects a native await", async () => {
   expect(await result).toContain("CancelledError");
 });
 
+test("each control of an id that names no act throws an error that names the id", () => {
+  const { engine } = open();
+  expect(() => engine.close(1, { id: "bash9" })).toThrow("no act 'bash9'");
+  expect(() => engine.cancel("bash9")).toThrow("no act 'bash9'");
+  expect(() => engine.pause("bash9")).toThrow("no act 'bash9'");
+  expect(() => engine.wake("bash9")).toThrow("no act 'bash9'");
+});
+
 test("a function of JavaScript crosses as a filter, and what it throws is raised where the word called it", () => {
   const { engine } = open();
   let calls = 0;

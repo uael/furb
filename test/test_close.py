@@ -244,3 +244,14 @@ async def test_a_close_of_the_prompt_of_the_running_word_stops_that_word_where_i
   assert "k" not in engine.module(root)
   await engine.rung("try:\n  close(5)\nexcept Exception:\n  after = 1", on=root)
   assert "after" not in engine.module(root)
+
+
+async def test_a_close_of_a_name_of_no_act_raises_refused_that_names_it() -> None:
+  """A close of a name of no act of the life raises Refused, which names it, and says nothing, so a caller that names a wrong act learns it."""
+  _, log, _ = born()
+  await settle()
+  before = len(log)
+  with pytest.raises(Refused, match="no act 'nothing9'"):
+    engine.close(1, "nothing9")
+  await settle()
+  assert log[before:] == []
