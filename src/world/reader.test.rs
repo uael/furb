@@ -136,11 +136,11 @@ fn a_record_names_its_engine_and_reads_its_log_while_the_log_agrees() {
     "[[\"made\",\"chain1\",\"store\",\"abc\"]]\n[[\"stand\",\"stand1\",\"operator\",\"chain1\"]]\n",
   )
   .unwrap();
-  let read = retold(&at).unwrap();
+  let (read, facts) = retold(&at).unwrap();
   assert_eq!(read.made.as_deref(), Some("abc"));
   assert!(!read.logged);
   assert_eq!(
-    shown(&read.facts),
+    shown(&facts),
     [
       "['made', 'chain1', 'store', 'abc']",
       "['chain', 'chain1', 'operator', '', '', '']",
@@ -153,10 +153,10 @@ fn a_record_names_its_engine_and_reads_its_log_while_the_log_agrees() {
     "{\"entries\":2}\n[\"stand\",\"stand1\",\"operator\",\"chain1\"]\n[\"tell\",\"chain1\",\"chain1\",[\"#chain1\"]]\n",
   )
   .unwrap();
-  let read = retold(&at).unwrap();
+  let (read, facts) = retold(&at).unwrap();
   assert!(read.logged);
   assert_eq!(
-    shown(&read.facts),
+    shown(&facts),
     ["['stand', 'stand1', 'operator', 'chain1']", "['tell', 'chain1', 'chain1', ['#chain1']]"]
       .map(str::to_owned)
   );

@@ -20,18 +20,18 @@
 use std::{
   collections::HashSet,
   fs::{File, OpenOptions},
-  io::Write,
+  io::{BufRead, BufReader, Write},
   path::{Path, PathBuf},
 };
 
-use serde_json::Value;
+use serde_json::{Value, value::RawValue};
 
 use crate::{
   ear::{Co, Ear, ear, hear},
-  fact::Fact,
+  fact::{Fact, named},
   value::{Fault, Object},
   wire::{outward, parsed},
-  world::kept,
+  world::store::each,
 };
 
 /// The ear of the log of the record at a path, which held a number of entries when the life opened: it hears every
@@ -194,45 +194,105 @@ impl Log {
 /// left short of an act that the record holds. A last line that a crash tore is left out.
 pub fn logged(path: impl AsRef<Path>) -> Result<Option<Vec<Object>>, Fault> {
   let path = path.as_ref();
-  let Ok(text) = std::fs::read_to_string(format!("{}.log", path.display())) else {
-    return Ok(None);
-  };
-  let mut lines = text.lines();
-  let head = lines.next().and_then(|one| serde_json::from_str::<Value>(one).ok());
-  let Some(mut entries) = head.and_then(|one| one.get("entries")?.as_u64()) else {
-    return Ok(None);
-  };
+  let (entries, asked) = asked(path)?;
   let mut facts = Vec::new();
-  let mut lines = lines.peekable();
-  while let Some(line) = lines.next() {
-    let Ok(fact) = parsed(line) else {
-      if lines.peek().is_none() && !text.ends_with('\n') {
+  Ok(walked(path, entries, asked, Some(&mut |one| facts.push(one)))?.then_some(facts))
+}
+
+/// How many entries the record at a path holds, and the name of each question among them, which a log that agrees
+/// with the record shows each as a question.
+pub(crate) fn asked(path: &Path) -> Result<(usize, HashSet<String>), Fault> {
+  let (mut entries, mut asked) = (0, HashSet::new());
+  each(path, &mut |entry| {
+    entries += 1;
+    let fact = entry.as_ref().items().and_then(|held| Fact::of(*held.first()?));
+    if let Some(one) = fact.filter(Fact::question) {
+      asked.insert(one.about().to_owned());
+    }
+  })?;
+  Ok((entries, asked))
+}
+
+/// Each fact of the log of the record at a path, in order, as [`logged`] gives them, when the log agrees with a record
+/// of that many entries and of those questions, which [`asked`] gives. It reads the log once to check it, then once
+/// more for the facts, one line at a time, so a reader holds no more of a large log than it keeps of each fact, and
+/// it gives no fact of a log that does not agree.
+pub(crate) fn each_logged(
+  path: &Path,
+  entries: usize,
+  asked: &HashSet<String>,
+  take: &mut dyn FnMut(Object),
+) -> Result<bool, Fault> {
+  if !walked(path, entries, asked.clone(), None)? {
+    return Ok(false);
+  }
+  match walked(path, entries, asked.clone(), Some(take))? {
+    true => Ok(true),
+    false => Err(Fault::refused(format!("The log of {} changed as it was read.", path.display()))),
+  }
+}
+
+/// Whether the log of the record at a path agrees with a record of that many entries and of those questions, read one
+/// line at a time, and each of its facts in order, to take when it is given one.
+fn walked(
+  path: &Path,
+  record: usize,
+  mut asked: HashSet<String>,
+  mut take: Option<&mut dyn FnMut(Object)>,
+) -> Result<bool, Fault> {
+  let Ok(file) = File::open(format!("{}.log", path.display())) else {
+    return Ok(false);
+  };
+  let mut lines = BufReader::with_capacity(1 << 20, file);
+  let mut line = String::new();
+  let head = match lines.read_line(&mut line) {
+    Ok(_) => serde_json::from_str::<Value>(line.trim_end_matches('\n')).ok(),
+    Err(_) => return Ok(false),
+  };
+  let Some(mut entries) = head.and_then(|one| one.get("entries")?.as_u64()) else {
+    return Ok(false);
+  };
+  loop {
+    line.clear();
+    match lines.read_line(&mut line) {
+      Ok(0) => break,
+      Ok(_) => {}
+      Err(_) => return Ok(false),
+    }
+    let (ended, text) = (line.ends_with('\n'), line.trim_end_matches('\n'));
+    let fact = match take {
+      Some(_) => parsed(text).ok(),
+      None => None,
+    };
+    let Ok(held) = serde_json::from_str::<Vec<&RawValue>>(text) else {
+      if !ended {
         break;
       }
-      return Ok(None);
+      return Ok(false);
     };
-    let held = fact.as_ref().items().unwrap_or_default();
-    if held.len() == 3 && held[0].as_str() == Some("keep") && held[1].as_str() == Some("") {
-      if held[2].as_int() != i64::try_from(entries + 1).ok() {
-        return Ok(None);
+    let word = |at: usize| {
+      held
+        .get(at)
+        .and_then(|one| serde_json::from_str::<String>(one.get()).ok())
+        .unwrap_or_default()
+    };
+    let (kind, about) = (word(0), word(1));
+    if held.len() == 3 && kind == "keep" && about.is_empty() {
+      if serde_json::from_str::<u64>(held[2].get()).ok() != Some(entries + 1) {
+        return Ok(false);
       }
       entries += 1;
       continue;
     }
-    facts.push(fact);
+    if named(&about, &kind) {
+      asked.remove(&about);
+    }
+    if let Some(take) = take.as_mut() {
+      let Some(fact) = fact else { return Ok(false) };
+      take(fact);
+    }
   }
-  let record = kept(path)?;
-  let shown: HashSet<String> = facts
-    .iter()
-    .filter_map(|one| Fact::of(one.as_ref()))
-    .filter(Fact::question)
-    .map(|one| one.about().to_owned())
-    .collect();
-  let whole = record.iter().all(|entry| {
-    let fact = entry.as_ref().items().and_then(|held| Fact::of(*held.first()?));
-    fact.is_none_or(|one| !one.question() || shown.contains(one.about()))
-  });
-  Ok((whole && usize::try_from(entries).ok() == Some(record.len())).then_some(facts))
+  Ok(asked.is_empty() && usize::try_from(entries).ok() == Some(record))
 }
 
 #[cfg(test)]

@@ -396,7 +396,7 @@ pub fn logged(path: String) -> Result<Option<Value>, Fault> {
   )
 )]
 pub fn retold(path: String) -> Result<Value, Fault> {
-  let world::Retold { made, version, logged, facts, .. } = world::retold(&path)?;
+  let (world::Retold { made, version, logged, .. }, facts) = world::retold(&path)?;
   Ok(Value(Object::dict([
     (Object::string("made"), made.map_or_else(Object::none, Object::string)),
     (Object::string("engine"), Object::string(world::engine())),
