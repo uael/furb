@@ -255,6 +255,19 @@ fn a_command_on_a_record_of_another_version_runs_the_build_of_that_version_that_
 }
 
 #[test]
+fn a_checkpoint_at_the_tip_of_a_record_carries_the_module_of_its_root_to_the_next_life() {
+  let yard = Yard::new("checkpoint");
+  assert_eq!(printed(yard.kept(&["run", "kept = [1, 2]\nclose(len(kept))"]), ""), "2\n");
+  printed(yard.furb(&["checkpoint", "--record", yard.record().to_str().unwrap()]), "");
+  let record = fs::read_to_string(yard.record()).unwrap();
+  assert!(
+    record.lines().last().unwrap().starts_with("[[\"checkpoint\",\"chain1\",\"store\","),
+    "{record}"
+  );
+  assert_eq!(printed(yard.kept(&["run", "close(kept + [3])"]), ""), "[1, 2, 3]\n");
+}
+
+#[test]
 fn a_record_is_printed_as_facts_each_after_the_number_of_its_line() {
   let yard = Yard::new("facts");
   fs::create_dir_all(yard.at.join(".furb")).expect("the folder of the project");

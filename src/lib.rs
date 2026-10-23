@@ -9,6 +9,7 @@
 //! adds its own. The Kernel and the gate are the crate's. [`wire`] carries a value as JSON, as the record keeps it,
 //! and [`binding`] gives the host API to python and to TypeScript.
 
+pub mod checkpoint;
 pub mod ear;
 pub mod engine;
 pub mod extension;
