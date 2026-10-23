@@ -123,6 +123,7 @@ import {
   frame,
   glyph,
   motion,
+  paletteOf,
   palettes,
   setTheme,
   spacing as space,
@@ -381,7 +382,7 @@ export function follow(renderer: CliRenderer, options: AppOptions): () => App {
 }
 
 /** What the choice of the theme of the terminal says in a picker. */
-const terminalDetail = `${themeLabels[terminalThemes.dark][0]} on a dark terminal, ${themeLabels[terminalThemes.light][0]} on a light one`;
+const terminalDetail = `The colors of the terminal, or ${themeLabels[terminalThemes.dark][0]} on a dark terminal and ${themeLabels[terminalThemes.light][0]} on a light one when it does not say them`;
 /** The commands whose value is a path of the project, which the suggestions wait for. */
 const pathCommands = new Set(["read", "image", "cd"]);
 /** What each effort of a model does, which the picker of the effort says beside it. */
@@ -5435,7 +5436,7 @@ export class App {
   };
   themes(): void {
     // The theme of the terminal comes first, then the dark themes, then the light ones.
-    const names = (Object.keys(palettes) as ThemeName[]).sort(
+    const names = (Object.keys(palettes) as (keyof typeof palettes)[]).sort(
       (one, other) => Number(themeLabels[one][1] === "Light") - Number(themeLabels[other][1] === "Light"),
     );
     const choices: ThemeChoice[] = ["terminal", ...names];
@@ -5443,7 +5444,7 @@ export class App {
     this.openPalette(
       "Color theme",
       choices.map((name) => {
-        const palette = palettes[name === "terminal" ? this.theme : name];
+        const palette = paletteOf(name === "terminal" ? this.theme : name);
         return {
           label: name === "terminal" ? "Terminal" : themeLabels[name][0],
           detail: name === "terminal" ? terminalDetail : themeLabels[name][1],

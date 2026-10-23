@@ -9,14 +9,26 @@ import { until } from "../../bind/typescript/test/until.ts";
 import { follow } from "../src/app.ts";
 import { demoLibrary, demoSession } from "../src/demo.ts";
 import { Reader } from "../src/reading.ts";
-import { colorless, glyph, motion, palettes, setTheme, spin, theme, themeOf } from "../src/theme.ts";
+import {
+  colorless,
+  glyph,
+  motion,
+  own,
+  paletteOf,
+  palettes,
+  setTheme,
+  spin,
+  terminalPalette,
+  theme,
+  themeOf,
+} from "../src/theme.ts";
 import { mix, styled } from "../src/ui.ts";
 import { composing } from "./composing.ts";
 
 afterEach(() => {
   colorless.on = false;
   motion.still = false;
-  setTheme("github");
+  setTheme("ink");
 });
 
 /** The glyphs of a border, of the bar of a panel, and of the spinner, which the mode of a screen reader draws none of. */
@@ -94,13 +106,13 @@ test("NO_COLOR gives each role the default color of the terminal, and a mix of t
   expect(theme.text.intent).toBe("rgb");
 });
 
-test("the theme Terminal follows the mode of the terminal, dark or light, and shows GitHub Dark while it says none", () =>
+test("the theme Terminal follows the mode of the terminal, dark or light, and shows Ink while it says none", () =>
   composing(async ({ session, app, screen, frame }) => {
-    expect(themeOf("terminal", null)).toBe("github");
+    expect(themeOf("terminal", null)).toBe("ink");
     expect(themeOf("terminal", "light")).toBe("day");
     expect(themeOf("paper", "dark")).toBe("paper");
     expect(session.preferences.theme).toBe("terminal");
-    expect(session.theme).toBe("github");
+    expect(session.theme).toBe("ink");
     screen.renderer.emit("theme_mode", "light");
     await frame();
     expect(session.theme).toBe("day");
@@ -191,5 +203,22 @@ test("a recorded life hears each whole line that its file adds, and a line that 
     expect(reader.facts.map((fact) => fact[1])).toEqual(["chain1", "chain2", "chain3"]);
   } finally {
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("the theme Terminal shows the colors that the terminal says, its text a step softer than its foreground", () => {
+  const dark = terminalPalette("#ffffff", "#000000");
+  expect(dark?.background).toBe("#000000");
+  expect(dark?.text).toBe("#d6d6d6");
+  expect(dark?.accent).toBe(palettes.ink.accent);
+  expect(terminalPalette("#202020", "#fafafa")?.accent).toBe(palettes.day.accent);
+  expect(terminalPalette(null, "#000000")).toBeUndefined();
+  own.palette = dark;
+  try {
+    expect(themeOf("terminal", "light")).toBe("own");
+    expect(themeOf("paper", null)).toBe("paper");
+    expect(paletteOf("own")).toBe(dark as NonNullable<typeof dark>);
+  } finally {
+    own.palette = undefined;
   }
 });

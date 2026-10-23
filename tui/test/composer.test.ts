@@ -434,7 +434,7 @@ test("the switch of the views fills the view shown with the accent, names its ch
     const top = (await frame()).split("\n")[0] ?? "";
     expect(top).toContain("Feed");
     expect(top).toContain("⌥1-3");
-    const accent = RGBA.fromHex(palettes.github.accent);
+    const accent = RGBA.fromHex(palettes.ink.accent);
     const filled = (label: string) =>
       Boolean(cellAt(screen.captureSpans(), top.indexOf(label), 0).bg?.equals(accent));
     expect([filled("Feed"), filled("Changes")]).toEqual([true, false]);

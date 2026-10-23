@@ -11,7 +11,7 @@ import { loadParsers } from "../src/parsers.ts";
 import { Preferences } from "../src/preferences.ts";
 import type { Exit } from "../src/session.ts";
 import { Session } from "../src/session.ts";
-import { colorless, palettes } from "../src/theme.ts";
+import { colorless, paletteOf } from "../src/theme.ts";
 import { Workspaces } from "../src/workspaces.ts";
 import { idle } from "../test/idle.ts";
 import { rasterize } from "./raster.ts";
@@ -91,7 +91,7 @@ async function capture(name: string): Promise<void> {
   await test.flush();
   waits(`the screen after ${name}`);
   if (only && !only.test(name)) return;
-  await writeFile(`${output}/${name}.png`, rasterize(test.captureSpans(), palettes[session.theme], "furb"));
+  await writeFile(`${output}/${name}.png`, rasterize(test.captureSpans(), paletteOf(session.theme), "furb"));
   // The text of each shot goes to a folder that FURB_GALLERY_TEXT names, to read the gallery without its pictures.
   const texts = process.env.FURB_GALLERY_TEXT;
   if (texts) await writeFile(join(texts, `${name}.txt`), test.captureCharFrame());

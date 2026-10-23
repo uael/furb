@@ -117,9 +117,10 @@ at work.
 
 ## Look and access
 
-Python words have offline Tree-sitter colors. The default theme, Terminal, follows the terminal: GitHub Dark on a
-dark terminal or on one that does not say its mode, and Day on a light one, and it changes when the terminal
-changes. ⌃T or `/theme` chooses another. Sessions share the theme, and the TUI saves it in
+Python words have offline Tree-sitter colors. The default theme, Terminal, follows the terminal: it takes the
+background of the terminal, and its text a step softer than the foreground of the terminal, when the terminal says
+its colors. Else it shows Ink on a dark terminal or on one that does not say its mode, and Day on a light one, and it
+changes when the terminal changes. ⌃T or `/theme` chooses another. Sessions share the theme, and the TUI saves it in
 `$XDG_CONFIG_HOME/furb/ui.json`, or `~/.config/furb/ui.json`, and `%APPDATA%\furb\ui.json` on Windows.
 `FURB_CONFIG_DIR` selects another configuration directory. Tests and screenshot generation use isolated preferences.
 `sidebarWidth` in the preferences file sets the width of the sidebar, from 26 to 48 columns. On a terminal narrower

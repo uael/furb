@@ -41,7 +41,7 @@ test("the real native life drives the feed, the transcript, and responsive views
   composing(
     async ({ session, app, screen, frame }) => {
       expect(screen.captureCharFrame()).toContain("Explore a codebase");
-      expect(session.theme).toBe("github");
+      expect(session.theme).toBe("ink");
       expect(app.scroll.x).toBe(2);
       expect(app.scroll.height).toBeGreaterThanOrEqual(36);
       expect(app.scroll.height).toBeLessThanOrEqual(38);
@@ -156,7 +156,7 @@ test("model and effort change independently, a model is named by its id alone, a
     expect(first.actorChoice).toEqual({ model: "claude-cli:org/high", effort: "off" });
     await writeFile(first.preferences.path, "{");
     recovered = await demoSession({ preferences: new Preferences(first.preferences.path) });
-    expect(recovered.theme).toBe("github");
+    expect(recovered.theme).toBe("ink");
     expect(recovered.preferences.notice).toContain("Could not read preferences");
     expect(await readFile(first.preferences.path, "utf8")).toBe("{");
   } finally {
@@ -411,7 +411,7 @@ test("the markdown of a message draws each element with no marks, and a code blo
       const plain = rows.findIndex((row) => row.includes("plain/"));
       expect(rows[plain + 1]?.slice(rows[plain]?.indexOf("plain/"))).toStartWith("    kept");
       const spans = screen.captureSpans();
-      const palette = palettes.github;
+      const palette = palettes.ink;
       expect(cellAt(spans, x, label + 1).fg?.equals(RGBA.fromHex(palette.syntaxKeyword))).toBe(true);
       // The notice stands on the background, and its code block on the panel.
       expect(cellAt(spans, x - 1, label + 1).bg?.equals(RGBA.fromHex(palette.panel))).toBe(true);

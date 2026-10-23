@@ -39,6 +39,32 @@ interface Palette {
 }
 
 export const palettes = {
+  ink: {
+    background: "#16181d",
+    panel: "#1b1e24",
+    raised: "#22262e",
+    selected: "#262c37",
+    border: "#2c3039",
+    text: "#c8cdd5",
+    prose: "#bec4cc",
+    muted: "#8f96a1",
+    faint: "#70767f",
+    accent: "#82a7d8",
+    secondary: "#a99ccf",
+    success: "#8fae8b",
+    warning: "#d9aa62",
+    danger: "#d7776c",
+    link: "#82a7d8",
+    added: "#1d2a22",
+    removed: "#33211f",
+    backdrop: "#0b0c0fb0",
+    syntaxKeyword: "#b49ad0",
+    syntaxString: "#a7b89a",
+    syntaxNumber: "#c9a979",
+    syntaxFunction: "#c8cdd5",
+    syntaxType: "#93b2c4",
+    syntaxComment: "#7d838d",
+  },
   github: {
     background: "#0d1117",
     panel: "#161b22",
@@ -196,24 +222,73 @@ export const palettes = {
     syntaxComment: "#8d897f",
   },
 } satisfies Record<string, Palette>;
-export type ThemeName = keyof typeof palettes;
+/** A theme by its name, or "own": the palette that the terminal gives, from its own colors. */
+export type ThemeName = keyof typeof palettes | "own";
 /** The theme that a view shows when no choice and no terminal names one. */
-export const defaultTheme: ThemeName = "github";
+export const defaultTheme: keyof typeof palettes = "ink";
+/** The palette that the colors of the terminal give, once the terminal said them. */
+export const own: { palette?: Palette } = {};
+/** The palette of a theme. */
+export function paletteOf(name: ThemeName): Palette {
+  return name === "own" ? (own.palette ?? palettes[defaultTheme]) : palettes[name];
+}
+/** A color between two colors of six hex digits, at a share of the way from the first to the second. */
+function blend(from: string, to: string, share: number): string {
+  const channel = (hex: string, at: number) => Number.parseInt(hex.slice(1 + at * 2, 3 + at * 2), 16);
+  return `#${[0, 1, 2]
+    .map((at) => Math.round(channel(from, at) + (channel(to, at) - channel(from, at)) * share))
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("")}`;
+}
+/** Whether a color of six hex digits is dark. */
+function dark(hex: string): boolean {
+  const channel = (at: number) => Number.parseInt(hex.slice(1 + at * 2, 3 + at * 2), 16) / 255;
+  return 0.2126 * channel(0) + 0.7152 * channel(1) + 0.0722 * channel(2) < 0.5;
+}
+/** The palette of the terminal: its own background, the surfaces and the tones of the text between its background and
+ * its foreground, a step softer than the foreground, and the colors of each meaning from the theme of its mode. The
+ * colors of the terminal are those it says, as #rrggbb, or nothing when it says none. */
+export function terminalPalette(foreground: string | null, background: string | null): Palette | undefined {
+  const hex = /^#[0-9a-f]{6}$/i;
+  if (!foreground || !background || !hex.test(foreground) || !hex.test(background)) return undefined;
+  const base = palettes[dark(background) ? "ink" : "day"];
+  const toward = (share: number) => blend(background, foreground, share);
+  return {
+    ...base,
+    background,
+    panel: toward(0.035),
+    raised: toward(0.065),
+    selected: blend(background, base.accent, 0.16),
+    border: toward(0.14),
+    text: toward(0.84),
+    prose: toward(0.8),
+    muted: toward(0.56),
+    faint: toward(0.44),
+    added: blend(background, base.success, 0.16),
+    removed: blend(background, base.danger, 0.16),
+    backdrop: `${background}b0`,
+    syntaxFunction: toward(0.84),
+  };
+}
 /** A choice of a theme: a theme by its name, or the one that follows the terminal. */
-export type ThemeChoice = ThemeName | "terminal";
-/** The themes that the choice "terminal" shows: a dark one on a dark terminal, and on a terminal that does not say
- * its mode, and a light one on a light terminal. */
-export const terminalThemes: Record<ThemeMode, ThemeName> = { dark: defaultTheme, light: "day" };
+export type ThemeChoice = keyof typeof palettes | "terminal";
+/** The themes that the choice "terminal" shows when the terminal does not say its colors: a dark one on a dark
+ * terminal, and on a terminal that does not say its mode, and a light one on a light terminal. */
+export const terminalThemes: Record<ThemeMode, keyof typeof palettes> = { dark: "ink", light: "day" };
 /** Whether a value names a choice of a theme. */
 export function isThemeChoice(value: unknown): value is ThemeChoice {
   return value === "terminal" || (typeof value === "string" && Object.hasOwn(palettes, value));
 }
-/** The theme that a choice shows on a terminal in a mode, or on a terminal that does not say its mode. */
+/** The theme that a choice shows on a terminal in a mode, or on a terminal that does not say its mode: the choice
+ * "terminal" shows the palette of the colors of the terminal once it said them. */
 export function themeOf(choice: ThemeChoice, mode: ThemeMode | null): ThemeName {
-  return choice === "terminal" ? terminalThemes[mode ?? "dark"] : choice;
+  if (choice !== "terminal") return choice;
+  return own.palette ? "own" : terminalThemes[mode ?? "dark"];
 }
 /** The name of a theme as a picker shows it, and whether it is light or dark. */
 export const themeLabels: Record<ThemeName, [string, string]> = {
+  ink: ["Ink", "Dark"],
+  own: ["Terminal", "The colors of the terminal"],
   github: ["GitHub Dark", "Dark"],
   forest: ["Forest", "Dark"],
   paper: ["Paper", "Light"],
@@ -281,11 +356,11 @@ const grounds = new Set<keyof Palette>([
 ]);
 /** The color of a role of a theme. Each role has its own color object, even when two roles have the same value. */
 function colorOf(name: ThemeName, role: keyof Palette): RGBA {
-  if (!colorless.on) return RGBA.fromHex(palettes[name][role]);
+  if (!colorless.on) return RGBA.fromHex(paletteOf(name)[role]);
   return grounds.has(role) ? RGBA.defaultBackground() : RGBA.defaultForeground();
 }
 export const theme = Object.fromEntries(
-  (Object.keys(palettes[defaultTheme]) as (keyof Palette)[]).map((role) => [
+  (Object.keys(paletteOf(defaultTheme)) as (keyof Palette)[]).map((role) => [
     role,
     colorOf(defaultTheme, role),
   ]),

@@ -565,7 +565,9 @@ def told(id, what="", *notes, **words):
 
 
 def control(kind, name, id, *words):
-  return get(id) and (over(id) or say(*told(id, name, value=(*words, None)[0]))) and say(kind, id, *words)
+  if not get(id):
+    raise Refused(f"no act {id!r}")
+  return (over(id) or say(*told(id, name, value=(*words, None)[0]))) and say(kind, id, *words)
 
 
 def headed(id, what="", **words):

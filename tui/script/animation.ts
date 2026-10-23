@@ -4,7 +4,7 @@ import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import { demoSession, removeDemoDirectories, seedDemoFiles } from "../src/demo.ts";
 import { loadParsers } from "../src/parsers.ts";
-import { palettes } from "../src/theme.ts";
+import { paletteOf } from "../src/theme.ts";
 import { idle } from "../test/idle.ts";
 import { gif, pack, type Still } from "./gif.ts";
 import { pixels } from "./raster.ts";
@@ -45,7 +45,7 @@ async function still(delay: number): Promise<void> {
   const texts = process.env.FURB_ANIMATION_TEXT;
   if (texts)
     await writeFile(join(texts, `${String(stills.length).padStart(3, "0")}.txt`), test.captureCharFrame());
-  const image = pixels(test.captureSpans(), palettes[session.theme], "furb", zoom);
+  const image = pixels(test.captureSpans(), paletteOf(session.theme), "furb", zoom);
   size = { width: image.width, height: image.height };
   stills.push(pack(image.pixels, delay));
 }

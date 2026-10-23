@@ -47,8 +47,6 @@ async def test_a_control_is_said_over_any_act_and_tells_its_header_only_while_th
   told = len(said(log, "tell"))
   engine.close(1, act)
   engine.cancel(command)
-  engine.pause("nothing9")
-  engine.close(1, "bogus9")
   await settle()
   assert [(a[0], a[1]) for a in log if a[0] in ("pause", "wake", "cancel", "close")][-2:] == [
     ("close", act),
