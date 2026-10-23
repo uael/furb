@@ -1,5 +1,5 @@
 import { type Call, call, isFault } from "./ears.js";
-import { type LiveAct, WORK } from "./life/acts.js";
+import { type Compaction, type LiveAct, WORK } from "./life/acts.js";
 import { bound, display, type Fact, isQuestion } from "./types.js";
 
 /** One answer of a model on a chain: its place in time, the actor whose reply it answered, and its usage, which is
@@ -25,6 +25,8 @@ export class Activity {
   readonly acts = new Map<string, LiveAct>();
   completed = 0;
   cost = 0;
+  /** Each compaction of a chain, in the order of the record. */
+  readonly compactions: Compaction[] = [];
   /** The answers of the models on each chain, in order, by the chain that the reply stands on, so that a host reads
    * the dollars of a chain and the share of the window that its last answer read. */
   readonly answers = new Map<string, Answered[]>();
@@ -104,7 +106,10 @@ export class Activity {
       return;
     }
     const act = this.acts.get(id);
-    if (kind === "pause" || kind === "wake") {
+    if (kind === "prefix" && by !== id) {
+      // A chain says its own prefix at its birth, as a chain with a source does, and that prefix cuts nothing.
+      this.compactions.push({ chain: id, by, at });
+    } else if (kind === "pause" || kind === "wake") {
       const paused = kind === "pause";
       this.controls.delete(id);
       this.controls.set(id, fact);

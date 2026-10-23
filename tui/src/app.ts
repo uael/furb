@@ -94,6 +94,7 @@ import {
 import { loadParsers } from "./parsers.ts";
 import {
   type Line as PartLine,
+  type Mark as PartMark,
   Parts,
   type Tone as PartTone,
   plainError,
@@ -2019,10 +2020,45 @@ export class App {
             same: [act, indent, w.folds[act.id], w.took[act.id]],
           },
         );
+      // The marks of the parts stand before the first act that began after their place: a rule with the title of the
+      // mark, then its lines.
+      const moment = w.moment;
+      const marks = this.parts.marks(this.seen()).filter((one) => moment === undefined || one.at < moment);
+      let marked = 0;
+      const markTo = (began: number) => {
+        for (; marked < marks.length && (marks[marked]?.at ?? 0) < began; marked++) {
+          const mark = marks[marked] as PartMark;
+          const lines = JSON.stringify(mark.lines ?? []);
+          add(
+            `mark-${mark.chain}-${mark.at}`,
+            `${mark.title}\n${lines}`,
+            [],
+            (box) => {
+              box.add(
+                this.line(
+                  [
+                    [`${glyph.rule.repeat(2)} `, c.border],
+                    [mark.title, c.muted],
+                    [
+                      ` ${glyph.rule.repeat(Math.max(0, this.feedWidth - Bun.stringWidth(mark.title) - 8))}`,
+                      c.border,
+                    ],
+                  ],
+                  c.muted,
+                ),
+              );
+              for (const one of mark.lines ?? [])
+                box.add(this.inset(space.between * 2, this.text(this.partLine(one), c.muted)));
+            },
+            { same: [mark.title, lines] },
+          );
+        }
+      };
       let retold = false;
       for (const line of lines) {
         const act = line.act as ActRow;
         const indent = line.depth * space.between;
+        if (line.type !== "tail" && line.type !== "value" && line.type !== "more") markTo(act.began);
         if (line.type === "rung") {
           const code = this.subject(act);
           // The words that a chain wrote to retell its source stand as one line, which names the source.
@@ -2377,6 +2413,7 @@ export class App {
           );
         }
       }
+      markTo(Number.POSITIVE_INFINITY);
       // A paused chain says so at the end of its feed, with the reason that the last failure gave, and a button that
       // wakes it, since nothing new runs on it until then.
       if (w.paused && !w.search) {
@@ -3116,7 +3153,15 @@ export class App {
       const count = rows.filter((row) => row.state === state).length;
       return count ? [[state, count] as const] : [];
     });
-    const key = JSON.stringify([lines, counts, left, w.selected, this.feedWidth, this.theme]);
+    const key = JSON.stringify([
+      lines,
+      counts,
+      left,
+      w.selected,
+      this.feedWidth,
+      this.theme,
+      w.host.compactions.length,
+    ]);
     if (key === this.boardKey) return;
     this.boardKey = key;
     this.board.backgroundColor = c.panel;
@@ -3161,9 +3206,12 @@ export class App {
       const said = now.tone === "work" && !now.text ? "writing" : shortenHomes(now.text);
       const more = now.more ? `  +${now.more}` : "";
       const label = pad(clip(row.label, name - 2 * depth), name - 2 * depth);
+      // A chain that compacted says how many times, as the record of the life holds each compaction.
+      const cuts = w.host.compactions.filter((one) => one.chain === row.id).length;
+      const compacted = cuts ? `${cuts > 1 ? `compacted ${cuts}×` : "compacted"}  ` : "";
       const room = Math.max(
         8,
-        this.feedWidth - 2 * space.inset - 23 - name - Bun.stringWidth(more) - (actor ? 18 : 0),
+        this.feedWidth - 2 * space.inset - 23 - name - Bun.stringWidth(more + compacted) - (actor ? 18 : 0),
       );
       const text = clip(id + said, room);
       const rest = text.slice(Math.min(id.length, text.length));
@@ -3175,6 +3223,7 @@ export class App {
             [`${mark()} `, color()],
             [label, here ? c.text : c.muted, here ? bold : 0],
             ["  ", c.faint],
+            [compacted, c.faint],
             [text.slice(0, Math.min(id.length, text.length)), c.faint],
             [pad(rest, room - Math.min(Bun.stringWidth(id), room)), toneColors[now.tone]()],
             [more, c.faint],
@@ -3530,6 +3579,7 @@ export class App {
     return {
       chain: w.selected,
       acts: w.acts,
+      compactions: w.host.compactions,
       of: (kind) => w.acts.filter((act) => act.kind === kind),
       run: (word) => w.command(`/run ${word}`),
       say: (text) => {

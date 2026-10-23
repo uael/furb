@@ -948,3 +948,25 @@ test("a rung costs the dollars of the answers that wrote its word", () => {
   hear(["done", "reply2", "world", ["assistant", "close(1)", [100, 10, 80, 0, 0.25], null]]);
   expect(activity.acts.get("rung1")?.cost).toBe(0.75);
 });
+
+test("the activity keeps each compaction of a chain: a prefix said on it after its birth", () => {
+  const activity = new Activity();
+  const hear = (fact: Fact) => {
+    const heard = activity.hear(fact);
+    while (!heard.next().done);
+  };
+  hear(["chain", "chain2", "rung1", ROOT, "work", ROOT]);
+  // A chain with a source says its own prefix at its birth, which cuts nothing.
+  hear(["prefix", "chain2", "chain2", [["bash", "bash1", "rung1", ROOT, "ls", "", 600]]]);
+  hear(["bash", "bash2", "rung2", "chain2", "ls", "", 600]);
+  hear([
+    "prefix",
+    "chain2",
+    "rung3",
+    [
+      ["bash", "bash2", "rung2", "chain2", "ls", "", 600],
+      ["done", "bash2", "world", { is: "Exit", code: 0 }],
+    ],
+  ]);
+  expect(activity.compactions).toEqual([{ chain: "chain2", by: "rung3", at: 4 }]);
+});

@@ -10,8 +10,10 @@ name in .furb/extensions/name, and turns it on in .furb/config.json, so it plays
 every later life. Take it for a helper that later work needs too, and give it only rungs that define.
 extend(name, *rungs, tui=module) also writes module, TypeScript, as the part of the extension that the TUI loads
 live. It imports no value and exports a default function of furb, which calls furb.panel(title, draw),
-furb.row(kind, draw), furb.key("ctrl+t", run) and furb.command(name, detail, run). draw(seen) gives a list of lines,
-each a str or a list of (text, tone); a row gives {label, details}. seen.of(kind) gives the acts of a kind.
+furb.row(kind, draw), furb.mark(draw), furb.key("ctrl+t", run) and furb.command(name, detail, run). draw(seen) gives
+a list of lines, each a str or a list of (text, tone); a row gives {label, details}; a mark gives a list of {chain,
+at, title, lines}, a rule in the feed of chain before the first act that began after at. seen.of(kind) gives the
+acts of a kind.
 An official extension lives in furb: a word, a contract, a suite and an ear of the World in the crate.
 Take it for what every project needs, and ask the operator first.
 enabled() gives the extensions that the life runs."""

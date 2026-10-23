@@ -17,6 +17,12 @@ const fixture = resolve(import.meta.dir, "..", "fixtures", "todo");
 const PART = readFileSync(join(fixture, "tui.ts"), "utf8");
 const TODO = readFileSync(join(fixture, "todo.py"), "utf8").replace(/^from furb\.engine import .*\n+/m, "");
 
+/** The word of the extension compaction, less its import of furb, as a life plays it. */
+const COMPACTION = readFileSync(
+  resolve(import.meta.dir, "..", "..", "extensions", "compaction", "compaction.py"),
+  "utf8",
+).replace(/^from furb\.engine import \([^)]*\)\n+/m, "");
+
 /** A project whose config turns on the extension todo of the fixtures, with the part that it is given. */
 function project(part = PART): { directory: string; file: string } {
   const directory = mkdtempSync(join(tmpdir(), "furb-parts-"));
@@ -49,7 +55,7 @@ test("a life gains the panel of a part of a project extension, which draws again
       let shown = await shows(frame, "○ write the part");
       expect(shown).toContain("✓ read the capture");
       expect(shown).toContain("1 open of 2");
-      expect(app.parts.loaded.map((one) => one.name)).toEqual(["todo"]);
+      expect(app.parts.loaded.map((one) => one.name)).toEqual(["compaction", "todo"]);
       // The rung opens, and the row of each act todo says what the part draws for it.
       await click("rung1");
       await shows(frame, "to do: write the part");
@@ -102,7 +108,10 @@ test("the parts load the part of each extension that the configs give, and a con
   let changes = 0;
   const parts = new Parts(directory, () => changes++);
   await parts.load();
-  expect(parts.loaded.map((one) => [one.name, one.file, one.error])).toEqual([["todo", file, undefined]]);
+  expect(parts.loaded.map((one) => [one.name, one.file, one.error])).toEqual([
+    ["compaction", "extensions/compaction/tui.ts", undefined],
+    ["todo", file, undefined],
+  ]);
   expect(parts.row("todo")).toBeDefined();
   expect(parts.command("todos")?.detail).toBe("Say how many items are open");
   writeFileSync(join(directory, ".furb", "config.json"), '{"extensions": []}\n');
@@ -111,4 +120,56 @@ test("the parts load the part of each extension that the configs give, and a con
   expect(parts.loaded[0]?.error).toContain("A config is a map, whose extensions is a map");
   expect(changes).toBe(2);
   parts.dispose();
+});
+
+test("the part of compaction, which the crate carries, marks each compaction in the feed of its chain with its summary, and the board counts them", async () => {
+  const { directory } = project();
+  const session = await demoSession({ cwd: directory });
+  await composing(
+    async ({ app, frame }) => {
+      await session.command(`/run ${COMPACTION}`);
+      await session.command(`/run chain("aside")\nbefore = "the first step"`);
+      await session.command('/run compact(summary="It read the plan.\\nThe tests wait.")');
+      let shown = await shows(frame, "Compaction: the model reads on from here");
+      expect(app.parts.loaded.find((one) => one.name === "compaction")?.error).toBeUndefined();
+      expect(shown).toContain("It read the plan.");
+      expect(shown).toContain("The tests wait.");
+      expect(shown.indexOf("the first step")).toBeLessThan(shown.indexOf("Compaction:"));
+      await session.command('/run after = "the next step"');
+      await session.command('/run compact(summary="It ran the tests.")');
+      shown = await shows(frame, "Compaction 2 of 2");
+      expect(shown).toContain("Compaction 1 of 2");
+      expect(shown).toContain("It ran the tests.");
+      expect(shown.indexOf("Compaction 1 of 2")).toBeLessThan(shown.indexOf("the next step"));
+      expect(shown.indexOf("the next step")).toBeLessThan(shown.indexOf("Compaction 2 of 2"));
+      expect(shown).toContain("compacted 2×");
+    },
+    { width: 120, height: 60 },
+    session,
+  );
+});
+
+test("a mark of a part stands at its place in the feed of its chain, and a mark that throws shows its error", async () => {
+  const { file } = project(
+    'export default (furb) => furb.mark((seen) => { if (seen.chain === "none") throw new Error("No marks."); return [{ chain: seen.chain, at: 2, title: "Here" }, { chain: "other", at: 1, title: "Not here" }] })\n',
+  );
+  const part = await loadPart("todo", file);
+  const parts = new Parts(
+    "",
+    () => {},
+    () => [],
+  );
+  parts.loaded = [part];
+  const seen = {
+    chain: "chain1",
+    acts: [],
+    compactions: [],
+    of: () => [],
+    run: async () => {},
+    say: () => {},
+  };
+  expect(parts.marks(seen)).toEqual([{ chain: "chain1", at: 2, title: "Here" }]);
+  expect(parts.marks({ ...seen, chain: "none" })).toEqual([
+    { chain: "none", at: 0, title: "A mark of todo failed: No marks." },
+  ]);
 });

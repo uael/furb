@@ -506,6 +506,12 @@ TUI goes on.
 
 ![The error of a part](screenshots/75-extension-part-error.png)
 
+The official extension `compaction` has a part too, which comes with furb. At each compaction of a chain, the feed
+shows a rule with the summary of the compaction under it: the model of the chain no longer reads what stands above
+the last rule. The board says how many times each chain compacted.
+
+![The compactions of a chain](screenshots/75-compaction.png)
+
 ## Undo and redo
 
 `/undo` removes the last message from a new branch, and `/redo` returns to the branch before it.

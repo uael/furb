@@ -57,6 +57,7 @@ const state = () => {
         reading: reader.reading,
         recorded: reader.recorded,
         measures: measuresOf(reader.activity.answers),
+        compactions: reader.activity.compactions,
       } satisfies HostState,
     });
     return;
@@ -78,6 +79,7 @@ const state = () => {
     pending: [...owner.pending],
     changes: owner.changes.length,
     measures: measuresOf(owner.activity.answers),
+    compactions: owner.activity.compactions,
   };
   sentFacts = owner.facts.length;
   self.postMessage({ state: snapshot });

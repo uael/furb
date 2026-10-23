@@ -31,6 +31,14 @@ export interface LiveAct {
   /** The dollars of the answers of the models that wrote the word of a rung, once one is done. */
   cost?: number;
 }
+/** A compaction of a chain: a prefix that a word said on the chain after its birth, which takes the place of what its
+ * transcript held, so that its model reads only what the prefix kept. It gives the chain, the act that said the prefix,
+ * and its place in time, as the place of an act. */
+export interface Compaction {
+  chain: string;
+  by: string;
+  at: number;
+}
 /** What a command came to: its code, and what it printed on each stream. */
 export type Exit = { stdout?: { content: string }; stderr?: { content: string }; code?: number };
 /** The measure of a chain whose models answered or that a grant holds: the dollars of its answers, the dollars since

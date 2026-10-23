@@ -12,7 +12,7 @@ import type {
   Stream,
   Turn,
 } from "furb";
-import type { Measure } from "furb/life";
+import type { Compaction, Measure } from "furb/life";
 import { framed, type Hello, hostPlace, type Place, PROTOCOL } from "./hosting.ts";
 import type { EngineOptions } from "./models.ts";
 import { isRecorded, type Reading } from "./reading.ts";
@@ -72,6 +72,8 @@ interface Plain {
   recorded?: boolean;
   /** The measure of each chain whose models answered, by the chain. */
   measures: Record<string, Measure>;
+  /** Each compaction of a chain, in the order of the record. */
+  compactions: Compaction[];
   /** The count of facts that the life said, which each state carries, so a window knows what it missed. */
   seq: number;
 }
@@ -97,6 +99,7 @@ export class HostView extends EventEmitter implements Plain {
   reading?: Reading;
   recorded?: boolean;
   measures: Record<string, Measure> = {};
+  compactions: Compaction[] = [];
   seq = 0;
   prompts = new Map<string, Prompt>();
   notices = new Map<string, Notice>();
@@ -114,9 +117,10 @@ export class HostView extends EventEmitter implements Plain {
     this.read[part] = text;
     return true;
   }
-  update({ facts, prompts, notices, streams, pending, measures, ...plain }: HostState): void {
+  update({ facts, prompts, notices, streams, pending, measures, compactions, ...plain }: HostState): void {
     Object.assign(this, plain);
     if (this.changed("measures", measures)) this.measures = measures;
+    if (this.changed("compactions", compactions)) this.compactions = compactions;
     if (this.changed("prompts", prompts))
       this.prompts = new Map(prompts.map((prompt) => [prompt.id, prompt]));
     if (this.changed("notices", notices))
