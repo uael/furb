@@ -32,15 +32,18 @@ A worker does one item in a worktree of its own, runs only the tests that its ch
 The round tells you a worker that ends, with its answer in results under its prompt, or that says nothing for 45 minutes, relays to you each question that a worker puts to the operator, and wakes a worker that paused.
 The round sends a conflict or a failed check at a new head to the worker that owns the PR, again after 30 minutes, and to a fixer after an hour, or at once when no worker owns it.
 The round merges each green PR into main from the lowest number when its branch is up to date with main, after it moves the PRs that stack on it onto main, and it updates a branch that is behind only when main is green.
-The label paused takes a PR out of the round. A draft, the label hold, a review that waits for its fix, and the label owner-merge, the owner merges it or not, keep a PR from a merge.
+The label paused takes a PR out of the round. A draft, the label hold, a review that waits for its fix, and the label owner-merge, until the owner takes it off as his approval, keep a PR from a merge.
 The round tells you when main is red, when a PR fails to merge or has no change for 45 minutes, and each line of DECISIONS that the owner changed. decide(title, text) adds a decision to it.
-Every third round puts the label hold on each PR with a new comment, and tells you each. A comment that starts with [furb is of a worker.
+Each round queues each open issue that the owner opened, or that he assigned to himself, as an item issueN, once, and its PR closes it.
+Each round sends each new comment of the owner on a PR or on his issue to the worker that owns it, puts the label hold on that PR, and tells you only the comments that no worker owns. A text on GitHub counts only when the owner wrote it with no 🤖 at its start, or when he put a 👍 on it; each worker starts what it writes there with 🤖.
+Each round sets one status label on each open PR and on each issue of the owner that it took: s:queued, s:working, s:checks, s:red, s:conflict, s:ready, or s:owner (green, waits for the owner).
 Every twelfth round audits the work against its measure, the open items, and writes its line in the News of DECISIONS.
 threads() gives the tree of the threads: the brief prompt of each worker and the prompts under it, with their state, their PRs, their queued items and each question that waits.
 debrief(name) asks the chain of a worker that ended for the frictions that it met in furb.
+Each act of the round is made through quietly(verb, ...), so its end wakes nobody: you hear only a notice, and each merge rides on the next one. Make each act that you do not await the same way.
 A review blocks only on a defect that a command reproduces, or on a false sentence of a contract."""
 
-CAP = 5
+CAP = 6
 ACTOR = "claude-cli:opus/medium"
 DECISIONS = "DECISIONS.md"
 NEWS = "No answer needed here. The newest line first.\n"
@@ -64,17 +67,17 @@ timers: dict[str, float] = {}
 noted: list[str] = []
 
 WORKER = """You are a worker on the repository {repo}. Do one item, and open its PR yourself.
-1. Make a worktree: git -C {repo} fetch -q origin main && git -C {repo} worktree add -q {repo}-w-{key} -b w/{key} origin/main, then work there.
+1. Make a worktree whose build starts warm: {repo}/script/worktree.sh {repo}-w-{key} w/{key}, then work there. If that worktree stands already, work in it, rebased onto origin/main. Run each build of Rust through sh $TMPDIR/build.sh <command>, which runs three at once at most.
 2. Change it as the CLAUDE.md files of the repository say.
 3. Run only the tests that your change touches.
-4. Commit with a message in the style of git log, push the branch, and open the PR with gh pr create --base main{labels}.
-5. Remove the worktree, and close with the URL of the PR alone.
-Run no real life of a model. Start each comment that you write on GitHub with [furb worker]. Ask the one who gave you this work on its chain: await prompt(str, question, on="{home}").
+4. Commit, push the branch, and open the PR with gh pr create --base main{labels}. Title the PR and its commit as type(area): What changed, 70 characters or fewer: the type is feat, fix, perf, or chore for a change that no user sees, and the area is the part that owns the change (engine, crate, tui, gui, provider, ci, or an extension by its name), as fix(tui): Reap the shell of a command that drops before its exit. Write the body from your own work, not from git log: ## Why (the problem, and why now), ## Outcome (what is true now that was not, with the evidence of what you ran under each claim, and each gap you leave), and ## Breaking changes only when a caller must change code; 300 words at most, and no how, which the diff holds.
+5. Remove the worktree with git worktree remove --force, and close with the URL of the PR alone.
+Run no real life of a model. Start each comment, review, issue and PR body that you write on GitHub with 🤖, since you write from the owner's account and his own words carry no mark; a title keeps its own rule. Never take off the label owner-merge: only the owner takes it off, and that is his approval to merge. The owner sleeps or is away: ask him nothing and wait for nothing of his. Take each decision yourself from the brief and the rulings, say it in your PR body, and go on. Ask the one who gave you this work on its chain only when it alone can decide: await prompt(str, question, on="{home}").
 
 The item, {key}:
 {what}"""
 
-FIX = """You fix the open PR #{n} of the repository {repo}: it {problem} at {sha}. Read it with gh pr view, gh pr checks and gh run view --log-failed. Rerun once a check that fails on one system alone. Else fix it in a worktree of its branch: resolve a conflict with the meaning of both sides, and for a stack read skill("gh-stack") and use gh stack sync. Run the tests that it touches, push with --force-with-lease, remove the worktree, and close with the URL of the PR. Run no real life of a model. Start each comment that you write on GitHub with [furb worker]. Ask the one who gave you this work on its chain: await prompt(str, question, on="{home}")."""
+FIX = """You fix the open PR #{n} of the repository {repo}: it {problem} at {sha}. Read it with gh pr view, gh pr checks and gh run view --log-failed. Rerun once a check that fails on one system alone. Else fix it in a worktree of its branch: resolve a conflict with the meaning of both sides, and for a stack read skill("gh-stack") and use gh stack sync. Run the tests that it touches, push with --force-with-lease, remove the worktree, and close with the URL of the PR. Run no real life of a model. Start each comment, review, issue and PR body that you write on GitHub with 🤖, since you write from the owner's account and his own words carry no mark; a title keeps its own rule. Never take off the label owner-merge: only the owner takes it off, and that is his approval to merge. The owner sleeps or is away: ask him nothing and wait for nothing of his. Take each decision yourself from the brief and the rulings, say it in your PR body, and go on. Ask the one who gave you this work on its chain only when it alone can decide: await prompt(str, question, on="{home}")."""
 
 FIXOWN = "Your open PR #{n} {problem} at {sha}. Fetch origin, rebase your branch onto its base or merge its base into it, resolve each conflict with the meaning of both sides, run the gates that the change touches, push with --force-with-lease, and keep its checks green."
 
@@ -90,23 +93,47 @@ gh run list --branch main --limit 20 --json headSha,conclusion --jq '.[0].headSh
 echo ---
 cat DECISIONS.md 2>/dev/null"""
 
-REVIEWS = r"""for n in $(gh pr list --state open --json number --jq '.[].number'); do
-gh api "repos/{owner}/{repo}/pulls/$n/comments" --jq '.[] | select(.in_reply_to_id == null) | select(.body | startswith("[furb") | not) | "\(.pull_request_url | split("/") | last) c\(.id) \(.path):\(.line // .original_line) \(.body | gsub("\n"; " "))"'
-gh api "repos/{owner}/{repo}/issues/$n/comments" --jq '.[] | select(.body | startswith("[furb") | not) | "\(.issue_url | split("/") | last) i\(.id) - \(.body | gsub("\n"; " "))"'
-gh api "repos/{owner}/{repo}/pulls/$n/reviews" --jq '.[] | select(.body != "") | select(.body | startswith("[furb") | not) | "\(.pull_request_url | split("/") | last) r\(.id) - \(.body | gsub("\n"; " "))"'
+REVIEWS = r"""for n in $(gh pr list --state open --json number --jq '.[].number') $(gh issue list --state open --json number --jq '.[].number'); do
+gh api "repos/{owner}/{repo}/pulls/$n/comments" --jq '.[] | "\(.pull_request_url | split("/") | last)\tc\(.id)\t\(.user.login)\t\(.reactions["+1"] // 0)\t\(.path):\(.line // .original_line)\t\(.body | gsub("[\n\t]"; " "))"' 2>/dev/null
+gh api "repos/{owner}/{repo}/issues/$n/comments" --jq '.[] | "\(.issue_url | split("/") | last)\ti\(.id)\t\(.user.login)\t\(.reactions["+1"] // 0)\t-\t\(.body | gsub("[\n\t]"; " "))"' 2>/dev/null
+gh api "repos/{owner}/{repo}/pulls/$n/reviews" --jq '.[] | select(.body != "") | "\(.pull_request_url | split("/") | last)\tr\(.id)\t\(.user.login)\t0\t-\t\(.body | gsub("[\n\t]"; " "))"' 2>/dev/null
 done"""
+
+
+landed: list[int] = []
+heard: list[str] = []
+OWNER = "uael"
+MARKS = ("🤖", "[furb")
+
+
+def quietly(verb, *args, **words):
+  got = []
+
+  def ear(id):
+    got.append(verb(*args, **words))
+    yield "done", id, None
+
+  act("quiet", "", ear)
+  return got[0]
+
+
+def merged_since() -> str:
+  lines = [*heard, *(["Merged: " + " ".join(f"#{n}" for n in landed) + "."] if landed else [])]
+  heard.clear()
+  landed.clear()
+  return ("\n\nSince the last notice:\n" + "\n".join(f"- {x}" for x in lines)) if lines else ""
 
 
 def hire(key: str, what: str, thread: str = "", brief: str = "") -> str:
   model = efforts.get(key, ACTOR)
   marks = [f"w:{key}", *([f"thread:{thread}"] if thread else [])]
   if not brief:
-    bash("; ".join(f"gh label create {m} --force >/dev/null 2>&1" for m in marks), show=HIDDEN)
+    quietly(bash, "; ".join(f"gh label create {m} --force >/dev/null 2>&1" for m in marks), show=HIDDEN)
   text = (custom.get(key) or brief or WORKER).replace("{labels}", "".join(f" --label {m}" for m in marks))
   text = text.replace("{repo}", cwd()).replace("{key}", key).replace("{home}", scope(acting())).replace("{what}", what)
   where = chain(f"{thread or 'w'}/{key}", source=bases.get(model, ""))
-  rung(f"actor = {model!r}", on=where)
-  name = str(prompt(str, text, to=model, on=where))
+  quietly(rung, f"actor = {model!r}", on=where)
+  name = str(quietly(prompt, str, text, to=model, on=where))
   working[name] = key
   return name
 
@@ -118,7 +145,7 @@ def debrief(name: str) -> str:
 def notice(key: str, message: str) -> None:
   if key not in noticed:
     noticed.add(key)
-    prompt(None, message)
+    quietly(prompt, None, message + merged_since())
 
 
 def working_at(name: str) -> str:
@@ -149,6 +176,15 @@ def owner_of(pr: dict) -> str:
   return ""
 
 
+def ours() -> set[str]:
+  return {
+    line
+    for x in transcript(ROOT, "write")
+    if isinstance(t := peek(x[1]), Text) and t.path.endswith(DECISIONS)
+    for line in t.lines
+  }
+
+
 def tend() -> None:
   now = clock()
   for orig, relay in list(relays.items()):
@@ -157,7 +193,7 @@ def tend() -> None:
       relays[orig] = ""
   for name in [x for x in working if over(x)]:
     results[name] = peek(name)
-    prompt(None, f"The worker {working.pop(name)} ({name}) ended with:\n\n{str(results[name])[:2000]}")
+    quietly(prompt, None, f"The worker {working.pop(name)} ({name}) ended with:\n\n{str(results[name])[:2000]}" + merged_since())
   for name, key in working.items():
     where = working_at(name)
     if paused(where):
@@ -165,7 +201,7 @@ def tend() -> None:
     facts = transcript(where)
     for x in [*facts, *(transcript(str(get(name)[3])) if where != get(name)[3] else [])]:
       if x[0] == "prompt" and x[6] == OPERATOR and not over(x[1]) and x[1] not in relays:
-        relays[x[1]] = str(prompt(x[4], f"{x[3]} asks the operator:\n\n{x[5]}"))
+        relays[x[1]] = str(quietly(prompt, x[4], f"{x[3]} asks the operator:\n\n{x[5]}"))
     if silent.get(where, (-1, now))[0] != len(facts):
       silent[where] = (len(facts), now)
     elif now - silent[where][1] >= 2700:
@@ -193,17 +229,14 @@ def mend(pr: dict, now: float) -> str:
   if own and now - since < 3600:
     if key not in noticed:
       noticed.add(key)
-      prompt(None, order, on=working_at(own))
+      quietly(prompt, None, order, on=working_at(own))
     elif now - since >= 1800 and key + " again" not in noticed:
       noticed.add(key + " again")
-      prompt(None, "Second notice, 30 minutes later: " + order, on=working_at(own))
-      prompt(None, f"#{n} still {problem} at {sha[:7]} after 30 minutes, so its worker {own} got a second notice.")
-  elif key + " fixer" not in noticed:
+      quietly(prompt, None, "Second notice, 30 minutes later: " + order, on=working_at(own))
+  elif key + " fixer" not in noticed and len(working) < CAP:
     noticed.update({key, key + " again", key + " fixer"})
     thread = next((m[7:] for m in pr["labels"] if m.startswith("thread:")), "")
     hire(f"fix{n}", "", thread, FIX.replace("{n}", str(n)).replace("{problem}", problem).replace("{sha}", sha))
-    if own:
-      prompt(None, f"#{n} still {problem} at {sha[:7]} after an hour, so a fixer is hired for it.")
   return key
 
 
@@ -232,26 +265,52 @@ async def land(pr: dict, red: bool) -> None:
   )
   if "MERGED" in got.stdout.content:
     merged.add(n)
-    prompt(None, f"#{n} is merged.")
+    landed.append(n)
   else:
     notice(f"unmerged {sha}", f"#{n} did not merge at {sha[:7]}. Look at it.")
 
 
 async def review(seed: bool) -> None:
   got = await bash(REVIEWS, show=HIDDEN, timeout=600)
-  fresh = [
-    p for p in (x.split(" ", 3) for x in got.stdout.content.splitlines()) if len(p) == 4 and p[1] not in comments
-  ]
-  comments.update(p[1] for p in fresh)
-  if seed or not fresh:
+  rows = [p for p in (x.split("\t", 5) for x in got.stdout.content.splitlines()) if len(p) == 6 and p[1] not in comments]
+  mine = [p for p in rows if p[2] == OWNER and not p[5].startswith(MARKS)]
+  kinds = {"c": "pulls", "i": "issues"}
+  others = [p for p in rows if p[2] != OWNER and p[3] not in ("0", "null", "") and p[1][0] in kinds]
+  if others:
+    asks = [
+      "echo " + p[1] + " $(gh api repos/{owner}/{repo}/" + kinds[p[1][0]] + "/comments/" + p[1][1:]
+      + "/reactions --jq '[.[] | select(.content == \"+1\") | .user.login] | index(\"" + OWNER + "\") != null' 2>/dev/null)"
+      for p in others
+    ]
+    seen = await bash("; ".join(asks), show=HIDDEN, timeout=300)
+    yes = {x.split(" ")[0] for x in seen.stdout.content.splitlines() if x.endswith(" true")}
+    mine += [p for p in others if p[1] in yes]
+  comments.update(p[1] for p in rows if p[2] == OWNER)
+  comments.update(p[1] for p in mine)
+  if seed or not mine:
     return
-  touched = sorted({p[0] for p in fresh})
-  await bash("".join(f"gh pr edit {n} --add-label hold >/dev/null 2>&1; " for n in touched), show=HIDDEN, timeout=300)
-  prompt(
-    None,
-    "New comments on the PRs, each of which now holds the label hold:\n"
-    + "\n".join(f"#{p[0]} {p[1]} {p[2]}: {p[3][:600]}" for p in fresh),
-  )
+  told: list[str] = []
+  held: set[int] = set()
+  for p in mine:
+    n = int(p[0]) if p[0].isdigit() else 0
+    line = f"#{p[0]} {p[1]} {p[4]} by {p[2]}: {p[5][:600]}"
+    if n in prs:
+      held.add(n)
+      own = owner_of(prs[n])
+      what = "your PR, which now holds the label hold until you push its fix and take hold off"
+    elif f"issue{n}" in handled:
+      own = next((w for w, k in working.items() if k == f"issue{n}"), "")
+      what = "your issue"
+    else:
+      continue
+    if own:
+      quietly(prompt, None, f"A new comment of the owner on {what}. Do what it asks, and answer it on GitHub with a reply that starts with 🤖.\n{line}", on=working_at(own))
+    else:
+      told.append(line)
+  if held:
+    await bash("".join(f"gh pr edit {n} --add-label hold >/dev/null 2>&1; " for n in sorted(held)), show=HIDDEN, timeout=300)
+  if told:
+    quietly(prompt, None, "New comments of the owner that no worker owns:\n" + "\n".join(told) + merged_since())
 
 
 def decide(title: str, text: str) -> str:
@@ -285,10 +344,88 @@ def audit(red: bool) -> None:
   line = f"- Audit: open items {measures[-1]} (queued {len(queue)}, working {len(working)}, PRs {ours}); PRs that wait for the owner: {theirs}; main {'red' if red else 'green'}."
   if noted and NEWS in noted[0]:
     noted[:] = [write(Text(DECISIONS, noted[0].replace(NEWS, NEWS + line + "\n", 1))).content]
-  prompt(
+  quietly(
+    prompt,
     None,
     f"Audit of the work, with the measures {measures[-6:]}:\n{line}\nIssues: {'; '.join(issues) or 'none'}\nCheck each worker and each PR against it, fix what is off, and go on.",
   )
+
+
+ISSUES = """gh issue list --state open --limit 100 --json number,title,body,author,assignees,labels,url --jq '[.[] | select(.author.login == "uael" or ([.assignees[].login] | index("uael"))) | {n: .number, title, body, url, labels: [.labels[].name]}]'"""
+
+ISSUE = """The issue #{n} of the owner: {url}
+Title: {title}
+
+{body}
+
+Read the issue whole with its comments first: gh issue view {n} --comments. Do what it asks. When it asks for a change, open the PR with Fixes #{n} in its body, so that the merge closes the issue. When it asks a question or a decision and no change, answer it in a comment on the issue, and close with that answer."""
+
+handled: set[str] = set()
+
+
+async def take_issues() -> None:
+  got = await bash(ISSUES, show=HIDDEN, timeout=120)
+  if got.code != 0 or not got.stdout.content.startswith("["):
+    notice(f"issues {int(clock() // 3600)}", "The command that lists the issues failed: " + got.stderr.content[-500:])
+    return
+  for it in json.loads(got.stdout.content):
+    key = f"issue{it['n']}"
+    body = str(it["body"] or "")
+    if key in handled or "paused" in it["labels"] or body.startswith(MARKS):
+      continue
+    handled.add(key)
+    if key in working.values() or any(q[0] == key for q in queue) or any(f"w:{key}" in pr["labels"] for pr in prs.values()):
+      continue
+    brief = ISSUE.replace("{n}", str(it["n"])).replace("{url}", it["url"]).replace("{title}", it["title"])
+    queue.append((key, brief.replace("{body}", body[:6000]), "issues"))
+    heard.append(f"The issue #{it['n']}, {it['title']}, is queued as the item {key}.")
+    quietly(bash, f"gh issue comment {it['n']} --body '🤖 Taken: a worker of furb does this as the item {key}, and its PR or its answer comes here.'", show=HIDDEN)
+
+
+STATUS = {
+  "s:queued": ("C5DEF5", "A worker of furb takes it when a slot frees"),
+  "s:working": ("1D76DB", "A worker of furb does it now"),
+  "s:checks": ("FBCA04", "Its checks run"),
+  "s:red": ("D93F0B", "A check failed, and its worker fixes it"),
+  "s:conflict": ("B60205", "It conflicts with its base, and its worker rebases it"),
+  "s:ready": ("0E8A16", "Green: the round merges it"),
+  "s:owner": ("5319E7", "Green, and waits for the merge of the owner"),
+}
+statused: dict[int, str] = {}
+
+
+async def mark() -> None:
+  want: dict[int, str] = {}
+  for n, pr in prs.items():
+    if "paused" in pr["labels"]:
+      continue
+    want[n] = (
+      "s:conflict"
+      if pr["mergeable"] == "CONFLICTING"
+      else "s:red"
+      if pr["verdict"] == "fail"
+      else "s:checks"
+      if pr["verdict"] != "pass"
+      else "s:owner"
+      if "owner-merge" in pr["labels"] or pr["draft"]
+      else "s:ready"
+    )
+  for key in handled:
+    n = int(key[5:])
+    if n not in want:
+      want[n] = "s:working" if key in working.values() else "s:queued" if any(q[0] == key for q in queue) else ""
+  edits = []
+  for n, s in want.items():
+    if statused.get(n) != s:
+      statused[n] = s
+      edits.append(
+        f"gh {'pr' if n in prs else 'issue'} edit {n}"
+        + (f" --add-label {s}" if s else "")
+        + "".join(f" --remove-label {x}" for x in STATUS if x != s)
+        + " >/dev/null 2>&1"
+      )
+  if edits:
+    await bash("; ".join(edits), show=HIDDEN, timeout=600)
 
 
 async def sweep(every: float) -> None:
@@ -319,6 +456,9 @@ async def sweep(every: float) -> None:
     pr = prs[n]
     if "paused" in pr["labels"]:
       continue
+    if not pr["head"].startswith("w/"):
+      notice(f"foreign #{n}", f"#{n} ({pr['head']}) was not made by a worker of the round, so the round neither mends nor merges it.")
+      continue
     live.add(mend(pr, now))
     if "owner-merge" in pr["labels"]:
       continue
@@ -332,13 +472,15 @@ async def sweep(every: float) -> None:
   for key in [k for k in fixes if k not in live]:
     del fixes[key]
   if parts[3] and noted and parts[3] != noted[0]:
-    old = set(noted[0].splitlines())
-    prompt(
-      None, "The owner changed DECISIONS.md:\n" + "\n".join([x for x in parts[3].splitlines() if x not in old][:60])
-    )
+    old = set(noted[0].splitlines()) | ours()
+    added = [x for x in parts[3].splitlines() if x.strip() and x not in old]
+    if added:
+      quietly(prompt, None, "The owner changed DECISIONS.md:\n" + "\n".join(added[:60]))
   if parts[3]:
     noted[:] = [parts[3]]
-  if now - timers.get("review", now - 3 * every) >= 3 * every:
+  await take_issues()
+  await mark()
+  if now - timers.get("review", now - every) >= every:
     await review("review" not in timers)
     timers["review"] = now
   if now - timers.setdefault("audit", now) >= 12 * every:
