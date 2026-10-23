@@ -101,13 +101,14 @@ which names the socket of the host. Give it the words of the host to show anothe
   the demo in WebKit, the engine of the web view of macOS: it starts the life, sends a message, captures the model as
   it writes and its answer, asks a question, answers it, cancels work that runs once it confirms, and rewinds with the
   files.
-- `furb-gui --check --record RECORD` ends the app once its window drew the whole life, and prints the process of its
-  web view and how many chains, threads and acts it drew, of the log of the life or of what the record kept. A check
-  enables no extension that the record does not run, and runs as an accessory of the system, with no tile in the Dock,
-  so it takes the front from no app and ends only by its own exit. `gui/src-tauri/tests/check.rs` runs it on a copy of
-  the record of a life of the demo in `gui/src-tauri/tests/fixtures`, or on the record that `FURB_RECORD` names, which
-  must be a copy, compares the counts with those of the log beside the record, or of `furb facts`, and holds the
-  footprint of that web view under 300 MB. It runs a check in a hidden window too, as a
+- `furb-gui --check --record RECORD` ends the app once its window drew the whole life and its stdin ended, and prints
+  the process of its web view and how many chains, threads and acts it drew, of the log of the life or of what the
+  record kept, so the one that runs it reads that web view after the window drew. By hand, give it `< /dev/null`. A
+  check enables no extension that the record does not run, and runs as an accessory of the system, with no tile in
+  the Dock, so it takes the front from no app and ends only by its own exit. `gui/src-tauri/tests/check.rs` runs it
+  on a copy of the record of a life of the demo in `gui/src-tauri/tests/fixtures`, or on the record that
+  `FURB_RECORD` names, which must be a copy, compares the counts with those of the log beside the record, or of
+  `furb facts`, and holds the footprint of that web view under 300 MB. It runs a check in a hidden window too, as a
   window behind others. The gates run it on macOS: `cargo test --features tauri/custom-protocol` in
   `gui/src-tauri`, after `bun run build` at the root and in `gui`, and `cargo build -p furb-cli`.
 

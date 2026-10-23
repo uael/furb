@@ -89,3 +89,24 @@ async def test_a_write_of_the_config_of_the_project_enables_what_it_turns_on(tmp
   await settle()
   assert await engine.rung("close(enabled())", on=again) == ["ouroboros", "kit"]
   assert callable(engine.module(again).get("f"))
+
+
+async def test_a_write_again_of_an_extension_that_the_life_runs_reloads_its_definitions(tmp_path: Path) -> None:
+  """When extend writes again the word of an extension that the life runs, the World enables it again with the new word, and each chain plays the definitions of that word alone, so a function and a name in capitals take their new value and every other name keeps its value."""
+  sand, root = extended("ouroboros", tmp_path, lives=True, sand=Disk())
+  there = engine.chain("there")
+  await settle()
+  f = engine.rung(F + "\n\nkept = ['first']\nLIMIT = 1", on=root)
+  await engine.rung(f"extend('kit', {f!r})", on=root)
+  await settle()
+  await engine.rung("kept.append('mine')", on=there)
+  g = engine.rung(G + "\n\nkept = []\nLIMIT = 2", on=root)
+  await engine.rung(f"extend('kit', {g!r})", on=root)
+  await settle()
+  assert [a[3] for a in engine.transcript(on=root) if a[0] == "enable"] == ["ouroboros", "kit", "kit"]
+  held = engine.module(there)
+  assert (held.get("kept"), held.get("LIMIT"), callable(held.get("g"))) == (["first", "mine"], 2, True)
+  _, again = extended("ouroboros", tmp_path, lives=True, sand=Disk(), record=plain(sand.record))
+  await settle()
+  assert await engine.rung("close(enabled())", on=again) == ["ouroboros", "kit"]
+  assert [engine.module(again).get(name) for name in ("kept", "LIMIT")] == [[], 2]

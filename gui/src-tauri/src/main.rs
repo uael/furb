@@ -6,7 +6,8 @@
 //! `furb-gui` opens on the projects and their records. `--record RECORD` goes on with a record, `--cwd DIRECTORY`
 //! starts a new life in a project, and `--demo` starts the demo of the TUI, which asks no model. `--model`, `--effort`
 //! and `--roster` name the models, as the TUI takes them. `--check` ends the app once its window drew the whole life of
-//! `--record`, and prints the process of its web view and the count of its chains, threads and acts.
+//! `--record` and its stdin ended, and prints the process of its web view and the count of its chains, threads and
+//! acts.
 //! `FURB_GUI_HIDDEN` starts the window hidden.
 
 mod host;
@@ -36,8 +37,12 @@ struct Held {
   child: Mutex<Option<(Child, Option<ChildStdin>)>>,
 }
 
-/// Whether the app runs as a check: it ends once its window drew the whole life, or fails after a while.
+/// Whether the app runs as a check: it ends once its window drew the whole life and its stdin ended, or fails after a
+/// while.
 static CHECK: AtomicBool = AtomicBool::new(false);
+
+/// Whether the window of a check drew the whole life, after which only the end of its stdin ends the app.
+static DREW: AtomicBool = AtomicBool::new(false);
 
 /// The process of the web content of a web view, which a check prints, so a test measures that process alone.
 #[cfg(target_os = "macos")]
@@ -71,8 +76,9 @@ fn host(webview: tauri::Webview, held: tauri::State<'_, Held>) -> Result<String,
 }
 
 /// What the window drew of the whole life, which it tells once the host read it: the chains, the threads and the
-/// acts, and whether they are those of the log of the life or those that its record kept. A check prints them and
-/// ends the app, which ends its host first, so the log of the life stands whole when the check ends.
+/// acts, and whether they are those of the log of the life or those that its record kept. A check prints them, then
+/// ends the app once its stdin ends, and the app ends its host first, so the log of the life stands whole when the
+/// check ends.
 #[tauri::command]
 fn drew(app: tauri::AppHandle, chains: usize, threads: usize, acts: usize, logged: bool) {
   if CHECK.load(Ordering::Relaxed) {
@@ -80,7 +86,13 @@ fn drew(app: tauri::AppHandle, chains: usize, threads: usize, acts: usize, logge
     println!(
       "furb-gui: the window drew {chains} chains, {threads} threads and {acts} acts of {of}"
     );
-    app.exit(0);
+    DREW.store(true, Ordering::Relaxed);
+    // The web content ends with the app, so the app waits until the one that runs the check ends its stdin, and that
+    // one measures the process of the web view after the window drew, while it stands.
+    std::thread::spawn(move || {
+      let _ = std::io::copy(&mut std::io::stdin().lock(), &mut std::io::sink());
+      app.exit(0);
+    });
   }
 }
 
@@ -133,8 +145,10 @@ fn main() {
       if CHECK.load(Ordering::Relaxed) {
         std::thread::spawn(|| {
           std::thread::sleep(Duration::from_secs(600));
-          eprintln!("furb-gui: the window drew no whole life in 600 seconds");
-          std::process::exit(1);
+          if !DREW.load(Ordering::Relaxed) {
+            eprintln!("furb-gui: the window drew no whole life in 600 seconds");
+            std::process::exit(1);
+          }
         });
       }
       app.manage(Held::default());

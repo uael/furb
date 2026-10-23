@@ -49,16 +49,17 @@ The owner chose the stack: Tauri 2, with a UI of web components.
 - The window holds the acts in a map that grows in place, and derives its views once a second while the host still
   opens a life, so a large record opens light. Each act of a command that runs carries the tail of its output, as the
   rows of the TUI do, and a read or a write leaves its text out.
-- `furb-gui --check --record RECORD` ends the app once its window drew the whole life, and prints the process of its
-  web view, which the private property `_webProcessIdentifier` of WKWebView gives, and the count of its chains, its
-  threads and its acts, and whether they are those of the log of the life or those that its record kept. A check keeps
-  the list of its projects in a folder of its own, so the list of the operator stays as it is, and enables no extension
-  that the record does not run, so the life that it draws is the one of the record. It runs as an accessory of the
-  system from its launch: no tile in the Dock, no place in the switcher of apps, and no front taken from another app,
-  so a quit that the Dock sends for the name of the app never reaches the app that the operator has open. It ends by
-  its own exit, which ends its host first, and fails after 600 seconds. The window tells the core what it drew at its
-  next frame, or after 500 milliseconds when no frame comes, since WebKit draws no frame in a window that is hidden or
-  behind others.
+- `furb-gui --check --record RECORD` ends the app once its window drew the whole life and its stdin ended, and prints
+  the process of its web view, which the private property `_webProcessIdentifier` of WKWebView gives, and the count
+  of its chains, its threads and its acts, and whether they are those of the log of the life or those that its record
+  kept. A check keeps the list of its projects in a folder of its own, so the list of the operator stays as it is, and
+  enables no extension that the record does not run, so the life that it draws is the one of the record. It runs as
+  an accessory of the system from its launch: no tile in the Dock, no place in the switcher of apps, and no front
+  taken from another app, so a quit that the Dock sends for the name of the app never reaches the app that the
+  operator has open. It ends by its own exit, which ends its host first, once its stdin ends after the window drew, so
+  the one that runs it reads its web view after the window drew, while it stands. It fails when its window drew no
+  whole life in 600 seconds. The window tells the core what it drew at its next frame, or after 500 milliseconds when
+  no frame comes, since WebKit draws no frame in a window that is hidden or behind others.
 - The test `gui/src-tauri/tests/check.rs` runs a check on a copy of the record of a life of the demo in
   `tests/fixtures`, or on the record that `FURB_RECORD` names, compares the counts with those of the log beside the
   record, which the life writes again, or with those of `furb facts` on the record when the window drew what the record

@@ -173,8 +173,15 @@ ear `extensions` of [`src/extension.rs`](../src/extension.rs) says the fact and 
 
 The extensions that a life enables at its start are those that the configs turn on. When a write of
 `.furb/config.json` lands in the middle of a life, the life enables each extension that the config turns on by its
-path and that it does not run yet. A word that the life runs already does not change in that life, and an extension
-that a config turns off runs on until the life ends. A host that gives no extensions, as the DeepSWE rig does,
+path and that it does not run yet. An extension that a config turns off runs on until the life ends.
+
+A life reloads an extension that it runs when its word changes: at its start, or at a later stand, for the word that
+the host gives, as a new build gives a new word of an official extension, and when a write of the life lands in the
+folder of an extension that a config turns on, as `extend()` does. The life enables it again with the new word, and
+each chain plays the definitions of that word alone: its imports, its functions, its classes, its types and its
+names in capitals. So a function and a constant take their new value, a name of state such as `queue` keeps its value,
+and the life word does not run again. A change of a file that no write of the life makes reaches the life at its
+next start. A host that gives no extensions, as the DeepSWE rig does,
 enables none.
 
 Each thing that comes from the disk reaches a chain through a question that an ear of the World answers, and a later
