@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openEngine } from "../src/bridge.ts";
@@ -123,6 +124,38 @@ test.skipIf(process.platform === "win32")(
       await reset;
       const next = JSON.parse(readFileSync(place.about, "utf8")) as About;
       expect(next.pid).not.toBe(pid);
+      expect(await engine.peek(command)).toMatchObject({ code: 0, stdout: { content: "kept\n" } });
+      await host.end();
+    }),
+);
+
+test.skipIf(process.platform === "win32")(
+  "a window whose host takes a connection as its process ends and drops it reaches the place again, and starts a host",
+  () =>
+    demoLife(async (record, directory) => {
+      const place = hostPlace(record);
+      if (!place) throw new Error("No socket serves here.");
+      const { engine, host } = await openEngine({ demo: true, host: true, cwd: directory, record });
+      const command = await engine.bash("echo kept", { on: engine.root });
+      await eventually(async () => (await engine.peek(command)) !== null, "the command to end");
+      const { pid } = JSON.parse(readFileSync(place.about, "utf8")) as About;
+      // The host stops, and its place takes one connection and drops it with no answer, as the socket of a host does
+      // while a kill ends its process.
+      process.kill(pid, "SIGSTOP");
+      rmSync(place.socket, { force: true });
+      let taken = 0;
+      const ending = createServer((socket) => {
+        taken++;
+        socket.destroy();
+        ending.close();
+      });
+      await new Promise<void>((resolve) => ending.listen(place.socket, resolve));
+      const faults: string[] = [];
+      host.on("fault", (error: Error) => faults.push(error.message));
+      const reset = new Promise<void>((resolve) => host.once("reset", resolve));
+      process.kill(pid, "SIGKILL");
+      await reset;
+      expect([taken, faults]).toEqual([1, []]);
       expect(await engine.peek(command)).toMatchObject({ code: 0, stdout: { content: "kept\n" } });
       await host.end();
     }),

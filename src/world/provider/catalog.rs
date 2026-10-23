@@ -596,16 +596,18 @@ impl Listed {
   }
 
   /// An address with each place `${NAME}` filled from the environment, which reads the name of pi-ai for the place
-  /// before the name itself; or the first name that the environment does not hold.
+  /// before the name itself; or the first name that the environment does not hold. Each place is filled once, after
+  /// the value of the place before it, so a value that names a place stands as it is.
   fn filled(&self, api: &str, env: &impl Fn(&str) -> Option<String>) -> Result<String, String> {
-    let mut filled = api.to_owned();
-    while let Some(at) = filled.find("${") {
+    let (mut filled, mut from) = (api.to_owned(), 0);
+    while let Some(at) = filled[from..].find("${").map(|at| from + at) {
       let Some(end) = filled[at..].find('}').map(|end| at + end) else { break };
       let name = filled[at + 2..end].to_owned();
       let value = self.aliases.get(&name).and_then(|alias| env(alias)).or_else(|| env(&name));
       let value =
         value.ok_or_else(|| format!("its address needs {name}: set it in the environment"))?;
       filled.replace_range(at..=end, &value);
+      from = at + value.len();
     }
     Ok(filled)
   }
