@@ -1,50 +1,12 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdtemp, realpath } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { demoDirectory, removeDemoDirectories } from "@furb/tui/src/demo.ts";
-import { Preferences } from "@furb/tui/src/preferences.ts";
-import { Workspaces } from "@furb/tui/src/workspaces.ts";
-import { Host, projectOf } from "../host/host.ts";
+import { removeDemoDirectories } from "@furb/tui/src/demo.ts";
+import { projectOf } from "../host/host.ts";
 import { serve } from "../host/serve.ts";
-import { empty, type Held, merged } from "../src/held.ts";
-import type { Part, Said } from "../src/wire.ts";
+import type { Part } from "../src/wire.ts";
+import { until, windowOf, withHost } from "./hosting.ts";
 
 afterAll(removeDemoDirectories);
-
-/** A condition that comes true within a while, or a failure that says what did not come. */
-async function until(what: string, condition: () => boolean, most = 20000): Promise<void> {
-  const end = Date.now() + most;
-  while (!condition()) {
-    if (Date.now() > end) throw new Error(`${what} did not come`);
-    await Bun.sleep(20);
-  }
-}
-
-/** A window of the test: each part that the host sent it, and the life as the window holds it after them. */
-function windowOf(host: Host): { parts: Part[]; held(): Held; leave(): void } {
-  const parts: Part[] = [];
-  let held = empty;
-  const leave = host.connect((said: Said) => {
-    parts.push(said.part);
-    held = merged(held, said.part);
-  });
-  return { parts, held: () => held, leave };
-}
-
-/** A host on the demo, which asks no model, in a project of its own with a list of its own, which a test uses and
- * which ends after it. */
-async function withHost(use: (host: Host, directory: string) => Promise<void>): Promise<void> {
-  // The project stands where its real path says, as the list of the TUI holds it.
-  const directory = await realpath(await demoDirectory());
-  const list = join(await mkdtemp(join(tmpdir(), "furb-gui-list-")), "workspaces.json");
-  const host = new Host(new Workspaces(new Preferences(join(directory, "ui.json")), { demo: true }, list));
-  try {
-    await use(host, directory);
-  } finally {
-    await host.dispose();
-  }
-}
 
 test("a window takes the whole life when it connects, then what a model writes as it writes it, and its answer", () =>
   withHost(async (host, directory) => {
@@ -135,7 +97,7 @@ test("the socket lets in only a window that holds its token, and answers each ca
       });
       socket.send(JSON.stringify({ id: 7, name: "nothing", args: [] }));
       await until("the answer", () => heard.some((one) => (one as { id?: number }).id === 7));
-      expect((heard[0] as Said).part.whole).toBe(true);
+      expect((heard[0] as { part: Part }).part.whole).toBe(true);
       expect(heard.find((one) => (one as { id?: number }).id === 7)).toEqual({
         id: 7,
         error: "No life is open.",

@@ -2,7 +2,8 @@
 
 The desktop app of furb runs a life of furb in a window, as the TUI runs one in a terminal. Start a new life in a
 project, or go on with a record. Send a message to a chain, and see each model write its step and each command print
-as they work. When a model asks you a question, the composer answers it.
+as they work. Answer each question of a model, pause, wake or cancel the act that you pick, take back your last
+message, and rewind to an earlier point with its files.
 
 ![A life on the demo, while its model writes its step](docs/screenshots/2-streams.png)
 
@@ -66,9 +67,23 @@ runs, and the composer takes no message. The rail and the bar say **Read only**.
   threads that a step asked, and the answer. While a model writes a step, the step shows its word as it comes, and
   while a command runs, it shows what the command prints.
 - The composer at the bottom sends a message to the chain of the thread shown. Enter sends it, and Shift+Enter adds a
-  line. When a question waits for you on that chain, the composer answers it, and says so.
+  line. When a question waits for you on that chain, the composer answers it, and says so. A question of `bool` or of
+  a `Literal` gives a button for each of its values. A notice of a model, which asks nothing, reads as a quiet line in
+  its step.
+- The arrow of the composer takes back your last message on the chain: a message that runs ends and comes back to the
+  composer, and a message that is done leaves a new branch of the chain without it, as the undo of the TUI does.
+- The menu of a thread, of a step and of a command pauses, wakes or cancels that act alone, with what stands under it,
+  and never the thread or the chain that it stands on. A cancel that ends running work asks you first, with the acts
+  and the chains that it ends.
+- **Rewind to** in the menu of a message or of a step makes a new branch of the chain at that point. When a write
+  changed a file after that point, it asks what comes back: the conversation, the files as they were, or both. A
+  change that a command made stays, and the dialog says so.
 
 ![A question of the model to you](docs/screenshots/4-asks.png)
+
+![A cancel that ends running work asks you first](docs/screenshots/9-confirm.png)
+
+![A rewind to a message whose answer wrote a file](docs/screenshots/10-rewind.png)
 
 The window speaks to the host over a WebSocket on 127.0.0.1 that only a window with the token of the host opens.
 
@@ -80,19 +95,18 @@ which names the socket of the host. Give it the words of the host to show anothe
 
 ## Prove it
 
-- `bun run test gui` from the root: the tests of the host, which drive a life of the demo through its socket, and of
-  the window.
+- `bun run test gui` from the root: the tests of the host, which drive a life of the demo through its socket and each
+  of its controls, and of the window.
 - `bun run shots [directory]` in `gui`, after `bun run build`: the captures of `docs/screenshots`. It drives a life on
   the demo in WebKit, the engine of the web view of macOS: it starts the life, sends a message, captures the model as
-  it writes and its answer, asks a question, answers it, and captures the thread as it goes on.
+  it writes and its answer, asks a question, answers it, cancels work that runs once it confirms, and rewinds with the
+  files.
 - `furb-gui --check --record RECORD` ends the app once its window drew the whole life, and prints how many chains,
   threads and acts it drew. `gui/src-tauri/tests/check.rs` runs it on the record that `FURB_RECORD` names and compares
   the counts with those of `furb facts`, as its comment says.
 
 ## What it does not do yet
 
-- It does not pause, wake or cancel an act, take back a message, or rewind: use [the TUI](../tui/README.md) for
-  that.
 - It has no loom, no graph, and no view of the program of a chain, which the TUI has.
 - No release ships it yet: build it from a clone.
 

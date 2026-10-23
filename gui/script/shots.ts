@@ -2,7 +2,8 @@
 // then `bun run shots [directory]`. The script starts a host on the demo of the TUI, which asks no model, and drives
 // the UI as a person does: it starts a life, sends a message, captures what the model writes while it streams and
 // its answer, sends a message whose model asks a question, captures the question, answers it, and captures the
-// thread once it goes on. Each capture has its text beside it, in a file of the same name. A screen that does not
+// thread once it goes on. Then it opens the menu of an act, cancels work that runs after it confirms, and rewinds to
+// a message whose answer wrote a file, with the files. Each capture has its text beside it, in a file of the same name. A screen that does not
 // come in a minute ends the run with an error that names it.
 
 import { spawn } from "node:child_process";
@@ -70,6 +71,38 @@ try {
   await page.goto(`${address("ink")}&picker=1`);
   await shows(page, "7-picker", "New life");
   await shot(page, "7-picker");
+  await page.goto(address("ink"));
+  await send(page, "Hire two workers");
+  await shows(page, "8-menu", "Think until I cancel.");
+  await page
+    .getByRole("button", { name: /^Controls of prompt/ })
+    .first()
+    .click();
+  await shows(page, "8-menu", /^Cancel prompt/);
+  await shot(page, "8-menu");
+  await page
+    .getByText(/^Cancel prompt/)
+    .first()
+    .click();
+  await shows(page, "9-confirm", "Keep it running");
+  await shot(page, "9-confirm");
+  await page.getByText(/^Cancel it and/).click();
+  await shows(page, "9-confirm", /is cancelled/);
+  await send(page, "Add the search shortcut, Ctrl+K.");
+  await shows(page, "10-rewind", "Ctrl+K opens the search now, and the README says so.");
+  await page
+    .getByRole("button", { name: /^Controls of prompt/ })
+    .first()
+    .click();
+  await page
+    .getByText(/^Rewind to prompt/)
+    .first()
+    .click();
+  await shows(page, "10-rewind", "Restore the files");
+  await shot(page, "10-rewind");
+  await page.getByText("Both", { exact: true }).click();
+  await shows(page, "11-branch", "A new branch of the chain: send a message to go on from there.");
+  await shot(page, "11-branch");
 } finally {
   await browser.close();
   server.kill();

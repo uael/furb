@@ -38,8 +38,14 @@ The owner chose the stack: Tauri 2, with a UI of web components.
   they changed. A part goes at most once each 50 milliseconds, and no part goes when nothing changed. A new life is a
   new generation, which the window takes from nothing.
 - The window sends calls, each answered once by its number: `open` a record, `create` a life in a project, `add` a
-  project, `show` a chain, `send` a line to a chain, and `resume` the work that an earlier life left. `send` is the
-  `submit` of the TUI: a line answers the question that waits on the chain, and else goes to its model.
+  project, `show` a chain, `send` a line to a chain, `answer` a question with a value of its choice, `pause`, `wake`
+  or `cancel` an act, `confirm` a cancel, `takeBack` the last message of a chain, read the `files` that a rewind gives
+  back, `rewind` to an act, and `resume` the work that an earlier life left. Each is the method of the `Session` of
+  the TUI that does the same: `send` is its `submit`, so a line answers the question that waits on the chain and else
+  goes to its model, and `takeBack` is its cancel of the last message, or its undo once that message is done.
+- A cancel that ends running work waits for the operator: the host sends the window `confirm`, with the acts and the
+  chains that it ends, and ends them once the window confirms. A message that comes back to the composer, after a take
+  back or a rewind to a message, comes as `compose`.
 - The window holds the acts in a map that grows in place, and derives its views once a second while the host still
   opens a life, so a large record opens light. Each act of a command that runs carries the tail of its output, as the
   rows of the TUI do, and a read or a write leaves its text out.
@@ -79,3 +85,5 @@ and not their layout or their look.
 - The rail at the left holds the life and what it spent, the questions that wait for you, and the tree of threads,
   each with its whole title and what its steps came to in a tip.
 - The header says the thread, the last notice of the session, and the mark Read only on a record of another engine.
+- The menu of an act holds its controls, and a dialog asks the operator to confirm a cancel that ends running work,
+  and what a rewind gives back.
