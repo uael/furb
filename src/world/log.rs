@@ -11,6 +11,11 @@
 //! engine took it, stands on the line before the first fact about it. The fact of a module stands with no words,
 //! since a module is no plain value and differs from one life to the next. The ear writes no fsync of the log, and a
 //! log that it cannot write it removes, so no reader takes a log that lacks a fact.
+//!
+//! A later life makes again no act of its record that an ear of the outside made, unless that ear makes it again, and
+//! says no fact about one that it does not make. So when the life keeps its first entry, the log writes each entry of
+//! the record about such an act that no line shows, in the order of the record, and the log still holds every act of
+//! its record.
 
 use std::{
   collections::HashSet,
@@ -31,8 +36,8 @@ use crate::{
 
 /// The ear of the log of the record at a path, which held a number of entries when the life opened: it hears every
 /// fact, and writes the log again from its first line.
-pub fn log(record: impl AsRef<Path>, entries: usize) -> Box<dyn Ear> {
-  heard(Log::open(record.as_ref(), entries))
+pub fn log(record: impl AsRef<Path>, held: &[Object]) -> Box<dyn Ear> {
+  heard(Log::open(record.as_ref(), held))
 }
 
 /// The ear of the log of the record at a path, for a life that opens from the snapshot of an earlier life on the
@@ -64,15 +69,46 @@ struct Log {
   entries: usize,
   /// Each name that a line of the log shows as an act, or that names no act.
   seen: HashSet<String>,
+  /// The entries of the record about each act that an ear of the outside made, by the name of that act, in the order
+  /// of the record, which the log writes when the life keeps its first entry and no line shows that act.
+  owed: Vec<(String, Value)>,
+}
+
+/// Whether a name is the name of an act, as `bash3`, and not the name of an ear.
+fn named_act(name: &str) -> bool {
+  let kind = name.trim_end_matches(|one: char| one.is_ascii_digit());
+  !kind.is_empty() && kind.len() < name.len()
+}
+
+/// The entries of a record about each act that an ear of the outside made, which a later life does not say again
+/// unless that ear makes the act again.
+fn owed(held: &[Object]) -> Vec<(String, Value)> {
+  let mut theirs = HashSet::new();
+  let mut owed = Vec::new();
+  for entry in held {
+    let Some(fact) = entry.as_ref().items().and_then(|one| Fact::of(*one.first()?)) else {
+      continue;
+    };
+    if fact.question() && !named_act(fact.by()) && !matches!(fact.by(), "" | "operator" | "journal")
+    {
+      theirs.insert(fact.about().to_owned());
+    }
+    if theirs.contains(fact.about()) {
+      owed.push((fact.about().to_owned(), outward(fact.0.as_ref())));
+    }
+  }
+  owed
 }
 
 impl Log {
   /// The log of the record at a path, written again from its first line.
-  fn open(record: &Path, entries: usize) -> Log {
+  fn open(record: &Path, held: &[Object]) -> Log {
     let path = PathBuf::from(format!("{}.log", record.display()));
     let fresh = PathBuf::from(format!("{}.log.new", record.display()));
     let file = OpenOptions::new().create(true).write(true).truncate(true).open(&fresh).ok();
-    let mut log = Log { path, file, fresh: Some(fresh), entries, seen: HashSet::new() };
+    let entries = held.len();
+    let mut log =
+      Log { path, file, fresh: Some(fresh), entries, seen: HashSet::new(), owed: owed(held) };
     log.line(&serde_json::json!({ "entries": entries }));
     log
   }
@@ -88,7 +124,7 @@ impl Log {
       seen.extend(about.filter(|one| !one.is_empty()));
     }
     let file = OpenOptions::new().append(true).open(&path).ok();
-    Log { path, file, fresh: None, entries, seen }
+    Log { path, file, fresh: None, entries, seen, owed: Vec::new() }
   }
 
   /// A fact that the ear heard, after the act it is about when no line shows that act yet.
@@ -119,6 +155,18 @@ impl Log {
 
   /// The line that says the record kept its next entry.
   fn kept(&mut self) {
+    let missed: HashSet<String> = self
+      .owed
+      .iter()
+      .map(|(about, _)| about.clone())
+      .filter(|one| !self.seen.contains(one))
+      .collect();
+    for (about, line) in std::mem::take(&mut self.owed) {
+      if missed.contains(&about) {
+        self.seen.insert(about);
+        self.line(&line);
+      }
+    }
     if let Some(fresh) = self.fresh.take()
       && self.file.is_some()
       && std::fs::rename(&fresh, &self.path).is_err()
