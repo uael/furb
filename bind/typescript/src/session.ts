@@ -5,7 +5,7 @@ import { attachImage, Engine, type ImageAttachment, model, type NativeEar, type 
 import { Activity } from "./activity.js";
 import { FileChanges } from "./changes.js";
 import { Console, type ConsoleOptions } from "./console.js";
-import { driving, type Ear } from "./ears.js";
+import { call, type Ear } from "./ears.js";
 import { WORK } from "./life/acts.js";
 import { furbDirectory, saveFile } from "./project.js";
 import { actorParts, type Entry, type Fact, isQuestion } from "./types.js";
@@ -149,7 +149,7 @@ export class Session extends EventEmitter {
     const working = !this.options.readOnly;
     const ears: Array<[string, Ear | NativeEar]> = [
       ...(this.options.ears ?? []),
-      ["observer", driving(this.observer(), "activity")],
+      ["observer", this.observer()],
       ["console", working ? this.console.ear() : silent()],
       ["changes", working ? this.changes.ear(this.directory, () => this.emit("change")) : silent()],
     ];
@@ -185,30 +185,46 @@ export class Session extends EventEmitter {
     }
   }
 
-  /** The ear that keeps every fact for the host, and every act in the activity, as an ear of the engine. */
+  /** The ear that keeps every fact for the host, and every act in the activity. It is an ear of the outside, so a
+   * snapshot of the life holds it by its name. An ear of the outside hears no question that an ear before it took,
+   * so the observer reads such an act by `get` before the first fact about it, as the log of a life holds it. */
   private *observer(): Ear {
+    const known = new Set<string>();
     for (;;) {
-      const fact = (yield null) as Fact | undefined;
-      if (!fact || this.stopped) continue;
-      this.facts.push(fact);
-      yield* this.activity.hear(fact);
-      const [kind, id, by, ...words] = fact;
-      // Only a pause, a wake, or a start or a done of an act of the pending work changes what is pending.
-      if (
-        kind === "pause" ||
-        kind === "wake" ||
-        ((kind === "started" || kind === "done") && this.held?.has(id))
-      )
-        this.held = undefined;
-      if (kind === "reply" && isQuestion(kind, id)) this.replies.set(id, by);
-      const rung = kind === "done" ? this.replies.get(id) : undefined;
-      if (rung !== undefined) {
-        this.replies.delete(id);
-        if (this.streams.delete(rung)) this.changed();
+      const heard = (yield null) as Fact | undefined;
+      if (!heard || this.stopped) continue;
+      const about = heard[1];
+      const made =
+        about && !known.has(about) && !isQuestion(heard[0], about)
+          ? ((yield call("get", [about])) as Fact | null | undefined)
+          : undefined;
+      for (const fact of made ? [made, heard] : [heard]) {
+        if (isQuestion(fact[0], fact[1])) known.add(fact[1]);
+        yield* this.observed(fact);
       }
-      if (kind === "keep") this.entries.push(words[0] as Entry);
-      this.heard();
     }
+  }
+
+  /** One fact that the observer keeps, after the act it is about. */
+  private *observed(fact: Fact): Ear {
+    this.facts.push(fact);
+    yield* this.activity.hear(fact);
+    const [kind, id, by, ...words] = fact;
+    // Only a pause, a wake, or a start or a done of an act of the pending work changes what is pending.
+    if (
+      kind === "pause" ||
+      kind === "wake" ||
+      ((kind === "started" || kind === "done") && this.held?.has(id))
+    )
+      this.held = undefined;
+    if (kind === "reply" && isQuestion(kind, id)) this.replies.set(id, by);
+    const rung = kind === "done" ? this.replies.get(id) : undefined;
+    if (rung !== undefined) {
+      this.replies.delete(id);
+      if (this.streams.delete(rung)) this.changed();
+    }
+    if (kind === "keep") this.entries.push(words[0] as Entry);
+    this.heard();
   }
 
   /** What a model wrote for a rung, added to what it streams while its reply runs. The door tells it on a later turn
