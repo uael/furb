@@ -142,9 +142,10 @@ and the checkpoint names it, so the model sees what it lost.
 A new engine boots from the last checkpoint. The journal holds each carried act under its name, counts each kind on
 from the carried count, makes each carried chain again under its name, makes each open act again through its verb under
 its own name, and then says again only the entries after the checkpoint. A word that ran when the checkpoint was
-written is cut: its run is done with a refusal that says the checkpoint cut it and which act it awaited, so its
-model sees that outcome and runs it again if it wants. This is the law of #290 for a command that a crash cut. So
-the model of the conductor runs its loop again, on the carried state.
+written runs again from its top, on the carried module, under the prompt, the operator or the chain that made it, at
+the wake of its chain: the round of the conductor is one word that runs for days, so a checkpoint does not end it.
+The prompt that such a word awaited is not carried, since the word asks it again. A word that a prompt made that is
+not carried stops, and its chain is told.
 
 The World writes a checkpoint at an upgrade, when a host ends, and when the tail since the last one passes a count
 that the host sets: 50000 facts by default, about four hours of life 3. A checkpoint in a running life also lets the
@@ -384,8 +385,8 @@ A new type, `Checkpoint`, with these sentences:
 - It makes each open act that the checkpoint carries again through its verb, under the site of its maker and under
   its own name, so the ear of the outside that runs it goes on with it, and a command or a reply that runs across a
   checkpoint ends once.
-- A word that ran when the checkpoint was written is cut: its run is done with a refusal that says the checkpoint
-  cut it and the act that it awaited, so its model sees that outcome and runs it again if it wants.
+- A word that ran when the checkpoint was written runs again from its top, on the carried module, under the prompt,
+  the operator or the chain that made it, once its chain wakes, and the prompt that it awaited is not carried.
 
 `boot`, changed:
 
