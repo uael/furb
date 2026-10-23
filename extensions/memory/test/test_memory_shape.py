@@ -41,13 +41,13 @@ async def test_the_world_answers_with_the_memory_of_the_user_first(tmp_path: Pat
   assert await paths(root, tmp_path, "../other/c.txt") == []
 
 
-async def test_the_memory_of_a_folder_is_its_claude_md_file_or_its_agents_md_file(tmp_path: Path) -> None:
-  """The memory of a folder is its CLAUDE.md file, or its AGENTS.md file when the folder holds no CLAUDE.md, and the memory of the user is that of the config directory of the user."""
-  user = noted(tmp_path / "config", "u\n", "AGENTS.md")
+async def test_the_memory_of_a_folder_is_its_agents_md_file_or_its_claude_md_file(tmp_path: Path) -> None:
+  """The memory of a folder is its AGENTS.md file, or its CLAUDE.md file when the folder holds no AGENTS.md, and the memory of the user is that of the config directory of the user."""
+  user = noted(tmp_path / "config", "u\n", "CLAUDE.md")
   top = noted(tmp_path / "work", "t\n")
-  noted(tmp_path / "work", "a\n", "AGENTS.md")
-  sub = noted(tmp_path / "work" / "sub", "s\n", "AGENTS.md")
-  noted(tmp_path / "work" / "low", "l\n", "claude.md")
+  noted(tmp_path / "work", "c\n", "CLAUDE.md")
+  sub = noted(tmp_path / "work" / "sub", "s\n", "CLAUDE.md")
+  noted(tmp_path / "work" / "low", "l\n", "agents.md")
   _, root = extended("memory", tmp_path, _monty.memory)
   assert await paths(root, tmp_path, "low/c.txt") == [str(user), str(top)]
   assert await paths(root, tmp_path, "sub/c.txt") == [str(sub)]
@@ -59,7 +59,7 @@ async def test_the_world_leaves_out_a_memory_file_whose_content_the_chain_holds(
   sub = noted(tmp_path / "work" / "sub", "s\n")
   noted(tmp_path / "work" / "other", "o\n")
   _, root = extended("memory", tmp_path, _monty.memory)
-  await engine.rung('memory()\nread("sub/CLAUDE.md")\nwrite(Text("other/CLAUDE.md", "o\\n"))', on=root)
+  await engine.rung('memory()\nread("sub/AGENTS.md")\nwrite(Text("other/AGENTS.md", "o\\n"))', on=root)
   assert (await paths(root, tmp_path, "sub/c.txt"), await paths(root, tmp_path, "other/c.txt")) == ([], [])
   two = engine.chain("two", root)
   await settle()
@@ -70,14 +70,14 @@ async def test_the_world_leaves_out_a_memory_file_whose_content_the_chain_holds(
   three = engine.chain("three")
   await settle()
   engine.ask("memory", three, "sub/c.txt")
-  engine.read("sub/CLAUDE.md", on=three)
+  engine.read("sub/AGENTS.md", on=three)
   assert await paths(three, tmp_path, "sub/c.txt") == [str(top), str(sub)]
   # A read in the step whose done the watcher hears first is held all the same.
   (sub.parent / "c.txt").write_text("c\n", encoding="utf-8", newline="")
   four = engine.chain("four")
   await settle()
   await engine.rung("remember()", on=four)
-  await engine.rung('read("sub/c.txt")\nread("sub/CLAUDE.md")', on=four)
+  await engine.rung('read("sub/c.txt")\nread("sub/AGENTS.md")', on=four)
   assert [one.split("\n")[1] for one in recalled(four, tmp_path)] == [f"memory8_path = {str(top)!r}"]
   # One text in two folders enters a chain once.
   twin = noted(tmp_path / "work" / "twin", "t2\n")

@@ -29,8 +29,8 @@ struct Skill {
 
 /// The ear of the skills: it answers a read of `skills://` with the list of the skills of the chain, one line for
 /// each, and a read of `skills://` and a name with the SKILL.md file of that skill, or with the refusal. It finds the
-/// skills in `.furb/skills` and `.claude/skills` of the working directory of the chain and of each folder above it,
-/// nearest first, then in `skills` of the config directory of the user, and then the skill `extending` that the
+/// skills in `.furb/skills`, `.agents/skills` and `.claude/skills` of the working directory of the chain and of each
+/// folder above it, nearest first, then in `skills` of the config directory of the user, and then the skill `extending` that the
 /// extension carries.
 pub fn skills(config: PathBuf) -> Box<dyn Ear> {
   hearing(&["read"], move |mut co| async move {
@@ -42,7 +42,9 @@ pub fn skills(config: PathBuf) -> Box<dyn Ear> {
       let path = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
       let Some(name) = path.strip_prefix(SCHEME) else { continue };
       let here = here(&mut co, a.on()).await?;
-      let roots = here.ancestors().flat_map(|one| [one.join(".furb"), one.join(".claude")]);
+      let roots = here
+        .ancestors()
+        .flat_map(|one| [one.join(".furb"), one.join(".agents"), one.join(".claude")]);
       let found = found(roots.map(|one| one.join("skills")).chain([config.join("skills")]));
       let answer = match found.iter().find(|one| one.name == name) {
         _ if name.is_empty() => {
