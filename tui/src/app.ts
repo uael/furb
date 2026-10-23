@@ -832,23 +832,29 @@ export class App {
     if (session.host.reading && !session.readingTold) this.readOrRenew();
   }
 
-  /** The dialog of a record that a life refused for a drift, as a record that another engine made, which opens to
-   * read: it names both engines, and offers to read the record, or to start a new life in its workspace. */
+  /** The dialog of a record that a life refused for a drift, as a record that a build of another version made, which
+   * opens to read: it names both versions, or both engines for a record of a build before the versions, and offers
+   * to read the record, or to start a new life in its workspace. */
   private readOrRenew(): void {
     const reading = this.session.host.reading;
     if (!reading) return;
     this.session.readingTold = true;
     const ours = reading.engine.slice(0, 12);
-    const same = reading.made === reading.engine;
-    const theirs = reading.made
-      ? `the engine ${reading.made.slice(0, 12)}`
-      : "an earlier engine, which the record does not name";
+    const same =
+      reading.version === null ? reading.made === reading.engine : reading.version === reading.current;
+    const theirs =
+      reading.version !== null
+        ? `a build of version ${reading.version}`
+        : reading.made
+          ? `the engine ${reading.made.slice(0, 12)}`
+          : "an earlier engine, which the record does not name";
+    const build = reading.version !== null ? `is of version ${reading.current}` : `runs the engine ${ours}`;
     const note = same
-      ? `This build runs the engine ${ours}, which made it, and its replay drifts: ${clip(reading.why, 240)}`
-      : `It was made by ${theirs}, and this build runs the engine ${ours}. A replay would drift, so it opens to read.`;
+      ? `This build ${build}, which made it, and its replay drifts: ${clip(reading.why, 240)}`
+      : `It was made by ${theirs}, and this build ${build}. A replay would drift, so it opens to read.`;
     const library = this.options.workspaces;
     this.openPalette(
-      same ? "This record does not replay" : "This record was made by another engine",
+      same ? "This record does not replay" : "This record was made by another build",
       [
         { label: "Read it", detail: "See what it kept. No word runs again.", run: () => {} },
         {

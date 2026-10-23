@@ -64,7 +64,7 @@ async def engined(record: Path, cut: str) -> None:
   for at, line in enumerate(lines[:5]):
     fact = json.loads(line)
     if fact[0][0] == "made":
-      fact[0][3] = made[3]
+      fact[0][3:] = made[3:]
       lines[at] = json.dumps(fact) + "\n"
   record.write_text("".join(lines), encoding="utf-8")
 
