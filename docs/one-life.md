@@ -109,10 +109,12 @@ Where it does not serve, and what serves:
 
 ### 3.1 Supersede
 
-`chain(label, source, filter, supersede=True)` gives `source`, which goes on under its name with its module, its
-ladders and its acts, and makes no chain (#371). Its transcript becomes its prefix: what the filter kept, all that
-made it, and every act of the source, so each view that reads the acts reads as before, and only the turns are cut.
-A prefix takes the place of what the transcript held. It costs 71 tokens of the engine, which stands at 6497.
+The engine gives one law (#371): a prefix said on a chain takes the place of what its transcript held, so the chain
+goes on under its name with its module, its ladders and its acts. It costs 23 tokens of the engine. The successor
+itself is `supersede(keep)` of the extension compaction (#375): it says on the chain a prefix of what the filter
+kept, all that made it, and every act of the chain, so each view that reads the acts reads as before, and only the
+turns are cut. A first shape put `supersede=True` on `chain` and cost 71 tokens; the law of the prefix alone serves
+the same need, and a checkpoint says a prefix too.
 
 The extension compaction becomes smaller: `compacted` asks `choice`, then at the next reply makes the successor with
 that filter. The conductor wraps its own chain with `compacted()` in its word. So the chain of an orchestrator is
@@ -325,25 +327,25 @@ Each PR that builds a part measures it again on copies of the real records.
 
 ## 7. The sentences of the contracts that change
 
-`src/furb/engine.pyi`, the signature of `chain`: `chain(label="", source="", filter=None, on="", supersede=False)`.
+`src/furb/engine.pyi`, `chain`, new:
 
-`chain`, new (#371):
-
-- A chain that supersedes its source is that source: chain gives the source, which goes on under its name, with the
-  same module, ladders and acts, and makes no chain.
-- The prefix of a supersede is what its filter kept, everything that made what it kept, and every act of the source,
-  so a view that reads its acts reads as before, and only its turns are cut.
 
 - A source is a chain of the life, or an act of carry that the World answered with a chain of another record, of
   which the new chain is the successor, with the turns, the open prompts and the plain values that the answer
   carries.
 
 `chain`, changed (#371): was "Nothing leaves a transcript once the transcript holds it." Now: "Nothing leaves a
-transcript once the transcript holds it, but by a supersede, whose prefix takes the place of what the transcript
-held."
+transcript once the transcript holds it, but by a prefix said on its chain, which takes the place of what the
+transcript held."
 
-`Prefix`, new (#371): "A prefix takes the place of what the transcript of the chain that says it held, so a supersede
-says its prefix on its source."
+`Prefix`, new (#371): "A prefix takes the place of what the transcript of the chain that it is said on held, so a word
+that says a prefix on its own chain cuts its turns, and the chain goes on under its name, with its module, its
+ladders and its acts."
+
+`extensions/compaction/compaction.pyi`, new (#375): `supersede(keep)`, "supersede(keep) says on the chain of the
+caller a prefix of what the filter keep kept of its acts, everything that made what it kept, and every act of the
+chain, and gives the chain." and "So the chain goes on under its name with its module, its ladders and its acts,
+and only its turns are cut."
 
 `Standing`, was: "A standing holds no source: the engine is one file the model imports, and a record made by another
 engine is a drift." Now: "A standing holds no source: the engine is one file the model imports, and a segment of the
