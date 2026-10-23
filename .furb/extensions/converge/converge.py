@@ -6,7 +6,7 @@ A target is a dict: its name; words, the numbers of the issues of the owner in t
 Each pass captures the target at the head of main, and the judges in JUDGES, each blind on a chain of its own, read each capture against his words and close with the gaps that they see. A gap counts only when it names a capture of the pass and quotes his words exactly, and a failed capture or check is a gap of its own.
 A pass with gaps is one step: the gaps go to each worker of an owner that works, or to one item in the queue of the round, which fixes the largest gap in one PR. The next pass comes once that work ended and its PR landed.
 The target converges after CLEAN passes in a row with no gap, and stalls after STALL passes with no fewer gaps than its best before them: each tells the operator through the round, and the loop then waits for a change of his words or of main under paths.
-Each round of the loop also holds with the label hold each open PR that changes paths at a head that no judge passed, and once its checks are green, judges each capture that the PR changes against main: its gaps go to its worker and to a comment, and a clean head loses the hold that converge put.
+Before the conductor merges a PR that changes paths, it asks converge through its vetoes: once the checks of the PR are green, converge judges each capture that the PR changes against main, and says no until a head shows no gap. The gaps go to its worker and to a comment, and a new head is judged again. converge puts no label on a PR.
 The ledger of a target, .furb/converge/<name>.json, keeps each pass, each judged head and the step that runs, so a later life goes on from it. The loop ends when it spent JOBS captures or USD dollars."""
 JUDGES = ("claude-cli:fable/high", "claude-cli:sonnet/high")
 CLEAN = 2
@@ -55,7 +55,7 @@ STEP = """The words of the owner on {name}, quoted below as he wrote them, are t
 </words>
 
 Blind judges read the captures of {name} at {sha} against his words, and found the gaps below. Fix the largest gap that falls in your work, the one that fails his words most, in one PR, with each other gap that the same change fixes. {capturing}
-converge judges the head of your PR against his words before it lands: it puts the label hold on it, and takes the hold off itself once a head shows no gap, so leave that label on. Once your PR lands, converge captures {name} again, so leave each other gap to a later pass.
+converge judges the head of your PR against his words before the conductor merges it, and tells you its gaps. Once your PR lands, converge captures {name} again, so leave each other gap to a later pass.
 
 The gaps:
 
@@ -165,7 +165,6 @@ def book_of(target: dict) -> dict:
   for key, empty in (
     ("passes", []),
     ("heads", {}),
-    ("held", []),
     ("shots", {}),
     ("clean", 0),
     ("spent", 0.0),
@@ -346,29 +345,47 @@ async def settled(target: dict, step: dict, head: str) -> bool:
   return not step["pr"] or step["pr"] in c["merged"] or step["pr"] not in c["prs"]
 
 
-async def holding(target: dict, book: dict) -> list[dict]:
-  c, ready = conductor(), []
-  open_ = c["prs"]
-  book["held"] = [n for n in book["held"] if n in open_]
-  for n, pr in sorted(open_.items()):
-    if "paused" in pr["labels"] or not str(pr["head"]).startswith("w/") or pr["base"] != "main":
-      continue
-    key = f"{n} {pr['sha']}"
-    seen = book["heads"].get(key)
-    if seen is None:
-      got = await bash(f"gh pr view {n} --json files --jq '.files[].path'", show=HIDDEN, timeout=120)
-      if got.code != 0:
-        continue
-      if not any(f.startswith(tuple(target["paths"])) for f in got.stdout.lines):
-        book["heads"][key] = {"state": "outside"}
-        continue
-      seen = book["heads"][key] = {"state": "held"}
-      if "hold" not in pr["labels"] and n not in book["held"]:
-        await bash(f"gh pr edit {n} --add-label hold >/dev/null 2>&1", show=HIDDEN, timeout=120)
-        book["held"].append(n)
-    if seen["state"] == "held" and pr.get("verdict") == "pass":
-      ready.append(pr)
-  return ready
+TARGETS = [TUI]
+LIVE: dict[str, dict] = {}
+OPEN: dict[str, dict] = {}
+
+
+def shared(target: dict) -> dict:
+  if target["name"] not in LIVE:
+    LIVE[target["name"]] = book_of(target)
+  return LIVE[target["name"]]
+
+
+async def classified(target: dict, book: dict, pr: dict) -> str:
+  key = f"{pr['n']} {pr['sha']}"
+  if key not in book["heads"]:
+    got = await bash(f"gh pr view {pr['n']} --json files --jq '.files[].path'", show=HIDDEN, timeout=120)
+    if got.code != 0:
+      return "held"
+    book["heads"][key] = {"state": "held" if any(f.startswith(tuple(target["paths"])) for f in got.stdout.lines) else "outside"}
+  return book["heads"][key]["state"]
+
+
+async def converge_veto(pr: dict) -> bool:
+  key = f"{pr['n']} {pr['sha']}"
+  for target in TARGETS:
+    book = shared(target)
+    state = await classified(target, book, pr)
+    if state == "held" and key in book["heads"]:
+      job = OPEN.get(key)
+      if not job:
+        job = started(target, "pr", str(pr["sha"]), int(pr["n"]))
+        job["words"] = await ruling(target)
+      job = await advanced(target, book, job, job["words"], str(pr["sha"]))
+      if job:
+        OPEN[key] = job
+      else:
+        OPEN.pop(key, None)
+      booked(target, book)
+      state = book["heads"][key]["state"]
+    if state not in ("outside", "clean"):
+      return True
+  return False
 
 
 def started(target: dict, kind: str, sha: str, n: int = 0) -> dict:
@@ -405,6 +422,12 @@ async def advanced(target: dict, book: dict, job: dict, words: str, head: str) -
   book["spent"] += cost_of(asked)
   if broken:
     book["passes"].append({"sha": job["sha"], "n": job["n"], "inconclusive": broken})
+    if job["kind"] == "pr":
+      key = f"{job['n']} {job['sha']}"
+      tries = book["heads"].get(key, {}).get("tries", 0) + 1
+      book["heads"][key] = {"state": "held" if tries < 2 else "stuck", "tries": tries}
+      if tries >= 2:
+        tell_home(f"the judges of the PR #{job['n']} at {job['sha'][:7]} gave no answer twice, so the conductor does not merge it.")
     return {}
   if job["kind"] == "pr":
     await screened(target, book, job, gaps, words)
@@ -439,20 +462,17 @@ async def screened(target: dict, book: dict, job: dict, gaps: list[list[str]], w
   c, n, sha = conductor(), job["n"], job["sha"]
   book["heads"][f"{n} {sha}"] = {"state": "gaps" if gaps else "clean", "gaps": gaps}
   if not gaps:
-    if n in book["held"]:
-      await bash(f"gh pr edit {n} --remove-label hold >/dev/null 2>&1", show=HIDDEN, timeout=120)
-      book["held"].remove(n)
     return
   body = (
     f"🤖 converge judged the head {sha[:7]} of this PR against the words of the owner on {target['name']}, and"
-    " holds it with the label hold until a head shows none of these gaps:\n\n"
+    " the conductor does not merge it until a head shows none of these gaps:\n\n"
     + "\n".join(f"- {shot}: {gap}" + (f" His words: {quote}" if quote else "") for shot, gap, quote in gaps[:LIMIT])
   )
   await bash(f"gh pr comment {n} --body-file -", stdin=body, show=HIDDEN, timeout=120)
   told = (
-    f"converge judged the head {sha[:7]} of your PR #{n} against the words of the owner, which follow, and holds it"
-    f" with the label hold until a head shows none of the gaps below. Fix them, push, and leave the label: converge"
-    f" takes it off itself.\n\n<words>\n{words}\n</words>\n\nThe gaps:\n\n{listed(gaps, job['taken'])}"
+    f"converge judged the head {sha[:7]} of your PR #{n} against the words of the owner, which follow, and the"
+    f" conductor does not merge it until a head shows none of the gaps below. Fix them and push."
+    f"\n\n<words>\n{words}\n</words>\n\nThe gaps:\n\n{listed(gaps, job['taken'])}"
   )
   told = safe(told)
   pr = c["prs"].get(n)
@@ -464,23 +484,20 @@ async def screened(target: dict, book: dict, job: dict, gaps: list[list[str]], w
 
 
 async def converge(target: dict, ticks: int = 0) -> dict:
-  book, job, tick = book_of(target), {}, 0
+  book, job, tick = shared(target), {}, 0
   while not ticks or tick < ticks:
     tick += 1
     head = await main_head()
     words = await ruling(target)
     if book["state"] in ("converged", "stalled") and (words != book["words"] or await moved(target, book["since"], head)):
       book.update(state="", clean=0)
-    ready = await holding(target, book)
     if book["step"] and await settled(target, book["step"], head):
       book["step"] = None
     if not job and book["state"] != "spent" and (book["jobs"] >= JOBS or book["spent"] >= USD):
       book["state"] = "spent"
       tell_home(f"{target['name']} spent its budget: {book['jobs']} captures and {book['spent']:.2f} dollars.")
     if not job and book["state"] != "spent" and head:
-      if ready and book["shots"]:
-        job = started(target, "pr", str(ready[0]["sha"]), int(ready[0]["n"]))
-      elif not book["state"] and not book["step"]:
+      if not book["state"] and not book["step"]:
         job = started(target, "main", head)
     while job:
       was = job
@@ -495,3 +512,6 @@ async def converge(target: dict, ticks: int = 0) -> dict:
     else:
       await wait(EVERY, *[a for a in ([job["act"]] if not job["asked"] else job["asked"]) if a != "none" and not over(a)])
   return book
+
+if scope(acting()) == ROOT:
+  conductor().get("vetoes", {})["converge"] = converge_veto

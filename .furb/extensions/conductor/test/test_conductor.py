@@ -515,3 +515,17 @@ async def test_a_job_over_its_budget_is_queued_once_until_new_runs_measure_it(co
   assert [(key, thread) for key, _, thread in conductor.queue] == [("budget-the-hooks", "ci")]
   assert "took 180 s" in conductor.queue[0][1]
   assert "budget of 60 s" in conductor.queue[0][1]
+
+@POSIX
+@JQ
+async def test_a_veto_keeps_a_green_pr_from_a_merge(conductor: Round) -> None:
+  asked: list[int] = []
+
+  async def deny(pr: dict) -> bool:
+    asked.append(pr["n"])
+    return True
+
+  conductor.vetoes["judge"] = deny
+  await conductor.land(conductor.pr(n=7, sha="sha7", checks=("SUCCESS",), names=["the hooks"]), False)
+  assert asked == [7]
+  assert "pr merge" not in conductor.log()

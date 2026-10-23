@@ -80,6 +80,7 @@ measures: list[int] = []
 timers: dict[str, float] = {}
 noted: list[str] = []
 debriefs: dict[str, str] = {}
+vetoes: dict = {}
 
 RULES = """Run no real life of a model. Never open a window on this machine, not even for a test: the owner works on it, and each window takes his mouse and his keyboard. Run a check of the app only on the runners of CI. Start each comment, review, issue and PR body that you write on GitHub with 🤖, since you write from the owner's account and his own words carry no mark; a title keeps its own rule. Never take off the label owner-merge: only the owner takes it off, and that is his approval to merge. The owner sleeps or is away: ask him nothing and wait for nothing of his. Take each decision yourself from the brief and the rulings, say it in your PR body, and go on. Ask the one who gave you this work on its chain only when it alone can decide: await prompt(str, question, on="{home}")."""
 
@@ -522,6 +523,9 @@ async def land(pr: dict, red: bool) -> None:
   n, sha = pr["n"], pr["sha"]
   if pr["verdict"] != "pass":
     return
+  for veto in list(vetoes.values()):
+    if await veto(pr):
+      return
   same = await bash(
     f"git fetch -q origin main refs/pull/{n}/head 2>/dev/null; t=$(git rev-parse {sha}^{{tree}} 2>/dev/null) && [ \"$(git merge-tree --write-tree origin/main {sha} 2>/dev/null | head -1)\" = \"$t\" ] && echo same",
     show=HIDDEN,

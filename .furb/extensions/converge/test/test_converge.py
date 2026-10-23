@@ -72,6 +72,7 @@ class World:
       "timers": {"sweep": 1.0},
       "owner_of": lambda pr: "",
       "working_at": lambda name: f"at-{name}",
+      "vetoes": {},
     }
     self.say(r"rev-parse origin/main", "sha1\n")
     self.say(r"gh issue view", WORDS + "\n")
@@ -80,6 +81,7 @@ class World:
     ns.update(HIDDEN=None, module=lambda on="": self.round, cwd=lambda: str(tmp), read=self.read, write=self.write)
     ns.update(bash=self.bash, prompt=self.prompt, chain=self.chain, rung=self.rung, grant=self.grant, wait=self.wait)
     ns.update(over=lambda name: name in self.done, peek=lambda name, waiting=None: self.done.get(name, waiting))
+    ns.update(acting=lambda: "rung1", scope=lambda name: "chain1")
     ns.update(get=self.facts.get, transcript=lambda on="", of="": [])
     exec(compile(SOURCE, str(HERE / "converge.py"), "exec"), ns)  # noqa: S102
     self.ns = ns
@@ -241,54 +243,6 @@ def converged(world: World) -> None:
   )
 
 
-def test_an_open_pr_that_changes_the_paths_is_held_and_judged_once_green(world: World) -> None:
-  converged(world)
-  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
-  world.round["prs"][5] = pr()
-  world.waited = lambda: world.round["prs"].update({5: pr(verdict="pass", labels=("hold",))})
-  world.say(r"python3 -I -", "S\tdemo/01-welcome\td2.png\n")
-  book = world.run(2)
-  assert [c for c in world.commands if c.startswith("gh pr edit")] == [
-    "gh pr edit 5 --add-label hold >/dev/null 2>&1",
-    "gh pr edit 5 --remove-label hold >/dev/null 2>&1",
-  ]
-  assert book["heads"]["5 abc"] == {"state": "clean", "gaps": []}
-  assert book["held"] == []
-  pairs = world.judged()[0]
-  assert "![main demo/01-welcome](furb-image://d1.png)" in pairs and "![head demo/01-welcome](furb-image://d2.png)" in pairs
-
-
-def test_a_pr_with_gaps_keeps_its_hold_and_its_worker_and_a_comment_get_them(world: World) -> None:
-  converged(world)
-  world.judge = lambda message, to: gap()
-  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
-  world.say(r"python3 -I -", "S\tdemo/01-welcome\td2.png\n")
-  world.round["prs"][5] = pr(verdict="pass")
-  world.round["owner_of"] = lambda one: "prompt70"
-  book = world.run(1)
-  assert book["heads"]["5 abc"]["state"] == "gaps"
-  assert book["held"] == [5]
-  assert any(c.startswith("gh pr comment 5") for c in world.commands)
-  assert [on for shape, message, to, on in world.prompts if shape is None] == ["at-prompt70"]
-
-
-def test_a_pr_that_changes_no_capture_passes_with_no_judge(world: World) -> None:
-  converged(world)
-  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
-  world.round["prs"][5] = pr(verdict="pass")
-  book = world.run(1)
-  assert book["heads"]["5 abc"]["state"] == "clean"
-  assert world.judged() == []
-
-
-def test_a_pr_outside_the_paths_is_neither_held_nor_judged(world: World) -> None:
-  converged(world)
-  world.say(r"gh pr view 5 --json files", "src/engine.rs\n")
-  world.round["prs"][5] = pr(verdict="pass")
-  book = world.run(1)
-  assert book["heads"]["5 abc"] == {"state": "outside"}
-  assert not any(c.startswith("gh pr edit") for c in world.commands)
-
 
 def test_a_change_of_the_words_of_the_owner_starts_the_passes_again(world: World) -> None:
   converged(world)
@@ -381,3 +335,64 @@ def test_a_list_of_gaps_for_a_worker_holds_its_first_few_and_counts_the_rest(wor
   text = world.listed(gaps, {"demo/01-welcome": "d1.png"})
   assert text.count("His words: ") == 12
   assert text.endswith("- and 3 more gaps, which a later pass shows again")
+
+def veto(world: World) -> bool:
+  return asyncio.run(world.converge_veto(pr(verdict="pass")))
+
+
+def test_the_conductor_is_given_the_veto_of_converge(world: World) -> None:
+  assert world.round["vetoes"]["converge"] is world.ns["converge_veto"]
+
+
+def test_a_green_pr_that_changes_a_capture_waits_for_the_judges_and_lands_on_a_clean_head(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.say(r"python3 -I -", "S\tdemo/01-welcome\td2.png\n")
+  assert veto(world) is False
+  assert world.book()["heads"]["5 abc"] == {"state": "clean", "gaps": []}
+  assert not any(c.startswith("gh pr edit") for c in world.commands)
+  pairs = world.judged()[0]
+  assert "![main demo/01-welcome](furb-image://d1.png)" in pairs
+  assert "![head demo/01-welcome](furb-image://d2.png)" in pairs
+
+
+def test_a_pr_with_gaps_keeps_the_veto_and_its_worker_and_a_comment_get_them(world: World) -> None:
+  converged(world)
+  world.judge = lambda message, to: gap()
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.say(r"python3 -I -", "S\tdemo/01-welcome\td2.png\n")
+  world.round["owner_of"] = lambda one: "prompt70"
+  world.round["prs"][5] = pr(verdict="pass")
+  assert veto(world) is True
+  assert veto(world) is True
+  assert world.book()["heads"]["5 abc"]["state"] == "gaps"
+  assert len(world.judged()) == 2
+  assert any(c.startswith("gh pr comment 5") for c in world.commands)
+  assert not any("label" in c for c in world.commands)
+  assert [on for shape, message, to, on in world.prompts if shape is None] == ["at-prompt70"]
+
+
+def test_a_pr_that_changes_no_capture_passes_with_no_judge(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  assert veto(world) is False
+  assert world.book()["heads"]["5 abc"]["state"] == "clean"
+  assert world.judged() == []
+
+
+def test_a_pr_outside_the_paths_is_not_judged(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "src/engine.rs\n")
+  assert veto(world) is False
+  assert world.ns["LIVE"]["tui"]["heads"]["5 abc"] == {"state": "outside"}
+  assert world.judged() == []
+
+
+def test_judges_that_give_no_list_twice_keep_the_veto_and_tell_the_operator_once(world: World) -> None:
+  converged(world)
+  world.judge = lambda message, to: Refused("paused")
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.say(r"python3 -I -", "S\tdemo/01-welcome\td2.png\n")
+  assert [veto(world) for _ in range(3)] == [True, True, True]
+  assert world.book()["heads"]["5 abc"]["state"] == "stuck"
+  assert len(world.told()) == 1
