@@ -36,6 +36,13 @@ let sequence = 0;
 /** The last state of the life, which a window that attaches reads first. */
 let last: HostState | undefined;
 let ending = false;
+/** What each other window hears when the life ends. */
+let why = "The life ended in another window.";
+/** How long a host that hands its life over waits for the commands and the replies of the models that run, so that
+ * each that ends in time lands in the record. Each other ends as interrupted in the life of the next host, as a
+ * command that a crash cut does. */
+const HANDOVER = 10000;
+let handing = false;
 
 function ask(target: string, method: string, args: unknown[], to: Asker): void {
   const id = ++sequence;
@@ -83,7 +90,7 @@ worker.onmessage = ({ data }) => {
   to?.send?.({ ...data, id: to.id });
   if (!data.disposed) return;
   // The life ended: each other window hears so, and the host ends once each window has its answer.
-  for (const send of windows) if (send !== to?.send) send({ ended: "The life ended in another window." });
+  for (const send of windows) if (send !== to?.send) send({ ended: why });
   server.close();
   setTimeout(() => close(0), 50);
 };
@@ -105,8 +112,38 @@ function heard(message: Request, send: Send): void {
     windows.add(send);
     return;
   }
-  if (message.target === "session" && message.method === "end") ending = true;
+  if (message.target === "session" && message.method === "end") {
+    const taker = (message.args[0] as { handover?: { build?: string } } | undefined)?.handover;
+    if (taker) {
+      if (!handing && !ending) void handOver(String(taker.build ?? ""));
+      return;
+    }
+    ending = true;
+  }
   ask(message.target, message.method, message.args, { send, id: message.id });
+}
+
+/** The ids of the commands and of the replies of the models that run, or none when the life cannot say. */
+const running = () =>
+  asked("library", "running").then(
+    (ids) => new Set(Array.isArray(ids) ? ids.map(String) : []),
+    () => new Set<string>(),
+  );
+
+/** The hand over of the life to a window of another build: the host waits a bounded time for what runs, then ends
+ * the life, so its record and its lease are free for the host that the window starts. */
+async function handOver(build: string): Promise<void> {
+  handing = true;
+  const left = await running();
+  for (const deadline = Date.now() + HANDOVER; left.size && Date.now() < deadline; ) {
+    await Bun.sleep(50);
+    const now = await running();
+    for (const id of left) if (!now.has(id)) left.delete(id);
+  }
+  if (ending) return;
+  ending = true;
+  why = `A window of the build ${build} took the life over, and a host of that build goes on with it. Open the life again in a window of that build.`;
+  ask("session", "end", [], { id: 0 });
 }
 
 let root: string;

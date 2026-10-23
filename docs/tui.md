@@ -398,7 +398,9 @@ sessions, each with its state, the time since its last save, its cost, and its s
 
 On macOS and Linux, each session is a life in a host of its own, which outlives the window. A quit detaches the
 window, and the commands and the models of each life go on. A later window, or a second one at the same time, opens
-the same record and attaches to the life as it stands. `/end` ends the life of each open session, then quits.
+the same record and attaches to the life as it stands. A window of a new build takes the life over: the old host
+ends it, and a host of the new build opens it again on the same record. `/end` ends the life of each open session,
+then quits.
 `tui/README.md` says where the host listens and when a life stays in the window.
 
 ![Workspace tree](screenshots/28-workspace-tree.png)
