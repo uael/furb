@@ -112,7 +112,7 @@ program that `FURB_TUI` names, or the `furb-tui` on PATH.
 - [The desktop preview](gui/README.md): how to build the desktop app, start it, and read a record in a window.
 - [The JSON-RPC](docs/rpc.md): the commands and the events of `furb --mode rpc`.
 - [The extensions](docs/extensions.md): what an extension is, the configs that turn one on, and the official ones.
-- [The developer guide](docs/developer-guide.md): the tools to install, how a word runs, and how to change the TUI.
+- [Contributing](CONTRIBUTING.md): how to set up a clone, how a word runs, the gates, and how a pull request lands.
 - [The contract](src/furb/engine.pyi): every law of the engine, one sentence per line.
 
 ## License
