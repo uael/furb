@@ -90,7 +90,7 @@ PRS = """gh pr list --state open --limit 200 --json number,isDraft,labels,mergea
 echo ---
 gh pr list --state merged --limit 200 --json number --jq '[.[].number]'
 echo ---
-gh run list --branch main --limit 20 --json headSha,conclusion --jq '.[0].headSha as $s | {sha: ($s // ""), runs: [.[] | select(.headSha == $s) | .conclusion]}'
+gh run list --branch main --workflow gates.yml --limit 20 --json headSha,conclusion --jq '.[0].headSha as $s | {sha: ($s // ""), runs: [.[] | select(.headSha == $s) | .conclusion]}'
 echo ---
 cat DECISIONS.md 2>/dev/null"""
 

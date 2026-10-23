@@ -172,7 +172,7 @@ def debug(template: Template) -> None:
 
 def wait(seconds: float = 0.0, *acts: str, on: str = "") -> Act[str | None]:
   def ear(id):
-    while not (got := [x for x in acts if over(x)]):
+    while not (got := [*filter(over, acts)]):
       yield {id, *acts}
     yield "done", id, got[0]
 
@@ -323,8 +323,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         case ("read", about, by, _, path) if question(("prompt", path)) and scope(path) == id:
           yield "done", about, Text(path, "\n".join(w for x, w in rungs.items() if x != by and under(x, path)))
         case ("write", about, by, _, Text(path, content) as text) if question(("prompt", path)) and scope(path) == id:
-          if under(by, path):
-            rungs.pop(by, None)
+          under(by, path) and rungs.pop(by, None)
           yield from replay(path, content.rstrip("\n"))
           yield "done", about, text
         case ("read", about, *_, path) if (door := re.fullmatch(r"(bash\d+)/(stdout|stderr)", path)) and get(door[1]):
@@ -397,8 +396,7 @@ def grant(usd: float | None = None, share: float | None = None, on: str = "") ->
     yield "started", id
     spent = 0
     for x in transcript(here, "grant"):
-      if x[3] == here and x[1] != id:
-        close(None, x[1])
+      x[3] != here or x[1] == id or close(None, x[1])
     yield told(id, "", bound(id, "None"), usd=usd, share=share)
     while True:
       match (yield {id, "reply"}):
@@ -494,9 +492,9 @@ class Act[T = object](str):
     f = get_running_loop().create_future()
 
     def waits():
-      while (got := peek(self, ...)) is ...:
+      while not over(self):
         yield
-      (f.set_exception if isinstance(got, BaseException) else f.set_result)(got)
+      (f.set_exception if isinstance(got := peek(self), BaseException) else f.set_result)(got)
 
     drive(g := waits(), f"{self} waits {id(g)}")
     try:
@@ -602,7 +600,7 @@ def unquoted(word):
   while m := re.search(r"(?m)^<s:(\w+)>\n?", word):
     head, word = word[: m.start() + 1], word[m.start() + 1 :]
     if end := re.search(f"(?m)</s:{m[1]}>$", word):
-      head = head[:-1] + f"{m[1]} = {word[len(m[0]) - 1 : end.start()]!r}" + "\n" * word[: end.end()].count("\n")
+      head = head[:-1] + m[1] + " = " + repr(word[len(m[0]) - 1 : end.start()]) + "\n" * word[: end.end()].count("\n")
       word = word[end.end() :]
     kept += head
   return kept + word
@@ -728,6 +726,7 @@ def boot(record=(), **outside):
     if about in known and kind in ("started", "done"):
       taken.setdefault(about, False)
       kind == "done" and done.setdefault(about, words[0])
+    kind == "prefix" and [held[x].clear() for x in held if x[0] == about]
     holds(scope(about), words[0] if kind == "prefix" else [a])
     log.append((a, ()))
     dispatch()
@@ -779,7 +778,7 @@ def boot(record=(), **outside):
     q = get(a[1]) or a[:1] * 4
     k = {a[0], *q[:4], scope(q[2]), scope(q[3])}
     return sorted(
-      ((n, g) for n, g in alive.items() if k & (waits.get(n) or k) or a[0] in ("pause", "wake", "cancel", "close")),
+      (x for x in alive.items() if k & (waits.get(x[0]) or k) or a[0] in ("pause", "wake", "cancel", "close")),
       key=lambda pair: (pair[0] not in known, pair[0] in outside),
     )
 

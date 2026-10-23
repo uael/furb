@@ -329,13 +329,16 @@ async def test_the_transcript_of_a_chain_is_the_facts_on_it_in_the_order_it_hear
 
 
 async def test_nothing_leaves_a_transcript_once_the_transcript_holds_it() -> None:
-  """Nothing leaves a transcript once the transcript holds it."""
+  """Nothing leaves a transcript once the transcript holds it, but by a prefix said on its chain, which takes the place of what the transcript held."""
   _, _, root, one = await posed()
   was = list(engine.transcript(root))
   engine.cancel(one)
   await settle()
   now = engine.transcript(root)
   assert now[: len(was)] == was and len(now) > len(was)
+  kept = [a for a in now if a[1] != one]
+  engine.say("prefix", root, kept)
+  assert [a[:2] for a in engine.transcript(root)] == [a[:2] for a in kept] != [a[:2] for a in now]
 
 
 async def test_an_assistant_turn_keeps_the_role_assistant_in_every_chain_made_from_the_chain() -> None:
