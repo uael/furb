@@ -90,6 +90,7 @@ Where the one primitive serves:
 | A chain that supersedes another | A word makes the successor of its own chain. |
 | An upgrade of the engine at a checkpoint | The new engine makes the successor of each chain that the checkpoint carries. |
 | A record that grows | The checkpoint, which carries the successors, is where a later life starts to read. |
+| A chain of another record | `carry` answers with a carried chain, and the new chain is its successor (section 3.7). |
 
 Where it serves in part: a fork for each question. A fork is a chain with a source that does not supersede it. It
 keeps the prefix of its source whole, so its first turn reads that prefix from the cache, and the source never
@@ -121,8 +122,8 @@ wrapped by default, and compaction stays a wrapper that a word puts on one chain
 ### 3.2 Segments and the checkpoint
 
 The record becomes a sequence of segments. The first starts at the root. Each later one starts at a checkpoint, a
-fact of the World on the root. The fact `made` after the start of a segment names the engine, the Kernel and the
-sheet that wrote it, by digest and with their text, about 45 KB.
+fact of the World on the root. The fact `made` names the version of the build that wrote the segment (section 3.3),
+and each stand says it again, so each part of the record names the build that made it.
 
 A checkpoint carries, as plain data:
 
@@ -148,26 +149,67 @@ The World writes a checkpoint at an upgrade, when a host ends, and when the tail
 that the host sets: 50000 facts by default, about four hours of life 3. A checkpoint in a running life also lets the
 host start the sandbox again from it, so the heap holds only the live state and the tail (C15).
 
+The form of a checkpoint is one fact of the record, whose values are in the plain form of the record (the marks of
+#96 for a tuple, a `Text`, an `Exit` and a whole float):
+
+```
+["checkpoint", "chain1", "store", {
+  "version": 1,
+  "build": "<the version of the build that wrote it>",
+  "before": "<the sha256 of the entry before it>",
+  "counts": {"chain": 118, "prompt": 1206, "bash": 7414, ...},
+  "acts": [[<act>, <its done, or null>], ...],
+  "chains": [{"chain": "chain1", "turns": [<tell or done of a reply>, ...],
+              "values": {"queue": [...], "working": {...}, ...},
+              "definitions": ["def hire(...): ...", "CAP = 6", ...],
+              "lost": ["<a name whose value is not plain>", ...]}, ...],
+  "open": ["prompt1177", "bash7394", ...]
+}]
+```
+
+- `acts` holds each act that a carried chain, a carried value or an open act names, with its answer, so `get`,
+  `peek` and `over` of that name give what they gave.
+- `chains` holds each chain with an act that is not over: its turns as its model read them, the plain values of its
+  module, the definitions of its program, and each name that it lost.
+- `open` names the acts that are not over, in the order of the record, which the next build makes again through
+  their verbs under their names. An open run is not in it: the checkpoint cuts it.
+
 The entries before the last checkpoint are history. No life replays them, a reader reads them, and the store can
 move them to a file of their own beside the record.
 
-### 3.3 Live patching: the engine, the Kernel and the interpreter
+### 3.3 Versions, the store of builds, and live patching
 
-An upgrade is an act on the root, which the host takes, so the record keeps its place. The host writes a checkpoint,
-makes a new sandbox on the new engine and Kernel from that checkpoint, and drops the old sandbox. The World is of the
-host and not of the sandbox, so each command and each reply that runs goes on and lands in the new segment: only the
-words that run are cut. The new engine and Kernel come from a newer build of the host, or from the files that the
-upgrade names, so an engine PR that merges reaches the running life with no new build of rust.
+The owner, on 10-23: "An engine version is a distribution: it is small, only Rust and embedded python. Maybe we keep
+a store of versions, replay each part of a record on the same one that made it, then stand on the new version in the
+new life. Each stand discloses a version, and we reuse the exact same binary. Keep few versions: increment only on
+breaking changes."
 
-A later build opens the record from its last checkpoint. It replays the tail on the engine, the Kernel and the sheet
-that the head of that segment holds as text, and then upgrades at the tip to its own. So a later build always goes
-on with a record of an older engine.
-
-The owner weighed a record that holds the source of each engine. It serves only with the checkpoint. A replay of
-every segment on its own engine still grows with the age of the life (4 hours for a year, section 6). It needs the
-state handed from one engine to the next at each boundary, which is the checkpoint. And an old segment still runs on
-the monty of the new build. So the record keeps the text of the engine of the last segment for its tail, and the
-checkpoint is the boundary.
+- A version is a build that replays: the engine, the Kernel, the sheet, monty and the ears of rust that make acts. A
+  build names its version as a number, `VERSION` in the crate, and the fact `made` names that number and the commit
+  of the build.
+- Few versions, by a rule that a machine checks. A gate replays a fixed corpus of records on the build of each PR and
+  compares the facts with the log of each record. A change that replays each record to the same facts keeps the
+  version. A change that fails the check adds one to `VERSION` and records the corpus again, in the same PR. The
+  corpus holds records that the repository can hold: the demo, the fixtures of the TUI, and a life of
+  `script/play.py` on a claude that answers from a script. So most PRs keep the version, and a life goes on with
+  them on a new build with no switch at all.
+- The store of builds: each build that a record names stands as one program in
+  `<cache of furb>/builds/<version>/furb`. A build puts itself there at its first run. A build that the store lacks
+  is fetched from the release of its version, or built from its commit with `script/worktree.sh` and cargo. So any
+  later build replays any part of any record on the exact program that made it, and no replay drifts: this is the
+  rule of the owner that a drift is an internal hard error (R2).
+- A stand on a new version: when a life opens on a build of another version than the last segment, the old build
+  from the store replays the tail of that segment with no model and no command (`furb checkpoint --record <path>`),
+  and writes a checkpoint at the tip. The new build starts from that checkpoint, with the successor of each chain. A
+  dump of the old interpreter does not load in the new one, so the checkpoint is plain data.
+- Live patching: an upgrade is an act on the root, which the host takes, so the record keeps its place. In a host of
+  its own (section 3.5), the old build writes the checkpoint while it lives, and the new build boots from it. In one
+  process, for an engine or a Kernel of the same build of rust, the host makes a new sandbox from the checkpoint and
+  drops the old one. The World is of the host and not of the sandbox, so each command and each reply that runs goes
+  on and lands in the new segment: only the words that run are cut. A change of the same version needs no
+  checkpoint: the new build replays the tail as it stands.
+- The owner weighed a record that holds the text of each engine. The store of builds replaces it: a text of python
+  does not hold monty and the ears of rust, which make acts too (C11, C16), and the exact program does.
 
 ### 3.4 A reload of an extension
 
@@ -185,6 +227,27 @@ the app attach to it and detach, so a new build of the TUI restarts only the win
 furb, with a cursor, so a window that comes back reads only what it missed. A new build of the host takes over with
 an upgrade: the old host writes a checkpoint and exits, and the new host takes the lease and boots from the
 checkpoint. An agent of the user starts the host again after a reboot.
+
+### 3.7 A successor of a chain of another record
+
+The owner, on 10-23: "import chains from a previous journal." This is one more source of a successor: a chain of
+another record. `carry(record, chain)` is an act that the World takes. It reads the other record with no life, and
+answers with that chain in the form of one item of `chains` of a checkpoint, and the record keeps that answer.
+`chain(label, source=<that act>)` makes the successor of the carried chain. So a replay of the new life reads the
+same turns from its own record and opens no other file. The act names its source by the path, the count of its
+entries and the digest of its last entry, which the chain of digests of the version 2 of the record proves.
+
+- What it carries: the turns of the chain as its model read them, from the log of the record or from `retold`
+  (#311), and each open prompt of a model, which goes on as a prompt of the successor with its shape, its message and
+  its actor, under a new name. When the store holds the build that made the record, that build writes a checkpoint
+  at its tip first (section 3.3), and the import carries the plain values and the definitions of the module too.
+  When no store holds that build, as for the records of 10-20 and 10-21, the import carries the turns alone, and the
+  successor names each value that it lost.
+- What it cannot carry: a generator, a word that runs and an open command, which ended with the life that ran them.
+  An act of another record keeps its name only in the turns, since a name of this record never names an act of
+  another one.
+- What it serves: the life after this one, if one comes, takes chain1, chain8 and each worker with their context,
+  and a record that no build of the store opens any more still gives its chains.
 
 ### 3.6 The versions of the formats
 
@@ -231,10 +294,9 @@ cache, and 47 million written to it, for 732 dollars. A write costs 12.5 times a
 
 ## 5. What the interpreter can still force
 
-- A change of what a word computes: only the tail after the last checkpoint replays, and an upgrade writes a
-  checkpoint, so a new monty reaches only a tail that a crash left. The digest of a segment adds the revision of
-  monty. The host keeps its previous build until a checkpoint of the new one lands, so a tail that a crash left
-  across a new build replays on the build that wrote it.
+- A change of what a word computes: each part of the record replays on the build that made it, from the store of
+  builds, so a new monty changes no replay. A pin of monty that changes a fact of the corpus is a new version, by the
+  gate.
 - The form of its dump: a checkpoint holds no dump, so a new `DUMP_VERSION` drops only the snapshot, which is a
   cache.
 - The bound of a turn (C14): a replay runs with no bound a word whose end the record holds.
@@ -253,7 +315,10 @@ log of 236 GB and a journal of changes of 53 GB.
 | Disk of the checkpoints | none | about 90 MB each day at 15 MB each four hours, so 33 GB a year beside 175 GB of record |
 | Heap | grows with the life: 1.6 GB at 250000 facts | the live state and the tail since the last checkpoint |
 | A supersede | none | no copy: the successor shares the module and the open acts |
-| An upgrade | a new life | a checkpoint, a new sandbox and a boot from it: seconds |
+| An upgrade | a new life | a checkpoint, a new sandbox and a boot from it: a few seconds [inferred: a parse of 60000 lines of the log of life 3 takes 1.9 s in python, and its live chains hold about 23000 lines] |
+| A build in the store | none | one program `furb`: 64 MB in the dev profile today (`target/debug/furb`), less in a release |
+| A stand on a new version after a crash | a new life | the old build replays a tail of at most 50000 facts, about 7 s at the rate of #302, then writes the checkpoint |
+| The TUI while it switches | none | the host tells each window that the life switches, with each step (the tail, the checkpoint, the boot); the feed stays readable from the log, and what the operator sends waits in the queue of follow-ups |
 | A reload | none | the definitions of one word on each chain at its next step |
 | TUI | 1.6 GB and slow at 250000 facts, and no draw at 1000000 | the item bigtui: it reads the summary, the table of chains and the pages in view, with a memory that does not grow with the age |
 
@@ -275,6 +340,10 @@ Each PR that builds a part measures it again on copies of the real records.
 - A successor retells no rung of its source, since it stands in the module that those rungs bound.
 - A successor of a successor supersedes each chain that the first one superseded, and the root keeps its name.
 
+- A source is a chain of the life, or an act of carry that the World answered with a chain of another record, of
+  which the new chain is the successor, with the turns, the open prompts and the plain values that the answer
+  carries.
+
 `chain`, changed:
 
 - Was: "In a chain with a source the rungs of the origin that are over at that source run again in the module of
@@ -294,11 +363,11 @@ successor for a chain that a successor superseded, and nothing for a name of no 
 
 `Standing`, was: "A standing holds no source: the engine is one file the model imports, and a record made by another
 engine is a drift." Now: "A standing holds no source: the engine is one file the model imports, and a segment of the
-record replays only on the engine that wrote it."
+record replays only on a build of the version that wrote it, which the fact made names."
 
 `Entry`, new: "The record is a sequence of segments: the first starts at the root and each later one at a
-checkpoint, and the fact made at the start of a segment names the engine, the Kernel and the sheet that wrote it,
-with their text."
+checkpoint, and the fact made names the version of the build that wrote each segment, which each stand says
+again."
 
 A new type, `Checkpoint`, with these sentences:
 
@@ -309,6 +378,8 @@ A new type, `Checkpoint`, with these sentences:
 - The definitions of a program are the statements at the top of each of its words that define: def, class, import,
   and an assignment to a name in capitals, in the order of the program.
 - A name of a module whose value is neither plain nor a definition is not carried, and the checkpoint names it.
+- An act of carry is answered with one chain of another record in the form that a checkpoint carries it, and the
+  record keeps that answer, so a replay reads the same turns.
 
 `boot`, new:
 
@@ -366,19 +437,21 @@ Each enables the next, and each carries its tests.
 3. fix(typescript): a `Session` keeps a snapshot, with its observer as an ear of the host by its name (C13).
 4. feat(crate): each format names its version, the record holds its chain of digests with the work of the item
    bench-audit, and each reader reads each older version, with a test for each (C10).
-5. feat(engine): a chain supersedes its source, and compaction makes a successor (C3, C9).
-6. feat(engine): a record goes on from its last checkpoint (C4, C9, C15).
-7. feat(crate): the upgrade of a running life at a checkpoint, and a tail that replays on the engine of its segment
-   (C1, C6, C11, C14, C16).
-8. feat(extensions): the reload of an extension (C2).
-9. feat(tui): a host of its own, to which the TUI and the app attach (C5, and C12 with bigtui).
-10. fix(provider): a lost conversation is made again from the turns (C7), and the prefix of a chain stays as it
+5. feat(crate): the version of a build, which each stand names, the gate of the corpus, and the store of builds
+   (C1, C11, C16).
+6. feat(engine): a chain supersedes its source, and compaction makes a successor (C3, C9).
+7. feat(engine): a record goes on from its last checkpoint, and a chain from a chain of another record (C4, C9,
+   C15).
+8. feat(crate): the upgrade of a running life at a checkpoint, and a stand on a new version (C1, C6, C14).
+9. feat(extensions): the reload of an extension (C2).
+10. feat(tui): a host of its own, to which the TUI and the app attach (C5, and C12 with bigtui).
+11. fix(provider): a lost conversation is made again from the turns (C7), and the prefix of a chain stays as it
     stood.
-11. The measure on the demo: one life upgrades its engine twice, reloads an extension and compacts a chain, with no
+12. The measure on the demo: one life upgrades its engine twice, reloads an extension and compacts a chain, with no
     drift, no chain lost and no act run twice.
 
 C8, a cancel that reaches every act under it, stays the law of the engine. The round runs on a chain of its own,
-under no prompt of the operator, which the conductor does in PR 5.
+under no prompt of the operator, which the conductor does in PR 6.
 
 ## 9. The decisions taken for the owner
 
@@ -387,7 +460,9 @@ under no prompt of the operator, which the conductor does in PR 5.
 - A checkpoint carries plain data and no dump of monty, so no form of the interpreter binds a later build.
 - A word that a checkpoint cuts ends as interrupted, as a command that a crash cut (#290), and its model runs it
   again.
-- The record keeps the text of the engine of the last segment for its tail, and no life replays every segment.
+- A version is a build, kept in a store, and a gate on a corpus of records keeps the versions few. The text of the
+  engine in the record goes, since it does not hold monty and the ears of rust.
+- A chain of another record is carried by an act whose answer the record keeps, so no replay reads another file.
 - A reload rebinds the definitions and the names in capitals, and keeps each other name, so a reload keeps the state.
 - The word of the conductor wraps the chain of the orchestrator, and the engine wraps no chain.
-- The engine stays under the wall of 6500 (R3). PR 5 and PR 6 each fit it, or go back to the owner with the cost.
+- The engine stays under the wall of 6500 (R3). PR 6 and PR 7 each fit it, or go back to the owner with the cost.
