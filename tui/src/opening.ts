@@ -2,21 +2,25 @@ import { statSync } from "node:fs";
 import { basename } from "node:path";
 import { BoxRenderable, type CliRenderer, type KeyEvent, TextRenderable } from "@opentui/core";
 import { shortenHome } from "./files.ts";
+import { clip } from "./format.ts";
 import { setTheme, spacing, type ThemeName, theme } from "./theme.ts";
 import { bold, styled } from "./ui.ts";
 
-/** What the first frame says it opens: a record, with its size, or a new life. */
-export function openingLine(record?: string): string {
+/** What the first frame says it opens, on one line of a width: a record, with its size, or a new life. A path too
+ * long for the line keeps its end, with the name of the record, and the size stays. */
+export function openingLine(record: string | undefined, width: number): string {
   if (!record) return "Opening a new life";
   const bytes = statSync(record, { throwIfNoEntry: false })?.size ?? 0;
   const size = bytes / 2 ** 20;
-  return `Opening ${shortenHome(record)}, ${size.toFixed(size < 10 ? 1 : 0)} MB`;
+  const [head, tail] = ["Opening ", `, ${size.toFixed(size < 10 ? 1 : 0)} MB`];
+  return `${head}${clip(shortenHome(record), Math.max(8, width - head.length - tail.length), "end")}${tail}`;
 }
 
 /** The first frame of the TUI, which it draws before it reads the record of the life: the top line, with the name and
  * the directory of the life, and what it opens. A record of a long life takes seconds to read, and this frame shows
- * at once that it loads, and Control C quits while it loads. It gives the function that removes the frame. */
-export function opening(
+ * at once that it loads, and Control C quits while it loads. It gives the function that removes the frame once the
+ * renderer drew it, since a frame that goes before the first draw of the renderer never shows. */
+export async function opening(
   renderer: CliRenderer,
   {
     directory,
@@ -24,7 +28,7 @@ export function opening(
     name,
     quit,
   }: { directory: string; record?: string; name: ThemeName; quit: () => void },
-): () => void {
+): Promise<() => void> {
   setTheme(name);
   const root = new BoxRenderable(renderer, {
     flexDirection: "column",
@@ -39,11 +43,20 @@ export function opening(
         [`   ${shortenHome(directory)}`, theme.faint],
       ]),
       height: spacing.bar,
+      wrapMode: "none",
       truncate: true,
     }),
   );
   const middle = new BoxRenderable(renderer, { flexGrow: 1, justifyContent: "center", alignItems: "center" });
-  middle.add(new TextRenderable(renderer, { content: openingLine(record), fg: theme.muted, truncate: true }));
+  middle.add(
+    new TextRenderable(renderer, {
+      content: openingLine(record, renderer.width - 2 * spacing.between),
+      fg: theme.muted,
+      height: spacing.bar,
+      wrapMode: "none",
+      truncate: true,
+    }),
+  );
   root.add(middle);
   renderer.root.add(root);
   renderer.requestRender();
@@ -51,6 +64,7 @@ export function opening(
     if (event.ctrl && event.name === "c") quit();
   };
   renderer.keyInput.on("keypress", key);
+  await renderer.idle();
   return () => {
     renderer.keyInput.off("keypress", key);
     root.destroyRecursively();

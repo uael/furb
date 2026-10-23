@@ -154,8 +154,8 @@ test("the first frame says which record the TUI opens and its size, and the life
   const tui =
     process.platform === "win32" ? windowsConsole(cli, env, directory) : terminal(cli, env, "SIGTERM");
   try {
-    const size = (await stat(record)).size / 2 ** 20;
-    await eventually(() => tui.screen().includes(`, ${size.toFixed(1)} MB`), "the first frame");
+    const size = ((await stat(record)).size / 2 ** 20).toFixed(1);
+    await eventually(() => tui.screen().includes(`life.jsonl, ${size} MB`), "the first frame");
     expect(tui.screen()).toContain("Opening ");
     await eventually(() => tui.screen().includes("Transcript"), "the life");
     await tui.signal();

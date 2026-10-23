@@ -82,7 +82,7 @@ const renderer = await createCliRenderer({
   useMouse: true,
 });
 // The first frame shows what opens before the record is read, which takes seconds for a long life.
-const opened = opening(renderer, {
+const opened = await opening(renderer, {
   directory,
   record: record && resolve(record),
   name: shown,
