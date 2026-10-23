@@ -132,7 +132,7 @@ jobs:
       - run: bun run lint
       - run: bun run test
       # The budget of the speed of the TUI holds on Linux, whose machines of the gates run no other work: the first
-      # frame of a life of 30000 facts under 500 ms warm, and the frames of the renderer at 60 each second while it
-      # scrolls and streams.
+      # frame of a life of 30000 facts, and the frames of the renderer at 60 each second while it scrolls and streams,
+      # each against a measure of the same machine, since one runner of ubuntu-latest is half as fast as another.
       - if: runner.os == 'Linux'
         run: bun run bench

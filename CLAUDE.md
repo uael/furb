@@ -254,9 +254,13 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 - `bun run docs`: write the tables of keys and commands in `tui/README.md` again from `tui/src/keys.ts` and
   `tui/src/commands.ts`.
 - `bun run bench`: the speed of the TUI on a recorded life of 30000 facts: the first frame, cold and warm, and the frames
-  while the feed scrolls and a command streams. It fails over its budget, which the gates hold on Linux: the warm first
-  frame under 500 ms, at least 95 in each hundred of the frames that the renderer draws with nothing to show, and the
-  95th percentile of the frames under 16.7 ms.
+  while the feed scrolls and a command streams. It fails over its budget, which the gates hold on Linux. Each budget
+  is set from a measure of the machine with no code of furb, so that it holds on a fast runner and on a slow one: the
+  pace, the time that the machine takes to parse each fact of the record, and the frames that the renderer draws with
+  nothing to show. The warm first frame takes less than 32 paces, the renderer draws at least 95 in each hundred of
+  the frames that it draws with nothing to show, and the 95th percentile of the frames takes less than a pace and
+  less than 16.7 ms. `FURB_BENCH_JSON` names a file that takes the measures of each run, from which the budgets are set
+  again.
 - `bun run screenshots` and `bun run animation`: capture `docs/screenshots/` and `docs/furb.gif` again from the
   real renderer. Run both after a change that a screen shows, and read each capture. One run of each at a time holds
   its home in `/tmp`, and a second run waits until the first ends. A screen that does not come in three minutes ends
