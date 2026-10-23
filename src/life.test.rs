@@ -449,9 +449,11 @@ fn a_life_on_a_record_of_another_version_is_refused_before_any_replay_and_says_b
       refused.to_string(),
       format!(
         "Drift: the record {} was made by a build of version {other}, and this build is of version {}, so a replay \
-         would drift. Open the record with the build that made it, or start a new life.",
+         would drift. Open the record with the build of version {other}, which stands at {} once a build of that \
+         version ran on this machine, and which script/builds.sh {other} makes there. Or start a new life.",
         record.display(),
-        world::VERSION
+        world::VERSION,
+        world::build(other).unwrap().display()
       )
     );
   }

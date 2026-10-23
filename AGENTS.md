@@ -15,7 +15,8 @@ API of its own:
 - `src/lib.rs` says what the crate gives: `Engine`, whose methods are the verbs of the contract, which `build.rs`
   makes from the contract, and `Ear`, the one trait of an ear, which a host writes as a generator of rust with `ear`.
 - `src/world/` holds the ears of the World that the crate writes, one file each: the files in `files.rs`, the
-  commands in `bash.rs`, time in `time.rs`, the store of the record in `store.rs`, as a file of lines or a database
+  commands in `bash.rs`, time in `time.rs`, the store of builds in `builds.rs`, which holds the program of the command line of each version
+  that ran on the machine, the store of the record in `store.rs`, as a file of lines or a database
   of SQLite, each a `Store` that the suite in `store.test.rs` holds to its laws, whose ear names in the record the
   engine that made it, the log of a life beside its record
   in `log.rs`, the reader of a record with no life in `reader.rs`, which opens a record of any engine to read, and the provider of models in `provider.rs`, which asks each model through rig and streams what it writes, and asks it again with a backoff after a failure that passes, as a lost connection. Its catalog, `provider/catalog.rs`,
@@ -209,6 +210,8 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
   case. This build, `cargo test`
   and `bun run build` take the dev profile, which optimizes every dependency, the interpreter among them, so a word
   runs as fast as in a release while the crates of the workspace build quickly. A wheel for PyPI takes the release.
+- `script/builds.sh <version>`: build the command line at the last commit of `origin/main` that holds a version, and
+  put it in the store of builds of the machine, so a record of that version opens with `furb` again.
 - `script/worktree.sh <path> <branch> [base]`: make a git worktree on a new branch from `base`, `origin/main` by
   default, whose build starts warm. Run it from any directory. It copies on write the build directories of the main
   checkout into the worktree: the `target` of cargo, which maturin and napi share, with its timestamps, the

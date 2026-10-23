@@ -6,6 +6,9 @@
 //! the engine of the crate, on the ears of the World that the crate writes, the extensions among them, and on the
 //! provider of the model of its default actor and of the models that `--roster` names, or of every model that the
 //! catalog of the crate offers when `--roster` names none.
+//!
+//! Each run puts the program in the store of builds of the machine under its version, and a command that opens a life
+//! on a record of another version runs the build of that version in its place, when the store holds one.
 
 mod console;
 mod life;
@@ -14,12 +17,13 @@ mod tui;
 
 use std::{
   collections::HashMap,
+  env,
   path::{Path, PathBuf},
-  process::ExitCode,
+  process::{self, ExitCode},
 };
 
 use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum, error::ErrorKind};
-use furb::{life::Opening, value::entry, verbs};
+use furb::{life::Opening, value::entry, verbs, world};
 
 use crate::life::Life;
 
@@ -161,7 +165,13 @@ impl Stand {
 }
 
 fn main() -> ExitCode {
+  if let Ok(program) = env::current_exe() {
+    let _ = world::shelve(&program);
+  }
   let furb = Furb::parse();
+  if let Some(ended) = handed(&furb) {
+    return ended;
+  }
   let done = match furb.command {
     Some(Command::Prompt { message, to, shape, place, mut stand }) => {
       // The actor of the prompt is one the life offers, which a roster that names models must name too.
@@ -193,6 +203,37 @@ fn main() -> ExitCode {
     Err(why) => {
       eprintln!("furb: {why}");
       ExitCode::FAILURE
+    }
+  }
+}
+
+/// The record of the life that a command opens, and nothing for a command that opens no life on a record.
+fn opened(furb: &Furb) -> Option<&Path> {
+  match &furb.command {
+    Some(
+      Command::Prompt { place, .. } | Command::Run { place, .. } | Command::Extensions { place },
+    ) => place.record.as_deref(),
+    Some(Command::Turns { record, .. }) => Some(record),
+    Some(Command::Facts { .. }) => None,
+    None if furb.mode == Mode::Rpc => furb.place.record.as_deref(),
+    None => None,
+  }
+}
+
+/// How the build of another version ended, which ran this command in its place with the same words, when the record
+/// that the command opens names that version and the store of builds holds its program: only a build of that
+/// version replays the record with no drift. Nothing runs when the store holds none, and the life says why.
+fn handed(furb: &Furb) -> Option<ExitCode> {
+  let theirs =
+    world::version(&world::kept(opened(furb)?).ok()?).filter(|one| *one != world::VERSION)?;
+  let program = world::stored(theirs)?;
+  match process::Command::new(&program).args(env::args_os().skip(1)).status() {
+    Ok(status) => {
+      Some(ExitCode::from(status.code().map_or(1, |code| u8::try_from(code).unwrap_or(1))))
+    }
+    Err(no) => {
+      eprintln!("furb: the build of version {theirs} at {} does not run: {no}", program.display());
+      Some(ExitCode::FAILURE)
     }
   }
 }

@@ -369,7 +369,8 @@ test("a session whose record a build of another version made opens to read befor
     const group = await library.add(directory);
     const row = group.sessions.find((entry) => entry.path === made.path);
     if (!row) throw new Error("No row for the record.");
-    const said = `was made by a build of version ${version + 1}, and this build is of version ${version}, so a replay would drift. Open the record with the build that made it, or start a new life.`;
+    const said = `was made by a build of version ${version + 1}, and this build is of version ${version}, so a replay would drift. Open the record with the build of version ${version + 1}, which stands at `;
+    const then = ` once a build of that version ran on this machine, and which script/builds.sh ${version + 1} makes there. Or start a new life.`;
     await library.select(row);
     const reading = row.session?.host.reading;
     expect(reading?.made).toBe("0".repeat(64));
@@ -377,7 +378,8 @@ test("a session whose record a build of another version made opens to read befor
     expect(reading?.version).toBe(version + 1);
     expect(reading?.current).toBe(version);
     expect(reading?.why).toStartWith("Drift: the record ");
-    expect(reading?.why).toEndWith(said);
+    expect(reading?.why).toContain(said);
+    expect(reading?.why).toEndWith(then);
     expect(row.error).toBeUndefined();
     expect(await readFile(made.path, "utf8")).toBe(other);
   }));
