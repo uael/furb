@@ -72,23 +72,24 @@ build reads.
 ## 2. One primitive: the successor
 
 A successor of a chain is a chain with a source, a filter, and the state that it carries, which takes over the work
-of its source. Today a chain with a source copies its origin and stands beside it. A successor supersedes it: from
-its birth, the name of the source names the successor in every scope.
+of its source. Today a chain with a source copies its origin and stands beside it. A successor supersedes it and
+takes its name: the chain goes on under its name, and only its transcript is cut to the prefix that the filter kept.
+So no name of a live act changes, and a brief that names `chain1` or a value that names `prompt1177` stays true.
 
-- In the same life, on the same engine: the successor stands in the module of its source. So a word of the source
-  that runs on, as `while True: await conduct()`, goes on with the same values, and its next acts land on the
-  successor. Each open prompt goes on in the successor under its own name, since its scope is now the successor.
+- In the same life, on the same engine: the chain keeps its module, its ladders and its open acts. So a word that
+  runs on, as `while True: await conduct()`, goes on with the same values, and each open prompt stays the same act.
   Nothing is moved, stopped, paused or run twice.
-- On another engine: the source is a chain that a checkpoint carries as plain data, and the successor stands in a
-  module made of the definitions and the plain values that the checkpoint carries (section 3.2).
+- On another engine: the chain is one that a checkpoint carries as plain data, and the new engine makes it again
+  under its name, with the carried turns as its prefix, in a module made of the definitions and the plain values
+  that the checkpoint carries (section 3.2).
 
 Where the one primitive serves:
 
 | Need | As a successor |
 | --- | --- |
 | Compaction (#317) | `compacted` makes a successor of its chain with the filter that the model chose. The restore of the module, the move of each prompt, the close of each rung that runs and the rung that keeps an old prompt quiet all go. |
-| A chain that supersedes another | A word makes the successor of its own chain. |
-| An upgrade of the engine at a checkpoint | The new engine makes the successor of each chain that the checkpoint carries. |
+| A chain that supersedes another | A word makes the successor of its own chain, which keeps its name. |
+| An upgrade of the engine at a checkpoint | The new engine makes each chain that the checkpoint carries again, under its name. |
 | A record that grows | The checkpoint, which carries the successors, is where a later life starts to read. |
 | A chain of another record | `carry` answers with a carried chain, and the new chain is its successor (section 3.7). |
 
@@ -108,12 +109,10 @@ Where it does not serve, and what serves:
 
 ### 3.1 Supersede
 
-`chain(label, source, filter, supersede=True)` makes the successor of `source`. The scope of the source is the
-successor from its birth, so `transcript(source)`, `module(source)`, a prompt on the source and a prompt on a thread
-of it are of the successor. The prefix of the successor is the transcript of the source as its filter keeps it.
-The successor takes over the ladders of the source: each rung that waits for its word asks its model on the
-successor, and each word that runs holds the next reply until it ends. A successor retells no rung, since it stands
-in the module that those rungs bound.
+`chain(label, source, filter, supersede=True)` gives `source`, which goes on under its name with its module, its
+ladders and its acts, and makes no chain (#371). Its transcript becomes its prefix: what the filter kept, all that
+made it, and every act of the source, so each view that reads the acts reads as before, and only the turns are cut.
+A prefix takes the place of what the transcript held. It costs 71 tokens of the engine, which stands at 6497.
 
 The extension compaction becomes smaller: `compacted` asks `choice`, then at the next reply makes the successor with
 that filter. The conductor wraps its own chain with `compacted()` in its word. So the chain of an orchestrator is
@@ -139,7 +138,7 @@ A plain value is one that the record can hold. A name whose value is neither pla
 and the checkpoint names it, so the model sees what it lost.
 
 A new engine boots from the last checkpoint. The journal holds each carried act under its name, counts each kind on
-from the carried count, makes the successor of each carried chain, makes each open act again through its verb under
+from the carried count, makes each carried chain again under its name, makes each open act again through its verb under
 its own name, and then says again only the entries after the checkpoint. A word that ran when the checkpoint was
 written is cut: its run is done with a refusal that says the checkpoint cut it and which act it awaited, so its
 model sees that outcome and runs it again if it wants. This is the law of #290 for a command that a crash cut. So
@@ -326,40 +325,25 @@ Each PR that builds a part measures it again on copies of the real records.
 
 ## 7. The sentences of the contracts that change
 
-`src/furb/engine.pyi`, the signature of `chain`: `chain(label="", source="", filter=None, supersede=False, on="")`.
+`src/furb/engine.pyi`, the signature of `chain`: `chain(label="", source="", filter=None, on="", supersede=False)`.
 
-`chain`, new:
+`chain`, new (#371):
 
-- A chain with a source that supersedes it is its successor: from the birth of the successor, the scope of the
-  source is the successor, so each act said on the source, each prompt on it and each read of its transcript is of
-  the successor.
-- A successor stands in the module of its source in the life that makes it, so each word of the source that runs on
-  goes on with the same values, and its acts land on the successor.
-- A successor takes over the ladders of its source as they stand: each rung that waits for its word asks its model
-  on the successor, and each word that runs holds the next reply until it ends.
-- A successor retells no rung of its source, since it stands in the module that those rungs bound.
-- A successor of a successor supersedes each chain that the first one superseded, and the root keeps its name.
+- A chain that supersedes its source is that source: chain gives the source, which goes on under its name, with the
+  same module, ladders and acts, and makes no chain.
+- The prefix of a supersede is what its filter kept, everything that made what it kept, and every act of the source,
+  so a view that reads its acts reads as before, and only its turns are cut.
 
 - A source is a chain of the life, or an act of carry that the World answered with a chain of another record, of
   which the new chain is the successor, with the turns, the open prompts and the plain values that the answer
   carries.
 
-`chain`, changed:
+`chain`, changed (#371): was "Nothing leaves a transcript once the transcript holds it." Now: "Nothing leaves a
+transcript once the transcript holds it, but by a supersede, whose prefix takes the place of what the transcript
+held."
 
-- Was: "In a chain with a source the rungs of the origin that are over at that source run again in the module of
-  the new chain." Now: "In a chain with a source that does not supersede it, the rungs of the origin that are over
-  at that source run again in the module of the new chain."
-- Was: "The globals of a chain with a source are those of a module of its own." Now: "The globals of a chain with a
-  source are those of a module of its own, but for a successor, which stands in the module of its source."
-- Was: "What a chain binds is its own, and a chain with a source is how a chain gets isolation." Now: "What a chain
-  binds is its own, and a chain with a source that does not supersede it is how a chain gets isolation."
-- Was: "The globals of a chain with a source are what the rungs of the origin that are over at that source bound,
-  whatever the filter kept." Now: the same sentence, of "a chain with a source that does not supersede it".
-
-`scope`, was: "The scope of a question, from its name: the chain it is on, or the scope of the thread it is on, and
-itself for a chain, and nothing for a name of no question of the life." Now: "The scope of a question, from its
-name: the chain it is on, or the scope of the thread it is on, and itself for a chain, and the scope of its
-successor for a chain that a successor superseded, and nothing for a name of no question of the life."
+`Prefix`, new (#371): "A prefix takes the place of what the transcript of the chain that says it held, so a supersede
+says its prefix on its source."
 
 `Standing`, was: "A standing holds no source: the engine is one file the model imports, and a record made by another
 engine is a drift." Now: "A standing holds no source: the engine is one file the model imports, and a segment of the
@@ -386,7 +370,7 @@ A new type, `Checkpoint`, with these sentences:
 - Given a record that holds a checkpoint, the journal reads from the last one and says again no entry before it.
 - It holds each act that the checkpoint carries under its name, with its answer, and counts each kind on from the
   count that it carries, so no later act takes a name of the past.
-- For each chain that the checkpoint carries, it makes the successor of that chain, whose prefix is the carried
+- For each chain that the checkpoint carries, it makes that chain again under its name, whose prefix is the carried
   transcript and whose module is made of the carried definitions and then the carried plain values.
 - It makes each open act that the checkpoint carries again through its verb, under the site of its maker and under
   its own name, so the ear of the outside that runs it goes on with it, and a command or a reply that runs across a
@@ -417,7 +401,7 @@ A new type, `Checkpoint`, with these sentences:
   its own on each prompt that it moves keeps that prompt from asking its model again.", "The summary names each rung
   that it stopped, ...", "A prompt of a model that asks its model on a chain that it compacted moves to the newest
   chain at that reply." and "It moves no prompt to the operator and no prompt that made it, and it never completes."
-  It gains: "The new chain supersedes the old one, so each open prompt, each rung that waits and each word that runs
+  It gains: "The chain supersedes itself, so each open prompt, each rung that waits and each word that runs
   goes on in it, and nothing is moved, stopped or paused." and "It never completes."
 
 `extensions/ouroboros/ouroboros.pyi`, `extend`, new: "A life that runs the extension already reloads it, so each
@@ -455,8 +439,8 @@ under no prompt of the operator, which the conductor does in PR 6.
 
 ## 9. The decisions taken for the owner
 
-- A successor supersedes by its scope, and shares the module of its source in the life that makes it. A copy of the
-  module, as `restore` of #317, goes, since it is a second truth of the same state.
+- A successor takes the name of its source, so no name of a live act changes, no scope moves, and the engine pays
+  71 tokens. A copy of the module, as `restore` of #317, goes, since it is a second truth of the same state.
 - A checkpoint carries plain data and no dump of monty, so no form of the interpreter binds a later build.
 - A word that a checkpoint cuts ends as interrupted, as a command that a crash cut (#290), and its model runs it
   again.
