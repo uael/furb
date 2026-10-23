@@ -33,7 +33,7 @@ The round tells you a worker that ends, with its answer in results under its pro
 The round sends a conflict or a failed check at a new head to the worker that owns the PR, again after 30 minutes, and to a fixer after an hour, or at once when no worker owns it.
 The round merges each green PR into main from the lowest number when its branch is up to date with main, after it moves the PRs that stack on it onto main, and it updates a branch that is behind only when main is green.
 The label paused takes a PR out of the round. A draft, the label hold, a review that waits for its fix, and the label owner-merge, until the owner takes it off as his approval, keep a PR from a merge.
-The round tells you when main is red, when a PR fails to merge or has no change for 45 minutes, and each comment or issue of the owner in uael/furb-ops, the private repository of the decisions. await decide(title, text) opens a decision there as an issue, and news(line) adds a line at the top of its digest, issue #13.
+The round tells you when main is red, when a PR fails to merge or has no change for 45 minutes, and each comment or issue of the owner in the private repository of the decisions, which PRIVATE names beside this word and git does not hold. await decide(title, text) opens a decision there as an issue, and news(line) adds a line at the top of its digest issue.
 Each round queues each open issue that the owner opened, or that he assigned to himself, as an item issueN, once, and its PR closes it.
 Each round sends each new comment of the owner on a PR or on his issue to the worker that owns it, puts the label hold on that PR, and tells you only the comments that no worker owns. A text on GitHub counts only when the owner wrote it with no 🤖 at its start, or when he put a 👍 on it; each worker starts what it writes there with 🤖.
 Each round sets one status label on each open PR and on each issue of the owner that it took: s:queued, s:working, s:checks, s:red, s:conflict, s:ready, or s:owner (green, waits for the owner).
@@ -319,10 +319,11 @@ async def review(seed: bool) -> None:
 
 
 async def decide(title: str, text: str) -> str:
-  count = await bash(f"gh issue list --repo {OPS} --label decision --state all --limit 500 --json number --jq length", show=HIDDEN, timeout=120)
+  repo = ops()[0]
+  count = await bash(f"gh issue list --repo {shq(repo)} --label decision --state all --limit 500 --json number --jq length", show=HIDDEN, timeout=120)
   n = 1 + int(count.stdout.content.strip() or "0")
   body = "🤖 " + text + "\n\nKeep it with no answer, or comment here with your change or your veto."
-  made = await bash(f"gh issue create --repo {OPS} --label decision --title {shq(f'D{n}. {title}')} --body-file -", stdin=body, show=HIDDEN, timeout=120)
+  made = await bash(f"gh issue create --repo {shq(repo)} --label decision --title {shq(f'D{n}. {title}')} --body-file -", stdin=body, show=HIDDEN, timeout=120)
   return f"D{n} ({made.stdout.content.strip()})"
 
 
@@ -431,73 +432,52 @@ async def mark() -> None:
     await bash("; ".join(edits), show=HIDDEN, timeout=600)
 
 
-OPS = "uael/furb-ops"
-DIGEST = 13
+PRIVATE = ".furb/extensions/conductor/private.json"
+secret: dict[str, str] = {}
 NEWS_PY = """import subprocess, sys
-got = subprocess.run(["gh", "issue", "view", "13", "--repo", "uael/furb-ops", "--json", "body", "--jq", ".body"], capture_output=True, text=True, check=True)
+repo, digest, line = sys.argv[1:4]
+got = subprocess.run(["gh", "issue", "view", digest, "--repo", repo, "--json", "body", "--jq", ".body"], capture_output=True, text=True, check=True)
 head, _, rest = got.stdout.rstrip("\\n").partition("\\n\\n")
-body = (head + "\\n\\n- " + sys.argv[1] + ("\\n" + rest if rest else ""))[:60000]
-subprocess.run(["gh", "issue", "edit", "13", "--repo", "uael/furb-ops", "--body-file", "-"], input=body, text=True, check=True)
+body = (head + "\\n\\n- " + line + ("\\n" + rest if rest else ""))[:60000]
+subprocess.run(["gh", "issue", "edit", digest, "--repo", repo, "--body-file", "-"], input=body, text=True, check=True)
 """
-OPS_WATCH = r"""gh api 'repos/uael/furb-ops/issues/comments?sort=created&direction=desc&per_page=100' --jq '.[] | "\(.issue_url | split("/") | last)\to\(.id)\t\(.user.login)\t\(.body | gsub("[\n\t]"; " "))"'
-gh issue list --repo uael/furb-ops --state all --limit 100 --json number,author,title,body --jq '.[] | "\(.number)\tn\(.number)\t\(.author.login)\t\(.body | gsub("[\n\t]"; " ")) (title: \(.title))"'"""
+OPS_WATCH = r"""gh api 'repos/{ops}/issues/comments?sort=created&direction=desc&per_page=100' --jq '.[] | "\(.issue_url | split("/") | last)\to\(.id)\t\(.user.login)\t\(.body | gsub("[\n\t]"; " "))"'
+gh issue list --repo {ops} --state all --limit 100 --json number,author,title,body --jq '.[] | "\(.number)\tn\(.number)\t\(.author.login)\t\(.body | gsub("[\n\t]"; " ")) (title: \(.title))"'"""
+
 
 def shq(s: str) -> str:
   return "'" + s.replace("'", "'\\''") + "'"
 
+
+def ops() -> tuple[str, str]:
+  if not secret:
+    try:
+      secret.update(json.loads(read(PRIVATE, HIDDEN).content))
+    except (Refused, ValueError):
+      return "", ""
+  return secret.get("repo", ""), secret.get("digest", "")
+
+
 def news(line: str) -> None:
-  lock = "/tmp/furb-ops-news.lock"
-  quietly(bash, f"until mkdir {lock} 2>/dev/null; do sleep 1; done; trap 'rmdir {lock}' EXIT; python3 -I - {shq(line)}", stdin=NEWS_PY, show=HIDDEN, timeout=300)
+  repo, digest = ops()
+  if not repo:
+    notice(f"private {int(clock() // 3600)}", f"{PRIVATE} names no private repository, so a line of news went nowhere: {line[:300]}")
+    return
+  lock = "/tmp/furb-conductor-news.lock"
+  quietly(bash, f"until mkdir {lock} 2>/dev/null; do sleep 1; done; trap 'rmdir {lock}' EXIT; python3 -I - {shq(repo)} {shq(digest)} {shq(line)}", stdin=NEWS_PY, show=HIDDEN, timeout=300)
+
 
 async def ops_watch() -> None:
-  got = await bash(OPS_WATCH, show=HIDDEN, timeout=300)
+  repo = ops()[0]
+  if not repo:
+    return
+  got = await bash(OPS_WATCH.replace("{ops}", repo), show=HIDDEN, timeout=300)
   rows = [p for p in (x.split("\t", 3) for x in got.stdout.content.splitlines()) if len(p) == 4 and p[1] not in comments]
   comments.update(p[1] for p in rows)
-  fresh = [p for p in rows if p[2] == "uael" and not p[3].startswith(("🤖", "[furb"))]
+  fresh = [p for p in rows if p[2] == OWNER and not p[3].startswith(MARKS)]
   if fresh and "ops" in timers:
-    quietly(prompt, None, "The owner wrote in uael/furb-ops:\n" + "\n".join(f"ops#{p[0]} {p[3][:1500]}" for p in fresh) + globals()["merged_since"]())
+    quietly(prompt, None, "The owner wrote in the private repository of the decisions:\n" + "\n".join(f"ops#{p[0]} {p[3][:1500]}" for p in fresh) + merged_since())
   timers["ops"] = clock()
-
-
-word = [w for w in program().values() if "async def ops_watch(" in w][-1]
-consts_block = word[word.index('OPS = "uael/furb-ops"'): word.index("\n\n\ndef shq(")]
-ext = read(".furb/extensions/conductor/conductor.py", HIDDEN)
-text = ext.content
-misses = []
-if "async def ops_watch(" not in text:
-  addition = "\n\n\n" + consts_block.strip("\n") + "\n" + grab(word, "shq") + "\n" + grab(word, "news") + "\n" + grab(word, "ops_watch")
-  text = text.replace("\n\n\nasync def sweep(", addition + "\n\n\nasync def sweep(", 1)
-  old_decide = grab(text, "decide")
-  text = text.replace(old_decide, grab(word, "decide"), 1) if old_decide else text
-  old_audit = '  if noted and NEWS in noted[0]:\n    noted[:] = [write(Text(DECISIONS, noted[0].replace(NEWS, NEWS + line + "\\n", 1))).content]\n'
-  for a, b2, label in [
-    (old_audit, "  news(line[2:])\n", "audit"),
-    ("  await mark()\n", "  await ops_watch()\n  await mark()\n", "sweep"),
-  ]:
-    if a in text:
-      text = text.replace(a, b2, 1)
-    else:
-      misses.append(label)
-  for a, b2 in [
-    ("each line of DECISIONS that the owner changed. decide(title, text) adds a decision to it.", "each comment or issue of the owner in uael/furb-ops, the private repository of the decisions. await decide(title, text) opens a decision there as an issue, and news(line) adds a line at the top of its digest, issue #13."),
-    ("writes its line in the News of DECISIONS.", "writes its line in the digest."),
-  ]:
-    text = text.replace(a, b2, 1)
-    CONDUCTING = CONDUCTING.replace(a, b2, 1)
-  debug(t"misses={misses!r} decide={bool(old_decide)}")
-  if not misses and old_decide:
-    write(Text(ext.path, text))
-    exec(grab(text, "audit"), globals())
-    exec(grab(text, "sweep"), globals())
-if not misses:
-  pointer = "# Decisions of the orchestrator\n\nThe decisions and the news moved on 10-23 to the private repository https://github.com/uael/furb-ops. Each decision is an issue there with the label decision: comment on it to keep, change or veto it, also from your phone. The news is the digest, issue #13. The whole of this file as it stood is archived there as DECISIONS.md.\n"
-  noted[:] = [write(Text(DECISIONS, pointer)).content]
-  news("The decisions and the news moved here from DECISIONS.md, on your choice A: D1 to D12 are issues #1 to #12, and this digest is #13. Comment on an issue to keep, change or veto a decision; the round reads your comments and your new issues here, with the rules of furb (your words with no 🤖, or a 👍 of yours).")
-  news("The engine wall: #340 (+15 tokens), #342 (+38) and #317 (+17) each fit under 6500 alone, but not together: from 6460 they come to about 6530, and catchup adds more. After your first merge of them, the worker of each other one rebases it and finds its room by a reshape that keeps every law; the item catchup knows this.")
-  for i, item in enumerate(queue):
-    if item[0] == "catchup":
-      queue[i] = (item[0], item[1] + " #342 (Text and the fork in linear time, 6498) is a third.", item[2])
-  close("Expected, not a defect: I was doing it. I created the private repository myself from your account, so you need to do nothing: https://github.com/uael/furb-ops. D1 to D12 are its issues #1 to #12, the News is its digest issue #13, and the whole DECISIONS.md is archived there. The local DECISIONS.md now holds only a pointer.\n\nFrom now on: each decision I take opens an issue there with the label decision, each news line goes at the top of #13, and each round reads your comments and your new issues there, with the same rules as on furb: your own words, or a 👍 of yours. Comment on a decision to keep, change or veto it. Questions still come to you as prompts.")
 
 
 async def sweep(every: float) -> None:
