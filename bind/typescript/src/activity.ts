@@ -134,6 +134,7 @@ export class Activity {
       this.acts.set(id, act);
       this.open.add(id);
       this.mark(act);
+      if (kind === "rung") this.continued(act);
       if (!this.children.has(by)) this.children.set(by, new Set());
       this.children.get(by)?.add(id);
       return;
@@ -209,6 +210,16 @@ export class Activity {
       stream.content += String(fact[3]);
       this.mark(act);
     }
+  }
+  /** A compaction into a new chain, when a rung is the first word that such a compaction gives a chain with a source:
+   * a word that starts by restoring that source. */
+  private continued(rung: LiveAct): void {
+    const chain = this.acts.get(rung.on);
+    const source = chain?.kind === "chain" ? String(chain.words[1] ?? "") : "";
+    const restored = /^restore\((['"])(\w+)\1\)/.exec(String(rung.words[0] ?? ""))?.[2];
+    if (!chain || !source || restored !== source || this.compactions.some((one) => one.chain === chain.id))
+      return;
+    this.compactions.push({ chain: chain.id, from: source, by: rung.by, at: chain.began });
   }
   /** Whether the last control over a new act is a pause. Only a control no older than the oldest pause can make
    * it one. */

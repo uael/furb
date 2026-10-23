@@ -37,7 +37,8 @@ Five extensions come with furb, and each life runs them unless a config turns th
   the defaults in an extension of its own whose word rebinds `SHARE`, `FILTERS`, `CHOOSER`, `LISTED` or `BRIEF`.
   Its part for the TUI marks each compaction in the feed of the chain: a rule at its place, with its summary under
   it, which parts what the model no longer reads from what it reads now. The board of the chains says how many
-  times a chain compacted.
+  times a chain compacted. A chain that an older compaction made, which went on in a new chain whose first word
+  restores its source, shows with that source as one chain, named `Main -> compacted`, with one feed.
 - **`ouroboros`** teaches a model to extend furb. Its life word, `ouroboros()`, tells each chain once the three ways
   to extend furb and when to take each: a def in a word, which lives with its chain; `extend(name, *rungs)`, which
   writes the words of those rungs as an extension of the project and turns it on, so every later chain runs it; and

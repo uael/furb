@@ -230,16 +230,17 @@ export class Parts {
     return undefined;
   }
 
-  /** The marks that the parts give for the feed of a chain, in the order of their places, each with the error of a
-   * component that throws as its title. */
+  /** The marks that the parts give for the feed of a chain, which shows each chain of its run of compactions, in the
+   * order of their places, each with the error of a component that throws as its title. */
   marks(seen: Seen): Mark[] {
+    const run = model.compactedRun(seen.chain, seen.compactions);
     const out: Mark[] = [];
     for (const part of this.loaded)
       for (const draw of part.marks)
         try {
           const marks = draw(seen);
           if (!Array.isArray(marks)) throw new Error("Its marks give no list.");
-          out.push(...marks.filter((one) => one.chain === seen.chain));
+          out.push(...marks.filter((one) => run.includes(one.chain)));
         } catch (error) {
           out.push({
             chain: seen.chain,

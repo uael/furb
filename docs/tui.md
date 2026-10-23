@@ -512,6 +512,12 @@ the last rule. The board says how many times each chain compacted.
 
 ![The compactions of a chain](screenshots/75-compaction.png)
 
+An older compaction went on in a new chain with the work that its source still needed, as `Main -> compacted`. Such
+a run of chains shows as one chain: one row named after its first chain and its last one, and one feed, which shows
+the feed of each chain of the run in its order, with the rule of each compaction between them.
+
+![A run of compactions into new chains](screenshots/75-compaction-chains.png)
+
 ## Undo and redo
 
 `/undo` removes the last message from a new branch, and `/redo` returns to the branch before it.

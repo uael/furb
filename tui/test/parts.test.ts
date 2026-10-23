@@ -173,3 +173,31 @@ test("a mark of a part stands at its place in the feed of its chain, and a mark 
     { chain: "none", at: 0, title: "A mark of todo failed: No marks." },
   ]);
 });
+
+test("a run of compactions into new chains, as an older compaction made them, shows as one chain: one row named first -> last, and one feed with the rule of each compaction", async () => {
+  const { directory } = project();
+  const session = await demoSession({ cwd: directory });
+  const root = session.engine.root;
+  await composing(
+    async ({ frame }) => {
+      await session.command(`/run ${COMPACTION}\ndef restore(source, on=""):\n  return None\nchain("aside")`);
+      await session.command('/run before = "the first step"');
+      const summary = "<s:summary>\\nIt read the plan.</s:summary>\\nreground()";
+      await session.command(
+        `/run older = chain("compacted", "${root}")\nrung("restore('${root}')\\n${summary}", on=older)\nrung('after = "the step after"', on=older)`,
+      );
+      const shown = await shows(frame, "the step after");
+      const newer = session.chains.find((chain) => chain.words[0] === "compacted")?.id ?? "";
+      expect(session.runOf(root)).toEqual([root, newer]);
+      expect(session.labelOf(newer)).toBe("Main -> compacted");
+      expect(session.activeChains().active.map(([chain]) => chain.id)).not.toContain(root);
+      expect(shown).toContain("Main -> compacted");
+      expect(shown).toContain("It read the plan.");
+      expect(shown).toContain("compacted  ");
+      expect(shown.indexOf("the first step")).toBeLessThan(shown.indexOf("goes on in a new chain from here"));
+      expect(shown.indexOf("goes on in a new chain from here")).toBeLessThan(shown.indexOf("the step after"));
+    },
+    { width: 120, height: 60 },
+    session,
+  );
+});
