@@ -442,7 +442,7 @@ under no prompt of the operator, which the conductor does in PR 6.
 ## 9. The decisions taken for the owner
 
 - A successor takes the name of its source, so no name of a live act changes, no scope moves, and the engine pays
-  71 tokens. A copy of the module, as `restore` of #317, goes, since it is a second truth of the same state.
+  23 tokens. A copy of the module, as `restore` of #317, goes, since it is a second truth of the same state.
 - A checkpoint carries plain data and no dump of monty, so no form of the interpreter binds a later build.
 - A word that a checkpoint cuts ends as interrupted, as a command that a crash cut (#290), and its model runs it
   again.
