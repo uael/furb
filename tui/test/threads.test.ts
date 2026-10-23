@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { chainThreads } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
+import { glyph } from "../src/theme.ts";
 import { type Composing, composing } from "./composing.ts";
 import { idle } from "./idle.ts";
 
@@ -77,11 +78,18 @@ test("after ⌥T the keys open the threads of a chain, Space collapses a thread 
       expect(session.folds[`thread:${id}`]).toBe(true);
       const folded = await frame();
       keep("collapsed", folded);
-      expect(folded).not.toContain("A clear starting point");
+      expect(folded).toContain(`${glyph.closed} Explore this project`);
       screen.mockInput.pressKey(" ");
       await frame();
       expect(session.folds[`thread:${id}`]).toBeUndefined();
-      expect(await frame()).toContain("A clear starting point");
+      // The feed lays the thread out again over a few frames, and its folded line goes.
+      let shown = await frame();
+      for (let step = 0; step < 40 && shown.includes(`${glyph.closed} Explore this project`); step++) {
+        await Bun.sleep(25);
+        shown = await frame();
+      }
+      expect(shown).not.toContain(`${glyph.closed} Explore this project`);
+      expect(shown).toContain("Collapse");
       screen.mockInput.pressArrow("left");
       expect(tree(session, await frame())).toBe(true);
     },
