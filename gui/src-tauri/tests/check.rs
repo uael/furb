@@ -81,17 +81,14 @@ fn named(name: &str, kind: &str) -> bool {
   name.strip_prefix(kind).is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
 }
 
-/// The chains, the threads and the acts of a record, as `furb facts` shows its questions. A chain is each chain that a
-/// question makes or stands on, a thread is each prompt, and an act is each question that is no step of the engine,
-/// each chain, and each rung that a question other than a prompt names as its maker, which the reader of the crate
-/// makes when the record does not keep it.
-fn counted(record: &Path) -> (usize, usize, usize) {
-  let out =
-    Command::new(furb()).args(["facts", "--record"]).arg(record).output().expect("furb facts runs");
-  assert!(out.status.success(), "furb facts fails: {}", String::from_utf8_lossy(&out.stderr));
+/// The chains, the threads and the acts of the questions of a life, each given as its kind, its name, who made it and
+/// the chain that it stands on. A chain is each chain that a question makes or stands on, a thread is each prompt on a
+/// chain,
+/// and an act is each question that is no step of the engine, each chain, and each rung that a question other than a
+/// prompt names as its maker, which the reader of the crate makes when the record does not keep it.
+fn tally<'a>(questions: impl Iterator<Item = [&'a str; 4]>) -> (usize, usize, usize) {
   let (mut chains, mut acts, mut threads) = (HashSet::new(), HashSet::new(), 0);
-  for line in String::from_utf8_lossy(&out.stdout).lines() {
-    let [kind, about, by, on, ..] = words(line)[..] else { continue };
+  for [kind, about, by, on] in questions {
     if !named(about, kind) {
       continue;
     }
@@ -105,9 +102,33 @@ fn counted(record: &Path) -> (usize, usize, usize) {
     if kind != "prompt" && named(by, "rung") {
       acts.insert(by.to_owned());
     }
-    threads += usize::from(kind == "prompt");
+    // A prompt on a thread is a message of that thread, and opens no thread of its own.
+    threads += usize::from(kind == "prompt" && !named(on, "prompt"));
   }
   (chains.len(), threads, acts.len())
+}
+
+/// The chains, the threads and the acts that a record kept, as `furb facts` shows its questions.
+fn counted(record: &Path) -> (usize, usize, usize) {
+  let out =
+    Command::new(furb()).args(["facts", "--record"]).arg(record).output().expect("furb facts runs");
+  assert!(out.status.success(), "furb facts fails: {}", String::from_utf8_lossy(&out.stderr));
+  let text = String::from_utf8_lossy(&out.stdout);
+  tally(text.lines().filter_map(|line| words(line).try_into().ok()))
+}
+
+/// The chains, the threads and the acts of the log of a life, beside its record: each fact that the life said, one
+/// list of JSON on each line after the first.
+fn logged(record: &Path) -> (usize, usize, usize) {
+  let mut path = record.as_os_str().to_owned();
+  path.push(".log");
+  let text = std::fs::read_to_string(&path).expect("the log of the life is read");
+  let facts: Vec<Vec<serde_json::Value>> =
+    text.lines().skip(1).filter_map(|line| serde_json::from_str(line).ok()).collect();
+  tally(facts.iter().filter_map(|fact| {
+    let text = |at: usize| fact.get(at).and_then(serde_json::Value::as_str).unwrap_or_default();
+    (fact.len() >= 4).then(|| [text(0), text(1), text(2), text(3)])
+  }))
 }
 
 /// The record that the check opens: the one that `FURB_RECORD` names, else a copy of the record of a life of the demo
@@ -171,7 +192,8 @@ fn the_check_draws_the_whole_record_and_its_web_view_stays_light() {
     .expect("the check says what the window drew");
   let numbers: Vec<usize> =
     drew.split_whitespace().filter_map(|one| one.trim_end_matches(',').parse().ok()).collect();
-  let (chains, threads, acts) = counted(&record);
+  let (chains, threads, acts) =
+    if drew.ends_with("of its log") { logged(&record) } else { counted(&record) };
   assert_eq!(numbers, vec![chains, threads, acts]);
   assert!(content.is_some(), "the app said no process of its web view");
   assert!(seen, "the process that the app said is no WebContent of WebKit");

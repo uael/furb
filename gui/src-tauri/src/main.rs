@@ -71,12 +71,16 @@ fn host(webview: tauri::Webview, held: tauri::State<'_, Held>) -> Result<String,
 }
 
 /// What the window drew of the whole life, which it tells once the host read it: the chains, the threads and the
-/// acts. A check prints them and ends.
+/// acts, and whether they are those of the log of the life or those that its record kept. A check prints them and
+/// ends the app, which ends its host first, so the log of the life stands whole when the check ends.
 #[tauri::command]
-fn drew(chains: usize, threads: usize, acts: usize) {
+fn drew(app: tauri::AppHandle, chains: usize, threads: usize, acts: usize, logged: bool) {
   if CHECK.load(Ordering::Relaxed) {
-    println!("furb-gui: the window drew {chains} chains, {threads} threads and {acts} acts");
-    std::process::exit(0);
+    let of = if logged { "its log" } else { "its record" };
+    println!(
+      "furb-gui: the window drew {chains} chains, {threads} threads and {acts} acts of {of}"
+    );
+    app.exit(0);
   }
 }
 
@@ -123,7 +127,7 @@ fn main() {
       std::process::exit(2);
     }
   };
-  let app = tauri::Builder::default()
+  let mut app = tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
     .setup(move |app| {
       if CHECK.load(Ordering::Relaxed) {
@@ -165,6 +169,13 @@ fn main() {
     .invoke_handler(tauri::generate_handler![host, drew])
     .build(tauri::generate_context!())
     .expect("the window of furb opens");
+  // A check runs as an accessory of the system from its launch: it has no tile in the Dock, no place in the switcher
+  // of apps, and takes the front from no app, so no quit that the Dock sends for the name of the app reaches the app
+  // that the operator has open, and a check ends only by its own exit.
+  #[cfg(target_os = "macos")]
+  if CHECK.load(Ordering::Relaxed) {
+    app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+  }
   app.run(|handle, event| {
     // The host ends when its stdin ends, and saves each life that it holds before it ends.
     if let tauri::RunEvent::Exit = event
