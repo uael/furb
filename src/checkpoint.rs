@@ -94,13 +94,13 @@ def _lives():
   return asked, sorted(live, key=_number), named, values, lost
 
 
-def checkpoint(define):
+def checkpoint(define, floor):
   asked, live, named, values, lost = _lives()
   defined = {}
   for c in live:
     words = [define(w) for r, w in program(c).items() if (get(r) or ("", "", ""))[2] != "extensions"]
     defined[c] = "\n\n".join(w for w in words if w)
-  counts = {}
+  counts = dict(floor)
   for x in asked:
     counts[x[0]] = max(counts.get(x[0], 0), _number(x[1]))
   entries, reserved = [], {}
@@ -172,16 +172,17 @@ def checkpoint(define):
   return entries
 "##;
 const WRITE: &str =
-  "(exec(__source, __names := {**globals()}), __names['checkpoint'](__define))[1]";
+  "(exec(__source, __names := {**globals()}), __names['checkpoint'](__define, __floor))[1]";
 
-/// The entry of the checkpoint of a life at its tip, as the store keeps it.
-pub fn written(engine: &mut Engine) -> Result<Object, Fault> {
+/// The entry of the checkpoint of a life at its tip, as the store keeps it, on the record that the life stands on.
+pub fn written(engine: &mut Engine, record: &[Object]) -> Result<Object, Fault> {
   let define = callable(|args: Vec<Object>| {
     let word = args.first().and_then(|one| one.as_ref().as_str().map(str::to_owned));
     Ok(Object::string(definitions(&word.unwrap_or_default())))
   });
-  let entries =
-    engine.word(WRITE, vec![("__source", Object::string(SOURCE)), ("__define", define)])?;
+  let words =
+    vec![("__source", Object::string(SOURCE)), ("__define", define), ("__floor", taken(record))];
+  let entries = engine.word(WRITE, words)?;
   let carried = Object::dict([
     (Object::string("version"), Object::int(VERSION)),
     (Object::string("engine"), Object::string(world::engine())),
@@ -208,6 +209,23 @@ fn unmarked(one: ObjectRef<'_>) -> Option<Object> {
     Some("tuple") => field("args")?.items()?.first().map(|args| args.to_owned()),
     _ => Some(one.to_owned()),
   }
+}
+
+/// The highest number that each kind took in a record, its checkpoints among them, as a map. A later life makes again
+/// no act that an ear of the outside made, as the merged of a command, so its transcripts do not hold each name that the
+/// record took, and the checkpoint keeps each of them taken.
+fn taken(record: &[Object]) -> Object {
+  let mut most: Vec<(String, i64)> = Vec::new();
+  for a in booted(record.to_vec()).iter().filter_map(fact).filter(Fact::question) {
+    let Some(n) = a.about().strip_prefix(a.kind()).and_then(|one| one.parse::<i64>().ok()) else {
+      continue;
+    };
+    match most.iter_mut().find(|one| one.0 == a.kind()) {
+      Some(one) => one.1 = one.1.max(n),
+      None => most.push((a.kind().to_owned(), n)),
+    }
+  }
+  Object::dict(most.into_iter().map(|(kind, n)| (Object::string(kind), Object::int(n))))
 }
 
 /// The fact of an entry.

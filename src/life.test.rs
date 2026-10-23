@@ -604,8 +604,12 @@ fn a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_promp
   let word = "work = chain('work')\nran = await bash('echo one')\nqueue = [ran]\nCAP = 6\ndef f():\n  return CAP\n\
               waiting = prompt(str, 'Wait.', on=work)\nawait wait(0.3)\nclose(str(waiting))";
   let waiting = closed(&mut first, word).as_ref().as_str().unwrap().to_owned();
-  let written = crate::checkpoint::written(&mut first).unwrap();
   drop(first);
+  // The checkpoint is written as the command line writes it: in a life that only replays the record.
+  let (mut inspected, kept) =
+    Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap();
+  let written = crate::checkpoint::written(&mut inspected, &kept).unwrap();
+  drop(inspected);
   crate::checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
   let mut later = scripted(&at, &["close('again')"]).boot::<String>([]).unwrap().0;
   let word = format!(
@@ -616,6 +620,11 @@ fn a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_promp
     closed(&mut later, &word).as_ref().py_repr(),
     format!("[{exit:?}, [{exit}], 6, ('prompt', '{waiting}'), 'again', 'chain3', 'bash2']"),
     "each name, value and answer of the past stands, the open prompt goes on, and a new act takes the next name"
+  );
+  assert_eq!(
+    closed(&mut later, "close([x[1] for x in transcript('chain1', 'merged')])").as_ref().py_repr(),
+    "['merged2']",
+    "a name that an ear of the outside took in the past stays taken"
   );
   drop(later);
   let kept = world::kept(at.join("record.jsonl")).unwrap();
@@ -641,7 +650,8 @@ fn a_record_of_another_version_opens_on_this_build_from_its_last_checkpoint() {
   let path = at.join("record.jsonl");
   let mut first = scripted(&at, &[]).boot::<String>([]).unwrap().0;
   assert_eq!(closed(&mut first, "kept = 1\nclose(kept)").as_ref().as_int(), Some(1));
-  let written = crate::checkpoint::written(&mut first).unwrap();
+  let written =
+    crate::checkpoint::written(&mut first, &world::kept(at.join("record.jsonl")).unwrap()).unwrap();
   drop(first);
   crate::checkpoint::keep(&path, written).unwrap();
   let made =
