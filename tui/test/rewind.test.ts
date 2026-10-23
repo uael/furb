@@ -45,6 +45,15 @@ test("a branch at rung1 of the demo with its files gives back the README as it w
     expect(session.notice).toContain("1 file is back as it was");
   }));
 
+test("a rewind reads the files of the journal as it stands, while the count that the state of the host says lags it", () =>
+  withDemo(async (session) => {
+    const { point, path } = await shortcut(session);
+    // The state that the host pushes says the count of the changes, and it can come after the acts that made them.
+    session.host.changes = 0;
+    const found = await session.filesAt(point);
+    expect(found.files.map((change) => change.path)).toEqual([path]);
+  }));
+
 test("a restore of the files alone keeps the conversation, and says that a command is not undone", () =>
   withDemo(async (session) => {
     const { point, readme, path } = await shortcut(session);
