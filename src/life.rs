@@ -173,26 +173,35 @@ impl Opening {
       (None, _) => (Vec::new(), None),
     };
     let path = self.record.as_deref().unwrap_or_default();
-    let refused = |why: String| {
+    let refused = |why: String, then: String| {
       Err(Fault::new(
         "Drift",
-        vec![Object::string(format!(
-          "{why}, so a replay would drift. Open the record with the build that made it, or start a new life."
-        ))],
+        vec![Object::string(format!("{why}, so a replay would drift. {then}"))],
       ))
     };
     match (world::version(&record), world::made(&record)) {
       (Some(theirs), _) if theirs != world::VERSION => {
-        return refused(format!(
-          "the record {path} was made by a build of version {theirs}, and this build is of version {}",
-          world::VERSION
-        ));
+        let at = world::build(theirs)
+          .map_or_else(|| "the store of builds".to_owned(), |at| at.display().to_string());
+        return refused(
+          format!(
+            "the record {path} was made by a build of version {theirs}, and this build is of version {}",
+            world::VERSION
+          ),
+          format!(
+            "Open the record with the build of version {theirs}, which stands at {at} once a build of that version ran \
+             on this machine, and which script/builds.sh {theirs} makes there. Or start a new life."
+          ),
+        );
       }
       (None, Some(theirs)) if theirs != world::engine() => {
-        return refused(format!(
-          "the record {path} was made by the engine {theirs:.12}, and this build runs the engine {:.12}",
-          world::engine()
-        ));
+        return refused(
+          format!(
+            "the record {path} was made by the engine {theirs:.12}, and this build runs the engine {:.12}",
+            world::engine()
+          ),
+          "Open the record with the build that made it, or start a new life.".to_owned(),
+        );
       }
       _ => {}
     }

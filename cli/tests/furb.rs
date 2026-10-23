@@ -218,6 +218,43 @@ fn a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it() {
 }
 
 #[test]
+fn each_run_puts_the_program_in_the_store_of_builds_under_its_version() {
+  let yard = Yard::new("shelved");
+  printed(yard.furb(&["run", COUNT]), "");
+  let stood = yard.at.join(format!("cache/furb/builds/{}/furb", furb::world::VERSION));
+  let (stood, program) = (
+    fs::read(&stood).expect("the build in the store"),
+    fs::read(env!("CARGO_BIN_EXE_furb")).unwrap(),
+  );
+  assert!(stood == program, "the store holds this program");
+}
+
+#[test]
+fn a_command_on_a_record_of_another_version_runs_the_build_of_that_version_that_the_store_holds() {
+  let yard = Yard::new("handed");
+  printed(yard.kept(&["run", COUNT]), "");
+  let other = furb::world::VERSION + 1;
+  let text = fs::read_to_string(yard.record()).unwrap();
+  let ours = format!("\"{}\",{}]", furb::world::engine(), furb::world::VERSION);
+  assert!(text.contains(&ours), "the record names this version");
+  fs::write(yard.record(), text.replace(&ours, &format!("\"{}\",{other}]", furb::world::engine())))
+    .unwrap();
+  let said = refused(yard.kept(&["run", COUNT]), "");
+  assert!(
+    said.contains(&format!("a build of version {other}, and this build is of version")),
+    "{said}"
+  );
+  assert!(said.contains(&format!("script/builds.sh {other}")), "{said}");
+  let store = yard.at.join(format!("cache/furb/builds/{other}"));
+  fs::create_dir_all(&store).unwrap();
+  program(&store.join("furb"), "#!/bin/sh\nprintf '%s\\n' \"$@\" > handed.txt\nexit 3\n");
+  let ended = ran(yard.kept(&["run", COUNT]), "");
+  assert_eq!(ended.status.code(), Some(3), "furb ends as the build of that version ended");
+  let words = fs::read_to_string(yard.at.join("handed.txt")).unwrap();
+  assert_eq!(words, format!("run\n{COUNT}\n--record\n{}\n", yard.record().display()));
+}
+
+#[test]
 fn a_record_is_printed_as_facts_each_after_the_number_of_its_line() {
   let yard = Yard::new("facts");
   fs::create_dir_all(yard.at.join(".furb")).expect("the folder of the project");
