@@ -15,6 +15,9 @@ import { join } from "node:path";
 /** The folder that holds each program that the tests compiled, for all the runs of the tests on this machine. */
 const built = join(tmpdir(), "furb-executables");
 
+/** The folder of the scripts that the tests run as programs, which the runner of the tests compiles before any test. */
+export const programs = join(import.meta.dir, "programs");
+
 /** A program named `name` in a directory, compiled from a script by the bun that runs the test, and its path, which
  * ends in .exe on Windows. A test runs a fake program in this way on every system, since Windows runs no script by
  * its shebang. The script imports only the modules of the runtime, and it finds its files from the path of the program.
@@ -23,15 +26,12 @@ const built = join(tmpdir(), "furb-executables");
  * on Windows, a compile and a first start took more than 30 s while the other runs of the tests worked. So each text of
  * a script compiles once for each bun into the folder `built`, which every run on the machine shares, and starts there
  * once. The program in the directory is a hard link to that file, which the system checked already, and a copy where
- * no link can be made. */
+ * no link can be made. A compile that runs beside the tests takes the disk and the processors from them all: on
+ * Windows every test timed out for a minute while runs of the tests compiled. So the runner of the tests runs this module first,
+ * which compiles each script of `programs`, and a test compiles only when it runs with no runner. */
 export function executable(script: string, directory: string, name: string): string {
   const file = process.platform === "win32" ? `${name}.exe` : name;
-  const key = createHash("sha256")
-    .update(`${Bun.version} ${Bun.revision}\n`)
-    .update(readFileSync(script))
-    .digest("hex");
-  const home = join(built, key.slice(0, 16));
-  if (!existsSync(join(home, "program"))) compile(script, home);
+  const home = compiled(script);
   const path = join(directory, file);
   const program = join(home, "program", process.platform === "win32" ? "program.exe" : "program");
   try {
@@ -40,6 +40,17 @@ export function executable(script: string, directory: string, name: string): str
     copyFileSync(program, path);
   }
   return path;
+}
+
+/** The folder of the program of a script, which compiles it when the folder holds none. */
+function compiled(script: string): string {
+  const key = createHash("sha256")
+    .update(`${Bun.version} ${Bun.revision}\n`)
+    .update(readFileSync(script))
+    .digest("hex");
+  const home = join(built, key.slice(0, 16));
+  if (!existsSync(join(home, "program"))) compile(script, home);
+  return home;
 }
 
 /** Compile the script into `home`/program, in a folder of its own that takes its name at once when it is done, so a
@@ -65,3 +76,5 @@ function compile(script: string, home: string): void {
     rmSync(work, { recursive: true, force: true });
   }
 }
+
+if (import.meta.main) compiled(process.argv[2] ?? "");

@@ -279,7 +279,8 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
   cache of `.furb/tests`, and not those of the machine. `tui/script/test.ts` deals the tests of each file into runs,
   each a process of its own that runs one test at a time, so a test counts its own time alone and no test runs
   beside one that changes the environment or the clock. Twice as many runs go at once as the machine has cores. A
-  word after `bun run test` filters the files.
+  word after `bun run test` filters the files. Each script of `bind/typescript/test/programs`, which a test runs as a
+  program, compiles before any run starts, so no compile takes the machine from a test.
   As root, the test of a folder that cannot be read fails, since root reads every folder.
 - `bun run demo` and `bun run tui`: the TUI on the demo session, which asks no model, or on a real life.
 - `bun run docs`: write the tables of keys and commands in `tui/README.md` again from `tui/src/keys.ts` and
@@ -299,6 +300,10 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
   real renderer. Run both after a change that a screen shows, and read each capture. One run of each at a time holds
   its home in `/tmp`, and a second run waits until the first ends. A screen that does not come in three minutes ends
   the run with an error that names the screen, and a run never waits past thirty minutes.
+
+- `python script/budgets.py`: set the budget of time of each job of the gates, in `.github/budgets.json`, from the
+  times of its last green runs on main. The round of the conductor holds each job to its budget, and turns a job that
+  passes it into an item, as it turns into an item each test that fails, then passes on the same commit.
 
 Every pull request and every push to `main` runs the gates in `.github/workflows/gates.yml`: the hooks, which
 include the gates of the crate and the type check. The suite runs on Linux, on macOS and on Windows, and the gates

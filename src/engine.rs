@@ -68,11 +68,12 @@ const VIEWS: [&str; 18] = [
 ];
 
 /// For each fact of the past, the ears of the host that wait for it, among the ears `w`, each by its name and what it
-/// waits for, as the bus gives a fact: an ear that waits for nothing hears it, as does an ear that waits for its kind, its act, or the
-/// kind, the maker or the chain of that act, or the chain of that maker, and every ear hears a control.
-const HEARING: &str = "(lambda past, w: [(lambda a: (lambda k: [n for n, x in w if x is None or k & x or a[0] in \
-  ('pause', 'wake', 'cancel', 'close')])((lambda q: {a[0], *q[:4], scope(q[2])})(get(a[1]) or a[:1] * 4)))(a) \
-  for a in past])(past, w)";
+/// waits for, as the bus of the engine gives a fact, whose `ears` this rule is word for word: an ear that waits for
+/// nothing hears it, as does an ear that waits for its kind, its act, or the kind, the maker, the chain or the thread
+/// of that act, or the chain of that maker or of that chain or thread, and every ear hears a control.
+pub(crate) const HEARING: &str = "(lambda past, w: [(lambda a: (lambda k: [n for n, x in w if x is None or k & x or a[0] in \
+  ('pause', 'wake', 'cancel', 'close')])((lambda q: {a[0], *q[:4], scope(q[2]), scope(q[3])})(get(a[1]) or \
+  a[:1] * 4)))(a) for a in past])(past, w)";
 
 /// The prefix of the name a function of the host crosses in under: `call:` and its number.
 const CALL: &str = "call:";
@@ -1489,10 +1490,11 @@ impl Engine {
     self.kept_now(true);
   }
 
-  /// The snapshot of the life, written where its keeper says when one is due, or now: a failure leaves the snapshot
+  /// The snapshot of the life, written where its keeper says when one is due, or now, and only when the life said a
+  /// fact since the last one, which is known before the sandbox dumps its session: a failure leaves the snapshot
   /// before it, since a snapshot is a cache.
   fn kept_now(&mut self, now: bool) {
-    if !self.keeper.as_mut().is_some_and(|keeper| keeper.due(now)) {
+    if !self.keeper.as_mut().is_some_and(|keeper| keeper.due(now) && keeper.grew()) {
       return;
     }
     if let Some((table, dump)) = self.snapshot()

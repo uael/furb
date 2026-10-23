@@ -195,7 +195,8 @@ test("a new standing drops the roster, the directory and the actor that the view
         "operator",
       ]);
     },
-    { model: "claude-cli:sonnet" },
+    // The roster is named, so the catalog offers no model of the claude command line that the machine holds.
+    { model: "claude-cli:sonnet", roster: ["claude-cli:sonnet"] },
   ));
 
 test("a row of a read or a write carries the count of the lines of its text and leaves the text out, a write the lines that its change added and removed, and an act that the life ran its time", () =>
