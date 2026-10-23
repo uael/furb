@@ -11,7 +11,7 @@ Run more, or run again, only for a new change, a failure, or a risk that stays o
 mirrors a change of the implementation that can be undone at low cost; use the `test-audit` skill when you write or
 review a test.
 
-`CLAUDE.md` gives every command, and says what each one runs. Read it first. `.github/workflows/gates.yml` says what
+`AGENTS.md` gives every command, and says what each one runs. Read it first. `.github/workflows/gates.yml` says what
 CI runs, and on which systems.
 
 ## Select the proof
@@ -42,7 +42,7 @@ own, as `Sand` and `tmp_path` do.
 
 `uv run python script/smoke.py`, `script/play.py` and `script/deepswe.py` ask a real model. Each spends prompts, so
 run one only when the owner asks, or when the change touches the provider and no scripted model can prove it.
-`script/CLAUDE.md` says how to run the rig of DeepSWE.
+`script/AGENTS.md` says how to run the rig of DeepSWE.
 
 The suite runs on Linux and on macOS, and the gates of TypeScript run on Windows too. A proof on one system does not
 prove the others. When CI fails on a system you do not have, read its log before you change anything.

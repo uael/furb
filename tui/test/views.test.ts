@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from "bun:test";
+import { afterAll, expect, setSystemTime, test } from "bun:test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type Renderable, TextRenderable } from "@opentui/core";
@@ -180,11 +180,26 @@ test("a damaged journal of file changes says what broke, with no word of the par
   ));
 
 test("the footer counts down the wait of a call of a model that the provider makes again, with its attempt and why", () =>
-  composing(async ({ session, app, frame }) => {
-    const retry = { attempt: 2, most: 10, until: Date.now() + 3500, why: "connection reset" };
-    session.host.streams = new Map([["rung1", { chain: session.selected, text: "", thinking: "", retry }]]);
-    app.render();
-    expect(await frame()).toContain("Retrying in 4 s, attempt 2 of 10, connection reset");
+  composing(async ({ session, frame }) => {
+    // The clock stands still, so the seconds left are what the test moves it by, however long the frames take.
+    const start = Date.now();
+    const retry = { attempt: 2, most: 10, until: start + 3500, why: "connection reset" };
+    // Each state of the worker carries the streams of its session, and a state that the opening of the demo sent can
+    // come after the test starts. So the stream that the test makes comes again with each state.
+    const stream = () => {
+      session.host.streams = new Map([["rung1", { chain: session.selected, text: "", thinking: "", retry }]]);
+    };
+    setSystemTime(new Date(start));
+    stream();
+    session.host.on("change", stream);
+    try {
+      expect(await frame()).toContain("Retrying in 4 s, attempt 2 of 10, connection reset");
+      setSystemTime(new Date(start + 1000));
+      expect(await frame()).toContain("Retrying in 3 s, attempt 2 of 10, connection reset");
+    } finally {
+      session.host.off("change", stream);
+      setSystemTime();
+    }
   }));
 
 test("a word of the operator that the gate refused says in one more line what to do", () =>

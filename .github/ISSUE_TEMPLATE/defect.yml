@@ -1,0 +1,80 @@
+name: Defect
+description: Tell us about a thing in furb that does not work as it should.
+title: "A short sentence that says what goes wrong"
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for this report. A clear report helps us fix the defect fast.
+        Remove each key, token and private path from what you paste here.
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+      description: Tell what furb did. Paste the exact error when there is one.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: Tell what furb should do in its place.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: The steps
+      description: The steps that make the defect occur again, one on each line, from the start.
+      placeholder: |
+        1. pip install furb
+        2. furb prompt "How many lines does a.txt hold?" --shape int
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: The version of furb
+      description: What `furb --version` prints, or the commit of your clone.
+      placeholder: furb 0.2.0
+    validations:
+      required: true
+  - type: dropdown
+    id: door
+    attributes:
+      label: The part of furb
+      description: Where you met the defect.
+      multiple: true
+      options:
+        - The TUI
+        - The command line, furb
+        - The Python package
+        - The TypeScript package
+        - The Rust crate
+        - The desktop preview
+        - The engine or an extension
+        - I do not know
+  - type: input
+    id: system
+    attributes:
+      label: The system
+      description: The operating system and its version, and the model that the life asked when it matters.
+      placeholder: macOS 26.1 on Apple silicon, claude-cli:opus/high
+    validations:
+      required: true
+  - type: textarea
+    id: record
+    attributes:
+      label: A record or a log
+      description: |
+        When it helps, attach the record of the life, a file of `.jsonl` or of `.sqlite`, or the lines of its log.
+        `furb facts --record <record>` prints the facts of a record with no life. A record holds all that the
+        life said and read, so read it before you attach it.
+      render: text
+  - type: textarea
+    id: more
+    attributes:
+      label: More
+      description: All else that helps, as a capture of the screen or a guess of the cause.

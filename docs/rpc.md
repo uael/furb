@@ -1,7 +1,7 @@
 # The JSON-RPC of furb
 
-`furb --mode rpc` serves one life on stdin and stdout, with no TUI. A client, in any language, sends commands and
-reads responses and events. The shape follows the RPC mode of Pi, `pi --mode rpc`: one JSON object on each line, in
+`furb --mode rpc` serves one life on stdin and stdout, with no TUI. Use it to drive furb from a program in any
+language: the program sends commands, and reads responses and events. The shape follows the RPC mode of Pi, `pi --mode rpc`: one JSON object on each line, in
 each direction.
 
 ```sh
@@ -12,27 +12,12 @@ furb --mode rpc --record session.jsonl --cwd path/to/project --model claude-cli:
 - `--cwd` is the directory the chains of the life start in. When you do not give it, it is the current directory.
 - `--demo` and the words after `--` are for the TUI. With `--mode rpc`, furb refuses them and exits with an error.
 
-The life runs on the engine of the crate and on the ears of the World that the crate writes: the files, the commands,
-time, the store of the record, the provider of models, and the extensions, which the life enables at its start as the
-configs of the user and of the directory say, and whose words it plays as rungs on each chain. The catalog of the crate
-knows the models, each named `provider:id`, and offers those of the claude command line, `claude-cli:opus`,
-`claude-cli:sonnet`, `claude-cli:haiku` and `claude-cli:fable`, when furb finds the program, those of a local server
-that `FURB_LOCAL_URL` names, each named `local:` and the id that the server lists, and those of each provider whose
-credential, such as `ANTHROPIC_API_KEY`, stands in the environment. The roster of the life holds the model of the
-default actor, the models that `--roster` names, and the operator, which is the client. With no `--roster`, it holds
-every model that the catalog offers, the model of the default actor first, and the operator.
-`--model provider:model/effort` names the default actor, and a prompt that names no actor goes to it. When it is not
-given, the default actor is `claude-cli:opus/high` when furb finds the claude command line, then the first model of a
-provider of the network, and then the first model of the local server, which furb asks when `--roster` is not given
-or a name needs it. An actor that names no effort takes `high`, and an effort moves to the nearest one that its model
-takes. The life refuses a prompt to a model
-that its roster does not hold. An actor may name its model by the id alone, when one model alone holds it, and furb
-names it as the roster does. A model of the local server takes its id alone only when that id holds a colon, as
-`qwen3:8b`; when the part before the colon names a provider, as `mistral:7b`, only once the server listed it, and
-`local:mistral:7b` is the sure name. A command that names a model of the local server that furb has not listed waits
-for the list, five seconds at most. `FURB_CLAUDE_BIN` names the claude command line, and the `claude` on PATH is used
-when it is not set. When that program is missing or does not run, as while the command line updates itself, a turn
-tries it again for 60 seconds, or for the seconds that `FURB_CLAUDE_GONE` gives, before it fails.
+The life runs on the engine of the crate and on the World of the crate: the files, the commands, time, the store of
+the record, the models, and the extensions that the configs turn on, as [Extensions](extensions.md) says. The roster
+of the life holds the model of the default actor, the models that `--roster` names, or each model that furb offers
+when `--roster` names none, and the operator, which is the client. `--model` names the default actor, and a prompt
+that names no actor goes to it. [Models](models.md) says how furb finds a model and how to name one. The life refuses
+a prompt to a model that its roster does not hold.
 
 ## Framing
 
@@ -171,18 +156,20 @@ this life, and a `wake` of it puts it to the World. A `retry` of an act that is 
 
 ## A session
 
-The lines that start with `>` are the lines of the client, and the others are the lines of furb. Most `fact` events
-are not shown.
+The lines that start with `>` are the lines of the client, and the others are the lines of furb. The `fact` events
+are not shown. This word asks the operator a question, and gives the answer as its own: it asks no model, so you can
+run it as it stands.
 
 ```text
-> {"id": "1", "type": "prompt", "message": "ask me", "shape": "int"}
-{"id": "1", "type": "response", "command": "prompt", "success": true, "data": {"act": "prompt1"}}
-{"type": "fact", "fact": ["prompt", "prompt1", "operator", "chain1", "int", "ask me", ""]}
-{"type": "prompt", "act": "prompt2", "on": "chain1", "shape": "int", "message": "how many?"}
-> {"id": "2", "type": "close", "act": "prompt2", "value": 7}
-{"id": "2", "type": "response", "command": "close", "success": true}
-{"type": "done", "act": "prompt1", "value": 7}
+> {"id": "1", "type": "rung", "word": "close(await prompt(int, \"how many?\", to=OPERATOR))"}
+{"type":"response","command":"rung","success":true,"id":"1","data":{"act":"rung7"}}
+{"act":"prompt1","on":"chain1","shape":"int","message":"how many?","type":"prompt"}
+> {"id": "2", "type": "close", "act": "prompt1", "value": 7}
+{"type":"response","command":"close","success":true,"id":"2"}
+{"type":"done","act":"rung7","value":7}
 ```
+
+The act is `rung7`, since the extensions ran the rungs before it.
 
 ## How it differs from Pi
 

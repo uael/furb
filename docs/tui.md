@@ -1,10 +1,12 @@
-# furb terminal workspace
+# A tour of the TUI
 
-Keys use the marks of macOS: ⌃ is Control, ⌥ is Option or Alt, and ⇧ is Shift. These captures come from the real
-OpenTUI renderer and native engine, with a scripted provider of the answers of the model, temporary files, and real
-local commands. Run `bun run screenshots` from the repository root to capture them again, and `bun run animation` to
-record the animation below: it types, clicks, and waits in a real session, and keeps each picture that changed. The
-generators are in `tui/script/`.
+This page shows each screen of the furb TUI, with what it does. [The TUI](../tui/README.md) says how to start it,
+and lists every key and command.
+
+Keys use the marks of macOS: ⌃ is Control, ⌥ is Option or Alt, and ⇧ is Shift. The pictures come from the real
+renderer and the real engine, with a scripted provider of the answers of the model, temporary files, and real local
+commands. `bun run screenshots` takes them again, and `bun run animation` records the animation below: it types,
+clicks, and waits in a real session, and keeps each picture that changed. The scripts are in `tui/script/`.
 
 ![The furb TUI in action](furb.gif)
 

@@ -79,3 +79,17 @@ async def test_when_the_lines_that_a_show_picks_of_a_text_are_not_one_run_the_te
     "#read1\nread1_path = 'b.txt'\nread1_numbers = [1, 2, 4]\n<s:read1_text>\none\ntwo\nfour</s:read1_text>",
     "#read2\nread2_path = 'b.txt'\n<s:read2_text>\ntwo\nsix</s:read2_text>",
   ]
+
+
+async def test_when_the_show_of_a_read_picks_no_line_of_a_text_the_tell_binds_the_number_of_its_lines() -> None:
+  """When the show of a read picks no line of a text, the tell binds the number of its lines, under the word lines, so a model knows where the text ends, or that it holds none."""
+  files = {"/w/b.txt": "one\ntwo\nsix\nfour\n", "/w/e.txt": ""}
+  word = "read('b.txt', span(9, 12))\nread('b.txt', grep('^z'))\nread('e.txt')\nwrite(Text('b.txt', 'one\\ntwo\\n'))\nclose(1)"
+  _, _, root = born(word, files=files)
+  assert await engine.prompt(int, "past the end", on=root) == 1
+  assert [one for one in paragraphs(engine.turns(on=root)) if one.startswith(("#read", "#write"))] == [
+    "#read1\nread1_path = 'b.txt'\nread1_lines = 4",
+    "#read2\nread2_path = 'b.txt'\nread2_lines = 4",
+    "#read3\nread3_path = 'e.txt'\nread3_lines = 0",
+    "#write1\nwrite1_path = 'b.txt'",
+  ]

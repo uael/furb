@@ -1,25 +1,20 @@
 # furb for TypeScript
 
-The same Rust crate and Monty sandbox, through N-API. Views, queries and controls are synchronous. An `Act` has
-an `id`, converts to its name as a string, and can be awaited. Its Promise resolves with its outcome or rejects
-with an error that names the engine's fault. A TUI is not part of this package.
+The engine of furb for Node.js 22 or later and Bun 1.4.2 or later, on macOS, Linux and Windows. It runs the same
+Rust crate and monty sandbox as the Python package, through N-API. Use it to open a life from a program, as
+[the examples](https://github.com/uael/furb/blob/main/docs/examples/README.md) do, or to write a host of your own, as the TUI does.
 
-`napi-rs` builds `furb.<system>.node` from the host API in `src/binding.rs`, which the door to python gives too, and
-from the door in `src/binding/ts.rs` and its module `src/binding/ts/host.rs`, and generates `index.d.cts` from them.
-It writes `index.cjs` too, which loads the engine from beside itself, or from the package of the engine of its
-system, `furb-<system>`, which npm installs with the package `furb`. The optional
-`typescript` feature builds the binding in the existing crate. There is no Rust worker or second crate. The
-`Engine` of the package has one method for each verb of the contract, which the build of the crate makes from
-`src/furb/engine.pyi`, as it makes the methods of the crate: the words that the verb needs, in their order, then an
-object of the words that have a default, where nothing leaves the default of the engine. A verb of the operator
-names its chain in `on`. The package runs on Bun 1.4.2 or later and on Node.js 22 or later, on macOS, Linux and
-Windows. Bun gives no signal on Windows for Ctrl+Break or for the close of the console, and ends the process at
-once: `onConsoleEnd(callback)` hears these events there, and the system holds the process until the callback ends
-it.
+## Install
 
 `npm install furb` installs the package with the engine built for its system: Linux on x64 or arm64 with glibc 2.35
 or later, macOS on Apple silicon or on Intel, and Windows on x64. On another system, build the engine from a checkout
 with `bun run build`.
+
+> [!NOTE]
+> The package waits for the release of furb 0.2.0. Until then, build it from a clone with `bun install && bun run
+> build`, and add it to a workspace of Bun as the examples do.
+
+## A first session
 
 ```ts
 import { boot } from "furb";
@@ -43,6 +38,12 @@ try {
   await session.dispose();
 }
 ```
+
+Views, queries and controls are synchronous. An `Act` has
+an `id`, converts to its name as a string, and can be awaited. Its Promise resolves with its outcome or rejects
+with an error that names the engine's fault. A TUI is not part of this package.
+
+## Sessions
 
 A `Session` opens an engine on the ears of the World that the crate writes and on the console of the operator, which
 this package writes. `Engine.open(ears, opening)` opens it as every host of the crate opens a life: on the record, on
@@ -78,6 +79,8 @@ effort that the host chose last, and takes that model when the host names none a
 keeps each stand and what the provider answered it, and every life stands again as it opens, so a later life tells the
 new standing on each chain whose standing changed.
 
+## Models
+
 The claude command line is the provider `claude-cli` of the catalog, with the models `opus`, `sonnet`, `haiku` and
 `fable`. It follows the pooled session design in [dirt](https://github.com/uael/dirt/tree/main/packages/cli/src/providers).
 It keeps a warm conversation for each chain of each life, sends only new messages, preserves text and thinking
@@ -92,6 +95,8 @@ import { models, Session } from "furb";
 const [first, ...others] = models().map((model) => model.name);
 const session = new Session({ model: first, effort: "high", roster: others.slice(0, 2) });
 ```
+
+## The operator and the answers
 
 Pass `answer` to replace only model requests, or `operator` to supply operator answers. `answer` gets the actor,
 the chain, the messages and the settings of the request as the provider would send them, its effort, its conversation
@@ -115,6 +120,8 @@ nothing. A turn is its role, its python, its usage and the blocks of its provide
 it. The provider hands a model the python of each user turn as it is, and no user turn that holds nothing, and the
 `answer` callback receives the same messages.
 
+## Ears
+
 An ear is a generator of JavaScript or an ear of the crate, a `NativeEar`, and `Engine.boot(record, ears)` takes
 them under the names the engine hears them by, in the order the engine offers them a question. A generator hears
 each fact of the life. It yields a saying, `[kind, id, ...words]`, and hears back the fact the bus made of it, and
@@ -129,6 +136,8 @@ one that takes a question takes it in their place, and one that takes it and ask
 function of JavaScript crosses as a show, a filter, or a function that makes the ear of an act, and what it throws
 is raised where the word called it. It answers from its words alone: a verb of the engine that it calls while the
 engine runs it is refused, since only an ear, which yields, can wait for the answer of the engine.
+
+## Values
 
 Values use the Python record form. Text and Exit carry `is` plus their fields. Faults carry `is` and `args`.
 Lists and tuples cross as arrays, and maps keep their order. Every value of the engine crosses to JavaScript,
@@ -148,6 +157,8 @@ Records preserve integral floats as `{"is":"float","args":["1"]}`. The native re
 precision before JavaScript can round a number. Every act the host makes enters the record, a query among them, and
 a later life makes it again at its place. A view enters nothing. `Session.open` refuses a record whose replay
 drifts.
+
+## Work that waits
 
 `session.pending` names the work that an earlier life left, which waits for a wake that this life says, by the kind of
 each act, as `engine.pending()` finds it: among each act that the outside started and did not end, and the acts that
@@ -173,6 +184,8 @@ since a stream lives only while its reply runs. File snapshots append to `.chang
 change. `session.changes.repair()` writes the journal again with each change that it can read, and
 `session.changes.renew()` starts a new journal and keeps the damaged one beside it. Keep both companions with the JSONL
 record.
+
+## The log and the snapshot
 
 The ear of the log writes the log of the life beside its record, `<record>.log`, in each life that keeps its record,
 and `log(record)` gives it to a host that boots an engine by hand: every fact that the life said, in the order
@@ -203,10 +216,14 @@ which reads by `get` each act that an ear before it took. The session saves
 save that fails throws an error that names the file, with the error of the system as its cause. The TUI saves its
 own files with it.
 
+## Read a record
+
 `inspectRecord(path)` reads pending work through the same native replay without taking a record lock,
 writing files, enabling an extension, or starting a model or command. `session.activity` holds the state of every act
 a person follows, and `session.isPaused(id)` reads it. `session.interrupt(chain)` cancels the work of a chain, each
 prompt, rung, command and wait on it that is not done, and not what an extension started on it.
+
+## Images
 
 `session.attachImage(path)` copies an image into the record's `.images` directory and returns its name, type,
 size, and `furb-image://` reference. A session with no record copies it into `.furb/images` of its directory. The
@@ -217,6 +234,8 @@ Put that reference in the prompt as a Markdown image,
 provider hands the python of the turn as it is, and adds each image that the message of a prompt of that turn
 references, to a model that takes images. The stored bytes are checked against their digest before use. PNG, JPEG, GIF,
 and WebP are supported, with a 20 MiB limit per image. Keep `.images` with the record when moving a session.
+
+## The model of a life
 
 The model of a life is the views that a host derives from the acts of a life, in `src/life`, which `furb/life`
 gives. It holds no native code and no module of node, so a terminal and a window of the web read the same views:
@@ -246,3 +265,18 @@ gives. It holds no native code and no module of node, so a terminal and a window
 - `time`: the marks of a life on its axis of time: each step, each question to the operator, and each end of a thread.
 - `watch`: the last value of each name that a chain told by a moment, under the act whose name it starts with.
 - `debugger`: the call stack of a chain, and the program of the ladder of a prompt, which its door holds.
+
+## How the package is built
+
+`napi-rs` builds `furb.<system>.node` from the host API in `src/binding.rs`, which the door to python gives too, and
+from the door in `src/binding/ts.rs` and its module `src/binding/ts/host.rs`, and generates `index.d.cts` from them.
+It writes `index.cjs` too, which loads the engine from beside itself, or from the package of the engine of its
+system, `furb-<system>`, which npm installs with the package `furb`. The optional
+`typescript` feature builds the binding in the existing crate. There is no Rust worker or second crate. The
+`Engine` of the package has one method for each verb of the contract, which the build of the crate makes from
+`src/furb/engine.pyi`, as it makes the methods of the crate: the words that the verb needs, in their order, then an
+object of the words that have a default, where nothing leaves the default of the engine. A verb of the operator
+names its chain in `on`. The package runs on Bun 1.4.2 or later and on Node.js 22 or later, on macOS, Linux and
+Windows. Bun gives no signal on Windows for Ctrl+Break or for the close of the console, and ends the process at
+once: `onConsoleEnd(callback)` hears these events there, and the system holds the process until the callback ends
+it.
