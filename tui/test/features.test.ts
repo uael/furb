@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { link, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, extname, join } from "node:path";
-import { executable } from "../../bind/typescript/test/executable.ts";
+import { executable, programs } from "../../bind/typescript/test/executable.ts";
 import { remove } from "../../bind/typescript/test/processes.ts";
 import { until } from "../../bind/typescript/test/until.ts";
 import { openEngine } from "../src/bridge.ts";
@@ -180,17 +180,13 @@ test("clipboard import and share publication use bounded files and the explicitl
   await mkdir(bin);
   const oldPath = process.env.PATH;
   const data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=";
-  // One program under the name of each system's reader of the clipboard, where AppKit and PowerShell print base64,
-  // and under the name gh, where it keeps what it uploads beside its folder. One program compiles once.
-  await writeFile(
-    join(directory, "fake.ts"),
-    `import { readFileSync, writeFileSync } from "node:fs"; import { basename, dirname, join } from "node:path"; const name = basename(process.execPath).replace(/\\.exe$/, ""); const data = ${JSON.stringify(data)}; if (name === "gh") { const args = process.argv.slice(2); writeFileSync(join(dirname(process.execPath), "..", "uploaded.json"), JSON.stringify({ args, markdown: readFileSync(args.at(-2), "utf8"), html: readFileSync(args.at(-1), "utf8") })); console.log("https://gist.github.com/furb/test-link"); } else process.stdout.write(/^(osascript|powershell)$/.test(name) ? data : Buffer.from(data, "base64"));\n`,
-  );
-  const reader = executable(join(directory, "fake.ts"), directory, "reader");
+  // One program under the name of each system's reader of the clipboard, and under the name gh.
+  await writeFile(join(bin, "clipboard"), data);
+  const reader = executable(join(programs, "clipboard.ts"), directory, "reader");
   for (const name of ["osascript", "powershell", "wl-paste", "xclip"])
     await link(reader, join(bin, `${name}${extname(reader)}`));
   const log = join(directory, "uploaded.json");
-  const gh = executable(join(directory, "fake.ts"), bin, "gh");
+  const gh = executable(join(programs, "clipboard.ts"), bin, "gh");
 
   try {
     process.env.PATH = `${bin}${delimiter}${oldPath ?? ""}`;
@@ -220,9 +216,8 @@ test("clipboard import and share publication use bounded files and the explicitl
 });
 
 /** A claude command line in the directory that ends with a failure as it starts. */
-async function failing(directory: string): Promise<string> {
-  await writeFile(join(directory, "claude.ts"), "process.exit(1);\n");
-  return executable(join(directory, "claude.ts"), directory, "claude");
+function failing(directory: string): string {
+  return executable(join(programs, "failing.ts"), directory, "claude");
 }
 
 test("a model request failure shows in the feed as the failure of an act, and not as an error of the view", async () => {
@@ -233,7 +228,7 @@ test("a model request failure shows in the feed as the failure of an act, and no
       record: join(directory, "session.jsonl"),
       // A claude command line that fails at once fails every request, as a model that is not there does. A program
       // that is missing would be tried again for a minute, as a command line that updates itself is.
-      claude: await failing(directory),
+      claude: failing(directory),
       roster: ["claude-cli:sonnet"],
     });
     await composing(
@@ -260,7 +255,7 @@ test("an App ends with its renderer while a model request fails and a redraw wai
     const opened = await openEngine({
       cwd: directory,
       record: join(directory, "session.jsonl"),
-      claude: await failing(directory),
+      claude: failing(directory),
       roster: ["claude-cli:sonnet"],
     });
     await composing(
