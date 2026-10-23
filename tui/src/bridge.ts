@@ -8,6 +8,7 @@ import type {
   ImageAttachment,
   LiveAct,
   Engine as Native,
+  Repaired,
   SetupInfo,
   Stream,
   Turn,
@@ -171,8 +172,9 @@ export class HostView extends EventEmitter implements Plain {
   netChanges = (writes: string[] | null) => this.ask<FileChange[]>("library", "net", writes);
   /** The change of each file of the branch against main, as git holds it in the directory of the session. */
   branchChanges = () => this.ask<FileChange[]>("library", "branch");
-  /** The journal of file changes written again with each change that it holds, and the count of lines it lost. */
-  repairChanges = () => this.ask<number>("library", "repairChanges");
+  /** The journal of file changes written again with each change that it holds, and the counts of changes kept and of
+   * lines removed. */
+  repairChanges = () => this.ask<Repaired>("library", "repairChanges");
   /** A new journal of file changes, and the path that the damaged one is kept at. */
   renewChanges = () => this.ask<string>("library", "renewChanges");
   /** An act whole, with all that a command printed, and nothing when the life holds no such act. */

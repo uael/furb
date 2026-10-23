@@ -1516,9 +1516,11 @@ export class App {
       : retry
         ? retryLine(retry)
         : status === "error"
-          ? w.error
-            ? "The view could not load"
-            : "The last act failed"
+          ? w.damagedJournal
+            ? "The journal of file changes is damaged"
+            : w.error
+              ? "The view could not load"
+              : "The last act failed"
           : statusLabels[status];
     // The footer offers the keys of the top layer that offers any, each of which does what its key does, and under
     // the layer of the table, the wake of a paused chain.
@@ -1956,12 +1958,12 @@ export class App {
           this.text(w.damagedJournal, c.muted),
           [
             "Repair the journal",
-            "keeps each change that it can read",
+            `keeps each change that it can read, ${this.chordOf("repair")}`,
             () => void w.repairJournal().catch(w.fail),
           ],
           [
             "Start a new journal",
-            "keeps the damaged one beside it",
+            `keeps the damaged one beside it, ${this.chordOf("renew")}`,
             () => void w.renewJournal().catch(w.fail),
           ],
         ),
@@ -4820,6 +4822,8 @@ export class App {
       sidebar: () => library.toggle(),
       workspace: this.workspacePicker,
       watch: this.watch,
+      repair: () => this.session.repairJournal(),
+      renew: () => this.session.renewJournal(),
     };
     if (name && !argument && Object.hasOwn(bare, name)) {
       await bare[name]?.();
@@ -5110,6 +5114,11 @@ export class App {
   /** Every action in one list: each with its label, the slash command that does it, what it does, and its keys. The
    * table of keys gives the chord of each command, and each action that has keys and no command, which stands before
    * the command that it goes with. */
+  /** The chord of the key that runs an action, as this terminal sends it. */
+  private chordOf(action: Action): string {
+    const found = bindings.find(({ binding }) => binding.run === action);
+    return found ? shown(found.key, found.binding, this.kitty) : "";
+  }
   palette(): void {
     const views_: Record<View, string> = {
       feed: "Messages, the Python each model wrote, and answers",
@@ -7170,12 +7179,16 @@ export class App {
     quit: () => void this.options.quit(),
     lifeView: () => this.switchView(),
     steer: () => this.steer(),
+    repair: () => void this.session.repairJournal().catch(this.session.fail),
+    renew: () => void this.session.renewJournal().catch(this.session.fail),
   };
   /** When an action of the table acts, where it does not act at all times: a key that does not act goes on to the
    * input, and the footer does not offer it. */
   private readonly when: Partial<Record<Action, () => boolean>> = {
     answer: () => this.session.desk.asks.length > 0,
     scope: () => this.session.view === "changes",
+    repair: () => this.session.journalDamaged,
+    renew: () => this.session.journalDamaged,
     pause: () => !this.searchRow.visible && this.pausing(),
   };
   /** The view shown, with the rewind tree closed. */

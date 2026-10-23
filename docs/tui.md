@@ -374,9 +374,12 @@ changes beside the record holds each write that the rewind reads.
 
 A view with nothing to show says why in its middle. An act that fails keeps its failure in the feed. A view that
 cannot load says what broke in plain words, and never the words of the parser of JSON, and offers to read it again.
-When the journal of file changes beside the record is damaged, the view of changes names the change that it cannot
-read, and offers to repair the journal, which keeps each change that it can read, or to start a new journal, which
-keeps the damaged one beside it.
+When the journal of file changes beside the record is damaged, the session still opens, with `--resume` and from the
+list, and the view of changes names the change that it cannot read. It offers to repair the journal, which reads the
+file again and keeps each change that it can read, or to start a new journal, which keeps the damaged one beside it.
+Each has a key, ⌥R and ⌥J, and a command, `/repair` and `/renew`, that act once the view found the journal damaged. A
+repair says how many changes it kept and how many lines it removed, as "2 changes kept, 1 line removed". The rewind
+reads each change that the journal holds and skips each line that is no change.
 
 ![Empty results](screenshots/24-empty-results.png)
 

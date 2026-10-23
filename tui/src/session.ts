@@ -492,6 +492,10 @@ export class Session extends EventEmitter {
     this.errors[`${this.selected}:${this.view}`] = value;
     if (!value) delete this.damaged[`${this.selected}:${this.view}`];
   }
+  /** Whether the journal of file changes is known to be damaged, whatever the view that is shown. */
+  get journalDamaged(): boolean {
+    return Object.values(this.damaged).some(Boolean);
+  }
   /** Whether the error of each view of a chain is a damaged journal of file changes. */
   private readonly damaged: Record<string, boolean> = {};
   /** Why the journal of file changes cannot be read, which the view shown offers to repair; empty when it reads. */
@@ -501,17 +505,28 @@ export class Session extends EventEmitter {
 
   /** The journal of file changes written again with each change that it holds, and the view read again. */
   async repairJournal(): Promise<void> {
-    const lost = await this.host.repairChanges();
+    this.damagedOnly();
+    const { kept, removed } = await this.host.repairChanges();
     await this.journalMended(
-      `The journal is repaired: ${lost} damaged ${lost === 1 ? "line is" : "lines are"} removed, and each change that it held stays.`,
+      `The journal is repaired: ${kept} ${kept === 1 ? "change" : "changes"} kept, ${removed} ${removed === 1 ? "line" : "lines"} removed.`,
     );
   }
   /** A new journal of file changes, with the damaged one kept beside it, and the view read again. */
   async renewJournal(): Promise<void> {
+    this.damagedOnly();
     const aside = await this.host.renewChanges();
     await this.journalMended(`A new journal is started. The damaged one is kept at ${shortenHome(aside)}.`);
   }
+  /** A repair or a new journal acts on a journal that a view found damaged. */
+  private damagedOnly(): void {
+    if (!this.journalDamaged) throw new Error("The journal of file changes is not damaged.");
+  }
   private async journalMended(notice: string): Promise<void> {
+    // The journal is one for the whole session, so each view that found it damaged reads it again.
+    for (const key of Object.keys(this.damaged)) {
+      delete this.errors[key];
+      delete this.damaged[key];
+    }
     this.error = "";
     this.changesRead = "";
     this.notice = notice;
@@ -586,11 +601,18 @@ export class Session extends EventEmitter {
           const writes = this.scope === "branch" ? null : this.writes();
           const read = `${this.scope}:${this.host.changes}:${writes ? `${writes[0]}:${writes.length}:${writes.at(-1)}` : ""}`;
           if (read !== this.changesRead) {
-            const changes = await (this.scope === "branch"
-              ? this.host.branchChanges()
-              : this.host.netChanges(this.scope === "life" ? null : writes));
-            this.changes = changes.map(reviewed);
-            this.changesRead = read;
+            try {
+              const changes = await (this.scope === "branch"
+                ? this.host.branchChanges()
+                : this.host.netChanges(this.scope === "life" ? null : writes));
+              this.changes = changes.map(reviewed);
+              this.changesRead = read;
+            } catch (error) {
+              // A damaged journal is the failure of the view of changes alone, and it never stops the session: the
+              // view says it and offers to repair it, and the next read tries again.
+              if ((error as { name?: unknown } | undefined)?.name !== "DamagedJournal") throw error;
+              this.fail(error);
+            }
           }
         }
         // The findings of the gate that refused the last word of the operator on the chain shown.

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FileChanges } from "../src/changes.ts";
@@ -520,11 +520,25 @@ test("a damaged journal of file changes opens, names the change it cannot read, 
     expect(() => repaired.read()).toThrow(new DamagedJournal(journal, 1));
     expect(repaired.read(0, 1).map((one) => one.after)).toEqual(["one"]);
     // The repair keeps each change in its order, and a change appended after it reads with them.
-    expect(repaired.repair()).toBe(1);
+    expect(repaired.readable().map((one) => one.after)).toEqual(["one", "two"]);
+    expect(repaired.repair()).toEqual({ kept: 2, removed: 1 });
     repaired.append({ path: "a", before: "two", after: "three" });
     expect(repaired.read().map((one) => one.after)).toEqual(["one", "two", "three"]);
   } finally {
     repaired.dispose();
+  }
+  // A repair reads the whole file again: a change that this session appended, and a line that another program
+  // appended after the session opened, both stay, and a line that a crash cut is counted as removed.
+  await writeFile(journal, `${change("one")}\n{ damaged }\n${change("two")}\n`);
+  const open = new FileChanges(record);
+  try {
+    open.append({ path: "a", before: "two", after: "three" });
+    await appendFile(journal, `${change("four")}\nnull\n${change("five")}`);
+    expect(open.repair()).toEqual({ kept: 4, removed: 3 });
+    expect(open.length).toBe(4);
+    expect(open.read().map((one) => one.after)).toEqual(["one", "two", "three", "four"]);
+  } finally {
+    open.dispose();
   }
   await writeFile(journal, `${change("one")}\nnull\n`);
   const renewed = new FileChanges(record);

@@ -210,6 +210,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | [ ] / { } after ⌥G | Move the cursor in time by one / ten moments |
 | Space / x / n / b after ⌥G | Pause or wake / cancel / step / branch at the cursor the chain |
 | ⌃PageUp / ⌃PageDown | Previous / next scope of file changes: this turn, this chain, the life, the branch |
+| ⌥R / ⌥J | Repair the journal of file changes / start a new journal, once the view of changes finds it damaged |
 | ⌃C | Clear the input, close a dialog, or cancel what you sent last (a message goes back to the input) |
 | Esc | Close a dialog or pause current model work |
 | F1 / ⌃Q / ⌃D twice | Help / save and quit / save and quit from an empty input |
@@ -241,6 +242,8 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/bash <command>` | Stream a shell command |
 | `/read <path>` | Show a file to this chain |
 | `/changes [turn|chain|life|branch]` | Show the files that this turn, this chain, the life or the branch against main changed |
+| `/repair` | Keep each change that the journal of file changes can read, and remove the lines that it cannot |
+| `/renew` | Start a new journal of file changes, and keep the damaged one beside it |
 | `/cd <path>` | Change this chain's working directory |
 | `/edit [prompt id]` | Change a prompt's program and replay it |
 | `/inspect <name>` | Read a value from this chain's module |
