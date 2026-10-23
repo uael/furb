@@ -15,9 +15,10 @@ extensions/<name>/
   <name>.py     the word
   <name>.pyi    the contract, which an official extension has
   test/         the suite, which an official extension has
+  tui.ts        the part for the TUI, which an extension can have
 ```
 
-The manifest is a JSON map with three keys:
+The manifest is a JSON map with four keys:
 
 ```json
 { "name": "memory", "word": "memory.py", "life": "remember()" }
@@ -31,6 +32,8 @@ The manifest is a JSON map with three keys:
   doctrine of its own, a quote that holds no law, as furb holds its own in `DOCTRINE.md`. Its contract holds its laws, as
   `engine.pyi` holds those of the engine.
 - `life` is the life word, python that starts the work of the extension, such as `remember()`. It can be absent.
+- `tui` is the file of the part for the TUI, relative to the folder: a module of TypeScript, which the TUI loads beside
+  the life, as [A part for the TUI](#a-part-for-the-tui) says. It can be absent, and an official extension has none.
 
 ## Where furb finds extensions
 
@@ -86,7 +89,8 @@ journal answers again in a later life, so a replay is exact and the World is ask
   three ways to extend furb and when to take each. A def in a word lives with its chain. `extend(name, *rungs)` lives
   with the project: it writes the words of those rungs, as `program()` holds them, as the word of the extension
   `name` in `.furb/extensions/<name>`, with its manifest, and turns it on in `.furb/config.json`, so it plays on
-  every chain now and in every later life. An official extension lives in furb. `enabled()` gives the names of the
+  every chain now and in every later life. `extend(name, *rungs, tui=module)` also writes `module` as `tui.ts`, the
+  part of the extension for the TUI, and the manifest names it. An official extension lives in furb. `enabled()` gives the names of the
   extensions that the life runs. It needs no ear of the World.
 
 - `compaction` is a kit to go on in a new chain that keeps less of the old one, since in furb a compaction is a
@@ -127,6 +131,48 @@ answers the reads of a scheme of its own. An extension that needs an ear in rust
 Name only the extensions that you trust. A word runs in the sandbox of monty on the engine of the crate, and with the
 rights of the user on the engine of CPython, as a word of a model does there.
 
+## A part for the TUI
+
+An extension can give the TUI a part: a module of TypeScript, which its manifest names under `tui`. The part draws on
+the model of a life and on the acts of the extension. Nothing builds it: Bun loads the module as it stands.
+
+- When the TUI opens a session, it loads the part of each extension that the configs turn on, as `parts(project)` of
+  the binding gives them from the configs and the manifests as they are then. It loads the parts again when a file of
+  the folder of a part changes, and when a write of the life in `.furb` of the project or in the folder of a part
+  lands, as a write of `extend` does. A part needs no restart and no build of furb.
+- The module exports a function as its default, which the TUI calls with `furb`, as Pi gives the API of the agent to
+  an extension. The function calls `furb.panel(title, draw)`, `furb.row(kind, draw)`, `furb.key(on, run)` and
+  `furb.command(name, detail, run)`.
+- A panel stands over the input while the feed shows. `draw(seen)` gives its lines, each a text or a list of
+  `[text, tone]`, where a tone is `text`, `muted`, `faint`, `accent`, `success`, `warning` or `danger`. The TUI draws it
+  again each time that the life changes. A panel shows twelve lines at most.
+- A row draws each act of its kind in the feed: `draw(act, seen)` gives `{ label, details }`, the text after the kind
+  and the lines that its card shows when it opens. The rows of a rung and of a prompt are the TUI's own.
+- A key, as `ctrl+e` or `+`, acts while no dialog is open, and a key with no ctrl, meta or alt acts on an empty input
+  alone. A command runs from the palette, or as `/name` in the input. A key of the TUI wins over a key of a part, and a
+  part that names a command of the TUI fails.
+- `seen` gives the chain on screen, every act of the life, `of(kind)` for the acts of a kind, `run(word)`, which runs
+  python on the chain through the gate as `/run` does, and `say(text)`, which shows a notice in the footer.
+  `furb.life` is the model of a life, `@furb/engine/life`.
+- A part imports types alone, so it loads in any project. `tui/src/parts.ts` gives the types, and `tui/fixtures/todo`
+  is an extension with a part.
+- A module that does not load, that exports no function as its default, or whose function throws, shows its error in
+  plain words in a panel under the name of its extension. A panel or a row that throws shows its error in its place,
+  and a key or a command that throws shows its error in the footer. The TUI goes on in each case.
+- The TUI loads the parts that the configs turn on also for a life that enables no extension, such as the demo, since
+  a part reads only the acts of the life.
+
+```ts
+export default function (furb) {
+  const items = (seen) => seen.of("todo").map((act) => ({ item: String(act.words[0]), done: Boolean(act.words[1]) }));
+  furb.panel("Todo", (seen) => items(seen).map(({ item, done }) => [[done ? "✓ " : "○ ", "accent"], [item]]));
+  furb.row("todo", (act) => ({ label: String(act.words[0]) }));
+  furb.command("todos", "Say how many items are open", (_, seen) => seen.say(`${items(seen).length} items`));
+}
+```
+
+![The part of an extension](screenshots/74-extension-part.png)
+
 ## Permissions
 
 furb has no permissions, by design. Each act runs with the rights of the user who runs furb, and the record shows who
@@ -140,8 +186,8 @@ permission, as the rest of furb does.
 
 - `furb extensions` prints each extension that a life on a record runs, with its life word, and the state of the
   JSON-RPC names them.
-- The TUI has no part of its own for an extension. `/extensions` lists what the life runs, and `/run` runs a word
-  of one on the chain on screen.
+- The TUI loads the part of each extension for the TUI, as [A part for the TUI](#a-part-for-the-tui) says.
+  `/extensions` lists what the life runs, and `/run` runs a word of one on the chain on screen.
 - `Session` takes `extensions`, false to enable nothing new, and `config`, the config directory of the user.
 - `opened` gives the record and the ears of the crate to a host of either door, and `extensions` false enables
   nothing new.

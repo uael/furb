@@ -99,11 +99,11 @@ At 140 columns or more, the two sides of a diff stand side by side, and below th
 
 ![This chain](screenshots/04-changes.png)
 
-![This turn](screenshots/74-changes-turn.png)
+![This turn](screenshots/76-changes-turn.png)
 
-![The life](screenshots/75-changes-life.png)
+![The life](screenshots/77-changes-life.png)
 
-![The branch](screenshots/76-changes-branch.png)
+![The branch](screenshots/78-changes-branch.png)
 
 Each hunk has two actions. **Revert** writes the old lines of the hunk back through the World, as a word of yours on
 the chain, so the record keeps the write. The word refuses when the file no longer holds the lines of the hunk where
@@ -111,9 +111,9 @@ the review shows them. **Comment a line** lists the lines of the hunk. Choose on
 message that names the file, the line and its text: write your comment after it, and Enter sends it to the chain as a
 prompt.
 
-![Comment a line](screenshots/77-changes-comment.png)
+![Comment a line](screenshots/79-changes-comment.png)
 
-![The comment in the input](screenshots/78-changes-comment-input.png)
+![The comment in the input](screenshots/80-changes-comment-input.png)
 
 ## Command palette
 
@@ -458,6 +458,14 @@ session keeps its name in its saved view, and a workspace in the list of workspa
 `/extensions` lists the extensions that the life runs, and `/run` runs a word of one. The demo runs none.
 
 ![Extension command](screenshots/42-extension-command.png)
+
+The part of a project extension adds a panel over the input, here a todo list, and the row of each act of its kind in
+the feed. The TUI loads it again when its file changes. A module that breaks shows its error in its panel, and the
+TUI goes on.
+
+![The part of an extension](screenshots/74-extension-part.png)
+
+![The error of a part](screenshots/75-extension-part-error.png)
 
 ## Undo and redo
 

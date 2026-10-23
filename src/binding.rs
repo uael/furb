@@ -35,7 +35,7 @@ use pyo3::pyfunction;
 
 use crate::{
   Ear, Fact, Fault, Heard, Life, Object, Spoken, Step,
-  extension::{self, Extension},
+  extension::{self, Extension, Part},
   life::Opening,
   wire,
   world::{self, images},
@@ -457,6 +457,14 @@ pub fn enabled(root: Vec<Said>) -> Vec<Extension> {
 #[cfg_attr(feature = "typescript", napi)]
 pub fn extensions(given: Vec<Extension>) -> NativeEar {
   NativeEar::of(extension::extensions(given))
+}
+
+/// The part for a TUI of each extension that a life in the directory of a project runs and whose manifest names
+/// one, as the configs of the user and of the project say it now, which a TUI loads beside the life.
+#[cfg_attr(feature = "python", pyfunction)]
+#[cfg_attr(feature = "typescript", napi)]
+pub fn parts(project: String) -> Result<Vec<Part>, Fault> {
+  extension::parts(&extension::Places::here(), std::path::Path::new(&project))
 }
 
 /// The ear of the memory extension, which finds the memory of a path in its folders and in the config directory.

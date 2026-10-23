@@ -7,7 +7,7 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use super::{Extension, Places, configured, extensions, load, word};
+use super::{Extension, Part, Places, configured, extensions, load, parts, word};
 use crate::{
   Ear, Engine, Fact, Object,
   ear::{ear, hear, say},
@@ -143,6 +143,43 @@ fn a_config_that_is_not_of_the_form_is_refused_with_its_path() {
     format!("No config gives the folder of the extension note: {shown}")
   );
   assert!(refused("{").ends_with(&format!(": {shown}")));
+}
+
+#[test]
+fn a_manifest_names_the_part_of_an_extension_for_a_tui_as_text() {
+  let at = place("tui");
+  folder(&at.join("good"), r#"{"name": "note", "word": "note.py", "tui": "tui.ts"}"#, "x = 1\n");
+  assert_eq!(
+    load("note", &at.join("good")).unwrap(),
+    Extension { life: String::new(), ..note("x = 1") }
+  );
+  folder(&at.join("bad"), r#"{"name": "note", "word": "note.py", "tui": 1}"#, "x = 1\n");
+  let manifest = at.join("bad").join("furb.json").display().to_string();
+  assert_eq!(
+    load("note", &at.join("bad")).unwrap_err().message(),
+    format!("The tui of the manifest is no text: {manifest}")
+  );
+}
+
+#[test]
+fn the_parts_for_a_tui_are_those_of_the_extensions_that_the_configs_turn_on_and_that_name_one() {
+  let at = place("parts");
+  let places = Places { config: at.join("user"), home: None };
+  let project = at.join("project");
+  assert_eq!(parts(&places, &project).unwrap(), [], "an official extension has none");
+  let todo = project.join(".furb").join("extensions").join("todo");
+  folder(&todo, r#"{"name": "todo", "word": "note.py", "tui": "tui.ts"}"#, "t = 1");
+  folder(&project.join("plain"), r#"{"name": "plain", "word": "note.py"}"#, "p = 1");
+  folder(&project.join("off"), r#"{"name": "off", "word": "note.py", "tui": "off.ts"}"#, "o = 1");
+  config(
+    &project.join(".furb").join("config.json"),
+    r#"{"extensions": {"todo": "extensions/todo", "plain": "../plain", "off": false}}"#,
+  );
+  let got = parts(&places, &project).unwrap();
+  assert_eq!(
+    got,
+    [Part { name: "todo".to_owned(), file: todo.join("tui.ts").display().to_string() }]
+  );
 }
 
 /// The word of the extension of the tests, which reads a file of the directory of the chain.

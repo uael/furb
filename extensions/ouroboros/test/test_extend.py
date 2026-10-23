@@ -42,6 +42,22 @@ async def test_extend_writes_the_words_of_the_rungs_it_names(tmp_path: Path) -> 
   assert json.loads((folder / "furb.json").read_text(encoding="utf-8")) == {"name": "kit", "word": "kit.py"}
 
 
+async def test_extend_writes_tui_as_the_part_that_the_tui_loads(tmp_path: Path) -> None:
+  """extend writes tui, when it is given, as tui.ts in the folder of the extension, the part that the TUI loads, and the manifest names tui.ts under tui whenever the folder holds that file."""
+  _, root = extended("ouroboros", tmp_path, lives=True, sand=Disk())
+  f, g = engine.rung(F, on=root), engine.rung(G, on=root)
+  await g
+  folder = tmp_path / "work" / ".furb" / "extensions" / "kit"
+  part = 'export default (furb) => furb.panel("Kit", () => ["one"])'
+  await engine.rung(f"extend('kit', {f!r}, tui={part!r})", on=root)
+  assert (folder / "tui.ts").read_text(encoding="utf-8") == part + "\n"
+  manifest = {"name": "kit", "word": "kit.py", "tui": "tui.ts"}
+  assert json.loads((folder / "furb.json").read_text(encoding="utf-8")) == manifest
+  await engine.rung(f"extend('kit', {g!r})", on=root)
+  assert (folder / "tui.ts").read_text(encoding="utf-8") == part + "\n"
+  assert json.loads((folder / "furb.json").read_text(encoding="utf-8")) == manifest
+
+
 async def test_extend_turns_the_extension_on_in_the_config_of_the_project(tmp_path: Path) -> None:
   """extend turns the extension on in .furb/config.json with the path of its folder from the folder of that config, and keeps every other entry of the config."""
   (tmp_path / "work" / ".furb").mkdir(parents=True)

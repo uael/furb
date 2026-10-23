@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
@@ -135,7 +135,7 @@ try {
   await capture("04-changes");
   // The review in each other scope: this turn, the life, and the branch against main, then a comment on a line.
   session.review("turn");
-  await capture("74-changes-turn");
+  await capture("76-changes-turn");
   // A note that another chain writes stands in the life, and not in this chain.
   const reviewChain = session.chains.find((one) => one.words[0] === "Review notes")?.id;
   if (!reviewChain) throw new Error("The gallery has no chain Review notes.");
@@ -147,19 +147,19 @@ try {
   );
   await until(session.host, () => session.host.changes > written + 1);
   session.review("life");
-  await capture("75-changes-life");
+  await capture("77-changes-life");
   session.review("branch");
-  await capture("76-changes-branch");
+  await capture("78-changes-branch");
   session.review("chain");
   await capture("04-changes");
   await click(test, "Comment a line");
   await rest();
   for (let step = 0; step < 4; step++) test.mockInput.pressArrow("down");
   await test.flush();
-  await capture("77-changes-comment");
+  await capture("79-changes-comment");
   test.mockInput.pressEnter();
   await test.flush();
-  await capture("78-changes-comment-input");
+  await capture("80-changes-comment-input");
   app().composer.setText("");
   await rest();
   session.show("feed");
@@ -758,6 +758,34 @@ try {
   const asks = () => watched.at(watched.activity).some((act) => act.kind === "prompt" && act.words[2]);
   while (asks()) watched.travel(-1);
   await capture("65-watch-earlier");
+
+  // A project extension gives the TUI a part, which loads live: the panel of a todo list over the input, and the row
+  // of each act todo in the feed. A module that breaks shows its error in its panel.
+  app().dispose();
+  await library.dispose();
+  const listed = await project("todo");
+  const folder = join(listed, ".furb", "extensions", "todo");
+  await cp(resolve(import.meta.dir, "..", "fixtures", "todo"), folder, { recursive: true });
+  await writeFile(join(listed, ".furb", "config.json"), '{"extensions": {"todo": "extensions/todo"}}\n');
+  await show(await demoSession({ cwd: listed }));
+  const todo = (await readFile(join(folder, "todo.py"), "utf8")).replace(
+    /^from furb\.engine import .*\n+/m,
+    "",
+  );
+  await session.command(
+    `/run ${todo}\ntodo("Draw the todo list in a panel", done=True)\ntodo("Load the part again when its file changes", done=True)\ntodo("Show the error of a module that breaks")`,
+  );
+  await settle();
+  while (!app().parts.version) await Bun.sleep(10);
+  // The rung opens, so the capture shows the row of each act todo under its word.
+  app().render();
+  await test.flush();
+  await click(test, "rung1");
+  await rest();
+  await capture("74-extension-part");
+  await writeFile(join(folder, "tui.ts"), "export default (furb) => { furb.panel(");
+  while (!app().parts.loaded[0]?.error) await Bun.sleep(10);
+  await capture("75-extension-part-error");
 } catch (error) {
   console.error(error);
   failed = true;
