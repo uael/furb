@@ -26,7 +26,7 @@ part that is missing.
 effort of its `--model` as `--model` and `--effort`, each `--roster`, and the words after `--`.
 
 A recorded life is a log of a life whose first line is a header that says `"recorded": true`. The TUI reads it as it
-reads a record that another engine made, from its acts, and runs nothing: what you send to it fails with the
+reads a record that a build of another version made, from its acts, and runs nothing: what you send to it fails with the
 reason. The demo opens
 `fixtures/conductor.jsonl`, a life of a conductor of furb with 23 chains, beside its scripted life, when it has no
 `--cwd` and no record. `bun run tui/script/fixture.ts <record>.jsonl.log [out]` makes such a fixture from the log of
@@ -46,9 +46,9 @@ a `.gitignore` that keeps it out of version control. Keep the `.jsonl`, `.sessio
 `.ui.json` files together. The last file keeps the view of the session as you left it. Keep its `.images` directory
 too when the session has image attachments. An unfinished session opens paused and offers a resume choice. The
 native engine replays completed work from the record.
-A record whose replay drifts, as a record that another engine made, opens to read: the TUI shows what the record
-kept, runs no word again, asks no model, and refuses each command that would change the life. A dialog names the
-engine that made the record and the engine of this build, and offers to read it or to start a new life in its
+A record whose replay drifts, as a record that a build of another version made, opens to read: the TUI shows what
+the record kept, runs no word again, asks no model, and refuses each command that would change the life. A dialog
+names the version of the build that made the record and the version of this build, and offers to read it or to start a new life in its
 workspace.
 ⌃W lists the workspaces and their sessions, each with its state, save time, cost, and record size. It reads
 unfinished work through native replay without locking or changing the saved record. The record shows what remains

@@ -235,11 +235,19 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     try {
       engine = opened.open();
     } catch (error) {
-      // A record that another engine made drifts on a replay, so it opens to read, with the facts that it kept.
+      // A record that a build of another version made drifts on a replay, so it opens to read, with the facts that
+      // it kept.
       const why = error instanceof Error ? error.message : String(error);
       if (!why.startsWith("Drift") || !opened.record) throw error;
-      const { facts, made, engine: ours, logged } = retold(opened.record);
-      reader = new Reader(facts, opened.directory, opened.record, { made, engine: ours, why, logged });
+      const { facts, made, engine: ours, version, current, logged } = retold(opened.record);
+      reader = new Reader(facts, opened.directory, opened.record, {
+        made,
+        engine: ours,
+        version,
+        current,
+        why,
+        logged,
+      });
       snapshots = new Snapshots(reader, reader);
       return reader.root;
     }

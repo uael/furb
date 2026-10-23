@@ -383,21 +383,25 @@ pub fn logged(path: String) -> Result<Option<Value>, Fault> {
 }
 
 /// What the record at a path tells, read with no life, so no word runs again and a record of any engine opens: the
-/// engine that made it, as the record names it, and nothing when it names none; the engine of this build; whether
+/// engine that made it, as the record names it, and nothing when it names none; the engine of this build; the
+/// version of the build that made it, as the record names it, and nothing when it names none; the version of this
+/// build; whether
 /// the facts are those of its log; and the facts, in order. The facts are those of the log when it agrees with the
 /// record, and else those that the record kept, with the chains, the rungs, the runs and the dones that they name.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(
   feature = "typescript",
   napi(
-    ts_return_type = "{ made: string | null; engine: string; logged: boolean; facts: unknown[] }"
+    ts_return_type = "{ made: string | null; engine: string; version: number | null; current: number; logged: boolean; facts: unknown[] }"
   )
 )]
 pub fn retold(path: String) -> Result<Value, Fault> {
-  let world::Retold { made, logged, facts } = world::retold(&path)?;
+  let world::Retold { made, version, logged, facts } = world::retold(&path)?;
   Ok(Value(Object::dict([
     (Object::string("made"), made.map_or_else(Object::none, Object::string)),
     (Object::string("engine"), Object::string(world::engine())),
+    (Object::string("version"), version.map_or_else(Object::none, Object::int)),
+    (Object::string("current"), Object::int(world::VERSION)),
     (Object::string("logged"), Object::bool(logged)),
     (Object::string("facts"), Object::list(facts)),
   ])))

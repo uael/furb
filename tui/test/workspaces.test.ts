@@ -354,28 +354,32 @@ test("a session that opens keeps its row through a refresh that comes before its
     expect(created.session?.sessionName).toBe("Second");
   }));
 
-test("a session whose record another engine made opens to read before any replay, and names both engines", () =>
+test("a session whose record a build of another version made opens to read before any replay, and names both versions", () =>
   withLibrary(async ({ directory, open }) => {
     let library = open();
     const made = await library.create(await library.add(directory), "Made elsewhere");
     await library.dispose();
     const text = await readFile(made.path, "utf8");
-    const engine = /\["made","chain1","store","([0-9a-f]{64})"\]/.exec(text)?.[1];
-    if (!engine) throw new Error("The record names no engine.");
-    await writeFile(made.path, text.replaceAll(engine, "0".repeat(64)));
+    const found = /\["made","chain1","store","([0-9a-f]{64})",(\d+)\]/.exec(text);
+    if (!found?.[1] || !found[2]) throw new Error("The record names no build.");
+    const [named, engine, version] = [found[0], found[1], Number(found[2])];
+    const other = text.replace(named, `["made","chain1","store","${"0".repeat(64)}",${version + 1}]`);
+    await writeFile(made.path, other);
     library = open();
     const group = await library.add(directory);
     const row = group.sessions.find((entry) => entry.path === made.path);
     if (!row) throw new Error("No row for the record.");
-    const said = `was made by the engine 000000000000, and this build runs the engine ${engine.slice(0, 12)}, so a replay would drift. Open the record with the build that made it, or start a new life.`;
+    const said = `was made by a build of version ${version + 1}, and this build is of version ${version}, so a replay would drift. Open the record with the build that made it, or start a new life.`;
     await library.select(row);
     const reading = row.session?.host.reading;
     expect(reading?.made).toBe("0".repeat(64));
     expect(reading?.engine).toBe(engine);
+    expect(reading?.version).toBe(version + 1);
+    expect(reading?.current).toBe(version);
     expect(reading?.why).toStartWith("Drift: the record ");
     expect(reading?.why).toEndWith(said);
     expect(row.error).toBeUndefined();
-    expect(await readFile(made.path, "utf8")).toBe(text.replaceAll(engine, "0".repeat(64)));
+    expect(await readFile(made.path, "utf8")).toBe(other);
   }));
 
 test("deleting the current session moves to the next session that opens, and to a new one when none does", () =>

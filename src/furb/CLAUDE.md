@@ -157,9 +157,12 @@ meanings. The entry of such a name here gives only its form in the engine.
   which the record keeps; the World says it at the tip, and when a write of the config of the project lands that
   turns on an extension by its path, and it plays the extension as a rung on every chain there is when it hears the
   fact, and after it on each chain at its birth, before the call that made the chain returns.
-- made: the fact by which the store names in the record the engine that made it, a digest of the engine and of the
-  Kernel, which the store says as it hears the root of a new record at its birth; a life on a record that names
-  another engine is refused before any replay, since that engine can make other acts from the same record.
+- made: the fact by which the store names in the record the build that made it, the digest of the engine and of the
+  Kernel and the version of the build, `VERSION` in `src/world/store.rs`, which the store says as it hears the root of
+  a new record at its birth. A life on a record that names another version is refused before any replay, since a
+  build of that version can make other acts from the same record. A record of a build before the versions names an
+  engine alone, and a life on another engine refuses it. A build keeps the version while each record of the corpus,
+  `tests/corpus`, replays on it with no drift.
 - life word: the python of an extension that its rung runs after its word, and that the World plays alone on a chain
   whose origin had the extension, since that chain made the rung of its origin again.
 
@@ -198,7 +201,7 @@ meanings. The entry of such a name here gives only its form in the engine.
 - A chain is a function of the record, and a later boot must offer the same interpreter and the same outside, since a
   record is made again by running its words, or loaded from the snapshot that a run of those words made on the same
   record, interpreter and outside, which the opening of the life checks against the record. A record names the
-  engine that made it, and a life on another engine is refused before any replay.
+  version of the build that made it, and a life on a build of another version is refused before any replay.
 - A chain is one conversation, and the transcript that a provider caches grows at one end.
 - Nothing is told twice, and nothing tells what it does not know: an act tells of itself, and a chain of the rungs it
   asks a model for, with the message of the prompt each advances, of a word that told nothing, of the prompts and the

@@ -619,7 +619,7 @@ try {
   app().closeOverlay();
   await capture("55-answer-landed");
 
-  // A record that an earlier engine made drifts on a replay, so it opens to read, with a dialog that names both engines.
+  // A record whose replay drifts on the build of its version opens to read, with a dialog that says why it drifts.
   const older = await demoSession({ cwd: await project("fieldnotes-old") });
   await seedDemo(older);
   const drifts = older.host.record ?? "";

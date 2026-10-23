@@ -26,9 +26,10 @@ it gave the gate and ran, from these answers alone.
 
 ## How to run it
 
-The engine of the life that made the record must be the engine of the build that audits it. The record names that
-engine in its fact `made`, as a digest of `src/furb/engine.py` and `src/furb/kernel.py`, and the audit says it in its
-report. A build of another engine refuses the record before any replay, and the audit says so.
+The build that audits the record must be of the version of the build that made it. The record names that build in
+its fact `made`: the engine, as a digest of `src/furb/engine.py` and `src/furb/kernel.py`, and the version of the
+build. The audit says the engine in its report. A build of another version refuses the record before any replay, and
+the audit says so.
 
 Install furb from its wheels alone, in a clean virtual environment:
 

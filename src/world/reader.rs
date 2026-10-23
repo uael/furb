@@ -26,7 +26,7 @@ use crate::{
   value::{Fault, IS, Object, ObjectRef, entry, field},
 };
 
-use super::{kept, logged, made};
+use super::{kept, logged, made, version};
 
 /// Who says each fact that the reader adds to the facts that a record kept, but a question.
 pub const READER: &str = "reader";
@@ -36,6 +36,8 @@ pub const READER: &str = "reader";
 pub struct Retold {
   /// The engine that made the record, as the record names it, and nothing when it names none.
   pub made: Option<String>,
+  /// The version of the build that made the record, as the record names it, and nothing when it names none.
+  pub version: Option<i64>,
   /// Whether the facts are those of the log, which holds every fact that the life said.
   pub logged: bool,
   /// The facts, in the order that the life said them.
@@ -46,15 +48,15 @@ pub struct Retold {
 pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
   let path = path.as_ref();
   let record = kept(path)?;
-  let made = made(&record);
+  let (made, version) = (made(&record), version(&record));
   if let Some(facts) = logged(path)? {
-    return Ok(Retold { made, logged: true, facts });
+    return Ok(Retold { made, version, logged: true, facts });
   }
   let facts = record
     .iter()
     .filter_map(|entry| Some(entry.as_ref().items()?.first()?.to_owned()))
     .collect::<Vec<_>>();
-  Ok(Retold { made, logged: false, facts: told(&facts) })
+  Ok(Retold { made, version, logged: false, facts: told(&facts) })
 }
 
 /// A fact that the reader says: its kind, what it is about, and its words.
