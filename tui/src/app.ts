@@ -2421,7 +2421,8 @@ export class App {
                 text.flexShrink = 1;
                 row.add(text);
                 row.add(this.text(state, c.faint, { marginLeft: space.between }));
-                row.add(this.threadControls(act));
+                const controls = this.threadControls(act);
+                if (controls) row.add(controls);
                 this.panel(box, tone).add(row);
               } else if (!line) {
                 const note = this.box({ paddingLeft: space.between });
@@ -2445,7 +2446,8 @@ export class App {
                     ),
                   ),
                 );
-              if (!user) box.add(this.threadControls(act));
+              const controls = user ? undefined : this.threadControls(act);
+              if (controls) box.add(controls);
             },
             { group: user ? "user" : "sent", act, heading: user ? false : undefined, indent, shown: message },
           );
@@ -4651,11 +4653,12 @@ export class App {
   private railThread(): ChainThread | undefined {
     return this.railChain ? this.chainThreadsBy(this.railChain).by.get(this.railAt ?? "") : undefined;
   }
-  /** The controls of a thread at the foot of its message in the feed: collapse it, and resolve it or open it again. */
-  private threadControls(act: ActRow): BoxRenderable {
-    const own = this.chainThreadsBy(this.session.selected);
-    const thread = own.by.get(act.id) ?? own.of.get(act.id);
-    const id = thread?.act.id ?? act.id;
+  /** The controls of a thread on the header of the thread in the feed: collapse it, and resolve it or open it again.
+   * A message of a thread and a prompt that heads no thread have none. */
+  private threadControls(act: ActRow): BoxRenderable | undefined {
+    const thread = this.chainThreadsBy(this.session.selected).by.get(act.id);
+    if (!thread) return undefined;
+    const id = thread.act.id;
     const row = this.row({ gap: 3, paddingLeft: space.between });
     row.add(
       this.link(
