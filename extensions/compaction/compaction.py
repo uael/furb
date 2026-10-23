@@ -151,7 +151,12 @@ def supersede(keep: Filter | None = None, on: str = "") -> str:
   here = on or scope(acting())
   theirs = transcript(here)
   kin = {here}
-  for one in (keep or list)([x for x in theirs if question(x)]):
+  acts = []
+  for x in theirs:
+    match x:
+      case (str(kind), str(name), str(by), str(where), *words) if question(x):
+        acts.append((kind, name, by, where, *words))
+  for one in (keep or list)(acts):
     name = one[1]
     while name not in kin and (b := get(name)):
       kin.add(name)
