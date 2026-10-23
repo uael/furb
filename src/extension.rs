@@ -242,13 +242,15 @@ pub fn parts(places: &Places, project: &Path) -> Result<Vec<Part>, Fault> {
   Ok(out)
 }
 
-/// A path that a config gives, resolved against the folder of the config, with `~` as the home.
+/// A path that a config gives, resolved against the folder of the config, with `~` as the home. The path is joined
+/// part by part, so each separator is that of the system, as `extensions/todo` gives `extensions\\todo` on Windows.
 fn beside(file: &Path, path: &str, places: &Places) -> PathBuf {
+  let native = |one: &str| Path::new(one).components().collect::<PathBuf>();
   match (path.strip_prefix('~'), &places.home) {
     (Some(rest), Some(home)) if rest.is_empty() || rest.starts_with(['/', '\\']) => {
-      home.join(rest.trim_start_matches(['/', '\\']))
+      home.join(native(rest.trim_start_matches(['/', '\\'])))
     }
-    _ => file.parent().unwrap_or(Path::new("")).join(path),
+    _ => file.parent().unwrap_or(Path::new("")).join(native(path)),
   }
 }
 
