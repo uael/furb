@@ -14,6 +14,7 @@ STALL = 3
 JOBS = 40
 USD = 150.0
 EACH = 15.0
+LIMIT = 12
 BATCH = 16
 EVERY = 300.0
 RECORDS = 3
@@ -298,10 +299,12 @@ def stalled(counts: list[int]) -> bool:
 
 def listed(gaps: list[list[str]], taken: dict[str, str]) -> str:
   lines = []
-  for shot, gap, quote in gaps:
+  for shot, gap, quote in gaps[:LIMIT]:
     lines.append(f"- {shot}: {gap}" + (f"\n  His words: {quote}" if quote else ""))
     if shot in taken:
       lines.append(f"  ![{shot}](furb-image://{taken[shot]})")
+  if len(gaps) > LIMIT:
+    lines.append(f"- and {len(gaps) - LIMIT} more gaps, which a later pass shows again")
   return "\n".join(lines)
 
 
@@ -443,7 +446,7 @@ async def screened(target: dict, book: dict, job: dict, gaps: list[list[str]], w
   body = (
     f"🤖 converge judged the head {sha[:7]} of this PR against the words of the owner on {target['name']}, and"
     " holds it with the label hold until a head shows none of these gaps:\n\n"
-    + "\n".join(f"- {shot}: {gap}" + (f" His words: {quote}" if quote else "") for shot, gap, quote in gaps)
+    + "\n".join(f"- {shot}: {gap}" + (f" His words: {quote}" if quote else "") for shot, gap, quote in gaps[:LIMIT])
   )
   await bash(f"gh pr comment {n} --body-file -", stdin=body, show=HIDDEN, timeout=120)
   told = (

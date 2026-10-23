@@ -375,3 +375,9 @@ def test_a_wait_names_only_the_acts_that_still_run(world: World) -> None:
   book = world.run(8)
   assert world.waits and all(done == [] for done in world.waits)
   assert book["passes"] and world.pending == []
+
+def test_a_list_of_gaps_for_a_worker_holds_its_first_few_and_counts_the_rest(world: World) -> None:
+  gaps = [["demo/01-welcome", f"Gap {i}.", QUOTE] for i in range(15)]
+  text = world.listed(gaps, {"demo/01-welcome": "d1.png"})
+  assert text.count("His words: ") == 12
+  assert text.endswith("- and 3 more gaps, which a later pass shows again")
