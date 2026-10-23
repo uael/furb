@@ -328,17 +328,21 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         case ("tell", *_, notes):
           heard.append("\n".join(notes))
         case ("ready", rid, _, word):
-          if heard:
-            act("run", id, None, name := rid + "_told", unquoted(rungs.setdefault(name, "\n\n".join(heard))), "")
-            heard = []
-          ran = tells(rid) and rid
-          rungs[(donor := r[5]) or rid] = word
-          if ran and (found := gate(word)):
+          try:
+            if heard:
+              act("run", id, None, name := rid + "_told", unquoted(rungs.setdefault(name, "\n\n".join(heard))), "")
+              heard = []
+            ran = tells(rid) and rid
+            rungs[(donor := r[5]) or rid] = word
+            found = ran and gate(word)
+            if not found:
+              running[rid] = act("run", id, None, rid, unquoted(word), donor)
+          except Exception as e:
+            found = [f"{e}"]
+          if found:
             yield told(rid, "refused", findings="\n".join(found))
             refused.add(rid)
             close(Refused(), rid)
-          else:
-            running[rid] = act("run", id, None, rid, unquoted(word), donor)
         case ("done", _, "", Refused()) if r[0] == "reply":
           pause(id)
       if r[0] == "run":

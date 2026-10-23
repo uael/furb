@@ -2,6 +2,7 @@
 
 from conftest import (
   BAD,
+  Py,
   acts,
   born,
   faulted,
@@ -15,6 +16,8 @@ from conftest import (
   ran,
   said,
   settle,
+  sown,
+  watched,
   written,
 )
 from furb import engine
@@ -161,3 +164,18 @@ async def test_the_chain_tells_the_findings_that_refused_a_word() -> None:
   assert isinstance(refusal, Refused) and refusal.args == ()
   assert heads(engine.turns(on=root))[-3:] == [f"#{first} closed", f"#{again} advance on {act}", f"#{act} closed"]
   assert ran(log) == [bind, f"{refused}\n\n#{again} advance on {act}", "close(1)"]
+
+
+async def test_a_word_that_the_chain_cannot_gate_or_run_is_refused_as_the_gate_refuses_a_word() -> None:
+  """A word that the chain cannot gate or run, as when the life refuses its gate, is refused as the gate refuses a word, with what went wrong as its one finding, so no word and no told text ends the ear of a chain."""
+  sand, log = sown(), []
+  root = engine.boot((), kernel=Py().kernel(), probe=watched(log), world=sand.hears())
+  sand.script[root] = ["k = 1", "close(1)"]
+  act = engine.prompt(int, "work", on=root)
+  await settle(300)
+  first, again, *_ = (a[1] for a in said(log, "rung"))
+  told = paragraphs(engine.turns(on=root))
+  assert f"#{first} refused\n{first}_findings = 'nothing takes gate'" in told
+  assert f"#{first} closed\n{first}_value = Refused()" in told
+  assert f"#{again} advance on {act}" in told
+  assert isinstance(engine.peek(first), Refused) and not engine.over(act)
