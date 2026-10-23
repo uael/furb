@@ -26,10 +26,7 @@ def ask(kind, on, *words):
 
 
 def span(lo: int, hi: int) -> Show:
-  def picks(lines):
-    return list(range(1, len(lines) + 1)[lo - 1 if lo > 0 else lo : hi if hi >= 0 else hi + 1 or None])
-
-  return picks
+  return lambda lines: [*range(1, len(lines) + 1)[lo - 1 if lo > 0 else lo : hi if hi >= 0 else hi + 1 or None]]
 
 
 def grep(pattern: str) -> Show:
@@ -62,17 +59,18 @@ def write(text: Text, on: str = "") -> Text:
 
 
 def turns(on: str = "") -> list[tuple]:
-  folded, user, cut = [], [], 0
+  folded, user, sent = [], [], []
   for it in transcript(on):
     match it:
       case ("reply", *_):
-        cut = len(user)
+        sent += user
+        user = []
       case ("done", about, _, (_, _, _, _) as turn) if question(("reply", about)):
-        folded += [("user", "\n\n".join(user[:cut]), None, None), turn]
-        del user[:cut]
+        folded += [("user", "\n\n".join(sent), None, None), turn]
+        sent = []
       case ("tell", *_, notes):
         user.append("\n".join(notes))
-  return [*folded, ("user", "\n\n".join(user), None, None)]
+  return [*folded, ("user", "\n\n".join(sent + user), None, None)]
 
 
 def module(on: str = "") -> dict:
@@ -143,16 +141,14 @@ def close(value: object, id: str = "") -> None:
     case ("prompt", _, _, on, shape, *_) if not isinstance(value, BaseException):
       try:
         s = eval(shape, module(on)) or object
-        fits = any(
+        assert any(
           (type(value), value) in [(type(a), a) for a in x.__args__]
           if (origin := getattr(x, "__origin__", x)) is Literal
           else isinstance(value, origin)
           for x in (s.__args__ if isinstance(s, type(int | str)) else [s])
         )
       except Exception:
-        fits = False
-      if not fits:
-        raise Refused(f"{value!r} not {shape}")
+        raise Refused(f"{value!r} not {shape}") from None
   control("close", "closed", id, value)
   if under(who, id):
     raise CancelledError()
@@ -195,7 +191,7 @@ def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
         case ("wants", about, by, _, call) if get(by)[4] == id:
           yield "started", about
           while not over(call):
-            yield mine | {call}
+            yield {call}
           yield "done", about, peek(call)
         case ("done", about, _, value) if question(("run", about)) and get(about)[4] == id:
           if isinstance(value, CancelledError):
@@ -270,13 +266,12 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
 
     if source:
       theirs = transcript(source)
-      kin = set()
+      kin = {source}
       for one in (filter or list)([x for x in theirs if question(x)]):
         name = one[1]
         while name not in kin and (b := get(name)):
           kin.add(name)
           name = b[2]
-      kin.add(source)
       yield ("prefix", id, [it for it in theirs if (get(it[1])[2] if question(("reply", it[1])) else it[1]) in kin])
     yield "started", id
     yield told(id, "", bound(id), label=label, source=source)
@@ -328,8 +323,8 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
               Text(path, "".join(x[3] for x in transcript(door[1], "out") if x[1::3] == door.groups())),
             ),
           )
-        case ("rung", rid, maker, _, "", _, to):
-          waiting[rid] = maker, to
+        case ("rung", rid, _, _, "", *_):
+          waiting[rid] = 0
         case ("tell", *_, notes):
           heard.append("\n".join(notes))
         case ("ready", rid, _, word):
@@ -353,7 +348,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
       if any(running.values()):
         continue
       if asking not in waiting and (asking := next((x for x in waiting if not paused(x)), "")):
-        maker, to = waiting[asking]
+        maker, to = get(asking)[2::4]
         if offered(last[0], to) is None:
           close(Refused(f"{to} no actor"), maker if question(("prompt", maker)) else asking)
         else:
@@ -391,8 +386,8 @@ def grant(usd: float | None = None, share: float | None = None, on: str = "") ->
       x[3] != here or x[1] == id or close(None, x[1])
     yield told(id, "", bound(id, "None"), usd=usd, share=share)
     while True:
-      match (yield {id, "reply"}):
-        case ("done", about, _, (_, _, (*_, cost), _)) if question(("reply", about)) and scope(about) == here:
+      match (yield {id, here}):
+        case ("done", about, _, (_, _, (*_, cost), _)) if question(("reply", about)):
           spent += cost
           yield told(id, "ledger", spent=spent)
           if (usd and spent >= usd) or (share and filled(about) >= share):
@@ -593,12 +588,9 @@ def shown(text, show):
 
 def unquoted(word):
   kept = ""
-  while m := re.search(r"(?m)^<s:(\w+)>\n?", word):
-    head, word = word[: m.start() + 1], word[m.start() + 1 :]
-    if end := re.search(f"(?m)</s:{m[1]}>$", word):
-      head = head[:-1] + m[1] + " = " + repr(word[len(m[0]) - 1 : end.start()]) + "\n" * word[: end.end()].count("\n")
-      word = word[end.end() :]
-    kept += head
+  while m := re.search(r"(?ms)^<s:(\w+)>\n?(.*?)</s:\1>$", word):
+    kept += word[: m.start()] + m[1] + " = " + repr(m[2]) + "\n" * m[0].count("\n")
+    word = word[m.end() :]
   return kept + word
 
 
@@ -614,14 +606,14 @@ def covers(a, id):
       name = get(name)[3]
     return name == of
 
-  if kind != "close":
-    up = id
-    while not on(up) and (x := get(up)):
-      up = x[2]
-    return on(up) or scope(id) == of
-  if question(("reply", id)):
-    id = get(id)[2]
-  return on(id) or (question(("rung", id)) and on(get(id)[2]))
+  if kind == "close":
+    if question(("reply", id)):
+      id = get(id)[2]
+    return on(id) or (question(("rung", id)) and on(get(id)[2]))
+  up = id
+  while not on(up) and (x := get(up)):
+    up = x[2]
+  return on(up) or scope(id) == of
 
 
 def paused(id):
