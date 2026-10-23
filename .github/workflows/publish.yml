@@ -15,11 +15,27 @@ name: publish
 # environment: pip installs the wheels and runs the command furb; a new crate takes the packed furb as a patch of
 # crates.io, with every other crate from crates.io and no lock of furb, and runs an example of docs/examples/rust;
 # and npm installs the packed furb in a new folder and runs an example of docs/examples/typescript. A run started by
-# hand on a branch, or by a pull request that changes what a release builds, builds and proves everything and
-# publishes nothing, which is the rehearsal of a release.
+# hand on a branch, or by a push to main that changes what a release builds, builds and proves everything and
+# publishes nothing, which is the rehearsal of a release. A pull request that changes what a release builds runs the
+# same rehearsal on the systems of Linux and Windows alone: a macOS runner of GitHub waits in a queue of its own, where a
+# rehearsal of 2 hours of macOS held a pull request for 48 minutes, so the macOS legs run on main after the merge, and
+# before a release in the run of its tag.
 on:
   push:
     tags: ["v*"]
+    branches: [main]
+    paths:
+      - .github/workflows/publish.yml
+      - Cargo.toml
+      - pyproject.toml
+      - bind/python/pyproject.toml
+      - cli/Cargo.toml
+      - cli/pyproject.toml
+      - bind/typescript/package.json
+      - bind/typescript/build.ts
+      - bind/typescript/npm/**
+      - script/prove-crate.sh
+      - script/prove-npm.sh
   pull_request:
     paths:
       - .github/workflows/publish.yml
@@ -36,10 +52,11 @@ on:
   workflow_dispatch:
 
 # One run for one ref: a push that follows another on a branch or a pull request ends the run before it, so a rehearsal
-# of an old head holds no runner. A run on a tag is never ended, so no release stops halfway.
+# of an old head holds no runner. A run on a tag is never ended, so no release stops halfway, and a run on main is
+# never ended, since only a run that ends saves the cache of rust.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' && github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
@@ -81,7 +98,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest","windows-latest"]' || '["ubuntu-latest","macos-latest","windows-latest"]') }}
         # The extension is built for one interpreter, and the program for none.
         crate:
           - { name: furb-monty, path: bind/python, args: --interpreter python3.14 }
@@ -139,7 +156,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest","windows-latest"]' || '["ubuntu-latest","macos-latest","windows-latest"]') }}
     defaults:
       run:
         shell: bash
@@ -191,12 +208,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { os: ubuntu-22.04, system: linux-x64-gnu }
-          - { os: ubuntu-22.04-arm, system: linux-arm64-gnu }
-          - { os: macos-latest, system: darwin-arm64 }
-          - { os: macos-15-intel, system: darwin-x64 }
-          - { os: windows-latest, system: win32-x64-msvc }
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"os":"ubuntu-22.04","system":"linux-x64-gnu"},{"os":"ubuntu-22.04-arm","system":"linux-arm64-gnu"},{"os":"windows-latest","system":"win32-x64-msvc"}]' || '[{"os":"ubuntu-22.04","system":"linux-x64-gnu"},{"os":"ubuntu-22.04-arm","system":"linux-arm64-gnu"},{"os":"macos-latest","system":"darwin-arm64"},{"os":"macos-15-intel","system":"darwin-x64"},{"os":"windows-latest","system":"win32-x64-msvc"}]') }}
     defaults:
       run:
         shell: bash
@@ -243,11 +255,17 @@ jobs:
         with:
           pattern: engine-*
           path: engines
-      # Each build wrote the same loader, so the loader of one serves the package.
+      # Each build wrote the same loader, so the loader of one serves the package. A pull request builds no engine for
+      # macOS, and its pack leaves those two packages without their engine.
       - run: |
           cp engines/engine-linux-x64-gnu/index.cjs bind/typescript/index.cjs
           for system in linux-x64-gnu linux-arm64-gnu darwin-arm64 darwin-x64 win32-x64-msvc; do
-            cp "engines/engine-$system/furb.$system.node" "bind/typescript/npm/$system/"
+            if [ -d "engines/engine-$system" ]; then
+              cp "engines/engine-$system/furb.$system.node" "bind/typescript/npm/$system/"
+            elif [ "$GITHUB_EVENT_NAME" != pull_request ]; then
+              echo "No engine for $system." >&2
+              exit 1
+            fi
           done
       - run: bun x --no-install tsc -p bind/typescript/tsconfig.json
       - run: |
@@ -269,12 +287,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { os: ubuntu-22.04, system: linux-x64-gnu }
-          - { os: ubuntu-22.04-arm, system: linux-arm64-gnu }
-          - { os: macos-latest, system: darwin-arm64 }
-          - { os: macos-15-intel, system: darwin-x64 }
-          - { os: windows-latest, system: win32-x64-msvc }
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"os":"ubuntu-22.04","system":"linux-x64-gnu"},{"os":"ubuntu-22.04-arm","system":"linux-arm64-gnu"},{"os":"windows-latest","system":"win32-x64-msvc"}]' || '[{"os":"ubuntu-22.04","system":"linux-x64-gnu"},{"os":"ubuntu-22.04-arm","system":"linux-arm64-gnu"},{"os":"macos-latest","system":"darwin-arm64"},{"os":"macos-15-intel","system":"darwin-x64"},{"os":"windows-latest","system":"win32-x64-msvc"}]') }}
     defaults:
       run:
         shell: bash
