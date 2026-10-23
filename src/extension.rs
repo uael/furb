@@ -1,7 +1,7 @@
 //! The extensions: what an extension is, and where a host finds the ones that a life runs.
 //!
-//! An extension stands in a folder that holds a manifest, `furb.json`, which gives its name, the file of its word
-//! and its life word, and that file: a python module that imports what it uses from `furb.engine`, so an editor
+//! An extension stands in a folder that holds a manifest, `furb.json`, which gives its name, the file of its word,
+//! its life word and the file of its part for a TUI, and that file: a python module that imports what it uses from `furb.engine`, so an editor
 //! reads it. The word is that file less those imports. The official extensions are the crate's own, which it
 //! carries in the same form.
 //!
@@ -139,16 +139,21 @@ fn manifested<T: AsRef<str>>(
   read: impl FnOnce(&str) -> Result<T, String>,
 ) -> Result<Extension, String> {
   let manifest: Value = serde_json::from_str(text).map_err(|no| no.to_string())?;
-  let field = |key: &str| match manifest.get(key) {
+  let (Some(name), Some(file)) = (field(&manifest, "name")?, field(&manifest, "word")?) else {
+    return Err("A manifest gives a name and a word".to_owned());
+  };
+  let life = field(&manifest, "life")?.unwrap_or_default().to_owned();
+  field(&manifest, "tui")?;
+  Ok(Extension { name: name.to_owned(), word: word(read(file)?.as_ref()), life })
+}
+
+/// The text that a manifest gives under a key, or none when it gives none, and a refusal when it is not text.
+fn field<'a>(manifest: &'a Value, key: &str) -> Result<Option<&'a str>, String> {
+  match manifest.get(key) {
     None => Ok(None),
     Some(Value::String(one)) => Ok(Some(one.as_str())),
     Some(_) => Err(format!("The {key} of the manifest is no text")),
-  };
-  let (Some(name), Some(file)) = (field("name")?, field("word")?) else {
-    return Err("A manifest gives a name and a word".to_owned());
-  };
-  let life = field("life")?.unwrap_or_default().to_owned();
-  Ok(Extension { name: name.to_owned(), word: word(read(file)?.as_ref()), life })
+  }
 }
 
 /// The extensions that the configs of the user and of the project turn on, in the order a life runs them: each
@@ -156,6 +161,20 @@ fn manifested<T: AsRef<str>>(
 /// gives the folder of an extension that is not official by its path, which resolves against the folder of the
 /// config, `~` being the home, and `true` keeps the path that an earlier config gave.
 pub fn configured(places: &Places, project: &Path) -> Result<Vec<Extension>, Fault> {
+  let official = official();
+  let on = turned_on(places, project)?.into_iter();
+  on.map(|(name, path)| match path {
+    Some(root) => load(&name, &root),
+    None => {
+      Ok(official.iter().find(|one| one.name == name).cloned().expect("an official extension"))
+    }
+  })
+  .collect()
+}
+
+/// The name of each extension that the configs turn on, in the order a life runs them, with the path of its folder,
+/// which an official extension has not.
+fn turned_on(places: &Places, project: &Path) -> Result<Vec<(String, Option<PathBuf>)>, Fault> {
   let official = official();
   let mut named: Vec<(String, Option<PathBuf>, bool)> =
     official.iter().map(|one| (one.name.clone(), None, true)).collect();
@@ -192,20 +211,46 @@ pub fn configured(places: &Places, project: &Path) -> Result<Vec<Extension>, Fau
     }
   }
   // The official extensions stand first, and each other one that is on has the path of its folder.
-  let on = named.into_iter().enumerate().filter(|(_, one)| one.2);
-  on.map(|(at, (name, path, _))| {
-    path.map_or_else(|| Ok(official[at].clone()), |root| load(&name, &root))
-  })
-  .collect()
+  Ok(named.into_iter().filter(|one| one.2).map(|(name, path, _)| (name, path)).collect())
 }
 
-/// A path that a config gives, resolved against the folder of the config, with `~` as the home.
+/// The part of an extension that a TUI loads: the name of the extension, and the path of its module of TypeScript,
+/// which the manifest names under `tui`, beside the word.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "typescript", napi_derive::napi(object))]
+#[cfg_attr(feature = "python", derive(pyo3::IntoPyObject))]
+pub struct Part {
+  pub name: String,
+  pub file: String,
+}
+
+/// The part for a TUI of each extension that the configs turn on and whose manifest names one, in the order a life
+/// runs them. An official extension has none, and the manifest of each folder is read again, so a part that a
+/// later write names is found.
+pub fn parts(places: &Places, project: &Path) -> Result<Vec<Part>, Fault> {
+  let mut out = Vec::new();
+  for (name, root) in turned_on(places, project)? {
+    let Some(root) = root else { continue };
+    let file = root.join("furb.json");
+    let refused = |why: String| Fault::refused(format!("{why}: {}", file.display()));
+    let text = fs::read_to_string(&file).map_err(|no| refused(no.to_string()))?;
+    let manifest: Value = serde_json::from_str(&text).map_err(|no| refused(no.to_string()))?;
+    if let Some(tui) = field(&manifest, "tui").map_err(refused)? {
+      out.push(Part { name, file: root.join(tui).display().to_string() });
+    }
+  }
+  Ok(out)
+}
+
+/// A path that a config gives, resolved against the folder of the config, with `~` as the home. The path is joined
+/// part by part, so each separator is that of the system, as `extensions/todo` gives `extensions\\todo` on Windows.
 fn beside(file: &Path, path: &str, places: &Places) -> PathBuf {
+  let native = |one: &str| Path::new(one).components().collect::<PathBuf>();
   match (path.strip_prefix('~'), &places.home) {
     (Some(rest), Some(home)) if rest.is_empty() || rest.starts_with(['/', '\\']) => {
-      home.join(rest.trim_start_matches(['/', '\\']))
+      home.join(native(rest.trim_start_matches(['/', '\\'])))
     }
-    _ => file.parent().unwrap_or(Path::new("")).join(path),
+    _ => file.parent().unwrap_or(Path::new("")).join(native(path)),
   }
 }
 

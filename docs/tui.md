@@ -446,6 +446,14 @@ session keeps its name in its saved view, and a workspace in the list of workspa
 
 ![Extension command](screenshots/42-extension-command.png)
 
+The part of a project extension adds a panel over the input, here a todo list, and the row of each act of its kind in
+the feed. The TUI loads it again when its file changes. A module that breaks shows its error in its panel, and the
+TUI goes on.
+
+![The part of an extension](screenshots/74-extension-part.png)
+
+![The error of a part](screenshots/75-extension-part-error.png)
+
 ## Undo and redo
 
 `/undo` removes the last message from a new branch, and `/redo` returns to the branch before it.

@@ -92,6 +92,14 @@ import {
 } from "./overview.ts";
 import { loadParsers } from "./parsers.ts";
 import {
+  type Line as PartLine,
+  Parts,
+  type Tone as PartTone,
+  plainError,
+  type Row,
+  type Seen,
+} from "./parts.ts";
+import {
   type ActRow,
   type Cancel,
   cancelled,
@@ -453,6 +461,14 @@ export class App {
   /** What waits for the operator, over the input, and the key of what it shows. */
   private readonly deskBox: BoxRenderable;
   private deskKey = "";
+  /** The parts of the extensions for the TUI, which add panels, rows, keys and commands. */
+  readonly parts: Parts;
+  /** The panels of the parts over the input, the key of what it shows, and what takes the keys of the parts away. */
+  private readonly dock: BoxRenderable;
+  private dockKey = "";
+  private partKeysOff?: () => void;
+  /** Whether a part drew the rows of a kind at the last load. */
+  private partRows = false;
   /** The ask that the answer dialog shows, which Tab moves from. */
   private answering?: string;
   /** The rewind tree, which the feed shows in place of its cards while it is open: its rows, and the row that the
@@ -635,6 +651,16 @@ export class App {
     this.scroll.verticalScrollBar.visible = false;
     this.scroll.horizontalScrollBar.visible = false;
     center.add(this.scroll);
+    this.dock = this.box({
+      id: "parts",
+      visible: false,
+      marginTop: space.section,
+      paddingX: space.inset,
+      paddingY: space.inset,
+      gap: space.stack,
+      backgroundColor: c.panel,
+    });
+    center.add(this.dock);
     this.deskBox = this.box({
       id: "desk",
       visible: false,
@@ -741,6 +767,8 @@ export class App {
     session.on("confirm", this.confirm);
     this.keymap = keymapOf(renderer);
     this.layersOff = this.layers();
+    this.parts = new Parts(session.host.directory, this.partsChanged);
+    void this.parts.load();
     renderer.on("resize", this.render);
     renderer.on("selection", this.copySelection);
     // A renderer that ends on its own, as on a signal, ends the App before it frees the buffers of the view.
@@ -974,6 +1002,7 @@ export class App {
   render = (): void => {
     if (this.closed) return;
     const w = this.session;
+    this.parts.heard(w.acts);
     if (w.theme !== this.theme) this.applyTheme(w.theme);
     if (this.draftKey !== w.draftKey) this.showDraft(w.draftKey);
     this.rail.visible = w.preferences.sidebar && this.renderer.width >= 100;
@@ -1067,6 +1096,7 @@ export class App {
       space.section +
       space.bar;
     this.renderMeta(mode, modeColor);
+    this.renderDock();
     this.renderDesk();
     this.renderStatus();
     this.renderContent();
@@ -3129,6 +3159,132 @@ export class App {
    * the ask that he acts on, from which chain, and what it wants, the first line of its message, and its choices or
    * where its answer goes. A click on a mark points at its ask and shows its chain, and a click on the message opens
    * the ask whole. */
+  /** The parts once they loaded: their keys again, and each card again, since a part may draw the row of its act. */
+  private partsChanged = (): void => {
+    if (this.closed) return;
+    this.partKeysOff?.();
+    const keys = this.parts.loaded.flatMap((part) => part.keys);
+    // A key of a part stands under every key of the TUI, and one with no modifier acts on an empty input alone.
+    this.partKeysOff = keys.length
+      ? this.keymap.registerLayer({
+          priority: -1000,
+          enabled: () => !this.renaming?.input?.focused && !this.overlay,
+          commands: keys.map(({ on, run }, index) => ({
+            name: `part-${index}`,
+            run: () => {
+              this.partRun(() => run(this.seen()));
+              return true;
+            },
+            enabled: () => /^(ctrl|meta|alt|super)\+/.test(on) || !this.composer.plainText,
+          })),
+          bindings: keys.map(({ on }, index) => ({ key: on, cmd: `part-${index}` })),
+        })
+      : undefined;
+    // The cards are made again only when a part draws the rows of a kind, before this load or after it.
+    const rows = this.parts.loaded.some((part) => part.rows.size);
+    if (rows || this.partRows) {
+      this.clear(this.scroll);
+      this.cards.clear();
+      this.paneKeys.delete(this.scroll);
+    }
+    this.partRows = rows;
+    this.dockKey = "";
+    this.schedule();
+  };
+  /** Runs what a part does, and shows in the footer the error of one that fails. */
+  private partRun(run: () => unknown): void {
+    const failed = (error: unknown) => {
+      this.session.notice = `A part of an extension failed: ${plainError(error)}`;
+      this.schedule();
+    };
+    try {
+      const got = run();
+      if (got instanceof Promise) got.catch(failed);
+    } catch (error) {
+      failed(error);
+    }
+  }
+  /** What a component of a part reads of the life, and what it can do in it. */
+  private seen(): Seen {
+    const w = this.session;
+    return {
+      chain: w.selected,
+      acts: w.acts,
+      of: (kind) => w.acts.filter((act) => act.kind === kind),
+      run: (word) => w.command(`/run ${word}`),
+      say: (text) => {
+        w.notice = text;
+        this.schedule();
+      },
+    };
+  }
+  /** The runs of a line of a part, each in the color of its tone. */
+  private partLine(line: PartLine): Part[] {
+    const tones: Record<PartTone, RGBA> = {
+      text: c.text,
+      muted: c.muted,
+      faint: c.faint,
+      accent: c.accent,
+      success: c.success,
+      warning: c.warning,
+      danger: c.danger,
+    };
+    if (typeof line === "string") return [[line, c.text]];
+    return line.map(([text, tone]) => [String(text), tones[tone ?? "text"] ?? c.text]);
+  }
+  /** The row that a part draws for an act of its kind, with its error as its label when it throws. */
+  private partRow(act: ActRow): Row | undefined {
+    const draw = this.parts.row(act.kind);
+    if (!draw) return undefined;
+    try {
+      return draw(act, this.seen()) ?? {};
+    } catch (error) {
+      return { label: `its row failed: ${plainError(error)}` };
+    }
+  }
+  /** The panels of the parts over the input, while the feed shows: each panel of a part that loaded, and the error of
+   * a part that did not load or of a panel that throws, in plain words in its own panel. A panel shows twelve lines at
+   * most. */
+  private renderDock(): void {
+    const w = this.session;
+    const shown: { title: string; lines: readonly PartLine[]; error?: string }[] = [];
+    if (w.view === "feed" && !this.tree) {
+      const seen = this.seen();
+      for (const part of this.parts.loaded) {
+        if (part.error) shown.push({ title: part.name, lines: [], error: part.error });
+        for (const panel of part.panels)
+          try {
+            const lines = panel.draw(seen);
+            if (!Array.isArray(lines)) throw new Error("Its panel gives no list of lines.");
+            shown.push({ title: panel.name, lines });
+          } catch (error) {
+            shown.push({ title: panel.name, lines: [], error: plainError(error) });
+          }
+      }
+    }
+    const visible = shown.length > 0;
+    if (this.dock.visible !== visible) this.dock.visible = visible;
+    if (!visible) {
+      this.dockKey = "";
+      return;
+    }
+    const key = JSON.stringify([shown, this.feedWidth, this.theme]);
+    if (key === this.dockKey) return;
+    this.dockKey = key;
+    this.dock.backgroundColor = c.panel;
+    this.clear(this.dock);
+    for (const one of shown) {
+      const box = this.box();
+      const mark: Part[] = one.error ? [[`${glyph.failed} `, c.danger]] : [];
+      box.add(this.line([...mark, [one.title, c.text, bold]], c.text, { truncate: true }));
+      if (one.error) box.add(this.text(one.error, c.danger));
+      const lines = one.lines.slice(0, 12);
+      for (const line of lines) box.add(this.line(this.partLine(line), c.text, { truncate: true }));
+      if (one.lines.length > lines.length)
+        box.add(this.line(`${one.lines.length - lines.length} more lines`, c.faint));
+      this.dock.add(box);
+    }
+  }
   private renderDesk(): void {
     const w = this.session;
     const { asks, questions } = w.desk;
@@ -3314,6 +3470,8 @@ export class App {
   /** What an act is about, whole: the message of a prompt, the program of a rung, the time of a wait, the ceilings of
    * a grant, and the first word of any other act. */
   private subject(act: ActRow): string {
+    const label = this.partRow(act)?.label;
+    if (label !== undefined) return label;
     if (act.kind === "prompt") return String(act.words[1] ?? "");
     if (act.kind === "rung")
       return String(this.session.program[act.id] || this.toldWord(act.id) || act.words[0] || "");
@@ -3430,6 +3588,11 @@ export class App {
     }
     if ((act.kind === "read" || act.kind === "write") && !failed(act)) {
       this.textDetails(details, act);
+      return;
+    }
+    const row = this.partRow(act);
+    if (row?.details) {
+      for (const line of row.details) details.add(this.line(this.partLine(line), c.text));
       return;
     }
     const fields: Record<string, string[]> = {
@@ -4298,6 +4461,12 @@ export class App {
       else await library.create(group);
       return true;
     }
+    // A command of a part of an extension, which no command of the TUI shadows.
+    const part = name ? this.parts.command(name) : undefined;
+    if (part) {
+      this.partRun(() => part.run(argument, this.seen()));
+      return true;
+    }
     return false;
   }
   /** The views of the life to choose from, the one that shows marked. */
@@ -4580,6 +4749,14 @@ export class App {
         run: this.command(name, argument),
       });
     }
+    for (const part of this.parts.loaded)
+      for (const one of part.commands)
+        choices.push({
+          label: title(one.name),
+          detail: `${one.detail} (${part.name})`,
+          command: `/${one.name}`,
+          run: () => this.action(`/${one.name}`),
+        });
     this.openPalette("Commands", choices, { rich: true });
   }
   /** How a command runs when it is picked from a list: one that needs its argument waits for it in the input. */
@@ -6641,6 +6818,8 @@ export class App {
     this.session.off("shared", this.shared);
     this.session.off("confirm", this.confirm);
     for (const off of this.layersOff) off();
+    this.partKeysOff?.();
+    this.parts.dispose();
     this.renderer.off("resize", this.render);
     this.renderer.off("selection", this.copySelection);
     this.root.destroyRecursively();

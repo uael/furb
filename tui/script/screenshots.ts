@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
@@ -731,6 +731,34 @@ try {
   const asks = () => watched.at(watched.activity).some((act) => act.kind === "prompt" && act.words[2]);
   while (asks()) watched.travel(-1);
   await capture("65-watch-earlier");
+
+  // A project extension gives the TUI a part, which loads live: the panel of a todo list over the input, and the row
+  // of each act todo in the feed. A module that breaks shows its error in its panel.
+  app().dispose();
+  await library.dispose();
+  const listed = await project("todo");
+  const folder = join(listed, ".furb", "extensions", "todo");
+  await cp(resolve(import.meta.dir, "..", "fixtures", "todo"), folder, { recursive: true });
+  await writeFile(join(listed, ".furb", "config.json"), '{"extensions": {"todo": "extensions/todo"}}\n');
+  await show(await demoSession({ cwd: listed }));
+  const todo = (await readFile(join(folder, "todo.py"), "utf8")).replace(
+    /^from furb\.engine import .*\n+/m,
+    "",
+  );
+  await session.command(
+    `/run ${todo}\ntodo("Draw the todo list in a panel", done=True)\ntodo("Load the part again when its file changes", done=True)\ntodo("Show the error of a module that breaks")`,
+  );
+  await settle();
+  while (!app().parts.version) await Bun.sleep(10);
+  // The rung opens, so the capture shows the row of each act todo under its word.
+  app().render();
+  await test.flush();
+  await click(test, "rung1");
+  await rest();
+  await capture("74-extension-part");
+  await writeFile(join(folder, "tui.ts"), "export default (furb) => { furb.panel(");
+  while (!app().parts.loaded[0]?.error) await Bun.sleep(10);
+  await capture("75-extension-part-error");
 } catch (error) {
   console.error(error);
   failed = true;
