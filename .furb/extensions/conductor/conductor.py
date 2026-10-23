@@ -72,13 +72,13 @@ WORKER = """You are a worker on the repository {repo}. Do one item, and open its
 2. Change it as the CLAUDE.md files of the repository say.
 3. Run only the tests that your change touches.
 4. Commit with the title of the PR as its message, and push the branch. Then open the PR, or update it when it stands, with pr(), which fills the template of the owner from what you give it and checks each of its rules: await pr(title, why, outcome, checks, breaking=[], fixes=0, where=<your worktree>, labels="{labels}"). title is type(area): What changed, 70 characters or fewer: the type is feat, fix, perf, or chore for a change that no user sees, and the area is the part that owns the change (engine, crate, tui, gui, provider, ci, conductor, or an extension by its name). why is the problem and why it matters now, from your own work and not from git log. outcome is a list: what is true now that was not, each with the evidence of what you ran, and each gap that you leave. breaking lists each change that forces a caller of a door or of the contract to change code. 300 words at most, and no how, which the diff holds. checks is six lines, one for each box of the checklist of the template in its order: verify each box one by one, then give the evidence of how you verified it, or not: and the work that it still needs, which leaves that box open. A pr() that breaks a rule raises Refused and says why; never write the body of a PR by hand.
-5. Remove the worktree with git worktree remove --force, and close with the URL of the PR alone.
+5. Remove the worktree with git worktree remove --force, and close with a tuple: the number of your PR, or 0 when the item asked for no change, and your report in 200 words at most: what you measured, what you decided, and what is left.
 Run no real life of a model. Start each comment, review, issue and PR body that you write on GitHub with 🤖, since you write from the owner's account and his own words carry no mark; a title keeps its own rule. Never take off the label owner-merge: only the owner takes it off, and that is his approval to merge. The owner sleeps or is away: ask him nothing and wait for nothing of his. Take each decision yourself from the brief and the rulings, say it in your PR body, and go on. Ask the one who gave you this work on its chain only when it alone can decide: await prompt(str, question, on="{home}").
 
 The item, {key}:
 {what}"""
 
-FIX = """You fix the open PR #{n} of the repository {repo}: it {problem} at {sha}. Read it with gh pr view, gh pr checks and gh run view --log-failed. Rerun once a check that fails on one system alone. Else fix it in a worktree of its branch: resolve a conflict with the meaning of both sides, and for a stack read skill("gh-stack") and use gh stack sync. Run the tests that it touches, push with --force-with-lease, remove the worktree, and close with the URL of the PR. Run no real life of a model. Start each comment, review, issue and PR body that you write on GitHub with 🤖, since you write from the owner's account and his own words carry no mark; a title keeps its own rule. Never take off the label owner-merge: only the owner takes it off, and that is his approval to merge. The owner sleeps or is away: ask him nothing and wait for nothing of his. Take each decision yourself from the brief and the rulings, say it in your PR body, and go on. Ask the one who gave you this work on its chain only when it alone can decide: await prompt(str, question, on="{home}")."""
+FIX = """You fix the open PR #{n} of the repository {repo}: it {problem} at {sha}. Read it with gh pr view, gh pr checks and gh run view --log-failed. Rerun once a check that fails on one system alone. Else fix it in a worktree of its branch: resolve a conflict with the meaning of both sides, and for a stack read skill("gh-stack") and use gh stack sync. Run the tests that it touches, push with --force-with-lease, remove the worktree, and close with a tuple: the number of the PR, and your report in 200 words at most. Run no real life of a model. Start each comment, review, issue and PR body that you write on GitHub with 🤖, since you write from the owner's account and his own words carry no mark; a title keeps its own rule. Never take off the label owner-merge: only the owner takes it off, and that is his approval to merge. The owner sleeps or is away: ask him nothing and wait for nothing of his. Take each decision yourself from the brief and the rulings, say it in your PR body, and go on. Ask the one who gave you this work on its chain only when it alone can decide: await prompt(str, question, on="{home}")."""
 
 FIXOWN = "Your open PR #{n} {problem} at {sha}. Fetch origin, rebase your branch onto its base or merge its base into it, resolve each conflict with the meaning of both sides, run the gates that the change touches, push with --force-with-lease, and keep its checks green."
 
@@ -180,7 +180,7 @@ def hire(key: str, what: str, thread: str = "", brief: str = "") -> str:
   text = text.replace("{repo}", cwd()).replace("{key}", key).replace("{home}", scope(acting())).replace("{what}", what)
   where = chain(f"{thread or 'w'}/{key}", source=bases.get(model, ""))
   quietly(rung, f"actor = {model!r}", on=where)
-  name = str(quietly(prompt, str, text, to=model, on=where))
+  name = str(quietly(prompt, tuple[int, str], text, to=model, on=where))
   working[name] = key
   return name
 
@@ -240,7 +240,9 @@ def tend() -> None:
       relays[orig] = ""
   for name in [x for x in working if over(x)]:
     results[name] = peek(name)
-    quietly(prompt, None, f"The worker {working.pop(name)} ({name}) ended with:\n\n{str(results[name])[:2000]}" + merged_since())
+    got = results[name]
+    said = f"PR #{got[0]}\n\n{got[1]}" if isinstance(got, tuple) and len(got) == 2 and got[0] else str(got)
+    quietly(prompt, None, f"The worker {working.pop(name)} ({name}) ended with:\n\n{said[:2000]}" + merged_since())
   for name, key in working.items():
     where = working_at(name)
     if paused(where):
@@ -281,7 +283,7 @@ def boxes(pr: dict, now: float) -> str:
       f"You close the open boxes of the checklist of the open PR #{n} of the repository "
       + "{repo}. "
       + order.replace("Your open PR", "The PR")
-      + " Read it with gh pr view, work in a worktree of its branch, push with --force-with-lease, remove the worktree, and close with the URL of the PR. Run no real life of a model. Start each comment that you write on GitHub with 🤖. Ask the one who gave you this work on its chain: await prompt(str, question, on=\"{home}\")."
+      + " Read it with gh pr view, work in a worktree of its branch, push with --force-with-lease, remove the worktree, and close with a tuple: the number of the PR, and your report in 200 words at most. Run no real life of a model. Start each comment that you write on GitHub with 🤖. Ask the one who gave you this work on its chain: await prompt(str, question, on=\"{home}\")."
     )
     hire(f"box{n}", "", thread, brief)
   return key
