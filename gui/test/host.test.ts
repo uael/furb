@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { demoDirectory, removeDemoDirectories } from "@furb/tui/src/demo.ts";
@@ -35,7 +35,8 @@ function windowOf(host: Host): { parts: Part[]; held(): Held; leave(): void } {
 /** A host on the demo, which asks no model, in a project of its own with a list of its own, which a test uses and
  * which ends after it. */
 async function withHost(use: (host: Host, directory: string) => Promise<void>): Promise<void> {
-  const directory = await demoDirectory();
+  // The project stands where its real path says, as the list of the TUI holds it.
+  const directory = await realpath(await demoDirectory());
   const list = join(await mkdtemp(join(tmpdir(), "furb-gui-list-")), "workspaces.json");
   const host = new Host(new Workspaces(new Preferences(join(directory, "ui.json")), { demo: true }, list));
   try {
