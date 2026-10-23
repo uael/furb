@@ -3,13 +3,13 @@
 # the packed engine of this system in a new folder, with no registry for either, and node runs the example chains of
 # docs/examples/typescript there, on a claude command line that answers from a script. The first argument is the folder
 # of the packs, furb-<version>.tgz and furb-<system>-<version>.tgz, as npm pack names them. The fake claude is
-# bind/typescript/test/claude.ts, which bun compiles to a program, since Windows runs no script by its shebang.
+# bind/typescript/test/programs/claude.ts, which bun compiles to a program, since Windows runs no script by its shebang.
 set -eu
 packs=$(cd "$1" && pwd)
 root=$(cd "$(dirname "$0")/.." && pwd)
 yard=$(mktemp -d)
 mkdir "$yard/app" "$yard/fake"
-(cd "$yard/fake" && bun build --compile "$root/bind/typescript/test/claude.ts" --outfile claude >/dev/null)
+(cd "$yard/fake" && bun build --compile "$root/bind/typescript/test/programs/claude.ts" --outfile claude >/dev/null)
 claude=$yard/fake/claude
 [ -f "$claude.exe" ] && claude=$claude.exe
 printf '%s' '"close(\"Login is twice as fast.\")"' > "$yard/fake/word.1"
