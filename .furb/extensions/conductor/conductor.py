@@ -71,7 +71,7 @@ WORKER = """You are a worker on the repository {repo}. Do one item, and open its
 1. Make a worktree whose build starts warm: {repo}/script/worktree.sh {repo}-w-{key} w/{key}, then work there. Build on origin/main, and stack your branch on an open PR only when your change needs its code; say why in the body, since a stack lands one layer at a time. If that worktree stands already, work in it, rebased onto origin/main. Run each build of Rust through sh $TMPDIR/build.sh <command>, which runs three at once at most.
 2. Change it as the CLAUDE.md files of the repository say.
 3. Run only the tests that your change touches.
-4. Commit with the title of the PR as its message, and push the branch. Then open the PR, or update it when it stands, with pr(), which fills the template of the owner from what you give it and checks each of its rules: await pr(title, why, outcome, breaking=[], fixes=0, where=<your worktree>, labels="{labels}"). title is type(area): What changed, 70 characters or fewer: the type is feat, fix, perf, or chore for a change that no user sees, and the area is the part that owns the change (engine, crate, tui, gui, provider, ci, conductor, or an extension by its name). why is the problem and why it matters now, from your own work and not from git log. outcome is a list: what is true now that was not, each with the evidence of what you ran, and each gap that you leave. breaking lists each change that forces a caller of a door or of the contract to change code. 300 words at most, and no how, which the diff holds. A pr() that breaks a rule raises Refused and says why; never write the body of a PR by hand.
+4. Commit with the title of the PR as its message, and push the branch. Then open the PR, or update it when it stands, with pr(), which fills the template of the owner from what you give it and checks each of its rules: await pr(title, why, outcome, checks, breaking=[], fixes=0, where=<your worktree>, labels="{labels}"). title is type(area): What changed, 70 characters or fewer: the type is feat, fix, perf, or chore for a change that no user sees, and the area is the part that owns the change (engine, crate, tui, gui, provider, ci, conductor, or an extension by its name). why is the problem and why it matters now, from your own work and not from git log. outcome is a list: what is true now that was not, each with the evidence of what you ran, and each gap that you leave. breaking lists each change that forces a caller of a door or of the contract to change code. 300 words at most, and no how, which the diff holds. checks is six lines, one for each box of the checklist of the template in its order: verify each box one by one, then give the evidence of how you verified it, or not: and the work that it still needs, which leaves that box open. A pr() that breaks a rule raises Refused and says why; never write the body of a PR by hand.
 5. Remove the worktree with git worktree remove --force, and close with the URL of the PR alone.
 Run no real life of a model. Start each comment, review, issue and PR body that you write on GitHub with 🤖, since you write from the owner's account and his own words carry no mark; a title keeps its own rule. Never take off the label owner-merge: only the owner takes it off, and that is his approval to merge. The owner sleeps or is away: ask him nothing and wait for nothing of his. Take each decision yourself from the brief and the rulings, say it in your PR body, and go on. Ask the one who gave you this work on its chain only when it alone can decide: await prompt(str, question, on="{home}").
 
@@ -86,7 +86,7 @@ DEBRIEF = """Your work is done. As a user of furb, list each friction, defect or
 
 LABELS = "gh label create hold -c FBCA04 -d 'It waits for the fix of a review before a merge' 2>/dev/null; gh label create owner-merge -c 5319E7 -d 'The owner merges it or not' 2>/dev/null; gh label create paused -c BFBFBF -d 'The owner paused it: no fix and no merge' 2>/dev/null; true"
 
-PRS = """gh pr list --state open --limit 200 --json number,isDraft,labels,mergeable,mergeStateStatus,baseRefName,headRefName,headRefOid,statusCheckRollup,updatedAt --jq '[.[] | {n: .number, draft: .isDraft, labels: [.labels[].name], mergeable, state: .mergeStateStatus, base: .baseRefName, head: .headRefName, sha: .headRefOid, checks: [.statusCheckRollup[]? | (.conclusion // .state // "")], names: [.statusCheckRollup[]? | (.name // .context // "")], idle: ((now - (.updatedAt | fromdateiso8601)) / 60 | floor)}]'
+PRS = """gh pr list --state open --limit 200 --json number,isDraft,labels,mergeable,mergeStateStatus,baseRefName,headRefName,headRefOid,statusCheckRollup,updatedAt,body --jq '[.[] | {n: .number, draft: .isDraft, labels: [.labels[].name], mergeable, state: .mergeStateStatus, base: .baseRefName, head: .headRefName, sha: .headRefOid, checks: [.statusCheckRollup[]? | (.conclusion // .state // "")], names: [.statusCheckRollup[]? | (.name // .context // "")], open: [(.body // "") | splits("\\n") | select(startswith("- [ ] "))], idle: ((now - (.updatedAt | fromdateiso8601)) / 60 | floor)}]'
 echo ---
 gh pr list --state merged --limit 200 --json number --jq '[.[].number]'
 echo ---
@@ -125,8 +125,50 @@ def merged_since() -> str:
   return ("\n\nSince the last notice:\n" + "\n".join(f"- {x}" for x in lines)) if lines else ""
 
 
-PR_SRC = 'PR_TITLE = r"(feat|fix|perf|chore)\\([a-z0-9][a-z0-9:/_.-]*\\)!?: [A-Z0-9`].*"\nPR_CHECKS = """- [x] I am accountable for this diff, whoever or whatever wrote it.\n- [x] It is one change. No part belongs in another PR. No part could be its own PR.\n- [x] Its comments obey {rules}: none, or each one prevents a debugging session.\n- [x] Its prose obeys {rules}: Simplified Technical English, for a general non-technical audience.\n- [x] Every flaw I know of is fixed in this diff or named in `## Outcome`.\n- [x] I checked each statement above. I did not assume it."""\n\n\ndef shq(s: str) -> str:\n  return "\'" + s.replace("\'", "\'\\\\\'\'") + "\'"\n\n\ndef pr_body(why: str, outcome: list[str], breaking: list[str], fixes: int) -> str:\n  parts = ["🤖" + (f" Fixes #{fixes}." if fixes else ""), "## Why", why.strip(), "## Outcome", "\\n".join(f"- {x.strip()}" for x in outcome)]\n  if breaking:\n    parts += ["## Breaking changes", "\\n".join(f"- {x.strip()}" for x in breaking)]\n  return "\\n\\n".join([*parts, "---", PR_CHECKS]) + "\\n"\n\n\ndef pr(title: str, why: str, outcome: list[str], breaking: list[str] | None = None, fixes: int = 0, where: str = "", labels: str = "", number: int = 0, base: str = "main") -> Act:\n  if len(title) > 70 or not re.fullmatch(PR_TITLE, title):\n    raise Refused(f"the title {title!r} is not type(area): What changed, in 70 characters or fewer")\n  if not why.strip() or not outcome:\n    raise Refused("a PR needs a why and at least one outcome")\n  words = len(" ".join([why, *outcome, *(breaking or [])]).split())\n  if words > 300:\n    raise Refused(f"the body holds {words} words, over 300: delete a whole paragraph, not a word")\n  body = pr_body(why, outcome, breaking or [], fixes)\n  name = shq(title)\n  rules = \'R=CLAUDE.md; [ -f AGENTS.md ] && R=AGENTS.md; sed "s/{rules}/$R/g" | \'\n  if number:\n    command = rules + f"gh pr edit {number} --title {name} --body-file - && gh pr view {number} --json url --jq .url"\n  else:\n    added = labels.replace("--label", "--add-label")\n    command = (f"cd {shq(where)} && " if where else "") + rules + f"if gh pr view --json number >/dev/null 2>&1; then gh pr edit --title {name} --body-file -{added}; else gh pr create --base {base} --title {name} --body-file -{labels}; fi && gh pr view --json url --jq .url"\n  return bash(command, stdin=body, show=span(-2, -1), timeout=180)'
-exec(PR_SRC, globals())
+PR_TITLE = r"(feat|fix|perf|chore)\([a-z0-9][a-z0-9:/_.-]*\)!?: [A-Z0-9`].*"
+PR_BOXES = [
+  "I am accountable for this diff, whoever or whatever wrote it.",
+  "It is one change. No part belongs in another PR. No part could be its own PR.",
+  "Its comments obey {rules}: none, or each one prevents a debugging session.",
+  "Its prose obeys {rules}: Simplified Technical English, for a general non-technical audience.",
+  "Every flaw I know of is fixed in this diff or named in `## Outcome`.",
+  "I checked each statement above. I did not assume it.",
+]
+
+
+def pr_box(box: str, check: str) -> str:
+  said = check.strip()
+  if said.lower().startswith("not:"):
+    return f"- [ ] {box}\n  Not yet: {said[4:].strip()}"
+  return f"- [x] {box}\n  Checked: {said}"
+
+
+def pr_body(why: str, outcome: list[str], breaking: list[str], fixes: int, checks: list[str]) -> str:
+  parts = ["🤖" + (f" Fixes #{fixes}." if fixes else ""), "## Why", why.strip(), "## Outcome", "\n".join(f"- {x.strip()}" for x in outcome)]
+  if breaking:
+    parts += ["## Breaking changes", "\n".join(f"- {x.strip()}" for x in breaking)]
+  return "\n\n".join([*parts, "---", "\n".join(pr_box(b, c) for b, c in zip(PR_BOXES, checks))]) + "\n"
+
+
+def pr(title: str, why: str, outcome: list[str], checks: list[str], breaking: list[str] | None = None, fixes: int = 0, where: str = "", labels: str = "", number: int = 0, base: str = "main") -> Act:
+  if len(title) > 70 or not re.fullmatch(PR_TITLE, title):
+    raise Refused(f"the title {title!r} is not type(area): What changed, in 70 characters or fewer")
+  if not why.strip() or not outcome:
+    raise Refused("a PR needs a why and at least one outcome")
+  if len(checks) != len(PR_BOXES) or not all(c.strip() and c.strip().lower() != "not:" for c in checks):
+    raise Refused(f"checks needs {len(PR_BOXES)} lines, one for each box of the checklist in its order: the evidence of how you verified that box, or not: and the work that it still needs")
+  words = len(" ".join([why, *outcome, *(breaking or [])]).split())
+  if words > 300:
+    raise Refused(f"the body holds {words} words, over 300: delete a whole paragraph, not a word")
+  body = pr_body(why, outcome, breaking or [], fixes, checks)
+  name = shq(title)
+  rules = 'R=CLAUDE.md; [ -f AGENTS.md ] && R=AGENTS.md; sed "s/{rules}/$R/g" | '
+  if number:
+    command = rules + f"gh pr edit {number} --title {name} --body-file - && gh pr view {number} --json url --jq .url"
+  else:
+    added = labels.replace("--label", "--add-label")
+    command = (f"cd {shq(where)} && " if where else "") + rules + f"if gh pr view --json number >/dev/null 2>&1; then gh pr edit --title {name} --body-file -{added}; else gh pr create --base {base} --title {name} --body-file -{labels}; fi && gh pr view --json url --jq .url"
+  return bash(command, stdin=body, show=span(-2, -1), timeout=180)
 
 
 def hire(key: str, what: str, thread: str = "", brief: str = "") -> str:
@@ -138,7 +180,6 @@ def hire(key: str, what: str, thread: str = "", brief: str = "") -> str:
   text = text.replace("{repo}", cwd()).replace("{key}", key).replace("{home}", scope(acting())).replace("{what}", what)
   where = chain(f"{thread or 'w'}/{key}", source=bases.get(model, ""))
   quietly(rung, f"actor = {model!r}", on=where)
-  quietly(rung, PR_SRC, on=where)
   name = str(quietly(prompt, str, text, to=model, on=where))
   working[name] = key
   return name
@@ -215,6 +256,35 @@ def tend() -> None:
         f"silent {where} {len(facts)}",
         f"The worker {key} on {where} has said nothing for {int(now - silent[where][1]) // 60} minutes. Look at it.",
       )
+
+
+def boxes(pr: dict, now: float) -> str:
+  if not pr.get("open"):
+    return ""
+  n, sha = pr["n"], pr["sha"]
+  key = f"#{n} {sha} open boxes"
+  since = fixes.setdefault(key, now)
+  own = owner_of(pr)
+  order = (
+    f"Your open PR #{n} has a box of its checklist open at {sha[:7]}:\n"
+    + "\n".join(x[6:] for x in pr["open"])
+    + f"\nDo the work that each open box names, verify it, then call pr(..., number={n}) again with the evidence of each box, so pr() ticks it. The round merges no PR with an open box."
+  )
+  if own and now - since < 3600:
+    if key not in noticed:
+      noticed.add(key)
+      quietly(prompt, None, order, on=working_at(own))
+  elif key + " fixer" not in noticed and len(working) < CAP:
+    noticed.update({key, key + " fixer"})
+    thread = next((m[7:] for m in pr["labels"] if m.startswith("thread:")), "")
+    brief = (
+      f"You close the open boxes of the checklist of the open PR #{n} of the repository "
+      + "{repo}. "
+      + order.replace("Your open PR", "The PR")
+      + " Read it with gh pr view, work in a worktree of its branch, push with --force-with-lease, remove the worktree, and close with the URL of the PR. Run no real life of a model. Start each comment that you write on GitHub with 🤖. Ask the one who gave you this work on its chain: await prompt(str, question, on=\"{home}\")."
+    )
+    hire(f"box{n}", "", thread, brief)
+  return key
 
 
 def mend(pr: dict, now: float) -> str:
@@ -421,6 +491,7 @@ STATUS = {
   "s:working": ("1D76DB", "A worker of furb does it now"),
   "s:checks": ("FBCA04", "Its checks run"),
   "s:red": ("D93F0B", "A check failed, and its worker fixes it"),
+  "s:boxes": ("FEF2C0", "A box of its checklist is open, and its worker closes it"),
   "s:conflict": ("B60205", "It conflicts with its base, and its worker rebases it"),
   "s:stacked": ("BFD4F2", "Green, and lands after the PR under it"),
   "s:ready": ("0E8A16", "Green: the round merges it"),
@@ -439,6 +510,8 @@ async def mark() -> None:
       if pr["mergeable"] == "CONFLICTING"
       else "s:red"
       if pr["verdict"] == "fail"
+      else "s:boxes"
+      if pr["verdict"] == "open"
       else "s:owner"
       if "owner-merge" in pr["labels"] or pr["draft"]
       else "s:stacked"
@@ -536,6 +609,8 @@ async def sweep(every: float) -> None:
     pr["verdict"] = (
       "fail"
       if any(c in FAILS for c in pr["checks"])
+      else "open"
+      if pr.get("open")
       else "pass"
       if GATE in pr.get("names", []) and all(c in GREEN for c in pr["checks"])
       else "pending"
@@ -556,6 +631,7 @@ async def sweep(every: float) -> None:
       notice(f"foreign #{n}", f"#{n} ({pr['head']}) was not made by a worker of the round, so the round neither mends nor merges it.")
       continue
     live.add(mend(pr, now))
+    live.add(boxes(pr, now))
     if "owner-merge" in pr["labels"]:
       continue
     if pr["idle"] >= 45:
