@@ -57,6 +57,16 @@ export interface Weave {
   /** The acts that an earlier life left, which wait for a wake. */
   pending: ReadonlyMap<string, string>;
   label(id: string): string;
+  /** What a host already holds of the acts, which a loom of no width reads in place of a pass over every act: each act
+   * by its name, the acts on each chain, the chains, and each act that is not done. */
+  index?: {
+    ids: ReadonlyMap<string, LiveAct>;
+    on: ReadonlyMap<string, readonly LiveAct[]>;
+    chains: readonly LiveAct[];
+    live: Iterable<LiveAct>;
+    /** How many times an act on each chain came or changed, which a host that counts them gives. */
+    stamp?: (chain: string) => number;
+  };
 }
 
 /** The heights of a cell, from the work that runs with no moment to many moments. */
@@ -162,7 +172,10 @@ export function waitsOn(
 
 /** The loom of a life: the operator, then each chain in the order of the tree, with its cells over the moments of the
  * life, its state, what it waits on and its measure. A moment is the start or the end of an act. */
-export function weave({ acts, prompts, measures, folds, width, pending, label }: Weave): Loom {
+export function weave({ acts, prompts, measures, folds, width, pending, label, index }: Weave): Loom {
+  // A loom of no width shows no cell, so it reads the index of a host when it has one, in the time of the chains and of
+  // the work that is not done, and not of every act.
+  if (index && width <= 0) return board({ prompts, measures, folds, pending, label }, index);
   const byId = new Map(acts.map((act) => [act.id, act]));
   const owed: Owed[] = prompts
     .flatMap((prompt) => {
@@ -249,6 +262,176 @@ export function weave({ acts, prompts, measures, folds, width, pending, label }:
   return { rows, owed, folded };
 }
 
+/** What the loom of no width of the index of a host read: the tree of its chains, as many as it read, and the state of
+ * each chain with what it was read of. */
+interface Boarded {
+  chains: number;
+  tree: ReturnType<typeof treeOf>;
+  states: Map<string, Boarding>;
+}
+/** The state of a chain on the board, and what it was read of: the stamp of its acts, whether the operator owes a
+ * question on it, its held work, and the last prompt that it asks on another chain. */
+interface Boarding {
+  stamp: number;
+  owes: boolean;
+  held: string;
+  asks: string;
+  state: RowState;
+  waits?: string;
+}
+const boarded = new WeakMap<object, Boarded>();
+
+/** The loom of no width of a life, read from the index of a host: its rows, with no cells. A host that stamps each
+ * change of the acts on each chain has the state of a chain read again only once an act on it, a question of the
+ * operator on it, or its held work changed. */
+function board(
+  { prompts, measures, folds, pending, label }: Omit<Weave, "acts" | "width" | "index">,
+  { ids, on, chains: listed, live, stamp }: NonNullable<Weave["index"]>,
+): Loom {
+  const owed: Owed[] = prompts
+    .flatMap((prompt) => {
+      const act = ids.get(prompt.id);
+      return act && !act.done ? [{ ...prompt, chain: act.on, by: act.by, began: act.began }] : [];
+    })
+    .sort((one, other) => one.began - other.began);
+  const owing = new Set(owed.map((prompt) => prompt.chain));
+  // The work that is not done on each chain, and the prompts that are not done on another chain that the rungs of
+  // each chain made, in the order of the acts, which tell what each chain waits on as waitsOn tells it.
+  const openOn = new Map<string, LiveAct[]>();
+  const asked = new Map<string, LiveAct[]>();
+  const put = (map: Map<string, LiveAct[]>, key: string, act: LiveAct) => {
+    const list = map.get(key);
+    if (list) list.push(act);
+    else map.set(key, [act]);
+  };
+  for (const act of live) {
+    if (act.done) continue;
+    put(openOn, act.on, act);
+    const maker = act.kind === "prompt" ? ids.get(act.by)?.on : undefined;
+    if (maker !== undefined && maker !== act.on) put(asked, maker, act);
+  }
+  const held = new Map<string, string[]>();
+  for (const id of pending.keys()) {
+    const act = ids.get(id);
+    if (act) held.set(act.on, [...(held.get(act.on) ?? []), id]);
+  }
+  // The tree of the chains holds while no chain comes, and a fold of the operator lays it out again.
+  const read = boarded.get(ids);
+  const unfolded = read?.chains === listed.length ? read.tree : treeOf(listed, ids, new Set());
+  const tree = folds.size ? treeOf(listed, ids, folds) : unfolded;
+  const states = read?.states ?? new Map<string, Boarding>();
+  boarded.set(ids, { chains: listed.length, tree: unfolded, states });
+  // The state of a chain, as rowState gives it of all its work, from the work that waits or is not done, its last
+  // work, and whether it holds a prompt, since each prompt of a chain with no work that is not done is done.
+  const stateOf = (id: string): Boarding => {
+    const owes = owing.has(id);
+    const pend = (held.get(id) ?? []).join(" ");
+    const asks = asked.get(id)?.at(-1)?.id ?? "";
+    const changed = stamp?.(id) ?? -1;
+    const kept = states.get(id);
+    if (
+      kept &&
+      changed >= 0 &&
+      kept.stamp === changed &&
+      kept.owes === owes &&
+      kept.held === pend &&
+      kept.asks === asks
+    )
+      return kept;
+    const work = (act?: LiveAct): act is LiveAct =>
+      act !== undefined && act.on === id && WORK.includes(act.kind);
+    const waiting = [...(openOn.get(id) ?? []), ...(held.get(id) ?? []).map((one) => ids.get(one))].filter(
+      work,
+    );
+    const acts = on.get(id) ?? [];
+    const latest = acts.findLast(work);
+    const state: RowState = owes
+      ? "asks"
+      : waiting.some((act) => pending.has(act.id) || (act.paused && !act.done))
+        ? "paused"
+        : waiting.some((act) => !act.done)
+          ? "working"
+          : latest && cancelled(latest)
+            ? "idle"
+            : latest && failed(latest)
+              ? "failed"
+              : acts.some((act) => act.kind === "prompt")
+                ? "done"
+                : "idle";
+    const local = openOn.get(id) ?? [];
+    const waits =
+      state === "working"
+        ? (local.findLast((act) => act.kind === "bash" || act.kind === "wait")?.id ??
+          asked.get(id)?.at(-1)?.id ??
+          local.findLast((act) => act.kind === "rung")?.id)
+        : undefined;
+    const made = { stamp: changed, owes, held: pend, asks, state, waits };
+    states.set(id, made);
+    return made;
+  };
+  const rows: Row[] = [
+    {
+      id: "operator",
+      label: "you",
+      lines: "",
+      state: owed.length ? "asks" : "idle",
+      workers: 0,
+      folded: false,
+      tally: {},
+      cells: [],
+    },
+  ];
+  for (const { chain, lines, below } of tree) {
+    const fold = folds.has(chain.id) && below.length > 0;
+    const tally: Partial<Record<RowState, number>> = {};
+    if (fold)
+      for (const id of below) {
+        const one = stateOf(id).state;
+        tally[one] = (tally[one] ?? 0) + 1;
+      }
+    const { state, waits } = stateOf(chain.id);
+    rows.push({
+      id: chain.id,
+      label: label(chain.id),
+      lines,
+      state,
+      workers: below.length,
+      folded: fold,
+      tally,
+      waits,
+      cells: [],
+      measure: measures[chain.id],
+    });
+  }
+  return { rows, owed, folded: 0 };
+}
+
+/** The rows of the tree of the chains of a life, in its order: each chain under the chain whose rung made it, with
+ * the lines of the tree before its label and the chains under it, and none under a chain that a fold holds. */
+function treeOf(listed: readonly LiveAct[], ids: ReadonlyMap<string, LiveAct>, folds: ReadonlySet<string>) {
+  const chains = [...listed].sort((one, other) => one.began - other.began);
+  const children = new Map<string | undefined, LiveAct[]>();
+  for (const chain of chains) {
+    const parent = parentOf(chain, ids);
+    const list = children.get(parent);
+    if (list) list.push(chain);
+    else children.set(parent, [chain]);
+  }
+  const under = (id: string): string[] =>
+    (children.get(id) ?? []).flatMap((child) => [child.id, ...under(child.id)]);
+  const out: { chain: LiveAct; lines: string; depth: number; below: string[] }[] = [];
+  const visit = (chain: LiveAct, lines: string, last: boolean, depth: number): void => {
+    const below = under(chain.id);
+    out.push({ chain, lines: depth ? `${lines}${last ? "└ " : "├ "}` : "", depth, below });
+    if (folds.has(chain.id) && below.length > 0) return;
+    const next = children.get(chain.id) ?? [];
+    for (const [place, child] of next.entries())
+      visit(child, depth ? `${lines}${last ? "  " : "│ "}` : "", place === next.length - 1, depth + 1);
+  };
+  for (const top of children.get(undefined) ?? []) visit(top, "", true, 0);
+  return out;
+}
+
 /** The acts of a life as they stood at a moment: each act that began by then, and an act that ended after it as one
  * that runs, with no value yet. */
 export function asOf(acts: readonly LiveAct[], at: number): LiveAct[] {
@@ -318,7 +501,13 @@ export function subjectOf(act: LiveAct, word: (rung: LiveAct) => string): string
 }
 
 /** What the chain of a row does now, from the loom and the acts of the life. */
-export function nowOf(row: Row, loom: Loom, acts: readonly LiveAct[], word: (rung: LiveAct) => string): Now {
+export function nowOf(
+  row: Row,
+  loom: Loom,
+  acts: readonly LiveAct[],
+  word: (rung: LiveAct) => string,
+  index?: Pick<NonNullable<Weave["index"]>, "ids" | "on">,
+): Now {
   const asks = loom.owed.filter((prompt) => prompt.chain === row.id);
   const [first] = asks;
   if (first)
@@ -328,10 +517,12 @@ export function nowOf(row: Row, loom: Loom, acts: readonly LiveAct[], word: (run
       more: asks.length - 1,
       text: gist(first.message),
     };
-  const waits = row.waits ? acts.find((act) => act.id === row.waits) : undefined;
+  const waits = row.waits
+    ? (index?.ids.get(row.waits) ?? acts.find((act) => act.id === row.waits))
+    : undefined;
   if (row.state === "working" && waits)
     return { tone: "work", act: waits.id, more: 0, text: subjectOf(waits, word) };
-  const work = acts.filter((act) => act.on === row.id && WORK.includes(act.kind));
+  const work = (index?.on.get(row.id) ?? acts).filter((act) => act.on === row.id && WORK.includes(act.kind));
   if (row.state === "failed") {
     const fault = work.findLast((act) => failed(act) && !cancelled(act));
     const value = fault?.value as { is?: string; args?: unknown[] } | null | undefined;
