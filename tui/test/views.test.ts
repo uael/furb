@@ -488,7 +488,7 @@ test("the sidebar says what each thread came to, a question that waits stands fi
       const rows = shown.split("\n");
       const needs = rows.findIndex((line) => line.includes("Needs you"));
       expect(needs).toBeGreaterThan(-1);
-      expect(rows.findIndex((line) => line.includes("Threads"))).toBeGreaterThan(needs);
+      expect(rows.findIndex((line) => line.includes("Chains"))).toBeGreaterThan(needs);
       expect(rows[needs + 2]).toContain("◆ Main");
       expect(shown).toContain("Apply the search shortcut?");
       expect(shown).toContain(" 3 Other ");

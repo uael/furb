@@ -22,7 +22,7 @@ test("the threads of a real life count the chains at work and say what each does
       await session.refresh();
       const shown = await frame();
       const lines = shown.split("\n");
-      expect(lines.find((line) => line.includes("Threads"))).toContain("◉ 21");
+      expect(lines.find((line) => line.includes("Chains"))).toContain("◉ 21");
       // A thread at work says what its command does, and not the command.
       expect(lines.some((line) => /◉ feed +runs bun/.test(line))).toBe(true);
       // The conductor runs one long word, under which its messages pile up: the earlier ones fold into one line.

@@ -94,7 +94,7 @@ test("⌥V switches the view of the life between main, the loom and the graph, w
       expect(loom).toContain("waits on");
       screen.mockInput.pressKey("v", { meta: true });
       expect(app.lifeView).toBe("graph");
-      expect(await frame()).toContain("Threads");
+      expect(await frame()).toContain("Chains");
       screen.mockInput.pressKey("v", { meta: true });
       expect(app.lifeView).toBe("main");
       // The command.

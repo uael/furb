@@ -212,6 +212,9 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | ⌃⌥← | Return from a definition jump |
 | ⌥[ / ⌥] or ⌥P / ⌥N | Previous / next message of the feed |
 | ⌥V / ⌥G | Switch the view of the life: main, the loom, or the graph / move in the loom or the graph |
+| ⌥T | Move in the sidebar: the tree of the chains, and the threads of a chain |
+| ↑↓ / Enter or → / Esc or ← after ⌥T | Move / list the threads of a chain, or choose a thread / back to the tree, then to the input |
+| Space / r / o after ⌥T | Collapse or expand / resolve / open again the thread |
 | ↑↓←→ / Enter / Esc after ⌥G | Move, fold or zoom / zoom in / zoom out or go back |
 | [ ] / { } after ⌥G | Move the cursor in time by one / ten moments |
 | Space / x / n / b after ⌥G | Pause or wake / cancel / step / branch at the cursor the chain |

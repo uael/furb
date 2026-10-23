@@ -42,7 +42,9 @@ import {
 import {
   type Ask,
   beside,
+  type ChainThread,
   type Chip,
+  chainThreads,
   condense,
   doingOf,
   gist,
@@ -90,7 +92,6 @@ import {
   lifeViewDetails,
   lifeViewLabels,
   lifeViews,
-  shortActor,
 } from "./overview.ts";
 import { loadParsers } from "./parsers.ts";
 import {
@@ -185,6 +186,26 @@ const chainMarks: Record<RowState, [() => string, () => RGBA]> = {
   done: [() => glyph.done, () => c.success],
   idle: [() => glyph.ring, () => c.faint],
 };
+/** The mark of a thread in the list of the threads of a chain, and its color: it asks the operator, a pause holds it,
+ * it failed, it is resolved, or it runs. */
+/** The threads of the chain shown: in order, each by its id, and the thread of each message, by the id of the message. */
+type ThreadList = {
+  acts: unknown;
+  owed: string;
+  list: ChainThread[];
+  by: Map<string, ChainThread>;
+  of: Map<string, ChainThread>;
+};
+const threadMarks = (thread: ChainThread): [string, RGBA] =>
+  thread.state === "asks"
+    ? [glyph.asks, c.warning]
+    : thread.state === "held"
+      ? [glyph.held, c.warning]
+      : thread.state === "failed"
+        ? [glyph.failed, c.danger]
+        : thread.resolved
+          ? [glyph.done, c.faint]
+          : [glyph.running, c.accent];
 /** How many rows of the feed a long message takes until a click opens it. */
 const MESSAGE_ROWS = 8;
 /** How many rows of the feed the word of a rung that stands open by itself takes until a click shows all of it. */
@@ -415,8 +436,21 @@ export class App {
   private readonly railSession: BoxRenderable;
   private readonly railHeading: BoxRenderable;
   private readonly railSpaces: ScrollBoxRenderable;
+  private readonly railUsage: BoxRenderable;
   /** What the sidebar of the session drew last, which a frame that would draw the same leaves as it is. */
   private railKey = "";
+  /** The chain whose threads the sidebar lists in place of the tree of the chains, once a click or Enter chose it. */
+  private railChain?: string;
+  /** Whether the keys move in the sidebar, after ⌥T, and the row that they stand on: a chain in the tree, or a thread in
+   * the list of a chain. */
+  private railKeys = false;
+  private railAt?: string;
+  /** The ids of the chains of the tree, in the order that the sidebar shows them, which the keys move through. */
+  private railRows: string[] = [];
+  /** The first row of the list of the threads that the sidebar shows, which the wheel and the keys move. */
+  private railFrom = 0;
+  /** The threads of the chain shown, read again only when the acts or the questions that wait change. */
+  private threadList: ThreadList = { acts: undefined, owed: "", list: [], by: new Map(), of: new Map() };
   /** The lists of the sidebar that the operator unfolded: the finished chains, under the key finished, and the
    * archived sessions of a workspace, under its folder. */
   private readonly unfolded = new Set<string>();
@@ -773,6 +807,16 @@ export class App {
     this.railSpaces.verticalScrollBar.visible = false;
     this.railSpaces.horizontalScrollBar.visible = false;
     this.rail.add(this.railSpaces);
+    // The usage of the chain stands at the foot of the sidebar, under a rule, where the list above it does not move it.
+    this.railUsage = this.box({
+      paddingX: space.between,
+      paddingBottom: space.inset,
+      border: ["top"],
+      borderColor: c.border,
+      customBorderChars: { ...noBorder, horizontal: glyph.rule },
+      visible: false,
+    });
+    this.rail.add(this.railUsage);
     this.root.add(this.rail);
     session.on("change", this.schedule);
     options.workspaces.on("change", this.schedule);
@@ -1456,60 +1500,6 @@ export class App {
 
   /** The state of the session and the keys that act on it, in the footer. A notice stands after the state until it
    * ends, and each key is a button that does what it says. */
-  /** What the chain shown costs, after the state in the footer: its actor, the share of the window that its last
-   * answer read and where a grant pauses the chain, the dollars of its answers, and how many questions wait for the
-   * operator in the life. */
-  private usage(room: number): Part[] {
-    const w = this.session;
-    const share = w.filled;
-    const grant = w.activity.find((act) => act.kind === "grant" && !act.done);
-    const ceiling =
-      grant?.words[1] === null || grant?.words[1] === undefined ? undefined : Number(grant.words[1]);
-    const percent = (value: number) => `${Number((value * 100).toFixed(1))}%`;
-    const questions = w.desk.questions;
-    // Each part has a place in the line and a rank: where the footer has no room for all, the parts of the lowest
-    // rank go first, and a question that waits goes last.
-    const parts: [place: number, rank: number, Part[]][] = [
-      [0, 3, [[`   ${shortActor(this.actorOf(w.selected))}`, c.muted]]],
-    ];
-    if (share !== undefined && Number.isFinite(share))
-      parts.push([
-        1,
-        1,
-        [
-          ["  context ", c.faint],
-          [percent(share), share >= 0.7 ? c.warning : c.muted],
-          [ceiling === undefined ? "" : `, pauses at ${percent(ceiling)}`, c.faint],
-        ],
-      ]);
-    if (w.spend.dollars > 0)
-      parts.push([
-        2,
-        2,
-        [
-          ["  ", c.faint],
-          [dollars(w.spend.dollars), c.muted],
-        ],
-      ]);
-    if (questions)
-      parts.push([
-        3,
-        0,
-        [
-          ["   ", c.faint],
-          [`${glyph.asks} ${questions} for you`, c.warning, bold],
-        ],
-      ]);
-    let left = room;
-    const kept = new Set<number>();
-    for (const [place, , one] of [...parts].sort((a, b) => a[1] - b[1])) {
-      const size = Bun.stringWidth(plain(one));
-      if (size > left) continue;
-      left -= size;
-      kept.add(place);
-    }
-    return parts.filter(([place]) => kept.has(place)).flatMap(([, , one]) => one);
-  }
   /** The tokens of the chain shown, which the tip of the footer says whole: the whole prompt of its last answer, and
    * what every answer read past the cache, wrote, and read and wrote in the cache, each token counted once. */
   private tokens(): string {
@@ -1580,17 +1570,10 @@ export class App {
     const notice = w.error ? "" : w.notice;
     // The state stays in the footer, and a notice stands after it, cut at its end where the footer has no room for it
     // beside the keys.
-    // A notice takes the place of the usage of the chain, which comes back once the notice goes.
     const state: Part[] = [
       [moving && !retry ? `${spin()} ` : mark, color],
       [label, moving ? c.text : c.muted],
     ];
-    if (!notice && !retry)
-      state.push(
-        ...this.usage(
-          this.feedWidth - Bun.stringWidth(plain(hints)) - Bun.stringWidth(plain(state)) - space.between * 2,
-        ),
-      );
     const room =
       this.feedWidth - Bun.stringWidth(plain(hints)) - Bun.stringWidth(plain(state)) - space.between * 2;
     const tokens = this.tokens();
@@ -2070,7 +2053,12 @@ export class App {
           },
         );
       let retold = false;
+      // A thread that the operator collapsed shows its header line alone.
+      let collapsed = -1;
       for (const line of lines) {
+        if (collapsed >= 0 && line.depth > collapsed) continue;
+        collapsed = -1;
+        const depth = line.depth;
         const act = line.act as ActRow;
         const indent = line.depth * space.between;
         if (line.type === "rung") {
@@ -2362,6 +2350,39 @@ export class App {
         } else {
           const message = String(act.words[1] ?? "");
           const user = w.isUserPrompt(act);
+          // Each thread carries its color on its header and on the mark at its left.
+          // A message of a thread takes the color of its thread, and hides with it.
+          const own = this.chainThreadsBy(w.selected);
+          const thread = own.by.get(act.id);
+          const host = thread ?? own.of.get(act.id);
+          const tone = threadTone(host?.act.id ?? act.id);
+          if (host && w.folds[`thread:${host.act.id}`]) {
+            collapsed = depth;
+            if (!thread) continue;
+            const [mark, color] = thread ? threadMarks(thread) : [glyph.ring, c.faint];
+            const steps = (madeBy(act.id).length || 0) + (thread?.messages.length ?? 0);
+            const room = this.feedWidth - indent - 16;
+            add(
+              act.id,
+              `folded\n${message}\n${mark}\n${steps}\n${this.feedWidth}\n${this.theme}`,
+              [],
+              (box) =>
+                box.add(
+                  this.link(
+                    [
+                      [`${glyph.mark}`, tone],
+                      [`${mark} `, color],
+                      [`${glyph.closed} `, c.faint],
+                      [clip(shortenHomes(gist(message)), room), c.muted],
+                      [steps ? `  ${steps} ${steps === 1 ? "step" : "steps"}` : "", c.faint],
+                    ],
+                    () => this.foldThread(act.id, false),
+                  ),
+                ),
+              { act, indent, shown: message },
+            );
+            continue;
+          }
           // A message that the chain or a rung sent is its heading when it is one short line, and stands under its
           // heading otherwise. The heading says who sent it, and to which model.
           const sent = user ? "" : this.sender(act);
@@ -2374,10 +2395,11 @@ export class App {
             w.folds[`message:${act.id}`] === false ? [message, 0] : this.firstRows(message, MESSAGE_ROWS);
           add(
             act.id,
-            `${message}\n${line}\n${sent}\n${plain(state)}\n${rest}`,
+            `${message}\n${line}\n${sent}\n${plain(state)}\n${rest}\n${thread?.resolved}\n${this.theme}`,
             user
-              ? [["You", c.muted]]
+              ? [["You", tone]]
               : [
+                  [`${glyph.mark}`, tone],
                   [`${glyph.ring} `, c.faint],
                   [line ? message : sent, c.muted, line ? bold : 0],
                   [line ? `  ${sent}` : "", c.faint],
@@ -2399,7 +2421,8 @@ export class App {
                 text.flexShrink = 1;
                 row.add(text);
                 row.add(this.text(state, c.faint, { marginLeft: space.between }));
-                this.panel(box, c.accent).add(row);
+                row.add(this.threadControls(act));
+                this.panel(box, tone).add(row);
               } else if (!line) {
                 const note = this.box({ paddingLeft: space.between });
                 note.add(this.markdown(shortened, c.muted));
@@ -2422,6 +2445,7 @@ export class App {
                     ),
                   ),
                 );
+              if (!user) box.add(this.threadControls(act));
             },
             { group: user ? "user" : "sent", act, heading: user ? false : undefined, indent, shown: message },
           );
@@ -4114,6 +4138,7 @@ export class App {
     if (!this.rail.visible) return;
     this.renderRailSession();
     this.renderWorkspaces();
+    this.renderRailUsage();
   }
   /** What each act that a thread waits on does, and what each thread that ended came to, which hold while their act
    * and their state stay, so that a frame reads none of them again. */
@@ -4126,6 +4151,11 @@ export class App {
     // The layout gives the sidebar its width, which the preferences only ask for.
     const width = this.rail.width || w.preferences.sidebarWidth;
     const inner = width - space.between * 2;
+    if (this.railChain && w.chains.some((chain) => chain.id === this.railChain)) {
+      this.renderThreadList(this.railChain, width, inner);
+      return;
+    }
+    this.railChain = undefined;
     const loom = this.lifeLoom();
     const rows = loom.rows.filter((row) => row.id !== "operator");
     const asks = w.desk.asks.filter((ask) => !ask.notice);
@@ -4179,6 +4209,9 @@ export class App {
     });
     const resting = rows.filter((row) => !standing.includes(row));
     const lines = standing.map((row) => ({ row, said: said(row) }));
+    this.railRows = [...standing, ...(this.unfolded.has("finished") ? resting.slice(0, 12) : [])].map(
+      (row) => row.id,
+    );
     const key = JSON.stringify([
       this.theme,
       width,
@@ -4188,6 +4221,7 @@ export class App {
       resting.map((row) => [row.id, row.label]),
       this.unfolded.has("finished"),
       this.choice,
+      this.railKeys && this.railAt,
     ]);
     if (key === this.railKey) return;
     this.railKey = key;
@@ -4231,7 +4265,7 @@ export class App {
       add([], { marginTop: space.section });
     }
     const working = rows.filter((row) => row.state === "working").length;
-    heading("Threads", [
+    heading("Chains", [
       [working ? `${glyph.running} ${working}` : "", c.accent],
       [working && resting.length ? "  " : ""],
       [resting.length ? `${glyph.done} ${resting.length}` : "", c.faint],
@@ -4271,9 +4305,9 @@ export class App {
             [clip(text, room).padEnd(room), color],
             [since ? ` ${since}` : "", c.faint],
           ],
-          () => void w.select(row.id).catch(w.fail),
+          () => this.openThreads(row.id),
           edge,
-          selected,
+          selected || this.cursorOn(row.id),
         ),
       );
     };
@@ -4284,6 +4318,355 @@ export class App {
       );
       if (this.unfolded.has("finished")) for (const row of resting.slice(0, 12)) threadRow(row, said(row));
     }
+  }
+  /** The context of the chain shown, at the foot of the sidebar: how full its window is and where a grant pauses it,
+   * its tokens, and what it spent. */
+  private renderRailUsage(): void {
+    const w = this.session;
+    const window = w.filled;
+    const grant = w.activity.find((act) => act.kind === "grant" && !act.done);
+    const width = this.rail.width || w.preferences.sidebarWidth;
+    if (
+      !this.paneChanged(this.railUsage, [this.theme, w.spend, window, width, w.context, grant?.words, w.demo])
+    )
+      return;
+    this.clear(this.railUsage);
+    const inner = width - space.between * 2;
+    const add = (parts: Part[], options: TextShape = {}) => {
+      const node = this.line(parts, c.muted, { truncate: true, ...options });
+      this.railUsage.add(node);
+      return node;
+    };
+    // A line of a table: its name and its note at its left, and its value at its right.
+    const spread = (name: Part, note: string, value: Part, options: TextShape = {}) => {
+      const room = Math.max(1, inner - Bun.stringWidth(name[0] + note + value[0]));
+      return add([name, [note, c.faint], [" ".repeat(room)], value], options);
+    };
+    const row = (name: string, value: string, color = c.text) => spread([name, c.muted], "", [value, color]);
+    const section = (name: string, value = "", note = "") =>
+      spread([name, c.text, bold], note, [value, c.faint]);
+    const spend = w.spend;
+    const ceiling =
+      grant?.words[1] === null || grant?.words[1] === undefined ? undefined : Number(grant.words[1]);
+    const known = window !== undefined && Number.isFinite(window);
+    const tokens = spend.input + spend.output + spend.cacheRead + spend.cacheWrite;
+    // A chain with a source reads the prompt of its origin before it answers once, so its context shows from its birth.
+    this.railUsage.visible = tokens > 0 || spend.dollars > 0 || Boolean(grant) || w.context !== undefined;
+    if (this.railUsage.visible) {
+      section(
+        "Context",
+        known ? `${Number(((window ?? 0) * 100).toFixed(1))}%` : "",
+        w.demo ? "  simulated" : "",
+      );
+      // The meter fills with the share of the window that the last answer used, and marks the ceiling of a grant. It
+      // stands empty until an answer tells the share, and a hover over it says the share and where the chain pauses.
+      const part = known ? (window ?? 0) : 0;
+      const used = Math.min(inner, Math.max(part > 0 ? 1 : 0, Math.round(part * inner)));
+      const mark = ceiling === undefined ? -1 : Math.min(inner - 1, Math.round(ceiling * inner));
+      const tone = part >= 0.9 ? c.danger : part >= 0.7 ? c.warning : c.accent;
+      const cells: Part[] = [];
+      for (let at = 0; at < inner; at++)
+        cells.push(at === mark ? ["╋", c.warning] : [glyph.meter, at < used ? tone : c.border]);
+      const tip: Part[] = [
+        [known ? `${Number((part * 100).toFixed(1))}%` : "No answer yet", c.text, bold],
+        [known ? " of the context window" : "", c.muted],
+        [ceiling === undefined ? "" : `, pauses at ${Number((ceiling * 100).toFixed(1))}%`, c.warning],
+      ];
+      this.tipped(add(cells), tip);
+      // The last prompt is the whole prompt of the last answer, its system prompt and the reads of the cache included,
+      // which the share of the window measures. The fresh input, the output and the cache are what every answer of the
+      // chain read past the cache, wrote, and read and wrote in the cache, each token counted once.
+      const prompt = w.context;
+      if (prompt !== undefined)
+        this.tipped(row("Last prompt", count(prompt)), [
+          ["The whole prompt of the last answer, its system prompt and the cache included.", c.text],
+        ]);
+      if (tokens > 0) {
+        this.tipped(row("Fresh input", count(spend.input)), [
+          ["The input of the answers of the chain that the cache did not hold.", c.text],
+        ]);
+        row("Output", count(spend.output));
+        if (spend.cacheRead) row("Cache read", count(spend.cacheRead));
+        if (spend.cacheWrite) row("Cache write", count(spend.cacheWrite));
+      }
+      row("Spent", dollars(spend.dollars));
+      if (grant && grant.words[0] !== null) row("Ceiling", dollars(Number(grant.words[0])), c.muted);
+    }
+  }
+  /** The threads of the chain shown, and each by its id. */
+  private chainThreadList(chain: string): ChainThread[] {
+    return this.chainThreadsBy(chain).list;
+  }
+  private chainThreadsBy(chain: string): ThreadList {
+    const w = this.session;
+    if (w.selected !== chain) return { acts: undefined, owed: "", list: [], by: new Map(), of: new Map() };
+    const owed = [...w.host.prompts.keys()].join(" ");
+    if (this.threadList.acts !== w.acts || this.threadList.owed !== owed) {
+      const index = w.ladderIndex;
+      const list = chainThreads(index.on, index.ids, new Set(w.host.prompts.keys()));
+      this.threadList = {
+        acts: w.acts,
+        owed,
+        list,
+        by: new Map(list.map((one) => [one.act.id, one])),
+        of: new Map(
+          list.flatMap((one) => one.messages.map((message): [string, ChainThread] => [message.id, one])),
+        ),
+      };
+    }
+    return this.threadList;
+  }
+  /** How many threads the list of a chain shows at once. */
+  private get railRoom(): number {
+    return Math.max(5, Math.floor(this.renderer.height / 2) - 5);
+  }
+  /** Whether the keys of the sidebar stand on a row. */
+  private cursorOn(id: string): boolean {
+    return this.railKeys && this.railAt === id;
+  }
+  /** The threads of a chain in the sidebar, in place of the tree of the chains: a row that goes back to the tree, then
+   * a row for each prompt of the chain, in the color of its thread, with its state and the first line of its message.
+   * The thread chosen, or under the keys, shows its controls under its row. The list scrolls by the wheel and by the
+   * keys. */
+  private renderThreadList(chain: string, width: number, inner: number): void {
+    const w = this.session;
+    const list = this.chainThreadList(chain);
+    const room = this.railRoom;
+    this.railFrom = Math.max(0, Math.min(Math.max(0, list.length - room), this.railFrom));
+    const from = this.railFrom;
+    const key = JSON.stringify([
+      "threads",
+      this.theme,
+      width,
+      chain,
+      w.labelOf(chain),
+      w.thread,
+      this.railKeys && this.railAt,
+      from,
+      room,
+      list.map((one) => [
+        one.act.id,
+        one.state,
+        one.resolved,
+        one.title,
+        w.folds[`thread:${one.act.id}`] === true,
+      ]),
+    ]);
+    if (key === this.railKey) return;
+    this.railKey = key;
+    this.clear(this.railSession);
+    this.railSession.onMouseScroll = (event) => {
+      const direction = event.scroll?.direction;
+      if (!this.railChain || (direction !== "up" && direction !== "down")) return;
+      this.railFrom = Math.max(0, this.railFrom + (direction === "up" ? -3 : 3));
+      this.render();
+    };
+    const edge = { marginX: -space.between, paddingRight: space.inset };
+    const line = (parts: Part[], run?: () => void) =>
+      this.railSession.add(this.line(parts, c.muted, { truncate: true, ...(run ? { run } : {}) }));
+    this.railSession.add(
+      this.railRow(
+        [
+          ["← ", c.accent],
+          ["Chains", c.muted],
+        ],
+        () => this.closeThreads(),
+        { ...edge, paddingLeft: 1 },
+      ),
+    );
+    let asks = 0;
+    let running = 0;
+    let resolved = 0;
+    for (const one of list)
+      if (one.state === "asks") asks++;
+      else if (one.resolved) resolved++;
+      else running++;
+    const tally: Part[] = [
+      [asks ? `${glyph.asks} ${asks}  ` : "", c.warning],
+      [running ? `${glyph.running} ${running}  ` : "", c.accent],
+      [resolved ? `${glyph.done} ${resolved}` : "", c.faint],
+    ];
+    const name = clip(w.labelOf(chain), Math.max(4, inner - Bun.stringWidth(plain(tally)) - 1));
+    line([
+      [name, c.text, bold],
+      [" ".repeat(Math.max(1, inner - Bun.stringWidth(name + plain(tally))))],
+      ...tally,
+    ]);
+    if (!list.length) line([["No thread on this chain yet.", c.faint]]);
+    if (from > 0)
+      line([[`↑ ${from} earlier`, c.faint]], () => {
+        this.railFrom = Math.max(0, from - room);
+        this.render();
+      });
+    for (const one of list.slice(from, from + room)) {
+      const id = one.act.id;
+      const chosen = w.thread === id;
+      const folded = w.folds[`thread:${id}`] === true;
+      const [mark, tone] = threadMarks(one);
+      const text = clip(shortenHomes(one.title) || id, Math.max(4, width - 6 - space.inset));
+      this.railSession.add(
+        this.railRow(
+          [
+            [glyph.mark, threadTone(id)],
+            [`${mark} `, tone],
+            [folded ? `${glyph.closed} ` : "", c.faint],
+            [text, chosen ? c.text : one.resolved ? c.faint : c.muted, chosen ? bold : 0],
+          ],
+          () => this.chooseThread(id),
+          edge,
+          chosen || this.cursorOn(id),
+        ),
+      );
+      if (!chosen && !this.cursorOn(id)) continue;
+      const controls = this.row({ gap: 1, paddingLeft: 3, flexWrap: "wrap" });
+      const chip = (label: string, run: () => void) =>
+        controls.add(this.text([[` ${label} `, c.text, 0, c.raised]], c.text, { run }));
+      chip(folded ? "Expand" : "Collapse", () => this.foldThread(id));
+      if (one.resolved) chip("Open again", () => this.reopenThread(id));
+      else chip("Resolve", () => this.resolveThread(one));
+      const ask = one.asks[0];
+      if (ask) chip("Answer", () => void w.point(ask).catch(this.report));
+      this.railSession.add(controls);
+    }
+    const after = list.length - from - room;
+    if (after > 0)
+      line([[`↓ ${after} later`, c.faint]], () => {
+        this.railFrom = from + room;
+        this.render();
+      });
+  }
+  /** A chain chosen in the tree: the feed shows it, and the sidebar lists its threads in place of the tree. */
+  private openThreads(chain: string): void {
+    this.railChain = chain;
+    this.railFrom = Number.MAX_SAFE_INTEGER;
+    void this.session.select(chain).catch(this.report);
+    const list = this.chainThreadList(chain);
+    this.railAt = (list.findLast((one) => !one.resolved) ?? list.at(-1))?.act.id;
+    this.render();
+  }
+  /** The tree of the chains again, in place of the list of the threads of a chain, with the keys on that chain. */
+  private closeThreads(): void {
+    if (this.railChain) this.railAt = this.railChain;
+    this.railChain = undefined;
+    this.session.thread = undefined;
+    this.render();
+  }
+  /** A thread chosen in the list: the feed unfolds it and scrolls to it, and the input sends each message to it. */
+  private chooseThread(id: string): void {
+    const w = this.session;
+    this.railAt = id;
+    w.thread = id;
+    if (w.folds[`thread:${id}`]) {
+      delete w.folds[`thread:${id}`];
+      w.save();
+    }
+    if (this.railKeys) this.railSteer(false);
+    this.go("feed", id);
+  }
+  /** A thread folds in the feed to its header line alone, or unfolds. */
+  private foldThread(id: string, fold = !this.session.folds[`thread:${id}`]): void {
+    const w = this.session;
+    if (fold) w.folds[`thread:${id}`] = true;
+    else delete w.folds[`thread:${id}`];
+    w.save();
+    this.renderContent();
+    this.render();
+  }
+  /** A thread resolves: its open prompt closes, and the model that works for it stops. */
+  private resolveThread(thread: ChainThread): void {
+    const open = [thread.act, ...thread.messages].findLast((act) => !act.done);
+    if (open) void this.session.resolve(open.id).catch(this.report);
+  }
+  /** A thread opens again: the input takes the message that goes to it. */
+  private reopenThread(id: string): void {
+    const w = this.session;
+    w.thread = id;
+    this.railAt = id;
+    w.notice = `Your next message goes to ${id} and opens it again.`;
+    if (this.railKeys) this.railSteer(false);
+    else this.composer.focus();
+    this.render();
+  }
+  /** The keys move in the sidebar, or go back to the input. */
+  private railSteer(on = !this.railKeys): void {
+    this.railKeys = on;
+    if (on) {
+      if (this.steering) this.steer(false);
+      this.composer.blur();
+      if (!this.railAt)
+        this.railAt = this.railChain
+          ? (this.session.thread ?? this.chainThreadList(this.railChain).at(-1)?.act.id)
+          : this.session.selected;
+    } else this.composer.focus();
+    this.render();
+  }
+  /** A step of the keys of the sidebar, in the tree or in the list, which scrolls the list so that the row shows. */
+  private moveRail(by: number): void {
+    const ids = this.railChain
+      ? this.chainThreadList(this.railChain).map((one) => one.act.id)
+      : this.railRows;
+    if (!ids.length) return;
+    const at = ids.indexOf(this.railAt ?? "");
+    const next = Math.max(0, Math.min(ids.length - 1, at < 0 ? ids.length - 1 : at + by));
+    this.railAt = ids[next];
+    if (this.railChain) {
+      if (next < this.railFrom) this.railFrom = next;
+      else if (next >= this.railFrom + this.railRoom) this.railFrom = next - this.railRoom + 1;
+    }
+    this.render();
+  }
+  /** Enter or → in the sidebar: a chain lists its threads, and a thread is chosen. */
+  private enterRail(): void {
+    const at = this.railAt;
+    if (!at) return;
+    if (this.railChain) this.chooseThread(at);
+    else this.openThreads(at);
+  }
+  /** ← or Esc in the sidebar: the list goes back to the tree, and the tree gives the keys back to the input. */
+  private leaveRail(): void {
+    if (this.railChain) this.closeThreads();
+    else this.railSteer(false);
+  }
+  /** The thread under the keys of the list. */
+  private railThread(): ChainThread | undefined {
+    return this.railChain ? this.chainThreadsBy(this.railChain).by.get(this.railAt ?? "") : undefined;
+  }
+  /** The controls of a thread at the foot of its message in the feed: collapse it, and resolve it or open it again. */
+  private threadControls(act: ActRow): BoxRenderable {
+    const own = this.chainThreadsBy(this.session.selected);
+    const thread = own.by.get(act.id) ?? own.of.get(act.id);
+    const id = thread?.act.id ?? act.id;
+    const row = this.row({ gap: 3, paddingLeft: space.between });
+    row.add(
+      this.link(
+        [
+          [`${glyph.open} `, c.faint],
+          ["Collapse", c.faint],
+        ],
+        () => this.foldThread(id, true),
+      ),
+    );
+    if (thread?.resolved)
+      row.add(
+        this.link(
+          [
+            [`${glyph.ring} `, c.faint],
+            ["Open again", c.faint],
+          ],
+          () => this.reopenThread(id),
+        ),
+      );
+    else if (thread)
+      row.add(
+        this.link(
+          [
+            [`${glyph.done} `, c.faint],
+            ["Resolve", c.faint],
+          ],
+          () => this.resolveThread(thread),
+        ),
+      );
+    return row;
   }
   /** A row of the sidebar, whose click runs, which spans the sidebar so that the pointer and the selection show from
    * edge to edge. It lights while the pointer is on it, and stays lit while it is selected. */
@@ -4310,6 +4693,12 @@ export class App {
       },
       options,
     );
+  }
+  /** A node that shows a tip while the pointer is over it. */
+  private tipped<T extends Renderable>(node: T, parts: Part[]): T {
+    node.onMouseOver = (event) => this.tip(parts, event.x, event.y);
+    node.onMouseOut = () => this.unhover();
+    return node;
   }
   /** The composer holds a text in place of the draft that the session shows, and an undo gives the draft back. */
   private insert(text: string): void {
@@ -6933,6 +7322,44 @@ export class App {
       stageKey("b", () => this.branchAtCursor(), ["b", "branch"]),
       stageKey("tab", () => this.question(), ["Tab", "answer"]),
     ]);
+    // While the keys move in the sidebar, the arrows move them, Enter opens a chain or chooses a thread, Escape goes
+    // back, and a letter acts on the thread under them.
+    const onThread = (run: (thread: ChainThread) => void) => () => {
+      const thread = this.railThread();
+      if (thread) run(thread);
+    };
+    layer(() => bare() && this.railKeys, "rail", [
+      { on: "up", run: () => this.moveRail(-1), hint: ["↑↓", "move"] },
+      { on: "down", run: () => this.moveRail(1) },
+      {
+        on: ["return", "enter", "right"],
+        run: () => this.enterRail(),
+        hint: ["Enter", () => (this.railChain ? "choose" : "threads")],
+      },
+      {
+        on: ["escape", "left"],
+        run: () => this.leaveRail(),
+        hint: ["Esc", () => (this.railChain ? "chains" : "input")],
+      },
+      {
+        on: "space",
+        run: onThread((thread) => this.foldThread(thread.act.id)),
+        when: () => Boolean(this.railThread()),
+        hint: ["Space", "collapse"],
+      },
+      {
+        on: "r",
+        run: onThread((thread) => this.resolveThread(thread)),
+        when: () => this.railThread()?.resolved === false,
+        hint: ["r", "resolve"],
+      },
+      {
+        on: "o",
+        run: onThread((thread) => this.reopenThread(thread.act.id)),
+        when: () => this.railThread()?.resolved === true,
+        hint: ["o", "open again"],
+      },
+    ]);
     layer(bare, "", [
       // As in Claude Code, Ctrl+D acts on an empty input.
       { on: "ctrl+d", run: () => this.exit(), when: () => !this.composer.plainText },
@@ -7131,6 +7558,7 @@ export class App {
     quit: () => void this.options.quit(),
     lifeView: () => this.switchView(),
     steer: () => this.steer(),
+    rail: () => this.railSteer(),
   };
   /** When an action of the table acts, where it does not act at all times: a key that does not act goes on to the
    * input, and the footer does not offer it. */
