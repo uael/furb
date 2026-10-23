@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { existsSync } from "node:fs";
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { createCliRenderer, RGBA } from "@opentui/core";
@@ -18,6 +19,7 @@ const { values } = parseArgs({
   args: process.argv.slice(2).filter((value, index) => index !== 0 || value !== "--"),
   options: {
     demo: { type: "boolean" },
+    attach: { type: "string" },
     help: { type: "boolean", short: "h" },
     cwd: { type: "string" },
     model: { type: "string" },
@@ -32,8 +34,8 @@ const { values } = parseArgs({
 });
 if (values.help) {
   console.log(`furb-tui [--demo] [--cwd path] [--model provider:model] [--effort ${efforts.join("|")}]
-         [--record file.jsonl | --resume file.jsonl] [--roster provider:model ...] [--view main|loom|graph]
-         [--screen-reader] [--reduced-motion]
+         [--record file.jsonl | --resume file.jsonl | --attach furb://host:port/key] [--roster provider:model ...]
+         [--view main|loom|graph] [--screen-reader] [--reduced-motion]
 
 Enter sends a prompt. ⌃J (Control J) adds a line, and so does ⇧Enter (Shift Enter) in a terminal with the kitty
 keyboard protocol. ⌃P opens actions. F1 shows all keys that the terminal sends. ⌃ is Control, ⌥ is Option or Alt,
@@ -46,6 +48,8 @@ such as ANTHROPIC_API_KEY, and of the local server that FURB_LOCAL_URL names, ea
 of /model joins the session when you choose it.
 --view shows the life as the board of main, the loom of its chains in time, or the graph of its programs. ⌥V
 switches the view at run time, and the setting keeps the last one.
+--attach shows the life of another operator, whose /serve gave the address: its key lets the window read and drive
+the life, or read it only.
 --screen-reader shows one column of text, with no box, no spinner, and nothing that moves, and --reduced-motion
 stops each spinner and each part that moves with time. /access turns each on or off, and the setting keeps it.
 NO_COLOR, when it is set and not empty, turns every color off. The theme Terminal, the default, follows the terminal
@@ -56,11 +60,18 @@ bell.`);
 if (values.view && !isLifeView(values.view)) throw new Error(`Choose a view of ${lifeViews.join(", ")}.`);
 if (values.effort && !efforts.some((effort) => effort === values.effort)) throw new Error("Invalid effort.");
 if (values.resume && !existsSync(resolve(values.resume))) throw new Error(`No session at ${values.resume}.`);
+if (values.attach && (values.demo || values.cwd || values.record || values.resume))
+  throw new Error(
+    "--attach shows the life of another host, so it takes no --demo, --cwd, --record or --resume.",
+  );
+// A window that attaches to a host on the network keeps its list and its view in a folder of its own, which goes when
+// it quits, so the life of another operator joins no list of this machine.
+const attached = values.attach ? await mkdtemp(join(tmpdir(), "furb-attach-")) : undefined;
 const preferences = new Preferences();
 if (isLifeView(values.view)) preferences.view = values.view;
 if (values["screen-reader"]) preferences.screenReader = true;
 if (values["reduced-motion"]) preferences.reducedMotion = true;
-const record = values.resume ?? values.record;
+const record = attached ? join(attached, "attached.jsonl") : (values.resume ?? values.record);
 const savedDirectory =
   record && !values.cwd
     ? await readFile(`${resolve(record)}.session.json`, "utf8")
@@ -70,7 +81,7 @@ const savedDirectory =
 const directory =
   values.demo && !values.cwd && !record
     ? await demoDirectory()
-    : resolve(values.cwd ?? savedDirectory ?? process.cwd());
+    : resolve(attached ?? values.cwd ?? savedDirectory ?? process.cwd());
 if (values.demo) await mkdir(directory, { recursive: true });
 const shown = themeOf(preferences.theme, preferences.terminalMode);
 const renderer = await createCliRenderer({
@@ -104,11 +115,12 @@ const engineOptions: EngineOptions = {
   roster: values.roster,
   demo: values.demo,
   host: !(values.demo && !record && !values.cwd),
+  attach: values.attach,
 };
 const library = new Workspaces(
   preferences,
   engineOptions,
-  values.demo ? join(furbDirectory(directory), "workspaces.json") : undefined,
+  values.demo || attached ? join(furbDirectory(directory), "workspaces.json") : undefined,
 );
 const group = await library.add(directory);
 await library.refresh();
@@ -124,6 +136,7 @@ try {
   renderer.destroy();
   console.error(`furb-tui: ${error instanceof Error ? error.message : String(error)}`);
   await library.dispose();
+  if (attached) await rm(attached, { recursive: true, force: true });
   process.exit(1);
 }
 const initial = library.current?.session;
@@ -149,6 +162,7 @@ const quit = async (end = false) => {
     () => renderer.destroy(),
     () => library.dispose(end),
     () => removeDemoDirectories(),
+    () => attached && rm(attached, { recursive: true, force: true }),
   ])
     try {
       await step();

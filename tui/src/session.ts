@@ -412,6 +412,7 @@ export class Session extends EventEmitter {
       this.queueHeld = this.queued.length > 0;
       if (damage) this.notice = damage;
     }
+    if (host.role === "read") this.notice = "This window reads the life only, so it changes nothing in it.";
     // A view that an older release saved, and that this release has no more, opens as the feed.
     if (!views.includes(this.view)) this.view = "feed";
     host.on("change", this.changed);
