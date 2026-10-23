@@ -4,6 +4,8 @@ from furb.engine import (
   HIDDEN,
   OPERATOR,
   ROOT,
+  Exit,
+  Refused,
   Text,
   acting,
   bash,
@@ -11,6 +13,7 @@ from furb.engine import (
   clock,
   close,
   cwd,
+  gate,
   get,
   over,
   paused,
@@ -169,6 +172,174 @@ def pr(title: str, why: str, outcome: list[str], checks: list[str], breaking: li
     added = labels.replace("--label", "--add-label")
     command = (f"cd {shq(where)} && " if where else "") + rules + f"if gh pr view --json number >/dev/null 2>&1; then gh pr edit --title {name} --body-file -{added}; else gh pr create --base {base} --title {name} --body-file -{labels}; fi && gh pr view --json url --jq .url"
   return bash(command, stdin=body, show=span(-2, -1), timeout=180)
+
+
+PATCHER = "claude-cli:opus/medium"
+CONDUCTOR = ".furb/extensions/conductor/conductor.py"
+TRIES = 3
+PATCH = """You change the conductor of furb, the word below, which is {path} on origin/main. The change: {ask}
+
+Close with a list of (old, new) pairs of str, and edit no file: code applies the pairs, checks them, and opens the
+PR. Each old is an exact part of the word that occurs in it once, with the lines around it that make it unique, and
+its new is its text after the change. No two olds overlap. Change only what the change needs, add each name of the
+engine that new code uses to the import of furb.engine at the top, and keep the style of the word: two spaces of
+indentation, lines of 120 columns at most, and prose in Simplified Technical English with no em dash and no en dash.
+
+The word:
+
+{word}"""
+CHECKED = """Code checked the pairs: each old occurs once, the gate and ruff find nothing new, and git diff holds the
+pairs alone. Verify each box of the checklist of the PR template, one by one, against the diff below. Close with a
+tuple of two lists of str. The first holds six str, one for each box in its order: the evidence of how you verified
+it, or not: and the flaw that keeps it open. The second holds each flaw that the diff keeps and that no pair can
+fix, one sentence each, which the PR names in its Outcome. Give a flaw that a pair can fix as not: in its box,
+and the next prompt asks you for the pairs again.
+{boxes}
+
+{diff}"""
+LOAD = (
+  "The change is not in the running round: until onelife2 lands the reload of an extension, the orchestrator loads"
+  " each changed definition by hand, as a rung on the chain of the round."
+)
+PROOF = (
+  "Each old occurs once in the word of origin/main. The gate and ruff find nothing in the new word"
+  " that they do not find in that word, and git diff holds the pairs alone. The commit skips the local"
+  " hooks, which a worktree with no build cannot run: the gates of the PR run them."
+)
+
+
+def spliced(was: str, pairs: list[tuple[str, str]]) -> str:
+  spots: list[tuple[int, int, str]] = []
+  for old, new in pairs:
+    if not old or old == new or was.count(old) != 1:
+      count = was.count(old) if old else 0
+      raise Refused(
+        f"each old must occur once in the word and differ from its new, and this one occurs {count} times:"
+        f" {old[:300]!r}"
+      )
+    spots.append((was.index(old), was.index(old) + len(old), new))
+  out, end = "", 0
+  for at, stop, new in sorted(spots):
+    if at < end:
+      raise Refused(f"two olds overlap at character {at} of the word")
+    out, end = out + was[end:at] + new, stop
+  return out + was[end:]
+
+
+def changed(was: str, pairs: list[tuple[str, str]]) -> list[str]:
+  heads = r"^(?:(?:async )?def |class )(\w+)|^(\w+)(?:: [^=\n]+)? = "
+
+  def names(part: str) -> list[str]:
+    return [a or b for a, b in re.findall(heads, part, re.M)]
+
+  said: list[str] = []
+  for old, new in pairs:
+    at = was.index(old)
+    near = names(was[:at])
+    added = [x for x in names(new) if x not in names(old)]
+    after = f", after {near[-1]}" if near else ""
+    adds = f" and adds {', '.join(added)}" if added else ""
+    line = was.count("\n", 0, at) + 1
+    lines = [f"{n} line" + ("s" if n != 1 else "") for n in (len(old.splitlines()), len(new.splitlines()))]
+    said.append(f"Line {line}{after}: the pair changes {lines[0]} into {lines[1]}{adds}.")
+  return said
+
+
+def linted(out: str) -> set[str]:
+  found: set[str] = set()
+  for x in out.splitlines():
+    hit = re.match(r"\S+:\d+:\d+: (.+)", x)
+    if hit:
+      found.add(hit[1])
+    elif re.match(r"[+-](?![+-]{2} )", x):
+      found.add(x)
+  return found
+
+
+async def vetted(word: str, known: set[str], base: set[str], tree: str, lint: str) -> None:
+  found = [x for x in gate(word) if re.sub(r"^line \d+: ", "", x) not in known]
+  if found:
+    raise Refused("the gate refuses the word:\n" + "\n".join(found))
+  wrote = await bash(f"cd {tree} && cat > {CONDUCTOR} && git status --porcelain", stdin=word, show=HIDDEN, timeout=60)
+  if wrote.stdout.content.strip() != f"M {CONDUCTOR}":
+    raise Refused(f"git sees more than the pairs: {wrote.stdout.content[:300]}")
+  fresh = sorted(linted((await bash(lint, show=HIDDEN, timeout=120)).stdout.content) - base)
+  if fresh:
+    raise Refused("ruff finds what it does not find in the word of origin/main:\n" + "\n".join(fresh)[:1500])
+
+
+async def patch(title: str, why: str, ask: str) -> tuple[str, str, str]:
+  if len(title) > 70 or not re.fullmatch(PR_TITLE, title):
+    raise Refused(f"the title {title!r} is not type(area): What changed, in 70 characters or fewer")
+  key = "patch-" + "-".join(re.findall(r"[a-z0-9]+", title.split(":", 1)[1].lower())[:4])
+  place = f"{cwd()}-w-{key}"
+  tree, ruff = shq(place), shq(f"{cwd()}/.venv/bin/ruff")
+  lint = f"cd {tree} && {ruff} format --diff {CONDUCTOR} 2>/dev/null; {ruff} check --output-format concise {CONDUCTOR}"
+  made = await bash(
+    f"git worktree remove --force {tree} 2>/dev/null; git fetch -q origin main"
+    f" && git worktree add -q {tree} -B w/{key} origin/main && cat {tree}/{CONDUCTOR}",
+    show=HIDDEN,
+    timeout=180,
+  )
+  if made.code != 0:
+    raise Refused(f"no worktree {place}: {made.stderr.content[-500:]}")
+  try:
+    was = word = made.stdout.content
+    known = {re.sub(r"^line \d+: ", "", x) for x in gate(was)}
+    base = linted((await bash(lint, show=HIDDEN, timeout=120)).stdout.content)
+    rules = (await bash(f"cd {tree} && ls AGENTS.md 2>/dev/null || echo CLAUDE.md", show=HIDDEN)).stdout.content
+    listed = "\n".join(f"{n}. " + box.replace("{rules}", rules.strip()) for n, box in enumerate(PR_BOXES, 1))
+    where = chain(f"patch/{key}")
+    quietly(rung, f"actor = {PATCHER!r}", on=where)
+    brief = PATCH.format(path=CONDUCTOR, ask=ask, word=was)
+    pairs: list[tuple[str, str]] = []
+    checks: list[str] = []
+    gaps: list[str] = []
+    for _ in range(TRIES + 1):
+      got = await prompt(list[tuple[str, str]], brief, to=PATCHER, on=where)
+      try:
+        pairs = [(str(old), str(new)) for old, new in got]
+        word = spliced(was, pairs)
+        await vetted(word, known, base, tree, lint)
+      except (Refused, TypeError, ValueError) as fault:
+        brief = (
+          f"Fault: {fault}\nThe pairs apply to the word of origin/main again."
+          " Close again with the whole list of pairs, fixed."
+        )
+        continue
+      diff = (await bash(f"cd {tree} && git diff", show=HIDDEN, timeout=60)).stdout.content
+      answered = await prompt(
+        tuple[list[str], list[str]], CHECKED.format(boxes=listed, diff=diff), to=PATCHER, on=where
+      )
+      checks, gaps = [str(x) for x in answered[0]], [str(x) for x in answered[1]]
+      unticked = [b for b, c in zip(PR_BOXES, checks) if not c.strip() or c.strip().lower().startswith("not:")]
+      if len(checks) == len(PR_BOXES) and not unticked:
+        break
+      brief = (
+        f"Fault: give {len(PR_BOXES)} checks in the order of the boxes, and leave no box open:\n"
+        + "\n".join(f"- {b}" for b in unticked)
+        + "\nFix each flaw that a pair can fix, and name each other one as a gap. The pairs apply to the word of"
+        " origin/main again. Close again with the whole list of pairs."
+      )
+    else:
+      raise Refused(f"{where} gave no pairs and checks that pass in {TRIES + 1} answers. {brief}")
+    pushed = await bash(
+      f"cd {tree} && git commit -q --no-verify -am {shq(title)}"
+      f" && (git fetch -q origin w/{key} 2>/dev/null; true) && git push -q --force-with-lease -u origin w/{key}"
+      f" && (gh label create w:{key} --force >/dev/null 2>&1; true)",
+      show=HIDDEN,
+      timeout=180,
+    )
+    if pushed.code != 0:
+      raise Refused(f"no push of w/{key}: {pushed.stderr.content[-500:]}")
+    opened = await pr(title, why, [*changed(was, pairs), PROOF, *gaps], checks, where=place, labels=f" --label w:{key}")
+    assert isinstance(opened, Exit)
+    url = (opened.stdout.content.strip().splitlines() or [""])[-1]
+    if opened.code != 0 or not url.startswith("https://"):
+      raise Refused(f"no PR for w/{key}: {opened.stderr.content[-500:]}")
+    return url, word, LOAD
+  finally:
+    quietly(bash, f"git worktree remove --force {tree}; git branch -D w/{key}", show=HIDDEN)
 
 
 def hire(key: str, what: str, thread: str = "", brief: str = "") -> str:
