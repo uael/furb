@@ -6,6 +6,7 @@ import {
   type LiveAct,
   questionKind,
   type Session,
+  standingOf,
   type Turn,
 } from "furb";
 import type { Exit } from "furb/life";
@@ -205,7 +206,11 @@ export class Snapshots {
       this.session.activity.acts.get(requested)?.kind === "chain" ? requested : this.engine.root;
     const view = this.chains.get(selected) ?? {};
     this.chains.set(selected, view);
-    view.roster ??= (this.engine.standing() as [Roster, string, string])[0];
+    view.roster ??= (standingOf(this.engine)[0] ?? []).map(([name, efforts, window]) => [
+      name,
+      efforts,
+      window,
+    ]);
     if (!view.program) {
       view.program = { ...(this.engine.program({ on: selected }) as Record<string, string>) };
       view.worded = { whole: true, words: view.program };
