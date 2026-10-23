@@ -16,7 +16,7 @@ An empty feed shows the logo of furb, what it does, the project and the model, t
 know. The first way plays a life to watch, which asks no model. A click on each other way puts its prompt in the
 input. The top line names the session, the chain, and the
 directory of the chain, and the toggle at its right switches the three views of the chain. The footer says what the
-session does and offers the keys that act now, each a button that does what its key does. GitHub Dark is the default.
+session does and offers the keys that act now, each a button that does what its key does. Ink is the default.
 
 ![Welcome](screenshots/01-welcome.png)
 
@@ -196,8 +196,11 @@ definition.
 
 ## Themes
 
-Terminal, the default, follows the mode of the terminal: GitHub Dark on a dark terminal, and Day on a light one.
-Paper and Day are light, and Midnight, Forest and Dusk are dark. ⌃T opens the themes, each with a swatch of its
+Terminal, the default, takes the colors of the terminal when the terminal says them: its background, and its text a
+step softer than its foreground. Else it follows the mode of the terminal: Ink on a dark terminal, and Day on a light
+one. Each color keeps one meaning in every theme: the accent marks the operator and the selection, amber what waits
+for the operator, red a failure, and a quiet green what is done. Paper and Day are light, and Ink, GitHub Dark,
+Midnight, Forest and Dusk are dark. ⌃T opens the themes, each with a swatch of its
 colors.
 
 ![The theme of a light terminal](screenshots/78-terminal-light.png)
