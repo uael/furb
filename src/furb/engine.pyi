@@ -495,7 +495,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   A chain is an act of Never, so the chain never completes.
   The turns of a chain tell the standing and the acts of the operator.
   The transcript of a chain is the facts on it, in the order they were said.
-  Nothing leaves a transcript once the transcript holds it.
+  Nothing leaves a transcript once the transcript holds it, but by a prefix said on its chain, which takes the place of what the transcript held.
   An assistant turn keeps the role assistant in every chain made from the chain.
   The engine adds the acts that caused a kept act to what the filter kept.
   The globals of a chain whose filter is a take that is not inside hold the bindings of the skipped words still.
@@ -879,6 +879,7 @@ type Module = tuple[Literal["module"], str, str, dict[str, object]]
 type Prefix = tuple[Literal["prefix"], str, str, list[Fact]]
 """A prefix carries what a chain with a source holds of the transcript of its origin, which the chain says at its birth, before its open.
 The transcript of the chain holds the facts of its prefix where the prefix stands, and not the prefix itself.
+A prefix takes the place of what the transcript of the chain that it is said on held, so a word that says a prefix on its own chain cuts its turns, and the chain goes on under its name, with its module, its ladders and its acts.
 """
 type Gate = tuple[Literal["gate"], str, str, str, str]
 """A gate is the question of whether a word may run, which the ear named gate answers with its findings, apart from the Kernel, so a word may ask it while the Kernel runs that word.
