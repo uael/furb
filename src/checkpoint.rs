@@ -161,6 +161,8 @@ def checkpoint(define, floor):
       for x in transcript(c)
       if x[0] not in ("module", "carried") and _plain(x) and (not question(x) or x[0] == "reply" or x[1] in carried)
     ]
+    held = {ROOT, *live, *carried, *(x[1] for x in turns if question(x))}
+    turns = [x for x in turns if x[0] not in ("started", "done") or x[1] in held]
     counts["rung"] = counts.get("rung", 0) + 1
     counts["gate"] = counts.get("gate", 0) + 1
     entries += [

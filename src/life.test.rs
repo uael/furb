@@ -707,4 +707,14 @@ fn a_record_of_another_version_opens_on_this_build_from_its_last_checkpoint() {
     Some(2),
     "only the build after the checkpoint counts"
   );
+  assert_eq!(
+    closed(
+      &mut later,
+      "close([x[3][0] for x in transcript('chain1', 'tell') if 'rai' + 'sed = ' in x[3][0]])"
+    )
+    .as_ref()
+    .py_repr(),
+    "[]",
+    "the carried turns hold no answer of an act that the checkpoint does not carry, so no word of an extension raises"
+  );
 }
