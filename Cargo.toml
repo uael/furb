@@ -98,6 +98,10 @@ htmd = "0.5"
 pyo3 = { version = "0.29.2", features = ["generate-import-lib", "multiple-pymethods"], optional = true }
 napi = { version = "3", default-features = false, features = ["napi6", "serde-json", "dyn-symbols"], optional = true }
 napi-derive = { version = "3", optional = true }
+# No line of furb names salsa. The ruff crates 0.0.9 build on salsa 0.28.2 alone, and salsa 0.28.5 breaks them, so a
+# crate that takes furb with no lock of ours builds only when furb pins salsa and its macros of rules.
+salsa = { version = "=0.28.2", default-features = false }
+salsa-macro-rules = "=0.28.2"
 # The parser of the checker, which finds each import of a sheet for the sandbox to run.
 ruff_python_parser = "0.0.9"
 ruff_python_ast = "0.0.9"

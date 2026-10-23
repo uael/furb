@@ -1451,6 +1451,8 @@ dependencies = [
  "ruff_text_size",
  "rusqlite",
  "rustix",
+ "salsa",
+ "salsa-macro-rules",
  "serde",
  "serde_json",
  "sha2 0.10.9",
