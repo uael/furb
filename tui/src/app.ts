@@ -4235,35 +4235,7 @@ export class App {
       const room = Math.max(1, inner - Bun.stringWidth(name + plain(count)));
       add([[name, c.text, bold], [" ".repeat(room)], ...count]);
     };
-    if (asks.length) {
-      heading("Needs you", [[`${asks.length}`, c.warning, bold]]);
-      for (const ask of asks) {
-        const parent = w.labelOf(ask.chain).split("/").slice(0, -1).join("/");
-        add(
-          [
-            [`${glyph.asks} `, c.warning],
-            [label(ask.chain), c.text, bold],
-            [parent ? `  in ${parent}` : "", c.faint],
-          ],
-          { marginTop: space.section, run: () => void w.point(ask.id).catch(this.report) },
-        );
-        for (const text of wrapped(shortenHomes(gist(ask.message)), inner - 2, 2))
-          add([["  "], [text, c.text]], { run: () => this.question(ask) });
-        const controls = this.row({ gap: 1, paddingLeft: 2, flexWrap: "wrap" });
-        const chip = (text: string, run: () => void) =>
-          controls.add(this.text([[` ${text} `, c.text, 0, c.raised]], c.text, { run }));
-        if (ask.choices.length) {
-          for (const [at, value] of ask.choices.entries())
-            chip(`${at + 1} ${value}`, () => void w.answer(ask, value).catch(this.report));
-          chip(`${ask.choices.length + 1} Other`, () => {
-            this.choice = { id: ask.id, at: ask.choices.length, other: true };
-            void w.point(ask.id).catch(this.report);
-          });
-        } else chip(`Answer as ${ask.shape}`, () => void w.point(ask.id).catch(this.report));
-        this.railSession.add(controls);
-      }
-      add([], { marginTop: space.section });
-    }
+    this.renderNeeds(asks, inner);
     const working = rows.filter((row) => row.state === "working").length;
     heading("Chains", [
       [working ? `${glyph.running} ${working}` : "", c.accent],
@@ -4393,6 +4365,50 @@ export class App {
       if (grant && grant.words[0] !== null) row("Ceiling", dollars(Number(grant.words[0])), c.muted);
     }
   }
+  /** Each question that waits for the operator, on top of the sidebar over the tree and over the list of threads, which
+   * a click answers in place: a question never hides. */
+  private renderNeeds(asks: readonly Ask[], inner: number): void {
+    const w = this.session;
+    const add = (parts: Part[], options: TextShape = {}) => {
+      const node = this.line(parts, c.muted, { truncate: true, ...options });
+      this.railSession.add(node);
+      return node;
+    };
+    const heading = (name: string, count: Part[]) => {
+      const room = Math.max(1, inner - Bun.stringWidth(name + plain(count)));
+      add([[name, c.text, bold], [" ".repeat(room)], ...count]);
+    };
+    const label = (chain: string) => w.labelOf(chain).split("/").at(-1) ?? "";
+    if (asks.length) {
+      heading("Needs you", [[`${asks.length}`, c.warning, bold]]);
+      for (const ask of asks) {
+        const parent = w.labelOf(ask.chain).split("/").slice(0, -1).join("/");
+        add(
+          [
+            [`${glyph.asks} `, c.warning],
+            [label(ask.chain), c.text, bold],
+            [parent ? `  in ${parent}` : "", c.faint],
+          ],
+          { marginTop: space.section, run: () => void w.point(ask.id).catch(this.report) },
+        );
+        for (const text of wrapped(shortenHomes(gist(ask.message)), inner - 2, 2))
+          add([["  "], [text, c.text]], { run: () => this.question(ask) });
+        const controls = this.row({ gap: 1, paddingLeft: 2, flexWrap: "wrap" });
+        const chip = (text: string, run: () => void) =>
+          controls.add(this.text([[` ${text} `, c.text, 0, c.raised]], c.text, { run }));
+        if (ask.choices.length) {
+          for (const [at, value] of ask.choices.entries())
+            chip(`${at + 1} ${value}`, () => void w.answer(ask, value).catch(this.report));
+          chip(`${ask.choices.length + 1} Other`, () => {
+            this.choice = { id: ask.id, at: ask.choices.length, other: true };
+            void w.point(ask.id).catch(this.report);
+          });
+        } else chip(`Answer as ${ask.shape}`, () => void w.point(ask.id).catch(this.report));
+        this.railSession.add(controls);
+      }
+      add([], { marginTop: space.section });
+    }
+  }
   /** The threads of the chain shown, and each by its id. */
   private chainThreadList(chain: string): ChainThread[] {
     return this.chainThreadsBy(chain).list;
@@ -4434,8 +4450,11 @@ export class App {
     const room = this.railRoom;
     this.railFrom = Math.max(0, Math.min(Math.max(0, list.length - room), this.railFrom));
     const from = this.railFrom;
+    const questions = w.desk.asks.filter((ask) => !ask.notice);
     const key = JSON.stringify([
       "threads",
+      questions.map((ask) => [ask.id, ask.label, ask.message, ask.choices]),
+      this.choice,
       this.theme,
       width,
       chain,
@@ -4461,6 +4480,7 @@ export class App {
       this.railFrom = Math.max(0, this.railFrom + (direction === "up" ? -3 : 3));
       this.render();
     };
+    this.renderNeeds(questions, inner);
     const edge = { marginX: -space.between, paddingRight: space.inset };
     const line = (parts: Part[], run?: () => void) =>
       this.railSession.add(this.line(parts, c.muted, { truncate: true, ...(run ? { run } : {}) }));
@@ -4536,7 +4556,7 @@ export class App {
       });
   }
   /** A chain chosen in the tree: the feed shows it, and the sidebar lists its threads in place of the tree. */
-  private openThreads(chain: string): void {
+  openThreads(chain: string): void {
     this.railChain = chain;
     this.railFrom = Number.MAX_SAFE_INTEGER;
     void this.session.select(chain).catch(this.report);
@@ -4545,7 +4565,7 @@ export class App {
     this.render();
   }
   /** The tree of the chains again, in place of the list of the threads of a chain, with the keys on that chain. */
-  private closeThreads(): void {
+  closeThreads(): void {
     if (this.railChain) this.railAt = this.railChain;
     this.railChain = undefined;
     this.session.thread = undefined;

@@ -42,7 +42,11 @@ export const commands = {
   export: ["Export transcript", "<path>", "Write the transcript and program to a new JSON file"],
   workspace: ["Open workspace", "[path]", "Choose a workspace or add a project folder"],
   view: ["View of the life", "[main|loom|graph]", "Show the life as main, the loom, or the graph"],
-  sidebar: ["Toggle sidebar", "", "Show or hide the threads and the workspaces"],
+  sidebar: [
+    "Toggle sidebar",
+    "",
+    "Show or hide the chains and their threads, the context, and the workspaces",
+  ],
   delete: ["Delete session", "", "Archive a session, or move it and its files to the workspace trash"],
   autocollapse: ["Automatic rung collapse", "", "Toggle collapse of completed rungs"],
   extensions: ["Extensions", "", "List the extensions that this life runs"],

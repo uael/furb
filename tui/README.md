@@ -53,7 +53,7 @@ runs, and each follow-up that the queue sends, asks the actor that the chain has
 
 ## Three views of a life
 
-The TUI holds three views of the whole life side by side: main, with the threads in the sidebar, the loom of the chains in time, and the
+The TUI holds three views of the whole life side by side: main, with the chains and their threads in the sidebar, the loom of the chains in time, and the
 graph of the programs that run. `--view main|loom|graph` chooses one at the start, ⌥V switches it at run time,
 `/view` names one or lists the three, and the preferences keep the last one. Each view stands over the feed of the
 selected chain, and every other screen stays the same in each one. ⌥G gives the keys to the loom or the graph, and
@@ -266,7 +266,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/export <path>` | Write the transcript and program to a new JSON file |
 | `/workspace [path]` | Choose a workspace or add a project folder |
 | `/view [main|loom|graph]` | Show the life as main, the loom, or the graph |
-| `/sidebar` | Show or hide the threads and the workspaces |
+| `/sidebar` | Show or hide the chains and their threads, the context, and the workspaces |
 | `/delete` | Archive a session, or move it and its files to the workspace trash |
 | `/autocollapse` | Toggle collapse of completed rungs |
 | `/extensions` | List the extensions that this life runs |

@@ -49,15 +49,23 @@ holds it, with no key and no path of a home in it, and `bun run demo` opens it b
 
 The sidebar says the whole life at a glance, in one place. On top, Needs you holds each question that waits for you,
 the oldest first, with its thread, its message, and a button for each value of a choice, Other among them, which a
-click answers. Under it, Threads holds the tree of the chains: each thread on one row, with a bar in a tone of its
+click answers. Under it, Chains holds the tree of the chains: each chain on one row, with a bar in a tone of its
 own, its mark, the last part of its name, and what it does now in a few words, never a raw command, as "checks of
-#364", "runs cargo test" or "waits for feed". A thread that works for a minute or more says since when, in yellow
-past fifteen minutes. A thread that failed says why, and one that finished the first line of its answer. A thread
-stands in the tree while it or a thread under it needs a look, and the others fold under Finished. A click on a row
-shows that chain. The footer says what the chain shown costs: its actor, the share of the window that its last answer
-read and where a grant pauses it, its dollars, and how many questions wait for you.
+#364", "runs cargo test" or "waits for feed". A chain that works for a minute or more says since when, in yellow
+past fifteen minutes. A chain that failed says why, and one that finished the first line of its answer. A chain
+stands in the tree while it or a chain under it needs a look, and the others fold under Finished.
 
-The feed shows the ladder of the chain: your message in a panel, each rung of the ladder on one
+A click on a chain, or Enter after ⌥T, shows that chain and lists its threads in place of the tree, under a row
+"← Chains" that gives the tree back, as ← and Esc do. A thread is a prompt on the chain, with the messages that came to
+it. Its row has the color of its thread, its mark, as asks you, runs or resolved, and the first line of its message,
+and the list scrolls. A click on a thread scrolls the feed to it, and the input then sends each message to it, as
+`prompt(None, message, on=thread)`, which its model reads at its next step. A message to a resolved thread opens it
+again. Under the thread chosen, Collapse folds it in the feed to its header line alone, and Resolve closes it, as
+`close(None, thread)` does, or Open again takes the message that opens it. Space, r and o do the same after ⌥T, and
+the header of the thread in the feed holds the same controls. At the foot of the sidebar, Context says how full the
+window of the chain shown is and where a grant pauses it, its tokens, and what it spent.
+
+The feed shows the ladder of the chain, each thread in its color: your message in a panel, each rung of the ladder on one
 row, and the answer under the name of the model that gave it. The row of a rung shows its mark, its name, the first
 line of its Python in the colors of its grammar, the count of the lines after it, and the acts that it made, each in
 the color of its state. Once it is done, it says how long it ran and what the answers of its model cost. A rung opens
@@ -74,7 +82,7 @@ of each ladder, and one line in place of each run of earlier ones, as "28 earlie
 shows them. A step that asks you or runs always shows. A long message shows its first eight rows, and the word of a
 rung that runs shows its first twelve, each with a line that shows the rest. A jump to an act opens each fold over
 it. The sidebar and the feed come from the model of a life that `furb/life` gives, so each host shows the same
-life. Under the threads, the sidebar shows the workspaces, each with the session shown, each session that works,
+life. Under the chains, the sidebar shows the workspaces, each with the session shown, each session that works,
 asks or failed, and its newest sessions up to three, and the older ones fold under Earlier.
 
 ![Feed](screenshots/02-feed.png)
@@ -230,10 +238,12 @@ surface takes the default colors of the terminal.
 ## Chains
 
 ⌃B lists the chains, each with its state and the chain it branched from. Each chain has its own feed and module. The
-sidebar lists in its threads the root chain, the chain on screen, and each chain that is not at rest, and the other chains fold
-under Finished.
+sidebar lists in its tree the root chain, the chain on screen, and each chain that is not at rest, and the other chains
+fold under Finished. A click on a chain lists its threads, each in the color of its thread.
 
 ![Chains](screenshots/15-chains.png)
+
+![The threads of a chain](screenshots/81-chain-threads.png)
 
 ## Views of the life
 
@@ -243,7 +253,7 @@ keeps the last one. The loom and the graph stand over the feed of the selected c
 screen of main stays where it is in each view: the transcript, the changes, the palette, the dialogs, the desk, and
 the composer. Each row of a chain shows its state, its actor, its cost, and the question that it waits on.
 
-Main shows the feed of the selected chain under nothing, and the threads in the sidebar.
+Main shows the feed of the selected chain under nothing, and the chains and their threads in the sidebar.
 
 ![Main](screenshots/02-feed.png)
 

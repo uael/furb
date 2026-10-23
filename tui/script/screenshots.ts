@@ -268,6 +268,9 @@ try {
   app().chains();
   await capture("15-chains");
   app().closeOverlay();
+  app().openThreads(session.selected);
+  await capture("81-chain-threads");
+  app().closeThreads();
   app().help();
   await capture("16-help");
   app().closeOverlay();

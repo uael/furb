@@ -115,3 +115,32 @@ test("a thread resolves from its row, and a message to it opens it again", () =>
     size,
     true,
   ));
+
+test("a question that waits stands in Needs you over the tree, and stays over the list of the threads of its chain", () =>
+  composing(
+    async (use) => {
+      const { session, frame } = use;
+      await idle(session);
+      const question = await session.engine.prompt("bool", {
+        message: "Apply the search shortcut?",
+        on: session.engine.root,
+        to: "operator",
+      });
+      await until(session.host, () => session.host.prompts.has(question));
+      await session.refresh();
+      const shown = await frame();
+      keep("question", shown);
+      const rows = rail(session, shown);
+      const needs = rows.findIndex((line) => line.includes("Needs you"));
+      expect(needs).toBeGreaterThan(-1);
+      expect(rows.findIndex((line) => line.trim().startsWith("Chains "))).toBeGreaterThan(needs);
+      await railClick(use, "Main     asks");
+      const list = await frame();
+      keep("question-list", list);
+      expect(rail(session, list).join("\n")).toContain("Needs you");
+      expect(list).toContain("← Chains");
+      expect(listed(session).some((one) => one.act.id === question)).toBe(false);
+    },
+    size,
+    true,
+  ));
