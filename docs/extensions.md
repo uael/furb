@@ -93,8 +93,9 @@ journal answers again in a later life, so a replay is exact and the World is ask
   part of the extension for the TUI, and the manifest names it. An official extension lives in furb. `enabled()` gives the names of the
   extensions that the life runs. It needs no ear of the World.
 
-- `compaction` is a kit to cut a chain to the work that it still needs, since in furb a compaction is a chain that
-  supersedes its source with a filter and goes on under its name. `compact()` supersedes the chain of the caller: its
+- `compaction` is a kit to cut a chain to the work that it still needs, since in furb a compaction is a prefix said
+  on a chain, which takes the place of its transcript, so the chain goes on under its name. `supersede(keep)` says
+  that prefix: what the filter kept, all that made it, and every act. `compact()` supersedes the chain of the caller: its
   filter applies `FILTERS` in order, and its next word binds the summary that it is given and reads again with
   `reground()` each file whose read or write it kept, showing only what changed. The module, the prompts, the rungs
   and the words that run go on as they were. Each filter is a small function that gives a filter: `latest()` keeps

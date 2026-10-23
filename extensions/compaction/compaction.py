@@ -18,6 +18,7 @@ from furb.engine import (
   question,
   read,
   rung,
+  say,
   scope,
   take,
   transcript,
@@ -25,7 +26,8 @@ from furb.engine import (
 )
 
 compaction = """Compaction cuts this chain to the work that it still needs, and the chain goes on under its name.
-- compact() supersedes this chain with a filter that applies FILTERS in order, and its next word binds the summary
+- supersede(keep) cuts this chain to what the filter keep kept, and every act. compact() supersedes this chain with a
+  filter that applies FILTERS in order, and its next word binds the summary
   that it is given and reads again each file whose read or write it kept, showing what changed. Its prompts, its
   rungs, the words that run and its module go on.
 - A filter drops acts. latest() keeps the last read or write of each path, quiet() drops the commands, recent(n)
@@ -145,9 +147,25 @@ def reground(on: str = "") -> None:
       continue
 
 
-def compact(filters: list[Filter] | None = None, summary: str = "", on: str = "") -> str:
+def supersede(keep: Filter | None = None, on: str = "") -> str:
   here = on or scope(acting())
-  chain(source=here, filter=together(*(FILTERS if filters is None else filters)), supersede=True)
+  theirs = transcript(here)
+  kin = {here}
+  for one in (keep or list)([x for x in theirs if question(x)]):
+    name = one[1]
+    while name not in kin and (b := get(name)):
+      kin.add(name)
+      name = b[2]
+  say(
+    "prefix",
+    here,
+    [it for it in theirs if question(it) or (get(it[1])[2] if question(("reply", it[1])) else it[1]) in kin],
+  )
+  return here
+
+
+def compact(filters: list[Filter] | None = None, summary: str = "", on: str = "") -> str:
+  here = supersede(together(*(FILTERS if filters is None else filters)), on)
   name = "summary"
   while f"</s:{name}>" in summary:
     name += "_"

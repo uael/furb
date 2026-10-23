@@ -37,6 +37,11 @@ async def chosen(to: str = "", on: str = "") -> Filter:
 def reground(on: str = "") -> None:
   """reground() reads again each file of each read or write whose tell the chain holds, once each, in the order of the first read or write, shows only the lines that changed since the last text that the chain holds of it, and skips a file that it cannot read, so the chain sees each file that it kept as it is now."""
 
+def supersede(keep: Filter | None = None, on: str = "") -> str:
+  """supersede(keep) says on the chain of the caller a prefix of what the filter keep kept of its acts, everything that made what it kept, and every act of the chain, and gives the chain.
+  So the chain goes on under its name with its module, its ladders and its acts, and only its turns are cut.
+  """
+
 def compact(filters: list[Filter] | None = None, summary: str = "", on: str = "") -> str:
   """compact() supersedes the chain of the caller with a filter that applies the filters in order, FILTERS when it is given none, so the chain goes on under its name with less, and gives that chain.
   The next word of that chain binds the summary that compact is given as the quote summary when there is one, and regrounds the chain.
