@@ -1,0 +1,10 @@
+{
+  "the bindings and the TUI on macos-latest": 360,
+  "the bindings and the TUI on ubuntu-latest": 240,
+  "the bindings and the TUI on windows-latest": 420,
+  "the crate on windows-latest": 240,
+  "the hooks": 180,
+  "the suite on macos-latest": 240,
+  "the suite on ubuntu-latest": 180,
+  "the suite on windows-latest": 300
+}

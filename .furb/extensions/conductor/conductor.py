@@ -43,6 +43,7 @@ Each round queues each open issue that the owner opened, or that he assigned to 
 Each round tells you once each fork PR of UPSTREAM that holds the label upstream-ready and not upstreamed: by the ruling of the owner, you then open its PR on pydantic/monty with the body that he reviewed, and put the label upstreamed on the fork PR.
 Each round sends each new comment of the owner on a PR or on his issue to the worker that owns it, puts the label hold on that PR, and tells you only the comments that no worker owns. A text on GitHub counts only when the owner wrote it with no 🤖 at its start, or when he put a 👍 on it; each worker starts what it writes there with 🤖.
 Each round sets one status label on each open PR and on each issue of the owner that it took: s:queued, s:working, s:checks, s:red, s:boxes, s:held, s:conflict, s:stacked, s:ready, or s:owner (green, waits for the owner).
+Each round reads the gates: when the median time of a job in its last five green runs on main passes its budget in .github/budgets.json, which script/budgets.py sets from measures, it queues an item budget-<job>, once until five new runs measure the job; and when the gates fail, then pass on the same commit, it puts each test that failed in the ledger of the flakes, flaky, and at once queues an item flake-<test>, or tells the worker that holds that item.
 Every twelfth round audits the work against its measure, the open items, writes its line in the digest, and tells you the open entries of TOOLING, the most repeated first: turn the worst into the next item. The audit prunes what the work left behind, and loses no work: a worktree of the round whose item is not in working, queue or backlog and whose branch merged, closed, or holds nothing that main lacks, with its local branch, once its changes that are not committed are a patch and its commits that only this machine holds are a bundle, in the folder of the day in ARCHIVE; a remote branch whose PR closed at its head and that no item names, written first to TRASHED; a scratch directory of a life that no process and no item uses, older than 2 days; and a folder /tmp/furb-* older than 2 days. It tells you what went and the room that df saw freed.
 threads() gives the tree of the threads: the brief prompt of each worker and the prompts under it, with their state, their PRs, their queued items and each question that waits.
 debrief(name) asks the chain of a worker that ended for the frictions that it met in furb.
@@ -1100,6 +1101,113 @@ async def prune() -> str:
   return (got.stdout.lines[-1:] or [f"The prune failed: {got.stderr.content[-300:]}"])[0]
 
 
+MANY = 3
+budgeted: dict[str, list[int]] = {}
+flaky: dict[str, list[str]] = {}
+runs_read: set[int] = set()
+CI_PY = r'''import json, re, statistics, subprocess, sys
+from datetime import datetime
+read = set(json.loads(sys.argv[1]))
+def gh(*args):
+  return subprocess.run(["gh", *args], capture_output=True, text=True, check=True).stdout
+def jobs(run, attempt=0):
+  at = f"/attempts/{attempt}" if attempt else ""
+  return json.loads(gh("api", f"repos/{{owner}}/{{repo}}/actions/runs/{run}{at}/jobs?per_page=100", "--jq", "[.jobs[] | {id, name, conclusion, started_at, completed_at}]"))
+def spent(job):
+  stamp = lambda s: datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
+  return int(stamp(job["completed_at"]) - stamp(job["started_at"]))
+budgets = json.loads(subprocess.run(["git", "show", "origin/main:.github/budgets.json"], capture_output=True, text=True).stdout or "{}")
+path = "repos/{owner}/{repo}/actions/workflows/gates.yml/runs"
+green = json.loads(gh("api", f"{path}?branch=main&status=success&per_page=5", "--jq", "[.workflow_runs[].id]"))
+measured = {}
+for run in green:
+  for job in jobs(run):
+    if job["conclusion"] == "success":
+      measured.setdefault(job["name"], []).append(spent(job))
+over = [{"job": n, "median": int(statistics.median(v)), "budget": budgets[n], "runs": green} for n, v in measured.items() if n in budgets and len(v) >= 3 and statistics.median(v) > budgets[n]]
+runs = json.loads(gh("api", f"{path}?per_page=100", "--jq", "[.workflow_runs[] | {id, sha: .head_sha, attempt: .run_attempt, conclusion, url: .html_url}]"))
+flakes, settled = [], []
+for run in runs:
+  if run["attempt"] < 2 or run["conclusion"] != "success":
+    continue
+  settled.append(run["id"])
+  if run["id"] in read:
+    continue
+  for attempt in range(1, run["attempt"]):
+    for job in jobs(run["id"], attempt):
+      if job["conclusion"] not in ("failure", "timed_out"):
+        continue
+      log = subprocess.run(["gh", "api", f"repos/{{owner}}/{{repo}}/actions/jobs/{job['id']}/logs"], capture_output=True, text=True).stdout
+      tests = []
+      for line in log.splitlines():
+        line = re.sub(r"\x1b\[[0-9;]*m", "", re.sub(r"^\S+Z ", "", line))
+        hit = re.match(r"\(fail\) (.+?)(?: \[[\d.]+m?s\])?$", line) or re.match(r"FAILED (\S+)", line) or re.match(r"test (\S+) \.\.\. FAILED$", line)
+        if hit and hit[1] not in tests:
+          tests.append(hit[1])
+      flakes.append({"tests": tests, "job": job["name"], "sha": run["sha"], "url": f"{run['url']}/attempts/{attempt}"})
+print(json.dumps({"over": over, "flakes": flakes, "read": settled}))
+'''
+
+BUDGET = """The job {job} of the gates took {median} s in the median of its last green runs on main, {runs}, over its budget of {budget} s in .github/budgets.json, so each loop of feedback waits longer for it. Find where the job spends its time, from the times of its steps in gh run view --json jobs and from its logs, and bring the job under its budget at the cause: a cache that misses, a build done twice, or a test that waits. Never drop or weaken a gate to save time: move it, share it or make it faster. Change a budget only with the measures of script/budgets.py, and say why in the PR."""
+
+FLAKE = """The gates failed, then passed when they ran again, on the same commit {sha}, so a test or a job is flaky, and a flake hides a defect and slows each loop of feedback. In the job {job}, at {url}, it failed in:
+{tests}
+The ledger of the flakes holds every attempt that failed this way: {seen}.
+Read the log of the attempt that failed: gh run view <run> --attempt <attempt> --log-failed. Find the cause, and prove it with a command that shows it, before and after your fix. {many}Fix it at its cause: never with a skip, a retry, a longer bound or a weaker assertion."""
+
+MANY_SAID = "More than {n} tests failed in one attempt, so one cause, as a machine that is slow or a shared resource that waits, probably holds them all: find it first. "
+
+
+def slug(text: str, size: int = 34) -> str:
+  return "-".join(re.findall(r"[a-z0-9]+", text.lower()))[:size].strip("-")
+
+
+def taken(key: str) -> str:
+  return next((w for w, k in working.items() if k == key), "") or ("queued" if any(q[0] == key for q in queue) else "")
+
+
+async def watch_ci() -> None:
+  got = await bash(f"python3 -I - {shq(json.dumps(sorted(runs_read)))}", stdin=CI_PY, show=HIDDEN, timeout=900)
+  if got.code != 0 or not got.stdout.content.startswith("{"):
+    notice(f"ci {int(clock() // 3600)}", "The command that measures the gates failed: " + got.stderr.content[-500:])
+    return
+  seen = json.loads(got.stdout.content)
+  runs_read.clear()
+  runs_read.update(seen["read"])
+  seed = "ci" not in timers
+  timers["ci"] = clock()
+  for one in seen["over"]:
+    job, ran = str(one["job"]), [int(r) for r in one["runs"]]
+    key = "budget-" + slug(job)
+    if taken(key) or set(ran) & set(budgeted.get(job, [])):
+      continue
+    budgeted[job] = ran
+    brief = BUDGET.format(job=job, median=one["median"], runs=", ".join(map(str, ran)), budget=one["budget"])
+    queue.append((key, brief, "ci"))
+    heard.append(f"The job {job} took {one['median']} s, over its budget of {one['budget']} s: queued as the item {key}.")
+  for one in seen["flakes"]:
+    tests = [str(x) for x in one["tests"]]
+    many = len(tests) > MANY
+    name = str(one["job"]) if many or not tests else tests[0]
+    flaky.setdefault(name, []).append(str(one["url"]))
+    if seed:
+      continue
+    key = "flake-" + slug(name)
+    listed = "\n".join(f"- {x}" for x in tests) or "- the job itself, with no test named in its log"
+    brief = FLAKE.format(
+      sha=one["sha"], job=one["job"], url=one["url"], tests=listed, seen=", ".join(flaky[name]),
+      many=MANY_SAID.format(n=MANY) if many else "",
+    )
+    own = taken(key)
+    if own == "queued":
+      continue
+    if own:
+      quietly(prompt, None, f"Your flake came again, at {one['url']}:\n{listed}", on=working_at(own))
+      continue
+    queue.append((key, brief, "ci"))
+    heard.append(f"The gates flaked at {one['url']} in {name[:120]}: queued as the item {key}.")
+
+
 async def sweep(every: float) -> None:
   got = await bash(PRS, show=HIDDEN, timeout=300)
   parts = got.stdout.content.split("\n---\n", 3)
@@ -1162,6 +1270,7 @@ async def sweep(every: float) -> None:
   await upstream_watch()
   await ops_watch()
   await mark()
+  await watch_ci()
   if now - timers.get("review", now - every) >= every:
     await review("review" not in timers)
     timers["review"] = now

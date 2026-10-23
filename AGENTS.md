@@ -296,6 +296,10 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
   its home in `/tmp`, and a second run waits until the first ends. A screen that does not come in three minutes ends
   the run with an error that names the screen, and a run never waits past thirty minutes.
 
+- `python script/budgets.py`: set the budget of time of each job of the gates, in `.github/budgets.json`, from the
+  times of its last green runs on main. The round of the conductor holds each job to its budget, and turns a job that
+  passes it into an item, as it turns into an item each test that fails, then passes on the same commit.
+
 Every pull request and every push to `main` runs the gates in `.github/workflows/gates.yml`: the hooks, which
 include the gates of the crate and the type check. The suite runs on Linux, on macOS and on Windows, and the gates
 of the crate run on Windows too. The gates of the TypeScript side run on Linux, on macOS, and on Windows.
