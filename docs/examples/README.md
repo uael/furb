@@ -1,22 +1,29 @@
-# Examples of furb as a framework
+# Examples
 
-Each example is a short program that you run as it stands. It shows one thing, in each door of furb: python, with
-the package `furb`; TypeScript, with the npm package `furb`; and Rust, with the crate `furb`. The three read the
-same, since each door gives the same names: `open` opens a life on its record, or goes on with it; `prompt` gives a
-thread that you await for its value; `chain` opens a chain; `questions` gives each question to the operator; `grant`
-puts a ceiling on a chain; and a thread has its `plan`, which `edit` changes.
+These five short programs show furb as a library: a life that your own program opens, asks, and steers. Each one
+shows one idea, in each of the three languages of furb: Python, with the package `furb`; TypeScript, with the package
+`furb`; and Rust, with the crate `furb`. The three read the same, since each gives the same names:
 
-Each prompt goes to the default actor of the crate, which is the claude command line when this machine holds it.
-Run an example in a directory of its own, since it keeps its record there:
+- `open` opens a life on its record, or goes on with it.
+- `prompt` asks a model, and gives a thread that you await for its answer.
+- `chain` opens a chain, a conversation with its own state.
+- `questions` gives each question that a model asks you.
+- `grant` puts a dollar ceiling on a chain.
+- A thread has its `plan`, the Python that its model will run, which `edit` changes.
 
-- python: `uv run python docs/examples/python/durable.py`
+## Run them
+
+Each example asks the default model, which is the claude command line when your machine has it, as
+[Models](../models.md) says. Run an example in a directory of its own, since it keeps its record there. From a clone
+of this repository:
+
+- Python: `uv run python docs/examples/python/durable.py`
 - TypeScript: `bun run build`, then `bun docs/examples/typescript/durable.ts`
 - Rust: `cargo run --example durable`
 
 A program that runs again on its record makes its prompts, chains and grants in the same order, so each one finds
-the act that it made before, done or pending. A program that changes between two runs makes a new act where it no
-longer agrees with the record, and the act of the record goes on as pending work. A key that a program gives a call,
-so that the call agrees with the record wherever it stands, is a later change.
+the act that it made before, done or still at work. A program that changed between two runs makes a new act where it
+no longer agrees with the record, and the act of the record goes on as work that waits.
 
 The tests run each example as a process, on a claude command line that answers from a script:
 `test/outside/test_examples.py`, `bind/typescript/test/examples.test.ts` and `tests/examples.rs`.

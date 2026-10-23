@@ -9,8 +9,8 @@ message, and rewind to an earlier point with its files.
 
 ## What you need
 
-- A clone of this repository, and the tools of [the developer guide](../docs/developer-guide.md#what-you-need): Rust and
-  Bun 1.4.2 or later.
+- A clone of this repository, and the tools of [Contributing](../CONTRIBUTING.md#what-you-need): Rust and Bun 1.4.2
+  or later.
 - The web view of your system. macOS has it. Windows 10 and 11 have WebView2. Linux needs WebKitGTK and the other
   libraries of the [prerequisites of Tauri](https://v2.tauri.app/start/prerequisites/).
 

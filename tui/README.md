@@ -1,76 +1,105 @@
-# furb TUI
+# The furb TUI
 
-An OpenTUI application built on the npm package `furb`, in `bind/typescript`. The TUI owns a Bun worker for each open session: its life and its
-ears.
-Rendering, input, and syntax coloring stay responsive while the sandbox gates and runs Python. The TUI needs Bun
-1.4.2 or later. On Windows, Bun 1.3 crashes the TUI when it calls into OpenTUI.
-
-```sh
-uv sync
-bun install
-bun run build
-bun run demo                 # A local, scripted life, and a real life recorded from its log. No model request.
-bun run tui                  # A real life, on the models of the catalog of the crate.
-bun run tui -- --resume .furb/sessions/example.jsonl
-```
-
-The welcome of an empty chain offers "Watch a life" first: a short life on a small project that plays by itself
-and asks no model, so it costs nothing. Several models answer in it, a word of Python runs as a program, and a branch
-starts from an earlier point. While it plays and the input is empty, `[` and `]` move the feed back and on in time,
-`b` starts a branch at the moment shown, and Esc comes back to now. `/watch` plays it too. On the first run, and on
-each run while no model answers, the welcome checks the setup: the claude command line, the keys in the
-environment, the local server that `FURB_LOCAL_URL` names, and the models that the catalog offers, with a fix for each
-part that is missing.
-
-`furb`, the command line, opens this TUI when it has no command, with `--demo`, `--record`, `--cwd`, the model and the
-effort of its `--model` as `--model` and `--effort`, each `--roster`, and the words after `--`.
-
-A recorded life is a log of a life whose first line is a header that says `"recorded": true`. The TUI reads it as it
-reads a record that another engine made, from its acts, and runs nothing: what you send to it fails with the
-reason. The demo opens
-`fixtures/conductor.jsonl`, a life of a conductor of furb with 23 chains, beside its scripted life, when it has no
-`--cwd` and no record. `bun run tui/script/fixture.ts <record>.jsonl.log [out]` makes such a fixture from the log of
-a real life: it keeps the acts that the model of a life reads, cuts each word, message and output to its first lines,
-replaces each key, address of mail and home directory, and ends at the moment with the most chains at work.
-
-Use `--cwd`, `--model provider:model`, `--effort`, `--record`, and repeated `--roster` options to configure
-a new life. A session offers every model that the catalog offers, with its model first: the default model when you
-name none. With `--roster`, it offers its model and the models of `--roster`, and no more.
-The TUI holds three views of the whole life side by side: the board of main, the loom of the chains in time, and the
-graph of the programs that run. `--view main|loom|graph` chooses one at the start, ⌥V switches it at run time,
-`/view` names one or lists the three, and the preferences keep the last one. Each view stands over the feed of the
-selected chain, and every other screen stays the same in each one. ⌥G gives the keys to the loom or the graph, and
-Esc gives them back. `docs/tui.md` shows each view, and `tui/DESIGN.md` says how they came.
-Sessions are saved under `.furb/sessions` in the selected directory. The `.furb` that the TUI makes holds
-a `.gitignore` that keeps it out of version control. Keep the `.jsonl`, `.session.json`, `.changes.jsonl`, and
-`.ui.json` files together. The last file keeps the view of the session as you left it. Keep its `.images` directory
-too when the session has image attachments. An unfinished session opens paused and offers a resume choice. The
-native engine replays completed work from the record.
-A record whose replay drifts, as a record that another engine made, opens to read: the TUI shows what the record
-kept, runs no word again, asks no model, and refuses each command that would change the life. A dialog names the
-engine that made the record and the engine of this build, and offers to read it or to start a new life in its
-workspace.
-⌃W lists the workspaces and their sessions, each with its state, save time, cost, and record size. It reads
-unfinished work through native replay without locking or changing the saved record. The record shows what remains
-unfinished. The list shows at once, and each saved session shows its state when its replay ends.
+The TUI is the home of furb in a terminal. You talk to a model, watch each word that it writes run, answer its
+questions, and steer the work of many chains at once. It shows the life in three views, keeps each session in a
+record, and goes on with unfinished work when you open it again.
 
 ![The furb TUI in action](../docs/furb.gif)
 
 [The gallery](../docs/tui.md) shows each screen of the TUI and what it does.
 
-`/workspace path` adds a folder, and `/new` starts a session in the current workspace. `/delete` archives a chosen
-session, or moves it and its companions to `.furb/trash` and removes its scratch directory from the cache of furb. The
-trash holds a `restore.json` with the original paths, and its record can be opened with `--resume`, which makes again
-the scratch files that its words wrote. Quit saves and closes all open sessions, and SIGINT, SIGTERM, SIGHUP,
-and SIGQUIT quit the same way. On Windows, a console that closes and Ctrl+Break quit the same way. `sidebarWidth` in
-the preferences file sets the width of the sidebar, from 26 to 48 columns. On a terminal narrower than 100 columns the
-sidebar is hidden, and `/workspace` keeps all sessions available from the keyboard.
+## Start it
 
-Python words have offline Tree-sitter colors. The default theme, Terminal, follows the terminal: GitHub Dark on a dark
-terminal or on one that does not say its mode, and Day on a light one, and it changes when the terminal changes. ⌃T
-or `/theme` chooses another. Sessions share the theme, and the TUI saves it in `$XDG_CONFIG_HOME/furb/ui.json` (or `~/.config/furb/ui.json`, and `%APPDATA%\furb\ui.json` on Windows).
-`FURB_CONFIG_DIR` selects another configuration directory. Tests and screenshot generation use isolated
-preferences; the CLI shares the user's choice across sessions, including demos.
+The TUI runs from a clone of this repository. It needs uv, the Rust toolchain, and Bun 1.4.2 or later. On Windows,
+Bun 1.3 crashes the TUI when it calls into OpenTUI.
+
+```sh
+uv sync
+bun install
+bun run build
+bun run demo                 # A scripted life, and a real life recorded from its log. It asks no model.
+bun run tui                  # A real life, on the models of the catalog of the crate.
+bun run tui -- --resume .furb/sessions/example.jsonl
+```
+
+`furb`, the command line, opens this TUI when it has no command, with `--demo`, `--record`, `--cwd`, the model and
+the effort of its `--model` as `--model` and `--effort`, each `--roster`, and the words after `--`, as
+[the command line](../cli/README.md) says.
+
+The welcome of an empty chain offers "Watch a life" first: a short life on a small project that plays by itself and
+asks no model, so it costs nothing. Several models answer in it, a word of Python runs as a program, and a branch
+starts from an earlier point. While it plays and the input is empty, `[` and `]` move the feed back and on in time,
+`b` starts a branch at the moment shown, and Esc comes back to now. `/watch` plays it too.
+
+On the first run, and on each run while no model answers, the welcome checks the setup: the claude command line, the
+keys in the environment, the local server that `FURB_LOCAL_URL` names, and the models that the catalog offers, with a
+fix for each part that is missing. [Models](../docs/models.md) says how furb finds a model.
+
+## Choose the models
+
+`--model provider:model` and `--effort` give the default actor of a new life, and each `--roster` adds a model. With
+no `--roster`, a session offers every model that the catalog offers, with its model first: the default model when you
+name none. With `--roster`, it offers its model and the models of `--roster`, and no more. `--cwd` gives the
+directory of the life, and `--record` its record.
+
+`/model` and `/effort` open separate pickers. The model picker lists the models of the session, then every model that
+the catalog of the crate offers. `/model name` takes `provider:model` or the id of the model alone, by the rule of the
+catalog. A model of the catalog that the session does not offer joins the session: the session saves it, opens again
+on its record, starts again the work that was running, but for a command, which ends as interrupted, and sends the
+next prompt of the chain to that model. Each model offers the efforts that the catalog gives it, saved in the roster
+of the chain. A change of model keeps the current effort if the new model offers it. A choice of a model or an effort
+sets the actor of the chain by a rung of the operator. A prompt names no actor, so the next rung of a prompt that
+runs, and each follow-up that the queue sends, asks the actor that the chain has then.
+
+## Three views of a life
+
+The TUI holds three views of the whole life side by side: the board of main, the loom of the chains in time, and the
+graph of the programs that run. `--view main|loom|graph` chooses one at the start, ⌥V switches it at run time,
+`/view` names one or lists the three, and the preferences keep the last one. Each view stands over the feed of the
+selected chain, and every other screen stays the same in each one. ⌥G gives the keys to the loom or the graph, and
+Esc gives them back. [The gallery](../docs/tui.md#views-of-the-life) shows each view, and
+[`DESIGN.md`](DESIGN.md) says how they came.
+
+## Sessions and records
+
+Sessions are saved under `.furb/sessions` in the selected directory. The `.furb` that the TUI makes holds a
+`.gitignore` that keeps it out of version control. Keep the `.jsonl`, `.session.json`, `.changes.jsonl`, and
+`.ui.json` files of a session together. The last one keeps the view of the session as you left it. Keep its
+`.images` directory too when the session has image attachments.
+
+An unfinished session opens paused and offers a resume choice. The native engine replays completed work from the
+record. A record whose replay drifts, as a record that another engine made, opens to read: the TUI shows what the
+record kept, runs no word again, asks no model, and refuses each command that would change the life. A dialog names
+the engine that made the record and the engine of this build, and offers to read it or to start a new life in its
+workspace. [The desktop preview](../gui/README.md) reads records in a window too.
+
+⌃W lists the workspaces and their sessions, each with its state, save time, cost, and record size. It reads
+unfinished work through native replay without locking or changing the saved record. The list shows at once, and each
+saved session shows its state when its replay ends. `/workspace path` adds a folder, and `/new` starts a session in
+the current workspace. `/delete` archives a chosen session, or moves it and its companions to `.furb/trash` and
+removes its scratch directory from the cache of furb. The trash holds a `restore.json` with the original paths, and
+its record can be opened with `--resume`, which makes again the scratch files that its words wrote.
+
+Quit saves and closes all open sessions, and SIGINT, SIGTERM, SIGHUP, and SIGQUIT quit the same way. On Windows, a
+console that closes and Ctrl+Break quit the same way.
+
+A recorded life is a log of a life whose first line is a header that says `"recorded": true`. The TUI reads it as it
+reads a record that another engine made, from its acts, and runs nothing: what you send to it fails with the reason.
+The demo opens `fixtures/conductor.jsonl`, a life of a conductor of furb with 23 chains, beside its scripted life,
+when it has no `--cwd` and no record. `bun run tui/script/fixture.ts <record>.jsonl.log [out]` makes such a fixture
+from the log of a real life: it keeps the acts that the model of a life reads, cuts each word, message and output to
+its first lines, replaces each key, address of mail and home directory, and ends at the moment with the most chains
+at work.
+
+## Look and access
+
+Python words have offline Tree-sitter colors. The default theme, Terminal, follows the terminal: GitHub Dark on a
+dark terminal or on one that does not say its mode, and Day on a light one, and it changes when the terminal
+changes. ⌃T or `/theme` chooses another. Sessions share the theme, and the TUI saves it in
+`$XDG_CONFIG_HOME/furb/ui.json`, or `~/.config/furb/ui.json`, and `%APPDATA%\furb\ui.json` on Windows.
+`FURB_CONFIG_DIR` selects another configuration directory. Tests and screenshot generation use isolated preferences.
+`sidebarWidth` in the preferences file sets the width of the sidebar, from 26 to 48 columns. On a terminal narrower
+than 100 columns the sidebar is hidden, and `/workspace` keeps all sessions available from the keyboard.
 
 The TUI serves each person who uses it:
 
@@ -86,13 +115,18 @@ The TUI serves each person who uses it:
 
 `/access` with no argument lists both choices, and the preferences keep them for every session.
 
-The renderer draws at 60 frames each second. `bun run bench` opens a recorded life of 30000 facts and measures the
-first frame, and the frames while the feed scrolls and a command streams. The gates hold it on Linux, against the
-pace of the same machine, the time that it takes to parse each fact of the record: the warm first frame under 32
-paces, at least 95 in each hundred of the frames that the renderer draws with nothing to show, since the timers of
-the runtime keep a loop of 60 frames a few frames under 60, and the 95th percentile of the frames under a pace and
-under 16.7 ms. A change of the life makes again only the cards of the acts that changed, so a frame of a long life
-takes about as long as a frame of a short one.
+## Speed
+
+The TUI owns a Bun worker for each open session, which holds its life and its ears. So rendering, input, and
+syntax coloring stay responsive while the sandbox gates and runs Python. The renderer draws at 60 frames each second.
+`bun run bench` opens a recorded life of 30000 facts and measures the first frame, and the frames while the feed
+scrolls and a command streams. The gates hold it on Linux, against the pace of the same machine, the time that it
+takes to parse each fact of the record: the warm first frame under 32 paces, at least 95 in each hundred of the frames
+that the renderer draws with nothing to show, since the timers of the runtime keep a loop of 60 frames a few frames
+under 60, and the 95th percentile of the frames under a pace and under 16.7 ms. A change of the life makes again only
+the cards of the acts that changed, so a frame of a long life takes about as long as a frame of a short one.
+
+## Mouse and keys
 
 The mouse reaches every control: a click is a press and a release on one control, and a drag selects text instead.
 The text that a drag selects goes to the clipboard through OSC 52 when the drag ends, where the terminal supports
@@ -192,6 +226,8 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 
 <!-- commands:end -->
 
+## How the work flows
+
 The command table comes from the same source as completion, the palette, and help. Run `bun run docs` after
 changing that source. Enter sends a message straight to the engine. The engine gives the next
 ask to the rung that has waited longest. ⌥Enter or `/queue text` holds a follow-up until the chain's
@@ -219,6 +255,8 @@ keeps the current effort if the new model offers it. A choice of a model or an e
 by a rung of the operator. A prompt names no actor, so the next rung of a prompt that runs, and each follow-up that
 the queue sends, asks the actor that the chain has then.
 
+## Branches, rewind and undo
+
 The engine contract takes a chain as a fork source. A fork is not a filesystem rollback or an arbitrary
 historical checkpoint. A branch that the rewind tree makes uses the engine's `take` filter and runs as an operator
 rung, so the filter is made again after a reopen. Its module keeps its current state. When a write changed a file
@@ -229,11 +267,15 @@ same durable filter to remove the last user message from a new branch; `/redo` r
 change the model's conversation. The module and filesystem remain current. The TUI does not add a separate
 permission or tool protocol to the engine.
 
+## Share and export
+
 `/share` writes a standalone HTML conversation, including its images and exact transcript. `/share`, `/export`
 and `/image` read a leading `~` as the home directory, and a relative path from the directory of the selected chain.
 The share dialog can open the file, copy its path, or upload the selected conversation to an unlisted GitHub gist
 through `gh`. Upload happens only when chosen. Anyone with its link can read the shared conversation. `/export` keeps
 the structured JSON export. `/context` sets the context ceiling.
+
+## Extensions
 
 A life runs the extensions that the configs turn on, as [the guide of the extensions](../docs/extensions.md) says,
 and each chain shows the rungs of their words in its feed, as it shows any rung. An extension can also give the TUI a part, a module of TypeScript beside its word, which adds
