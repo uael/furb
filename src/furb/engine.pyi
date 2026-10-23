@@ -894,6 +894,7 @@ The chain has the word of a rung gated before it runs, but a word it wrote itsel
 A rung that retells stands with the gate where the one it retells stood, so the gate reads a word once in a life, and a replay makes no copy of a refused word, which never ran, so the chain tells nothing of that word again.
 A refused word of a rung stands in the ladder of its prompt, which its door shows, and it is no part of the program of the chain, which holds the words that run.
 The chain tells the findings that refused a word, ends that rung with a refusal that holds none of them, and the prompt of it asks again as it does for a word that gave no value.
+A word that the chain cannot gate or run, as when the life refuses its gate, is refused as the gate refuses a word, with what went wrong as its one finding, so no word and no told text ends the ear of a chain.
 """
 type Cd = tuple[Literal["cd"], str, str, str, str]
 """A cd is the question of the directory a path names, which the World answers and the transcript of the chain holds."""
