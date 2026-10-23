@@ -36,6 +36,11 @@ replaces each key, address of mail and home directory, and ends at the moment wi
 Use `--cwd`, `--model provider:model`, `--effort`, `--record`, and repeated `--roster` options to configure
 a new life. A session offers every model that the catalog offers, with its model first: the default model when you
 name none. With `--roster`, it offers its model and the models of `--roster`, and no more.
+The TUI holds three views of the whole life side by side: the board of main, the loom of the chains in time, and the
+graph of the programs that run. `--view main|loom|graph` chooses one at the start, ⌥V switches it at run time,
+`/view` names one or lists the three, and the preferences keep the last one. Each view stands over the feed of the
+selected chain, and every other screen stays the same in each one. ⌥G gives the keys to the loom or the graph, and
+Esc gives them back. `docs/tui.md` shows each view, and `tui/DESIGN.md` says how they came.
 Sessions are saved under `.furb/sessions` in the selected directory. The `.furb` that the TUI makes holds
 a `.gitignore` that keeps it out of version control. Keep the `.jsonl`, `.session.json`, `.changes.jsonl`, and
 `.ui.json` files together. The last file keeps the view of the session as you left it. Keep its `.images` directory
@@ -83,7 +88,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | ↑ / ↓ | Previous / next sent input, from the first or the last line |
 | ↑ in an empty input | Take the last queued message back to edit it |
 | ⌃S | Put the input aside, or bring it back |
-| Esc twice | Rewind: branch from an earlier point of the chain |
+| Esc twice | Rewind: go back to an earlier point of the chain, with its files or not |
 | ⌃1-3 or ⌥1-3 | Feed / transcript / changes view |
 | ⌃Tab / ⇧⌃Tab | Next / previous chain |
 | ⌃P | Search all actions |
@@ -104,7 +109,11 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | Click / right-click an act | Fold or expand it / inspect its value or prompt program |
 | ⌃⌥← | Return from a definition jump |
 | ⌥[ / ⌥] or ⌥P / ⌥N | Previous / next message of the feed |
-| ⌃PageUp / ⌃PageDown | Previous / next page of file changes |
+| ⌥V / ⌥G | Switch the view of the life: main, the loom, or the graph / move in the loom or the graph |
+| ↑↓←→ / Enter / Esc after ⌥G | Move, fold or zoom / zoom in / zoom out or go back |
+| [ ] / { } after ⌥G | Move the cursor in time by one / ten moments |
+| Space / x / n / b after ⌥G | Pause or wake / cancel / step / branch at the cursor the chain |
+| ⌃PageUp / ⌃PageDown | Previous / next scope of file changes: this turn, this chain, the life, the branch |
 | ⌃C | Clear the input, close a dialog, or cancel what you sent last (a message goes back to the input) |
 | Esc | Close a dialog or pause current model work |
 | F1 / ⌃Q / ⌃D twice | Help / save and quit / save and quit from an empty input |
@@ -124,7 +133,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/chain <label>` | A conversation with its own state |
 | `/fork <label>` | Copy this chain's current transcript and program |
 | `/tree` | Browse the chains and their turns, and open or branch from one |
-| `/rewind` | Branch from an earlier message or act of this chain |
+| `/rewind` | Go back to an earlier message or act of this chain, with its files or not |
 | `/undo` | Remove the last user message from a new transcript branch |
 | `/redo` | Return to the branch before undo |
 | `/queue [text]` | Send after current work, or manage queued messages |
@@ -134,6 +143,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/run <python>` | Write a rung through the gate |
 | `/bash <command>` | Stream a shell command |
 | `/read <path>` | Show a file to this chain |
+| `/changes [turn|chain|life|branch]` | Show the files that this turn, this chain, the life or the branch against main changed |
 | `/cd <path>` | Change this chain's working directory |
 | `/edit [prompt id]` | Change a prompt's program and replay it |
 | `/inspect <name>` | Read a value from this chain's module |
@@ -149,6 +159,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/share [path]` | Export a standalone HTML conversation |
 | `/export <path>` | Write the transcript and program to a new JSON file |
 | `/workspace [path]` | Choose a workspace or add a project folder |
+| `/view [main|loom|graph]` | Show the life as the board of main, the loom, or the graph |
 | `/sidebar` | Show or hide the chains, the usage, and the workspaces |
 | `/delete` | Archive a session, or move it and its files to the workspace trash |
 | `/autocollapse` | Toggle collapse of completed rungs |
@@ -186,7 +197,10 @@ the queue sends, asks the actor that the chain has then.
 
 The engine contract takes a chain as a fork source. A fork is not a filesystem rollback or an arbitrary
 historical checkpoint. A branch that the rewind tree makes uses the engine's `take` filter and runs as an operator
-rung, so the filter is made again after a reopen. Its module and files keep their current state. `/undo` uses the
+rung, so the filter is made again after a reopen. Its module keeps its current state. When a write changed a file
+after the point, the rewind tree offers to restore the conversation, the files, or both. It reads the text that each
+write replaced in the journal of file changes beside the record, and writes it back by an operator rung, so the
+record holds the restore. A change that a command made is not restored. `/undo` uses the
 same durable filter to remove the last user message from a new branch; `/redo` returns to its origin. These commands
 change the model's conversation. The module and filesystem remain current. The TUI does not add a separate
 permission or tool protocol to the engine.
@@ -198,6 +212,8 @@ through `gh`. Upload happens only when chosen. Anyone with its link can read the
 the structured JSON export. `/context` sets the context ceiling.
 
 A life runs the extensions that the configs turn on, as [the guide of the extensions](../docs/extensions.md) says,
-and each chain shows the rungs of their words in its feed, as it shows any rung. The TUI has no part of its own for an extension: `/extensions` lists what the life runs, and `/run`
-runs a word of one on the chain on screen, as `/run skill("pdf")`. A cancel ends one act and the work under it, and
+and each chain shows the rungs of their words in its feed, as it shows any rung. An extension can also give the TUI a part, a module of TypeScript beside its word, which adds
+panels over the input, the rows of the acts of a kind, keys and commands, and which the TUI loads again live, as
+[the guide of the extensions](../docs/extensions.md#a-part-for-the-tui) says. `/extensions` lists what the life
+runs, and `/run` runs a word of one on the chain on screen, as `/run skill("pdf")`. A cancel ends one act and the work under it, and
 not what an extension started on the chain, such as the watcher of the memory.

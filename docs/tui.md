@@ -88,9 +88,32 @@ The exact text that the provider sends to the model, turn by turn.
 
 ## Changes
 
-The lines that each write through the World added or removed. The toggle counts the changes.
+The review of the files that changed, in one of four scopes: this turn, which holds the writes of the chain shown
+since your last message, this chain, the life, and the branch, which holds each file that differs from the base of
+the branch against main in git, a file that git does not track yet among them. Click a scope, press ⌃PageUp or
+⌃PageDown, or type `/changes turn`, `chain`, `life` or `branch`. The toggle counts the writes of the life.
 
-![Changes](screenshots/04-changes.png)
+The list of the files comes first, each with the lines that it added and removed, and a click on a file goes to its
+diff. Each file shows the net change of the scope: from its text before the first write to its text after the last.
+At 140 columns or more, the two sides of a diff stand side by side, and below that one stands under the other.
+
+![This chain](screenshots/04-changes.png)
+
+![This turn](screenshots/76-changes-turn.png)
+
+![The life](screenshots/77-changes-life.png)
+
+![The branch](screenshots/78-changes-branch.png)
+
+Each hunk has two actions. **Revert** writes the old lines of the hunk back through the World, as a word of yours on
+the chain, so the record keeps the write. The word refuses when the file no longer holds the lines of the hunk where
+the review shows them. **Comment a line** lists the lines of the hunk. Choose one, and the input holds the start of a
+message that names the file, the line and its text: write your comment after it, and Enter sends it to the chain as a
+prompt.
+
+![Comment a line](screenshots/79-changes-comment.png)
+
+![The comment in the input](screenshots/80-changes-comment-input.png)
 
 ## Command palette
 
@@ -187,6 +210,55 @@ under Finished.
 
 ![Chains](screenshots/15-chains.png)
 
+## Views of the life
+
+The board of main, the loom and the graph are three views of the whole life, side by side. ⌥V switches the view at
+run time, `/view` names one or lists the three, `--view main|loom|graph` chooses one at the start, and the setting
+keeps the last one. A view of the life stands where the board stands, over the feed of the selected chain, and each
+screen of main stays where it is in each view: the transcript, the changes, the palette, the dialogs, the desk, and
+the composer. Each row of a chain shows its state, its actor, its cost, and the question that it waits on.
+
+The board of main counts the chains by what they do, and gives one row to each chain that needs a look, with what it
+waits on, its actor, and its answers and dollars.
+
+![The board of main](screenshots/02-feed.png)
+
+The loom shows each chain as a thread in time, under you. Time goes from left to right, and the right edge is now. A
+cell is taller where more acts began or ended, yellow where the chain asks you, and red where an act failed, and the
+past fades and folds. At the right of each thread stand what it waits on or the question that it asks, its actor, its
+dollars against the ceiling of its grant, and the share of the window that its last answer read.
+
+![The loom](screenshots/66-loom.png)
+
+⌥G gives the keys to the loom, and Esc gives them back to the input. The arrows move between the chains and fold
+the workers of a chain into its row. `[` and `]` move a cursor in time by one moment, and `{` and `}` by ten: the
+loom and the feed show the life as it stood then, and the right edge of the loom says `then`. The verbs that change the life do nothing in
+the past, `b` branches the selected chain at the cursor, and Esc returns to now. Space pauses or wakes the selected
+chain, `x` cancels its work, `n` lets it run one more rung, and Tab answers the oldest question.
+
+![The cursor in time](screenshots/67-loom-time-cursor.png)
+
+The graph shows the life as programs that run: the tree of its threads, one for each prompt, beside the map of its
+programs, one for each chain at the place of its birth, with the lines of the tree of hires and a dot where a
+message flows. Under the name of each program stand what it waits on, its actor, its dollars, and its question.
+
+![The graph](screenshots/68-graph.png)
+
+After ⌥G, Enter zooms in and Esc zooms out: from the threads to the map, to the source of one program, with what
+each act came to beside the line that made it, to one word, and to one act, whose card the feed shows whole.
+
+![The map](screenshots/69-graph-map.png)
+
+![A program](screenshots/70-graph-program.png)
+
+![A word](screenshots/71-graph-word.png)
+
+![An act](screenshots/72-graph-act.png)
+
+A command that runs shows as it runs at the level of one act, since its card in the feed streams what it prints.
+
+![A command at the level of one act](screenshots/73-graph-command.png)
+
 ## Keys, marks, and commands
 
 One mark means one state in every view, dialog, and sidebar: a spinner for work that runs, `◉` for a chain or a
@@ -260,9 +332,19 @@ A cancel of an act with no running work under it, as a message that its model st
 Escape twice opens the rewind tree in the feed. Each act stands under the act that made it, and each branch under
 the point it starts from. Up and Down move the pointer, Left and Right fold a branch, and a click points at a row.
 Enter on a message gives it back to the input on a new branch, and Enter on another act makes a new branch that reads
-the chain through that act. The module and the files keep their state.
+the chain through that act. The module keeps its state.
+
+When a write changed a file after the point, on any chain, Enter asks first what comes back. Restore the
+conversation makes the branch, and the files stay as they are. Restore the files puts back each file as it was at
+the point, and the conversation goes on as it stands. Both does the two. For a message, the point is before the
+message. The files come back by a rung of the operator on the chain, so the record holds each write and the model
+reads it. A write puts back the text of a file, and a command removes a file that a write made. A change that a
+command made is not restored, and the dialog says how many commands ran after the point. The journal of file
+changes beside the record holds each write that the rewind reads.
 
 ![Rewind tree](screenshots/23-rewind-tree.png)
+
+![Rewind with the files](screenshots/74-rewind-files.png)
 
 ## Empty, loading, and failed views
 
@@ -386,6 +468,14 @@ session keeps its name in its saved view, and a workspace in the list of workspa
 `/extensions` lists the extensions that the life runs, and `/run` runs a word of one. The demo runs none.
 
 ![Extension command](screenshots/42-extension-command.png)
+
+The part of a project extension adds a panel over the input, here a todo list, and the row of each act of its kind in
+the feed. The TUI loads it again when its file changes. A module that breaks shows its error in its panel, and the
+TUI goes on.
+
+![The part of an extension](screenshots/74-extension-part.png)
+
+![The error of a part](screenshots/75-extension-part-error.png)
 
 ## Undo and redo
 

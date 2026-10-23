@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { FileChange, ImageAttachment, LiveAct, SetupInfo, Turn } from "@furb/engine";
 import {
   actorParts,
@@ -18,12 +18,12 @@ import {
   WORK,
 } from "@furb/engine";
 import { type Ask, aimed, beside, type Desk, desk } from "@furb/engine/life";
-import { createTwoFilesPatch } from "diff";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { refusal } from "./conversation.ts";
-import { expandHome, fileReferences, projectFiles, shortenHome } from "./files.ts";
+import { expandHome, fileReferences, fromDirectory, projectFiles, shortenHome } from "./files.ts";
 import { dollars } from "./format.ts";
 import { Preferences } from "./preferences.ts";
+import { type Hunk, type Reviewed, revertWord, reviewed, type Scope, scopes } from "./review.ts";
 import { shareHtml, shareMarkdown } from "./share.ts";
 import { palettes, type ThemeName } from "./theme.ts";
 
@@ -43,8 +43,16 @@ export type ActRow = LiveAct & {
 };
 /** What a command gave: what it printed to each stream, and its exit code once it is over. */
 export type Exit = { stdout?: { content: string }; stderr?: { content: string }; code?: number };
-/** A change of a file, with the patch that shows it. */
-export type ShownChange = FileChange & { patch: string };
+/** The net change of a file in the scope of the review, with its hunks. */
+export type ShownChange = Reviewed;
+/** What a rewind to a point gives back of the files: for each file that a write changed after the point, the change
+ * whose text it replaced first, and how many commands ran after the point, whose changes stay. */
+export interface Restore {
+  files: FileChange[];
+  commands: number;
+}
+/** A path as a word of the shell, between single quotes. */
+const quoted = (path: string) => `'${path.replaceAll("'", "'\\''")}'`;
 
 export type SessionStatus =
   | "saved"
@@ -114,6 +122,7 @@ const kept = [
   "selected",
   "actor",
   "view",
+  "scope",
   "mode",
   "shape",
   "editing",
@@ -163,8 +172,10 @@ export class Session extends EventEmitter {
   /** The share of the window that the last answer of the chain filled, as filled of the engine gives it, which the
    * advance binds too. Nothing before the first answer. */
   filled?: number;
+  /** The net change of each file in the scope of the review. */
   changes: ShownChange[] = [];
-  changePage = 0;
+  /** Which changes the view of changes reviews: this turn, this chain, the life, or the branch against main. */
+  scope: Scope = "chain";
   program: Record<string, string> = {};
   /** The text of the search box, which the rows of the view must hold. */
   search = "";
@@ -219,7 +230,7 @@ export class Session extends EventEmitter {
   private counted = 0;
   private dirty = false;
   private closed = false;
-  /** The page of changes and the count of changes that `changes` was read at. */
+  /** The scope, the writes and the count of changes that `changes` was read at. */
   private changesRead = "";
   /** Whether the dialog of a record open to read was shown, so it shows once for each life of the session. */
   readingTold = false;
@@ -345,7 +356,6 @@ export class Session extends EventEmitter {
   private async journalMended(notice: string): Promise<void> {
     this.error = "";
     this.changesRead = "";
-    this.changePage = 0;
     this.notice = notice;
     await this.refresh();
   }
@@ -389,13 +399,16 @@ export class Session extends EventEmitter {
           }
           this.save();
         }
-        const page = `${this.changePage}:${this.host.changes}`;
-        if (this.view === "changes" && page !== this.changesRead) {
-          this.changes = (await this.host.readChanges(this.changePage * 20, 20)).map((change) => ({
-            ...change,
-            patch: createTwoFilesPatch(change.path, change.path, change.before, change.after),
-          }));
-          this.changesRead = page;
+        if (this.view === "changes") {
+          const writes = this.scope === "branch" ? null : this.writes();
+          const read = `${this.scope}:${this.host.changes}:${writes ? `${writes[0]}:${writes.length}:${writes.at(-1)}` : ""}`;
+          if (read !== this.changesRead) {
+            const changes = await (this.scope === "branch"
+              ? this.host.branchChanges()
+              : this.host.netChanges(this.scope === "life" ? null : writes));
+            this.changes = changes.map(reviewed);
+            this.changesRead = read;
+          }
         }
         const rows = this.acts;
         for (const act of rows) {
@@ -656,6 +669,36 @@ export class Session extends EventEmitter {
     this.search = "";
     await this.refresh();
   }
+  /** The writes of the scope of the review on the chain shown: those since the last message of the operator for this
+   * turn, and those of the chain for this chain. */
+  private writes(): string[] {
+    const writes = this.activity.filter((act) => act.kind === "write");
+    const message =
+      this.scope === "turn" ? this.activity.findLast((act) => this.isUserPrompt(act)) : undefined;
+    return writes.filter((act) => !message || act.began > message.began).map((act) => act.id);
+  }
+  /** The scope of the review set, or moved one step through the scopes, and the changes read again. The branch is read
+   * again each time that it is chosen, since git may change with no act of the life. */
+  review(scope: Scope | -1 | 1): void {
+    this.scope =
+      typeof scope === "string"
+        ? scope
+        : (scopes[(scopes.indexOf(this.scope) + scope + scopes.length) % scopes.length] ?? "chain");
+    this.changesRead = "";
+    this.save();
+    this.show("changes");
+  }
+  /** One hunk of a change reverted by a word of the operator on the chain shown, so the World writes the file and the
+   * record keeps the write. The word refuses when the file no longer holds the hunk where the review showed it. */
+  async revert(change: ShownChange, hunk: Hunk): Promise<void> {
+    const path = fromDirectory(this.host.directory, change.path);
+    await this.engine.result(
+      await this.engine.rung({ word: revertWord(change.path, hunk), on: this.selected }),
+    );
+    this.notice = `The hunk at line ${hunk.newStart} of ${path} is reverted.`;
+    this.changesRead = "";
+    await this.refresh();
+  }
   show(view: View): void {
     this.view = view;
     this.search = "";
@@ -779,7 +822,7 @@ export class Session extends EventEmitter {
   /** A new branch of the chain of an act, which the session selects. The branch reads the transcript of that chain
    * through the act, or up to a message of the operator, whose text returns to the composer to be sent again. The
    * module and the files keep the state they have. */
-  async rewind(id: string, label?: string): Promise<string> {
+  async rewind(id: string, label?: string, files?: Restore): Promise<string> {
     if (this.paused) throw new Error("Wake this chain before rewinding.");
     const chain = this.acts.find((act) => act.id === id)?.on;
     if (!chain) throw new Error(`There is no act ${id} to rewind to.`);
@@ -792,11 +835,75 @@ export class Session extends EventEmitter {
     // and no branch that came later.
     const omitted = this.activity.slice(message ? at : at + 1).map((later) => later.id);
     const branch = await this.branch(label ?? this.branchLabel(), omitted);
+    if (files) await this.restoreFiles(files, branch);
     if (message) await this.restore(String(act.words[1] ?? ""));
+    const kept = files
+      ? `${this.restored(files)} The module keeps its state.`
+      : "The module and the files keep their state.";
     this.notice = message
-      ? "The message is back in the input on a new branch. The module and the files keep their state."
-      : `The new branch reads the transcript through ${id}. The module and the files keep their state.`;
+      ? `The message is back in the input on a new branch. ${kept}`
+      : `The new branch reads the transcript through ${id}. ${kept}`;
     return branch;
+  }
+  /** What a rewind to an act gives back of the files: the files as they stood when the act was made, or before the
+   * message for a message of the operator. A write after the point counts, on any chain, but a write that the act
+   * itself made, which the branch keeps. A change that an older session kept names no write, and stays. */
+  async filesAt(id: string): Promise<Restore> {
+    const byId = new Map(this.acts.map((act) => [act.id, act]));
+    const point = byId.get(id);
+    if (!point) return { files: [], commands: 0 };
+    const message = this.isUserPrompt(point);
+    const under = (act: ActRow): boolean => {
+      for (let up: ActRow | undefined = act; up; up = byId.get(up.by)) if (up.id === id) return true;
+      return false;
+    };
+    const after = (act: ActRow | undefined): act is ActRow =>
+      !!act && act.began >= point.began && (message || !under(act));
+    const files = new Map<string, FileChange>();
+    for (let at = 0; at < this.host.changes; at += 100)
+      for (const change of await this.host.readChanges(at, 100))
+        if (change.act && after(byId.get(change.act)) && !files.has(change.path))
+          files.set(change.path, change);
+    const commands = this.acts.filter((act) => act.kind === "bash" && after(act)).length;
+    return { files: [...files.values()], commands };
+  }
+  /** The files given back as a rewind found them, by a rung of the operator on a chain, so that the record holds each
+   * write and the chain reads it. A write puts back the text of a file, and a command removes a file that a write
+   * made. */
+  async restoreFiles({ files }: Restore, on = this.selected): Promise<void> {
+    if (!files.length) return;
+    const word = files
+      .map((change) =>
+        change.made
+          ? `await bash(${JSON.stringify(`rm -f -- ${quoted(change.path)}`)})`
+          : `write(Text(${JSON.stringify(this.near(change.path))}, ${JSON.stringify(change.before)}))`,
+      )
+      .join("\n");
+    const rung = await this.engine.rung({ word, on });
+    await this.engine.result(rung);
+    await this.refresh();
+    const run = this.acts.find((act) => act.id === rung)?.run;
+    if (run?.status === "failed") throw new Error(`The files were not restored: ${run.reason}`);
+  }
+  /** A path as a word names it: from the directory of the chain shown when it stands under it, and whole else. */
+  private near(path: string): string {
+    const near = relative(this.workingDirectory, path);
+    return near && !near.startsWith("..") && !isAbsolute(near) ? near : path;
+  }
+  /** What a restore of the files did, in words, with the changes that it could not undo. */
+  restored({ files, commands }: Restore): string {
+    const count =
+      files.length === 1 ? "1 file is back as it was." : `${files.length} files are back as they were.`;
+    const stays = commands
+      ? ` ${commands} ${commands === 1 ? "command" : "commands"} ran after that point, and a change that a command made is not restored.`
+      : "";
+    return `${count}${stays}`;
+  }
+  /** The files of the selected chain given back as they stood at an act, with no branch. */
+  async restoreAt(id: string, files?: Restore): Promise<void> {
+    const found = files ?? (await this.filesAt(id));
+    await this.restoreFiles(found);
+    this.notice = `${this.restored(found)} The conversation goes on as it stands.`;
   }
   /** The acts as they stood at the moment that the feed shows: an act that began later is not there yet, and an act
    * that ended later still runs, with no value yet. */
@@ -1108,6 +1215,11 @@ export class Session extends EventEmitter {
       case "shape":
         if (!shapes().includes(argument)) throw new Error(`Choose ${shapes().join(", ")}.`);
         this.shape = argument;
+        break;
+      case "changes":
+        if (argument && !(scopes as readonly string[]).includes(argument))
+          throw new Error(`Choose ${scopes.join(", ")}.`);
+        this.review((argument as Scope) || this.scope);
         break;
       case "theme":
         if (!Object.hasOwn(palettes, argument))

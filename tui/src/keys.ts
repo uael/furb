@@ -56,7 +56,7 @@ export const keys = [
   },
   {
     chord: "Esc twice",
-    action: "Rewind: branch from an earlier point of the chain",
+    action: "Rewind: go back to an earlier point of the chain, with its files or not",
     bindings: [{ chord: "Esc Esc", command: "rewind" }],
   },
   {
@@ -198,9 +198,32 @@ export const keys = [
     bindings: [{ on: ["meta+[", "meta+]", "meta+p", "meta+n", "ctrl+meta+p", "ctrl+meta+n"], run: "jump" }],
   },
   {
+    chord: "⌥V / ⌥G",
+    action: "Switch the view of the life: main, the loom, or the graph / move in the loom or the graph",
+    bindings: [
+      { on: ["meta+v"], run: "lifeView", chord: "⌥V", command: "view" },
+      {
+        on: ["meta+g"],
+        run: "steer",
+        chord: "⌥G",
+        choice: {
+          label: "Move in the view of the life",
+          detail: "The keys move on the loom or the graph, and Esc gives them back to the input",
+          before: "view",
+        },
+      },
+    ],
+  },
+  { chord: "↑↓←→ / Enter / Esc after ⌥G", action: "Move, fold or zoom / zoom in / zoom out or go back" },
+  { chord: "[ ] / { } after ⌥G", action: "Move the cursor in time by one / ten moments" },
+  {
+    chord: "Space / x / n / b after ⌥G",
+    action: "Pause or wake / cancel / step / branch at the cursor the chain",
+  },
+  {
     chord: "⌃PageUp / ⌃PageDown",
-    action: "Previous / next page of file changes",
-    bindings: [{ on: ["ctrl+pageup", "ctrl+pagedown"], run: "page", always: true }],
+    action: "Previous / next scope of file changes: this turn, this chain, the life, the branch",
+    bindings: [{ on: ["ctrl+pageup", "ctrl+pagedown"], run: "scope", always: true }],
   },
   {
     chord: "⌃C",

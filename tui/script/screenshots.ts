@@ -1,10 +1,12 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import { type App, follow } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { demoSession, removeDemoDirectories, seedDemo, seedDemoFiles, tour } from "../src/demo.ts";
+import { isLifeView } from "../src/overview.ts";
 import { loadParsers } from "../src/parsers.ts";
 import { Preferences } from "../src/preferences.ts";
 import type { Exit } from "../src/session.ts";
@@ -51,6 +53,9 @@ await show(session);
 
 /** The shots whose notice tells what the step did, which keep it. The others show no notice of an earlier step. */
 const notices = /^(34|36|37|42|43|44|45|50|55|58)-/;
+/** The view of the life that each shot of main shows, which FURB_GALLERY_VIEW names, so that the gallery of main is
+ * captured again in the loom and in the graph. */
+const view = isLifeView(process.env.FURB_GALLERY_VIEW) ? process.env.FURB_GALLERY_VIEW : "main";
 /** The work of the chain completes, and the queue sends what waits in it, until nothing is left to do. */
 async function settle(): Promise<void> {
   await session.refresh();
@@ -71,6 +76,7 @@ async function rest(): Promise<void> {
 async function capture(name: string): Promise<void> {
   waits(`the screen ${name}`);
   if (!notices.test(name)) session.notice = "";
+  if (!/^(6[6-9]|7[0-3])-/.test(name)) app().session.preferences.view = view;
   // A read that a change starts while the last one ends leaves the view loading, so the capture waits for none.
   if (name !== "25-loading" && name !== "27-view-error")
     do await session.refresh();
@@ -101,6 +107,22 @@ try {
   await session.refresh();
   session.show("transcript");
   await capture("03-transcript");
+  // The project is a repository of git on a branch of its own, so the review compares the branch with main.
+  const git = (...args: string[]) =>
+    spawnSync("git", [
+      "-C",
+      session.host.directory,
+      "-c",
+      "user.name=furb",
+      "-c",
+      "user.email=furb@example.com",
+      ...args,
+    ]);
+  await writeFile(join(session.host.directory, ".gitignore"), "demo.jsonl*\n");
+  git("init", "-q", "-b", "main");
+  git("add", ".");
+  git("commit", "-q", "-m", "Field notes");
+  git("checkout", "-q", "-b", "keyboard");
   const written = session.host.changes;
   await session.engine.result(
     await session.engine.rung({
@@ -111,6 +133,35 @@ try {
   await until(session.host, () => session.host.changes > written);
   session.show("changes");
   await capture("04-changes");
+  // The review in each other scope: this turn, the life, and the branch against main, then a comment on a line.
+  session.review("turn");
+  await capture("76-changes-turn");
+  // A note that another chain writes stands in the life, and not in this chain.
+  const reviewChain = session.chains.find((one) => one.words[0] === "Review notes")?.id;
+  if (!reviewChain) throw new Error("The gallery has no chain Review notes.");
+  await session.engine.result(
+    await session.engine.rung({
+      word: 'write(Text("review.md", "# Review\\n\\n- The README names the key that finds a note.\\n"))',
+      on: reviewChain,
+    }),
+  );
+  await until(session.host, () => session.host.changes > written + 1);
+  session.review("life");
+  await capture("77-changes-life");
+  session.review("branch");
+  await capture("78-changes-branch");
+  session.review("chain");
+  await capture("04-changes");
+  await click(test, "Comment a line");
+  await rest();
+  for (let step = 0; step < 4; step++) test.mockInput.pressArrow("down");
+  await test.flush();
+  await capture("79-changes-comment");
+  test.mockInput.pressEnter();
+  await test.flush();
+  await capture("80-changes-comment-input");
+  app().composer.setText("");
+  await rest();
   session.show("feed");
   app().palette();
   await capture("05-command-palette");
@@ -266,6 +317,25 @@ try {
   app().rewind();
   await capture("23-rewind-tree");
   app().closeTree();
+  // A message whose answer writes the README: a rewind to it asks what comes back, the conversation, the files, or
+  // both. The files then come back, so the later captures read the README as it was.
+  await session.engine.result(
+    await session.engine.prompt("str", { message: "Add the search shortcut, Ctrl+K.", on: session.selected }),
+  );
+  await session.refresh();
+  const shortcut = session.activity.findLast((act) => session.isUserPrompt(act))?.id ?? "";
+  app().rewind();
+  app().render();
+  await test.flush();
+  test.mockInput.pressEnter();
+  for (let tries = 0; tries < 400 && !test.captureCharFrame().includes("Restore the files"); tries++) {
+    await Bun.sleep(10);
+    app().render();
+    await test.flush();
+  }
+  await capture("74-rewind-files");
+  app().closeOverlay();
+  await session.restoreAt(shortcut);
 
   app().dispose();
   await library.dispose();
@@ -598,6 +668,24 @@ try {
   await until(session, () => session.acts.some((act) => act.id === message && act.done));
   await rest();
   await capture("59-take-back");
+  // The graph at the level of one act shows the card of the act in the feed, which says that the command runs.
+  if (view === "main") {
+    const guide = await session.engine.bash(
+      "printf 'Building the page capture\\n'; sleep 30; printf 'The guide has one page\\n'",
+      { on: session.selected },
+    );
+    await until(session, () =>
+      Boolean((session.acts.find((act) => act.id === guide)?.value as Exit | undefined)?.stdout?.content),
+    );
+    app().switchView("graph");
+    app().graph.level = "act";
+    app().render();
+    await capture("73-graph-command");
+    app().graph.level = "threads";
+    app().switchView("main");
+    await session.command(`/cancel ${guide}`);
+    await session.engine.result(guide).catch(() => {});
+  }
 
   // The feed of a real life: a life of the conductor, recorded from its log, with a score of chains at work, which
   // shows and runs nothing. The library of the demo ends first, with the sessions and the workers that it holds.
@@ -625,6 +713,33 @@ try {
   test.resize(82, 32);
   await capture("17-narrow");
   test.resize(152, 46);
+  // The views of the life side by side, on the same life: the loom of its chains in time over the feed, with the
+  // cursor in time, then the graph of its programs at each level of its zoom.
+  await session.select(session.engine.root);
+  app().switchView("loom");
+  await capture("66-loom");
+  app().steer(true);
+  await session.select(session.chains.find((chain) => session.labelOf(chain.id) === "life3/feed")?.id ?? "");
+  app().travel(-40);
+  await capture("67-loom-time-cursor");
+  app().travel(Number.MAX_SAFE_INTEGER);
+  app().steer(false);
+  await session.select(session.engine.root);
+  app().switchView("graph");
+  await capture("68-graph");
+  app().steer(true);
+  await app().graph.key("return");
+  await capture("69-graph-map");
+  await app().graph.key("return");
+  await capture("70-graph-program");
+  // The word of the last rung of the conductor that made an act, then that act, whose card the feed shows whole.
+  for (let step = 0; step < 4; step++) await app().graph.key("up");
+  await app().graph.key("return");
+  await capture("71-graph-word");
+  await app().graph.key("return");
+  await capture("72-graph-act");
+  app().steer(false);
+  app().switchView("main");
 
   // A first run on a machine that holds no model: the welcome checks the setup, with a fix for each part that is
   // missing. The demo needs no model and checks nothing, so the check is the one of a machine with nothing.
@@ -662,6 +777,34 @@ try {
   const asks = () => watched.at(watched.activity).some((act) => act.kind === "prompt" && act.words[2]);
   while (asks()) watched.travel(-1);
   await capture("65-watch-earlier");
+
+  // A project extension gives the TUI a part, which loads live: the panel of a todo list over the input, and the row
+  // of each act todo in the feed. A module that breaks shows its error in its panel.
+  app().dispose();
+  await library.dispose();
+  const listed = await project("todo");
+  const folder = join(listed, ".furb", "extensions", "todo");
+  await cp(resolve(import.meta.dir, "..", "fixtures", "todo"), folder, { recursive: true });
+  await writeFile(join(listed, ".furb", "config.json"), '{"extensions": {"todo": "extensions/todo"}}\n');
+  await show(await demoSession({ cwd: listed }));
+  const todo = (await readFile(join(folder, "todo.py"), "utf8")).replace(
+    /^from furb\.engine import .*\n+/m,
+    "",
+  );
+  await session.command(
+    `/run ${todo}\ntodo("Draw the todo list in a panel", done=True)\ntodo("Load the part again when its file changes", done=True)\ntodo("Show the error of a module that breaks")`,
+  );
+  await settle();
+  while (!app().parts.version) await Bun.sleep(10);
+  // The rung opens, so the capture shows the row of each act todo under its word.
+  app().render();
+  await test.flush();
+  await click(test, "rung1");
+  await rest();
+  await capture("74-extension-part");
+  await writeFile(join(folder, "tui.ts"), "export default (furb) => { furb.panel(");
+  while (!app().parts.loaded[0]?.error) await Bun.sleep(10);
+  await capture("75-extension-part-error");
 } catch (error) {
   console.error(error);
   failed = true;

@@ -16,8 +16,11 @@ import {
   condense,
   gist,
   type Line,
+  type Loom,
   ladder,
+  momentsOf,
   nowOf,
+  owedAt,
   type RowState,
   type Tone,
   wants,
@@ -59,7 +62,7 @@ import { conversation, refusal } from "./conversation.ts";
 import { demoSession, tour } from "./demo.ts";
 import { externalEditor, openFile } from "./editor.ts";
 import { emojiNamed, emojis } from "./emoji.ts";
-import { shortenHome, shortenHomes } from "./files.ts";
+import { fromDirectory, shortenHome, shortenHomes } from "./files.ts";
 import {
   ago,
   clip,
@@ -68,14 +71,34 @@ import {
   elapsed,
   graphemes,
   kibibytes,
-  lineCounts,
   modelName,
   plainFailure,
   retryLine,
   share,
 } from "./format.ts";
+import { Graph, type Stage } from "./graph.ts";
 import { type Action, bindings, chords, keys, shown } from "./keys.ts";
+import {
+  actorOf,
+  isLifeView,
+  joined,
+  type LifeView,
+  LoomPane,
+  lifeViewDetails,
+  lifeViewLabels,
+  lifeViews,
+  shortActor,
+} from "./overview.ts";
 import { loadParsers } from "./parsers.ts";
+import {
+  type Line as PartLine,
+  Parts,
+  type Tone as PartTone,
+  plainError,
+  type Row,
+  type Seen,
+} from "./parts.ts";
+import { commentStart, type Hunk, hunkPatch, lines, type Scope, scopeLabels, scopes } from "./review.ts";
 import {
   type ActRow,
   type Cancel,
@@ -418,9 +441,34 @@ export class App {
   /** The board over the feed: one row for each chain of the life, with what it does now. */
   private readonly board: BoxRenderable;
   private boardKey = "";
+  /** The view of the life that shows in place of the board: the loom or the graph, drawn as rows of text. */
+  private readonly stage: TextRenderable;
+  /** The loom and the graph, each with its own selection, folds and level, which a switch of the view keeps. */
+  readonly loom = new LoomPane();
+  readonly graph: Graph;
+  /** Whether the keys move on the loom or the graph, in place of the input. */
+  steering = false;
+  /** The moment that the loom, the graph and the feed show, which is the moment of the session, and nothing at the
+   * present: one cursor in time for every view. */
+  get cursor(): number | undefined {
+    return this.session.moment;
+  }
+  set cursor(at: number | undefined) {
+    this.session.moment = at;
+  }
+  /** The chains that a step lets run for one rung, with the count of their rungs that had ended when it began. */
+  private readonly stepping = new Map<string, number>();
   /** What waits for the operator, over the input, and the key of what it shows. */
   private readonly deskBox: BoxRenderable;
   private deskKey = "";
+  /** The parts of the extensions for the TUI, which add panels, rows, keys and commands. */
+  readonly parts: Parts;
+  /** The panels of the parts over the input, the key of what it shows, and what takes the keys of the parts away. */
+  private readonly dock: BoxRenderable;
+  private dockKey = "";
+  private partKeysOff?: () => void;
+  /** Whether a part drew the rows of a kind at the last load. */
+  private partRows = false;
   /** The ask that the answer dialog shows, which Tab moves from. */
   private answering?: string;
   /** The rewind tree, which the feed shows in place of its cards while it is open: its rows, and the row that the
@@ -574,6 +622,18 @@ export class App {
       backgroundColor: c.panel,
     });
     center.add(this.board);
+    this.stage = new TextRenderable(renderer, {
+      id: "life-stage",
+      content: "",
+      fg: c.text,
+      wrapMode: "none",
+      flexShrink: 0,
+      visible: false,
+      marginTop: space.section,
+      onMouseUp: (event) => this.clickStage(event.y - this.stage.y),
+    });
+    center.add(this.stage);
+    this.graph = new Graph(this.stageOf());
     this.scroll = new ScrollBoxRenderable(renderer, {
       id: "timeline",
       flexGrow: 1,
@@ -591,6 +651,16 @@ export class App {
     this.scroll.verticalScrollBar.visible = false;
     this.scroll.horizontalScrollBar.visible = false;
     center.add(this.scroll);
+    this.dock = this.box({
+      id: "parts",
+      visible: false,
+      marginTop: space.section,
+      paddingX: space.inset,
+      paddingY: space.inset,
+      gap: space.stack,
+      backgroundColor: c.panel,
+    });
+    center.add(this.dock);
     this.deskBox = this.box({
       id: "desk",
       visible: false,
@@ -697,6 +767,8 @@ export class App {
     session.on("confirm", this.confirm);
     this.keymap = keymapOf(renderer);
     this.layersOff = this.layers();
+    this.parts = new Parts(session.host.directory, this.partsChanged);
+    void this.parts.load();
     renderer.on("resize", this.render);
     renderer.on("selection", this.copySelection);
     // A renderer that ends on its own, as on a signal, ends the App before it frees the buffers of the view.
@@ -706,6 +778,7 @@ export class App {
       for (const card of this.cards.values())
         if (card.title) this.label(card, [...card.marker, ...card.title()]);
       if (this.statusMoves) this.renderStatus();
+      if (this.stage.visible && this.cursor === undefined && this.moves()) this.renderStage();
     }, frame);
     this.render();
     this.composer.focus();
@@ -929,6 +1002,7 @@ export class App {
   render = (): void => {
     if (this.closed) return;
     const w = this.session;
+    this.parts.heard(w.acts);
     if (w.theme !== this.theme) this.applyTheme(w.theme);
     if (this.draftKey !== w.draftKey) this.showDraft(w.draftKey);
     this.rail.visible = w.preferences.sidebar && this.renderer.width >= 100;
@@ -1022,6 +1096,7 @@ export class App {
       space.section +
       space.bar;
     this.renderMeta(mode, modeColor);
+    this.renderDock();
     this.renderDesk();
     this.renderStatus();
     this.renderContent();
@@ -2127,67 +2202,101 @@ export class App {
         );
       });
     } else if (w.view === "changes") {
-      if (w.host.changes > 20)
-        add("change-pages", String(w.changePage), [], (box) => {
-          const row = this.row({ gap: space.between });
-          row.add(
-            this.text(
-              `Writes ${w.changePage * 20 + 1} to ${Math.min((w.changePage + 1) * 20, w.host.changes)} of ${w.host.changes}`,
-              c.muted,
-            ),
-          );
-          row.add(this.link("Previous page", () => this.changePage(-1)));
-          row.add(this.link("Next page", () => this.changePage(1)));
-          box.add(row);
-        });
       const root = w.host.directory;
-      for (const [index, change] of w.changes.entries()) {
-        // A change never changes once it is written, so its position in the life keys its card.
-        const position = String(w.changePage * 20 + index);
-        const { added, removed } = lineCounts(change.patch);
-        const path = change.path.startsWith(`${root}/`) ? change.path.slice(root.length + 1) : change.path;
-        // The heading of a change is a bar of the panel: the path, what the write did to the file, and the lines it
+      const relative = (path: string) => fromDirectory(root, path);
+      // The scopes of the review stand first, and in the middle of an empty view under why it is empty.
+      if (w.changes.length)
+        add("change-scopes", `${w.scope}:${this.theme}`, [], (box) => box.add(this.scopes()));
+      const counts = (added: number, removed: number): Part[] => [
+        [`+${added}`, added ? c.success : c.faint],
+        [` -${removed}`, removed ? c.danger : c.faint],
+      ];
+      if (w.changes.length) {
+        // The list of the files: each with the lines that it added and removed, and a click that goes to its diff.
+        const added = w.changes.reduce((sum, change) => sum + change.added, 0);
+        const removed = w.changes.reduce((sum, change) => sum + change.removed, 0);
+        const files = w.changes.length === 1 ? "1 file" : `${w.changes.length} files`;
+        add(
+          "change-files",
+          `${w.scope}:${this.theme}:${w.changes.map((change) => `${change.path}:${change.added}:${change.removed}`).join()}`,
+          [[`${files}  `, c.text, bold], ...counts(added, removed)],
+          (box) => {
+            const width = Math.max(...w.changes.map((change) => Bun.stringWidth(relative(change.path))));
+            for (const change of w.changes) {
+              const path = relative(change.path);
+              const row = this.row({ paddingLeft: space.between });
+              row.add(this.link(path, () => this.jumpTo(`change:${path}`)));
+              row.add(
+                this.text([
+                  [" ".repeat(width - Bun.stringWidth(path) + 2), c.text],
+                  ...counts(change.added, change.removed),
+                ]),
+              );
+              box.add(row);
+            }
+          },
+        );
+      }
+      for (const change of w.changes) {
+        const path = relative(change.path);
+        // The heading of a change is a bar of the panel: the path, what the change did to the file, and the lines it
         // added and removed at its right.
         const [what, color] = !change.before
           ? ["created", c.success]
           : !change.after
             ? ["deleted", c.danger]
             : ["modified", c.warning];
-        const counts = `+${added} -${removed} `;
+        const tail = `+${change.added} -${change.removed} `;
         const fill = Math.max(
           1,
-          this.feedWidth - Bun.stringWidth(` ${glyph.dot} ${path}  ${what}`) - Bun.stringWidth(counts),
+          this.feedWidth - Bun.stringWidth(` ${glyph.dot} ${path}  ${what}`) - Bun.stringWidth(tail),
         );
+        // Two sides need room for two lines of code side by side, and one side reads better below that.
+        const split = this.renderer.width >= 140;
         add(
-          `change-${position}`,
-          position,
+          `change:${path}`,
+          `${w.scope}:${change.before.length}:${change.after.length}:${change.added}:${change.removed}:${split}:${this.theme}`,
           [
             [` ${glyph.dot} `, color, 0, c.panel],
             [path, c.text, bold, c.panel],
             [`  ${what}`, c.muted, 0, c.panel],
             [" ".repeat(fill), c.text, 0, c.panel],
-            [`+${added}`, added ? c.success : c.faint, 0, c.panel],
-            [` -${removed} `, removed ? c.danger : c.faint, 0, c.panel],
+            [`+${change.added}`, change.added ? c.success : c.faint, 0, c.panel],
+            [` -${change.removed} `, change.removed ? c.danger : c.faint, 0, c.panel],
           ],
-          (box) =>
-            box.add(
-              new DiffRenderable(this.renderer, {
-                diff: change.patch,
-                // Two sides need room for two lines of code side by side, and one side reads better below that.
-                view: this.feedWidth >= 160 ? "split" : "unified",
-                syntaxStyle: this.style,
-                fg: c.text,
-                showLineNumbers: true,
-                lineNumberFg: c.faint,
-                lineNumberBg: c.background,
-                contextBg: c.background,
-                addedBg: c.added,
-                removedBg: c.removed,
-                addedSignColor: c.success,
-                removedSignColor: c.danger,
-                wrapMode: "word",
-              }),
-            ),
+          (box) => {
+            for (const hunk of change.hunks) {
+              // Each hunk has a bar: where it stands in both files, a revert through the World, and a comment on
+              // one of its lines, which goes to the chain as a prompt.
+              const bar = this.row({ gap: space.between, paddingLeft: space.between });
+              bar.add(
+                this.text(
+                  `@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`,
+                  c.faint,
+                ),
+              );
+              bar.add(this.link("Revert", () => void w.revert(change, hunk).catch(this.report)));
+              bar.add(this.link("Comment a line", () => this.commentLine(path, hunk)));
+              box.add(bar);
+              box.add(
+                new DiffRenderable(this.renderer, {
+                  diff: hunkPatch(path, hunk),
+                  view: split ? "split" : "unified",
+                  syntaxStyle: this.style,
+                  fg: c.text,
+                  showLineNumbers: true,
+                  lineNumberFg: c.faint,
+                  lineNumberBg: c.background,
+                  contextBg: c.background,
+                  addedBg: c.added,
+                  removedBg: c.removed,
+                  addedSignColor: c.success,
+                  removedSignColor: c.danger,
+                  wrapMode: "word",
+                }),
+              );
+            }
+          },
           { shown: change.path },
         );
       }
@@ -2214,12 +2323,30 @@ export class App {
       const empty: Record<View, [string, string]> = {
         feed: ["Nothing here yet", "Send a message, or run Python with ⌃R."],
         transcript: ["No transcript yet", "The model reads its first turn here once a prompt runs."],
-        changes: ["No file changes yet", "Each file that the life writes shows here as a diff."],
+        changes: (
+          {
+            turn: [
+              "No file changes in this turn",
+              "Each file that this chain writes after your last message shows here.",
+            ],
+            chain: [
+              "No file changes on this chain",
+              "Each file that this chain writes shows here as a diff.",
+            ],
+            life: ["No file changes yet", "Each file that the life writes shows here as a diff."],
+            branch: [
+              "No change on this branch",
+              "Each file that differs from main in git shows here as a diff.",
+            ],
+          } satisfies Record<Scope, [string, string]>
+        )[w.scope],
       };
       const [title, hint] = w.search
         ? [`Nothing matches “${w.search}”`, "Change the filter, or press Esc to clear it."]
         : empty[w.view];
-      add("empty", `${title}:${height}:${this.theme}`, [], (box) =>
+      // An empty review offers its other scopes under its hint, where the eye already is.
+      const scoped = w.view === "changes" && !w.search;
+      add("empty", `${title}:${height}:${this.theme}:${scoped && w.scope}`, [], (box) =>
         this.centered(
           box,
           height,
@@ -2228,6 +2355,7 @@ export class App {
             [title, c.text, bold],
           ]),
           this.text(hint, c.muted),
+          ...(scoped ? [this.scopes()] : []),
         ),
       );
     }
@@ -2690,7 +2818,12 @@ export class App {
       label: (id) => w.labelOf(id),
     });
     const rows = loom.rows.filter((row) => row.id !== "operator");
-    const visible = w.view === "feed" && !this.tree && (rows.length > 1 || loom.owed.length > 0);
+    this.renderStage();
+    const visible =
+      this.lifeView === "main" &&
+      w.view === "feed" &&
+      !this.tree &&
+      (rows.length > 1 || loom.owed.length > 0);
     if (this.board.visible !== visible) this.board.visible = visible;
     if (!visible) {
       this.boardKey = "";
@@ -2760,11 +2893,16 @@ export class App {
       const measure = row.measure
         ? `${row.measure.answers} ${row.measure.answers === 1 ? "answer" : "answers"}  ${row.measure.dollars < 0.01 ? "<$0.01" : `$${row.measure.dollars.toFixed(2)}`}`
         : "";
+      // A wide board names the actor of each chain beside its cost.
+      const actor = this.feedWidth >= 110 ? clip(shortActor(this.actorOf(row.id)), 16) : "";
       const id = now.act && now.tone === "work" ? `${now.act}  ` : "";
       const said = now.tone === "work" && !now.text ? "writing" : shortenHomes(now.text);
       const more = now.more ? `  +${now.more}` : "";
       const label = pad(clip(row.label, name - 2 * depth), name - 2 * depth);
-      const room = Math.max(8, this.feedWidth - 2 * space.inset - 23 - name - Bun.stringWidth(more));
+      const room = Math.max(
+        8,
+        this.feedWidth - 2 * space.inset - 23 - name - Bun.stringWidth(more) - (actor ? 18 : 0),
+      );
       const text = clip(id + said, room);
       const rest = text.slice(Math.min(id.length, text.length));
       this.board.add(
@@ -2778,6 +2916,7 @@ export class App {
             [text.slice(0, Math.min(id.length, text.length)), c.faint],
             [pad(rest, room - Math.min(Bun.stringWidth(id), room)), toneColors[now.tone]()],
             [more, c.faint],
+            [actor ? `  ${actor.padEnd(16)}` : "", c.muted],
             [measure.padStart(18), c.faint],
           ],
           c.text,
@@ -2786,10 +2925,419 @@ export class App {
       );
     }
   }
+  /** The view of the life that shows: the board of main, the loom, or the graph. */
+  get lifeView(): LifeView {
+    return this.session.preferences.view;
+  }
+  /** The view of the life switched to the one named, or to the next one, which the preferences keep. */
+  switchView(view?: LifeView): void {
+    const w = this.session;
+    const next = view ?? lifeViews[(lifeViews.indexOf(this.lifeView) + 1) % lifeViews.length] ?? "main";
+    w.preferences.view = next;
+    w.preferences.save();
+    if (next === "main") {
+      this.cursor = undefined;
+      if (this.steering) this.steer(false);
+    }
+    w.notice =
+      next === "main"
+        ? "The board of main shows the life. ⌥V switches the view."
+        : `The ${next} shows the life. ⌥V switches the view, and ⌥G moves in it.`;
+    this.boardKey = "";
+    this.render();
+  }
+  /** The actor of a chain, as its last answer, its rungs or its prompts name it. */
+  private actorOf(chain: string): string {
+    const w = this.session;
+    return actorOf(chain, w.acts, w.host.measures, chain === w.selected ? w.actor : w.host.actor);
+  }
+  /** The acts of the life as they stood at the time cursor, which the loom and the graph read. */
+  private stageActs: readonly ActRow[] = [];
+  /** The loom of the life at the time cursor, which the last draw of the stage read. */
+  private stageLoom: Loom = { rows: [], owed: [], folded: 0 };
+  private weaveStage(width: number): Loom {
+    const w = this.session;
+    const then = this.cursor;
+    const acts = w.at(w.acts);
+    this.stageActs = acts;
+    this.stageLoom = weave({
+      acts,
+      prompts: then === undefined ? [...w.host.prompts.values()] : owedAt(acts),
+      measures: w.host.measures,
+      folds: this.loom.folds,
+      width,
+      pending: then === undefined ? w.host.pending : new Map(),
+      label: (id) => w.labelOf(id),
+    });
+    return this.stageLoom;
+  }
+  /** Whether the stage moves with time: a chain works, or the graph shows a message that flows. */
+  private moves(): boolean {
+    return (
+      this.stageLoom.rows.some((row) => row.state === "working") ||
+      (this.lifeView === "graph" && this.stageLoom.owed.length > 0)
+    );
+  }
+  /** The loom or the graph in place of the board of main, over the feed. The graph takes the whole height of the
+   * feed for one program and its words, and gives it back to the feed to show one act. */
+  private renderStage(): void {
+    const w = this.session;
+    const view = this.lifeView;
+    const shows =
+      view !== "main" && w.view === "feed" && !this.tree && !(view === "graph" && this.graph.level === "act");
+    const whole = shows && view === "graph" && ["program", "word"].includes(this.graph.level);
+    if (this.stage.visible !== shows) this.stage.visible = shows;
+    if (this.scroll.visible === whole) this.scroll.visible = !whole;
+    this.steps();
+    if (!shows) return;
+    const width = this.feedWidth;
+    const body = Math.max(8, this.renderer.height - 14);
+    if (view === "loom") {
+      const loom = this.weaveStage(LoomPane.cellWidth(width));
+      const rows = this.loom.draw({
+        loom,
+        width,
+        height: Math.min(loom.rows.length + 1, Math.max(4, Math.floor(body * 0.45))),
+        selected: w.selected,
+        frozen: this.cursor !== undefined,
+        steering: this.steering,
+        actor: (id) => this.actorOf(id),
+      });
+      this.stage.flexGrow = 0;
+      this.stage.height = rows.length;
+      this.stage.content = styled(joined(rows));
+      return;
+    }
+    this.weaveStage(Math.max(8, width - 60));
+    if (whole) {
+      this.stage.flexGrow = 1;
+      this.stage.flexShrink = 1;
+      this.stage.minHeight = 0;
+    } else {
+      this.stage.flexGrow = 0;
+      this.stage.flexShrink = 0;
+    }
+    const height = whole ? Math.max(6, this.renderer.height - 12) : Math.max(8, Math.floor(body * 0.55));
+    this.stage.height = height;
+    this.stage.content = styled(joined(this.graph.rows(width, height)));
+  }
+  /** A click on a row of the stage: the loom selects its chain, or answers for the row of the operator, and the graph
+   * selects what the row shows, and zooms in on a second click. */
+  private clickStage(row: number): void {
+    if (this.lifeView === "graph") {
+      if (this.graph.click(row)) this.render();
+      return;
+    }
+    const chain = this.loom.click(row);
+    if (chain === "operator") this.question();
+    else if (chain) void this.selectAt(chain).catch(this.report);
+  }
+  /** What the graph reads of the App: the life at the time cursor, and the controls that it asks for. */
+  private stageOf(): Stage {
+    const app = this;
+    return {
+      get acts() {
+        return app.stageActs;
+      },
+      get loom() {
+        return app.stageLoom;
+      },
+      get owed() {
+        return new Set(app.stageLoom.owed.map((prompt) => prompt.id));
+      },
+      get frozen() {
+        return app.cursor !== undefined;
+      },
+      get selected() {
+        return app.session.selected;
+      },
+      words: () => app.words(),
+      label: (chain) => app.session.labelOf(chain),
+      actor: (chain) => app.actorOf(chain),
+      streams: () => (app.cursor === undefined ? app.session.host.streams : new Map()),
+      select: (chain) => app.selectAt(chain),
+      // The lens of the graph is the card of the act in the feed, which shows it whole.
+      lens: (act) => {
+        if (!act) return app.render();
+        const w = app.session;
+        void (act.on === w.selected ? Promise.resolve() : w.select(act.on))
+          .then(() => app.go("feed", act.id))
+          .catch(app.report);
+      },
+    };
+  }
+  /** The words of the rungs of the life: what the caller of each wrote, what ran, and what its model wrote, the words
+   * that the gate refused among them. */
+  private words(): Map<string, string> {
+    const w = this.session;
+    const words = new Map<string, string>();
+    for (const item of conversation(w.turns, w.acts))
+      if (item.type === "python" && item.rung) words.set(item.rung.id, item.code);
+    for (const [id, word] of Object.entries(w.program)) words.set(id, word);
+    for (const act of w.acts)
+      if (act.kind === "rung" && act.words[0]) words.set(act.id, String(act.words[0]));
+    return words;
+  }
+  /** The keys go to the loom or the graph, or back to the input. */
+  steer(on = !this.steering): void {
+    const w = this.session;
+    if (on && this.lifeView === "main") {
+      w.notice = "⌥V shows the loom or the graph, which ⌥G moves in.";
+      return;
+    }
+    this.steering = on;
+    if (on) {
+      this.closeTree();
+      this.composer.blur();
+    } else this.composer.focus();
+    this.boardKey = "";
+    this.render();
+  }
+  /** The selection of the loom moves by a count of chains, and the session shows the chain that it reaches. */
+  private moveLoom(by: number): void {
+    const rows = this.stageLoom.rows.filter((row) => row.id !== "operator");
+    const at = rows.findIndex((row) => row.id === this.session.selected);
+    const next = rows[Math.max(0, Math.min(rows.length - 1, at + by))];
+    if (next && next.id !== this.session.selected) void this.selectAt(next.id).catch(this.report);
+  }
+  /** A chain shown at the moment of the cursor in time, which the loom and the graph keep from chain to chain. */
+  private async selectAt(chain: string): Promise<void> {
+    const at = this.cursor;
+    await this.session.select(chain);
+    // A move of the cursor while the chain opened stands.
+    if (at !== undefined && this.cursor === undefined) this.cursor = at;
+    this.render();
+  }
+  /** The workers of the selected chain fold into its row of the loom, or show again. */
+  private foldLoom(folding: boolean): void {
+    const row = this.stageLoom.rows.find((one) => one.id === this.session.selected);
+    if (!row?.workers) return;
+    if (folding) this.loom.folds.add(row.id);
+    else this.loom.folds.delete(row.id);
+    this.render();
+  }
+  /** The time cursor moves back or forward by a count of moments, and past the last moment it stands at the present
+   * again. */
+  travel(by: number): void {
+    const moments = momentsOf(this.session.acts);
+    if (!moments.length) return;
+    const from = this.cursor === undefined ? moments.length - 1 : moments.indexOf(this.cursor);
+    const to = Math.max(0, from + by);
+    this.cursor = to >= moments.length - 1 ? undefined : moments[to];
+    this.render();
+  }
+  /** Whether a verb that changes the life can act: none acts in the past. */
+  private present(): boolean {
+    if (this.cursor === undefined) return true;
+    this.session.notice =
+      "The cursor stands in the past, where nothing changes. Esc returns to now, and b branches.";
+    this.render();
+    return false;
+  }
+  /** The selected chain paused, or woken when a pause holds it. */
+  private holdChain(): void {
+    if (!this.present()) return;
+    const w = this.session;
+    const row = this.stageLoom.rows.find((one) => one.id === w.selected);
+    this.action(`/${row?.state === "paused" ? "wake" : "pause"} ${w.selected}`);
+  }
+  /** The work of the selected chain cancelled: the act that the graph selects, or what the chain waits on. */
+  private cancelChain(): void {
+    if (!this.present()) return;
+    const w = this.session;
+    const target =
+      this.lifeView === "graph" && this.graph.level !== "threads" && this.graph.level !== "map"
+        ? this.graph.selection
+        : this.stageLoom.rows.find((one) => one.id === w.selected)?.waits;
+    if (target) this.action(`/cancel ${target}`);
+    else w.notice = `${w.label} waits on nothing to cancel.`;
+  }
+  /** A step: the selected chain runs until one more of its rungs ends, then a pause holds it again. */
+  private async step(): Promise<void> {
+    if (!this.present()) return;
+    const w = this.session;
+    const chain = w.selected;
+    this.stepping.set(chain, this.rungsDone(chain));
+    if (this.stageLoom.rows.find((row) => row.id === chain)?.state === "paused")
+      this.action(`/wake ${chain}`);
+    w.notice = `${w.labelOf(chain)} runs one step, then pauses.`;
+    this.render();
+  }
+  private rungsDone(chain: string): number {
+    return this.session.acts.filter((act) => act.on === chain && act.kind === "rung" && act.done).length;
+  }
+  /** Each chain that a step let run pauses again once a rung of it that the step let run ends. */
+  private steps(): void {
+    for (const [chain, ended] of this.stepping) {
+      if (this.rungsDone(chain) <= ended) continue;
+      this.stepping.delete(chain);
+      this.action(`/pause ${chain}`);
+      this.session.notice = `${this.session.labelOf(chain)} paused after one step.`;
+    }
+  }
+  /** A branch of the selected chain at the time cursor, as the feed branches at its moment. */
+  private branchAtCursor(): void {
+    const w = this.session;
+    if (this.cursor === undefined) {
+      w.notice = "[ moves the cursor back in time, and b branches the chain there.";
+      this.render();
+      return;
+    }
+    void w.branchHere().catch(this.report);
+  }
+  /** Escape on the stage: the graph zooms out, then the cursor returns to now, then the keys go back to the input. */
+  private async leaveStage(): Promise<void> {
+    if (this.lifeView === "graph" && (await this.graph.key("escape"))) this.render();
+    else if (this.cursor !== undefined) this.travel(Number.MAX_SAFE_INTEGER);
+    else this.steer(false);
+  }
+  /** Enter on the stage: the graph zooms in, and the loom answers for the row of the operator or gives the keys to the
+   * input on the selected chain. */
+  private async enterStage(): Promise<void> {
+    if (this.lifeView === "graph") {
+      await this.graph.key("return");
+      this.render();
+    } else this.steer(false);
+  }
+  /** An arrow on the stage: the graph moves its selection, and the loom moves between chains or folds their workers. */
+  private async arrowStage(name: string): Promise<void> {
+    if (this.lifeView === "graph") {
+      await this.graph.key(name);
+      this.render();
+    } else if (name === "up" || name === "down") this.moveLoom(name === "up" ? -1 : 1);
+    else if (name === "pageup" || name === "pagedown") this.moveLoom(name === "pageup" ? -8 : 8);
+    else this.foldLoom(name === "left");
+  }
   /** The desk over the input: one mark for each ask that waits for the operator, in the order that they came, then
    * the ask that he acts on, from which chain, and what it wants, the first line of its message, and its choices or
    * where its answer goes. A click on a mark points at its ask and shows its chain, and a click on the message opens
    * the ask whole. */
+  /** The parts once they loaded: their keys again, and each card again, since a part may draw the row of its act. */
+  private partsChanged = (): void => {
+    if (this.closed) return;
+    this.partKeysOff?.();
+    const keys = this.parts.loaded.flatMap((part) => part.keys);
+    // A key of a part stands under every key of the TUI, and one with no modifier acts on an empty input alone.
+    this.partKeysOff = keys.length
+      ? this.keymap.registerLayer({
+          priority: -1000,
+          enabled: () => !this.renaming?.input?.focused && !this.overlay,
+          commands: keys.map(({ on, run }, index) => ({
+            name: `part-${index}`,
+            run: () => {
+              this.partRun(() => run(this.seen()));
+              return true;
+            },
+            enabled: () => /^(ctrl|meta|alt|super)\+/.test(on) || !this.composer.plainText,
+          })),
+          bindings: keys.map(({ on }, index) => ({ key: on, cmd: `part-${index}` })),
+        })
+      : undefined;
+    // The cards are made again only when a part draws the rows of a kind, before this load or after it.
+    const rows = this.parts.loaded.some((part) => part.rows.size);
+    if (rows || this.partRows) {
+      this.clear(this.scroll);
+      this.cards.clear();
+      this.paneKeys.delete(this.scroll);
+    }
+    this.partRows = rows;
+    this.dockKey = "";
+    this.schedule();
+  };
+  /** Runs what a part does, and shows in the footer the error of one that fails. */
+  private partRun(run: () => unknown): void {
+    const failed = (error: unknown) => {
+      this.session.notice = `A part of an extension failed: ${plainError(error)}`;
+      this.schedule();
+    };
+    try {
+      const got = run();
+      if (got instanceof Promise) got.catch(failed);
+    } catch (error) {
+      failed(error);
+    }
+  }
+  /** What a component of a part reads of the life, and what it can do in it. */
+  private seen(): Seen {
+    const w = this.session;
+    return {
+      chain: w.selected,
+      acts: w.acts,
+      of: (kind) => w.acts.filter((act) => act.kind === kind),
+      run: (word) => w.command(`/run ${word}`),
+      say: (text) => {
+        w.notice = text;
+        this.schedule();
+      },
+    };
+  }
+  /** The runs of a line of a part, each in the color of its tone. */
+  private partLine(line: PartLine): Part[] {
+    const tones: Record<PartTone, RGBA> = {
+      text: c.text,
+      muted: c.muted,
+      faint: c.faint,
+      accent: c.accent,
+      success: c.success,
+      warning: c.warning,
+      danger: c.danger,
+    };
+    if (typeof line === "string") return [[line, c.text]];
+    return line.map(([text, tone]) => [String(text), tones[tone ?? "text"] ?? c.text]);
+  }
+  /** The row that a part draws for an act of its kind, with its error as its label when it throws. */
+  private partRow(act: ActRow): Row | undefined {
+    const draw = this.parts.row(act.kind);
+    if (!draw) return undefined;
+    try {
+      return draw(act, this.seen()) ?? {};
+    } catch (error) {
+      return { label: `its row failed: ${plainError(error)}` };
+    }
+  }
+  /** The panels of the parts over the input, while the feed shows: each panel of a part that loaded, and the error of
+   * a part that did not load or of a panel that throws, in plain words in its own panel. A panel shows twelve lines at
+   * most. */
+  private renderDock(): void {
+    const w = this.session;
+    const shown: { title: string; lines: readonly PartLine[]; error?: string }[] = [];
+    if (w.view === "feed" && !this.tree) {
+      const seen = this.seen();
+      for (const part of this.parts.loaded) {
+        if (part.error) shown.push({ title: part.name, lines: [], error: part.error });
+        for (const panel of part.panels)
+          try {
+            const lines = panel.draw(seen);
+            if (!Array.isArray(lines)) throw new Error("Its panel gives no list of lines.");
+            shown.push({ title: panel.name, lines });
+          } catch (error) {
+            shown.push({ title: panel.name, lines: [], error: plainError(error) });
+          }
+      }
+    }
+    const visible = shown.length > 0;
+    if (this.dock.visible !== visible) this.dock.visible = visible;
+    if (!visible) {
+      this.dockKey = "";
+      return;
+    }
+    const key = JSON.stringify([shown, this.feedWidth, this.theme]);
+    if (key === this.dockKey) return;
+    this.dockKey = key;
+    this.dock.backgroundColor = c.panel;
+    this.clear(this.dock);
+    for (const one of shown) {
+      const box = this.box();
+      const mark: Part[] = one.error ? [[`${glyph.failed} `, c.danger]] : [];
+      box.add(this.line([...mark, [one.title, c.text, bold]], c.text, { truncate: true }));
+      if (one.error) box.add(this.text(one.error, c.danger));
+      const lines = one.lines.slice(0, 12);
+      for (const line of lines) box.add(this.line(this.partLine(line), c.text, { truncate: true }));
+      if (one.lines.length > lines.length)
+        box.add(this.line(`${one.lines.length - lines.length} more lines`, c.faint));
+      this.dock.add(box);
+    }
+  }
   private renderDesk(): void {
     const w = this.session;
     const { asks, questions } = w.desk;
@@ -2975,6 +3523,8 @@ export class App {
   /** What an act is about, whole: the message of a prompt, the program of a rung, the time of a wait, the ceilings of
    * a grant, and the first word of any other act. */
   private subject(act: ActRow): string {
+    const label = this.partRow(act)?.label;
+    if (label !== undefined) return label;
     if (act.kind === "prompt") return String(act.words[1] ?? "");
     if (act.kind === "rung")
       return String(this.session.program[act.id] || this.toldWord(act.id) || act.words[0] || "");
@@ -3091,6 +3641,11 @@ export class App {
     }
     if ((act.kind === "read" || act.kind === "write") && !failed(act)) {
       this.textDetails(details, act);
+      return;
+    }
+    const row = this.partRow(act);
+    if (row?.details) {
+      for (const line of row.details) details.add(this.line(this.partLine(line), c.text));
       return;
     }
     const fields: Record<string, string[]> = {
@@ -3923,6 +4478,12 @@ export class App {
       await bare[name]?.();
       return true;
     }
+    if (name === "view") {
+      if (!argument) this.viewPicker();
+      else if (isLifeView(argument)) this.switchView(argument);
+      else throw new Error(`Choose ${lifeViews.join(", ")}.`);
+      return true;
+    }
     if (name === "inspect" && argument) {
       await this.inspect(argument);
       return true;
@@ -3953,7 +4514,24 @@ export class App {
       else await library.create(group);
       return true;
     }
+    // A command of a part of an extension, which no command of the TUI shadows.
+    const part = name ? this.parts.command(name) : undefined;
+    if (part) {
+      this.partRun(() => part.run(argument, this.seen()));
+      return true;
+    }
     return false;
+  }
+  /** The views of the life to choose from, the one that shows marked. */
+  private viewPicker(): void {
+    this.openPalette(
+      "View of the life",
+      lifeViews.map((view) => ({
+        label: `${lifeViewLabels[view]}${view === this.lifeView ? "  (shows)" : ""}`,
+        detail: lifeViewDetails[view],
+        run: () => this.switchView(view),
+      })),
+    );
   }
   private imageActions(uri: string): void {
     const content = imageContent(this.session.host.imageDirectory, uri);
@@ -4162,7 +4740,7 @@ export class App {
               detail: message
                 ? "A new branch that has not read this message, with the message in the input"
                 : "A new branch that reads the chain up to this act",
-              run: () => w.rewind(act.id).then(() => {}),
+              run: () => this.rewindTo(act),
             },
           ]
         : []),
@@ -4224,6 +4802,14 @@ export class App {
         run: this.command(name, argument),
       });
     }
+    for (const part of this.parts.loaded)
+      for (const one of part.commands)
+        choices.push({
+          label: title(one.name),
+          detail: `${one.detail} (${part.name})`,
+          command: `/${one.name}`,
+          run: () => this.action(`/${one.name}`),
+        });
     this.openPalette("Commands", choices, { rich: true });
   }
   /** How a command runs when it is picked from a list: one that needs its argument waits for it in the input. */
@@ -5014,6 +5600,50 @@ export class App {
     const last = points.findLast((act) => this.session.isUserPrompt(act)) ?? points.at(-1);
     this.openTree(last?.id ?? this.session.selected, "Rewind");
   };
+  /** A rewind to a point. When a write changed a file after it, it asks first what comes back: the conversation on a
+   * new branch, the files on this chain, or both. A change that a command made is not restored. */
+  private async rewindTo(act: ActRow): Promise<void> {
+    const w = this.session;
+    const found = await w.filesAt(act.id);
+    const { files, commands } = found;
+    if (!files.length) {
+      await w.rewind(act.id);
+      return;
+    }
+    const message = w.isUserPrompt(act);
+    const count = files.length === 1 ? "the file" : `the ${files.length} files`;
+    const named = files.map(({ path }) => {
+      const near = relative(w.workingDirectory, path);
+      return near.startsWith("..") || isAbsolute(near) ? shortenHome(path) : near;
+    });
+    const stays = commands
+      ? `${commands} ${commands === 1 ? "command" : "commands"} ran after it: a change that a command made is not restored.`
+      : "A change that a command made is not restored.";
+    this.openPalette(
+      `Rewind to ${act.id}`,
+      [
+        {
+          label: "Restore the conversation",
+          detail: message
+            ? "A new branch that has not read this message, with the message in the input. The files stay."
+            : "A new branch that reads the chain up to this point. The files stay as they are.",
+          run: () => w.rewind(act.id).then(() => {}),
+        },
+        {
+          label: "Restore the files",
+          detail: `Put back ${count} that a write changed after this point. The conversation stays.`,
+          run: () => w.restoreAt(act.id, found),
+        },
+        {
+          label: "Both",
+          detail: `A new branch from this point, and ${count} put back`,
+          run: () => w.rewind(act.id, undefined, found).then(() => {}),
+        },
+        { label: "Keep", detail: "Return without changes", run() {} },
+      ],
+      { note: `${clip(named.join(", "), 200)}. ${stays}` },
+    );
+  }
   /** The tree of the session in the feed, with the pointer on the chain shown. */
   sessionTree = (): void => this.openTree(this.session.selected, "Session tree");
   /** Whether an act is a point that a branch can start from: an act that a turn of its chain tells, which is no
@@ -5135,7 +5765,7 @@ export class App {
     }
     const branch = async () => {
       this.closeTree();
-      await w.rewind(act.id);
+      await this.rewindTo(act);
     };
     if (w.isUserPrompt(act) && !asksOperator(act))
       return {
@@ -5183,8 +5813,8 @@ export class App {
       this.clear(this.treeBar);
       const note =
         tree.title === "Rewind"
-          ? "Choose a point to branch from. The module and the files keep their state."
-          : "Open a chain, or branch from a point. The module and the files keep their state.";
+          ? "Choose a point to go back to, with the files as they were or not. A change by a command stays."
+          : "Open a chain, or go back to a point, with the files as they were or not. A change by a command stays.";
       // The note is cut at its end where the bar has no room for it beside the title and the key that leaves.
       const room =
         width - space.inset * 2 - Bun.stringWidth(tree.title) - space.between * 2 - Bun.stringWidth("Esc");
@@ -5921,6 +6551,34 @@ export class App {
         hint: ["Esc", "now"],
       },
     ]);
+    // While the keys move on the loom or the graph, the arrows, Enter and Escape move there, and a letter acts on the
+    // selected chain.
+    const stageKey = (on: string | string[], run: () => unknown, hint?: Hint): KeyCommand => ({
+      on,
+      run: () => void Promise.resolve(run()).catch(this.report),
+      hint,
+    });
+    layer(() => bare() && this.steering && this.lifeView !== "main", "stage", [
+      stageKey("up", () => this.arrowStage("up"), ["↑↓←→", "move"]),
+      ...["down", "left", "right", "pageup", "pagedown"].map((on) => stageKey(on, () => this.arrowStage(on))),
+      stageKey(["return", "enter"], () => this.enterStage(), [
+        "Enter",
+        () => (this.lifeView === "graph" ? "zoom in" : "input"),
+      ]),
+      stageKey("escape", () => this.leaveStage(), [
+        "Esc",
+        () => (this.lifeView === "graph" && this.graph.level !== "threads" ? "zoom out" : "back"),
+      ]),
+      stageKey("[", () => this.travel(-1), ["[ ]", "time"]),
+      stageKey("]", () => this.travel(1)),
+      stageKey("{", () => this.travel(-10)),
+      stageKey("}", () => this.travel(10)),
+      stageKey("space", () => this.holdChain(), ["Space", "pause"]),
+      stageKey("x", () => this.cancelChain(), ["x", "cancel"]),
+      stageKey("n", () => this.step(), ["n", "step"]),
+      stageKey("b", () => this.branchAtCursor(), ["b", "branch"]),
+      stageKey("tab", () => this.question(), ["Tab", "answer"]),
+    ]);
     layer(bare, "", [
       // As in Claude Code, Ctrl+D acts on an empty input.
       { on: "ctrl+d", run: () => this.exit(), when: () => !this.composer.plainText },
@@ -6113,16 +6771,18 @@ export class App {
     },
     back: () => void this.back().catch(this.report),
     jump: (key) => this.jumpMessage(["]", "n"].includes(key?.name ?? "") ? 1 : -1),
-    page: (key) => this.changePage(key?.name === "pageup" ? -1 : 1),
+    scope: (key) => this.session.review(key?.name === "pageup" ? -1 : 1),
     pause: this.escape,
     help: () => this.help(),
     quit: () => void this.options.quit(),
+    lifeView: () => this.switchView(),
+    steer: () => this.steer(),
   };
   /** When an action of the table acts, where it does not act at all times: a key that does not act goes on to the
    * input, and the footer does not offer it. */
   private readonly when: Partial<Record<Action, () => boolean>> = {
     answer: () => this.session.desk.asks.length > 0,
-    page: () => this.session.view === "changes",
+    scope: () => this.session.view === "changes",
     pause: () => !this.searchRow.visible && this.pausing(),
   };
   /** The view shown, with the rewind tree closed. */
@@ -6211,16 +6871,52 @@ export class App {
     this.session.off("shared", this.shared);
     this.session.off("confirm", this.confirm);
     for (const off of this.layersOff) off();
+    this.partKeysOff?.();
+    this.parts.dispose();
     this.renderer.off("resize", this.render);
     this.renderer.off("selection", this.copySelection);
     this.root.destroyRecursively();
     this.style.destroy();
   };
-  private changePage(step: number): void {
-    this.session.changePage = Math.max(
-      0,
-      Math.min(Math.ceil(this.session.host.changes / 20) - 1, this.session.changePage + step),
+  /** The scopes of the review of the changes: the one shown in bold, and each other one a link to it. */
+  private scopes(): BoxRenderable {
+    const w = this.session;
+    const row = this.row({ gap: space.between, flexShrink: 0 });
+    for (const scope of scopes)
+      row.add(
+        scope === w.scope
+          ? this.text([[scopeLabels[scope], c.text, bold | underline]])
+          : this.link(scopeLabels[scope], () => w.review(scope)),
+      );
+    row.add(this.text("⌃PageUp / ⌃PageDown", c.faint));
+    return row;
+  }
+  /** The feed scrolled so that the card of an id stands at its top. */
+  private jumpTo(id: string): void {
+    const node = this.scroll.getChildren().find((one) => one.id === id);
+    if (node) this.scroll.scrollBy(node.y - this.scroll.viewport.y);
+  }
+  /** A comment on one line of a hunk: the operator picks the line, and the input holds the start of a message that
+   * names it, which Enter sends to the chain as a prompt. */
+  private commentLine(path: string, hunk: Hunk): void {
+    const shown = lines(hunk);
+    this.openPalette(
+      `Comment a line of ${path}`,
+      shown.map((line) => ({
+        label: `${line.sign} ${line.text}`.trimEnd(),
+        detail: `${line.sign === "-" ? "removed " : ""}line ${line.number}`,
+        run: () => {
+          const start = commentStart(path, line);
+          this.insert(start);
+          this.composer.cursorOffset = start.length;
+        },
+      })),
+      {
+        selected: Math.max(
+          0,
+          shown.findIndex((line) => line.sign !== " "),
+        ),
+      },
     );
-    void this.session.refresh().catch(this.session.fail);
   }
 }

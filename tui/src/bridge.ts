@@ -129,6 +129,11 @@ export class HostView extends EventEmitter implements Plain {
   source = () => this.ask<string>("library", "source");
   snapshot = (chain: string, since = 0) => this.ask<Snapshot>("library", "snapshot", chain, since);
   readChanges = (start: number, count: number) => this.ask<FileChange[]>("library", "changes", start, count);
+  /** The net change of each file across the changes that the writes made, or across every change of the life when
+   * no list of writes is given. */
+  netChanges = (writes: string[] | null) => this.ask<FileChange[]>("library", "net", writes);
+  /** The change of each file of the branch against main, as git holds it in the directory of the session. */
+  branchChanges = () => this.ask<FileChange[]>("library", "branch");
   /** The journal of file changes written again with each change that it holds, and the count of lines it lost. */
   repairChanges = () => this.ask<number>("library", "repairChanges");
   /** A new journal of file changes, and the path that the damaged one is kept at. */

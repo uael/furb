@@ -1,17 +1,30 @@
 // The worker loads no module that loads OpenTUI, whose native library belongs to the thread that draws.
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import type { Engine, SessionOptions, Turn } from "@furb/engine";
+import type { Engine, FileChange, SessionOptions, Turn } from "@furb/engine";
 import { Act, actorParts, ENGINE, model, models, retold, Session, setup } from "@furb/engine";
 import { measureOf } from "@furb/engine/life";
 import type { HostState } from "./bridge.ts";
 import { type EngineOptions, roster } from "./models.ts";
 import { queueDispatches, queueHash } from "./queue.ts";
 import { isRecorded, Reader } from "./reading.ts";
+import { branchChanges, net } from "./review.ts";
 import type { FollowUp } from "./session.ts";
 import { Snapshots } from "./snapshots.ts";
 
 declare const self: Worker & { close(): void };
+
+/** Each change of a journal that one of the writes made, or each change when no list of writes is given, read a page
+ * at a time. */
+function* written(
+  changes: { length: number; read(start: number, count: number): FileChange[] },
+  writes: unknown,
+): Generator<FileChange> {
+  const named = Array.isArray(writes) ? new Set(writes.map(String)) : undefined;
+  for (let start = 0; start < changes.length; start += 50)
+    for (const change of changes.read(start, 50))
+      if (!named || (change.act && named.has(change.act))) yield change;
+}
 let session: Session | undefined;
 let engine: Engine | undefined;
 let snapshots: Snapshots | undefined;
@@ -155,15 +168,20 @@ function scriptedSession(options: SessionOptions, watch = false): Session {
       // A message that hires workers makes a life as a conductor makes it: a prompt to a worker on each of two chains of
       // its own, each of which thinks until a cancel, under a wait that holds the thread of the message open.
       const hires = last.includes("Hire two workers");
+      // A message that adds the search shortcut writes the README, so a rewind to a point before it can give the file
+      // back as it was.
+      const shortcut = !first && last.includes("Add the search shortcut");
       const code = hires
         ? 'for label in ("w/one", "w/two"):\n  prompt(str, "Think until I cancel.", on=chain(label))\nawait wait(3600)'
-        : fenced
-          ? '```python\nclose("Here is the answer, in a fence.")\n```'
-          : asks
-            ? 'await prompt(str, "Which effort should the next step take?", to=OPERATOR)'
-            : first
-              ? 'notes = read("README.md")\ncheck = await bash("printf \'✓ capture\\n✓ search\\n✓ local storage\\n\'")\nclose("## A clear starting point\\nFieldnotes keeps ideas close. The project has three small parts: capture, search, and local storage.\\n\\nAll three checks passed. A useful next step is to add a **search shortcut**, then cover it with a focused test.")'
-              : `close(${JSON.stringify(answer)})`;
+        : shortcut
+          ? 'notes = read("README.md")\nwrite(notes.replace("- Find it when it matters", "- Find it when it matters, with Ctrl+K"))\nclose("Ctrl+K opens the search now, and the README says so.")'
+          : fenced
+            ? '```python\nclose("Here is the answer, in a fence.")\n```'
+            : asks
+              ? 'await prompt(str, "Which effort should the next step take?", to=OPERATOR)'
+              : first
+                ? 'notes = read("README.md")\ncheck = await bash("printf \'✓ capture\\n✓ search\\n✓ local storage\\n\'")\nclose("## A clear starting point\\nFieldnotes keeps ideas close. The project has three small parts: capture, search, and local storage.\\n\\nAll three checks passed. A useful next step is to add a **search shortcut**, then cover it with a focused test.")'
+                : `close(${JSON.stringify(answer)})`;
       if (slow) {
         write({ thinking });
         await pause(200);
@@ -264,6 +282,10 @@ async function answer(data: { target: string; method: string; args: unknown[] })
   if (data.target === "library" && data.method === "source") return ENGINE;
   if (data.target === "library" && data.method === "changes")
     return session?.changes.read(Number(data.args[0]), Number(data.args[1]));
+  if (data.target === "library" && data.method === "net")
+    return session ? net(written(session.changes, data.args[0])) : [];
+  if (data.target === "library" && data.method === "branch")
+    return session ? branchChanges(session.directory) : [];
   if (data.target === "library" && data.method === "repairChanges") return session?.changes.repair();
   if (data.target === "library" && data.method === "renewChanges") return session?.changes.renew();
   if (data.target === "library" && data.method === "act")
@@ -302,6 +324,8 @@ function read(data: { target: string; method: string; args: unknown[] }): unknow
   if (data.target === "library" && data.method === "sees") return false;
   if (data.target === "library" && data.method === "model") return null;
   if (data.target === "library" && data.method === "changes") return [];
+  if (data.target === "library" && data.method === "net") return [];
+  if (data.target === "library" && data.method === "branch") return branchChanges(open.directory);
   if (data.target === "library" && data.method === "act") return open.activity.acts.get(String(data.args[0]));
   if (data.target === "library" && data.method === "look") {
     const path = resolve(open.directory, open.cwd({ on: String(data.args[1]) }), String(data.args[0]));
