@@ -34,6 +34,8 @@
         "@codemirror/view": "^6.38.0",
         "@fontsource/atkinson-hyperlegible-mono": "5.3.0",
         "@fontsource/atkinson-hyperlegible-next": "5.3.0",
+        "@furb/engine": "workspace:*",
+        "@furb/tui": "workspace:*",
         "@lezer/highlight": "^1.2.5",
         "@radix-ui/react-dropdown-menu": "^2.1.16",
         "@radix-ui/react-tooltip": "^1.2.8",

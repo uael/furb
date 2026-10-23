@@ -231,6 +231,29 @@ test("what a model writes streams into the session under its rung until its repl
   }
 });
 
+test("the act of a rung holds the word that its chain took, as its model or its caller wrote it", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-word-"));
+  const session = new Session({
+    cwd,
+    record: join(cwd, "life.jsonl"),
+    ...modeled,
+    answer: async () => said("close(7)"),
+  });
+  try {
+    const engine = session.open();
+    const asked = engine.prompt("int", { message: "seven", on: engine.root });
+    expect(await asked).toBe(7);
+    const rung = engine.rung({ word: "x = 1", on: engine.root });
+    await engine.result(rung.id);
+    const acts = [...session.activity.acts.values()];
+    expect(acts.find((act) => act.kind === "rung" && act.by === asked.id)?.word).toBe("close(7)");
+    expect(session.activity.acts.get(rung.id)?.word).toBe("x = 1");
+  } finally {
+    await session.dispose();
+    await rm(cwd, { recursive: true });
+  }
+});
+
 test("what a model writes after its reply is done streams nothing", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-late-"));
   const { promise: held, resolve: release } = Promise.withResolvers<void>();

@@ -17,6 +17,8 @@ export interface LiveAct {
   /** The thread that a prompt on a thread is on: the prompt that its on names. */
   thread?: string;
   words: unknown[];
+  /** The word of a rung, which its caller or its model wrote, once its chain took it to run or to refuse. */
+  word?: string;
   done: boolean;
   value: unknown;
   /** Whether a pause stands over the act while it lives. */

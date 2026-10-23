@@ -13,7 +13,7 @@ import { Glob } from "bun";
 const given = process.argv.slice(2);
 const flags = given.filter((one) => one.startsWith("-"));
 const filters = given.filter((one) => !one.startsWith("-"));
-const files = ["bind/typescript/test", "tui/test"]
+const files = ["bind/typescript/test", "tui/test", "gui/test"]
   .flatMap((root) => [...new Glob("**/*.test.ts").scanSync(root)].map((file) => `./${root}/${file}`))
   .filter((file) => filters.length === 0 || filters.some((filter) => file.includes(filter)))
   .sort((one, other) => Bun.file(other).size - Bun.file(one).size);

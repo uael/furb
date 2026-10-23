@@ -9,7 +9,14 @@
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
+    "jsx": "react-jsx",
     "types": ["bun"]
   },
-  "include": ["bind/typescript/**/*.ts", "tui/**/*.ts", "docs/examples/**/*.ts"]
+  "include": [
+    "bind/typescript/**/*.ts",
+    "tui/**/*.ts",
+    "docs/examples/**/*.ts",
+    "gui/host/**/*.ts",
+    "gui/test/**/*.ts"
+  ]
 }
