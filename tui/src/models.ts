@@ -1,4 +1,4 @@
-import type { SessionOptions } from "@furb/engine";
+import type { SessionOptions } from "furb";
 
 /** The models of the demo, which it names in the catalog of the crate and asks none of. */
 export const demoRoster = ["claude-cli:sonnet", "claude-cli:opus", "claude-cli:haiku", "claude-cli:fable"];

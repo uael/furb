@@ -48,6 +48,7 @@ module, and each answer of the model is a program that runs in it.
 
 ```sh
 pip install furb                     # The engine, and furb, the command line. It needs Python 3.14 or later.
+npm install furb                     # The engine for Node.js 22 or later and Bun, with no Python.
 ```
 
 `furb` is a program of Rust. It runs the engine in monty. It asks the models of the claude command line, the models of

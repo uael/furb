@@ -1,5 +1,5 @@
-import { type Engine, type Fact, isQuestion, type LiveAct, questionKind, type Session } from "@furb/engine";
 import { createTwoFilesPatch } from "diff";
+import { type Engine, type Fact, isQuestion, type LiveAct, questionKind, type Session } from "furb";
 import type { Snapshot, Usage } from "./bridge.ts";
 import { lineCounts } from "./format.ts";
 import { queueDispatches } from "./queue.ts";

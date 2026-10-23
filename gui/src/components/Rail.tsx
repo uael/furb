@@ -1,6 +1,6 @@
-import { actState } from "@furb/engine/life";
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { actState } from "furb/life";
 import { ChevronDown, FolderOpen } from "lucide-react";
 import { useRef } from "react";
 import { dollars } from "../data.ts";

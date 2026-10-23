@@ -2,7 +2,7 @@
 // the life that the window shows, and in the list of the projects. The window sends calls, each of which the host
 // answers once.
 
-import type { Ask, LiveAct, Measure } from "@furb/engine/life";
+import type { Ask, LiveAct, Measure } from "furb/life";
 
 /** One record of a project, as the picker lists it. */
 export interface Place {

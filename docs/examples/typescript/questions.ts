@@ -1,5 +1,5 @@
 import { createInterface } from "node:readline";
-import { open } from "@furb/engine";
+import { open } from "furb";
 
 await using life = await open("deploy.jsonl");
 const terminal = createInterface({ input: process.stdin });

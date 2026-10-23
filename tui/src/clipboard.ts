@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { imageType } from "@furb/engine";
+import { imageType } from "furb";
 
 export async function clipboardImage<T>(use: (path: string) => Promise<T>): Promise<T> {
   // Each reader prints the image on the clipboard: as base64 text through macOS AppKit and through the .NET of

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { Turn } from "@furb/engine";
+import type { Turn } from "furb";
 import { conversation } from "../src/conversation.ts";
 import type { ActRow } from "../src/session.ts";
 

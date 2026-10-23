@@ -1,5 +1,5 @@
-import { safeText } from "@furb/engine";
 import { RGBA, StyledText, type TextChunk } from "@opentui/core";
+import { safeText } from "furb";
 
 /** One run of text in a line, with its color, its attributes, and the color behind it. */
 export type Part = readonly [text: string, fg?: RGBA, attributes?: number, bg?: RGBA];

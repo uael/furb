@@ -1,33 +1,5 @@
 import { isAbsolute, join, relative } from "node:path";
 import {
-  actorParts,
-  display,
-  imageContent,
-  imagePath,
-  imageReferences,
-  safeText,
-  shapes,
-  TIMEOUT,
-  WORK,
-} from "@furb/engine";
-import {
-  beside,
-  type Chip,
-  condense,
-  gist,
-  type Line,
-  type Loom,
-  ladder,
-  makers,
-  momentsOf,
-  nowOf,
-  owedAt,
-  type RowState,
-  type Tone,
-  wants,
-  weave,
-} from "@furb/engine/life";
-import {
   type BoxOptions,
   BoxRenderable,
   type CliRenderer,
@@ -56,6 +28,34 @@ import {
 } from "@opentui/core";
 import type { Keymap } from "@opentui/keymap";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
+import {
+  actorParts,
+  display,
+  imageContent,
+  imagePath,
+  imageReferences,
+  safeText,
+  shapes,
+  TIMEOUT,
+  WORK,
+} from "furb";
+import {
+  beside,
+  type Chip,
+  condense,
+  gist,
+  type Line,
+  type Loom,
+  ladder,
+  makers,
+  momentsOf,
+  nowOf,
+  owedAt,
+  type RowState,
+  type Tone,
+  wants,
+  weave,
+} from "furb/life";
 import type { Token, Tokens } from "marked";
 import { clipboardImage } from "./clipboard.ts";
 import { commands, slashes } from "./commands.ts";

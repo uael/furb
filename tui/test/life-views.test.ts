@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Loom } from "@furb/engine/life";
+import type { Loom } from "furb/life";
 import { openEngine } from "../src/bridge.ts";
 import { LoomPane, questionOf, shortActor } from "../src/overview.ts";
 import { Preferences } from "../src/preferences.ts";

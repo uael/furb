@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type Engine, Session, type SessionOptions } from "@furb/engine";
+import { type Engine, Session, type SessionOptions } from "furb";
 import { until } from "../../bind/typescript/test/until.ts";
 import { Snapshots } from "../src/snapshots.ts";
 

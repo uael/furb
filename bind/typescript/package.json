@@ -1,10 +1,24 @@
 {
-  "name": "@furb/engine",
-  "version": "0.1.0",
+  "name": "furb",
+  "version": "0.2.0",
+  "description": "The core of an AI harness: the engine of furb in a sandbox, with a World of your own, for Node.js and Bun.",
   "type": "module",
   "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/uael/furb.git",
+    "directory": "bind/typescript"
+  },
+  "homepage": "https://github.com/uael/furb/tree/main/bind/typescript#readme",
   "napi": {
-    "binaryName": "furb"
+    "binaryName": "furb",
+    "targets": [
+      "x86_64-unknown-linux-gnu",
+      "aarch64-unknown-linux-gnu",
+      "aarch64-apple-darwin",
+      "x86_64-apple-darwin",
+      "x86_64-pc-windows-msvc"
+    ]
   },
   "main": "./dist/index.js",
   "exports": {
@@ -22,11 +36,21 @@
     "dist",
     "index.cjs",
     "index.d.cts",
-    "*.node",
     "README.md"
   ],
   "scripts": {
     "build": "bun run build.ts"
+  },
+  "optionalDependencies": {
+    "furb-linux-x64-gnu": "0.2.0",
+    "furb-linux-arm64-gnu": "0.2.0",
+    "furb-darwin-arm64": "0.2.0",
+    "furb-darwin-x64": "0.2.0",
+    "furb-win32-x64-msvc": "0.2.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   },
   "engines": {
     "bun": ">=1.4.2",

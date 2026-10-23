@@ -1,3 +1,4 @@
+import type { RGBA } from "@opentui/core";
 import {
   type ActState,
   actState,
@@ -15,8 +16,7 @@ import {
   threads,
   valueText,
   you,
-} from "@furb/engine/life";
-import type { RGBA } from "@opentui/core";
+} from "furb/life";
 import { clip, dollars } from "./format.ts";
 import { questionOf, shortActor } from "./overview.ts";
 import type { ActRow } from "./session.ts";

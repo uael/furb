@@ -16,13 +16,20 @@
       },
     },
     "bind/typescript": {
-      "name": "@furb/engine",
-      "version": "0.1.0",
+      "name": "furb",
+      "version": "0.2.0",
+      "optionalDependencies": {
+        "furb-darwin-arm64": "0.2.0",
+        "furb-darwin-x64": "0.2.0",
+        "furb-linux-arm64-gnu": "0.2.0",
+        "furb-linux-x64-gnu": "0.2.0",
+        "furb-win32-x64-msvc": "0.2.0",
+      },
     },
     "docs/examples": {
       "name": "furb-examples",
       "dependencies": {
-        "@furb/engine": "workspace:*",
+        "furb": "workspace:*",
       },
     },
     "gui": {
@@ -34,7 +41,7 @@
         "@codemirror/view": "^6.38.0",
         "@fontsource/atkinson-hyperlegible-mono": "5.3.0",
         "@fontsource/atkinson-hyperlegible-next": "5.3.0",
-        "@furb/engine": "workspace:*",
+        "furb": "workspace:*",
         "@furb/tui": "workspace:*",
         "@lezer/highlight": "^1.2.5",
         "@radix-ui/react-dropdown-menu": "^2.1.16",
@@ -66,10 +73,10 @@
         "furb-tui": "src/cli.ts",
       },
       "dependencies": {
-        "@furb/engine": "workspace:*",
         "@opentui/core": "0.5.11",
         "@opentui/keymap": "0.5.11",
         "diff": "^9.0.0",
+        "furb": "workspace:*",
         "gemoji": "^8.1.0",
         "marked": "17.0.1",
         "tree-sitter-json": "^0.24.8",
@@ -225,8 +232,6 @@
     "@fontsource/atkinson-hyperlegible-mono": ["@fontsource/atkinson-hyperlegible-mono@5.3.0", "", {}, "sha512-7Iha5azCRXJVk4NdxbVdKAE+4p/rMJoW6dslvhktugDFPSp7kxFRGAavBtwtSTrnyNhKXW8w1NHgMnrh/6OshA=="],
 
     "@fontsource/atkinson-hyperlegible-next": ["@fontsource/atkinson-hyperlegible-next@5.3.0", "", {}, "sha512-8p1tHVoPDo6oYwSO3sMw5snGwFwSf3TmeSF9Gcj792GXdsg6oqvhoItbj6Hj/XZIk0Xs+Cwu6pkLBAl3Q5HrwA=="],
-
-    "@furb/engine": ["@furb/engine@workspace:bind/typescript"],
 
     "@furb/gui": ["@furb/gui@workspace:gui"],
 
@@ -721,6 +726,8 @@
     "fdir": ["fdir@6.5.0", "", { "peerDependencies": { "picomatch": "^3 || ^4" }, "optionalPeers": ["picomatch"] }, "sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg=="],
 
     "fsevents": ["fsevents@2.3.3", "", { "os": "darwin" }, "sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw=="],
+
+    "furb": ["furb@workspace:bind/typescript"],
 
     "furb-examples": ["furb-examples@workspace:docs/examples"],
 

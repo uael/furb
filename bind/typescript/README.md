@@ -4,8 +4,10 @@ The same Rust crate and Monty sandbox, through N-API. Views, queries and control
 an `id`, converts to its name as a string, and can be awaited. Its Promise resolves with its outcome or rejects
 with an error that names the engine's fault. A TUI is not part of this package.
 
-`napi-rs` builds `furb.node` from the host API in `src/binding.rs`, which the door to python gives too, and from the
-door in `src/binding/ts.rs` and its module `src/binding/ts/host.rs`, and generates `index.d.cts` from them. `index.cjs` loads `furb.node`. The optional
+`napi-rs` builds `furb.<system>.node` from the host API in `src/binding.rs`, which the door to python gives too, and
+from the door in `src/binding/ts.rs` and its module `src/binding/ts/host.rs`, and generates `index.d.cts` from them.
+It writes `index.cjs` too, which loads the engine from beside itself, or from the package of the engine of its
+system, `furb-<system>`, which npm installs with the package `furb`. The optional
 `typescript` feature builds the binding in the existing crate. There is no Rust worker or second crate. The
 `Engine` of the package has one method for each verb of the contract, which the build of the crate makes from
 `src/furb/engine.pyi`, as it makes the methods of the crate: the words that the verb needs, in their order, then an
@@ -15,8 +17,12 @@ Windows. Bun gives no signal on Windows for Ctrl+Break or for the close of the c
 once: `onConsoleEnd(callback)` hears these events there, and the system holds the process until the callback ends
 it.
 
+`npm install furb` installs the package with the engine built for its system: Linux on x64 or arm64 with glibc 2.35
+or later, macOS on Apple silicon or on Intel, and Windows on x64. On another system, build the engine from a checkout
+with `bun run build`.
+
 ```ts
-import { boot } from "@furb/engine";
+import { boot } from "furb";
 
 const session = boot({
   cwd: process.cwd(),
@@ -80,7 +86,7 @@ program that `claude` names in the options, then the one `FURB_CLAUDE_BIN` names
 or the CLI installed by Claude Desktop. No process starts until a model is asked, and each one ends with the life.
 
 ```ts
-import { models, Session } from "@furb/engine";
+import { models, Session } from "furb";
 
 // The models the catalog offers, which a host names as its default actor and in its roster.
 const [first, ...others] = models().map((model) => model.name);
@@ -211,7 +217,7 @@ provider hands the python of the turn as it is, and adds each image that the mes
 references, to a model that takes images. The stored bytes are checked against their digest before use. PNG, JPEG, GIF,
 and WebP are supported, with a 20 MiB limit per image. Keep `.images` with the record when moving a session.
 
-The model of a life is the views that a host derives from the acts of a life, in `src/life`, which `@furb/engine/life`
+The model of a life is the views that a host derives from the acts of a life, in `src/life`, which `furb/life`
 gives. It holds no native code and no module of node, so a terminal and a window of the web read the same views:
 
 - `acts`: the act as a view reads it, `LiveAct`, the kinds of work, `WORK`, what a command came to, `Exit`, the

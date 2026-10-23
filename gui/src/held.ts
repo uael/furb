@@ -1,7 +1,7 @@
 // The life as the window holds it, and each part of the host taken into it. It reads no DOM, so the tests of the host
 // merge the parts as the window merges them.
 
-import type { LiveAct } from "@furb/engine/life";
+import type { LiveAct } from "furb/life";
 import type { Life, Part, Project, StreamPart } from "./wire.ts";
 
 /** What a model writes for a rung while its reply runs, as the window holds it. */

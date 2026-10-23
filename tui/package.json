@@ -8,7 +8,7 @@
     "furb-tui": "src/cli.ts"
   },
   "dependencies": {
-    "@furb/engine": "workspace:*",
+    "furb": "workspace:*",
     "@opentui/core": "0.5.11",
     "@opentui/keymap": "0.5.11",
     "diff": "^9.0.0",

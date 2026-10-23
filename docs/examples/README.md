@@ -1,7 +1,7 @@
 # Examples of furb as a framework
 
 Each example is a short program that you run as it stands. It shows one thing, in each door of furb: python, with
-the package `furb`; TypeScript, with the package `@furb/engine`; and Rust, with the crate `furb`. The three read the
+the package `furb`; TypeScript, with the npm package `furb`; and Rust, with the crate `furb`. The three read the
 same, since each door gives the same names: `open` opens a life on its record, or goes on with it; `prompt` gives a
 thread that you await for its value; `chain` opens a chain; `questions` gives each question to the operator; `grant`
 puts a ceiling on a chain; and a thread has its `plan`, which `edit` changes.
@@ -41,7 +41,7 @@ asyncio.run(main())
 ```
 
 ```ts
-import { open } from "@furb/engine";
+import { open } from "furb";
 
 await using life = await open("release.jsonl");
 console.log(await life.prompt("str", "Plan the release of version 2."));
@@ -87,7 +87,7 @@ asyncio.run(main())
 ```
 
 ```ts
-import { open } from "@furb/engine";
+import { open } from "furb";
 
 await using life = await open("notes.jsonl", { roster: ["claude-cli:opus", "claude-cli:sonnet"] });
 const reviewer = life.chain("reviewer", { model: "claude-cli:sonnet" });
@@ -143,7 +143,7 @@ asyncio.run(main())
 
 ```ts
 import { createInterface } from "node:readline";
-import { open } from "@furb/engine";
+import { open } from "furb";
 
 await using life = await open("deploy.jsonl");
 const terminal = createInterface({ input: process.stdin });
@@ -206,7 +206,7 @@ asyncio.run(main())
 ```
 
 ```ts
-import { open } from "@furb/engine";
+import { open } from "furb";
 
 await using life = await open("budget.jsonl");
 const budget = life.chain("budget");
@@ -264,7 +264,7 @@ asyncio.run(main())
 ```
 
 ```ts
-import { open } from "@furb/engine";
+import { open } from "furb";
 
 await using life = await open("door.jsonl");
 const release = life.prompt("str", "Release version 2 in one hour.");

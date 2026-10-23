@@ -8,8 +8,8 @@
  * and the TUI goes on. */
 import { type FSWatcher, statSync, watch } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
-import { parts as configured, type LiveAct, type Part } from "@furb/engine";
-import * as model from "@furb/engine/life";
+import { parts as configured, type LiveAct, type Part } from "furb";
+import * as model from "furb/life";
 import { commands } from "./commands.ts";
 
 /** The tone of a run of text, which the theme colors. */
@@ -37,7 +37,7 @@ export interface Seen {
 }
 /** What the TUI gives the function that a part exports. */
 export interface Furb {
-  /** The model of a life, `@furb/engine/life`. */
+  /** The model of a life, `furb/life`. */
   life: typeof model;
   /** A panel over the input: a name, and the lines that it shows, which the TUI draws again with the life. */
   panel(name: string, draw: (seen: Seen) => readonly Line[]): void;

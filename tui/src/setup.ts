@@ -1,4 +1,4 @@
-import type { SetupInfo } from "@furb/engine";
+import type { SetupInfo } from "furb";
 
 /** One check of the first run: what it checks, whether it stands, what it found, and how to fix it when it does not.
  * A check that is optional stands as a choice, and nothing is wrong when it is not set. */

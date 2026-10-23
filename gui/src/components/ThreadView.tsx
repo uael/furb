@@ -1,5 +1,5 @@
-import { type Exit, type LiveAct, reason, type Thread } from "@furb/engine/life";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { type Exit, type LiveAct, reason, type Thread } from "furb/life";
 import { ChevronRight, CornerDownRight } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { actorName } from "../data.ts";

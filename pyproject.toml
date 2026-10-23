@@ -18,9 +18,9 @@ classifiers = [
 dependencies = [
     # The Kernel gates a word through the gate of the crate, so the package stands on the extension, at its own
     # version: both carry the engine, and a release is the two together.
-    "furb-monty==0.2.0",
+    "furb-monty==0.2.0", # x-release-please-version
     # The command furb is a program of rust, which the wheel of furb-cli puts on the PATH of the environment.
-    "furb-cli==0.2.0",
+    "furb-cli==0.2.0", # x-release-please-version
 ]
 
 [project.urls]

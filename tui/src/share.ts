@@ -1,7 +1,7 @@
 import { copyFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { display, imageContent, imageReferences } from "@furb/engine";
+import { display, imageContent, imageReferences } from "furb";
 import { Marked } from "marked";
 import { conversation } from "./conversation.ts";
 import { escaped } from "./format.ts";

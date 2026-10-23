@@ -72,7 +72,7 @@ The TypeScript side is a bun workspace at the root, with two packages:
 - `bind/typescript` is the crate through N-API. Its views, its queries and its controls are synchronous, and an
   act that is answered later can be awaited. It includes a `Session`: an engine on the ears of the crate, the
   provider among them, and on a console of the operator. `bind/typescript/README.md` says how to use it. Its
-  model of a life, `@furb/engine/life` in `src/life`, gives the views of a life that every host draws, with no native
+  model of a life, `furb/life` in `src/life`, gives the views of a life that every host draws, with no native
   code. The TUI imports its build in `bind/typescript/dist`, which `bun run build` makes again.
 - `tui` is the OpenTUI application on that package. `tui/README.md` says what the TUI does, and `docs/tui.md` shows
   each screen.
@@ -271,8 +271,34 @@ Every pull request and every push to `main` runs the gates in `.github/workflows
 include the gates of the crate and the type check. The suite runs on Linux, on macOS and on Windows, and the gates
 of the crate run on Windows too. The gates of the TypeScript side run on Linux, on macOS, and on Windows.
 
+A release is one version of every package: the crates `furb` and `furb-cli` on crates.io, the package `furb` of npm
+with the package of its engine for each system, and `furb`, `furb-monty` and `furb-cli` on PyPI.
+`release-please-config.json` names each file that holds the version, and `.github/workflows/release.yml` keeps the
+pull request of the next release open on main, with `CHANGELOG.md`. A merge of that pull request tags the release,
+and `.github/workflows/publish.yml` publishes it from the tag, once it proved each package from its built artifacts
+in a clean environment. The merge of any other pull request publishes nothing. crates.io takes no crate that
+stands on git, and `furb` stands on the fork of monty by git: the job of crates.io publishes `furb` and `furb-cli`
+only when no dependency of either stands on git, which is when monty stands on crates.io with what furb needs, and
+until then it says why it skips.
+
+- `sh script/prove-crate.sh [folder]`: pack the crates of monty at the revision of the fork that `Cargo.toml` names,
+  and `furb` and `furb-cli` on them by their version, as patches of crates.io, then add `furb` to a new crate that
+  takes every other crate from crates.io with no lock of furb, run the example chains there, and install `furb-cli`.
+  It proves that the crates pack and build as crates.io will give them once monty stands there. A crate that breaks
+  the build in a fresh resolve takes a pin with `=` in `Cargo.toml`, as salsa does. It takes about 5 minutes.
+- `sh script/prove-npm.sh <packs>`: install the packs of `npm pack` of `furb` and of the engine of this system in a
+  new folder, and run the example chains there with node.
+
 ## Prose
 
 Write all prose in Simplified Technical English, for a general non-technical audience, per ASD-STE100 at
 https://www.asd-ste100.org/, with no em dash and no en dash. This holds for everything you write: a message, a
 commit, a comment, a docstring, a document.
+
+The title of each pull request starts with a type of conventional commits, then its sentence: `feat: ` for what a
+user can do that he could not, `fix: ` for what was wrong, `perf: ` for what is faster or smaller, and `chore: ` for a
+change that no user of a package sees, as `fix: Reap the shell of a command that drops before its exit`. A squash
+merge carries the title into the commit on main, and release-please reads the types of those commits: below version
+1.0, a `feat:` raises the minor version of the next release and a `fix:` or a `perf:` its patch, and `CHANGELOG.md`
+lists each under its type. A `chore:` raises nothing and stays out of the changelog. The commits before this rule
+stay as they are.

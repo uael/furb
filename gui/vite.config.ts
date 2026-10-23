@@ -10,7 +10,7 @@ export default defineConfig({
   plugins: [react(), tailwind()],
   resolve: {
     alias: {
-      "@furb/engine/life": resolve(import.meta.dirname, "../bind/typescript/src/life/index.ts"),
+      "furb/life": resolve(import.meta.dirname, "../bind/typescript/src/life/index.ts"),
     },
   },
   clearScreen: false,
