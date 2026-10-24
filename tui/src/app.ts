@@ -95,6 +95,7 @@ import {
 import { loadParsers } from "./parsers.ts";
 import {
   type Line as PartLine,
+  type Mark as PartMark,
   Parts,
   type Tone as PartTone,
   plainError,
@@ -386,8 +387,9 @@ export function follow(renderer: CliRenderer, options: AppOptions): () => App {
 /** The rows of the chains of a loom of the board in the orders that the board reads them: every row, the rows that
  * ask, then those that need a look, then the others, each in the order of the tree, the place of each row, and how
  * many rows hold each state, in the order of the count line. */
-function boardOrderOf(loom: Loom) {
-  const rows = loom.rows.filter((row) => row.id !== "operator");
+function boardOrderOf(loom: Loom, listed: (chain: string) => boolean) {
+  const all = loom.rows.filter((row) => row.id !== "operator");
+  const rows = all.filter((row) => listed(row.id));
   const looks = (row: (typeof rows)[number]) => ["failed", "paused", "working"].includes(row.state);
   const counts = boardOrder.flatMap((state) => {
     const count = rows.filter((row) => row.state === state).length;
@@ -398,7 +400,8 @@ function boardOrderOf(loom: Loom) {
     asking: rows.filter((row) => row.state === "asks"),
     looking: rows.filter((row) => row.state !== "asks" && looks(row)),
     resting: rows.filter((row) => row.state !== "asks" && !looks(row)),
-    place: new Map(rows.map((row, at) => [row.id, at])),
+    // A chain that the board does not list keeps its place, which the run of compactions that starts with it takes.
+    place: new Map(all.map((row, at) => [row.id, at])),
     counts,
   };
 }
@@ -2015,9 +2018,15 @@ export class App {
       // The thread of now is read from the index, in the time of what it shows, and that of a moment of the past whole.
       const owed = new Set(w.host.prompts.keys());
       const word = (rung: ActRow) => this.subject(rung);
-      const lines = index
-        ? thread(w.selected, word, w.host.streams, owed, opened, index)
-        : condense(ladder(w.selected, shown, word, w.host.streams, owed), opened);
+      // A run of compactions into new chains shows as one feed: the feed of each chain of the run in its order, which
+      // the rule of each compaction parts.
+      const run = w.runOf(w.selected);
+      const continuing = new Set(run.slice(1));
+      const lines = run.flatMap((chain) =>
+        index && chain === w.selected
+          ? thread(chain, word, w.host.streams, owed, opened, index)
+          : condense(ladder(chain, shown, word, w.host.streams, owed), opened),
+      );
       const actCard = (act: ActRow, indent: number) =>
         add(
           act.id,
@@ -2035,15 +2044,55 @@ export class App {
             same: [act, indent, w.folds[act.id], w.took[act.id]],
           },
         );
+      // The marks of the parts stand after the last act that began before their place: a rule with the title of the
+      // mark, then its lines. A line that only shows more of an act, or a fold of earlier lines, places no mark.
+      const moment = w.moment;
+      const marks = this.parts.marks(this.seen()).filter((one) => moment === undefined || one.at < moment);
+      const placing = (line: (typeof lines)[number]) =>
+        line.type !== "tail" && line.type !== "value" && line.type !== "more";
+      const before = new Map<number, PartMark[]>();
+      for (const mark of marks) {
+        const at = lines.findLastIndex((line) => placing(line) && line.act.began < mark.at) + 1;
+        before.set(at, [...(before.get(at) ?? []), mark]);
+      }
+      const markAt = (at: number) => {
+        for (const mark of before.get(at) ?? []) {
+          const said = JSON.stringify(mark.lines ?? []);
+          add(
+            `mark-${mark.chain}-${mark.at}`,
+            `${mark.title}\n${said}`,
+            [],
+            (box) => {
+              box.add(
+                this.line(
+                  [
+                    [`${glyph.rule.repeat(2)} `, c.border],
+                    [mark.title, c.muted],
+                    [
+                      ` ${glyph.rule.repeat(Math.max(0, this.feedWidth - Bun.stringWidth(mark.title) - 8))}`,
+                      c.border,
+                    ],
+                  ],
+                  c.muted,
+                ),
+              );
+              for (const one of mark.lines ?? [])
+                box.add(this.inset(space.between * 2, this.text(this.partLine(one), c.muted)));
+            },
+            { same: [mark.title, said] },
+          );
+        }
+      };
       let retold = false;
-      for (const line of lines) {
+      for (const [at, line] of lines.entries()) {
         const act = line.act as ActRow;
         const indent = line.depth * space.between;
+        markAt(at);
         if (line.type === "rung") {
           const code = this.subject(act);
           // The words that a chain wrote to retell its source stand as one line, which names the source.
           if (rows.get(act.by)?.kind === "chain") {
-            if (retold) continue;
+            if (retold || continuing.has(act.by)) continue;
             retold = true;
             const source = String(rows.get(act.by)?.words[1] ?? "");
             if (source)
@@ -2393,6 +2442,7 @@ export class App {
           );
         }
       }
+      markAt(lines.length);
       // A paused chain says so at the end of its feed, with the reason that the last failure gave, and a button that
       // wakes it, since nothing new runs on it until then.
       if (w.paused && !w.search) {
@@ -3069,6 +3119,7 @@ export class App {
       [...w.host.prompts.keys()].join(" "),
       w.host.measures,
       [...w.host.pending.keys()].join(" "),
+      w.host.compactions,
     ];
     const same = this.boardLoom?.of.every((one, at) => one === of[at]) ? this.boardLoom.loom : undefined;
     const woven =
@@ -3084,7 +3135,8 @@ export class App {
         index: w.boardIndex,
       });
     // The rows of the chains in their orders, and how many of each state, are read once for each loom.
-    const order = same && this.boardLoom ? this.boardLoom.order : boardOrderOf(woven);
+    const order =
+      same && this.boardLoom ? this.boardLoom.order : boardOrderOf(woven, (chain) => w.listed(chain));
     this.boardLoom = { of, loom: woven, order };
     const loom = woven;
     const { rows, asking, looking, resting, place, counts } = order;
@@ -3106,12 +3158,14 @@ export class App {
       0,
       room,
     );
-    const selected = rows[place.get(w.selected) ?? -1];
+    // The chain shown stands in the row of its run of compactions, which the last chain of the run heads.
+    const run = w.runOf(w.selected);
+    const selected = rows.find((row) => row.id === run.at(-1));
     if (selected && !chosen.includes(selected)) chosen.splice(Math.max(0, room - 1), 1, selected);
     // The rows shown keep the order of the board: the chains that ask, then the others in the order of their tree. A
     // chain that the operator names again keeps its loom, so each label is read again.
     const rank = (row: (typeof rows)[number]) =>
-      (row.state === "asks" ? 0 : rows.length) + (place.get(row.id) ?? 0);
+      (row.state === "asks" ? 0 : place.size) + (place.get(w.runOf(row.id)[0] ?? row.id) ?? 0);
     const shown = [...new Set(chosen)]
       .sort((one, other) => rank(one) - rank(other))
       .map((row) => ({ ...row, label: w.labelOf(row.id) }));
@@ -3127,9 +3181,19 @@ export class App {
     const lines = shown.map((row) => {
       const now = known.get(row.id) ?? nowOf(row, loom, w.acts, word, w.boardIndex);
       known.set(row.id, now);
-      return { row, now, depth: row.lines.length / 2 };
+      // A run of compactions stands at the depth of its first chain, which the board does not list.
+      const first = loom.rows.find((one) => one.id === w.runOf(row.id)[0]) ?? row;
+      return { row, now, depth: first.lines.length / 2 };
     });
-    const key = JSON.stringify([lines, counts, left, w.selected, this.feedWidth, this.theme]);
+    const key = JSON.stringify([
+      lines,
+      counts,
+      left,
+      w.selected,
+      this.feedWidth,
+      this.theme,
+      w.host.compactions.length,
+    ]);
     if (key === this.boardKey) return;
     this.boardKey = key;
     this.board.backgroundColor = c.panel;
@@ -3163,7 +3227,7 @@ export class App {
       Math.max(...lines.map(({ row, depth }) => Bun.stringWidth(row.label) + 2 * depth)),
     );
     for (const { row, now, depth } of lines) {
-      const here = row.id === w.selected;
+      const here = run.includes(row.id);
       const [mark, color] = boardMarks[row.state];
       const measure = row.measure
         ? `${row.measure.answers} ${row.measure.answers === 1 ? "answer" : "answers"}  ${row.measure.dollars < 0.01 ? "<$0.01" : `$${row.measure.dollars.toFixed(2)}`}`
@@ -3174,9 +3238,13 @@ export class App {
       const said = now.tone === "work" && !now.text ? "writing" : shortenHomes(now.text);
       const more = now.more ? `  +${now.more}` : "";
       const label = pad(clip(row.label, name - 2 * depth), name - 2 * depth);
+      // A chain that compacted says how many times, in place or into a new chain of its run.
+      const chains = w.runOf(row.id);
+      const cuts = w.host.compactions.filter((one) => chains.includes(one.chain)).length;
+      const compacted = cuts ? `${cuts > 1 ? `compacted ${cuts}×` : "compacted"}  ` : "";
       const room = Math.max(
         8,
-        this.feedWidth - 2 * space.inset - 23 - name - Bun.stringWidth(more) - (actor ? 18 : 0),
+        this.feedWidth - 2 * space.inset - 23 - name - Bun.stringWidth(more + compacted) - (actor ? 18 : 0),
       );
       const text = clip(id + said, room);
       const rest = text.slice(Math.min(id.length, text.length));
@@ -3188,6 +3256,7 @@ export class App {
             [`${mark()} `, color()],
             [label, here ? c.text : c.muted, here ? bold : 0],
             ["  ", c.faint],
+            [compacted, c.faint],
             [text.slice(0, Math.min(id.length, text.length)), c.faint],
             [pad(rest, room - Math.min(Bun.stringWidth(id), room)), toneColors[now.tone]()],
             [more, c.faint],
@@ -3543,6 +3612,7 @@ export class App {
     return {
       chain: w.selected,
       acts: w.acts,
+      compactions: w.host.compactions,
       of: (kind) => w.acts.filter((act) => act.kind === kind),
       run: (word) => w.command(`/run ${word}`),
       say: (text) => {
@@ -4250,7 +4320,7 @@ export class App {
     // the sidebar past its padding.
     const edge = { marginX: -space.between, paddingX: space.inset };
     const chainLine = (chain: ActRow) => {
-      const selected = chain.id === w.selected;
+      const selected = w.runOf(w.selected).at(-1) === chain.id;
       const status = states.get(chain.id) ?? "idle";
       this.railSession.add(
         this.railRow(
@@ -6384,7 +6454,7 @@ export class App {
   /** The chains of the session, each with its state and the chain it branched from. */
   chains(): void {
     const w = this.session;
-    const chains = w.chains;
+    const chains = w.chains.filter((chain) => w.listed(chain.id));
     this.openPalette(
       "Chains",
       chains.map((chain) => {

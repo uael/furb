@@ -3,7 +3,7 @@ import { type FSWatcher, readFileSync, watch as watchFile } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { Engine, FileChange, SessionOptions, Turn } from "furb";
 import { Act, actorParts, ENGINE, model, models, retold, Session, setup, standingOf } from "furb";
-import { type Measure, measureOf } from "furb/life";
+import { type Compaction, type Measure, measureOf } from "furb/life";
 import type { HostState } from "./bridge.ts";
 import { type EngineOptions, roster } from "./models.ts";
 import { queueDispatches, queueHash } from "./queue.ts";
@@ -57,6 +57,7 @@ const state = () => {
         reading: reader.reading,
         recorded: reader.recorded,
         measures: measuresOf(reader.activity.answers),
+        compactions: compactionsOf(reader.activity.compactions),
       } satisfies HostState,
     });
     return;
@@ -78,6 +79,7 @@ const state = () => {
     pending: [...owner.pending],
     changes: owner.changes.length,
     measures: measuresOf(owner.activity.answers),
+    compactions: compactionsOf(owner.activity.compactions),
   };
   sentFacts = owner.facts.length;
   self.postMessage({ state: snapshot });
@@ -215,6 +217,15 @@ function measuresOf(answers: ReadonlyMap<string, readonly { actor: string; usage
       changed[chain] = measureOf(list);
     }
   return changed;
+}
+
+/** How many compactions of the life the host holds. */
+let compacted = 0;
+/** The compactions of a life since the last state, which the host adds to those that it holds. */
+function compactionsOf(compactions: readonly Compaction[]): Compaction[] {
+  const fresh = compactions.slice(compacted);
+  compacted = compactions.length;
+  return fresh;
 }
 
 /** What a request of the session comes to. */

@@ -42,19 +42,30 @@ pub const ENABLE: &str = "enable";
 /// The journal, which says the record again in a later life, so a done it says answers no stand of this life.
 const JOURNAL: &str = "journal";
 
-/// The official extensions, each as its manifest and the file of its word, in the order a life runs them.
-const OFFICIAL: [(&str, &str); 5] = [
-  (include_str!("../extensions/memory/furb.json"), include_str!("../extensions/memory/memory.py")),
-  (include_str!("../extensions/skills/furb.json"), include_str!("../extensions/skills/skills.py")),
+/// The official extensions, each as its manifest, the file of its word, and the file of the part for a TUI that its
+/// manifest names, in the order a life runs them.
+const OFFICIAL: [(&str, &str, Option<&str>); 5] = [
+  (
+    include_str!("../extensions/memory/furb.json"),
+    include_str!("../extensions/memory/memory.py"),
+    None,
+  ),
+  (
+    include_str!("../extensions/skills/furb.json"),
+    include_str!("../extensions/skills/skills.py"),
+    None,
+  ),
   (
     include_str!("../extensions/compaction/furb.json"),
     include_str!("../extensions/compaction/compaction.py"),
+    Some(include_str!("../extensions/compaction/tui.ts")),
   ),
   (
     include_str!("../extensions/ouroboros/furb.json"),
     include_str!("../extensions/ouroboros/ouroboros.py"),
+    None,
   ),
-  (include_str!("../extensions/web/furb.json"), include_str!("../extensions/web/web.py")),
+  (include_str!("../extensions/web/furb.json"), include_str!("../extensions/web/web.py"), None),
 ];
 
 /// Whether a line imports furb or a module of it, as `from furb import`, `from furb.engine import` or `import
@@ -116,7 +127,10 @@ impl Places {
 /// The official extensions, in the order a life runs them.
 pub fn official() -> Vec<Extension> {
   let whole = "an official extension is whole";
-  OFFICIAL.iter().map(|(manifest, word)| manifested(manifest, |_| Ok(word)).expect(whole)).collect()
+  OFFICIAL
+    .iter()
+    .map(|(manifest, word, _)| manifested(manifest, |_| Ok(word)).expect(whole))
+    .collect()
 }
 
 /// The extension in a folder, under the name that its config gives it: its manifest, whose name must be that
@@ -218,32 +232,52 @@ fn turned_on(places: &Places, project: &Path) -> Result<Vec<(String, Option<Path
   Ok(named.into_iter().filter(|one| one.2).map(|(name, path, _)| (name, path)).collect())
 }
 
-/// The part of an extension that a TUI loads: the name of the extension, and the path of its module of TypeScript,
-/// which the manifest names under `tui`, beside the word.
+/// The part of an extension that a TUI loads: the name of the extension, the path of its module of TypeScript, which
+/// the manifest names under `tui`, beside the word, and the text of that module when the crate carries it. The crate
+/// carries the part of an official extension, so a TUI loads it from the text where no checkout of furb stands, as in
+/// an installed package, and the path is then its place in the repository of furb.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "typescript", napi_derive::napi(object))]
 #[cfg_attr(feature = "python", derive(pyo3::IntoPyObject))]
 pub struct Part {
   pub name: String,
   pub file: String,
+  pub text: Option<String>,
 }
 
 /// The part for a TUI of each extension that the configs turn on and whose manifest names one, in the order a life
-/// runs them. An official extension has none, and the manifest of each folder is read again, so a part that a
-/// later write names is found.
+/// runs them. The part of an official extension is the one that the crate carries, and the manifest of each other
+/// folder is read again, so a part that a later write names is found.
 pub fn parts(places: &Places, project: &Path) -> Result<Vec<Part>, Fault> {
   let mut out = Vec::new();
   for (name, root) in turned_on(places, project)? {
-    let Some(root) = root else { continue };
+    let Some(root) = root else {
+      out.extend(carried(&name));
+      continue;
+    };
     let file = root.join("furb.json");
     let refused = |why: String| Fault::refused(format!("{why}: {}", file.display()));
     let text = fs::read_to_string(&file).map_err(|no| refused(no.to_string()))?;
     let manifest: Value = serde_json::from_str(&text).map_err(|no| refused(no.to_string()))?;
     if let Some(tui) = field(&manifest, "tui").map_err(refused)? {
-      out.push(Part { name, file: root.join(tui).display().to_string() });
+      out.push(Part { name, file: root.join(tui).display().to_string(), text: None });
     }
   }
   Ok(out)
+}
+
+/// The part that the crate carries for an official extension, when its manifest names one.
+fn carried(name: &str) -> Option<Part> {
+  OFFICIAL.iter().find_map(|(manifest, _, text)| {
+    let manifest: Value = serde_json::from_str(manifest).expect("an official extension is whole");
+    let tui = field(&manifest, "tui").ok()??;
+    let file = format!("extensions/{name}/{tui}");
+    (manifest["name"] == name).then(|| Part {
+      name: name.to_owned(),
+      file,
+      text: text.map(str::to_owned),
+    })
+  })
 }
 
 /// A path that a config gives, resolved against the folder of the config, with `~` as the home. The path is joined

@@ -17,6 +17,7 @@ import {
   Session,
   type Turn,
 } from "../src/index.ts";
+import { compactedRun } from "../src/life/acts.ts";
 import { alive, printPid, remove } from "./processes.ts";
 import { until } from "./until.ts";
 
@@ -962,4 +963,52 @@ test("a rung costs the dollars of the answers that wrote its word", () => {
   hear(["reply", "reply2", "rung1", ROOT, "claude-cli:opus/high"]);
   hear(["done", "reply2", "world", ["assistant", "close(1)", [100, 10, 80, 0, 0.25], null]]);
   expect(activity.acts.get("rung1")?.cost).toBe(0.75);
+});
+
+test("the activity keeps each compaction of a chain: a prefix said on it after its birth", () => {
+  const activity = new Activity();
+  const hear = (fact: Fact) => {
+    const heard = activity.hear(fact);
+    while (!heard.next().done);
+  };
+  hear(["chain", "chain2", "rung1", ROOT, "work", ROOT]);
+  // A chain with a source says its own prefix at its birth, which cuts nothing.
+  hear(["prefix", "chain2", "chain2", [["bash", "bash1", "rung1", ROOT, "ls", "", 600]]]);
+  hear(["bash", "bash2", "rung2", "chain2", "ls", "", 600]);
+  hear([
+    "prefix",
+    "chain2",
+    "rung3",
+    [
+      ["bash", "bash2", "rung2", "chain2", "ls", "", 600],
+      ["done", "bash2", "world", { is: "Exit", code: 0 }],
+    ],
+  ]);
+  expect(activity.compactions).toEqual([{ chain: "chain2", by: "rung3", at: 4 }]);
+});
+
+test("the activity keeps a compaction into a new chain: a chain whose first word from its compaction restores its source, which runs on from that source", () => {
+  const activity = new Activity();
+  const hear = (fact: Fact) => {
+    const heard = activity.hear(fact);
+    while (!heard.next().done);
+  };
+  const word = (source: string) =>
+    `restore('${source}')\n<s:summary>\nIt read the plan.</s:summary>\nreground()`;
+  hear(["chain", "chain20", "compacted1", ROOT, "compacted", ROOT]);
+  hear(["prefix", "chain20", "chain20", []]);
+  hear(["rung", "rung2", "extensions", "chain20", "remember()", "", ""]);
+  hear(["rung", "rung3", "compacted1", "chain20", word(ROOT), "", ""]);
+  // A word that restores another chain than the source, and a later word that restores it again, make none.
+  hear(["chain", "chain21", "rung3", ROOT, "aside", ROOT]);
+  hear(["rung", "rung4", "rung3", "chain21", word("chain7"), "", ""]);
+  hear(["rung", "rung5", "compacted1", "chain20", word(ROOT), "", ""]);
+  hear(["chain", "chain22", "compacted1", "chain20", "compacted", "chain20"]);
+  hear(["rung", "rung6", "compacted1", "chain22", word("chain20"), "", ""]);
+  expect(activity.compactions).toEqual([
+    { chain: "chain20", from: ROOT, by: "compacted1", at: 1 },
+    { chain: "chain22", from: "chain20", by: "compacted1", at: 8 },
+  ]);
+  expect(compactedRun("chain20", activity.compactions)).toEqual([ROOT, "chain20", "chain22"]);
+  expect(compactedRun("chain21", activity.compactions)).toEqual(["chain21"]);
 });

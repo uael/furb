@@ -35,6 +35,10 @@ Five extensions come with furb, and each life runs them unless a config turns th
   nothing, so a loop such as `while True: await conduct()` goes on with its state, and the workers that a conductor
   hired go on. No chain is watched unless a word asks for it, so the extension has no life word. A project changes
   the defaults in an extension of its own whose word rebinds `SHARE`, `FILTERS`, `CHOOSER`, `LISTED` or `BRIEF`.
+  Its part for the TUI marks each compaction in the feed of the chain: a rule at its place, with its summary under
+  it, which parts what the model no longer reads from what it reads now. The board of the chains says how many
+  times a chain compacted. A chain that an older compaction made, which went on in a new chain whose first word
+  restores its source, shows with that source as one chain, named `Main -> compacted`, with one feed.
 - **`ouroboros`** teaches a model to extend furb. Its life word, `ouroboros()`, tells each chain once the three ways
   to extend furb and when to take each: a def in a word, which lives with its chain; `extend(name, *rungs)`, which
   writes the words of those rungs as an extension of the project and turns it on, so every later chain runs it; and
@@ -108,7 +112,9 @@ a change of furb. The skill `extending` gives an example of each.
 
 An official extension also has a contract, `<name>.pyi`, whose laws its suite in `test/` holds, as
 [the hygiene laws](../AGENTS.md#the-hygiene-laws) say, and an ear of the World in `src/extension/<name>.rs` when it
-reads the disk or the network, as `memory`, `skills` and `web` do.
+reads the disk or the network, as `memory`, `skills` and `web` do. Its part for the TUI, `tui.ts` beside its word as
+`compaction` has, is in the crate, so the TUI loads it from an installed package too, where no checkout of furb
+stands. It changes with a build of furb, and not live.
 
 Turn on only the extensions that you trust. A word runs in the sandbox of monty with the engine of the crate, and with
 the rights of your user with the engine of CPython, as a word of a model does there.
@@ -138,12 +144,18 @@ export default function (furb) {
 - `furb.row(kind, draw)` draws each act of a kind in the feed: `draw(act, seen)` gives `{ label, details }`, the
   text after the kind and the lines that its card shows when it opens. The rows of a rung and of a prompt stay the
   TUI's own.
+- `furb.mark(draw)` marks places in the feed of a chain: `draw(seen)` gives a list of `{ chain, at, title, lines }`.
+  The feed of that chain shows each mark as a rule with its title, then its lines, after the last act that began
+  before `at`, or at its start. `at` is a place in time, as the `began` of an act, so a mark stands between the acts
+  before it and the acts after it. When the feed shows a moment of the past, it shows only the marks before that
+  moment. A mark that throws shows its error as its title.
 - `furb.key(on, run)` adds a key, as `ctrl+e` or `+`, which acts while no dialog is open. A key with no ctrl, meta or
   alt acts only on an empty input.
 - `furb.command(name, detail, run)` adds a command to the palette, which `/name` runs too. A key of the TUI wins over
   a key of a part, and a part that names a command of the TUI fails.
-- `seen` gives the chain on screen, every act of the life, `of(kind)` for the acts of a kind, `run(word)`, which runs
-  Python on the chain through the gate as `/run` does, and `say(text)`, which shows a notice in the footer.
+- `seen` gives the chain on screen, every act of the life, `compactions`, each compaction of a chain as the model of
+  a life gives it, `of(kind)` for the acts of a kind, `run(word)`, which runs Python on the chain through the gate as
+  `/run` does, and `say(text)`, which shows a notice in the footer.
   `furb.life` is [the model of a life](../bind/typescript/README.md), `furb/life`.
 
 A part imports types alone, so it loads in any project. `tui/src/parts.ts` gives the types, and `tui/fixtures/todo`

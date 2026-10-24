@@ -17,7 +17,7 @@ import {
   shapes,
   WORK,
 } from "furb";
-import { type ActIndex, type Ask, aimed, beside, type Desk, desk } from "furb/life";
+import { type ActIndex, type Ask, aimed, beside, compactedRun, type Desk, desk } from "furb/life";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { expandHome, fileReferences, fromDirectory, projectFiles, shortenHome } from "./files.ts";
 import { dollars } from "./format.ts";
@@ -715,29 +715,34 @@ export class Session extends EventEmitter {
    * that failed, or a state that was not idle when it was read last, and no other chain. */
   activeChains(): { active: [ActRow, SessionStatus][]; resting: number } {
     const index = this.indexed();
-    const restless = new Set([
-      this.engine.root,
-      this.selected,
-      ...this.liveOn().keys(),
-      ...index.failing,
-      ...this.unread,
-      ...[...this.phases].flatMap(([id, phase]) => (phase === "idle" ? [] : [id])),
-      ...[...this.host.prompts.keys(), ...this.host.pending.keys()].flatMap(
-        (id) => index.ids.get(id)?.on ?? [],
-      ),
-    ]);
+    // A chain of a run of compactions into new chains stands as its run, which the last chain of it heads.
+    const head = (id: string) => this.runOf(id).at(-1) ?? id;
+    const root = head(this.engine.root);
+    const selected = head(this.selected);
+    const restless = new Set(
+      [
+        this.engine.root,
+        this.selected,
+        ...this.liveOn().keys(),
+        ...index.failing,
+        ...this.unread,
+        ...[...this.phases].flatMap(([id, phase]) => (phase === "idle" ? [] : [id])),
+        ...[...this.host.prompts.keys(), ...this.host.pending.keys()].flatMap(
+          (id) => index.ids.get(id)?.on ?? [],
+        ),
+      ].map(head),
+    );
     const active = [...restless]
       .flatMap((id) => {
         const chain = index.ids.get(id);
         return chain?.kind === "chain" ? [[chain, this.chainStatus(id)] as [ActRow, SessionStatus]] : [];
       })
-      .filter(
-        ([chain, status]) => chain.id === this.engine.root || chain.id === this.selected || status !== "idle",
-      )
+      .filter(([chain, status]) => chain.id === root || chain.id === selected || status !== "idle")
       .sort(
         ([one], [other]) => (index.places.get(one.id)?.chain ?? 0) - (index.places.get(other.id)?.chain ?? 0),
       );
-    return { active, resting: index.chains.length - active.length };
+    const listed = index.chains.filter((chain) => this.listed(chain.id)).length;
+    return { active, resting: listed - active.length };
   }
   /** The first chains that rest, in the order of the chains, up to a count. */
   restingChains(count: number): ActRow[] {
@@ -745,7 +750,7 @@ export class Session extends EventEmitter {
     const out: ActRow[] = [];
     for (const chain of this.indexed().chains) {
       if (out.length >= count) break;
-      if (!shown.has(chain.id)) out.push(chain);
+      if (!shown.has(chain.id) && this.listed(chain.id)) out.push(chain);
     }
     return out;
   }
@@ -838,8 +843,9 @@ export class Session extends EventEmitter {
   get context(): number | undefined {
     return this.turns.findLast(([role, , used]) => role === "assistant" && used)?.[2]?.[0];
   }
+  /** The name of the chain shown, which a run of compactions into new chains names as a whole. */
   get label(): string {
-    return this.labelOf(this.selected);
+    return this.labelOf(this.runOf(this.selected).at(-1) ?? this.selected);
   }
   get actorChoice(): { model: string; effort: string } {
     return actorParts(
@@ -981,9 +987,26 @@ export class Session extends EventEmitter {
       ...(this.images[this.selected] ?? []).map(({ name, uri }) => imageReference(name, uri)),
     ].join("\n");
   }
+  /** The name of a chain: its label, or Main for the root. The last chain of a run of compactions into new chains
+   * names the run, as the first chain and the last one: Main -> compacted. */
   labelOf(id: string): string {
-    const chain = this.indexed().ids.get(id);
-    return id === this.engine.root ? "Main" : String((chain?.kind === "chain" && chain.words[0]) || "Chain");
+    const own = (name: string) => {
+      const chain = this.indexed().ids.get(name);
+      return name === this.engine.root
+        ? "Main"
+        : String((chain?.kind === "chain" && chain.words[0]) || "Chain");
+    };
+    const run = this.runOf(id);
+    return run.length > 1 && run.at(-1) === id ? `${own(run[0] ?? id)} -> ${own(id)}` : own(id);
+  }
+  /** The run of compactions into new chains that holds a chain, as `furb/life` gives it. */
+  runOf(id: string): string[] {
+    return compactedRun(id, this.host.compactions);
+  }
+  /** Whether a list of the chains shows a chain: a chain that a later chain of its run goes on from shows as that run,
+   * under the last chain of it. */
+  listed(id: string): boolean {
+    return this.runOf(id).at(-1) === id;
   }
   async select(id: string): Promise<void> {
     // The moment that the feed shows is one of the chain shown, so another chain is shown as it stands now.

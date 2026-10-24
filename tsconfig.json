@@ -16,6 +16,7 @@
     "bind/typescript/**/*.ts",
     "tui/**/*.ts",
     "docs/examples/**/*.ts",
+    "extensions/**/*.ts",
     "gui/host/**/*.ts",
     "gui/test/**/*.ts"
   ]

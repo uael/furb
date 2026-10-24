@@ -445,12 +445,15 @@ export interface Outcome {
 }
 
 /**
- * The part of an extension that a TUI loads: the name of the extension, and the path of its module of TypeScript,
- * which the manifest names under `tui`, beside the word.
+ * The part of an extension that a TUI loads: the name of the extension, the path of its module of TypeScript, which
+ * the manifest names under `tui`, beside the word, and the text of that module when the crate carries it. The crate
+ * carries the part of an official extension, so a TUI loads it from the text where no checkout of furb stands, as in
+ * an installed package, and the path is then its place in the repository of furb.
  */
 export interface Part {
   name: string
   file: string
+  text?: string
 }
 
 /**

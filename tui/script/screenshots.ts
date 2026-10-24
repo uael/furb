@@ -814,8 +814,49 @@ try {
   await rest();
   await capture("74-extension-part");
   await writeFile(join(folder, "tui.ts"), "export default (furb) => { furb.panel(");
-  while (!app().parts.loaded[0]?.error) await Bun.sleep(10);
+  while (!app().parts.loaded.find((one) => one.name === "todo")?.error) await Bun.sleep(10);
   await capture("75-extension-part-error");
+  app().dispose();
+  await library.dispose();
+
+  // The part of the official extension compaction, which the crate carries: a rule at each compaction of a chain,
+  // with its summary, between what the model no longer reads and what it reads now. The board says how many times
+  // each chain compacted.
+  await show(await demoSession({ cwd: await project("compaction") }));
+  const compaction = (
+    await readFile(resolve(import.meta.dir, "..", "..", "extensions", "compaction", "compaction.py"), "utf8")
+  ).replace(/^from furb\.engine import \([^)]*\)\n+/m, "");
+  await session.command(`/run ${compaction}\nchain("review")\nplan = read("README.md")`);
+  await settle();
+  await session.command(
+    '/run compact(summary="The plan stands in README.md, and the operator chose the calm palette.\\nThe parser is done and its tests pass. The docs wait.")',
+  );
+  await settle();
+  await session.command('/run docs = "The docs of the parser"');
+  await settle();
+  await session.command(
+    '/run compact(summary="The docs of the parser are written.\\nThe screenshots of the parser wait.")',
+  );
+  await settle();
+  await rest();
+  await capture("75-compaction");
+  app().dispose();
+  await library.dispose();
+
+  // An older compaction went on in a new chain, as Main -> compacted: the run shows as one row of the board and as one
+  // feed, with the rule of the compaction between the feed of each chain.
+  await show(await demoSession({ cwd: await project("compacted") }));
+  const root = session.engine.root;
+  await session.command(
+    `/run ${compaction}\ndef restore(source, on=""):\n  return None\nchain("review")\nplan = read("README.md")`,
+  );
+  await settle();
+  await session.command(
+    `/run newer = chain("compacted", "${root}")\nrung("restore('${root}')\\n<s:summary>\\nThe plan stands in README.md, and the parser is done.\\nThe docs wait.</s:summary>\\nreground()", on=newer)\nrung('docs = "The docs of the parser"', on=newer)`,
+  );
+  await settle();
+  await rest();
+  await capture("75-compaction-chains");
   app().dispose();
   await library.dispose();
 
