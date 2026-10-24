@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { basename, delimiter, join, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import { type App, follow } from "../src/app.ts";
@@ -21,7 +22,24 @@ import { click, end, find, highlighting, home, mount, watch } from "./stage.ts";
 const conductor = resolve(import.meta.dir, "..", "fixtures", "conductor.jsonl");
 // The model of the demo writes slowly, so that its work stays in progress while a capture shows it. The session runs
 // in a worker, which reads the environment once, as it starts.
-const projects = await home("furb-gallery", { FURB_DEMO_PACE: "200" });
+// The gallery finds no model: no claude command line on its PATH, no key, and no local server, so that the first run
+// of a real life shows the check of the setup as a new machine does. The demo needs no model.
+const bare = {
+  PATH: (process.env.PATH ?? "")
+    .split(delimiter)
+    .filter(
+      (folder) => folder && !existsSync(join(folder, process.platform === "win32" ? "claude.exe" : "claude")),
+    )
+    .join(delimiter),
+  FURB_CLAUDE_BIN: "",
+  FURB_LOCAL_URL: "",
+  ...Object.fromEntries(
+    Object.keys(process.env)
+      .filter((name) => /_(API_KEY|KEY|TOKEN)$/.test(name))
+      .map((name) => [name, ""]),
+  ),
+};
+const projects = await home("furb-gallery", { FURB_DEMO_PACE: "200", ...bare });
 /** What the script waits for: a screen whose state never comes ends the script with an error that names the screen. */
 const waits = watch();
 /** A project of the gallery in its home, new, with the files of the demo. */
@@ -752,22 +770,16 @@ try {
   app().steer(false);
   app().switchView("main");
 
-  // A first run on a machine that holds no model: the welcome checks the setup, with a fix for each part that is
-  // missing. The demo needs no model and checks nothing, so the check is the one of a machine with nothing.
+  // A first run of a real life, not a demo, on this home, which holds no model: the welcome checks the setup, with a
+  // fix for each part that is missing, over the steps that the extensions played on the chain.
   app().dispose();
   await library.dispose();
-  const bare = await demoSession({ cwd: await project("first-run") });
-  await until(bare, () => bare.setup === null && bare.catalogRead);
-  bare.setup = {
-    claude: false,
-    providers: [
-      { provider: "anthropic", env: ["ANTHROPIC_API_KEY"], offered: 0 },
-      { provider: "openai", env: ["OPENAI_API_KEY"], offered: 0 },
-      { provider: "google", env: ["GOOGLE_API_KEY", "GEMINI_API_KEY"], offered: 0 },
-      { provider: "openrouter", env: ["OPENROUTER_API_KEY"], offered: 0 },
-    ],
-  };
-  await show(bare);
+  const fresh = await project("first-run");
+  const machine = await openEngine({ cwd: fresh, record: join(fresh, "session.jsonl") });
+  const real = new Session(machine.engine, machine.host, true);
+  await real.refresh();
+  await until(real, () => real.setup !== undefined && real.catalogRead && real.activity.length > 0);
+  await show(real);
   await capture("63-setup-no-model");
 
   // Watch a life: the demo plays by itself, asks no model, and costs nothing.
@@ -788,6 +800,10 @@ try {
   const asks = () => watched.at(watched.activity).some((act) => act.kind === "prompt" && act.words[2]);
   while (asks()) watched.travel(-1);
   await capture("65-watch-earlier");
+  // The bar of the watch stays over the feed on the smallest terminal.
+  test.resize(80, 24);
+  await capture("81-watch-small");
+  test.resize(152, 46);
 
   // A project extension gives the TUI a part, which loads live: the panel of a todo list over the input, and the row
   // of each act todo in the feed. A module that breaks shows its error in its panel.

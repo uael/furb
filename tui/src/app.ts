@@ -116,7 +116,7 @@ import {
   views,
   working,
 } from "./session.ts";
-import { type Check, checks } from "./setup.ts";
+import { answering, type Check, checks } from "./setup.ts";
 import { publishShare } from "./share.ts";
 import {
   theme as c,
@@ -137,6 +137,17 @@ import {
   themeLabels,
 } from "./theme.ts";
 import { bold, italic, logo, mix, type Part, plain, styled, underline } from "./ui.ts";
+import {
+  asker,
+  branchMessages,
+  branchStart,
+  branchTakes,
+  earlierSteps,
+  modelsRead,
+  plainActs,
+  stepName,
+  watchBar,
+} from "./watching.ts";
 import type { SessionEntry, Workspace, Workspaces } from "./workspaces.ts";
 
 const exitNotice = "Press ⌃D again to exit.";
@@ -481,6 +492,11 @@ export class App {
   private readonly searchRow: BoxRenderable;
   /** The bar above the feed while the rewind tree is open, which says what a choice does. */
   private readonly treeBar: BoxRenderable;
+  /** The bar of a life that the operator watches, pinned over the feed, so that it stays as the feed scrolls. */
+  private readonly watchBar: BoxRenderable;
+  private watchKey = "";
+  /** Whether the feed shows the welcome, whose check of the setup takes the key r while the input is empty. */
+  private welcoming = false;
   /** The board over the feed: one row for each chain of the life, with what it does now. */
   private readonly board: BoxRenderable;
   private boardKey = "";
@@ -669,6 +685,8 @@ export class App {
     center.add(this.searchRow);
     this.treeBar = bar({ id: "rewind-bar" });
     center.add(this.treeBar);
+    this.watchBar = this.box({ id: "watch-bar", visible: false, flexShrink: 0 });
+    center.add(this.watchBar);
     this.board = this.box({
       id: "board",
       visible: false,
@@ -1243,7 +1261,13 @@ export class App {
           ]
         : w.mode === "python"
           ? ["Python", c.secondary, "Write Python. The gate reads it before it runs."]
-          : ["Prompt", c.accent, "Ask anything, or type / for commands"];
+          : this.setupState().none
+            ? [
+                "Prompt",
+                c.danger,
+                "No model answers yet. Fix the setup above, or watch a life, which needs none.",
+              ]
+            : ["Prompt", c.accent, "Ask anything, or type / for commands"];
     for (const edge of this.composeEdges) if (edge.borderColor !== modeColor) edge.borderColor = modeColor;
     this.composer.cursorColor = modeColor;
     this.composer.placeholder = placeholder;
@@ -1321,7 +1345,10 @@ export class App {
     const chord = `${this.kitty ? "⌃" : "⌥"}1-3`;
     const toggle = views.reduce(
       (sum, view) =>
-        sum + viewLabels[view].length + 4 + (view === "changes" && changes ? String(changes).length + 1 : 0),
+        sum +
+        this.viewLabel(view).length +
+        4 +
+        (view === "changes" && changes ? String(changes).length + 1 : 0),
       0,
     );
     const head = Bun.stringWidth(w.sessionName) + 3 + Bun.stringWidth(w.label);
@@ -1334,7 +1361,7 @@ export class App {
       this.switcher(
         this.toggle,
         views.map((view) => ({
-          label: viewLabels[view],
+          label: this.viewLabel(view),
           badge: view === "changes" && changes ? String(changes) : "",
           color: c.accent,
           run: () => this.showView(view),
@@ -1368,7 +1395,10 @@ export class App {
     const w = this.session;
     const pending = w.operatorPrompt;
     const { model, effort } = w.actorChoice;
-    const { provider, id: name } = modelName(model);
+    const { provider, id } = modelName(model);
+    // With no model that answers, the actor falls to the operator, which the line names as no model, with no effort.
+    const none = id === "operator";
+    const name = none ? "no model" : id;
     const stash = w.stashes[w.draftKey];
     const prompt = w.mode === "prompt" && !w.editing && !pending;
     // The line spans the input but its bar and its padding.
@@ -1394,7 +1424,12 @@ export class App {
     // A narrow input leaves out, in this order, the provider, the type of the answer, the effort, and the chord of the
     // switch, and the stash shows less of what waits in it.
     const edited = Boolean(w.editing || pending);
-    const shown = { chord: !edited, provider: prompt && Boolean(provider), shape: prompt, effort: prompt };
+    const shown = {
+      chord: !edited,
+      provider: prompt && Boolean(provider) && !none,
+      shape: prompt,
+      effort: prompt && !none,
+    };
     const gaps = 3;
     const width = () =>
       (edited ? Bun.stringWidth(mode) + 4 : "Prompt".length + "Python".length + 8) +
@@ -1452,7 +1487,7 @@ export class App {
       gap();
       button(
         [
-          [name, c.text],
+          [name, none ? c.danger : c.text],
           [shown.provider ? ` ${provider}` : "", c.faint],
         ],
         () => this.models(),
@@ -1865,6 +1900,7 @@ export class App {
       }
     }
     this.renderBoard();
+    this.renderWatch();
     if (this.tree) {
       this.renderTree();
       return;
@@ -1986,7 +2022,28 @@ export class App {
           ],
         ),
       );
-    if (w.view === "feed") {
+    // A chain that holds no act of the operator or of a model shows the welcome, so that the steps of the extensions,
+    // which each chain runs as it starts, do not hide it.
+    this.welcoming =
+      w.view === "feed" &&
+      !w.search &&
+      !w.loading &&
+      !w.error &&
+      w.moment === undefined &&
+      !w.paused &&
+      !w.actOf(w.selected)?.words[1] &&
+      !w.activity.some((act) => act.by === "operator" || act.kind === "prompt");
+    if (this.welcoming) {
+      const { width, height } = this.scroll.viewport;
+      const { found } = this.setupState();
+      add(
+        "welcome",
+        `welcome:${width}:${height}:${this.theme}:${w.watching}:${found.map((one) => one.state + one.found).join()}`,
+        [],
+        (box) => this.welcome(box, height),
+      );
+      items++;
+    } else if (w.view === "feed") {
       // The feed shows the acts as they stood at the moment that the operator moved to, or as they stand now.
       const shown = w.at(w.acts);
       // The acts of now are found by the index of the session, and those of a moment of the past by a map of their own.
@@ -2001,9 +2058,6 @@ export class App {
         made ??= makers(shown);
         return made?.get(id) ?? [];
       };
-      if (w.watching) {
-        add("watch", `watch:${w.moment}:${w.cost}:${this.theme}`, [], (box) => this.watchBanner(box));
-      }
       // The feed of a chain is its ladder, which the model of a life gives every host: each prompt with the rungs of
       // its ladder, the acts of each rung, and what the prompt closed with.
       // A fold that the operator opened shows the earlier prompts of the thread, or the earlier rungs of a ladder.
@@ -2046,18 +2100,37 @@ export class App {
             if (retold) continue;
             retold = true;
             const source = String(rows.get(act.by)?.words[1] ?? "");
+            // The branch says what it takes of its source: each message before the moment it starts at, which the
+            // word that made it does not leave out.
+            const maker = w.actOf(String(rows.get(act.by)?.by ?? ""));
+            const messages =
+              maker &&
+              branchMessages(w.acts, source, maker, this.subject(maker), (one) => w.isUserPrompt(one));
+            const name = w.labelOf(source);
             if (source)
-              add(`retold-${act.by}`, `${source}:${this.theme}`, [], (box) =>
-                box.add(
-                  this.link(
-                    [
-                      ["↳ ", c.secondary],
-                      ["Branched from ", c.muted],
-                      [w.labelOf(source), c.text, bold],
-                    ],
-                    () => void w.select(source).catch(w.fail),
-                  ),
-                ),
+              add(
+                `retold-${act.by}`,
+                `${source}:${name}:${messages}:${w.watching}:${this.theme}`,
+                [],
+                (box) => {
+                  box.add(
+                    this.link(
+                      w.watching
+                        ? [
+                            ["↳ ", c.secondary],
+                            [branchStart(name), c.muted],
+                          ]
+                        : [
+                            ["↳ ", c.secondary],
+                            ["Branched from ", c.muted],
+                            [name, c.text, bold],
+                          ],
+                      () => void w.select(source).catch(w.fail),
+                    ),
+                  );
+                  if (messages !== undefined)
+                    box.add(this.text(branchTakes(messages), c.faint, { paddingLeft: space.between }));
+                },
               );
             continue;
           }
@@ -2247,7 +2320,7 @@ export class App {
                 this.link(
                   [
                     [`${glyph.closed} `, c.faint],
-                    [`${count} earlier ${noun}`, c.muted],
+                    [w.watching ? earlierSteps(count) : `${count} earlier ${noun}`, c.muted],
                   ],
                   () => {
                     w.folds[key] = false;
@@ -2418,6 +2491,7 @@ export class App {
         );
         items++;
       }
+      // A feed that shows nothing, as after an undo of its one message, shows the welcome too.
       if (!items && !w.search && !w.loading && !w.error) {
         const { width, height } = this.scroll.viewport;
         add("welcome", `welcome:${width}:${height}:${this.theme}`, [], (box) => this.welcome(box, height));
@@ -2683,32 +2757,29 @@ export class App {
           ),
         );
     column.add(
-      this.text("The model answers in Python. Read and steer each word it runs.", c.muted, {
+      this.text("The model answers in Python. Read and steer each step it runs.", c.muted, {
         marginTop: space.section,
       }),
     );
-    const model = modelName(w.actorChoice.model).id;
+    // With no model that answers, the actor is the operator, which the line does not name.
+    const model = this.setupState().none ? "" : modelName(w.actorChoice.model).id.replace(/^operator$/, "");
     column.add(
       this.whole(
         this.text(
           [
             [clip(shortenHome(w.workingDirectory), 40, "end"), c.faint],
-            ["   ", c.faint],
+            [model ? "   " : "", c.faint],
             [model, c.faint],
           ],
           c.faint,
           { truncate: true },
         ),
-        () => `${shortenHome(w.workingDirectory)}   ${model}`,
+        () => `${shortenHome(w.workingDirectory)}${model ? `   ${model}` : ""}`,
       ),
     );
-    // The check of the setup shows on the first run, and on each run while no model answers, once the worker said
-    // what this machine holds. The demo needs no model and checks nothing.
-    const setup = w.setup;
-    const found = setup && w.catalogRead ? checks(setup, w.catalog.length) : [];
     // With no model, a prompt has nothing to answer it, so the welcome offers only the life to watch.
-    const none = Boolean(found.length) && !w.catalog.length;
-    if (found.length && (this.firstRun || none)) {
+    const { found, none, shown } = this.setupState();
+    if (shown) {
       column.add(this.setupCheck(found, width));
       if (!w.preferences.setupSeen) {
         w.preferences.setupSeen = true;
@@ -2787,6 +2858,43 @@ export class App {
     this.centered(box, height, column);
   }
 
+  /** The check of the setup, once the worker said what this machine holds: its checks, whether no model answers, and
+   * whether the welcome shows it, which it does on the first run, and on each run while no model answers. The demo
+   * needs no model and checks nothing. */
+  private setupState(): { found: Check[]; none: boolean; shown: boolean } {
+    const w = this.session;
+    const found = w.setup && w.catalogRead ? checks(w.setup, answering(w.setup, w.catalog)) : [];
+    const none = found.at(-1)?.state === "missing";
+    return { found, none, shown: Boolean(found.length) && (this.firstRun || none) };
+  }
+  /** The check of the setup again, after the operator fixed a part of it. */
+  private checkAgain = (): void => {
+    this.session.notice = "Checking the setup again.";
+    void this.session
+      .checkSetup()
+      .then(() => {
+        this.session.notice = this.setupState().none ? "Still no model answers." : "A model answers now.";
+        this.renderContent();
+      })
+      .catch(this.report);
+  };
+  /** The name of a view of a chain: the watch names the transcript by what it is. */
+  private viewLabel(view: View): string {
+    return view === "transcript" && this.session.watching ? modelsRead : viewLabels[view];
+  }
+  /** The bar of the watch, pinned over the feed: drawn again only when what it says changed. */
+  private renderWatch(): void {
+    const w = this.session;
+    const visible = w.watching && !this.tree;
+    if (this.watchBar.visible !== visible) this.watchBar.visible = visible;
+    // The board stands right under the bar, which spares a row of the feed on a small terminal.
+    this.board.marginTop = visible ? 0 : space.section;
+    const key = visible ? `${w.moment === undefined}:${w.cost}:${this.theme}` : "";
+    if (key === this.watchKey) return;
+    this.watchKey = key;
+    this.clear(this.watchBar);
+    if (visible) this.watchBanner(this.watchBar);
+  }
   /** The check of the setup: each way to a model that this machine holds or lacks, with a fix for each one that is
    * missing, and a clear word when no model answers. */
   private setupCheck(found: Check[], width: number): BoxRenderable {
@@ -2841,29 +2949,17 @@ export class App {
     const w = this.session;
     const panel = this.panel(box, c.accent);
     // The demo asks no model: its script answers each turn, so no call goes out and nothing is spent.
+    const earlier = w.moment !== undefined;
+    const [title, count, shows, keys] = watchBar(dollars(w.cost), earlier);
     panel.add(
       this.text([
         [`${glyph.running} `, c.accent],
-        ["Watching a life", c.text, bold],
-        [`   0 model calls, ${dollars(w.cost)}`, c.muted],
+        [title, c.text, bold],
+        [`   ${count}`, c.muted],
       ]),
     );
-    panel.add(
-      this.text(
-        "Many models answer in one life. A word of Python is a program. Any point can start a new branch.",
-        c.muted,
-        { paddingLeft: space.between },
-      ),
-    );
-    panel.add(
-      this.text(
-        w.moment === undefined
-          ? "Press [ to step back in time, then b to start a branch from there."
-          : "This is an earlier moment. Press ] to step on, b to start a branch here, or Esc to come back to now.",
-        w.moment === undefined ? c.faint : c.warning,
-        { paddingLeft: space.between },
-      ),
-    );
+    panel.add(this.text(shows, c.muted, { paddingLeft: space.between }));
+    panel.add(this.text(keys, earlier ? c.warning : c.faint, { paddingLeft: space.between }));
   }
   /** Watch a life: a new demo that plays by itself, asks no model, and shows in a workspace of its own. */
   private watch = async (): Promise<void> => {
@@ -2934,7 +3030,12 @@ export class App {
    * nothing, since its glyph says it. */
   private actState(act: ActRow): State {
     const w = this.session;
-    const running = () => ({ word: `running ${this.progress(act.id)}`, mark: spin(), color: c.accent });
+    // At a moment of the past, an act that had not ended yet shows so, with no spinner and no time, since nothing runs
+    // there.
+    const running = () =>
+      w.moment === undefined
+        ? { word: `running ${this.progress(act.id)}`, mark: spin(), color: c.accent }
+        : { word: "not done yet", mark: glyph.ring, color: c.faint };
     if (act.kind === "grant" && act.done) return { word: "ended", mark: glyph.ring, color: c.faint };
     // Only work moves: an act of another kind that lives, as a grant or the watcher of an extension, lives until
     // something ends it, as a chain does, and shows a dot.
@@ -3037,13 +3138,19 @@ export class App {
     const more = line.more ? `  +${line.more}` : "";
     const tail = word ? `  ${word}` : "";
     const did = this.did(act);
-    const room = this.feedWidth - indent - 8 - Bun.stringWidth(act.id + more + tail + plain(did));
+    // The watch names a rung and its acts in common words.
+    const plainly = this.session.watching;
+    const name = plainly ? stepName(this.author(act)) : act.id;
+    const acts = plainly
+      ? line.acts.map((chip) => ({ ...chip, label: plainActs(chip.ids[0] ?? chip.label, chip.ids.length) }))
+      : line.acts;
+    const room = this.feedWidth - indent - 8 - Bun.stringWidth(name + more + tail + plain(did));
     // The acts take at most half the row, and the first line of the word takes the rest.
-    const chips = this.chipParts(line.acts, Math.floor(room / 2));
+    const chips = this.chipParts(acts, Math.floor(room / 2));
     const shown = this.preview(first, this.feedWidth - room + Bun.stringWidth(plain(chips)));
     return [
       [`${mark} `, color],
-      [`${act.id}  `, c.faint],
+      [`${name}  `, c.faint],
       ...this.colored(shown),
       [more, c.faint],
       ...chips,
@@ -3166,7 +3273,7 @@ export class App {
       const here = row.id === w.selected;
       const [mark, color] = boardMarks[row.state];
       const measure = row.measure
-        ? `${row.measure.answers} ${row.measure.answers === 1 ? "answer" : "answers"}  ${row.measure.dollars < 0.01 ? "<$0.01" : `$${row.measure.dollars.toFixed(2)}`}`
+        ? `${row.measure.answers} ${row.measure.answers === 1 ? "answer" : "answers"}  ${row.measure.dollars > 0 && row.measure.dollars < 0.01 ? "<$0.01" : `$${row.measure.dollars.toFixed(2)}`}`
         : "";
       // A wide board names the actor of each chain beside its cost.
       const actor = this.feedWidth >= 110 ? clip(shortActor(this.actorOf(row.id)), 16) : "";
@@ -3810,11 +3917,22 @@ export class App {
         : observation
           ? this.subject(act).replace(/ done$/, "")
           : this.subject(act);
-    const name = act.kind === "rung" ? act.id : observation ? (subject.split("\n")[0] ?? "") : act.kind;
-    // An open rung says who wrote it: the model of the prompt that made it, or the operator.
+    // A rung says who wrote it: the model of the prompt that made it, or the operator. The watch names it in common
+    // words, which say who wrote it.
+    const plainly = this.session.watching;
+    const name =
+      act.kind === "rung"
+        ? plainly
+          ? stepName(this.author(act))
+          : act.id
+        : observation
+          ? (subject.split("\n")[0] ?? "")
+          : act.kind;
     const author =
       act.kind === "rung" && !closed
-        ? `  by ${act.by === "operator" ? "you" : this.model(String(act.words[2] ?? "")).name}`
+        ? plainly
+          ? ""
+          : `  by ${this.author(act)}`
         : observation
           ? `  ${this.sender(act)}`
           : "";
@@ -3929,7 +4047,12 @@ export class App {
   private sender(act: ActRow): string {
     const model = this.model(String(act.words[2] ?? "")).name;
     const maker = this.session.actOf(act.by);
+    if (this.session.watching) return asker(model, maker?.kind === "chain");
     return maker?.kind === "chain" ? `the chain told ${model}` : `${act.by} asked ${model}`;
+  }
+  /** Who wrote the word of a rung: you, or the model of the prompt that made it. */
+  private author(act: ActRow): string {
+    return act.by === "operator" ? "you" : this.model(String(act.words[2] ?? "")).name;
   }
   /** The heading of the answer to a prompt: the model that answered it with its effort, and the prompt when others
    * closed with it. */
@@ -6920,6 +7043,10 @@ export class App {
     layer(() => bare() && Boolean(this.session.editing), "edit", [
       { on: ["return", "enter"], run: () => void this.submit(), hint: ["Enter", "run"] },
       { on: "escape", run: this.escape, hint: ["Esc", "leave the program"] },
+    ]);
+    // While the welcome shows the check of the setup and the input is empty, r checks it again.
+    layer(() => bare() && this.welcoming && this.setupState().shown && !this.composer.plainText, "setup", [
+      { on: "r", run: this.checkAgain, hint: ["r", "check again"] },
     ]);
     // While the operator watches a life and the input is empty, [ and ] move the moment of the feed, b starts a
     // branch there, and Escape comes back to now.

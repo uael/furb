@@ -525,7 +525,9 @@ def test_the_door_gives_the_catalog_of_the_crate(tmp_path: Path) -> None:
   opus = {"name": "claude-cli:opus", "efforts": efforts, "window": 1000000, "images": True, "price": None}
   assert opus in _monty.models(str(claude))
   found = _monty.setup(str(claude))
-  assert found["claude"] is True
+  assert (found["claude"], found["signed"]) == (True, True)
+  claude.write_text("#!/bin/sh\necho 'Not logged in'\nexit 1\n")
+  assert _monty.setup(str(claude))["signed"] is False
   anthropic = next(one for one in found["providers"] if one["provider"] == "anthropic")
   assert "ANTHROPIC_API_KEY" in anthropic["env"]
 

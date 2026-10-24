@@ -122,6 +122,36 @@ impl Claude {
     Claude { bin: bin.into(), stall, gone: patience(), keeper }
   }
 
+  /// Whether the command line is signed in, as `claude auth status` says. It counts as signed in unless that command
+  /// says it is not, in its JSON or in its words, so a version with no such command, or one that does not end in ten
+  /// seconds, passes, and a turn says what is wrong.
+  pub fn signed(&self) -> bool {
+    let Ok(mut child) = std::process::Command::new(&*self.bin)
+      .args(["auth", "status"])
+      .stdin(std::process::Stdio::null())
+      .stdout(std::process::Stdio::piped())
+      .stderr(std::process::Stdio::piped())
+      .spawn()
+    else {
+      return true;
+    };
+    let until = std::time::Instant::now() + Duration::from_secs(10);
+    while matches!(child.try_wait(), Ok(None)) {
+      if std::time::Instant::now() >= until {
+        let _ = child.kill();
+        let _ = child.wait();
+        return true;
+      }
+      std::thread::sleep(Duration::from_millis(20));
+    }
+    let Ok(out) = child.wait_with_output() else { return true };
+    let said = String::from_utf8_lossy(&out.stdout);
+    let logged =
+      serde_json::from_str::<Value>(&said).ok().and_then(|one| one["loggedIn"].as_bool());
+    let words = format!("{said}{}", String::from_utf8_lossy(&out.stderr)).to_lowercase();
+    logged.unwrap_or(!words.contains("not logged in"))
+  }
+
   /// The same command line, whose process waits this long for a program that is missing or does not run.
   #[cfg(all(test, unix))]
   pub(crate) fn waiting(self, gone: Duration) -> Claude {

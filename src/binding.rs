@@ -532,13 +532,14 @@ pub fn models(claude: Option<String>) -> Vec<ModelInfo> {
   catalog.offered().iter().map(ModelInfo::of).collect()
 }
 
-/// What a first run checks of this machine, as a host reads it: whether the catalog found the claude command line,
-/// each provider of the network with the names of its credential and how many of its models the catalog offers, and
-/// the local server that `FURB_LOCAL_URL` names, with the models it offers or why it listed none.
+/// What a first run checks of this machine, as a host reads it: whether the catalog found the claude command line and
+/// whether it is signed in, each provider of the network with the names of its credential and how many of its models
+/// the catalog offers, and the local server that `FURB_LOCAL_URL` names, with the models it offers or why it listed none.
 #[cfg_attr(feature = "typescript", napi(object, object_from_js = false))]
 #[cfg_attr(feature = "python", derive(pyo3::IntoPyObject))]
 pub struct SetupInfo {
   pub claude: bool,
+  pub signed: bool,
   pub providers: Vec<ProviderInfo>,
   pub local: Option<LocalInfo>,
 }
@@ -572,6 +573,7 @@ pub fn setup(claude: Option<String>) -> SetupInfo {
   let found = world::Catalog::load().claude(claude.map(Into::into), None).setup();
   SetupInfo {
     claude: found.claude,
+    signed: found.signed,
     providers: (found.providers.into_iter())
       .map(|one| ProviderInfo { provider: one.provider, env: one.env, offered: count(one.offered) })
       .collect(),
