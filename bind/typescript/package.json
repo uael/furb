@@ -1,6 +1,6 @@
 {
   "name": "furb",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "The core of an AI harness: the engine of furb in a sandbox, with a World of your own, for Node.js and Bun.",
   "type": "module",
   "license": "AGPL-3.0-only",
@@ -42,11 +42,11 @@
     "build": "bun run build.ts"
   },
   "optionalDependencies": {
-    "furb-linux-x64-gnu": "0.2.0",
-    "furb-linux-arm64-gnu": "0.2.0",
-    "furb-darwin-arm64": "0.2.0",
-    "furb-darwin-x64": "0.2.0",
-    "furb-win32-x64-msvc": "0.2.0"
+    "furb-linux-x64-gnu": "0.3.0",
+    "furb-linux-arm64-gnu": "0.3.0",
+    "furb-darwin-arm64": "0.3.0",
+    "furb-darwin-x64": "0.3.0",
+    "furb-win32-x64-msvc": "0.3.0"
   },
   "publishConfig": {
     "access": "public",
