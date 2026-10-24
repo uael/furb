@@ -62,6 +62,16 @@ pub fn kept(path: impl AsRef<Path>) -> Result<Vec<Object>, Fault> {
   }
 }
 
+/// Each entry that the store kept at a path, in order, read with no lease and changed in nothing, one at a time, so
+/// a reader holds no more of a large record than it keeps of each entry.
+pub fn each(path: impl AsRef<Path>, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
+  let path = path.as_ref();
+  match database(path) {
+    true => sqlite::each(path, take),
+    false => lines::each(path, take),
+  }
+}
+
 /// The kind of the fact by which a record names the build that made it: `("made", "chain1", "store", engine,
 /// version)`, where engine is what [`engine`] gives and version is [`VERSION`]. A record of a build before the
 /// versions holds no version. No contract holds it, so this is the one home of its shape.

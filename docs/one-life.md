@@ -91,7 +91,7 @@ Where the one primitive serves:
 | A chain that supersedes another | A word makes the successor of its own chain, which keeps its name. |
 | An upgrade of the engine at a checkpoint | The new engine makes each chain that the checkpoint carries again, under its name. |
 | A record that grows | The checkpoint, which carries the successors, is where a later life starts to read. |
-| A chain of another record | `carry` answers with a carried chain, and the new chain is its successor (section 3.7). |
+| A chain of another record | `carry` answers with the turns and the open prompts of a chain of another record, and `imported` makes a chain whose prefix holds them (section 3.7). |
 
 Where it serves in part: a fork for each question. A fork is a chain with a source that does not supersede it. It
 keeps the prefix of its source whole, so its first turn reads that prefix from the cache, and the source never
@@ -248,23 +248,47 @@ any end. On the demo, a takeover takes about 0.3 seconds, and a first host about
 ### 3.7 A successor of a chain of another record
 
 The owner, on 10-23: "import chains from a previous journal." This is one more source of a successor: a chain of
-another record. `carry(record, chain)` is an act that the World takes. It reads the other record with no life, and
-answers with that chain in the form of one item of `chains` of a checkpoint, and the record keeps that answer.
-`chain(label, source=<that act>)` makes the successor of the carried chain. So a replay of the new life reads the
-same turns from its own record and opens no other file. The act names its source by the path, the count of its
-entries and the digest of its last entry, which the chain of digests of the version 2 of the record proves.
+another record. `carry(record, source)` of the extension compaction is an act that the ear `compaction` of the World
+takes. It reads the other record with no life, as `retold` (#311) does, and answers with what the chain `source`
+holds: its turns as its model read them after the last prefix said on it, which are each tell and each reply with its
+done, and each open prompt of a model on it, as `(name, shape, message, to)`. The record keeps that answer, so a
+replay of the new life reads the same turns from its own record and opens no other file. The answer names its source
+by the path, the count of its entries and the sha256 of its last entry, which the chain of digests of the version 2 of
+the record will prove.
 
-- What it carries: the turns of the chain as its model read them, from the log of the record or from `retold`
-  (#311), and each open prompt of a model, which goes on as a prompt of the successor with its shape, its message and
-  its actor, under a new name. When the store holds the build that made the record, that build writes a checkpoint
-  at its tip first (section 3.3), and the import carries the plain values and the definitions of the module too.
-  When no store holds that build, as for the records of 10-20 and 10-21, the import carries the turns alone, and the
-  successor names each value that it lost.
-- What it cannot carry: a generator, a word that runs and an open command, which ended with the life that ran them.
-  An act of another record keeps its name only in the turns, since a name of this record never names an act of
-  another one.
-- What it serves: the life after this one, if one comes, takes chain1, chain8 and each worker with their context,
-  and a record that no build of the store opens any more still gives its chains.
+`imported(record, source)` makes the successor: a new chain, or the chain that it is given, on which a rung that the
+chain makes awaits `inherit(record, source)`. `inherit` awaits the carry, says on its chain a prefix of its module, the
+carried turns, each act of the chain and each tell about the chain, opens each carried open prompt again under a new
+name, and tells under the carry what it carried and which prompt takes the place of which. The extension costs no
+token of the engine.
+
+- Names: each carried fact is about `reply0`, a name that no life gives, and the carry says it, so no carried fact
+  stands for an act of this life. A fork of the successor keeps the carried turns whole: a chain with a source holds
+  whole each fact of its origin about a name that no act of the life holds. This law costs 7 tokens of the engine,
+  6492 before and 6499 after, and it holds the turns that a checkpoint carries too. `supersede` keeps the carried
+  turns while its filter keeps the carry, and drops them with it.
+- What it cannot carry: each value of the module, each word that ran and each open command, which ended with the life
+  that ran them. The carry says so in its tell. When the store holds the build that made the record, a later PR can
+  carry the plain values and the definitions through a checkpoint at its tip (section 3.3).
+- A record whose log does not agree with it gives its replies and no tell, since a record keeps no tell (C13).
+- What it serves: the life after this one takes chain1, chain8 and each worker with their context, and a record that
+  no build of the store opens any more still gives its chains.
+
+Measured on copies of real records, with `furb run` on a new record and a claude that answers from a script:
+
+| Record | Its log | Carry | Peak memory | Facts carried | Replies | Tells | Open prompts | Answer kept |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| life 3, `c3978f7f`, 491 MB, 126891 entries | 693 MB, does not agree (C13) | 7.1 s | 3.9 GB | 1341 | 653 | 49 | 58 | 3.2 MB |
+| life 4, `6f5c3a41`, 217 MB, cut to 46326 entries | 313 MB, agrees | 2.3 s | 1.6 GB | 1892 | 162 | 1568 | 1 | 1.9 MB |
+
+chain1 of life 3, imported, reads 1391 turns. A later life on the new record, with the record of life 3 moved away,
+reads the same 1391 turns. The 49 tells of life 3 are the findings of the gate that the reader says. Its 58 open
+prompts are messages of the owner to chain1 that its model never closed, and each opens again on the successor and
+asks its model. The reader reads the record and its log one entry and one line at a time, so a carry holds only the
+chain that it carries. Measured with `measure_a_carry_of_a_record` in `src/extension/compaction.test.rs` on new
+copies, the carry of chain1 of life 3 takes 4.6 s and 163 MB at peak, against 7.1 s and 3.8 GB when the reader held
+the whole log and the record, and the carry of chain1 of life 4, at 249 MB and 2155 facts carried, takes 2.4 s and
+126 MB, against 2.5 s and 1.8 GB, with the same answer.
 
 ### 3.6 The versions of the formats
 
@@ -346,9 +370,9 @@ Each PR that builds a part measures it again on copies of the real records.
 `src/furb/engine.pyi`, `chain`, new:
 
 
-- A source is a chain of the life, or an act of carry that the World answered with a chain of another record, of
-  which the new chain is the successor, with the turns, the open prompts and the plain values that the answer
-  carries.
+- A chain with a source holds whole each fact of its origin about a name that no act of the life holds, as a turn
+  that its origin carried from another record. (Taken in the PR of section 3.7: the successor of a chain of another
+  record is a word of the extension compaction, and the source of `chain` stays a chain of the life.)
 
 `chain`, changed (#371): was "Nothing leaves a transcript once the transcript holds it." Now: "Nothing leaves a
 transcript once the transcript holds it, but by a prefix said on its chain, which takes the place of what the
@@ -380,8 +404,9 @@ A new type, `Checkpoint`, with these sentences:
 - The definitions of a program are the statements at the top of each of its words that define: def, class, import,
   and an assignment to a name in capitals, in the order of the program.
 - A name of a module whose value is neither plain nor a definition is not carried, and the checkpoint names it.
-- An act of carry is answered with one chain of another record in the form that a checkpoint carries it, and the
-  record keeps that answer, so a replay reads the same turns.
+- An act of carry is answered with the turns and the open prompts of one chain of another record, and the record
+  keeps that answer, so a replay reads the same turns. (Taken in the PR of section 3.7, in the contract of the
+  extension compaction.)
 
 `boot`, new:
 
