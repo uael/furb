@@ -33,7 +33,7 @@ export const commands = {
   grant: ["Set budget", "<dollars>", "Pause at a dollar ceiling"],
   context: ["Set context ceiling", "<fraction>", "Pause at a share of the model window"],
   pause: ["Pause", "[act or chain]", "Hold delivery while work completes"],
-  wake: ["Wake", "[act or chain]", "Deliver pending work"],
+  wake: ["Wake", "[act or chain]", "Wake every paused chain, or one"],
   cancel: ["Cancel work", "[id]", "End an act, or what you sent last on this chain"],
   feed: ["Feed command", "<id> [text]", "Send a line of input to a command; no text closes its input"],
   close: ["Answer an act", "<id> <json>", "Close an act with a JSON value"],

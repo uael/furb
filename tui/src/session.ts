@@ -1436,14 +1436,25 @@ export class Session extends EventEmitter {
         await this.engine.pause(argument || this.selected);
         this.notice = "Paused. In-flight work can finish.";
         break;
-      case "wake":
+      case "wake": {
         if (this.host.pending.size) {
           this.emit("resume");
           break;
         }
-        await this.engine.wake(argument || this.selected);
-        this.notice = "Work resumed.";
+        // With no chain named, the wake goes to the whole life: a pause of one chain holds the chains it made, and the
+        // chains that stand outside it, so a wake of the selected chain alone leaves them paused.
+        const stopped = argument
+          ? [argument]
+          : [
+              ...new Set([
+                this.selected,
+                ...this.chains.filter((chain) => chain.paused && !chain.done).map((chain) => chain.id),
+              ]),
+            ];
+        for (const id of stopped) await this.engine.wake(id);
+        this.notice = stopped.length > 1 ? `Work resumed on ${stopped.length} chains.` : "Work resumed.";
         break;
+      }
       case "cancel":
         await this.cancel(argument);
         break;
