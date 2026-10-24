@@ -315,13 +315,23 @@ async function answer(data: { target: string; method: string; args: unknown[] })
   if (data.target === "library" && data.method === "made")
     return session?.entries.map(([fact]) => fact).find((fact) => fact?.[0] === "made")?.[3] ?? null;
   if (data.target === "library" && data.method === "changes")
-    return session?.changes.read(Number(data.args[0]), Number(data.args[1]));
+    // The rewind reads the journal for the files to give back, and a damaged journal does not stop it.
+    return session?.changes.readable(Number(data.args[0]), Number(data.args[1]));
   if (data.target === "library" && data.method === "net")
     return session ? net(written(session.changes, data.args[0])) : [];
   if (data.target === "library" && data.method === "branch")
     return session ? branchChanges(session.directory) : [];
-  if (data.target === "library" && data.method === "repairChanges") return session?.changes.repair();
-  if (data.target === "library" && data.method === "renewChanges") return session?.changes.renew();
+  // A repair or a new journal changes the count of changes that the window shows, which the state carries.
+  if (data.target === "library" && data.method === "repairChanges") {
+    const repaired = session?.changes.repair();
+    state();
+    return repaired;
+  }
+  if (data.target === "library" && data.method === "renewChanges") {
+    const renewed = session?.changes.renew();
+    state();
+    return renewed;
+  }
   if (data.target === "library" && data.method === "act")
     return session?.activity.acts.get(String(data.args[0]));
   // The commands and the replies of the models that run, which a host waits for before it hands the life over.

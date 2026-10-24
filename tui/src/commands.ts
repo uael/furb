@@ -26,6 +26,16 @@ export const commands = {
     "[turn|chain|life|branch]",
     "Show the files that this turn, this chain, the life or the branch against main changed",
   ],
+  repair: [
+    "Repair the journal",
+    "",
+    "Keep each change that the journal of file changes can read, and remove the lines that it cannot",
+  ],
+  renew: [
+    "Start a new journal",
+    "",
+    "Start a new journal of file changes, and keep the damaged one beside it",
+  ],
   cd: ["Change directory", "<path>", "Change this chain's working directory"],
   edit: ["Edit program", "[prompt id]", "Change a prompt's program and replay it"],
   inspect: ["Inspect a name", "<name>", "Read a value from this chain's module"],
