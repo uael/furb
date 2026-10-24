@@ -315,10 +315,11 @@ fn command(
 /// exit is said at its end; or the command is ended at its stop, with every process of it.
 ///
 /// A command that outlives its timeout is ended with every process of it, and exits with no code. Its exit comes once
-/// its shell exited and its streams closed, or once its shell exited and no process of its group lives, as when a
-/// process that left the group holds a stream: then the exit gives what its streams wrote until then. The shell is
-/// reaped as it exits, and its group keeps its number for as long as a process of it lives, so an end signals no
-/// group that another took, but in the moment between the last probe of an empty group and that end.
+/// its shell exited and its streams closed, or once its shell exited and DRAIN passed with a stream open, as when a
+/// process that the command started holds a stream: then the exit gives what its streams wrote until then, and that
+/// process is left to run, with no reader on its stream. The shell is reaped as it exits, and its group keeps its
+/// number for as long as a process of it lives, so an end signals no group that another took, but in the moment
+/// after the last process of the group ended and before that end.
 async fn ran(
   begun: Begun,
   fed: spsc::Receiver<Option<String>>,
@@ -345,25 +346,26 @@ async fn ran(
     let (mut streams, mut shell) = (pin!(streams), pin!(shell));
     let (mut expired, mut feeding) = (pin!(expired), pin!(feed(stdin, fed)));
     let (mut late, mut closed, mut drained, mut status) = (false, false, false, None);
-    let (mut gone, mut ended) = (false, false);
+    let (mut until, mut ended) = (None, false);
     let mut stopped = pin!(stopped);
     loop {
       tokio::select! {
         biased;
         _ = &mut stopped => return,
-        got = &mut shell, if status.is_none() => status = Some(got),
+        got = &mut shell, if status.is_none() => {
+          status = Some(got);
+          until = Some(tokio::time::Instant::now() + DRAIN);
+        }
         () = &mut streams, if !drained => drained = true,
         () = &mut expired, if !late => {
           late = true;
           group.slay();
         }
         () = &mut feeding, if !closed => closed = true,
-        // A process that left the group can hold a stream once no process of the group lives, so the group is
-        // probed while the shell is gone and a stream is open, and a probe that finds it empty gives the streams
-        // one more probe to give what they hold.
-        () = tokio::time::sleep(PROBE), if status.is_some() && !drained => {
-          ended = gone;
-          gone = !group.lives();
+        // A process that the command started can hold a stream for longer than the shell lives, so the streams have
+        // DRAIN after the shell exits to give what they hold, and then the command ends.
+        () = tokio::time::sleep_until(until.unwrap_or_else(tokio::time::Instant::now)), if until.is_some() && !drained && !ended => {
+          ended = true;
         }
       }
       if let Some(got) = status.take_if(|_| drained || ended) {
@@ -410,9 +412,12 @@ async fn feed(stdin: Option<ChildStdin>, mut fed: spsc::Receiver<Option<String>>
   }
 }
 
-/// How long the World waits between two probes of the group of a command whose shell exited while a stream is open,
-/// and between two probes of the shell of a command that dropped before its shell was reaped.
+/// How long the World waits between two probes of the shell of a command that dropped before its shell was reaped.
 const PROBE: Duration = Duration::from_millis(100);
+
+/// How long the streams of a command have to give what they hold once its shell exited, before the command ends with a
+/// process of it still holding one.
+const DRAIN: Duration = Duration::from_millis(250);
 
 /// One stream of a command: each text said as it comes, whole in utf-8, and kept in all until the stream ends.
 async fn read(
@@ -532,17 +537,6 @@ impl Group {
     }
     #[cfg(windows)]
     self.job.take();
-  }
-
-  /// Whether a process of the group lives. On Windows no job here says it, so the group lives until the command is
-  /// over, and the command waits for its streams.
-  fn lives(&self) -> bool {
-    #[cfg(unix)]
-    let lives =
-      self.leader.is_some_and(|leader| rustix::process::test_kill_process_group(leader).is_ok());
-    #[cfg(windows)]
-    let lives = self.job.is_some();
-    lives
   }
 
   /// The group let go once the command is over, and every process of it that outlives the command left to run.
