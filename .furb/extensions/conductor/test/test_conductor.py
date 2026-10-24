@@ -103,7 +103,7 @@ class Round:
     (tmp / "home.gitconfig").write_text("", encoding="utf-8")
     who = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
     self.env = {
-      **os.environ,
+      **{name: value for name, value in os.environ.items() if not name.startswith("GIT_")},
       **who,
       "GIT_CONFIG_GLOBAL": str(tmp / "home.gitconfig"),
       "GIT_CONFIG_NOSYSTEM": "1",
@@ -516,6 +516,7 @@ async def test_a_job_over_its_budget_is_queued_once_until_new_runs_measure_it(co
   assert "took 180 s" in conductor.queue[0][1]
   assert "budget of 60 s" in conductor.queue[0][1]
 
+
 @POSIX
 @JQ
 async def test_a_veto_keeps_a_green_pr_from_a_merge(conductor: Round) -> None:
@@ -529,3 +530,19 @@ async def test_a_veto_keeps_a_green_pr_from_a_merge(conductor: Round) -> None:
   await conductor.land(conductor.pr(n=7, sha="sha7", checks=("SUCCESS",), names=["the hooks"]), False)
   assert asked == [7]
   assert "pr merge" not in conductor.log()
+
+
+def test_the_environment_of_each_git_holds_no_variable_of_a_commit(
+  tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+  for name in ("GIT_INDEX_FILE", "GIT_DIR", "GIT_WORK_TREE", "GIT_PREFIX", "GIT_EXEC_PATH"):
+    monkeypatch.setenv(name, "/elsewhere")
+  env = Round(tmp_path).env
+  assert sorted(name for name in env if name.startswith("GIT_")) == [
+    "GIT_AUTHOR_EMAIL",
+    "GIT_AUTHOR_NAME",
+    "GIT_COMMITTER_EMAIL",
+    "GIT_COMMITTER_NAME",
+    "GIT_CONFIG_GLOBAL",
+    "GIT_CONFIG_NOSYSTEM",
+  ]
