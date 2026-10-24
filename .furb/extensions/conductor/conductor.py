@@ -36,7 +36,7 @@ The round tells you a worker that ends with no PR, with its answer, or that says
 When a worker ends, the round asks it debrief() once, and adds each friction that it gives to TOOLING, the ledger of the defects of the tooling, as flaw(what) adds a defect that you find or patch live. An entry counts each time that it comes again.
 A check counts by its newest run. A failed check heals with no worker first, once for each head sha: the round updates the branch of a PR on main that is behind main while main is green, else it reruns the failed jobs of the run whose failure is the one failed check of the PR. It reruns once, for each head sha, a run that was cancelled at the head of a PR, and a check cancelled again at that sha counts as failed.
 Then the round sends a conflict or a failed check at a new head to the worker that owns the PR, again after 30 minutes, and to a fixer after an hour, or at once when no worker owns it.
-The round merges each green PR into main from the lowest number when no file that it changes changed on main since its branch forked, after it moves the PRs that stack on it onto main; else it updates the branch, and only when main is green.
+The round merges each green PR into main from the lowest number when no file that it changes changed on main since its branch forked, after it moves the PRs that stack on it onto main and rebases each there with git rebase --onto from the head that it held of the PR that merged, in a scratch worktree, and pushes it with --force-with-lease (a rebase that conflicts is left to the fixer); else it updates the branch, and only when main is green.
 The label paused takes a PR out of the round. A draft, the label hold, a review that waits for its fix, and the label owner-merge, until the owner takes it off as his approval, keep a PR from a merge.
 A notice wakes you only for a decision, with the context that it needs: each event that needs none, as a worker that ends with a PR, a heal, a merge or a PR made outside the round, is one line in the next notice. The round tells you when main is red, with the lines that failed, when a PR fails to merge, with what gh said, or when a PR on main with no draft, no hold, no worker and no check that runs has no change for 45 minutes, with its checks, and each comment or issue of the owner in the private repository of the decisions, which PRIVATE names beside this word and git does not hold. await decide(title, text) opens a decision there as an issue, and news(line) adds a line at the top of its digest issue.
 Each round queues each open issue that the owner opened, or that he assigned to himself, as an item issueN, once, and its PR closes it.
@@ -519,6 +519,45 @@ async def mend(pr: dict, now: float, red: bool) -> str:
   return key
 
 
+RESTACK = """pull() { git fetch -q origin "+refs/heads/$onto:refs/remotes/origin/$onto" "+refs/heads/$head:refs/remotes/origin/$head"; }
+tries=0
+while :; do
+  pull || exit 1
+  [ "$parent" = 0 ] && break
+  want=$(gh pr view "$parent" --json mergeCommit --jq .mergeCommit.oid 2>/dev/null)
+  [ -n "$want" ] && git merge-base --is-ancestor "$want" "origin/$onto" 2>/dev/null && break
+  tries=$((tries + 1))
+  [ "$tries" -ge 10 ] && { echo "$onto holds no merge of #$parent"; exit 1; }
+  sleep 3
+done
+[ "$(git rev-parse "origin/$head")" = "$sha" ] || { echo "$head moved since the sweep"; exit 4; }
+git merge-base --is-ancestor "$old" "origin/$head" || { echo "$head holds no $old"; exit 3; }
+root=$PWD
+dir=$(mktemp -d) || exit 1
+trap 'cd "$root"; git worktree remove --force "$dir" >/dev/null 2>&1; rm -rf "$dir"' EXIT
+git -c core.hooksPath=/dev/null worktree add -q --detach "$dir" "origin/$head" || exit 1
+cd "$dir" || exit 1
+git -c core.hooksPath=/dev/null rebase -q --onto "origin/$onto" "$old" >/dev/null 2>&1 || { git rebase --abort >/dev/null 2>&1; echo "$head conflicts with $onto"; exit 2; }
+git push -q --no-verify --force-with-lease="refs/heads/$head:$sha" origin "HEAD:refs/heads/$head" || exit 5
+"""
+
+
+def spec(head: str) -> str:
+  return shq(f"+refs/heads/{head}:refs/remotes/origin/{head}")
+
+
+async def restack(old: str, onto: str, kid: dict, parent: int = 0) -> None:
+  head = kid["head"]
+  setup = f"onto={shq(onto)} head={shq(head)} old={shq(old)} sha={shq(kid['sha'])} parent={parent}\n"
+  got = await bash(setup + RESTACK, show=HIDDEN, timeout=300)
+  if got.code != 0:
+    why = " ".join((got.stdout.content + got.stderr.content).split())[-300:]
+    heard.append(f"#{kid['n']} was not rebased onto {onto}, exit {got.code}: {why}")
+    return
+  for deeper in [up for up in prs.values() if up["base"] == head]:
+    await restack(kid["sha"], head, deeper)
+
+
 async def land(pr: dict, red: bool) -> None:
   n, sha = pr["n"], pr["sha"]
   if pr["verdict"] != "pass":
@@ -545,7 +584,16 @@ async def land(pr: dict, red: bool) -> None:
         noticed.add(f"update {sha}")
         await bash(f"gh pr update-branch {n}", show=HIDDEN, timeout=120)
       return
-  moves = "".join(f"gh pr edit {d} --base main >/dev/null 2>&1; " for d, up in prs.items() if up["base"] == pr["head"])
+  kids = [up for up in prs.values() if up["base"] == pr["head"]]
+  cuts = {}
+  for up in kids:
+    found = await bash(
+      f"git fetch -q origin {spec(pr['head'])} {spec(up['head'])} && git merge-base {shq('origin/' + pr['head'])} {shq('origin/' + up['head'])}",
+      show=HIDDEN,
+      timeout=120,
+    )
+    cuts[up["n"]] = found.stdout.content.strip() if found.code == 0 and found.stdout.content.strip() else pr["sha"]
+  moves = "".join(f"gh pr edit {up['n']} --base main >/dev/null 2>&1; " for up in kids)
   got = await bash(
     f"{moves}out=$(gh pr merge {n} --squash --delete-branch 2>&1) || out=\"$out $(gh stack merge {n} --yes --squash 2>&1)\";"
     f" sleep 5; echo \"$out\" | tail -4; gh pr view {n} --json state --jq .state",
@@ -555,9 +603,8 @@ async def land(pr: dict, red: bool) -> None:
   if got.stdout.lines[-1:] == ["MERGED"]:
     merged.add(n)
     landed.append(n)
-    kids = [d for d, up in prs.items() if up["base"] == pr["head"]]
-    if kids:
-      await bash("sleep 10; " + "; ".join(f"gh pr edit {d} --base main >/dev/null 2>&1; gh pr update-branch {d} >/dev/null 2>&1" for d in kids), show=HIDDEN, timeout=300)
+    for up in kids:
+      await restack(cuts[up["n"]], "main", up, n)
   else:
     said = "\n".join(got.stdout.lines[:-1])[-800:] or "nothing"
     notice(f"unmerged {sha}", f"#{n} did not merge at {sha[:7]}, and gh said:\n{said}")
