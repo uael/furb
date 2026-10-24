@@ -671,7 +671,9 @@ export class Session extends EventEmitter {
    * a question waits for the operator, a reopened record holds work, or what the acts do. A pause of the chain holds
    * it while none of its acts runs or asks. */
   status(chain?: string): SessionStatus {
-    if (chain ? this.error : Object.values(this.errors).some(Boolean)) return "error";
+    // A damaged journal of file changes fails the view that shows it, and not the session that the list marks.
+    if (chain ? this.error : Object.entries(this.errors).some(([key, error]) => error && !this.damaged[key]))
+      return "error";
     if (this.queueHeld && this.queued.length) return "blocked";
     if (this.host.pending.size) return "paused";
     if (!chain && this.host.prompts.size) return "blocked";

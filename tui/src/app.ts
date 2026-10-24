@@ -5111,14 +5111,14 @@ export class App {
       },
     ]);
   }
-  /** Every action in one list: each with its label, the slash command that does it, what it does, and its keys. The
-   * table of keys gives the chord of each command, and each action that has keys and no command, which stands before
-   * the command that it goes with. */
   /** The chord of the key that runs an action, as this terminal sends it. */
   private chordOf(action: Action): string {
     const found = bindings.find(({ binding }) => binding.run === action);
     return found ? shown(found.key, found.binding, this.kitty) : "";
   }
+  /** Every action in one list: each with its label, the slash command that does it, what it does, and its keys. The
+   * table of keys gives the chord of each command, and each action that has keys and no command, which stands before
+   * the command that it goes with. */
   palette(): void {
     const views_: Record<View, string> = {
       feed: "Messages, the Python each model wrote, and answers",
