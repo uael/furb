@@ -112,6 +112,7 @@ no network.
 | `src/world/provider/pi.rs` | The protocol of pi-ai itself, which the gateway Radius speaks. |
 | `src/world/provider/claude.rs` | The claude command line, as a model of rig. |
 | `src/world/provider/images.rs` | The images that a message names, each kept under the digest of its bytes. |
+| `src/world/provider/watch.rs` | The watch over the word of a reply while its model writes it, which finds the first statement that cannot be python. |
 
 ### The doors
 
