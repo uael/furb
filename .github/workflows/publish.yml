@@ -16,10 +16,11 @@ name: publish
 # crates.io, with every other crate from crates.io and no lock of furb, and runs an example of docs/examples/rust;
 # and npm installs the packed furb in a new folder and runs an example of docs/examples/typescript. A run started by
 # hand on a branch, or by a push to main that changes what a release builds, builds and proves everything and
-# publishes nothing, which is the rehearsal of a release. A pull request that changes what a release builds runs the
-# same rehearsal on the systems of Linux and Windows alone: a macOS runner of GitHub waits in a queue of its own, where a
-# rehearsal of 2 hours of macOS held a pull request for 48 minutes, so the macOS legs run on main after the merge, and
-# before a release in the run of its tag.
+# publishes nothing, which is the rehearsal of a release. A pull request into main that changes what a release builds
+# runs the same rehearsal on the systems of Linux and Windows alone: a macOS runner of GitHub waits in a queue of its
+# own, where a rehearsal of 2 hours of macOS held a pull request for 48 minutes, so the macOS legs run on main after
+# the merge, and before a release in the run of its tag. A pull request that stands on another runs it once it moves
+# onto main, as the gates do: 20 jobs at once is all that GitHub runs for this repository.
 on:
   push:
     tags: ["v*"]
@@ -37,6 +38,7 @@ on:
       - script/prove-crate.sh
       - script/prove-npm.sh
   pull_request:
+    branches: [main]
     paths:
       - .github/workflows/publish.yml
       - Cargo.toml

@@ -167,6 +167,9 @@ impl Opening {
   fn parted(self, continued: bool) -> Result<(Vec<Object>, Ears, bool), Fault> {
     let works = self.works();
     let keeps = self.keeps != Some(false) && works;
+    if let Some(path) = self.record.as_deref().filter(|_| keeps) {
+      upgraded(Path::new(path), &self.directory, world::stored)?;
+    }
     let (record, store) = match (&self.record, keeps) {
       (Some(path), true) => world::store(path).map(|(held, store)| (held, Some(store)))?,
       (Some(path), false) => (world::kept(path)?, None),
@@ -323,6 +326,45 @@ impl Opening {
       engine.keep(Keeper::new(path, build));
     }
     Ok((engine, record))
+  }
+}
+
+/// A record whose last segment an older version made, upgraded at a stand: the build of that version, which the store
+/// of builds holds, writes a checkpoint at its tip, so a life of this build goes on from it. A record of this version
+/// or of a newer one, and one of a version whose build the store lacks, stay as they are, and the life says why it
+/// refuses them.
+fn upgraded(
+  path: &Path,
+  directory: &str,
+  stored: impl Fn(i64) -> Option<PathBuf>,
+) -> Result<(), Fault> {
+  if !path.exists() {
+    return Ok(());
+  }
+  let record = world::kept(path)?;
+  let older = world::version(checkpoint::segment(&record)).filter(|one| *one < world::VERSION);
+  let Some((theirs, program)) = older.and_then(|one| Some((one, stored(one)?))) else {
+    return Ok(());
+  };
+  let ran = std::process::Command::new(&program)
+    .arg("checkpoint")
+    .arg("--record")
+    .arg(path)
+    .arg("--cwd")
+    .arg(directory)
+    .output();
+  match ran {
+    Ok(done) if done.status.success() => Ok(()),
+    Ok(done) => Err(Fault::refused(format!(
+      "the build of version {theirs} at {} wrote no checkpoint of {}: {}",
+      program.display(),
+      path.display(),
+      String::from_utf8_lossy(&done.stderr).trim()
+    ))),
+    Err(no) => Err(Fault::refused(format!(
+      "the build of version {theirs} at {} does not run: {no}",
+      program.display()
+    ))),
   }
 }
 

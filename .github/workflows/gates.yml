@@ -25,6 +25,32 @@ env:
   CARGO_PROFILE_DEV_INCREMENTAL: "false"
 
 jobs:
+  scope:
+    # A runner of macOS waits in a queue of its own, for 10 minutes in the median. The jobs on Linux always run and hold
+    # the whole proof of the logic; the jobs on macOS and on Windows prove the system alone, so a pull request runs them
+    # only when a path that it changes can behave in another way there, which script/scope.py says. A run on main, or
+    # by hand, runs every job.
+    name: the scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      suite_os: ${{ steps.scope.outputs.suite_os }}
+      ts_os: ${{ steps.scope.outputs.ts_os }}
+      crate: ${{ steps.scope.outputs.crate }}
+      gui: ${{ steps.scope.outputs.gui }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: scope
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            git diff --name-only "origin/$GITHUB_BASE_REF...HEAD" | python3 script/scope.py
+          else
+            python3 script/scope.py --all
+          fi | tee -a "$GITHUB_OUTPUT"
+
   hooks:
     name: the hooks
     runs-on: ubuntu-latest
@@ -51,12 +77,13 @@ jobs:
     # The engine speaks to a machine through the World, and a machine answers as itself: the suite runs on each,
     # and on both engines, the one of the interpreter and the one in the sandbox of monty.
     name: the suite on ${{ matrix.os }}
+    needs: scope
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: ${{ fromJSON(needs.scope.outputs.suite_os) }}
     # On Windows the commands of the tests run in the sh of Git for Windows, which the bash of Git puts on PATH.
     defaults:
       run:
@@ -77,6 +104,8 @@ jobs:
     # path, a line end and a process are of another form there. It builds the crate with the feature of the bindings
     # of TypeScript too, so it runs their clippy and their tests, and Windows builds the crate for its tests once.
     name: the crate on windows-latest
+    needs: scope
+    if: needs.scope.outputs.crate == 'true'
     runs-on: windows-latest
     timeout-minutes: 60
     defaults:
@@ -95,6 +124,7 @@ jobs:
 
   typescript:
     name: the bindings and the TUI on ${{ matrix.os }}
+    needs: scope
     runs-on: ${{ matrix.os }}
     # A change of the lock or of this file makes every system build each crate from nothing, and main saves the cache
     # only from a job that passes. A limit shorter than that build fails every later run too, since none finds a cache.
@@ -102,7 +132,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: ${{ fromJSON(needs.scope.outputs.ts_os) }}
     # One shell on every system. On Windows it is the bash of Git for Windows, which puts on PATH the sh and the tools
     # that the commands of the tests run.
     defaults:
@@ -143,16 +173,17 @@ jobs:
       # The app on macOS, whose web view is the WKWebView of the system: furb-gui --check opens the record of a life of
       # the demo that gui/src-tauri/tests/fixtures holds, through its host, draws it whole with the counts of furb facts,
       # under the budget of its web view, and ends, in a window that shows and in one that is hidden, as a window
-      # behind others. The app is a workspace of its own, whose lints the hooks do not run.
-      - if: runner.os == 'macOS'
+      # behind others. The app is a workspace of its own, whose lints the hooks do not run. A change that no path of the
+      # app or of the crate holds does not run it.
+      - if: runner.os == 'macOS' && needs.scope.outputs.gui == 'true'
         run: cargo build -p furb-cli
-      - if: runner.os == 'macOS'
+      - if: runner.os == 'macOS' && needs.scope.outputs.gui == 'true'
         working-directory: gui
         run: bun run build
-      - if: runner.os == 'macOS'
+      - if: runner.os == 'macOS' && needs.scope.outputs.gui == 'true'
         working-directory: gui/src-tauri
         run: cargo fmt --check && cargo clippy --all-targets -- -D warnings
-      - if: runner.os == 'macOS'
+      - if: runner.os == 'macOS' && needs.scope.outputs.gui == 'true'
         working-directory: gui/src-tauri
         run: FURB_CLI="$GITHUB_WORKSPACE/target/$CARGO_BUILD_TARGET/debug/furb" cargo test --features tauri/custom-protocol -- --test-threads 1
       # The budget of the speed of the TUI holds on Linux, whose machines of the gates run no other work: the first
