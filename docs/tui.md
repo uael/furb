@@ -401,7 +401,9 @@ window, and the commands and the models of each life go on. A later window, or a
 the same record and attaches to the life as it stands. A window of a new build takes the life over: the old host
 ends it, and a host of the new build opens it again on the same record. `/end` ends the life of each open session,
 then quits.
-`tui/README.md` says where the host listens and when a life stays in the window.
+`/serve` gives two addresses of the life on the network, one to read and drive it and one to read it only, and
+`furb-tui --attach <address>` opens a window of another operator on it. `tui/README.md` says where the host listens,
+how other operators reach it, and when a life stays in the window.
 
 ![Workspace tree](screenshots/28-workspace-tree.png)
 

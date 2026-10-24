@@ -4,7 +4,7 @@
 import { deserialize, serialize } from "bun:jsc";
 import { chmodSync, mkdirSync, readdirSync } from "node:fs";
 import type { Socket } from "node:net";
-import { tmpdir, userInfo } from "node:os";
+import { hostname, tmpdir, userInfo } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { scratch } from "furb";
 
@@ -36,11 +36,87 @@ export interface About {
   started: number;
 }
 
-/** What the hello of the host gives a window: what it says of itself, the root of its life, and the count of facts
- * that the life said. */
+/** What the hello of the host gives a window: what it says of itself, the root of its life, the count of facts that
+ * the life said, and the role of the window. */
 export interface Hello extends About {
   root: string;
   seq: number;
+  /** A window that comes through the socket of Unix writes, and a window that comes over the network holds the role
+   * that its key gives. A host of an older build says no role, and each of its windows writes. */
+  role?: Role;
+}
+
+/** What an operator does in a life: read and write, or read only, which changes nothing in the life and opens no file
+ * of the machine of the host by its path. */
+export type Role = "read" | "write";
+
+/** The addresses at which other operators reach a life over the network, each with the key of its role. */
+export interface Served {
+  read: string;
+  write: string;
+}
+
+/** The longest message that a peer of the network sends before its hello gives it a role: a stranger makes the host
+ * hold no more than this. */
+export const HELLO = 65536;
+
+/** The requests that a window that reads makes: the views of the life and what the host reads of it, which change
+ * nothing. It opens no file by its path, so it reads only what the life holds and the changes of its project. */
+const READS: Record<string, readonly string[]> = {
+  host: ["hello"],
+  session: ["dispose"],
+  engine: [
+    "get",
+    "peek",
+    "transcript",
+    "turns",
+    "program",
+    "standing",
+    "cwd",
+    "inspect",
+    "names",
+    "outcome",
+    "pending",
+    "parked",
+  ],
+  library: ["snapshot", "source", "made", "catalog", "sees", "model", "changes", "net", "branch", "act"],
+};
+
+/** Whether a window that reads may make a request. */
+export function reads(target: string, method: string): boolean {
+  return READS[target]?.includes(method) ?? false;
+}
+
+/** Where the host listens on the network for an address that an operator gives: host:port, [host]:port, :port, a
+ * port alone, or nothing, on 127.0.0.1 and a free port by default. */
+export function listening(address: string): { name: string; port: number } {
+  const text = address.trim();
+  if (/^\d+$/.test(text)) return { name: "127.0.0.1", port: Number(text) };
+  const found = /^(?:\[([^\]]+)\]|([^:[\]]*))(?::(\d+))?$/.exec(text);
+  if (!found) throw new Error(`${text} is no address: give host:port, as 0.0.0.0:7700.`);
+  return { name: found[1] ?? (found[2] || "127.0.0.1"), port: Number(found[3] ?? 0) };
+}
+
+/** The address that an operator gives a window to reach a host on the network: furb://host:port/key. A host that
+ * listens on every interface is named by the name of its machine. */
+export function addressOf(name: string, port: number, key: string): string {
+  const shown = name === "0.0.0.0" || name === "::" ? hostname() : name;
+  return `furb://${shown.includes(":") ? `[${shown}]` : shown}:${port}/${key}`;
+}
+
+/** The host and the port of an address of a host on the network, and the key that it holds. */
+export function reachOf(address: string): { host: string; port: number; key: string } {
+  let url: URL | undefined;
+  try {
+    url = new URL(address);
+  } catch {}
+  if (!url || url.protocol !== "furb:" || !url.port || url.pathname.length < 2)
+    throw new Error(`${address} is no address of a host: it reads furb://host:port/key.`);
+  return {
+    host: url.hostname.replace(/^\[|\]$/g, ""),
+    port: Number(url.port),
+    key: decodeURIComponent(url.pathname.slice(1)),
+  };
 }
 
 /** Where the host of the life on a record listens: hosts/<key>.sock in the cache of furb, in a folder of mode 0700, so
@@ -69,17 +145,32 @@ export function hostPlace(record: string): Place | undefined {
 
 /** The sender of the messages on a socket, which hears each message that comes on it. A message crosses as the
  * structured clone of the runtime after its length in four bytes, as it crosses to a worker, so an error, a map and a
- * value that JSON drops cross whole. */
-export function framed(socket: Socket, heard: (message: never) => void): (message: object) => void {
+ * value that JSON drops cross whole. A message longer than most, or one that does not read, ends the socket. */
+export function framed(
+  socket: Socket,
+  heard: (message: never) => void,
+  most: () => number = () => Number.POSITIVE_INFINITY,
+): (message: object) => void {
   let held: Buffer = Buffer.alloc(0);
   socket.on("data", (chunk: Buffer) => {
     held = held.length ? Buffer.concat([held, chunk]) : chunk;
-    while (held.length >= 4) {
+    while (held.length >= 4 && !socket.destroyed) {
       const size = held.readUInt32LE(0);
+      if (size > most()) {
+        socket.destroy();
+        return;
+      }
       if (held.length < 4 + size) break;
       const body = held.subarray(4, 4 + size);
       held = held.subarray(4 + size);
-      heard(deserialize(new Uint8Array(body)) as never);
+      let message: unknown;
+      try {
+        message = deserialize(new Uint8Array(body));
+      } catch {
+        socket.destroy();
+        return;
+      }
+      heard(message as never);
     }
   });
   return (message) => {
