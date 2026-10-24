@@ -88,7 +88,7 @@ export class Session extends EventEmitter {
   engine?: Engine;
   private readonly options: SessionOptions;
   /** The rung that each reply of the life that runs asks a model for, until the done of that reply. */
-  private readonly replies = new Map<string, string>();
+  readonly replies = new Map<string, string>();
   private stopped = false;
   /** The pending work as the engine last gave it, which the engine reads off the transcripts at each call, so the
    * session asks it again only after a fact that can change it. */
