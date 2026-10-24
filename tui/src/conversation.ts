@@ -20,13 +20,20 @@ export type Item =
 /** The headers that tell how an act ended, which the card of the act shows as its state. */
 const ENDS = ["closed", "exited", "cancelled"];
 
-/** What the conversation of a chain shows, in the order of its turns. */
-export function conversation(turns: readonly Turn[], acts: readonly ActRow[]): Item[] {
-  const rows = new Map(acts.map((act) => [act.id, act]));
+/** What the conversation of a chain shows, in the order of its turns, with each act by its name. A read of the turns
+ * after a turn starts from the place of that turn and the rung that the turns before it advanced on, and says the rung
+ * that its own turns end on in from. */
+export function conversation(
+  turns: readonly Turn[],
+  actOf: (id: string) => ActRow | undefined,
+  from: { at?: number; rung?: ActRow } = {},
+): Item[] {
+  const rows = { get: actOf };
   const items: Item[] = [];
   const seen = new Set<string>();
-  let rung: ActRow | undefined;
-  for (const [index, [role, python]] of turns.entries()) {
+  let rung = from.rung;
+  for (const [place, [role, python]] of turns.entries()) {
+    const index = (from.at ?? 0) + place;
     if (role === "assistant") {
       if (python) items.push({ type: "python", key: `turn-${index}`, code: python, rung });
       if (rung) seen.add(rung.id);
@@ -71,6 +78,7 @@ export function conversation(turns: readonly Turn[], acts: readonly ActRow[]): I
       } else shown();
     }
   }
+  from.rung = rung;
   return items;
 }
 
