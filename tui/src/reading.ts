@@ -1,5 +1,5 @@
 import { closeSync, existsSync, fstatSync, openSync, readSync } from "node:fs";
-import { Activity, type Call, type Entry, type Fact, isQuestion, type Turn, WORK } from "furb";
+import { Activity, type Actor, type Call, type Entry, type Fact, isQuestion, type Turn, WORK } from "furb";
 
 /** Why a record opens to read: the engine and the version of the build that made it, as the record names them, the
  * engine and the version of this build, and what the life that opened on it raised. */
@@ -160,11 +160,11 @@ export class Reader {
   }
 
   /** What the root stands on: its roster, its directory and its actor, as the last stand said. */
-  standing(): [unknown[], string, string] {
+  standing(): [Actor[], string, string] {
     const stood = this.facts.findLast(([kind, about]) => kind === "done" && isQuestion("stand", about));
     const [roster = [], directory = this.directory, actor = "operator"] = (stood?.[3] ?? []) as unknown[];
     // A recorded life names no path of this machine, so it stands where the host opens it.
-    return [roster as unknown[], this.recorded ? this.directory : String(directory), String(actor)];
+    return [roster as Actor[], this.recorded ? this.directory : String(directory), String(actor)];
   }
 
   /** The word of each rung of a chain, by the rung, as each run of the chain ran it since its last module. */

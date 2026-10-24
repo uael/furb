@@ -3,11 +3,11 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { executable } from "./executable.ts";
+import { executable, programs } from "./executable.ts";
 import { remove } from "./processes.ts";
 
 const examples = join(import.meta.dir, "..", "..", "..", "docs", "examples", "typescript");
-const fake = join(import.meta.dir, "claude.ts");
+const fake = join(programs, "claude.ts");
 
 /** The directory an example runs in, and the fake claude beside it, which answers with these words in order. */
 async function yard(...words: string[]) {

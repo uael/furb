@@ -211,7 +211,8 @@ breaking changes."
   and writes a checkpoint at the tip. The new build starts from that checkpoint, with the successor of each chain. A
   dump of the old interpreter does not load in the new one, so the checkpoint is plain data.
 - Live patching: an upgrade is an act on the root, which the host takes, so the record keeps its place. In a host of
-  its own (section 3.5), the old build writes the checkpoint while it lives, and the new build boots from it. In one
+  its own (section 3.5), the old host ends its life, and the new host opens it again: the old build from the store
+  writes the checkpoint, and the new build boots from it. In one
   process, for an engine or a Kernel of the same build of rust, the host makes a new sandbox from the checkpoint and
   drops the old one. The World is of the host and not of the sandbox, so each command and each reply that runs goes
   on and lands in the new segment: only the words that run are cut. A change of the same version needs no
@@ -232,9 +233,16 @@ plays the same change at the same place.
 One process holds one life: the record, the lease, the World, the provider, the commands and the views. The TUI and
 the app attach to it and detach, so a new build of the TUI restarts only the window. The worker of the TUI and
 `gui/host` of #361 already hold a life behind a protocol, so the host is that worker behind a socket in the cache of
-furb, with a cursor, so a window that comes back reads only what it missed. A new build of the host takes over with
-an upgrade: the old host writes a checkpoint and exits, and the new host takes the lease and boots from the
-checkpoint. An agent of the user starts the host again after a reboot.
+furb, with a cursor, so a window that comes back reads only what it missed. A new build of the host takes over: a window
+whose build differs from the build that the host says asks the host to hand the life over. The host waits up to 10
+seconds for each command and each reply of a model that runs, so each that ends in time lands in the record. Then it
+ends the life, so the record and the lease are free, tells each other window that a window of that build took the
+life, and exits. The window starts a host of its own build on the same record, which opens the life again: a replay
+on the same version, or an upgrade through a checkpoint on a new version (section 3.3). A command or a reply that
+runs past the wait is cut: the new host holds it as pending, and the next wake ends it as interrupted, as a command
+that a crash cut (#290), so its model runs it again if it wants. The ask to hand over is the end of the life with the
+build in its arguments, so a host that does not know it, as a host of the protocol 1 before it, ends the life as at
+any end. On the demo, a takeover takes about 0.3 seconds, and a first host about 0.18 seconds. An agent of the user starts the host again after a reboot.
 
 ### 3.7 A successor of a chain of another record
 
@@ -454,6 +462,9 @@ under no prompt of the operator, which the conductor does in PR 6.
   facts that the journal of any engine replays, so the engine pays no token for it.
 - A word that a checkpoint cuts ends as interrupted, as a command that a crash cut (#290), and its model runs it
   again.
+- A takeover waits up to 10 seconds for the commands and the replies that run, then ends the life, and each that
+  runs past the wait ends as interrupted at the next wake, as after a crash (#290). The window that attaches last
+  takes the life over, and a host that it started keeps its build until another window attaches.
 - A version is a build, kept in a store, and a gate on a corpus of records keeps the versions few. The text of the
   engine in the record goes, since it does not hold monty and the ears of rust.
 - A chain of another record is carried by an act whose answer the record keeps, so no replay reads another file.

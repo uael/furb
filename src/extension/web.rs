@@ -141,7 +141,7 @@ fn fetched(url: String) -> BoxFuture<'static, Result<Text, String>> {
     let client =
       ReqwestClient::builder().user_agent(AGENT).timeout(Duration::from_secs(60)).build();
     let client = client.map_err(|no| no.to_string())?;
-    let response = client
+    let mut response = client
       .get(&url)
       .header("accept", ACCEPT)
       .send()
@@ -156,9 +156,13 @@ fn fetched(url: String) -> BoxFuture<'static, Result<Text, String>> {
     if response.content_length().is_some_and(|size| size > LARGEST) {
       return Err(format!("{url} is larger than {LARGEST} bytes"));
     }
-    let bytes = response.bytes().await.map_err(|no| format!("{url}: {no}"))?;
-    if bytes.len() as u64 > LARGEST {
-      return Err(format!("{url} is larger than {LARGEST} bytes"));
+    // A page that tells no length, or tells one that is wrong, is read on only while it stays under the bound.
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(|no| format!("{url}: {no}"))? {
+      if (bytes.len() + chunk.len()) as u64 > LARGEST {
+        return Err(format!("{url} is larger than {LARGEST} bytes"));
+      }
+      bytes.extend_from_slice(&chunk);
     }
     let content =
       page(&kind, &String::from_utf8_lossy(&bytes)).map_err(|no| format!("{url} {no}"))?;

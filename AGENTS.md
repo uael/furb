@@ -20,7 +20,7 @@ API of its own:
   that ran on the machine, the store of the record in `store.rs`, as a file of lines or a database
   of SQLite, each a `Store` that the suite in `store.test.rs` holds to its laws, whose ear names in the record the
   engine that made it, the log of a life beside its record
-  in `log.rs`, the reader of a record with no life in `reader.rs`, which opens a record of any engine to read, and the provider of models in `provider.rs`, which asks each model through rig and streams what it writes, and asks it again with a backoff after a failure that passes, as a lost connection. Its catalog, `provider/catalog.rs`,
+  in `log.rs`, the reader of a record with no life in `reader.rs`, which opens a record of any engine to read, and the provider of models in `provider.rs`, which asks each model through rig and streams what it writes, and asks it again with a backoff after a failure that passes, as a lost connection, and at the reset of a usage limit of the claude command line, which it tells the chain. Its catalog, `provider/catalog.rs`,
   knows the models of every provider that pi-ai serves and those of the claude command line, and it offers each
   model whose credential stands in the environment, the claude command line when it finds the program, and each
   model for chat that a local server lists when `FURB_LOCAL_URL` names its address, which `provider/local.rs` asks.
@@ -87,8 +87,8 @@ The TypeScript side is a bun workspace at the root, with three packages:
 - `tui` is the OpenTUI application on that package. `tui/README.md` says what the TUI does, and `docs/tui.md` shows
   each screen. A life of the TUI runs in the worker of `tui/src/worker.ts`, which `tui/src/host.ts`, the host of the
   life, holds in a process of its own behind a socket that `tui/src/hosting.ts` places, so the life outlives each
-  window: `tui/src/bridge.ts` attaches a window to the host, or starts it, and keeps the worker in the window where no
-  socket serves.
+  window: `tui/src/bridge.ts` attaches a window to the host, starts it, or takes over a host of another build, and keeps
+  the worker in the window where no socket serves.
 - `gui` is the desktop app, which runs a life in a window as the TUI runs one in a terminal: its core in
   `gui/src-tauri`, a Cargo workspace of its own on Tauri 2, holds the window and starts the host of a life in
   `gui/host`, a program of bun on the `Workspaces` and the `Session` of the TUI, and its UI in `gui/src` reads the
@@ -280,7 +280,8 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
   cache of `.furb/tests`, and not those of the machine. `tui/script/test.ts` deals the tests of each file into runs,
   each a process of its own that runs one test at a time, so a test counts its own time alone and no test runs
   beside one that changes the environment or the clock. Twice as many runs go at once as the machine has cores. A
-  word after `bun run test` filters the files.
+  word after `bun run test` filters the files. Each script of `bind/typescript/test/programs`, which a test runs as a
+  program, compiles before any run starts, so no compile takes the machine from a test.
   As root, the test of a folder that cannot be read fails, since root reads every folder.
 - `bun run demo` and `bun run tui`: the TUI on the demo session, which asks no model, or on a real life.
 - `bun run docs`: write the tables of keys and commands in `tui/README.md` again from `tui/src/keys.ts` and
@@ -300,6 +301,10 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
   real renderer. Run both after a change that a screen shows, and read each capture. One run of each at a time holds
   its home in `/tmp`, and a second run waits until the first ends. A screen that does not come in three minutes ends
   the run with an error that names the screen, and a run never waits past thirty minutes.
+
+- `python script/budgets.py`: set the budget of time of each job of the gates, in `.github/budgets.json`, from the
+  times of its last green runs on main. The round of the conductor holds each job to its budget, and turns a job that
+  passes it into an item, as it turns into an item each test that fails, then passes on the same commit.
 
 Every pull request and every push to `main` runs the gates in `.github/workflows/gates.yml`: the hooks, which
 include the gates of the crate and the type check. The suite runs on Linux, on macOS and on Windows, and the gates

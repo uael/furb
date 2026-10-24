@@ -1,16 +1,18 @@
 //! The opening of a life: what it enables, what it keeps, and the ears it hears, on the record that the store keeps.
 
 use std::{
+  cell::RefCell,
   collections::VecDeque,
   fs,
   path::{Path, PathBuf},
+  rc::Rc,
   sync::{Arc, Mutex},
 };
 
 use super::{Answer, Opening};
 use crate::{
   Ear, Engine, Fact, Object, Text,
-  ear::{ear, hear, say},
+  ear::{ear, hear, hearing, say},
   extension::enabled,
   value::entry,
   verbs, world,
@@ -285,6 +287,45 @@ fn goes_on(at: &Path, extensions: bool) {
     facts[..one].iter().filter(|one| one.as_ref().py_repr().contains("the memory")).count();
   assert!(!extensions || first > 0, "the first life told the memory");
   assert_eq!(told, 0, "the memory ear heard the past, so it tells no chain again what it holds");
+}
+
+/// An ear of the host that waits for a chain by its name, and keeps the kind and the act of each fact it hears
+/// that is no act.
+fn listening(chain: &'static str, heard: Rc<RefCell<Vec<String>>>) -> Box<dyn Ear> {
+  hearing(&[chain], move |mut co| async move {
+    loop {
+      let a = hear(&mut co).await;
+      if !a.question() {
+        heard.borrow_mut().push(format!("{} {}", a.kind(), a.about()));
+      }
+    }
+  })
+}
+
+#[test]
+fn an_ear_that_a_life_from_its_snapshot_tells_the_past_hears_what_it_hears_in_a_replay() {
+  let at = place("hearing");
+  let (record, again) = (at.join("record.jsonl"), at.join("again.jsonl"));
+  let open = |record: &Path, snapshot: bool, heard: &Rc<RefCell<Vec<String>>>| {
+    let record = Some(record.display().to_string());
+    let opening = Opening { snapshot: Some(snapshot), record, ..opening(&at, true) };
+    opening.boot([("listening", listening("chain2", heard.clone()))]).unwrap().0
+  };
+  let mut first = open(&record, true, &Rc::default());
+  // A message on the thread of a prompt stands on that prompt, and the chain of that prompt names it alone.
+  let word = "side = chain('side')\nasked = prompt(None, 'ask', to=OPERATOR, on=side)\n\
+    more = prompt(None, 'more', on=asked)\nclose(None, more)\nclose(None, asked)\nclose(1)";
+  assert_eq!(closed(&mut first, word).as_ref().as_int(), Some(1));
+  drop(first);
+  for end in ["", ".log", ".snapshot"] {
+    fs::copy(format!("{}{end}", record.display()), format!("{}{end}", again.display())).unwrap();
+  }
+  let (told, replayed) = (Rc::default(), Rc::default());
+  let restored = open(&record, true, &told);
+  let replay = open(&again, false, &replayed);
+  assert!(restored.restored() && !replay.restored());
+  assert!(replayed.borrow().iter().any(|one| one == "tell prompt2"), "{:?}", replayed.borrow());
+  assert_eq!(*told.borrow(), *replayed.borrow());
 }
 
 #[test]

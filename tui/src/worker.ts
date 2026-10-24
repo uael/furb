@@ -2,7 +2,7 @@
 import { type FSWatcher, readFileSync, watch as watchFile } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { Engine, FileChange, SessionOptions, Turn } from "furb";
-import { Act, actorParts, ENGINE, model, models, retold, Session, setup } from "furb";
+import { Act, actorParts, ENGINE, model, models, retold, Session, setup, standingOf } from "furb";
 import { type Measure, measureOf } from "furb/life";
 import type { HostState } from "./bridge.ts";
 import { type EngineOptions, roster } from "./models.ts";
@@ -298,8 +298,8 @@ async function answer(data: { target: string; method: string; args: unknown[] })
   if (data.target === "library" && data.method === "setup") return demo ? null : setup(claude);
   if (data.target === "library" && (data.method === "model" || data.method === "sees")) {
     if (!engine) throw new Error("The session is not open.");
-    const [standing] = engine.standing() as [[string][]];
-    const names = standing.map(([name]) => name);
+    const [roster = []] = standingOf(engine);
+    const names = roster.map(([name]) => name);
     // A name of the roster is found by the rule the catalog finds every model by, and an actor by its model.
     const name =
       data.method === "sees" ? actorParts(String(data.args[0]), names).model : String(data.args[0]);
@@ -324,6 +324,16 @@ async function answer(data: { target: string; method: string; args: unknown[] })
   if (data.target === "library" && data.method === "renewChanges") return session?.changes.renew();
   if (data.target === "library" && data.method === "act")
     return session?.activity.acts.get(String(data.args[0]));
+  // The commands and the replies of the models that run, which a host waits for before it hands the life over.
+  if (data.target === "library" && data.method === "running")
+    return session
+      ? [
+          ...[...session.activity.acts.values()]
+            .filter((act) => !act.done && act.kind === "bash")
+            .map((act) => act.id),
+          ...session.replies.keys(),
+        ]
+      : [];
   if (data.target === "library" && data.method === "look") {
     if (!engine || !session) throw new Error("The session is not open.");
     // The host reads the path where the chain stands, as the files would, and no act is made, so nothing is kept.

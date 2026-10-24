@@ -1,5 +1,6 @@
 {
   "extensions": {
-    "conductor": "extensions/conductor"
+    "conductor": "extensions/conductor",
+    "converge": "extensions/converge"
   }
 }
