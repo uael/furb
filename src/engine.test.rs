@@ -302,17 +302,33 @@ fn a_command_that_outlives_its_timeout_ends_with_no_code() {
 }
 
 #[test]
-fn a_command_that_puts_its_work_in_the_background_ends_when_that_work_ends() {
+fn a_command_ends_once_its_shell_exited_and_a_drain_passed_though_a_process_of_it_holds_a_stream() {
   let mut lived = Lived::new("behind", &[], true).unwrap();
-  let with = verbs::Bash { timeout: Some(60.0), on: on(&lived.root()), ..Default::default() };
-  // The shell exits at once, and the work in the background holds the stdout until it ends.
-  let exit: Exit = block_on(lived.engine.bash("(sleep 1 && echo x) &", with).unwrap()).unwrap();
-  assert_eq!((exit.code, exit.stdout.content.as_str()), (Some(0), "x\n"));
+  let with = verbs::Bash { timeout: Some(600.0), on: on(&lived.root()), ..Default::default() };
+  // The shell exits at once, and the process in the background holds the stdout for LONG seconds, so an exit before
+  // LONG has passed proves that the World did not wait for that process.
+  const LONG: u64 = 20;
+  let begun = Instant::now();
+  let line = format!("echo before; sleep {LONG} & echo $!");
+  let exit: Exit = block_on(lived.engine.bash(&line, with).unwrap()).unwrap();
+  let took = begun.elapsed();
+  let pid = exit.stdout.content.lines().last().unwrap_or_default().to_owned();
+  let _ = std::process::Command::new("kill").arg(&pid).status();
+  assert_eq!(exit.code, Some(0));
+  assert!(
+    exit.stdout.content.starts_with("before\n"),
+    "the stdout holds what was read: {:?}",
+    exit.stdout.content
+  );
+  assert!(
+    took < Duration::from_secs(LONG / 2),
+    "the command waited for a process of it that holds a stream, for {took:?}"
+  );
 }
 
 #[cfg(unix)]
 #[test]
-fn a_command_ends_once_its_shell_exited_and_no_process_of_its_group_lives() {
+fn a_command_ends_though_a_process_that_left_its_group_holds_its_streams() {
   let mut lived = Lived::new("left", &[], true).unwrap();
   let with = verbs::Bash { timeout: Some(600.0), on: on(&lived.root()), ..Default::default() };
   // The child leaves the group of the command and holds its streams for LONG, as the master of an ssh does, so an
