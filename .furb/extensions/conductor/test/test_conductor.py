@@ -119,7 +119,7 @@ class Round:
     ns.update(cwd=lambda: str(tmp), get=self.facts.get, over=lambda name: name in self.done, prompt=self.prompt)
     ns.update(peek=lambda name, waiting=None: self.done.get(name, waiting), read=self.read, write=self.write)
     ns.update(transcript=lambda on="", of="": [], paused=lambda name: False, scope=lambda name: "chain1")
-    ns.update(acting=lambda: "rung1", wake=lambda name: None)
+    ns.update(acting=lambda: "rung1", wake=lambda name: None, span=lambda lo, hi: None)
     exec(compile(IMPORT.sub("", SOURCE), str(HERE / "conductor.py"), "exec"), ns)  # noqa: S102
     ns.update(quietly=lambda verb, *args, **words: verb(*args, **words), hire=self.hire)
     self.ns = ns
@@ -546,3 +546,36 @@ def test_the_environment_of_each_git_holds_no_variable_of_a_commit(
     "GIT_CONFIG_GLOBAL",
     "GIT_CONFIG_NOSYSTEM",
   ]
+
+
+CHECKS = ["checked"] * 6
+
+
+def branch(conductor: Round, name: str = "w/k") -> None:
+  subprocess.run(["git", "init", "-q", "-b", name], cwd=conductor.tmp, env=conductor.env, check=True)
+  conductor.say(r"pr view --json number", '{"number": 311}')
+  conductor.say(r"pr create", "https://github.com/o/r/pull/9\n")
+
+
+@POSIX
+@JQ
+async def test_pr_creates_a_new_pr_when_the_branch_held_only_a_merged_one(conductor: Round) -> None:
+  branch(conductor)
+  got = await conductor.ns["pr"]("feat(tui): Show records", "It matters.", ["It works."], CHECKS, where=str(conductor.tmp))
+  assert got.code == 0
+  log = conductor.log()
+  assert "pr create" in log
+  assert "pr edit" not in log
+
+
+@POSIX
+@JQ
+async def test_pr_edits_the_open_pr_of_the_branch(conductor: Round) -> None:
+  branch(conductor)
+  conductor.say(r"pr list --state open --head w/k", '[{"number": 7}]')
+  conductor.say(r"pr view 7 --json url", '{"url": "https://github.com/o/r/pull/7"}')
+  got = await conductor.ns["pr"]("feat(tui): Show records", "It matters.", ["It works."], CHECKS, where=str(conductor.tmp))
+  assert got.code == 0
+  log = conductor.log()
+  assert "pr edit 7 --title" in log
+  assert "pr create" not in log
