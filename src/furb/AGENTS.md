@@ -165,10 +165,19 @@ meanings. The entry of such a name here gives only its form in the engine.
   Kernel and the version of the build, `VERSION` in `src/world/store.rs`, which the store says as it hears the root of
   a new record at its birth. A life on a record that names another version is refused before any replay, since a
   build of that version can make other acts from the same record. The command line of each version puts its program
-  in the store of builds of the machine, and a command on a record of another version runs the program of that
-  version in its place when the store holds it. A record of a build before the versions names an
+  in the store of builds of the machine. A life that keeps a record whose last segment an older version made is
+  upgraded as it opens: the program of that version from the store writes a checkpoint at the tip of the record, and
+  the life goes on from it on this build. A command on a record of a newer version runs the program of that version in
+  its place when the store holds it. A record of a build before the versions names an
   engine alone, and a life on another engine refuses it. A build keeps the version while each record of the corpus,
-  `tests/corpus`, replays on it with no drift.
+  `tests/corpus`, replays on it with no drift. After a checkpoint, only the fact made of the segment after it counts,
+  and the store says it again at the root of the first life that goes on from the checkpoint.
+- checkpoint: the fact by which a record carries the state of its life to a later life of any build, at its tip:
+  the facts that the journal of any engine replays, of each chain that lives, its turns, its module and its open
+  prompts, and the names that each kind took. `src/checkpoint.rs` holds its shape. A later life boots on these facts
+  and on the record after the checkpoint, and replays nothing before it. Each name of the past stays taken, an act
+  that a value names keeps its name and its answer, each chain with an open prompt opens paused, and its prompt asks
+  its model again at a wake. A name of the module whose value the record cannot hold is lost, and the chain is told.
 - life word: the python of an extension that its rung runs after its word, and that the World plays alone on a chain
   whose origin had the extension, since that chain made the rung of its origin again.
 

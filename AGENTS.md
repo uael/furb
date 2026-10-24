@@ -41,6 +41,9 @@ API of its own:
   A life on a record that a build of another version made is refused before any replay, with both versions, and
   `tests/corpus` holds the records that each build of a version must replay with no drift. Every
   host gives it as one `Opening`, and each door gives it as `opened` and as `Engine.open`.
+- `src/checkpoint.rs` holds the checkpoint of a life, a fact at the tip of its record that python of its
+  own makes in the names of the engine: each chain that lives, with its turns, its module and its open prompts, as facts that
+  the journal of any engine replays, so a later life goes on from it on any build. `furb checkpoint` writes one.
 - `src/snapshot.rs` holds the snapshot of a life beside its record: the session of the sandbox that monty dumps and
   what the engine holds of the ears, which a later life on the same record and build opens from with no replay.
 - `src/engine.rs` opens a life in the sandbox: it loads the engine, the sheet and the Kernel, each in a namespace of
@@ -63,6 +66,7 @@ API of its own:
   it was built from. `--mode rpc` serves one life as a JSON-RPC on stdin and stdout, as Pi does, which
   `docs/rpc.md` says. `prompt`, `turns`, `run` and `extensions` each open one life on the record they are given, and `facts` prints
   each fact of a record after the number of its line, filtered by an act or by a chain, and opens no life.
+  `checkpoint` writes the checkpoint of a life at the tip of its record.
   Every life runs on the ears of the crate, on the model of its default actor and the models that `--roster` names,
   or every model of the catalog when `--roster` names none, and on a console of the operator. The package `furb` depends on the wheel of `furb-cli`, so `pip install furb`
   gives the command `furb`.
@@ -83,8 +87,8 @@ The TypeScript side is a bun workspace at the root, with three packages:
 - `tui` is the OpenTUI application on that package. `tui/README.md` says what the TUI does, and `docs/tui.md` shows
   each screen. A life of the TUI runs in the worker of `tui/src/worker.ts`, which `tui/src/host.ts`, the host of the
   life, holds in a process of its own behind a socket that `tui/src/hosting.ts` places, so the life outlives each
-  window: `tui/src/bridge.ts` attaches a window to the host, or starts it, and keeps the worker in the window where no
-  socket serves.
+  window: `tui/src/bridge.ts` attaches a window to the host, starts it, or takes over a host of another build, and keeps
+  the worker in the window where no socket serves.
 - `gui` is the desktop app, which runs a life in a window as the TUI runs one in a terminal: its core in
   `gui/src-tauri`, a Cargo workspace of its own on Tauri 2, holds the window and starts the host of a life in
   `gui/host`, a program of bun on the `Workspaces` and the `Session` of the TUI, and its UI in `gui/src` reads the

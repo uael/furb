@@ -8,8 +8,9 @@ import { tmpdir, userInfo } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { scratch } from "furb";
 
-/** The version of the protocol between a window and the host of a life, which the hello of each says. A host and a
- * window of two versions do not talk. */
+/** The version of the protocol between a window and the host of a life, which the hello of each says. Each version
+ * keeps the hello and the end of the life as they are, so a window takes over a host of any build: it ends that host
+ * with an end that names the hand over, and a host that does not know the hand over ends as by any end. */
 export const PROTOCOL = 1;
 /** The longest path of a socket that this module makes: macOS takes 104 bytes with the end of the string. */
 const LONGEST = 100;
@@ -91,8 +92,10 @@ export function framed(socket: Socket, heard: (message: never) => void): (messag
 }
 
 /** The build of this program: the version of the package furb and the digest of its native library, which holds the
- * engine, the Kernel, the interpreter and the ears of the crate, so a host of a new build knows the life of an old one. */
+ * engine, the Kernel, the interpreter and the ears of the crate, so a window of a new build knows a host of an old one
+ * and takes it over. FURB_BUILD names another build in its place, as a test of a takeover does. */
 export async function buildOf(): Promise<string> {
+  if (process.env.FURB_BUILD) return process.env.FURB_BUILD;
   const index = Bun.resolveSync("furb", import.meta.dir);
   const root = dirname(dirname(index));
   const { version } = (await Bun.file(join(root, "package.json")).json()) as { version: string };

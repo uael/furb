@@ -16,7 +16,7 @@ use std::{
 };
 
 use crate::{
-  Ear, Engine, Fault, Object,
+  Ear, Engine, Fault, Object, checkpoint,
   ear::{hear, hearing},
   extension::{self, Places, memory::memory, skills::skills, web::web},
   snapshot::{self, Keeper},
@@ -144,7 +144,7 @@ impl Opening {
   /// record, and else one of its own, which goes with the life. A new record starts with an empty scratch directory,
   /// and the files of the record are made again in one that is missing.
   pub fn parts(self) -> Result<(Vec<Object>, Ears), Fault> {
-    self.parted(false)
+    self.parted(false).map(|(record, ears, _)| (record, ears))
   }
 
   /// Whether the life keeps what it says to its record.
@@ -164,9 +164,12 @@ impl Opening {
 
   /// The record and the ears of the crate, as [`Opening::parts`] gives them, with an ear of the log that writes it on
   /// after the lines that it holds when the life is `continued` from a snapshot.
-  fn parted(self, continued: bool) -> Result<(Vec<Object>, Ears), Fault> {
+  fn parted(self, continued: bool) -> Result<(Vec<Object>, Ears, bool), Fault> {
     let works = self.works();
     let keeps = self.keeps != Some(false) && works;
+    if let Some(path) = self.record.as_deref().filter(|_| keeps) {
+      upgraded(Path::new(path), &self.directory, world::stored)?;
+    }
     let (record, store) = match (&self.record, keeps) {
       (Some(path), true) => world::store(path).map(|(held, store)| (held, Some(store)))?,
       (Some(path), false) => (world::kept(path)?, None),
@@ -179,7 +182,9 @@ impl Opening {
         vec![Object::string(format!("{why}, so a replay would drift. {then}"))],
       ))
     };
-    match (world::version(&record), world::made(&record)) {
+    // A record with a checkpoint goes on from it on any build, so only the build of its last segment counts.
+    let (segment, cut) = (checkpoint::segment(&record), checkpoint::last(&record).is_some());
+    match (world::version(segment), world::made(segment)) {
       (Some(theirs), _) if theirs != world::VERSION => {
         let at = world::build(theirs)
           .map_or_else(|| "the store of builds".to_owned(), |at| at.display().to_string());
@@ -194,7 +199,7 @@ impl Opening {
           ),
         );
       }
-      (None, Some(theirs)) if theirs != world::engine() => {
+      (None, Some(theirs)) if theirs != world::engine() && !cut => {
         return refused(
           format!(
             "the record {path} was made by the engine {theirs:.12}, and this build runs the engine {:.12}",
@@ -205,6 +210,7 @@ impl Opening {
       }
       _ => {}
     }
+    let record = checkpoint::booted(record);
     let log = self.log.as_ref().map(|log| log.0.clone());
     let told = |line: &str| match &log {
       Some(log) => log(line),
@@ -223,7 +229,7 @@ impl Opening {
       true => extension::configured(&places, self.directory.as_ref())?,
       false => Vec::new(),
     };
-    let logs = self.record.as_ref().filter(|_| keeps).map(|path| match continued {
+    let logs = self.record.as_ref().filter(|_| keeps).map(|path| match continued && !cut {
       true => world::continued(path, record.len()),
       false => world::log(path, &record),
     });
@@ -242,7 +248,7 @@ impl Opening {
     ];
     ears.extend(store.map(|store| ("store", store)));
     ears.extend(logs.map(|log| ("log", log)));
-    Ok((record, ears.into_iter().map(|(name, ear)| (name.to_owned(), ear)).collect()))
+    Ok((record, ears.into_iter().map(|(name, ear)| (name.to_owned(), ear)).collect(), cut))
   }
 
   /// The ear of the provider: the models of the roster that the catalog makes, which the function of the host
@@ -291,10 +297,11 @@ impl Opening {
     let (keeps, snapshots) = (self.keeps(), self.snapshot != Some(false));
     let path = self.record.clone().filter(|_| snapshots).map(PathBuf::from);
     let restore = path.as_ref().and_then(|path| snapshot::restore(path, &build));
-    let (record, ears) = self.parted(restore.is_some() && keeps)?;
+    let (record, ears, cut) = self.parted(restore.is_some() && keeps)?;
     let ears = host.into_iter().chain(ears);
     let mut engine = match restore {
-      Some(restore) if restore.entries == record.len() => {
+      // A life that goes on from a checkpoint boots on more entries than its record holds, and keeps no snapshot.
+      Some(restore) if restore.entries == record.len() && !cut => {
         let opened =
           Engine::from_snapshot(&record, ears, &restore.table, restore.sand, &restore.past)
             .and_then(|mut engine| engine.verb("stand", vec![], vec![]).map(|_| engine));
@@ -307,18 +314,57 @@ impl Opening {
           (Err(fault), _) => return Err(fault),
         }
       }
-      Some(_) => {
+      Some(_) if !cut => {
         return Err(Fault::refused("the record changed while the life opened on its snapshot"));
       }
-      None => Engine::boot(record.clone(), ears)?,
+      _ => Engine::boot(record.clone(), ears)?,
     };
     if let Some(no) = engine.raised() {
       return Err(no.clone());
     }
-    if let Some(path) = path.filter(|_| keeps) {
+    if let Some(path) = path.filter(|_| keeps && !cut) {
       engine.keep(Keeper::new(path, build));
     }
     Ok((engine, record))
+  }
+}
+
+/// A record whose last segment an older version made, upgraded at a stand: the build of that version, which the store
+/// of builds holds, writes a checkpoint at its tip, so a life of this build goes on from it. A record of this version
+/// or of a newer one, and one of a version whose build the store lacks, stay as they are, and the life says why it
+/// refuses them.
+fn upgraded(
+  path: &Path,
+  directory: &str,
+  stored: impl Fn(i64) -> Option<PathBuf>,
+) -> Result<(), Fault> {
+  if !path.exists() {
+    return Ok(());
+  }
+  let record = world::kept(path)?;
+  let older = world::version(checkpoint::segment(&record)).filter(|one| *one < world::VERSION);
+  let Some((theirs, program)) = older.and_then(|one| Some((one, stored(one)?))) else {
+    return Ok(());
+  };
+  let ran = std::process::Command::new(&program)
+    .arg("checkpoint")
+    .arg("--record")
+    .arg(path)
+    .arg("--cwd")
+    .arg(directory)
+    .output();
+  match ran {
+    Ok(done) if done.status.success() => Ok(()),
+    Ok(done) => Err(Fault::refused(format!(
+      "the build of version {theirs} at {} wrote no checkpoint of {}: {}",
+      program.display(),
+      path.display(),
+      String::from_utf8_lossy(&done.stderr).trim()
+    ))),
+    Err(no) => Err(Fault::refused(format!(
+      "the build of version {theirs} at {} does not run: {no}",
+      program.display()
+    ))),
   }
 }
 

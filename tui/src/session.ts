@@ -1198,10 +1198,14 @@ export class Session extends EventEmitter {
     const after = (act: ActRow | undefined): act is ActRow =>
       !!act && act.began >= point.began && (message || !under(act));
     const files = new Map<string, FileChange>();
-    for (let at = 0; at < this.host.changes; at += 100)
-      for (const change of await this.host.readChanges(at, 100))
+    // The count of changes in the state of the host lags the acts, which the session asks for, so the journal is read
+    // to its end: a page shorter than asked is its last.
+    for (let at = 0, page: FileChange[] = []; at === 0 || page.length === 100; at += 100) {
+      page = await this.host.readChanges(at, 100);
+      for (const change of page)
         if (change.act && after(byId.get(change.act)) && !files.has(change.path))
           files.set(change.path, change);
+    }
     const commands = this.acts.filter((act) => act.kind === "bash" && after(act)).length;
     return { files: [...files.values()], commands };
   }
@@ -1437,14 +1441,25 @@ export class Session extends EventEmitter {
         await this.engine.pause(argument || this.selected);
         this.notice = "Paused. In-flight work can finish.";
         break;
-      case "wake":
+      case "wake": {
         if (this.host.pending.size) {
           this.emit("resume");
           break;
         }
-        await this.engine.wake(argument || this.selected);
-        this.notice = "Work resumed.";
+        // With no chain named, the wake goes to the whole life: a pause of one chain holds the chains it made, and the
+        // chains that stand outside it, so a wake of the selected chain alone leaves them paused.
+        const stopped = argument
+          ? [argument]
+          : [
+              ...new Set([
+                this.selected,
+                ...this.chains.filter((chain) => chain.paused && !chain.done).map((chain) => chain.id),
+              ]),
+            ];
+        for (const id of stopped) await this.engine.wake(id);
+        this.notice = stopped.length > 1 ? `Work resumed on ${stopped.length} chains.` : "Work resumed.";
         break;
+      }
       case "cancel":
         await this.cancel(argument);
         break;

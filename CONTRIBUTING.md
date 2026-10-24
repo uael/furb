@@ -89,6 +89,7 @@ contract needs a request of the owner.
 | `src/world/time.rs` | The clock, a chance, and a wait. |
 | `src/world/store.rs` | The store: the record on the disk, one fact on each line with the time the store kept it after the fact, which one process at a time owns, and the engine and the version of the build that made it, which the record names. |
 | `src/world/log.rs` | The log of a life beside its record: every fact that the life said, which `logged` reads while it agrees with the record. |
+| `src/checkpoint.rs` | The checkpoint of a life, at the tip of its record, from which a life of any later build goes on, with the python that makes it in the names of the engine. |
 | `src/world/builds.rs` | The store of builds: the program of the command line of each version that ran on the machine, in the cache of furb, which a command on a record of that version runs. |
 | `src/world/reader.rs` | The reader of a record with no life, which `retold` gives, so a record of any engine opens to read. |
 | `src/world/operator.rs` | The rules by which every console reads what the operator answers. |
