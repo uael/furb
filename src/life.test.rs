@@ -523,6 +523,19 @@ fn a_life_on_a_record_of_another_engine_before_the_versions_is_refused_before_an
   assert_eq!(fs::read_to_string(&record).unwrap(), text, "it keeps nothing");
 }
 
+#[test]
+fn a_life_on_a_record_of_another_engine_is_refused_before_it_takes_the_lease_of_the_record() {
+  let at = place("leased");
+  let (record, _) =
+    made_elsewhere(&at, &format!("[\"made\",\"chain1\",\"store\",\"{}\"]", "0".repeat(64)));
+  let _held = world::store(&record).unwrap();
+  let refused = Opening { extensions: Some(false), ..opening(&at, true) }
+    .boot::<String>([])
+    .map(|_| ())
+    .unwrap_err();
+  assert!(refused.to_string().starts_with("Drift: the record"), "{refused}");
+}
+
 /// The corpus that the gate of the versions replays: the records in `tests/corpus`, which `tests/corpus/README.md`
 /// says.
 fn corpus() -> PathBuf {

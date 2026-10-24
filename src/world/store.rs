@@ -62,6 +62,20 @@ pub fn kept(path: impl AsRef<Path>) -> Result<Vec<Object>, Fault> {
   }
 }
 
+/// The entries that the store kept at a path whose fact is of one of some kinds, in order, read with no lease and
+/// changed in nothing. A file of lines is read from the head of each line, and parses only the lines of those kinds.
+pub fn heads(path: impl AsRef<Path>, kinds: &[&str]) -> Result<Vec<Object>, Fault> {
+  let path = path.as_ref();
+  if !database(path) {
+    return lines::heads(path, kinds);
+  }
+  let of = |entry: &Object| {
+    let fact = entry.as_ref().items().and_then(|held| Fact::of(*held.first()?));
+    fact.is_some_and(|one| kinds.contains(&one.kind()))
+  };
+  Ok(sqlite::kept(path)?.into_iter().filter(of).collect())
+}
+
 /// The kind of the fact by which a record names the build that made it: `("made", "chain1", "store", engine,
 /// version)`, where engine is what [`engine`] gives and version is [`VERSION`]. A record of a build before the
 /// versions holds no version. No contract holds it, so this is the one home of its shape.

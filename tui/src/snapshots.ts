@@ -42,6 +42,11 @@ function firstChange(held: readonly Turn[], turns: readonly Turn[]): number {
     one === other || JSON.stringify(one) === JSON.stringify(other);
   let at = 0;
   while (at < held.length && at < turns.length) {
+    // A view that keeps the turns that did not change gives them again as they were.
+    if (held[at] === turns[at]) {
+      at++;
+      continue;
+    }
     const [one, other] = [held[at] as Turn, turns[at] as Turn];
     if (one.length !== other.length || !one.every((part, place) => same(part, other[place]))) break;
     at++;
@@ -54,7 +59,7 @@ const TAIL = 2000;
 
 /** An act as a row of a snapshot: a write carries the lines that its change added and removed, and a command that
  * printed more than a tail carries the tail of each stream. An act carries its time when this life ran it. */
-function row(act: LiveAct, lines?: ActRow["lines"], took?: number): ActRow {
+export function row(act: LiveAct, lines?: ActRow["lines"], took?: number): ActRow {
   if (took !== undefined) return row({ ...act, took } as ActRow, lines);
   // A read and a write carry the count of the lines of their text, and leave the text out, which the view reads whole
   // when it shows it.
@@ -67,9 +72,10 @@ function row(act: LiveAct, lines?: ActRow["lines"], took?: number): ActRow {
       ...act,
       words: act.words.map(bare),
       value: bare(act.value),
+      // A row that a reader made already carries the count of the text that it left out.
       ...(content === undefined
         ? {}
-        : { count: content ? content.replace(/\n$/, "").split("\n").length : 0 }),
+        : { count: content ? content.replace(/\n$/, "").split("\n").length : ((act as ActRow).count ?? 0) }),
       ...(lines ? { lines } : {}),
     };
   }
