@@ -13,7 +13,7 @@ import type {
   Turn,
 } from "furb";
 import type { Measure } from "furb/life";
-import { framed, type Hello, hostPlace, type Place, PROTOCOL } from "./hosting.ts";
+import { buildOf, framed, type Hello, hostPlace, type Place, PROTOCOL } from "./hosting.ts";
 import type { EngineOptions } from "./models.ts";
 import { isRecorded, type Reading } from "./reading.ts";
 import type { ActRow, FollowUp } from "./session.ts";
@@ -371,9 +371,15 @@ async function reach(options: EngineOptions, place: Place): Promise<Socket> {
   }
 }
 
+/** How long a window waits for a host of another build to end once it asked it to hand the life over: the host waits
+ * up to 10 seconds for what runs, then ends the life. */
+const TAKEOVER = 60000;
+
 /** The life in a host of its own, which outlives the window. A dispose of the window detaches it, and the life goes
  * on; an end ends the life. When the host goes away with the life open, the window attaches again, to a host that it
- * starts again when none answers, and reads the acts from the start when it is another host. */
+ * starts again when none answers, and reads the acts from the start when it is another host. A window that finds a
+ * host of another build takes it over: the host ends the life, and the window starts a host of its own build, which
+ * opens the life again on the same record. */
 async function attach(options: EngineOptions, place: Place): Promise<{ engine: Engine; host: HostView }> {
   let socket: Socket | undefined;
   const link: Link = new Link((target, method) => {
@@ -383,35 +389,50 @@ async function attach(options: EngineOptions, place: Place): Promise<{ engine: E
     return Promise.resolve();
   });
   const lost = "The host of the life ended before it answered.";
+  const mine = buildOf().catch((error: unknown) => `unknown: ${error}`);
   let first: Hello | undefined;
   let reaching: Promise<void> | undefined;
   const hello = async (): Promise<Hello> => {
-    const held = await reach(options, place);
-    socket = held;
-    link.send = framed(held, (data: Message) => link.receive(data));
-    held.on("close", () => {
-      if (socket !== held) return;
-      link.send = undefined;
-      link.drop(lost);
-      if (!link.closed && first && !reaching)
-        reaching = again().finally(() => {
-          reaching = undefined;
-        });
-    });
-    held.on("error", () => {});
-    // A host that ends its side of the socket ends it whole: bun closes no socket whose peer ended while a write of the
-    // window waits on it, so the socket would wait with no close.
-    held.on("end", () => held.destroy());
-    const said = (await link.request("host", "hello", [
-      { window: process.pid, protocol: PROTOCOL },
-    ])) as Hello;
-    if (said.protocol !== PROTOCOL) {
-      held.end();
-      throw new Error(
-        `The host of ${said.record} speaks the protocol ${said.protocol}, and this window ${PROTOCOL}. End the life in a window of its build first.`,
-      );
+    for (let took = false; ; took = true) {
+      const held = await reach(options, place);
+      socket = held;
+      const send = framed(held, (data: Message) => {
+        if (socket === held) link.receive(data);
+      });
+      link.send = send;
+      held.on("close", () => {
+        if (socket !== held) return;
+        link.send = undefined;
+        link.drop(lost);
+        if (!link.closed && first && !reaching)
+          reaching = again().finally(() => {
+            reaching = undefined;
+          });
+      });
+      held.on("error", () => {});
+      // A host that ends its side of the socket ends it whole: bun closes no socket whose peer ended while a write of
+      // the window waits on it, so the socket would wait with no close.
+      held.on("end", () => held.destroy());
+      const build = await mine;
+      const said = (await link.request("host", "hello", [
+        { window: process.pid, protocol: PROTOCOL, build },
+      ])) as Hello;
+      // A host that this window started after a takeover keeps its build, so two windows of two builds that open
+      // the life at once do not take it over from each other with no end.
+      if (!took && said.build !== build) {
+        socket = undefined;
+        link.send = undefined;
+        await takeOver(held, send, said, build);
+        continue;
+      }
+      if (said.protocol !== PROTOCOL) {
+        held.end();
+        throw new Error(
+          `The host of ${said.record} speaks the protocol ${said.protocol}, and this window ${PROTOCOL}. End the life in a window of its build first.`,
+        );
+      }
+      return said;
     }
-    return said;
   };
   // A host that a kill ends can take a connection while its process ends, and then drops it before it answers the
   // hello: the window reaches the place again, where no host answers any more, and starts a new one.
@@ -431,4 +452,28 @@ async function attach(options: EngineOptions, place: Place): Promise<{ engine: E
   };
   first = await hello();
   return { engine: link.engine(first.root), host: link.host };
+}
+
+/** The end of a host of another build, which hands the life over: the window asks it to end the life, and waits until
+ * it closes the socket. The ask is an end of the session, so a host that does not know the hand over ends the life
+ * as at any end. */
+async function takeOver(
+  held: Socket,
+  send: (message: object) => void,
+  said: Hello,
+  build: string,
+): Promise<void> {
+  let timer: Timer | undefined;
+  const closed = new Promise<boolean>((resolve) => {
+    held.once("close", () => resolve(true));
+    timer = setTimeout(() => resolve(false), TAKEOVER);
+  });
+  send({ id: 0, target: "session", method: "end", args: [{ handover: { build, protocol: PROTOCOL } }] });
+  const ended = await closed;
+  clearTimeout(timer);
+  if (ended) return;
+  held.destroy();
+  throw new Error(
+    `The host of ${said.record}, of the build ${said.build}, did not hand the life over to the build ${build} in ${TAKEOVER / 1000} seconds.`,
+  );
 }

@@ -1172,10 +1172,14 @@ export class Session extends EventEmitter {
     const after = (act: ActRow | undefined): act is ActRow =>
       !!act && act.began >= point.began && (message || !under(act));
     const files = new Map<string, FileChange>();
-    for (let at = 0; at < this.host.changes; at += 100)
-      for (const change of await this.host.readChanges(at, 100))
+    // The count of changes in the state of the host lags the acts, which the session asks for, so the journal is read
+    // to its end: a page shorter than asked is its last.
+    for (let at = 0, page: FileChange[] = []; at === 0 || page.length === 100; at += 100) {
+      page = await this.host.readChanges(at, 100);
+      for (const change of page)
         if (change.act && after(byId.get(change.act)) && !files.has(change.path))
           files.set(change.path, change);
+    }
     const commands = this.acts.filter((act) => act.kind === "bash" && after(act)).length;
     return { files: [...files.values()], commands };
   }
