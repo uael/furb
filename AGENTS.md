@@ -251,9 +251,10 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
   record.
 - `uv run python script/deepswe.py`: the DeepSWE rig, which `script/AGENTS.md` says how to run.
 - `uv run python script/bench/onelife.py`: the proof of one life. It builds the command line three times, with the
-  engine changed twice in a way that makes the same acts, and runs one record over the three builds on a claude that
-  answers from a script: the record goes on with no drift, reloads an extension and compacts a chain in place, and
-  no chain is lost and no command or turn runs twice. Its docstring says how to run it.
+  engine changed twice in a way that makes the same acts and the last build of the next version, and runs one record
+  over the three builds on a claude that answers from a script: the record goes on with no drift, reloads an extension,
+  compacts a chain in place and crosses the version through a checkpoint, and no chain is lost, no name is taken twice
+  and no command or turn runs twice. Its docstring says how to run it.
 - `uv run python script/bench/replay.py <task> --out <directory>`: the bench of replay. One life of the local model
   works a task of DeepSWE, later lives open on its record, one more opens after a change of the World, and Claude
   Code on the same model works the task as the baseline. Its docstring says how to run it.
