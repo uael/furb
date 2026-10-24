@@ -17,11 +17,11 @@ use std::{
   time::{Duration, Instant},
 };
 
-use futures::FutureExt;
+use futures::{FutureExt, StreamExt};
 use rig_core::{
   completion::{CompletionError, CompletionModel, CompletionRequest, CompletionResponse, Usage},
   message::{AssistantContent, Message, Reasoning, UserContent},
-  streaming::{StreamFinal, StreamingCompletionResponse},
+  streaming::{RawStreamingChoice, StreamFinal, StreamingCompletionResponse},
   test_utils::{MockCompletionModel, MockError, MockStreamEvent},
 };
 use serde_json::{Value, json};
@@ -343,6 +343,145 @@ fn a_cancel_over_a_reply_ends_the_call_of_its_model_and_the_ear_says_nothing_mor
   );
   let dones = said(&mut engine).into_iter().filter(|(kind, ..)| kind == "done").count();
   assert_eq!(dones, 0, "the provider said no done of the reply a control ended");
+}
+
+/// A model that writes these parts of its text and then waits, and says when its call is dropped.
+#[derive(Clone)]
+struct Halting {
+  parts: Vec<&'static str>,
+  dropped: Arc<AtomicBool>,
+}
+
+impl Halting {
+  fn writes(parts: &[&'static str]) -> Halting {
+    Halting { parts: parts.to_vec(), dropped: Arc::default() }
+  }
+}
+
+impl CompletionModel for Halting {
+  async fn completion(&self, _: CompletionRequest) -> Result<CompletionResponse, CompletionError> {
+    Err(CompletionError::ProviderError("the provider streams".into()))
+  }
+
+  async fn stream(
+    &self,
+    _: CompletionRequest,
+  ) -> Result<StreamingCompletionResponse, CompletionError> {
+    let flag = Flag(Arc::clone(&self.dropped));
+    let said = futures::stream::iter(
+      self.parts.clone().into_iter().map(|part| Ok(RawStreamingChoice::Message(part.to_owned()))),
+    );
+    let held = futures::stream::once(async move {
+      let _flag = flag;
+      std::future::pending::<()>().await;
+    })
+    .filter_map(|()| std::future::ready(None::<Result<RawStreamingChoice, CompletionError>>));
+    Ok(StreamingCompletionResponse::stream("halting", Box::pin(said.chain(held))))
+  }
+}
+
+/// Whether the root holds a tell that holds each of these texts.
+fn told_of(engine: &mut Engine, texts: &[&str]) -> bool {
+  let root = engine.root().to_owned();
+  let facts = engine
+    .transcript(verbs::Transcript { on: on(&root), of: None })
+    .expect("the root has a transcript");
+  facts.iter().any(|one| {
+    let all = one.word(0).map(|word| word.py_repr()).unwrap_or_default();
+    one.kind() == "tell" && texts.iter().all(|text| all.contains(text))
+  })
+}
+
+/// The turn of a reply that ended at a word as far as this text, which counted nothing.
+fn cut(text: &str) -> String {
+  let text = text.replace('\n', "\\n");
+  format!("('assistant', '{text}', (0, 0, 0, 0, 0.0), [{{'type': 'text', 'text': '{text}'}}])")
+}
+
+#[test]
+fn a_reply_ends_at_the_first_statement_that_cannot_be_python_and_the_gate_refuses_its_word() {
+  let model = Halting::writes(&["```python\n", "foo()\n", "bar()\n"]);
+  let (mut engine, _) = life("stops", vec![Model::new("m", 1000, model.clone())]);
+  asked(&mut engine);
+  assert_eq!(replied(&mut engine), cut("```python"));
+  assert!(
+    until(&mut engine, |_| model.dropped.load(Ordering::SeqCst)),
+    "the call of the model ended before it wrote the rest"
+  );
+  assert!(
+    until(&mut engine, |engine| told_of(engine, &["refused", "line 1"])),
+    "the gate refused the word as far as the statement"
+  );
+  assert!(!ran(&mut engine, "foo"), "no word ran");
+}
+
+#[test]
+fn a_reply_ends_after_a_fault_that_follows_a_quote_at_the_line_of_the_fault() {
+  let parts = ["<s:note>\n", "Hello\n", "</s:note>\n", "Here is the code:\n", "close(1)\n"];
+  let model = Halting::writes(&parts);
+  let (mut engine, _) = life("quotes", vec![Model::new("m", 1000, model.clone())]);
+  asked(&mut engine);
+  assert_eq!(replied(&mut engine), cut("<s:note>\nHello\n</s:note>\nHere is the code:"));
+}
+
+#[test]
+fn a_word_whose_statements_stand_over_many_lines_is_not_ended_while_the_model_writes_it() {
+  let parts = [
+    "x = (\n",
+    "  3,\n",
+    ")\n",
+    "t = \'\'\'\n",
+    "text at the edge\n",
+    "\'\'\'\n",
+    "<s:note>\n",
+    "Hello\n",
+    "</s:note>\n",
+    "if x:\n",
+    "  y = 1\n",
+    "else:\n",
+    "  y = 2\n",
+    "close(x[0] + len(t) + y + len(note))",
+  ];
+  let usage = Usage { input_tokens: 10, output_tokens: 5, total_tokens: 15, ..Default::default() };
+  let events: Vec<_> = parts
+    .iter()
+    .map(|part| MockStreamEvent::text(*part))
+    .chain([MockStreamEvent::FinalResponse(StreamFinal::new("mock", usage))])
+    .collect();
+  let model = MockCompletionModel::from_stream_turns([events]);
+  let (mut engine, _) = life("whole", vec![scripted(&model)]);
+  let id = asked(&mut engine);
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  assert_eq!(got.as_ref().as_int(), Some(3 + 18 + 1 + 6));
+}
+
+#[test]
+fn what_a_function_of_the_host_tells_is_no_word_that_ends_its_reply() {
+  let host: Hosted = Arc::new(|_, told| {
+    async move {
+      told("```python\nthe work goes on\n", "");
+      told("it goes on\n", "");
+      Ok(Object::tuple([
+        Object::string("assistant"),
+        Object::string("close(2)"),
+        Object::tuple([
+          Object::int(0),
+          Object::int(0),
+          Object::int(0),
+          Object::int(0),
+          Object::float(0.0),
+        ]),
+        Object::list([]),
+      ]))
+    }
+    .boxed()
+  });
+  let at = yard("hosted");
+  let model = scripted(&MockCompletionModel::default()).hosted(host);
+  let mut engine = lived(Provider::new(at.display().to_string(), vec![model]));
+  let id = asked(&mut engine);
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  assert_eq!(got.as_ref().as_int(), Some(2));
 }
 
 #[cfg(unix)]

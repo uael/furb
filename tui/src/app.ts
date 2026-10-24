@@ -4824,6 +4824,32 @@ export class App {
       await bare[name]?.();
       return true;
     }
+    if (name === "serve") {
+      const served = await this.session.host.serve(argument);
+      const copy = (address: string, what: string) => () => {
+        this.renderer.copyToClipboardOSC52(address);
+        this.session.notice = `Copied the address ${what}.`;
+      };
+      this.openPalette(
+        "Serve this life to other operators",
+        [
+          {
+            label: "Copy the address to read and drive it",
+            detail: served.write,
+            run: copy(served.write, "to read and drive this life"),
+          },
+          {
+            label: "Copy the address to read it only",
+            detail: served.read,
+            run: copy(served.read, "to read this life only"),
+          },
+        ],
+        {
+          note: "An operator attaches with furb-tui --attach <address>. Each address holds its key, so give it only to the operator that it is for.",
+        },
+      );
+      return true;
+    }
     if (name === "access") {
       if (!argument) this.accessPicker();
       else if (argument === "reader" || argument === "motion") this.toggleAccess(argument);

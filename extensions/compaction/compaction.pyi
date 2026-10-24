@@ -40,6 +40,7 @@ def reground(on: str = "") -> None:
 def supersede(keep: Filter | None = None, on: str = "") -> str:
   """supersede(keep) says on the chain of the caller a prefix of what the filter keep kept of its acts, everything that made what it kept, and every act of the chain, and gives the chain.
   So the chain goes on under its name with its module, its ladders and its acts, and only its turns are cut.
+  A fact that the chain carried from another record stays when the filter keeps the carry that said it, and goes with it.
   """
 
 def compact(filters: list[Filter] | None = None, summary: str = "", on: str = "") -> str:
@@ -54,3 +55,17 @@ def compacted(on: str = "") -> Act:
   It moves, stops and pauses nothing, so each open prompt, each rung that waits and each word that runs goes on in the chain.
   It never completes.
   """
+
+def carry(record: str, source: str = "chain1", on: str = "") -> Act:
+  """carry(record, source) asks the World for what the chain source of the record at the path record holds, as an act of the kind carry with the words record and source, and gives the act.
+  The record keeps its answer, so a later life reads it from its own record and opens no other file.
+  """
+
+async def inherit(record: str, source: str = "chain1", on: str = "") -> str:
+  """inherit(record, source) awaits carry(record, source) on the chain of the caller, and says on it a prefix of its module, the turns that the carry gave, each act of the chain and each tell about the chain, so the chain reads the turns of source as its own and keeps its acts.
+  It opens on the chain again each open prompt that the carry gave, with its shape, its message and its actor, under a new name.
+  It tells under the carry the chain and the record that it carried from, the count of the entries of that record, the sha256 of its last entry, whether its log gave the facts, how many facts of turns it carried, that each value of the module, each word that ran and each command that was open was lost, and which new prompt takes the place of which, and gives the chain.
+  """
+
+def imported(record: str, source: str = "chain1", label: str = "", on: str = "") -> str:
+  """imported(record, source, label) makes a chain labeled label, or source of record when it is given no label, or takes the chain on, puts on it a rung that the chain makes, so that the rung outlives the word that called imported, whose word awaits inherit(record, source), and gives the chain."""

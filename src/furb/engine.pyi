@@ -518,6 +518,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   To await a chain never returns.
   A chain has a globals dict and a working directory of its own.
   A chain with a source holds the acts it inherited from that source, as the filter kept them.
+  A chain with a source holds whole each fact of its origin about a name that no act of the life holds, as a turn that its origin carried from another record.
   The steps that an inherited prompt takes after the point enter the transcript of its owner alone.
   What a chain binds is its own, and a chain with a source is how a chain gets isolation.
   Two chains from one source hold the same values, since both ran the same rungs.
