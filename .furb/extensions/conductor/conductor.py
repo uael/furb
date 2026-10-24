@@ -194,7 +194,7 @@ def pr(title: str, why: str, outcome: list[str], checks: list[str], breaking: li
     command = rules + f"gh pr edit {number} --title {name} --body-file - && gh pr view {number} --json url --jq .url"
   else:
     added = labels.replace("--label", "--add-label")
-    command = (f"cd {shq(where)} && " if where else "") + rules + f"if gh pr view --json number >/dev/null 2>&1; then gh pr edit --title {name} --body-file -{added}; else gh pr create --base {base} --title {name} --body-file -{labels}; fi && gh pr view --json url --jq .url"
+    command = (f"cd {shq(where)} && " if where else "") + rules + "{ N=$(gh pr list --state open --head \"$(git branch --show-current)\" --json number --jq '.[0].number // empty'); " + f"if [ -n \"$N\" ]; then gh pr edit \"$N\" --title {name} --body-file -{added} && gh pr view \"$N\" --json url --jq .url; else gh pr create --base {base} --title {name} --body-file -{labels}; fi; }}"
   return bash(command, stdin=body, show=span(-2, -1), timeout=180)
 
 
