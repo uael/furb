@@ -637,9 +637,15 @@ try {
   await older.dispose();
   const kept = await readFile(drifts, "utf8");
   await writeFile(drifts, kept.replace(/("bash","bash\d+","rung\d+","chain\d+","[^"]*"),""/, "$1,false"));
+  // A record of an earlier engine has no log beside it, so the TUI shows the facts that the record kept.
+  await rm(`${drifts}.log`, { force: true });
   await library.import(drifts, await library.add(older.host.directory));
   session = library.current?.session ?? session;
   await capture("56-record-to-read");
+  // The dialog closes, and the record stays read only: the footer says so and offers a new life, the composer is off,
+  // and the work that had no end when the record ended shows no spinner and no clock.
+  app().closeOverlay();
+  await capture("56b-record-read-only");
 
   app().dispose();
   await library.dispose();

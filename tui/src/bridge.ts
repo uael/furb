@@ -15,7 +15,7 @@ import type {
 import type { Measure } from "furb/life";
 import { buildOf, framed, type Hello, hostPlace, type Place, PROTOCOL } from "./hosting.ts";
 import type { EngineOptions } from "./models.ts";
-import { isRecorded, type Reading } from "./reading.ts";
+import { type Carry, isRecorded, type Reading } from "./reading.ts";
 import type { ActRow, FollowUp } from "./session.ts";
 
 /** What one answer of a model read and wrote: its whole prompt, its output, the reads and the writes of the cache,
@@ -163,6 +163,8 @@ export class HostView extends EventEmitter implements Plain {
   sendQueued = (entry: FollowUp) => this.ask<string>("library", "queue", entry);
   resume = () => this.ask<unknown>("session", "resume");
   source = () => this.ask<string>("library", "source");
+  /** What a new life from the record open to read carries, and the first word that binds it. */
+  carry = () => this.ask<Carry>("library", "carry");
   snapshot = (chain: string, since = 0, held = 0) =>
     this.ask<Snapshot>("library", "snapshot", chain, since, held);
   readChanges = (start: number, count: number) => this.ask<FileChange[]>("library", "changes", start, count);

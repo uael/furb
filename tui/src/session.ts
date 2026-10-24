@@ -61,6 +61,7 @@ export type SessionStatus =
   | "paused"
   | "done"
   | "error"
+  | "reading"
   | "opening";
 export const statusLabels: Record<SessionStatus, string> = {
   saved: "Saved",
@@ -70,10 +71,12 @@ export const statusLabels: Record<SessionStatus, string> = {
   paused: "Paused",
   done: "Finished, unread",
   error: "Error",
+  reading: "Read only",
   opening: "Opening",
 };
 /** Whether an act is at work: it lives, no pause holds it, and its kind is one whose work takes time. */
-export const working = (act: ActRow): boolean => !act.done && !act.paused && WORK.includes(act.kind);
+export const working = (act: ActRow): boolean =>
+  !act.done && !act.paused && !act.unfinished && WORK.includes(act.kind);
 /** Whether an act failed: a rung that the gate refused or whose run raised, or an act done with an exception other
  * than a cancel. */
 export function failed(act: ActRow): boolean {
@@ -649,6 +652,7 @@ export class Session extends EventEmitter {
    * a question waits for the operator, a reopened record holds work, or what the acts do. A pause of the chain holds
    * it while none of its acts runs or asks. */
   status(chain?: string): SessionStatus {
+    if (this.host.reading) return "reading";
     if (chain ? this.error : Object.values(this.errors).some(Boolean)) return "error";
     if (this.queueHeld && this.queued.length) return "blocked";
     if (this.host.pending.size) return "paused";
@@ -691,7 +695,9 @@ export class Session extends EventEmitter {
     if (asked(this.host.prompts.keys())) return "blocked";
     if (asked(this.host.pending.keys())) return "paused";
     // Only an act that is not done works or waits under a pause, and the index holds each such act.
-    const live = (chain ? (this.liveOn().get(chain) ?? []) : [...index.live.values()]).filter(mine);
+    const live = (chain ? (this.liveOn().get(chain) ?? []) : [...index.live.values()]).filter(
+      (act) => mine(act) && !act.unfinished,
+    );
     if (live.some(working)) return "working";
     if (live.some((act) => act.paused && !act.done)) return "paused";
     const latest = chain ? index.latest.get(chain) : this.acts.findLast(mine);
@@ -1643,8 +1649,9 @@ export class Session extends EventEmitter {
   save(): void {
     this.preferences.save();
     const record = this.host.record;
-    // A recorded life keeps no view beside its log, which a later reader takes as it was made.
-    if (!record || this.host.recorded) return;
+    // A recorded life keeps no view beside its log, which a later reader takes as it was made, and a record open to
+    // read stays as it was.
+    if (!record || this.host.recorded || this.host.reading) return;
     const path = `${record}.ui.json`;
     this.savedCost = this.cost;
     const view: SavedView = {
