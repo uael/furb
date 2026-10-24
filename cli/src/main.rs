@@ -7,8 +7,9 @@
 //! provider of the model of its default actor and of the models that `--roster` names, or of every model that the
 //! catalog of the crate offers when `--roster` names none.
 //!
-//! Each run puts the program in the store of builds of the machine under its version, and a command that opens a life
-//! on a record of another version runs the build of that version in its place, when the store holds one.
+//! Each run puts the program in the store of builds of the machine under its version. A life on a record of an older
+//! version is upgraded as it opens, and a command that opens a record of a newer version runs the build of that version
+//! in its place, when the store holds one.
 
 mod console;
 mod life;
@@ -23,7 +24,7 @@ use std::{
 };
 
 use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum, error::ErrorKind};
-use furb::{life::Opening, value::entry, verbs, world};
+use furb::{checkpoint, life::Opening, value::entry, verbs, world};
 
 use crate::life::Life;
 
@@ -139,6 +140,16 @@ enum Command {
     #[command(flatten)]
     stand: Stand,
   },
+  /// Write at the tip of a record the checkpoint of its life, from which a life of any later build goes on: each chain
+  /// that lives, with its turns, its module and its open prompts. It replays the record and asks no model.
+  Checkpoint {
+    /// The record to write the checkpoint at.
+    #[arg(long)]
+    record: PathBuf,
+    /// The directory the chains of the life start in, the current directory when unsaid.
+    #[arg(long)]
+    cwd: Option<PathBuf>,
+  },
   /// Print each extension that a life on the record runs: those it enables, then those that the configs of the user
   /// and of the directory turn on, each with its life word.
   Extensions {
@@ -188,6 +199,9 @@ fn main() -> ExitCode {
     Some(Command::Facts { record, act, chain }) => facts(&record, act.as_deref(), chain.as_deref()),
     Some(Command::Run { word, place, stand }) => run(stand.on(place.opening(true)), word),
     Some(Command::Extensions { place }) => extensions(place.opening(false)),
+    Some(Command::Checkpoint { record, cwd }) => {
+      checkpoint(Place { record: Some(record.clone()), cwd }.opening(false), &record)
+    }
     None if furb.mode == Mode::Rpc => {
       if furb.demo || !furb.more.is_empty() {
         let why = "--demo and the words after -- are for the TUI, and --mode rpc serves no TUI";
@@ -214,19 +228,20 @@ fn opened(furb: &Furb) -> Option<&Path> {
     Some(
       Command::Prompt { place, .. } | Command::Run { place, .. } | Command::Extensions { place },
     ) => place.record.as_deref(),
-    Some(Command::Turns { record, .. }) => Some(record),
+    Some(Command::Turns { record, .. } | Command::Checkpoint { record, .. }) => Some(record),
     Some(Command::Facts { .. }) => None,
     None if furb.mode == Mode::Rpc => furb.place.record.as_deref(),
     None => None,
   }
 }
 
-/// How the build of another version ended, which ran this command in its place with the same words, when the record
-/// that the command opens names that version and the store of builds holds its program: only a build of that
-/// version replays the record with no drift. Nothing runs when the store holds none, and the life says why.
+/// How the build of a newer version ended, which ran this command in its place with the same words, when the record
+/// that the command opens names that version and the store of builds holds its program: only a build of that version
+/// replays the record with no drift. A record of an older version is upgraded as the life opens, as
+/// [`furb::life::Opening`] says. Nothing runs when the store holds no such build, and the life says why.
 fn handed(furb: &Furb) -> Option<ExitCode> {
-  let theirs =
-    world::version(&world::kept(opened(furb)?).ok()?).filter(|one| *one != world::VERSION)?;
+  let kept = world::kept(opened(furb)?).ok()?;
+  let theirs = world::version(checkpoint::segment(&kept)).filter(|one| *one > world::VERSION)?;
   let program = world::stored(theirs)?;
   match process::Command::new(&program).args(env::args_os().skip(1)).status() {
     Ok(status) => {
@@ -321,6 +336,16 @@ fn run(opening: Opening, word: String) -> Result<(), String> {
   let id = life.engine.rung(with).map_err(|no| no.to_string())?.id().to_owned();
   println!("{}", life.settled(&id)?.py_repr());
   Ok(())
+}
+
+/// The checkpoint of the life of a record, made in a life that only inspects it and kept at its tip.
+fn checkpoint(opening: Opening, record: &Path) -> Result<(), String> {
+  let failed = |no: furb::Fault| no.to_string();
+  let (mut engine, kept) =
+    Opening { inspecting: Some(true), ..opening }.boot::<String>([]).map_err(failed)?;
+  let written = furb::checkpoint::written(&mut engine, &kept).map_err(failed)?;
+  drop(engine);
+  furb::checkpoint::keep(record, written).map_err(failed)
 }
 
 /// Each extension that a life on the record runs, as its name and its life word, or its name alone when it has none,

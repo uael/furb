@@ -103,7 +103,7 @@ class Round:
     (tmp / "home.gitconfig").write_text("", encoding="utf-8")
     who = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
     self.env = {
-      **os.environ,
+      **{name: value for name, value in os.environ.items() if not name.startswith("GIT_")},
       **who,
       "GIT_CONFIG_GLOBAL": str(tmp / "home.gitconfig"),
       "GIT_CONFIG_NOSYSTEM": "1",
@@ -113,6 +113,7 @@ class Round:
     }
     self.say("^$", "")
     self.says.clear()
+    self.say(r"workflows/gates\.yml/runs\?", '{"workflow_runs": []}')
     ns: dict = {"__name__": "conductor", "re": re, "Text": Text, "Exit": Exit, "Refused": Refused}
     ns.update(HIDDEN=None, OPERATOR="operator", ROOT="chain1", bash=self.bash, clock=lambda: self.now)
     ns.update(cwd=lambda: str(tmp), get=self.facts.get, over=lambda name: name in self.done, prompt=self.prompt)
@@ -457,3 +458,91 @@ def test_the_prune_removes_what_the_work_left_and_keeps_its_work(conductor: Roun
   assert (root / ".furb" / "trashed.tsv").read_text(encoding="utf-8").split("\t")[1:4] == ["w/closed", main, "4"]
   assert sorted(p.name for p in scratch.iterdir()) == sorted(["new1", "held1", life])
   assert sorted(p.name for p in folder.iterdir()) == ["furb-new", "other-old"]
+
+
+@POSIX
+@JQ
+async def test_a_flake_of_the_gates_is_queued_at_once_and_read_once(conductor: Round) -> None:
+  conductor.says.clear()
+  conductor.say(r"workflows/gates\.yml/runs\?", '{"workflow_runs": []}')
+  await conductor.watch_ci()
+  assert conductor.queue == []
+  conductor.says.clear()
+  url = "https://github.com/o/r/actions/runs/50"
+  flaky = [{"id": 50, "head_sha": "s1", "run_attempt": 2, "conclusion": "success", "html_url": url}]
+  job = {
+    "id": 7,
+    "name": "the bindings and the TUI on ubuntu-latest",
+    "conclusion": "failure",
+    "started_at": "2026-10-23T10:00:00Z",
+    "completed_at": "2026-10-23T10:01:00Z",
+  }
+  conductor.say(r"runs\?branch=main&status=success", '{"workflow_runs": []}')
+  conductor.say(r"runs\?per_page=100", json.dumps({"workflow_runs": flaky}))
+  conductor.say(r"runs/50/attempts/1/jobs", json.dumps({"jobs": [job]}))
+  conductor.say(r"jobs/7/logs", "2026-10-23T10:00:30.0000000Z (fail) a host test [30000.17ms]\n")
+  await conductor.watch_ci()
+  await conductor.watch_ci()
+  assert [(key, thread) for key, _, thread in conductor.queue] == [("flake-a-host-test", "ci")]
+  assert f"{url}/attempts/1" in conductor.queue[0][1]
+  assert "a host test" in conductor.queue[0][1]
+
+
+@POSIX
+@JQ
+async def test_a_job_over_its_budget_is_queued_once_until_new_runs_measure_it(conductor: Round) -> None:
+  tree = conductor.tmp
+  (tree / ".github").mkdir()
+  (tree / ".github" / "budgets.json").write_text('{"the hooks": 60}\n', encoding="utf-8")
+  git("init", "-q", "-b", "main", cwd=tree, env=conductor.env)
+  git("add", ".github", cwd=tree, env=conductor.env)
+  git("commit", "-q", "-m", "budgets", cwd=tree, env=conductor.env)
+  git("update-ref", "refs/remotes/origin/main", "HEAD", cwd=tree, env=conductor.env)
+  conductor.says.clear()
+  green = {"workflow_runs": [{"id": n} for n in range(1, 6)]}
+  job = {
+    "id": 1,
+    "name": "the hooks",
+    "conclusion": "success",
+    "started_at": "2026-10-23T10:00:00Z",
+    "completed_at": "2026-10-23T10:03:00Z",
+  }
+  conductor.say(r"runs\?branch=main&status=success", json.dumps(green))
+  conductor.say(r"runs/\d+/jobs", json.dumps({"jobs": [job]}))
+  conductor.say(r"runs\?per_page=100", '{"workflow_runs": []}')
+  await conductor.watch_ci()
+  await conductor.watch_ci()
+  assert [(key, thread) for key, _, thread in conductor.queue] == [("budget-the-hooks", "ci")]
+  assert "took 180 s" in conductor.queue[0][1]
+  assert "budget of 60 s" in conductor.queue[0][1]
+
+
+@POSIX
+@JQ
+async def test_a_veto_keeps_a_green_pr_from_a_merge(conductor: Round) -> None:
+  asked: list[int] = []
+
+  async def deny(pr: dict) -> bool:
+    asked.append(pr["n"])
+    return True
+
+  conductor.vetoes["judge"] = deny
+  await conductor.land(conductor.pr(n=7, sha="sha7", checks=("SUCCESS",), names=["the hooks"]), False)
+  assert asked == [7]
+  assert "pr merge" not in conductor.log()
+
+
+def test_the_environment_of_each_git_holds_no_variable_of_a_commit(
+  tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+  for name in ("GIT_INDEX_FILE", "GIT_DIR", "GIT_WORK_TREE", "GIT_PREFIX", "GIT_EXEC_PATH"):
+    monkeypatch.setenv(name, "/elsewhere")
+  env = Round(tmp_path).env
+  assert sorted(name for name in env if name.startswith("GIT_")) == [
+    "GIT_AUTHOR_EMAIL",
+    "GIT_AUTHOR_NAME",
+    "GIT_COMMITTER_EMAIL",
+    "GIT_COMMITTER_NAME",
+    "GIT_CONFIG_GLOBAL",
+    "GIT_CONFIG_NOSYSTEM",
+  ]

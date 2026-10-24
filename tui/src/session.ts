@@ -231,14 +231,70 @@ const kept = [
 /** What `<record>.ui.json` holds: the kept fields of a session, and what the session had cost. */
 export type SavedView = Partial<Pick<Session, (typeof kept)[number]>> & { cost?: number };
 
-/** The saved view of a record: nothing when it has none, and the defaults with the reason when its file holds no
- * view that can be read. */
+/** The form of each field that `<record>.ui.json` keeps, which a field must have to be read: a text, a flag, a
+ * number, a map, a list of texts, or a list of maps. */
+const forms: Record<(typeof kept)[number] | "cost", "text" | "flag" | "number" | "map" | "texts" | "maps"> = {
+  sessionName: "text",
+  demo: "flag",
+  selected: "text",
+  actor: "text",
+  view: "text",
+  scope: "text",
+  mode: "text",
+  shape: "text",
+  editing: "text",
+  histories: "map",
+  stashes: "map",
+  started: "map",
+  took: "map",
+  queued: "maps",
+  queueError: "text",
+  images: "map",
+  redo: "maps",
+  drafts: "map",
+  scrolls: "map",
+  folds: "map",
+  models: "texts",
+  cost: "number",
+};
+
+/** Whether a value has a form. */
+function formed(value: unknown, form: (typeof forms)[keyof typeof forms]): boolean {
+  const map = (one: unknown) => Boolean(one) && typeof one === "object" && !Array.isArray(one);
+  switch (form) {
+    case "text":
+      return typeof value === "string";
+    case "flag":
+      return typeof value === "boolean";
+    case "number":
+      return typeof value === "number";
+    case "map":
+      return map(value);
+    case "texts":
+      return Array.isArray(value) && value.every((one) => typeof one === "string");
+    case "maps":
+      return Array.isArray(value) && value.every(map);
+  }
+}
+
+/** The saved view of a record: nothing when it has none, the defaults with the reason when its file holds no view
+ * that can be read, and the view less each field of another form, with the names of those fields. */
 export function savedView(record: string): { view: SavedView; damage?: string } {
   const path = `${record}.ui.json`;
   try {
     const view: unknown = JSON.parse(readFileSync(path, "utf8"));
-    if (view && typeof view === "object" && !Array.isArray(view)) return { view };
-    throw new Error("It holds no map.");
+    if (!view || typeof view !== "object" || Array.isArray(view)) throw new Error("It holds no map.");
+    const held = view as Record<string, unknown>;
+    const wrong = Object.entries(forms).flatMap(([key, form]) =>
+      key in held && !formed(held[key], form) ? [key] : [],
+    );
+    for (const key of wrong) delete held[key];
+    if (!wrong.length) return { view: held };
+    const fields = wrong.join(", ");
+    return {
+      view: held,
+      damage: `${path} holds ${fields} in a form this release does not read: each opened empty.`,
+    };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return { view: {} };
     const reason = error instanceof Error ? error.message : String(error);
@@ -1136,10 +1192,14 @@ export class Session extends EventEmitter {
     const after = (act: ActRow | undefined): act is ActRow =>
       !!act && act.began >= point.began && (message || !under(act));
     const files = new Map<string, FileChange>();
-    for (let at = 0; at < this.host.changes; at += 100)
-      for (const change of await this.host.readChanges(at, 100))
+    // The count of changes in the state of the host lags the acts, which the session asks for, so the journal is read
+    // to its end: a page shorter than asked is its last.
+    for (let at = 0, page: FileChange[] = []; at === 0 || page.length === 100; at += 100) {
+      page = await this.host.readChanges(at, 100);
+      for (const change of page)
         if (change.act && after(byId.get(change.act)) && !files.has(change.path))
           files.set(change.path, change);
+    }
     const commands = this.acts.filter((act) => act.kind === "bash" && after(act)).length;
     return { files: [...files.values()], commands };
   }
@@ -1375,14 +1435,25 @@ export class Session extends EventEmitter {
         await this.engine.pause(argument || this.selected);
         this.notice = "Paused. In-flight work can finish.";
         break;
-      case "wake":
+      case "wake": {
         if (this.host.pending.size) {
           this.emit("resume");
           break;
         }
-        await this.engine.wake(argument || this.selected);
-        this.notice = "Work resumed.";
+        // With no chain named, the wake goes to the whole life: a pause of one chain holds the chains it made, and the
+        // chains that stand outside it, so a wake of the selected chain alone leaves them paused.
+        const stopped = argument
+          ? [argument]
+          : [
+              ...new Set([
+                this.selected,
+                ...this.chains.filter((chain) => chain.paused && !chain.done).map((chain) => chain.id),
+              ]),
+            ];
+        for (const id of stopped) await this.engine.wake(id);
+        this.notice = stopped.length > 1 ? `Work resumed on ${stopped.length} chains.` : "Work resumed.";
         break;
+      }
       case "cancel":
         await this.cancel(argument);
         break;

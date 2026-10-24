@@ -8,7 +8,7 @@ import { Console, type ConsoleOptions } from "./console.js";
 import { call, type Ear } from "./ears.js";
 import { WORK } from "./life/acts.js";
 import { furbDirectory, saveFile } from "./project.js";
-import { actorParts, type Entry, type Fact, isQuestion } from "./types.js";
+import { actorParts, type Entry, type Fact, isQuestion, standingOf } from "./types.js";
 
 /** An ear that takes nothing and says nothing. */
 function* silent(): Ear {
@@ -88,7 +88,7 @@ export class Session extends EventEmitter {
   engine?: Engine;
   private readonly options: SessionOptions;
   /** The rung that each reply of the life that runs asks a model for, until the done of that reply. */
-  private readonly replies = new Map<string, string>();
+  readonly replies = new Map<string, string>();
   private stopped = false;
   /** The pending work as the engine last gave it, which the engine reads off the transcripts at each call, so the
    * session asks it again only after a fact that can change it. */
@@ -125,8 +125,7 @@ export class Session extends EventEmitter {
   /** The actor a prompt goes to when it names none, which the standing of every chain says, and the operator before
    * the life stands. */
   get actor(): string {
-    const standing = this.engine?.standing() as [unknown, string, string] | [];
-    return standing?.[2] ?? "operator";
+    return (this.engine && standingOf(this.engine)[2]) ?? "operator";
   }
 
   get imageDirectory(): string {
@@ -180,6 +179,7 @@ export class Session extends EventEmitter {
     } catch (error) {
       this.stopped = true;
       this.engine?.dispose();
+      this.console.dispose();
       this.changes.dispose();
       throw error;
     }

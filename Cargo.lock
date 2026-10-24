@@ -1484,6 +1484,7 @@ dependencies = [
  "google-cloud-auth",
  "htmd",
  "indexmap 2.14.2",
+ "jiff",
  "memchr",
  "monty",
  "monty-type-checking",

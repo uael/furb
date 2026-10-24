@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openEngine } from "../src/bridge.ts";
@@ -129,6 +130,38 @@ test.skipIf(process.platform === "win32")(
 );
 
 test.skipIf(process.platform === "win32")(
+  "a window whose host takes a connection as its process ends and drops it reaches the place again, and starts a host",
+  () =>
+    demoLife(async (record, directory) => {
+      const place = hostPlace(record);
+      if (!place) throw new Error("No socket serves here.");
+      const { engine, host } = await openEngine({ demo: true, host: true, cwd: directory, record });
+      const command = await engine.bash("echo kept", { on: engine.root });
+      await eventually(async () => (await engine.peek(command)) !== null, "the command to end");
+      const { pid } = JSON.parse(readFileSync(place.about, "utf8")) as About;
+      // The host stops, and its place takes one connection and drops it with no answer, as the socket of a host does
+      // while a kill ends its process.
+      process.kill(pid, "SIGSTOP");
+      rmSync(place.socket, { force: true });
+      let taken = 0;
+      const ending = createServer((socket) => {
+        taken++;
+        socket.destroy();
+        ending.close();
+      });
+      await new Promise<void>((resolve) => ending.listen(place.socket, resolve));
+      const faults: string[] = [];
+      host.on("fault", (error: Error) => faults.push(error.message));
+      const reset = new Promise<void>((resolve) => host.once("reset", resolve));
+      process.kill(pid, "SIGKILL");
+      await reset;
+      expect([taken, faults]).toEqual([1, []]);
+      expect(await engine.peek(command)).toMatchObject({ code: 0, stdout: { content: "kept\n" } });
+      await host.end();
+    }),
+);
+
+test.skipIf(process.platform === "win32")(
   "a host that cannot open its life ends, and the window that started it fails with its reason",
   () =>
     demoLife(async (record, directory) => {
@@ -139,5 +172,79 @@ test.skipIf(process.platform === "win32")(
       );
       expect(failure).toContain("Invalid record entry");
       expect(existsSync(hostPlace(record)?.socket ?? "")).toBe(false);
+    }),
+);
+
+test.skipIf(process.platform === "win32")(
+  "a window of a new build takes over a host of another build, the life goes on in a host of its build, and a window of the old host hears the end",
+  () =>
+    demoLife(async (record, directory) => {
+      const place = hostPlace(record);
+      if (!place) throw new Error("No socket serves here.");
+      const options = { demo: true, host: true, cwd: directory, record };
+      // A window of the old build starts a host of that build, which takes it from the window.
+      process.env.FURB_BUILD = "0.0.0+0ld0b0i1d000";
+      let old: Awaited<ReturnType<typeof openEngine>>;
+      try {
+        old = await openEngine(options);
+      } finally {
+        delete process.env.FURB_BUILD;
+      }
+      const before = JSON.parse(readFileSync(place.about, "utf8")) as About;
+      expect(before.build).toBe("0.0.0+0ld0b0i1d000");
+      const kept = await old.engine.bash("echo kept", { on: old.engine.root });
+      await eventually(async () => (await old.engine.peek(kept)) !== null, "the first command to end");
+      const faults: string[] = [];
+      old.host.on("fault", (error: Error) => faults.push(error.message));
+      // A command that runs as the window takes the host over lands before the old host ends its life.
+      const late = await old.engine.bash("sleep 1; echo late", { on: old.engine.root });
+      const start = performance.now();
+      const { engine, host } = await openEngine(options);
+      const took = performance.now() - start;
+      console.log(`The takeover took ${Math.round(took)} ms.`);
+      const after = JSON.parse(readFileSync(place.about, "utf8")) as About;
+      expect(after.pid).not.toBe(before.pid);
+      expect(after.build).toMatch(/\+[0-9a-f]{12}$/);
+      expect(alive(before.pid)).toBe(false);
+      expect(engine.root).toBe(old.engine.root);
+      expect(await engine.peek(kept)).toMatchObject({ code: 0, stdout: { content: "kept\n" } });
+      expect(await engine.peek(late)).toMatchObject({ code: 0, stdout: { content: "late\n" } });
+      await eventually(() => faults.length > 0, "the window of the old host to hear the end");
+      expect(faults[0]).toStartWith(`A window of the build ${after.build} took the life over`);
+      expect(await old.engine.peek(kept).catch((error: Error) => error.message)).toBe(faults[0]);
+      await host.end();
+      await eventually(() => !alive(after.pid), "the new host to end");
+    }),
+);
+
+test.skipIf(process.platform === "win32")(
+  "a command that runs past the wait of a host that hands its life over waits in the new host, and a wake ends it as interrupted",
+  () =>
+    demoLife(async (record, directory) => {
+      const options = { demo: true, host: true, cwd: directory, record };
+      process.env.FURB_BUILD = "0.0.0+0ld0b0i1d000";
+      let old: Awaited<ReturnType<typeof openEngine>>;
+      try {
+        old = await openEngine(options);
+      } finally {
+        delete process.env.FURB_BUILD;
+      }
+      const cut = await old.engine.bash("sleep 60; echo never", { on: old.engine.root });
+      await eventually(
+        async () => (await old.engine.peek(cut)) === null && old.host.seq > 0,
+        "the command to start",
+      );
+      const start = performance.now();
+      const { engine, host } = await openEngine(options);
+      expect(performance.now() - start).toBeGreaterThan(10000);
+      await eventually(() => host.pending.has(cut), "the new host to hold the command as pending");
+      expect(await engine.peek(cut)).toBeNull();
+      await host.resume();
+      await eventually(async () => (await engine.peek(cut)) !== null, "the wake to end the command");
+      expect(await engine.peek(cut)).toMatchObject({
+        is: "Refused",
+        args: ['"sleep 60; echo never" was interrupted: the life that ran it ended before it did'],
+      });
+      await host.end();
     }),
 );

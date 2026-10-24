@@ -88,8 +88,8 @@ session, its commands and its models, then quits.
 
 On macOS and Linux, the life of each session runs in a host of its own: a Bun process, `src/host.ts`, that holds the
 record, its lease, the World, the provider, the commands and the views of the life. The window draws and attaches to
-the host through a socket of Unix, so a quit, a crash or a new build of the window ends no command and no model of the
-life.
+the host through a socket of Unix, so a quit or a crash of the window ends no command and no model of the life, and a
+window of a new build takes the life over with its record whole.
 
 - The host of a record listens at `hosts/<key>.sock` in the cache of furb, in a folder that only the user can open,
   where `<key>` is the key of the scratch directory of the record. Beside it, `<key>.json` says the process of the
@@ -103,6 +103,12 @@ life.
   operator wins. `/end` in one window ends the life, and each other window shows that the life ended.
 - When a host ends while the life goes on, as at a crash, the window starts a host again and reads the acts of the
   life again from the start.
+- A window whose build is not the build of the host takes the host over. The host waits up to 10 seconds for each
+  command and each reply of a model that runs, ends the life, and exits, and each other window shows that a window of
+  another build took the life. Then the window starts a host of its own build, which opens the life again on the same
+  record. A command that runs past the wait stays pending in the new host, and a resume ends it as interrupted, so its
+  model runs it again if it wants. `FURB_BUILD` names the build of a window and of the hosts that it starts in place
+  of the build of the program, as the tests do.
 - The demo of a new project, which `bun run demo` opens with no `--cwd` and no record, stays in the window, since its
   folder goes when the window quits. A recorded life, which runs nothing, stays in the window too. On Windows, each
   life stays in the window.
@@ -248,7 +254,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/grant <dollars>` | Pause at a dollar ceiling |
 | `/context <fraction>` | Pause at a share of the model window |
 | `/pause [act or chain]` | Hold delivery while work completes |
-| `/wake [act or chain]` | Deliver pending work |
+| `/wake [act or chain]` | Wake every paused chain, or one |
 | `/cancel [id]` | End an act, or what you sent last on this chain |
 | `/feed <id> [text]` | Send a line of input to a command; no text closes its input |
 | `/close <id> <json>` | Close an act with a JSON value |
