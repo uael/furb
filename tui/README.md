@@ -117,9 +117,10 @@ A recorded life is a log of a life whose first line is a header that says `"reco
 reads a record that a build of another version made, from its acts, and runs nothing: what you send to it fails with the reason.
 The demo opens `fixtures/conductor.jsonl`, a life of a conductor of furb with 23 chains, beside its scripted life,
 when it has no `--cwd` and no record. `bun run tui/script/fixture.ts <record>.jsonl.log [out]` makes such a fixture
-from the log of a real life: it keeps the acts that the model of a life reads, cuts each word, message and output to
-its first lines, replaces each key, address of mail and home directory, and ends at the moment with the most chains
-at work.
+from the log of a real life: it keeps the acts that the model of a life reads, keeps each word of a model whole, since
+the feed shows it as the program that ran, cuts each message and output to its first lines, keeps the last lines that
+each command that still runs printed, replaces each key, address of mail and home directory, and ends at the moment
+with the most chains at work.
 
 ## Look and access
 

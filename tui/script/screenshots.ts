@@ -276,24 +276,24 @@ try {
   app().closeOverlay();
   app().toggleMode();
   app().composer.setText("");
-  const command = await session.engine.bash(
-    "printf 'Building the search index...\\n'; sleep 1; printf '3 notes indexed.\\n'",
-    { on: session.selected },
-  );
+  // A word runs a command, whose line is lit while it runs, with what it prints under it.
+  const command = await session.engine.rung({
+    word: `index = await bash("printf 'Building the search index...\\n'; sleep 4; printf '3 notes indexed.\\n'")\nprint(index.stdout.content)`,
+    on: session.selected,
+  });
   // The command shows once it has printed its first line.
   await until(session, () =>
-    Boolean((session.acts.find((act) => act.id === command)?.value as Exit | undefined)?.stdout?.content),
+    session.acts.some(
+      (act) =>
+        act.kind === "bash" &&
+        act.by === command &&
+        !act.done &&
+        Boolean((act.value as Exit | undefined)?.stdout?.content),
+    ),
   );
+  // After a second, the line says how long its command has run.
+  await new Promise((done) => setTimeout(done, 1200));
   await session.refresh();
-  app().render();
-  await test.flush();
-  const commandRow = app()
-    .scroll.getChildren()
-    .find((node) => node.id === command)
-    ?.getChildren()[0];
-  if (!commandRow) throw new Error("The command row is not visible.");
-  await test.mockMouse.click(commandRow.x + 1, commandRow.y);
-  await rest();
   app().scroll.scrollTo(app().scroll.scrollHeight);
   await capture("18-live-command");
   await session.engine.result(command);

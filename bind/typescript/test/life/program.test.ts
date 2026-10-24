@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { makers } from "../../src/life/ladder.ts";
-import { hintOf, threadProgram } from "../../src/life/program.ts";
+import { actLines, hintOf, threadProgram } from "../../src/life/program.ts";
 import { act } from "./acts.ts";
 
 const label = (chain: string) => `label of ${chain}`;
@@ -120,5 +120,24 @@ test("a program that keeps its last steps makes their lines alone, after the cou
     ["earlier", "# 1 earlier step"],
     ["code", "x = rung2"],
     ["code", "x = rung3"],
+  ]);
+});
+
+test("an act that no word made stands as one line of python, its call bound to its name, lit while it runs with what its command prints under it", () => {
+  const bash = act("bash1", "bash", "chain1", "operator", 1, undefined, {
+    words: ["printf 'a\\nb\\n'", "", 600],
+    value: { code: null, stdout: { path: "", content: "a\nb\n" }, stderr: { path: "", content: "" } },
+  });
+  expect(actLines(bash, new Set(), label).map((line) => [line.kind, line.text])).toEqual([
+    ["code", `bash1 = bash("printf 'a\\\\nb\\\\n'")`],
+    ["output", "a"],
+    ["output", "b"],
+  ]);
+  const wait = act("wait1", "wait", "chain1", "operator", 1, 2, { words: [60, "bash1"], value: "bash1" });
+  const [line] = actLines(wait, new Set(), label);
+  expect(line?.kind === "code" && [line.text, line.runs, line.hint]).toEqual([
+    'wait1 = wait(60, "bash1")',
+    false,
+    "woke: bash1",
   ]);
 });

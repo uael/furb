@@ -227,3 +227,40 @@ export function threadProgram(
   flush(last);
   return out;
 }
+
+/** A value of an act as python writes it. */
+function python(value: unknown): string {
+  if (value === null || value === undefined) return "None";
+  if (typeof value === "boolean") return value ? "True" : "False";
+  if (typeof value === "number") return String(value);
+  return JSON.stringify(typeof value === "string" ? value : String(value));
+}
+
+/** An act that no word made, as the operator or an ear makes it, as one line of python: its call, bound to its name,
+ * with its hint, lit while it runs, and the last lines that its command prints under it. */
+export function actLines(
+  act: LiveAct,
+  owed: ReadonlySet<string>,
+  label: (chain: string) => string,
+): ProgramLine[] {
+  // A command shows its text alone, since its input and its timeout are those of each command.
+  const words = act.kind === "bash" ? act.words.slice(0, 1) : [...act.words];
+  while (words.length && (words.at(-1) === "" || words.at(-1) === null || words.at(-1) === undefined))
+    words.pop();
+  const runs = actState(act, owed) === "running";
+  const out: ProgramLine[] = [
+    {
+      kind: "code",
+      step: act,
+      number: 1,
+      text: `${act.id} = ${act.kind}(${words.map(python).join(", ")})`,
+      acts: [act],
+      runs,
+      hint: hintOf([act], owed, label),
+    },
+  ];
+  if (runs && act.kind === "bash")
+    for (const printed of tailOf(act, OUTPUT_LINES).split("\n"))
+      if (printed) out.push({ kind: "output", step: act, act, text: printed });
+  return out;
+}

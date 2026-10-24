@@ -581,7 +581,7 @@ test("rewind is a recorded rung and keeps the selected transcript after reopenin
   }
 });
 
-test("a progress tick keeps an in-flight act's card and body in place", () =>
+test("an act that no word made stands as a lit line of python, which says its time after a second under a header that stays in place", () =>
   composing(
     async ({ session, app, screen, frame }) => {
       // The clock stands still from before the wait starts, so the elapsed time is what the test moves it by, however
@@ -591,16 +591,16 @@ test("a progress tick keeps an in-flight act's card and body in place", () =>
       try {
         const id = await session.engine.wait([], { seconds: 60, on: session.engine.root });
         await session.refresh();
-        await frame();
+        const before = await frame();
+        expect(before).toContain(`${id} = wait(60)`);
+        expect(before).not.toContain("1.0s");
         const card = app.scroll.getChildren().find((node) => node.id === id);
-        if (!card) throw new Error("No card for the pending wait.");
-        const body = card.getChildren().at(-1);
-        // The clock moves past a tick of the spinner and a second of the elapsed time, and the card stays.
+        if (!card) throw new Error("No header for the pending wait.");
+        // The clock moves past a second of the elapsed time: the line says it, and the header stays.
         setSystemTime(new Date(start + 1300));
         await frame();
         expect(app.scroll.getChildren().find((node) => node.id === id)).toBe(card);
-        expect(card.getChildren().at(-1)).toBe(body);
-        expect(screen.captureCharFrame()).toContain("running 1s");
+        expect(screen.captureCharFrame()).toMatch(new RegExp(`${id} = wait\\(60\\) +# waits 60s +1\\.0s`));
       } finally {
         setSystemTime();
       }

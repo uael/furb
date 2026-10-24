@@ -65,7 +65,7 @@ test("a view opens at the offset it was left at, after a shorter view, in a new 
   );
 });
 
-test("a command that printed more than a row holds sends the tail and its length, and its open card shows all of it", () =>
+test("a command that printed more than a row holds sends the tail and its length, and its open line shows all of it", () =>
   composing(
     async ({ session, app, screen, frame }) => {
       await session.submit("/bash seq 1 3000");
@@ -80,13 +80,17 @@ test("a command that printed more than a row holds sends the tail and its length
       expect(stdout.length).toBeLessThanOrEqual(2000);
       expect(printed.endsWith(stdout)).toBe(true);
       await frame();
-      const card = app.scroll.getChildren().find((node) => node.id === command.id);
-      const heading = card?.getChildren()[0];
-      if (!card || !heading) throw new Error("No card for the command.");
-      await screen.mockMouse.click(heading.x + 1, heading.y);
+      const line = app.scroll.getChildren().find((node) => node.id === `program-${command.id}`);
+      if (!line) throw new Error("No line for the command.");
+      await screen.mockMouse.click(line.x + 8, line.y);
       await screen.flush();
-      const opened = app.scroll.getChildren().find((node) => node.id === command.id);
-      if (!opened) throw new Error("No open card for the command.");
+      await until(
+        screen.renderer,
+        () => app.scroll.getChildren().some((node) => node.id === `opened-${command.id}-0`),
+        "frame",
+      );
+      const opened = app.scroll.getChildren().find((node) => node.id === `opened-${command.id}-0`);
+      if (!opened) throw new Error("No open line for the command.");
       // The line end that closes the output ends its last row, and the card draws no empty row for it.
       const shown = printed.replace(/\n$/, "");
       await until(screen.renderer, () => texts(opened).includes(shown), "frame");

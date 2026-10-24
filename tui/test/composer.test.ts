@@ -376,7 +376,7 @@ test("a space after a command whose values are known lists them, and Enter on a 
     expect(await frame()).toContain("No known value matches. Enter sends what is typed.");
   }));
 
-test("/feed lists the commands whose stdin is open, and the card of such a command says that its input is open", () =>
+test("/feed lists the commands whose stdin is open, and the line of such a command says that its input is open once it opens", () =>
   composing(async ({ session, app, screen, frame }) => {
     const on = session.engine.root;
     const open = String(await session.engine.bash("exec sleep 30", { stdin: null, on }));
@@ -385,19 +385,20 @@ test("/feed lists the commands whose stdin is open, and the card of such a comma
       await until(session, () => [open, shut].every((id) => session.activity.some((act) => act.id === id)));
       // The list of /feed names each command whose stdin is open, by its id, and a folded card names none.
       await screen.mockInput.typeText("/feed ");
-      const listed = await frame();
+      // The feed names each command on its line, so the list is the rest of the frame.
+      const listed = (await frame())
+        .split("\n")
+        .filter((row) => !row.includes(" = bash("))
+        .join("\n");
       expect(listed).toContain(open);
       expect(listed).not.toContain(shut);
       app.composer.setText("");
       await frame();
-      // Each card opens at a click on its heading, and its last line says whether its input is open.
+      // Each line opens at a click, and what its act gave under it says whether its input is open.
       for (const id of [open, shut]) {
-        const heading = app.scroll
-          .getChildren()
-          .find((node) => node.id === id)
-          ?.getChildren()[0];
-        if (!heading) throw new Error(`No heading for ${id}.`);
-        await screen.mockMouse.click(heading.x, heading.y);
+        const line = app.scroll.getChildren().find((node) => node.id === `program-${id}`);
+        if (!line) throw new Error(`No line for ${id}.`);
+        await screen.mockMouse.click(line.x + 8, line.y);
         await screen.flush();
       }
       const cards = await frame();

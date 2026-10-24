@@ -40,6 +40,7 @@ import {
 } from "furb";
 import {
   type Ask,
+  actLines,
   beside,
   type ChainThread,
   type Chip,
@@ -1708,17 +1709,6 @@ export class App {
     this.scroll.add(node, index);
     this.feedOrder = undefined;
   }
-  /** The text of an act, which its card keys on and the filter reads, kept for each act, since an act that changes is
-   * a new object. */
-  private readonly actTexts = new WeakMap<ActRow, string>();
-  private actText(act: ActRow): string {
-    let text = this.actTexts.get(act);
-    if (text === undefined) {
-      text = JSON.stringify(act);
-      this.actTexts.set(act, text);
-    }
-    return text;
-  }
   /** A panel in a box: a bar of a color at its left, and half a row of the panel above and below what it holds. */
   private panel(box: BoxRenderable, color: RGBA, options: BoxOptions = {}): BoxRenderable {
     const edge = (side: "top" | "bottom") => {
@@ -1962,9 +1952,6 @@ export class App {
       if (made) made.same = same;
       order++;
     };
-    // The label of an act that works moves with time, so the tick reads it again.
-    const moving = (act?: ActRow, indent = 0) =>
-      act && working(act) ? () => this.actLabel(act, false, indent) : undefined;
     if (w.preferences.notice)
       add("preferences-notice", w.preferences.notice, [], (box) => {
         const panel = this.panel(box, c.warning);
@@ -2052,23 +2039,6 @@ export class App {
       const lines = index
         ? thread(w.selected, word, w.host.streams, owed, opened, index)
         : condense(ladder(w.selected, shown, word, w.host.streams, owed), opened);
-      const actCard = (act: ActRow, indent: number) =>
-        add(
-          act.id,
-          this.actText(act),
-          () => this.actLabel(act, false, indent),
-          (box) => this.actDetails(box, act),
-          {
-            compact: true,
-            group: "tools",
-            preview: this.actPreview(act),
-            act,
-            title: moving(act, indent),
-            indent,
-            shown: this.actText(act),
-            same: [act, indent, w.folds[act.id], w.took[act.id]],
-          },
-        );
       let retold = false;
       // The feed is one program of threads: each thread is its header, then the words of its steps as python, with
       // what each line came to as a quiet comment beside it. A thread that the operator collapsed shows its header
@@ -2445,8 +2415,26 @@ export class App {
             { indent },
           );
         } else if (line.type === "act") {
-          // The ceiling of a grant stands in the sidebar, so the feed shows no grant.
-          if (act.kind !== "grant") actCard(act, indent);
+          // The ceiling of a grant stands in the sidebar, so the feed shows no grant. An act that no word made stands as
+          // a line of python under a quiet header, as a word that the operator runs.
+          if (act.kind === "grant") continue;
+          add(
+            act.id,
+            `ran:${act.by}:${this.theme}`,
+            [
+              [glyph.mark, threadTone(act.id)],
+              [act.by === "operator" ? "You ran" : `${act.by} ran`, c.muted],
+            ],
+            () => {},
+            { indent, heading: true, shown: act.id },
+          );
+          programCard(
+            act.id,
+            programFor(`act:${act.id}`, `${act.done}:${act.paused}:${act.output ?? 0}`, () =>
+              actLines(act, owed, named),
+            ),
+            indent,
+          );
         } else if (asksOperator(act) && act.words[0] === "None") {
           // A prompt of None asks nothing: the console closed it as it took it, and it settles as a quiet line, its
           // first line, which opens to the whole message. No key dismisses it.
@@ -3148,33 +3136,6 @@ export class App {
     row.add(this.text(text, color, { flexShrink: 1 }));
     return row;
   }
-  private actPreview(act: ActRow): BlockOptions["preview"] {
-    if (act.run)
-      return act.run.reason && !cancelled(act)
-        ? (box) => this.excerpt(box, act.run?.reason ?? "", false, c.danger)
-        : undefined;
-    if (failed(act)) {
-      const fault = act.value as { is: string; args: unknown[] };
-      return (box) =>
-        this.excerpt(box, `${fault.is}: ${fault.args.map(display).join(", ")}`, false, c.danger);
-    }
-    // A command shows the tail of its output while it runs, and folds to its heading once it is over.
-    if (act.kind === "bash" && !act.done && act.value && typeof act.value === "object") {
-      const exit = act.value as Exit;
-      const output = [exit.stdout?.content, exit.stderr?.content].filter(Boolean).join("\n");
-      if (output) return (box) => this.excerpt(box, output, true);
-    }
-    // The answer of a prompt is markdown, whose marks of a heading, of emphasis, and of code the preview leaves out.
-    if (act.kind === "prompt" && act.done && act.value !== null)
-      return (box) =>
-        this.excerpt(
-          box,
-          display(act.value)
-            .replace(/^#{1,6} /gm, "")
-            .replace(/(\*\*|__|\*|`)(\S(?:.*?\S)?)\1/g, "$2"),
-        );
-    return undefined;
-  }
   /** What an act is doing: the word that says it, the glyph that shows it, and their color. A done act says
    * nothing, since its glyph says it. */
   private actState(act: ActRow): State {
@@ -3851,82 +3812,6 @@ export class App {
   private retry(act: ActRow): ActRow | undefined {
     if (act.kind !== "rung" || act.by === "operator" || !failed(act)) return undefined;
     return this.session.madeAfter(act, (other) => other.kind === "rung");
-  }
-  /** The heading of an act: its state, its kind, what it is about, and the word of its state. A rung is named by its
-   * id, and says its first line while it is folded. */
-  /** The labels of the acts that are done, which stay as they are while the view keeps its theme, its width and its
-   * parts, since an act that changes is a new object. */
-  private readonly labels = new WeakMap<ActRow, Map<string, Part[]>>();
-  private actLabel(act: ActRow, closed = false, indent = 0, code?: string): Part[] {
-    if (!act.done) return this.labelNow(act, closed, indent, code);
-    const key = `${closed}|${indent}|${code}|${this.theme}|${this.feedWidth}|${this.partsLoaded}`;
-    const kept = this.labels.get(act) ?? new Map<string, Part[]>();
-    this.labels.set(act, kept);
-    const label = kept.get(key) ?? this.labelNow(act, closed, indent, code);
-    kept.set(key, label);
-    return label;
-  }
-  private labelNow(act: ActRow, closed: boolean, indent: number, code?: string): Part[] {
-    const { word, mark, color } = this.actState(act);
-    const observation = act.kind === "prompt" && !this.session.isUserPrompt(act);
-    // A rung says its first line while it is folded, and a message of a chain names the act that it tells done.
-    const subject =
-      act.kind === "rung"
-        ? closed
-          ? ((code || this.subject(act)).split("\n")[0] ?? "")
-          : ""
-        : observation
-          ? this.subject(act).replace(/ done$/, "")
-          : this.subject(act);
-    const name = act.kind === "rung" ? act.id : observation ? (subject.split("\n")[0] ?? "") : act.kind;
-    // An open rung says who wrote it: the model of the prompt that made it, or the operator.
-    const author =
-      act.kind === "rung" && !closed
-        ? `  by ${act.by === "operator" ? "you" : this.model(String(act.words[2] ?? "")).name}`
-        : observation
-          ? `  ${this.sender(act)}`
-          : "";
-    const tail = word ? `  ${word}` : "";
-    const did = this.did(act);
-    const reserve =
-      indent + 2 + 2 + Bun.stringWidth(name) + 2 + Bun.stringWidth(tail + author + plain(did)) + 1;
-    return [
-      [`${mark} `, color],
-      [name, act.kind === "rung" || !failed(act) ? c.text : c.danger, bold],
-      [subject && !observation ? `  ${this.preview(subject, reserve)}` : "", c.muted],
-      [author, c.faint],
-      ...did,
-      [tail, color],
-    ];
-  }
-  /** What a done act did, after its subject: the lines of a read, the lines that a write added and removed, the exit
-   * and the time of a command, and the time and the dollars of a rung. */
-  private did(act: ActRow): Part[] {
-    if (!act.done || failed(act) || cancelled(act)) return [];
-    const took = this.session.took[act.id];
-    // An act that took no millisecond says no time.
-    const time: Part = [!took ? "" : `  ${took < 1000 ? `${took}ms` : elapsed(took)}`, c.faint];
-    const lines = act.count ?? 0;
-    if (act.kind === "read") return [[`  ${lines} ${lines === 1 ? "line" : "lines"}`, c.faint]];
-    if (act.kind === "write")
-      return act.lines
-        ? [
-            [`  +${act.lines.added}`, act.lines.added ? c.success : c.faint],
-            [` -${act.lines.removed}`, act.lines.removed ? c.danger : c.faint],
-          ]
-        : [[`  ${lines} ${lines === 1 ? "line" : "lines"}`, c.faint]];
-    if (act.kind === "bash") {
-      const code = (act.value as Exit | null)?.code;
-      return [
-        [
-          code === undefined || code === null ? "  timed out" : `  exit ${code}`,
-          code === 0 ? c.faint : c.danger,
-        ],
-        time,
-      ];
-    }
-    if (act.kind === "rung") return [time, [act.cost ? `  ${dollars(act.cost)}` : "", c.faint]];
-    return [];
   }
   /** The words that the turns of the chain shown tell of its rungs, by rung, which the program of the chain does not
    * hold for a word that the gate refused. */
