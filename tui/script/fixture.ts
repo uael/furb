@@ -37,6 +37,82 @@ export function clip(text: string, lines = 40, width = 160): string {
   return kept.join("\n");
 }
 
+/** A word with each string that makes its line longer than most cut to its start and a mark inside its quotes, so the
+ * word stays python and the fixture stays small. A line of a quote is cut as it is, since a quote is no python. */
+export function shortened(word: string, most = 1000, keep = 300): string {
+  let open = "";
+  let quote = "";
+  return word
+    .split("\n")
+    .map((line) => {
+      if (quote || /^<s:\w+>/.test(line)) {
+        quote ||= line.match(/^<s:(\w+)>/)?.[1] ?? "";
+        if (line.endsWith(`</s:${quote}>`)) quote = "";
+        return line.length > most ? `${line.slice(0, keep)}…` : line;
+      }
+      if (line.length <= most) {
+        open = runsOn(line, open);
+        return line;
+      }
+      let out = "";
+      let kept = 0;
+      let cut = false;
+      for (let at = 0; at < line.length; at++) {
+        const char = line[at] ?? "";
+        if (open) {
+          if (line.startsWith(open, at)) {
+            out += open;
+            at += open.length - 1;
+            open = "";
+            continue;
+          }
+          const step = char === "\\" ? line.slice(at, at + 2) : char;
+          if (kept < keep) out += step;
+          else if (!cut) out += "…";
+          cut ||= kept >= keep;
+          kept += step.length;
+          at += step.length - 1;
+          continue;
+        }
+        if (char === "#") return out + line.slice(at);
+        out += char;
+        if (char !== '"' && char !== "'") continue;
+        open = line.startsWith(char.repeat(3), at) ? char.repeat(3) : char;
+        if (open.length === 3) {
+          out += char.repeat(2);
+          at += 2;
+        }
+        kept = 0;
+        cut = false;
+      }
+      if (open.length === 1) open = "";
+      return out;
+    })
+    .join("\n");
+}
+
+/** The mark of the string of three marks that runs on past a line, after the line, from the one that ran on to it. */
+function runsOn(line: string, from: string): string {
+  let open = from;
+  for (let at = 0; at < line.length; at++) {
+    const char = line[at] ?? "";
+    if (open) {
+      if (char === "\\") at++;
+      else if (line.startsWith(open, at)) {
+        at += open.length - 1;
+        open = "";
+      }
+      continue;
+    }
+    if (char === "#") break;
+    if (char === '"' || char === "'") {
+      open = line.startsWith(char.repeat(3), at) ? char.repeat(3) : char;
+      if (open.length === 3) at += 2;
+    }
+  }
+  return open.length === 3 ? open : "";
+}
+
 type Fact = unknown[];
 /** The last lines of a print, each cut to a width. */
 const printed = (text: string) =>
@@ -103,7 +179,7 @@ export function fixture(lines: string[]): { facts: Fact[]; header: Record<string
               // The word of a rung that an ear wrote, as an extension, shows as one quiet line, and the word of any
               // other rung stays whole, since the feed shows it as the program that ran.
               at === 1 && kind === "run" && !ears.has(String(words[0]))
-                ? text(one, WHOLE, 400)
+                ? text(typeof one === "string" ? shortened(one) : one, WHOLE, WHOLE)
                 : text(one, 1, 100),
             )
           : kind === "prompt"

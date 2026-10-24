@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { until } from "../../bind/typescript/test/until.ts";
-import { clip, scrub } from "../script/fixture.ts";
+import { clip, scrub, shortened } from "../script/fixture.ts";
 import { openEngine } from "../src/bridge.ts";
 import { Session } from "../src/session.ts";
 import { composing } from "./composing.ts";
@@ -63,4 +63,24 @@ test("the fixture of a recorded life holds no secret: no key, no address of mail
   expect(clip("one\ntwo\nthree", 2)).toBe("one\ntwo\n… 1 more lines");
   const text = await readFile(conductor, "utf8");
   expect(text).not.toMatch(/\/Users\/|\/home\/|gh[pousr]_[A-Za-z0-9]{20}|github_pat_\w{20}|sk-[\w-]{20}/);
+});
+
+test("the fixture keeps a word python: a string that makes its line too long is cut inside its quotes, and a line of a quote as it is", () => {
+  const long = "x".repeat(50);
+  const word = [
+    `a = f("${long}", '${long}')  # ${long}`,
+    `b = """${long}`,
+    `${long} """ + "${long}"`,
+    "<s:q>",
+    `it's ${long}`,
+    "</s:q>",
+  ].join("\n");
+  expect(shortened(word, 40, 4).split("\n")).toEqual([
+    `a = f("xxxx…", 'xxxx…')  # ${long}`,
+    'b = """xxxx…',
+    'xxxx…""" + "xxxx…"',
+    "<s:q>",
+    "it's…",
+    "</s:q>",
+  ]);
 });
