@@ -44,7 +44,7 @@ A session offers every model of the claude command line, of a provider whose cre
 such as ANTHROPIC_API_KEY, and of the local server that FURB_LOCAL_URL names, each named as provider:model, and
 /model lists them. With --roster, a session offers its model and the models of --roster, and a model of the list
 of /model joins the session when you choose it.
---view shows the life as the board of main, the loom of its chains in time, or the graph of its programs. ⌥V
+--view shows the life as main, the loom of its chains in time, or the graph of its programs. ⌥V
 switches the view at run time, and the setting keeps the last one.
 --screen-reader shows one column of text, with no box, no spinner, and nothing that moves, and --reduced-motion
 stops each spinner and each part that moves with time. /access turns each on or off, and the setting keeps it.

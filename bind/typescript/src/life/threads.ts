@@ -185,3 +185,54 @@ export function outline(tops: readonly Thread[], folds: ReadonlySet<string>): Th
   for (const top of tops) visit(top);
   return out;
 }
+
+/** One thread of a chain, as the list of the threads of that chain shows it: its prompt, the first line of its message,
+ * its messages, the questions to the operator that wait in it, and its state. A thread is resolved once its prompt and
+ * each of its messages is over, and a message to a resolved thread opens it again until its model closes the message. */
+export interface ChainThread {
+  act: LiveAct;
+  title: string;
+  messages: LiveAct[];
+  asks: string[];
+  state: ActState;
+  resolved: boolean;
+}
+
+/** The threads of one chain, in the order they began: each prompt to a model on the chain that is no message of
+ * another thread. It asks the operator while a question waits in it. The acts on the chain and the index of every act
+ * of a host spare a pass over every act. */
+export function chainThreads(
+  on: readonly LiveAct[],
+  rows: ReadonlyMap<string, LiveAct>,
+  owed: ReadonlySet<string>,
+): ChainThread[] {
+  const out = new Map<string, ChainThread>();
+  const later: [LiveAct, string][] = [];
+  const waits: [string, string][] = [];
+  for (const act of on) {
+    if (act.kind !== "prompt") continue;
+    if (act.words[2] === "operator") {
+      const thread = owed.has(act.id) ? threadOf(act, rows) : undefined;
+      if (thread) waits.push([thread, act.id]);
+      continue;
+    }
+    const message = messageOf(act, rows);
+    if (message !== undefined) {
+      if (message) later.push([act, message]);
+      continue;
+    }
+    const title =
+      String(act.words[1] ?? "")
+        .split("\n")
+        .find((line) => line.trim()) ?? "";
+    out.set(act.id, { act, title, messages: [], asks: [], state: "done", resolved: true });
+  }
+  for (const [act, id] of later) out.get(id)?.messages.push(act);
+  for (const [id, ask] of waits) out.get(id)?.asks.push(ask);
+  for (const thread of out.values()) {
+    const open = [thread.act, ...thread.messages].findLast((act) => !act.done);
+    thread.resolved = !open;
+    thread.state = thread.asks.length ? "asks" : actState(open ?? thread.act, owed);
+  }
+  return [...out.values()];
+}
