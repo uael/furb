@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { makers } from "../../src/life/ladder.ts";
-import { actLines, hintOf, threadProgram } from "../../src/life/program.ts";
+import { actLines, foldStrings, hintOf, literals, threadProgram } from "../../src/life/program.ts";
 import { act } from "./acts.ts";
 
 const label = (chain: string) => `label of ${chain}`;
@@ -140,4 +140,26 @@ test("an act that no word made stands as one line of python, its call bound to i
     false,
     "woke: bash1",
   ]);
+});
+
+test("a line too wide for its room folds its longest strings first, each to its start and a fold", () => {
+  const line = 'b = bash("git fetch -q origin && git log --oneline -5 origin/main", timeout=60)  # "a quote"';
+  const { text, folds } = foldStrings(line, 60);
+  expect(text).toBe('b = bash("git fetch -q origin...", timeout=60)  # "a quote"');
+  expect(folds).toEqual([
+    { literal: 0, at: 29, whole: "git fetch -q origin && git log --oneline -5 origin/main" },
+  ]);
+  expect(foldStrings(line, 50).text).toBe('b = bash("git fetch -q...", timeout=60)  # "a quote"');
+  expect(foldStrings(line, 60, new Set([0])).text).toBe(line);
+  expect(foldStrings(line, 200).folds).toEqual([]);
+});
+
+test("the literals of a line skip a name that ends in a prefix, keep their escapes, stop at a comment, and run a string that does not end to the end of its line", () => {
+  expect(literals(`x = f'{a}' + r"\\d" + 'it\\'s' + """t"""  # 'no'`)).toEqual([
+    { start: 6, end: 9, raw: false },
+    { start: 15, end: 17, raw: true },
+    { start: 22, end: 27, raw: false },
+    { start: 34, end: 35, raw: false },
+  ]);
+  expect(literals('brief = """first line')).toEqual([{ start: 11, end: 21, raw: false }]);
 });

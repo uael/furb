@@ -391,6 +391,7 @@ export function syntax(): SyntaxStyle {
     operator: { fg: theme.syntaxKeyword },
     punctuation: { fg: theme.muted },
     diagnostic: { fg: theme.danger, bg: theme.removed, underline: true },
+    fold: { fg: theme.link, underline: true },
     matching: { fg: theme.accent, bg: theme.selected, bold: true },
     conceal: { fg: theme.faint },
     "markup.heading": { fg: theme.text, bold: true },

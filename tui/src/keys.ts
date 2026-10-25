@@ -185,6 +185,7 @@ export const keys = [
     bindings: [{ on: ["ctrl+y"], run: "copy" }],
   },
   { chord: "Click / right-click an act", action: "Fold or expand it / inspect its value or prompt program" },
+  { chord: "Pointer / click on an underlined ...", action: "Show a folded string whole / open it in place" },
   {
     chord: "⌃⌥←",
     action: "Return from a definition jump",

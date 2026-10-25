@@ -80,7 +80,17 @@ same way under You ran, and so does an act that no word made, as a command that 
 that binds the act to its name, as `bash3 = bash("make docs")`.
 
 A click on a line opens it in place: its whole text, cut into rows at the column of the code, and under it what each
-of its acts gave, as the output of a command or the text of a read. A second click folds it. Collapse on the header
+of its acts gave, as the output of a command or the text of a read. A second click folds it. A line too long for the
+column of the code folds its longest strings first, each to its start and an underlined `...`, until it fits. The
+pointer on a `...` shows the whole string, and a click opens it in place, with the rest of its line. A click on the
+string folds it again. The record and the word that ran stay as they were sent: the fold is the view alone. The
+colors of a line come from its whole statement, so a line that is cut or folded keeps the colors of the code that ran.
+
+![A string under the pointer](screenshots/82-string-hover.png)
+
+![An open string](screenshots/83-open-string.png)
+
+Collapse on the header
 of a thread, or ⌥D, which lists the threads, folds the thread to its header line, which says its state, the first
 line of its message and the count of its steps, and a click on that line opens it again. A resolved thread that is
 not the last of its chain starts folded, and `/autocollapse` turns that fold off, and on again. A right click on a

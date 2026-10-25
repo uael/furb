@@ -19,6 +19,7 @@ import {
   RGBA,
   type ScrollBoxOptions,
   ScrollBoxRenderable,
+  type SimpleHighlight,
   StyledText,
   TextareaRenderable,
   type TextChunk,
@@ -51,10 +52,14 @@ import {
   condense,
   doingOf,
   type Exit,
+  FOLD,
+  type Fold,
   failed,
+  foldStrings,
   gist,
   type Loom,
   ladder,
+  literals,
   makers,
   momentsOf,
   nowOf,
@@ -1750,20 +1755,56 @@ export class App {
     box.add(edge("bottom"));
     return inner;
   }
-  private code(content: string): CodeRenderable {
+  /** Python, highlighted as it shows, or by colors, which give the highlights of the whole content in their place. */
+  private code(
+    content: string,
+    marks?: SimpleHighlight[],
+    hover?: (event: MouseEvent) => boolean,
+    colors?: () => Promise<SimpleHighlight[]>,
+  ): CodeRenderable {
     const code = new CodeRenderable(this.renderer, {
       content: safeText(content),
       filetype: "python",
       syntaxStyle: this.style,
       wrapMode: "word",
       drawUnstyledText: true,
+      ...(colors
+        ? { onHighlight: () => colors() }
+        : marks?.length
+          ? { onHighlight: (highlights: SimpleHighlight[]) => [...highlights, ...marks] }
+          : {}),
     });
-    return this.pointable(code, content);
+    return this.pointable(code, content, hover);
   }
+  /** The group of each character of a program, as the parser of python highlights it, kept for the last programs. */
+  private groupsOf(source: string): Promise<(string | undefined)[]> {
+    const kept = this.sourceGroups.get(source);
+    if (kept) return kept;
+    const made = getTreeSitterClient()
+      .highlightOnce(source, "python")
+      .then(
+        (result) => {
+          const groups: (string | undefined)[] = new Array(source.length);
+          for (const [start, end, group] of result?.highlights ?? [])
+            for (let at = start; at < end; at++) groups[at] = group;
+          return groups;
+        },
+        () => [],
+      );
+    const oldest = this.sourceGroups.keys().next();
+    if (this.sourceGroups.size >= 64 && !oldest.done) this.sourceGroups.delete(oldest.value);
+    this.sourceGroups.set(source, made);
+    return made;
+  }
+  private sourceGroups = new Map<string, Promise<(string | undefined)[]>>();
   /** Python under the pointer. A name shows what it holds in a card once the pointer rests on it, and a click with ⌃
    * or ⌥ opens it in the inspector. A header that names an act and an image attachment are references, which show
    * what they name in the card and open it at a click. */
-  private pointable<T extends CodeRenderable | TextRenderable>(node: T, content: string): T {
+  private pointable<T extends CodeRenderable | TextRenderable>(
+    node: T,
+    content: string,
+    hover?: (event: MouseEvent) => boolean,
+  ): T {
     const target = (x: number, y: number) => {
       // A row of the node is a line of the content, or a part of a line that the node wraps.
       const row = y - node.y;
@@ -1786,6 +1827,7 @@ export class App {
     };
     node.onMouseMove = (event) => {
       clearTimeout(this.hoverTimer);
+      if (hover?.(event)) return;
       const value = target(event.x, event.y);
       this.unhover();
       if (value)
@@ -2163,7 +2205,7 @@ export class App {
             room,
             ...segment.map((line) =>
               line.kind === "code"
-                ? `${line.text}|${this.lineHint(line)}|${line.runs ? since(line.acts.at(-1)) : ""}|${line.fails ?? ""}|${took(line.step)}|${this.lineOpen(line)}`
+                ? `${line.text}|${this.lineHint(line)}|${line.runs ? since(line.acts.at(-1)) : ""}|${line.fails ?? ""}|${took(line.step)}|${this.lineOpen(line)}|${[...this.openStrings(line)]}`
                 : `${line.kind}|${line.text}`,
             ),
           ].join("\n");
@@ -4085,6 +4127,16 @@ export class App {
     const fit = (text: string, most: number) => clip(text, Math.max(4, most));
     // The line of the program that each row shows, which a click opens or folds.
     const sources: (ProgramLine | undefined)[] = [];
+    // The strings that each row folds, and the rows that show the strings of a line whole, each with where it starts
+    // in the text of its line.
+    const folded = new Map<number, { line: Extract<ProgramLine, { kind: "code" }>; folds: Fold[] }>();
+    const whole = new Map<number, number>();
+    // The colors come from each statement whole, so a line cut to its room or a folded string changes no color: the
+    // program as it ran, each part of a row with where it starts in that program, and the rows that only comment.
+    let program = "";
+    const pieces: [row: number, from: number, to: number, at: number][] = [];
+    const fixed: [row: number, from: number, to: number, group: string][] = [];
+    const comment = (row: number, from = 0) => fixed.push([row, from, texts[row]?.length ?? 0, "comment"]);
     const push = (text: string, number?: number, source?: ProgramLine) => {
       const at = texts.length;
       texts.push(text);
@@ -4096,22 +4148,43 @@ export class App {
     for (const line of lines) {
       if (line.kind === "code") {
         const note = noteOf(line);
-        const open = this.lineOpen(line);
-        // An open line shows its whole text, cut at the column into rows of their own.
-        const parts = open
-          ? Array.from({ length: Math.max(1, Math.ceil(line.text.length / column)) }, (_, k) =>
+        // An open line, and a line whose strings the operator opened, show the whole text, cut at the column into
+        // rows of their own. Another line folds its longest strings until it fits.
+        const shown =
+          this.lineOpen(line) || this.openStrings(line).size ? undefined : foldStrings(line.text, column);
+        const parts = shown
+          ? [fit(shown.text, column)]
+          : Array.from({ length: Math.max(1, Math.ceil(line.text.length / column)) }, (_, k) =>
               line.text.slice(k * column, (k + 1) * column),
-            )
-          : [fit(line.text, column)];
+            );
         const code = parts[0] ?? "";
+        const hint = note ? `# ${fit(note, room - column - 4)}` : "";
         const at = push(
-          note
-            ? `${code}${" ".repeat(Math.max(0, column - Bun.stringWidth(code)))}  # ${fit(note, room - column - 4)}`
-            : code,
+          hint ? `${code}${" ".repeat(Math.max(0, column - Bun.stringWidth(code)))}  ${hint}` : code,
           line.number,
           line,
         );
+        if (hint) comment(at, (texts[at]?.length ?? 0) - hint.length);
         for (const more of parts.slice(1)) push(more, undefined, line);
+        const folds = shown?.folds.filter((fold) => fold.at + FOLD.length <= Bun.stringWidth(code)) ?? [];
+        if (folds.length) folded.set(at, { line, folds });
+        if (!shown) for (const k of parts.keys()) whole.set(at + k, k * column);
+        const base = program.length;
+        program += `${line.text}\n`;
+        if (shown) {
+          const found = shown.folds.length ? literals(line.text) : [];
+          let from = 0;
+          let source = base;
+          for (const fold of shown.folds) {
+            if (fold.at >= code.length) break;
+            pieces.push([at, from, fold.at, source]);
+            fixed.push([at, fold.at, Math.min(fold.at + FOLD.length, code.length), "string"]);
+            from = fold.at + FOLD.length;
+            source = base + (found[fold.literal]?.end ?? 0);
+          }
+          if (from < code.length) pieces.push([at, from, code.length, source]);
+        } else
+          for (const [k, part] of parts.entries()) pieces.push([at + k, 0, part.length, base + k * column]);
         if (line.runs) {
           colors.set(at, { content: c.selected, gutter: c.selected });
           signs.set(at, { before: glyph.running, beforeColor: c.accent });
@@ -4122,20 +4195,94 @@ export class App {
             .split("\n")
             .filter((one) => one.trim())
             .slice(0, 3))
-            push(`# ${fit(why.replace(/^line \d+: /, ""), room - 4)}`);
+            comment(push(`# ${fit(why.replace(/^line \d+: /, ""), room - 4)}`));
         }
-      } else if (line.kind === "quote")
-        push(
+      } else if (line.kind === "quote") {
+        const at = push(
           `${line.name} = "${fit(line.text, column - line.name.length - 6)}"  # ${line.lines} lines`,
           line.number,
         );
-      else if (line.kind === "output") push(`#   ${fit(line.text, room - 6)}`);
+        const end = (texts[at] ?? "").lastIndexOf('"  # ');
+        fixed.push([at, line.name.length + 3, end + 1, "string"]);
+        comment(at, end + 3);
+      } else if (line.kind === "output") comment(push(`#   ${fit(line.text, room - 6)}`));
       else if (line.kind === "writes") {
         const at = push(`# ${fit(line.text, room - 4)}`);
+        comment(at);
         signs.set(at, { before: glyph.running, beforeColor: c.accent });
-      } else push(fit(line.text, room - 2));
+      } else comment(push(fit(line.text, room - 2)));
     }
-    const view = this.numbered(texts.join("\n"), {
+    // Each fold is underlined, at its place in the text of the program.
+    const starts: number[] = [];
+    let offset = 0;
+    for (const text of texts) {
+      starts.push(offset);
+      offset += text.length + 1;
+    }
+    const marks: SimpleHighlight[] = [...folded].flatMap(([row, { folds }]) =>
+      folds.map(
+        (fold): SimpleHighlight => [
+          (starts[row] ?? 0) + fold.at,
+          (starts[row] ?? 0) + fold.at + FOLD.length,
+          "fold",
+        ],
+      ),
+    );
+    // The fold under the pointer: a hover shows its string whole, and a click opens it in place.
+    const foldAt = (x: number, y: number) => {
+      const row = y - view.y;
+      const one = folded.get(row);
+      const at = x - target.x;
+      const fold = one?.folds.find((fold) => {
+        const from = Bun.stringWidth((texts[row] ?? "").slice(0, fold.at));
+        return at >= from && at < from + FOLD.length;
+      });
+      return one && fold ? { line: one.line, fold } : undefined;
+    };
+    const hoverFold = (event: MouseEvent) => {
+      const hit = foldAt(event.x, event.y);
+      if (!hit) return false;
+      clearTimeout(this.hoverTimer);
+      this.unhover();
+      this.hoverTimer = setTimeout(() => {
+        const raw = literals(hit.line.text)[hit.fold.literal]?.raw;
+        const text = raw
+          ? hit.fold.whole
+          : hit.fold.whole.replace(/\\([nt"'\\])/g, (_, one: string) =>
+              one === "n" ? "\n" : one === "t" ? "  " : one,
+            );
+        this.hoverCard(
+          event.x,
+          event.y,
+          14,
+          () => this.openString(hit.line, hit.fold.literal),
+          this.text(text.slice(0, 2000), c.text),
+        );
+      }, 220);
+      return true;
+    };
+    // Each run of characters of one group in a part of a row takes the group that it has in the program.
+    const highlights = async (): Promise<SimpleHighlight[]> => {
+      const groups = await this.groupsOf(program);
+      const out: SimpleHighlight[] = [];
+      for (const [row, from, to, at] of pieces) {
+        const start = starts[row] ?? 0;
+        let run = from;
+        for (let k = from + 1; k <= to; k++) {
+          const group = groups[at + run - from];
+          if (k < to && groups[at + k - from] === group) continue;
+          if (group) out.push([start + run, start + k, group]);
+          run = k;
+        }
+      }
+      for (const [row, from, to, group] of fixed)
+        out.push([(starts[row] ?? 0) + from, (starts[row] ?? 0) + to, group]);
+      return [...out, ...marks];
+    };
+    const target = this.code(texts.join("\n"), marks, hoverFold, highlights);
+    const view = new LineNumberRenderable(this.renderer, {
+      target,
+      paddingRight: space.inset,
       fg: c.faint,
       minWidth: 3,
       lineNumbers: numbers,
@@ -4143,13 +4290,61 @@ export class App {
       lineColors: colors,
       lineSigns: signs,
     });
-    // A press that ends a drag selects text and opens nothing.
+    // The gutter of the numbers takes the events of the pointer over the program, so it shows the string of a fold.
+    view.onMouseMove = (event) => {
+      if (hoverFold(event)) return;
+      clearTimeout(this.hoverTimer);
+      this.unhover();
+    };
+    // A press that ends a drag selects text and opens nothing. A press on a fold opens its string, and a press on a
+    // string that shows whole folds it again.
     view.onMouseUp = (event) => {
-      const line = sources[event.y - view.y];
+      const row = event.y - view.y;
+      const line = sources[row];
       if (line?.kind !== "code" || this.renderer.getSelection()?.getSelectedText()) return;
+      const hit = foldAt(event.x, event.y);
+      if (hit) return this.openString(hit.line, hit.fold.literal);
+      const open = this.openStrings(line);
+      const index = (whole.get(row) ?? -1) + event.x - target.x;
+      const literal = literals(line.text).findIndex(
+        (one, k) => open.has(k) && whole.has(row) && index >= one.start - 1 && index <= one.end,
+      );
+      if (literal >= 0) return this.openString(line, literal);
       if (line.acts.length || Bun.stringWidth(line.text) > column) this.openLine(line);
     };
     return view;
+  }
+  /** The strings of a line of a program that the operator opened, which show whole. */
+  private openStrings(line: Extract<ProgramLine, { kind: "code" }>): Set<number> {
+    const folds = this.session.folds;
+    const key = `string:${line.step.id}:${line.number}:`;
+    // Each frame asks of each line of each program, so the lines with an open string are read once from the folds.
+    if (this.stringLines?.folds !== folds)
+      this.stringLines = {
+        folds,
+        lines: new Set(
+          Object.keys(folds)
+            .filter((one) => one.startsWith("string:") && folds[one] === false)
+            .map((one) => one.slice(0, one.lastIndexOf(":") + 1)),
+        ),
+      };
+    if (!this.stringLines.lines.has(key)) return new Set();
+    return new Set([...literals(line.text).keys()].filter((k) => folds[key + k] === false));
+  }
+  /** The lines of the programs whose strings the operator opened, as read from the folds of the session. */
+  private stringLines?: { folds: Record<string, boolean>; lines: Set<string> };
+  /** A string of a line of a program opens in place, or folds again. */
+  private openString(line: Extract<ProgramLine, { kind: "code" }>, literal: number): void {
+    const w = this.session;
+    w.folds[`string:${line.step.id}:${line.number}:${literal}`] = this.openStrings(line).has(literal);
+    this.stringLines = undefined;
+    w.save();
+    this.unhover();
+    // A feed that follows its end would push the line up as it grows, so the view keeps its offset.
+    const top = this.scroll.scrollTop;
+    this.renderContent();
+    this.scrollNow(top);
+    this.scrollAfterLayout(top);
   }
   /** Whether a line of a program stands open: its whole text, and what its acts gave under it. */
   private lineOpen(line: ProgramLine): boolean {

@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
+import { RGBA } from "@opentui/core";
 import { chainThreads } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
-import { glyph } from "../src/theme.ts";
-import { type Composing, composing } from "./composing.ts";
+import { glyph, palettes } from "../src/theme.ts";
+import { type Composing, cellAt, composing } from "./composing.ts";
 import { idle } from "./idle.ts";
 
 const size = { width: 152, height: 46 };
@@ -148,6 +149,78 @@ test("a question that waits stands in Needs you over the tree, and stays over th
       expect(rail(session, list).join("\n")).toContain("Needs you");
       expect(list).toContain("← Chains");
       expect(listed(session).some((one) => one.act.id === question)).toBe(false);
+    },
+    size,
+    true,
+  ));
+
+test("a string too long for its line folds to its start and an underlined ..., which a hover shows whole and a click opens in place", () =>
+  composing(
+    async ({ session, screen, frame }) => {
+      const long = `${"word ".repeat(48)}ENDMARK`;
+      const rung = await session.engine.rung({ word: `brief = "${long}"`, on: session.engine.root });
+      await session.engine.result(rung);
+      await session.refresh();
+      const folded = await frame();
+      keep("fold", folded);
+      const rows = folded.split("\n");
+      const y = rows.findIndex((row) => row.includes('brief = "word'));
+      expect(y).toBeGreaterThanOrEqual(0);
+      expect(rows[y]).toContain('..."');
+      expect(folded).not.toContain("ENDMARK");
+      const x = (rows[y] ?? "").indexOf('..."') + 1;
+      await screen.mockMouse.moveTo(x, y);
+      await until(screen.renderer, () => screen.captureCharFrame().includes("ENDMARK"), "frame");
+      await screen.mockMouse.click(x, y);
+      await until(session, () => session.folds[`string:${rung}:1:0`] === false);
+      const opened = await frame();
+      keep("fold-open", opened);
+      expect(opened.split("\n")[y]).toContain('brief = "word');
+      expect(opened.split("\n").filter((row) => row.includes("word word")).length).toBeGreaterThan(1);
+      expect(
+        opened
+          .split("\n")
+          .filter((row) => row.includes("word word"))
+          .some((row) => row.includes('..."')),
+      ).toBe(false);
+    },
+    { ...size, useMouse: true },
+    true,
+  ));
+
+test("a line cut to its room and a folded string keep the colors of their whole statement", () =>
+  composing(
+    async ({ session, screen, frame }) => {
+      const names = Array.from({ length: 16 }, (_, k) => `"n${k}xyz"`).join(", ");
+      const word = [
+        `names = [${names}]`,
+        `brief = "${"word ".repeat(40)}end"`,
+        "def shout():",
+        "  return names",
+      ].join("\n");
+      const rung = await session.engine.rung({ word, on: session.engine.root });
+      await session.engine.result(rung);
+      await session.refresh();
+      const rows = (await frame()).split("\n");
+      const cut = rows.findIndex((row) => row.includes("names = ["));
+      const fold = rows.findIndex((row) => row.includes('brief = "word'));
+      const def = rows.findIndex((row) => row.includes("def shout"));
+      expect(rows[cut]).toContain("…");
+      expect(rows[cut]).not.toContain("]");
+      expect(rows[fold]).toContain('..."');
+      const palette = palettes.ink;
+      const fg = (x: number, y: number) => cellAt(screen.captureSpans(), x, y).fg;
+      const keyword = RGBA.fromHex(palette.syntaxKeyword);
+      const x = (rows[def] ?? "").indexOf("def");
+      await until(screen.renderer, () => Boolean(fg(x, def)?.equals(keyword)), "frame");
+      expect(fg((rows[cut] ?? "").indexOf("n0xyz"), cut)?.equals(RGBA.fromHex(palette.syntaxString))).toBe(
+        true,
+      );
+      // The closing mark of the folded string, after its underlined ..., is a string.
+      expect(
+        fg((rows[fold] ?? "").indexOf('..."') + 3, fold)?.equals(RGBA.fromHex(palette.syntaxString)),
+      ).toBe(true);
+      expect(fg((rows[def + 1] ?? "").indexOf("return"), def + 1)?.equals(keyword)).toBe(true);
     },
     size,
     true,

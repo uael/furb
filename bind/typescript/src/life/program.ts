@@ -264,3 +264,78 @@ export function actLines(
       if (printed) out.push({ kind: "output", step: act, act, text: printed });
   return out;
 }
+
+/** A string literal on one line of python: where its text starts and ends, inside its quotes, and whether it is raw. */
+export type Literal = { start: number; end: number; raw: boolean };
+
+/** The string literals of one line of python, in order, each from its first character to its last. A comment ends the
+ * line, and a literal that does not end on the line runs to its end. */
+export function literals(line: string): Literal[] {
+  const found: Literal[] = [];
+  for (let at = 0; at < line.length; at++) {
+    const char = line[at] ?? "";
+    if (char === "#") break;
+    if (char !== '"' && char !== "'") continue;
+    const prefix = line.slice(0, at).match(/[rRbBuUfFtT]{0,2}$/)?.[0] ?? "";
+    if (/[\w]/.test(line[at - prefix.length - 1] ?? "")) continue;
+    const mark = line.startsWith(char.repeat(3), at) ? char.repeat(3) : char;
+    let end = at + mark.length;
+    while (end < line.length && !line.startsWith(mark, end)) end += line[end] === "\\" ? 2 : 1;
+    // A string that does not end on the line, as the first line of a long quote of three marks, runs to its end.
+    found.push({ start: at + mark.length, end: Math.min(end, line.length), raw: /[rR]/.test(prefix) });
+    if (end >= line.length) break;
+    at = end + mark.length - 1;
+  }
+  return found;
+}
+
+/** The marks that stand for the end of a string that a line folds. */
+export const FOLD = "...";
+/** How many characters of a string stay before its fold. */
+const KEEP = 12;
+
+/** A string that a line folds: which literal of the line it is, where its fold stands in the text that shows, and its
+ * whole text. */
+export type Fold = { literal: number; at: number; whole: string };
+
+/** A line of python that fits its room: the longest strings first keep only their start and a fold, until the line
+ * fits. A string that the operator opened stays whole, and a line that still does not fit stays longer than its room.
+ * The text of a literal is its python, with its escapes. */
+export function foldStrings(
+  line: string,
+  room: number,
+  open: ReadonlySet<number> = new Set(),
+): { text: string; folds: Fold[] } {
+  let excess = line.length - room;
+  if (excess <= 0) return { text: line, folds: [] };
+  const found = literals(line);
+  const keep = new Map<number, number>();
+  const order = [...found.keys()]
+    .filter((index) => !open.has(index))
+    .sort(
+      (a, b) =>
+        (found[b]?.end ?? 0) - (found[b]?.start ?? 0) - ((found[a]?.end ?? 0) - (found[a]?.start ?? 0)),
+    );
+  for (const index of order) {
+    if (excess <= 0) break;
+    const one = found[index];
+    if (!one) continue;
+    const size = one.end - one.start;
+    const kept = Math.max(KEEP, size - excess - FOLD.length);
+    if (kept + FOLD.length >= size) continue;
+    keep.set(index, kept);
+    excess -= size - kept - FOLD.length;
+  }
+  let text = "";
+  let from = 0;
+  const folds: Fold[] = [];
+  for (const [index, one] of found.entries()) {
+    const kept = keep.get(index);
+    if (kept === undefined) continue;
+    text += line.slice(from, one.start) + line.slice(one.start, one.start + kept).trimEnd();
+    folds.push({ literal: index, at: text.length, whole: line.slice(one.start, one.end) });
+    text += FOLD;
+    from = one.end;
+  }
+  return { text: text + line.slice(from), folds };
+}
