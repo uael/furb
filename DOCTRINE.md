@@ -46,4 +46,4 @@ write(read("src/example.py", HIDDEN).replace("old_name", "new_name", 1))
 checked = await bash("python -m pytest -q tests/test_example.py")
 assert checked.code == 0
 
-A failed check is work to fix. Read its error before the next edit. Keep changes that work. Fix a gate refusal through the prompt door instead of sending the whole program again. Close only when the requested behavior and the checks pass.
+For a failed check, read its error and compare it with the unchanged base. Fix failures your changes caused. Keep changes that work. Fix a gate refusal through the prompt door instead of sending the whole program again. Close when the task checks pass, and report pre-existing failures.
