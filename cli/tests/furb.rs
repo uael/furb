@@ -22,7 +22,7 @@ use std::{
 use serde_json::{Value, json};
 
 /// The fake claude of the tests of the crate, which answers the Nth turn with the word of the file word.N beside it.
-const FAKE: &str = include_str!("../../src/world/provider/fake-claude.sh");
+const FAKE: &str = include_str!("../../src/world/provider/claude/fake-claude.sh");
 
 /// A word that counts the lines of the file of the yard.
 const COUNT: &str = "close(len(read('a.txt').lines))";
