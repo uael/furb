@@ -23,6 +23,11 @@ This grades the reference solution of the task, which is the control. A rig that
 measures itself and not the life, so a task that does not validate says nothing about the engine. Validate a task
 once, before you spend money on it.
 
+For Python tasks, the reference grade also keeps the names of parameterized pytest cases. A model grade uses a
+reference name only for the same test definition and parameter values, with one match on each side. This keeps an
+added option from changing the names of existing cases. The assertions stay as they are. A missing or ambiguous
+match keeps the name that pytest gives it.
+
 ## The verbs
 
 - `tools` installs the reporters, and needs no task.

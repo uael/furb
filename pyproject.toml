@@ -65,6 +65,10 @@ src = ["src", "test", "bind/python"]
 # A word of an extension of the project runs in a chain, on the names of the engine, and keeps its own form.
 extend-exclude = [".furb"]
 
+[tool.ruff.per-file-target-version]
+# The verifier images use Python versions older than this repository.
+"script/pytest_ids.py" = "py38"
+
 [tool.ruff.lint]
 select = [
   "A", "ANN", "ARG", "B", "C4", "E", "EM", "ERA", "F", "FBT", "I", "N", "PERF", "PGH", "PL", "PT", "PTH", "RET", "RUF",
