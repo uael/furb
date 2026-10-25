@@ -6,6 +6,7 @@ import { Act, actorParts, ENGINE, model, models, retold, Session, setup, standin
 import { type Measure, measureOf } from "furb/life";
 import type { HostState } from "./bridge.ts";
 import { type EngineOptions, roster } from "./models.ts";
+import { changeProvider } from "./providers.ts";
 import { queueDispatches, queueHash } from "./queue.ts";
 import { guard, isRecorded, Reader } from "./reading.ts";
 import { branchChanges, net } from "./review.ts";
@@ -32,6 +33,7 @@ let snapshots: Snapshots | undefined;
 let reader: Reader | undefined;
 /** The claude command line that the session names, which the catalog offers, and whether the session is the demo. */
 let claude: string | undefined;
+let userConfig: string | undefined;
 let demo = false;
 let timer: ReturnType<typeof setTimeout> | undefined;
 /** The watch on the file of a recorded life, which hears each line that the file adds. */
@@ -203,11 +205,13 @@ function scriptedSession(options: SessionOptions, watch = false): Session {
   });
 }
 
-/** How many answers the measure of each chain that the host holds counts. */
-const measured = new Map<string, number>();
+/** How many answers the measure of each chain that the host holds counts, by the answers of each life. */
+const counted = new WeakMap<object, Map<string, number>>();
 /** The measure of each chain whose models answered since the last state, from the answers of the activity of a life,
  * which the host adds to the measures that it holds. */
 function measuresOf(answers: ReadonlyMap<string, readonly { actor: string; usage: readonly number[] }[]>) {
+  const measured = counted.get(answers) ?? new Map<string, number>();
+  counted.set(answers, measured);
   const changed: Record<string, Measure> = {};
   for (const [chain, list] of answers)
     if (measured.get(chain) !== list.length) {
@@ -239,6 +243,7 @@ async function answer(data: { target: string; method: string; args: unknown[] })
       return recorded.root;
     }
     claude = options.claude;
+    userConfig = options.config;
     demo = (scripted || watch) ?? false;
     const opened = demo
       ? scriptedSession(options, watch)
@@ -261,15 +266,13 @@ async function answer(data: { target: string; method: string; args: unknown[] })
         throw error;
       }
       held?.undo();
-      const { facts, made, engine: ours, version, current, logged } = retold(opened.record);
-      reader = new Reader(facts, opened.directory, opened.record, {
-        made,
-        engine: ours,
-        version,
-        current,
-        why,
-        logged,
-      });
+      const { file, made, engine: ours, version, current, logged } = retold(opened.record);
+      reader = new Reader(
+        opened.directory,
+        opened.record,
+        { made, engine: ours, version, current, why, logged },
+        file,
+      );
       snapshots = new Snapshots(reader, reader);
       return reader.root;
     }
@@ -304,9 +307,42 @@ async function answer(data: { target: string; method: string; args: unknown[] })
   }
   // The demo asks no model, so it offers its roster and nothing of the catalog of this machine.
   if (data.target === "library" && data.method === "catalog")
-    return demo ? [] : models(claude).map(({ name, efforts, window }) => [name, efforts, window]);
+    return demo
+      ? []
+      : models(claude, session?.directory, userConfig).map(({ name, efforts, window }) => [
+          name,
+          efforts,
+          window,
+        ]);
   // The first run checks this machine, which the demo does not need.
-  if (data.target === "library" && data.method === "setup") return demo ? null : setup(claude);
+  if (data.target === "library" && data.method === "setup")
+    return demo ? null : setup(claude, session?.directory, userConfig);
+  if (data.target === "library" && data.method === "providers") {
+    if (!session) throw new Error("The session is not open.");
+    if (demo) return [{ name: "claude-cli", enabled: true, models: 4 }];
+    const found = setup(claude, session.directory, userConfig);
+    const offered = found.providers.map((one) => ({
+      name: one.provider,
+      enabled: one.enabled,
+      models: one.offered,
+    }));
+    if (!offered.some((one) => one.name === "claude-cli"))
+      offered.push({ name: "claude-cli", enabled: true, models: found.claude ? 4 : 0 });
+    if (!offered.some((one) => one.name === "local"))
+      offered.push({ name: "local", enabled: true, models: found.local?.offered ?? 0 });
+    return offered.sort((a, b) => a.name.localeCompare(b.name));
+  }
+  if (data.target === "library" && (data.method === "provider" || data.method === "reload")) {
+    if (!session || !engine) throw new Error("The session is not open.");
+    if (demo) throw new Error("Provider settings are not available in the demo.");
+    const running = engine;
+    if (data.method === "provider") {
+      changeProvider(session.directory, String(data.args[0]), data.args[1], () => {
+        running.stand();
+      });
+    } else engine.stand();
+    return true;
+  }
   if (data.target === "library" && (data.method === "model" || data.method === "sees")) {
     if (!engine) throw new Error("The session is not open.");
     const [roster = []] = standingOf(engine);
@@ -314,11 +350,13 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     // A name of the roster is found by the rule the catalog finds every model by, and an actor by its model.
     const name =
       data.method === "sees" ? actorParts(String(data.args[0]), names).model : String(data.args[0]);
-    const found = model(name);
+    const found = model(name, session?.directory, userConfig);
     if (data.method === "sees") return found?.images ?? false;
     const held = found?.name ?? name;
     // A model that the roster does not hold is one the operator may add from the catalog, which offers it.
-    const offered = names.includes(held) || (!demo && models(claude).some((one) => one.name === held));
+    const offered =
+      names.includes(held) ||
+      (!demo && models(claude, session?.directory, userConfig).some((one) => one.name === held));
     return offered ? held : null;
   }
   if (data.target === "library" && data.method === "source") return ENGINE;
@@ -393,7 +431,7 @@ function read(data: { target: string; method: string; args: unknown[] }): unknow
   if (data.target === "library" && data.method === "changes") return [];
   if (data.target === "library" && data.method === "net") return [];
   if (data.target === "library" && data.method === "branch") return branchChanges(open.directory);
-  if (data.target === "library" && data.method === "act") return open.activity.acts.get(String(data.args[0]));
+  if (data.target === "library" && data.method === "act") return open.act(String(data.args[0]));
   if (data.target === "library" && data.method === "look") {
     const path = resolve(open.directory, open.cwd({ on: String(data.args[1]) }), String(data.args[0]));
     try {

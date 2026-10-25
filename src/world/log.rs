@@ -28,11 +28,14 @@ use serde_json::Value;
 
 use crate::{
   ear::{Co, Ear, ear, hear},
-  fact::Fact,
+  fact::{Fact, named},
   value::{Fault, Object},
   wire::{outward, parsed},
   world::kept,
 };
+
+/// The start of the line that says the record kept an entry, as the ear writes it.
+const KEEP: &str = r#"["keep","","#;
 
 /// The ear of the log of the record at a path, which held a number of entries when the life opened: it hears every
 /// fact, and writes the log again from its first line.
@@ -197,42 +200,73 @@ pub fn logged(path: impl AsRef<Path>) -> Result<Option<Vec<Object>>, Fault> {
   let Ok(text) = std::fs::read_to_string(format!("{}.log", path.display())) else {
     return Ok(None);
   };
-  let mut lines = text.lines();
+  if !agreed(&text, &kept(path)?) {
+    return Ok(None);
+  }
+  let facts = text
+    .lines()
+    .skip(1)
+    .filter(|line| !line.starts_with(KEEP))
+    .map_while(|line| parsed(line).ok())
+    .collect();
+  Ok(Some(facts))
+}
+
+/// Whether the log of the record at a path agrees with the entries that the record holds, as [`logged`] reads it,
+/// which the caller read once.
+pub(crate) fn agrees(path: &Path, record: &[Object]) -> bool {
+  std::fs::read_to_string(format!("{}.log", path.display())).is_ok_and(|text| agreed(&text, record))
+}
+
+/// Whether the text of a log agrees with the entries of its record: its head counts the entries that the record
+/// held, its lines of keep count the others in order, each line is JSON but a last one that a crash tore, and it shows
+/// each question of the record. Each line is read from its head alone, and no fact is made.
+fn agreed(text: &str, record: &[Object]) -> bool {
+  let mut lines = text.lines().peekable();
   let head = lines.next().and_then(|one| serde_json::from_str::<Value>(one).ok());
   let Some(mut entries) = head.and_then(|one| one.get("entries")?.as_u64()) else {
-    return Ok(None);
+    return false;
   };
-  let mut facts = Vec::new();
-  let mut lines = lines.peekable();
+  let mut asked = HashSet::new();
   while let Some(line) = lines.next() {
-    let Ok(fact) = parsed(line) else {
+    if serde_json::from_str::<serde::de::IgnoredAny>(line).is_err() {
       if lines.peek().is_none() && !text.ends_with('\n') {
         break;
       }
-      return Ok(None);
-    };
-    let held = fact.as_ref().items().unwrap_or_default();
-    if held.len() == 3 && held[0].as_str() == Some("keep") && held[1].as_str() == Some("") {
-      if held[2].as_int() != i64::try_from(entries + 1).ok() {
-        return Ok(None);
+      return false;
+    }
+    if let Some(at) = line.strip_prefix(KEEP).and_then(|one| one.strip_suffix(']')) {
+      if at.parse::<u64>().ok() != entries.checked_add(1) {
+        return false;
       }
       entries += 1;
-      continue;
+    } else if let Some(name) = question(line) {
+      asked.insert(name);
     }
-    facts.push(fact);
   }
-  let record = kept(path)?;
-  let shown: HashSet<String> = facts
-    .iter()
-    .filter_map(|one| Fact::of(one.as_ref()))
-    .filter(Fact::question)
-    .map(|one| one.about().to_owned())
-    .collect();
-  let whole = record.iter().all(|entry| {
+  usize::try_from(entries).ok() == Some(record.len()) && shows(record, &asked)
+}
+
+/// Whether a set of names holds the name of each question that an entry of a record holds.
+fn shows(record: &[Object], shown: &HashSet<String>) -> bool {
+  record.iter().all(|entry| {
     let fact = entry.as_ref().items().and_then(|held| Fact::of(*held.first()?));
     fact.is_none_or(|one| !one.question() || shown.contains(one.about()))
-  });
-  Ok((whole && usize::try_from(entries).ok() == Some(record.len())).then_some(facts))
+  })
+}
+
+/// The name of the question that a line of a log shows, read from its first two words, as `["bash","bash3",`. A
+/// line whose head holds an escape is parsed whole.
+fn question(line: &str) -> Option<String> {
+  let rest = line.strip_prefix("[\"")?;
+  let (kind, rest) = rest.split_once('"')?;
+  let about = rest.strip_prefix(",\"").and_then(|one| one.split_once('"')).map(|one| one.0);
+  if kind.contains('\\') || about.is_some_and(|one| one.contains('\\')) {
+    let fact = parsed(line).ok()?;
+    let fact = Fact::of(fact.as_ref())?;
+    return fact.question().then(|| fact.about().to_owned());
+  }
+  about.filter(|one| named(one, kind)).map(str::to_owned)
 }
 
 #[cfg(test)]

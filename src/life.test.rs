@@ -535,6 +535,19 @@ fn a_life_on_a_record_of_another_engine_before_the_versions_is_refused_before_an
   assert_eq!(fs::read_to_string(&record).unwrap(), text, "it keeps nothing");
 }
 
+#[test]
+fn a_life_on_a_record_of_another_engine_is_refused_before_it_takes_the_lease_of_the_record() {
+  let at = place("leased");
+  let (record, _) =
+    made_elsewhere(&at, &format!("[\"made\",\"chain1\",\"store\",\"{}\"]", "0".repeat(64)));
+  let _held = world::store(&record).unwrap();
+  let refused = Opening { extensions: Some(false), ..opening(&at, true) }
+    .boot::<String>([])
+    .map(|_| ())
+    .unwrap_err();
+  assert!(refused.to_string().starts_with("Drift: the record"), "{refused}");
+}
+
 /// The corpus that the gate of the versions replays: the records in `tests/corpus`, which `tests/corpus/README.md`
 /// says.
 fn corpus() -> PathBuf {
@@ -561,6 +574,52 @@ fn scripted(at: &Path, words: &[&str]) -> Opening {
     answer: Some(answer),
     ..opening(at, true)
   }
+}
+
+#[test]
+fn a_stand_reloads_provider_settings_and_a_refused_reload_keeps_the_life() {
+  let at = place("provider-settings");
+  fs::create_dir_all(at.join("config")).unwrap();
+  fs::create_dir_all(at.join(".furb")).unwrap();
+  fs::write(
+    at.join("config/config.json"),
+    r#"{"providers":{"bench":{"url":"http://127.0.0.1:9/v1","models":{"one":{"window":65536}}}}}"#,
+  )
+  .unwrap();
+  let path = at.join(".furb/config.json");
+  fs::write(&path, r#"{"providers":{"claude-cli":false,"local":false}}"#).unwrap();
+  let (mut engine, _) = Opening {
+    extensions: Some(false),
+    snapshot: Some(false),
+    roster: None,
+    actor: Some("bench:one".to_owned()),
+    ..scripted(&at, &["close(23)", "close(29)"])
+  }
+  .boot::<String>([])
+  .unwrap();
+  let names = "close([a[0] for a in standing()[0] if str(a[0]).startswith('bench:')])";
+  assert_eq!(closed(&mut engine, names).py_repr(), "['bench:one']");
+  assert_eq!(
+    closed(&mut engine, "marker = 17\nclose(await prompt(int, to='bench:one'))").as_ref().as_int(),
+    Some(23)
+  );
+  fs::write(&path, r#"{"providers":{"bench":{"models":{"two":{"window":131072,"images":true}}}}}"#)
+    .unwrap();
+  engine.stand(verbs::Stand::default()).unwrap();
+  assert_eq!(closed(&mut engine, names).py_repr(), "['bench:two']");
+  assert_eq!(
+    closed(&mut engine, "close(marker + await prompt(int, to='bench:two'))").as_ref().as_int(),
+    Some(46)
+  );
+  fs::write(&path, r#"{"providers":{"bench":{"models":{"bad":{"window":0}}}}}"#).unwrap();
+  assert!(engine.stand(verbs::Stand::default()).is_err());
+  assert_eq!(closed(&mut engine, names).py_repr(), "['bench:two']");
+  assert_eq!(closed(&mut engine, "close(marker)").as_ref().as_int(), Some(17));
+  fs::write(&path, r#"{"providers":{"bench":false}}"#).unwrap();
+  engine.stand(verbs::Stand::default()).unwrap();
+  assert_eq!(closed(&mut engine, names).py_repr(), "[]");
+  drop(engine);
+  fs::remove_dir_all(at).unwrap();
 }
 
 /// The words of the model of the life of the corpus: the root writes, reads, runs a command, waits, reads the

@@ -27,6 +27,9 @@ async function folder(record: string): Promise<Map<string, { time: number; bytes
   const held = new Map<string, { time: number; bytes: string }>();
   for (const name of (await readdir(directory)).sort()) {
     if (name !== base && !name.startsWith(`${base}.`)) continue;
+    // The file of what the record tells is a cache that a read derives from the record and writes again when it is
+    // stale, so it is no change of the record.
+    if (name === `${base}.told`) continue;
     const info = await stat(join(directory, name));
     // A file is held by its time and its bytes, since a read changes neither.
     held.set(
@@ -248,14 +251,19 @@ test("a chain that the record does not keep takes its first prompt as its label 
     ];
     await writeFile(record, `${kept.map((fact) => JSON.stringify([fact])).join("\n")}\n`);
     const got = retold(record);
-    const reader = new Reader(got.facts as never, directory, record, {
-      made: got.made,
-      engine: got.engine,
-      version: got.version,
-      current: got.current,
-      why: "x",
-      logged: got.logged,
-    });
+    const reader = new Reader(
+      directory,
+      record,
+      {
+        made: got.made,
+        engine: got.engine,
+        version: got.version,
+        current: got.current,
+        why: "x",
+        logged: got.logged,
+      },
+      got.file,
+    );
     // A rung that the record ended shows as done, and the work with no end stays unfinished.
     const rungs = [...reader.activity.acts.values()].filter((act) => act.kind === "rung");
     expect(reader.activity.acts.get("rung1")?.done).toBe(true);
@@ -266,7 +274,11 @@ test("a chain that the record does not keep takes its first prompt as its label 
       .map((act) => String(act.words[0]));
     expect(labels).toEqual(["root", "Review the diff.", "chain3", "Other."]);
     expect(new Set(labels).size).toBe(labels.length);
-    const two = (got.facts as unknown[][]).find((fact) => fact[0] === "chain" && fact[1] === "chain2");
+    const facts = (await readFile(got.file, "utf8"))
+      .split("\n")
+      .filter((line) => line.startsWith("["))
+      .map((line) => JSON.parse(line) as unknown[]);
+    const two = facts.find((fact) => fact[0] === "chain" && fact[1] === "chain2");
     expect(two?.[2]).toBe("rung1");
     expect(two?.[3]).toBe("chain1");
   } finally {

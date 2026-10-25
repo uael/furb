@@ -21,16 +21,18 @@
 //! by [`READER`].
 
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 
 use crate::{
   fact::{Fact, named},
   value::{Fault, IS, Object, ObjectRef, entry, field},
+  wire::{outward, parsed},
 };
 
-use super::{kept, logged, made, version};
+use super::{kept, log::agrees, made, version};
 
 /// Who says each fact that the reader adds to the facts that a record kept, but a question.
 pub const READER: &str = "reader";
@@ -44,8 +46,11 @@ pub struct Retold {
   pub version: Option<i64>,
   /// Whether the facts are those of the log, which holds every fact that the life said.
   pub logged: bool,
-  /// The facts, in the order that the life said them.
-  pub facts: Vec<Object>,
+  /// The file that holds the facts, in the order that the life said them, each on a line of its own as JSON reads a
+  /// value of the sandbox: the log beside the record while it agrees with the record, and else the file of what the
+  /// record tells, `<record>.told`, beside it. A line that does not start with `[`, and a line `["keep", "", n]` of
+  /// the log, holds no fact.
+  pub file: PathBuf,
   /// The count of the entries of the record.
   pub entries: usize,
   /// The sha256 of the last entry of the record, in the plain form that the record keeps, and nothing for a record
@@ -53,20 +58,83 @@ pub struct Retold {
   pub last: Option<String>,
 }
 
+impl Retold {
+  /// The facts of the file, in the order that the life said them.
+  pub fn facts(&self) -> Result<Vec<Object>, Fault> {
+    let text = std::fs::read_to_string(&self.file)
+      .map_err(|no| Fault::refused(format!("{} cannot be read: {no}", self.file.display())))?;
+    text
+      .lines()
+      .filter(|line| line.starts_with('[') && !line.starts_with(r#"["keep","","#))
+      .map(parsed)
+      .collect()
+  }
+}
+
 /// What the record at a path tells, read with no lease and changed in nothing.
+///
+/// The file of what the record tells is a cache: its first line names the size and the time of change of the record
+/// and of its log, and the build that wrote it. While all agree, a later read takes it as it stands and reads no
+/// record. Else the reader writes it again from the record.
 pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
   let path = path.as_ref();
+  let log = PathBuf::from(format!("{}.log", path.display()));
+  let cache = PathBuf::from(format!("{}.told", path.display()));
+  let stamp = serde_json::json!([stamped(path), stamped(&log), BUILD]);
+  if let Some(found) = cached(&cache, &stamp, &log) {
+    return Ok(found);
+  }
   let record = kept(path)?;
   let (made, version) = (made(&record), version(&record));
+  let logged = agrees(path, &record);
   let (entries, last) = (record.len(), record.last().map(digest));
-  if let Some(facts) = logged(path)? {
-    return Ok(Retold { made, version, logged: true, facts, entries, last });
+  let head = serde_json::json!({ "stamp": stamp, "made": made, "version": version, "logged": logged, "entries": entries, "last": last });
+  let fresh = PathBuf::from(format!("{}.told.new", path.display()));
+  let failed =
+    |no: std::io::Error| Fault::refused(format!("{} cannot be written: {no}", fresh.display()));
+  let mut file = std::io::BufWriter::new(std::fs::File::create(&fresh).map_err(failed)?);
+  writeln!(file, "{head}").map_err(failed)?;
+  if !logged {
+    let facts =
+      record.into_iter().filter_map(|entry| Some(entry.as_ref().items()?.first()?.to_owned()));
+    for fact in told(facts.collect()) {
+      writeln!(file, "{}", outward(fact.as_ref())).map_err(failed)?;
+    }
   }
-  let facts = record
-    .iter()
-    .filter_map(|entry| Some(entry.as_ref().items()?.first()?.to_owned()))
-    .collect::<Vec<_>>();
-  Ok(Retold { made, version, logged: false, facts: told(&facts), entries, last })
+  file.into_inner().map_err(|no| failed(no.into_error()))?.sync_data().map_err(failed)?;
+  std::fs::rename(&fresh, &cache).map_err(failed)?;
+  Ok(Retold { made, version, logged, file: if logged { log } else { cache }, entries, last })
+}
+
+/// What the build that writes a file of what a record tells names in it: a reader of another build writes it again.
+const BUILD: &str = concat!(env!("CARGO_PKG_VERSION"), "/", env!("CARGO_PKG_NAME"), "/1");
+
+/// The size and the time of change of a file, in nanoseconds, or nothing when no file stands there.
+fn stamped(path: &Path) -> Option<(u64, u128)> {
+  let meta = std::fs::metadata(path).ok()?;
+  let at = meta.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_nanos();
+  Some((meta.len(), at))
+}
+
+/// What the file of what a record tells holds, while its first line names the stamp that the record, its log and the
+/// build give now.
+fn cached(told: &Path, stamp: &serde_json::Value, log: &Path) -> Option<Retold> {
+  let file = std::fs::File::open(told).ok()?;
+  let mut head = String::new();
+  std::io::BufRead::read_line(&mut std::io::BufReader::new(file), &mut head).ok()?;
+  let head: serde_json::Value = serde_json::from_str(&head).ok()?;
+  if head.get("stamp")? != stamp {
+    return None;
+  }
+  let logged = head.get("logged")?.as_bool()?;
+  Some(Retold {
+    made: head.get("made")?.as_str().map(str::to_owned),
+    version: head.get("version")?.as_i64(),
+    logged,
+    file: if logged { log.to_path_buf() } else { told.to_path_buf() },
+    entries: usize::try_from(head.get("entries")?.as_u64()?).ok()?,
+    last: head.get("last")?.as_str().map(str::to_owned),
+  })
 }
 
 /// The sha256 of an entry of a record, in the plain form that the record keeps.
@@ -108,8 +176,8 @@ fn text(fact: &Fact, at: usize) -> String {
 }
 
 /// The facts that a record kept, with the facts that the engine said and the record does not keep.
-pub fn told(kept: &[Object]) -> Vec<Object> {
-  let facts: Vec<Fact> = kept.iter().filter_map(|one| Fact::of(one.as_ref())).collect();
+pub fn told(kept: Vec<Object>) -> Vec<Object> {
+  let facts: Vec<Fact> = kept.into_iter().filter_map(Fact::owned).collect();
   let mut makers: HashMap<String, String> = HashMap::new();
   let chains: HashSet<&str> =
     facts.iter().filter(|one| one.question() && one.kind() == "chain").map(Fact::about).collect();
@@ -131,7 +199,7 @@ pub fn told(kept: &[Object]) -> Vec<Object> {
     }
   }
   let mut life = Reader { makers, homes, labels, ..Reader::default() };
-  for fact in &facts {
+  for fact in facts {
     life.hear(fact);
   }
   life.out
@@ -175,12 +243,15 @@ struct Reader {
 }
 
 impl Reader {
-  fn hear(&mut self, fact: &Fact) {
+  fn hear(&mut self, owned: Fact) {
+    let fact = &owned;
     let (kind, about, by) = (fact.kind(), fact.about(), fact.by());
     if fact.question() {
       self.asked(fact);
     }
-    self.out.push(fact.0.clone());
+    // The fact stands after the facts that name it, and before those that it makes the reader say.
+    let at = self.out.len();
+    self.out.push(Object::none());
     match kind {
       "rung" if fact.question() && !text(fact, 1).is_empty() => {
         self.words.insert(about.to_owned(), text(fact, 1));
@@ -211,6 +282,7 @@ impl Reader {
       }
       _ => {}
     }
+    self.out[at] = owned.0;
   }
 
   /// A question: the chain and the rung that it names when the reader holds neither, then its own place.

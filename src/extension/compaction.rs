@@ -55,7 +55,7 @@ fn carried(
   about: &str,
   on: &str,
 ) -> Result<Object, Fault> {
-  let (held, done) = held(&told.facts, chain).ok_or_else(|| {
+  let (held, done) = held(&told.facts()?, chain).ok_or_else(|| {
     Fault::refused(format!("the record {} holds no chain {chain}", path.display()))
   })?;
   let replies: HashSet<&str> =
