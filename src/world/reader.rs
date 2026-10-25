@@ -19,7 +19,7 @@
 //! by [`READER`].
 
 use std::collections::{HashMap, HashSet};
-use std::io::Write;
+use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
@@ -30,7 +30,7 @@ use crate::{
   wire::{outward, parsed},
 };
 
-use super::{kept, log::agrees, made, version};
+use super::{log::agrees, made, store::each, version};
 
 /// Who says each fact that the reader adds to the facts that a record kept, but a question.
 pub const READER: &str = "reader";
@@ -57,15 +57,31 @@ pub struct Retold {
 }
 
 impl Retold {
+  /// Each fact of the file, in the order that the life said them, read one line at a time, so a reader holds no more
+  /// of a large record than it keeps of each fact.
+  pub fn each(&self, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
+    let failed =
+      |no: std::io::Error| Fault::refused(format!("{} cannot be read: {no}", self.file.display()));
+    let file = std::fs::File::open(&self.file).map_err(failed)?;
+    let mut lines = std::io::BufReader::with_capacity(1 << 20, file);
+    let mut line = String::new();
+    loop {
+      line.clear();
+      if lines.read_line(&mut line).map_err(failed)? == 0 {
+        return Ok(());
+      }
+      let text = line.trim_end_matches('\n');
+      if text.starts_with('[') && !text.starts_with(r#"["keep","","#) {
+        take(parsed(text)?);
+      }
+    }
+  }
+
   /// The facts of the file, in the order that the life said them.
   pub fn facts(&self) -> Result<Vec<Object>, Fault> {
-    let text = std::fs::read_to_string(&self.file)
-      .map_err(|no| Fault::refused(format!("{} cannot be read: {no}", self.file.display())))?;
-    text
-      .lines()
-      .filter(|line| line.starts_with('[') && !line.starts_with(r#"["keep","","#))
-      .map(parsed)
-      .collect()
+    let mut facts = Vec::new();
+    self.each(&mut |one| facts.push(one))?;
+    Ok(facts)
   }
 }
 
@@ -82,26 +98,62 @@ pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
   if let Some(found) = cached(&cache, &stamp, &log) {
     return Ok(found);
   }
-  let record = kept(path)?;
-  let (made, version) = (made(&record), version(&record));
-  let logged = agrees(path, &record);
-  let (entries, last) = (record.len(), record.last().map(digest));
-  let head = serde_json::json!({ "stamp": stamp, "made": made, "version": version, "logged": logged, "entries": entries, "last": last });
+  let (mut maker, mut built, mut entries, mut last) = (None, None, 0, None);
+  let (mut asked, mut makers) = (HashSet::new(), Makers::default());
+  each(path, &mut |entry| {
+    let one = std::slice::from_ref(&entry);
+    if maker.is_none() {
+      maker = made(one);
+    }
+    built = built.or_else(|| version(one));
+    if let Some(fact) = kept(&entry) {
+      makers.hear(&fact);
+      if fact.question() {
+        asked.insert(fact.about().to_owned());
+      }
+    }
+    entries += 1;
+    last = Some(entry);
+  })?;
+  let logged = agrees(path, entries, &asked);
+  let last = last.as_ref().map(digest);
+  let head = serde_json::json!({ "stamp": stamp, "made": maker, "version": built, "logged": logged, "entries": entries, "last": last });
   let fresh = PathBuf::from(format!("{}.told.new", path.display()));
   let failed =
     |no: std::io::Error| Fault::refused(format!("{} cannot be written: {no}", fresh.display()));
   let mut file = std::io::BufWriter::new(std::fs::File::create(&fresh).map_err(failed)?);
   writeln!(file, "{head}").map_err(failed)?;
   if !logged {
-    let facts =
-      record.into_iter().filter_map(|entry| Some(entry.as_ref().items()?.first()?.to_owned()));
-    for fact in told(facts.collect()) {
-      writeln!(file, "{}", outward(fact.as_ref())).map_err(failed)?;
+    let mut broken = None;
+    {
+      let mut out = |fact: Object| {
+        if broken.is_none()
+          && let Err(no) = writeln!(file, "{}", outward(fact.as_ref()))
+        {
+          broken = Some(no);
+        }
+      };
+      let mut life = Reader::new(makers.ended(), &mut out);
+      each(path, &mut |entry| {
+        if let Some(fact) = kept(&entry) {
+          life.hear(fact);
+        }
+      })?;
+    }
+    if let Some(no) = broken {
+      return Err(failed(no));
     }
   }
   file.into_inner().map_err(|no| failed(no.into_error()))?.sync_data().map_err(failed)?;
   std::fs::rename(&fresh, &cache).map_err(failed)?;
-  Ok(Retold { made, version, logged, file: if logged { log } else { cache }, entries, last })
+  Ok(Retold {
+    made: maker,
+    version: built,
+    logged,
+    file: if logged { log } else { cache },
+    entries,
+    last,
+  })
 }
 
 /// What the build that writes a file of what a record tells names in it: a reader of another build writes it again.
@@ -133,6 +185,11 @@ fn cached(told: &Path, stamp: &serde_json::Value, log: &Path) -> Option<Retold> 
     entries: usize::try_from(head.get("entries")?.as_u64()?).ok()?,
     last: head.get("last")?.as_str().map(str::to_owned),
   })
+}
+
+/// The fact of an entry of a record.
+fn kept(entry: &Object) -> Option<Fact> {
+  Fact::owned(entry.as_ref().items()?.first()?.to_owned())
 }
 
 /// The sha256 of an entry of a record, in the plain form that the record keeps.
@@ -174,29 +231,73 @@ fn text(fact: &Fact, at: usize) -> String {
 }
 
 /// The facts that a record kept, with the facts that the engine said and the record does not keep.
-pub fn told(kept: Vec<Object>) -> Vec<Object> {
+#[cfg(test)]
+fn told(kept: Vec<Object>) -> Vec<Object> {
   let facts: Vec<Fact> = kept.into_iter().filter_map(Fact::owned).collect();
-  let mut makers: HashMap<String, String> = HashMap::new();
-  let chains: HashSet<&str> =
-    facts.iter().filter(|one| one.question() && one.kind() == "chain").map(Fact::about).collect();
-  for one in
-    facts.iter().filter(|one| one.question() && one.kind() == "prompt" && named(one.by(), "rung"))
-  {
-    if !chains.contains(one.on()) {
-      makers.entry(one.on().to_owned()).or_insert_with(|| one.by().to_owned());
-    }
-  }
-  let mut life = Reader { makers, ..Reader::default() };
+  let mut makers = Makers::default();
+  facts.iter().for_each(|one| makers.hear(one));
+  let mut out = Vec::new();
+  let mut take = |one| out.push(one);
+  let mut life = Reader::new(makers.ended(), &mut take);
   for fact in facts {
     life.hear(fact);
   }
-  life.out
+  out
 }
 
-/// What the reader knows of the facts that it heard.
+/// What the reader needs to know of all the facts that a record kept before it tells the first of them: each chain
+/// that the record holds, and the chain and the maker of each prompt that a rung made, in order.
 #[derive(Default)]
-struct Reader {
-  out: Vec<Object>,
+struct Makers {
+  chains: HashSet<String>,
+  prompts: Vec<(String, String)>,
+}
+
+impl Makers {
+  fn hear(&mut self, one: &Fact) {
+    if one.question() && one.kind() == "chain" {
+      self.chains.insert(one.about().to_owned());
+    }
+    if one.question() && one.kind() == "prompt" && named(one.by(), "rung") {
+      self.prompts.push((one.on().to_owned(), one.by().to_owned()));
+    }
+  }
+
+  /// The maker of each chain that the record does not hold: the rung that makes the first prompt on it.
+  fn ended(self) -> HashMap<String, String> {
+    let mut makers = HashMap::new();
+    for (on, by) in self.prompts.into_iter().filter(|(on, _)| !self.chains.contains(on)) {
+      makers.entry(on).or_insert(by);
+    }
+    makers
+  }
+}
+
+impl<'a> Reader<'a> {
+  /// The reader that tells each fact to out, with the maker of each chain that the record does not hold.
+  fn new(makers: HashMap<String, String>, out: &'a mut dyn FnMut(Object)) -> Reader<'a> {
+    Reader {
+      out,
+      stage: Vec::new(),
+      makers,
+      scopes: HashMap::new(),
+      done: HashSet::new(),
+      prompts: Vec::new(),
+      rungs: HashMap::new(),
+      words: HashMap::new(),
+      replies: HashMap::new(),
+      gates: HashMap::new(),
+      runs: HashMap::new(),
+      gated: HashSet::new(),
+    }
+  }
+}
+
+/// What the reader knows of the facts that it heard, and where it says the facts that it tells.
+struct Reader<'a> {
+  out: &'a mut dyn FnMut(Object),
+  /// The facts that the reader said and did not tell yet.
+  stage: Vec<Object>,
   /// The maker of each chain that the record does not hold, when a rung makes the first prompt on it.
   makers: HashMap<String, String>,
   /// Each act that a fact names, and the chain of each.
@@ -216,7 +317,7 @@ struct Reader {
   gated: HashSet<String>,
 }
 
-impl Reader {
+impl Reader<'_> {
   fn hear(&mut self, owned: Fact) {
     let fact = &owned;
     let (kind, about, by) = (fact.kind(), fact.about(), fact.by());
@@ -224,8 +325,7 @@ impl Reader {
       self.asked(fact);
     }
     // The fact stands after the facts that name it, and before those that it makes the reader say.
-    let at = self.out.len();
-    self.out.push(Object::none());
+    self.flush();
     match kind {
       "rung" if fact.question() && !text(fact, 1).is_empty() => {
         self.words.insert(about.to_owned(), text(fact, 1));
@@ -256,7 +356,15 @@ impl Reader {
       }
       _ => {}
     }
-    self.out[at] = owned.0;
+    (self.out)(owned.0);
+    self.flush();
+  }
+
+  /// Tell the facts that the reader said, in order.
+  fn flush(&mut self) {
+    for one in self.stage.drain(..) {
+      (self.out)(one);
+    }
   }
 
   /// A question: the chain and the rung that it names when the reader holds neither, then its own place.
@@ -265,7 +373,7 @@ impl Reader {
     if kind != "chain" && named(on, "chain") && !self.scopes.contains_key(on) {
       let maker = self.makers.get(on).cloned().unwrap_or_else(|| "operator".to_owned());
       let under = self.scopes.get(&maker).cloned().unwrap_or_default();
-      self.out.push(question("chain", on, &maker, [under.as_str(), "", ""]));
+      self.stage.push(question("chain", on, &maker, [under.as_str(), "", ""]));
       self.scopes.insert(on.to_owned(), on.to_owned());
     }
     let chain = self.scope(on);
@@ -300,7 +408,7 @@ impl Reader {
     if let Some(last) = self.rungs.remove(&maker) {
       self.end(&last, Object::none());
     }
-    self.out.push(question("rung", id, &maker, [chain, "", "", ""]));
+    self.stage.push(question("rung", id, &maker, [chain, "", "", ""]));
     self.scopes.insert(id.to_owned(), chain.to_owned());
     self.rungs.insert(maker, id.to_owned());
   }
@@ -312,7 +420,7 @@ impl Reader {
     }
     let (Some(word), Some(chain)) = (self.words.get(rung), self.scopes.get(rung)) else { return };
     let id = format!("run{}", self.runs.len() + 1);
-    self.out.push(question("run", &id, chain, [chain.as_str(), rung, word.as_str(), ""]));
+    self.stage.push(question("run", &id, chain, [chain.as_str(), rung, word.as_str(), ""]));
     self.runs.insert(rung.to_owned(), id);
   }
 
@@ -351,7 +459,7 @@ impl Reader {
     } else {
       format!("{name} = {}", Object::string(findings).py_repr())
     };
-    self.out.push(said(
+    self.stage.push(said(
       "tell",
       &rung,
       [Object::list([Object::string(format!("#{rung} refused\n{bound}"))])],
@@ -366,9 +474,9 @@ impl Reader {
     }
     if let Some(run) = self.runs.get(id).cloned() {
       self.done.insert(run.clone());
-      self.out.push(said("done", &run, [Object::none()]));
+      self.stage.push(said("done", &run, [Object::none()]));
     }
-    self.out.push(said("done", id, [value]));
+    self.stage.push(said("done", id, [value]));
     self.prompts.retain(|(prompt, ..)| prompt != id);
     if let Some(rung) = self.rungs.remove(id) {
       self.end(&rung, Object::none());

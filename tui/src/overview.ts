@@ -7,12 +7,12 @@ import { theme as c, spin } from "./theme.ts";
 import { bold, mix, type Part } from "./ui.ts";
 
 /** The views of a life that the TUI holds side by side, which a key, a command and a setting switch at run time: the
- * board of main over the feed, the loom of the chains in time over the feed, and the graph of the programs that run. */
+ * main, the feed beside the threads, the loom of the chains in time over the feed, and the graph of the programs that run. */
 export const lifeViews = ["main", "loom", "graph"] as const;
 export type LifeView = (typeof lifeViews)[number];
 export const lifeViewLabels: Record<LifeView, string> = { main: "Main", loom: "Loom", graph: "Graph" };
 export const lifeViewDetails: Record<LifeView, string> = {
-  main: "The board of the chains over the feed of the selected chain",
+  main: "The feed of the selected chain beside the threads",
   loom: "Each chain as a thread in time over the feed, with a cursor in time",
   graph: "The threads and the map of the programs, with a zoom into a program, a word and an act",
 };

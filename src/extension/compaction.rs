@@ -36,26 +36,34 @@ pub fn compaction() -> Box<dyn Ear> {
         |at: usize| a.word(at).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
       let (about, record, chain) = (a.about().to_owned(), word(1), word(2));
       let path = resolved(&here(&mut co, a.on()).await?, &record);
-      let none = Fault::refused(format!("No record at {}.", path.display()));
-      let read = |path: &Path| {
-        retold(path).map_err(|no| Fault::refused(format!("{}: {}", path.display(), no.message())))
-      };
-      let got = (if path.is_file() { read(&path) } else { Err(none) })
-        .and_then(|told| carried(&told, &path, &chain, &about, a.on()));
+      let got = carry(&path, &chain, &about, a.on());
       say(&mut co, Fact::says("done", &about, [got.unwrap_or_else(|no| no.object())]));
     }
   })
 }
 
+/// What a carry under the name about, asked on a chain on, gives of a chain of the record at a path.
+pub(crate) fn carry(path: &Path, chain: &str, about: &str, on: &str) -> Result<Object, Fault> {
+  if !path.is_file() {
+    return Err(Fault::refused(format!("No record at {}.", path.display())));
+  }
+  let failed = |no: Fault| Fault::refused(format!("{}: {}", path.display(), no.message()));
+  let told = retold(path).map_err(failed)?;
+  let mut fold = Held::new(chain);
+  told.each(&mut |one| fold.hear(one)).map_err(failed)?;
+  carried(&told, fold, path, chain, about, on)
+}
+
 /// What a carry under the name about, asked on a chain on, gives of the chain of a record that the reader told.
 fn carried(
   told: &Retold,
+  fold: Held,
   path: &Path,
   chain: &str,
   about: &str,
   on: &str,
 ) -> Result<Object, Fault> {
-  let (held, done) = held(&told.facts()?, chain).ok_or_else(|| {
+  let (held, done) = fold.ended().ok_or_else(|| {
     Fault::refused(format!("the record {} holds no chain {chain}", path.display()))
   })?;
   let replies: HashSet<&str> =
@@ -108,37 +116,54 @@ fn fact_text(fact: &Fact, at: usize) -> String {
   fact.word(at).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default()
 }
 
-/// What the transcript of a chain holds at the end of the facts of a life, as the engine holds it: each question on
-/// it, each other fact about an act of it, and what the last prefix said on it holds in place of what came before;
-/// and each act that is done. Nothing when no chain of that name was made.
-fn held(facts: &[Object], chain: &str) -> Option<(Vec<Fact>, HashSet<String>)> {
-  let mut scopes: HashMap<String, String> = HashMap::new();
-  let (mut held, mut done) = (Vec::new(), HashSet::new());
-  for fact in facts.iter().filter_map(|one| Fact::of(one.as_ref())) {
+/// What the transcript of a chain holds, as the engine holds it, of the facts of a life that it heard in order: each
+/// question on it, each other fact about an act of it, and what the last prefix said on it holds in place of what
+/// came before; and each act that is done.
+struct Held {
+  chain: String,
+  scopes: HashMap<String, String>,
+  held: Vec<Fact>,
+  done: HashSet<String>,
+}
+
+impl Held {
+  fn new(chain: &str) -> Held {
+    Held { chain: chain.to_owned(), scopes: HashMap::new(), held: Vec::new(), done: HashSet::new() }
+  }
+
+  /// The next fact of the life.
+  fn hear(&mut self, one: Object) {
+    let Some(fact) = Fact::of(one.as_ref()) else { return };
     let at = if fact.question() {
       let at = match fact.kind() {
         "chain" => fact.about().to_owned(),
-        _ => scopes.get(fact.on()).cloned().unwrap_or_default(),
+        _ => self.scopes.get(fact.on()).cloned().unwrap_or_default(),
       };
-      scopes.insert(fact.about().to_owned(), at.clone());
+      self.scopes.insert(fact.about().to_owned(), at.clone());
       at
     } else {
       if fact.kind() == "done" {
-        done.insert(fact.about().to_owned());
+        self.done.insert(fact.about().to_owned());
       }
-      scopes.get(fact.about()).cloned().unwrap_or_default()
+      self.scopes.get(fact.about()).cloned().unwrap_or_default()
     };
-    if at != chain {
-      continue;
+    if at != self.chain {
+      return;
     }
     if fact.kind() == "prefix" {
       let said = fact.word(0).and_then(|one| one.items()).unwrap_or_default();
-      held = said.into_iter().filter_map(Fact::of).collect();
+      self.held = said.into_iter().filter_map(Fact::of).collect();
     } else {
-      held.push(fact);
+      self.held.push(fact);
     }
   }
-  (scopes.get(chain).map(String::as_str) == Some(chain)).then_some((held, done))
+
+  /// What the transcript holds at the end of the facts, and each act that is done, or nothing when no chain of that
+  /// name was made.
+  fn ended(self) -> Option<(Vec<Fact>, HashSet<String>)> {
+    let made = self.scopes.get(&self.chain) == Some(&self.chain);
+    made.then_some((self.held, self.done))
+  }
 }
 
 #[cfg(test)]

@@ -47,6 +47,7 @@ credential in the environment. To add a server that uses OpenAI chat completions
 The arguments are the provider name, URL, model id, context window and, when needed, the name of the environment
 variable that holds its key. The optional last argument selects the protocol, which is `chat` when unsaid.
 Use `openai` for OpenAI Responses, `anthropic` for Anthropic Messages, or `gemini` for Google Gemini.
+Use `-` for the key name when the server needs no key and a protocol follows it.
 `/provider remove office` disables the provider and keeps its settings for a later add.
 
 The same settings can be written in `config.json` in the user config directory, or in `.furb/config.json` in the

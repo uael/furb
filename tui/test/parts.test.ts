@@ -50,14 +50,13 @@ test("a life gains the panel of a part of a project extension, which draws again
   const { directory, file } = project();
   const session = await demoSession({ cwd: directory });
   await composing(
-    async ({ app, frame, click, screen }) => {
+    async ({ app, frame, screen }) => {
       await session.command(`/run ${TODO}\ntodo("write the part")\ntodo("read the capture", done=True)`);
       let shown = await shows(frame, "○ write the part");
       expect(shown).toContain("✓ read the capture");
       expect(shown).toContain("1 open of 2");
       expect(app.parts.loaded.map((one) => one.name)).toEqual(["compaction", "todo"]);
-      // The rung opens, and the row of each act todo says what the part draws for it.
-      await click("rung1");
+      // The hint of the line of each act todo says what the part draws as its row.
       await shows(frame, "to do: write the part");
       // A change of the file of the part draws again, with no restart.
       writeFileSync(file, PART.replace('"Todo"', '"Todo list"'));
@@ -197,7 +196,10 @@ test("a run of compactions into new chains, as an older compaction made them, sh
       expect(shown).toContain("It read the plan.");
       expect(shown).toContain("compacted  ");
       expect(shown.indexOf("the first step")).toBeLessThan(shown.indexOf("goes on in a new chain from here"));
-      expect(shown.indexOf("goes on in a new chain from here")).toBeLessThan(shown.indexOf("the step after"));
+      // The word of the operator that made the step stands in the feed too, so the step is its last line.
+      expect(shown.indexOf("goes on in a new chain from here")).toBeLessThan(
+        shown.lastIndexOf("the step after"),
+      );
     },
     { width: 120, height: 60 },
     session,

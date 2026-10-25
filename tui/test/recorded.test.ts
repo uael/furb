@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { until } from "../../bind/typescript/test/until.ts";
-import { clip, scrub } from "../script/fixture.ts";
+import { clip, scrub, shortened } from "../script/fixture.ts";
 import { openEngine } from "../src/bridge.ts";
 import { Session } from "../src/session.ts";
 import { composing } from "./composing.ts";
@@ -15,20 +15,16 @@ async function recorded(): Promise<Session> {
   return new Session(engine, host, true);
 }
 
-test("the board of a real life counts its chains by what they do and says what each chain at work waits on, and the feed folds the earlier steps of a long thread into one line that a click opens", async () =>
+test("the threads of a real life count the chains at work and say what each does in a few words, and the feed folds the earlier steps of a long thread into one line that a click opens", async () =>
   // One test holds both, since each test runs in a process of its own and two demo libraries at once save one list.
   composing(
     async ({ session, app, frame, click }) => {
       await session.refresh();
       const shown = await frame();
       const lines = shown.split("\n");
-      expect(lines.find((line) => line.includes("at work"))).toContain("21 at work");
-      // A board of a third of the screen holds the chains that need a look, and counts the ones it leaves out.
-      expect(shown).toContain("more, ⌃B lists every chain");
-      // The sidebar names the chains too, so the row of the board is the one that says what the chain waits on.
-      expect(lines.some((line) => /◉ life3\/feed +bash361 .*95 answers {2}\$\d+\.\d\d/.test(line))).toBe(
-        true,
-      );
+      expect(lines.find((line) => line.includes("Chains"))).toContain("◉ 21");
+      // A thread at work says what its command does, and not the command.
+      expect(lines.some((line) => /◉ feed +runs bun/.test(line))).toBe(true);
       // The conductor runs one long word, under which its messages pile up: the earlier ones fold into one line.
       const folds = () => app.scroll.getChildren().filter((node) => node.id.startsWith("more-")).length;
       expect(folds()).toBeGreaterThan(0);
@@ -67,4 +63,24 @@ test("the fixture of a recorded life holds no secret: no key, no address of mail
   expect(clip("one\ntwo\nthree", 2)).toBe("one\ntwo\n… 1 more lines");
   const text = await readFile(conductor, "utf8");
   expect(text).not.toMatch(/\/Users\/|\/home\/|gh[pousr]_[A-Za-z0-9]{20}|github_pat_\w{20}|sk-[\w-]{20}/);
+});
+
+test("the fixture keeps a word python: a string that makes its line too long is cut inside its quotes, and a line of a quote as it is", () => {
+  const long = "x".repeat(50);
+  const word = [
+    `a = f("${long}", '${long}')  # ${long}`,
+    `b = """${long}`,
+    `${long} """ + "${long}"`,
+    "<s:q>",
+    `it's ${long}`,
+    "</s:q>",
+  ].join("\n");
+  expect(shortened(word, 40, 4).split("\n")).toEqual([
+    `a = f("xxxx…", 'xxxx…')  # ${long}`,
+    'b = """xxxx…',
+    'xxxx…""" + "xxxx…"',
+    "<s:q>",
+    "it's…",
+    "</s:q>",
+  ]);
 });

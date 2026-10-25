@@ -8,7 +8,7 @@ import { Preferences } from "../src/preferences.ts";
 import { Session } from "../src/session.ts";
 import { composing } from "./composing.ts";
 
-test("the provider menu saves a change, restores a custom provider, and refuses invalid settings without changing the file", async () => {
+test("the provider menu saves, restores and validates provider settings", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-provider-menu-"));
   const path = join(directory, ".furb", "config.json");
   await mkdir(join(directory, ".furb"));
@@ -55,6 +55,10 @@ test("the provider menu saves a change, restores a custom provider, and refuses 
           .catch(String);
         expect(refusal).toContain("positive window");
         expect(await readFile(path, "utf8")).toBe(before);
+        await session.command("/provider add response http://127.0.0.1:9/v1 qwen 65536 - openai");
+        expect(
+          session.catalog.filter(([name]) => name.startsWith("response:")).map(([name]) => name),
+        ).toEqual(["response:qwen"]);
       },
       { width: 120, height: 44, useMouse: true },
       session,
