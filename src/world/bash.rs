@@ -91,6 +91,10 @@ fn runs(path: &Path) -> bool {
 /// interrupted, so the model sees that outcome and runs it again if it wants, and its doors keep what it wrote before.
 /// It takes no write.
 ///
+/// A stream keeps at most `HEAD` bytes at its start and `TAIL` bytes at its end: the ear reads the pipe to its end, says
+/// the first bytes as they come and then a line that says the rest is cut, and its exit gives the first bytes, a line that
+/// counts the bytes cut, and the last bytes.
+///
 /// A command runs with `TMPDIR` set to the scratch directory of the life, and `TMP` and `TEMP` too on Windows, which
 /// the ear makes first, so a command finds there the files of `scratch://`. A command ends with every process it started, which its group holds. A
 /// command that a control ended first, which the engine says done, is ended so and says nothing more.
@@ -315,10 +319,11 @@ fn command(
 /// exit is said at its end; or the command is ended at its stop, with every process of it.
 ///
 /// A command that outlives its timeout is ended with every process of it, and exits with no code. Its exit comes once
-/// its shell exited and its streams closed, or once its shell exited and no process of its group lives, as when a
-/// process that left the group holds a stream: then the exit gives what its streams wrote until then. The shell is
-/// reaped as it exits, and its group keeps its number for as long as a process of it lives, so an end signals no
-/// group that another took, but in the moment between the last probe of an empty group and that end.
+/// its shell exited and its streams closed, or once its shell exited and DRAIN passed with a stream open, as when a
+/// process that the command started holds a stream: then the exit gives what its streams wrote until then, and that
+/// process is left to run, with no reader on its stream. The shell is reaped as it exits, and its group keeps its
+/// number for as long as a process of it lives, so an end signals no group that another took, but in the moment
+/// after the last process of the group ended and before that end.
 async fn ran(
   begun: Begun,
   fed: spsc::Receiver<Option<String>>,
@@ -327,7 +332,7 @@ async fn ran(
 ) {
   let Begun { about, mut child, mut group, timeout, .. } = begun;
   let (stdout, stderr, stdin) = (child.stdout.take(), child.stderr.take(), child.stdin.take());
-  let (mut out, mut err) = (String::new(), String::new());
+  let (mut out, mut err) = (Kept::new(HEAD, TAIL), Kept::new(HEAD, TAIL));
   let streams = async {
     tokio::join!(
       read(stdout, "stdout", &about, &says, &mut out),
@@ -345,25 +350,26 @@ async fn ran(
     let (mut streams, mut shell) = (pin!(streams), pin!(shell));
     let (mut expired, mut feeding) = (pin!(expired), pin!(feed(stdin, fed)));
     let (mut late, mut closed, mut drained, mut status) = (false, false, false, None);
-    let (mut gone, mut ended) = (false, false);
+    let (mut until, mut ended) = (None, false);
     let mut stopped = pin!(stopped);
     loop {
       tokio::select! {
         biased;
         _ = &mut stopped => return,
-        got = &mut shell, if status.is_none() => status = Some(got),
+        got = &mut shell, if status.is_none() => {
+          status = Some(got);
+          until = Some(tokio::time::Instant::now() + DRAIN);
+        }
         () = &mut streams, if !drained => drained = true,
         () = &mut expired, if !late => {
           late = true;
           group.slay();
         }
         () = &mut feeding, if !closed => closed = true,
-        // A process that left the group can hold a stream once no process of the group lives, so the group is
-        // probed while the shell is gone and a stream is open, and a probe that finds it empty gives the streams
-        // one more probe to give what they hold.
-        () = tokio::time::sleep(PROBE), if status.is_some() && !drained => {
-          ended = gone;
-          gone = !group.lives();
+        // A process that the command started can hold a stream for longer than the shell lives, so the streams have
+        // DRAIN after the shell exits to give what they hold, and then the command ends.
+        () = tokio::time::sleep_until(until.unwrap_or_else(tokio::time::Instant::now)), if until.is_some() && !drained && !ended => {
+          ended = true;
         }
       }
       if let Some(got) = status.take_if(|_| drained || ended) {
@@ -375,8 +381,8 @@ async fn ran(
   let code = status.ok().and_then(coded).map(i64::from);
   let exit = Exit {
     code: if late { None } else { code },
-    stdout: Text::new(format!("{about}/stdout"), out),
-    stderr: Text::new(format!("{about}/stderr"), err),
+    stdout: Text::new(format!("{about}/stdout"), out.finish()),
+    stderr: Text::new(format!("{about}/stderr"), err.finish()),
   };
   let _ = says.unbounded_send(Said::Exit { about: about.clone(), exit });
 }
@@ -410,17 +416,95 @@ async fn feed(stdin: Option<ChildStdin>, mut fed: spsc::Receiver<Option<String>>
   }
 }
 
-/// How long the World waits between two probes of the group of a command whose shell exited while a stream is open,
-/// and between two probes of the shell of a command that dropped before its shell was reaped.
+/// How long the World waits between two probes of the shell of a command that dropped before its shell was reaped.
 const PROBE: Duration = Duration::from_millis(100);
 
-/// One stream of a command: each text said as it comes, whole in utf-8, and kept in all until the stream ends.
+/// How long the streams of a command have to give what they hold once its shell exited, before the command ends with a
+/// process of it still holding one.
+const DRAIN: Duration = Duration::from_millis(250);
+
+/// How much of a stream a command keeps: its first `HEAD` bytes, which it says as they come, and its last `TAIL`
+/// bytes, which its exit gives with the first. A command that writes more has the rest of it cut, whatever it writes,
+/// so no command fills the memory of the host or the record.
+pub(crate) const HEAD: usize = 4 << 20;
+pub(crate) const TAIL: usize = 4 << 20;
+
+/// What a stream keeps of its text: the first bytes whole, then the last bytes, and how many bytes lie between.
+struct Kept {
+  head: String,
+  tail: String,
+  full: bool,
+  cut: usize,
+  caps: (usize, usize),
+}
+
+impl Kept {
+  fn new(head: usize, tail: usize) -> Self {
+    Kept { head: String::new(), tail: String::new(), full: false, cut: 0, caps: (head, tail) }
+  }
+
+  /// The text to say now: the part of a new text that the head takes, and, once the head is full, a line that says
+  /// the cut. The rest of a text goes to the tail, which keeps its last bytes.
+  fn push(&mut self, text: &str) -> String {
+    let mut said = String::new();
+    let mut rest = text;
+    if !self.full {
+      let mut at = (self.caps.0 - self.head.len()).min(text.len());
+      while !text.is_char_boundary(at) {
+        at -= 1;
+      }
+      self.head.push_str(&text[..at]);
+      said.push_str(&text[..at]);
+      rest = &text[at..];
+      if rest.is_empty() {
+        return said;
+      }
+      self.full = true;
+      said.push_str(&format!(
+        "\n[output over {} bytes: the exit keeps its first and its last bytes]\n",
+        self.caps.0
+      ));
+    }
+    self.tail.push_str(rest);
+    if self.tail.len() > 2 * self.caps.1 {
+      self.trim();
+    }
+    said
+  }
+
+  /// The tail cut to its cap, at a character.
+  fn trim(&mut self) {
+    let mut at = self.tail.len().saturating_sub(self.caps.1);
+    while !self.tail.is_char_boundary(at) {
+      at += 1;
+    }
+    self.tail.drain(..at);
+    self.cut += at;
+  }
+
+  /// The text of the exit: all of the stream, or its head, a line that counts the bytes cut, and its tail.
+  fn finish(mut self) -> String {
+    if !self.full {
+      return self.head;
+    }
+    if self.tail.len() > self.caps.1 {
+      self.trim();
+    }
+    match self.cut {
+      0 => self.head + &self.tail,
+      cut => format!("{}\n[... {cut} bytes cut ...]\n{}", self.head, self.tail),
+    }
+  }
+}
+
+/// One stream of a command: each text said as it comes, whole in utf-8, as far as its head holds, and kept in `all`
+/// until the stream ends. The stream is read to its end, whatever it holds, so the command never blocks on a full pipe.
 async fn read(
   stream: Option<impl AsyncRead + Unpin>,
   name: &'static str,
   about: &str,
   says: &UnboundedSender<Said>,
-  all: &mut String,
+  all: &mut Kept,
 ) {
   let Some(mut stream) = stream else { return };
   let (mut held, mut chunk) = (Vec::new(), [0u8; 8192]);
@@ -428,13 +512,9 @@ async fn read(
     let n = stream.read(&mut chunk).await.unwrap_or(0);
     held.extend_from_slice(&chunk[..n]);
     let text = whole(&mut held, n == 0);
+    let text = if text.is_empty() { text } else { all.push(&text) };
     if !text.is_empty() {
-      let _ = says.unbounded_send(Said::Out {
-        about: about.to_owned(),
-        text: text.clone(),
-        stream: name,
-      });
-      all.push_str(&text);
+      let _ = says.unbounded_send(Said::Out { about: about.to_owned(), text, stream: name });
     }
     if n == 0 {
       return;
@@ -532,17 +612,6 @@ impl Group {
     }
     #[cfg(windows)]
     self.job.take();
-  }
-
-  /// Whether a process of the group lives. On Windows no job here says it, so the group lives until the command is
-  /// over, and the command waits for its streams.
-  fn lives(&self) -> bool {
-    #[cfg(unix)]
-    let lives =
-      self.leader.is_some_and(|leader| rustix::process::test_kill_process_group(leader).is_ok());
-    #[cfg(windows)]
-    let lives = self.job.is_some();
-    lives
   }
 
   /// The group let go once the command is over, and every process of it that outlives the command left to run.

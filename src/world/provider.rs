@@ -5,7 +5,8 @@
 //! of a local server and of the claude command line, or a function of the host that answers a request with a turn. A
 //! call of a model is a future of the ear, which the life polls, and a call that its reply no longer needs ends. It
 //! streams, and the host is told what the model writes as it writes it; what the reply came to the ear says of its
-//! own accord.
+//! own accord. The ear reads the statements of the word of a reply as the model finishes them, and when one cannot be
+//! python it ends the reply there, with the word as far as that statement, which the gate refuses.
 
 pub mod catalog;
 pub mod claude;
@@ -14,11 +15,12 @@ pub mod images;
 mod local;
 mod pi;
 pub mod search;
+mod watch;
 
 use std::{
   collections::{HashMap, HashSet},
   path::PathBuf,
-  sync::Arc,
+  sync::{Arc, PoisonError, RwLock},
   time::Duration,
 };
 
@@ -35,7 +37,7 @@ use serde_json::{Map, Value, json};
 use tokio::sync::mpsc;
 use unsync::oneshot;
 
-use self::{images::Images, search::Searches};
+use self::{images::Images, search::Searches, watch::Watch};
 use crate::{
   SYSTEM,
   ear::{Co, Ear, Next, hearing, say},
@@ -318,6 +320,9 @@ pub struct Model {
   /// Whether it may wrap its word in a fence or in a tag of markup, as a model of a local server does, so its turn
   /// loses those marks, as [`unfenced`] says.
   fenced: bool,
+  /// Whether a function of the host answers in place of the model, which tells what it likes while it works, so what
+  /// it tells is no part of the word that it gives.
+  hosted: bool,
   /// How it takes the most tokens of thought of one turn, when it takes one.
   thought: Option<Thought>,
   /// Whether it reads its earlier turns with no thought, as a model of a local server, whose own template drops the
@@ -360,6 +365,7 @@ impl Model {
       ends: false,
       tagged: false,
       fenced: false,
+      hosted: false,
       forgets: false,
       thought: None,
       answers,
@@ -405,6 +411,7 @@ impl Model {
 
   /// The same model, whose turns a function of the host answers in place of the model.
   pub fn hosted(mut self, host: Hosted) -> Model {
+    self.hosted = true;
     self.answers = Arc::new(move |asked| {
       let Asked { actor, chain, request, told, .. } = asked;
       let settings = request.additional_params.unwrap_or_else(|| json!({}));
@@ -418,6 +425,13 @@ impl Model {
       Box::pin(async move { got.await.map(Answer::Turn).map_err(CompletionError::ProviderError) })
     });
     self
+  }
+
+  /// Whether what the model streams as text is its word, so the statements of it that are finished can be read: the
+  /// text of a model whose server wraps its word, or writes its thought in it, is cleaned after it ends, and a
+  /// function of the host tells what it likes.
+  fn streams_its_word(&self) -> bool {
+    !(self.hosted || self.tagged || self.fenced)
   }
 
   /// The name an actor names the model by.
@@ -469,14 +483,18 @@ impl Model {
 /// of a model in one turn, the directory of the images that a turn names, and whom it tells what a model writes.
 pub struct Provider {
   directory: String,
-  models: Vec<Model>,
+  models: Arc<RwLock<Vec<Model>>>,
   actor: Option<String>,
   thinking: Thinking,
   images: Option<PathBuf>,
   writes: Option<Writes>,
   backoff: Backoff,
   retries: Option<Retries>,
+  refresh: Option<Refresh>,
 }
+
+type Refresh =
+  Arc<dyn Fn() -> Result<(Vec<Model>, Option<String>, Thinking), String> + Send + Sync>;
 
 impl Provider {
   /// A provider of these models, on a directory, whose model thinks [`THINKING`] tokens at most in one turn.
@@ -484,13 +502,14 @@ impl Provider {
     let directory = directory.into();
     Provider {
       directory,
-      models,
+      models: Arc::new(RwLock::new(models)),
       actor: None,
       thinking: Thinking::default(),
       images: None,
       writes: None,
       backoff: BACKOFF,
       retries: None,
+      refresh: None,
     }
   }
 
@@ -498,6 +517,16 @@ impl Provider {
   pub fn thinking(mut self, thinking: Thinking) -> Provider {
     self.thinking = thinking;
     self
+  }
+
+  pub(crate) fn refreshing(mut self, refresh: Refresh) -> Provider {
+    self.refresh = Some(refresh);
+    self
+  }
+
+  pub(crate) fn into_settings(self) -> (Vec<Model>, Option<String>, Thinking) {
+    let models = self.models.read().unwrap_or_else(PoisonError::into_inner).clone();
+    (models, self.actor, self.thinking)
   }
 
   /// The actor a prompt goes to when it names none, which is the first model at the level of an actor that names
@@ -534,9 +563,11 @@ impl Provider {
   /// The native search of the web of the model that an actor names, or none when its provider has none or no
   /// model of the provider is that actor.
   pub fn search(&self) -> Search {
-    let models = self.models.clone();
+    let models = Arc::clone(&self.models);
     Arc::new(move |actor| {
       models
+        .read()
+        .unwrap_or_else(PoisonError::into_inner)
         .iter()
         .find(|model| model.settings(actor).is_some())
         .and_then(|model| model.search.clone())
@@ -552,9 +583,23 @@ impl Provider {
   /// the turn of the model, or with a refusal, and a second refusal in a row of the same actor on a chain pauses the
   /// chain first. A done of a reply that the ear did not say ends the call of its model.
   pub fn ear(self) -> Box<dyn Ear> {
-    let Provider { directory, models, actor, thinking, images, writes, backoff, retries } = self;
-    let actor = actor.unwrap_or_else(|| {
-      models.first().map_or_else(|| OPERATOR.to_owned(), |model| model.at(None))
+    let Provider {
+      directory,
+      models,
+      actor,
+      mut thinking,
+      images,
+      writes,
+      backoff,
+      retries,
+      refresh,
+    } = self;
+    let mut actor = actor.unwrap_or_else(|| {
+      models
+        .read()
+        .unwrap_or_else(PoisonError::into_inner)
+        .first()
+        .map_or_else(|| OPERATOR.to_owned(), |model| model.at(None))
     });
     let mut images = Images::new(images);
     hearing(&["stand", "reply"], move |mut co: Co<Replied>| async move {
@@ -571,10 +616,38 @@ impl Provider {
             if let (Some(writes), Some(reply)) = (&writes, replies.get(&id)) {
               writes(&reply.rung, &reply.chain, &text, &thinking);
             }
+            let Some(watch) = replies.get_mut(&id).and_then(|reply| reply.watch.as_mut()) else {
+              continue;
+            };
+            let Some(end) = watch.wrote(&text).filter(|_| !text.is_empty()) else { continue };
+            let read = watch.upto(end).to_owned();
+            // The statements before the last line at the left edge, as python: each quote in them bound as a string.
+            let word = if !read.contains(watch::QUOTE) {
+              read
+            } else if watch::open(&read) {
+              continue;
+            } else {
+              let got = co.call("unquoted", vec![Object::string(&read)], vec![]).await;
+              match got.ok().and_then(|one| one.as_ref().as_str().map(str::to_owned)) {
+                Some(word) => word,
+                None => continue,
+              }
+            };
+            let Some(line) = watch::broken(&word) else { continue };
+            // The word as far as the statement that cannot be python is the turn of the reply, so the gate refuses
+            // it and the chain tells why. The model wrote no more of it that counts, and its call ends with the reply.
+            let Ok(turn) = cut(watch.through(line)) else { continue };
+            if let Some(Reply { chain, .. }) = replies.remove(&id) {
+              mute.remove(&chain);
+              say(&mut co, Fact::says("done", &id, [turn]));
+            }
             continue;
           }
           // A retry of the call of the model of a reply that still stands, told to the host under its rung.
           Next::Worked(Replied::Retried { id, retry, limit }) => {
+            if let Some(watch) = replies.get_mut(&id).and_then(|reply| reply.watch.as_mut()) {
+              watch.forget();
+            }
             if let (Some(retries), Some(reply)) = (&retries, replies.get(&id)) {
               retries(&reply.rung, &reply.chain, &retry);
             }
@@ -604,7 +677,25 @@ impl Provider {
         let about = a.about().to_owned();
         match a.kind() {
           "stand" if a.question() => {
-            say(&mut co, Fact::says("done", &about, [standing(&models, &directory, &actor)]));
+            if let Some(refresh) = &refresh {
+              match refresh() {
+                Ok((fresh, default, budget)) => {
+                  if !fresh.iter().any(|model| model.settings(&actor).is_some()) {
+                    actor = default
+                      .or_else(|| fresh.first().map(|model| model.at(None)))
+                      .unwrap_or_else(|| OPERATOR.to_owned());
+                  }
+                  *models.write().unwrap_or_else(PoisonError::into_inner) = fresh;
+                  thinking = budget;
+                }
+                Err(why) => {
+                  say(&mut co, Fact::says("done", &about, [Fault::refused(why).object()]));
+                  continue;
+                }
+              }
+            }
+            let held = models.read().unwrap_or_else(PoisonError::into_inner);
+            say(&mut co, Fact::says("done", &about, [standing(&held, &directory, &actor)]));
           }
           "reply" if a.question() => {
             say(&mut co, Fact::says("started", &about, []));
@@ -612,16 +703,25 @@ impl Provider {
             let actor = a.word(1).and_then(|one| one.as_str()).unwrap_or_default().to_owned();
             let turns = co.call("turns", vec![], vec![("on", Object::string(&chain))]).await?;
             let (tells, told) = mpsc::unbounded_channel();
-            let wrote = written(writes.is_some(), &about, &tells);
+            let wrote = written(&about, &tells);
             let key = format!("{life}/{chain}");
-            let asked =
-              requested(&models, &actor, &chain, turns.as_ref(), &key, &mut images, wrote)
-                .map(|one| thinks(one, thinking));
+            let asked = requested(
+              &models.read().unwrap_or_else(PoisonError::into_inner),
+              &actor,
+              &chain,
+              turns.as_ref(),
+              &key,
+              &mut images,
+              wrote,
+            )
+            .map(|one| thinks(one, thinking));
+            let watch = asked.as_ref().is_ok_and(|(model, _)| model.streams_its_word());
             let again = mute.get(&chain) == Some(&actor);
             let (stop, stopped) = oneshot::channel();
             co.work(answered(about.clone(), asked, backoff, tells, told, stopped));
             let rung = a.by().to_owned();
-            replies.insert(about, Reply { chain, actor, rung, again, _stop: stop });
+            let watch = watch.then(Watch::default);
+            replies.insert(about, Reply { chain, actor, rung, again, watch, _stop: stop });
           }
           "done" => {
             let Some(Reply { chain, actor, .. }) = replies.remove(&about) else { continue };
@@ -648,13 +748,15 @@ impl Provider {
   }
 }
 
-/// A reply the ear took: its chain, its actor, the rung it answers, whether a refusal of it pauses its chain, and the
-/// stop of its work, which ends the call of its model, and what the host is told of it, when the reply goes.
+/// A reply the ear took: its chain, its actor, the rung it answers, whether a refusal of it pauses its chain, the
+/// watch over its word while its model writes it, when the model streams its word, and the stop of its work, which
+/// ends the call of its model, and what the host is told of it, when the reply goes.
 struct Reply {
   chain: String,
   actor: String,
   rung: String,
   again: bool,
+  watch: Option<Watch>,
   _stop: oneshot::Sender<()>,
 }
 
@@ -666,11 +768,8 @@ enum Replied {
   Came { id: String, got: Result<Object, CompletionError> },
 }
 
-/// What a turn tells as it streams, sent to the work of its reply when the host hears what a model writes.
-fn written(heard: bool, id: &str, tells: &mpsc::UnboundedSender<Replied>) -> Told {
-  if !heard {
-    return Arc::new(|_, _| {});
-  }
+/// What a turn tells as it streams, sent to the work of its reply, which tells the host and reads the word.
+fn written(id: &str, tells: &mpsc::UnboundedSender<Replied>) -> Told {
   let (id, tells) = (id.to_owned(), tells.clone());
   Arc::new(move |text, thinking| {
     let (text, thinking) = (text.to_owned(), thinking.to_owned());
@@ -1052,6 +1151,19 @@ fn turn(model: &Model, response: &CompletionResponse) -> Result<Object, Completi
   let usage =
     Object::tuple([count(input), count(output), count(read), count(wrote), Object::float(dollars)]);
   Ok(Object::tuple([Object::string("assistant"), Object::string(text.trim()), usage, blocks]))
+}
+
+/// The turn of a reply that ended at the first statement of its word that cannot be python: the word as far as that
+/// statement, as the turn of a model that wrote nothing more. It counts nothing, since the usage of a stream comes
+/// with its end.
+fn cut(word: &str) -> Result<Object, CompletionError> {
+  let failed = |why: String| CompletionError::ResponseError(why);
+  let blocks =
+    serde_json::to_value([AssistantContent::text(word)]).map_err(|no| failed(no.to_string()))?;
+  let blocks = wire::inward(&blocks).map_err(|fault| failed(fault.message()))?;
+  let zero = || Object::int(0);
+  let usage = Object::tuple([zero(), zero(), zero(), zero(), Object::float(0.0)]);
+  Ok(Object::tuple([Object::string("assistant"), Object::string(word.trim()), usage, blocks]))
 }
 
 /// How many characters of the end of a cut turn its refusal shows.

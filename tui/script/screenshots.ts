@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
+import type { Exit } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { type App, follow } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
@@ -9,7 +10,6 @@ import { demoSession, removeDemoDirectories, seedDemo, seedDemoFiles, tour } fro
 import { isLifeView } from "../src/overview.ts";
 import { loadParsers } from "../src/parsers.ts";
 import { Preferences } from "../src/preferences.ts";
-import type { Exit } from "../src/session.ts";
 import { Session } from "../src/session.ts";
 import { colorless, paletteOf } from "../src/theme.ts";
 import { Workspaces } from "../src/workspaces.ts";
@@ -168,6 +168,10 @@ try {
   app().closeOverlay();
   app().models();
   await capture("06-models");
+  app().closeOverlay();
+  app().providers();
+  await session.host.providers();
+  await capture("91-providers");
   app().closeOverlay();
   app().effortPicker();
   await capture("07-effort");
@@ -761,10 +765,10 @@ try {
   bare.setup = {
     claude: false,
     providers: [
-      { provider: "anthropic", env: ["ANTHROPIC_API_KEY"], offered: 0 },
-      { provider: "openai", env: ["OPENAI_API_KEY"], offered: 0 },
-      { provider: "google", env: ["GOOGLE_API_KEY", "GEMINI_API_KEY"], offered: 0 },
-      { provider: "openrouter", env: ["OPENROUTER_API_KEY"], offered: 0 },
+      { provider: "anthropic", env: ["ANTHROPIC_API_KEY"], offered: 0, enabled: true },
+      { provider: "openai", env: ["OPENAI_API_KEY"], offered: 0, enabled: true },
+      { provider: "google", env: ["GOOGLE_API_KEY", "GEMINI_API_KEY"], offered: 0, enabled: true },
+      { provider: "openrouter", env: ["OPENROUTER_API_KEY"], offered: 0, enabled: true },
     ],
   };
   await show(bare);

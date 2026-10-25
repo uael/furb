@@ -21,6 +21,8 @@
 //!
 //! [`local`]: super::local
 
+mod config;
+
 use std::{
   collections::{HashMap, HashSet},
   env, fs,
@@ -65,7 +67,7 @@ const STALE: Duration = Duration::from_secs(24 * 60 * 60);
 /// One provider of the snapshot: the client of rig that asks it, the names of its credential, those whose credential
 /// goes as a bearer, its address, the names of the environment that a place of an address reads before its own, and
 /// its models.
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 pub(super) struct Listed {
   rig: Client,
   env: Vec<String>,
@@ -76,6 +78,8 @@ pub(super) struct Listed {
   #[serde(default)]
   aliases: HashMap<String, String>,
   models: IndexMap<String, Listing>,
+  #[serde(skip)]
+  key: Option<String>,
 }
 
 /// One provider as the cache holds it, which is the catalog of models.dev whole: its models alone count.
@@ -87,7 +91,7 @@ struct Cached {
 
 /// One model of the catalog, in the words of models.dev: `provider` names the package and the address of a model
 /// that its provider serves apart.
-#[derive(Deserialize, Default)]
+#[derive(Clone, Deserialize, Default)]
 #[serde(default)]
 struct Listing {
   reasoning: bool,
@@ -101,7 +105,7 @@ struct Listing {
 }
 
 /// The package that asks a model apart from its provider, the address it asks, and the shape of its request.
-#[derive(Deserialize, Default)]
+#[derive(Clone, Deserialize, Default)]
 #[serde(default)]
 struct Own {
   npm: String,
@@ -109,14 +113,14 @@ struct Own {
   shape: Option<String>,
 }
 
-#[derive(Deserialize, Default)]
+#[derive(Clone, Deserialize, Default)]
 #[serde(default)]
 struct Reasoning {
   r#type: String,
   values: Vec<String>,
 }
 
-#[derive(Deserialize, Default)]
+#[derive(Clone, Deserialize, Default)]
 #[serde(default)]
 struct Limit {
   context: u64,
@@ -132,7 +136,7 @@ struct Cost {
   cache_write: f64,
 }
 
-#[derive(Deserialize, Default)]
+#[derive(Clone, Deserialize, Default)]
 #[serde(default)]
 struct Modalities {
   input: Vec<String>,
@@ -157,26 +161,28 @@ enum Dialect {
 /// thought of a model in one turn that the environment gives as `MAX_THINKING_TOKENS`.
 pub struct Catalog {
   models: Vec<(Model, bool)>,
-  /// Each provider of the network, with the names of its credential.
-  providers: Vec<(String, Vec<String>)>,
+  /// Each provider, with the names of its credential and whether the settings enable it.
+  providers: Vec<(String, Vec<String>, bool)>,
   local: Option<Arc<Server>>,
   thinking: Option<String>,
 }
 
-/// What this machine holds of each way to a model, as a first run checks it: whether the catalog found the claude
-/// command line, each provider of the network, and the local server that the environment names.
+/// What this machine offers through each way to a model: the claude command line, each configured provider, and
+/// the local server that the environment names.
 pub struct Setup {
   pub claude: bool,
   pub providers: Vec<Ready>,
   pub local: Option<Local>,
 }
 
-/// A provider of the network as a first run checks it: its name, the names of its credential, and how many of its
-/// models the catalog offers, which is none when no credential of it stands in the environment.
+/// A provider as a first run checks it: its name, the names of its credential, whether the settings enable it, and
+/// how many of its models the catalog offers.
 pub struct Ready {
   pub provider: String,
   pub env: Vec<String>,
   pub offered: usize,
+  /// Whether the provider settings enable this provider.
+  pub enabled: bool,
 }
 
 /// The local server that the environment names, as a first run checks it: its address, how many models for chat the
@@ -228,7 +234,7 @@ impl Catalog {
     let mut models: Vec<_> = claude.map(|model| (model, found)).collect();
     let mut providers = Vec::new();
     for (provider, one) in listed {
-      providers.push((provider.clone(), one.env.clone()));
+      providers.push((provider.clone(), one.env.clone(), true));
       let credential = one.credential(&env);
       for (id, listing) in &one.models {
         let Some(client) = listing.client(one.rig).filter(|_| listing.kept()) else { continue };
@@ -251,10 +257,11 @@ impl Catalog {
     Setup {
       claude: offered(claude::CLAUDE) > 0,
       providers: providers
-        .map(|(provider, env)| Ready {
+        .map(|(provider, env, enabled)| Ready {
           provider: provider.clone(),
           env: env.clone(),
           offered: offered(provider),
+          enabled: *enabled,
         })
         .collect(),
       local: self.local.as_ref().map(|server| {
@@ -536,6 +543,9 @@ impl Listed {
   /// credentials of an application where its client finds them, under the application data on Windows and under
   /// the home elsewhere.
   fn credential(&self, env: &impl Fn(&str) -> Option<String>) -> Result<(String, bool), String> {
+    if let Some(key) = &self.key {
+      return Ok((key.clone(), false));
+    }
     let named = self.env.iter().find_map(|name| env(name).map(|key| (name, key)));
     let adc = || {
       let (root, gcloud) =

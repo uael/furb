@@ -10,6 +10,9 @@ export type EngineOptions = Omit<SessionOptions, "answer" | "operator" | "ears">
   demo?: boolean;
   watch?: boolean;
   host?: boolean;
+  /** The address of a host on the network, furb://host:port/key, which the window attaches to in place of a host of
+   * this machine. */
+  attach?: string;
 };
 
 /** The roster of a session of the TUI: the models the operator names, or those of the demo, and the models the

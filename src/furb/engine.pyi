@@ -518,6 +518,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   To await a chain never returns.
   A chain has a globals dict and a working directory of its own.
   A chain with a source holds the acts it inherited from that source, as the filter kept them.
+  A chain with a source holds whole each fact of its origin about a name that no act of the life holds, as a turn that its origin carried from another record.
   The steps that an inherited prompt takes after the point enter the transcript of its owner alone.
   What a chain binds is its own, and a chain with a source is how a chain gets isolation.
   Two chains from one source hold the same values, since both ran the same rungs.
@@ -610,7 +611,7 @@ def bash(
   The World runs the command in a POSIX sh: /bin/sh, and on Windows the sh of Git for Windows, which it finds on PATH, beside the git on PATH, or in the folder of the programs of the machine.
   The World runs each command with TMPDIR set to the scratch directory, and TMP and TEMP too on Windows, which it makes first, so the command finds the files of scratch:// in $TMPDIR, and a program that reads TMPDIR, as tempfile of python does, makes its files there.
   The command runs until it ends, until its timeout, or until a cancel.
-  The command ends once its shell exited and its streams closed, or once its shell exited and no process of its group lives, as when a process that left the group holds a stream, with the code of the shell and what its streams wrote.
+  The command ends once its shell exited and its streams closed, or once its shell exited and a short drain passed with a stream open, as when a process that the command started holds a stream, with the code of the shell and what its streams wrote.
   The World ends the command at its timeout.
   The command completes with its exit code and its streams.
   The exit code of the command is None after a timeout.

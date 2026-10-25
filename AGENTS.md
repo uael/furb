@@ -20,7 +20,8 @@ API of its own:
   that ran on the machine, the store of the record in `store.rs`, as a file of lines or a database
   of SQLite, each a `Store` that the suite in `store.test.rs` holds to its laws, whose ear names in the record the
   engine that made it, the log of a life beside its record
-  in `log.rs`, the reader of a record with no life in `reader.rs`, which opens a record of any engine to read, and the provider of models in `provider.rs`, which asks each model through rig and streams what it writes, and asks it again with a backoff after a failure that passes, as a lost connection, and at the reset of a usage limit of the claude command line, which it tells the chain. Its catalog, `provider/catalog.rs`,
+  in `log.rs`, the reader of a record with no life in `reader.rs`, which opens a record of any engine to read and keeps what it tells
+  in a cache beside the record, `<record>.told`, and the provider of models in `provider.rs`, which asks each model through rig and streams what it writes, and asks it again with a backoff after a failure that passes, as a lost connection, and at the reset of a usage limit of the claude command line, which it tells the chain. It reads the statements of the word that a model streams, as the model finishes them, and ends the reply at the first that cannot be python, with the word as far as that statement, which `provider/watch.rs` holds. Its catalog, `provider/catalog.rs`,
   knows the models of every provider that pi-ai serves and those of the claude command line, and it offers each
   model whose credential stands in the environment, the claude command line when it finds the program, and each
   model for chat that a local server lists when `FURB_LOCAL_URL` names its address, which `provider/local.rs` asks.
@@ -34,7 +35,9 @@ API of its own:
   `extensions`, which enables each by a fact that the record keeps and plays its word as a rung on each chain, and
   `parts`, the part for the TUI of each extension, which `tui/src/parts.ts` loads live.
   `extensions/` holds the official extensions, `memory`, `skills`, `compaction`, `ouroboros` and `web`, each a word, a
-  contract and a suite, and `src/extension/` holds the ear of the World of each that has one. `docs/extensions.md` says how an extension works.
+  contract and a suite, and `src/extension/` holds the ear of the World of each that has one: `compaction.rs` answers a
+  carry with the turns and the open prompts of a chain of another record, which the reader reads. `docs/extensions.md`
+  says how an extension works.
 - `src/life.rs` opens a life as every host opens one: the record, and the ears of the crate after the ears of the
   host, the provider among them, on the default actor and the roster that the host names from the catalog, or every
   model that the catalog offers when the host names no roster, or on a model of its own, and the extensions. A host adds only its own ears, such as the console of its operator.
@@ -88,7 +91,8 @@ The TypeScript side is a bun workspace at the root, with three packages:
   each screen. A life of the TUI runs in the worker of `tui/src/worker.ts`, which `tui/src/host.ts`, the host of the
   life, holds in a process of its own behind a socket that `tui/src/hosting.ts` places, so the life outlives each
   window: `tui/src/bridge.ts` attaches a window to the host, starts it, or takes over a host of another build, and keeps
-  the worker in the window where no socket serves.
+  the worker in the window where no socket serves. The host serves the life over the network too, to a window of
+  another operator that holds the key of a role, to read and write or to read only, which `tui/README.md` says.
 - `gui` is the desktop app, which runs a life in a window as the TUI runs one in a terminal: its core in
   `gui/src-tauri`, a Cargo workspace of its own on Tauri 2, holds the window and starts the host of a life in
   `gui/host`, a program of bun on the `Workspaces` and the `Session` of the TUI, and its UI in `gui/src` reads the
@@ -251,9 +255,10 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
   record.
 - `uv run python script/deepswe.py`: the DeepSWE rig, which `script/AGENTS.md` says how to run.
 - `uv run python script/bench/onelife.py`: the proof of one life. It builds the command line three times, with the
-  engine changed twice in a way that makes the same acts, and runs one record over the three builds on a claude that
-  answers from a script: the record goes on with no drift, reloads an extension and compacts a chain in place, and
-  no chain is lost and no command or turn runs twice. Its docstring says how to run it.
+  engine changed twice in a way that makes the same acts and the last build of the next version, and runs one record
+  over the three builds on a claude that answers from a script: the record goes on with no drift, reloads an extension,
+  compacts a chain in place and crosses the version through a checkpoint, and no chain is lost, no name is taken twice
+  and no command or turn runs twice. Its docstring says how to run it.
 - `uv run python script/bench/replay.py <task> --out <directory>`: the bench of replay. One life of the local model
   works a task of DeepSWE, later lives open on its record, one more opens after a change of the World, and Claude
   Code on the same model works the task as the baseline. Its docstring says how to run it.
@@ -287,7 +292,7 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
   `tui/src/commands.ts`.
 - `bun run bench`: the speed of the TUI on a recorded life at the weight of a real record, about 2.6 KB for each fact:
   one of about 160000 facts and one of a tenth of that. It measures what a new fact costs in each life, a line of a
-  command, a new act and a token of a model, and in the long life the first frame, cold and warm, the frames while the
+  command, a new act, a paragraph told on the root chain and a token of a model, and in the long life the first frame, cold and warm, the frames while the
   feed scrolls and a command streams, and the memory of a process that opened the life. It fails over its budget,
   which the gates hold on Linux. Each budget is set from a measure of the machine with no code of furb, so that it holds
   on a fast runner and on a slow one: the pace, the time that the machine takes to parse the facts of the long life,

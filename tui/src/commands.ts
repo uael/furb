@@ -4,6 +4,13 @@ export const commands = {
   new: ["New session", "", "Start a fresh life"],
   watch: ["Watch a life", "", "Play a short life that asks no model and costs nothing"],
   model: ["Choose model", "[model]", "Choose the model that answers on this chain"],
+  providers: ["Providers", "", "Add or remove a provider for this project"],
+  provider: [
+    "Change provider",
+    "<add|remove> <name> [URL model window key_env protocol]",
+    "Save a provider in the project settings and use it now",
+  ],
+  reload: ["Reload settings", "", "Read provider settings again and update the standing of this life"],
   effort: ["Choose effort", "[level]", "Set the reasoning effort of the selected model"],
   shape: ["Response shape", "[type]", "Choose the result type of the next prompt"],
   theme: ["Color theme", "[name]", "Change the palette of every surface, or follow the terminal"],
@@ -25,6 +32,16 @@ export const commands = {
     "Review changes",
     "[turn|chain|life|branch]",
     "Show the files that this turn, this chain, the life or the branch against main changed",
+  ],
+  repair: [
+    "Repair the journal",
+    "",
+    "Keep each change that the journal of file changes can read, and remove the lines that it cannot",
+  ],
+  renew: [
+    "Start a new journal",
+    "",
+    "Start a new journal of file changes, and keep the damaged one beside it",
   ],
   cd: ["Change directory", "<path>", "Change this chain's working directory"],
   edit: ["Edit program", "[prompt id]", "Change a prompt's program and replay it"],
@@ -50,6 +67,11 @@ export const commands = {
   delete: ["Delete session", "", "Archive a session, or move it and its files to the workspace trash"],
   autocollapse: ["Automatic rung collapse", "", "Toggle collapse of completed rungs"],
   extensions: ["Extensions", "", "List the extensions that this life runs"],
+  serve: [
+    "Serve to operators",
+    "[address]",
+    "Give the addresses at which other operators read this life, or read and drive it, over the network",
+  ],
   end: ["End the lives", "", "End each open life, its commands and its models, then quit"],
   exit: ["Exit", "", "Save every session and quit, while a life in a host of its own goes on"],
 } as const;

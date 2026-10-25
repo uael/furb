@@ -18,7 +18,7 @@ use std::{
 use crate::{
   Ear, Engine, Fault, Object, checkpoint,
   ear::{hear, hearing},
-  extension::{self, Places, memory::memory, skills::skills, web::web},
+  extension::{self, Places, compaction::compaction, memory::memory, skills::skills, web::web},
   snapshot::{self, Keeper},
   world::{self, Catalog, Retries, Scratch, Writes},
 };
@@ -137,8 +137,7 @@ impl Opening {
 
   /// The record the life opens on, and the ears of the crate, in the order of boot: the provider, the extensions,
   /// each official extension, the files, the commands and time, and the store and the log of the life when the life
-  /// keeps. The ear of the
-  /// web does work, so a life that inspects hears it silent.
+  /// keeps. The ears of the web and of the compaction do work, so a life that inspects hears them silent.
   ///
   /// The files and the commands share the scratch directory of the life: the one of its record when it keeps the
   /// record, and else one of its own, which goes with the life. A new record starts with an empty scratch directory,
@@ -154,8 +153,17 @@ impl Opening {
 
   /// The names of the ears of the crate, in the order of boot.
   fn names(&self) -> Vec<String> {
-    let mut names =
-      vec!["provider", "extensions", "memory", "skills", "web", "files", "bash", "time"];
+    let mut names = vec![
+      "provider",
+      "extensions",
+      "memory",
+      "skills",
+      "web",
+      "compaction",
+      "files",
+      "bash",
+      "time",
+    ];
     if self.keeps() {
       names.extend(["store", "log"]);
     }
@@ -170,46 +178,19 @@ impl Opening {
     if let Some(path) = self.record.as_deref().filter(|_| keeps) {
       upgraded(Path::new(path), &self.directory, world::stored)?;
     }
+    // A record that another build made is refused from the entries that name its build, read from the head of each
+    // line, before the life reads the record whole or takes its lease.
+    if let Some(path) = &self.record {
+      drifts(path, &world::heads(path, &[world::MADE, checkpoint::CHECKPOINT])?)?;
+    }
     let (record, store) = match (&self.record, keeps) {
       (Some(path), true) => world::store(path).map(|(held, store)| (held, Some(store)))?,
       (Some(path), false) => (world::kept(path)?, None),
       (None, _) => (Vec::new(), None),
     };
     let path = self.record.as_deref().unwrap_or_default();
-    let refused = |why: String, then: String| {
-      Err(Fault::new(
-        "Drift",
-        vec![Object::string(format!("{why}, so a replay would drift. {then}"))],
-      ))
-    };
-    // A record with a checkpoint goes on from it on any build, so only the build of its last segment counts.
-    let (segment, cut) = (checkpoint::segment(&record), checkpoint::last(&record).is_some());
-    match (world::version(segment), world::made(segment)) {
-      (Some(theirs), _) if theirs != world::VERSION => {
-        let at = world::build(theirs)
-          .map_or_else(|| "the store of builds".to_owned(), |at| at.display().to_string());
-        return refused(
-          format!(
-            "the record {path} was made by a build of version {theirs}, and this build is of version {}",
-            world::VERSION
-          ),
-          format!(
-            "Open the record with the build of version {theirs}, which stands at {at} once a build of that version ran \
-             on this machine, and which script/builds.sh {theirs} makes there. Or start a new life."
-          ),
-        );
-      }
-      (None, Some(theirs)) if theirs != world::engine() && !cut => {
-        return refused(
-          format!(
-            "the record {path} was made by the engine {theirs:.12}, and this build runs the engine {:.12}",
-            world::engine()
-          ),
-          "Open the record with the build that made it, or start a new life.".to_owned(),
-        );
-      }
-      _ => {}
-    }
+    drifts(path, &record)?;
+    let cut = checkpoint::last(&record).is_some();
     let record = checkpoint::booted(record);
     let log = self.log.as_ref().map(|log| log.0.clone());
     let told = |line: &str| match &log {
@@ -242,6 +223,7 @@ impl Opening {
       ("memory", memory(config.clone())),
       ("skills", skills(config)),
       ("web", working(works.then(|| web(search)))),
+      ("compaction", working(works.then(compaction))),
       ("files", working(scratch.clone().map(world::files))),
       ("bash", working(scratch.map(|scratch| world::bash(scratch, &record)))),
       ("time", working(works.then(world::time))),
@@ -257,13 +239,33 @@ impl Opening {
   fn provider(self) -> Result<(Box<dyn Ear>, world::Search), Fault> {
     let works = self.works();
     let stall = self.stall.and_then(|seconds| Duration::try_from_secs_f64(seconds).ok());
-    let catalog = Catalog::load().claude(self.claude.map(PathBuf::from), stall);
+    let claude = self.claude.map(PathBuf::from);
+    let config = self.config.map(PathBuf::from);
+    let directory = self.directory;
+    let catalog = Catalog::load()
+      .claude(claude.clone(), stall)
+      .configured(Path::new(&directory), config.as_deref())
+      .map_err(Fault::refused)?;
     let asks: world::Hosted =
       Arc::new(|_, _| Box::pin(async { Err("a life that inspects asks no model".to_owned()) }));
     let answer = if works { self.answer.map(|one| one.0) } else { Some(asks) };
     let (roster, actor) = (self.roster.as_deref(), self.actor.as_deref());
     let mut provider =
-      catalog.provider(self.directory, roster, actor, answer).map_err(Fault::refused)?;
+      catalog.provider(directory.clone(), roster, actor, answer.clone()).map_err(Fault::refused)?;
+    let names = self.roster;
+    let preferred = self.actor;
+    provider = provider.refreshing(Arc::new(move || {
+      let fresh = Catalog::load()
+        .claude(claude.clone(), stall)
+        .configured(Path::new(&directory), config.as_deref())?;
+      let offered = names.as_ref().map(|names| {
+        names.iter().filter(|name| fresh.find(name).is_some()).cloned().collect::<Vec<_>>()
+      });
+      let actor = preferred.as_deref().filter(|name| fresh.roster(Some(&[]), Some(name)).is_ok());
+      let candidate =
+        fresh.provider(directory.clone(), offered.as_deref(), actor, answer.clone())?;
+      Ok(candidate.into_settings())
+    }));
     if let Some(images) = self.images {
       provider = provider.images(images);
     }
@@ -341,7 +343,8 @@ fn upgraded(
   if !path.exists() {
     return Ok(());
   }
-  let record = world::kept(path)?;
+  // The entries that name the build and the checkpoints alone tell the version of the last segment.
+  let record = world::heads(path, &[world::MADE, checkpoint::CHECKPOINT])?;
   let older = world::version(checkpoint::segment(&record)).filter(|one| *one < world::VERSION);
   let Some((theirs, program)) = older.and_then(|one| Some((one, stored(one)?))) else {
     return Ok(());
@@ -379,6 +382,46 @@ fn silent() -> Box<dyn Ear> {
 
 mod host;
 pub use host::{Chain, Life, LifeAct, Open, Question, Shape, Thread};
+
+/// The refusal of a life on the record at a path, from its entries that name the build that made them and its
+/// checkpoints, when a build of another version or another engine made its last segment, so a replay would drift.
+fn drifts(path: &str, record: &[Object]) -> Result<(), Fault> {
+  let refused = |why: String, then: String| {
+    Err(Fault::new(
+      "Drift",
+      vec![Object::string(format!("{why}, so a replay would drift. {then}"))],
+    ))
+  };
+  // A record with a checkpoint goes on from it on any build, so only the build of its last segment counts.
+  let (segment, cut) = (checkpoint::segment(record), checkpoint::last(record).is_some());
+  match (world::version(segment), world::made(segment)) {
+    (Some(theirs), _) if theirs != world::VERSION => {
+      let at = world::build(theirs)
+        .map_or_else(|| "the store of builds".to_owned(), |at| at.display().to_string());
+      return refused(
+        format!(
+          "the record {path} was made by a build of version {theirs}, and this build is of version {}",
+          world::VERSION
+        ),
+        format!(
+          "Open the record with the build of version {theirs}, which stands at {at} once a build of that version ran \
+           on this machine, and which script/builds.sh {theirs} makes there. Or start a new life."
+        ),
+      );
+    }
+    (None, Some(theirs)) if theirs != world::engine() && !cut => {
+      return refused(
+        format!(
+          "the record {path} was made by the engine {theirs:.12}, and this build runs the engine {:.12}",
+          world::engine()
+        ),
+        "Open the record with the build that made it, or start a new life.".to_owned(),
+      );
+    }
+    _ => {}
+  }
+  Ok(())
+}
 
 #[cfg(test)]
 #[path = "life.test.rs"]

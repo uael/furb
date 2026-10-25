@@ -13,7 +13,7 @@ use sha2::{Digest, Sha256};
 
 use super::{
   cache,
-  files::{ended, failed, text},
+  files::{ended, failed, stored, text},
   resolved,
 };
 use crate::{
@@ -117,7 +117,7 @@ impl Scratch {
       if let Some(parent) = at.parent() {
         fs::create_dir_all(parent).map_err(|no| failed(&no, &name))?;
       }
-      fs::write(&at, ended(&at, content)).map_err(|no| failed(&no, &name))?;
+      stored(&at, ended(&at, content).as_bytes()).map_err(|no| failed(&no, &name))?;
     }
     if under.as_os_str().is_empty() || fs::symlink_metadata(&at).is_ok_and(|one| one.is_dir()) {
       return Ok(Text::new(name, entries(&at).join("\n")));

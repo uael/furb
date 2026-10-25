@@ -15,6 +15,7 @@ from furb.engine import (
   cwd,
   gate,
   get,
+  module,
   over,
   paused,
   peek,
@@ -30,13 +31,16 @@ from furb.engine import (
 
 CONDUCTING = """Conduct the work in one loop, and plan no further than the next step.
 Put each item in queue as (key, brief, thread), or in backlog to wait behind queue, then await conduct(). Each round tends the workers and the open PRs, hires a worker for each item, CAP at once, and waits every seconds or until a worker ends. It hires only when no open PR of the round needs a worker that it has not got: a failed check, a conflict or an open box, on a PR with no label paused or hold. So the fixers take the free slots first, and the round merges before it starts new work. It moves the first item of backlog to queue while queue and working hold fewer than CAP items.
+The owner rules, on 10-23: "this kind of item should be done by sonnet, not opus. You need to use Sonnet more, when it make sense. And opus/medium should be your default, not opus/high. opus/high is kinda the max, xhigh for the coordination and my rulings only. most of the time sonnet/{medium,high} and opus/high are perfect." So the default of a worker, a fixer and a debrief, which asks the model of its worker, is ACTOR, opus/medium. A worker runs only a model of MODELS: sonnet/medium, sonnet/high, opus/medium or opus/high. hire() refuses xhigh and max, and the round starts no item that asks for one and tells you. You choose sonnet for an item where it makes sense, as efforts[key] = "claude-cli:sonnet/medium" before you queue it.
+The owner rules again, on 10-23: "From now on: 2 opus workers, 3 sonnet ones. max." So ROOM gives the room of each family of model: the round runs at most 2 workers on opus and 3 on sonnet at once, and counts only the workers whose prompt is not over. An item whose model has no room keeps its place in queue while the next item whose model has room starts. A fixer goes before a new item. A worker that ended and whose PR needs a worker goes on in its own chain on HANDOVER, sonnet, with a new prompt there, when sonnet has room; else a fixer starts on opus when it has room.
+The round runs on one chain, lead["home"]. After a compaction of your chain, await conduct() in the new chain: it names that chain, the round of the old chain ends at its next wake, and the state that the round reads is the state of the new chain, which you change there.
 hire(key, brief, thread) starts a worker from the base chain of its actor in bases, at its actor in efforts or ACTOR, on a chain labeled thread/key, with the brief in custom or WORKER, and its PR carries the labels w:key and thread:thread.
 A worker does one item in a worktree of its own, runs only the tests that its change touches, opens its PR, and closes with its URL.
 The round tells you a worker that ends with no PR, with its answer, or that says nothing for 45 minutes, relays to you each question that a worker puts to the operator, and wakes a worker that paused. results keeps the answer of each worker under its prompt.
 When a worker ends, the round asks it debrief() once, and adds each friction that it gives to TOOLING, the ledger of the defects of the tooling, as flaw(what) adds a defect that you find or patch live. An entry counts each time that it comes again.
 A check counts by its newest run. A failed check heals with no worker first, once for each head sha: the round updates the branch of a PR on main that is behind main while main is green, else it reruns the failed jobs of the run whose failure is the one failed check of the PR. It reruns once, for each head sha, a run that was cancelled at the head of a PR, and a check cancelled again at that sha counts as failed.
 Then the round sends a conflict or a failed check at a new head to the worker that owns the PR, again after 30 minutes, and to a fixer after an hour, or at once when no worker owns it.
-The round merges each green PR into main from the lowest number when no file that it changes changed on main since its branch forked, after it moves the PRs that stack on it onto main; else it updates the branch, and only when main is green.
+The round merges each green PR into main from the lowest number when no file that it changes changed on main since its branch forked, after it moves the PRs that stack on it onto main and rebases each there with git rebase --onto from the head that it held of the PR that merged, in a scratch worktree, and pushes it with --force-with-lease (a rebase that conflicts is left to the fixer); else it updates the branch, and only when main is green.
 The label paused takes a PR out of the round. A draft, the label hold, a review that waits for its fix, and the label owner-merge, until the owner takes it off as his approval, keep a PR from a merge.
 A notice wakes you only for a decision, with the context that it needs: each event that needs none, as a worker that ends with a PR, a heal, a merge or a PR made outside the round, is one line in the next notice. The round tells you when main is red, with the lines that failed, when a PR fails to merge, with what gh said, or when a PR on main with no draft, no hold, no worker and no check that runs has no change for 45 minutes, with its checks, and each comment or issue of the owner in the private repository of the decisions, which PRIVATE names beside this word and git does not hold. await decide(title, text) opens a decision there as an issue, and news(line) adds a line at the top of its digest issue.
 Each round queues each open issue that the owner opened, or that he assigned to himself, as an item issueN, once, and its PR closes it.
@@ -50,8 +54,11 @@ debrief(name) asks the chain of a worker that ended for the frictions that it me
 Each act of the round is made through quietly(verb, ...), so its end wakes nobody: you hear only a notice, and each merge rides on the next one. Make each act that you do not await the same way.
 A review blocks only on a defect that a command reproduces, or on a false sentence of a contract."""
 
-CAP = 4
+ROOM = {"opus": 2, "sonnet": 3}
+CAP = ROOM["opus"] + ROOM["sonnet"]
 ACTOR = "claude-cli:opus/medium"
+HANDOVER = "claude-cli:sonnet/medium"
+MODELS = (HANDOVER, "claude-cli:sonnet/high", ACTOR, "claude-cli:opus/high")
 DECISIONS = "DECISIONS.md"
 NEWS = "No answer needed here. The newest line first.\n"
 GATE = "the hooks"
@@ -69,6 +76,9 @@ results: dict[str, object] = {}
 relays: dict[str, str] = {}
 bases: dict[str, str] = {}
 efforts: dict[str, str] = {}
+homes: dict[str, str] = {}
+models: dict[str, str] = {}
+lead: dict[str, str] = {}
 custom: dict[str, str] = {}
 prs: dict[int, dict] = {}
 merged: set[int] = set()
@@ -356,8 +366,73 @@ async def patch(title: str, why: str, ask: str) -> tuple[str, str, str]:
     quietly(bash, f"git worktree remove --force {tree}; git branch -D w/{key}", show=HIDDEN)
 
 
+def model_of(key: str) -> str:
+  return efforts.get(key, ACTOR)
+
+
+def family(model: str) -> str:
+  return model.split(":")[-1].split("/")[0]
+
+
+def room(model: str) -> bool:
+  if model not in MODELS:
+    return False
+  mine = family(model)
+  live = [n for n in working if not over(n) and family(models.get(n, ACTOR)) == mine]
+  return len(live) < ROOM[mine]
+
+
+def can(key: str) -> bool:
+  model = model_of(key)
+  if model not in MODELS:
+    notice(
+      f"effort {key} {model}",
+      f"The item {key} asks for {model}, and a worker runs only {', '.join(MODELS)}: xhigh and max stay for you and the rulings of the owner. Set efforts[{key!r}] to one of them.",
+    )
+    return False
+  return room(model)
+
+
+def handover(key: str, text: str) -> str:
+  where = homes[key]
+  quietly(rung, f"actor = {HANDOVER!r}", on=where)
+  name = str(quietly(prompt, tuple[int, str], text, to=HANDOVER, on=where))
+  working[name] = key
+  models[name] = HANDOVER
+  return name
+
+
+def assist(pr: dict, key: str, order: str, fixer: str, thread: str, brief: str) -> None:
+  maker = next((m[2:] for m in pr["labels"] if m.startswith("w:")), "")
+  if homes.get(maker) and maker not in working.values():
+    if room(HANDOVER):
+      noticed.update({key, key + " again", key + " fixer"})
+      handover(
+        maker,
+        f"Your work on this chain goes on, now on {HANDOVER}. {order} Close with a tuple: the number of the PR, and your report in 200 words at most.",
+      )
+  elif can(fixer):
+    noticed.update({key, key + " again", key + " fixer"})
+    hire(fixer, "", thread, brief)
+
+
+def follow() -> str:
+  here = scope(acting())
+  old = lead.get("home", "")
+  lead["home"] = here
+  if old and old != here:
+    held = module(old).get("lead")
+    if isinstance(held, dict):
+      held["home"] = here
+  return here
+
+
 def hire(key: str, what: str, thread: str = "", brief: str = "") -> str:
-  model = efforts.get(key, ACTOR)
+  model = model_of(key)
+  if model not in MODELS:
+    raise Refused(
+      f"{key} asks {model}, and a worker runs only {', '.join(MODELS)}: xhigh and max stay for the coordination and the rulings of the owner"
+    )
   marks = [f"w:{key}", *([f"thread:{thread}"] if thread else [])]
   if not brief:
     quietly(bash, "; ".join(f"gh label create {m} --force >/dev/null 2>&1" for m in marks), show=HIDDEN)
@@ -367,6 +442,8 @@ def hire(key: str, what: str, thread: str = "", brief: str = "") -> str:
   quietly(rung, f"actor = {model!r}", on=where)
   name = str(quietly(prompt, tuple[int, str], text, to=model, on=where))
   working[name] = key
+  models[name] = model
+  homes[key] = where
   return name
 
 
@@ -473,8 +550,7 @@ def boxes(pr: dict, now: float) -> str:
     if key not in noticed:
       noticed.add(key)
       quietly(prompt, None, order, on=working_at(own))
-  elif key + " fixer" not in noticed and len(working) < CAP:
-    noticed.update({key, key + " fixer"})
+  elif key + " fixer" not in noticed:
     thread = next((m[7:] for m in pr["labels"] if m.startswith("thread:")), "")
     brief = (
       f"You close the open boxes of the checklist of the open PR #{n} of the repository "
@@ -482,7 +558,7 @@ def boxes(pr: dict, now: float) -> str:
       + order.replace("Your open PR", "The PR")
       + " Read it with gh pr view, work in a worktree of its branch, push with --force-with-lease, remove the worktree, and close with a tuple: the number of the PR, and your report in 200 words at most. " + RULES
     )
-    hire(f"box{n}", "", thread, brief)
+    assist(pr, key, order, f"box{n}", thread, brief)
   return key
 
 
@@ -512,11 +588,49 @@ async def mend(pr: dict, now: float, red: bool) -> str:
     elif now - since >= 1800 and key + " again" not in noticed:
       noticed.add(key + " again")
       quietly(prompt, None, "Second notice, 30 minutes later: " + order, on=working_at(own))
-  elif key + " fixer" not in noticed and len(working) < CAP:
-    noticed.update({key, key + " again", key + " fixer"})
+  elif key + " fixer" not in noticed:
     thread = next((m[7:] for m in pr["labels"] if m.startswith("thread:")), "")
-    hire(f"fix{n}", "", thread, FIX.replace("{n}", str(n)).replace("{problem}", problem).replace("{sha}", sha))
+    assist(pr, key, order, f"fix{n}", thread, FIX.replace("{n}", str(n)).replace("{problem}", problem).replace("{sha}", sha))
   return key
+
+
+RESTACK = """pull() { git fetch -q origin "+refs/heads/$onto:refs/remotes/origin/$onto" "+refs/heads/$head:refs/remotes/origin/$head"; }
+tries=0
+while :; do
+  pull || exit 1
+  [ "$parent" = 0 ] && break
+  want=$(gh pr view "$parent" --json mergeCommit --jq .mergeCommit.oid 2>/dev/null)
+  [ -n "$want" ] && git merge-base --is-ancestor "$want" "origin/$onto" 2>/dev/null && break
+  tries=$((tries + 1))
+  [ "$tries" -ge 10 ] && { echo "$onto holds no merge of #$parent"; exit 1; }
+  sleep 3
+done
+[ "$(git rev-parse "origin/$head")" = "$sha" ] || { echo "$head moved since the sweep"; exit 4; }
+git merge-base --is-ancestor "$old" "origin/$head" || { echo "$head holds no $old"; exit 3; }
+root=$PWD
+dir=$(mktemp -d) || exit 1
+trap 'cd "$root"; git worktree remove --force "$dir" >/dev/null 2>&1; rm -rf "$dir"' EXIT
+git -c core.hooksPath=/dev/null worktree add -q --detach "$dir" "origin/$head" || exit 1
+cd "$dir" || exit 1
+git -c core.hooksPath=/dev/null rebase -q --onto "origin/$onto" "$old" >/dev/null 2>&1 || { git rebase --abort >/dev/null 2>&1; echo "$head conflicts with $onto"; exit 2; }
+git push -q --no-verify --force-with-lease="refs/heads/$head:$sha" origin "HEAD:refs/heads/$head" || exit 5
+"""
+
+
+def spec(head: str) -> str:
+  return shq(f"+refs/heads/{head}:refs/remotes/origin/{head}")
+
+
+async def restack(old: str, onto: str, kid: dict, parent: int = 0) -> None:
+  head = kid["head"]
+  setup = f"onto={shq(onto)} head={shq(head)} old={shq(old)} sha={shq(kid['sha'])} parent={parent}\n"
+  got = await bash(setup + RESTACK, show=HIDDEN, timeout=300)
+  if got.code != 0:
+    why = " ".join((got.stdout.content + got.stderr.content).split())[-300:]
+    heard.append(f"#{kid['n']} was not rebased onto {onto}, exit {got.code}: {why}")
+    return
+  for deeper in [up for up in prs.values() if up["base"] == head]:
+    await restack(kid["sha"], head, deeper)
 
 
 async def land(pr: dict, red: bool) -> None:
@@ -545,7 +659,16 @@ async def land(pr: dict, red: bool) -> None:
         noticed.add(f"update {sha}")
         await bash(f"gh pr update-branch {n}", show=HIDDEN, timeout=120)
       return
-  moves = "".join(f"gh pr edit {d} --base main >/dev/null 2>&1; " for d, up in prs.items() if up["base"] == pr["head"])
+  kids = [up for up in prs.values() if up["base"] == pr["head"]]
+  cuts = {}
+  for up in kids:
+    found = await bash(
+      f"git fetch -q origin {spec(pr['head'])} {spec(up['head'])} && git merge-base {shq('origin/' + pr['head'])} {shq('origin/' + up['head'])}",
+      show=HIDDEN,
+      timeout=120,
+    )
+    cuts[up["n"]] = found.stdout.content.strip() if found.code == 0 and found.stdout.content.strip() else pr["sha"]
+  moves = "".join(f"gh pr edit {up['n']} --base main >/dev/null 2>&1; " for up in kids)
   got = await bash(
     f"{moves}out=$(gh pr merge {n} --squash --delete-branch 2>&1) || out=\"$out $(gh stack merge {n} --yes --squash 2>&1)\";"
     f" sleep 5; echo \"$out\" | tail -4; gh pr view {n} --json state --jq .state",
@@ -555,9 +678,8 @@ async def land(pr: dict, red: bool) -> None:
   if got.stdout.lines[-1:] == ["MERGED"]:
     merged.add(n)
     landed.append(n)
-    kids = [d for d, up in prs.items() if up["base"] == pr["head"]]
-    if kids:
-      await bash("sleep 10; " + "; ".join(f"gh pr edit {d} --base main >/dev/null 2>&1; gh pr update-branch {d} >/dev/null 2>&1" for d in kids), show=HIDDEN, timeout=300)
+    for up in kids:
+      await restack(cuts[up["n"]], "main", up, n)
   else:
     said = "\n".join(got.stdout.lines[:-1])[-800:] or "nothing"
     notice(f"unmerged {sha}", f"#{n} did not merge at {sha[:7]}, and gh said:\n{said}")
@@ -871,8 +993,10 @@ def staff() -> None:
     return
   while backlog and len(working) + len(queue) < CAP:
     queue.append(backlog.pop(0))
-  while queue and len(working) < CAP:
-    hire(*queue.pop(0))
+  for item in list(queue):
+    if can(item[0]):
+      queue.remove(item)
+      hire(*item)
 
 
 async def upstream_watch() -> None:
@@ -1284,9 +1408,10 @@ async def sweep(every: float) -> None:
 
 
 async def conduct(every: float = 300) -> dict[str, object]:
+  here = follow()
   made = "".join(f"gh label create {s} --force -c {c} -d {shq(d)} >/dev/null 2>&1; " for s, (c, d) in STATUS.items())
   await bash(made + LABELS, show=HIDDEN)
-  while True:
+  while lead.get("home") == here:
     tend()
     await sweep(every)
     staff()
@@ -1298,6 +1423,7 @@ async def conduct(every: float = 300) -> dict[str, object]:
     ):
       return results
     await wait(every, *working, *[x for x in relays.values() if x])
+  return results
 
 
 def threads() -> str:

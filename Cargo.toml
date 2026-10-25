@@ -85,6 +85,7 @@ num-bigint = "0.4"
 # is JSON too, read into the shapes it holds.
 serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
 serde = { version = "1", features = ["derive"] }
+url = "2"
 indexmap = { version = "2", features = ["serde"] }
 # The search for a byte, which finds the end of each line of the record many bytes at a time, even in a build that
 # does not optimize the crate.

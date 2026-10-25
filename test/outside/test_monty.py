@@ -360,11 +360,12 @@ async def test_the_ear_of_the_log_writes_the_log_of_a_life_on_the_engine_of_this
   assert ["rung", "rung1"] in heads and ["run", "run1"] in heads
   assert ["run", "run1"] not in [fact[:2] for (fact,) in _monty.kept(path)]
   retold = _monty.retold(path)
-  assert retold["logged"] and retold["facts"] == logged
+  assert retold["logged"] and retold["file"] == f"{path}.log"
   Path(f"{path}.log").unlink()
   retold = _monty.retold(path)
-  assert not retold["logged"]
-  assert ["rung", "rung1"] in [fact[:2] for fact in retold["facts"]]
+  assert not retold["logged"] and retold["file"] == f"{path}.told"
+  told = [json.loads(line) for line in Path(retold["file"]).read_text().splitlines() if line.startswith("[")]
+  assert ["rung", "rung1"] in [fact[:2] for fact in told]
 
 
 async def test_an_engine_and_an_ear_that_the_collector_of_cycles_drops_on_another_thread_go_with_no_error() -> None:
@@ -397,7 +398,7 @@ async def test_the_door_opens_a_life_as_every_host_opens_one(tmp_path: Path) -> 
   record, ears = _monty.opened(directory=str(tmp_path), record=path, config=config)
   assert (record, [name for name, _ in ears]) == (
     [],
-    ["provider", "extensions", "memory", "skills", "web", "files", "bash", "time", "store", "log"],
+    ["provider", "extensions", "memory", "skills", "web", "compaction", "files", "bash", "time", "store", "log"],
   )
   root = furb_monty.engine.boot(record, **dict(ears), world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears())
   await settle()
@@ -415,7 +416,7 @@ async def test_the_door_opens_a_life_as_every_host_opens_one(tmp_path: Path) -> 
   record, ears = _monty.opened(directory=str(tmp_path), record=fresh, config=config, keeps=False, extensions=False)
   assert (record, [name for name, _ in ears]) == (
     [],
-    ["provider", "extensions", "memory", "skills", "web", "files", "bash", "time"],
+    ["provider", "extensions", "memory", "skills", "web", "compaction", "files", "bash", "time"],
   )
   root = furb_monty.engine.boot(record, **dict(ears), world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears())
   await settle()

@@ -9,10 +9,11 @@ import {
   standingOf,
   type Turn,
 } from "furb";
+import type { Exit } from "furb/life";
 import type { Roster, Snapshot, Usage } from "./bridge.ts";
 import { lineCounts } from "./format.ts";
 import { queueDispatches } from "./queue.ts";
-import type { ActRow, Exit } from "./session.ts";
+import type { ActRow } from "./session.ts";
 
 /** What a snapshot knows of one chain. A value it must read again is undefined. */
 interface ChainView {
@@ -42,6 +43,11 @@ function firstChange(held: readonly Turn[], turns: readonly Turn[]): number {
     one === other || JSON.stringify(one) === JSON.stringify(other);
   let at = 0;
   while (at < held.length && at < turns.length) {
+    // A view that keeps the turns that did not change gives them again as they were.
+    if (held[at] === turns[at]) {
+      at++;
+      continue;
+    }
     const [one, other] = [held[at] as Turn, turns[at] as Turn];
     if (one.length !== other.length || !one.every((part, place) => same(part, other[place]))) break;
     at++;
@@ -54,7 +60,7 @@ const TAIL = 2000;
 
 /** An act as a row of a snapshot: a write carries the lines that its change added and removed, and a command that
  * printed more than a tail carries the tail of each stream. An act carries its time when this life ran it. */
-function row(act: LiveAct, lines?: ActRow["lines"], took?: number): ActRow {
+export function row(act: LiveAct, lines?: ActRow["lines"], took?: number): ActRow {
   if (took !== undefined) return row({ ...act, took } as ActRow, lines);
   // A read and a write carry the count of the lines of their text, and leave the text out, which the view reads whole
   // when it shows it.
@@ -67,9 +73,10 @@ function row(act: LiveAct, lines?: ActRow["lines"], took?: number): ActRow {
       ...act,
       words: act.words.map(bare),
       value: bare(act.value),
+      // A row that a reader made already carries the count of the text that it left out.
       ...(content === undefined
         ? {}
-        : { count: content ? content.replace(/\n$/, "").split("\n").length : 0 }),
+        : { count: content ? content.replace(/\n$/, "").split("\n").length : ((act as ActRow).count ?? 0) }),
       ...(lines ? { lines } : {}),
     };
   }
@@ -92,7 +99,7 @@ export type Views = Pick<Engine, "root" | "standing" | "program" | "turns" | "cw
 /** What a snapshot reads of a session: the facts, the activity and the entries of its life, and, of a life that runs,
  * the changes of its files and the facts that it says as it says them. */
 export type Lived = Pick<Session, "facts" | "activity" | "entries" | "isPaused" | "pending"> &
-  Partial<Pick<Session, "on">> & { changes?: Pick<Session["changes"], "length" | "read"> };
+  Partial<Pick<Session, "on">> & { changes?: Pick<Session["changes"], "length" | "readable"> };
 
 /** Views belong to changes of the life, not to frames or refresh requests. */
 export class Snapshots {
@@ -224,19 +231,15 @@ export class Snapshots {
     const files = this.session.changes;
     // A journal that a repair or a new journal made shorter is read again from its start.
     if ((files?.length ?? 0) < this.changes) this.changes = 0;
-    try {
-      for (const change of files?.read(this.changes, files.length - this.changes) ?? [])
-        if (change.act)
-          this.lines.set(
-            change.act,
-            lineCounts(createTwoFilesPatch(change.path, change.path, change.before, change.after)),
-          );
-      this.changes = files?.length ?? 0;
-    } catch (error) {
-      // A damaged journal is the failure of the view of changes alone, which offers to repair it: the rows keep the
-      // counts that they hold, and the journal is read again once it reads.
-      if ((error as { name?: unknown } | undefined)?.name !== "DamagedJournal") throw error;
-    }
+    // A damaged journal is the failure of the view of changes alone, which offers to repair it: the counts of the rows
+    // come from each line that is a change.
+    for (const change of files?.readable(this.changes, files.length - this.changes) ?? [])
+      if (change.act)
+        this.lines.set(
+          change.act,
+          lineCounts(createTwoFilesPatch(change.path, change.path, change.before, change.after)),
+        );
+    this.changes = files?.length ?? 0;
     const { acts, count } = this.session.activity.since(since);
     // The share of the window has one home, filled of the engine, which the advance binds too.
     const reply = this.replies.get(selected);
