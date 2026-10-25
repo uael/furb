@@ -327,7 +327,7 @@ export class Reader {
     let name = "earlier";
     while (body.includes(`</s:${name}>`)) name += "_";
     const word = [
-      `# The earlier work of the record ${basename(this.record)}, which this life carries.`,
+      `# The earlier work of the record ${JSON.stringify(basename(this.record))}, which this life carries.`,
       `<s:${name}>\n${body}\n</s:${name}>`,
       `earlier_files = ${JSON.stringify(files.slice(0, 200))}`,
     ].join("\n");

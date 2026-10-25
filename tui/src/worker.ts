@@ -263,10 +263,7 @@ async function answer(data: { target: string; method: string; args: unknown[] })
       : new Session({ ...options, roster: roster(options) });
     // A life that opens on a record writes beside it before a replay drifts, so the guard gives back what it changed
     // when the record opens to read.
-    let held: ReturnType<typeof guard> | undefined;
-    try {
-      held = opened.record && existsSync(opened.record) ? guard(opened.record) : undefined;
-    } catch {}
+    const held = opened.record && existsSync(opened.record) ? guard(opened.record) : undefined;
     try {
       engine = opened.open();
       held?.keep();

@@ -358,3 +358,46 @@ test("the guard gives back a record that a life wrote beside before its replay d
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("a record whose preservation guard cannot be made refuses before replay", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-record-guard-failed-"));
+  try {
+    const record = await lived(directory, "drifts");
+    await drifting(record);
+    await writeFile(`${record}.log.held`, "This file belongs to another operation.\n");
+    const before = await folder(record);
+    let opened: Awaited<ReturnType<typeof openEngine>> | undefined;
+    let failure: unknown;
+    try {
+      opened = await openEngine({ cwd: directory, record, demo: true });
+    } catch (error) {
+      failure = error;
+    } finally {
+      await opened?.host.dispose();
+    }
+    expect(String(failure)).toMatch(/EEXIST|already exists/i);
+    expectKept(await folder(record), before);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a record name cannot add Python statements to the word that carries its work", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-carry-name-"));
+  try {
+    const file = join(directory, "facts.jsonl");
+    await writeFile(file, `${JSON.stringify(["chain", "chain1", "operator", "", "root", ""])}\n`);
+    const name = 'earlier\nraise RuntimeError("name is data")';
+    const reader = new Reader(
+      directory,
+      join(directory, name),
+      { made: null, engine: "old", version: null, current: 1, why: "drift", logged: false },
+      file,
+    );
+    const carried = reader.carry().word.split("\n");
+    expect(carried[0]).toContain("\\nraise RuntimeError");
+    expect(carried[1]).toBe("<s:earlier>");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

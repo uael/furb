@@ -3829,10 +3829,14 @@ export class App {
   private renderPick(ask: Ask | undefined): void {
     if (this.pickBox.visible !== Boolean(ask)) this.pickBox.visible = Boolean(ask);
     const typing = !ask || this.choice.other;
-    if (this.composer.visible !== typing) this.composer.visible = typing;
-    // A record open to read has no input, including when a control last focused it.
-    if (this.session.host.reading || !typing || this.overlay) this.composer.blur();
-    else if (!this.composer.focused) this.composer.focus();
+    const changed = this.composer.visible !== typing;
+    if (changed) this.composer.visible = typing;
+    // A record open to read has no input. Other inputs, such as a row being renamed, keep their focus.
+    if (this.session.host.reading) this.composer.blur();
+    else if (changed) {
+      if (typing && !this.overlay) this.composer.focus();
+      else this.composer.blur();
+    }
     if (!ask) {
       this.pickKey = "";
       return;

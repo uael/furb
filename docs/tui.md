@@ -356,7 +356,7 @@ A session that opens with unfinished work stays paused until you resume it.
 
 A record whose replay drifts, as a record that a build of another version made, opens to read. The TUI shows what the record
 kept: each chain, each rung with its word, and each act. No word runs again, no model is asked, and a command that
-would change the life is refused. A read changes no file: the record and the files beside it stay as they were.
+would change the life is refused. A read leaves the record and its log as they were. It can refresh the derived cache, `<record>.told`.
 
 A dialog gives the build that made the record and this build, each on a line of its own. A record of an earlier engine
 that names no engine says "an earlier engine, not named". The dialog says what a new life from the record carries, and
