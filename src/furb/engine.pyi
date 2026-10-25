@@ -611,7 +611,7 @@ def bash(
   The World runs the command in a POSIX sh: /bin/sh, and on Windows the sh of Git for Windows, which it finds on PATH, beside the git on PATH, or in the folder of the programs of the machine.
   The World runs each command with TMPDIR set to the scratch directory, and TMP and TEMP too on Windows, which it makes first, so the command finds the files of scratch:// in $TMPDIR, and a program that reads TMPDIR, as tempfile of python does, makes its files there.
   The command runs until it ends, until its timeout, or until a cancel.
-  The command ends once its shell exited and its streams closed, or once its shell exited and no process of its group lives, as when a process that left the group holds a stream, with the code of the shell and what its streams wrote.
+  The command ends once its shell exited and its streams closed, or once its shell exited and a short drain passed with a stream open, as when a process that the command started holds a stream, with the code of the shell and what its streams wrote.
   The World ends the command at its timeout.
   The command completes with its exit code and its streams.
   The exit code of the command is None after a timeout.

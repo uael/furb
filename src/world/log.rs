@@ -24,15 +24,18 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use serde_json::{Value, value::RawValue};
+use serde_json::Value;
 
 use crate::{
   ear::{Co, Ear, ear, hear},
   fact::{Fact, named},
   value::{Fault, Object},
   wire::{outward, parsed},
-  world::store::each,
+  world::kept,
 };
+
+/// The start of the line that says the record kept an entry, as the ear writes it.
+const KEEP: &str = r#"["keep","","#;
 
 /// The ear of the log of the record at a path, which held a number of entries when the life opened: it hears every
 /// fact, and writes the log again from its first line.
@@ -194,105 +197,88 @@ impl Log {
 /// left short of an act that the record holds. A last line that a crash tore is left out.
 pub fn logged(path: impl AsRef<Path>) -> Result<Option<Vec<Object>>, Fault> {
   let path = path.as_ref();
-  let (entries, asked) = asked(path)?;
-  let mut facts = Vec::new();
-  Ok(walked(path, entries, asked, Some(&mut |one| facts.push(one)))?.then_some(facts))
-}
-
-/// How many entries the record at a path holds, and the name of each question among them, which a log that agrees
-/// with the record shows each as a question.
-pub(crate) fn asked(path: &Path) -> Result<(usize, HashSet<String>), Fault> {
-  let (mut entries, mut asked) = (0, HashSet::new());
-  each(path, &mut |entry| {
-    entries += 1;
-    let fact = entry.as_ref().items().and_then(|held| Fact::of(*held.first()?));
-    if let Some(one) = fact.filter(Fact::question) {
-      asked.insert(one.about().to_owned());
-    }
-  })?;
-  Ok((entries, asked))
-}
-
-/// Each fact of the log of the record at a path, in order, as [`logged`] gives them, when the log agrees with a record
-/// of that many entries and of those questions, which [`asked`] gives. It reads the log once to check it, then once
-/// more for the facts, one line at a time, so a reader holds no more of a large log than it keeps of each fact, and
-/// it gives no fact of a log that does not agree.
-pub(crate) fn each_logged(
-  path: &Path,
-  entries: usize,
-  asked: &HashSet<String>,
-  take: &mut dyn FnMut(Object),
-) -> Result<bool, Fault> {
-  if !walked(path, entries, asked.clone(), None)? {
-    return Ok(false);
+  let record = kept(path)?;
+  let asked: HashSet<String> = record
+    .iter()
+    .filter_map(|entry| Fact::of(*entry.as_ref().items()?.first()?))
+    .filter(Fact::question)
+    .map(|one| one.about().to_owned())
+    .collect();
+  if !agrees(path, record.len(), &asked) {
+    return Ok(None);
   }
-  match walked(path, entries, asked.clone(), Some(take))? {
-    true => Ok(true),
-    false => Err(Fault::refused(format!("The log of {} changed as it was read.", path.display()))),
-  }
-}
-
-/// Whether the log of the record at a path agrees with a record of that many entries and of those questions, read one
-/// line at a time, and each of its facts in order, to take when it is given one.
-fn walked(
-  path: &Path,
-  record: usize,
-  mut asked: HashSet<String>,
-  mut take: Option<&mut dyn FnMut(Object)>,
-) -> Result<bool, Fault> {
-  let Ok(file) = File::open(format!("{}.log", path.display())) else {
-    return Ok(false);
+  let Ok(text) = std::fs::read_to_string(format!("{}.log", path.display())) else {
+    return Ok(None);
   };
-  let mut lines = BufReader::with_capacity(1 << 20, file);
+  let facts = text
+    .lines()
+    .skip(1)
+    .filter(|line| !line.starts_with(KEEP))
+    .map_while(|line| parsed(line).ok())
+    .collect();
+  Ok(Some(facts))
+}
+
+/// Whether the log of the record at a path agrees with a record of that many entries and of those questions, as
+/// [`logged`] reads it, which the caller read once.
+pub(crate) fn agrees(path: &Path, entries: usize, asked: &HashSet<String>) -> bool {
+  File::open(format!("{}.log", path.display()))
+    .is_ok_and(|file| agreed(BufReader::with_capacity(1 << 20, file), entries, asked.clone()))
+}
+
+/// Whether a log agrees with a record of that many entries and of those questions: its head counts the entries that
+/// the record held, its lines of keep count the others in order, each line is JSON but a last one that a crash tore,
+/// and it shows each question of the record. Each line is read from its head alone, one at a time, and no fact is
+/// made.
+fn agreed(mut lines: impl BufRead, record: usize, mut asked: HashSet<String>) -> bool {
   let mut line = String::new();
   let head = match lines.read_line(&mut line) {
     Ok(_) => serde_json::from_str::<Value>(line.trim_end_matches('\n')).ok(),
-    Err(_) => return Ok(false),
+    Err(_) => return false,
   };
   let Some(mut entries) = head.and_then(|one| one.get("entries")?.as_u64()) else {
-    return Ok(false);
+    return false;
   };
   loop {
     line.clear();
     match lines.read_line(&mut line) {
       Ok(0) => break,
       Ok(_) => {}
-      Err(_) => return Ok(false),
+      Err(_) => return false,
     }
-    let (ended, text) = (line.ends_with('\n'), line.trim_end_matches('\n'));
-    let fact = match take {
-      Some(_) => parsed(text).ok(),
-      None => None,
-    };
-    let Ok(held) = serde_json::from_str::<Vec<&RawValue>>(text) else {
+    let ended = line.ends_with('\n');
+    let text =
+      line.strip_suffix('\n').map(|one| one.strip_suffix('\r').unwrap_or(one)).unwrap_or(&line);
+    if serde_json::from_str::<serde::de::IgnoredAny>(text).is_err() {
       if !ended {
         break;
       }
-      return Ok(false);
-    };
-    let word = |at: usize| {
-      held
-        .get(at)
-        .and_then(|one| serde_json::from_str::<String>(one.get()).ok())
-        .unwrap_or_default()
-    };
-    let (kind, about) = (word(0), word(1));
-    if held.len() == 3 && kind == "keep" && about.is_empty() {
-      if serde_json::from_str::<u64>(held[2].get()).ok() != Some(entries + 1) {
-        return Ok(false);
+      return false;
+    }
+    if let Some(at) = text.strip_prefix(KEEP).and_then(|one| one.strip_suffix(']')) {
+      if at.parse::<u64>().ok() != entries.checked_add(1) {
+        return false;
       }
       entries += 1;
-      continue;
-    }
-    if named(&about, &kind) {
-      asked.remove(&about);
-    }
-    if let Some(take) = take.as_mut() {
-      let Some(fact) = fact else { return Ok(false) };
-      take(fact);
+    } else if let Some(name) = question(text) {
+      asked.remove(&name);
     }
   }
-  Ok(asked.is_empty() && usize::try_from(entries).ok() == Some(record))
+  asked.is_empty() && usize::try_from(entries).ok() == Some(record)
+}
+
+/// The name of the question that a line of a log shows, read from its first two words, as `["bash","bash3",`. A
+/// line whose head holds an escape is parsed whole.
+fn question(line: &str) -> Option<String> {
+  let rest = line.strip_prefix("[\"")?;
+  let (kind, rest) = rest.split_once('"')?;
+  let about = rest.strip_prefix(",\"").and_then(|one| one.split_once('"')).map(|one| one.0);
+  if kind.contains('\\') || about.is_some_and(|one| one.contains('\\')) {
+    let fact = parsed(line).ok()?;
+    let fact = Fact::of(fact.as_ref())?;
+    return fact.question().then(|| fact.about().to_owned());
+  }
+  about.filter(|one| named(one, kind)).map(str::to_owned)
 }
 
 #[cfg(test)]

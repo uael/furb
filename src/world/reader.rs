@@ -19,16 +19,18 @@
 //! by [`READER`].
 
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::io::{BufRead, Write};
+use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 
 use crate::{
   fact::{Fact, named},
   value::{Fault, IS, Object, ObjectRef, entry, field},
+  wire::{outward, parsed},
 };
 
-use super::{log::each_logged, made, store::each, version};
+use super::{log::agrees, made, store::each, version};
 
 /// Who says each fact that the reader adds to the facts that a record kept, but a question.
 pub const READER: &str = "reader";
@@ -42,6 +44,11 @@ pub struct Retold {
   pub version: Option<i64>,
   /// Whether the facts are those of the log, which holds every fact that the life said.
   pub logged: bool,
+  /// The file that holds the facts, in the order that the life said them, each on a line of its own as JSON reads a
+  /// value of the sandbox: the log beside the record while it agrees with the record, and else the file of what the
+  /// record tells, `<record>.told`, beside it. A line that does not start with `[`, and a line `["keep", "", n]` of
+  /// the log, holds no fact.
+  pub file: PathBuf,
   /// The count of the entries of the record.
   pub entries: usize,
   /// The sha256 of the last entry of the record, in the plain form that the record keeps, and nothing for a record
@@ -49,19 +56,48 @@ pub struct Retold {
   pub last: Option<String>,
 }
 
-/// What the record at a path tells, read with no lease and changed in nothing, and its facts, in the order that the
-/// life said them.
-pub fn retold(path: impl AsRef<Path>) -> Result<(Retold, Vec<Object>), Fault> {
-  let mut facts = Vec::new();
-  let told = retell(path, &mut |one| facts.push(one))?;
-  Ok((told, facts))
+impl Retold {
+  /// Each fact of the file, in the order that the life said them, read one line at a time, so a reader holds no more
+  /// of a large record than it keeps of each fact.
+  pub fn each(&self, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
+    let failed =
+      |no: std::io::Error| Fault::refused(format!("{} cannot be read: {no}", self.file.display()));
+    let file = std::fs::File::open(&self.file).map_err(failed)?;
+    let mut lines = std::io::BufReader::with_capacity(1 << 20, file);
+    let mut line = String::new();
+    loop {
+      line.clear();
+      if lines.read_line(&mut line).map_err(failed)? == 0 {
+        return Ok(());
+      }
+      let text = line.trim_end_matches('\n');
+      if text.starts_with('[') && !text.starts_with(r#"["keep","","#) {
+        take(parsed(text)?);
+      }
+    }
+  }
+
+  /// The facts of the file, in the order that the life said them.
+  pub fn facts(&self) -> Result<Vec<Object>, Fault> {
+    let mut facts = Vec::new();
+    self.each(&mut |one| facts.push(one))?;
+    Ok(facts)
+  }
 }
 
-/// What the record at a path tells, read with no lease and changed in nothing, which hands each of its facts to take
-/// in the order that the life said them. It reads the record and its log one entry and one line at a time, so it holds
-/// no more of them than take keeps.
-pub fn retell(path: impl AsRef<Path>, take: &mut dyn FnMut(Object)) -> Result<Retold, Fault> {
+/// What the record at a path tells, read with no lease and changed in nothing.
+///
+/// The file of what the record tells is a cache: its first line names the size and the time of change of the record
+/// and of its log, and the build that wrote it. While all agree, a later read takes it as it stands and reads no
+/// record. Else the reader writes it again from the record.
+pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
   let path = path.as_ref();
+  let log = PathBuf::from(format!("{}.log", path.display()));
+  let cache = PathBuf::from(format!("{}.told", path.display()));
+  let stamp = serde_json::json!([stamped(path), stamped(&log), BUILD]);
+  if let Some(found) = cached(&cache, &stamp, &log) {
+    return Ok(found);
+  }
   let (mut maker, mut built, mut entries, mut last) = (None, None, 0, None);
   let (mut asked, mut makers) = (HashSet::new(), Makers::default());
   each(path, &mut |entry| {
@@ -79,17 +115,81 @@ pub fn retell(path: impl AsRef<Path>, take: &mut dyn FnMut(Object)) -> Result<Re
     entries += 1;
     last = Some(entry);
   })?;
-  let logged = each_logged(path, entries, &asked, take)?;
+  let logged = agrees(path, entries, &asked);
+  let last = last.as_ref().map(digest);
+  let head = serde_json::json!({ "stamp": stamp, "made": maker, "version": built, "logged": logged, "entries": entries, "last": last });
+  let fresh = PathBuf::from(format!("{}.told.new", path.display()));
+  let failed =
+    |no: std::io::Error| Fault::refused(format!("{} cannot be written: {no}", fresh.display()));
+  let mut file = std::io::BufWriter::new(std::fs::File::create(&fresh).map_err(failed)?);
+  writeln!(file, "{head}").map_err(failed)?;
   if !logged {
-    let mut life = Reader::new(makers.ended(), take);
-    each(path, &mut |entry| kept(&entry).into_iter().for_each(|one| life.hear(&one)))?;
+    let mut broken = None;
+    {
+      let mut out = |fact: Object| {
+        if broken.is_none()
+          && let Err(no) = writeln!(file, "{}", outward(fact.as_ref()))
+        {
+          broken = Some(no);
+        }
+      };
+      let mut life = Reader::new(makers.ended(), &mut out);
+      each(path, &mut |entry| {
+        if let Some(fact) = kept(&entry) {
+          life.hear(fact);
+        }
+      })?;
+    }
+    if let Some(no) = broken {
+      return Err(failed(no));
+    }
   }
-  Ok(Retold { made: maker, version: built, logged, entries, last: last.as_ref().map(digest) })
+  file.into_inner().map_err(|no| failed(no.into_error()))?.sync_data().map_err(failed)?;
+  std::fs::rename(&fresh, &cache).map_err(failed)?;
+  Ok(Retold {
+    made: maker,
+    version: built,
+    logged,
+    file: if logged { log } else { cache },
+    entries,
+    last,
+  })
+}
+
+/// What the build that writes a file of what a record tells names in it: a reader of another build writes it again.
+const BUILD: &str = concat!(env!("CARGO_PKG_VERSION"), "/", env!("CARGO_PKG_NAME"), "/1");
+
+/// The size and the time of change of a file, in nanoseconds, or nothing when no file stands there.
+fn stamped(path: &Path) -> Option<(u64, u128)> {
+  let meta = std::fs::metadata(path).ok()?;
+  let at = meta.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_nanos();
+  Some((meta.len(), at))
+}
+
+/// What the file of what a record tells holds, while its first line names the stamp that the record, its log and the
+/// build give now.
+fn cached(told: &Path, stamp: &serde_json::Value, log: &Path) -> Option<Retold> {
+  let file = std::fs::File::open(told).ok()?;
+  let mut head = String::new();
+  std::io::BufRead::read_line(&mut std::io::BufReader::new(file), &mut head).ok()?;
+  let head: serde_json::Value = serde_json::from_str(&head).ok()?;
+  if head.get("stamp")? != stamp {
+    return None;
+  }
+  let logged = head.get("logged")?.as_bool()?;
+  Some(Retold {
+    made: head.get("made")?.as_str().map(str::to_owned),
+    version: head.get("version")?.as_i64(),
+    logged,
+    file: if logged { log.to_path_buf() } else { told.to_path_buf() },
+    entries: usize::try_from(head.get("entries")?.as_u64()?).ok()?,
+    last: head.get("last")?.as_str().map(str::to_owned),
+  })
 }
 
 /// The fact of an entry of a record.
 fn kept(entry: &Object) -> Option<Fact> {
-  Fact::of(*entry.as_ref().items()?.first()?)
+  Fact::owned(entry.as_ref().items()?.first()?.to_owned())
 }
 
 /// The sha256 of an entry of a record, in the plain form that the record keeps.
@@ -132,14 +232,16 @@ fn text(fact: &Fact, at: usize) -> String {
 
 /// The facts that a record kept, with the facts that the engine said and the record does not keep.
 #[cfg(test)]
-fn told(kept: &[Object]) -> Vec<Object> {
-  let facts: Vec<Fact> = kept.iter().filter_map(|one| Fact::of(one.as_ref())).collect();
+fn told(kept: Vec<Object>) -> Vec<Object> {
+  let facts: Vec<Fact> = kept.into_iter().filter_map(Fact::owned).collect();
   let mut makers = Makers::default();
   facts.iter().for_each(|one| makers.hear(one));
   let mut out = Vec::new();
   let mut take = |one| out.push(one);
   let mut life = Reader::new(makers.ended(), &mut take);
-  facts.iter().for_each(|one| life.hear(one));
+  for fact in facts {
+    life.hear(fact);
+  }
   out
 }
 
@@ -176,6 +278,7 @@ impl<'a> Reader<'a> {
   fn new(makers: HashMap<String, String>, out: &'a mut dyn FnMut(Object)) -> Reader<'a> {
     Reader {
       out,
+      stage: Vec::new(),
       makers,
       scopes: HashMap::new(),
       done: HashSet::new(),
@@ -193,6 +296,8 @@ impl<'a> Reader<'a> {
 /// What the reader knows of the facts that it heard, and where it says the facts that it tells.
 struct Reader<'a> {
   out: &'a mut dyn FnMut(Object),
+  /// The facts that the reader said and did not tell yet.
+  stage: Vec<Object>,
   /// The maker of each chain that the record does not hold, when a rung makes the first prompt on it.
   makers: HashMap<String, String>,
   /// Each act that a fact names, and the chain of each.
@@ -213,12 +318,14 @@ struct Reader<'a> {
 }
 
 impl Reader<'_> {
-  fn hear(&mut self, fact: &Fact) {
+  fn hear(&mut self, owned: Fact) {
+    let fact = &owned;
     let (kind, about, by) = (fact.kind(), fact.about(), fact.by());
     if fact.question() {
       self.asked(fact);
     }
-    (self.out)(fact.0.clone());
+    // The fact stands after the facts that name it, and before those that it makes the reader say.
+    self.flush();
     match kind {
       "rung" if fact.question() && !text(fact, 1).is_empty() => {
         self.words.insert(about.to_owned(), text(fact, 1));
@@ -249,6 +356,15 @@ impl Reader<'_> {
       }
       _ => {}
     }
+    (self.out)(owned.0);
+    self.flush();
+  }
+
+  /// Tell the facts that the reader said, in order.
+  fn flush(&mut self) {
+    for one in self.stage.drain(..) {
+      (self.out)(one);
+    }
   }
 
   /// A question: the chain and the rung that it names when the reader holds neither, then its own place.
@@ -257,7 +373,7 @@ impl Reader<'_> {
     if kind != "chain" && named(on, "chain") && !self.scopes.contains_key(on) {
       let maker = self.makers.get(on).cloned().unwrap_or_else(|| "operator".to_owned());
       let under = self.scopes.get(&maker).cloned().unwrap_or_default();
-      (self.out)(question("chain", on, &maker, [under.as_str(), "", ""]));
+      self.stage.push(question("chain", on, &maker, [under.as_str(), "", ""]));
       self.scopes.insert(on.to_owned(), on.to_owned());
     }
     let chain = self.scope(on);
@@ -292,7 +408,7 @@ impl Reader<'_> {
     if let Some(last) = self.rungs.remove(&maker) {
       self.end(&last, Object::none());
     }
-    (self.out)(question("rung", id, &maker, [chain, "", "", ""]));
+    self.stage.push(question("rung", id, &maker, [chain, "", "", ""]));
     self.scopes.insert(id.to_owned(), chain.to_owned());
     self.rungs.insert(maker, id.to_owned());
   }
@@ -304,7 +420,7 @@ impl Reader<'_> {
     }
     let (Some(word), Some(chain)) = (self.words.get(rung), self.scopes.get(rung)) else { return };
     let id = format!("run{}", self.runs.len() + 1);
-    (self.out)(question("run", &id, chain, [chain.as_str(), rung, word.as_str(), ""]));
+    self.stage.push(question("run", &id, chain, [chain.as_str(), rung, word.as_str(), ""]));
     self.runs.insert(rung.to_owned(), id);
   }
 
@@ -343,7 +459,7 @@ impl Reader<'_> {
     } else {
       format!("{name} = {}", Object::string(findings).py_repr())
     };
-    (self.out)(said(
+    self.stage.push(said(
       "tell",
       &rung,
       [Object::list([Object::string(format!("#{rung} refused\n{bound}"))])],
@@ -358,9 +474,9 @@ impl Reader<'_> {
     }
     if let Some(run) = self.runs.get(id).cloned() {
       self.done.insert(run.clone());
-      (self.out)(said("done", &run, [Object::none()]));
+      self.stage.push(said("done", &run, [Object::none()]));
     }
-    (self.out)(said("done", id, [value]));
+    self.stage.push(said("done", id, [value]));
     self.prompts.retain(|(prompt, ..)| prompt != id);
     if let Some(rung) = self.rungs.remove(id) {
       self.end(&rung, Object::none());

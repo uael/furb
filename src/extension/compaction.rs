@@ -10,7 +10,7 @@ use crate::{
   ear::{Ear, hear, hearing, say},
   fact::Fact,
   value::{Fault, Object},
-  world::{Retold, here, resolved, retell},
+  world::{Retold, here, resolved, retold},
 };
 
 /// The name that each fact that a carry gives is about: a reply and a number, as the turns of a chain read a reply,
@@ -47,9 +47,10 @@ pub(crate) fn carry(path: &Path, chain: &str, about: &str, on: &str) -> Result<O
   if !path.is_file() {
     return Err(Fault::refused(format!("No record at {}.", path.display())));
   }
+  let failed = |no: Fault| Fault::refused(format!("{}: {}", path.display(), no.message()));
+  let told = retold(path).map_err(failed)?;
   let mut fold = Held::new(chain);
-  let told = retell(path, &mut |one| fold.hear(one))
-    .map_err(|no| Fault::refused(format!("{}: {}", path.display(), no.message())))?;
+  told.each(&mut |one| fold.hear(one)).map_err(failed)?;
   carried(&told, fold, path, chain, about, on)
 }
 

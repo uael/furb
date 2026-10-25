@@ -79,7 +79,19 @@ const READS: Record<string, readonly string[]> = {
     "pending",
     "parked",
   ],
-  library: ["snapshot", "source", "made", "catalog", "sees", "model", "changes", "net", "branch", "act"],
+  library: [
+    "snapshot",
+    "source",
+    "made",
+    "catalog",
+    "providers",
+    "sees",
+    "model",
+    "changes",
+    "net",
+    "branch",
+    "act",
+  ],
 };
 
 /** Whether a window that reads may make a request. */

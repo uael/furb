@@ -42,10 +42,12 @@ pub use provider::{
   claude, images,
   search::Searches,
 };
-pub use reader::{READER, Retold, retell, retold};
+pub use reader::{READER, Retold, retold};
 pub use scratch::{SCRATCH, Scratch};
 pub(crate) use store::database;
-pub use store::{Lines, MADE, Sqlite, Store, VERSION, engine, keeping, kept, made, store, version};
+pub use store::{
+  Lines, MADE, Sqlite, Store, VERSION, engine, heads, keeping, kept, made, store, version,
+};
 pub use time::time;
 
 use crate::{
