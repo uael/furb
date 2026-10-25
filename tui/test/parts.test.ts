@@ -129,7 +129,8 @@ test("the part of compaction, which the crate carries, marks each compaction in 
     async ({ app, frame }) => {
       await session.command(`/run ${COMPACTION}`);
       await session.command(`/run chain("aside")\nbefore = "the first step"`);
-      await session.command('/run compact(summary="It read the plan.\\nThe tests wait.")');
+      // The word shows in the feed too, so its summary is split in pieces: the whole text stands only in the mark.
+      await session.command('/run compact(summary="It read " + "the plan.\\nThe tests " + "wait.")');
       let shown = await shows(frame, "The tests wait.");
       expect(shown).toContain("Compaction: the model reads on from here");
       expect(app.parts.loaded.find((one) => one.name === "compaction")?.error).toBeUndefined();
@@ -137,7 +138,7 @@ test("the part of compaction, which the crate carries, marks each compaction in 
       expect(shown).toContain("The tests wait.");
       expect(shown.indexOf("the first step")).toBeLessThan(shown.indexOf("Compaction:"));
       await session.command('/run after = "the next step"');
-      await session.command('/run compact(summary="It ran the tests.")');
+      await session.command('/run compact(summary="It ran " + "the tests.")');
       shown = await shows(frame, "It ran the tests.");
       expect(shown).toContain("Compaction 2 of 2");
       expect(shown).toContain("Compaction 1 of 2");
