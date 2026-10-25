@@ -448,7 +448,44 @@ try {
       research.status === "paused",
   );
   await capture("28-workspace-tree");
+
+  // A generated workspace gallery overflows the navigator with real sessions and archived history.
+  let showcase: typeof main | undefined;
+  for (let workspaceIndex = 1; workspaceIndex <= 4; workspaceIndex++) {
+    const directory = await project(`fieldwork-${workspaceIndex}`);
+    const group = await library.add(directory);
+    for (let sessionIndex = 1; sessionIndex <= 8; sessionIndex++) {
+      const entry = await library.create(group, `Fieldwork ${workspaceIndex}.${sessionIndex}`);
+      if (!entry.session) throw new Error(`Fieldwork ${workspaceIndex}.${sessionIndex} did not open.`);
+      if (workspaceIndex === 1 && sessionIndex === 1) showcase = entry;
+      if (sessionIndex === 1)
+        await entry.session.engine.result(
+          await entry.session.engine.rung({
+            word: `def inspect_batch(items):\n    results = []\n    for item in items:\n        if item:\n            results.append(item)\n    return results\n\nreport = inspect_batch(["notes", "archive", ""])`,
+            on: entry.session.engine.root,
+          }),
+        );
+      if (sessionIndex === 2)
+        await entry.session.engine.prompt("str", {
+          message: "Which field note should be checked next?",
+          to: "operator",
+          on: entry.session.engine.root,
+        });
+      if (sessionIndex === 8) await library.archive(entry);
+    }
+  }
+  await library.refresh();
+  if (!showcase?.session) throw new Error("The rich showcase session did not open.");
+  await library.select(showcase);
+  session = showcase.session;
+  await capture("84-rich-workspaces");
+  test.resize(80, 24);
+  await capture("85-rich-workspaces-80x24");
+  test.resize(160, 48);
+  await capture("86-rich-workspaces-160x48");
+  test.resize(152, 46);
   app().render();
+  await test.flush();
   await test.flush();
   // A click on a line of a program that made an act opens it in place, with what the act gave.
   const rows = test.captureCharFrame().split("\n");
@@ -555,24 +592,28 @@ try {
   await session.submit("Give me an answer in a fence.");
   await settle();
   await capture("47-retried-word");
-  // An archived session folds under Archived, and the pointer on a session row shows its remove button.
-  const stale = library.groups[1]?.sessions.find((entry) => entry.name === "Archive");
-  if (!stale) throw new Error("The gallery has no Archive session.");
-  await library.archive(stale);
-  app().render();
-  await test.flush();
-  const [, changelogRow] = find(test, "Changelog");
-  const removeAt = (test.captureCharFrame().split("\n")[changelogRow] ?? "").lastIndexOf("×");
-  await test.mockMouse.moveTo(removeAt, changelogRow);
+  // The workspace picker filters sessions; Right opens the selected session's actions.
+  if (!changelog.session || !research.session) throw new Error("The workspace sessions did not open.");
+  await app().workspacePicker();
+  await test.mockInput.typeText("Changelog");
   await capture("48-archive-session");
-  // A right click on a session row opens its menu at the pointer, and Rename takes the new name in the row.
-  const [researchAt, researchRow] = find(test, "Research");
-  await test.mockMouse.click(researchAt + 2, researchRow, 2);
+  test.mockInput.pressArrow("right");
+  await capture("48-archive-session");
+  await click(test, "Archive");
+  await until(library, () => changelog.archived);
+  await app().workspacePicker();
+  await test.mockInput.typeText("Research");
   await capture("49-session-menu");
-  await click(test, "Rename", researchAt);
+  test.mockInput.pressArrow("right");
+  await capture("49-session-menu");
+  await click(test, "Rename");
   await test.flush();
-  await test.mockInput.typeText(" notes");
-  await rest();
+  test.mockInput.pressKey("a", { ctrl: true });
+  await test.mockInput.typeText("Research notes");
+  test.mockInput.pressEnter();
+  await until(library, () => research.name === "Research notes");
+  await library.select(research);
+  session = research.session;
   await capture("50-rename-session");
   // A life at the scale of a real one: many chains, and questions to the owner open on three of them at once, one of
   // which a conductor relays at its length. The desk over the input counts them, and says which one the input answers.

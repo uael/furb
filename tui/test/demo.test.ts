@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { dirname } from "node:path";
-import { demoSession, removeDemoDirectories, tour } from "../src/demo.ts";
+import { demoSession, removeDemoDirectories, seedRichDemo, tour } from "../src/demo.ts";
 
 test("the temporary directory of a demo goes when the process that made it removes its demo directories", async () => {
   const session = await demoSession();
@@ -18,7 +18,7 @@ test("the life that the operator watches asks three models in one word, branches
   try {
     await tour(session, 0);
     const prompts = session.acts.filter((act) => act.kind === "prompt");
-    expect(prompts.map((act) => act.words[2] || "")).toEqual([
+    expect(prompts.slice(0, 5).map((act) => act.words[2] || "")).toEqual([
       "",
       "claude-cli:haiku",
       "claude-cli:sonnet",
@@ -30,13 +30,19 @@ test("the life that the operator watches asks three models in one word, branches
       "Save the notes to a file, so they stay after a restart.",
       "Give search a shortcut, Ctrl+K, so it is one key away.",
     ]);
-    expect(session.chains.map((chain) => chain.words[0])).toEqual(["root", "Another way"]);
+    expect(session.chains.map((chain) => chain.words[0])).toContain("Another way");
+    expect(session.chains.filter((chain) => String(chain.words[0]).startsWith("Fieldwork "))).toHaveLength(
+      12,
+    );
+    const threads = session.acts.filter((act) => act.kind === "prompt");
+    expect(threads.length).toBeGreaterThan(100);
+    expect(threads.filter((act) => act.thread)).toHaveLength(120);
     expect(session.host.cost).toBe(0);
   } finally {
     await session.dispose();
     await removeDemoDirectories();
   }
-});
+}, 20_000);
 
 test("the moment that the feed shows steps back through the chain, and a branch there keeps what came before", async () => {
   const session = await demoSession({ watch: true });
@@ -70,3 +76,27 @@ test("the moment that the feed shows steps back through the chain, and a branch 
     await removeDemoDirectories();
   }
 });
+
+test("the rich scripted life has many real chains, nested threads, and long control-flow programs", async () => {
+  const session = await demoSession({ watch: true });
+  try {
+    await seedRichDemo(session);
+    expect(session.chains.filter((chain) => String(chain.words[0]).startsWith("Fieldwork "))).toHaveLength(
+      12,
+    );
+    const prompts = session.acts.filter((act) => act.kind === "prompt");
+    expect(prompts).toHaveLength(132);
+    expect(prompts.filter((act) => act.thread)).toHaveLength(120);
+    for (const chain of session.chains.filter((act) => String(act.words[0]).startsWith("Fieldwork "))) {
+      await session.select(chain.id);
+      expect(
+        Object.values(session.program).some((word) => word.includes("while") && word.includes("try")),
+      ).toBe(true);
+      expect(session.activity.filter((act) => act.kind === "rung").length).toBeGreaterThan(1);
+    }
+    expect(session.host.cost).toBe(0);
+  } finally {
+    await session.dispose();
+    await removeDemoDirectories();
+  }
+}, 30_000);

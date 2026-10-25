@@ -2,7 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
-import { demoSession, removeDemoDirectories, seedDemoFiles } from "../src/demo.ts";
+import { demoSession, removeDemoDirectories, seedDemoFiles, seedRichDemo } from "../src/demo.ts";
 import { loadParsers } from "../src/parsers.ts";
 import { paletteOf } from "../src/theme.ts";
 import { idle } from "../test/idle.ts";
@@ -148,6 +148,10 @@ try {
   await type("github", 1, 8);
   test.mockInput.pressEnter();
   await still(220);
+  // End on the generated, model-free gallery: many real chains, long programs and waiting threads.
+  await seedRichDemo(session);
+  await session.refresh();
+  await still(260);
   // The lights of the title bar are rare pixels, which the palette keeps all the same.
   await writeFile(output, gif(stills, size.width, size.height, [0xff5f57, 0xfebc2e, 0x28c840]));
   console.log(`${output}: ${stills.length} pictures`);
