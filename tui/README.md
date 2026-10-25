@@ -245,6 +245,10 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | ↑↓←→ / Enter / Esc after ⌥G | Move, fold or zoom / zoom in / zoom out or go back |
 | [ ] / { } after ⌥G | Move the cursor in time by one / ten moments |
 | Space / x / n / b after ⌥G | Pause or wake / cancel / step / branch at the cursor the chain |
+| ⌥↑ | Previous hunk in changes |
+| ⌥↓ | Next hunk in changes |
+| ⇧⌥R | Revert selected hunk |
+| ⇧⌥C | Comment on selected hunk |
 | ⌃PageUp / ⌃PageDown | Previous / next scope of file changes: this turn, this chain, the life, the branch |
 | ⌥R / ⌥J | Repair the journal of file changes / start a new journal, once the view of changes finds it damaged |
 | ⌃C | Clear the input, close a dialog, or cancel what you sent last (a message goes back to the input) |
@@ -280,7 +284,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/run <python>` | Write a rung through the gate |
 | `/bash <command>` | Stream a shell command |
 | `/read <path>` | Show a file to this chain |
-| `/changes [turn|chain|life|branch]` | Show the files that this turn, this chain, the life or the branch against main changed |
+| `/changes [turn|chain|life|branch [base]|revert|comment]` | Review file changes, choose a branch base, revert a hunk, or comment on a line |
 | `/repair` | Keep each change that the journal of file changes can read, and remove the lines that it cannot |
 | `/renew` | Start a new journal of file changes, and keep the damaged one beside it |
 | `/cd <path>` | Change this chain's working directory |

@@ -232,6 +232,26 @@ export const keys = [
     action: "Pause or wake / cancel / step / branch at the cursor the chain",
   },
   {
+    chord: "⌥↑",
+    action: "Previous hunk in changes",
+    bindings: [{ on: ["meta+up"], run: "reviewPrevious", hint: "previous hunk" }],
+  },
+  {
+    chord: "⌥↓",
+    action: "Next hunk in changes",
+    bindings: [{ on: ["meta+down"], run: "reviewNext", hint: "next hunk" }],
+  },
+  {
+    chord: "⇧⌥R",
+    action: "Revert selected hunk",
+    bindings: [{ on: ["meta+shift+r"], run: "reviewRevert", command: "changes", hint: "revert hunk" }],
+  },
+  {
+    chord: "⇧⌥C",
+    action: "Comment on selected hunk",
+    bindings: [{ on: ["meta+shift+c"], run: "reviewComment", command: "changes", hint: "comment on hunk" }],
+  },
+  {
     chord: "⌃PageUp / ⌃PageDown",
     action: "Previous / next scope of file changes: this turn, this chain, the life, the branch",
     bindings: [{ on: ["ctrl+pageup", "ctrl+pagedown"], run: "scope", always: true }],
