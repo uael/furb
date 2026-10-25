@@ -306,6 +306,12 @@ export class Session extends EventEmitter {
   filled?: number;
   /** The net change of each file in the scope of the review. */
   changes: ShownChange[] = [];
+  /** Why a scope has no changes when its source cannot be read. */
+  changesReason = "";
+  /** An optional branch base selected by /changes branch <base>. */
+  branchBase = "";
+  /** A changes command that needs the view to choose a hunk. */
+  reviewAction?: (kind: "revert" | "comment") => void | Promise<void>;
   /** Which changes the view of changes reviews: this turn, this chain, the life, or the branch against main. */
   scope: Scope = "chain";
   program: Record<string, string> = {};
@@ -596,19 +602,24 @@ export class Session extends EventEmitter {
         }
         if (this.view === "changes") {
           const writes = this.scope === "branch" ? null : this.writes();
-          const read = `${this.scope}:${this.host.changes}:${writes ? `${writes[0]}:${writes.length}:${writes.at(-1)}` : ""}`;
+          const read = `${this.scope}:${this.branchBase}:${this.host.changes}:${writes ? `${writes[0]}:${writes.length}:${writes.at(-1)}` : ""}`;
           if (read !== this.changesRead) {
             try {
               const changes = await (this.scope === "branch"
-                ? this.host.branchChanges()
+                ? this.host.branchChanges(this.branchBase || undefined)
                 : this.host.netChanges(this.scope === "life" ? null : writes));
               this.changes = changes.map(reviewed);
+              this.changesReason = "";
               this.changesRead = read;
             } catch (error) {
-              // A damaged journal is the failure of the view of changes alone, and it never stops the session: the
-              // view says it and offers to repair it, and the next read tries again.
-              if ((error as { name?: unknown } | undefined)?.name !== "DamagedJournal") throw error;
-              this.fail(error);
+              // A source that cannot be reviewed is an empty scope, not a failed life.
+              this.changes = [];
+              if ((error as { name?: unknown } | undefined)?.name === "DamagedJournal") {
+                this.fail(error);
+              } else {
+                this.changesReason = error instanceof Error ? error.message : String(error);
+              }
+              this.changesRead = read;
             }
           }
         }
@@ -1047,6 +1058,27 @@ export class Session extends EventEmitter {
     this.search = "";
     await this.refresh();
   }
+  /** What the empty review says when writes made no net change. */
+  get changesWriteSummary(): string {
+    const ids = this.scope === "life" ? this.written.map((act) => act.id) : this.writes();
+    if (!ids.length) return "";
+    const paths = ids
+      .map(
+        (id) =>
+          this.indexed()
+            .ids.get(id)
+            ?.words.find((word): word is { path: string } =>
+              Boolean(
+                word &&
+                  typeof word === "object" &&
+                  "path" in word &&
+                  typeof (word as { path?: unknown }).path === "string",
+              ),
+            )?.path,
+      )
+      .filter((path): path is string => Boolean(path));
+    return `No net change across ${ids.length} ${ids.length === 1 ? "write" : "writes"}${paths.length ? `: ${[...new Set(paths)].join(", ")}` : "."}`;
+  }
   /** The writes of the scope of the review on the chain shown: those since the last message of the operator for this
    * turn, and those of the chain for this chain. */
   private writes(): string[] {
@@ -1062,6 +1094,8 @@ export class Session extends EventEmitter {
       typeof scope === "string"
         ? scope
         : (scopes[(scopes.indexOf(this.scope) + scope + scopes.length) % scopes.length] ?? "chain");
+    if (this.scope !== "branch") this.branchBase = "";
+    this.changesReason = "";
     this.changesRead = "";
     this.save();
     this.show("changes");
@@ -1070,10 +1104,14 @@ export class Session extends EventEmitter {
    * record keeps the write. The word refuses when the file no longer holds the hunk where the review showed it. */
   async revert(change: ShownChange, hunk: Hunk): Promise<void> {
     const path = fromDirectory(this.host.directory, change.path);
-    await this.engine.result(
-      await this.engine.rung({ word: revertWord(change.path, hunk), on: this.selected }),
-    );
-    this.notice = `The hunk at line ${hunk.newStart} of ${path} is reverted.`;
+    try {
+      await this.engine.result(
+        await this.engine.rung({ word: revertWord(change.path, hunk, change), on: this.selected }),
+      );
+      this.notice = `The hunk at line ${hunk.newStart} of ${path} is reverted.`;
+    } catch (error) {
+      this.notice = `Could not revert the hunk: ${error instanceof Error ? error.message : String(error)}`;
+    }
     this.changesRead = "";
     await this.refresh();
   }
@@ -1648,11 +1686,26 @@ export class Session extends EventEmitter {
         if (!shapes().includes(argument)) throw new Error(`Choose ${shapes().join(", ")}.`);
         this.shape = argument;
         break;
-      case "changes":
-        if (argument && !(scopes as readonly string[]).includes(argument))
-          throw new Error(`Choose ${scopes.join(", ")}.`);
-        this.review((argument as Scope) || this.scope);
+      case "changes": {
+        const [requested, ...base] = argument.split(/\s+/);
+        if (requested === "revert" || requested === "comment") {
+          await this.reviewAction?.(requested);
+          if (!this.reviewAction) this.notice = `Open the changes view to ${requested} a hunk.`;
+          break;
+        }
+        if (requested === "branch") {
+          this.scope = "branch";
+          this.branchBase = base.join(" ");
+          this.changesReason = "";
+          this.changesRead = "";
+          this.show("changes");
+          break;
+        }
+        if (requested && !(scopes as readonly string[]).includes(requested))
+          throw new Error(`Choose ${scopes.join(", ")}, branch <base>, revert, or comment.`);
+        this.review((requested as Scope) || this.scope);
         break;
+      }
       case "theme":
         if (!isThemeChoice(argument))
           throw new Error(`Choose terminal, ${Object.keys(palettes).join(", ")}.`);

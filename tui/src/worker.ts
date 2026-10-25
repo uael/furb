@@ -396,7 +396,9 @@ async function answer(data: { target: string; method: string; args: unknown[] })
   if (data.target === "library" && data.method === "net")
     return session ? net(written(session.changes, data.args[0])) : [];
   if (data.target === "library" && data.method === "branch")
-    return session ? branchChanges(session.directory) : [];
+    return session
+      ? branchChanges(session.directory, typeof data.args[0] === "string" ? data.args[0] : undefined)
+      : [];
   // A repair or a new journal changes the count of changes that the window shows, which the state carries.
   if (data.target === "library" && data.method === "repairChanges") {
     const repaired = session?.changes.repair();
@@ -456,7 +458,8 @@ function read(data: { target: string; method: string; args: unknown[] }): unknow
   if (data.target === "library" && data.method === "model") return null;
   if (data.target === "library" && data.method === "changes") return [];
   if (data.target === "library" && data.method === "net") return [];
-  if (data.target === "library" && data.method === "branch") return branchChanges(open.directory);
+  if (data.target === "library" && data.method === "branch")
+    return branchChanges(open.directory, typeof data.args[0] === "string" ? data.args[0] : undefined);
   if (data.target === "library" && data.method === "act") return open.act(String(data.args[0]));
   if (data.target === "library" && data.method === "look") {
     const path = resolve(open.directory, open.cwd({ on: String(data.args[1]) }), String(data.args[0]));

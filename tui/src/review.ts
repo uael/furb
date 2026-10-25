@@ -30,7 +30,7 @@ export function net(changes: Iterable<FileChange>): FileChange[] {
 }
 
 /** A change of a file as the review shows it: its hunks, and the count of lines that they add and remove. */
-export type Reviewed = FileChange & { hunks: Hunk[]; added: number; removed: number };
+export type Reviewed = FileChange & { deleted?: boolean; hunks: Hunk[]; added: number; removed: number };
 
 /** A change of a file with its hunks, each with three lines of context. */
 export function reviewed(change: FileChange): Reviewed {
@@ -56,14 +56,39 @@ export function side(hunk: Hunk, old: boolean): string[] {
     .map((line) => line.slice(1));
 }
 
-/** The word that reverts one hunk through the World: it reads the file, refuses when the lines of the new side are
- * not where the hunk puts them, and writes the old side in their place. */
-export function revertWord(path: string, hunk: Hunk): string {
+/** The word that reverts a hunk through the World. It checks the reviewed text before it changes the file. */
+export function revertWord(
+  path: string,
+  hunk: Hunk,
+  change?: Pick<FileChange, "before" | "after" | "made"> & { deleted?: boolean },
+): string {
   const lo = hunk.newLines ? hunk.newStart : hunk.newStart + 1;
   const hi = hunk.newStart + hunk.newLines - 1 + (hunk.newLines ? 0 : 1);
   const old = side(hunk, true);
   const text = old.length ? `${old.join("\n")}\n` : "";
   const p = JSON.stringify(path);
+  const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+  if (change?.made) {
+    const command = JSON.stringify(`rm -- ${quote(path)}`);
+    return [
+      "try:",
+      `  held = read(${p}, HIDDEN)`,
+      "except Refused:",
+      "  held = None",
+      `if held is None or held.content != ${JSON.stringify(change.after)}:`,
+      `  raise Refused(${JSON.stringify(`${path} changed since the review`)})`,
+      `write(held.replace(held.content, ""))`,
+      `await bash(${command})`,
+    ].join("\n");
+  }
+  if (change?.deleted) {
+    return [
+      `probe = await bash(${JSON.stringify(`test -e ${quote(path)}`)})`,
+      "if probe.code != 1:",
+      `  raise Refused(${JSON.stringify(`${path} changed since the review`)})`,
+      `write(Text(${p}, ${JSON.stringify(change.before)}))`,
+    ].join("\n");
+  }
   return [
     `held = read(${p}, HIDDEN)`,
     `if held.lines[${lo - 1}:${hi}] != ${JSON.stringify(side(hunk, false))}:`,
@@ -107,13 +132,12 @@ function git(directory: string, ...args: string[]): string | undefined {
   return run.status === 0 ? run.stdout : undefined;
 }
 
-/** The files of the branch against main: each file that differs between the base of the branch and the working tree,
- * a file that git does not track yet among them, as a change from its text at the base to its text on the disk. The
- * base is where the branch left origin/main, or main when the repository has no origin. A binary file is left out. */
-export function branchChanges(directory: string): FileChange[] {
+/** Files that differ from the selected branch base and the working tree. The default base is origin/HEAD, then main,
+ * then master. A caller can name another base. Binary files are left out. */
+export function branchChanges(directory: string, requestedBase?: string): FileChange[] {
   const top = git(directory, "rev-parse", "--show-toplevel")?.trim();
   if (!top) throw new Error(`${directory} is not in a git repository, so it has no branch to review.`);
-  const base = ["origin/main", "main"]
+  const base = (requestedBase ? [requestedBase] : ["origin/HEAD", "main", "master"])
     .map((name) => git(top, "merge-base", "HEAD", name)?.trim())
     .find((sha) => sha);
   if (!base)
@@ -131,7 +155,13 @@ export function branchChanges(directory: string): FileChange[] {
       after = status === "D" ? "" : readFileSync(join(top, path), "utf8");
     } catch {}
     if (before.includes("\0") || after.includes("\0")) continue;
-    changes.push({ path: join(top, path), before, after });
+    changes.push({
+      path: join(top, path),
+      before,
+      after,
+      ...(status === "A" ? { made: true } : {}),
+      ...(status === "D" ? { deleted: true } : {}),
+    });
   }
   return changes;
 }

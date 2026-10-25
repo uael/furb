@@ -628,6 +628,7 @@ export class App {
     readonly session: Session,
     readonly options: AppOptions,
   ) {
+    session.reviewAction = (kind) => this.runReviewAction(kind);
     // The theme that follows the terminal reads the mode that the terminal said, and each later change of it.
     session.preferences.terminalMode = renderer.themeMode ?? session.preferences.terminalMode;
     this.reader = session.preferences.screenReader;
@@ -2739,8 +2740,7 @@ export class App {
       const root = w.host.directory;
       const relative = (path: string) => fromDirectory(root, path);
       // The scopes of the review stand first, and in the middle of an empty view under why it is empty.
-      if (w.changes.length)
-        add("change-scopes", `${w.scope}:${this.theme}`, [], (box) => box.add(this.scopes()));
+      add("change-scopes", `${w.scope}:${this.theme}`, [], (box) => box.add(this.scopes()));
       const counts = (added: number, removed: number): Part[] => [
         [`+${added}`, added ? c.success : c.faint],
         [` -${removed}`, removed ? c.danger : c.faint],
@@ -2802,14 +2802,27 @@ export class App {
             for (const hunk of change.hunks) {
               // Each hunk has a bar: where it stands in both files, a revert through the World, and a comment on
               // one of its lines, which goes to the chain as a prompt.
-              const bar = this.row({ gap: space.between, paddingLeft: space.between });
+              const bar = this.row({
+                id: `review-hunk:${change.path}:${hunk.newStart}`,
+                gap: space.between,
+                paddingLeft: space.between,
+              });
               bar.add(
                 this.text(
                   `@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`,
                   c.faint,
                 ),
               );
-              bar.add(this.link("Revert", () => void w.revert(change, hunk).catch(this.report)));
+              bar.add(
+                this.link(
+                  "Revert",
+                  () =>
+                    void w
+                      .revert(change, hunk)
+                      .then(() => this.composer.focus())
+                      .catch(this.report),
+                ),
+              );
               bar.add(this.link("Comment a line", () => this.commentLine(path, hunk)));
               box.add(bar);
               box.add(
@@ -2860,17 +2873,21 @@ export class App {
         changes: (
           {
             turn: [
-              "No file changes in this turn",
+              w.changesWriteSummary || "No file changes in this turn",
               "Each file that this chain writes after your last message shows here.",
             ],
             chain: [
-              "No file changes on this chain",
+              w.changesWriteSummary || "No file changes on this chain",
               "Each file that this chain writes shows here as a diff.",
             ],
-            life: ["No file changes yet", "Each file that the life writes shows here as a diff."],
+            life: [
+              w.changesWriteSummary || "No file changes yet",
+              "Each file that the life writes shows here as a diff.",
+            ],
             branch: [
-              "No change on this branch",
-              "Each file that differs from main in git shows here as a diff.",
+              w.changesReason ? "Branch changes are unavailable" : "No change on this branch",
+              w.changesReason ||
+                `Each file that differs from ${w.branchBase || "the branch base"} in git shows here as a diff.`,
             ],
           } satisfies Record<Scope, [string, string]>
         )[w.scope],
@@ -2879,8 +2896,7 @@ export class App {
         ? [`Nothing matches “${w.search}”`, "Change the filter, or press Esc to clear it."]
         : empty[w.view];
       // An empty review offers its other scopes under its hint, where the eye already is.
-      const scoped = w.view === "changes" && !w.search;
-      add("empty", `${title}:${height}:${this.theme}:${scoped && w.scope}`, [], (box) =>
+      add("empty", `${title}:${height}:${this.theme}`, [], (box) =>
         this.centered(
           box,
           height,
@@ -2889,7 +2905,6 @@ export class App {
             [title, c.text, bold],
           ]),
           this.text(hint, c.muted),
-          ...(scoped ? [this.scopes()] : []),
         ),
       );
     }
@@ -3578,6 +3593,8 @@ export class App {
   /** The parts once they loaded: their keys again, and each card again, since a part may draw the row of its act. */
   /** The count of the loads of the parts, which a label that a part gives keys on. */
   private partsLoaded = 0;
+  /** The hunk selected by the review navigation keys. */
+  private reviewHunk = 0;
   private partsChanged = (): void => {
     this.partsLoaded++;
     if (this.closed) return;
@@ -8089,6 +8106,10 @@ export class App {
     back: () => void this.back().catch(this.report),
     jump: (key) => this.jumpMessage(["]", "n"].includes(key?.name ?? "") ? 1 : -1),
     scope: (key) => this.session.review(key?.name === "pageup" ? -1 : 1),
+    reviewPrevious: () => this.moveReviewHunk(-1),
+    reviewNext: () => this.moveReviewHunk(1),
+    reviewRevert: () => this.session.reviewAction?.("revert"),
+    reviewComment: () => this.session.reviewAction?.("comment"),
     pause: this.escape,
     help: () => this.help(),
     quit: () => void this.options.quit(),
@@ -8103,6 +8124,10 @@ export class App {
   private readonly when: Partial<Record<Action, () => boolean>> = {
     answer: () => this.session.desk.asks.length > 0,
     scope: () => this.session.view === "changes",
+    reviewPrevious: () => this.session.view === "changes" && !this.overlay,
+    reviewNext: () => this.session.view === "changes" && !this.overlay,
+    reviewRevert: () => this.session.view === "changes" && !this.overlay,
+    reviewComment: () => this.session.view === "changes" && !this.overlay,
     repair: () => this.session.journalDamaged,
     renew: () => this.session.journalDamaged,
     pause: () => !this.searchRow.visible && this.pausing(),
@@ -8221,8 +8246,43 @@ export class App {
   }
   /** The feed scrolled so that the card of an id stands at its top. */
   private jumpTo(id: string): void {
-    const node = this.scroll.getChildren().find((one) => one.id === id);
+    const find = (node: Renderable): Renderable | undefined =>
+      node.id === id ? node : node.getChildren().map(find).find(Boolean);
+    const node = this.scroll.getChildren().map(find).find(Boolean);
     if (node) this.scroll.scrollBy(node.y - this.scroll.viewport.y);
+  }
+  private async runReviewAction(kind: "revert" | "comment"): Promise<void> {
+    if (this.session.view !== "changes") {
+      this.session.review(this.session.scope);
+      await this.session.refresh();
+    }
+    const targets = this.reviewTargets();
+    if (targets.length && this.reviewHunk >= targets.length) this.reviewHunk = 0;
+    const target = targets[this.reviewHunk];
+    const change = target?.change;
+    const hunk = target?.hunk;
+    if (!change || !hunk) {
+      this.session.notice = "There is no hunk in this scope.";
+      return;
+    }
+    const path = fromDirectory(this.session.host.directory, change.path);
+    if (kind === "revert") {
+      await this.session.revert(change, hunk);
+      this.composer.focus();
+    } else this.commentLine(path, hunk);
+  }
+  private reviewTargets() {
+    return this.session.changes.flatMap((change) => change.hunks.map((hunk) => ({ change, hunk })));
+  }
+  private moveReviewHunk(step: number): void {
+    const targets = this.reviewTargets();
+    if (!targets.length) return;
+    this.reviewHunk = (this.reviewHunk + step + targets.length) % targets.length;
+    const target = targets[this.reviewHunk];
+    if (target) {
+      this.session.notice = `Hunk ${this.reviewHunk + 1} of ${targets.length}: ${target.change.path}, line ${target.hunk.newStart}.`;
+      this.jumpTo(`review-hunk:${target.change.path}:${target.hunk.newStart}`);
+    }
   }
   /** A comment on one line of a hunk: the operator picks the line, and the input holds the start of a message that
    * names it, which Enter sends to the chain as a prompt. */
