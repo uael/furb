@@ -195,7 +195,7 @@ test("a revert of a hunk writes its old lines back through the World, and refuse
 
 test("reverting a created file removes it safely, while an insertion in an existing file does not", () =>
   composing(async ({ session }) => {
-    const path = "-quote'\\line\n.txt";
+    const path = "-quote' line.txt";
     await written(session, path, "created\n");
     session.review("chain");
     await session.refresh();
@@ -334,3 +334,47 @@ test("a diff shows its two sides side by side at 140 columns or more, and one un
       { width, height: 40 },
     );
 });
+
+test("an unexpected journal read error is not hidden as an empty review", () =>
+  composing(async ({ session }) => {
+    const original = session.host.netChanges.bind(session.host);
+    session.host.netChanges = () => {
+      throw new Error("unexpected journal read failure");
+    };
+    try {
+      session.review("chain");
+      await expect(session.refresh()).rejects.toThrow("unexpected journal read failure");
+      expect(session.changesReason).toBe("");
+    } finally {
+      session.host.netChanges = original;
+    }
+  }));
+
+test("a generated revert keeps newline and backslash paths inside its Python literals", () => {
+  const path = "-quote'\\line\n.txt";
+  const word = revertWord(
+    path,
+    { oldStart: 0, oldLines: 0, newStart: 1, newLines: 1, lines: ["+created"] },
+    { before: "", after: "created\n", made: true },
+  );
+  const source = word.split("\n");
+  expect(source).toHaveLength(8);
+  expect(source[1]).toBe(`  held = read(${JSON.stringify(path)}, HIDDEN)`);
+  const last = source.at(-1) ?? "";
+  expect(last.startsWith("await bash(")).toBe(true);
+  expect(JSON.parse(last.slice("await bash(".length, -1))).toBe("rm -- '-quote'\\''\\line\n.txt'");
+});
+
+test("the Changes badge counts files in the selected scope, not journal writes", () =>
+  composing(async ({ session, frame }) => {
+    const path = join(session.host.directory, "counted.txt");
+    await writeFile(path, "before\n");
+    await written(session, "counted.txt", "first\n");
+    await written(session, "counted.txt", "second\n");
+    expect(await frame()).toContain("Changes •");
+    await reviewed(session, "chain");
+    expect((await frame()).match(/Changes\s+(\d+)/)?.[1]).toBe("1");
+    await written(session, "counted.txt", "before\n");
+    await reviewed(session, "chain");
+    expect((await frame()).match(/Changes\s+(\d+)/)?.[1]).toBe("0");
+  }));

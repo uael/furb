@@ -612,12 +612,15 @@ export class Session extends EventEmitter {
               this.changesReason = "";
               this.changesRead = read;
             } catch (error) {
-              // A source that cannot be reviewed is an empty scope, not a failed life.
-              this.changes = [];
-              if ((error as { name?: unknown } | undefined)?.name === "DamagedJournal") {
+              const kind = (error as { name?: unknown } | undefined)?.name;
+              if (kind === "DamagedJournal") {
+                this.changes = [];
                 this.fail(error);
-              } else {
+              } else if (this.scope === "branch" && kind === "ReviewUnavailable") {
+                this.changes = [];
                 this.changesReason = error instanceof Error ? error.message : String(error);
+              } else {
+                throw error;
               }
               this.changesRead = read;
             }

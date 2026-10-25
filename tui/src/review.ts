@@ -6,6 +6,11 @@ import type { FileChange } from "furb";
 
 export type { Hunk };
 
+/** A branch source that is unavailable, rather than a failed read of the journal or files. */
+export class ReviewUnavailable extends Error {
+  override readonly name = "ReviewUnavailable";
+}
+
 /** The scopes of the review of the changes: the writes since the last message of the operator on the chain shown,
  * the writes of that chain, the writes of the whole life, and the files of the branch against main, which git
  * holds. */
@@ -136,24 +141,29 @@ function git(directory: string, ...args: string[]): string | undefined {
  * then master. A caller can name another base. Binary files are left out. */
 export function branchChanges(directory: string, requestedBase?: string): FileChange[] {
   const top = git(directory, "rev-parse", "--show-toplevel")?.trim();
-  if (!top) throw new Error(`${directory} is not in a git repository, so it has no branch to review.`);
+  if (!top)
+    throw new ReviewUnavailable(`${directory} is not in a git repository, so it has no branch to review.`);
   const base = (requestedBase ? [requestedBase] : ["origin/HEAD", "main", "master"])
     .map((name) => git(top, "merge-base", "HEAD", name)?.trim())
     .find((sha) => sha);
   if (!base)
-    throw new Error("This repository has no branch main, so the branch has nothing to be compared to.");
-  const listed = (git(top, "diff", "--name-status", "--no-renames", "-z", base) ?? "").split("\0");
+    throw new ReviewUnavailable(
+      `No common base was found against ${requestedBase || "origin/HEAD, main or master"}. Choose another branch base.`,
+    );
+  const required = (...args: string[]): string => {
+    const text = git(top, ...args);
+    if (text === undefined) throw new Error(`Cannot read branch changes: git ${args[0]} failed.`);
+    return text;
+  };
+  const listed = required("diff", "--name-status", "--no-renames", "-z", base).split("\0");
   const files: [string, string][] = [];
   for (let at = 0; at + 1 < listed.length; at += 2) files.push([listed[at] ?? "", listed[at + 1] ?? ""]);
-  for (const path of (git(top, "ls-files", "--others", "--exclude-standard", "-z") ?? "").split("\0"))
+  for (const path of required("ls-files", "--others", "--exclude-standard", "-z").split("\0"))
     if (path) files.push(["A", path]);
   const changes: FileChange[] = [];
   for (const [status, path] of files) {
-    const before = status === "A" ? "" : (git(top, "show", `${base}:${path}`) ?? "");
-    let after = "";
-    try {
-      after = status === "D" ? "" : readFileSync(join(top, path), "utf8");
-    } catch {}
+    const before = status === "A" ? "" : required("show", `${base}:${path}`);
+    const after = status === "D" ? "" : readFileSync(join(top, path), "utf8");
     if (before.includes("\0") || after.includes("\0")) continue;
     changes.push({
       path: join(top, path),

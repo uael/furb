@@ -1338,7 +1338,7 @@ export class App {
   /** The top line: the session and the chain at its left, each a button, and the toggle of the views at its right. */
   private renderTop(): void {
     const w = this.session;
-    const changes = w.host.changes;
+    const changes = w.view === "changes" ? String(w.changes.length) : w.host.changes ? "•" : "";
     const shown = this.tree ? "feed" : w.view;
     const directory = shortenHome(w.workingDirectory);
     // The top line spends its room in this order: the session and the chain, the switch of the views, the key of the
@@ -2739,7 +2739,7 @@ export class App {
     } else if (w.view === "changes") {
       const root = w.host.directory;
       const relative = (path: string) => fromDirectory(root, path);
-      // The scopes of the review stand first, and in the middle of an empty view under why it is empty.
+      // The scopes of the review stand once at the top, including when the review is empty.
       add("change-scopes", `${w.scope}:${this.theme}`, [], (box) => box.add(this.scopes()));
       const counts = (added: number, removed: number): Part[] => [
         [`+${added}`, added ? c.success : c.faint],
@@ -2775,9 +2775,9 @@ export class App {
         const path = relative(change.path);
         // The heading of a change is a bar of the panel: the path, what the change did to the file, and the lines it
         // added and removed at its right.
-        const [what, color] = !change.before
+        const [what, color] = change.made
           ? ["created", c.success]
-          : !change.after
+          : change.deleted
             ? ["deleted", c.danger]
             : ["modified", c.warning];
         const tail = `+${change.added} -${change.removed} `;
@@ -2849,7 +2849,8 @@ export class App {
       }
     }
     // A view with nothing to show says why in the middle of the feed, and what brings something to it.
-    const { height } = this.scroll.viewport;
+    // An empty review shares the viewport with its one-row scope bar and the section gap.
+    const height = Math.max(0, this.scroll.viewport.height - (w.view === "changes" ? 1 + space.section : 0));
     if (!items && w.loading && !w.error) {
       const loading = (): Part[] => [
         [`${spin()} `, c.accent],
