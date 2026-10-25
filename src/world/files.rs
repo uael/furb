@@ -2,8 +2,9 @@
 
 use std::{
   fs,
-  io::ErrorKind,
+  io::{self, ErrorKind, Write},
   path::{Path, PathBuf},
+  sync::atomic::{AtomicU32, Ordering},
 };
 
 use super::{SCRATCH, Scratch, bash::door, here, resolved};
@@ -21,7 +22,7 @@ use crate::{
 /// and one of `scratch://` against the scratch directory of the life, which no chain stands in. A file whose every
 /// line ends with CRLF reads with LF, and a write to it writes CRLF. A path whose first part is the name of an act
 /// of the life is a door that no ear of the engine served, and never a file, so the ear refuses it with the chain of
-/// that act.
+/// that act. A write puts the whole text in place in one step, as `stored` says, so no reader sees a torn file.
 pub fn files(scratch: Scratch) -> Box<dyn Ear> {
   hearing(&["cd", "read", "write"], move |mut co| async move {
     loop {
@@ -103,9 +104,75 @@ async fn served(co: &mut Co, a: &Fact, scratch: &Scratch) -> Result<Text, Fault>
     if let Some(parent) = at.parent() {
       fs::create_dir_all(parent).map_err(|no| failed(&no, at.display()))?;
     }
-    fs::write(&at, ended(&at, content)).map_err(|no| failed(&no, at.display()))?;
+    stored(&at, ended(&at, content).as_bytes()).map_err(|no| failed(&no, at.display()))?;
   }
   read(&at)
+}
+
+/// Writes bytes to the file at a path in one step, so a crash or a failure midway leaves the old file whole and a
+/// reader sees the old bytes or the new, and never a part. The bytes go to a temporary file in the same folder, which
+/// is synced, takes the mode of the old file, and is renamed over the target. A link is resolved to its target first,
+/// so it stays a link. A file that cannot be opened for writing is refused as a plain write refuses it. Where a
+/// temporary file cannot be made, or the rename fails, as on Windows while another program holds the file open, the
+/// write is the plain write in place, which is not atomic. A hard link to the file does not see the new bytes, and a
+/// crash may leave a temporary file `.<name>.<pid>.<n>.tmp` in the folder.
+pub(super) fn stored(at: &Path, bytes: &[u8]) -> io::Result<()> {
+  replace(at, bytes, |file, bytes| file.write_all(bytes))
+}
+
+/// `stored` with the filling of the temporary file given, so a test can make it fail midway.
+fn replace(
+  at: &Path,
+  bytes: &[u8],
+  fill: impl FnOnce(&mut fs::File, &[u8]) -> io::Result<()>,
+) -> io::Result<()> {
+  static TEMPS: AtomicU32 = AtomicU32::new(0);
+  let Some(target) = linked(at) else { return fs::write(at, bytes) };
+  let mode = match fs::metadata(&target) {
+    Ok(info) if info.is_file() => {
+      fs::OpenOptions::new().write(true).open(&target)?;
+      Some(info.permissions())
+    }
+    Ok(_) => return fs::write(&target, bytes),
+    Err(no) if no.kind() == ErrorKind::NotFound => None,
+    Err(_) => return fs::write(&target, bytes),
+  };
+  let Some(name) = target.file_name() else { return fs::write(&target, bytes) };
+  let temp = target.with_file_name(format!(
+    ".{}.{}.{}.tmp",
+    name.to_string_lossy(),
+    std::process::id(),
+    TEMPS.fetch_add(1, Ordering::Relaxed)
+  ));
+  let Ok(mut file) = fs::OpenOptions::new().write(true).create_new(true).open(&temp) else {
+    return fs::write(&target, bytes);
+  };
+  let done = fill(&mut file, bytes)
+    .and_then(|()| file.sync_all())
+    .and_then(|()| mode.map_or(Ok(()), |mode| file.set_permissions(mode)));
+  drop(file);
+  if let Err(no) = done {
+    let _ = fs::remove_file(&temp);
+    return Err(no);
+  }
+  if fs::rename(&temp, &target).is_err() {
+    let _ = fs::remove_file(&temp);
+    return fs::write(&target, bytes);
+  }
+  Ok(())
+}
+
+/// The file that a path names after its links: a link is followed to its target, each relative link from the folder
+/// that holds it, and nothing for a chain of more than 40 links, which a plain write refuses.
+fn linked(at: &Path) -> Option<PathBuf> {
+  let mut at = at.to_path_buf();
+  for _ in 0..40 {
+    match fs::read_link(&at) {
+      Ok(to) => at = at.parent().unwrap_or(Path::new("")).join(to),
+      Err(_) => return Some(at),
+    }
+  }
+  None
 }
 
 /// Whether bytes end each of their lines with CRLF: they hold a line break, and a CR comes before each one.
