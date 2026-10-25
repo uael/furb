@@ -14,7 +14,7 @@ import pytest
 
 ROOT = Path(__file__).parents[2]
 EXAMPLES = ROOT / "docs" / "examples" / "python"
-FAKE = ROOT / "src" / "world" / "provider" / "fake-claude.sh"
+FAKE = ROOT / "src" / "world" / "provider" / "claude" / "fake-claude.sh"
 
 pytestmark = pytest.mark.skipif(
   sys.platform == "win32", reason="the claude of the tests is a script of sh, which Windows does not start"
