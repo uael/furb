@@ -2,7 +2,7 @@
 import { type FSWatcher, readFileSync, watch as watchFile } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { Engine, FileChange, SessionOptions, Turn } from "furb";
-import { Act, actorParts, ENGINE, model, models, retold, Session, setup, standingOf } from "furb";
+import { Act, actorParts, codexAuth, ENGINE, model, models, retold, Session, setup, standingOf } from "furb";
 import { type Measure, measureOf } from "furb/life";
 import type { HostState } from "./bridge.ts";
 import { type EngineOptions, roster } from "./models.ts";
@@ -39,6 +39,18 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 /** The watch on the file of a recorded life, which hears each line that the file adds. */
 let follower: FSWatcher | undefined;
 let sentFacts = 0;
+async function refreshCodex(directory?: string): Promise<void> {
+  if (
+    demo ||
+    !setup(claude, directory, userConfig).providers.some((one) => one.provider === "codex" && one.enabled)
+  )
+    return;
+  let status = codexAuth("refresh", userConfig);
+  while (status.state === "connecting") {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    status = codexAuth("status", userConfig);
+  }
+}
 const state = () => {
   if (reader) {
     self.postMessage({
@@ -245,6 +257,7 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     claude = options.claude;
     userConfig = options.config;
     demo = (scripted || watch) ?? false;
+    await refreshCodex(options.cwd);
     const opened = demo
       ? scriptedSession(options, watch)
       : new Session({ ...options, roster: roster(options) });
@@ -295,7 +308,8 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     return act.id;
   }
   // The demo asks no model, so it offers its roster and nothing of the catalog of this machine.
-  if (data.target === "library" && data.method === "catalog")
+  if (data.target === "library" && data.method === "catalog") {
+    await refreshCodex(session?.directory);
     return demo
       ? []
       : models(claude, session?.directory, userConfig).map(({ name, efforts, window }) => [
@@ -303,6 +317,7 @@ async function answer(data: { target: string; method: string; args: unknown[] })
           efforts,
           window,
         ]);
+  }
   // The first run checks this machine, which the demo does not need.
   if (data.target === "library" && data.method === "setup")
     return demo ? null : setup(claude, session?.directory, userConfig);
@@ -326,12 +341,35 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     if (demo) throw new Error("Provider settings are not available in the demo.");
     const running = engine;
     if (data.method === "provider") {
+      if (data.args[0] === "codex") {
+        if (data.args[1] === false) codexAuth("cancel", userConfig);
+        else if (data.args[1] === true) {
+          let status = codexAuth("refresh", userConfig);
+          if (["disconnected", "needs-login", "failed", "canceled"].includes(status.state))
+            status = codexAuth("start", userConfig);
+          self.postMessage({ authentication: status });
+          while (["waiting", "connecting"].includes(status.state)) {
+            await new Promise((resolve) => setTimeout(resolve, 200));
+            const next = codexAuth("status", userConfig);
+            if (next.state !== status.state) self.postMessage({ authentication: next });
+            status = next;
+          }
+          if (status.state === "canceled") return false;
+          if (status.state !== "connected")
+            throw new Error(status.message || "OpenAI sign-in did not complete.");
+        }
+      }
       changeProvider(session.directory, String(data.args[0]), data.args[1], () => {
         running.stand();
       });
-    } else engine.stand();
+    } else {
+      await refreshCodex(session.directory);
+      engine.stand();
+    }
     return true;
   }
+  if (data.target === "library" && data.method === "codexAuth")
+    return codexAuth(String(data.args[0] || "status"), userConfig);
   if (data.target === "library" && (data.method === "model" || data.method === "sees")) {
     if (!engine) throw new Error("The session is not open.");
     const [roster = []] = standingOf(engine);

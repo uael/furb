@@ -176,6 +176,7 @@ export class HostView extends EventEmitter implements Plain {
   setup = () => this.ask<SetupInfo | null>("library", "setup");
   providers = () => this.ask<ProviderChoice[]>("library", "providers");
   provider = (name: string, value: unknown) => this.ask<boolean>("library", "provider", name, value);
+  codexAuth = (action = "status") => this.ask<import("furb").CodexAuthInfo>("library", "codexAuth", action);
   reload = () => this.ask<boolean>("library", "reload");
   /** The name of the model that a name gives in the roster or in the catalog, and nothing when it gives none. */
   model = (name: string) => this.ask<string | null>("library", "model", name);
@@ -216,6 +217,7 @@ export class HostView extends EventEmitter implements Plain {
 type Request = { id: number; target: string; method: string; args: unknown[] };
 /** What the holder of a life sends a window: an answer to a request, or a push of the life. */
 type Message = {
+  authentication?: import("furb").CodexAuthInfo;
   id?: number;
   value?: unknown;
   error?: string;
@@ -261,6 +263,10 @@ class Link {
     });
   }
   receive(data: Message): void {
+    if (data.authentication) {
+      this.host.emit("authentication", data.authentication);
+      return;
+    }
     if (data.fault) {
       this.host.emit("fault", new Error(data.fault));
       return;

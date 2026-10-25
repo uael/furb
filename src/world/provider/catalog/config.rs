@@ -95,6 +95,15 @@ impl Catalog {
         }
         continue;
       }
+      if name == super::super::codex::NAME {
+        self.models.retain(|(model, _)| !model.name.starts_with("codex:"));
+        self.models.extend(
+          super::super::codex::offered(config, &form)?.into_iter().map(|model| (model, true)),
+        );
+        self.providers.retain(|(id, _, _)| id != &name);
+        self.providers.push((name, Vec::new(), true));
+        continue;
+      }
       if form == Value::Bool(true) {
         if defaults.contains_key(&name) || name == LOCAL || name == claude::CLAUDE {
           continue;

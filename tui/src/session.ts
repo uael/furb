@@ -404,6 +404,16 @@ export class Session extends EventEmitter {
     host.on("change", this.changed);
     host.on("facts", this.factsChanged);
     host.on("fault", this.fail);
+    host.on("authentication", (status: import("furb").CodexAuthInfo) => {
+      this.notice =
+        status.state === "connected"
+          ? "OpenAI is connected."
+          : ["connecting", "waiting"].includes(status.state)
+            ? "Connecting to OpenAI."
+            : status.message || "Codex sign-in canceled.";
+      this.emit("authentication", status);
+      this.emit("change");
+    });
     // A window that attached again to another host of its life reads its acts from the start, since the counts of the
     // acts are of the host that made them.
     host.on("reset", () => {
@@ -1486,9 +1496,18 @@ export class Session extends EventEmitter {
                   models: { [id || ""]: { window: Number(window) } },
                 }
               : true;
-        await this.host.provider(name, value);
+        if (!(await this.host.provider(name, value))) {
+          this.notice = "Codex sign-in canceled.";
+          break;
+        }
         await this.reloadCatalog();
-        this.notice = `Provider ${name} ${verb === "remove" ? "removed" : "added"}. The settings are saved in .furb/config.json.`;
+        this.notice =
+          name === "codex"
+            ? verb === "remove"
+              ? "Codex subscription disconnected."
+              : "Codex subscription connected."
+            : `Provider ${name} ${verb === "remove" ? "removed" : "added"}. The settings are saved in .furb/config.json.`;
+        if (name === "codex" && verb === "add") this.emit("codexModels");
         break;
       }
       case "name":
@@ -1703,9 +1722,19 @@ export class Session extends EventEmitter {
     }
   }
 
-  private async reloadCatalog(): Promise<void> {
+  async reloadCatalog(): Promise<void> {
     this.catalog = await this.host.catalog();
     this.catalogRead = true;
+    const authenticated = (models: readonly [string, string[], number][]) =>
+      models
+        .filter(([name]) => name.startsWith("codex:"))
+        .map(([name, efforts, window]) => [name, efforts, window]);
+    if (
+      !this.demo &&
+      this.host.role === "write" &&
+      JSON.stringify(authenticated(this.roster)) !== JSON.stringify(authenticated(this.catalog))
+    )
+      await this.host.reload();
     this.setup = await this.host.setup();
     await this.refresh();
   }

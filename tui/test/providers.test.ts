@@ -33,17 +33,23 @@ test("the provider menu saves, restores and validates provider settings", async 
       },
     });
     await composing(
-      async ({ app, frame, click }) => {
+      async ({ app, frame, screen }) => {
         app.providers();
         await session.host.providers();
+        await screen.mockInput.typeText("custom");
         expect(await frame()).toContain("Add a custom provider");
+        app.closeOverlay();
+        app.providers();
+        await session.host.providers();
+        await screen.mockInput.typeText("desk");
         expect(await frame()).toContain("desk");
-        await click("desk");
+        screen.mockInput.pressEnter();
         await until(session, () => session.notice.startsWith("Provider desk removed"));
         expect(JSON.parse(await readFile(path, "utf8")).providers.desk.enabled).toBe(false);
         app.providers();
         await session.host.providers();
-        await click("desk");
+        await screen.mockInput.typeText("desk");
+        screen.mockInput.pressEnter();
         await until(session, () => session.notice.startsWith("Provider desk added"));
         expect(JSON.parse(await readFile(path, "utf8")).providers.desk).toEqual({
           ...saved.providers.desk,

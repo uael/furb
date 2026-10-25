@@ -149,6 +149,10 @@ function welcome(socket: Socket, keys: Record<Role, string>): void {
 }
 
 worker.onmessage = ({ data }) => {
+  if (data.authentication) {
+    for (const [send, role] of windows) if (role === "write") send(data);
+    return;
+  }
   if (data.state || data.log || data.fault) {
     // A state holds the measures of the chains that changed since the state before it, so the last state holds them
     // all, which a window that attaches reads first.
