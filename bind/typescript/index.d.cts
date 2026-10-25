@@ -516,12 +516,13 @@ export declare function scratch(record: string): string | null
 export declare function setup(claude?: string | undefined | null, directory?: string | undefined | null, config?: string | undefined | null): SetupInfo
 
 /**
- * What a first run checks of this machine, as a host reads it: whether the claude command line offers a model,
- * each configured provider with the names of its credential and how many of its models the catalog offers, and
- * the local server that `FURB_LOCAL_URL` names, with the models it offers or why it listed none.
+ * What a first run checks of this machine, as a host reads it: whether the claude command line offers a model and
+ * whether it is signed in, each configured provider with the names of its credential and how many of its models the
+ * catalog offers, and the local server that `FURB_LOCAL_URL` names, with the models it offers or why it listed none.
  */
 export interface SetupInfo {
   claude: boolean
+  signed: boolean
   providers: Array<ProviderInfo>
   local?: LocalInfo
 }

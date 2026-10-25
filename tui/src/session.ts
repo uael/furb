@@ -25,6 +25,7 @@ import { Preferences } from "./preferences.ts";
 import { type Hunk, type Reviewed, revertWord, reviewed, type Scope, scopes } from "./review.ts";
 import { shareHtml, shareMarkdown } from "./share.ts";
 import { isThemeChoice, palettes, type ThemeChoice, type ThemeName, themeOf } from "./theme.ts";
+import { branchNotice } from "./watching.ts";
 
 /** The views of a chain: the feed of what it did, the transcript that the model reads, and the files it changed. */
 export const views = ["feed", "transcript", "changes"] as const;
@@ -438,6 +439,14 @@ export class Session extends EventEmitter {
       this.emit("change");
     }, this.fail);
     this.save();
+  }
+  /** The catalog and the check of the setup read again, as after the operator signed in to a model. */
+  async checkSetup(): Promise<void> {
+    const [catalog, found] = await Promise.all([this.host.catalog(), this.host.setup()]);
+    this.catalog = catalog;
+    this.catalogRead = true;
+    this.setup = found;
+    this.emit("change");
   }
   private changed = () => {
     // A notice asks nothing, so it settles as the console takes it, and no key of the operator dismisses it.
@@ -1229,9 +1238,12 @@ export class Session extends EventEmitter {
     const kept = files
       ? `${this.restored(files)} The module keeps its state.`
       : "The module and the files keep their state.";
-    this.notice = message
-      ? `The message is back in the input on a new branch. ${kept}`
-      : `The new branch reads the transcript through ${id}. ${kept}`;
+    // The watch says it in common words, as the first minute of furb.
+    this.notice = this.watching
+      ? branchNotice
+      : message
+        ? `The message is back in the input on a new branch. ${kept}`
+        : `The new branch reads the transcript through ${id}. ${kept}`;
     return branch;
   }
   /** What a rewind to an act gives back of the files: the files as they stood when the act was made, or before the
@@ -1285,8 +1297,11 @@ export class Session extends EventEmitter {
   }
   /** What a restore of the files did, in words, with the changes that it could not undo. */
   restored({ files, commands }: Restore): string {
-    const count =
-      files.length === 1 ? "1 file is back as it was." : `${files.length} files are back as they were.`;
+    const count = !files.length
+      ? "No file changed after that point."
+      : files.length === 1
+        ? "1 file is back as it was."
+        : `${files.length} files are back as they were.`;
     const stays = commands
       ? ` ${commands} ${commands === 1 ? "command" : "commands"} ran after that point, and a change that a command made is not restored.`
       : "";
@@ -1330,12 +1345,13 @@ export class Session extends EventEmitter {
     this.emit("change");
   }
   /** A new branch of the selected chain at the moment that the feed shows, which the session selects: it reads the
-   * transcript through the last act that began before that moment, as a rewind to that act does. */
+   * transcript through the last act that began before that moment, as a rewind to that act does, and the files that a
+   * write changed after it come back as they were. */
   async branchHere(): Promise<string> {
     const last = this.at(this.activity).findLast((act) => !["chain", "grant"].includes(act.kind));
     if (!last) throw new Error("Nothing happened before this moment, so there is nothing to branch from.");
     this.moment = undefined;
-    return this.rewind(last.id);
+    return this.rewind(last.id, undefined, await this.filesAt(last.id));
   }
   /** A message sent before as the draft of the composer, with the images it referred to attached again. */
   private async restore(text: string): Promise<void> {

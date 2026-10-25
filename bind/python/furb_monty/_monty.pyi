@@ -53,10 +53,11 @@ class LocalInfo(TypedDict):
   failed: str | None
 
 class SetupInfo(TypedDict):
-  """What a first run checks of this machine: whether the catalog found the claude command line, each provider of
-  the network, and the local server that FURB_LOCAL_URL names."""
+  """What a first run checks of this machine: whether the catalog found the claude command line and whether it is
+  signed in, each provider of the network, and the local server that FURB_LOCAL_URL names."""
 
   claude: bool
+  signed: bool
   providers: list[ProviderInfo]
   local: LocalInfo | None
 
