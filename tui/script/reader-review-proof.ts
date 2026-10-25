@@ -87,14 +87,29 @@ try {
         await app.colorsDone();
         app.render();
         await screen.flush();
-        const frame = screen.captureCharFrame();
+        let frame = screen.captureCharFrame();
+        for (
+          let attempt = 0;
+          kind === "whole" && attempt < 8 && (!frame.includes("A note.") || !frame.includes("Before."));
+          attempt++
+        ) {
+          await Bun.sleep(20);
+          app.render();
+          await screen.renderOnce();
+          await app.colorsDone();
+          frame = screen.captureCharFrame();
+        }
         if (!frame.includes("The life") || !frame.includes("Read only"))
           throw new Error(`${kind}: the Life review or read-only status is hidden.`);
         if (/Revert|Comment a line|revert hunk|Repair the journal|Start a new journal/.test(frame))
           throw new Error(`${kind}: a read offers a write.`);
         if (
           kind === "whole" &&
-          (!frame.includes("2 files") || !frame.includes("notes.txt") || !frame.includes("legacy.txt"))
+          (!frame.includes("2 files") ||
+            !frame.includes("notes.txt") ||
+            !frame.includes("legacy.txt") ||
+            !frame.includes("A note.") ||
+            !frame.includes("Before."))
         )
           throw new Error("The journal's current and older changes are not visible.");
         if (kind === "damaged" && !frame.includes("The journal of file changes is damaged"))
