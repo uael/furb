@@ -31,7 +31,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 ENGINE = ROOT / "src" / "furb" / "engine.py"
-FAKE = ROOT / "src" / "world" / "provider" / "fake-claude.sh"
+FAKE = ROOT / "src" / "world" / "provider" / "claude" / "fake-claude.sh"
 STORE = ROOT / "src" / "world" / "store.rs"
 
 # Two changes of the engine that make the same acts: each gives a build of another engine and of the same version.

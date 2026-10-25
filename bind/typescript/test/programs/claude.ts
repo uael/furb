@@ -1,4 +1,5 @@
-// The claude command line of the tests of the examples, which answers from a script, as src/world/provider/fake-claude.sh
+// The claude command line of the tests of the examples, which answers from a script, as
+// src/world/provider/claude/fake-claude.sh
 // does where a shell runs it. The word of a turn is the JSON text in the file word.N beside it, for the Nth turn of all,
 // and each turn costs the dollars of the file cost beside it. When the file deaf stands beside it, it writes its pid
 // in the file asked, reads no input and lives on until the file deaf goes or its parent ends, as a test that is

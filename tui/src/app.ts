@@ -314,6 +314,9 @@ const starters = [
   ["Start with a plan", "Read the project and propose a small, testable plan."],
 ] as const;
 interface BlockOptions {
+  /** A live body updates its existing nodes while its structure stays the same. */
+  update?: (box: BoxRenderable) => void;
+  structure?: string;
   compact?: boolean;
   collapsible?: boolean;
   heading?: boolean;
@@ -460,6 +463,7 @@ export class App {
   /** The program of each thread and each word of the operator, as it stood at a version of the acts and of the words
    * that its models write. */
   private programs = new Map<string, { version: number; live: string; lines: ProgramLine[] }>();
+  private sourceLocations = new Map<string, string>();
   /** The chain whose threads the sidebar lists in place of the tree of the chains, once a click or Enter chose it. */
   private railChain?: string;
   /** Whether the keys move in the sidebar, after ⌥T, and the row that they stand on: a chain in the tree, or a thread in
@@ -567,6 +571,7 @@ export class App {
       title?: () => Part[];
       marker: Part[];
       key: string;
+      structure?: string;
       compact: boolean;
       collapsible: boolean;
       state: string;
@@ -864,6 +869,10 @@ export class App {
     this.tick = setInterval(() => {
       for (const card of this.cards.values())
         if (card.title) this.label(card, [...card.marker, ...card.title()]);
+      for (const [view, row] of this.programLoaders) {
+        if (view.isDestroyed) this.programLoaders.delete(view);
+        else view.setLineSign(row, { before: spin(), beforeColor: c.accent });
+      }
       if (this.statusMoves) this.renderStatus();
       if (this.stage.visible && this.cursor === undefined && this.moves()) this.renderStage();
     }, frame);
@@ -1665,6 +1674,10 @@ export class App {
     const visible = Boolean(plain(label)) && (options.compact || options.heading !== false || closed);
     const margin = options.separate ? space.section : space.stack;
     const prior = this.cards.get(id);
+    if (prior && options.update && prior.structure === options.structure && prior.key !== key) {
+      options.update(prior.node);
+      prior.key = key;
+    }
     if (prior?.key === key) {
       this.label(prior, heading);
       Object.assign(prior, { marker, title: options.title, closed });
@@ -1693,6 +1706,7 @@ export class App {
     this.placeCard(box, index);
     const card = {
       key,
+      structure: options.structure,
       node: box,
       heading: labelNode,
       label: [],
@@ -1783,8 +1797,8 @@ export class App {
   private groupsOf(source: string): Promise<(string | undefined)[]> {
     const kept = this.sourceGroups.get(source);
     if (kept) return kept;
-    const made = getTreeSitterClient()
-      .highlightOnce(source, "python")
+    const made = loadParsers()
+      .then(() => getTreeSitterClient().highlightOnce(source, "python"))
       .then(
         (result) => {
           const groups: (string | undefined)[] = new Array(source.length);
@@ -1918,6 +1932,7 @@ export class App {
   }
   renderContent(): void {
     const w = this.session;
+    this.sourceLocations.clear();
     const view = this.tree ? "tree" : `${w.selected}:${w.view}`;
     this.treeBar.visible = Boolean(this.tree);
     if (this.lastView !== view) {
@@ -2082,7 +2097,8 @@ export class App {
       );
       // The thread of now is read from the index, in the time of what it shows, and that of a moment of the past whole.
       const owed = new Set(w.host.prompts.keys());
-      const word = (rung: ActRow) => this.subject(rung);
+      for (const id of this.streamedSource.keys()) if (w.actOf(id)?.done) this.streamedSource.delete(id);
+      const word = (rung: ActRow) => this.sourceWord(rung);
       const lines = index
         ? thread(w.selected, word, w.host.streams, owed, opened, index)
         : condense(ladder(w.selected, shown, word, w.host.streams, owed), opened);
@@ -2131,35 +2147,61 @@ export class App {
         return made;
       };
       const programCard = (id: string, given: readonly ProgramLine[], indent: number) => {
-        // What a model writes changes at each token, so it stands in a card of its own under the program, and the
-        // program stays as it was drawn.
-        const all = given.filter((line) => line.kind !== "writes");
-        const writing = given.filter((line) => line.kind === "writes");
-        const tails = () => {
-          for (const line of writing) {
-            const stream = w.host.streams.get(line.step.id);
-            const tail =
-              (stream?.text || stream?.thinking || "").replace(/\n+$/, "").split("\n").at(-1)?.trim() ||
-              line.text;
-            add(
-              `writes-${line.step.id}`,
-              `${tail}:${this.feedWidth}:${this.theme}`,
-              [],
-              (box) =>
-                box.add(
-                  this.inset(
-                    space.between,
-                    this.text([
-                      [`${glyph.running} `, c.accent],
-                      [`# ${clip(tail, this.feedWidth - indent - 12)}`, c.syntaxComment],
-                    ]),
-                  ),
-                ),
-              { indent },
-            );
-          }
-        };
-        if (!all.length) return tails();
+        // Completed steps and the live tail share one retained source node, including the handoff from tokens
+        // to the complete word. The original step coordinates still own inspection, copy, edit and string folds.
+        const all: ProgramLine[] = given.flatMap((line): ProgramLine[] => {
+          if (line.kind !== "writes") this.streamedSource.delete(line.step.id);
+          if (line.kind === "quote")
+            return [
+              {
+                kind: "code",
+                step: line.step,
+                number: line.number,
+                display: line.display,
+                text: `${line.name} = ${JSON.stringify(line.value)}`,
+                source: line.source,
+                acts: [],
+                runs: false,
+                hint: "",
+              },
+            ];
+          if (line.kind !== "writes") return [line];
+          const current = w.host.streams.get(line.step.id);
+          if (current)
+            this.streamedSource.set(line.step.id, { text: current.text, thinking: current.thinking });
+          // Stream removal and the full word can arrive in separate host updates. The pending step keeps its
+          // latest source between them, rather than replacing it with an empty thinking line for one frame.
+          const stream = current ?? this.streamedSource.get(line.step.id);
+          const text = stream?.text ?? "";
+          const thought = (stream?.thinking ?? "").trimEnd().split("\n").at(-1) || "thinking";
+          const number = line.display ?? 1;
+          const source: ProgramLine[] = text
+            ? text
+                .trimEnd()
+                .split("\n")
+                .map((text, index) => ({
+                  kind: "code",
+                  step: line.step,
+                  number: index + 1,
+                  display: number + index,
+                  text,
+                  acts: [],
+                  runs: false,
+                  hint: "",
+                }))
+            : [];
+          source.push({ ...line, text: thought, display: number + source.length });
+          return source;
+        });
+        const digits = Math.max(
+          2,
+          ...all.map((line) =>
+            line.kind === "code" || line.kind === "writes"
+              ? String(line.display ?? (line.kind === "code" ? line.number : 1)).length
+              : 1,
+          ),
+        );
+        if (!all.length) return;
         // A thread whose program made its last steps alone says how many came before them.
         const earlier = all[0]?.kind === "earlier" ? all[0].count : 0;
         const steps = [...new Set(all.filter((line) => line.kind !== "note").map((line) => line.step))];
@@ -2212,8 +2254,13 @@ export class App {
                 : `${line.kind}|${line.text}`,
             ),
           ].join("\n");
+          const location = at ? `program-${id}-${at}` : `program-${id}`;
+          for (const line of segment) {
+            if (!this.sourceLocations.has(line.step.id)) this.sourceLocations.set(line.step.id, location);
+            if (line.kind === "code") for (const act of line.acts) this.sourceLocations.set(act.id, location);
+          }
           add(
-            at ? `program-${id}-${at}` : `program-${id}`,
+            location,
             key,
             [],
             (box) => {
@@ -2231,9 +2278,20 @@ export class App {
                     },
                   ),
                 );
-              box.add(this.programView(segment, room, took, since, heads));
+              box.add(this.programView(segment, room, took, since, heads, digits));
             },
-            { indent, same: [key] },
+            {
+              indent,
+              same: [key],
+              separate: at === 0,
+              structure: `${hide}:${room}:${this.theme}`,
+              shown: segment.map((line) => line.text).join("\n"),
+              update: (box) => {
+                const view = box.getChildren().find((node) => node instanceof LineNumberRenderable);
+                if (view instanceof LineNumberRenderable)
+                  this.programView(segment, room, took, since, heads, digits, view);
+              },
+            },
           );
           const open = segment.at(-1);
           if (open?.kind === "code" && this.lineOpen(open) && open.acts.length)
@@ -2250,7 +2308,6 @@ export class App {
               { indent },
             );
         }
-        tails();
       };
       let collapsed = -1;
       for (const line of lines) {
@@ -2269,7 +2326,7 @@ export class App {
         const act = line.act as ActRow;
         const indent = line.depth * space.between;
         if (line.type === "rung") {
-          const code = this.subject(act);
+          const code = this.sourceWord(act);
           // The words that a chain wrote to retell its source stand as one line, which names the source.
           if (rows.get(act.by)?.kind === "chain") {
             if (retold) continue;
@@ -2323,21 +2380,9 @@ export class App {
             );
             continue;
           }
-          // A rung folds to one row: its state, the first line of its word, and the acts that it made. Open, it shows
-          // its whole word, and each act that it made stands under it.
+          // A rung shows its word as source. A click on a line opens what each act of that line gave.
           // A rung that a cancel ended before its model wrote a word shows nothing, since the message says the cancel.
           if (!code.trim() && cancelled(act)) continue;
-          // A word of the operator stands as its program under a quiet header.
-          add(
-            act.id,
-            `you:${this.theme}`,
-            [
-              [glyph.mark, threadTone(act.id)],
-              ["You ran", c.muted],
-            ],
-            () => {},
-            { indent, heading: true, shown: code },
-          );
           programCard(
             act.id,
             programFor(act.id, stepOf(act), () =>
@@ -2353,24 +2398,8 @@ export class App {
             );
         } else if (line.type === "tail") {
           const maker = rows.get(act.by);
-          if (line.model) {
-            // A model shows the last lines that it writes, or of its thinking until it writes, with a cursor.
-            const thinking = !w.host.streams.get(act.id)?.text;
-            add(`stream-${act.id}`, line.text, [], (box) => {
-              // A column holds the lines, so that a long line wraps at the width of the feed.
-              const tail = this.box({ paddingLeft: indent + space.between });
-              tail.add(
-                this.text(
-                  [
-                    [line.text, thinking ? c.faint : c.muted, thinking ? italic : 0],
-                    [glyph.mark, c.accent],
-                  ],
-                  c.muted,
-                ),
-              );
-              box.add(tail);
-            });
-          } else if (maker?.kind === "rung" && this.folded(maker.id, maker))
+          if (line.model) continue;
+          else if (maker?.kind === "rung" && this.folded(maker.id, maker))
             // A command that runs shows its last lines under the folded rung that made it.
             add(`tail-${act.id}`, line.text, [], (box) => this.excerpt(box, line.text, true), { indent });
         } else if (line.type === "value") {
@@ -2462,19 +2491,9 @@ export class App {
             { indent },
           );
         } else if (line.type === "act") {
-          // The ceiling of a grant stands in the sidebar, so the feed shows no grant. An act that no word made stands as
-          // a line of python under a quiet header, as a word that the operator runs.
+          // The ceiling of a grant stands in the sidebar, so the feed shows no grant. An act that no word made
+          // stands as a line of Python, as a word that the operator runs.
           if (act.kind === "grant") continue;
-          add(
-            act.id,
-            `ran:${act.by}:${this.theme}`,
-            [
-              [glyph.mark, threadTone(act.id)],
-              [act.by === "operator" ? "You ran" : `${act.by} ran`, c.muted],
-            ],
-            () => {},
-            { indent, heading: true, shown: act.id },
-          );
           programCard(
             act.id,
             programFor(`act:${act.id}`, `${act.done}:${act.paused}:${act.output ?? 0}`, () =>
@@ -2483,29 +2502,20 @@ export class App {
             indent,
           );
         } else if (asksOperator(act) && act.words[0] === "None") {
-          // A prompt of None asks nothing: the console closed it as it took it, and it settles as a quiet line, its
-          // first line, which opens to the whole message. No key dismisses it.
+          // A prompt of None asks nothing. Its whole message uses the common message panel, and no key dismisses it.
           const message = String(act.words[1] ?? "");
-          const from = act.by === "operator" ? "for you" : `from ${act.by}`;
-          const lines = message.split("\n").filter((one) => one.trim()).length;
-          const more = lines > 1 ? `  +${lines - 1} ${lines === 2 ? "line" : "lines"}` : "";
-          const room = this.feedWidth - indent - 12 - Bun.stringWidth(from + more);
           add(
             act.id,
-            `${message}\n${this.feedWidth}\n${this.theme}`,
-            [
-              [`${glyph.notice} `, c.faint],
-              ["Notice", c.muted],
-              [`  ${from}`, c.faint],
-              [`  ${clip(shortenHomes(gist(message)), room)}`, c.muted],
-              [more, c.faint],
-            ],
+            `${message}:${this.theme}`,
+            [],
             (box) => {
-              const body = this.box({ paddingLeft: space.between });
-              body.add(this.markdown(message, c.muted));
-              box.add(body);
+              const panel = this.panel(box, c.faint);
+              panel.add(this.markdown(message, c.text, c.background));
+              panel.onMouseDown = (event) => {
+                if (event.button === 2) this.actActions(act);
+              };
             },
-            { compact: true, group: "notice", act, indent, shown: message },
+            { group: "notice", act, indent, shown: message, heading: false },
           );
         } else if (asksOperator(act)) {
           const message = String(act.words[1] ?? "");
@@ -2515,15 +2525,42 @@ export class App {
           add(
             act.id,
             `${message}\n${waiting}\n${aimed}`,
-            [
-              [`${glyph.asks} `, waiting ? c.warning : c.faint],
-              ["Question", c.text, bold],
-              [`  ${act.by === "operator" ? "for you" : `from ${act.by}`}`, c.faint],
-            ],
+            [],
             (box) => {
-              this.panel(box, waiting ? c.warning : c.border).add(
-                this.markdown(message, c.text, c.background),
-              );
+              const panel = this.panel(box, waiting ? c.warning : c.border);
+              panel.onMouseDown = (event) => {
+                if (event.button === 2) this.actActions(act);
+              };
+              panel.add(this.markdown(message, c.text, c.background));
+              if (ask?.choices.length) {
+                const choices = this.row({ gap: space.between, flexWrap: "wrap" });
+                for (const [index, value] of ask.choices.entries())
+                  choices.add(
+                    this.link(String(value), () => {
+                      void w
+                        .point(ask.id)
+                        .then(() => {
+                          this.choice = { id: ask.id, at: index, other: false };
+                          this.render();
+                          this.composer.focus();
+                        })
+                        .catch(this.report);
+                    }),
+                  );
+                choices.add(
+                  this.link("Other…", () => {
+                    void w
+                      .point(ask.id)
+                      .then(() => {
+                        this.choice = { id: ask.id, at: ask.choices.length, other: true };
+                        this.render();
+                        this.composer.focus();
+                      })
+                      .catch(this.report);
+                  }),
+                );
+                panel.add(choices);
+              }
               // The question that the input answers says so, and a click on another one points the input at it.
               if (ask)
                 box.add(
@@ -2544,7 +2581,7 @@ export class App {
                   ),
                 );
             },
-            { group: "question", act, shown: message },
+            { group: "question", act, shown: message, heading: false, indent },
           );
         } else {
           const message = String(act.words[1] ?? "");
@@ -2566,10 +2603,9 @@ export class App {
               `folded\n${message}\n${mark}\n${steps}\n${this.feedWidth}\n${this.theme}`,
               [],
               (box) =>
-                box.add(
+                this.panel(box, tone).add(
                   this.link(
                     [
-                      [`${glyph.mark}`, tone],
                       [`${mark} `, color],
                       [`${glyph.closed} `, c.faint],
                       [clip(shortenHomes(gist(message)), room), c.muted],
@@ -2600,18 +2636,11 @@ export class App {
           add(
             act.id,
             `${message}\n${line}\n${sent}\n${plain(state)}\n${rest}\n${thread?.resolved}\n${this.theme}`,
-            user
-              ? [["You", tone]]
-              : [
-                  [`${glyph.mark}`, tone],
-                  [`${glyph.ring} `, c.faint],
-                  [line ? message : sent, c.muted, line ? bold : 0],
-                  [line ? `  ${sent}` : "", c.faint],
-                ],
+            [],
             (box) => {
               // A message shows as the operator typed it, with each image it attached named by a mark that opens it.
               // Its first line says at its right the type of the answer that it asks for, and where it stands.
-              if (user) {
+              {
                 // A right click on a message opens its menu, as on the heading of any other act.
                 const row = this.box({
                   flexDirection: "row",
@@ -2628,10 +2657,6 @@ export class App {
                 const controls = this.threadControls(act);
                 if (controls) row.add(controls);
                 this.panel(box, tone).add(row);
-              } else if (!line) {
-                const note = this.box({ paddingLeft: space.between });
-                note.add(this.markdown(shortened, c.muted));
-                box.add(note);
               }
               if (rest)
                 box.add(
@@ -2650,10 +2675,8 @@ export class App {
                     ),
                   ),
                 );
-              const controls = user ? undefined : this.threadControls(act);
-              if (controls) box.add(controls);
             },
-            { group: user ? "user" : "sent", act, heading: user ? false : undefined, indent, shown: message },
+            { group: user ? "user" : "sent", act, heading: false, indent, shown: message },
           );
           const parts = [act, ...(thread?.messages ?? [])];
           programCard(
@@ -3270,7 +3293,8 @@ export class App {
   private readonly coloring = new Map<string, Promise<void>>();
   /** Once each line of a word that the view asked to color has its colors. */
   async colorsDone(): Promise<void> {
-    while (this.coloring.size) await Promise.all(this.coloring.values());
+    while (this.coloring.size || this.sourcePainting.size)
+      await Promise.all([...this.coloring.values(), ...this.sourcePainting]);
   }
   /** The loom that the threads of the sidebar read last, and what it was woven of, which a frame of the same life
    * reads again. */
@@ -3917,8 +3941,11 @@ export class App {
     }
     return held.words.get(id);
   }
-  /** What an act is about, whole: the message of a prompt, the program of a rung, the time of a wait, the ceilings of
-   * a grant, and the first word of any other act. */
+  /** The original word, before the engine turns quotes into Python and pads their source lines. */
+  private sourceWord(act: ActRow): string {
+    return String(act.words[0] || act.word || this.toldWord(act.id) || this.session.program[act.id] || "");
+  }
+  /** What an act is about, whole, or the label that its extension gives it. */
   private subject(act: ActRow): string {
     const label = this.partRow(act)?.label;
     if (label !== undefined) return label;
@@ -4124,7 +4151,9 @@ export class App {
     took: (step: ActRow) => string,
     since: (act?: ActRow) => string,
     heads: ReadonlySet<ProgramLine>,
-  ): Renderable {
+    digits = 2,
+    prior?: LineNumberRenderable,
+  ): LineNumberRenderable {
     const texts: string[] = [];
     const numbers = new Map<number, number>();
     const hidden = new Set<number>();
@@ -4172,23 +4201,31 @@ export class App {
         // rows of their own. Another line folds its longest strings until it fits.
         const shown =
           this.lineOpen(line) || this.openStrings(line).size ? undefined : foldStrings(line.text, column);
-        const parts = shown
-          ? [fit(shown.text, column)]
-          : Array.from({ length: Math.max(1, Math.ceil(line.text.length / column)) }, (_, k) =>
-              line.text.slice(k * column, (k + 1) * column),
-            );
+        const parts = shown ? [fit(shown.text, column)] : [""];
+        if (!shown)
+          for (const { segment } of graphemes.segment(line.text)) {
+            const last = parts.length - 1;
+            if (Bun.stringWidth((parts[last] ?? "") + segment) > column) parts.push(segment);
+            else parts[last] += segment;
+          }
+        const offsets: number[] = [];
+        let offset = 0;
+        for (const part of parts) {
+          offsets.push(offset);
+          offset += part.length;
+        }
         const code = parts[0] ?? "";
         const hint = note ? `# ${fit(note, room - column - 4)}` : "";
         const at = push(
           hint ? `${code}${" ".repeat(Math.max(0, column - Bun.stringWidth(code)))}  ${hint}` : code,
-          line.number,
+          line.display ?? line.number,
           line,
         );
         if (hint) comment(at, (texts[at]?.length ?? 0) - hint.length);
         for (const more of parts.slice(1)) push(more, undefined, line);
-        const folds = shown?.folds.filter((fold) => fold.at + FOLD.length <= Bun.stringWidth(code)) ?? [];
+        const folds = shown?.folds.filter((fold) => fold.at + FOLD.length <= code.length) ?? [];
         if (folds.length) folded.set(at, { line, folds });
-        if (!shown) for (const k of parts.keys()) whole.set(at + k, k * column);
+        if (!shown) for (const k of parts.keys()) whole.set(at + k, offsets[k] ?? 0);
         const base = program.length;
         program += `${line.text}\n`;
         if (shown) {
@@ -4204,7 +4241,8 @@ export class App {
           }
           if (from < code.length) pieces.push([at, from, code.length, source]);
         } else
-          for (const [k, part] of parts.entries()) pieces.push([at + k, 0, part.length, base + k * column]);
+          for (const [k, part] of parts.entries())
+            pieces.push([at + k, 0, part.length, base + (offsets[k] ?? 0)]);
         if (line.runs) {
           colors.set(at, { content: c.selected, gutter: c.selected });
           signs.set(at, { before: glyph.running, beforeColor: c.accent });
@@ -4217,17 +4255,9 @@ export class App {
             .slice(0, 3))
             comment(push(`# ${fit(why.replace(/^line \d+: /, ""), room - 4)}`));
         }
-      } else if (line.kind === "quote") {
-        const at = push(
-          `${line.name} = "${fit(line.text, column - line.name.length - 6)}"  # ${line.lines} lines`,
-          line.number,
-        );
-        const end = (texts[at] ?? "").lastIndexOf('"  # ');
-        fixed.push([at, line.name.length + 3, end + 1, "string"]);
-        comment(at, end + 3);
       } else if (line.kind === "output") comment(push(`#   ${fit(line.text, room - 6)}`));
       else if (line.kind === "writes") {
-        const at = push(`# ${fit(line.text, room - 4)}`);
+        const at = push(`# ${fit(line.text, room - 4)}`, line.display);
         comment(at);
         signs.set(at, { before: glyph.running, beforeColor: c.accent });
       } else comment(push(fit(line.text, room - 2)));
@@ -4250,7 +4280,7 @@ export class App {
     );
     // The fold under the pointer: a hover shows its string whole, and a click opens it in place.
     const foldAt = (x: number, y: number) => {
-      const row = y - view.y;
+      const row = target.getLineSources(y - view.y, 1)[0] ?? 0;
       const one = folded.get(row);
       const at = x - target.x;
       const fold = one?.folds.find((fold) => {
@@ -4299,19 +4329,74 @@ export class App {
         out.push([(starts[row] ?? 0) + from, (starts[row] ?? 0) + to, group]);
       return [...out, ...marks];
     };
-    const target = this.code(texts.join("\n"), marks, hoverFold, highlights);
-    const view = new LineNumberRenderable(this.renderer, {
+    const content = texts.join("\n");
+    const known = prior && this.programSurfaces.get(prior);
+    const target = known?.target ?? this.text(content);
+    this.pointable(target, content, hoverFold);
+    const view =
+      prior ??
+      new LineNumberRenderable(this.renderer, { target, fg: c.faint, paddingRight: 1, minWidth: digits + 2 });
+    const state = known ?? {
       target,
-      paddingRight: space.inset,
-      fg: c.faint,
-      minWidth: 3,
-      lineNumbers: numbers,
-      hideLineNumbers: hidden,
-      lineColors: colors,
-      lineSigns: signs,
-    });
+      text: "",
+      groups: [] as (string | undefined)[],
+      revision: 0,
+      press: undefined as { x: number; y: number; dragged: boolean } | undefined,
+    };
+    this.programSurfaces.set(view, state);
+    const revision = ++state.revision;
+    // The old prefix keeps its colors until the complete statement has new highlights. No plain frame replaces it.
+    let prefix = 0;
+    while (prefix < content.length && content[prefix] === state.text[prefix]) prefix++;
+    const groups = state.groups.slice(0, prefix);
+    for (const [row, from, to, group] of fixed)
+      for (let at = (starts[row] ?? 0) + from; at < (starts[row] ?? 0) + to; at++) groups[at] = group;
+    for (const [from, to, group] of marks) for (let at = from; at < to; at++) groups[at] = group;
+    const paint = (groups: (string | undefined)[]) => {
+      const parts: Part[] = [];
+      let from = 0;
+      for (let at = 1; at <= content.length; at++) {
+        if (at < content.length && groups[at] === groups[from]) continue;
+        const style = groups[from] ? this.style.getStyle(groups[from] ?? "") : undefined;
+        parts.push([
+          content.slice(from, at),
+          style?.fg ?? c.text,
+          (style?.bold ? bold : 0) |
+            (style?.dim ? 2 : 0) |
+            (style?.italic ? italic : 0) |
+            (style?.underline ? underline : 0),
+          style?.bg,
+        ]);
+        from = at;
+      }
+      target.content = styled(parts);
+      state.groups = groups;
+    };
+    if (state.text !== content) paint(groups);
+    state.text = content;
+    const painting = highlights()
+      .then((marks) => {
+        if (target.isDestroyed || state.revision !== revision) return;
+        const groups: (string | undefined)[] = [];
+        for (const [from, to, group] of marks) for (let at = from; at < to; at++) groups[at] = group;
+        if (groups.length !== state.groups.length || [...groups].some((one, at) => one !== state.groups[at]))
+          paint(groups);
+      })
+      .finally(() => this.sourcePainting.delete(painting));
+    this.sourcePainting.add(painting);
+    for (const at of texts.keys()) if (!signs.has(at)) signs.set(at, { before: " ", beforeColor: c.faint });
+    view.setLineNumbers(numbers);
+    view.setHideLineNumbers(hidden);
+    view.setLineColors(colors);
+    view.setLineSigns(signs);
+    this.programLoaders.delete(view);
+    for (const [row, sign] of signs) if (sign.before === glyph.running) this.programLoaders.set(view, row);
     // The gutter of the numbers takes the events of the pointer over the program, so it shows the string of a fold.
+    view.onMouseDown = (event) => {
+      state.press = { x: event.x, y: event.y, dragged: false };
+    };
     view.onMouseMove = (event) => {
+      if (state.press && (event.x !== state.press.x || event.y !== state.press.y)) state.press.dragged = true;
       if (hoverFold(event)) return;
       clearTimeout(this.hoverTimer);
       this.unhover();
@@ -4319,13 +4404,26 @@ export class App {
     // A press that ends a drag selects text and opens nothing. A press on a fold opens its string, and a press on a
     // string that shows whole folds it again.
     view.onMouseUp = (event) => {
-      const row = event.y - view.y;
+      const row = target.getLineSources(event.y - view.y, 1)[0] ?? 0;
       const line = sources[row];
-      if (line?.kind !== "code" || this.renderer.getSelection()?.getSelectedText()) return;
+      if (event.button === 2 && line) return this.actActions(line.step as ActRow);
+      const press = state.press;
+      state.press = undefined;
+      if (line?.kind !== "code" || !press || press.dragged || event.x !== press.x || event.y !== press.y)
+        return;
       const hit = foldAt(event.x, event.y);
       if (hit) return this.openString(hit.line, hit.fold.literal);
       const open = this.openStrings(line);
-      const index = (whole.get(row) ?? -1) + event.x - target.x;
+      // The pointer is in terminal cells; literal bounds and the row's offset are UTF-16 source positions.
+      let cells = 0;
+      let units = 0;
+      for (const { segment } of graphemes.segment(texts[row] ?? "")) {
+        const width = Bun.stringWidth(segment);
+        if (cells + width > event.x - target.x) break;
+        cells += width;
+        units += segment.length;
+      }
+      const index = (whole.get(row) ?? -1) + units;
       const literal = literals(line.text).findIndex(
         (one, k) => open.has(k) && whole.has(row) && index >= one.start - 1 && index <= one.end,
       );
@@ -4334,6 +4432,19 @@ export class App {
     };
     return view;
   }
+  private streamedSource = new Map<string, { text: string; thinking: string }>();
+  private sourcePainting = new Set<Promise<void>>();
+  private programLoaders = new Map<LineNumberRenderable, number>();
+  private programSurfaces = new WeakMap<
+    LineNumberRenderable,
+    {
+      target: TextRenderable;
+      text: string;
+      groups: (string | undefined)[];
+      revision: number;
+      press?: { x: number; y: number; dragged: boolean };
+    }
+  >();
   /** The strings of a line of a program that the operator opened, which show whole. */
   private openStrings(line: Extract<ProgramLine, { kind: "code" }>): Set<number> {
     const folds = this.session.folds;
@@ -5874,6 +5985,15 @@ export class App {
             },
           ]
         : []),
+      ...(act.kind === "rung"
+        ? [
+            {
+              label: "Copy its source",
+              detail: "The original Python, with no display folds",
+              run: () => this.renderer.copyToClipboardOSC52(this.sourceWord(act)),
+            },
+          ]
+        : []),
       {
         label: "Copy its name",
         detail: act.id,
@@ -7245,7 +7365,9 @@ export class App {
       this.scroll.scrollChildIntoView(
         this.cards.has(target.card)
           ? target.card
-          : ([...this.cards].find(([, card]) => card.act === target.card)?.[0] ?? target.card),
+          : (this.sourceLocations.get(target.card) ??
+              [...this.cards].find(([, card]) => card.act === target.card)?.[0] ??
+              target.card),
       );
     else this.scrollNow(target);
     this.scrollTarget = undefined;

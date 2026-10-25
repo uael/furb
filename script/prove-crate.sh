@@ -51,7 +51,7 @@ furb = \"$version\"
 cp "$root/docs/examples/rust/chains.rs" src/main.rs
 cargo --config "$work/config.toml" build --quiet
 mkdir -p "$work/yard/work" "$work/yard/fake"
-cp "$root/src/world/provider/fake-claude.sh" "$work/yard/fake/claude"
+cp "$root/src/world/provider/claude/fake-claude.sh" "$work/yard/fake/claude"
 chmod +x "$work/yard/fake/claude"
 printf '%s' '"close(\"Login is twice as fast.\")"' > "$work/yard/fake/word.1"
 printf '%s' '"close(\"The notes read well.\")"' > "$work/yard/fake/word.2"
