@@ -62,6 +62,16 @@ pub fn kept(path: impl AsRef<Path>) -> Result<Vec<Object>, Fault> {
   }
 }
 
+/// Each entry that the store kept at a path, in order, read with no lease and changed in nothing, one at a time, so
+/// a reader holds no more of a large record than it keeps of each entry.
+pub fn each(path: impl AsRef<Path>, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
+  let path = path.as_ref();
+  match database(path) {
+    true => sqlite::each(path, take),
+    false => lines::each(path, take),
+  }
+}
+
 /// The entries that the store kept at a path whose fact is of one of some kinds, in order, read with no lease and
 /// changed in nothing. A file of lines is read from the head of each line, and parses only the lines of those kinds.
 pub fn heads(path: impl AsRef<Path>, kinds: &[&str]) -> Result<Vec<Object>, Fault> {
