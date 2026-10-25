@@ -5839,7 +5839,7 @@ export class App {
             value: act.value,
           }),
       },
-      ...(w.editable(act)
+      ...(!w.host.reading && w.editable(act)
         ? [
             {
               label: "Edit its program",
