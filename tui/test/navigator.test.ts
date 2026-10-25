@@ -53,7 +53,9 @@ for (const { width, height } of [
         await frame();
         await screen.mockInput.typeText("Find threads");
         screen.mockInput.pressEnter();
-        expect(await capture("thread-picker")).toContain("Threads");
+        const threadPicker = await capture("thread-picker");
+        expect(threadPicker).toContain("Threads");
+        expect(threadPicker.split("\n").find((line) => line.includes("prompt1"))).toMatch(/prompt1\s+done/);
         screen.mockInput.pressArrow("right");
         expect(await capture("thread-menu")).toContain("Reopen and reply");
         expect(session.thread).toBe(targetBeforeInspect);

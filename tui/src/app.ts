@@ -4854,9 +4854,8 @@ export class App {
     const list = this.chainThreadList(w.selected);
     this.openPalette(
       `Threads · ${w.label}`,
-      list.map((thread) => ({
-        label: `${thread.act.id}  ${thread.title || "Untitled thread"}`,
-        detail: thread.resolved
+      list.map((thread) => {
+        const state = thread.resolved
           ? "done"
           : thread.asks.length
             ? "ask"
@@ -4864,11 +4863,23 @@ export class App {
               ? "held"
               : thread.state === "failed"
                 ? "fail"
-                : "run",
-        status: thread.resolved ? "done" : thread.state === "asks" ? "blocked" : "working",
-        run: () => this.inspectThread(thread),
-        menu: () => this.threadMenu(thread),
-      })),
+                : "run";
+        return {
+          label: `${thread.act.id}  ${state}  ${thread.title || "Untitled thread"}`,
+          detail: "",
+          status: thread.resolved
+            ? "done"
+            : thread.state === "asks"
+              ? "blocked"
+              : thread.state === "held"
+                ? "paused"
+                : thread.state === "failed"
+                  ? "error"
+                  : "working",
+          run: () => this.inspectThread(thread),
+          menu: () => this.threadMenu(thread),
+        };
+      }),
       { note: "Enter inspects. → actions. All threads are searchable." },
     );
   }
