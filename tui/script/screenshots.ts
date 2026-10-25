@@ -775,6 +775,23 @@ try {
   };
   await show(bare);
   await capture("63-setup-no-model");
+  bare.catalog = [["local:qwen3", ["low", "medium", "high"], 65536]];
+  bare.setup = {
+    ...bare.setup,
+    providers: [...bare.setup.providers, { provider: "local", env: [], offered: 1, enabled: true }],
+  };
+  bare.emit("change");
+  await capture("92-setup-configured-local");
+  bare.catalog = [];
+  bare.setup = {
+    ...bare.setup,
+    providers: [
+      ...bare.setup.providers.filter((one) => one.provider !== "local"),
+      { provider: "local", env: ["LOCAL_KEY"], offered: 0, enabled: true },
+    ],
+  };
+  bare.emit("change");
+  await capture("93-setup-configured-local-missing");
 
   // Watch a life: the demo plays by itself, asks no model, and costs nothing.
   app().dispose();

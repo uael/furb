@@ -37,6 +37,21 @@ async function drawn(frame: () => Promise<string>, root: Renderable): Promise<st
 
 afterAll(removeDemoDirectories);
 
+test("the welcome shows provider checks when they arrive and updates them after a reload", () =>
+  composing(async ({ session, frame }) => {
+    session.setup = { claude: false, providers: [{ provider: "local", env: [], enabled: true, offered: 0 }] };
+    session.catalog = [];
+    session.catalogRead = true;
+    session.emit("change");
+    expect(await frame()).toContain("No model from the local provider settings.");
+    session.setup = { claude: false, providers: [{ provider: "local", env: [], enabled: true, offered: 1 }] };
+    session.catalog = [["local:qwen3", ["medium"], 65536]];
+    session.emit("change");
+    const shown = await frame();
+    expect(shown).toContain("1 model in the provider settings.");
+    expect(shown).not.toContain("No model from the local provider settings.");
+  }));
+
 test("the real native life drives the feed, the transcript, and responsive views", () =>
   composing(
     async ({ session, app, screen, frame }) => {

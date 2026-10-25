@@ -2655,7 +2655,18 @@ export class App {
       }
       if (!items && !w.search && !w.loading && !w.error) {
         const { width, height } = this.scroll.viewport;
-        add("welcome", `welcome:${width}:${height}:${this.theme}`, [], (box) => this.welcome(box, height));
+        const welcomeKey = JSON.stringify([
+          this.reader,
+          w.catalogRead,
+          w.catalog.length,
+          w.setup,
+          w.actorChoice.model,
+          w.workingDirectory,
+          w.watching,
+        ]);
+        add("welcome", `welcome:${width}:${height}:${this.theme}:${welcomeKey}`, [], (box) =>
+          this.welcome(box, height),
+        );
         items++;
       }
     } else if (w.view === "transcript") {
