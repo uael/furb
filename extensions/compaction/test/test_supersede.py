@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from extensions.conftest import compacting
+from extensions.conftest import carried, compacting, importing
 from furb import engine
 
 
@@ -29,3 +29,15 @@ async def test_so_the_chain_goes_on_under_its_name(tmp_path: Path) -> None:
   assert await engine.prompt(int, "the k", on=root) == 7
   assert engine.get("chain2") is None and len(str(engine.turns(on=root))) < len(str(turns)) + 400
   assert [a for a in engine.transcript(root) if a[0] == "tell" and "a.txt" in str(a)] == []
+
+
+async def test_a_carried_fact_stays_when_the_filter_keeps_the_carry_that_said_it(tmp_path: Path) -> None:
+  """A fact that the chain carried from another record stays when the filter keeps the carry that said it, and goes with it."""
+  _, root, heard = importing(tmp_path, ())
+  await engine.rung("await inherit('old.jsonl')", on=root)
+  (carry,) = [a[1] for a in heard]
+  turns = carried(carry)["turns"]
+  await engine.rung(f"supersede(take({carry!r}))", on=root)
+  assert [a for a in engine.transcript(root) if a in turns] == turns
+  await engine.rung(f"supersede(take({carry!r}, inside=False))", on=root)
+  assert [a for a in engine.transcript(root) if a in turns] == []

@@ -88,8 +88,11 @@ def run(n: int, workflow: str, at: str, conclusion: str) -> dict:
 
 
 class Round:
-  def __init__(self, tmp: Path) -> None:
+  def __init__(self, tmp: Path, chain: str = "chain1", modules: dict | None = None) -> None:
     self.tmp, self.now = tmp, 1000.0
+    self.chain, self.modules = chain, {} if modules is None else modules
+    self.rungs: list[tuple[str, str]] = []
+    self.targets: list[str] = []
     self.says: list[tuple[str, str, int]] = []
     self.prompts: list[tuple[str, str]] = []
     self.hired: list[tuple[str, str]] = []
@@ -103,7 +106,7 @@ class Round:
     (tmp / "home.gitconfig").write_text("", encoding="utf-8")
     who = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
     self.env = {
-      **os.environ,
+      **{name: value for name, value in os.environ.items() if not name.startswith("GIT_")},
       **who,
       "GIT_CONFIG_GLOBAL": str(tmp / "home.gitconfig"),
       "GIT_CONFIG_NOSYSTEM": "1",
@@ -118,11 +121,14 @@ class Round:
     ns.update(HIDDEN=None, OPERATOR="operator", ROOT="chain1", bash=self.bash, clock=lambda: self.now)
     ns.update(cwd=lambda: str(tmp), get=self.facts.get, over=lambda name: name in self.done, prompt=self.prompt)
     ns.update(peek=lambda name, waiting=None: self.done.get(name, waiting), read=self.read, write=self.write)
-    ns.update(transcript=lambda on="", of="": [], paused=lambda name: False, scope=lambda name: "chain1")
-    ns.update(acting=lambda: "rung1", wake=lambda name: None)
+    ns.update(transcript=lambda on="", of="": [], paused=lambda name: False, scope=lambda name: self.chain)
+    ns.update(acting=lambda: "rung1", wake=lambda name: None, module=lambda on="": self.modules.get(on, {}))
+    ns.update(chain=lambda label="", source="": f"chain-{label}", rung=self.rung)
     exec(compile(IMPORT.sub("", SOURCE), str(HERE / "conductor.py"), "exec"), ns)  # noqa: S102
+    self.real_hire = ns["hire"]
     ns.update(quietly=lambda verb, *args, **words: verb(*args, **words), hire=self.hire)
     self.ns = ns
+    self.modules[chain] = ns
 
   def __getattr__(self, name: str) -> object:
     return self.ns[name]
@@ -152,7 +158,12 @@ class Round:
 
   def prompt(self, shape: object, message: str = "", to: str = "", on: str = "") -> str:
     self.prompts.append((message, on))
+    self.targets.append(to)
     return f"prompt{100 + len(self.prompts)}"
+
+  def rung(self, word: str = "", retells: str = "", to: str = "", on: str = "") -> str:
+    self.rungs.append((word, on))
+    return f"rung{len(self.rungs)}"
 
   def read(self, path: str, show: object = None, on: str = "") -> Text:
     if path not in self.files:
@@ -167,7 +178,13 @@ class Round:
     self.hired.append((key, brief))
     name = f"worker{len(self.hired)}"
     self.ns["working"][name] = key
+    self.ns["models"][name] = self.ns["model_of"](key)
     return name
+
+  def busy(self, name: str, key: str, model: str) -> None:
+    self.ns["working"][name] = key
+    self.ns["models"][name] = model
+    self.facts[name] = ("prompt", name, "rung1", f"chain-{key}", "None", "", "")
 
   def pr(self, n: int = 5, checks: tuple = (), **more: object) -> dict:
     one = {
@@ -267,6 +284,7 @@ async def test_a_lone_failure_reruns_its_failed_jobs_once_before_a_fixer(conduct
 
 
 def test_new_items_wait_while_an_open_pr_needs_a_worker(conductor: Round) -> None:
+  conductor.efforts.update({key: SONNET for key in "abcde"})
   conductor.queue[:] = [("a", "", ""), ("b", "", "")]
   conductor.backlog[:] = [("c", "", ""), ("d", "", ""), ("e", "", "")]
   conductor.prs[7] = conductor.pr(n=7, checks=("FAILURE",))
@@ -275,7 +293,8 @@ def test_new_items_wait_while_an_open_pr_needs_a_worker(conductor: Round) -> Non
   conductor.working["prompt9"] = "fix7"
   conductor.staff()
   assert [key for key, _ in conductor.hired] == ["a", "b", "c"]
-  assert conductor.backlog == [("d", "", ""), ("e", "", "")]
+  assert conductor.queue == [("d", "", "")]
+  assert conductor.backlog == [("e", "", "")]
 
 
 def test_each_brief_forbids_a_window_on_this_machine(conductor: Round) -> None:
@@ -516,6 +535,7 @@ async def test_a_job_over_its_budget_is_queued_once_until_new_runs_measure_it(co
   assert "took 180 s" in conductor.queue[0][1]
   assert "budget of 60 s" in conductor.queue[0][1]
 
+
 @POSIX
 @JQ
 async def test_a_veto_keeps_a_green_pr_from_a_merge(conductor: Round) -> None:
@@ -529,3 +549,147 @@ async def test_a_veto_keeps_a_green_pr_from_a_merge(conductor: Round) -> None:
   await conductor.land(conductor.pr(n=7, sha="sha7", checks=("SUCCESS",), names=["the hooks"]), False)
   assert asked == [7]
   assert "pr merge" not in conductor.log()
+
+
+def test_the_environment_of_each_git_holds_no_variable_of_a_commit(
+  tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+  for name in ("GIT_INDEX_FILE", "GIT_DIR", "GIT_WORK_TREE", "GIT_PREFIX", "GIT_EXEC_PATH"):
+    monkeypatch.setenv(name, "/elsewhere")
+  env = Round(tmp_path).env
+  assert sorted(name for name in env if name.startswith("GIT_")) == [
+    "GIT_AUTHOR_EMAIL",
+    "GIT_AUTHOR_NAME",
+    "GIT_COMMITTER_EMAIL",
+    "GIT_COMMITTER_NAME",
+    "GIT_CONFIG_GLOBAL",
+    "GIT_CONFIG_NOSYSTEM",
+  ]
+
+
+OPUS = "claude-cli:opus/medium"
+SONNET = "claude-cli:sonnet/medium"
+TOP = "claude-cli:opus/high"
+
+
+def test_the_rulings_of_the_owner_stand_in_conducting_in_his_words(conductor: Round) -> None:
+  for words in (
+    "opus/medium should be your default, not opus/high",
+    "xhigh for the coordination and my rulings only",
+    "From now on: 2 opus workers, 3 sonnet ones. max.",
+  ):
+    assert words in conductor.CONDUCTING
+  assert conductor.ACTOR == OPUS
+  assert conductor.ROOM == {"opus": 2, "sonnet": 3}
+
+
+@POSIX
+@JQ
+def test_a_worker_runs_only_sonnet_or_opus_at_medium_or_high(conductor: Round) -> None:
+  conductor.ns["quietly"] = lambda verb, *args, **words: (
+    asyncio.run(verb(*args, **words)) if verb == conductor.bash else verb(*args, **words)
+  )
+  for model in ("claude-cli:opus/xhigh", "claude-cli:opus/max", "claude-cli:sonnet/max", "claude-cli:haiku/medium"):
+    conductor.efforts["k"] = model
+    with pytest.raises(Refused, match="xhigh and max"):
+      conductor.real_hire("k", "w")
+  assert conductor.working == {}
+  assert conductor.log() == ""
+  for model in (SONNET, "claude-cli:sonnet/high", OPUS, TOP):
+    conductor.efforts["k"] = model
+    name = conductor.real_hire("k", "w")
+    assert conductor.models[name] == model
+    assert conductor.targets[-1] == model
+  assert "label create w:k --force" in conductor.log()
+  del conductor.efforts["k"]
+  assert conductor.models[conductor.real_hire("k", "w")] == OPUS
+  assert conductor.targets[-1] == OPUS
+
+
+def test_an_item_that_asks_for_xhigh_waits_and_the_owner_hears(conductor: Round) -> None:
+  conductor.efforts["x"] = "claude-cli:opus/xhigh"
+  conductor.queue[:] = [("x", "", ""), ("y", "", "")]
+  conductor.staff()
+  assert [key for key, _ in conductor.hired] == ["y"]
+  assert conductor.queue == [("x", "", "")]
+  assert len(conductor.prompts) == 1
+  assert "xhigh" in conductor.prompts[0][0]
+  conductor.staff()
+  assert len(conductor.prompts) == 1
+
+
+def test_the_round_runs_two_workers_on_opus_and_three_on_sonnet_at_most(conductor: Round) -> None:
+  models = {"o1": OPUS, "o2": TOP, "o3": OPUS, "s1": SONNET, "s2": SONNET, "s3": SONNET, "s4": SONNET}
+  conductor.efforts.update(models)
+  conductor.queue[:] = [(key, "", "") for key in models]
+  conductor.staff()
+  assert [key for key, _ in conductor.hired] == ["o1", "o2", "s1", "s2", "s3"]
+  assert conductor.queue == [("o3", "", ""), ("s4", "", "")]
+  conductor.done["worker1"] = None
+  conductor.staff()
+  assert [key for key, _ in conductor.hired][5:] == ["o3"]
+  assert conductor.queue == [("s4", "", "")]
+
+
+def test_an_item_with_no_room_keeps_its_place_while_the_next_with_room_starts(conductor: Round) -> None:
+  conductor.busy("p1", "a", OPUS)
+  conductor.busy("p2", "b", TOP)
+  conductor.efforts["d"] = SONNET
+  conductor.queue[:] = [("c", "", ""), ("d", "", "")]
+  conductor.staff()
+  assert [key for key, _ in conductor.hired] == ["d"]
+  assert conductor.queue == [("c", "", "")]
+
+
+def test_a_fixer_goes_before_a_new_item_and_waits_for_room_on_opus(conductor: Round) -> None:
+  conductor.busy("p1", "a", OPUS)
+  conductor.busy("p2", "b", TOP)
+  conductor.prs[8] = conductor.pr(n=8, open=["- [ ] It is one change."], verdict="open")
+  conductor.queue[:] = [("c", "", "")]
+  conductor.boxes(conductor.prs[8], 0.0)
+  conductor.staff()
+  assert conductor.hired == []
+  conductor.done["p1"] = None
+  conductor.boxes(conductor.prs[8], 0.0)
+  assert [key for key, _ in conductor.hired] == ["box8"]
+
+
+def test_an_ended_worker_goes_on_in_its_own_chain_on_sonnet(conductor: Round) -> None:
+  conductor.homes["k8"] = "chain7"
+  pr = conductor.pr(n=8, open=["- [ ] It is one change."], labels=["w:k8"])
+  for index, key in enumerate("abc"):
+    conductor.busy(f"p{index}", key, SONNET)
+  conductor.boxes(pr, 0.0)
+  assert (conductor.hired, conductor.rungs, conductor.prompts) == ([], [], [])
+  conductor.done["p0"] = None
+  conductor.boxes(pr, 0.0)
+  assert conductor.hired == []
+  assert conductor.rungs == [(f"actor = {SONNET!r}", "chain7")]
+  assert conductor.targets == [SONNET]
+  message, on = conductor.prompts[0]
+  assert on == "chain7"
+  assert message.startswith(f"Your work on this chain goes on, now on {SONNET}. Your open PR #8")
+  name = next(name for name, key in conductor.working.items() if key == "k8")
+  assert conductor.models[name] == SONNET
+  conductor.boxes(pr, 0.0)
+  assert len(conductor.prompts) == 1
+
+
+def test_the_round_follows_the_compaction_of_its_orchestrator(conductor: Round, tmp_path: Path) -> None:
+  (tmp_path / "new").mkdir()
+  new = Round(tmp_path / "new", "chain2", conductor.modules)
+  calls: list[str] = []
+
+  async def waits(every: float, *acts: str) -> None:
+    new.lead.update(conductor.lead)
+    assert new.follow() == "chain2"
+
+  async def swept(every: float) -> None:
+    calls.append("sweep")
+
+  conductor.queue.append(("a", "", ""))
+  conductor.ns.update(tend=lambda: calls.append("tend"), staff=lambda: None, wait=waits, sweep=swept)
+  assert asyncio.run(conductor.conduct()) == {}
+  assert calls == ["tend", "sweep"]
+  assert conductor.lead == {"home": "chain2"}
+  assert new.lead == {"home": "chain2"}

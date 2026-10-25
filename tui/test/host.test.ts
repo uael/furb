@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { createServer } from "node:net";
+import { createConnection, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openEngine } from "../src/bridge.ts";
-import { type About, hostPlace } from "../src/hosting.ts";
+import { type About, hostPlace, listening, reachOf } from "../src/hosting.ts";
 
 /** The moment a condition holds, read again every 50 ms. */
 async function eventually(ready: () => boolean | Promise<boolean>, what: string): Promise<void> {
@@ -248,3 +248,99 @@ test.skipIf(process.platform === "win32")(
       await host.end();
     }),
 );
+
+test.skipIf(process.platform === "win32")(
+  "a window over the network with the key to read sees the life and changes nothing in it",
+  () =>
+    demoLife(async (record, directory) => {
+      const own = await openEngine({ demo: true, host: true, cwd: directory, record });
+      const served = await own.host.serve();
+      // The door opens once for the life of the host, so a second serve gives the same addresses.
+      expect(await own.host.serve("0.0.0.0:1")).toEqual(served);
+      expect(served.read).toMatch(/^furb:\/\/127\.0\.0\.1:\d+\/[0-9a-f-]{36}$/);
+      expect(served.write).not.toBe(served.read);
+      const command = await own.engine.bash("echo seen", { on: own.engine.root });
+      await eventually(async () => (await own.engine.peek(command)) !== null, "the command to end");
+      const reader = await openEngine({ attach: served.read, record: join(directory, "reader.jsonl") });
+      expect([reader.engine.root, reader.host.role, own.host.role]).toEqual([
+        own.engine.root,
+        "read",
+        "write",
+      ]);
+      expect(await reader.engine.peek(command)).toMatchObject({ code: 0, stdout: { content: "seen\n" } });
+      await eventually(() => reader.host.seq > 0, "the state of the life");
+      // The window keeps its view at its own record, and not at the record of the host.
+      expect(reader.host.record).toBe(join(directory, "reader.jsonl"));
+      const refused = (work: Promise<unknown>) => work.then(String, (error: Error) => error.message);
+      expect(await refused(reader.engine.bash("echo no", { on: reader.engine.root }))).toBe(
+        "This window reads the life only, so it cannot bash.",
+      );
+      expect(await refused(reader.host.look("life.jsonl", reader.engine.root))).toBe(
+        "This window reads the life only, so it cannot look.",
+      );
+      expect(await refused(reader.host.serve())).toBe("This window reads the life only, so it cannot serve.");
+      expect(await refused(reader.host.end())).toBe("This window reads the life only, so it cannot end.");
+      expect(await reader.host.setup()).toBeNull();
+      // The window that writes sees that no command came from the window that reads.
+      const commands = (await own.engine.transcript({ on: own.engine.root })).filter(
+        (fact) => fact[0] === "bash",
+      );
+      expect(commands.map((fact) => fact[1])).toEqual([command]);
+      await reader.host.dispose();
+      await own.host.end();
+    }),
+);
+
+test.skipIf(process.platform === "win32")(
+  "a window over the network with the key to write drives the life, and a host refuses a key of no role",
+  () =>
+    demoLife(async (record, directory) => {
+      const own = await openEngine({ demo: true, host: true, cwd: directory, record });
+      const served = await own.host.serve();
+      const writer = await openEngine({ attach: served.write, record: join(directory, "writer.jsonl") });
+      expect(writer.host.role).toBe("write");
+      const command = await writer.engine.bash("echo driven", { on: writer.engine.root });
+      await eventually(async () => (await own.engine.peek(command)) !== null, "the command to end");
+      expect(await own.engine.peek(command)).toMatchObject({ code: 0, stdout: { content: "driven\n" } });
+      const { host, port } = reachOf(served.read);
+      const wrong = await openEngine({ attach: `furb://${host}:${port}/not-a-key` }).then(
+        () => "opened",
+        (error: Error) => error.message,
+      );
+      expect(wrong).toBe("This key opens no window of the life.");
+      // A stranger that says it sends a long message before any hello loses its socket, and the life goes on.
+      const stranger = createConnection({ host, port });
+      await new Promise<void>((resolve) => stranger.once("connect", () => resolve()));
+      const closed = new Promise<void>((resolve) => stranger.once("close", () => resolve()));
+      stranger.on("error", () => {});
+      const head = Buffer.alloc(4);
+      head.writeUInt32LE(2 ** 30, 0);
+      stranger.write(head);
+      await closed;
+      expect(await writer.engine.peek(command)).toMatchObject({ code: 0 });
+      await writer.host.dispose();
+      await own.host.end();
+    }),
+);
+
+test("an address of a host reads as its host, its port and its key, and an address to listen at as a host and a port", () => {
+  expect(reachOf("furb://[::1]:7700/k%2F1")).toEqual({ host: "::1", port: 7700, key: "k/1" });
+  expect(() => reachOf("http://h:1/k")).toThrow(
+    "http://h:1/k is no address of a host: it reads furb://host:port/key.",
+  );
+  expect(() => reachOf("furb://h:1/")).toThrow("is no address of a host");
+  expect([
+    listening(""),
+    listening("7700"),
+    listening(":7700"),
+    listening("0.0.0.0:7700"),
+    listening("[::]:1"),
+  ]).toEqual([
+    { name: "127.0.0.1", port: 0 },
+    { name: "127.0.0.1", port: 7700 },
+    { name: "127.0.0.1", port: 7700 },
+    { name: "0.0.0.0", port: 7700 },
+    { name: "::", port: 1 },
+  ]);
+  expect(() => listening("a:b:c")).toThrow("a:b:c is no address: give host:port, as 0.0.0.0:7700.");
+});

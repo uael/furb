@@ -41,12 +41,16 @@ import {
 import {
   type Ask,
   actLines,
+  asksOperator,
   beside,
   type ChainThread,
   type Chip,
+  cancelled,
   chainThreads,
   condense,
   doingOf,
+  type Exit,
+  failed,
   gist,
   type Loom,
   ladder,
@@ -108,9 +112,6 @@ import { commentStart, type Hunk, hunkPatch, lines, type Scope, scopeLabels, sco
 import {
   type ActRow,
   type Cancel,
-  cancelled,
-  type Exit,
-  failed,
   type Scroll,
   type Session,
   type SessionStatus,
@@ -151,8 +152,6 @@ const twice = 800;
 const viewLabels: Record<View, string> = { feed: "Feed", transcript: "Transcript", changes: "Changes" };
 /** A text with its first letter in upper case. */
 const title = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
-/** Whether an act is a question to the operator: a prompt whose actor is the operator. */
-const asksOperator = (act: ActRow) => act.kind === "prompt" && act.words[2] === "operator";
 /** What an act is doing: the word that says it, the glyph that shows it, and their color. */
 type State = { word: string; mark: string; color: RGBA };
 /** The state of an act that failed, that a cancel ended, that is done, or that a pause holds. */
@@ -1548,9 +1547,11 @@ export class App {
       : retry
         ? retryLine(retry)
         : status === "error"
-          ? w.error
-            ? "The view could not load"
-            : "The last act failed"
+          ? w.damagedJournal
+            ? "The journal of file changes is damaged"
+            : w.error
+              ? "The view could not load"
+              : "The last act failed"
           : statusLabels[status];
     // The footer offers the keys of the top layer that offers any, each of which does what its key does, and under
     // the layer of the table, the wake of a paused chain.
@@ -1977,12 +1978,12 @@ export class App {
           this.text(w.damagedJournal, c.muted),
           [
             "Repair the journal",
-            "keeps each change that it can read",
+            `keeps each change that it can read, ${this.chordOf("repair")}`,
             () => void w.repairJournal().catch(w.fail),
           ],
           [
             "Start a new journal",
-            "keeps the damaged one beside it",
+            `keeps the damaged one beside it, ${this.chordOf("renew")}`,
             () => void w.renewJournal().catch(w.fail),
           ],
         ),
@@ -5325,9 +5326,37 @@ export class App {
       sidebar: () => library.toggle(),
       workspace: this.workspacePicker,
       watch: this.watch,
+      repair: () => this.session.repairJournal(),
+      renew: () => this.session.renewJournal(),
     };
     if (name && !argument && Object.hasOwn(bare, name)) {
       await bare[name]?.();
+      return true;
+    }
+    if (name === "serve") {
+      const served = await this.session.host.serve(argument);
+      const copy = (address: string, what: string) => () => {
+        this.renderer.copyToClipboardOSC52(address);
+        this.session.notice = `Copied the address ${what}.`;
+      };
+      this.openPalette(
+        "Serve this life to other operators",
+        [
+          {
+            label: "Copy the address to read and drive it",
+            detail: served.write,
+            run: copy(served.write, "to read and drive this life"),
+          },
+          {
+            label: "Copy the address to read it only",
+            detail: served.read,
+            run: copy(served.read, "to read this life only"),
+          },
+        ],
+        {
+          note: "An operator attaches with furb-tui --attach <address>. Each address holds its key, so give it only to the operator that it is for.",
+        },
+      );
       return true;
     }
     if (name === "access") {
@@ -5611,6 +5640,11 @@ export class App {
         },
       },
     ]);
+  }
+  /** The chord of the key that runs an action, as this terminal sends it. */
+  private chordOf(action: Action): string {
+    const found = bindings.find(({ binding }) => binding.run === action);
+    return found ? shown(found.key, found.binding, this.kitty) : "";
   }
   /** Every action in one list: each with its label, the slash command that does it, what it does, and its keys. The
    * table of keys gives the chord of each command, and each action that has keys and no command, which stands before
@@ -7727,12 +7761,16 @@ export class App {
     lifeView: () => this.switchView(),
     steer: () => this.steer(),
     rail: () => this.railSteer(),
+    repair: () => void this.session.repairJournal().catch(this.session.fail),
+    renew: () => void this.session.renewJournal().catch(this.session.fail),
   };
   /** When an action of the table acts, where it does not act at all times: a key that does not act goes on to the
    * input, and the footer does not offer it. */
   private readonly when: Partial<Record<Action, () => boolean>> = {
     answer: () => this.session.desk.asks.length > 0,
     scope: () => this.session.view === "changes",
+    repair: () => this.session.journalDamaged,
+    renew: () => this.session.journalDamaged,
     pause: () => !this.searchRow.visible && this.pausing(),
   };
   /** The view shown, with the rewind tree closed. */

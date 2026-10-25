@@ -443,3 +443,23 @@ test("a file opens with the command of the system it runs on", () => {
   expect(opener("linux", path)).toEqual(["xdg-open", path]);
   expect(opener("freebsd", path)).toEqual(["xdg-open", path]);
 });
+
+test("/wake with no chain wakes every paused chain of the life, and /wake with a chain wakes that one alone", () =>
+  composing(async ({ session }) => {
+    const first = session.selected;
+    await session.submit("/pause");
+    await session.submit("/chain second");
+    const second = session.selected;
+    await session.submit("/pause");
+    const stopped = () =>
+      session.chains.filter((chain) => [first, second].includes(chain.id) && chain.paused);
+    await until(session, () => stopped().length === 2);
+    await session.submit(`/wake ${first}`);
+    await until(session, () => stopped().length === 1);
+    expect(stopped()[0]?.id).toBe(second);
+    await session.submit(`/pause ${first}`);
+    await until(session, () => stopped().length === 2);
+    await session.submit("/wake");
+    await until(session, () => stopped().length === 0);
+    expect(session.notice).toBe("Work resumed on 2 chains.");
+  }));
