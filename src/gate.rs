@@ -20,10 +20,11 @@ use monty_types::{NamedValues, TypeCheckingConfig, TypeCheckingFormat};
 use ruff_python_ast::{
   ExceptHandler, Expr, ExprContext, Parameter, Pattern, Stmt,
   statement_visitor::{StatementVisitor, walk_stmt},
+  token::TokenKind,
   visitor::{self, Visitor},
 };
-use ruff_python_parser::parse_module;
-use ruff_text_size::{Ranged, TextRange};
+use ruff_python_parser::{Mode, ParseOptions, parse_module, parse_unchecked};
+use ruff_text_size::{Ranged, TextRange, TextSize};
 
 use crate::{
   ENGINE,
@@ -43,6 +44,13 @@ const IMPORT: &str = "error[unresolved-import]";
 /// The rule of a finding on an await in a function that is not async.
 const AWAIT: &str = "error[await-outside-async]";
 
+/// The most brackets, one in another, that the checker reads in a literal. The checker takes time of about the fourth
+/// power of the depth of a literal, and more again when a part has no type that it knows, as an empty list: a list of
+/// 32 levels with an empty list at the bottom takes 6 s. monty writes a value of about 990 levels as a literal, which
+/// a tell puts in the program. Each shape of lists, tuples and dicts that was measured reads in less than 0.05 s at 12
+/// levels.
+const DEEP: usize = 12;
+
 /// The rule of a finding on a name that the transcript binds.
 const TOLD: &str = "error[transcript-name]";
 
@@ -60,8 +68,10 @@ thread_local! {
 /// What the gate found on a sheet, in the order of its lines: each error of the checker by the line it stands on,
 /// in the concise form it writes, and no warning, since a warning refuses no word; each import that the
 /// sandbox cannot run, in place of what the checker says of the imports; each await in a function that is not
-/// async; and each name that the word binds and that the transcript binds.
+/// async; and each name that the word binds and that the transcript binds. Each is read on the sheet with each
+/// literal that holds more than `DEEP` brackets cut, which the checker could not read in time.
 pub fn checked(sheet: &str) -> Result<Vec<(usize, String)>, Fault> {
+  let sheet = &shallowed(sheet);
   let mut found = typed(sheet)?;
   found.extend(unrun(sheet));
   found.extend(unawaited(sheet));
@@ -101,6 +111,99 @@ fn typed(sheet: &str) -> Result<Vec<(usize, String)>, Fault> {
       }
     }
   })
+}
+
+/// The sheet with each literal of a list, a tuple, a set or a dict that holds more than `DEEP` brackets, one in
+/// another, cut to an empty one of its kind, which keeps its lines. A value that a tell wrote as a literal stays in
+/// the program, so each later word reads it again. The whole literal is cut, and not its deep parts, so no part of a
+/// type that the checker does not know stands deep in a union. The cut reads the tokens and not the tree, since the
+/// parser gives no tree past about 200 brackets.
+fn shallowed(sheet: &str) -> String {
+  let parsed = parse_unchecked(sheet, ParseOptions::from(Mode::Module));
+  // Each open bracket: where it starts, its kind, whether it opens a literal, whether a colon stands in it as an
+  // item of its own, and the most brackets that stand one in another in it, itself among them.
+  let mut open: Vec<(TextSize, TokenKind, bool, bool, usize)> = vec![];
+  let mut cut: Vec<(TextRange, (&str, &str))> = vec![];
+  let (mut before, mut strings) = (TokenKind::Newline, 0usize);
+  for token in parsed.tokens().iter() {
+    let kind = token.kind();
+    match kind {
+      TokenKind::FStringStart | TokenKind::TStringStart => strings += 1,
+      TokenKind::FStringEnd | TokenKind::TStringEnd => strings = strings.saturating_sub(1),
+      TokenKind::Lpar | TokenKind::Lsqb | TokenKind::Lbrace => {
+        // A bracket after a value opens a call or a subscript, and a bracket in an f-string opens a part of it.
+        let literal = strings == 0 && (kind == TokenKind::Lbrace || !valued(before));
+        open.push((token.start(), kind, literal, false, 1));
+      }
+      TokenKind::Colon => {
+        if let Some(top) = open.last_mut() {
+          top.3 = true;
+        }
+      }
+      TokenKind::Rpar | TokenKind::Rsqb | TokenKind::Rbrace => {
+        if let Some((start, opened, literal, colon, deepest)) = open.pop() {
+          if let Some(around) = open.last_mut() {
+            around.4 = around.4.max(deepest + 1);
+          }
+          if literal && deepest > DEEP {
+            let marks = match opened {
+              TokenKind::Lsqb => ("[", "]"),
+              TokenKind::Lpar => ("tuple([", "])"),
+              _ if colon => ("{", "}"),
+              _ => ("set(", ")"),
+            };
+            cut.push((TextRange::new(start, token.end()), marks));
+          }
+        }
+      }
+      _ => {}
+    }
+    if !matches!(kind, TokenKind::Comment | TokenKind::NonLogicalNewline) {
+      before = kind;
+    }
+  }
+  cut.sort_by_key(|(range, _)| range.start());
+  let (mut text, mut at) = (String::with_capacity(sheet.len()), 0);
+  for (range, (first, last)) in cut {
+    let (from, to) = (range.start().to_usize(), range.end().to_usize());
+    // A literal in a literal that is cut goes with it.
+    if from < at {
+      continue;
+    }
+    text.push_str(&sheet[at..from]);
+    text.push_str(first);
+    text.extend(std::iter::repeat_n('\n', sheet[from..to].matches('\n').count()));
+    text.push_str(last);
+    at = to;
+  }
+  text.push_str(&sheet[at..]);
+  text
+}
+
+/// Whether a token ends a value, so that a bracket after it opens a call or a subscript. A soft keyword counts as a
+/// name, so a bracket after one is never cut.
+fn valued(token: TokenKind) -> bool {
+  matches!(
+    token,
+    TokenKind::Name
+      | TokenKind::Int
+      | TokenKind::Float
+      | TokenKind::Complex
+      | TokenKind::String
+      | TokenKind::FStringEnd
+      | TokenKind::TStringEnd
+      | TokenKind::Rpar
+      | TokenKind::Rsqb
+      | TokenKind::Rbrace
+      | TokenKind::None
+      | TokenKind::True
+      | TokenKind::False
+      | TokenKind::Ellipsis
+      | TokenKind::Case
+      | TokenKind::Match
+      | TokenKind::Type
+      | TokenKind::Lazy
+  )
 }
 
 /// The sheet as the checker reads it, and the line of the sheet that each of its lines stands for.
@@ -582,6 +685,61 @@ mod tests {
       got,
       vec![(2, told("bash1_stdout")), (3, told("prompt2")), (8, told("prompt2_value"))]
     );
+  }
+
+  /// A name that a tell binds to a value of lists, `depth` levels deep, as monty writes it.
+  fn lists(depth: usize) -> String {
+    format!("#bash1 exited 0\nbash1_value = {}{}", "[".repeat(depth), "]".repeat(depth))
+  }
+
+  /// A literal `depth` levels deep, each level a list that holds an int, the level below, and a dict, with an empty
+  /// list at the bottom, which the checker reads the slowest of the shapes that the gate measured.
+  fn mixed(depth: usize) -> String {
+    (1..depth).fold("[]".to_owned(), |below, _| format!("[1, {below}, {{'k': (1, 'a')}}]"))
+  }
+
+  #[test]
+  fn a_literal_past_the_bound_is_cut_whole_to_an_empty_one_that_keeps_its_lines() {
+    let (open, close) = ("[".repeat(DEEP), "]".repeat(DEEP));
+    assert_eq!(shallowed(&format!("x = {open}{{1: [\n2]}}{close}\ny = 1")), "x = [\n]\ny = 1");
+    let deep = mixed(DEEP + 1);
+    let items = &deep[1..deep.len() - 1];
+    let word = format!("x = ({deep},)\ny = {{1: {deep}}}\nz = {{{items}}}");
+    assert_eq!(shallowed(&word), "x = tuple([])\ny = {}\nz = set()");
+  }
+
+  #[test]
+  fn a_literal_within_the_bound_a_call_and_a_subscript_stay_as_they_stand() {
+    let deep = "f(".repeat(DEEP + 1) + &")".repeat(DEEP + 1);
+    let word = format!(
+      "{}\nx = {{'a': [(1, {{2}})]}}\n{deep}\ny = x{}\nz = f'{{x}}'",
+      lists(DEEP),
+      "[0]".repeat(DEEP + 1)
+    );
+    assert_eq!(shallowed(&word), word);
+  }
+
+  #[test]
+  fn a_value_that_a_tell_wrote_as_a_deep_literal_stalls_no_word() {
+    let start = std::time::Instant::now();
+    for deep in [
+      lists(990),
+      format!("bash1_value = {}", mixed(100)),
+      format!("bash1_value = {}", mixed(DEEP)),
+    ] {
+      assert_eq!(said(&[&deep], "y: int = len(bash1_value)\nclose(bash1_value[0])"), vec![]);
+    }
+    let took = start.elapsed();
+    assert!(took.as_secs() < 3, "{took:?}");
+  }
+
+  #[test]
+  fn a_word_reads_a_value_that_was_cut_as_a_collection_of_its_kind() {
+    let deep = mixed(DEEP + 1);
+    let program = format!("a = ({deep},)\nb = {{'k': {deep}}}\nc = {deep}");
+    assert_eq!(said(&[&program], "x = a[3][0]\ny = b['j'][1]\nz: int = len(c[5])"), vec![]);
+    let found = said(&[&program], "w: str = len(c)");
+    assert_eq!(found.len(), 1, "{found:?}");
   }
 
   #[test]

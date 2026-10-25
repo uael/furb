@@ -27,6 +27,15 @@ impl Fact {
       .then(|| Fact(said.to_owned()))
   }
 
+  /// One fact or saying from an object that it takes, as [`Fact::of`] reads it, with no copy of the object.
+  pub fn owned(said: Object) -> Option<Fact> {
+    let fits = said
+      .as_ref()
+      .items()
+      .is_some_and(|held| held.len() >= 2 && held[..2].iter().all(|one| one.as_str().is_some()));
+    fits.then_some(Fact(said))
+  }
+
   /// The kind of the fact, which is its first entry.
   pub fn kind(&self) -> &str {
     self.at(0)

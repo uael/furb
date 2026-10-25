@@ -16,5 +16,7 @@ test("the open of a rung that its caller wrote shows as its word, under a header
     began: 1,
   };
   const turns = [["user", "#rung1 by operator\nrung1_word = 'k = 1'", null, null]] as unknown as Turn[];
-  expect(conversation(turns, [act]).map((item) => item.type)).toEqual(["python"]);
+  expect(conversation(turns, (id) => (id === act.id ? act : undefined)).map((item) => item.type)).toEqual([
+    "python",
+  ]);
 });

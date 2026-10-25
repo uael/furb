@@ -239,6 +239,32 @@ fn the_world_writes_the_stderr_of_a_merged_command_into_its_stdout() {
 }
 
 #[test]
+fn a_command_that_writes_more_than_its_cap_keeps_its_first_and_its_last_bytes_and_marks_the_cut() {
+  let mut lived = Lived::new("cap", &[], true).unwrap();
+  let root = lived.root();
+  let with = verbs::Bash { timeout: Some(120.0), on: on(&root), ..Default::default() };
+  let act = lived.engine.bash("seq -f %.0f 1 12000000", with).unwrap();
+  let id = act.id().to_owned();
+  let exit: Exit = block_on(act).unwrap();
+  let text = exit.stdout.content;
+  assert_eq!(exit.code, Some(0));
+  assert!(text.len() < 9 << 20, "the exit holds {} bytes", text.len());
+  assert!(text.starts_with("1\n2\n3\n"), "{:?}", &text[..20]);
+  assert!(text.ends_with("\n11999999\n12000000\n"));
+  assert!(text.contains("bytes cut ..."));
+  let facts = lived.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
+  let said: usize = facts
+    .iter()
+    .filter(|one| one.kind() == "out" && one.about() == id)
+    .map(|one| one.word(0).and_then(|it| it.as_str().map(str::len)).unwrap_or_default())
+    .sum();
+  assert!(said < 5 << 20, "the record holds {said} bytes of out");
+  let door = verbs::Read { on: on(&root), ..Default::default() };
+  let read = lived.engine.read(&format!("{id}/stdout"), door).unwrap();
+  assert!(read.content.len() < 9 << 20, "a read gives {} bytes", read.content.len());
+}
+
+#[test]
 fn a_command_is_fed_what_the_operator_writes_into_its_stdin() {
   let mut lived = Lived::new("feeds", &[], true).unwrap();
   let root = lived.root();

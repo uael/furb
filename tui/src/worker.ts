@@ -203,11 +203,13 @@ function scriptedSession(options: SessionOptions, watch = false): Session {
   });
 }
 
-/** How many answers the measure of each chain that the host holds counts. */
-const measured = new Map<string, number>();
+/** How many answers the measure of each chain that the host holds counts, by the answers of each life. */
+const counted = new WeakMap<object, Map<string, number>>();
 /** The measure of each chain whose models answered since the last state, from the answers of the activity of a life,
  * which the host adds to the measures that it holds. */
 function measuresOf(answers: ReadonlyMap<string, readonly { actor: string; usage: readonly number[] }[]>) {
+  const measured = counted.get(answers) ?? new Map<string, number>();
+  counted.set(answers, measured);
   const changed: Record<string, Measure> = {};
   for (const [chain, list] of answers)
     if (measured.get(chain) !== list.length) {
@@ -250,15 +252,13 @@ async function answer(data: { target: string; method: string; args: unknown[] })
       // it kept.
       const why = error instanceof Error ? error.message : String(error);
       if (!why.startsWith("Drift") || !opened.record) throw error;
-      const { facts, made, engine: ours, version, current, logged } = retold(opened.record);
-      reader = new Reader(facts, opened.directory, opened.record, {
-        made,
-        engine: ours,
-        version,
-        current,
-        why,
-        logged,
-      });
+      const { file, made, engine: ours, version, current, logged } = retold(opened.record);
+      reader = new Reader(
+        opened.directory,
+        opened.record,
+        { made, engine: ours, version, current, why, logged },
+        file,
+      );
       snapshots = new Snapshots(reader, reader);
       return reader.root;
     }
@@ -381,7 +381,7 @@ function read(data: { target: string; method: string; args: unknown[] }): unknow
   if (data.target === "library" && data.method === "changes") return [];
   if (data.target === "library" && data.method === "net") return [];
   if (data.target === "library" && data.method === "branch") return branchChanges(open.directory);
-  if (data.target === "library" && data.method === "act") return open.activity.acts.get(String(data.args[0]));
+  if (data.target === "library" && data.method === "act") return open.act(String(data.args[0]));
   if (data.target === "library" && data.method === "look") {
     const path = resolve(open.directory, open.cwd({ on: String(data.args[1]) }), String(data.args[0]));
     try {

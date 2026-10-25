@@ -102,6 +102,8 @@ interface Index {
    * how many times an act on each chain came or changed, which tells the board when to read a chain again. */
   stamps: Map<string, number>;
   chained: Map<string, number>;
+  /** The chain of each act that came or changed, once each time, which tells the board which chains to read again. */
+  touched: string[];
   /** The writes that are done, in the order that the session saw them done. */
   written: ActRow[];
   /** The acts on each chain but its chains, as activity reads them, which only grows. */
@@ -147,6 +149,7 @@ function placed(index: Index, act: ActRow): void {
   else index.live.delete(act.id);
   index.stamps.set(act.by, (index.stamps.get(act.by) ?? 0) + 1);
   index.chained.set(act.on, (index.chained.get(act.on) ?? 0) + 1);
+  index.touched.push(act.on);
   const latest = index.latest.get(act.on);
   if (
     act.kind !== "chain" &&
@@ -789,6 +792,7 @@ export class Session extends EventEmitter {
       live: new Map(),
       stamps: new Map(),
       chained: new Map(),
+      touched: [],
       written: [],
       work: new Map(),
       latest: new Map(),
@@ -821,6 +825,11 @@ export class Session extends EventEmitter {
    * act that changed takes its place. */
   get activity(): ActRow[] {
     return this.indexed().work.get(this.selected) ?? [];
+  }
+  /** The acts of the chain shown that are not done, but its chains, in the order of the acts: what a frame reads of
+   * the work that runs, with no pass over every act of the chain. */
+  get open(): ActRow[] {
+    return (this.liveOn().get(this.selected) ?? []).filter((act) => !act.done && act.kind !== "chain");
   }
   /** What the answers of the chain itself cost, each token counted once: a chain with a source does not count the
    * answers of its origin again. The first number of the usage of an answer is the whole prompt of that call, which
@@ -955,6 +964,7 @@ export class Session extends EventEmitter {
     chains: readonly ActRow[];
     live: Iterable<ActRow>;
     stamp: (chain: string) => number;
+    touched: readonly string[];
   } {
     const index = this.indexed();
     return {
@@ -963,6 +973,7 @@ export class Session extends EventEmitter {
       chains: index.chains,
       live: index.live.values(),
       stamp: (chain) => index.chained.get(chain) ?? 0,
+      touched: index.touched,
     };
   }
   /** The act that a name or a door names: the act whose name is the first part of the path. */
