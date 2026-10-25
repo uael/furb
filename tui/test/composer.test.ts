@@ -592,6 +592,14 @@ test("the footer offers the keys of the top layer that acts, and a click on one 
       screen.mockInput.pressEscape();
       await until(session, () => session.paused);
       expect(await footer()).toEndWith("/wake wake the chain   ⌃P commands   F1 help");
+      screen.resize(80, 24);
+      app.switchView("loom");
+      screen.mockInput.pressKey("g", { meta: true });
+      const narrow = await footer();
+      expect(narrow).toContain("↑↓←→ move");
+      expect(narrow).toEndWith("F1 help");
+      await click("F1 help");
+      expect(await frame()).toContain("Keys and commands");
     },
     undefined,
     true,
@@ -662,10 +670,10 @@ test("a word that the gate refused shows a cross on the line that the refusal na
       await idle(session);
       await session.refresh();
       const lines = (await frame()).split("\n");
-      const refused = lines.findIndex((line) => /✗ 1 ```python/.test(line));
+      const refused = lines.findIndex((line) => /✗ +1 ```python/.test(line));
       expect(refused).toBeGreaterThan(0);
       expect(lines[refused + 1]).toMatch(/^ +# Got unexpected token/);
-      const retried = lines.findIndex((line) => / 1 close\("Here it is again as plain Python/.test(line));
+      const retried = lines.findIndex((line) => / +4 close\("Here it is again as plain Python/.test(line));
       expect(retried).toBeGreaterThan(refused + 1);
       expect(lines.slice(retried).join("\n")).not.toContain("✗");
       expect(lines.join("\n")).not.toContain("failed");

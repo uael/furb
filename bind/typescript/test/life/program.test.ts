@@ -49,7 +49,21 @@ test("the program of a thread holds the words of its steps and its messages in o
     ["output", "6"],
     ["output", "7"],
   ]);
+  expect(
+    lines.flatMap((line) =>
+      line.kind === "code" || line.kind === "quote" ? [[line.number, line.display]] : [],
+    ),
+  ).toEqual([
+    [1, 1],
+    [5, 2],
+    [6, 3],
+    [1, 4],
+  ]);
   const quote = lines[0];
+  expect(quote?.kind === "quote" && [quote.value, quote.source]).toEqual([
+    "ls\npwd\n",
+    "<s:cmd>\nls\npwd\n</s:cmd>",
+  ]);
   expect(quote?.kind === "quote" && [quote.name, quote.lines]).toEqual(["cmd", 2]);
   const ran = lines[1];
   expect(ran?.kind === "code" && [ran.hint, ran.runs]).toEqual(["exit 0, 3 lines", false]);
@@ -116,6 +130,10 @@ test("a program that keeps its last steps makes their lines alone, after the cou
     undefined,
     2,
   );
+  expect(lines.flatMap((line) => (line.kind === "code" ? [[line.number, line.display]] : []))).toEqual([
+    [1, 2],
+    [1, 3],
+  ]);
   expect(lines.map((line) => [line.kind, line.text])).toEqual([
     ["earlier", "# 1 earlier step"],
     ["code", "x = rung2"],
@@ -162,4 +180,36 @@ test("the literals of a line skip a name that ends in a prefix, keep their escap
     { start: 34, end: 35, raw: false },
   ]);
   expect(literals('brief = """first line')).toEqual([{ start: 11, end: 21, raw: false }]);
+});
+test("multiline and raw strings stay single escaped display lines without changing source coordinates", () => {
+  const prompt = act("prompt1", "prompt", "chain1", "operator", 1, undefined, {
+    words: ["str", "Go", "opus"],
+  });
+  const rung = act("rung1", "rung", "chain1", "prompt1", 2, 5);
+  const next = act("rung2", "rung", "chain1", "prompt1", 6, 7);
+  const word = `text = """one "quoted"\ntwo\\n雪😀"""\nraw = r"""C:\\new\n\\path"""\nprint(text, raw)`;
+  const lines = threadProgram(
+    [prompt],
+    makers([prompt, rung, next]),
+    (step) => (step === rung ? word : "print('next')"),
+    new Set(),
+    label,
+  );
+  const code = lines.flatMap((line) => (line.kind === "code" ? [line] : []));
+  expect(code.map((line) => [line.number, line.display, line.text])).toEqual([
+    [1, 1, 'text = "one \\"quoted\\"\\ntwo\\n雪😀"'],
+    [3, 2, 'raw = "C:\\\\new\\n\\\\path"'],
+    [5, 3, "print(text, raw)"],
+    [1, 4, "print('next')"],
+  ]);
+  expect(code[0]?.source).toBe('text = """one "quoted"\ntwo\\n雪😀"""');
+  expect(code[1]?.source).toBe('raw = r"""C:\\new\n\\path"""');
+  const incomplete = threadProgram(
+    [prompt],
+    makers([prompt, rung]),
+    () => 'text = """still\narriving',
+    new Set(),
+    label,
+  );
+  expect(incomplete.map((line) => line.text)).toEqual(['text = """still', "arriving"]);
 });

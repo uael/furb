@@ -48,6 +48,25 @@ for (const { width, height } of [
           if (typeof child.value !== "string") throw new Error("The scripted chain did not open.");
           parent = child.value;
         }
+        const targetBeforeInspect = session.thread;
+        app.details();
+        await frame();
+        await screen.mockInput.typeText("Find threads");
+        screen.mockInput.pressEnter();
+        const threadPicker = await capture("thread-picker");
+        expect(threadPicker).toContain("Threads");
+        expect(threadPicker.split("\n").find((line) => line.includes("prompt1"))).toMatch(/prompt1\s+done/);
+        screen.mockInput.pressArrow("right");
+        expect(await capture("thread-menu")).toContain("Reopen and reply");
+        expect(session.thread).toBe(targetBeforeInspect);
+        app.closeOverlay();
+        if (width === 80) {
+          app.switchView("loom");
+          screen.mockInput.pressKey("g", { meta: true });
+          const footer = await capture("navigation-footer");
+          expect(footer.trimEnd().split("\n").at(-1)).toContain("F1 help");
+          app.switchView("main");
+        }
         const questions = [];
         for (let index = 1; index <= 3; index++) {
           questions.push(

@@ -30,8 +30,8 @@ export const commands = {
   read: ["Read file", "<path>", "Show a file to this chain"],
   changes: [
     "Review changes",
-    "[turn|chain|life|branch]",
-    "Show the files that this turn, this chain, the life or the branch against main changed",
+    "[turn|chain|life|branch [base]|revert|comment]",
+    "Review file changes, choose a branch base, revert a hunk, or comment on a line",
   ],
   repair: [
     "Repair the journal",
