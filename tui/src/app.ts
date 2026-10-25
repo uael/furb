@@ -3792,12 +3792,15 @@ export class App {
     const head = this.row();
     const marks = this.row({ gap: 1 });
     head.add(marks);
-    for (const one of asks)
+    const preview = this.questionPreview(asks);
+    for (const one of preview)
       marks.add(
         this.text(glyph.asks, one.id === ask?.id ? c.warning : c.faint, {
           run: () => void w.point(one.id).catch(this.report),
         }),
       );
+    if (asks.length > preview.length)
+      marks.add(this.text("…", c.accent, { run: () => this.questionPicker() }));
     const count = `${questions} ${questions === 1 ? "question" : "questions"}`;
     if (!ask) {
       head.add(
@@ -3805,10 +3808,10 @@ export class App {
           [
             ["  ", c.faint],
             [`${count} ${asks.length === 1 ? "waits" : "wait"} on other chains`, c.text, bold],
-            ["  ⌃A or a mark goes to the first", c.faint],
+            ["  ⌃A to answer", c.accent],
           ],
           c.text,
-          { truncate: true, flexShrink: 1, run: () => this.question() },
+          { truncate: true, flexShrink: 1, run: () => this.answerQuestion() },
         ),
       );
       this.deskBox.add(head);
@@ -4679,7 +4682,8 @@ export class App {
           marginTop: space.section,
         },
       );
-      for (const ask of asks) {
+      const preview = this.questionPreview(asks);
+      for (const ask of preview) {
         const origin = w.labelOf(ask.chain).split("/").at(-1) ?? ask.chain;
         const subject = gist(ask.message).replace(/\s+/g, " ");
         const active = ask.id === w.operatorPrompt?.id;
@@ -4697,6 +4701,8 @@ export class App {
           { attributes: active ? bold : 0 },
         );
       }
+      if (asks.length > preview.length)
+        line([[`View all ${asks.length} questions`, c.accent]], () => this.questionPicker());
     }
     line(
       [
@@ -6517,6 +6523,29 @@ export class App {
       },
     ]);
   };
+  /** A short preview keeps navigation visible; the current answer target stays in that preview. */
+  private questionPreview(asks: readonly Ask[]): Ask[] {
+    const shown = asks.slice(0, 3);
+    const aimed = asks.find((ask) => ask.id === this.session.aimed?.id);
+    if (aimed && !shown.some((ask) => ask.id === aimed.id)) shown[shown.length - 1] = aimed;
+    return shown;
+  }
+  /** Opening the queue inspects its questions; choosing one explicitly selects its answer target. */
+  private questionPicker(): void {
+    this.openPalette(
+      "Questions",
+      this.session.desk.asks.map((ask) => ({
+        label: gist(ask.message) || wants(ask),
+        detail: `${ask.label}  ${ask.id}  wants ${wants(ask)}`,
+        run: () => this.question(ask),
+      })),
+    );
+  }
+  private answerQuestion(): void {
+    const asks = this.session.desk.asks;
+    if (!this.session.aimed && asks.length > this.questionPreview(asks).length) this.questionPicker();
+    else this.question();
+  }
   /** The dialog of an ask: its whole message, and the field of its answer or the choices of its shape. Its title says
    * which ask of the desk it is, and from which chain. Tab and ⇧Tab go to the next and the previous ask, and an
    * answer goes on to the next ask that waits, until none waits. */
@@ -8155,7 +8184,7 @@ export class App {
     python: () => this.toggleMode(),
     complete: () => void this.completeNames().catch(this.report),
     ladders: () => this.ladders(),
-    answer: () => this.question(),
+    answer: () => this.answerQuestion(),
     names: () => void this.names().catch(this.report),
     copy: () => {
       const selection = this.renderer.getSelection()?.getSelectedText();
