@@ -116,7 +116,7 @@ export class Session extends EventEmitter {
     // catalog knows that model: the record keeps what it was lived on, and the stand of the later life tells each
     // chain what it stands on now.
     const preferred = saved?.options.model;
-    const held = preferred && model(preferred) ? preferred : undefined;
+    const held = preferred && model(preferred, this.directory, options.config) ? preferred : undefined;
     this.options = { ...options, model: named.model ?? held ?? named.roster?.[0] };
     this.console = new Console({ operator: options.operator, changed, fault });
     this.changes = new FileChanges(this.record, options.readOnly);

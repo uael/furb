@@ -254,6 +254,9 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/new` | Start a fresh life |
 | `/watch` | Play a short life that asks no model and costs nothing |
 | `/model [model]` | Choose the model that answers on this chain |
+| `/providers` | Add or remove a provider for this project |
+| `/provider <add|remove> <name> [URL model window key_env protocol]` | Save a provider in the project settings and use it now |
+| `/reload` | Read provider settings again and update the standing of this life |
 | `/effort [level]` | Set the reasoning effort of the selected model |
 | `/shape [type]` | Choose the result type of the next prompt |
 | `/theme [name]` | Change the palette of every surface, or follow the terminal |

@@ -20,7 +20,7 @@ mod watch;
 use std::{
   collections::{HashMap, HashSet},
   path::PathBuf,
-  sync::Arc,
+  sync::{Arc, PoisonError, RwLock},
   time::Duration,
 };
 
@@ -483,14 +483,18 @@ impl Model {
 /// of a model in one turn, the directory of the images that a turn names, and whom it tells what a model writes.
 pub struct Provider {
   directory: String,
-  models: Vec<Model>,
+  models: Arc<RwLock<Vec<Model>>>,
   actor: Option<String>,
   thinking: Thinking,
   images: Option<PathBuf>,
   writes: Option<Writes>,
   backoff: Backoff,
   retries: Option<Retries>,
+  refresh: Option<Refresh>,
 }
+
+type Refresh =
+  Arc<dyn Fn() -> Result<(Vec<Model>, Option<String>, Thinking), String> + Send + Sync>;
 
 impl Provider {
   /// A provider of these models, on a directory, whose model thinks [`THINKING`] tokens at most in one turn.
@@ -498,13 +502,14 @@ impl Provider {
     let directory = directory.into();
     Provider {
       directory,
-      models,
+      models: Arc::new(RwLock::new(models)),
       actor: None,
       thinking: Thinking::default(),
       images: None,
       writes: None,
       backoff: BACKOFF,
       retries: None,
+      refresh: None,
     }
   }
 
@@ -512,6 +517,16 @@ impl Provider {
   pub fn thinking(mut self, thinking: Thinking) -> Provider {
     self.thinking = thinking;
     self
+  }
+
+  pub(crate) fn refreshing(mut self, refresh: Refresh) -> Provider {
+    self.refresh = Some(refresh);
+    self
+  }
+
+  pub(crate) fn into_settings(self) -> (Vec<Model>, Option<String>, Thinking) {
+    let models = self.models.read().unwrap_or_else(PoisonError::into_inner).clone();
+    (models, self.actor, self.thinking)
   }
 
   /// The actor a prompt goes to when it names none, which is the first model at the level of an actor that names
@@ -548,9 +563,11 @@ impl Provider {
   /// The native search of the web of the model that an actor names, or none when its provider has none or no
   /// model of the provider is that actor.
   pub fn search(&self) -> Search {
-    let models = self.models.clone();
+    let models = Arc::clone(&self.models);
     Arc::new(move |actor| {
       models
+        .read()
+        .unwrap_or_else(PoisonError::into_inner)
         .iter()
         .find(|model| model.settings(actor).is_some())
         .and_then(|model| model.search.clone())
@@ -566,9 +583,23 @@ impl Provider {
   /// the turn of the model, or with a refusal, and a second refusal in a row of the same actor on a chain pauses the
   /// chain first. A done of a reply that the ear did not say ends the call of its model.
   pub fn ear(self) -> Box<dyn Ear> {
-    let Provider { directory, models, actor, thinking, images, writes, backoff, retries } = self;
-    let actor = actor.unwrap_or_else(|| {
-      models.first().map_or_else(|| OPERATOR.to_owned(), |model| model.at(None))
+    let Provider {
+      directory,
+      models,
+      actor,
+      mut thinking,
+      images,
+      writes,
+      backoff,
+      retries,
+      refresh,
+    } = self;
+    let mut actor = actor.unwrap_or_else(|| {
+      models
+        .read()
+        .unwrap_or_else(PoisonError::into_inner)
+        .first()
+        .map_or_else(|| OPERATOR.to_owned(), |model| model.at(None))
     });
     let mut images = Images::new(images);
     hearing(&["stand", "reply"], move |mut co: Co<Replied>| async move {
@@ -646,7 +677,25 @@ impl Provider {
         let about = a.about().to_owned();
         match a.kind() {
           "stand" if a.question() => {
-            say(&mut co, Fact::says("done", &about, [standing(&models, &directory, &actor)]));
+            if let Some(refresh) = &refresh {
+              match refresh() {
+                Ok((fresh, default, budget)) => {
+                  if !fresh.iter().any(|model| model.settings(&actor).is_some()) {
+                    actor = default
+                      .or_else(|| fresh.first().map(|model| model.at(None)))
+                      .unwrap_or_else(|| OPERATOR.to_owned());
+                  }
+                  *models.write().unwrap_or_else(PoisonError::into_inner) = fresh;
+                  thinking = budget;
+                }
+                Err(why) => {
+                  say(&mut co, Fact::says("done", &about, [Fault::refused(why).object()]));
+                  continue;
+                }
+              }
+            }
+            let held = models.read().unwrap_or_else(PoisonError::into_inner);
+            say(&mut co, Fact::says("done", &about, [standing(&held, &directory, &actor)]));
           }
           "reply" if a.question() => {
             say(&mut co, Fact::says("started", &about, []));
@@ -656,9 +705,16 @@ impl Provider {
             let (tells, told) = mpsc::unbounded_channel();
             let wrote = written(&about, &tells);
             let key = format!("{life}/{chain}");
-            let asked =
-              requested(&models, &actor, &chain, turns.as_ref(), &key, &mut images, wrote)
-                .map(|one| thinks(one, thinking));
+            let asked = requested(
+              &models.read().unwrap_or_else(PoisonError::into_inner),
+              &actor,
+              &chain,
+              turns.as_ref(),
+              &key,
+              &mut images,
+              wrote,
+            )
+            .map(|one| thinks(one, thinking));
             let watch = asked.as_ref().is_ok_and(|(model, _)| model.streams_its_word());
             let again = mute.get(&chain) == Some(&actor);
             let (stop, stopped) = oneshot::channel();

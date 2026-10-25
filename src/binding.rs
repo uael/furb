@@ -525,17 +525,37 @@ pub fn answered(shape: String, line: String) -> Result<Record, Fault> {
   world::answered(&shape, &line).map(Record)
 }
 
-/// The models the catalog of this machine offers, with the claude command line at a path when it is given, each
-/// named as the catalog names it.
-#[cfg_attr(feature = "python", pyfunction, pyo3(signature = (claude = None)))]
+/// The models that the user and project settings offer, with the claude command line at a path when it is given.
+/// The directory is the current directory when unsaid, and config is the user config directory when unsaid.
+/// Invalid settings give a refusal.
+#[cfg_attr(feature = "python", pyfunction, pyo3(signature = (claude = None, directory = None, config = None)))]
 #[cfg_attr(feature = "typescript", napi)]
-pub fn models(claude: Option<String>) -> Vec<ModelInfo> {
-  let catalog = world::Catalog::load().claude(claude.map(Into::into), None);
-  catalog.offered().iter().map(ModelInfo::of).collect()
+pub fn models(
+  claude: Option<String>,
+  directory: Option<String>,
+  config: Option<String>,
+) -> Result<Vec<ModelInfo>, Fault> {
+  let catalog = configured_catalog(claude, directory, config)?;
+  Ok(catalog.offered().iter().map(ModelInfo::of).collect())
 }
 
-/// What a first run checks of this machine, as a host reads it: whether the catalog found the claude command line,
-/// each provider of the network with the names of its credential and how many of its models the catalog offers, and
+fn configured_catalog(
+  claude: Option<String>,
+  directory: Option<String>,
+  config: Option<String>,
+) -> Result<world::Catalog, Fault> {
+  let directory = directory
+    .map(std::path::PathBuf::from)
+    .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+  let config = config.map(std::path::PathBuf::from);
+  world::Catalog::load()
+    .claude(claude.map(Into::into), None)
+    .configured(&directory, config.as_deref())
+    .map_err(Fault::refused)
+}
+
+/// What a first run checks of this machine, as a host reads it: whether the claude command line offers a model,
+/// each configured provider with the names of its credential and how many of its models the catalog offers, and
 /// the local server that `FURB_LOCAL_URL` names, with the models it offers or why it listed none.
 #[cfg_attr(feature = "typescript", napi(object, object_from_js = false))]
 #[cfg_attr(feature = "python", derive(pyo3::IntoPyObject))]
@@ -545,14 +565,16 @@ pub struct SetupInfo {
   pub local: Option<LocalInfo>,
 }
 
-/// A provider of the network as a first run checks it: its name, the names of its credential in the environment, and
-/// how many of its models the catalog offers.
+/// A provider as a first run checks it: its name, the names of its credential in the environment, whether the
+/// settings enable it, and how many of its models the catalog offers.
 #[cfg_attr(feature = "typescript", napi(object, object_from_js = false))]
 #[cfg_attr(feature = "python", derive(pyo3::IntoPyObject))]
 pub struct ProviderInfo {
   pub provider: String,
   pub env: Vec<String>,
   pub offered: i64,
+  /// Whether the provider settings enable this provider.
+  pub enabled: bool,
 }
 
 /// The local server as a first run checks it: its address, how many models the catalog offers of it, and why it
@@ -565,32 +587,48 @@ pub struct LocalInfo {
   pub failed: Option<String>,
 }
 
-/// What a first run checks of this machine, with the claude command line at a path when it is given. It asks the
-/// local server for what it lists, so it waits for that server.
-#[cfg_attr(feature = "python", pyfunction, pyo3(signature = (claude = None)))]
+/// What a first run checks with the user and project settings, and the claude command line at a path when it is
+/// given. It asks the local server for what it lists, so it waits for that server. The directory is the current
+/// directory when unsaid, config is the user config directory when unsaid, and invalid settings give a refusal.
+#[cfg_attr(feature = "python", pyfunction, pyo3(signature = (claude = None, directory = None, config = None)))]
 #[cfg_attr(feature = "typescript", napi)]
-pub fn setup(claude: Option<String>) -> SetupInfo {
+pub fn setup(
+  claude: Option<String>,
+  directory: Option<String>,
+  config: Option<String>,
+) -> Result<SetupInfo, Fault> {
   let count = |n: usize| i64::try_from(n).unwrap_or(i64::MAX);
-  let found = world::Catalog::load().claude(claude.map(Into::into), None).setup();
-  SetupInfo {
+  let found = configured_catalog(claude, directory, config)?.setup();
+  Ok(SetupInfo {
     claude: found.claude,
     providers: (found.providers.into_iter())
-      .map(|one| ProviderInfo { provider: one.provider, env: one.env, offered: count(one.offered) })
+      .map(|one| ProviderInfo {
+        provider: one.provider,
+        env: one.env,
+        offered: count(one.offered),
+        enabled: one.enabled,
+      })
       .collect(),
     local: found.local.map(|one| LocalInfo {
       address: one.address,
       offered: count(one.offered),
       failed: one.failed,
     }),
-  }
+  })
 }
 
 /// The model the catalog knows by a name, as `provider:id` or as an id that one model alone holds, which for a model of
 /// the local server holds a colon, whether it offers that model or not; nothing when it knows none.
-#[cfg_attr(feature = "python", pyfunction)]
+/// It reads the user and project settings, with the current directory and the user config directory when unsaid.
+/// Invalid settings give a refusal.
+#[cfg_attr(feature = "python", pyfunction, pyo3(signature = (name, directory = None, config = None)))]
 #[cfg_attr(feature = "typescript", napi)]
-pub fn model(name: String) -> Option<ModelInfo> {
-  world::Catalog::load().find(&name).as_ref().map(ModelInfo::of)
+pub fn model(
+  name: String,
+  directory: Option<String>,
+  config: Option<String>,
+) -> Result<Option<ModelInfo>, Fault> {
+  Ok(configured_catalog(None, directory, config)?.find(&name).as_ref().map(ModelInfo::of))
 }
 
 /// The levels of effort, from least to most, which an actor names after its model.

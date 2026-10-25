@@ -4809,6 +4809,7 @@ export class App {
       tree: this.sessionTree,
       queue: this.queuePicker,
       model: this.models,
+      providers: this.providers,
       effort: this.effortPicker,
       shape: this.shapes,
       theme: () => this.themes(),
@@ -5526,6 +5527,35 @@ export class App {
   }
   /** The models of the roster and of the catalog under their providers, with the one the chain uses marked. */
   models = (): void => this.pick("model", "Model", "The chain sends its next prompt to this model.");
+  providers = (): void => {
+    void this.session.host
+      .providers()
+      .then((choices) =>
+        this.openPalette(
+          "Providers",
+          [
+            {
+              label: "Add a custom provider",
+              detail: "Enter its name, URL, model and context window",
+              run: () => this.insert("/provider add "),
+            },
+            {
+              label: "Reload settings",
+              detail: "Read the JSON config files again",
+              run: () => this.action("/reload"),
+            },
+            ...choices.map((one) => ({
+              label: one.name,
+              detail: `${one.enabled ? "Remove" : "Add"} provider, ${one.models} models available`,
+              mark: this.current(one.enabled),
+              run: () => this.action(`/provider ${one.enabled ? "remove" : "add"} ${one.name}`),
+            })),
+          ],
+          { note: "Changes apply to this project and are saved in .furb/config.json." },
+        ),
+      )
+      .catch(this.report);
+  };
   effortPicker = (): void =>
     this.pick(
       "effort",
