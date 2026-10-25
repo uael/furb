@@ -662,10 +662,10 @@ test("a word that the gate refused shows a cross on the line that the refusal na
       await idle(session);
       await session.refresh();
       const lines = (await frame()).split("\n");
-      const refused = lines.findIndex((line) => /✗ 1 ```python/.test(line));
+      const refused = lines.findIndex((line) => /✗ +1 ```python/.test(line));
       expect(refused).toBeGreaterThan(0);
       expect(lines[refused + 1]).toMatch(/^ +# Got unexpected token/);
-      const retried = lines.findIndex((line) => / 1 close\("Here it is again as plain Python/.test(line));
+      const retried = lines.findIndex((line) => / +4 close\("Here it is again as plain Python/.test(line));
       expect(retried).toBeGreaterThan(refused + 1);
       expect(lines.slice(retried).join("\n")).not.toContain("✗");
       expect(lines.join("\n")).not.toContain("failed");
