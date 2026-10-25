@@ -4735,9 +4735,54 @@ export class App {
         detail: `${thread.act.id}  ${thread.resolved ? "finished" : thread.asks.length ? "needs you" : thread.state}`,
         status: thread.resolved ? "done" : thread.state === "asks" ? "blocked" : "working",
         run: () => this.inspectThread(thread),
+        menu: () => this.threadMenu(thread),
       })),
-      { note: "Finished threads remain searchable. Opening a thread does not change where new text goes." },
+      { note: "Enter inspects. → or ⋯ opens thread actions. Search includes finished work." },
     );
+  }
+  private threadMenu(thread: ChainThread): void {
+    const id = thread.act.id;
+    const ask = thread.asks[0];
+    this.openPalette(`Thread ${id}`, [
+      { label: "Inspect", detail: thread.title, run: () => this.inspectThread(thread) },
+      {
+        label: this.threadFolded(id) ? "Expand" : "Collapse",
+        detail: "Show or fold its program",
+        run: () => this.foldThread(id),
+      },
+      ...(ask && !this.session.host.reading
+        ? [
+            {
+              label: "Answer question",
+              detail: ask,
+              run: () => this.session.point(ask),
+            },
+          ]
+        : []),
+      ...(!this.session.host.reading
+        ? [
+            {
+              label: thread.resolved ? "Reopen and reply" : "Reply here",
+              detail: `Direct future model text to ${id}`,
+              run: () => this.replyThread(id),
+            },
+            {
+              label: "New thread",
+              detail: "Start a separate task on this chain",
+              run: () => this.newThread(),
+            },
+            ...(!thread.resolved
+              ? [
+                  {
+                    label: "Resolve",
+                    detail: "Ask before closing this thread and its work",
+                    run: () => this.confirmResolve(thread),
+                  },
+                ]
+              : []),
+          ]
+        : []),
+    ]);
   }
   /** Inspecting a thread opens it in the feed, without changing the reply destination. */
   private inspectThread(thread: ChainThread): void {

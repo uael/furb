@@ -249,6 +249,24 @@ for (const width of [80, 160]) {
         } else {
           screen.mockInput.pressKey("t", { meta: true });
           expect(await frame()).toContain("Threads");
+          await screen.mockInput.typeText(ids.at(-2) ?? "");
+          screen.mockInput.pressArrow("right");
+          expect(await frame()).toContain("Reply here");
+          await screen.mockInput.typeText("Reply here");
+          screen.mockInput.pressEnter();
+          await frame();
+          expect(session.thread).toBe(ids.at(-2));
+          expect(app.composer.plainText).toBe("unsent draft");
+          screen.mockInput.pressKey("t", { meta: true });
+          await frame();
+          await screen.mockInput.typeText(ids.at(-2) ?? "");
+          screen.mockInput.pressArrow("right");
+          await frame();
+          await screen.mockInput.typeText("New thread");
+          screen.mockInput.pressEnter();
+          await frame();
+          expect(session.thread).toBeUndefined();
+          expect(app.composer.plainText).toBe("unsent draft");
         }
       },
       { width, height: 36, kittyKeyboard: true },

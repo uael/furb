@@ -48,6 +48,16 @@ for (const { width, height } of [
           if (typeof child.value !== "string") throw new Error("The scripted chain did not open.");
           parent = child.value;
         }
+        const targetBeforeInspect = session.thread;
+        app.details();
+        await frame();
+        await screen.mockInput.typeText("Find threads");
+        screen.mockInput.pressEnter();
+        expect(await capture("thread-picker")).toContain("Threads");
+        screen.mockInput.pressArrow("right");
+        expect(await capture("thread-menu")).toContain("Reopen and reply");
+        expect(session.thread).toBe(targetBeforeInspect);
+        app.closeOverlay();
         const questions = [];
         for (let index = 1; index <= 3; index++) {
           questions.push(
