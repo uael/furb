@@ -4545,13 +4545,15 @@ export class App {
   private chainThreadList(chain: string): ChainThread[] {
     return this.chainThreadsBy(chain).list;
   }
+  /** What each prompt that the list of the threads read is: a message to a thread, or a thread and its title. */
+  private readonly promptsRead = new Map<string, { message: string | undefined; title: string }>();
   private chainThreadsBy(chain: string): ThreadList {
     const w = this.session;
     if (w.selected !== chain) return { acts: undefined, owed: "", list: [], by: new Map(), of: new Map() };
     const owed = [...w.host.prompts.keys()].join(" ");
     if (this.threadList.acts !== w.version || this.threadList.owed !== owed) {
       const index = w.ladderIndex;
-      const list = chainThreads(index.on, index.ids, new Set(w.host.prompts.keys()));
+      const list = chainThreads(index.on, index.ids, new Set(w.host.prompts.keys()), this.promptsRead);
       this.threadList = {
         acts: w.version,
         owed,

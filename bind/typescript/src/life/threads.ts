@@ -200,11 +200,12 @@ export interface ChainThread {
 
 /** The threads of one chain, in the order they began: each prompt to a model on the chain that is no message of
  * another thread. It asks the operator while a question waits in it. The acts on the chain and the index of every act
- * of a host spare a pass over every act. */
+ * of a host spare a pass over every act, and what a host keeps of each prompt it read spares a read of it again. */
 export function chainThreads(
   on: readonly LiveAct[],
   rows: ReadonlyMap<string, LiveAct>,
   owed: ReadonlySet<string>,
+  known: Map<string, { message: string | undefined; title: string }> = new Map(),
 ): ChainThread[] {
   const out = new Map<string, ChainThread>();
   const later: [LiveAct, string][] = [];
@@ -216,16 +217,26 @@ export function chainThreads(
       if (thread) waits.push([thread, act.id]);
       continue;
     }
-    const message = messageOf(act, rows);
-    if (message !== undefined) {
-      if (message) later.push([act, message]);
+    // What a prompt is stays as it was said, so a host that keeps it reads each prompt once.
+    let seen = known.get(act.id);
+    if (!seen) {
+      const message = messageOf(act, rows);
+      seen = {
+        message,
+        title:
+          message === undefined
+            ? (String(act.words[1] ?? "")
+                .split("\n")
+                .find((line) => line.trim()) ?? "")
+            : "",
+      };
+      known.set(act.id, seen);
+    }
+    if (seen.message !== undefined) {
+      if (seen.message) later.push([act, seen.message]);
       continue;
     }
-    const title =
-      String(act.words[1] ?? "")
-        .split("\n")
-        .find((line) => line.trim()) ?? "";
-    out.set(act.id, { act, title, messages: [], asks: [], state: "done", resolved: true });
+    out.set(act.id, { act, title: seen.title, messages: [], asks: [], state: "done", resolved: true });
   }
   for (const [act, id] of later) out.get(id)?.messages.push(act);
   for (const [id, ask] of waits) out.get(id)?.asks.push(ask);
