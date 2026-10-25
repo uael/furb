@@ -175,7 +175,9 @@ try {
     async ({ session, app, screen, frame }) => {
       session.preferences.reducedMotion = true;
       for (const id of ["prompt1", "prompt2"]) session.folds[`thread:${id}`] = true;
-      const capture = async (name: string) => {
+      const handoff: Still[] = [];
+      let dimensions = { width: 0, height: 0 };
+      const capture = async (name: string, animate = false) => {
         await frame();
         await app.colorsDone();
         await frame();
@@ -184,6 +186,11 @@ try {
           rasterize(screen.captureSpans(), paletteOf(session.theme), "furb"),
         );
         await writeFile(`${out}/${name}.txt`, screen.captureCharFrame());
+        if (animate) {
+          const image = pixels(screen.captureSpans(), paletteOf(session.theme), "furb", 1);
+          dimensions = image;
+          handoff.push(pack(image.pixels, 60));
+        }
       };
       app.scroll.scrollTo(0);
       await capture("dense-folded-wide");
@@ -200,6 +207,45 @@ try {
       screen.resize(140, 44);
       session.folds["thread:prompt2"] = false;
       await capture("dense-threads-expanded-wide");
+      addStep("prompt3", 9);
+      await save();
+      await until(session, () => session.acts.some((act) => act.id === `rung${rung}`));
+      app.scroll.scrollTo(99999);
+      await capture("dense-three-digit-wide");
+      const pending = `rung${++rung}`;
+      facts.push(["rung", pending, "prompt3", "chain1", "", "", ""]);
+      await save();
+      await until(session, () => session.acts.some((act) => act.id === pending));
+      const actual = session.host.streams;
+      const held = new Map([[pending, { text: 'value = "steady source"\nif Tr', thinking: "" }]]);
+      Object.defineProperty(session.host, "streams", { configurable: true, get: () => held, set: () => {} });
+      try {
+        app.scroll.scrollTo(99999);
+        await capture("handoff-partial", true);
+        const rows = (await frame()).split("\n");
+        const y = rows.findIndex((row) => row.includes('value = "steady source"'));
+        const x = (rows[y] ?? "").indexOf("steady source");
+        await screen.mockMouse.drag(x, y, x + 5, y);
+        await capture("handoff-selection", true);
+        const word = 'value = "steady source"\nif True:\n    answer = value';
+        held.set(pending, { text: word, thinking: "Keep the current statement" });
+        await capture("handoff-streamed", true);
+        held.clear();
+        await capture("handoff-gap", true);
+        facts.push(
+          ["run", `run${rung}`, "chain1", "chain1", pending, word, ""],
+          ["done", `run${rung}`, "", null],
+          ["done", pending, "", null],
+        );
+        await save();
+        await until(session, () => session.acts.some((act) => act.id === pending && act.done));
+        await capture("handoff-word", true);
+        if (screen.renderer.getSelection()?.getSelectedText() !== "steady")
+          throw new Error("The complete word lost the source selection.");
+        await writeFile(`${out}/handoff.gif`, gif(handoff, dimensions.width, dimensions.height));
+      } finally {
+        Object.defineProperty(session.host, "streams", { configurable: true, writable: true, value: actual });
+      }
     },
     { width: 140, height: 44, useMouse: true },
     dense,

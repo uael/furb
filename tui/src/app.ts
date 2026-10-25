@@ -463,6 +463,7 @@ export class App {
   /** The program of each thread and each word of the operator, as it stood at a version of the acts and of the words
    * that its models write. */
   private programs = new Map<string, { version: number; live: string; lines: ProgramLine[] }>();
+  private sourceLocations = new Map<string, string>();
   /** The chain whose threads the sidebar lists in place of the tree of the chains, once a click or Enter chose it. */
   private railChain?: string;
   /** Whether the keys move in the sidebar, after ⌥T, and the row that they stand on: a chain in the tree, or a thread in
@@ -1795,8 +1796,8 @@ export class App {
   private groupsOf(source: string): Promise<(string | undefined)[]> {
     const kept = this.sourceGroups.get(source);
     if (kept) return kept;
-    const made = getTreeSitterClient()
-      .highlightOnce(source, "python")
+    const made = loadParsers()
+      .then(() => getTreeSitterClient().highlightOnce(source, "python"))
       .then(
         (result) => {
           const groups: (string | undefined)[] = new Array(source.length);
@@ -1930,6 +1931,7 @@ export class App {
   }
   renderContent(): void {
     const w = this.session;
+    this.sourceLocations.clear();
     const view = this.tree ? "tree" : `${w.selected}:${w.view}`;
     this.treeBar.visible = Boolean(this.tree);
     if (this.lastView !== view) {
@@ -2094,6 +2096,7 @@ export class App {
       );
       // The thread of now is read from the index, in the time of what it shows, and that of a moment of the past whole.
       const owed = new Set(w.host.prompts.keys());
+      for (const id of this.streamedSource.keys()) if (w.actOf(id)?.done) this.streamedSource.delete(id);
       const word = (rung: ActRow) => this.sourceWord(rung);
       const lines = index
         ? thread(w.selected, word, w.host.streams, owed, opened, index)
@@ -2143,93 +2146,61 @@ export class App {
         return made;
       };
       const programCard = (id: string, given: readonly ProgramLine[], indent: number) => {
-        // What a model writes changes at each token, so it stands in a card of its own under the program, and the
-        // program stays as it was drawn.
-        const all: ProgramLine[] = given
-          .filter((line) => line.kind !== "writes")
-          .map((line) =>
-            line.kind === "quote"
-              ? {
+        // Completed steps and the live tail share one retained source node, including the handoff from tokens
+        // to the complete word. The original step coordinates still own inspection, copy, edit and string folds.
+        const all: ProgramLine[] = given.flatMap((line): ProgramLine[] => {
+          if (line.kind !== "writes") this.streamedSource.delete(line.step.id);
+          if (line.kind === "quote")
+            return [
+              {
+                kind: "code",
+                step: line.step,
+                number: line.number,
+                display: line.display,
+                text: `${line.name} = ${JSON.stringify(line.value)}`,
+                source: line.source,
+                acts: [],
+                runs: false,
+                hint: "",
+              },
+            ];
+          if (line.kind !== "writes") return [line];
+          const current = w.host.streams.get(line.step.id);
+          if (current)
+            this.streamedSource.set(line.step.id, { text: current.text, thinking: current.thinking });
+          // Stream removal and the full word can arrive in separate host updates. The pending step keeps its
+          // latest source between them, rather than replacing it with an empty thinking line for one frame.
+          const stream = current ?? this.streamedSource.get(line.step.id);
+          const text = stream?.text ?? "";
+          const thought = (stream?.thinking ?? "").trimEnd().split("\n").at(-1) || "thinking";
+          const number = line.display ?? 1;
+          const source: ProgramLine[] = text
+            ? text
+                .trimEnd()
+                .split("\n")
+                .map((text, index) => ({
                   kind: "code",
                   step: line.step,
-                  number: line.number,
-                  display: line.display,
-                  text: `${line.name} = ${JSON.stringify(line.value)}`,
-                  source: line.source,
+                  number: index + 1,
+                  display: number + index,
+                  text,
                   acts: [],
                   runs: false,
                   hint: "",
-                }
-              : line,
-          );
+                }))
+            : [];
+          source.push({ ...line, text: thought, display: number + source.length });
+          return source;
+        });
         const digits = Math.max(
           2,
-          ...all.map((line) => (line.kind === "code" ? String(line.display ?? line.number).length : 1)),
+          ...all.map((line) =>
+            line.kind === "code" || line.kind === "writes"
+              ? String(line.display ?? (line.kind === "code" ? line.number : 1)).length
+              : 1,
+          ),
         );
-        const writing = given.filter((line) => line.kind === "writes");
-        const tails = () => {
-          for (const line of writing) {
-            const stream = w.host.streams.get(line.step.id);
-            const text = stream?.text ?? "";
-            const thought = (stream?.thinking ?? "").trimEnd().split("\n").at(-1) || "thinking";
-            const number = line.display ?? 1;
-            const source: ProgramLine[] = text
-              ? text
-                  .trimEnd()
-                  .split("\n")
-                  .map((text, index) => ({
-                    kind: "code",
-                    step: line.step,
-                    number: index + 1,
-                    display: number + index,
-                    text,
-                    acts: [],
-                    runs: false,
-                    hint: "",
-                  }))
-              : [];
-            source.push({ ...line, text: thought, display: number + source.length });
-            const room = this.feedWidth - indent - 8;
-            add(
-              `writes-${line.step.id}`,
-              `${text}|${thought}|${room}|${this.theme}`,
-              [],
-              (box) =>
-                box.add(
-                  this.programView(
-                    source,
-                    room,
-                    () => "",
-                    () => "",
-                    new Set(),
-                    digits,
-                    true,
-                  ),
-                ),
-              {
-                indent,
-                separate: false,
-                structure: `writes:${room}:${this.theme}`,
-                shown: text || thought,
-                update: (box) => {
-                  const view = box.getChildren().find((node) => node instanceof LineNumberRenderable);
-                  if (view instanceof LineNumberRenderable)
-                    this.programView(
-                      source,
-                      room,
-                      () => "",
-                      () => "",
-                      new Set(),
-                      digits,
-                      true,
-                      view,
-                    );
-                },
-              },
-            );
-          }
-        };
-        if (!all.length) return tails();
+        if (!all.length) return;
         // A thread whose program made its last steps alone says how many came before them.
         const earlier = all[0]?.kind === "earlier" ? all[0].count : 0;
         const steps = [...new Set(all.filter((line) => line.kind !== "note").map((line) => line.step))];
@@ -2282,8 +2253,13 @@ export class App {
                 : `${line.kind}|${line.text}`,
             ),
           ].join("\n");
+          const location = at ? `program-${id}-${at}` : `program-${id}`;
+          for (const line of segment) {
+            if (!this.sourceLocations.has(line.step.id)) this.sourceLocations.set(line.step.id, location);
+            if (line.kind === "code") for (const act of line.acts) this.sourceLocations.set(act.id, location);
+          }
           add(
-            at ? `program-${id}-${at}` : `program-${id}`,
+            location,
             key,
             [],
             (box) => {
@@ -2312,7 +2288,7 @@ export class App {
               update: (box) => {
                 const view = box.getChildren().find((node) => node instanceof LineNumberRenderable);
                 if (view instanceof LineNumberRenderable)
-                  this.programView(segment, room, took, since, heads, digits, false, view);
+                  this.programView(segment, room, took, since, heads, digits, view);
               },
             },
           );
@@ -2331,7 +2307,6 @@ export class App {
               { indent },
             );
         }
-        tails();
       };
       let collapsed = -1;
       for (const line of lines) {
@@ -2404,8 +2379,7 @@ export class App {
             );
             continue;
           }
-          // A rung folds to one row: its state, the first line of its word, and the acts that it made. Open, it shows
-          // its whole word, and each act that it made stands under it.
+          // A rung shows its word as source. A click on a line opens what each act of that line gave.
           // A rung that a cancel ended before its model wrote a word shows nothing, since the message says the cancel.
           if (!code.trim() && cancelled(act)) continue;
           programCard(
@@ -2516,8 +2490,8 @@ export class App {
             { indent },
           );
         } else if (line.type === "act") {
-          // The ceiling of a grant stands in the sidebar, so the feed shows no grant. An act that no word made stands as
-          // a line of python under a quiet header, as a word that the operator runs.
+          // The ceiling of a grant stands in the sidebar, so the feed shows no grant. An act that no word made
+          // stands as a line of Python, as a word that the operator runs.
           if (act.kind === "grant") continue;
           programCard(
             act.id,
@@ -2527,8 +2501,7 @@ export class App {
             indent,
           );
         } else if (asksOperator(act) && act.words[0] === "None") {
-          // A prompt of None asks nothing: the console closed it as it took it, and it settles as a quiet line, its
-          // first line, which opens to the whole message. No key dismisses it.
+          // A prompt of None asks nothing. Its whole message uses the common message panel, and no key dismisses it.
           const message = String(act.words[1] ?? "");
           add(
             act.id,
@@ -2536,7 +2509,7 @@ export class App {
             [],
             (box) => {
               const panel = this.panel(box, c.faint);
-              panel.add(this.message(message));
+              panel.add(this.markdown(message, c.text, c.background));
               panel.onMouseDown = (event) => {
                 if (event.button === 2) this.actActions(act);
               };
@@ -2557,7 +2530,7 @@ export class App {
               panel.onMouseDown = (event) => {
                 if (event.button === 2) this.actActions(act);
               };
-              panel.add(this.message(message));
+              panel.add(this.markdown(message, c.text, c.background));
               if (ask?.choices.length) {
                 const choices = this.row({ gap: space.between, flexWrap: "wrap" });
                 for (const [index, value] of ask.choices.entries())
@@ -4161,7 +4134,6 @@ export class App {
     since: (act?: ActRow) => string,
     heads: ReadonlySet<ProgramLine>,
     digits = 2,
-    streaming = false,
     prior?: LineNumberRenderable,
   ): LineNumberRenderable {
     const texts: string[] = [];
@@ -4238,9 +4210,7 @@ export class App {
         if (!shown) for (const k of parts.keys()) whole.set(at + k, offsets[k] ?? 0);
         const base = program.length;
         program += `${line.text}\n`;
-        if (streaming) {
-          // A partial statement stays plain until the model finishes it.
-        } else if (shown) {
+        if (shown) {
           const found = shown.folds.length ? literals(line.text) : [];
           let from = 0;
           let source = base;
@@ -4348,7 +4318,13 @@ export class App {
     const view =
       prior ??
       new LineNumberRenderable(this.renderer, { target, fg: c.faint, paddingRight: 1, minWidth: digits + 2 });
-    const state = known ?? { target, text: "", groups: [] as (string | undefined)[], revision: 0 };
+    const state = known ?? {
+      target,
+      text: "",
+      groups: [] as (string | undefined)[],
+      revision: 0,
+      press: undefined as { x: number; y: number; dragged: boolean } | undefined,
+    };
     this.programSurfaces.set(view, state);
     const revision = ++state.revision;
     // The old prefix keeps its colors until the complete statement has new highlights. No plain frame replaces it.
@@ -4398,7 +4374,11 @@ export class App {
     this.programLoaders.delete(view);
     for (const [row, sign] of signs) if (sign.before === glyph.running) this.programLoaders.set(view, row);
     // The gutter of the numbers takes the events of the pointer over the program, so it shows the string of a fold.
+    view.onMouseDown = (event) => {
+      state.press = { x: event.x, y: event.y, dragged: false };
+    };
     view.onMouseMove = (event) => {
+      if (state.press && (event.x !== state.press.x || event.y !== state.press.y)) state.press.dragged = true;
       if (hoverFold(event)) return;
       clearTimeout(this.hoverTimer);
       this.unhover();
@@ -4409,11 +4389,23 @@ export class App {
       const row = target.getLineSources(event.y - view.y, 1)[0] ?? 0;
       const line = sources[row];
       if (event.button === 2 && line) return this.actActions(line.step as ActRow);
-      if (line?.kind !== "code" || this.renderer.getSelection()?.getSelectedText()) return;
+      const press = state.press;
+      state.press = undefined;
+      if (line?.kind !== "code" || !press || press.dragged || event.x !== press.x || event.y !== press.y)
+        return;
       const hit = foldAt(event.x, event.y);
       if (hit) return this.openString(hit.line, hit.fold.literal);
       const open = this.openStrings(line);
-      const index = (whole.get(row) ?? -1) + event.x - target.x;
+      // The pointer is in terminal cells; literal bounds and the row's offset are UTF-16 source positions.
+      let cells = 0;
+      let units = 0;
+      for (const { segment } of graphemes.segment(texts[row] ?? "")) {
+        const width = Bun.stringWidth(segment);
+        if (cells + width > event.x - target.x) break;
+        cells += width;
+        units += segment.length;
+      }
+      const index = (whole.get(row) ?? -1) + units;
       const literal = literals(line.text).findIndex(
         (one, k) => open.has(k) && whole.has(row) && index >= one.start - 1 && index <= one.end,
       );
@@ -4422,6 +4414,7 @@ export class App {
     };
     return view;
   }
+  private streamedSource = new Map<string, { text: string; thinking: string }>();
   private sourcePainting = new Set<Promise<void>>();
   private programLoaders = new Map<LineNumberRenderable, number>();
   private programSurfaces = new WeakMap<
@@ -4431,6 +4424,7 @@ export class App {
       text: string;
       groups: (string | undefined)[];
       revision: number;
+      press?: { x: number; y: number; dragged: boolean };
     }
   >();
   /** The strings of a line of a program that the operator opened, which show whole. */
@@ -7353,7 +7347,9 @@ export class App {
       this.scroll.scrollChildIntoView(
         this.cards.has(target.card)
           ? target.card
-          : ([...this.cards].find(([, card]) => card.act === target.card)?.[0] ?? target.card),
+          : (this.sourceLocations.get(target.card) ??
+              [...this.cards].find(([, card]) => card.act === target.card)?.[0] ??
+              target.card),
       );
     else this.scrollNow(target);
     this.scrollTarget = undefined;
