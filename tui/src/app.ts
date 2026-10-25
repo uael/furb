@@ -5980,12 +5980,11 @@ export class App {
       // The models of the catalog that the roster does not hold follow it, and one of them joins the roster when it is
       // chosen.
       const added = w.catalog.filter(([name]) => !roster.some(([held]) => held === name));
-      return [...roster, ...added].map(([name, , window], at) => {
+      return [...roster, ...added].map(([name, , window]) => {
         const { provider, id } = modelName(name);
-        const shared = roster.filter(([other]) => modelName(other).id === id).length > 1;
         return {
-          // A model of the roster goes by its id alone, unless two providers offer a model of that id.
-          value: at < roster.length && !shared ? id : name,
+          // A catalog can hold the same id under a provider that the roster does not offer.
+          value: name,
           detail: `${count(window)} tokens of context`,
           current: name === w.actorChoice.model,
           label: id,
