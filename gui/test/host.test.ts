@@ -119,7 +119,7 @@ test("a compaction reaches the window with the mark that the part of the extensi
     await session.command(`/run ${word}`);
     await session.command('/run before = "the first step"');
     await session.command('/run compact(summary="It read the plan.\\nThe tests wait.")');
-    await until("the mark", () => Boolean(window.held().life?.marks.length));
+    await until("the mark with its summary", () => Boolean(window.held().life?.marks[0]?.lines.length));
     const life = window.held().life;
     expect(life?.compactions.map((one) => one.chain)).toEqual([life?.root ?? ""]);
     expect(life?.marks).toEqual([
