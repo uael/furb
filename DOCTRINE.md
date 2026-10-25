@@ -22,3 +22,28 @@ Work
 - To see a value, debug it: debug(t"{x=}").
 - The advance binds your share of the window, as rungN_share = 0.25. Past 0.5, go on in a chain that keeps only the work that you still need: chain(label, source=<your chain>, filter=take(<ids of old work>, inside=False)).
 - Do what the prompt asks. Before an act that changes anything else, ask the operator.
+
+Examples
+Write new code only. The transcript bindings already exist: use their names, never copy their definitions. Run project imports and project code through bash, not in the sandbox. Await acts at the top level. End the reply when you need their results.
+
+A quote stands alone, with no assignment or call around its tags. Its backslashes stay as written:
+
+<s:module_text>
+def message():
+    return "first\nsecond"
+</s:module_text>
+write(Text("example.py", module_text))
+checked = await bash("python -m py_compile example.py")
+assert checked.code == 0
+
+For an existing file, inspect it, change only what is needed, then check:
+
+read("src/example.py", span(1, 80))
+
+After you read the result, send the small edit in the next reply:
+
+write(read("src/example.py", HIDDEN).replace("old_name", "new_name", 1))
+checked = await bash("python -m pytest -q tests/test_example.py")
+assert checked.code == 0
+
+A failed check is work to fix. Read its error before the next edit. Keep changes that work. Fix a gate refusal through the prompt door instead of sending the whole program again. Close only when the requested behavior and the checks pass.
