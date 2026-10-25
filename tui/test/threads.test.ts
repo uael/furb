@@ -225,3 +225,76 @@ test("a line cut to its room and a folded string keep the colors of their whole 
     size,
     true,
   ));
+test("a live source selection and its syntax stay in place as elapsed time changes", () =>
+  composing(
+    async ({ session, app, screen, frame }) => {
+      session.preferences.reducedMotion = true;
+      const rung = await session.engine.rung({
+        word: 'value = "steady source"\nawait wait(60)',
+        on: session.engine.root,
+      });
+      await session.refresh();
+      await frame();
+      await app.colorsDone();
+      const initial = await frame();
+      const rows = initial.split("\n");
+      const y = rows.findIndex((row) => row.includes('value = "steady source"'));
+      const x = (rows[y] ?? "").indexOf("steady source");
+      expect(y).toBeGreaterThanOrEqual(0);
+      await until(
+        screen.renderer,
+        () =>
+          Boolean(cellAt(screen.captureSpans(), x, y).fg?.equals(RGBA.fromHex(palettes.ink.syntaxString))),
+        "frame",
+      );
+      await screen.mockMouse.drag(x, y, x + 5, y);
+      const selected = screen.renderer.getSelection()?.getSelectedText();
+      expect(selected).toBe("steady");
+      const source = app.scroll.getChildren().find((node) => node.id === `program-${rung}`);
+      const wait = session.acts.find((act) => act.kind === "wait" && act.by === rung);
+      if (!wait) throw new Error("No pending wait.");
+      const top = app.scroll.scrollTop;
+      const focused = app.composer.focused;
+      session.started[wait.id] = Date.now() - 4000;
+      await frame();
+      expect(app.scroll.getChildren().find((node) => node.id === `program-${rung}`) === source).toBe(true);
+      expect(screen.renderer.getSelection()?.getSelectedText()).toBe(selected);
+      expect(app.scroll.scrollTop).toBe(top);
+      expect(app.composer.focused).toBe(focused);
+      expect(
+        cellAt(screen.captureSpans(), x + 8, y).fg?.equals(RGBA.fromHex(palettes.ink.syntaxString)),
+      ).toBe(true);
+      await session.engine.close(null, { id: wait.id });
+      await session.engine.result(rung);
+    },
+    { width: 140, height: 42, useMouse: true },
+  ));
+
+test("source selection survives command output while the pointer, focus and scroll stay still", () =>
+  composing(
+    async ({ session, app, screen, frame }) => {
+      session.preferences.reducedMotion = true;
+      const rung = await session.engine.rung({
+        word: 'value = "steady output"\nawait bash("printf first; sleep 0.5; printf second; sleep 0.5; printf third")',
+        on: session.engine.root,
+      });
+      await session.refresh();
+      await frame();
+      await app.colorsDone();
+      const rows = (await frame()).split("\n");
+      const y = rows.findIndex((row) => row.includes('value = "steady output"'));
+      const x = (rows[y] ?? "").indexOf("steady output");
+      await screen.mockMouse.drag(x, y, x + 5, y);
+      const source = app.scroll.getChildren().find((node) => node.id === `program-${rung}`);
+      const top = app.scroll.scrollTop;
+      const focused = app.composer.focused;
+      await session.engine.result(rung);
+      await session.refresh();
+      await frame();
+      expect(app.scroll.getChildren().find((node) => node.id === `program-${rung}`) === source).toBe(true);
+      expect(screen.renderer.getSelection()?.getSelectedText()).toBe("steady");
+      expect(app.scroll.scrollTop).toBe(top);
+      expect(app.composer.focused).toBe(focused);
+    },
+    { width: 140, height: 42, useMouse: true },
+  ));
