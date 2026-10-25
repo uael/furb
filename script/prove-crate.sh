@@ -21,13 +21,13 @@ mkdir "$work/crates" "$work/unpacked" "$work/furb"
 git clone -q https://github.com/uael/monty "$work/monty"
 git -C "$work/monty" checkout -q "$rev"
 fork=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"$/\1/p' "$work/monty/Cargo.toml")
-monty="monty-macros monty-types monty monty-typeshed monty-type-checking"
+monty="monty-macros monty-types monty-alloc monty monty-typeshed monty-type-checking"
 (cd "$work/monty" && cargo package --quiet --no-verify $(printf -- '-p %s ' $monty))
 # The copy of the checkout: each file that git tracks, as it stands now, and each dependency on monty by its version.
 (cd "$root" && git ls-files -z | tar --null -T - -cf -) | tar -xf - -C "$work/furb"
 sed -i.git 's/^\(monty[a-z-]* = { git = "https:\/\/github.com\/uael\/monty", rev = "[0-9a-f]*"\) }$/\1, version = "'"$fork"'" }/' \
   "$work/furb/Cargo.toml"
-test "$(grep -c "version = \"$fork\" }" "$work/furb/Cargo.toml")" = 3
+test "$(grep -c "version = \"$fork\" }" "$work/furb/Cargo.toml")" = 4
 rm "$work/furb/Cargo.lock"
 printf '[patch.crates-io]\n' > "$work/config.toml"
 unpack() {

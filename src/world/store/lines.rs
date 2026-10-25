@@ -57,6 +57,31 @@ pub(super) fn kept(path: &Path) -> Result<Vec<Object>, Fault> {
   read(path, false)
 }
 
+/// The entries of the file of lines at a path whose fact is of one of some kinds, as [`kept`] reads them: a line whose
+/// head names another kind is not parsed, and a line that does not parse is passed over.
+pub(super) fn heads(path: &Path, kinds: &[&str]) -> Result<Vec<Object>, Fault> {
+  let data = match std::fs::read(path) {
+    Ok(data) => data,
+    Err(no) if no.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
+    Err(no) => return Err(failed(path, no)),
+  };
+  let starts: Vec<String> = kinds.iter().map(|kind| format!("[[\"{kind}\",")).collect();
+  let mut entries = Vec::new();
+  let mut start = 0;
+  while start < data.len() {
+    let end = memchr::memchr(b'\n', &data[start..]).map_or(data.len(), |at| start + at);
+    let line = &data[start..end];
+    if starts.iter().any(|head| line.starts_with(head.as_bytes()))
+      && let Ok(held) = serde_json::from_slice::<Vec<&RawValue>>(line)
+      && let Some(entry) = held.first().and_then(|one| entry_of(one))
+    {
+      entries.push(entry);
+    }
+    start = end + 1;
+  }
+  Ok(entries)
+}
+
 /// The line of an entry: its fact, and after it the time at which the store kept it, in milliseconds since the start
 /// of 1970, so the fact stays as the journal said it.
 fn stamped(mut entry: Value, at: u64) -> String {

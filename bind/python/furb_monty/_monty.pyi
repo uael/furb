@@ -39,12 +39,13 @@ class ModelInfo(TypedDict):
   price: list[float] | None
 
 class ProviderInfo(TypedDict):
-  """A provider of the network as a first run checks it: its name, the names of its credential in the environment,
-  and how many of its models the catalog offers."""
+  """A provider as a first run checks it: its name, the names of its credential in the environment, whether the
+  settings enable it, and how many of its models the catalog offers."""
 
   provider: str
   env: list[str]
   offered: int
+  enabled: bool
 
 class LocalInfo(TypedDict):
   """The local server as a first run checks it: its address, how many models the catalog offers of it, and why it
@@ -268,14 +269,16 @@ def logged(path: str) -> list[list[object]] | None:
 
 class Retold(TypedDict):
   """What a record tells, read with no life: the engine that made it, the engine of this build, the version of the
-  build that made it, the version of this build, whether its facts are those of its log, and its facts."""
+  build that made it, the version of this build, whether its facts are those of its log, and the file that holds its
+  facts, one on each line as JSON, where a line that does not start with `[`, and a line `["keep", "", n]`, holds no
+  fact."""
 
   made: str | None
   engine: str
   version: int | None
   current: int
   logged: bool
-  facts: list[list[object]]
+  file: str
 
 def retold(path: str) -> Retold:
   """What the record at a path tells, read with no life, so no word runs again and a record of any engine opens: the
@@ -332,17 +335,26 @@ def answered(shape: str, line: str) -> object:
   """A line of the operator as a value of the shape a prompt wants, by the rules every console of the crate reads a
   line by. It raises Refused for a line that is no value of the shape, and for a shape the operator answers not."""
 
-def models(claude: str | None = None) -> list[ModelInfo]:
-  """The models the catalog of this machine offers, with the claude command line at a path when it is given."""
+def models(claude: str | None = None, directory: str | None = None, config: str | None = None) -> list[ModelInfo]:
+  """The models the user and project settings offer, with the claude command line at a path when it is given.
+  The directory is the current directory when unsaid, and config is the user config directory when unsaid.
+  Invalid settings raise Refused.
+  """
 
-def model(name: str) -> ModelInfo | None:
-  """The model the catalog knows by a name, whether it offers that model or not; nothing when it knows none."""
+def model(name: str, directory: str | None = None, config: str | None = None) -> ModelInfo | None:
+  """The model the user and project settings know by a name; nothing when they know none.
+  The directory is the current directory when unsaid, and config is the user config directory when unsaid.
+  Invalid settings raise Refused.
+  """
 
 def levels() -> list[str]:
   """The levels of effort, from least to most, which an actor names after its model."""
 
-def setup(claude: str | None = None) -> SetupInfo:
-  """What a first run checks of this machine, with the claude command line at a path when it is given."""
+def setup(claude: str | None = None, directory: str | None = None, config: str | None = None) -> SetupInfo:
+  """What a first run checks with the user and project settings, and the claude command line at a path when given.
+  The directory is the current directory when unsaid, and config is the user config directory when unsaid.
+  Invalid settings raise Refused.
+  """
 
 def attach_image(directory: str, path: str) -> ImageAttachment:
   """An image copied into a directory of images under the digest of its bytes, as a message attaches it."""

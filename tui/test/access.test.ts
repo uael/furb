@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RGBA } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
+import type { Turn } from "furb";
 import { until } from "../../bind/typescript/test/until.ts";
 import { follow } from "../src/app.ts";
 import { demoLibrary, demoSession } from "../src/demo.ts";
@@ -201,6 +202,60 @@ test("a recorded life hears each whole line that its file adds, and a line that 
     appendFileSync(path, `in3", "operator", "chain1", "three", ""]\n`);
     expect(reader.follow()).toBe(true);
     expect(reader.facts.map((fact) => fact[1])).toEqual(["chain1", "chain2", "chain3"]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a reader holds of a long output the tail that its row shows, and gives the act whole from its file", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-cut-"));
+  try {
+    const path = join(directory, "life.jsonl");
+    const output = Array.from({ length: 500 }, (_, at) => `line ${at} of a long output`).join("\n");
+    const exit = {
+      is: "Exit",
+      code: 0,
+      stdout: { is: "Text", content: output },
+      stderr: { is: "Text", content: "" },
+    };
+    const facts = [
+      ["chain", "chain1", "operator", "", "root", ""],
+      ["bash", "bash1", "operator", "chain1", "seq 500", "", 600],
+      ["started", "bash1", "bash"],
+      ["done", "bash1", "bash", exit],
+    ];
+    writeFileSync(path, [{ recorded: true }, ...facts].map((one) => `${JSON.stringify(one)}\n`).join(""));
+    const reader = Reader.recorded(path, directory);
+    const held = reader.activity.acts.get("bash1") as unknown as { value: typeof exit; output: number };
+    expect(held.value.stdout.content).toBe(output.slice(-2000));
+    expect(held.output).toBe(output.length);
+    expect(JSON.stringify(reader.facts).length).toBeLessThan(output.length);
+    expect(reader.act("bash1")?.value).toEqual(exit);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("the turns of a chain that a reader gives again keep each turn that did not change", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-turns-"));
+  try {
+    const path = join(directory, "life.jsonl");
+    const turn: Turn = ["assistant", "close(1)", [10, 1, 0, 0, 0], null];
+    const facts = [
+      ["chain", "chain1", "operator", "", "root", ""],
+      ["tell", "chain1", "chain1", ["#chain1"]],
+      ["reply", "reply1", "rung1", "chain1", "opus"],
+      ["done", "reply1", "provider", turn],
+    ];
+    writeFileSync(path, [{ recorded: true }, ...facts].map((one) => `${JSON.stringify(one)}\n`).join(""));
+    const reader = Reader.recorded(path, directory);
+    const first = reader.turns();
+    expect(first).toEqual([["user", "#chain1", null, null], turn, ["user", "", null, null]]);
+    appendFileSync(path, `${JSON.stringify(["tell", "chain1", "chain1", ["#rung2 advance"]])}\n`);
+    reader.follow();
+    const again = reader.turns();
+    expect(again[1]).toBe(first[1] as Turn);
+    expect(again.at(-1)).toEqual(["user", "#rung2 advance", null, null]);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

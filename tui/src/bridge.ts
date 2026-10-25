@@ -26,6 +26,7 @@ import {
   type Served,
 } from "./hosting.ts";
 import type { EngineOptions } from "./models.ts";
+import type { ProviderChoice } from "./providers.ts";
 import { isRecorded, type Reading } from "./reading.ts";
 import type { ActRow, FollowUp } from "./session.ts";
 
@@ -177,6 +178,9 @@ export class HostView extends EventEmitter implements Plain {
   catalog = () => this.ask<[string, string[], number][]>("library", "catalog");
   /** What the first run checks of this machine, and nothing in the demo, which needs no model. */
   setup = () => this.ask<SetupInfo | null>("library", "setup");
+  providers = () => this.ask<ProviderChoice[]>("library", "providers");
+  provider = (name: string, value: unknown) => this.ask<boolean>("library", "provider", name, value);
+  reload = () => this.ask<boolean>("library", "reload");
   /** The name of the model that a name gives in the roster or in the catalog, and nothing when it gives none. */
   model = (name: string) => this.ask<string | null>("library", "model", name);
   answer = (id: string, value: string) => this.ask<unknown>("console", "answer", id, value);

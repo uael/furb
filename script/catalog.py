@@ -16,7 +16,7 @@ from pathlib import Path
 
 URL = "https://models.dev/api.json"
 """URL is the public catalog of models.dev."""
-PI = "https://registry.npmjs.org/@earendil-works/pi-ai/-/pi-ai-0.87.0.tgz"
+PI = "https://registry.npmjs.org/@earendil-works/pi-ai/-/pi-ai-1.4.0.tgz"
 """PI is the package of pi-ai, whose data holds the providers that models.dev does not list."""
 SNAPSHOT = Path(__file__).parents[1] / "src" / "world" / "provider" / "catalog.json"
 """SNAPSHOT is the file that the crate carries."""

@@ -37,6 +37,7 @@ import {
   safeText,
   shapes,
   TIMEOUT,
+  type Turn,
   WORK,
 } from "furb";
 import {
@@ -55,6 +56,7 @@ import {
   makers,
   momentsOf,
   nowOf,
+  orderOf,
   owedAt,
   type RowState,
   type Tone,
@@ -383,24 +385,25 @@ export function follow(renderer: CliRenderer, options: AppOptions): () => App {
   return () => app;
 }
 
-/** The rows of the chains of a loom of the board in the orders that the board reads them: every row, the rows that
- * ask, then those that need a look, then the others, each in the order of the tree, the place of each row, and how
- * many rows hold each state, in the order of the count line. */
-function boardOrderOf(loom: Loom, listed: (chain: string) => boolean) {
-  const all = loom.rows.filter((row) => row.id !== "operator");
-  const rows = all.filter((row) => listed(row.id));
-  const looks = (row: (typeof rows)[number]) => ["failed", "paused", "working"].includes(row.state);
-  const counts = boardOrder.flatMap((state) => {
-    const count = rows.filter((row) => row.state === state).length;
-    return count ? [[state, count] as const] : [];
-  });
+/** The order of the board with only the rows that it lists: a chain that a later chain of its run goes on from stands
+ * in that run, so it is not a row. The place of each row stays the place that the loom gives, which the run of
+ * compactions that starts with a chain that the board does not list takes. */
+function listedOrder(order: ReturnType<typeof orderOf>, listed: (chain: string) => boolean) {
+  const shows = (row: Loom["rows"][number]) => listed(row.id);
+  const rows = order.rows.filter(shows);
+  const counts = new Map<RowState, number>();
+  for (const row of rows) counts.set(row.state, (counts.get(row.state) ?? 0) + 1);
+  const unlisted = order.rows.length - rows.length;
   return {
     rows,
-    asking: rows.filter((row) => row.state === "asks"),
-    looking: rows.filter((row) => row.state !== "asks" && looks(row)),
-    resting: rows.filter((row) => row.state !== "asks" && !looks(row)),
-    // A chain that the board does not list keeps its place, which the run of compactions that starts with it takes.
-    place: new Map(all.map((row, at) => [row.id, at])),
+    asking: order.asking.filter(shows),
+    looking: order.looking.filter(shows),
+    resting: (count: number) =>
+      order
+        .resting(count + unlisted)
+        .filter(shows)
+        .slice(0, count),
+    place: order.place,
     counts,
   };
 }
@@ -3107,7 +3110,7 @@ export class App {
    * state of its chain, its name, what it does now, and how many answers its models gave for how many dollars. A click
    * on a row shows its chain. The board shows once the life holds more than one chain, or a question waits. */
   /** The loom that the board read last, and what it was woven of, which a frame of the same life reads again. */
-  private boardLoom?: { of: unknown[]; loom: Loom; order: ReturnType<typeof boardOrderOf> };
+  private boardLoom?: { of: unknown[]; loom: Loom; order: ReturnType<typeof listedOrder> };
   /** What each chain of the board does now, and what it was read of. */
   private boardNow: { of: unknown[]; now: Map<string, ReturnType<typeof nowOf>> } = {
     of: [],
@@ -3137,10 +3140,16 @@ export class App {
       });
     // The rows of the chains in their orders, and how many of each state, are read once for each loom.
     const order =
-      same && this.boardLoom ? this.boardLoom.order : boardOrderOf(woven, (chain) => w.listed(chain));
+      same && this.boardLoom?.order
+        ? this.boardLoom.order
+        : listedOrder(orderOf(woven), (chain) => w.listed(chain));
     this.boardLoom = { of, loom: woven, order };
     const loom = woven;
-    const { rows, asking, looking, resting, place, counts } = order;
+    const { rows, asking, looking, place } = order;
+    const counts = boardOrder.flatMap((state) => {
+      const count = order.counts.get(state) ?? 0;
+      return count ? [[state, count] as const] : [];
+    });
     this.renderStage();
     const visible =
       this.lifeView === "main" &&
@@ -3155,7 +3164,7 @@ export class App {
     // The rows that the board holds: each chain that asks, then each chain that needs a look, then the others, as
     // many as a third of the screen holds, and the chain shown always.
     const room = Math.max(3, Math.floor((this.renderer.height - 16) / 3));
-    const chosen = [...asking.slice(0, room), ...looking.slice(0, room), ...resting.slice(0, room)].slice(
+    const chosen = [...asking.slice(0, room), ...looking.slice(0, room), ...order.resting(room)].slice(
       0,
       room,
     );
@@ -3418,7 +3427,7 @@ export class App {
   private words(): Map<string, string> {
     const w = this.session;
     const words = new Map<string, string>();
-    for (const item of conversation(w.turns, w.acts))
+    for (const item of conversation(w.turns, (one) => w.actOf(one)))
       if (item.type === "python" && item.rung) words.set(item.rung.id, item.code);
     for (const [id, word] of Object.entries(w.program)) words.set(id, word);
     for (const act of w.acts)
@@ -3933,19 +3942,32 @@ export class App {
   }
   /** The words that the turns of the chain shown tell of its rungs, by rung, which the program of the chain does not
    * hold for a word that the gate refused. */
-  private told: { turns: unknown; words: Map<string, string> } = { turns: undefined, words: new Map() };
+  private told: { turns: readonly Turn[]; at: number; rung?: ActRow; words: Map<string, string> } = {
+    turns: [],
+    at: 0,
+    words: new Map(),
+  };
   private toldWord(id: string): string | undefined {
-    const { turns, acts } = this.session;
-    if (this.told.turns !== turns)
-      this.told = {
-        turns,
-        words: new Map(
-          conversation(turns, acts).flatMap((item) =>
-            item.type === "python" && item.rung ? [[item.rung.id, item.code]] : [],
-          ),
-        ),
+    const w = this.session;
+    const { turns } = w;
+    const held = this.told;
+    if (held.turns !== turns) {
+      // The turns before the last are whole, so each is read once while the turns begin with them. The last turn grows
+      // as paragraphs are told on the chain, and it is read again.
+      if (!(held.at > 0 && turns.length >= held.at && turns[held.at - 1] === held.turns[held.at - 1]))
+        Object.assign(held, { at: 0, rung: undefined, words: new Map() });
+      const whole = Math.max(held.at, turns.length - 1);
+      const read = (from: { at: number; rung?: ActRow }, to?: number) => {
+        for (const item of conversation(turns.slice(from.at, to), (one) => w.actOf(one), from))
+          if (item.type === "python" && item.rung) held.words.set(item.rung.id, item.code);
+        return from;
       };
-    return this.told.words.get(id);
+      held.rung = read({ at: held.at, rung: held.rung }, whole).rung;
+      held.at = whole;
+      read({ at: whole, rung: held.rung });
+      held.turns = turns;
+    }
+    return held.words.get(id);
   }
   /** What an act is about, whole: the message of a prompt, the program of a rung, the time of a wait, the ceilings of
    * a grant, and the first word of any other act. */
@@ -4275,7 +4297,7 @@ export class App {
   private renderRailSession(): void {
     const w = this.session;
     const window = w.filled;
-    const grant = w.activity.find((act) => act.kind === "grant" && !act.done);
+    const grant = w.open.find((act) => act.kind === "grant");
     const width = w.preferences.sidebarWidth;
     // The root chain, the chain that is shown, and a chain that has something to say stand in the list, and the other
     // finished chains fold under a row of their own, which a click opens.
@@ -4880,6 +4902,7 @@ export class App {
       tree: this.sessionTree,
       queue: this.queuePicker,
       model: this.models,
+      providers: this.providers,
       effort: this.effortPicker,
       shape: this.shapes,
       theme: () => this.themes(),
@@ -5387,20 +5410,17 @@ export class App {
     pause: () => this.chainValues(),
     wake: () => this.chainValues(),
     cancel: () =>
-      this.session.activity
+      this.session.open
         .filter((act) => working(act))
         .map((act) => ({
           value: act.id,
           detail: `${act.kind}  ${clip(String(act.words[act.kind === "prompt" ? 1 : 0] ?? ""), 40)}`,
         })),
     feed: () =>
-      this.session.activity
-        .filter((act) => act.kind === "bash" && !act.done && act.words[1] === null)
+      this.session.open
+        .filter((act) => act.kind === "bash" && act.words[1] === null)
         .map((act) => ({ value: act.id, detail: clip(String(act.words[0] ?? ""), 48), more: true })),
-    close: () =>
-      this.session.activity
-        .filter((act) => !act.done && act.kind !== "chain")
-        .map((act) => ({ value: act.id, detail: act.kind, more: true })),
+    close: () => this.session.open.map((act) => ({ value: act.id, detail: act.kind, more: true })),
     grant: () =>
       ["1", "2", "5", "10", "20"].map((value) => ({
         value,
@@ -5600,6 +5620,35 @@ export class App {
   }
   /** The models of the roster and of the catalog under their providers, with the one the chain uses marked. */
   models = (): void => this.pick("model", "Model", "The chain sends its next prompt to this model.");
+  providers = (): void => {
+    void this.session.host
+      .providers()
+      .then((choices) =>
+        this.openPalette(
+          "Providers",
+          [
+            {
+              label: "Add a custom provider",
+              detail: "Enter its name, URL, model and context window",
+              run: () => this.insert("/provider add "),
+            },
+            {
+              label: "Reload settings",
+              detail: "Read the JSON config files again",
+              run: () => this.action("/reload"),
+            },
+            ...choices.map((one) => ({
+              label: one.name,
+              detail: `${one.enabled ? "Remove" : "Add"} provider, ${one.models} models available`,
+              mark: this.current(one.enabled),
+              run: () => this.action(`/provider ${one.enabled ? "remove" : "add"} ${one.name}`),
+            })),
+          ],
+          { note: "Changes apply to this project and are saved in .furb/config.json." },
+        ),
+      )
+      .catch(this.report);
+  };
   effortPicker = (): void =>
     this.pick(
       "effort",
@@ -7225,7 +7274,7 @@ export class App {
   /** Whether Escape pauses the chain: a model is at work on it, and no pause holds it. */
   private pausing(): boolean {
     const w = this.session;
-    return !w.paused && w.activity.some((act) => act.kind === "prompt" && !act.done && !asksOperator(act));
+    return !w.paused && w.open.some((act) => act.kind === "prompt" && !asksOperator(act));
   }
   /** What each action of the table of keys does, with the key that ran it. */
   private readonly actions: Record<Action, (key?: KeyEvent) => unknown> = {
