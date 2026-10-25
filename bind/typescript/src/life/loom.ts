@@ -621,6 +621,80 @@ export function subjectOf(act: LiveAct, word: (rung: LiveAct) => string): string
   );
 }
 
+/** What a command does, by the program that it runs, in a few words: the checks of a pull request, a push, the tests
+ * of a tool. A command whose program no rule knows says its program, and no guess. */
+const commands: [RegExp, (found: RegExpMatchArray) => string][] = [
+  [/\bgh pr checks (\d+)/, (found) => `checks of #${found[1]}`],
+  [/\bgh pr merge (\d+)/, (found) => `merges #${found[1]}`],
+  [/\bgh pr (?:create|edit)\b/, () => "opens its PR"],
+  [/\bgh pr (?:view|diff) (\d+)/, (found) => `reads #${found[1]}`],
+  [/\bgh pr list\b/, () => "lists the PRs"],
+  [/\bgh run (?:watch|view)\b/, () => "reads a run of CI"],
+  [/\bgh issue \w+ (\d+)/, (found) => `reads issue #${found[1]}`],
+  [/\bgit push\b/, () => "pushes"],
+  [/\bgit rebase\b/, () => "rebases"],
+  [/\bgit (?:fetch|pull)\b/, () => "fetches"],
+  [/\bgit commit\b/, () => "commits"],
+  [/\bcargo (test|build|clippy|fmt|run)\b/, (found) => `runs cargo ${found[1]}`],
+  [
+    /\b(bun|npm|pnpm|yarn)( run)? (test|build|lint|check|bench|screenshots|animation|format)\b/,
+    (found) => `runs ${found[1]}${found[2] ?? ""} ${found[3]}`,
+  ],
+  [/\b(pytest|ruff|ty check|pre-commit)\b/, (found) => `runs ${found[1]}`],
+  [/\bsleep (\d+)/, (found) => `sleeps ${duration(Number(found[1]))}`],
+];
+
+/** What a command does, in a few words: the first rule that knows it, or else the program that it runs first, past a
+ * change of directory and the variables that it sets. */
+export function commandDoing(command: string): string {
+  for (const [rule, say] of commands) {
+    const found = command.match(rule);
+    if (found) return say(found);
+  }
+  const program = command
+    .split(/&&|;|\|\||\n/)
+    .map(
+      (part) =>
+        part
+          .trim()
+          .replace(/^[({]\s*/, "")
+          .split(/\s+/)
+          .find((word) => /^[\w./~$]/.test(word) && /^[\w./~$+-]+$/.test(word) && !/^\w+=/.test(word)) ?? "",
+    )
+    .find((first) => first && first !== "cd");
+  return program ? `runs ${program.split("/").at(-1)}` : "runs a command";
+}
+
+/** What an act that runs does, in a few words that a person reads at a glance, never a raw command: a question to the
+ * operator, the chains that a prompt or a wait waits for, what a command does, and the file that a read or a write
+ * takes. */
+export function doingOf(
+  act: LiveAct,
+  find: (id: string) => LiveAct | undefined,
+  label: (chain: string) => string,
+): string {
+  const file = () => {
+    const path = String((act.words[0] as { path?: string } | undefined)?.path ?? act.words[0] ?? "");
+    return path.split("/").at(-1) ?? path;
+  };
+  if (act.kind === "prompt") return asksOperator(act) ? "asks you" : `waits for ${label(act.on)}`;
+  if (act.kind === "bash") return commandDoing(String(act.words[0] ?? ""));
+  if (act.kind === "read") return `reads ${file()}`;
+  if (act.kind === "write") return `writes ${file()}`;
+  if (act.kind === "chain") return `starts ${label(act.id)}`;
+  if (act.kind === "wait") {
+    const awaited = act.words.slice(1).flatMap((id) => find(String(id)) ?? []);
+    if (!awaited.length) return `waits ${duration(Number(act.words[0] ?? 0))}`;
+    const chains = new Set(awaited.map((one) => (one.kind === "prompt" ? label(one.on) : "")));
+    const [only] = chains;
+    if (chains.size === 1 && only) return `waits for ${only}`;
+    const [one] = awaited;
+    if (one && awaited.length === 1) return doingOf(one, find, label);
+    return `waits for ${awaited.length} ${awaited.every((one) => one.kind === "prompt") ? "threads" : "acts"}`;
+  }
+  return act.kind === "rung" ? "runs a step" : act.kind;
+}
+
 /** What the chain of a row does now, from the loom and the acts of the life. */
 export function nowOf(
   row: Row,

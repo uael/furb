@@ -224,6 +224,17 @@ export const palettes = {
 } satisfies Record<string, Palette>;
 /** A theme by its name, or "own": the palette that the terminal gives, from its own colors. */
 export type ThemeName = keyof typeof palettes | "own";
+/** The tones of the threads, muted so that no tone reads as a state: each thread takes one by its name, on the bar of
+ * its row in the sidebar, so that the eye finds it again. */
+const threadTones = ["#6f8fb8", "#b08a5e", "#7f9c7b", "#9a7fa6", "#5f9ea2", "#b07b7b", "#8d8fb8", "#a39a62"];
+/** The tone of a thread, the same for its name in each life, and the default color of the terminal when the view
+ * shows no color. */
+export function threadTone(name: string): RGBA {
+  if (colorless.on) return RGBA.defaultForeground();
+  let hash = 0;
+  for (const char of name) hash = (hash * 31 + (char.codePointAt(0) ?? 0)) >>> 0;
+  return RGBA.fromHex(threadTones[hash % threadTones.length] ?? "#6f8fb8");
+}
 /** The theme that a view shows when no choice and no terminal names one. */
 export const defaultTheme: keyof typeof palettes = "ink";
 /** The palette that the colors of the terminal give, once the terminal said them. */

@@ -143,8 +143,8 @@ export default function (furb) {
   text or a list of `[text, tone]`, where a tone is `text`, `muted`, `faint`, `accent`, `success`, `warning` or
   `danger`. The TUI draws it again each time that the life changes, and shows twelve lines at most.
 - `furb.row(kind, draw)` draws each act of a kind in the feed: `draw(act, seen)` gives `{ label, details }`, the
-  text after the kind and the lines that its card shows when it opens. The rows of a rung and of a prompt stay the
-  TUI's own.
+  hint at the end of the line of the program that made the act, and the lines that show under that line when a click
+  opens it. The rows of a rung and of a prompt stay the TUI's own.
 - `furb.key(on, run)` adds a key, as `ctrl+e` or `+`, which acts while no dialog is open. A key with no ctrl, meta or
   alt acts only on an empty input.
 - `furb.command(name, detail, run)` adds a command to the palette, which `/name` runs too. A key of the TUI wins over

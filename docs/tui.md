@@ -47,38 +47,56 @@ The captures of the feed show a real life: a conductor and the workers that it h
 life of furb, with 23 chains, 21 of them at work, and ladders of up to 76 rungs. `tui/fixtures/conductor.jsonl`
 holds it, with no key and no path of a home in it, and `bun run demo` opens it beside the scripted life.
 
-The board over the feed says the whole life at a glance. Its first line counts the chains by what they do: the
-chains that ask you, then those that failed, are paused, work, are done, or rest. Under it, each chain that needs a
-look stands on one row: the chains that ask you first, then those that failed, are paused or work, in the order of
-their tree. A row shows the mark of the chain, its name, what it does now, and how many answers its models gave for
-how many dollars. A chain that asks you shows its question in yellow. A chain at work shows the act that it waits
-on: a command, a wait with its time and the acts that it waits for, or a rung that its model writes. A chain that
-failed shows why, and a chain that finished shows the first line of its answer. The board takes at most a third of
-the screen, keeps the chain on screen, and counts the chains that it leaves out, which ⌃B lists. A click on a row
-shows that chain. The board shows when the life has more than one chain, or when a question waits for you.
+The sidebar says the whole life at a glance, in one place. On top, Needs you holds each question that waits for you,
+the oldest first, with its thread, its message, and a button for each value of a choice, Other among them, which a
+click answers. Under it, Chains holds the tree of the chains: each chain on one row, with a bar in a tone of its
+own, its mark, the last part of its name, and what it does now in a few words, never a raw command, as "checks of
+#364", "runs cargo test" or "waits for feed". A chain that works for a minute or more says since when, in yellow
+past fifteen minutes. A chain that failed says why, and one that finished the first line of its answer. A chain
+stands in the tree while it or a chain under it needs a look, and the others fold under Finished.
 
-Under the board, the feed shows the ladder of the chain: your message in a panel, each rung of the ladder on one
-row, and the answer under the name of the model that gave it. The row of a rung shows its mark, its name, the first
-line of its Python in the colors of its grammar, the count of the lines after it, and the acts that it made, each in
-the color of its state. Once it is done, it says how long it ran and what the answers of its model cost. A rung opens
-while it runs, and shows the last lines that its model writes or that its command prints. It folds to its row when
-it completes. A click on its heading, or ⌥D, opens it to show its numbered Python, and under it each act that it made
-with a preview of its output. Each act says what it did: a read its path and the count of its lines, a write its path
-and the lines that it added and removed, and a command its line, its exit, and how long it ran. The time is known for
-the work that the TUI saw run, since the record holds no time. The fold stays the same across views and after a
-reopen. `/autocollapse` turns the automatic fold off, and on again. A right click on an act inspects it, edits its
-program, or branches after it.
+A click on a chain, or Enter after ⌥T, shows that chain and lists its threads in place of the tree, under a row
+"← Chains" that gives the tree back, as ← and Esc do. A thread is a prompt on the chain, with the messages that came to
+it. Its row has the color of its thread, its mark, as asks you, runs or resolved, and the first line of its message,
+and the list scrolls. A click on a thread scrolls the feed to it, and the input then sends each message to it, as
+`prompt(None, message, on=thread)`, which its model reads at its next step. A message to a resolved thread opens it
+again. Under the thread chosen, Collapse folds it in the feed to its header line alone, and Resolve closes it, as
+`close(None, thread)` does, or Open again takes the message that opens it. Space, r and o do the same after ⌥T, and
+the header of the thread in the feed holds the same controls. At the foot of the sidebar, Context says how full the
+window of the chain shown is and where a grant pauses it, its tokens, and what it spent.
 
-A long thread stays short. The feed shows the last six steps of the chain and of each rung, and the last four rungs
-of each ladder, and one line in place of each run of earlier ones, as "28 earlier messages". A click on the line
-shows them. A step that asks you or runs always shows. A long message shows its first eight rows, and the word of a
-rung that runs shows its first twelve, each with a line that shows the rest. A jump to an act opens each fold over
-it. The board and the feed come from the model of a life that `furb/life` gives, so each host shows the same
-life. The sidebar shows the chains, the context and the cost, and the workspaces.
+The feed shows the threads of the chain, each in its color. A thread is a prompt: its message heads it in a panel,
+and under it the words of its steps stand as one Python program, line by line, with the number of each line in the
+gutter. No step and no act takes a row of its own. Each line ends with a quiet hint of what its acts came to: a read
+the count of its lines, a write the lines that it added and removed, a command its exit and the count of the lines
+that it printed, a question its answer or what it waits for, and a loop its count, as x6. The first line of each
+step says how long the step ran and what the answers of its model cost. The time is known for the work that the TUI
+saw run, since the record holds no time. The line that runs is lit, with a mark in the gutter and, after a second,
+its time, and the last lines that its command prints stream under it. A line that the gate refused has a red cross in
+the gutter, and the reason stands under it as a comment. A message that you send to the thread, and each notice of
+the chain, stands as a comment among the steps, and what the model writes before its word comes stands under the
+program. The answer of the thread stands under the name of the model that gave it. A word that you run stands in the
+same way under You ran, and so does an act that no word made, as a command that `/bash` starts: one line of Python
+that binds the act to its name, as `bash3 = bash("make docs")`.
+
+A click on a line opens it in place: its whole text, cut into rows at the column of the code, and under it what each
+of its acts gave, as the output of a command or the text of a read. A second click folds it. Collapse on the header
+of a thread, or ⌥D, which lists the threads, folds the thread to its header line, which says its state, the first
+line of its message and the count of its steps, and a click on that line opens it again. A resolved thread that is
+not the last of its chain starts folded, and `/autocollapse` turns that fold off, and on again. A right click on a
+name inspects it.
+
+A long thread stays short. The program of a thread shows its last six steps, and one line in place of the earlier
+ones, as "# 35 earlier steps", and the feed shows one line in place of its earlier threads, as "28 earlier
+messages". A click on the line shows them. A long message shows its first rows, with a line that shows the rest. A
+jump to an act opens each fold over it. The sidebar and the feed come from the model of a life that `furb/life`
+gives, so each host shows the same life. Under the chains, the sidebar shows the workspaces, each with the session
+shown, each session that works, asks or failed, and its newest sessions up to three, and the older ones fold under
+Earlier.
 
 ![Feed](screenshots/02-feed.png)
 
-![A long ladder](screenshots/60-long-ladder.png)
+![A long thread](screenshots/60-long-ladder.png)
 
 ![Folded steps](screenshots/61-folded-steps.png)
 
@@ -229,23 +247,24 @@ surface takes the default colors of the terminal.
 ## Chains
 
 ⌃B lists the chains, each with its state and the chain it branched from. Each chain has its own feed and module. The
-sidebar lists the root chain, the chain on screen, and each chain that is not at rest, and the other chains fold
-under Finished.
+sidebar lists in its tree the root chain, the chain on screen, and each chain that is not at rest, and the other chains
+fold under Finished. A click on a chain lists its threads, each in the color of its thread.
 
 ![Chains](screenshots/15-chains.png)
 
+![The threads of a chain](screenshots/81-chain-threads.png)
+
 ## Views of the life
 
-The board of main, the loom and the graph are three views of the whole life, side by side. ⌥V switches the view at
+Main, the loom and the graph are three views of the whole life, side by side. ⌥V switches the view at
 run time, `/view` names one or lists the three, `--view main|loom|graph` chooses one at the start, and the setting
-keeps the last one. A view of the life stands where the board stands, over the feed of the selected chain, and each
+keeps the last one. The loom and the graph stand over the feed of the selected chain, and each
 screen of main stays where it is in each view: the transcript, the changes, the palette, the dialogs, the desk, and
 the composer. Each row of a chain shows its state, its actor, its cost, and the question that it waits on.
 
-The board of main counts the chains by what they do, and gives one row to each chain that needs a look, with what it
-waits on, its actor, and its answers and dollars.
+Main shows the feed of the selected chain under nothing, and the chains and their threads in the sidebar.
 
-![The board of main](screenshots/02-feed.png)
+![Main](screenshots/02-feed.png)
 
 The loom shows each chain as a thread in time, under you. Time goes from left to right, and the right edge is now. A
 cell is taller where more acts began or ended, yellow where the chain asks you, and red where an act failed, and the
@@ -410,8 +429,8 @@ The sidebar groups sessions under project folders, and its list scrolls on its o
 sessions, and a click on a session opens it. Open sessions keep running while another is selected. A dot shows the
 state of each session and workspace, from live work and saved records: blue for work, yellow for input needed or
 paused work, green for an unread completion, and red for an error. An open grey dot means ready or saved, and a click
-on a completed session clears its unread mark. A rung folds its program to one line and
-keeps its acts, a workspace folds to its name, and ⌃\ hides the sidebar. ⌃W lists the workspaces and their
+on a completed session clears its unread mark. A line of a program opens in place with what its acts gave, a
+workspace folds to its name, and ⌃\ hides the sidebar. ⌃W lists the workspaces and their
 sessions, each with its state, the time since its last save, its cost, and its size.
 
 On macOS and Linux, each session is a life in a host of its own, which outlives the window. A quit detaches the
@@ -425,7 +444,7 @@ how other operators reach it, and when a life stays in the window.
 
 ![Workspace tree](screenshots/28-workspace-tree.png)
 
-![Collapsed rung](screenshots/29-collapsed-rung.png)
+![An open line](screenshots/29-open-line.png)
 
 ![Collapsed workspace](screenshots/30-collapsed-workspace.png)
 

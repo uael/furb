@@ -53,7 +53,7 @@ runs, and each follow-up that the queue sends, asks the actor that the chain has
 
 ## Three views of a life
 
-The TUI holds three views of the whole life side by side: the board of main, the loom of the chains in time, and the
+The TUI holds three views of the whole life side by side: main, with the chains and their threads in the sidebar, the loom of the chains in time, and the
 graph of the programs that run. `--view main|loom|graph` chooses one at the start, ⌥V switches it at run time,
 `/view` names one or lists the three, and the preferences keep the last one. Each view stands over the feed of the
 selected chain, and every other screen stays the same in each one. ⌥G gives the keys to the loom or the graph, and
@@ -140,9 +140,10 @@ A recorded life is a log of a life whose first line is a header that says `"reco
 reads a record that a build of another version made, from its acts, and runs nothing: what you send to it fails with the reason.
 The demo opens `fixtures/conductor.jsonl`, a life of a conductor of furb with 23 chains, beside its scripted life,
 when it has no `--cwd` and no record. `bun run tui/script/fixture.ts <record>.jsonl.log [out]` makes such a fixture
-from the log of a real life: it keeps the acts that the model of a life reads, cuts each word, message and output to
-its first lines, replaces each key, address of mail and home directory, and ends at the moment with the most chains
-at work.
+from the log of a real life: it keeps the acts that the model of a life reads, keeps each word of a model whole, since
+the feed shows it as the program that ran, cuts each message and output to its first lines, keeps the last lines that
+each command that still runs printed, replaces each key, address of mail and home directory, and ends at the moment
+with the most chains at work.
 
 ## Look and access
 
@@ -152,13 +153,13 @@ its colors. Else it shows Ink on a dark terminal or on one that does not say its
 changes when the terminal changes. ⌃T or `/theme` chooses another. Sessions share the theme, and the TUI saves it in
 `$XDG_CONFIG_HOME/furb/ui.json`, or `~/.config/furb/ui.json`, and `%APPDATA%\furb\ui.json` on Windows.
 `FURB_CONFIG_DIR` selects another configuration directory. Tests and screenshot generation use isolated preferences.
-`sidebarWidth` in the preferences file sets the width of the sidebar, from 26 to 48 columns. On a terminal narrower
+`sidebarWidth` in the preferences file sets the width of the sidebar, from 26 to 56 columns, and 44 by default. On a terminal narrower
 than 100 columns the sidebar is hidden, and `/workspace` keeps all sessions available from the keyboard.
 
 The TUI serves each person who uses it:
 
 - `--screen-reader`, or `/access reader`, shows one column of text for a screen reader: no sidebar, no box, no
-  spinner, no logo in blocks, and nothing that moves. The view of the life is the board of main.
+  spinner, no logo in blocks, and nothing that moves. The view of the life is main.
 - `--reduced-motion`, or `/access motion`, stops each spinner, and no part of the view moves with time. The mark of
   work that runs, ◉, stays.
 - `NO_COLOR`, when it is set and not empty, turns every color off: each surface takes the default colors of the
@@ -237,6 +238,9 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | ⌃⌥← | Return from a definition jump |
 | ⌥[ / ⌥] or ⌥P / ⌥N | Previous / next message of the feed |
 | ⌥V / ⌥G | Switch the view of the life: main, the loom, or the graph / move in the loom or the graph |
+| ⌥T | Move in the sidebar: the tree of the chains, and the threads of a chain |
+| ↑↓ / Enter or → / Esc or ← after ⌥T | Move / list the threads of a chain, or choose a thread / back to the tree, then to the input |
+| Space / r / o after ⌥T | Collapse or expand / resolve / open again the thread |
 | ↑↓←→ / Enter / Esc after ⌥G | Move, fold or zoom / zoom in / zoom out or go back |
 | [ ] / { } after ⌥G | Move the cursor in time by one / ten moments |
 | Space / x / n / b after ⌥G | Pause or wake / cancel / step / branch at the cursor the chain |
@@ -293,10 +297,10 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/share [path]` | Export a standalone HTML conversation |
 | `/export <path>` | Write the transcript and program to a new JSON file |
 | `/workspace [path]` | Choose a workspace or add a project folder |
-| `/view [main|loom|graph]` | Show the life as the board of main, the loom, or the graph |
-| `/sidebar` | Show or hide the chains, the usage, and the workspaces |
+| `/view [main|loom|graph]` | Show the life as main, the loom, or the graph |
+| `/sidebar` | Show or hide the chains and their threads, the context, and the workspaces |
 | `/delete` | Archive a session, or move it and its files to the workspace trash |
-| `/autocollapse` | Toggle collapse of completed rungs |
+| `/autocollapse` | Toggle the fold of the threads that are over |
 | `/extensions` | List the extensions that this life runs |
 | `/serve [address]` | Give the addresses at which other operators read this life, or read and drive it, over the network |
 | `/end` | End each open life, its commands and its models, then quit |
@@ -356,8 +360,8 @@ the structured JSON export. `/context` sets the context ceiling.
 ## Extensions
 
 A life runs the extensions that the configs turn on, as [the guide of the extensions](../docs/extensions.md) says,
-and each chain shows the rungs of their words in its feed, as it shows any rung. An extension can also give the TUI a part, a module of TypeScript beside its word, which adds
-panels over the input, the rows of the acts of a kind, keys and commands, and which the TUI loads again live, as
+and the feed of each chain shows the words that they ran on it as one line. An extension can also give the TUI a part, a module of TypeScript beside its word, which adds
+panels over the input, the hint of the line of each act of a kind, keys and commands, and which the TUI loads again live, as
 [the guide of the extensions](../docs/extensions.md#a-part-for-the-tui) says. `/extensions` lists what the life
 runs, and `/run` runs a word of one on the chain on screen, as `/run skill("pdf")`. A cancel ends one act and the work under it, and
 not what an extension started on the chain, such as the watcher of the memory.

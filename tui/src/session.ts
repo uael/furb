@@ -320,6 +320,9 @@ export class Session extends EventEmitter {
   loading = false;
   paused = false;
   editing?: string;
+  /** The thread that the operator chose in the sidebar, to which the input sends each message as prompt(None, message,
+   * on=thread): its model reads it at its next step, and a message to a resolved thread opens it again. */
+  thread?: string;
   readonly preferences: Preferences;
   mode: "prompt" | "python" = "prompt";
   shape = "str";
@@ -929,6 +932,22 @@ export class Session extends EventEmitter {
     await this.host.decline(ask.id, words);
     this.landed(ask, `Your words went to ${ask.id} on ${ask.label}.`);
   }
+  /** The operator resolves a thread: its open prompt closes as the engine closes a prompt, with None where its shape
+   * takes None, with the word resolved where it takes a str, and else as Refused of the words resolved by the operator,
+   * which the await of the word that asked raises. The rungs that work for the thread end with it. */
+  async resolve(id: string): Promise<void> {
+    const act = this.indexed().ids.get(id);
+    if (!act || act.kind !== "prompt" || act.done) return;
+    const shape = String(act.words[0] ?? "");
+    const value = /\bNone\b|^object$/.test(shape)
+      ? null
+      : shape === "str"
+        ? "resolved"
+        : { is: "Refused", args: ["resolved by the operator"] };
+    await this.engine.close(value, { id });
+    this.notice = `You resolved ${act.thread ?? id}. A message to it opens it again.`;
+    await this.refresh();
+  }
   /** What the operator did to an ask, and what waits after it, in the notice. The pointer goes on to what waits next
    * on the chain shown. */
   private landed(ask: Ask, said: string): void {
@@ -1014,6 +1033,7 @@ export class Session extends EventEmitter {
     if (id !== this.selected) {
       this.editing = undefined;
       this.held = 0;
+      this.thread = undefined;
       this.turns = [];
       this.answers = [];
       this.filled = undefined;
@@ -1431,10 +1451,11 @@ export class Session extends EventEmitter {
         await this.attachFiles(input);
         this.redo = [];
         const pending = this.host.pending.size > 0;
-        const id = await this.engine.prompt(this.shape, {
-          message: this.withImages(input),
-          on: this.selected,
-        });
+        const thread = this.thread;
+        const id = thread
+          ? await this.engine.prompt("None", { message: this.withImages(input), on: thread })
+          : await this.engine.prompt(this.shape, { message: this.withImages(input), on: this.selected });
+        if (thread) this.notice = `Your message went to the thread ${thread}.`;
         delete this.images[this.selected];
         this.save();
         if (pending) this.emit("resume");
@@ -1539,11 +1560,11 @@ export class Session extends EventEmitter {
         this.enqueue(argument);
         break;
       case "autocollapse":
-        this.preferences.foldRungs = !this.preferences.foldRungs;
+        this.preferences.foldThreads = !this.preferences.foldThreads;
         this.preferences.save();
-        this.notice = this.preferences.foldRungs
-          ? "Completed rungs collapse automatically."
-          : "Rungs keep their open state.";
+        this.notice = this.preferences.foldThreads
+          ? "The threads that are over fold automatically."
+          : "The threads that are over stay open.";
         break;
       case "grant": {
         const amount = Number(argument);
