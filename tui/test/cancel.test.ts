@@ -73,7 +73,7 @@ test("⌃C cancels the last message of the owner alone, and never the thread or 
 
 test("a cancel that reaches running work says how many acts it ends and on which chains, and ends them only once the owner confirms", () =>
   composing(
-    async ({ session, frame, click }) => {
+    async ({ session, frame, screen }) => {
       const { thread, workers } = await conductor(session);
       // The wait of the thread, and the prompt and the rung of each worker.
       expect(session.reach(thread).acts).toHaveLength(5);
@@ -83,14 +83,15 @@ test("a cancel that reaches running work says how many acts it ends and on which
       expect(asked).toContain(`It ends work on ${session.engine.root} (Main), `);
       expect(asked).toContain("(w/one)");
       expect(asked).toContain("(w/two)");
-      await click("Keep");
+      await screen.mockInput.typeText("Keep");
+      screen.mockInput.pressEnter();
       await session.refresh();
       expect(live(session, [thread, ...workers])).toBe(true);
       await session.command(`/cancel ${thread}`);
       const ended = until(session, () =>
         session.notice.startsWith(`${thread} is cancelled, and 5 acts under it on `),
       );
-      await click("Cancel it");
+      screen.mockInput.pressEnter();
       await ended;
       await session.refresh();
       expect([thread, ...workers].some((id) => live(session, [id]))).toBe(false);
