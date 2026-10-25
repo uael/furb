@@ -6070,17 +6070,7 @@ export class App {
   };
   private renderSuggestions(): void {
     const token = this.overlay || this.dismissed ? undefined : this.token();
-    const prefix = this.beforeCursor();
-    const history =
-      !token &&
-      !this.overlay &&
-      !this.dismissed &&
-      this.composer.focused &&
-      !this.session.editing &&
-      !this.session.operatorPrompt &&
-      this.session.mode === "prompt" &&
-      Boolean(prefix) &&
-      !this.renderer.getSelection()?.getSelectedText();
+    const history = !token && !this.overlay && !this.dismissed && this.historySuggestion();
     const shown = token || history ? this.suggestions : [];
     const files = this.session.files;
     // An emoji list that matches nothing closes.

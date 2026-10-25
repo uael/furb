@@ -31,6 +31,12 @@ test("prompt-history suggestions render and accept by keyboard at 80 by 24", () 
       screen.mockInput.pressTab();
       expect(app.composer.plainText).toBe("summarize the issue");
       expect(await frame()).not.toContain("prompt history · Tab to use");
+      const accepted = await frame();
+      await writeFile(
+        join(folder, "prompt-history-80x24-accepted.png"),
+        rasterize(screen.captureSpans(), paletteOf(session.theme), "Prompt accepted"),
+      );
+      await writeFile(join(folder, "prompt-history-80x24-accepted.txt"), accepted);
       screen.mockInput.pressEscape();
       await frame();
       expect(app.composer.plainText).toBe("summarize the issue");
@@ -61,9 +67,21 @@ test("prompt-history navigation renders at 160 by 48 and restores its draft", ()
       screen.mockInput.pressArrow("up");
       expect(app.composer.plainText).toBe("deploy the service");
       expect(await frame()).not.toContain("prompt history · Tab to use");
+      const selected = await frame();
+      await writeFile(
+        join(folder, "prompt-history-160x48-selected.png"),
+        rasterize(screen.captureSpans(), paletteOf(session.theme), "History selected"),
+      );
+      await writeFile(join(folder, "prompt-history-160x48-selected.txt"), selected);
       screen.mockInput.pressTab();
       expect(app.composer.plainText).toBe("deploy the service");
       expect(app.composer.cursorOffset).toBe(app.composer.plainText.length);
+      const accepted = await frame();
+      await writeFile(
+        join(folder, "prompt-history-160x48-accepted.png"),
+        rasterize(screen.captureSpans(), paletteOf(session.theme), "History accepted"),
+      );
+      await writeFile(join(folder, "prompt-history-160x48-accepted.txt"), accepted);
       screen.mockInput.pressEscape();
       await frame();
       expect(app.composer.plainText).toBe("deploy the service");
@@ -76,6 +94,12 @@ test("prompt-history navigation renders at 160 by 48 and restores its draft", ()
         await Bun.sleep(10);
       }
       expect(app.composer.plainText).toBe(draft);
+      const restored = await frame();
+      await writeFile(
+        join(folder, "prompt-history-160x48-restored.png"),
+        rasterize(screen.captureSpans(), paletteOf(session.theme), "Draft restored"),
+      );
+      await writeFile(join(folder, "prompt-history-160x48-restored.txt"), restored);
       app.composer.setText("first line\nsecond line");
       const multiline = app.composer.plainText;
       app.composer.cursorOffset = multiline.length;
