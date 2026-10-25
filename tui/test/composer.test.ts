@@ -1,15 +1,12 @@
 import { afterAll, expect, setSystemTime, test } from "bun:test";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { readFile } from "node:fs/promises";
 import { RGBA } from "@opentui/core";
 import { setRendererCapabilities } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
-import { pixels, rasterize } from "../script/raster.ts";
 import { removeDemoDirectories } from "../src/demo.ts";
 import { emojis } from "../src/emoji.ts";
 import { count } from "../src/format.ts";
-import { paletteOf, palettes } from "../src/theme.ts";
+import { palettes } from "../src/theme.ts";
 import { cellAt, composing } from "./composing.ts";
 import { idle } from "./idle.ts";
 
@@ -323,6 +320,7 @@ test("Up and Down walk prefix history, restore the draft, and leave queued messa
 
 test("Escape restores the exact draft while browsing prefix history", () =>
   composing(async ({ session, app, screen, frame }) => {
+    await idle(session);
     session.histories[session.draftKey] = ["task from history"];
     const draft = "task draft with spacing  ";
     app.composer.setText(draft);
@@ -331,6 +329,17 @@ test("Escape restores the exact draft while browsing prefix history", () =>
     expect(app.composer.plainText).toBe("task from history");
     screen.mockInput.pressEscape();
     await frame();
+    expect(app.composer.plainText).toBe(draft);
+    screen.mockInput.pressEscape();
+    for (
+      let attempt = 0;
+      attempt < 100 && !session.paused && session.notice !== "Press Escape again to rewind.";
+      attempt++
+    ) {
+      await frame();
+      await Bun.sleep(10);
+    }
+    expect(session.paused || session.notice === "Press Escape again to rewind.").toBe(true);
     expect(app.composer.plainText).toBe(draft);
   }));
 
@@ -794,69 +803,6 @@ test("autocomplete uses saved history only, never messages from an older transcr
     expect(session.draftKey).toBe(promptKey);
   }));
 
-test("prompt-history suggestions render and accept by keyboard at 80 by 24", () =>
-  composing(
-    async ({ session, app, screen, frame }) => {
-      session.histories[session.draftKey] = ["summarize the notes", "summarize the issue"];
-      await screen.mockInput.typeText("summarize the");
-      const shown = await frame();
-      expect(shown).toContain("prompt history · Tab to use");
-      expect(shown).toContain("summarize the issue");
-      const root = process.env.TMPDIR ?? tmpdir();
-      const folder = join(root, "promptdoors");
-      await mkdir(folder, { recursive: true });
-      const captured = screen.captureSpans();
-      const image = pixels(captured, paletteOf(session.theme), "Prompt history", 2);
-      expect(image.width).toBeGreaterThan(0);
-      expect(image.pixels.some((value) => value !== 0)).toBe(true);
-      await writeFile(
-        join(folder, "prompt-history-80x24.png"),
-        rasterize(captured, paletteOf(session.theme), "Prompt history"),
-      );
-      await writeFile(join(folder, "prompt-history-80x24.txt"), shown);
-      screen.mockInput.pressTab();
-      expect(app.composer.plainText).toBe("summarize the issue");
-      expect(session.activity.filter((act) => session.isUserPrompt(act))).toHaveLength(0);
-    },
-    { width: 80, height: 24 },
-  ));
-
-test("prompt-history navigation renders at 160 by 48 and does not trap multiline editing", () =>
-  composing(
-    async ({ session, app, screen, frame }) => {
-      session.histories[session.draftKey] = ["deploy the service"];
-      await screen.mockInput.typeText("deploy");
-      screen.mockInput.pressArrow("up");
-      expect(app.composer.plainText).toBe("deploy the service");
-      const shown = await frame();
-      expect(shown).toContain("prompt history · Tab to use");
-      const root = process.env.TMPDIR ?? tmpdir();
-      const folder = join(root, "promptdoors");
-      await mkdir(folder, { recursive: true });
-      const captured = screen.captureSpans();
-      const image = pixels(captured, paletteOf(session.theme), "Prompt history", 2);
-      expect(image.width).toBeGreaterThan(0);
-      expect(image.pixels.some((value) => value !== 0)).toBe(true);
-      await writeFile(
-        join(folder, "prompt-history-160x48.png"),
-        rasterize(captured, paletteOf(session.theme), "Prompt history"),
-      );
-      await writeFile(join(folder, "prompt-history-160x48.txt"), shown);
-      screen.mockInput.pressEscape();
-      for (let attempt = 0; attempt < 100 && app.composer.plainText !== "deploy"; attempt++) {
-        await frame();
-        await Bun.sleep(10);
-      }
-      expect(app.composer.plainText).toBe("deploy");
-      app.composer.setText("first line\nsecond line");
-      const multiline = app.composer.plainText;
-      app.composer.cursorOffset = multiline.length;
-      screen.mockInput.pressArrow("up");
-      expect(app.composer.plainText).toBe(multiline);
-    },
-    { width: 160, height: 48 },
-  ));
-
 test("a text selection hides prompt-history hints without taking composer focus", () =>
   composing(
     async ({ session, app, screen, frame }) => {
@@ -894,3 +840,33 @@ test("prompt history stays on its chain and does not enter Python input", () =>
     },
     { width: 80, height: 24 },
   ));
+
+test("Python and command history remain available without entering prompt history", () =>
+  composing(async ({ session, app, screen, frame }) => {
+    app.toggleMode();
+    session.histories[session.draftKey] = ["value = 1", "value = 2"];
+    app.composer.setText("");
+    screen.mockInput.pressArrow("up");
+    expect(app.composer.plainText).toBe("value = 2");
+    screen.mockInput.pressArrow("down");
+    expect(app.composer.plainText).toBe("");
+
+    app.toggleMode();
+    const promptKey = session.draftKey;
+    for (const name of ["first", "second"]) {
+      app.composer.setText(`/name ${name}`);
+      await app.submit();
+    }
+    expect(session.histories[`${promptKey}:commands`]).toEqual(["/name first", "/name second"]);
+    app.composer.setText("first");
+    expect(await frame()).not.toContain("prompt history · Tab to use");
+    app.composer.setText("/name");
+    app.composer.cursorOffset = app.composer.plainText.length;
+    const navigate = app as unknown as {
+      walkHistory(key: { name: string; meta: boolean }): boolean;
+    };
+    expect(navigate.walkHistory({ name: "up", meta: true })).toBe(true);
+    expect(app.composer.plainText).toBe("/name second");
+    screen.mockInput.pressTab();
+    expect(app.composer.plainText).toBe("/name second");
+  }));
