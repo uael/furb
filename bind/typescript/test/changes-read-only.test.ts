@@ -135,3 +135,34 @@ test("a journal row with a path but no text is damaged, not a file change", asyn
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("a failed journal repair keeps its readable changes and can be retried", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-journal-repair-failed-"));
+  const record = join(directory, "life.jsonl");
+  const path = `${record}.changes.jsonl`;
+  const bytes = `${change("one")}\n{ damaged }\n`;
+  let journal: FileChanges | undefined;
+  try {
+    await writeFile(path, bytes);
+    await mkdir(`${path}.repair`);
+    journal = new FileChanges(record);
+    const opened = journal;
+    expect(() => opened.repair()).toThrow();
+    expect(await readFile(path, "utf8")).toBe(bytes);
+    expect(opened.read(0, 1).map((one) => one.after)).toEqual(["one"]);
+    expect(() => opened.read(1, 1)).toThrow(DamagedJournal);
+    await rm(`${path}.repair`, { recursive: true });
+    expect(opened.repair()).toEqual({ kept: 1, removed: 1 });
+    opened.append({ path: "note.txt", before: "one", after: "two" });
+    expect(opened.read().map((one) => one.after)).toEqual(["one", "two"]);
+    opened.dispose();
+    journal = undefined;
+    expect(() => opened.dispose()).not.toThrow();
+  } finally {
+    try {
+      journal?.dispose();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  }
+});

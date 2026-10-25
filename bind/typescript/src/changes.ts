@@ -2,7 +2,6 @@ import {
   closeSync,
   existsSync,
   fsyncSync,
-  ftruncateSync,
   mkdirSync,
   mkdtempSync,
   openSync,
@@ -10,6 +9,7 @@ import {
   readSync,
   renameSync,
   rmSync,
+  truncateSync,
   writeFileSync,
   writeSync,
 } from "node:fs";
@@ -162,11 +162,9 @@ export class FileChanges {
   }
   append(change: FileChange): void {
     this.writable();
-    if (this.fd === undefined) return;
-    if (this.cut) {
-      ftruncateSync(this.fd, this.end);
-      this.cut = false;
-    }
+    const path = this.path;
+    if (this.fd === undefined || !path) return;
+    if (this.cut) this.reopen(path, () => truncateSync(path, this.end));
     const data = Buffer.from(`${JSON.stringify(change)}\n`);
     writeSync(this.fd, data);
     fsyncSync(this.fd);
@@ -228,13 +226,21 @@ export class FileChanges {
   }
   /** The journal closed, changed on disk, and opened again on its lines. */
   private reopen(path: string, change: () => void): void {
-    if (this.fd !== undefined) closeSync(this.fd);
-    change();
-    this.index(path);
-    this.fd = openSync(path, "a+", 0o600);
+    this.close();
+    try {
+      change();
+    } finally {
+      this.index(path);
+      this.fd = openSync(path, "a+", 0o600);
+    }
+  }
+  private close(): void {
+    const fd = this.fd;
+    this.fd = undefined;
+    if (fd !== undefined) closeSync(fd);
   }
   dispose(): void {
-    if (this.fd !== undefined) closeSync(this.fd);
+    this.close();
     if (this.temporary) rmSync(this.temporary, { recursive: true });
   }
 }
