@@ -13,16 +13,19 @@ await mkdir(out, { recursive: true });
 await loadParsers();
 try {
   await composing(
-    async ({ session, app, screen, frame, click }) => {
+    async ({ session, app, screen, frame }) => {
       const stills: Still[] = [];
       let size = { width: 0, height: 0 };
-      const capture = async (name: string, animate = false) => {
+      const capture = async (name: string, animate = false, expected?: string) => {
         await frame();
         await app.colorsDone();
         await frame();
         const spans = screen.captureSpans();
         await writeFile(`${out}/${name}.png`, rasterize(spans, paletteOf(session.theme), "furb"));
-        await writeFile(`${out}/${name}.txt`, screen.captureCharFrame());
+        const text = screen.captureCharFrame();
+        if (expected && !text.includes(expected))
+          throw new Error(`${name} does not show its expected state: ${expected}`);
+        await writeFile(`${out}/${name}.txt`, text);
         if (animate) {
           const image = pixels(spans, paletteOf(session.theme), "furb", 1);
           size = image;
@@ -62,10 +65,11 @@ try {
       await until(session.host, () => session.host.prompts.has(question));
       await session.refresh();
       await capture("question");
-      await click("yes");
       await screen.mockMouse.moveTo(0, 0);
       screen.mockInput.pressArrow("down");
+      if (!session.host.prompts.has(question)) throw new Error("The keyboard choice was already answered.");
       await capture("question-keyboard");
+      if (!session.host.prompts.has(question)) throw new Error("The keyboard capture answered the question.");
       screen.mockInput.pressEnter();
       await until(session.host, () => !session.host.prompts.has(question));
       await session.engine.prompt("None", {
@@ -75,38 +79,6 @@ try {
       });
       await session.refresh();
       await capture("notice");
-      // A scripted demo reply, never a network model, provides the real pending rung.
-      process.env.FURB_DEMO_PACE = "200";
-      await session.submit("show live progress");
-      await until(session.host, () => session.host.streams.size > 0);
-      const stream = [...session.host.streams.entries()][0];
-      if (stream) {
-        const [id, initial] = stream;
-        const actual = session.host.streams;
-        const held = new Map([[id, { ...initial, text: "", thinking: "" }]]);
-        Object.defineProperty(session.host, "streams", {
-          configurable: true,
-          get: () => held,
-          set: () => {},
-        });
-        await capture("thinking-empty", true);
-        for (const [n, thinking] of [
-          "Read the source",
-          "Keep the source and display coordinates apart",
-          "Check the active line",
-        ].entries()) {
-          held.set(id, { ...initial, text: "", thinking });
-          await capture(`thinking-${n}`, true);
-        }
-        held.set(id, { ...initial, thinking: "", text: 'answer = "a partial' });
-        await capture("stream-partial", true);
-        held.set(id, { ...initial, thinking: "", text: 'answer = "a partial statement"\nclose(answer)' });
-        await capture("stream-source", true);
-        screen.resize(76, 38);
-        await capture("stream-narrow");
-        screen.resize(140, 44);
-        Object.defineProperty(session.host, "streams", { configurable: true, writable: true, value: actual });
-      }
       if (stills.length) await writeFile(`${out}/source.gif`, gif(stills, size.width, size.height));
     },
     { width: 140, height: 44, useMouse: true, kittyKeyboard: true },
@@ -177,7 +149,7 @@ try {
       for (const id of ["prompt1", "prompt2"]) session.folds[`thread:${id}`] = true;
       const handoff: Still[] = [];
       let dimensions = { width: 0, height: 0 };
-      const capture = async (name: string, animate = false) => {
+      const capture = async (name: string, animate = false, expected?: string) => {
         await frame();
         await app.colorsDone();
         await frame();
@@ -185,7 +157,10 @@ try {
           `${out}/${name}.png`,
           rasterize(screen.captureSpans(), paletteOf(session.theme), "furb"),
         );
-        await writeFile(`${out}/${name}.txt`, screen.captureCharFrame());
+        const text = screen.captureCharFrame();
+        if (expected && !text.includes(expected))
+          throw new Error(`${name} does not show its expected state: ${expected}`);
+        await writeFile(`${out}/${name}.txt`, text);
         if (animate) {
           const image = pixels(screen.captureSpans(), paletteOf(session.theme), "furb", 1);
           dimensions = image;
@@ -217,11 +192,29 @@ try {
       await save();
       await until(session, () => session.acts.some((act) => act.id === pending));
       const actual = session.host.streams;
-      const held = new Map([[pending, { text: 'value = "steady source"\nif Tr', thinking: "" }]]);
+      const held = new Map([[pending, { text: "", thinking: "" }]]);
       Object.defineProperty(session.host, "streams", { configurable: true, get: () => held, set: () => {} });
       try {
         app.scroll.scrollTo(99999);
-        await capture("handoff-partial", true);
+        await capture("thinking-empty", true, "# thinking");
+        for (const [n, thinking] of [
+          "Read the source",
+          "Keep the source and display coordinates apart",
+          "Check the active line",
+        ].entries()) {
+          held.set(pending, { text: "", thinking });
+          app.scroll.scrollTo(99999);
+          await capture(`thinking-${n}`, true, `# ${thinking}`);
+        }
+        held.set(pending, { text: 'answer = "a partial', thinking: "" });
+        await capture("stream-partial", true, 'answer = "a partial');
+        held.set(pending, { text: 'answer = "a partial statement"\nclose(answer)', thinking: "" });
+        await capture("stream-source", true, 'answer = "a partial statement"');
+        screen.resize(76, 38);
+        await capture("stream-narrow", false, 'answer = "a partial statement"');
+        screen.resize(140, 44);
+        held.set(pending, { text: 'value = "steady source"\nif Tr', thinking: "" });
+        await capture("handoff-partial", true, 'value = "steady source"');
         const rows = (await frame()).split("\n");
         const y = rows.findIndex((row) => row.includes('value = "steady source"'));
         const x = (rows[y] ?? "").indexOf("steady source");
