@@ -25,6 +25,12 @@ pub mod world;
 #[cfg(any(feature = "python", feature = "typescript"))]
 pub mod binding;
 
+/// The allocator that counts each byte a program asks for, which is how the sandbox reads its memory. A program that
+/// links the crate gives it the `allocator` feature, or installs this one itself as `#[global_allocator]`.
+#[cfg(feature = "allocator")]
+#[global_allocator]
+static ALLOCATOR: monty_alloc::LimitedAllocator = monty_alloc::LimitedAllocator;
+
 pub use crate::{
   ear::{Ear, Heard, Spoken, Step},
   engine::{Act, Engine, Life, Plain, verbs},
