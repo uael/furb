@@ -4731,13 +4731,13 @@ export class App {
     this.openPalette(
       `Threads · ${w.label}`,
       list.map((thread) => ({
-        label: thread.title || thread.act.id,
-        detail: `${thread.act.id}  ${thread.resolved ? "finished" : thread.asks.length ? "needs you" : thread.state}`,
+        label: `${thread.act.id}  ${thread.title || "Untitled thread"}`,
+        detail: thread.resolved ? "finished" : thread.asks.length ? "needs you" : thread.state,
         status: thread.resolved ? "done" : thread.state === "asks" ? "blocked" : "working",
         run: () => this.inspectThread(thread),
         menu: () => this.threadMenu(thread),
       })),
-      { note: "Enter inspects. → or ⋯ opens thread actions. Search includes finished work." },
+      { note: "Enter inspects. → actions. All threads are searchable." },
     );
   }
   private threadMenu(thread: ChainThread): void {
