@@ -631,6 +631,35 @@ pub fn model(
   Ok(configured_catalog(None, directory, config)?.find(&name).as_ref().map(ModelInfo::of))
 }
 
+/// A ChatGPT sign-in state, with its browser address while it waits and a message when it fails. It holds no token.
+#[cfg_attr(feature = "typescript", napi(object, object_from_js = false))]
+#[cfg_attr(feature = "python", derive(pyo3::IntoPyObject))]
+pub struct CodexAuthInfo {
+  pub state: String,
+  pub url: Option<String>,
+  pub message: Option<String>,
+}
+
+/// Read, start, refresh or cancel ChatGPT sign-in for codex. The default action reads its state.
+/// The config directory is the user config directory when unsaid. A start returns before the browser completes.
+#[cfg_attr(feature = "python", pyfunction, pyo3(signature = (action = None, config = None)))]
+#[cfg_attr(feature = "typescript", napi)]
+pub fn codex_auth(action: Option<String>, config: Option<String>) -> Result<CodexAuthInfo, Fault> {
+  use crate::world::codex as auth;
+  let path = config.map(std::path::PathBuf::from);
+  let status = match action.as_deref().unwrap_or("status") {
+    "status" => auth::status(path.as_deref()),
+    "start" => auth::begin(path.as_deref()).map_err(Fault::refused)?,
+    "refresh" => auth::refresh(path.as_deref()).map_err(Fault::refused)?,
+    "cancel" => {
+      auth::cancel(path.as_deref());
+      auth::status(path.as_deref())
+    }
+    _ => return Err(Fault::refused("Use status, start, refresh or cancel for codex")),
+  };
+  Ok(CodexAuthInfo { state: status.state, url: status.url, message: status.message })
+}
+
 /// The levels of effort, from least to most, which an actor names after its model.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]

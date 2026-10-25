@@ -11,12 +11,12 @@ test("a machine with no model gives a fix for each check that is missing, and sa
   const found = checks({ claude: false, providers }, 0);
   expect(found.map(({ label, state }) => [label, state])).toEqual([
     ["Claude command line", "missing"],
-    ["Keys", "missing"],
+    ["Other providers", "missing"],
     ["Local server", "optional"],
     ["Models", "missing"],
   ]);
   expect(found[1]?.fix).toBe(
-    "Set one in your shell, as export ANTHROPIC_API_KEY=your-key, then start furb again. Other names: OPENAI_API_KEY, GOOGLE_API_KEY.",
+    "Add a provider with /providers, or edit the config and run /reload. Environment key names: ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY.",
   );
   expect(found[3]?.found).toBe("No model answers.");
   expect(found.every((check) => check.fix)).toBe(true);
@@ -44,5 +44,22 @@ test("a local server that does not answer is missing, with its address", () => {
     state: "missing",
     found: "No answer from http://127.0.0.1:9.",
     fix: "Start the server, or set FURB_LOCAL_URL to its address.",
+  });
+});
+
+test("a local provider from the config shows its models or asks for a settings repair", () => {
+  const configured = { provider: "local", env: [], enabled: true, offered: 1 };
+  const ready = checks({ claude: false, providers: [...providers, configured] }, 1);
+  expect(ready[2]).toEqual({
+    label: "Local server",
+    state: "ready",
+    found: "1 model in the provider settings.",
+  });
+  const missing = checks({ claude: false, providers: [...providers, { ...configured, offered: 0 }] }, 0);
+  expect(missing[2]).toEqual({
+    label: "Local server",
+    state: "missing",
+    found: "No model from the local provider settings.",
+    fix: "Check this provider's URL, model and key in the config, then run /reload.",
   });
 });

@@ -719,6 +719,21 @@ try {
   await session.refresh();
   ({ library, app } = await mount(session, test.renderer));
   await capture("02-feed");
+  // A string too long for its line folds to an underlined ..., which a hover shows whole and a click opens in place.
+  const folded = test.captureCharFrame().split("\n");
+  const foldRow = folded.findIndex((row) => /\.\.\.["']/.test(row));
+  if (foldRow < 0) throw new Error("No string folds in the feed.");
+  const foldColumn = (folded[foldRow] ?? "").search(/\.\.\.["']/) + 1;
+  await test.mockMouse.moveTo(foldColumn, foldRow);
+  await new Promise((done) => setTimeout(done, 400));
+  await capture("82-string-hover");
+  await test.mockMouse.click(foldColumn, foldRow);
+  await rest();
+  await capture("83-open-string");
+  // The string folds again for the shots that follow.
+  session.folds = Object.fromEntries(
+    Object.entries(session.folds).filter(([key]) => !key.startsWith("string:")),
+  );
   // A worker of the life, whose ladders are long: the earlier rungs of a ladder fold into one line.
   await session.select(session.chains.find((chain) => session.labelOf(chain.id) === "life3/feed")?.id ?? "");
   await capture("60-long-ladder");
@@ -781,6 +796,23 @@ try {
   };
   await show(bare);
   await capture("63-setup-no-model");
+  bare.catalog = [["local:qwen3", ["low", "medium", "high"], 65536]];
+  bare.setup = {
+    ...bare.setup,
+    providers: [...bare.setup.providers, { provider: "local", env: [], offered: 1, enabled: true }],
+  };
+  bare.emit("change");
+  await capture("92-setup-configured-local");
+  bare.catalog = [];
+  bare.setup = {
+    ...bare.setup,
+    providers: [
+      ...bare.setup.providers.filter((one) => one.provider !== "local"),
+      { provider: "local", env: ["LOCAL_KEY"], offered: 0, enabled: true },
+    ],
+  };
+  bare.emit("change");
+  await capture("93-setup-configured-local-missing");
 
   // Watch a life: the demo plays by itself, asks no model, and costs nothing.
   app().dispose();

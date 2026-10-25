@@ -347,6 +347,18 @@ def model(name: str, directory: str | None = None, config: str | None = None) ->
 def levels() -> list[str]:
   """The levels of effort, from least to most, which an actor names after its model."""
 
+class CodexAuthInfo(TypedDict):
+  """A ChatGPT sign-in state, its browser address while it waits, and a message when it fails. It holds no token."""
+
+  state: str
+  url: str | None
+  message: str | None
+
+def codex_auth(action: str | None = None, config: str | None = None) -> CodexAuthInfo:
+  """Read, start, refresh or cancel ChatGPT sign-in for codex. The default action reads its state.
+  The config directory is the user config directory when unsaid. A start returns before the browser completes.
+  """
+
 def setup(claude: str | None = None, directory: str | None = None, config: str | None = None) -> SetupInfo:
   """What a first run checks with the user and project settings, and the claude command line at a path when given.
   The directory is the current directory when unsaid, and config is the user config directory when unsaid.
