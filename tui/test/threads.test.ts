@@ -7,7 +7,7 @@ import { LineNumberRenderable, RGBA, TextRenderable } from "@opentui/core";
 import { chainThreads } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { demoSession } from "../src/demo.ts";
-import { glyph, palettes } from "../src/theme.ts";
+import { palettes } from "../src/theme.ts";
 import { type Composing, cellAt, composing } from "./composing.ts";
 import { idle } from "./idle.ts";
 
@@ -21,10 +21,6 @@ const keep = (name: string, frame: string) => {
 /** The part of each row of a frame that the sidebar shows. */
 const rail = (session: Composing["session"], frame: string) =>
   frame.split("\n").map((line) => line.slice(size.width - session.preferences.sidebarWidth));
-
-/** Whether the sidebar shows the tree of the chains, whose heading is Chains, and not the list of the threads of one. */
-const tree = (session: Composing["session"], frame: string) =>
-  rail(session, frame).some((line) => line.trim().startsWith("Chains "));
 
 /** A click on the first row of the sidebar that shows a text. */
 async function railClick({ session, screen, frame }: Composing, text: string): Promise<void> {
@@ -40,69 +36,49 @@ async function railClick({ session, screen, frame }: Composing, text: string): P
 const listed = (session: Composing["session"]) =>
   chainThreads(session.ladderIndex.on, session.ladderIndex.ids, new Set(session.host.prompts.keys()));
 
-test("a click on a chain lists the threads of that chain in place of the tree, and ← Chains gives the tree back", () =>
+test("the chain switcher stays visible while the selected chain thread list stays in the rail", () =>
+  composing(
+    async (use) => {
+      const { frame } = use;
+      await idle(use.session);
+      const shown = await frame();
+      keep("navigator", shown);
+      expect(shown).toContain("⌃B switch");
+      expect(shown).toContain("Threads");
+      expect(shown).toContain("Find threads");
+      await railClick(use, "⌃B switch");
+      const picker = await frame();
+      expect(picker).toContain("Chains");
+      expect(picker).toContain("Main");
+      use.screen.mockInput.pressKey("escape");
+      const back = await frame();
+      expect(back).toContain("⌃B switch");
+      expect(back).toContain("Threads");
+    },
+    size,
+    true,
+  ));
+
+test("inspecting a thread does not retarget the composer; explicit Reply here does", () =>
   composing(
     async (use) => {
       const { session, frame } = use;
       await idle(session);
-      const shown = await frame();
-      keep("tree", shown);
-      expect(tree(session, shown)).toBe(true);
-      await railClick(use, "Main");
-      await until(session, () => session.selected === session.engine.root);
-      const list = await frame();
-      keep("list", list);
-      expect(list).toContain("← Chains");
-      expect(tree(session, list)).toBe(false);
-      const first = listed(session)[0];
-      expect(first).toBeDefined();
-      expect(rail(session, list).join("\n")).toContain((first?.title ?? "").slice(0, 12));
-      await railClick(use, "← Chains");
-      expect(tree(session, await frame())).toBe(true);
+      const before = session.thread;
+      await railClick(use, "Explore this project");
+      const inspectedThread = listed(session).find((one) => one.title.includes("Explore this project"));
+      expect(session.thread).toBe(before);
+      const inspected = await frame();
+      expect(inspected).toContain("Reopen and reply");
+      await railClick(use, "Reopen and reply");
+      expect(session.thread).toBe(inspectedThread?.act.id);
+      expect(await frame()).toContain("reply");
     },
     size,
     true,
   ));
 
-test("after ⌥T the keys open the threads of a chain, Space collapses a thread in the feed to its header line, and ← goes back", () =>
-  composing(
-    async (use) => {
-      const { session, screen, frame } = use;
-      await idle(session);
-      await frame();
-      screen.mockInput.pressKey("t", { meta: true });
-      await frame();
-      screen.mockInput.pressEnter();
-      await until(session, () => session.selected === session.engine.root);
-      expect(await frame()).toContain("← Chains");
-      const last = listed(session).at(-1);
-      expect(last).toBeDefined();
-      const id = last?.act.id ?? "";
-      screen.mockInput.pressKey(" ");
-      await frame();
-      expect(session.folds[`thread:${id}`]).toBe(true);
-      const folded = await frame();
-      keep("collapsed", folded);
-      expect(folded).toContain(`${glyph.closed} Explore this project`);
-      screen.mockInput.pressKey(" ");
-      await frame();
-      expect(session.folds[`thread:${id}`]).toBe(false);
-      // The feed lays the thread out again over a few frames, and its folded line goes.
-      let shown = await frame();
-      for (let step = 0; step < 40 && shown.includes(`${glyph.closed} Explore this project`); step++) {
-        await Bun.sleep(25);
-        shown = await frame();
-      }
-      expect(shown).not.toContain(`${glyph.closed} Explore this project`);
-      expect(shown).toContain("Collapse");
-      screen.mockInput.pressArrow("left");
-      expect(tree(session, await frame())).toBe(true);
-    },
-    size,
-    true,
-  ));
-
-test("a thread resolves from its row, and a message to it opens it again", () =>
+test("a thread can be explicitly targeted, safely resolved, and reopened", () =>
   composing(
     async (use) => {
       const { session, frame } = use;
@@ -111,28 +87,29 @@ test("a thread resolves from its row, and a message to it opens it again", () =>
       await session.engine.pause(root);
       const id = await session.engine.prompt("str", { message: "Hold this thread open", on: root });
       await session.refresh();
-      await railClick(use, "Main");
       await until(session, () => listed(session).some((one) => one.act.id === id));
       await railClick(use, "Hold this thread open");
+      expect(session.thread).not.toBe(id);
+      await railClick(use, "Reply here");
       expect(session.thread).toBe(id);
-      const open = await frame();
-      keep("chosen", open);
-      await railClick(use, " Resolve ");
+      await railClick(use, "New thread");
+      expect(session.thread).toBeUndefined();
+      await railClick(use, "Resolve");
+      use.screen.mockInput.pressArrow("down");
+      use.screen.mockInput.pressEnter();
       await until(session, () => listed(session).find((one) => one.act.id === id)?.resolved === true);
       expect(await session.engine.result(id)).toBe("resolved");
-      expect(await frame()).toContain(" Open again ");
-      await session.submit("Look at it once more");
-      await until(session, () => listed(session).find((one) => one.act.id === id)?.resolved === false);
-      keep("reopened", await frame());
+      expect(await frame()).toContain("Reopen and reply");
+      await railClick(use, "Reopen and reply");
+      expect(session.thread).toBe(id);
     },
     size,
     true,
   ));
 
-test("a question that waits stands in Needs you over the tree, and stays over the list of the threads of its chain", () =>
+test("Needs-you is global, one row per question, without duplicate choice chips", () =>
   composing(
-    async (use) => {
-      const { session, frame } = use;
+    async ({ session, frame }) => {
       await idle(session);
       const question = await session.engine.prompt("bool", {
         message: "Apply the search shortcut?",
@@ -142,17 +119,16 @@ test("a question that waits stands in Needs you over the tree, and stays over th
       await until(session.host, () => session.host.prompts.has(question));
       await session.refresh();
       const shown = await frame();
-      keep("question", shown);
+      keep("needs-you", shown);
       const rows = rail(session, shown);
       const needs = rows.findIndex((line) => line.includes("Needs you"));
       expect(needs).toBeGreaterThan(-1);
-      expect(rows.findIndex((line) => line.trim().startsWith("Chains "))).toBeGreaterThan(needs);
-      await railClick(use, "Main     asks");
-      const list = await frame();
-      keep("question-list", list);
-      expect(rail(session, list).join("\n")).toContain("Needs you");
-      expect(list).toContain("← Chains");
-      expect(listed(session).some((one) => one.act.id === question)).toBe(false);
+      expect(rows[needs + 1]).toContain("Apply the search shortcut?");
+      expect(rows[needs + 1]).toContain("Main");
+      expect(rows.filter((line) => line.includes("Apply the search shortcut?")).length).toBe(1);
+      expect(rows.join(" ")).not.toContain("1 yes");
+      expect(rows.join(" ")).toContain("Threads");
+      expect(rows.join(" ")).toContain("Find threads");
     },
     size,
     true,
@@ -229,6 +205,78 @@ test("a line cut to its room and a folded string keep the colors of their whole 
     size,
     true,
   ));
+
+for (const width of [80, 160]) {
+  test(`all repeated task subjects remain reachable by id at ${width} columns`, () =>
+    composing(
+      async ({ session, app, screen, frame }) => {
+        const root = session.engine.root;
+        await session.engine.pause(root);
+        const ids: string[] = [];
+        for (let index = 0; index < 25; index++)
+          ids.push(
+            await session.engine.prompt("str", {
+              message: "Review the repeated task subject with all of its details intact",
+              on: root,
+            }),
+          );
+        await session.refresh();
+        app.composer.setText("unsent draft");
+        const target = session.thread;
+        app.details();
+        await frame();
+        await screen.mockInput.typeText("Find threads");
+        screen.mockInput.pressEnter();
+        await frame();
+        expect(await frame()).toContain("Threads");
+        await screen.mockInput.typeText(ids.at(-1) ?? "");
+        expect(await frame()).toContain(ids.at(-1) ?? "");
+        screen.mockInput.pressEnter();
+        await frame();
+        expect(session.thread).toBe(target);
+        expect(app.composer.plainText).toBe("unsent draft");
+        const last = ids.at(-1);
+        const node = app.scroll.getChildren().find((one) => one.id === last);
+        expect(node).toBeDefined();
+        if (!node) throw new Error("No selected thread in the feed.");
+        expect(node.y).toBeGreaterThanOrEqual(app.scroll.viewport.y);
+        expect(node.y).toBeLessThan(app.scroll.viewport.y + app.scroll.viewport.height);
+        if (width >= 100) {
+          screen.mockInput.pressKey("t", { meta: true });
+          await frame();
+          screen.mockInput.pressArrow("up");
+          const moved = await frame();
+          expect(moved).toContain("Reply here");
+          screen.mockInput.pressKey("t");
+          await frame();
+          expect(session.thread).toBe(ids.at(-2));
+        } else {
+          screen.mockInput.pressKey("t", { meta: true });
+          expect(await frame()).toContain("Threads");
+          await screen.mockInput.typeText(ids.at(-2) ?? "");
+          screen.mockInput.pressArrow("right");
+          expect(await frame()).toContain("Reply here");
+          await screen.mockInput.typeText("Reply here");
+          screen.mockInput.pressEnter();
+          await frame();
+          expect(session.thread).toBe(ids.at(-2));
+          expect(app.composer.plainText).toBe("unsent draft");
+          screen.mockInput.pressKey("t", { meta: true });
+          await frame();
+          await screen.mockInput.typeText(ids.at(-2) ?? "");
+          screen.mockInput.pressArrow("right");
+          await frame();
+          await screen.mockInput.typeText("New thread");
+          screen.mockInput.pressEnter();
+          await frame();
+          expect(session.thread).toBeUndefined();
+          expect(app.composer.plainText).toBe("unsent draft");
+        }
+      },
+      { width, height: 36, kittyKeyboard: true },
+    ));
+}
+
 test("a live source selection and its syntax stay in place as elapsed time changes", () =>
   composing(
     async ({ session, app, screen, frame }) => {

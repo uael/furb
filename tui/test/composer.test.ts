@@ -473,7 +473,7 @@ test("the meter of the context says its share and where the chain pauses when th
       expect(row).toBeGreaterThan(0);
       await screen.mockMouse.moveTo((lines[row] ?? "").indexOf("━") + 2, row);
       const tip = await frame();
-      expect(tip).toContain("of the context window");
+      expect(tip).toContain("of its window.");
       expect(tip).toContain("pauses at 30%");
       expect(tip).not.toContain("30.000000000000004");
     },
@@ -482,7 +482,7 @@ test("the meter of the context says its share and where the chain pauses when th
   ));
 
 test("the usage counts each token once, and the context share shows from the first answer with no grant", () =>
-  composing(async ({ session, frame }) => {
+  composing(async ({ session, app, screen, frame }) => {
     // Each answer of the demo reads a prompt of 3240 tokens, 2800 of them from the cache, and writes 184.
     await session.submit("Explore this project.");
     await until(session, () => session.turns.some((turn) => turn[0] === "assistant"));
@@ -499,13 +499,29 @@ test("the usage counts each token once, and the context share shows from the fir
     expect(session.filled).toBe(0);
     expect(session.context).toBe(3240);
     const shown = await frame();
-    expect(shown).toContain("0%");
-    expect(shown).toContain("Cache read");
-    expect(shown).not.toContain("Cached");
+    expect(shown).toContain("0.3%");
+    expect(shown).toContain(`last 3.2k   cached ${count(2800 * answers)}`);
     expect(shown).toContain("━");
-    const lines = shown.split("\n");
-    expect(lines.find((line) => line.includes("Last prompt"))).toContain("3.2k");
-    expect(lines.find((line) => line.includes("Fresh input"))).toContain(count(440 * answers));
+    app.details();
+    await frame();
+    await screen.mockInput.typeText("Context details");
+    screen.mockInput.pressEnter();
+    const details = await frame();
+    const lines = details.split("\n");
+    expect(lines.find((line) => line.includes("Last prompt") && line.includes("tokens"))).toContain(
+      "3,240 tokens",
+    );
+    expect(lines.find((line) => line.includes("Window limit"))).toContain("tokens");
+    expect(lines.find((line) => line.includes("Fresh input"))).toContain(
+      `${(440 * answers).toLocaleString("en-US")} tokens`,
+    );
+    expect(lines.find((line) => line.includes("Output"))).toContain(
+      `${(184 * answers).toLocaleString("en-US")} tokens`,
+    );
+    expect(lines.find((line) => line.includes("Cache read"))).toContain(
+      `${(2800 * answers).toLocaleString("en-US")} tokens`,
+    );
+    expect(lines.find((line) => line.includes("Cache write"))).toContain("0 tokens");
   }));
 
 test("the usage of a fork counts the answers of the fork alone, and not those of its origin", () =>
@@ -520,7 +536,7 @@ test("the usage of a fork counts the answers of the fork alone, and not those of
     expect(session.turns.filter((turn) => turn[0] === "assistant").length).toBe(answered);
     expect(session.spend).toEqual({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, dollars: 0 });
     const shown = await frame();
-    expect(shown).toContain("Last prompt");
+    expect(shown).toContain("last 3.2k   cached 0");
     expect(shown).not.toContain("Cache read");
   }));
 
@@ -576,6 +592,14 @@ test("the footer offers the keys of the top layer that acts, and a click on one 
       screen.mockInput.pressEscape();
       await until(session, () => session.paused);
       expect(await footer()).toEndWith("/wake wake the chain   ⌃P commands   F1 help");
+      screen.resize(80, 24);
+      app.switchView("loom");
+      screen.mockInput.pressKey("g", { meta: true });
+      const narrow = await footer();
+      expect(narrow).toContain("↑↓←→ move");
+      expect(narrow).toEndWith("F1 help");
+      await click("F1 help");
+      expect(await frame()).toContain("Keys and commands");
     },
     undefined,
     true,
@@ -624,7 +648,7 @@ test("a cancelled message keeps its place in the feed, and its cancel reads as a
     expect(shown).not.toContain("CancelledError");
     // The first message says its cancel at its right, above the second message, and the rung that the cancel ended
     // before it wrote a word shows nothing.
-    const lines = shown.split("\n");
+    const lines = shown.split("\n").map((line) => line.slice(0, 120 - session.preferences.sidebarWidth));
     const first = lines.findIndex((line) => line.includes("Think until I cancel."));
     expect(lines[first]).toContain("⊘ ▸ Think until I cancel.");
     expect(lines[first]).not.toContain("✗");
