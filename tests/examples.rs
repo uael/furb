@@ -16,7 +16,7 @@ use std::{
 const BOUND: Duration = Duration::from_secs(60);
 
 /// The fake claude of the tests of the crate.
-const FAKE: &str = include_str!("../src/world/provider/fake-claude.sh");
+const FAKE: &str = include_str!("../src/world/provider/claude/fake-claude.sh");
 
 /// The directory an example runs in, and the fake claude beside it.
 struct Yard {

@@ -1238,5 +1238,5 @@ fn numbered(version: &Path) -> Vec<u64> {
 }
 
 #[cfg(all(test, unix))]
-#[path = "claude.test.rs"]
+#[path = "mod.test.rs"]
 pub(super) mod test;
