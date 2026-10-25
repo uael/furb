@@ -8,9 +8,11 @@
 //! own accord. The ear reads the statements of the word of a reply as the model finishes them, and when one cannot be
 //! python it ends the reply there, with the word as far as that statement, which the gate refuses.
 
+pub mod auth;
 pub mod catalog;
 pub mod claude;
 mod clients;
+mod codex;
 pub mod images;
 mod local;
 mod pi;

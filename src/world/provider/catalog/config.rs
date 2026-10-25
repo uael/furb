@@ -95,6 +95,43 @@ impl Catalog {
         }
         continue;
       }
+      if name == super::super::auth::NAME {
+        if form != Value::Bool(true) {
+          return Err(
+            "The openai-auth provider uses ChatGPT sign-in and accepts true or false".to_owned(),
+          );
+        }
+        let auth = super::super::auth::directory(config);
+        let models = super::super::auth::models(config).into_iter().map(|one| {
+          let window = one
+            .context_window
+            .or(one.max_context_window)
+            .unwrap_or_default()
+            .saturating_mul(one.effective_context_window_percent.unwrap_or(95).min(100))
+            / 100;
+          let mut model = super::super::Model::new(
+            format!("{name}:{}", one.slug),
+            window.max(1),
+            super::super::codex::Codex { config: auth.clone(), id: one.slug },
+          )
+          .conversation("prompt_cache_key");
+          model.images = one.input_modalities.iter().any(|one| one == "image");
+          for effort in one.supported_reasoning_levels {
+            if super::LEVELS.contains(&effort.effort.as_str()) {
+              model = model.effort(
+                &effort.effort,
+                serde_json::json!({"reasoning": {"effort": effort.effort, "summary": "auto"}}),
+              );
+            }
+          }
+          (model, true)
+        });
+        self.models.retain(|(model, _)| !model.name.starts_with("openai-auth:"));
+        self.models.extend(models);
+        self.providers.retain(|(id, _, _)| id != &name);
+        self.providers.push((name, Vec::new(), true));
+        continue;
+      }
       if form == Value::Bool(true) {
         if defaults.contains_key(&name) || name == LOCAL || name == claude::CLAUDE {
           continue;

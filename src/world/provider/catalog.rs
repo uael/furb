@@ -203,7 +203,9 @@ impl Catalog {
     let env = |name: &str| env::var(name).ok();
     let server = SERVER.get_or_init(|| Server::named(env).map(Arc::new)).clone();
     let cached = cache().map(|at| at.join("models.json"));
-    Catalog::of(listed(cached.as_ref()), Claude::found(), server, env)
+    let mut catalog = Catalog::of(listed(cached.as_ref()), Claude::found(), server, env);
+    catalog.providers.push((super::auth::NAME.to_owned(), Vec::new(), false));
+    catalog
   }
 
   /// The catalog with the claude command line at a path, or the one of this machine when only a stall is given, which

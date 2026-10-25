@@ -361,6 +361,19 @@ export declare function official(): Array<Extension>
 export declare function onConsoleEnd(callback: (event: "break" | "close" | "logoff" | "shutdown") => void): void
 
 /**
+ * Read, start, refresh or cancel ChatGPT sign-in for openai-auth. The default action reads its state.
+ * The config directory is the user config directory when unsaid. A start returns before the browser completes.
+ */
+export declare function openaiAuth(action?: string | undefined | null, config?: string | undefined | null): OpenaiAuthInfo
+
+/** A ChatGPT sign-in state, with its browser address while it waits and a message when it fails. It holds no token. */
+export interface OpenaiAuthInfo {
+  state: string
+  url?: string
+  message?: string
+}
+
+/**
  * The record a life opens on, and the ears of the crate that it hears after the ears of the host, as every host
  * of the crate opens a life: the provider, the extensions, each official extension, the files, the commands, time,
  * and the store of the record when the life keeps.
