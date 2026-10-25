@@ -170,6 +170,13 @@ function tupled(value: unknown): unknown[] | undefined {
   return Array.isArray(held.args[0]) ? held.args[0] : held.args;
 }
 
+/** The tuple value of a recorded model answer, as the values that Activity reads. */
+function answerValue(value: unknown): unknown[] | undefined {
+  const items = tupled(value);
+  if (!items || items.length !== 4) return undefined;
+  return [items[0], items[1], tupled(items[2]) ?? items[2], items[3]];
+}
+
 /** How many characters of a turn the first word of a new life keeps, and how many it keeps of all turns. */
 const TURN = 1500;
 const BUDGET = 30000;
@@ -233,6 +240,7 @@ export class Reader {
     // stays so, with no end to come: it neither runs nor waits for a wake, so it counts as no work at all. A chain is no work, and stays as it is. A
     // rung whose run ended in the facts that the record kept ended with it. A recorded life shows a moment of a life,
     // so its work stands as it stood at that moment.
+    if (reading) this.settle();
     if (reading) reading.carries = this.carries();
     if (reading)
       for (const act of this.activity.acts.values()) {
@@ -242,6 +250,34 @@ export class Reader {
         if (!act.done && WORK.includes(act.kind) && !(act.kind === "rung" && act.run?.status !== "running"))
           act.unfinished = true;
       }
+  }
+  /** A model answer whose tuple values the activity reads from the live engine. */
+  private normalize(fact: Fact): Fact {
+    if (fact[0] !== "done" || !isQuestion("reply", fact[1])) return fact;
+    const value = answerValue(fact[3]);
+    return value ? ([fact[0], fact[1], fact[2], value, ...fact.slice(4)] as Fact) : fact;
+  }
+  /** Ends work that a recorded close or cancel already ended in the life. */
+  private settle(): void {
+    for (const [at, fact] of this.facts.entries()) {
+      const [kind, about, , value] = fact;
+      if (kind !== "close" && kind !== "cancel") continue;
+      for (const act of [...this.activity.acts.values()]) {
+        if (act.done || act.began > at || !WORK.includes(act.kind) || !this.covers(fact, act.id)) continue;
+        const ended = kind === "close" && act.id === about ? value : { is: "CancelledError", args: [] };
+        this.feed(["done", act.id, "", ended] as Fact);
+      }
+    }
+  }
+  /** Feeds a derived end fact through the activity. */
+  private feed(fact: Fact): void {
+    const ear = this.activity.hear(fact);
+    for (let step = ear.next(); !step.done; ) {
+      const asked = step.value as Call;
+      step = ear.next(
+        asked.call === "covers" ? this.covers(asked.args[0] as Fact, String(asked.args[1])) : null,
+      );
+    }
   }
   /** How many turns of the root chain say something, and how many files the acts of the record wrote. */
   private carries(): { turns: number; files: number } {
@@ -361,14 +397,9 @@ export class Reader {
 
   /** One fact: the activity hears it, and the transcript of its chain holds it. A fact of a line of the file is held
    * with its long texts cut, and an act that it ends keeps of them what its row shows, since the file holds them whole. */
-  private hear(whole: Fact, line?: Line): void {
-    const ear = this.activity.hear(whole);
-    for (let step = ear.next(); !step.done; ) {
-      const asked = step.value as Call;
-      step = ear.next(
-        asked.call === "covers" ? this.covers(asked.args[0] as Fact, String(asked.args[1])) : null,
-      );
-    }
+  private hear(told: Fact, line?: Line): void {
+    const whole = this.normalize(told);
+    this.feed(whole);
     const fact = line ? this.cut(whole, line) : whole;
     this.facts.push(fact);
     const [kind, about] = fact;

@@ -643,8 +643,7 @@ try {
   await older.dispose();
   const kept = await readFile(drifts, "utf8");
   await writeFile(drifts, kept.replace(/("bash","bash\d+","rung\d+","chain\d+","[^"]*"),""/, "$1,false"));
-  // A record of an earlier engine has no log beside it, so the TUI shows the facts that the record kept.
-  await rm(`${drifts}.log`, { force: true });
+  // Keep the log with the record, since it holds the close that completed its prompt.
   await library.import(drifts, await library.add(older.host.directory));
   session = library.current?.session ?? session;
   await capture("56-record-to-read");

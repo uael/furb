@@ -1257,22 +1257,25 @@ export class App {
       );
     }
     const choosing = this.picking();
-    const [mode, modeColor, placeholder] = w.editing
-      ? ["Edit program", c.warning, "Edit this prompt's Python program"]
-      : pending
-        ? [
-            "Answer",
-            c.warning,
-            choosing
-              ? `Your own words in place of ${wants(pending)}. Esc goes back to the values.`
-              : `Your answer to ${pending.id}, as ${pending.shape}`,
-          ]
-        : w.mode === "python"
-          ? ["Python", c.secondary, "Write Python. The gate reads it before it runs."]
-          : ["Prompt", c.accent, "Ask anything, or type / for commands"];
+    const reading = w.host.reading;
+    const [mode, modeColor, placeholder] = reading
+      ? ["Read only", c.faint, readOnly(reading)]
+      : w.editing
+        ? ["Edit program", c.warning, "Edit this prompt's Python program"]
+        : pending
+          ? [
+              "Answer",
+              c.warning,
+              choosing
+                ? `Your own words in place of ${wants(pending)}. Esc goes back to the values.`
+                : `Your answer to ${pending.id}, as ${pending.shape}`,
+            ]
+          : w.mode === "python"
+            ? ["Python", c.secondary, "Write Python. The gate reads it before it runs."]
+            : ["Prompt", c.accent, "Ask anything, or type / for commands"];
     for (const edge of this.composeEdges) if (edge.borderColor !== modeColor) edge.borderColor = modeColor;
     this.composer.cursorColor = modeColor;
-    this.composer.placeholder = w.host.reading ? readOnly(w.host.reading) : placeholder;
+    this.composer.placeholder = placeholder;
     this.renderPick(choosing);
     // The box holds the values of a choice, or the lines of the text, up to six, then a row of space and the line
     // under the text. While Other takes the words of the operator, it holds both.
@@ -1396,7 +1399,8 @@ export class App {
     const { model, effort } = w.actorChoice;
     const { provider, id: name } = modelName(model);
     const stash = w.stashes[w.draftKey];
-    const prompt = w.mode === "prompt" && !w.editing && !pending;
+    const reading = Boolean(w.host.reading);
+    const prompt = w.mode === "prompt" && !w.editing && !pending && !reading;
     // The line spans the input but its bar and its padding.
     const room = this.feedWidth - 3;
     if (
@@ -1411,6 +1415,7 @@ export class App {
         pending?.shape,
         stash,
         prompt,
+        reading,
         room,
         this.theme,
       ])
@@ -1419,7 +1424,7 @@ export class App {
     this.clear(this.meta);
     // A narrow input leaves out, in this order, the provider, the type of the answer, the effort, and the chord of the
     // switch, and the stash shows less of what waits in it.
-    const edited = Boolean(w.editing || pending);
+    const edited = Boolean(w.editing || pending || reading);
     const shown = { chord: !edited, provider: prompt && Boolean(provider), shape: prompt, effort: prompt };
     const gaps = 3;
     const width = () =>
@@ -3824,12 +3829,10 @@ export class App {
   private renderPick(ask: Ask | undefined): void {
     if (this.pickBox.visible !== Boolean(ask)) this.pickBox.visible = Boolean(ask);
     const typing = !ask || this.choice.other;
-    if (this.composer.visible !== typing) {
-      this.composer.visible = typing;
-      // The input takes the keys again once no list holds them.
-      if (typing && !this.overlay) this.composer.focus();
-      else this.composer.blur();
-    }
+    if (this.composer.visible !== typing) this.composer.visible = typing;
+    // A record open to read has no input, including when a control last focused it.
+    if (this.session.host.reading || !typing || this.overlay) this.composer.blur();
+    else if (!this.composer.focused) this.composer.focus();
     if (!ask) {
       this.pickKey = "";
       return;
@@ -4902,10 +4905,12 @@ export class App {
       const chip = (label: string, run: () => void) =>
         controls.add(this.text([[` ${label} `, c.text, 0, c.raised]], c.text, { run }));
       chip(folded ? "Expand" : "Collapse", () => this.foldThread(id));
-      if (one.resolved) chip("Open again", () => this.reopenThread(id));
-      else chip("Resolve", () => this.resolveThread(one));
-      const ask = one.asks[0];
-      if (ask) chip("Answer", () => void w.point(ask).catch(this.report));
+      if (!w.host.reading) {
+        if (one.resolved) chip("Open again", () => this.reopenThread(id));
+        else chip("Resolve", () => this.resolveThread(one));
+        const ask = one.asks[0];
+        if (ask) chip("Answer", () => void w.point(ask).catch(this.report));
+      }
       this.railSession.add(controls);
     }
     const after = list.length - from - room;
@@ -4963,12 +4968,14 @@ export class App {
   }
   /** A thread resolves: its open prompt closes, and the model that works for it stops. */
   private resolveThread(thread: ChainThread): void {
+    if (this.session.host.reading) return;
     const open = [thread.act, ...thread.messages].findLast((act) => !act.done);
     if (open) void this.session.resolve(open.id).catch(this.report);
   }
   /** A thread opens again: the input takes the message that goes to it. */
   private reopenThread(id: string): void {
     const w = this.session;
+    if (w.host.reading) return;
     w.thread = id;
     this.railAt = id;
     w.notice = `Your next message goes to ${id} and opens it again.`;
@@ -5036,6 +5043,7 @@ export class App {
         () => this.foldThread(id, true),
       ),
     );
+    if (this.session.host.reading) return row;
     if (thread?.resolved)
       row.add(
         this.link(
@@ -5840,7 +5848,7 @@ export class App {
             },
           ]
         : []),
-      ...(!act.done && !act.unfinished && WORK.includes(act.kind)
+      ...(!w.host.reading && !act.done && !act.unfinished && WORK.includes(act.kind)
         ? [
             w.lastOwn?.id === act.id && message
               ? {
@@ -5855,7 +5863,7 @@ export class App {
                 },
           ]
         : []),
-      ...(this.isPoint(act)
+      ...(!w.host.reading && this.isPoint(act)
         ? [
             {
               label: message ? "Edit and send again" : "Branch after it",

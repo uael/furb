@@ -171,6 +171,7 @@ test("a record open to read says so in its footer and its composer, and shows no
       await Bun.sleep(50);
       await open.screen.renderOnce();
       const frame = open.frame();
+      expect(open.session.host.reading).toBeDefined();
       expect(frame).toContain("Read only: its replay drifts");
       expect(frame).toContain("Start a new life");
       expect(frame).not.toMatch(/[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/);
@@ -231,6 +232,49 @@ test("a new life from a record starts with the turns of its root chain and the f
     } finally {
       await open.close();
     }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a recorded answer keeps its cost when its tuples have the record wrapper", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-record-cost-"));
+  try {
+    const record = join(directory, "cost.jsonl");
+    const tuple = (args: unknown[]) => ({ is: "tuple", args: [args] });
+    const facts = [
+      ["chain", "chain1", "operator", "", "root", ""],
+      ["reply", "reply1", "rung1", "chain1", "opus"],
+      ["done", "reply1", "journal", tuple(["assistant", "", tuple([10, 2, 0, 8, 0.25]), null])],
+    ];
+    await writeFile(record, `${facts.map((fact) => JSON.stringify(fact)).join("\n")}\n`);
+    const reading = { made: null, engine: "old", version: null, current: 1, why: "drift", logged: false };
+    const reader = new Reader(directory, record, reading);
+    expect(reader.activity.cost).toBe(0.25);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a close in the record ends the work it closed without ending truncated work", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-record-close-"));
+  try {
+    const record = join(directory, "close.jsonl");
+    const facts = [
+      ["chain", "chain1", "operator", "", "root", ""],
+      ["prompt", "prompt1", "operator", "chain1", "str", "Do the work.", ""],
+      ["rung", "rung1", "prompt1", "chain1", "closed word", "", ""],
+      ["close", "prompt1", "console", "finished"],
+      ["rung", "rung2", "operator", "chain1", "unfinished word", "", ""],
+    ];
+    await writeFile(record, `${facts.map((fact) => JSON.stringify(fact)).join("\n")}\n`);
+    const reading = { made: null, engine: "old", version: null, current: 1, why: "drift", logged: false };
+    const reader = new Reader(directory, record, reading);
+    expect(reader.activity.acts.get("prompt1")).toMatchObject({ done: true, value: "finished" });
+    const closed = reader.activity.acts.get("rung1");
+    expect(closed).toMatchObject({ done: true });
+    expect(closed?.unfinished).toBeUndefined();
+    expect(reader.activity.acts.get("rung2")).toMatchObject({ done: false, unfinished: true });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
