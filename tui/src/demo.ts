@@ -125,7 +125,10 @@ export async function demoLibrary(session: Session): Promise<Workspaces> {
  * Add a generated, scripted life for gallery and stress checks. Every act goes through the demo engine, so the
  * views read real chains, prompts and file changes rather than a painted frame.
  */
-export async function seedRichDemo(session: Session): Promise<void> {
+export async function seedRichDemo(
+  session: Session,
+  { questions = true }: { questions?: boolean } = {},
+): Promise<string> {
   const { engine } = session;
   const root = engine.root;
   const branches: string[] = [];
@@ -135,7 +138,6 @@ export async function seedRichDemo(session: Session): Promise<void> {
     );
 
   const longPath =
-    "examples/fieldwork/notes/2026/rounds/01/session/runs/immutable/cache/observations/research/field-notes/summary.md";
     "examples/fieldwork/notes/2026/rounds/01/session/runs/immutable/cache/observations/research/field-notes/summary.md";
   const source = [
     "def index_notes(paths):",
@@ -184,8 +186,11 @@ export async function seedRichDemo(session: Session): Promise<void> {
         `# Field note ${index + 1}: compare the path, its line count, and the next useful action.`,
     ),
   ].join("\n");
+  let longProgramId = "";
   for (const [index, chain] of branches.entries()) {
-    await engine.result(await engine.rung({ word: longProgram, on: chain }));
+    const program = await engine.rung({ word: longProgram, on: chain });
+    if (index === 0) longProgramId = program;
+    await engine.result(program);
     await engine.result(
       await engine.rung({
         word: `write(Text("FIELDWORK-${index + 1}.md", ${JSON.stringify(
@@ -194,6 +199,11 @@ export async function seedRichDemo(session: Session): Promise<void> {
         on: chain,
       }),
     );
+  }
+
+  if (!questions) {
+    await session.refresh();
+    return longProgramId;
   }
 
   const parents: string[] = [];
@@ -216,6 +226,7 @@ export async function seedRichDemo(session: Session): Promise<void> {
   );
   await Promise.all(threads);
   await session.refresh();
+  return longProgramId;
 }
 
 export async function seedDemo(session: Session): Promise<void> {

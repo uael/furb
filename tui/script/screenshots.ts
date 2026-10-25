@@ -6,7 +6,14 @@ import type { Exit } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { type App, follow } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
-import { demoSession, removeDemoDirectories, seedDemo, seedDemoFiles, tour } from "../src/demo.ts";
+import {
+  demoSession,
+  removeDemoDirectories,
+  seedDemo,
+  seedDemoFiles,
+  seedRichDemo,
+  tour,
+} from "../src/demo.ts";
 import { isLifeView } from "../src/overview.ts";
 import { loadParsers } from "../src/parsers.ts";
 import { Preferences } from "../src/preferences.ts";
@@ -298,7 +305,7 @@ try {
   // After a second, the line says how long its command has run.
   await new Promise((done) => setTimeout(done, 1200));
   await session.refresh();
-  app().scroll.scrollTo(app().scroll.scrollHeight);
+  app().scroll.scrollTo(0);
   await capture("18-live-command");
   await session.engine.result(command);
   const progress = await session.engine.prompt("str", {
@@ -478,9 +485,24 @@ try {
   if (!showcase?.session) throw new Error("The rich showcase session did not open.");
   await library.select(showcase);
   session = showcase.session;
+  const program = await seedRichDemo(session, { questions: false });
+  const richBranch = session.chains.find((chain) => session.labelOf(chain.id) === "Fieldwork 01")?.id;
+  if (!richBranch) throw new Error("The showcase session has no generated Fieldwork chain.");
+  session.folds[`steps:${program}`] = false;
+  await session.select(richBranch);
+  await click(test, "Transcript");
+  app().scroll.stickyScroll = false;
+  app().scroll.scrollTo(0);
+  if (session.chains.filter((chain) => session.labelOf(chain.id).startsWith("Fieldwork ")).length !== 12)
+    throw new Error("The showcase session did not build its twelve real fieldwork chains.");
   await capture("84-rich-workspaces");
+  if (!test.captureCharFrame().includes("index_notes"))
+    throw new Error("The rich workspace capture does not show the long fieldwork program.");
   test.resize(80, 24);
+  app().scroll.scrollTo(18);
   await capture("85-rich-workspaces-80x24");
+  if (!test.captureCharFrame().includes("index_notes"))
+    throw new Error("The 80x24 rich workspace capture does not show the long fieldwork program.");
   test.resize(160, 48);
   await capture("86-rich-workspaces-160x48");
   test.resize(152, 46);
@@ -599,8 +621,17 @@ try {
   await capture("48-archive-session");
   test.mockInput.pressArrow("right");
   await capture("48-archive-session");
+  const archiveMenuFrame = test.captureCharFrame().split(/\r?\n/);
+  if (
+    !archiveMenuFrame.some((line) => line.includes("Changelog")) ||
+    !archiveMenuFrame.some((line) => line.includes("Archive")) ||
+    !archiveMenuFrame.some((line) => line.includes("Move to trash"))
+  )
+    throw new Error("The Changelog session action menu did not show its title and Archive choices.");
   await click(test, "Archive");
-  await until(library, () => changelog.archived);
+  await until(library, () => changelog.archived === true);
+  if (changelog.archived !== true)
+    throw new Error("The Archive action did not mark the Changelog session archived.");
   await app().workspacePicker();
   await test.mockInput.typeText("Research");
   await capture("49-session-menu");
@@ -608,8 +639,7 @@ try {
   await capture("49-session-menu");
   await click(test, "Rename");
   await test.flush();
-  test.mockInput.pressKey("a", { ctrl: true });
-  await test.mockInput.typeText("Research notes");
+  await test.mockInput.typeText(" notes");
   test.mockInput.pressEnter();
   await until(library, () => research.name === "Research notes");
   await library.select(research);
