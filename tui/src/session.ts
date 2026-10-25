@@ -1461,7 +1461,7 @@ export class Session extends EventEmitter {
               ? {
                   url,
                   protocol: protocol || "chat",
-                  ...(key_env ? { key_env } : {}),
+                  ...(key_env && key_env !== "-" ? { key_env } : {}),
                   models: { [id || ""]: { window: Number(window) } },
                 }
               : true;
