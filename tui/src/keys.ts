@@ -226,6 +226,15 @@ export const keys = [
     bindings: [{ on: ["ctrl+pageup", "ctrl+pagedown"], run: "scope", always: true }],
   },
   {
+    chord: "⌥R / ⌥J",
+    action:
+      "Repair the journal of file changes / start a new journal, once the view of changes finds it damaged",
+    bindings: [
+      { on: ["meta+r"], run: "repair", chord: "⌥R", command: "repair" },
+      { on: ["meta+j"], run: "renew", chord: "⌥J", command: "renew" },
+    ],
+  },
+  {
     chord: "⌃C",
     action:
       "Clear the input, close a dialog, or cancel what you sent last (a message goes back to the input)",

@@ -208,6 +208,9 @@ fn a_second_read_of_a_record_that_did_not_change_takes_the_file_of_what_it_tells
   fs::write(&told, format!("{head}\n[\"tell\",\"chain1\",\"chain1\",[\"kept\"]]\n")).unwrap();
   let again = retold(&at).unwrap();
   assert_eq!(again.made.as_deref(), Some("abc"));
+  assert_eq!((again.entries, &again.last), (read.entries, &read.last));
+  assert_eq!(again.entries, 1);
+  assert!(again.last.is_some());
   assert_eq!(shown(&filed(&again)), ["['tell', 'chain1', 'chain1', ['kept']]"]);
   fs::write(&at, "[[\"made\",\"chain1\",\"store\",\"abd\"]]\n").unwrap();
   let changed = retold(&at).unwrap();

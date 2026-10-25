@@ -18,7 +18,7 @@ use std::{
 use crate::{
   Ear, Engine, Fault, Object, checkpoint,
   ear::{hear, hearing},
-  extension::{self, Places, memory::memory, skills::skills, web::web},
+  extension::{self, Places, compaction::compaction, memory::memory, skills::skills, web::web},
   snapshot::{self, Keeper},
   world::{self, Catalog, Retries, Scratch, Writes},
 };
@@ -137,8 +137,7 @@ impl Opening {
 
   /// The record the life opens on, and the ears of the crate, in the order of boot: the provider, the extensions,
   /// each official extension, the files, the commands and time, and the store and the log of the life when the life
-  /// keeps. The ear of the
-  /// web does work, so a life that inspects hears it silent.
+  /// keeps. The ears of the web and of the compaction do work, so a life that inspects hears them silent.
   ///
   /// The files and the commands share the scratch directory of the life: the one of its record when it keeps the
   /// record, and else one of its own, which goes with the life. A new record starts with an empty scratch directory,
@@ -154,8 +153,17 @@ impl Opening {
 
   /// The names of the ears of the crate, in the order of boot.
   fn names(&self) -> Vec<String> {
-    let mut names =
-      vec!["provider", "extensions", "memory", "skills", "web", "files", "bash", "time"];
+    let mut names = vec![
+      "provider",
+      "extensions",
+      "memory",
+      "skills",
+      "web",
+      "compaction",
+      "files",
+      "bash",
+      "time",
+    ];
     if self.keeps() {
       names.extend(["store", "log"]);
     }
@@ -215,6 +223,7 @@ impl Opening {
       ("memory", memory(config.clone())),
       ("skills", skills(config)),
       ("web", working(works.then(|| web(search)))),
+      ("compaction", working(works.then(compaction))),
       ("files", working(scratch.clone().map(world::files))),
       ("bash", working(scratch.map(|scratch| world::bash(scratch, &record)))),
       ("time", working(works.then(world::time))),

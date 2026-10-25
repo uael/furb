@@ -89,7 +89,7 @@ export class Reader {
   readonly pending = new Map<string, string>();
   readonly streams = new Map<string, never>();
   readonly console = { prompts: new Map<string, never>(), notices: new Map<string, never>() };
-  readonly changes = { length: 0, read: () => [] };
+  readonly changes = { length: 0, read: () => [], readable: () => [] };
   /** The facts of each chain, as the transcript of the chain holds them. */
   private readonly held = new Map<string, Fact[]>();
   /** The lines of the file that hold whole the question and the done of each act whose texts the reader cut. */

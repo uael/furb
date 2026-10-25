@@ -22,10 +22,12 @@ use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use sha2::{Digest, Sha256};
+
 use crate::{
   fact::{Fact, named},
   value::{Fault, IS, Object, ObjectRef, entry, field},
-  wire::outward,
+  wire::{outward, parsed},
 };
 
 use super::{kept, log::agrees, made, version};
@@ -47,6 +49,24 @@ pub struct Retold {
   /// record tells, `<record>.told`, beside it. A line that does not start with `[`, and a line `["keep", "", n]` of
   /// the log, holds no fact.
   pub file: PathBuf,
+  /// The count of the entries of the record.
+  pub entries: usize,
+  /// The sha256 of the last entry of the record, in the plain form that the record keeps, and nothing for a record
+  /// with no entry.
+  pub last: Option<String>,
+}
+
+impl Retold {
+  /// The facts of the file, in the order that the life said them.
+  pub fn facts(&self) -> Result<Vec<Object>, Fault> {
+    let text = std::fs::read_to_string(&self.file)
+      .map_err(|no| Fault::refused(format!("{} cannot be read: {no}", self.file.display())))?;
+    text
+      .lines()
+      .filter(|line| line.starts_with('[') && !line.starts_with(r#"["keep","","#))
+      .map(parsed)
+      .collect()
+  }
 }
 
 /// What the record at a path tells, read with no lease and changed in nothing.
@@ -65,8 +85,8 @@ pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
   let record = kept(path)?;
   let (made, version) = (made(&record), version(&record));
   let logged = agrees(path, &record);
-  let head =
-    serde_json::json!({ "stamp": stamp, "made": made, "version": version, "logged": logged });
+  let (entries, last) = (record.len(), record.last().map(digest));
+  let head = serde_json::json!({ "stamp": stamp, "made": made, "version": version, "logged": logged, "entries": entries, "last": last });
   let fresh = PathBuf::from(format!("{}.told.new", path.display()));
   let failed =
     |no: std::io::Error| Fault::refused(format!("{} cannot be written: {no}", fresh.display()));
@@ -81,7 +101,7 @@ pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
   }
   file.into_inner().map_err(|no| failed(no.into_error()))?.sync_data().map_err(failed)?;
   std::fs::rename(&fresh, &cache).map_err(failed)?;
-  Ok(Retold { made, version, logged, file: if logged { log } else { cache } })
+  Ok(Retold { made, version, logged, file: if logged { log } else { cache }, entries, last })
 }
 
 /// What the build that writes a file of what a record tells names in it: a reader of another build writes it again.
@@ -110,7 +130,14 @@ fn cached(told: &Path, stamp: &serde_json::Value, log: &Path) -> Option<Retold> 
     version: head.get("version")?.as_i64(),
     logged,
     file: if logged { log.to_path_buf() } else { told.to_path_buf() },
+    entries: usize::try_from(head.get("entries")?.as_u64()?).ok()?,
+    last: head.get("last")?.as_str().map(str::to_owned),
   })
+}
+
+/// The sha256 of an entry of a record, in the plain form that the record keeps.
+fn digest(entry: &Object) -> String {
+  format!("{:x}", Sha256::digest(crate::wire::record(entry.as_ref()).to_string()))
 }
 
 /// A fact that the reader says: its kind, what it is about, and its words.

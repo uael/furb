@@ -103,7 +103,19 @@ fn the_ears_of_the_crate_come_after_the_ears_of_the_host_each_under_the_name_eve
   let names: Vec<&str> = ears.iter().map(|(name, _)| name.as_str()).collect();
   assert_eq!(
     names,
-    ["provider", "extensions", "memory", "skills", "web", "files", "bash", "time", "store", "log"]
+    [
+      "provider",
+      "extensions",
+      "memory",
+      "skills",
+      "web",
+      "compaction",
+      "files",
+      "bash",
+      "time",
+      "store",
+      "log"
+    ]
   );
   drop(ears);
   let (mut engine, _) = opening(&at, true).boot([("mine", mine())]).unwrap();
@@ -654,7 +666,8 @@ fn measure_how_long_a_life_opens_from_its_snapshot_and_by_a_replay() {
 #[test]
 fn a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_prompt_of_each_chain() {
   let at = place("checkpoint");
-  let mut first = scripted(&at, &["await wait(3600)\nclose('late')"]).boot::<String>([]).unwrap().0;
+  let ran = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0)\nclose(f'round {rounds}')";
+  let mut first = scripted(&at, &[ran]).boot::<String>([]).unwrap().0;
   let word = "work = chain('work')\nran = await bash('echo one')\nqueue = [ran]\nCAP = 6\ndef f():\n  return CAP\n\
               waiting = prompt(str, 'Wait.', on=work)\nawait wait(0.3)\nclose(str(waiting))";
   let waiting = closed(&mut first, word).as_ref().as_str().unwrap().to_owned();
@@ -672,8 +685,9 @@ fn a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_promp
   let exit = "Exit(code=0, stdout=Text(path='bash1/stdout', content='one\\n'), stderr=Text(path='bash1/stderr', content=''))";
   assert_eq!(
     closed(&mut later, &word).as_ref().py_repr(),
-    format!("[{exit:?}, [{exit}], 6, ('prompt', '{waiting}'), 'again', 'chain3', 'bash2']"),
-    "each name, value and answer of the past stands, the open prompt goes on, and a new act takes the next name"
+    format!("[{exit:?}, [{exit}], 6, ('prompt', '{waiting}'), 'round 2', 'chain3', 'bash2']"),
+    "each name, value and answer of the past stands, the word that ran runs again from its top on the module that \
+     the checkpoint carries and closes the open prompt with no new turn of the model, and a new act takes the next name"
   );
   assert_eq!(
     closed(&mut later, "close([x[1] for x in transcript('chain1', 'merged')])").as_ref().py_repr(),
@@ -699,6 +713,32 @@ fn a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_promp
 }
 
 #[test]
+fn a_word_that_ran_at_a_checkpoint_runs_again_and_asks_again_the_prompt_that_it_awaited() {
+  let at = place("checkpoint-asked");
+  let work = "got = await prompt(str, 'Ask.', on=chain('asked'))\nclose(got)";
+  let mut first =
+    scripted(&at, &[work, "await wait(3600)\nclose('late')"]).boot::<String>([]).unwrap().0;
+  let word =
+    "waiting = prompt(str, 'Wait.', on=chain('work'))\nawait wait(0.5)\nclose(str(waiting))";
+  let waiting = closed(&mut first, word).as_ref().as_str().unwrap().to_owned();
+  drop(first);
+  let (mut inspected, kept) =
+    Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap();
+  let written = crate::checkpoint::written(&mut inspected, &kept).unwrap();
+  drop(inspected);
+  crate::checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
+  let mut later = scripted(&at, &["close('fresh')"]).boot::<String>([]).unwrap().0;
+  let word = format!(
+    "wake('chain2')\ngot = await Act('{waiting}')\nclose([got, [x[1] for c in ['chain1', 'chain2', 'chain3', 'chain4'] for x in transcript(c, 'prompt') if not over(x[1])], str(chain('more'))])"
+  );
+  assert_eq!(
+    closed(&mut later, &word).as_ref().py_repr(),
+    "['fresh', [], 'chain5']",
+    "the word asks its prompt again on a new chain, and the prompt that it awaited at the checkpoint is not carried"
+  );
+}
+
+#[test]
 fn a_record_of_another_version_opens_on_this_build_from_its_last_checkpoint() {
   let at = place("upgrade");
   let path = at.join("record.jsonl");
@@ -719,6 +759,16 @@ fn a_record_of_another_version_opens_on_this_build_from_its_last_checkpoint() {
     closed(&mut later, "close(kept + 1)").as_ref().as_int(),
     Some(2),
     "only the build after the checkpoint counts"
+  );
+  assert_eq!(
+    closed(
+      &mut later,
+      "close([x[3][0] for x in transcript('chain1', 'tell') if 'rai' + 'sed = ' in x[3][0]])"
+    )
+    .as_ref()
+    .py_repr(),
+    "[]",
+    "the carried turns hold no answer of an act that the checkpoint does not carry, so no word of an extension raises"
   );
 }
 

@@ -1,5 +1,6 @@
 import { bound, opens, type Paragraph, paragraphs, plain, type Turn } from "furb";
-import { type ActRow, failed } from "./session.ts";
+import { failed } from "furb/life";
+import type { ActRow } from "./session.ts";
 
 /** One thing the conversation shows, read off the python of the turns of a chain.
  *
