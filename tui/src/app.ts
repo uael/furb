@@ -1348,10 +1348,22 @@ export class App {
     }
     if (chord) box.add(this.line(`  ${chord}`, c.faint));
   }
+  /** Without journal entries, a read cannot say that the writes had no net change. */
+  private get unrecordedChanges(): boolean {
+    const w = this.session;
+    return !!w.host.reading && w.host.changes === 0 && w.scope !== "branch";
+  }
   /** The top line: the session and the chain at its left, each a button, and the toggle of the views at its right. */
   private renderTop(): void {
     const w = this.session;
-    const changes = w.view === "changes" ? String(w.changes.length) : w.host.changes ? "•" : "";
+    const changes =
+      w.view === "changes"
+        ? w.journalDamaged || w.changesReason || w.error || this.unrecordedChanges
+          ? "?"
+          : String(w.changes.length)
+        : w.host.changes
+          ? "•"
+          : "";
     const shown = this.tree ? "feed" : w.view;
     const directory = shortenHome(w.workingDirectory);
     // The top line spends its room in this order: the session and the chain, the switch of the views, the key of the
@@ -2036,8 +2048,22 @@ export class App {
         );
       });
     if (w.error && w.view === "changes" && w.damagedJournal)
-      // A damaged journal of file changes says what broke, and offers to repair it or to start a new one.
-      add("view-error", `${w.view}:${w.damagedJournal}`, [], (box) =>
+      // A damaged journal says what broke; only a writable life offers to repair it or to start a new one.
+      add("view-error", `${w.view}:${w.damagedJournal}`, [], (box) => {
+        const actions: [string, string, () => void][] = w.host.reading
+          ? []
+          : [
+              [
+                "Repair the journal",
+                `keeps each change that it can read, ${this.chordOf("repair")}`,
+                () => void w.repairJournal().catch(w.fail),
+              ],
+              [
+                "Start a new journal",
+                `keeps the damaged one beside it, ${this.chordOf("renew")}`,
+                () => void w.renewJournal().catch(w.fail),
+              ],
+            ];
         this.banner(
           box,
           c.danger,
@@ -2046,18 +2072,9 @@ export class App {
             ["The journal of file changes is damaged", c.text, bold],
           ],
           this.text(w.damagedJournal, c.muted),
-          [
-            "Repair the journal",
-            `keeps each change that it can read, ${this.chordOf("repair")}`,
-            () => void w.repairJournal().catch(w.fail),
-          ],
-          [
-            "Start a new journal",
-            `keeps the damaged one beside it, ${this.chordOf("renew")}`,
-            () => void w.renewJournal().catch(w.fail),
-          ],
-        ),
-      );
+          ...actions,
+        );
+      });
     else if (w.error)
       add("view-error", `${w.view}:${w.error}`, [], (box) =>
         this.banner(
@@ -2845,17 +2862,19 @@ export class App {
                   c.faint,
                 ),
               );
-              bar.add(
-                this.link(
-                  "Revert",
-                  () =>
-                    void w
-                      .revert(change, hunk)
-                      .then(() => this.composer.focus())
-                      .catch(this.report),
-                ),
-              );
-              bar.add(this.link("Comment a line", () => this.commentLine(path, hunk)));
+              if (!w.host.reading) {
+                bar.add(
+                  this.link(
+                    "Revert",
+                    () =>
+                      void w
+                        .revert(change, hunk)
+                        .then(() => this.composer.focus())
+                        .catch(this.report),
+                  ),
+                );
+                bar.add(this.link("Comment a line", () => this.commentLine(path, hunk)));
+              }
               box.add(bar);
               box.add(
                 new DiffRenderable(this.renderer, {
@@ -2927,7 +2946,12 @@ export class App {
       };
       const [title, hint] = w.search
         ? [`Nothing matches “${w.search}”`, "Change the filter, or press Esc to clear it."]
-        : empty[w.view];
+        : w.view === "changes" && this.unrecordedChanges
+          ? [
+              "No file-change snapshots are available",
+              "The Feed still shows the writes that the record kept.",
+            ]
+          : empty[w.view];
       // An empty review offers its other scopes under its hint, where the eye already is.
       add("empty", `${title}:${height}:${this.theme}`, [], (box) =>
         this.centered(
@@ -8287,10 +8311,10 @@ export class App {
     scope: () => this.session.view === "changes",
     reviewPrevious: () => this.session.view === "changes" && !this.overlay,
     reviewNext: () => this.session.view === "changes" && !this.overlay,
-    reviewRevert: () => this.session.view === "changes" && !this.overlay,
-    reviewComment: () => this.session.view === "changes" && !this.overlay,
-    repair: () => this.session.journalDamaged,
-    renew: () => this.session.journalDamaged,
+    reviewRevert: () => this.session.view === "changes" && !this.overlay && !this.session.host.reading,
+    reviewComment: () => this.session.view === "changes" && !this.overlay && !this.session.host.reading,
+    repair: () => this.session.journalDamaged && !this.session.host.reading,
+    renew: () => this.session.journalDamaged && !this.session.host.reading,
     pause: () => !this.searchRow.visible && this.pausing(),
   };
   /** The view shown, with the rewind tree closed. */

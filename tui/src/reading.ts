@@ -19,6 +19,7 @@ import {
   type Call,
   type Entry,
   type Fact,
+  FileChanges,
   isQuestion,
   type LiveAct,
   questionKind,
@@ -112,7 +113,9 @@ export function guard(record: string): { undo(): void; keep(): void } {
   const logged = before.has(`${name}.log`);
   if (logged) linkSync(log, held);
   const size = before.get(`${name}.log`)?.size ?? 0;
-  const release = () => rmSync(held, { force: true });
+  const release = () => {
+    if (logged) rmSync(held, { force: true });
+  };
   return {
     keep: release,
     undo() {
@@ -223,7 +226,7 @@ export class Reader {
   readonly pending = new Map<string, string>();
   readonly streams = new Map<string, never>();
   readonly console = { prompts: new Map<string, never>(), notices: new Map<string, never>() };
-  readonly changes = { length: 0, read: () => [], readable: () => [] };
+  readonly changes: FileChanges;
   /** The facts of each chain, as the transcript of the chain holds them. */
   private readonly held = new Map<string, Fact[]>();
   /** The lines of the file that hold whole the question and the done of each act whose texts the reader cut. */
@@ -235,6 +238,7 @@ export class Reader {
     /** The file of the facts: the record of a recorded life, or the file that the crate retold the record in. */
     private readonly file = record,
   ) {
+    this.changes = new FileChanges(record, true);
     if (reading) this.read();
     // The life stopped where the record ends, and nothing runs on a record open to read, so the work that is not done
     // stays so, with no end to come: it neither runs nor waits for a wake, so it counts as no work at all. A chain is no work, and stays as it is. A
@@ -555,7 +559,9 @@ export class Reader {
     return this.activity.acts.get(id)?.paused ?? false;
   }
 
-  dispose(): void {}
+  dispose(): void {
+    this.changes.dispose();
+  }
 
   /** Each other verb, which would make an act or change the life. */
   refuse(): never {

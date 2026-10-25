@@ -1,0 +1,137 @@
+import { expect, test } from "bun:test";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DamagedJournal, FileChanges } from "../src/changes.ts";
+
+const change = (after: string) => JSON.stringify({ path: "note.txt", before: "", after });
+
+test("a journal open to read keeps its bytes and time and refuses every write", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-read-journal-"));
+  try {
+    const record = join(directory, "life.jsonl");
+    const path = `${record}.changes.jsonl`;
+    const text = `${change("one")}\n${change("two")}\n`;
+    await writeFile(path, text);
+    const before = await stat(path);
+    const journal = new FileChanges(record, true);
+    try {
+      expect(journal.length).toBe(2);
+      expect(journal.read().map((one) => one.after)).toEqual(["one", "two"]);
+      expect(journal.readable(1, 1).map((one) => one.after)).toEqual(["two"]);
+      expect(() => journal.append({ path: "note.txt", before: "", after: "three" })).toThrow("open to read");
+      expect(() => journal.repair()).toThrow("open to read");
+      expect(() => journal.renew()).toThrow("open to read");
+    } finally {
+      journal.dispose();
+    }
+    expect(await readFile(path, "utf8")).toBe(text);
+    expect((await stat(path)).mtimeMs).toBe(before.mtimeMs);
+    expect(await readdir(directory)).toEqual(["life.jsonl.changes.jsonl"]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a read-only journal reports damaged rows and an incomplete tail without truncating either", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-read-journal-tail-"));
+  try {
+    const record = join(directory, "life.jsonl");
+    const path = `${record}.changes.jsonl`;
+    // Even valid JSON without its closing newline is not a committed change.
+    const text = `${change("one")}\n{ damaged }\n${change("two")}\n${change("tail")}`;
+    await writeFile(path, text);
+    const before = await stat(path);
+    const journal = new FileChanges(record, true);
+    try {
+      expect(journal.length).toBe(4);
+      expect(journal.read(0, 1).map((one) => one.after)).toEqual(["one"]);
+      expect(() => journal.read(1, 1)).toThrow(new DamagedJournal(path, 1));
+      expect(() => journal.read(3, 1)).toThrow(new DamagedJournal(path, 3));
+      expect(journal.readable().map((one) => one.after)).toEqual(["one", "two"]);
+    } finally {
+      journal.dispose();
+    }
+    expect(await readFile(path, "utf8")).toBe(text);
+    expect((await stat(path)).mtimeMs).toBe(before.mtimeMs);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a read-only journal creates neither a missing record folder nor a missing journal", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-read-journal-missing-"));
+  try {
+    const journal = new FileChanges(join(directory, "missing", "life.jsonl"), true);
+    try {
+      expect(journal.length).toBe(0);
+      expect(journal.read()).toEqual([]);
+    } finally {
+      journal.dispose();
+    }
+    expect(await readdir(directory)).toEqual([]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("opening a writable journal keeps a cut tail until an actual write replaces it", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-journal-deferred-tail-"));
+  try {
+    const record = join(directory, "life.jsonl");
+    const path = `${record}.changes.jsonl`;
+    const text = `${change("one")}\n{"path":"cut`;
+    await writeFile(path, text);
+    const journal = new FileChanges(record);
+    try {
+      expect(await readFile(path, "utf8")).toBe(text);
+      expect(journal.read().map((one) => one.after)).toEqual(["one"]);
+      journal.append({ path: "note.txt", before: "one", after: "two" });
+      expect(journal.read().map((one) => one.after)).toEqual(["one", "two"]);
+      expect((await readFile(path, "utf8")).split("\n")).toHaveLength(3);
+    } finally {
+      journal.dispose();
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a journal that cannot be read reports its error even on an empty page", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-read-journal-error-"));
+  try {
+    const record = join(directory, "life.jsonl");
+    await mkdir(`${record}.changes.jsonl`);
+    const journal = new FileChanges(record, true);
+    try {
+      expect(journal.length).toBe(0);
+      expect(() => journal.read(0, 0)).toThrow();
+      expect(() => journal.readable()).toThrow();
+    } finally {
+      journal.dispose();
+    }
+    expect(await readdir(directory)).toEqual(["life.jsonl.changes.jsonl"]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a journal row with a path but no text is damaged, not a file change", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-read-journal-fields-"));
+  const record = join(directory, "life.jsonl");
+  const path = `${record}.changes.jsonl`;
+  const bytes = `${JSON.stringify({ path: "notes.txt", before: 42, after: null })}\n`;
+  try {
+    await writeFile(path, bytes);
+    const journal = new FileChanges(record, true);
+    try {
+      expect(() => journal.read()).toThrow(DamagedJournal);
+      expect(journal.readable()).toEqual([]);
+    } finally {
+      journal.dispose();
+    }
+    expect(await readFile(path, "utf8")).toBe(bytes);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

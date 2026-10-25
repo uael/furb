@@ -103,6 +103,7 @@ async function shown(record: string, directory: string, width: number) {
     library,
     session,
     screen,
+    app,
     frame: () => screen.captureCharFrame(),
     close: async () => {
       app.dispose();
@@ -397,6 +398,123 @@ test("a record name cannot add Python statements to the word that carries its wo
     const carried = reader.carry().word.split("\n");
     expect(carried[0]).toContain("\\nraise RuntimeError");
     expect(carried[1]).toBe("<s:earlier>");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+for (const width of [80, 160]) {
+  test(`a record's Life review reads its journal without live controls at ${width} columns`, async () => {
+    const directory = await mkdtemp(join(tmpdir(), "furb-reading-changes-"));
+    try {
+      const record = await lived(directory, "journal");
+      await drifting(record);
+      await appendFile(
+        `${record}.changes.jsonl`,
+        `${JSON.stringify({ path: join(directory, "legacy.txt"), before: "old\n", after: "new\n" })}\n`,
+      );
+      const before = await folder(record);
+      const open = await shown(record, directory, width);
+      try {
+        open.app.render();
+        open.app.closeOverlay();
+        open.session.review("life");
+        await open.session.refresh();
+        expect(open.session.view).toBe("changes");
+        open.app.render();
+        await open.screen.flush();
+        await open.app.colorsDone();
+        expect(open.session.changes.map((change) => change.path)).toEqual([
+          join(directory, "note.txt"),
+          join(directory, "legacy.txt"),
+        ]);
+        expect(open.frame()).toContain("2 files");
+        expect(open.frame()).toContain("note.txt");
+        expect(open.frame()).toContain("legacy.txt");
+        expect(open.frame()).not.toContain("Revert");
+        expect(open.frame()).not.toContain("Comment a line");
+        expect(open.frame()).not.toContain("revert hunk");
+        await expect(open.session.command("/changes revert")).rejects.toThrow("open to read");
+        await expect(open.session.command("/changes comment")).rejects.toThrow("open to read");
+      } finally {
+        await open.close();
+      }
+      expectKept(await folder(record), before);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+}
+
+test("a record's damaged Life journal remains whole and offers no repair or new journal", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-reading-damaged-changes-"));
+  try {
+    const record = await lived(directory, "damaged");
+    await drifting(record);
+    await appendFile(`${record}.changes.jsonl`, '{"path":"cut');
+    const before = await folder(record);
+    const open = await shown(record, directory, 120);
+    try {
+      open.app.render();
+      open.app.closeOverlay();
+      open.session.review("life");
+      await open.session.refresh();
+      expect(open.session.view).toBe("changes");
+      open.app.render();
+      await open.screen.flush();
+      expect(open.session.journalDamaged).toBe(true);
+      expect(open.frame()).toContain("The journal of file changes is damaged");
+      expect(open.frame()).toMatch(/Changes\s+\?/);
+      expect(open.frame()).not.toContain("Repair the journal");
+      expect(open.frame()).not.toContain("Start a new journal");
+      expect(open.frame()).toContain("The life");
+    } finally {
+      await open.close();
+    }
+    expectKept(await folder(record), before);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a record with no journal gains no journal when its replay drifts", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-reading-no-journal-"));
+  try {
+    const record = await lived(directory, "missing");
+    await rm(`${record}.changes.jsonl`);
+    await drifting(record);
+    const before = await folder(record);
+    const open = await shown(record, directory, 80);
+    try {
+      expect(open.session.host.reading).toBeDefined();
+      expect(await open.session.host.netChanges(null)).toEqual([]);
+      open.app.render();
+      open.app.closeOverlay();
+      open.session.review("life");
+      await open.session.refresh();
+      open.app.render();
+      await open.screen.flush();
+      expect(open.frame()).toContain("No file-change snapshots are available");
+      expect(open.frame()).toMatch(/Changes\s+\?/);
+      expect(open.frame()).not.toContain("No net change");
+    } finally {
+      await open.close();
+    }
+    expectKept(await folder(record), before);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a guard with no log keeps a held file that it did not make", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-record-other-held-"));
+  try {
+    const record = join(directory, "life.jsonl");
+    await writeFile(record, "");
+    await writeFile(`${record}.log.held`, "another operation\n");
+    const before = await folder(record);
+    guard(record).keep();
+    expectKept(await folder(record), before);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

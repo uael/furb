@@ -525,6 +525,7 @@ export class Session extends EventEmitter {
   }
   /** A repair or a new journal acts on a journal that a view found damaged. */
   private damagedOnly(): void {
+    if (this.host.reading) throw new Error("This record is open to read.");
     if (!this.journalDamaged) throw new Error("The journal of file changes is not damaged.");
   }
   private async journalMended(notice: string): Promise<void> {
@@ -1112,6 +1113,10 @@ export class Session extends EventEmitter {
   /** One hunk of a change reverted by a word of the operator on the chain shown, so the World writes the file and the
    * record keeps the write. The word refuses when the file no longer holds the hunk where the review showed it. */
   async revert(change: ShownChange, hunk: Hunk): Promise<void> {
+    if (this.host.reading) {
+      this.notice = "This record is open to read.";
+      return;
+    }
     const path = fromDirectory(this.host.directory, change.path);
     try {
       await this.engine.result(
@@ -1698,6 +1703,7 @@ export class Session extends EventEmitter {
       case "changes": {
         const [requested, ...base] = argument.split(/\s+/);
         if (requested === "revert" || requested === "comment") {
+          if (this.host.reading) throw new Error("This record is open to read.");
           await this.reviewAction?.(requested);
           if (!this.reviewAction) this.notice = `Open the changes view to ${requested} a hunk.`;
           break;
