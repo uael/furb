@@ -2,7 +2,7 @@
 // the life that the window shows, and in the list of the projects. The window sends calls, each of which the host
 // answers once.
 
-import type { Ask, LiveAct, Measure } from "furb/life";
+import type { Ask, Compaction, LiveAct, Measure } from "furb/life";
 
 /** One record of a project, as the picker lists it. */
 export interface Place {
@@ -54,6 +54,19 @@ export interface Life {
   /** What waits for the operator, the oldest first, and the question that the composer answers on the chain shown. */
   asks: Ask[];
   aimed?: string;
+  /** Each compaction of a chain, in the order of the record, as `furb/life` gives it. */
+  compactions: Compaction[];
+  /** Each place of a chain that a part of an extension marks, as the feed of the TUI shows it. */
+  marks: Mark[];
+}
+
+/** A place of a chain that a part of an extension marks, as a compaction: the chain, its place in time, as the place
+ * of an act, its title, and the lines under it, each a list of runs of text in a tone of the part. */
+export interface Mark {
+  chain: string;
+  at: number;
+  title: string;
+  lines: { text: string; tone: string }[][];
 }
 
 /** What a model writes for a rung while its reply runs: the text and the thought that came after the place that the
