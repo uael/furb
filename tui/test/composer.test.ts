@@ -376,7 +376,7 @@ test("a space after a command whose values are known lists them, and Enter on a 
     expect(await frame()).toContain("No known value matches. Enter sends what is typed.");
   }));
 
-test("/feed lists the commands whose stdin is open, and the card of such a command says that its input is open", () =>
+test("/feed lists the commands whose stdin is open, and the line of such a command says that its input is open once it opens", () =>
   composing(async ({ session, app, screen, frame }) => {
     const on = session.engine.root;
     const open = String(await session.engine.bash("exec sleep 30", { stdin: null, on }));
@@ -385,19 +385,20 @@ test("/feed lists the commands whose stdin is open, and the card of such a comma
       await until(session, () => [open, shut].every((id) => session.activity.some((act) => act.id === id)));
       // The list of /feed names each command whose stdin is open, by its id, and a folded card names none.
       await screen.mockInput.typeText("/feed ");
-      const listed = await frame();
+      // The feed names each command on its line, so the list is the rest of the frame.
+      const listed = (await frame())
+        .split("\n")
+        .filter((row) => !row.includes(" = bash("))
+        .join("\n");
       expect(listed).toContain(open);
       expect(listed).not.toContain(shut);
       app.composer.setText("");
       await frame();
-      // Each card opens at a click on its heading, and its last line says whether its input is open.
+      // Each line opens at a click, and what its act gave under it says whether its input is open.
       for (const id of [open, shut]) {
-        const heading = app.scroll
-          .getChildren()
-          .find((node) => node.id === id)
-          ?.getChildren()[0];
-        if (!heading) throw new Error(`No heading for ${id}.`);
-        await screen.mockMouse.click(heading.x, heading.y);
+        const line = app.scroll.getChildren().find((node) => node.id === `program-${id}`);
+        if (!line) throw new Error(`No line for ${id}.`);
+        await screen.mockMouse.click(line.x + 8, line.y);
         await screen.flush();
       }
       const cards = await frame();
@@ -592,17 +593,20 @@ test("a message sent to a paused chain wakes it, and the answer comes", () =>
   }));
 
 test("a notice cut to the room of the footer keeps one line and the mark of its cut, and shows whole in a tip while the pointer is over it", () =>
-  composing(async ({ session, screen, frame }) => {
-    session.notice = `A notice longer than its line ${"and longer ".repeat(12)}to its very end`;
-    const lines = (await frame()).split("\n");
-    const row = lines.findIndex((line) => line.includes("A notice longer"));
-    expect(lines[row]).not.toContain("to its very end");
-    expect(lines[row]).toContain("…");
-    expect(lines[row]).toContain("F1 help");
-    expect(lines.filter((line) => line.includes("and longer"))).toHaveLength(1);
-    await screen.mockMouse.moveTo((lines[row] ?? "").indexOf("A notice") + 2, row);
-    expect(await frame()).toContain("to its very end");
-  }));
+  composing(
+    async ({ session, screen, frame }) => {
+      session.notice = `A notice longer than its line ${"and longer ".repeat(12)}to its very end`;
+      const lines = (await frame()).split("\n");
+      const row = lines.findIndex((line) => line.includes("A notice longer"));
+      expect(lines[row]).not.toContain("to its very end");
+      expect(lines[row]).toContain("…");
+      expect(lines[row]).toContain("F1 help");
+      expect(lines.filter((line) => line.includes("and longer"))).toHaveLength(1);
+      await screen.mockMouse.moveTo((lines[row] ?? "").indexOf("A notice") + 2, row);
+      expect(await frame()).toContain("to its very end");
+    },
+    { width: 152, height: 40 },
+  ));
 
 test("a cancelled message keeps its place in the feed, and its cancel reads as a cancel, not as a failure", () =>
   composing(async ({ session, app, frame }) => {
@@ -622,14 +626,15 @@ test("a cancelled message keeps its place in the feed, and its cancel reads as a
     // before it wrote a word shows nothing.
     const lines = shown.split("\n");
     const first = lines.findIndex((line) => line.includes("Think until I cancel."));
-    expect(lines[first]).toContain("⊘ cancelled");
+    expect(lines[first]).toContain("⊘ ▸ Think until I cancel.");
+    expect(lines[first]).not.toContain("✗");
     expect(first).toBeLessThan(lines.findIndex((line) => line.includes("A second message.")));
     expect(lines.filter((line) => line.includes(" cancelled") && line.includes("⊘"))).toHaveLength(1);
     // A message that its answer closed says no state, only the type of its answer.
     expect(lines.find((line) => line.includes("A second message."))).not.toContain("✓");
   }));
 
-test("a word that the gate refused and that a later word of the same prompt replaced folds, and reads as retried", () =>
+test("a word that the gate refused shows a cross on the line that the refusal names and the reason under it, and the word that replaced it follows in the program of its thread", () =>
   composing(
     async ({ session, frame }) => {
       await session.submit("Give me an answer in a fence.");
@@ -638,10 +643,14 @@ test("a word that the gate refused and that a later word of the same prompt repl
       );
       await idle(session);
       await session.refresh();
-      const shown = await frame();
-      expect(shown).toMatch(/▸ ✗ rung\d+ .*retried as rung\d+/);
-      expect(shown).not.toContain("failed");
-      expect(shown).not.toContain("Got unexpected token");
+      const lines = (await frame()).split("\n");
+      const refused = lines.findIndex((line) => /✗ 1 ```python/.test(line));
+      expect(refused).toBeGreaterThan(0);
+      expect(lines[refused + 1]).toMatch(/^ +# Got unexpected token/);
+      const retried = lines.findIndex((line) => / 1 close\("Here it is again as plain Python/.test(line));
+      expect(retried).toBeGreaterThan(refused + 1);
+      expect(lines.slice(retried).join("\n")).not.toContain("✗");
+      expect(lines.join("\n")).not.toContain("failed");
     },
     { width: 140, height: 44 },
     true,

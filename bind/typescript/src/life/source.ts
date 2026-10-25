@@ -20,22 +20,38 @@ export type SourceLine =
     }
   | { type: "value"; act: LiveAct; text: string };
 
-/** The verbs that make an act, which a line of a word calls. */
-const calls = /\b(bash|read|write|prompt|chain|wait|rung|grant|cd)\s*\(/g;
 /** The kinds of the acts that a person follows in the margin. */
 const followed = new Set(["bash", "read", "write", "prompt", "chain", "wait", "rung", "grant", "cd"]);
+
+/** The pattern of the calls of the verbs that make an act and of the verbs of extensions that it is given, made once
+ * for each set of those verbs. */
+const patterns = new Map<string, RegExp>();
+function callsOf(extra: string): RegExp {
+  let made = patterns.get(extra);
+  if (!made) {
+    made = new RegExp(`(?<!\\bdef )\\b(${[...followed, ...(extra ? [extra] : [])].join("|")})\\s*\\(`, "g");
+    patterns.set(extra, made);
+  }
+  made.lastIndex = 0;
+  return made;
+}
 
 /** The acts that a word made, each on the line of the word that made it: the next line that calls its verb, or for a
  * line that a loop runs again, the last line that calls it, or else the last line. */
 export function placed(text: string, made: readonly LiveAct[]): LiveAct[][] {
   const lines = text.split("\n");
+  // A verb of an extension, as todo, stands on a line that calls it by its name, and a def of that name calls nothing.
+  const extra = [...new Set(made.map((act) => act.kind))].filter(
+    (kind) => !followed.has(kind) && /^\w+$/.test(kind),
+  );
+  const calls = callsOf(extra.join("|"));
   const slots: [line: number, kind: string][] = [];
   for (const [index, line] of lines.entries())
     for (const match of line.matchAll(calls)) slots.push([index, match[1] ?? ""]);
   const out = lines.map((): LiveAct[] => []);
   let next = 0;
   for (const act of made) {
-    if (!followed.has(act.kind)) continue;
+    if (!followed.has(act.kind) && !slots.some(([, kind]) => kind === act.kind)) continue;
     const ahead = slots.findIndex(([, kind], index) => index >= next && kind === act.kind);
     if (ahead >= 0) {
       out[slots[ahead]?.[0] ?? 0]?.push(act);

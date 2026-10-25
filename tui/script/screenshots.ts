@@ -272,29 +272,32 @@ try {
   app().chains();
   await capture("15-chains");
   app().closeOverlay();
+  app().openThreads(session.selected);
+  await capture("81-chain-threads");
+  app().closeThreads();
   app().help();
   await capture("16-help");
   app().closeOverlay();
   app().toggleMode();
   app().composer.setText("");
-  const command = await session.engine.bash(
-    "printf 'Building the search index...\\n'; sleep 1; printf '3 notes indexed.\\n'",
-    { on: session.selected },
-  );
+  // A word runs a command, whose line is lit while it runs, with what it prints under it.
+  const command = await session.engine.rung({
+    word: `index = await bash("printf 'Building the search index...\\n'; sleep 4; printf '3 notes indexed.\\n'")\nprint(index.stdout.content)`,
+    on: session.selected,
+  });
   // The command shows once it has printed its first line.
   await until(session, () =>
-    Boolean((session.acts.find((act) => act.id === command)?.value as Exit | undefined)?.stdout?.content),
+    session.acts.some(
+      (act) =>
+        act.kind === "bash" &&
+        act.by === command &&
+        !act.done &&
+        Boolean((act.value as Exit | undefined)?.stdout?.content),
+    ),
   );
+  // After a second, the line says how long its command has run.
+  await new Promise((done) => setTimeout(done, 1200));
   await session.refresh();
-  app().render();
-  await test.flush();
-  const commandRow = app()
-    .scroll.getChildren()
-    .find((node) => node.id === command)
-    ?.getChildren()[0];
-  if (!commandRow) throw new Error("The command row is not visible.");
-  await test.mockMouse.click(commandRow.x + 1, commandRow.y);
-  await rest();
   app().scroll.scrollTo(app().scroll.scrollHeight);
   await capture("18-live-command");
   await session.engine.result(command);
@@ -447,13 +450,12 @@ try {
   await capture("28-workspace-tree");
   app().render();
   await test.flush();
-  const word = app()
-    .scroll.getChildren()
-    .find((node) => /^rung\d+$/.test(node.id) && app().scroll.viewport.y <= node.y);
-  const heading = word?.getChildren()[0];
-  if (heading) await test.mockMouse.click(heading.x + 1, heading.y);
+  // A click on a line of a program that made an act opens it in place, with what the act gave.
+  const rows = test.captureCharFrame().split("\n");
+  const line = rows.findIndex((row) => /^ +\d+ .*\b(bash|read)\(/.test(row));
+  if (line >= 0) await test.mockMouse.click((rows[line]?.search(/\d+ /) ?? 0) + 4, line);
   await rest();
-  await capture("29-collapsed-rung");
+  await capture("29-open-line");
   library.toggle(second);
   await capture("30-collapsed-workspace");
   library.toggle();
@@ -793,8 +795,8 @@ try {
   while (asks()) watched.travel(-1);
   await capture("65-watch-earlier");
 
-  // A project extension gives the TUI a part, which loads live: the panel of a todo list over the input, and the row
-  // of each act todo in the feed. A module that breaks shows its error in its panel.
+  // A project extension gives the TUI a part, which loads live: the panel of a todo list over the input, and the hint
+  // of the line of each act todo in the feed. A module that breaks shows its error in its panel.
   app().dispose();
   await library.dispose();
   const listed = await project("todo");
@@ -811,10 +813,9 @@ try {
   );
   await settle();
   while (!app().parts.version) await Bun.sleep(10);
-  // The rung opens, so the capture shows the row of each act todo under its word.
+  // The line of each act todo says what the part draws as its row.
   app().render();
   await test.flush();
-  await click(test, "rung1");
   await rest();
   await capture("74-extension-part");
   await writeFile(join(folder, "tui.ts"), "export default (furb) => { furb.panel(");

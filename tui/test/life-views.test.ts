@@ -85,17 +85,16 @@ test("⌥V switches the view of the life between main, the loom and the graph, w
       };
       // The switch.
       expect(app.lifeView).toBe("main");
-      expect(await frame()).toContain("more, ⌃B lists every chain");
+      expect(await frame()).not.toContain("waits on");
       screen.mockInput.pressKey("v", { meta: true });
       expect(app.lifeView).toBe("loom");
       expect(new Preferences(session.preferences.path).view).toBe("loom");
       const loom = await frame();
       expect(loom).toContain("older ┊");
       expect(loom).toContain("waits on");
-      expect(loom).not.toContain("more, ⌃B lists every chain");
       screen.mockInput.pressKey("v", { meta: true });
       expect(app.lifeView).toBe("graph");
-      expect(await frame()).toContain("Threads");
+      expect(await frame()).toContain("Chains");
       screen.mockInput.pressKey("v", { meta: true });
       expect(app.lifeView).toBe("main");
       // The command.
@@ -104,7 +103,7 @@ test("⌥V switches the view of the life between main, the loom and the graph, w
       expect(app.lifeView).toBe("graph");
       app.composer.setText("/view");
       await app.submit();
-      expect(await frame()).toContain("The board of the chains over the feed");
+      expect(await frame()).toContain("The feed of the selected chain beside the threads");
       screen.mockInput.pressEscape();
       // The keys on the loom.
       app.switchView("loom");
