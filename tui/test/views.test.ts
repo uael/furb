@@ -99,7 +99,7 @@ test("a command that printed more than a row holds sends the tail and its length
     { width: 120, height: 40, useMouse: true },
   ));
 
-test("the views say each quantity one way, read the changes of a scope once, and set a heading only when it changes", () =>
+test("the views say each quantity one way, read the changes of a scope once, and set source content only when it changes", () =>
   composing(
     async ({ session, app, frame }) => {
       const reads: (string[] | null)[] = [];
@@ -117,11 +117,14 @@ test("the views say each quantity one way, read the changes of a scope once, and
         await session.submit("/grant 1.5");
         await session.refresh();
         expect(await frame()).toContain("$1.50");
-        // The word of a folded rung takes its colors off the main thread, which change its heading once.
+        // Source takes its colors off the main thread, then keeps its content across unchanged frames.
         await app.colorsDone();
         await frame();
-        const card = app.scroll.getChildren().find((node) => /^rung\d+$/.test(node.id));
-        const heading = card?.getChildren()[0] as TextRenderable | undefined;
+        const card = app.scroll.getChildren().find((node) => /^program-rung\d+$/.test(node.id));
+        const heading = card
+          ?.getChildren()
+          .flatMap((node) => node.getChildren())
+          .find((node) => node instanceof TextRenderable) as TextRenderable | undefined;
         if (!heading) throw new Error("No card for the rung.");
         const content = heading.content;
         await frame();
@@ -252,7 +255,8 @@ test("the standing of a chain is no card of the conversation, though its turns b
         `${root}_actor`,
       ]);
       const headings = app.scroll.getChildren().map((card) => (texts(card)[0] ?? "").replace(/^[▸▾] /, ""));
-      expect(headings).toContain("You");
+      expect(headings).not.toContain("You");
+      expect(app.scroll.getChildren().flatMap(texts).join("\n")).toContain("Explore this project");
       expect(headings.filter((heading) => /^(standing|roster|cwd|actor)\b/.test(heading))).toEqual([]);
     },
     { width: 120, height: 30 },
@@ -267,7 +271,7 @@ test("a card that the view goes to, or a thread that Details expands, is in view
         await screen.flush();
       };
       const card = (id: string) => {
-        const found = app.scroll.getChildren().find((node) => node.id === id);
+        const found = app.scroll.getChildren().find((node) => node.id === id || node.id === `program-${id}`);
         if (!found) throw new Error(`No card ${id} in the view.`);
         return found;
       };
@@ -293,6 +297,20 @@ test("a card that the view goes to, or a thread that Details expands, is in view
       expect(session.view).toBe("feed");
       expect(app.scroll.scrollHeight).toBeGreaterThan(app.scroll.viewport.height * 2);
       expect(seen(rung)).toBe(true);
+      // A name from a model's step jumps to that step's source inside its thread, not to a removed rung header.
+      session.show("transcript");
+      await session.refresh();
+      await laid();
+      await app.inspect("notes");
+      await laid();
+      screen.mockInput.pressEnter();
+      await laid();
+      expect(session.view).toBe("feed");
+      const sourceThread = session.acts.find(
+        (act) => act.kind === "prompt" && String(act.words[1]).startsWith("Explore"),
+      );
+      if (!sourceThread) throw new Error("No source thread of the demo.");
+      expect(seen(`program-${sourceThread.id}`)).toBe(true);
       // A thread folded to its header, far above the foot of the view, opens from Details and comes into view.
       const thread = session.acts.find(
         (act) => act.kind === "prompt" && String(act.words[1]).startsWith("Explore"),
