@@ -166,3 +166,26 @@ test("a failed journal repair keeps its readable changes and can be retried", as
     }
   }
 });
+
+test("a journal open to read does not prevent its writer from repairing it", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-journal-reader-repair-"));
+  const record = join(directory, "life.jsonl");
+  const path = `${record}.changes.jsonl`;
+  let writer: FileChanges | undefined;
+  let reader: FileChanges | undefined;
+  try {
+    await writeFile(path, `${change("one")}\n{ damaged }\n${change("two")}\n`);
+    writer = new FileChanges(record);
+    reader = new FileChanges(record, true);
+    expect(reader.read(0, 1).map((one) => one.after)).toEqual(["one"]);
+    expect(writer.repair()).toEqual({ kept: 2, removed: 1 });
+    expect(writer.read().map((one) => one.after)).toEqual(["one", "two"]);
+  } finally {
+    try {
+      reader?.dispose();
+      writer?.dispose();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  }
+});
