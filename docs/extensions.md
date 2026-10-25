@@ -33,7 +33,14 @@ Five extensions come with furb, and each life runs them unless a config turns th
   after an answer that fills more than `SHARE`, 0.6, of the window of its model, it asks `choice()`, and at the next
   reply after the answer, it compacts the chain to what the model chose, with its summary. It moves, stops and pauses
   nothing, so a loop such as `while True: await conduct()` goes on with its state, and the workers that a conductor
-  hired go on. No chain is watched unless a word asks for it, so the extension has no life word. A project changes
+  hired go on. `imported(record, source)` makes a chain that goes on from the chain `source`, `chain1` by default, of
+  another record: a rung of the new chain awaits `inherit(record, source)`, which awaits `carry(record, source)`. The
+  ear of the World reads that record with no life and answers with the turns of that chain and its open prompts, and
+  the record of this life keeps the answer, so a later life opens no other file. `inherit` says the carried turns as
+  the prefix of the chain, opens each carried prompt again under a new name, and tells what it carried. Each value of
+  the module, each word that ran and each command that was open there is lost, since it ended with the life that ran
+  it, and a record whose log does not agree with it gives its replies and no tell. No chain is watched unless a word
+  asks for it, so the extension has no life word. A project changes
   the defaults in an extension of its own whose word rebinds `SHARE`, `FILTERS`, `CHOOSER`, `LISTED` or `BRIEF`.
   Its part for the TUI marks each compaction in the feed of the chain: a rule at its place, with its summary under
   it, which parts what the model no longer reads from what it reads now. The board of the chains says how many

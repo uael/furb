@@ -7,8 +7,9 @@
 //! provider of the model of its default actor and of the models that `--roster` names, or of every model that the
 //! catalog of the crate offers when `--roster` names none.
 //!
-//! Each run puts the program in the store of builds of the machine under its version, and a command that opens a life
-//! on a record of another version runs the build of that version in its place, when the store holds one.
+//! Each run puts the program in the store of builds of the machine under its version. A life on a record of an older
+//! version is upgraded as it opens, and a command that opens a record of a newer version runs the build of that version
+//! in its place, when the store holds one.
 
 mod console;
 mod life;
@@ -23,7 +24,7 @@ use std::{
 };
 
 use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum, error::ErrorKind};
-use furb::{life::Opening, value::entry, verbs, world};
+use furb::{checkpoint, life::Opening, value::entry, verbs, world};
 
 use crate::life::Life;
 
@@ -234,12 +235,13 @@ fn opened(furb: &Furb) -> Option<&Path> {
   }
 }
 
-/// How the build of another version ended, which ran this command in its place with the same words, when the record
-/// that the command opens names that version and the store of builds holds its program: only a build of that
-/// version replays the record with no drift. Nothing runs when the store holds none, and the life says why.
+/// How the build of a newer version ended, which ran this command in its place with the same words, when the record
+/// that the command opens names that version and the store of builds holds its program: only a build of that version
+/// replays the record with no drift. A record of an older version is upgraded as the life opens, as
+/// [`furb::life::Opening`] says. Nothing runs when the store holds no such build, and the life says why.
 fn handed(furb: &Furb) -> Option<ExitCode> {
-  let theirs =
-    world::version(&world::kept(opened(furb)?).ok()?).filter(|one| *one != world::VERSION)?;
+  let kept = world::kept(opened(furb)?).ok()?;
+  let theirs = world::version(checkpoint::segment(&kept)).filter(|one| *one > world::VERSION)?;
   let program = world::stored(theirs)?;
   match process::Command::new(&program).args(env::args_os().skip(1)).status() {
     Ok(status) => {

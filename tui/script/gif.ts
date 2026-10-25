@@ -15,7 +15,7 @@ function unpack(still: Still): Uint8Array {
   return Bun.inflateSync(still.packed);
 }
 
-/** The index that marks a pixel as the same as the picture before it. The palette takes all 255 colors that a GIF
+/** The index that marks a pixel as clear: the same as the picture before it, or the ground of the first picture. The palette takes all 255 colors that a GIF
  * allows beside that index, so that the edges of the text keep their shades. */
 const unchanged = 255;
 
@@ -45,7 +45,8 @@ export function gif(stills: Still[], width: number, height: number, kept: number
               return [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
             }),
         delay: still.delay * 10,
-        transparent: Boolean(last),
+        // The first picture leaves the ground clear, and each later one leaves the same pixels clear.
+        transparent: true,
         transparentIndex: unchanged,
         // Each picture stays in place under the next one.
         dispose: 1,
@@ -57,8 +58,11 @@ export function gif(stills: Still[], width: number, height: number, kept: number
   return encoder.bytes();
 }
 
-/** The color of a pixel as one number: its red, green, and blue. */
+/** The color of a pixel as one number: its red, green, and blue, or clear when the pixel is mostly see-through, as the
+ * ground around the window is. A GIF has no shades of alpha, so the soft shadow goes with the ground. */
+const clear = -1;
 function color(pixels: Uint8Array, pixel: number): number {
+  if ((pixels[pixel * 4 + 3] ?? 0) < 128) return clear;
   return (
     ((pixels[pixel * 4] ?? 0) << 16) | ((pixels[pixel * 4 + 1] ?? 0) << 8) | (pixels[pixel * 4 + 2] ?? 0)
   );
@@ -73,7 +77,7 @@ function colors(stills: Still[], width: number, height: number, kept: number[]):
     const pixels = unpack(still);
     for (let pixel = 0; pixel < width * height; pixel++) {
       const value = color(pixels, pixel);
-      if (before && color(before, pixel) === value) continue;
+      if (value === clear || (before && color(before, pixel) === value)) continue;
       counts.set(value, (counts.get(value) ?? 0) + 1);
     }
     before = pixels;
@@ -89,6 +93,7 @@ function colors(stills: Still[], width: number, height: number, kept: number[]):
 function mapper(palette: number[]): (value: number) => number {
   const known = new Map<number, number>();
   return (value) => {
+    if (value === clear) return unchanged;
     const found = known.get(value);
     if (found !== undefined) return found;
     let best = 0,

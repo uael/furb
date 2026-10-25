@@ -14,6 +14,7 @@
 //! extension by a fact that the record keeps, and plays the word and the life word as a rung on each chain, and the
 //! definitions alone of a new word of an extension that the life runs, which reloads it.
 
+pub mod compaction;
 pub mod memory;
 pub mod skills;
 pub mod web;

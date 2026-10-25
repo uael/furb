@@ -41,14 +41,22 @@ export class DamagedJournal extends Error {
   }
 }
 
-/** Whether a line of a journal is a change. */
-function isChange(line: string): boolean {
+/** The change that a line of a journal holds, or nothing when the line is no change. */
+function parse(line: string): FileChange | undefined {
   try {
     const change: unknown = JSON.parse(line);
-    return typeof change === "object" && change !== null && typeof (change as FileChange).path === "string";
+    return typeof change === "object" && change !== null && typeof (change as FileChange).path === "string"
+      ? (change as FileChange)
+      : undefined;
   } catch {
-    return false;
+    return undefined;
   }
+}
+
+/** What a repair of a journal kept and removed: the count of changes that it kept, and of lines that it removed. */
+export interface Repaired {
+  kept: number;
+  removed: number;
 }
 
 /** Append file snapshots once. Keep only their positions in memory and read a page on demand. As an ear that comes
@@ -131,29 +139,46 @@ export class FileChanges {
     this.positions.push({ start: this.end, size: data.length - 1 });
     this.end += data.length;
   }
+  /** The line of the journal at a position. */
+  private line(fd: number, position: { start: number; size: number }): string {
+    const data = Buffer.alloc(position.size);
+    readSync(fd, data, 0, position.size, position.start);
+    return data.toString("utf8");
+  }
   /** A page of changes; a line of it that is no change throws a `DamagedJournal`. */
   read(start = 0, count = 20): FileChange[] {
     const fd = this.fd;
     if (fd === undefined) return [];
     return this.positions.slice(start, start + count).map((position, at) => {
-      const data = Buffer.alloc(position.size);
-      readSync(fd, data, 0, position.size, position.start);
-      const line = data.toString("utf8");
-      if (!isChange(line)) throw new DamagedJournal(this.path ?? "", start + at);
-      return JSON.parse(line) as FileChange;
+      const change = parse(this.line(fd, position));
+      if (!change) throw new DamagedJournal(this.path ?? "", start + at);
+      return change;
     });
   }
-  /** The journal written again with each line that is a change, in its order, and the count of lines that it lost. */
-  repair(): number {
+  /** A page of lines of the journal as changes, with each line that is no change left out. A reader that must not
+   * stop for a damaged journal, as the rewind, reads so. */
+  readable(start = 0, count = 20): FileChange[] {
+    const fd = this.fd;
+    if (fd === undefined) return [];
+    return this.positions
+      .slice(start, start + count)
+      .flatMap((position) => parse(this.line(fd, position)) ?? []);
+  }
+  /** The journal read again whole from its file, which holds each change that was appended since the session opened,
+   * and written again with each line that is a change, in its order, then indexed anew. It says the count of changes
+   * that it kept and of lines that it removed. */
+  repair(): Repaired {
     const path = this.path;
-    if (this.fd === undefined || !path) return 0;
-    const lines = readFileSync(path, "utf8").split("\n").slice(0, this.positions.length);
-    const kept = lines.filter(isChange);
+    if (this.fd === undefined || !path) return { kept: 0, removed: 0 };
+    const lines = readFileSync(path, "utf8").split("\n");
+    // What follows the last newline is empty, or a line that a crash cut.
+    const cut = lines.pop() ?? "";
+    const kept = lines.filter((line) => parse(line));
     this.reopen(path, () => {
       writeFileSync(`${path}.repair`, kept.map((line) => `${line}\n`).join(""), { mode: 0o600 });
       renameSync(`${path}.repair`, path);
     });
-    return lines.length - kept.length;
+    return { kept: kept.length, removed: lines.length - kept.length + (cut ? 1 : 0) };
   }
   /** A new journal that holds no change, and the path that the damaged journal is kept at beside it. */
   renew(): string {

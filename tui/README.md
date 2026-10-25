@@ -113,6 +113,28 @@ window of a new build takes the life over with its record whole.
   folder goes when the window quits. A recorded life, which runs nothing, stays in the window too. On Windows, each
   life stays in the window.
 
+### Many operators
+
+One host serves one life to many operators: one record, one World, and one protocol, on this machine or over the
+network. Each window that comes through the socket of Unix reads and drives the life, since only the user opens its
+folder. Each other operator comes over the network, with a key that gives a role:
+
+- `/serve [address]` opens the door of the host on the network, at `host:port` or at a port, on `127.0.0.1` and a
+  free port by default, and gives two addresses: one to read and drive the life, and one to read it only. Each has the
+  form `furb://host:port/key`, and each holds the key of its role. The door stays open until the host ends, and a
+  later `/serve` gives the same two addresses. A host that listens at `0.0.0.0` names its machine in each address.
+- `furb-tui --attach <address>`, or `furb -- --attach <address>`, opens a window on that life. The window keeps its
+  view in a temporary folder, which goes when it quits, so the life of another operator joins no list of its machine.
+  A quit detaches the window, and a window that writes ends the life with `/end`.
+- A window that reads sees each change of the life, and the host refuses each request that would change it: a
+  prompt, a word, a command, an answer, a control, a serve and an end. It opens no file of the machine of the host by
+  its path, so it reads only what the life holds and the changes of its project.
+- A peer of the network says its hello first, with a key, in ten seconds and in 64 KiB, or the host ends its socket.
+  The host compares each key in a time that does not depend on its content.
+- The door carries each message as it is, with no encryption. Over a network that you do not trust, open the door
+  at `127.0.0.1` and reach it through a tunnel, as `ssh -L 7700:127.0.0.1:7700 <host>`, or through a private
+  network.
+
 A recorded life is a log of a life whose first line is a header that says `"recorded": true`. The TUI reads it as it
 reads a record that a build of another version made, from its acts, and runs nothing: what you send to it fails with the reason.
 The demo opens `fixtures/conductor.jsonl`, a life of a conductor of furb with 23 chains, beside its scripted life,
@@ -216,6 +238,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | [ ] / { } after ⌥G | Move the cursor in time by one / ten moments |
 | Space / x / n / b after ⌥G | Pause or wake / cancel / step / branch at the cursor the chain |
 | ⌃PageUp / ⌃PageDown | Previous / next scope of file changes: this turn, this chain, the life, the branch |
+| ⌥R / ⌥J | Repair the journal of file changes / start a new journal, once the view of changes finds it damaged |
 | ⌃C | Clear the input, close a dialog, or cancel what you sent last (a message goes back to the input) |
 | Esc | Close a dialog or pause current model work |
 | F1 / ⌃Q / ⌃D twice | Help / save and quit / save and quit from an empty input |
@@ -247,6 +270,8 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/bash <command>` | Stream a shell command |
 | `/read <path>` | Show a file to this chain |
 | `/changes [turn|chain|life|branch]` | Show the files that this turn, this chain, the life or the branch against main changed |
+| `/repair` | Keep each change that the journal of file changes can read, and remove the lines that it cannot |
+| `/renew` | Start a new journal of file changes, and keep the damaged one beside it |
 | `/cd <path>` | Change this chain's working directory |
 | `/edit [prompt id]` | Change a prompt's program and replay it |
 | `/inspect <name>` | Read a value from this chain's module |
@@ -254,7 +279,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/grant <dollars>` | Pause at a dollar ceiling |
 | `/context <fraction>` | Pause at a share of the model window |
 | `/pause [act or chain]` | Hold delivery while work completes |
-| `/wake [act or chain]` | Deliver pending work |
+| `/wake [act or chain]` | Wake every paused chain, or one |
 | `/cancel [id]` | End an act, or what you sent last on this chain |
 | `/feed <id> [text]` | Send a line of input to a command; no text closes its input |
 | `/close <id> <json>` | Close an act with a JSON value |
@@ -267,6 +292,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/delete` | Archive a session, or move it and its files to the workspace trash |
 | `/autocollapse` | Toggle collapse of completed rungs |
 | `/extensions` | List the extensions that this life runs |
+| `/serve [address]` | Give the addresses at which other operators read this life, or read and drive it, over the network |
 | `/end` | End each open life, its commands and its models, then quit |
 | `/exit` | Save every session and quit, while a life in a host of its own goes on |
 

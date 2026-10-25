@@ -1,10 +1,24 @@
 // The host of one life: a process of its own that holds the life in the worker of the TUI, behind a socket, so the life
 // outlives each window. A window starts it, detached from the window, with the options of the life as JSON. It loads
 // no module that loads OpenTUI, since it draws nothing.
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { rmSync, writeFileSync } from "node:fs";
-import { createServer } from "node:net";
+import { type AddressInfo, createServer, type Socket } from "node:net";
 import type { HostState } from "./bridge.ts";
-import { type About, buildOf, framed, type Hello, hostPlace, PROTOCOL } from "./hosting.ts";
+import {
+  type About,
+  addressOf,
+  buildOf,
+  framed,
+  HELLO,
+  type Hello,
+  hostPlace,
+  listening,
+  PROTOCOL,
+  type Role,
+  reads,
+  type Served,
+} from "./hosting.ts";
 import type { EngineOptions } from "./models.ts";
 
 type Request = { id: number; target: string; method: string; args: unknown[] };
@@ -27,8 +41,8 @@ const tell = () => writeFileSync(place.about, `${JSON.stringify(about)}\n`, { mo
 const building = buildOf().catch((error: unknown) => `unknown: ${error}`);
 
 const worker = new Worker(new URL("worker.ts", import.meta.url).href, { type: "module" });
-/** Each window that said hello, by its sender. */
-const windows = new Set<Send>();
+/** Each window that said hello, by its sender, with its role. */
+const windows = new Map<Send, Role>();
 /** Each request that the worker has not answered, under the number that the host gave it: the window that made it and
  * its number there. */
 const waiting = new Map<number, Asker>();
@@ -65,11 +79,74 @@ function close(code: number): never {
   process.exit(code);
 }
 
+// The socket of Unix stands in a folder that only the user opens, so each window that comes through it writes.
 const server = createServer((socket) => {
-  const send = framed(socket, (message: Request) => heard(message, send));
+  const send = framed(socket, (message: Request) => heard(message, send, "write"));
   socket.on("close", () => windows.delete(send));
   socket.on("error", () => windows.delete(send));
 });
+
+/** The door of the life on the network, which a window that writes opens: the addresses that it gives each role. */
+let door: Promise<Served> | undefined;
+
+/** The door of the life on the network at an address, or the door that stands already, as it is open once for the
+ * life of the host. Each role takes a key of its own, which only the address of that role holds. */
+function serve(address: string): Promise<Served> {
+  door ??= (async () => {
+    const { name, port } = listening(address);
+    const keys: Record<Role, string> = { read: randomUUID(), write: randomUUID() };
+    const network = createServer((socket) => welcome(socket, keys));
+    await new Promise<void>((resolve, reject) => {
+      network.once("error", reject);
+      network.listen(port, name, () => resolve());
+    });
+    const at = (network.address() as AddressInfo).port;
+    return { read: addressOf(name, at, keys.read), write: addressOf(name, at, keys.write) };
+  })();
+  // A door that did not open, as on a port that another process holds, can open later at another address.
+  door.catch(() => {
+    door = undefined;
+  });
+  return door;
+}
+
+/** The role that a key gives, and nothing for a key of no role. */
+function roleOf(key: unknown, keys: Record<Role, string>): Role | undefined {
+  const given = Buffer.from(typeof key === "string" ? key : "");
+  return (["write", "read"] as const).find((role) => {
+    const own = Buffer.from(keys[role]);
+    return own.length === given.length && timingSafeEqual(own, given);
+  });
+}
+
+/** A peer of the network: its first message is a hello with the key of a role, in a short message and in ten seconds,
+ * or the host ends the socket, so a stranger reaches nothing of the life. */
+function welcome(socket: Socket, keys: Record<Role, string>): void {
+  let role: Role | undefined;
+  const timer = setTimeout(() => socket.destroy(), 10000);
+  const send = framed(
+    socket,
+    (message: Request) => {
+      if (role) return heard(message, send, role);
+      const said = typeof message === "object" && message ? message : ({} as Request);
+      const hello = said.target === "host" && said.method === "hello";
+      role = hello ? roleOf((said.args?.[0] as { key?: unknown } | undefined)?.key, keys) : undefined;
+      if (!role) {
+        send({ id: said.id ?? 0, error: "This key opens no window of the life." });
+        socket.end();
+        return;
+      }
+      clearTimeout(timer);
+      heard(said, send, role);
+    },
+    () => (role ? Number.POSITIVE_INFINITY : HELLO),
+  );
+  socket.on("close", () => {
+    clearTimeout(timer);
+    windows.delete(send);
+  });
+  socket.on("error", () => windows.delete(send));
+}
 
 worker.onmessage = ({ data }) => {
   if (data.state || data.log || data.fault) {
@@ -81,7 +158,7 @@ worker.onmessage = ({ data }) => {
         measures: { ...last?.measures, ...data.state.measures },
         compactions: [...(last?.compactions ?? []), ...data.state.compactions],
       };
-    for (const send of windows) send(data);
+    for (const send of windows.keys()) send(data);
     return;
   }
   const to = waiting.get(data.id);
@@ -90,7 +167,7 @@ worker.onmessage = ({ data }) => {
   to?.send?.({ ...data, id: to.id });
   if (!data.disposed) return;
   // The life ended: each other window hears so, and the host ends once each window has its answer.
-  for (const send of windows) if (send !== to?.send) send({ ended: why });
+  for (const send of windows.keys()) if (send !== to?.send) send({ ended: why });
   server.close();
   setTimeout(() => close(0), 50);
 };
@@ -98,18 +175,35 @@ worker.onerror = (event) => {
   // The worker of a life that ended may fail as it closes, which ends nothing more.
   if (ending) return;
   console.error(`furb-host: ${event.message}`);
-  for (const send of windows) send({ fault: event.message });
+  for (const send of windows.keys()) send({ fault: event.message });
   close(1);
 };
 
-/** What a window says: its hello, which attaches it, or a request of the worker, which goes to it. A window that
- * detaches only closes its socket, and the life goes on. */
-function heard(message: Request, send: Send): void {
+/** What a window says: its hello, which attaches it with its role, or a request, which goes to the worker when the role
+ * of the window makes it. A window that detaches only closes its socket, and the life goes on. */
+function heard(message: Request, send: Send, role: Role): void {
   if (message.target === "host" && message.method === "hello") {
-    send({ id: message.id, value: { ...about, root, seq: last?.seq ?? 0 } satisfies Hello });
+    send({ id: message.id, value: { ...about, root, seq: last?.seq ?? 0, role } satisfies Hello });
     // A window that attaches draws what the life holds, so the first state tells it that facts came.
     if (last) send({ state: { ...last, facts: Math.max(1, last.facts) } });
-    windows.add(send);
+    windows.set(send, role);
+    return;
+  }
+  // The first run checks the machine of the window, and a window that reads checks nothing of the host.
+  if (role === "read" && message.target === "library" && message.method === "setup") {
+    send({ id: message.id, value: null });
+    return;
+  }
+  if (role === "read" && !reads(message.target, message.method)) {
+    send({ id: message.id, error: `This window reads the life only, so it cannot ${message.method}.` });
+    return;
+  }
+  if (message.target === "host" && message.method === "serve") {
+    serve(String(message.args[0] ?? "")).then(
+      (value) => send({ id: message.id, value }),
+      (error: unknown) =>
+        send({ id: message.id, error: error instanceof Error ? error.message : String(error) }),
+    );
     return;
   }
   if (message.target === "session" && message.method === "end") {

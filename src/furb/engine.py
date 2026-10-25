@@ -274,7 +274,11 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         while name not in kin and (b := get(name)):
           kin.add(name)
           name = b[2]
-      yield ("prefix", id, [it for it in theirs if (get(it[1])[2] if question(("reply", it[1])) else it[1]) in kin])
+      yield (
+        "prefix",
+        id,
+        [it for it in theirs if not get(it[1]) or (get(it[1])[2] if question(("reply", it[1])) else it[1]) in kin],
+      )
     yield "started", id
     yield told(id, "", bound(id), label=label, source=source)
     yield from replay()
