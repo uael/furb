@@ -16,7 +16,9 @@ use rig_core::{
 };
 use serde_json::{Value, json};
 
-use super::auth;
+mod auth;
+
+pub use auth::{NAME, Status, begin, cancel, refresh, status};
 
 #[derive(Clone)]
 pub(super) struct Codex {
@@ -120,7 +122,7 @@ impl HttpClientExt for CodexHttp {
       }
       return Err(rig_core::http_client::Error::InvalidStatusCodeWithMessage(
         response.status(),
-        "Sign in to openai-auth again from Providers.".to_owned(),
+        "Sign in to codex again from Providers.".to_owned(),
       ));
     }
     if response.status().is_success() && !response.headers().contains_key("content-type") {
@@ -131,5 +133,59 @@ impl HttpClientExt for CodexHttp {
 }
 
 #[cfg(test)]
-#[path = "codex.test.rs"]
+#[path = "mod.test.rs"]
 mod test;
+
+#[derive(Default, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Settings {
+  enabled: Option<bool>,
+  model_context_window: Option<u64>,
+}
+
+pub(super) fn offered(
+  config: Option<&std::path::Path>,
+  form: &serde_json::Value,
+) -> Result<Vec<super::Model>, String> {
+  let settings: Settings = if *form == serde_json::Value::Bool(true) {
+    Settings::default()
+  } else {
+    serde_json::from_value(form.clone()).map_err(|no| format!("Invalid codex settings: {no}"))?
+  };
+  let _ = settings.enabled;
+  if settings.model_context_window == Some(0) {
+    return Err("The codex model_context_window must be positive".to_owned());
+  }
+  let directory = auth::directory(config);
+  Ok(
+    auth::models(config)
+      .into_iter()
+      .map(|one| {
+        let window = settings
+          .model_context_window
+          .map(|window| one.max_context_window.map_or(window, |maximum| window.min(maximum)))
+          .or(one.context_window)
+          .or(one.max_context_window)
+          .unwrap_or_default()
+          .saturating_mul(one.effective_context_window_percent.unwrap_or(95).min(100))
+          / 100;
+        let mut model = super::Model::new(
+          format!("{NAME}:{}", one.slug),
+          window.max(1),
+          Codex { config: directory.clone(), id: one.slug },
+        )
+        .conversation("prompt_cache_key");
+        model.images = one.input_modalities.iter().any(|one| one == "image");
+        for effort in one.supported_reasoning_levels {
+          if super::catalog::LEVELS.contains(&effort.effort.as_str()) {
+            model = model.effort(
+              &effort.effort,
+              serde_json::json!({"reasoning": {"effort": effort.effort, "summary": "auto"}}),
+            );
+          }
+        }
+        model
+      })
+      .collect(),
+  )
+}

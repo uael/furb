@@ -37,27 +37,36 @@ An **actor** is a model and an effort, which is how hard the model thinks: `off`
 
 ## Provider settings
 
-For a ChatGPT subscription, open `/providers` and choose `openai-auth`. Furb uses an existing ChatGPT sign-in when
-one is available. Otherwise, it opens the browser for sign-in. When it connects, the OpenAI model picker opens.
+For a ChatGPT subscription, open `/providers` and choose `codex`. Furb uses an existing ChatGPT sign-in when
+one is available. Otherwise, it opens the browser for sign-in. When it connects, the Codex model picker opens.
 Choose a model there. No API key, server, model id or context size is needed.
 
-`openai-auth` uses the limits of the ChatGPT subscription. `openai` remains the provider for an OpenAI API key.
-Claude Code stays available by default. Connecting OpenAI does not change a running model call.
+`codex` uses the limits of the ChatGPT subscription. `openai` remains the provider for an OpenAI API key.
+Claude Code stays available by default. Connecting Codex does not change a running model call.
 
 The account service supplies the model list, the input window, image support and the supported reasoning efforts.
 Furb reserves the input headroom that the service specifies, or 5% when it leaves that value unsaid. For a model
-with a 500,000-token window and 5% headroom, the picker shows 475,000 input tokens. A maximum window in the model
-data does not replace the default window of the account.
+with a 500,000-token default window and 5% headroom, the picker shows 475,000 input tokens.
 
-Model data is cached for five minutes and checked when a life opens, when the model picker opens, and on `/reload`.
+To request a larger window, set `model_context_window` under the `codex` provider in `.furb/config.json`:
+
+```json
+{"providers": {"codex": {"model_context_window": 1000000}}}
+```
+
+As in Codex, the value is capped at the maximum window from the account service before the input reserve is
+applied. With an 872,000-token maximum and a 95% usable share, this setting gives 828,400 input tokens. Without
+this setting, furb uses the default window from the account service.
+
+Model data is cached for five minutes and checked when a life opens, when the Codex model picker opens, and on `/reload`.
 If a refresh fails for a temporary cause, the last model list stays available. A changed model list or window
-updates the standing when the operator reloads it or opens the picker.
+updates the standing when the operator reloads it or opens the Codex picker.
 
 Furb keeps its sign-in in the user config directory, under `auth`, outside the project. On Unix, the credential
 file is readable and writable only by its owner. Furb refreshes its own credential when needed. It can read an
 existing Codex access token, but it does not use the Codex refresh token or change the Codex credentials.
 
-Disabling `openai-auth` removes its models from this project and keeps the sign-in for a later connection.
+Disabling `codex` removes its models from this project and keeps the sign-in for a later connection.
 
 Run `/providers` in the TUI to add or remove a provider for the current project. A built-in provider uses the
 credential in the environment. To add a server that uses OpenAI chat completions, enter:

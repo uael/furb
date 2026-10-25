@@ -347,15 +347,15 @@ def model(name: str, directory: str | None = None, config: str | None = None) ->
 def levels() -> list[str]:
   """The levels of effort, from least to most, which an actor names after its model."""
 
-class OpenaiAuthInfo(TypedDict):
+class CodexAuthInfo(TypedDict):
   """A ChatGPT sign-in state, its browser address while it waits, and a message when it fails. It holds no token."""
 
   state: str
   url: str | None
   message: str | None
 
-def openai_auth(action: str | None = None, config: str | None = None) -> OpenaiAuthInfo:
-  """Read, start, refresh or cancel ChatGPT sign-in for openai-auth. The default action reads its state.
+def codex_auth(action: str | None = None, config: str | None = None) -> CodexAuthInfo:
+  """Read, start, refresh or cancel ChatGPT sign-in for codex. The default action reads its state.
   The config directory is the user config directory when unsaid. A start returns before the browser completes.
   """
 

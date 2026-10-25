@@ -183,6 +183,19 @@ export declare function attachImage(directory: string, path: string): ImageAttac
 export declare function bash(scratch: string, record: Array<any>): NativeEar
 
 /**
+ * Read, start, refresh or cancel ChatGPT sign-in for codex. The default action reads its state.
+ * The config directory is the user config directory when unsaid. A start returns before the browser completes.
+ */
+export declare function codexAuth(action?: string | undefined | null, config?: string | undefined | null): CodexAuthInfo
+
+/** A ChatGPT sign-in state, with its browser address while it waits and a message when it fails. It holds no token. */
+export interface CodexAuthInfo {
+  state: string
+  url?: string
+  message?: string
+}
+
+/**
  * The config directory of the user for this process, where the configs, the extensions of the user and the
  * preferences of the TUI stand.
  */
@@ -359,19 +372,6 @@ export declare function official(): Array<Extension>
  * Windows has no such console, and gives this callback no event.
  */
 export declare function onConsoleEnd(callback: (event: "break" | "close" | "logoff" | "shutdown") => void): void
-
-/**
- * Read, start, refresh or cancel ChatGPT sign-in for openai-auth. The default action reads its state.
- * The config directory is the user config directory when unsaid. A start returns before the browser completes.
- */
-export declare function openaiAuth(action?: string | undefined | null, config?: string | undefined | null): OpenaiAuthInfo
-
-/** A ChatGPT sign-in state, with its browser address while it waits and a message when it fails. It holds no token. */
-export interface OpenaiAuthInfo {
-  state: string
-  url?: string
-  message?: string
-}
 
 /**
  * The record a life opens on, and the ears of the crate that it hears after the ears of the host, as every host

@@ -404,13 +404,13 @@ export class Session extends EventEmitter {
     host.on("change", this.changed);
     host.on("facts", this.factsChanged);
     host.on("fault", this.fail);
-    host.on("authentication", (status: import("furb").OpenaiAuthInfo) => {
+    host.on("authentication", (status: import("furb").CodexAuthInfo) => {
       this.notice =
         status.state === "connected"
           ? "OpenAI is connected."
           : ["connecting", "waiting"].includes(status.state)
             ? "Connecting to OpenAI."
-            : status.message || "OpenAI sign-in canceled.";
+            : status.message || "Codex sign-in canceled.";
       this.emit("authentication", status);
       this.emit("change");
     });
@@ -1497,17 +1497,17 @@ export class Session extends EventEmitter {
                 }
               : true;
         if (!(await this.host.provider(name, value))) {
-          this.notice = "OpenAI sign-in canceled.";
+          this.notice = "Codex sign-in canceled.";
           break;
         }
         await this.reloadCatalog();
         this.notice =
-          name === "openai-auth"
+          name === "codex"
             ? verb === "remove"
-              ? "OpenAI subscription disconnected."
-              : "OpenAI subscription connected."
+              ? "Codex subscription disconnected."
+              : "Codex subscription connected."
             : `Provider ${name} ${verb === "remove" ? "removed" : "added"}. The settings are saved in .furb/config.json.`;
-        if (name === "openai-auth" && verb === "add") this.emit("openaiModels");
+        if (name === "codex" && verb === "add") this.emit("codexModels");
         break;
       }
       case "name":
@@ -1727,7 +1727,7 @@ export class Session extends EventEmitter {
     this.catalogRead = true;
     const authenticated = (models: readonly [string, string[], number][]) =>
       models
-        .filter(([name]) => name.startsWith("openai-auth:"))
+        .filter(([name]) => name.startsWith("codex:"))
         .map(([name, efforts, window]) => [name, efforts, window]);
     if (
       !this.demo &&

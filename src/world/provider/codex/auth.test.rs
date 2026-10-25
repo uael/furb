@@ -23,7 +23,7 @@ impl Scope {
       Scope(std::env::temp_dir().join(format!("furb-auth-{}", random().expect("random bytes"))));
     let path = directory(Some(&root.0));
     save(
-      &path.join("openai-auth.json"),
+      &path.join("codex.json"),
       &Credential {
         access: "test-access".to_owned(),
         refresh: Some("test-refresh".to_owned()),
@@ -33,7 +33,7 @@ impl Scope {
     )
     .expect("credentials");
     save(
-      &path.join("openai-auth.models.json"),
+      &path.join("codex.models.json"),
       &Account {
         account: cached.to_owned(),
         fetched: now(),
@@ -55,11 +55,8 @@ impl Scope {
   }
 
   fn catalog(&self, enabled: bool) -> Catalog {
-    std::fs::write(
-      self.0.join("config.json"),
-      format!(r#"{{"providers":{{"openai-auth":{enabled}}}}}"#),
-    )
-    .expect("provider settings");
+    std::fs::write(self.0.join("config.json"), format!(r#"{{"providers":{{"codex":{enabled}}}}}"#))
+      .expect("provider settings");
     Catalog::of(&IndexMap::new(), None, None, |_| None)
       .configured(&self.0, Some(&self.0))
       .expect("configured catalog")
@@ -75,12 +72,22 @@ impl Drop for Scope {
 #[test]
 fn enabling_subscription_models_uses_the_account_window_and_supported_efforts() {
   let scope = Scope::profile("account", "account");
-  assert!(scope.catalog(false).find("openai-auth:account-model").is_none());
+  assert!(scope.catalog(false).find("codex:account-model").is_none());
   let catalog = scope.catalog(true);
-  let model = catalog.find("openai-auth:account-model").expect("account model");
+  let model = catalog.find("codex:account-model").expect("account model");
   assert_eq!(model.window, 475_000);
   assert_eq!(model.efforts.iter().map(|one| one.0.as_str()).collect::<Vec<_>>(), ["low", "high"]);
   assert!(model.images);
+  std::fs::write(
+    scope.0.join("config.json"),
+    r#"{"providers":{"codex":{"model_context_window":1000000}}}"#,
+  )
+  .expect("window override");
+  let catalog = Catalog::of(&IndexMap::new(), None, None, |_| None)
+    .configured(&scope.0, Some(&scope.0))
+    .expect("configured window");
+  assert_eq!(catalog.find("codex:account-model").expect("account model").window, 828_400);
+
   assert!(catalog.find("openai:account-model").is_none());
   assert_eq!(status(Some(&scope.0)).state, "connected");
 }
@@ -88,7 +95,7 @@ fn enabling_subscription_models_uses_the_account_window_and_supported_efforts() 
 #[test]
 fn a_model_cache_from_another_account_is_not_offered() {
   let scope = Scope::profile("current", "previous");
-  assert!(scope.catalog(true).find("openai-auth:account-model").is_none());
+  assert!(scope.catalog(true).find("codex:account-model").is_none());
   assert_eq!(status(Some(&scope.0)).state, "disconnected");
 }
 
@@ -99,8 +106,7 @@ fn the_credential_and_its_directory_are_private() {
   let scope = Scope::profile("account", "account");
   let path = directory(Some(&scope.0));
   assert_eq!(
-    std::fs::metadata(path.join("openai-auth.json")).expect("credential").permissions().mode()
-      & 0o777,
+    std::fs::metadata(path.join("codex.json")).expect("credential").permissions().mode() & 0o777,
     0o600
   );
   assert_eq!(std::fs::metadata(path).expect("directory").permissions().mode() & 0o777, 0o700);

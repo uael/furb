@@ -22,7 +22,7 @@ use sha2::{Digest, Sha256};
 use crate::{ear::reactor, extension::Places};
 
 /// The provider of models paid for by a ChatGPT subscription.
-pub const NAME: &str = "openai-auth";
+pub const NAME: &str = "codex";
 pub(super) const API: &str = "https://chatgpt.com/backend-api/codex";
 const AUTH: &str = "https://auth.openai.com";
 const CLIENT: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
@@ -184,7 +184,7 @@ fn borrowed() -> Option<Credential> {
 }
 
 fn held(config: &Path) -> Option<Credential> {
-  read(&config.join("openai-auth.json")).or_else(borrowed)
+  read(&config.join("codex.json")).or_else(borrowed)
 }
 
 /// The current sign-in state. This view starts no sign-in and makes no request.
@@ -197,7 +197,7 @@ pub fn status(config: Option<&Path>) -> Status {
   }
   let connected = held(&path).is_some_and(|one| {
     (one.expires > now() + 60_000 || one.refresh.is_some())
-      && read::<Catalog>(&path.join("openai-auth.models.json"))
+      && read::<Catalog>(&path.join("codex.models.json"))
         .is_some_and(|catalog| catalog.account == one.account && !catalog.models.is_empty())
   });
   Status {
@@ -240,7 +240,7 @@ pub(super) fn models(config: Option<&Path>) -> Vec<Listing> {
     return Vec::new();
   }
   let Some(credential) = held(&path) else { return Vec::new() };
-  read::<Catalog>(&path.join("openai-auth.models.json"))
+  read::<Catalog>(&path.join("codex.models.json"))
     .filter(|one| one.account == credential.account)
     .map(|one| one.models)
     .unwrap_or_default()
@@ -260,7 +260,7 @@ pub(super) fn needs_login(path: &Path) {
       status: Status {
         state: "needs-login".to_owned(),
         url: None,
-        message: Some("Sign in to OpenAI again from Providers.".to_owned()),
+        message: Some("Sign in to Codex again from Providers.".to_owned()),
       },
       canceled: Arc::new(AtomicBool::new(false)),
     },
@@ -285,7 +285,7 @@ pub fn refresh(config: Option<&Path>) -> Result<Status, String> {
   else {
     return Ok(Status { state: "disconnected".to_owned(), ..Status::default() });
   };
-  let fresh = read::<Catalog>(&path.join("openai-auth.models.json")).is_some_and(|one| {
+  let fresh = read::<Catalog>(&path.join("codex.models.json")).is_some_and(|one| {
     one.account == credential.account && now().saturating_sub(one.fetched) < 300_000
   });
   if fresh && status.state != "failed" {
@@ -295,12 +295,12 @@ pub fn refresh(config: Option<&Path>) -> Result<Status, String> {
 }
 
 pub(super) async fn credential(path: &Path) -> Result<Credential, Failure> {
-  let held = held(path).ok_or("Sign in to openai-auth from Providers")?;
+  let held = held(path).ok_or("Sign in to codex from Providers")?;
   if held.expires > now() + 60_000 {
     return Ok(held);
   }
   fs::create_dir_all(path).map_err(|no| no.to_string())?;
-  let path_of_lock = path.join("openai-auth.lock");
+  let path_of_lock = path.join("codex.lock");
   let _lock = tokio::task::spawn_blocking(move || {
     let file = File::options()
       .create(true)
@@ -313,17 +313,16 @@ pub(super) async fn credential(path: &Path) -> Result<Credential, Failure> {
   })
   .await
   .map_err(|no| no.to_string())??;
-  let held: Credential =
-    read(&path.join("openai-auth.json")).ok_or("Sign in to openai-auth again")?;
+  let held: Credential = read(&path.join("codex.json")).ok_or("Sign in to codex again")?;
   if held.expires > now() + 60_000 {
     return Ok(held);
   }
-  let refresh = held.refresh.ok_or("Sign in to openai-auth again")?;
+  let refresh = held.refresh.ok_or("Sign in to codex again")?;
   let token =
     token(&[("grant_type", "refresh_token"), ("refresh_token", &refresh), ("client_id", CLIENT)])
       .await?;
   let renewed = token.credential(Some(refresh))?;
-  save(&path.join("openai-auth.json"), &renewed)?;
+  save(&path.join("codex.json"), &renewed)?;
   Ok(renewed)
 }
 
@@ -415,7 +414,7 @@ async fn listed(path: &Path, credential: &Credential) -> Result<(), Failure> {
     return Err("This ChatGPT account offers no model to furb".into());
   }
   save(
-    &path.join("openai-auth.models.json"),
+    &path.join("codex.models.json"),
     &Catalog { account: credential.account.clone(), fetched: now(), models: response.models },
   )
   .map_err(Failure::from)
@@ -490,7 +489,7 @@ pub fn begin(config: Option<&Path>) -> Result<Status, String> {
           if canceled.load(Ordering::Relaxed) {
             return Err(Failure::from("Sign-in canceled"));
           }
-          save(&path.join("openai-auth.json"), &credential)?;
+          save(&path.join("codex.json"), &credential)?;
           credential
         }
         None => credential(&path).await?,

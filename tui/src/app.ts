@@ -846,7 +846,7 @@ export class App {
     session.on("shared", this.shared);
     session.on("confirm", this.confirm);
     session.on("authentication", this.authentication);
-    session.on("openaiModels", this.openaiModels);
+    session.on("codexModels", this.codexModels);
     this.keymap = keymapOf(renderer);
     this.layersOff = this.layers();
     this.parts = new Parts(session.host.directory, this.partsChanged);
@@ -6255,8 +6255,10 @@ export class App {
     );
   }
   /** The models of the roster and of the catalog under their providers, with the one the chain uses marked. */
-  models = (): void => this.pickModels();
-  private openaiModels = (): void => this.pickModels("openai-auth");
+  models = (): void => {
+    this.pick("model", "Model", "The chain sends its next prompt to this model.");
+  };
+  private codexModels = (): void => this.pickModels("codex");
   private pickModels(provider?: string): void {
     void this.session
       .reloadCatalog()
@@ -6264,7 +6266,7 @@ export class App {
         if (!this.closed)
           this.pick(
             "model",
-            provider ? "OpenAI models" : "Model",
+            provider ? "Codex models" : "Model",
             provider
               ? "These models use your ChatGPT subscription."
               : "The chain sends its next prompt to this model.",
@@ -6275,14 +6277,14 @@ export class App {
   }
   private authenticationOpen = false;
   private authenticationUrl = "";
-  private authentication = (status: import("furb").OpenaiAuthInfo): void => {
+  private authentication = (status: import("furb").CodexAuthInfo): void => {
     if (status.state !== "waiting" || !status.url) {
       if (this.authenticationOpen) this.closeOverlay();
       return;
     }
     const url = status.url;
     this.openPalette(
-      "Sign in to OpenAI",
+      "Sign in to Codex",
       [
         {
           label: "Open browser",
@@ -6300,7 +6302,7 @@ export class App {
           label: "Cancel sign-in",
           detail: "Keep using the current model",
           run: async () => {
-            await this.session.host.openaiAuth("cancel");
+            await this.session.host.codexAuth("cancel");
           },
         },
       ],
@@ -6310,7 +6312,7 @@ export class App {
     if (this.authenticationUrl !== url) {
       this.authenticationUrl = url;
       void openFile(url).catch(() => {
-        this.session.notice = "Open the sign-in link to connect OpenAI.";
+        this.session.notice = "Open the sign-in link to connect Codex.";
         this.render();
       });
     }
@@ -6319,7 +6321,7 @@ export class App {
     void this.session.host
       .providers()
       .then((choices) => {
-        const order = ["openai-auth", "claude-cli", "openai", "local"];
+        const order = ["codex", "claude-cli", "openai", "local"];
         const rank = (name: string) => (order.includes(name) ? order.indexOf(name) : order.length);
         choices.sort((one, other) => rank(one.name) - rank(other.name) || one.name.localeCompare(other.name));
         this.openPalette(
@@ -6328,7 +6330,7 @@ export class App {
             ...choices.map((one) => ({
               label: one.name,
               detail:
-                one.name === "openai-auth"
+                one.name === "codex"
                   ? one.enabled && one.models > 0
                     ? `Choose from ${one.models} models on your ChatGPT subscription`
                     : "Connect your ChatGPT subscription"
@@ -6337,18 +6339,18 @@ export class App {
                     : `${one.enabled ? "Remove" : "Add"} provider, ${one.models} models available`,
               mark: this.current(one.enabled),
               run: () =>
-                one.name === "openai-auth" && one.enabled && one.models > 0
-                  ? this.openaiModels()
+                one.name === "codex" && one.enabled && one.models > 0
+                  ? this.codexModels()
                   : this.action(
-                      `/provider ${one.enabled && !(one.name === "openai-auth" && one.models === 0) ? "remove" : "add"} ${one.name}`,
+                      `/provider ${one.enabled && !(one.name === "codex" && one.models === 0) ? "remove" : "add"} ${one.name}`,
                     ),
             })),
             ...choices
-              .filter((one) => one.name === "openai-auth" && one.enabled)
+              .filter((one) => one.name === "codex" && one.enabled)
               .map(() => ({
-                label: "Disable openai-auth",
+                label: "Disable codex",
                 detail: "Stop offering ChatGPT subscription models in this project",
-                run: () => this.action("/provider remove openai-auth"),
+                run: () => this.action("/provider remove codex"),
               })),
             {
               label: "Add a custom provider",
@@ -8191,7 +8193,7 @@ export class App {
     this.session.off("shared", this.shared);
     this.session.off("confirm", this.confirm);
     this.session.off("authentication", this.authentication);
-    this.session.off("openaiModels", this.openaiModels);
+    this.session.off("codexModels", this.codexModels);
     for (const off of this.layersOff) off();
     this.partKeysOff?.();
     this.parts.dispose();

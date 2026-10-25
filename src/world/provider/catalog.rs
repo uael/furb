@@ -204,7 +204,7 @@ impl Catalog {
     let server = SERVER.get_or_init(|| Server::named(env).map(Arc::new)).clone();
     let cached = cache().map(|at| at.join("models.json"));
     let mut catalog = Catalog::of(listed(cached.as_ref()), Claude::found(), server, env);
-    catalog.providers.push((super::auth::NAME.to_owned(), Vec::new(), false));
+    catalog.providers.push((super::codex::NAME.to_owned(), Vec::new(), false));
     catalog
   }
 
