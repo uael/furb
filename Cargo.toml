@@ -60,11 +60,15 @@ name = "door"
 path = "docs/examples/rust/door.rs"
 
 [features]
+# The counting allocator of monty as the global allocator of the program that links the crate, which the memory
+# bound of the sandbox needs: without it the sandbox counts no byte, and only the operations that monty checks
+# before they allocate are bound. A program that links the crate and names an allocator of its own leaves it off.
+allocator = []
 # The python binding: the same crate, reached from python. It links no interpreter of its own, which is what an
 # extension module is, so the module feature is on only where maturin builds the wheel.
-python = ["dep:pyo3"]
+python = ["dep:pyo3", "allocator"]
 extension-module = ["python", "pyo3/extension-module"]
-typescript = ["dep:napi", "dep:napi-derive", "dep:napi-build"]
+typescript = ["dep:napi", "dep:napi-derive", "dep:napi-build", "allocator"]
 
 [dependencies]
 # The sandbox the engine runs in, and its type checker, which is the gate of the
@@ -73,6 +77,8 @@ typescript = ["dep:napi", "dep:napi-derive", "dep:napi-build"]
 monty = { git = "https://github.com/uael/monty", rev = "75287c98" }
 monty-type-checking = { git = "https://github.com/uael/monty", rev = "75287c98" }
 monty-types = { git = "https://github.com/uael/monty", rev = "75287c98" }
+# The allocator that counts each byte the program asks for, which is how the interpreter reads its memory.
+monty-alloc = { git = "https://github.com/uael/monty", rev = "75287c98" }
 # A whole number past 64 bits, which a host hands in as its digits.
 num-bigint = "0.4"
 # The record: one fact per line, as JSON, whose numbers are read before anything rounds them. The catalog of models
