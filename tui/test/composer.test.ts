@@ -1,5 +1,6 @@
 import { afterAll, expect, setSystemTime, test } from "bun:test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RGBA } from "@opentui/core";
 import { setRendererCapabilities } from "@opentui/core/testing";
@@ -801,8 +802,7 @@ test("prompt-history suggestions render and accept by keyboard at 80 by 24", () 
       const shown = await frame();
       expect(shown).toContain("prompt history · Tab to use");
       expect(shown).toContain("summarize the issue");
-      const root = process.env.TMPDIR;
-      if (!root) throw new Error("The test has no scratch directory.");
+      const root = process.env.TMPDIR ?? tmpdir();
       const folder = join(root, "promptdoors");
       await mkdir(folder, { recursive: true });
       const captured = screen.captureSpans();
@@ -830,8 +830,7 @@ test("prompt-history navigation renders at 160 by 48 and does not trap multiline
       expect(app.composer.plainText).toBe("deploy the service");
       const shown = await frame();
       expect(shown).toContain("prompt history · Tab to use");
-      const root = process.env.TMPDIR;
-      if (!root) throw new Error("The test has no scratch directory.");
+      const root = process.env.TMPDIR ?? tmpdir();
       const folder = join(root, "promptdoors");
       await mkdir(folder, { recursive: true });
       const captured = screen.captureSpans();
