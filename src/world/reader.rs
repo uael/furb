@@ -23,6 +23,8 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
+use sha2::{Digest, Sha256};
+
 use crate::{
   fact::{Fact, named},
   value::{Fault, IS, Object, ObjectRef, entry, field},
@@ -44,6 +46,11 @@ pub struct Retold {
   pub logged: bool,
   /// The facts, in the order that the life said them.
   pub facts: Vec<Object>,
+  /// The count of the entries of the record.
+  pub entries: usize,
+  /// The sha256 of the last entry of the record, in the plain form that the record keeps, and nothing for a record
+  /// with no entry.
+  pub last: Option<String>,
 }
 
 /// What the record at a path tells, read with no lease and changed in nothing.
@@ -51,14 +58,20 @@ pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
   let path = path.as_ref();
   let record = kept(path)?;
   let (made, version) = (made(&record), version(&record));
+  let (entries, last) = (record.len(), record.last().map(digest));
   if let Some(facts) = logged(path)? {
-    return Ok(Retold { made, version, logged: true, facts });
+    return Ok(Retold { made, version, logged: true, facts, entries, last });
   }
   let facts = record
     .iter()
     .filter_map(|entry| Some(entry.as_ref().items()?.first()?.to_owned()))
     .collect::<Vec<_>>();
-  Ok(Retold { made, version, logged: false, facts: told(&facts) })
+  Ok(Retold { made, version, logged: false, facts: told(&facts), entries, last })
+}
+
+/// The sha256 of an entry of a record, in the plain form that the record keeps.
+fn digest(entry: &Object) -> String {
+  format!("{:x}", Sha256::digest(crate::wire::record(entry.as_ref()).to_string()))
 }
 
 /// A fact that the reader says: its kind, what it is about, and its words.

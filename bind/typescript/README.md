@@ -181,7 +181,9 @@ act, the call makes the act. The record's
 `.session.json` companion holds the directory, the model and the effort that the host chose last, and no stream,
 since a stream lives only while its reply runs. File snapshots append to `.changes.jsonl`;
 `session.changes.read` loads a page of them, and throws a `DamagedJournal` when the page holds a line that is no
-change. `session.changes.repair()` writes the journal again with each change that it can read, and
+change, and `session.changes.readable` loads a page and leaves out each line that is no change.
+`session.changes.repair()` reads the whole file again, writes the journal again with each change that it can read,
+and says how many it kept and how many lines it removed, as `{ kept, removed }`.
 `session.changes.renew()` starts a new journal and keeps the damaged one beside it. Keep both companions with the JSONL
 record.
 

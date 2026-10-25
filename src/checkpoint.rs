@@ -77,6 +77,17 @@ def _lives():
     chains.append(f"chain{len(chains) + 1}")
   asked = [get(c) for c in chains] + [x for c in chains for x in transcript(c) if question(x) and x[0] != "chain"]
   opened = [x[1] for x in asked if x[0] == "prompt" and not over(x[1])]
+  runs = sorted((x for x in asked if x[0] == "run" and not over(x[1]) and get(x[4])), key=lambda x: _number(x[1]))
+  waits = {x[2]: x[4] for x in asked if x[0] == "wants" and not over(x[1])}
+  resumed, dropped = [], set()
+  for x in runs:
+    maker = get(x[4])[2]
+    kind = (get(maker) or ("",))[0]
+    if maker == OPERATOR or kind == "chain" or kind == "prompt" and not over(maker) and maker not in dropped:
+      resumed.append(x)
+      if (get(waits.get(x[1], "")) or ("",))[0] == "prompt":
+        dropped.add(waits[x[1]])
+  opened = [one for one in opened if one not in dropped]
   live = {ROOT} | {scope(one) for one in opened}
   values, lost, named = {}, {}, set(opened)
   for c in sorted(live, key=_number):
@@ -91,11 +102,12 @@ def _lives():
       else:
         lost[c].append(name)
   live |= {get(one)[1] if get(one)[0] == "chain" else scope(one) for one in named}
-  return asked, sorted(live, key=_number), named, values, lost
+  live = sorted(live, key=_number)
+  return asked, live, named, values, lost, [x for x in resumed if scope(x[1]) in live]
 
 
 def checkpoint(define, floor):
-  asked, live, named, values, lost = _lives()
+  asked, live, named, values, lost, resumed = _lives()
   defined = {}
   for c in live:
     words = [define(w) for r, w in program(c).items() if (get(r) or ("", "", ""))[2] != "extensions"]
@@ -143,17 +155,22 @@ def checkpoint(define, floor):
   for kind, n in counts.items():
     take(kind, n)
   for c in live:
+    again = [x for x in resumed if scope(x[1]) == c]
+    said = {x[1]: x[3] for x in transcript(c) if x[0] == "ready"}
     word = "\n".join(
       [
         defined.get(c, ""),
         *(f"{name} = {shown}" for name, shown in values[c]),
         "for x in [x for x in transcript(scope(acting())) if x[0] == 'carried'][-1:]:",
-        "  say('prefix', x[1], [*transcript(x[1], 'module')[-1:], *x[3], *transcript(x[1], 'run')[-1:]])",
+        "  say('prefix', x[1], [*transcript(x[1], 'module')[-1:], *x[3], *transcript(x[1], 'stand')[-1:],",
+        "    *transcript(x[1], 'pause'), *transcript(x[1], 'run')[-1:]])",
         '  debug(t"{'
         + repr(
-          f"A new build goes on from a checkpoint. It lost {lost[c] or 'no name'}, cut {[x for x in cut if scope(x) == c] or 'no act'}, and each word that ran: run again what the work still needs."
+          f"A new build goes on from a checkpoint. It lost {lost[c] or 'no name'}, and it cut {[x for x in cut if scope(x) == c] or 'no act'}."
+          + (f" It runs again from its top each word that ran: {[x[4] for x in again]}." if again else "")
         )
         + '}")',
+        *(f"with site.set({get(x[4])[2]!r}):\n  rung({said.get(x[4], x[5])!r}, on={c!r})" for x in again),
       ]
     ).strip("\n")
     turns = [
@@ -161,6 +178,8 @@ def checkpoint(define, floor):
       for x in transcript(c)
       if x[0] not in ("module", "carried") and _plain(x) and (not question(x) or x[0] == "reply" or x[1] in carried)
     ]
+    held = {ROOT, *live, *carried, *(x[1] for x in turns if question(x))}
+    turns = [x for x in turns if x[0] not in ("started", "done") or x[1] in held]
     counts["rung"] = counts.get("rung", 0) + 1
     counts["gate"] = counts.get("gate", 0) + 1
     entries += [

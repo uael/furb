@@ -8,12 +8,23 @@ import type {
   ImageAttachment,
   LiveAct,
   Engine as Native,
+  Repaired,
   SetupInfo,
   Stream,
   Turn,
 } from "furb";
 import type { Measure } from "furb/life";
-import { buildOf, framed, type Hello, hostPlace, type Place, PROTOCOL } from "./hosting.ts";
+import {
+  buildOf,
+  framed,
+  type Hello,
+  hostPlace,
+  type Place,
+  PROTOCOL,
+  type Role,
+  reachOf,
+  type Served,
+} from "./hosting.ts";
 import type { EngineOptions } from "./models.ts";
 import { type Carry, isRecorded, type Reading } from "./reading.ts";
 import type { ActRow, FollowUp } from "./session.ts";
@@ -143,11 +154,21 @@ export class HostView extends EventEmitter implements Plain {
   }
   /** A request of the worker: the method of one of its targets, the session, its console, or the library, which
    * answers what the host reads of the life. */
-  private ask<T>(target: "session" | "console" | "library", method: string, ...args: unknown[]): Promise<T> {
+  private ask<T>(
+    target: "session" | "console" | "library" | "host",
+    method: string,
+    ...args: unknown[]
+  ): Promise<T> {
     return this.request(target, method, args) as Promise<T>;
   }
   /** Whether the model of an actor takes an image, as the catalog of the crate says. */
   sees = (actor: string) => this.ask<boolean>("library", "sees", actor);
+  /** What this window does in the life, as the hello of its host gave it: a window that reads changes nothing. */
+  role: Role = "write";
+  /** The addresses at which other operators reach the life over the network, to read or to write. The first serve
+   * opens the door of the host at the address that it is given, host:port or a port, on 127.0.0.1 and a free port by
+   * default, and each later one gives the same addresses. */
+  serve = (address = "") => this.ask<Served>("host", "serve", address);
   /** The models the catalog of the crate offers, each as its name, its efforts and its window. */
   catalog = () => this.ask<[string, string[], number][]>("library", "catalog");
   /** What the first run checks of this machine, and nothing in the demo, which needs no model. */
@@ -173,8 +194,9 @@ export class HostView extends EventEmitter implements Plain {
   netChanges = (writes: string[] | null) => this.ask<FileChange[]>("library", "net", writes);
   /** The change of each file of the branch against main, as git holds it in the directory of the session. */
   branchChanges = () => this.ask<FileChange[]>("library", "branch");
-  /** The journal of file changes written again with each change that it holds, and the count of lines it lost. */
-  repairChanges = () => this.ask<number>("library", "repairChanges");
+  /** The journal of file changes written again with each change that it holds, and the counts of changes kept and of
+   * lines removed. */
+  repairChanges = () => this.ask<Repaired>("library", "repairChanges");
   /** A new journal of file changes, and the path that the damaged one is kept at. */
   renewChanges = () => this.ask<string>("library", "renewChanges");
   /** An act whole, with all that a command printed, and nothing when the life holds no such act. */
@@ -290,17 +312,26 @@ class Link {
 }
 
 /** The life of a record, in a host of its own when the options ask it and a socket serves, or in a worker of the
- * window. A recorded life runs nothing, so it stays in the window. */
+ * window. A recorded life runs nothing, so it stays in the window. A window that names the address of a host on the
+ * network attaches to that host, and keeps its view at its own record. */
 export async function openEngine(options: EngineOptions): Promise<{ engine: Engine; host: HostView }> {
+  if (options.attach) {
+    const { host, port, key } = reachOf(options.attach);
+    return attach(options, () => dial(host, port), key);
+  }
   const place =
     options.host && options.record && !isRecorded(options.record) ? hostPlace(options.record) : undefined;
-  return place ? attach(options, place) : inWindow(options);
+  return place ? attach(options, () => reach(options, place), "", true) : inWindow(options);
 }
 
 /** The life in a worker of the window, which ends with the window. */
 async function inWindow(options: EngineOptions): Promise<{ engine: Engine; host: HostView }> {
   const worker = new Worker(new URL("worker.ts", import.meta.url).href, { type: "module" });
-  const link = new Link();
+  const link = new Link((target) =>
+    target === "host"
+      ? Promise.reject(new Error("This life runs in its window, so no other operator reaches it."))
+      : undefined,
+  );
   link.send = (message) => worker.postMessage(message);
   worker.onmessage = ({ data }) => link.receive(data);
   worker.onerror = (event) => {
@@ -317,6 +348,20 @@ async function inWindow(options: EngineOptions): Promise<{ engine: Engine; host:
     throw error;
   }
   return { engine: link.engine(root), host: link.host };
+}
+
+/** A connection to a host on the network, which fails with the reason when no host answers there. */
+function dial(host: string, port: number): Promise<Socket> {
+  return new Promise((resolve, reject) => {
+    const socket = createConnection({ host, port });
+    socket.once("connect", () => {
+      socket.removeAllListeners("error");
+      resolve(socket);
+    });
+    socket.once("error", (error) =>
+      reject(new Error(`No host of a life answers at ${host}:${port}: ${error.message}`)),
+    );
+  });
 }
 
 /** A connection to the socket at a path, and nothing when no host answers there. */
@@ -379,10 +424,16 @@ const TAKEOVER = 60000;
 
 /** The life in a host of its own, which outlives the window. A dispose of the window detaches it, and the life goes
  * on; an end ends the life. When the host goes away with the life open, the window attaches again, to a host that it
- * starts again when none answers, and reads the acts from the start when it is another host. A window that finds a
- * host of another build takes it over: the host ends the life, and the window starts a host of its own build, which
- * opens the life again on the same record. */
-async function attach(options: EngineOptions, place: Place): Promise<{ engine: Engine; host: HostView }> {
+ * starts again when none answers, and reads the acts from the start when it is another host. Its hello gives the key
+ * of the window, which a host on the network asks. A window of a host of this machine, which takes, takes over a host
+ * of another build: the host ends the life, and the window starts a host of its own build, which opens the life again
+ * on the same record. */
+async function attach(
+  options: EngineOptions,
+  reachHost: () => Promise<Socket>,
+  key = "",
+  takes = false,
+): Promise<{ engine: Engine; host: HostView }> {
   let socket: Socket | undefined;
   const link: Link = new Link((target, method) => {
     if (target !== "session" || method !== "dispose") return undefined;
@@ -396,10 +447,15 @@ async function attach(options: EngineOptions, place: Place): Promise<{ engine: E
   let reaching: Promise<void> | undefined;
   const hello = async (): Promise<Hello> => {
     for (let took = false; ; took = true) {
-      const held = await reach(options, place);
+      const held = await reachHost();
       socket = held;
+      // The record of a host on the network stands on another machine, or is the record of another operator, so the
+      // window keeps its view at its own record.
       const send = framed(held, (data: Message) => {
-        if (socket === held) link.receive(data);
+        if (socket !== held) return;
+        link.receive(
+          options.attach && data.state ? { ...data, state: { ...data.state, record: options.record } } : data,
+        );
       });
       link.send = send;
       held.on("close", () => {
@@ -417,11 +473,11 @@ async function attach(options: EngineOptions, place: Place): Promise<{ engine: E
       held.on("end", () => held.destroy());
       const build = await mine;
       const said = (await link.request("host", "hello", [
-        { window: process.pid, protocol: PROTOCOL, build },
+        { window: process.pid, protocol: PROTOCOL, build, key },
       ])) as Hello;
       // A host that this window started after a takeover keeps its build, so two windows of two builds that open
       // the life at once do not take it over from each other with no end.
-      if (!took && said.build !== build) {
+      if (takes && !took && said.build !== build) {
         socket = undefined;
         link.send = undefined;
         await takeOver(held, send, said, build);
@@ -433,6 +489,7 @@ async function attach(options: EngineOptions, place: Place): Promise<{ engine: E
           `The host of ${said.record} speaks the protocol ${said.protocol}, and this window ${PROTOCOL}. End the life in a window of its build first.`,
         );
       }
+      link.host.role = said.role ?? "write";
       return said;
     }
   };
