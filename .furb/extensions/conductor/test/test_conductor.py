@@ -122,7 +122,12 @@ class Round:
     ns.update(cwd=lambda: str(tmp), get=self.facts.get, over=lambda name: name in self.done, prompt=self.prompt)
     ns.update(peek=lambda name, waiting=None: self.done.get(name, waiting), read=self.read, write=self.write)
     ns.update(transcript=lambda on="", of="": [], paused=lambda name: False, scope=lambda name: self.chain)
-    ns.update(acting=lambda: "rung1", wake=lambda name: None, module=lambda on="": self.modules.get(on, {}))
+    ns.update(
+      acting=lambda: "rung1",
+      wake=lambda name: None,
+      span=lambda lo, hi: None,
+      module=lambda on="": self.modules.get(on, {}),
+    )
     ns.update(chain=lambda label="", source="": f"chain-{label}", rung=self.rung)
     exec(compile(IMPORT.sub("", SOURCE), str(HERE / "conductor.py"), "exec"), ns)  # noqa: S102
     self.real_hire = ns["hire"]
@@ -597,7 +602,11 @@ def stacked(conductor: Round, tmp_path: Path, clash: bool = False) -> dict[str, 
   commit("base.txt", "base\n", "base")
   git("push", "-q", "origin", "main", cwd=tmp_path, env=env)
   shas = {}
-  for branch, name, text in (("w/parent", "p.txt", "one\n"), ("w/kid", "k.txt", "kid\n"), ("w/deep", "d.txt", "deep\n")):
+  for branch, name, text in (
+    ("w/parent", "p.txt", "one\n"),
+    ("w/kid", "k.txt", "kid\n"),
+    ("w/deep", "d.txt", "deep\n"),
+  ):
     git("checkout", "-q", "-b", branch, cwd=tmp_path, env=env)
     if branch == "w/kid" and clash:
       name, text = "p.txt", "kid\n"
@@ -625,6 +634,15 @@ def stacked(conductor: Round, tmp_path: Path, clash: bool = False) -> dict[str, 
 def history(tmp_path: Path, conductor: Round, branch: str) -> list[str]:
   out = git("log", "--format=%s", branch, cwd=tmp_path / "origin.git", env=conductor.env)
   return out.splitlines()
+
+
+CHECKS = ["checked"] * 6
+
+
+def branch(conductor: Round, name: str = "w/k") -> None:
+  subprocess.run(["git", "init", "-q", "-b", name], cwd=conductor.tmp, env=conductor.env, check=True)
+  conductor.say(r"pr view --json number", '{"number": 311}')
+  conductor.say(r"pr create", "https://github.com/o/r/pull/9\n")
 
 
 @POSIX
@@ -756,6 +774,19 @@ async def test_a_merge_rebases_the_child_onto_main_and_pushes_it(conductor: Roun
 
 @POSIX
 @JQ
+async def test_pr_creates_a_new_pr_when_the_branch_held_only_a_merged_one(conductor: Round) -> None:
+  branch(conductor)
+  got = await conductor.ns["pr"](
+    "feat(tui): Show records", "It matters.", ["It works."], CHECKS, where=str(conductor.tmp)
+  )
+  assert got.code == 0
+  log = conductor.log()
+  assert "pr create" in log
+  assert "pr edit" not in log
+
+
+@POSIX
+@JQ
 async def test_a_rebase_that_conflicts_pushes_nothing_and_leaves_the_child_to_a_fixer(
   conductor: Round, tmp_path: Path
 ) -> None:
@@ -790,3 +821,18 @@ async def test_a_grandchild_follows_the_rebased_child(conductor: Round, tmp_path
   assert history(tmp_path, conductor, "w/kid") == ["kid", "parent (#7)", "base"]
   assert history(tmp_path, conductor, "w/deep") == ["deep", "kid", "parent (#7)", "base"]
   assert conductor.heard == []
+
+
+@POSIX
+@JQ
+async def test_pr_edits_the_open_pr_of_the_branch(conductor: Round) -> None:
+  branch(conductor)
+  conductor.say(r"pr list --state open --head w/k", '[{"number": 7}]')
+  conductor.say(r"pr view 7 --json url", '{"url": "https://github.com/o/r/pull/7"}')
+  got = await conductor.ns["pr"](
+    "feat(tui): Show records", "It matters.", ["It works."], CHECKS, where=str(conductor.tmp)
+  )
+  assert got.code == 0
+  log = conductor.log()
+  assert "pr edit 7 --title" in log
+  assert "pr create" not in log
