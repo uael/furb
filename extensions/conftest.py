@@ -133,3 +133,43 @@ def webbed(at: Path, answers: dict[str, Text]) -> tuple[str, list[tuple]]:
   heard."""
   heard: list[tuple] = []
   return extended("web", at, lambda _: surfed(answers, heard))[1], heard
+
+
+def carried(about: str, prompts: Sequence[tuple] = (("prompt70", "int", "Go on.", ""),)) -> dict:
+  """What the World of the suite carries of a chain of another record under the carry about: a tell, a reply whose
+  word binds k, its done and a tell, each about reply0 and said by the carry, and the open prompts of a model that it is given."""
+  turn = ("assistant", "k = 7", (1, 2, 3, 4, 0.5), None)
+  turns = [
+    ("tell", "reply0", about, ["#prompt4\nprompt4_message = 'Count.'"]),
+    ("reply", "reply0", about, "chain1", "opus"),
+    ("done", "reply0", about, turn),
+    ("tell", "reply0", about, ["#rung9 advance on prompt4"]),
+  ]
+  return {
+    "record": "/old.jsonl",
+    "entries": 9,
+    "digest": "ab" * 32,
+    "logged": True,
+    "turns": turns,
+    "prompts": [*prompts],
+  }
+
+
+def carrying(heard: list[tuple], prompts: Sequence[tuple]) -> World:
+  """The carry of the suite, in memory: an ear that takes each carry, keeps it in heard, and says it done with what
+  carried gives with these prompts."""
+  while True:
+    a = yield
+    if a[0] == "carry" and engine.question(a):
+      heard.append(a)
+      yield "done", a[1], carried(a[1], prompts)
+
+
+def importing(
+  at: Path, prompts: Sequence[tuple] = (("prompt70", "int", "Go on.", ""),)
+) -> tuple[Sand, str, list[tuple]]:
+  """A life that runs the extension compaction on the carry of the suite with these prompts: the World, the root and
+  what the carry heard."""
+  heard: list[tuple] = []
+  sand, root = extended("compaction", at, lambda _: carrying(heard, prompts))
+  return sand, root, heard

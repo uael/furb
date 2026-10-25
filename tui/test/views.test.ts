@@ -170,9 +170,7 @@ test("a damaged journal of file changes says what broke, with no word of the par
       expect(shown).not.toContain("JSON");
       await click("Repair the journal");
       await until(session, () => session.notice.startsWith("The journal is repaired"));
-      expect(session.notice).toBe(
-        "The journal is repaired: 1 damaged line is removed, and each change that it held stays.",
-      );
+      expect(session.notice).toBe("The journal is repaired: 0 changes kept, 1 line removed.");
       expect(session.error).toBe("");
       expect(await frame()).not.toContain("The journal of file changes is damaged");
     },

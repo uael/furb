@@ -17,7 +17,7 @@ import {
   shapes,
   WORK,
 } from "furb";
-import { type ActIndex, type Ask, aimed, beside, type Desk, desk } from "furb/life";
+import { type ActIndex, type Ask, aimed, beside, type Desk, desk, failed } from "furb/life";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { expandHome, fileReferences, fromDirectory, projectFiles, shortenHome } from "./files.ts";
 import { dollars } from "./format.ts";
@@ -40,8 +40,6 @@ export type ActRow = LiveAct & {
   /** How many milliseconds the act took, when this life ran it. */
   took?: number;
 };
-/** What a command gave: what it printed to each stream, and its exit code once it is over. */
-export type Exit = { stdout?: { content: string }; stderr?: { content: string }; code?: number };
 /** The net change of a file in the scope of the review, with its hunks. */
 export type ShownChange = Reviewed;
 /** What a rewind to a point gives back of the files: for each file that a write changed after the point, the change
@@ -74,16 +72,6 @@ export const statusLabels: Record<SessionStatus, string> = {
 };
 /** Whether an act is at work: it lives, no pause holds it, and its kind is one whose work takes time. */
 export const working = (act: ActRow): boolean => !act.done && !act.paused && WORK.includes(act.kind);
-/** Whether an act failed: a rung that the gate refused or whose run raised, or an act done with an exception other
- * than a cancel. */
-export function failed(act: ActRow): boolean {
-  if (act.run) return act.run.status === "failed" && !cancelled(act);
-  const value = act.value;
-  return Boolean(
-    value && typeof value === "object" && "is" in value && "args" in value && value.is !== "CancelledError",
-  );
-}
-
 /** The phase of an act that a view of the whole life reads: whether it is done or held, when it began and ended, and
  * how its rung ran. The output that a command streams is no part of it. */
 function phaseOf(act?: ActRow): string {
@@ -172,14 +160,6 @@ function placed(index: Index, act: ActRow): void {
   if (act.kind !== "rung" || act.by !== "operator") return;
   const word = index.words.get(act.on);
   if (!word || (index.at.get(word.id) ?? 0) <= (index.at.get(act.id) ?? 0)) index.words.set(act.on, act);
-}
-
-/** Whether an act was cancelled: a rung whose run ended with a cancel, or an act done with a cancel. A cancel is what
- * the operator asked for, so it is no failure. */
-export function cancelled(act: ActRow): boolean {
-  if (act.run) return act.run.status === "failed" && /^CancelledError\b/.test(act.run.reason ?? "");
-  const value = act.value;
-  return Boolean(value && typeof value === "object" && "is" in value && value.is === "CancelledError");
 }
 
 /** The running work that a cancel of an act ends, and the chains that it stands on. */
@@ -412,6 +392,7 @@ export class Session extends EventEmitter {
       this.queueHeld = this.queued.length > 0;
       if (damage) this.notice = damage;
     }
+    if (host.role === "read") this.notice = "This window reads the life only, so it changes nothing in it.";
     // A view that an older release saved, and that this release has no more, opens as the feed.
     if (!views.includes(this.view)) this.view = "feed";
     host.on("change", this.changed);
@@ -492,6 +473,10 @@ export class Session extends EventEmitter {
     this.errors[`${this.selected}:${this.view}`] = value;
     if (!value) delete this.damaged[`${this.selected}:${this.view}`];
   }
+  /** Whether the journal of file changes is known to be damaged, whatever the view that is shown. */
+  get journalDamaged(): boolean {
+    return Object.values(this.damaged).some(Boolean);
+  }
   /** Whether the error of each view of a chain is a damaged journal of file changes. */
   private readonly damaged: Record<string, boolean> = {};
   /** Why the journal of file changes cannot be read, which the view shown offers to repair; empty when it reads. */
@@ -501,17 +486,28 @@ export class Session extends EventEmitter {
 
   /** The journal of file changes written again with each change that it holds, and the view read again. */
   async repairJournal(): Promise<void> {
-    const lost = await this.host.repairChanges();
+    this.damagedOnly();
+    const { kept, removed } = await this.host.repairChanges();
     await this.journalMended(
-      `The journal is repaired: ${lost} damaged ${lost === 1 ? "line is" : "lines are"} removed, and each change that it held stays.`,
+      `The journal is repaired: ${kept} ${kept === 1 ? "change" : "changes"} kept, ${removed} ${removed === 1 ? "line" : "lines"} removed.`,
     );
   }
   /** A new journal of file changes, with the damaged one kept beside it, and the view read again. */
   async renewJournal(): Promise<void> {
+    this.damagedOnly();
     const aside = await this.host.renewChanges();
     await this.journalMended(`A new journal is started. The damaged one is kept at ${shortenHome(aside)}.`);
   }
+  /** A repair or a new journal acts on a journal that a view found damaged. */
+  private damagedOnly(): void {
+    if (!this.journalDamaged) throw new Error("The journal of file changes is not damaged.");
+  }
   private async journalMended(notice: string): Promise<void> {
+    // The journal is one for the whole session, so each view that found it damaged reads it again.
+    for (const key of Object.keys(this.damaged)) {
+      delete this.errors[key];
+      delete this.damaged[key];
+    }
     this.error = "";
     this.changesRead = "";
     this.notice = notice;
@@ -586,11 +582,18 @@ export class Session extends EventEmitter {
           const writes = this.scope === "branch" ? null : this.writes();
           const read = `${this.scope}:${this.host.changes}:${writes ? `${writes[0]}:${writes.length}:${writes.at(-1)}` : ""}`;
           if (read !== this.changesRead) {
-            const changes = await (this.scope === "branch"
-              ? this.host.branchChanges()
-              : this.host.netChanges(this.scope === "life" ? null : writes));
-            this.changes = changes.map(reviewed);
-            this.changesRead = read;
+            try {
+              const changes = await (this.scope === "branch"
+                ? this.host.branchChanges()
+                : this.host.netChanges(this.scope === "life" ? null : writes));
+              this.changes = changes.map(reviewed);
+              this.changesRead = read;
+            } catch (error) {
+              // A damaged journal is the failure of the view of changes alone, and it never stops the session: the
+              // view says it and offers to repair it, and the next read tries again.
+              if ((error as { name?: unknown } | undefined)?.name !== "DamagedJournal") throw error;
+              this.fail(error);
+            }
           }
         }
         // The findings of the gate that refused the last word of the operator on the chain shown.
@@ -649,7 +652,9 @@ export class Session extends EventEmitter {
    * a question waits for the operator, a reopened record holds work, or what the acts do. A pause of the chain holds
    * it while none of its acts runs or asks. */
   status(chain?: string): SessionStatus {
-    if (chain ? this.error : Object.values(this.errors).some(Boolean)) return "error";
+    // A damaged journal of file changes fails the view that shows it, and not the session that the list marks.
+    if (chain ? this.error : Object.entries(this.errors).some(([key, error]) => error && !this.damaged[key]))
+      return "error";
     if (this.queueHeld && this.queued.length) return "blocked";
     if (this.host.pending.size) return "paused";
     if (!chain && this.host.prompts.size) return "blocked";
