@@ -15,16 +15,20 @@ async function recorded(): Promise<Session> {
   return new Session(engine, host, true);
 }
 
-test("the threads of a real life count the chains at work and say what each does in a few words, and the feed folds the earlier steps of a long thread into one line that a click opens", async () =>
+test("the chain picker reaches the working chains of a recorded life, and folded earlier steps open without running work", async () =>
   // One test holds both, since each test runs in a process of its own and two demo libraries at once save one list.
   composing(
-    async ({ session, app, frame, click }) => {
+    async ({ session, app, screen, frame, click }) => {
       await session.refresh();
       const shown = await frame();
-      const lines = shown.split("\n");
-      expect(lines.find((line) => line.includes("Chains"))).toContain("◉ 21");
-      // A thread at work says what its command does, and not the command.
-      expect(lines.some((line) => /◉ feed +runs bun/.test(line))).toBe(true);
+      expect(shown).toContain("⌃B switch");
+      app.chains();
+      await frame();
+      await screen.mockInput.typeText("feed");
+      const picker = await frame();
+      expect(picker).toContain("feed");
+      expect(picker).toContain("◉");
+      app.closeOverlay();
       // The conductor runs one long word, under which its messages pile up: the earlier ones fold into one line.
       const folds = () => app.scroll.getChildren().filter((node) => node.id.startsWith("more-")).length;
       expect(folds()).toBeGreaterThan(0);
