@@ -35,6 +35,60 @@ An **actor** is a model and an effort, which is how hard the model thinks: `off`
 - `--roster` gives more models that a life can ask, one name each time. With no `--roster`, a life can ask each
   model that furb offers. A prompt to a model that the roster does not hold is refused.
 
+## Provider settings
+
+Run `/providers` in the TUI to add or remove a provider for the current project. A built-in provider uses the
+credential in the environment. To add a server that uses OpenAI chat completions, enter:
+
+```text
+/provider add office http://127.0.0.1:8080/v1 qwen3 262144 OFFICE_KEY
+```
+
+The arguments are the provider name, URL, model id, context window and, when needed, the name of the environment
+variable that holds its key. The optional last argument selects the protocol, which is `chat` when unsaid.
+Use `openai` for OpenAI Responses, `anthropic` for Anthropic Messages, or `gemini` for Google Gemini.
+Use `-` for the key name when the server needs no key and a protocol follows it.
+`/provider remove office` disables the provider and keeps its settings for a later add.
+
+The same settings can be written in `config.json` in the user config directory, or in `.furb/config.json` in the
+project. The project wins for each field that it gives. Other config fields stay as they are.
+
+```json
+{
+  "providers": {
+    "openai": false,
+    "office": {
+      "protocol": "chat",
+      "url": "http://127.0.0.1:8080/v1",
+      "key_env": "OFFICE_KEY",
+      "models": {
+        "qwen3": { "window": 262144, "output": 32768, "reasoning": true, "images": false }
+      }
+    }
+  }
+}
+```
+
+A built-in provider can be `true`, `false`, or an object that overrides its URL, credential or models. A custom
+provider needs a URL and at least one model. Each model needs a positive window. Its output limit is one quarter
+of that window when unsaid. `reasoning` and `images` are false when unsaid. The optional `key` field gives a key
+directly; `key_env` wins when both are present. A custom server with neither field sends no key. An object can set
+`enabled` to false to disable a provider and keep its other fields. The names `claude-cli` and `local` can be false
+to remove the command line or the server that the environment names from the roster.
+
+An optional model `cost` gives `input`, `output`, `cache_read` and `cache_write`, in dollars for one million tokens.
+A custom model has no dollar price when `cost` is unsaid, so a dollar ceiling cannot bound its cost.
+
+Run `/reload` after an external edit. The running life reads the provider settings and its thinking limit again,
+then stands on the new roster. Existing model calls finish with the settings they started with. New calls use the
+new settings. If the default model was removed, the first remaining model becomes the default, or the operator
+when no model remains. An invalid config shows its error and leaves the current roster in use.
+
+Every host can request the same reload with `engine.stand()`. The model list functions `models`, `model` and
+`setup` read the current settings and accept an optional project directory and user config directory. A host that
+gave an explicit roster keeps that limit: it can choose an added model when it opens a life with that model in
+its roster.
+
 ## Thinking
 
 `MAX_THINKING_TOKENS` gives the most tokens that a model can think in one turn, as it does for Claude Code, and 0

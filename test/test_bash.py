@@ -155,20 +155,25 @@ async def test_a_signal_that_ends_the_command_gives_the_code_128_and_the_number_
 
 
 async def test_the_command_ends_once_its_shell_exited_and_its_streams_closed(tmp_path: Path) -> None:
-  """The command ends once its shell exited and its streams closed, or once its shell exited and no process of its group lives, as when a process that left the group holds a stream, with the code of the shell and what its streams wrote."""
+  """The command ends once its shell exited and its streams closed, or once its shell exited and a short drain passed with a stream open, as when a process that the command started holds a stream, with the code of the shell and what its streams wrote."""
   live, root = machine(tmp_path)
-  behind = await engine.bash("(sleep 1 && echo x) &", on=root)
+  begun = time.monotonic()
+  held = await engine.bash("echo before; sleep 20 & echo $!", on=root)
+  took = time.monotonic() - begun
+  if sys.platform != "win32":
+    os.kill(int(held.stdout.content.splitlines()[-1]), signal.SIGKILL)
+  assert (held.code, held.stdout.content.startswith("before\n")) == (0, True)
+  assert took < 10
   if sys.platform == "win32":
     live.end()
-    assert (behind.code, behind.stdout.content) == (0, "x\n")
     return
   begun = time.monotonic()
   left = await engine.bash("perl -e 'use POSIX; setsid(); sleep 120' & echo $!", on=root)
   took = time.monotonic() - begun
   os.kill(int(left.stdout.content), signal.SIGKILL)
   live.end()
-  assert (behind.code, behind.stdout.content, left.code) == (0, "x\n", 0)
-  assert took < 120
+  assert left.code == 0
+  assert took < 10
 
 
 async def test_a_command_that_its_timeout_ended_tells_timed_out_and_its_timeout_in_its_header() -> None:

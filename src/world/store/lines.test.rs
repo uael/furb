@@ -4,7 +4,7 @@ use std::{fs, path::PathBuf};
 
 use serde_json::json;
 
-use super::{kept, stamped};
+use super::{heads, kept, stamped};
 
 /// A record of its own for one test, which does not stand yet.
 fn place(name: &str) -> PathBuf {
@@ -43,4 +43,24 @@ fn a_line_whose_word_after_the_fact_is_no_time_is_invalid() {
   let at = place("invalid");
   fs::write(&at, "[[\"stand\",\"stand1\",\"operator\",\"chain1\"],\"noon\"]\n").unwrap();
   assert!(kept(&at).is_err());
+}
+
+#[test]
+fn the_heads_of_a_record_are_its_entries_of_some_kinds_in_order_and_no_other_line_is_parsed() {
+  let at = place("heads");
+  fs::write(
+    &at,
+    "[[\"made\",\"chain1\",\"store\",\"abc\",1],1]\n[[\"done\",\"bash1\",\"bash\", not json\n[[\"checkpoint\",\"chain1\",\"store\",{}],2]\n[[\"made\",\"chain1\",\"store\",\"abd\",1]]\n",
+  )
+  .unwrap();
+  let read = heads(&at, &["made", "checkpoint"]).unwrap();
+  let shown: Vec<String> = read.iter().map(|one| one.as_ref().py_repr()).collect();
+  assert_eq!(
+    shown,
+    [
+      "[['made', 'chain1', 'store', 'abc', 1]]",
+      "[['checkpoint', 'chain1', 'store', {}]]",
+      "[['made', 'chain1', 'store', 'abd', 1]]",
+    ]
+  );
 }

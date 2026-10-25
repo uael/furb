@@ -4,6 +4,13 @@ export const commands = {
   new: ["New session", "", "Start a fresh life"],
   watch: ["Watch a life", "", "Play a short life that asks no model and costs nothing"],
   model: ["Choose model", "[model]", "Choose the model that answers on this chain"],
+  providers: ["Providers", "", "Add or remove a provider for this project"],
+  provider: [
+    "Change provider",
+    "<add|remove> <name> [URL model window key_env protocol]",
+    "Save a provider in the project settings and use it now",
+  ],
+  reload: ["Reload settings", "", "Read provider settings again and update the standing of this life"],
   effort: ["Choose effort", "[level]", "Set the reasoning effort of the selected model"],
   shape: ["Response shape", "[type]", "Choose the result type of the next prompt"],
   theme: ["Color theme", "[name]", "Change the palette of every surface, or follow the terminal"],

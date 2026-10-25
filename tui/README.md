@@ -177,14 +177,16 @@ The first frame shows at once, before the TUI reads the record: the top line, an
 
 A view costs what it shows, and not what the life holds. A new fact makes the worker send only what changed of the
 chain shown, the session places only the acts that changed in its index, the feed reads only the steps of the thread
-that it shows, and the board and the list of chains read only the chains that can have changed. A change of the life
+that it shows, the turns of the chain shown are read from the last turn that changed, and the board and the list of
+chains read only the chains that can have changed. A record open to read holds of each file that it read or wrote and
+of each long output only what a row shows, and reads the rest from its file when the operator opens the act. A change of the life
 makes again only the cards of the acts that changed, so a frame of a long life takes about as long as a frame of a
 short one.
 
 `bun run bench` makes a recorded life at the weight of a real record, about 2.6 KB for each fact: one of about 160000
 facts, the size of a record of an orchestrator of two days, and one of a tenth of that. In each life it measures what
-a new fact costs, from the moment the view hears of it to the frame that shows it: a line of a command, a new act, and
-a token of a model. In the long life it measures the first frame, the frames while the feed scrolls and a command
+a new fact costs, from the moment the view hears of it to the frame that shows it: a line of a command, a new act, a
+paragraph told on the root chain, and a token of a model. In the long life it measures the first frame, the frames while the feed scrolls and a command
 streams, and the memory of a process that opened the life. The gates hold it on Linux, against measures of the same
 machine: the pace, the time that it takes to parse the facts of the long life, and the frames that the renderer draws
 with nothing to show. The warm first frame takes under 32 paces, the renderer draws at least 95 in each hundred of
@@ -256,6 +258,9 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/new` | Start a fresh life |
 | `/watch` | Play a short life that asks no model and costs nothing |
 | `/model [model]` | Choose the model that answers on this chain |
+| `/providers` | Add or remove a provider for this project |
+| `/provider <add|remove> <name> [URL model window key_env protocol]` | Save a provider in the project settings and use it now |
+| `/reload` | Read provider settings again and update the standing of this life |
 | `/effort [level]` | Set the reasoning effort of the selected model |
 | `/shape [type]` | Choose the result type of the next prompt |
 | `/theme [name]` | Change the palette of every surface, or follow the terminal |

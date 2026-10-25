@@ -169,6 +169,10 @@ try {
   app().models();
   await capture("06-models");
   app().closeOverlay();
+  app().providers();
+  await session.host.providers();
+  await capture("91-providers");
+  app().closeOverlay();
   app().effortPicker();
   await capture("07-effort");
   app().closeOverlay();
@@ -763,10 +767,10 @@ try {
   bare.setup = {
     claude: false,
     providers: [
-      { provider: "anthropic", env: ["ANTHROPIC_API_KEY"], offered: 0 },
-      { provider: "openai", env: ["OPENAI_API_KEY"], offered: 0 },
-      { provider: "google", env: ["GOOGLE_API_KEY", "GEMINI_API_KEY"], offered: 0 },
-      { provider: "openrouter", env: ["OPENROUTER_API_KEY"], offered: 0 },
+      { provider: "anthropic", env: ["ANTHROPIC_API_KEY"], offered: 0, enabled: true },
+      { provider: "openai", env: ["OPENAI_API_KEY"], offered: 0, enabled: true },
+      { provider: "google", env: ["GOOGLE_API_KEY", "GEMINI_API_KEY"], offered: 0, enabled: true },
+      { provider: "openrouter", env: ["OPENROUTER_API_KEY"], offered: 0, enabled: true },
     ],
   };
   await show(bare);

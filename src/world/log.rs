@@ -20,7 +20,7 @@
 use std::{
   collections::HashSet,
   fs::{File, OpenOptions},
-  io::Write,
+  io::{BufRead, BufReader, Write},
   path::{Path, PathBuf},
 };
 
@@ -28,11 +28,14 @@ use serde_json::Value;
 
 use crate::{
   ear::{Co, Ear, ear, hear},
-  fact::Fact,
+  fact::{Fact, named},
   value::{Fault, Object},
   wire::{outward, parsed},
   world::kept,
 };
+
+/// The start of the line that says the record kept an entry, as the ear writes it.
+const KEEP: &str = r#"["keep","","#;
 
 /// The ear of the log of the record at a path, which held a number of entries when the life opened: it hears every
 /// fact, and writes the log again from its first line.
@@ -194,45 +197,88 @@ impl Log {
 /// left short of an act that the record holds. A last line that a crash tore is left out.
 pub fn logged(path: impl AsRef<Path>) -> Result<Option<Vec<Object>>, Fault> {
   let path = path.as_ref();
-  let Ok(text) = std::fs::read_to_string(format!("{}.log", path.display())) else {
-    return Ok(None);
-  };
-  let mut lines = text.lines();
-  let head = lines.next().and_then(|one| serde_json::from_str::<Value>(one).ok());
-  let Some(mut entries) = head.and_then(|one| one.get("entries")?.as_u64()) else {
-    return Ok(None);
-  };
-  let mut facts = Vec::new();
-  let mut lines = lines.peekable();
-  while let Some(line) = lines.next() {
-    let Ok(fact) = parsed(line) else {
-      if lines.peek().is_none() && !text.ends_with('\n') {
-        break;
-      }
-      return Ok(None);
-    };
-    let held = fact.as_ref().items().unwrap_or_default();
-    if held.len() == 3 && held[0].as_str() == Some("keep") && held[1].as_str() == Some("") {
-      if held[2].as_int() != i64::try_from(entries + 1).ok() {
-        return Ok(None);
-      }
-      entries += 1;
-      continue;
-    }
-    facts.push(fact);
-  }
   let record = kept(path)?;
-  let shown: HashSet<String> = facts
+  let asked: HashSet<String> = record
     .iter()
-    .filter_map(|one| Fact::of(one.as_ref()))
+    .filter_map(|entry| Fact::of(*entry.as_ref().items()?.first()?))
     .filter(Fact::question)
     .map(|one| one.about().to_owned())
     .collect();
-  let whole = record.iter().all(|entry| {
-    let fact = entry.as_ref().items().and_then(|held| Fact::of(*held.first()?));
-    fact.is_none_or(|one| !one.question() || shown.contains(one.about()))
-  });
-  Ok((whole && usize::try_from(entries).ok() == Some(record.len())).then_some(facts))
+  if !agrees(path, record.len(), &asked) {
+    return Ok(None);
+  }
+  let Ok(text) = std::fs::read_to_string(format!("{}.log", path.display())) else {
+    return Ok(None);
+  };
+  let facts = text
+    .lines()
+    .skip(1)
+    .filter(|line| !line.starts_with(KEEP))
+    .map_while(|line| parsed(line).ok())
+    .collect();
+  Ok(Some(facts))
+}
+
+/// Whether the log of the record at a path agrees with a record of that many entries and of those questions, as
+/// [`logged`] reads it, which the caller read once.
+pub(crate) fn agrees(path: &Path, entries: usize, asked: &HashSet<String>) -> bool {
+  File::open(format!("{}.log", path.display()))
+    .is_ok_and(|file| agreed(BufReader::with_capacity(1 << 20, file), entries, asked.clone()))
+}
+
+/// Whether a log agrees with a record of that many entries and of those questions: its head counts the entries that
+/// the record held, its lines of keep count the others in order, each line is JSON but a last one that a crash tore,
+/// and it shows each question of the record. Each line is read from its head alone, one at a time, and no fact is
+/// made.
+fn agreed(mut lines: impl BufRead, record: usize, mut asked: HashSet<String>) -> bool {
+  let mut line = String::new();
+  let head = match lines.read_line(&mut line) {
+    Ok(_) => serde_json::from_str::<Value>(line.trim_end_matches('\n')).ok(),
+    Err(_) => return false,
+  };
+  let Some(mut entries) = head.and_then(|one| one.get("entries")?.as_u64()) else {
+    return false;
+  };
+  loop {
+    line.clear();
+    match lines.read_line(&mut line) {
+      Ok(0) => break,
+      Ok(_) => {}
+      Err(_) => return false,
+    }
+    let ended = line.ends_with('\n');
+    let text =
+      line.strip_suffix('\n').map(|one| one.strip_suffix('\r').unwrap_or(one)).unwrap_or(&line);
+    if serde_json::from_str::<serde::de::IgnoredAny>(text).is_err() {
+      if !ended {
+        break;
+      }
+      return false;
+    }
+    if let Some(at) = text.strip_prefix(KEEP).and_then(|one| one.strip_suffix(']')) {
+      if at.parse::<u64>().ok() != entries.checked_add(1) {
+        return false;
+      }
+      entries += 1;
+    } else if let Some(name) = question(text) {
+      asked.remove(&name);
+    }
+  }
+  asked.is_empty() && usize::try_from(entries).ok() == Some(record)
+}
+
+/// The name of the question that a line of a log shows, read from its first two words, as `["bash","bash3",`. A
+/// line whose head holds an escape is parsed whole.
+fn question(line: &str) -> Option<String> {
+  let rest = line.strip_prefix("[\"")?;
+  let (kind, rest) = rest.split_once('"')?;
+  let about = rest.strip_prefix(",\"").and_then(|one| one.split_once('"')).map(|one| one.0);
+  if kind.contains('\\') || about.is_some_and(|one| one.contains('\\')) {
+    let fact = parsed(line).ok()?;
+    let fact = Fact::of(fact.as_ref())?;
+    return fact.question().then(|| fact.about().to_owned());
+  }
+  about.filter(|one| named(one, kind)).map(str::to_owned)
 }
 
 #[cfg(test)]
