@@ -583,6 +583,50 @@ def test_the_rulings_of_the_owner_stand_in_conducting_in_his_words(conductor: Ro
   assert conductor.ROOM == {"opus": 2, "sonnet": 3}
 
 
+def stacked(conductor: Round, tmp_path: Path, clash: bool = False) -> dict[str, str]:
+  env, origin = conductor.env, tmp_path / "origin.git"
+  git("init", "-q", "--bare", str(origin), cwd=tmp_path, env=env)
+  git("init", "-q", "-b", "main", cwd=tmp_path, env=env)
+  git("remote", "add", "origin", str(origin), cwd=tmp_path, env=env)
+
+  def commit(name: str, text: str, message: str) -> None:
+    (tmp_path / name).write_text(text, encoding="utf-8")
+    git("add", name, cwd=tmp_path, env=env)
+    git("commit", "-q", "-m", message, cwd=tmp_path, env=env)
+
+  commit("base.txt", "base\n", "base")
+  git("push", "-q", "origin", "main", cwd=tmp_path, env=env)
+  shas = {}
+  for branch, name, text in (("w/parent", "p.txt", "one\n"), ("w/kid", "k.txt", "kid\n"), ("w/deep", "d.txt", "deep\n")):
+    git("checkout", "-q", "-b", branch, cwd=tmp_path, env=env)
+    if branch == "w/kid" and clash:
+      name, text = "p.txt", "kid\n"
+    commit(name, text, branch[2:])
+    git("push", "-q", "origin", branch, cwd=tmp_path, env=env)
+    shas[branch] = git("rev-parse", "HEAD", cwd=tmp_path, env=env).strip()
+  git("checkout", "-q", "main", cwd=tmp_path, env=env)
+  git("merge", "--squash", "-q", "w/parent", cwd=tmp_path, env=env)
+  git("commit", "-q", "-m", "parent (#7)", cwd=tmp_path, env=env)
+  if clash:
+    commit("p.txt", "main\n", "main moves")
+  git("push", "-q", "origin", "main", cwd=tmp_path, env=env)
+  shas["main"] = git("rev-parse", "HEAD", cwd=tmp_path, env=env).strip()
+  shas["squash"] = git("rev-parse", "HEAD" if not clash else "HEAD^", cwd=tmp_path, env=env).strip()
+  conductor.say(r"compare/", '{"files": [{"filename": "b.py"}]}')
+  conductor.say(r"pr view 7 --json files", '{"files": [{"path": "a.py"}]}')
+  conductor.say(r"pr view 7 --json mergeCommit", json.dumps({"mergeCommit": {"oid": shas["squash"]}}))
+  conductor.say(r"pr view 7 --json state", '{"state": "MERGED"}')
+  conductor.prs[7] = conductor.pr(n=7, head="w/parent", sha=shas["w/parent"], checks=("SUCCESS",), names=["the hooks"])
+  conductor.prs[8] = conductor.pr(n=8, head="w/kid", base="w/parent", sha=shas["w/kid"])
+  conductor.prs[9] = conductor.pr(n=9, head="w/deep", base="w/kid", sha=shas["w/deep"])
+  return shas
+
+
+def history(tmp_path: Path, conductor: Round, branch: str) -> list[str]:
+  out = git("log", "--format=%s", branch, cwd=tmp_path / "origin.git", env=conductor.env)
+  return out.splitlines()
+
+
 @POSIX
 @JQ
 def test_a_worker_runs_only_sonnet_or_opus_at_medium_or_high(conductor: Round) -> None:
@@ -693,3 +737,56 @@ def test_the_round_follows_the_compaction_of_its_orchestrator(conductor: Round, 
   assert calls == ["tend", "sweep"]
   assert conductor.lead == {"home": "chain2"}
   assert new.lead == {"home": "chain2"}
+
+
+@POSIX
+@JQ
+async def test_a_merge_rebases_the_child_onto_main_and_pushes_it(conductor: Round, tmp_path: Path) -> None:
+  shas = stacked(conductor, tmp_path)
+  del conductor.prs[9]
+  await conductor.land(conductor.prs[7], False)
+  assert history(tmp_path, conductor, "w/kid") == ["kid", "parent (#7)", "base"]
+  assert git("rev-parse", "w/kid^", cwd=tmp_path / "origin.git", env=conductor.env).strip() == shas["squash"]
+  assert "pr edit 8 --base main" in conductor.log()
+  assert "update-branch" not in conductor.log()
+  assert conductor.heard == []
+  assert conductor.prompts == []
+  assert len(git("worktree", "list", cwd=tmp_path, env=conductor.env).splitlines()) == 1
+
+
+@POSIX
+@JQ
+async def test_a_rebase_that_conflicts_pushes_nothing_and_leaves_the_child_to_a_fixer(
+  conductor: Round, tmp_path: Path
+) -> None:
+  shas = stacked(conductor, tmp_path, clash=True)
+  del conductor.prs[9]
+  await conductor.land(conductor.prs[7], False)
+  assert git("rev-parse", "w/kid", cwd=tmp_path / "origin.git", env=conductor.env).strip() == shas["w/kid"]
+  assert len(conductor.heard) == 1
+  assert conductor.heard[0].startswith("#8 was not rebased onto main, exit 2: w/kid conflicts with main")
+  assert len(git("worktree", "list", cwd=tmp_path, env=conductor.env).splitlines()) == 1
+  kid = conductor.pr(n=8, head="w/kid", mergeable="CONFLICTING", base="main", sha=shas["w/kid"])
+  assert await conductor.mend(kid, 1e9, False) == f"#8 {shas['w/kid']} conflicts with its base"
+  assert [key for key, _ in conductor.hired] == ["fix8"]
+
+
+@POSIX
+@JQ
+async def test_a_child_that_moved_since_the_sweep_is_left_as_it_is(conductor: Round, tmp_path: Path) -> None:
+  shas = stacked(conductor, tmp_path)
+  conductor.prs[8]["sha"] = "0" * 40
+  del conductor.prs[9]
+  await conductor.land(conductor.prs[7], False)
+  assert git("rev-parse", "w/kid", cwd=tmp_path / "origin.git", env=conductor.env).strip() == shas["w/kid"]
+  assert conductor.heard[0].startswith("#8 was not rebased onto main, exit 4: w/kid moved since the sweep")
+
+
+@POSIX
+@JQ
+async def test_a_grandchild_follows_the_rebased_child(conductor: Round, tmp_path: Path) -> None:
+  stacked(conductor, tmp_path)
+  await conductor.land(conductor.prs[7], False)
+  assert history(tmp_path, conductor, "w/kid") == ["kid", "parent (#7)", "base"]
+  assert history(tmp_path, conductor, "w/deep") == ["deep", "kid", "parent (#7)", "base"]
+  assert conductor.heard == []
