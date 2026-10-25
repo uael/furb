@@ -6935,7 +6935,7 @@ export class App {
           0,
           chains.findIndex((chain) => chain.id === w.selected),
         ),
-        note: "Each row keeps its full path. → reads it whole. /tree shows the branches.",
+        note: "Search chains. → full path. /tree opens hierarchy.",
       },
     );
   }
