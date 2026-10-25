@@ -1579,7 +1579,9 @@ export class Session extends EventEmitter {
       }
       case "model": {
         if (!argument) throw new Error("Use /model followed by a model name.");
-        const name = await this.host.model(argument);
+        const name = this.roster.some(([candidate]) => candidate === argument)
+          ? argument
+          : await this.host.model(argument);
         const entry = this.roster.find(([candidate]) => candidate === name);
         // A model of the catalog that the roster does not hold joins the roster of the next life, which the session
         // opens on its record at once, and which the model goes to.

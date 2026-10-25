@@ -321,6 +321,26 @@ test("a model of the catalog that the roster does not hold joins the session, wh
   }
 });
 
+test("a provider added during a life can be selected by its full model name", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-workspaces-"));
+  const library = new Workspaces(new Preferences(join(directory, "config/ui.json")), {
+    claude: join(directory, "claude"),
+  });
+  try {
+    const entry = await library.create(await library.add(directory), "Providers");
+    const session = entry.session;
+    if (!session) throw new Error("The session did not open.");
+    await session.submit("/provider add subscription http://127.0.0.1:8741/v1 gpt-6.1-sol 500000");
+    expect(session.roster.map(([name]) => name)).toContain("subscription:gpt-6.1-sol");
+    session.host.model = async () => null;
+    await session.submit("/model subscription:gpt-6.1-sol");
+    expect(session.actor).toBe("subscription:gpt-6.1-sol");
+  } finally {
+    await library.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("the list of saved sessions comes before their replays, and a row shows its state when its replay lands", () =>
   withLibrary(async ({ directory, open }) => {
     let library = open();
