@@ -1564,7 +1564,7 @@ export class App {
         return hint && typeof command === "string" ? [{ hint, command }] : [];
       });
     const group = offered[0]?.hint[2];
-    const keys: readonly Offer[] = [
+    let keys: readonly Offer[] = [
       ...(group === "" && w.paused
         ? ([["/wake", "wake the chain", () => this.action("/wake")]] as const)
         : []),
@@ -1578,6 +1578,23 @@ export class App {
           ],
         ),
     ];
+    const state: Part[] = [
+      [moving && !retry ? `${spin()} ` : mark, color],
+      [label, moving ? c.text : c.muted],
+    ];
+    const available = this.feedWidth - Bun.stringWidth(plain(state)) - space.between * 2;
+    const keyWidth = ([chord, action]: Offer) => Bun.stringWidth(`${chord} ${action}`);
+    if (keys.reduce((sum, key, index) => sum + keyWidth(key) + (index ? 3 : 0), 0) > available) {
+      // Keep whole chords and actions. Help reaches the controls that do not fit.
+      const help: Offer = ["F1", "help", () => this.help()];
+      let left = available - keyWidth(help) - 3;
+      const fitted = keys.filter((key) => {
+        if (key[0] === "F1" || keyWidth(key) > left) return false;
+        left -= keyWidth(key) + 3;
+        return true;
+      });
+      keys = available >= keyWidth(help) ? [...fitted, help] : [];
+    }
     const buttons = keys.map(([chord, action], index): Part[] => [
       [index ? "   " : "", c.faint],
       [chord, c.muted],
@@ -1587,10 +1604,6 @@ export class App {
     const notice = w.error ? "" : w.notice;
     // The state stays in the footer, and a notice stands after it, cut at its end where the footer has no room for it
     // beside the keys.
-    const state: Part[] = [
-      [moving && !retry ? `${spin()} ` : mark, color],
-      [label, moving ? c.text : c.muted],
-    ];
     const room =
       this.feedWidth - Bun.stringWidth(plain(hints)) - Bun.stringWidth(plain(state)) - space.between * 2;
     const tokens = this.tokens();
@@ -4843,7 +4856,15 @@ export class App {
       `Threads · ${w.label}`,
       list.map((thread) => ({
         label: `${thread.act.id}  ${thread.title || "Untitled thread"}`,
-        detail: thread.resolved ? "finished" : thread.asks.length ? "needs you" : thread.state,
+        detail: thread.resolved
+          ? "done"
+          : thread.asks.length
+            ? "ask"
+            : thread.state === "held"
+              ? "held"
+              : thread.state === "failed"
+                ? "fail"
+                : "run",
         status: thread.resolved ? "done" : thread.state === "asks" ? "blocked" : "working",
         run: () => this.inspectThread(thread),
         menu: () => this.threadMenu(thread),

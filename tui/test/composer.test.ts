@@ -592,6 +592,14 @@ test("the footer offers the keys of the top layer that acts, and a click on one 
       screen.mockInput.pressEscape();
       await until(session, () => session.paused);
       expect(await footer()).toEndWith("/wake wake the chain   ⌃P commands   F1 help");
+      screen.resize(80, 24);
+      app.switchView("loom");
+      screen.mockInput.pressKey("g", { meta: true });
+      const narrow = await footer();
+      expect(narrow).toContain("↑↓←→ move");
+      expect(narrow).toEndWith("F1 help");
+      await click("F1 help");
+      expect(await frame()).toContain("Keys and commands");
     },
     undefined,
     true,

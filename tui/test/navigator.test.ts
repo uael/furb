@@ -58,6 +58,13 @@ for (const { width, height } of [
         expect(await capture("thread-menu")).toContain("Reopen and reply");
         expect(session.thread).toBe(targetBeforeInspect);
         app.closeOverlay();
+        if (width === 80) {
+          app.switchView("loom");
+          screen.mockInput.pressKey("g", { meta: true });
+          const footer = await capture("navigation-footer");
+          expect(footer.trimEnd().split("\n").at(-1)).toContain("F1 help");
+          app.switchView("main");
+        }
         const questions = [];
         for (let index = 1; index <= 3; index++) {
           questions.push(
