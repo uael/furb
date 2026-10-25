@@ -87,10 +87,11 @@ test("a cancel that reaches running work says how many acts it ends and on which
       await session.refresh();
       expect(live(session, [thread, ...workers])).toBe(true);
       await session.command(`/cancel ${thread}`);
-      await click("Cancel it");
-      await until(session, () =>
+      const ended = until(session, () =>
         session.notice.startsWith(`${thread} is cancelled, and 5 acts under it on `),
       );
+      await click("Cancel it");
+      await ended;
       await session.refresh();
       expect([thread, ...workers].some((id) => live(session, [id]))).toBe(false);
     },
