@@ -2,9 +2,9 @@ import { expect, test } from "bun:test";
 import { checks } from "../src/setup.ts";
 
 const providers = [
-  { provider: "openai", env: ["OPENAI_API_KEY"], offered: 0 },
-  { provider: "anthropic", env: ["ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY"], offered: 0 },
-  { provider: "google", env: ["GOOGLE_API_KEY", "GEMINI_API_KEY"], offered: 0 },
+  { provider: "openai", env: ["OPENAI_API_KEY"], enabled: true, offered: 0 },
+  { provider: "anthropic", env: ["ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY"], enabled: true, offered: 0 },
+  { provider: "google", env: ["GOOGLE_API_KEY", "GEMINI_API_KEY"], enabled: true, offered: 0 },
 ];
 
 test("a machine with no model gives a fix for each check that is missing, and says that no model answers", () => {
@@ -30,7 +30,7 @@ test("a check that stands says what it found, with no fix", () => {
   );
   expect(found.map(({ state, found, fix }) => [state, found, fix])).toEqual([
     ["ready", "Found. Your Claude plan answers.", undefined],
-    ["ready", "A key for openai.", undefined],
+    ["ready", "Models available from openai.", undefined],
     ["ready", "2 models at http://localhost:11434.", undefined],
     ["ready", "9 models answer.", undefined],
   ]);

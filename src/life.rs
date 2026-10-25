@@ -266,13 +266,33 @@ impl Opening {
   fn provider(self) -> Result<(Box<dyn Ear>, world::Search), Fault> {
     let works = self.works();
     let stall = self.stall.and_then(|seconds| Duration::try_from_secs_f64(seconds).ok());
-    let catalog = Catalog::load().claude(self.claude.map(PathBuf::from), stall);
+    let claude = self.claude.map(PathBuf::from);
+    let config = self.config.map(PathBuf::from);
+    let directory = self.directory;
+    let catalog = Catalog::load()
+      .claude(claude.clone(), stall)
+      .configured(Path::new(&directory), config.as_deref())
+      .map_err(Fault::refused)?;
     let asks: world::Hosted =
       Arc::new(|_, _| Box::pin(async { Err("a life that inspects asks no model".to_owned()) }));
     let answer = if works { self.answer.map(|one| one.0) } else { Some(asks) };
     let (roster, actor) = (self.roster.as_deref(), self.actor.as_deref());
     let mut provider =
-      catalog.provider(self.directory, roster, actor, answer).map_err(Fault::refused)?;
+      catalog.provider(directory.clone(), roster, actor, answer.clone()).map_err(Fault::refused)?;
+    let names = self.roster;
+    let preferred = self.actor;
+    provider = provider.refreshing(Arc::new(move || {
+      let fresh = Catalog::load()
+        .claude(claude.clone(), stall)
+        .configured(Path::new(&directory), config.as_deref())?;
+      let offered = names.as_ref().map(|names| {
+        names.iter().filter(|name| fresh.find(name).is_some()).cloned().collect::<Vec<_>>()
+      });
+      let actor = preferred.as_deref().filter(|name| fresh.roster(Some(&[]), Some(name)).is_ok());
+      let candidate =
+        fresh.provider(directory.clone(), offered.as_deref(), actor, answer.clone())?;
+      Ok(candidate.into_settings())
+    }));
     if let Some(images) = self.images {
       provider = provider.images(images);
     }

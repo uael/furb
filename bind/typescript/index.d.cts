@@ -317,8 +317,10 @@ export declare function memory(config: string): NativeEar
 /**
  * The model the catalog knows by a name, as `provider:id` or as an id that one model alone holds, which for a model of
  * the local server holds a colon, whether it offers that model or not; nothing when it knows none.
+ * It reads the user and project settings, with the current directory and the user config directory when unsaid.
+ * Invalid settings give a refusal.
  */
-export declare function model(name: string): ModelInfo | null
+export declare function model(name: string, directory?: string | undefined | null, config?: string | undefined | null): ModelInfo | null
 
 /**
  * A model of the catalog, as a host reads it: its name, its efforts, its window in tokens, whether it takes an
@@ -333,10 +335,11 @@ export interface ModelInfo {
 }
 
 /**
- * The models the catalog of this machine offers, with the claude command line at a path when it is given, each
- * named as the catalog names it.
+ * The models that the user and project settings offer, with the claude command line at a path when it is given.
+ * The directory is the current directory when unsaid, and config is the user config directory when unsaid.
+ * Invalid settings give a refusal.
  */
-export declare function models(claude?: string | undefined | null): Array<ModelInfo>
+export declare function models(claude?: string | undefined | null, directory?: string | undefined | null, config?: string | undefined | null): Array<ModelInfo>
 
 /** An image a message names: its text in the message, its name, and its uri. */
 export interface Named {
@@ -460,13 +463,15 @@ export interface Part {
 export declare function parts(project: string): Array<Part>
 
 /**
- * A provider of the network as a first run checks it: its name, the names of its credential in the environment, and
- * how many of its models the catalog offers.
+ * A provider as a first run checks it: its name, the names of its credential in the environment, whether the
+ * settings enable it, and how many of its models the catalog offers.
  */
 export interface ProviderInfo {
   provider: string
   env: Array<string>
   offered: number
+  /** Whether the provider settings enable this provider. */
+  enabled: boolean
 }
 
 /**
@@ -489,14 +494,15 @@ export declare const ROOT: string
 export declare function scratch(record: string): string | null
 
 /**
- * What a first run checks of this machine, with the claude command line at a path when it is given. It asks the
- * local server for what it lists, so it waits for that server.
+ * What a first run checks with the user and project settings, and the claude command line at a path when it is
+ * given. It asks the local server for what it lists, so it waits for that server. The directory is the current
+ * directory when unsaid, config is the user config directory when unsaid, and invalid settings give a refusal.
  */
-export declare function setup(claude?: string | undefined | null): SetupInfo
+export declare function setup(claude?: string | undefined | null, directory?: string | undefined | null, config?: string | undefined | null): SetupInfo
 
 /**
- * What a first run checks of this machine, as a host reads it: whether the catalog found the claude command line,
- * each provider of the network with the names of its credential and how many of its models the catalog offers, and
+ * What a first run checks of this machine, as a host reads it: whether the claude command line offers a model,
+ * each configured provider with the names of its credential and how many of its models the catalog offers, and
  * the local server that `FURB_LOCAL_URL` names, with the models it offers or why it listed none.
  */
 export interface SetupInfo {

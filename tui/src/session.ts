@@ -1432,6 +1432,33 @@ export class Session extends EventEmitter {
     const command = text.slice(1, space < 0 ? undefined : space);
     const argument = space < 0 ? "" : text.slice(space + 1).trim();
     switch (command) {
+      case "reload":
+        await this.host.reload();
+        await this.reloadCatalog();
+        this.notice = "Provider settings reloaded. The life stands on the new settings.";
+        break;
+      case "provider": {
+        const [verb, name, url, id, window, key_env, protocol] = argument.split(/\s+/);
+        if (!name || !["add", "remove"].includes(verb ?? ""))
+          throw new Error(
+            "Use /provider add <name> [URL model window key_env protocol], or /provider remove <name>.",
+          );
+        const value =
+          verb === "remove"
+            ? false
+            : url
+              ? {
+                  url,
+                  protocol: protocol || "chat",
+                  ...(key_env ? { key_env } : {}),
+                  models: { [id || ""]: { window: Number(window) } },
+                }
+              : true;
+        await this.host.provider(name, value);
+        await this.reloadCatalog();
+        this.notice = `Provider ${name} ${verb === "remove" ? "removed" : "added"}. The settings are saved in .furb/config.json.`;
+        break;
+      }
       case "name":
         this.sessionName = argument || basename(this.host.directory);
         this.save();
@@ -1640,6 +1667,13 @@ export class Session extends EventEmitter {
       default:
         throw new Error(`Unknown command /${command}. Press F1 for the command list.`);
     }
+  }
+
+  private async reloadCatalog(): Promise<void> {
+    this.catalog = await this.host.catalog();
+    this.catalogRead = true;
+    this.setup = await this.host.setup();
+    await this.refresh();
   }
 
   get cost(): number {

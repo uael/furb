@@ -563,6 +563,52 @@ fn scripted(at: &Path, words: &[&str]) -> Opening {
   }
 }
 
+#[test]
+fn a_stand_reloads_provider_settings_and_a_refused_reload_keeps_the_life() {
+  let at = place("provider-settings");
+  fs::create_dir_all(at.join("config")).unwrap();
+  fs::create_dir_all(at.join(".furb")).unwrap();
+  fs::write(
+    at.join("config/config.json"),
+    r#"{"providers":{"bench":{"url":"http://127.0.0.1:9/v1","models":{"one":{"window":65536}}}}}"#,
+  )
+  .unwrap();
+  let path = at.join(".furb/config.json");
+  fs::write(&path, r#"{"providers":{"claude-cli":false,"local":false}}"#).unwrap();
+  let (mut engine, _) = Opening {
+    extensions: Some(false),
+    snapshot: Some(false),
+    roster: None,
+    actor: Some("bench:one".to_owned()),
+    ..scripted(&at, &["close(23)", "close(29)"])
+  }
+  .boot::<String>([])
+  .unwrap();
+  let names = "close([a[0] for a in standing()[0] if str(a[0]).startswith('bench:')])";
+  assert_eq!(closed(&mut engine, names).py_repr(), "['bench:one']");
+  assert_eq!(
+    closed(&mut engine, "marker = 17\nclose(await prompt(int, to='bench:one'))").as_ref().as_int(),
+    Some(23)
+  );
+  fs::write(&path, r#"{"providers":{"bench":{"models":{"two":{"window":131072,"images":true}}}}}"#)
+    .unwrap();
+  engine.stand(verbs::Stand::default()).unwrap();
+  assert_eq!(closed(&mut engine, names).py_repr(), "['bench:two']");
+  assert_eq!(
+    closed(&mut engine, "close(marker + await prompt(int, to='bench:two'))").as_ref().as_int(),
+    Some(46)
+  );
+  fs::write(&path, r#"{"providers":{"bench":{"models":{"bad":{"window":0}}}}}"#).unwrap();
+  assert!(engine.stand(verbs::Stand::default()).is_err());
+  assert_eq!(closed(&mut engine, names).py_repr(), "['bench:two']");
+  assert_eq!(closed(&mut engine, "close(marker)").as_ref().as_int(), Some(17));
+  fs::write(&path, r#"{"providers":{"bench":false}}"#).unwrap();
+  engine.stand(verbs::Stand::default()).unwrap();
+  assert_eq!(closed(&mut engine, names).py_repr(), "[]");
+  drop(engine);
+  fs::remove_dir_all(at).unwrap();
+}
+
 /// The words of the model of the life of the corpus: the root writes, reads, runs a command, waits, reads the
 /// clock and chance, and asks a chain of its own, whose model answers in the second word.
 const WORK: [&str; 2] = [
