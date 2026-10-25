@@ -50,7 +50,6 @@ import {
   cancelled,
   chainThreads,
   condense,
-  doingOf,
   type Exit,
   FOLD,
   type Fold,
@@ -62,10 +61,8 @@ import {
   literals,
   makers,
   momentsOf,
-  nowOf,
   owedAt,
   type ProgramLine,
-  type RowState,
   stepLines,
   thread,
   threadProgram,
@@ -183,18 +180,6 @@ const statusMark = (status: SessionStatus): Part =>
       saved: [`${glyph.ring} `, c.faint],
     }) satisfies Record<SessionStatus, Part>
   )[status];
-/** The rows that a key moves the pointer of a list by, in the rewind tree and in a dialog. */
-/** The mark and the color of the state of a chain, as every view marks it. */
-const chainMarks: Record<RowState, [() => string, () => RGBA]> = {
-  asks: [() => glyph.asks, () => c.warning],
-  failed: [() => glyph.failed, () => c.danger],
-  working: [() => glyph.running, () => c.accent],
-  paused: [() => glyph.held, () => c.warning],
-  done: [() => glyph.done, () => c.success],
-  idle: [() => glyph.ring, () => c.faint],
-};
-/** The mark of a thread in the list of the threads of a chain, and its color: it asks the operator, a pause holds it,
- * it failed, it is resolved, or it runs. */
 /** The threads of the chain shown: in order, each by its id, and the thread of each message, by the id of the message. */
 type ThreadList = {
   acts: unknown;
@@ -228,22 +213,6 @@ const spell = (ms: number) =>
         : `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;
 /** How many rows of the feed a long message takes until a click opens it. */
 const MESSAGE_ROWS = 3;
-/** The lines of a text cut at its words to a width, at most a count of them, the last one cut where the text goes
- * on. */
-function wrapped(text: string, width: number, most: number): string[] {
-  const lines: string[] = [];
-  let line = "";
-  for (const word of text.split(/\s+/).filter(Boolean)) {
-    if (line && Bun.stringWidth(`${line} ${word}`) > width) {
-      lines.push(line);
-      line = word;
-    } else line = line ? `${line} ${word}` : word;
-  }
-  if (line) lines.push(line);
-  const kept = lines.slice(0, most);
-  if (lines.length > most) kept[most - 1] = clip(`${kept[most - 1]} …`, width);
-  return kept.map((one) => clip(one, width));
-}
 /** The color of the state of an act on a chip. */
 const chipColors: Record<Chip["state"], () => RGBA> = {
   running: () => c.accent,
@@ -347,6 +316,8 @@ interface Choice {
   status?: SessionStatus;
   /** The title of the part of the list that the choice opens, which the list shows above it. */
   heading?: string;
+  /** The actions of a row, opened by the menu button, right click or Right. */
+  menu?: () => void;
 }
 /** A value that the first argument of a command may take: what it means, whether it is the current one, whether the
  * command takes more after it, and the label and the heading that a picker shows it under. */
@@ -452,11 +423,9 @@ export class App {
   /** The keys of the App, as layers of the keymap of its renderer, and what takes each layer away again. */
   private readonly keymap: Keymap<Renderable, KeyEvent>;
   private readonly layersOff: (() => void)[];
-  /** The sidebar at the right: the session, its chains and its usage, then the workspaces, which scroll. */
+  /** The selected-chain navigator and its compact context summary. */
   private readonly rail: BoxRenderable;
-  private readonly railSession: BoxRenderable;
-  private readonly railHeading: BoxRenderable;
-  private readonly railSpaces: ScrollBoxRenderable;
+  private readonly railSession: ScrollBoxRenderable;
   private readonly railUsage: BoxRenderable;
   /** What the sidebar of the session drew last, which a frame that would draw the same leaves as it is. */
   private railKey = "";
@@ -470,16 +439,14 @@ export class App {
    * the list of a chain. */
   private railKeys = false;
   private railAt?: string;
-  /** The ids of the chains of the tree, in the order that the sidebar shows them, which the keys move through. */
+  /** The thread ids in the order that the keys move through them. */
   private railRows: string[] = [];
-  /** The first row of the list of the threads that the sidebar shows, which the wheel and the keys move. */
-  private railFrom = 0;
   /** The threads of the chain shown, read again only when the acts or the questions that wait change. */
   private threadList: ThreadList = { acts: undefined, owed: "", list: [], by: new Map(), of: new Map() };
   /** The lists of the sidebar that the operator unfolded: the finished chains, under the key finished, and the
    * archived sessions of a workspace, under its folder. */
   private readonly unfolded = new Set<string>();
-  /** The session or the workspace that the operator renames in its row, and the name typed so far. */
+  /** The item whose dialog takes its new name. */
   private renaming?: {
     item: SessionEntry | Workspace;
     value: string;
@@ -818,22 +785,19 @@ export class App {
       backgroundColor: c.panel,
       overflow: "hidden",
     });
-    this.railSession = this.box({ paddingX: space.between, gap: space.stack });
-    this.rail.add(this.railSession);
-    this.railHeading = this.row({ marginTop: space.section, paddingX: space.between });
-    this.rail.add(this.railHeading);
-    this.railSpaces = new ScrollBoxRenderable(renderer, {
-      id: "workspaces",
+    this.railSession = new ScrollBoxRenderable(renderer, {
+      id: "navigator",
       flexGrow: 1,
       flexShrink: 1,
       minHeight: 0,
       scrollX: false,
+      scrollY: true,
       backgroundColor: c.panel,
-      contentOptions: { paddingBottom: space.section },
+      contentOptions: { paddingX: space.between, paddingBottom: space.section },
     });
-    this.railSpaces.verticalScrollBar.visible = false;
-    this.railSpaces.horizontalScrollBar.visible = false;
-    this.rail.add(this.railSpaces);
+    this.railSession.verticalScrollBar.visible = false;
+    this.railSession.horizontalScrollBar.visible = false;
+    this.rail.add(this.railSession);
     // The usage of the chain stands at the foot of the sidebar, under a rule, where the list above it does not move it.
     this.railUsage = this.box({
       paddingX: space.between,
@@ -1187,8 +1151,14 @@ export class App {
     }
   }
 
+  private lastSize = "";
   render = (): void => {
     if (this.closed) return;
+    const size = `${this.renderer.width}x${this.renderer.height}`;
+    if (this.lastSize !== size) {
+      this.unhover();
+      this.lastSize = size;
+    }
     const w = this.session;
     this.parts.heard(w.written);
     motion.still = w.preferences.still;
@@ -1406,6 +1376,7 @@ export class App {
     const { provider, id: name } = modelName(model);
     const stash = w.stashes[w.draftKey];
     const prompt = w.mode === "prompt" && !w.editing && !pending;
+    const destination = !pending && w.thread ? w.thread : undefined;
     // The line spans the input but its bar and its padding.
     const room = this.feedWidth - 3;
     if (
@@ -1418,6 +1389,7 @@ export class App {
         w.shape,
         pending?.id,
         pending?.shape,
+        destination,
         stash,
         prompt,
         room,
@@ -1436,6 +1408,7 @@ export class App {
       gaps +
       (shown.chord ? 4 : 0) +
       Bun.stringWidth(`on ${w.label}`) +
+      (destination ? gaps + Bun.stringWidth(`reply ${destination}`) : 0) +
       (pending ? 2 * gaps + Bun.stringWidth(`answers ${pending.id}returns ${pending.shape}`) : 0) +
       (prompt ? gaps + Bun.stringWidth(name) : 0) +
       (shown.provider ? provider.length + 1 : 0) +
@@ -1469,6 +1442,16 @@ export class App {
       ],
       () => this.chains(),
     );
+    if (destination) {
+      gap();
+      button(
+        [
+          [w.host.reading ? "inspect " : "reply ", c.faint],
+          [destination, c.accent],
+        ],
+        () => void this.threadPicker(),
+      );
+    }
     if (pending) {
       gap();
       button(
@@ -1582,7 +1565,7 @@ export class App {
         return hint && typeof command === "string" ? [{ hint, command }] : [];
       });
     const group = offered[0]?.hint[2];
-    const keys: readonly Offer[] = [
+    let keys: readonly Offer[] = [
       ...(group === "" && w.paused
         ? ([["/wake", "wake the chain", () => this.action("/wake")]] as const)
         : []),
@@ -1596,6 +1579,23 @@ export class App {
           ],
         ),
     ];
+    const state: Part[] = [
+      [moving && !retry ? `${spin()} ` : mark, color],
+      [label, moving ? c.text : c.muted],
+    ];
+    const available = this.feedWidth - Bun.stringWidth(plain(state)) - space.between * 2;
+    const keyWidth = ([chord, action]: Offer) => Bun.stringWidth(`${chord} ${action}`);
+    if (keys.reduce((sum, key, index) => sum + keyWidth(key) + (index ? 3 : 0), 0) > available) {
+      // Keep whole chords and actions. Help reaches the controls that do not fit.
+      const help: Offer = ["F1", "help", () => this.help()];
+      let left = available - keyWidth(help) - 3;
+      const fitted = keys.filter((key) => {
+        if (key[0] === "F1" || keyWidth(key) > left) return false;
+        left -= keyWidth(key) + 3;
+        return true;
+      });
+      keys = available >= keyWidth(help) ? [...fitted, help] : [];
+    }
     const buttons = keys.map(([chord, action], index): Part[] => [
       [index ? "   " : "", c.faint],
       [chord, c.muted],
@@ -1605,10 +1605,6 @@ export class App {
     const notice = w.error ? "" : w.notice;
     // The state stays in the footer, and a notice stands after it, cut at its end where the footer has no room for it
     // beside the keys.
-    const state: Part[] = [
-      [moving && !retry ? `${spin()} ` : mark, color],
-      [label, moving ? c.text : c.muted],
-    ];
     const room =
       this.feedWidth - Bun.stringWidth(plain(hints)) - Bun.stringWidth(plain(state)) - space.between * 2;
     const tokens = this.tokens();
@@ -3296,38 +3292,6 @@ export class App {
     while (this.coloring.size || this.sourcePainting.size)
       await Promise.all([...this.coloring.values(), ...this.sourcePainting]);
   }
-  /** The loom that the threads of the sidebar read last, and what it was woven of, which a frame of the same life
-   * reads again. */
-  private woven?: { of: unknown[]; loom: Loom };
-  /** The loom of the chains of the life as it stands, each chain under the label that the operator gave it last. */
-  private lifeLoom(): Loom {
-    const w = this.session;
-    const of = [
-      w.version,
-      [...w.host.prompts.keys()].join(" "),
-      w.host.measures,
-      [...w.host.pending.keys()].join(" "),
-    ];
-    const same = this.woven?.of.every((one, at) => one === of[at]) ? this.woven.loom : undefined;
-    const loom =
-      same ??
-      weave({
-        acts: w.acts,
-        prompts: [...w.host.prompts.values()],
-        measures: w.host.measures,
-        folds: new Set(),
-        width: 0,
-        pending: w.host.pending,
-        label: (id) => id,
-        index: w.boardIndex,
-      });
-    this.woven = { of, loom };
-    // A chain that the operator names again keeps its loom, so each label is read again.
-    return {
-      ...loom,
-      rows: loom.rows.map((row) => (row.id === "operator" ? row : { ...row, label: w.labelOf(row.id) })),
-    };
-  }
   /** The view of the life that shows: main, the loom, or the graph. */
   /** The view of the life: the one that the preferences keep, or main in the mode of a screen reader,
    * which reads text in lines and no picture of the life in time. */
@@ -3756,12 +3720,17 @@ export class App {
       this.deskKey = "";
       return;
     }
-    const key = JSON.stringify([asks, ask?.id, w.selected, this.feedWidth, this.theme]);
+    const card = ask ? this.cards.get(ask.id)?.node : undefined;
+    const inFeed =
+      card &&
+      card.y >= this.scroll.viewport.y &&
+      card.y + card.height <= this.scroll.viewport.y + this.scroll.viewport.height;
+    const summary = ask && !inFeed ? clip(gist(ask.message), this.feedWidth - 18) : "";
+    const key = JSON.stringify([asks, ask?.id, summary, w.selected, this.feedWidth, this.theme]);
     if (key === this.deskKey) return;
     this.deskKey = key;
     this.deskBox.backgroundColor = c.panel;
     this.clear(this.deskBox);
-    const room = this.feedWidth - space.inset * 2;
     const head = this.row();
     const marks = this.row({ gap: 1 });
     head.add(marks);
@@ -3805,45 +3774,9 @@ export class App {
       ),
     );
     this.deskBox.add(head);
-    const lines = ask.message.split("\n").filter((line) => line.trim()).length;
-    const more = lines > 1 ? `  +${lines - 1} ${lines === 2 ? "line" : "lines"}` : "";
-    this.deskBox.add(
-      this.line(
-        [
-          [clip(shortenHomes(gist(ask.message)), room - Bun.stringWidth(more)), c.text],
-          [more, c.faint],
-        ],
-        c.text,
-        { truncate: true, run: () => this.question(ask) },
-      ),
-    );
-    const act = this.row({ gap: space.between });
-    if (ask.choices.length && ask.id === this.picking()?.id)
-      act.add(
-        this.text("Choose below with ↑↓ and Enter, or its number, or Other for your own words", c.faint),
-      );
-    else if (ask.choices.length) {
-      for (const choice of ask.choices)
-        act.add(
-          this.line([[choice, c.warning, bold]], c.warning, {
-            run: () => void w.answer(ask, choice).catch(this.report),
-          }),
-        );
-      act.add(this.text("or type it below", c.faint));
-    } else
-      act.add(
-        this.line(
-          [
-            ["Enter sends the input to ", c.faint],
-            [ask.id, c.muted],
-            [` as ${ask.shape}`, c.faint],
-            [asks.length > 1 ? "   ⌃A opens each in turn" : "   ⌃A opens it", c.faint],
-          ],
-          c.faint,
-          { truncate: true, flexShrink: 1 },
-        ),
-      );
-    this.deskBox.add(act);
+    head.add(this.text("  Details ⌃A", c.accent, { run: () => this.question(ask) }));
+    if (summary)
+      this.deskBox.add(this.line(summary, c.text, { truncate: true, run: () => this.question(ask) }));
   }
   /** The question whose values the input offers as a list in place of the box of the prompt: the question aimed, when
    * its shape is a choice, a Literal or a bool, and no program is under edit. */
@@ -4620,165 +4553,184 @@ export class App {
   private renderRail(): void {
     if (!this.rail.visible) return;
     this.renderRailSession();
-    this.renderWorkspaces();
     this.renderRailUsage();
   }
-  /** What each act that a thread waits on does, and what each thread that ended came to, which hold while their act
-   * and their state stay, so that a frame reads none of them again. */
-  private doing = new Map<string, string>();
-  /** The sidebar of the session: each question that waits for the operator, which a click answers in place, then the
-   * threads of the life as a tree of their chains, each with what it does now, and the finished ones folded at the
-   * foot. */
+  /** The selected chain, its questions and its threads stay in one navigator. */
   private renderRailSession(): void {
     const w = this.session;
-    // The layout gives the sidebar its width, which the preferences only ask for.
     const width = this.rail.width || w.preferences.sidebarWidth;
     const inner = width - space.between * 2;
-    if (this.railChain && w.chains.some((chain) => chain.id === this.railChain)) {
-      this.renderThreadList(this.railChain, width, inner);
-      return;
-    }
-    this.railChain = undefined;
-    const loom = this.lifeLoom();
-    const rows = loom.rows.filter((row) => row.id !== "operator");
+    const chain = w.selected;
+    this.railChain = chain;
     const asks = w.desk.asks.filter((ask) => !ask.notice);
-    const find = (id: string) => w.actOf(id);
-    const remember = (key: string, make: () => string): string => {
-      const known = this.doing.get(key);
-      if (known !== undefined) return known;
-      if (this.doing.size > 4000) this.doing.clear();
-      const made = make();
-      this.doing.set(key, made);
-      return made;
-    };
-    const label = (chain: string) => w.labelOf(chain).split("/").at(-1) ?? "";
-    // A thread that works says what its newest act does and since when, in minutes, so that a row changes at most once
-    // a minute while nothing needs the operator.
-    const said = (row: (typeof rows)[number]): [string, RGBA, string] => {
-      if (row.state === "asks") return ["asks you", c.warning, ""];
-      if (row.state === "paused") return ["paused", c.warning, ""];
-      // A thread that ended says what it came to: the first line of its answer, or why it failed.
-      if (row.state === "failed" || row.state === "done") {
-        const text = remember(`${row.state} ${row.id} ${row.measure?.answers ?? 0}`, () => {
-          return nowOf(row, loom, w.acts, (rung) => w.program[rung.id] ?? "").text;
-        });
-        return row.state === "failed"
-          ? [`failed${text ? `: ${text}` : ""}`, c.danger, ""]
-          : [text || "done", c.faint, ""];
-      }
-      if (row.state !== "working") return ["", c.faint, ""];
-      if (!row.waits) return ["writes a step", c.muted, ""];
-      const waits = row.waits;
-      const text = remember(`act ${waits}`, () => {
-        const act = find(waits);
-        return act ? doingOf(act, find, label) : "writes a step";
-      });
-      const began = w.started[waits];
-      const minutes = began === undefined ? 0 : Math.floor((Date.now() - began) / 60000);
-      const since = minutes < 1 ? "" : minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h`;
-      return [text, minutes >= 15 ? c.warning : c.muted, since];
-    };
-    // A thread stands in the tree while it or a thread under it needs a look: it works, asks, failed or is paused. The
-    // root and the thread shown stand always, and the others fold under Finished at the foot.
-    const looks = (row: (typeof rows)[number]) => !["done", "idle"].includes(row.state);
-    const depth = (row: (typeof rows)[number]) => row.lines.length / 2;
-    const standing = rows.filter((row, at) => {
-      if (row.id === w.engine.root || row.id === w.selected || looks(row)) return true;
-      for (const below of rows.slice(at + 1)) {
-        if (depth(below) <= depth(row)) return false;
-        if (looks(below)) return true;
-      }
-      return false;
+    const list = this.chainThreadList(chain);
+    const visibleThreads = list.filter((thread) => {
+      if (!thread.resolved || thread === list.at(-1) || this.unfolded.has("finished")) return true;
+      return thread.act.id === this.railAt || thread.act.id === w.thread;
     });
-    const resting = rows.filter((row) => !standing.includes(row));
-    const lines = standing.map((row) => ({ row, said: said(row) }));
-    this.railRows = [...standing, ...(this.unfolded.has("finished") ? resting.slice(0, 12) : [])].map(
-      (row) => row.id,
-    );
     const key = JSON.stringify([
       this.theme,
       width,
-      w.selected,
-      asks.map((ask) => [ask.id, ask.label, ask.message, ask.choices]),
-      lines.map(({ row, said: [text, , since] }) => [row.id, row.label, row.state, row.lines, text, since]),
-      resting.map((row) => [row.id, row.label]),
+      chain,
+      w.labelOf(chain),
+      asks.map((ask) => [ask.id, ask.chain, ask.message, ask.shape]),
+      w.operatorPrompt?.id,
+      w.thread,
+      this.railAt,
+      this.railKeys,
       this.unfolded.has("finished"),
-      this.choice,
-      this.railKeys && this.railAt,
+      visibleThreads.map((one) => [one.act.id, one.state, one.resolved, one.title, one.messages.length]),
+      w.host.reading,
     ]);
     if (key === this.railKey) return;
     this.railKey = key;
+    const scroll = this.railSession.scrollTop;
     this.clear(this.railSession);
-    const add = (parts: Part[], options: TextShape = {}) => {
-      const node = this.line(parts, c.muted, { truncate: true, ...options });
-      this.railSession.add(node);
-      return node;
-    };
-    const heading = (name: string, count: Part[]) => {
-      const room = Math.max(1, inner - Bun.stringWidth(name + plain(count)));
-      add([[name, c.text, bold], [" ".repeat(room)], ...count]);
-    };
-    this.renderNeeds(asks, inner);
-    const working = rows.filter((row) => row.state === "working").length;
-    heading("Chains", [
-      [working ? `${glyph.running} ${working}` : "", c.accent],
-      [working && resting.length ? "  " : ""],
-      [resting.length ? `${glyph.done} ${resting.length}` : "", c.faint],
-    ]);
-    // A row of a thread spans the sidebar past its padding, with the tone of its thread as a bar at its left edge. The
-    // threads of the first level stand with no guide, and the lines of the tree show from the second level.
-    const edge = { marginX: -space.between, paddingRight: space.inset };
-    const named = [...standing, ...(this.unfolded.has("finished") ? resting.slice(0, 12) : [])];
-    const name = Math.min(
-      18,
-      Math.floor(width * 0.38),
-      Math.max(8, ...named.map((row) => Bun.stringWidth(label(row.id)) + 2)),
+
+    const line = (parts: Part[], run?: () => void, options: TextShape = {}) =>
+      this.railSession.add(
+        this.line(parts, c.muted, { truncate: true, ...options, ...(run ? { run } : {}) }),
+      );
+    const top = this.row({ gap: 1 });
+    top.add(
+      this.line([[clip(w.labelOf(chain), Math.max(6, inner - 11)), c.text, bold]], c.text, {
+        truncate: true,
+        flexShrink: 1,
+        run: () => void this.chainPicker(),
+      }),
     );
-    const threadRow = (row: (typeof rows)[number], [text, color, since]: [string, RGBA, string]) => {
-      const selected = row.id === w.selected;
-      const [mark, tone] = chainMarks[row.state];
-      const guide = depth(row) ? `  ${row.lines.slice(2)}` : "";
-      const title = clip(label(row.id), Math.max(4, name - Bun.stringWidth(guide)));
-      // The row spans the sidebar, so its room is the width of the sidebar less its bar, its padding at the right, and
-      // the parts before and after the words.
-      const room = Math.max(
-        0,
-        width - 1 - Bun.stringWidth(guide) - 2 - name - 1 - (since ? since.length + 1 : 0) - space.inset,
+    top.add(this.text("⌃B switch", c.accent, { run: () => void this.chainPicker() }));
+    top.add(this.text("⌃W", c.faint, { run: () => void this.workspacePicker() }));
+    this.railSession.add(top);
+    if (asks.length) {
+      line(
+        [
+          ["Needs you", c.warning, bold],
+          [" ", c.faint],
+          [`${asks.length}`, c.warning, bold],
+        ],
+        undefined,
+        {
+          marginTop: space.section,
+        },
       );
-      this.railSession.add(
-        this.railRow(
+      for (const ask of asks) {
+        const origin = w.labelOf(ask.chain).split("/").at(-1) ?? ask.chain;
+        const subject = gist(ask.message).replace(/\s+/g, " ");
+        const active = ask.id === w.operatorPrompt?.id;
+        line(
           [
-            [glyph.mark, threadTone(row.id)],
-            [guide, c.faint],
-            [`${mark()} `, tone()],
+            [active ? glyph.pointer : glyph.asks, c.warning],
             [
-              title.padEnd(Math.max(4, name - Bun.stringWidth(guide))),
-              selected ? c.text : c.muted,
-              selected ? bold : 0,
+              ` ${clip(subject || wants(ask), Math.max(4, inner - Bun.stringWidth(origin) - 4))}`,
+              c.text,
+              active ? bold : 0,
             ],
-            [" "],
-            [clip(text, room).padEnd(room), color],
-            [since ? ` ${since}` : "", c.faint],
+            [`  ${clip(origin, 16)}`, c.faint],
           ],
-          () => this.openThreads(row.id),
-          edge,
-          selected || this.cursorOn(row.id),
-        ),
-      );
-    };
-    for (const { row, said: told } of lines) threadRow(row, told);
-    if (resting.length) {
-      this.railSession.add(
-        this.foldRow("finished", " Finished", resting.length, { ...edge, paddingLeft: 1 }),
-      );
-      if (this.unfolded.has("finished")) for (const row of resting.slice(0, 12)) threadRow(row, said(row));
+          () => void w.point(ask.id).catch(this.report),
+          { attributes: active ? bold : 0 },
+        );
+      }
     }
+    line(
+      [
+        ["Threads", c.text, bold],
+        ["  ", c.faint],
+        [String(list.length), c.faint],
+      ],
+      undefined,
+      {
+        marginTop: space.section,
+      },
+    );
+    if (!list.length) line([["No threads on this chain yet.", c.faint]]);
+    for (const thread of visibleThreads) {
+      const id = thread.act.id;
+      const inspected = this.railAt === id;
+      const targeted = w.thread === id;
+      const [mark, tone] = threadMarks(thread);
+      const state = thread.asks.length
+        ? "needs you"
+        : thread.resolved
+          ? "finished"
+          : thread.state === "held"
+            ? "paused"
+            : thread.state === "failed"
+              ? "failed"
+              : "working";
+      const title = clip(shortenHomes(thread.title) || id, Math.max(4, inner - state.length - 6));
+      line(
+        [
+          [glyph.mark, threadTone(id)],
+          [`${mark} `, tone],
+          [title, inspected ? c.text : thread.resolved ? c.faint : c.muted, inspected ? bold : 0],
+          [" ", c.faint],
+          [state, thread.state === "failed" ? c.danger : thread.asks.length ? c.warning : c.faint],
+        ],
+        () => this.inspectThread(thread),
+        {
+          id: `navigator:${id}`,
+          marginTop: space.stack,
+          onMouseDown: (event) => {
+            if (event.button !== 2) return;
+            event.stopPropagation();
+            this.inspectThread(thread);
+          },
+        },
+      );
+      if (!inspected) continue;
+      const detail = this.row({ gap: 1, paddingLeft: 2, flexWrap: "wrap" });
+      const action = (label: string, run: () => void, color = c.accent) =>
+        detail.add(this.text([[label, color]], color, { run }));
+      if (w.host.reading) {
+        action(targeted ? "Read-only target" : "Read-only", () => {}, c.faint);
+      } else {
+        action(targeted ? "Reply target" : thread.resolved ? "Reopen and reply" : "Reply here", () =>
+          this.replyThread(id),
+        );
+        action("New thread", () => this.newThread());
+        const ask = thread.asks[0];
+        if (ask) action("Answer question", () => void w.point(ask).catch(this.report), c.warning);
+        if (!thread.resolved) action("Resolve", () => this.confirmResolve(thread), c.muted);
+      }
+      this.railSession.add(detail);
+      const excerpt = thread.title.replace(/\s+/g, " ");
+      if (excerpt)
+        line([[clip(excerpt, inner - 3), c.faint]], () => this.inspectThread(thread), { paddingLeft: 2 });
+    }
+    const finished = list.filter((thread) => thread.resolved).length;
+    if (finished)
+      line(
+        [
+          [`${this.unfolded.has("finished") ? glyph.open : glyph.closed} Finished`, c.faint],
+          [`  ${finished}`, c.faint],
+        ],
+        () => {
+          if (this.unfolded.has("finished")) this.unfolded.delete("finished");
+          else this.unfolded.add("finished");
+          this.railKey = "";
+          this.render();
+        },
+        { marginTop: space.section },
+      );
+    line(
+      [
+        ["Find threads", c.accent],
+        ["  Details", c.faint],
+      ],
+      () => void this.threadPicker(),
+    );
+    this.railSession.scrollTo(scroll);
+    this.railRows = list.map((one) => one.act.id);
+    this.railSession.onMouseScroll = () => this.unhover();
   }
   /** The context of the chain shown, at the foot of the sidebar: how full its window is and where a grant pauses it,
    * its tokens, and what it spent. */
   private renderRailUsage(): void {
     const w = this.session;
-    const window = w.filled;
+    const { limit } = this.contextWindow();
+    const window = w.context !== undefined && limit !== undefined ? w.context / limit : undefined;
     const grant = w.open.find((act) => act.kind === "grant");
     const width = this.rail.width || w.preferences.sidebarWidth;
     if (
@@ -4787,111 +4739,105 @@ export class App {
       return;
     this.clear(this.railUsage);
     const inner = width - space.between * 2;
-    const add = (parts: Part[], options: TextShape = {}) => {
-      const node = this.line(parts, c.muted, { truncate: true, ...options });
-      this.railUsage.add(node);
-      return node;
-    };
-    // A line of a table: its name and its note at its left, and its value at its right.
-    const spread = (name: Part, note: string, value: Part, options: TextShape = {}) => {
-      const room = Math.max(1, inner - Bun.stringWidth(name[0] + note + value[0]));
-      return add([name, [note, c.faint], [" ".repeat(room)], value], options);
-    };
-    const row = (name: string, value: string, color = c.text) => spread([name, c.muted], "", [value, color]);
-    const section = (name: string, value = "", note = "") =>
-      spread([name, c.text, bold], note, [value, c.faint]);
     const spend = w.spend;
-    const ceiling =
-      grant?.words[1] === null || grant?.words[1] === undefined ? undefined : Number(grant.words[1]);
+    const ceiling = grant?.words[1] == null ? undefined : Number(grant.words[1]);
     const known = window !== undefined && Number.isFinite(window);
     const tokens = spend.input + spend.output + spend.cacheRead + spend.cacheWrite;
-    // A chain with a source reads the prompt of its origin before it answers once, so its context shows from its birth.
-    this.railUsage.visible = tokens > 0 || spend.dollars > 0 || Boolean(grant) || w.context !== undefined;
-    if (this.railUsage.visible) {
-      section(
-        "Context",
-        known ? `${Number(((window ?? 0) * 100).toFixed(1))}%` : "",
-        w.demo ? "  simulated" : "",
-      );
-      // The meter fills with the share of the window that the last answer used, and marks the ceiling of a grant. It
-      // stands empty until an answer tells the share, and a hover over it says the share and where the chain pauses.
-      const part = known ? (window ?? 0) : 0;
-      const used = Math.min(inner, Math.max(part > 0 ? 1 : 0, Math.round(part * inner)));
-      const mark = ceiling === undefined ? -1 : Math.min(inner - 1, Math.round(ceiling * inner));
-      const tone = part >= 0.9 ? c.danger : part >= 0.7 ? c.warning : c.accent;
-      const cells: Part[] = [];
-      for (let at = 0; at < inner; at++)
-        cells.push(at === mark ? ["╋", c.warning] : [glyph.meter, at < used ? tone : c.border]);
-      const tip: Part[] = [
-        [known ? `${Number((part * 100).toFixed(1))}%` : "No answer yet", c.text, bold],
-        [known ? " of the context window" : "", c.muted],
-        [ceiling === undefined ? "" : `, pauses at ${Number((ceiling * 100).toFixed(1))}%`, c.warning],
-      ];
-      this.tipped(add(cells), tip);
-      // The last prompt is the whole prompt of the last answer, its system prompt and the reads of the cache included,
-      // which the share of the window measures. The fresh input, the output and the cache are what every answer of the
-      // chain read past the cache, wrote, and read and wrote in the cache, each token counted once.
-      const prompt = w.context;
-      if (prompt !== undefined)
-        this.tipped(row("Last prompt", count(prompt)), [
-          ["The whole prompt of the last answer, its system prompt and the cache included.", c.text],
-        ]);
-      if (tokens > 0) {
-        this.tipped(row("Fresh input", count(spend.input)), [
-          ["The input of the answers of the chain that the cache did not hold.", c.text],
-        ]);
-        row("Output", count(spend.output));
-        if (spend.cacheRead) row("Cache read", count(spend.cacheRead));
-        if (spend.cacheWrite) row("Cache write", count(spend.cacheWrite));
-      }
-      row("Spent", dollars(spend.dollars));
-      if (grant && grant.words[0] !== null) row("Ceiling", dollars(Number(grant.words[0])), c.muted);
-    }
+    this.railUsage.visible =
+      tokens > 0 || spend.dollars > 0 || Boolean(grant) || w.context !== undefined || known;
+    if (!this.railUsage.visible) return;
+    const header = this.row();
+    const contextTags = [w.demo ? "demo" : "", w.host.reading ? "read-only" : ""].filter(Boolean);
+    header.add(
+      this.text(`Context${contextTags.length ? ` · ${contextTags.join(" · ")}` : ""}`, c.text, {
+        attributes: bold,
+        flexGrow: 1,
+      }),
+    );
+    header.add(
+      this.text(
+        known ? `${Number(((window ?? 0) * 100).toFixed(1))}%` : "unknown",
+        known ? c.accent : c.faint,
+      ),
+    );
+    header.add(this.text(`  ${dollars(spend.dollars)}`, c.muted));
+    this.railUsage.add(header);
+    const cells: Part[] = [];
+    const ratio = known ? window : undefined;
+    const used =
+      ratio === undefined ? 0 : Math.min(inner, Math.max(ratio > 0 ? 1 : 0, Math.round(ratio * inner)));
+    const marker = ceiling === undefined ? -1 : Math.min(inner - 1, Math.round(ceiling * inner));
+    const tone =
+      ratio !== undefined && ratio >= 0.9
+        ? c.danger
+        : ratio !== undefined && ratio >= 0.7
+          ? c.warning
+          : c.accent;
+    for (let at = 0; at < inner; at++)
+      cells.push(at === marker ? ["╋", c.warning] : [glyph.meter, known && at < used ? tone : c.border]);
+    const meter = this.line(cells, c.muted, { truncate: true });
+    this.tipped(meter, [
+      [
+        ratio === undefined
+          ? "Window use is not known yet."
+          : `Last prompt used ${Number((ratio * 100).toFixed(1))}% of its window.`,
+        c.text,
+      ],
+      [ceiling === undefined ? "" : `Grant pauses at ${Number((ceiling * 100).toFixed(1))}%.`, c.warning],
+    ]);
+    this.railUsage.add(meter);
+    const summary = `${w.context === undefined ? "last ?" : `last ${count(w.context)}`}   cached ${count(spend.cacheRead + spend.cacheWrite)}`;
+    this.railUsage.add(this.text(summary, c.muted, { truncate: true, run: this.contextDetails }));
+    header.onMouseUp = this.click(this.contextDetails);
   }
-  /** Each question that waits for the operator, on top of the sidebar over the tree and over the list of threads, which
-   * a click answers in place: a question never hides. */
-  private renderNeeds(asks: readonly Ask[], inner: number): void {
+  /** The window of the model that gave the last answer, not an actor selected for the next answer. */
+  private contextWindow(): { model: string; limit: number | undefined } {
     const w = this.session;
-    const add = (parts: Part[], options: TextShape = {}) => {
-      const node = this.line(parts, c.muted, { truncate: true, ...options });
-      this.railSession.add(node);
-      return node;
-    };
-    const heading = (name: string, count: Part[]) => {
-      const room = Math.max(1, inner - Bun.stringWidth(name + plain(count)));
-      add([[name, c.text, bold], [" ".repeat(room)], ...count]);
-    };
-    const label = (chain: string) => w.labelOf(chain).split("/").at(-1) ?? "";
-    if (asks.length) {
-      heading("Needs you", [[`${asks.length}`, c.warning, bold]]);
-      for (const ask of asks) {
-        const parent = w.labelOf(ask.chain).split("/").slice(0, -1).join("/");
-        add(
-          [
-            [`${glyph.asks} `, c.warning],
-            [label(ask.chain), c.text, bold],
-            [parent ? `  in ${parent}` : "", c.faint],
-          ],
-          { marginTop: space.section, run: () => void w.point(ask.id).catch(this.report) },
-        );
-        for (const text of wrapped(shortenHomes(gist(ask.message)), inner - 2, 2))
-          add([["  "], [text, c.text]], { run: () => this.question(ask) });
-        const controls = this.row({ gap: 1, paddingLeft: 2, flexWrap: "wrap" });
-        const chip = (text: string, run: () => void) =>
-          controls.add(this.text([[` ${text} `, c.text, 0, c.raised]], c.text, { run }));
-        if (ask.choices.length) {
-          for (const [at, value] of ask.choices.entries())
-            chip(`${at + 1} ${value}`, () => void w.answer(ask, value).catch(this.report));
-          chip(`${ask.choices.length + 1} Other`, () => {
-            this.choice = { id: ask.id, at: ask.choices.length, other: true };
-            void w.point(ask.id).catch(this.report);
-          });
-        } else chip(`Answer as ${ask.shape}`, () => void w.point(ask.id).catch(this.report));
-        this.railSession.add(controls);
-      }
-      add([], { marginTop: space.section });
-    }
+    const reply = w.activity.findLast(
+      (act) => act.kind === "reply" && act.done && Array.isArray(act.value) && Array.isArray(act.value[2]),
+    );
+    const actor = w.host.measures[w.selected]?.actor ?? String(reply?.words[0] ?? w.actor);
+    const { model } = actorParts(
+      actor,
+      w.roster.map(([name]) => name),
+    );
+    const limit = w.roster.find(([name]) => name === model)?.[2];
+    return { model, limit: typeof limit === "number" && limit > 0 ? limit : undefined };
   }
+  /** Exact usage is available from Details even when the sidebar is hidden. */
+  private contextDetails = (): void => {
+    const w = this.session;
+    const spend = w.spend;
+    const grant = w.open.find((act) => act.kind === "grant");
+    const { limit, model } = this.contextWindow();
+    const exact = (value: number) => `${value.toLocaleString("en-US")} tokens`;
+    this.openPalette(
+      "Context details",
+      [
+        {
+          label: "Last prompt",
+          detail: w.context === undefined ? "Unknown" : exact(w.context),
+          run: () => {},
+        },
+        { label: "Window limit", detail: limit ? `${exact(limit)} · ${model}` : "Unknown", run: () => {} },
+        { label: "Fresh input", detail: exact(spend.input), run: () => {} },
+        { label: "Output", detail: exact(spend.output), run: () => {} },
+        { label: "Cache read", detail: exact(spend.cacheRead), run: () => {} },
+        { label: "Cache write", detail: exact(spend.cacheWrite), run: () => {} },
+        { label: "Spent", detail: dollars(spend.dollars), run: () => {} },
+        ...(grant
+          ? [
+              {
+                label: "Grant",
+                detail: `${grant.words[0] == null ? "No dollar ceiling" : dollars(Number(grant.words[0]))}; ${grant.words[1] == null ? "no context ceiling" : `${Number((Number(grant.words[1]) * 100).toFixed(1))}% context ceiling`}`,
+                run: () => {},
+              },
+            ]
+          : []),
+      ],
+      { note: "The prompt includes cached input. All other token counts sum the answers of this chain." },
+    );
+  };
   /** The threads of the chain shown, and each by its id. */
   private chainThreadList(chain: string): ChainThread[] {
     return this.chainThreadsBy(chain).list;
@@ -4917,150 +4863,146 @@ export class App {
     }
     return this.threadList;
   }
-  /** How many threads the list of a chain shows at once. */
-  private get railRoom(): number {
-    return Math.max(5, Math.floor(this.renderer.height / 2) - 5);
+  private chainPicker(): void {
+    this.chains();
   }
-  /** Whether the keys of the sidebar stand on a row. */
-  private cursorOn(id: string): boolean {
-    return this.railKeys && this.railAt === id;
-  }
-  /** The threads of a chain in the sidebar, in place of the tree of the chains: a row that goes back to the tree, then
-   * a row for each prompt of the chain, in the color of its thread, with its state and the first line of its message.
-   * The thread chosen, or under the keys, shows its controls under its row. The list scrolls by the wheel and by the
-   * keys. */
-  private renderThreadList(chain: string, width: number, inner: number): void {
+  /** Search the complete chronological thread list, including finished threads. */
+  private threadPicker(): void {
     const w = this.session;
-    const list = this.chainThreadList(chain);
-    const room = this.railRoom;
-    this.railFrom = Math.max(0, Math.min(Math.max(0, list.length - room), this.railFrom));
-    const from = this.railFrom;
-    const questions = w.desk.asks.filter((ask) => !ask.notice);
-    const key = JSON.stringify([
-      "threads",
-      questions.map((ask) => [ask.id, ask.label, ask.message, ask.choices]),
-      this.choice,
-      this.theme,
-      width,
-      chain,
-      w.labelOf(chain),
-      w.thread,
-      this.railKeys && this.railAt,
-      from,
-      room,
-      list.map((one) => [one.act.id, one.state, one.resolved, one.title, this.threadFolded(one.act.id)]),
-    ]);
-    if (key === this.railKey) return;
-    this.railKey = key;
-    this.clear(this.railSession);
-    this.railSession.onMouseScroll = (event) => {
-      const direction = event.scroll?.direction;
-      if (!this.railChain || (direction !== "up" && direction !== "down")) return;
-      this.railFrom = Math.max(0, this.railFrom + (direction === "up" ? -3 : 3));
-      this.render();
-    };
-    this.renderNeeds(questions, inner);
-    const edge = { marginX: -space.between, paddingRight: space.inset };
-    const line = (parts: Part[], run?: () => void) =>
-      this.railSession.add(this.line(parts, c.muted, { truncate: true, ...(run ? { run } : {}) }));
-    this.railSession.add(
-      this.railRow(
-        [
-          ["← ", c.accent],
-          ["Chains", c.muted],
-        ],
-        () => this.closeThreads(),
-        { ...edge, paddingLeft: 1 },
-      ),
+    const list = this.chainThreadList(w.selected);
+    this.openPalette(
+      `Threads · ${w.label}`,
+      list.map((thread) => {
+        const state = thread.resolved
+          ? "done"
+          : thread.asks.length
+            ? "ask"
+            : thread.state === "held"
+              ? "held"
+              : thread.state === "failed"
+                ? "fail"
+                : "run";
+        return {
+          label: `${thread.act.id}  ${state}  ${thread.title || "Untitled thread"}`,
+          detail: "",
+          status: thread.resolved
+            ? "done"
+            : thread.state === "asks"
+              ? "blocked"
+              : thread.state === "held"
+                ? "paused"
+                : thread.state === "failed"
+                  ? "error"
+                  : "working",
+          run: () => this.inspectThread(thread),
+          menu: () => this.threadMenu(thread),
+        };
+      }),
+      { note: "Enter inspects. → actions. All threads are searchable." },
     );
-    let asks = 0;
-    let running = 0;
-    let resolved = 0;
-    for (const one of list)
-      if (one.state === "asks") asks++;
-      else if (one.resolved) resolved++;
-      else running++;
-    const tally: Part[] = [
-      [asks ? `${glyph.asks} ${asks}  ` : "", c.warning],
-      [running ? `${glyph.running} ${running}  ` : "", c.accent],
-      [resolved ? `${glyph.done} ${resolved}` : "", c.faint],
-    ];
-    const name = clip(w.labelOf(chain), Math.max(4, inner - Bun.stringWidth(plain(tally)) - 1));
-    line([
-      [name, c.text, bold],
-      [" ".repeat(Math.max(1, inner - Bun.stringWidth(name + plain(tally))))],
-      ...tally,
+  }
+  private threadMenu(thread: ChainThread): void {
+    const id = thread.act.id;
+    const ask = thread.asks[0];
+    this.openPalette(`Thread ${id}`, [
+      { label: "Inspect", detail: thread.title, run: () => this.inspectThread(thread) },
+      {
+        label: this.threadFolded(id) ? "Expand" : "Collapse",
+        detail: "Show or fold its program",
+        run: () => this.foldThread(id),
+      },
+      ...(ask && !this.session.host.reading
+        ? [
+            {
+              label: "Answer question",
+              detail: ask,
+              run: () => this.session.point(ask),
+            },
+          ]
+        : []),
+      ...(!this.session.host.reading
+        ? [
+            {
+              label: thread.resolved ? "Reopen and reply" : "Reply here",
+              detail: `Direct future model text to ${id}`,
+              run: () => this.replyThread(id),
+            },
+            {
+              label: "New thread",
+              detail: "Start a separate task on this chain",
+              run: () => this.newThread(),
+            },
+            ...(!thread.resolved
+              ? [
+                  {
+                    label: "Resolve",
+                    detail: "Ask before closing this thread and its work",
+                    run: () => this.confirmResolve(thread),
+                  },
+                ]
+              : []),
+          ]
+        : []),
     ]);
-    if (!list.length) line([["No thread on this chain yet.", c.faint]]);
-    if (from > 0)
-      line([[`↑ ${from} earlier`, c.faint]], () => {
-        this.railFrom = Math.max(0, from - room);
-        this.render();
-      });
-    for (const one of list.slice(from, from + room)) {
-      const id = one.act.id;
-      const chosen = w.thread === id;
-      const folded = this.threadFolded(id);
-      const [mark, tone] = threadMarks(one);
-      const text = clip(shortenHomes(one.title) || id, Math.max(4, width - 6 - space.inset));
-      this.railSession.add(
-        this.railRow(
-          [
-            [glyph.mark, threadTone(id)],
-            [`${mark} `, tone],
-            [folded ? `${glyph.closed} ` : "", c.faint],
-            [text, chosen ? c.text : one.resolved ? c.faint : c.muted, chosen ? bold : 0],
-          ],
-          () => this.chooseThread(id),
-          edge,
-          chosen || this.cursorOn(id),
-        ),
-      );
-      if (!chosen && !this.cursorOn(id)) continue;
-      const controls = this.row({ gap: 1, paddingLeft: 3, flexWrap: "wrap" });
-      const chip = (label: string, run: () => void) =>
-        controls.add(this.text([[` ${label} `, c.text, 0, c.raised]], c.text, { run }));
-      chip(folded ? "Expand" : "Collapse", () => this.foldThread(id));
-      if (one.resolved) chip("Open again", () => this.reopenThread(id));
-      else chip("Resolve", () => this.resolveThread(one));
-      const ask = one.asks[0];
-      if (ask) chip("Answer", () => void w.point(ask).catch(this.report));
-      this.railSession.add(controls);
+  }
+  /** Inspecting a thread opens it in the feed, without changing the reply destination. */
+  private inspectThread(thread: ChainThread): void {
+    this.unhover();
+    this.railAt = thread.act.id;
+    if (this.threadFolded(thread.act.id)) {
+      this.session.folds[`thread:${thread.act.id}`] = false;
+      this.session.save();
     }
-    const after = list.length - from - room;
-    if (after > 0)
-      line([[`↓ ${after} later`, c.faint]], () => {
-        this.railFrom = from + room;
-        this.render();
-      });
-  }
-  /** A chain chosen in the tree: the feed shows it, and the sidebar lists its threads in place of the tree. */
-  openThreads(chain: string): void {
-    this.railChain = chain;
-    this.railFrom = Number.MAX_SAFE_INTEGER;
-    void this.session.select(chain).catch(this.report);
-    const list = this.chainThreadList(chain);
-    this.railAt = (list.findLast((one) => !one.resolved) ?? list.at(-1))?.act.id;
+    this.go("feed", thread.act.id);
+    this.railKey = "";
     this.render();
   }
-  /** The tree of the chains again, in place of the list of the threads of a chain, with the keys on that chain. */
-  closeThreads(): void {
-    if (this.railChain) this.railAt = this.railChain;
-    this.railChain = undefined;
-    this.session.thread = undefined;
-    this.render();
-  }
-  /** A thread chosen in the list: the feed unfolds it and scrolls to it, and the input sends each message to it. */
-  private chooseThread(id: string): void {
-    const w = this.session;
+  /** Explicitly direct future text to a thread. */
+  private replyThread(id: string): void {
+    if (this.session.host.reading) return;
+    this.session.thread = id;
     this.railAt = id;
-    w.thread = id;
-    if (this.threadFolded(id)) {
-      w.folds[`thread:${id}`] = false;
-      w.save();
-    }
-    if (this.railKeys) this.railSteer(false);
-    this.go("feed", id);
+    this.session.notice = `New text will go to ${id}.`;
+    this.composer.focus();
+    this.railKey = "";
+    this.render();
+  }
+  private newThread(): void {
+    if (this.session.host.reading) return;
+    this.session.thread = undefined;
+    this.session.notice = "New text will start a thread on this chain.";
+    this.composer.focus();
+    this.railKey = "";
+    this.render();
+  }
+  private confirmResolve(thread: ChainThread): void {
+    if (this.session.host.reading) return;
+    const open = [thread.act, ...thread.messages].findLast((act) => !act.done);
+    if (!open) return;
+    this.openPalette("Resolve this thread?", [
+      { label: "Keep working", detail: "Leave the thread unchanged", run: () => {} },
+      {
+        label: "Resolve thread",
+        detail: `${open.id} will close; running work under it will stop`,
+        mark: ["! ", c.warning],
+        run: () => this.resolveThread(thread),
+      },
+    ]);
+  }
+  /** A chain selected from the list or picker keeps its thread navigator visible. */
+  openThreads(chain: string): void {
+    void this.session.select(chain).catch(this.report);
+    this.railChain = chain;
+    this.railKey = "";
+    this.render();
+  }
+  closeThreads(): void {
+    this.railSteer(false);
+  }
+  /** A thread selection in the sidebar inspects only; use Reply here to retarget the composer. */
+  private chooseThread(id: string): void {
+    const thread = this.chainThreadList(this.session.selected).find((one) => one.act.id === id);
+    if (thread) this.inspectThread(thread);
   }
   /** Whether a thread stands folded to its header in the feed: as the operator left it, and else when it is resolved,
    * is not the last thread of its chain, and the preference folds what is over. */
@@ -5082,11 +5024,13 @@ export class App {
   }
   /** A thread resolves: its open prompt closes, and the model that works for it stops. */
   private resolveThread(thread: ChainThread): void {
+    if (this.session.host.reading) return;
     const open = [thread.act, ...thread.messages].findLast((act) => !act.done);
     if (open) void this.session.resolve(open.id).catch(this.report);
   }
   /** A thread opens again: the input takes the message that goes to it. */
   private reopenThread(id: string): void {
+    if (this.session.host.reading) return;
     const w = this.session;
     w.thread = id;
     this.railAt = id;
@@ -5097,14 +5041,19 @@ export class App {
   }
   /** The keys move in the sidebar, or go back to the input. */
   private railSteer(on = !this.railKeys): void {
+    if (on && !this.rail.visible) {
+      this.threadPicker();
+      return;
+    }
     this.railKeys = on;
     if (on) {
       if (this.steering) this.steer(false);
       this.composer.blur();
       if (!this.railAt)
-        this.railAt = this.railChain
-          ? (this.session.thread ?? this.chainThreadList(this.railChain).at(-1)?.act.id)
-          : this.session.selected;
+        this.railAt =
+          this.session.thread ??
+          this.chainThreadList(this.session.selected).at(-1)?.act.id ??
+          this.session.selected;
     } else this.composer.focus();
     this.render();
   }
@@ -5117,23 +5066,30 @@ export class App {
     const at = ids.indexOf(this.railAt ?? "");
     const next = Math.max(0, Math.min(ids.length - 1, at < 0 ? ids.length - 1 : at + by));
     this.railAt = ids[next];
-    if (this.railChain) {
-      if (next < this.railFrom) this.railFrom = next;
-      else if (next >= this.railFrom + this.railRoom) this.railFrom = next - this.railRoom + 1;
-    }
     this.render();
+    if (this.railChain) {
+      queueMicrotask(() => {
+        const node = this.railSession.content
+          .getChildren()
+          .find((one) => one.id === `navigator:${this.railAt}`);
+        if (!node) return;
+        const top = node.y - this.railSession.viewport.y;
+        if (top < 0) this.railSession.scrollBy(top);
+        else if (top + node.height > this.railSession.viewport.height)
+          this.railSession.scrollBy(top + node.height - this.railSession.viewport.height);
+      });
+    }
   }
-  /** Enter or → in the sidebar: a chain lists its threads, and a thread is chosen. */
+  /** Enter or → inspects the thread under the keys. */
   private enterRail(): void {
     const at = this.railAt;
     if (!at) return;
     if (this.railChain) this.chooseThread(at);
     else this.openThreads(at);
   }
-  /** ← or Esc in the sidebar: the list goes back to the tree, and the tree gives the keys back to the input. */
+  /** ← or Esc gives the keys back to the input. */
   private leaveRail(): void {
-    if (this.railChain) this.closeThreads();
-    else this.railSteer(false);
+    this.railSteer(false);
   }
   /** The thread under the keys of the list. */
   private railThread(): ChainThread | undefined {
@@ -5155,6 +5111,7 @@ export class App {
         () => this.foldThread(id, true),
       ),
     );
+    if (this.session.host.reading) return row;
     if (thread?.resolved)
       row.add(
         this.link(
@@ -5172,36 +5129,10 @@ export class App {
             [`${glyph.done} `, c.faint],
             ["Resolve", c.faint],
           ],
-          () => this.resolveThread(thread),
+          () => this.confirmResolve(thread),
         ),
       );
     return row;
-  }
-  /** A row of the sidebar, whose click runs, which spans the sidebar so that the pointer and the selection show from
-   * edge to edge. It lights while the pointer is on it, and stays lit while it is selected. */
-  private railRow(parts: Part[], run: () => void, options: BoxOptions, selected = false): BoxRenderable {
-    const row = this.hoverable(
-      this.row({ backgroundColor: selected ? c.selected : c.panel, onMouseUp: this.click(run), ...options }),
-      selected ? c.selected : c.raised,
-    );
-    row.add(this.text(parts, c.muted, { truncate: true, flexGrow: 1, flexShrink: 1 }));
-    return row;
-  }
-  /** A row of the sidebar that folds a list under it, with its label and the count of the list, which a click folds
-   * or unfolds. */
-  private foldRow(key: string, label: string, count: number, options: BoxOptions): BoxRenderable {
-    return this.railRow(
-      [
-        [this.unfolded.has(key) ? glyph.open : glyph.closed, c.faint],
-        [label, c.faint],
-        [`  ${count}`, c.faint],
-      ],
-      () => {
-        if (!this.unfolded.delete(key)) this.unfolded.add(key);
-        this.render();
-      },
-      options,
-    );
   }
   /** A node that shows a tip while the pointer is over it. */
   private tipped<T extends Renderable>(node: T, parts: Part[]): T {
@@ -5215,252 +5146,6 @@ export class App {
     if (this.draftKey !== this.session.draftKey) this.showDraft(this.session.draftKey);
     this.composer.replaceText(text);
     this.composer.focus();
-  }
-  /** The workspaces in the sidebar, under the session: each folder with its sessions, which scroll on their own. */
-  private renderWorkspaces(): void {
-    const library = this.options.workspaces;
-    const width = this.session.preferences.sidebarWidth;
-    if (
-      !this.paneChanged(this.railSpaces, [
-        this.theme,
-        library.current?.path,
-        width,
-        library.notice,
-        library.groups.map((group) => [
-          group.name,
-          group.directory,
-          group.collapsed,
-          group.sessions.map((entry) => [entry.path, entry.name, entry.status, entry.error, entry.archived]),
-        ]),
-        [...this.unfolded],
-        this.renaming && this.itemKey(this.renaming.item),
-        this.menuItem && this.itemKey(this.menuItem),
-      ])
-    )
-      return;
-    this.clear(this.railHeading);
-    this.clear(this.railSpaces);
-    this.unhover();
-    const inner = width - space.between * 2;
-    this.railHeading.add(this.text("Workspaces", c.text, { attributes: bold, flexGrow: 1 }));
-    this.railHeading.add(this.text("⌃W", c.faint, { run: () => void this.workspacePicker() }));
-    const padding = { paddingLeft: space.inset, paddingRight: space.between };
-    const line = (parts: Part[], run: () => void, options: BoxOptions = {}) =>
-      this.railSpaces.add(this.railRow(parts, run, { ...padding, ...options }));
-    if (library.notice) this.railSpaces.add(this.inset(space.between, this.text(library.notice, c.warning)));
-    if (!library.groups.length)
-      this.railSpaces.add(
-        this.inset(space.between, this.text("No workspaces yet. Add a project folder below.", c.muted)),
-      );
-    // A session and a workspace take one shape of row. While the pointer is on the row, it lights, and at its end a
-    // button renames it and a button removes it, which asks first. The buttons are drawn in the color of the row until
-    // then, so the row keeps its layout. The mark of the state tells the state in a tip, and a right click opens the
-    // menu of the row. A row under a new name holds an input in place of its name.
-    const itemRow = (
-      item: SessionEntry | Workspace,
-      parts: { lead: Part[]; name: Part; state?: Part; after?: boolean },
-      tip: () => Part[],
-      run: () => void,
-      options: BoxOptions = {},
-      selected = false,
-    ) => {
-      const noun = "sessions" in item ? "workspace" : "session";
-      const lit = selected ? c.selected : c.raised;
-      const ground = selected ? c.selected : this.menuItem === item ? lit : c.panel;
-      // A click in the input of a new name only moves its cursor.
-      const renaming = this.renaming?.item === item ? this.renaming : undefined;
-      const row = this.row({
-        paddingLeft: space.inset,
-        paddingRight: space.between,
-        backgroundColor: renaming ? lit : ground,
-        ...(renaming ? {} : { onMouseUp: this.click(run) }),
-        onMouseDown: (event) => {
-          if (event.button !== 2) return;
-          event.stopPropagation();
-          this.itemMenu(item, event.x, event.y);
-        },
-        ...options,
-      });
-      row.add(this.line(parts.lead, c.muted));
-      const state = parts.state && this.line([parts.state], c.muted);
-      if (state && !parts.after) row.add(state);
-      if (renaming) {
-        const input = new InputRenderable(this.renderer, {
-          flexGrow: 1,
-          flexShrink: 1,
-          value: renaming.value,
-          ...inputColors(c.background),
-        });
-        input.on(InputRenderableEvents.INPUT, (value: string) => {
-          renaming.value = value;
-        });
-        // A row that the sidebar draws again keeps the cursor where it was.
-        if (renaming.cursor !== undefined) input.cursorOffset = renaming.cursor;
-        input.onKeyDown = () => {
-          queueMicrotask(() => {
-            if (!input.isDestroyed) renaming.cursor = input.cursorOffset;
-          });
-        };
-        input.on(InputRenderableEvents.ENTER, () => this.endRename(true));
-        // The name is kept when the input loses its focus to another part of the screen, and not when the sidebar
-        // draws the row again, which focuses its new input at once.
-        input.on("blurred", () =>
-          queueMicrotask(() => {
-            if (this.renaming === renaming && !renaming.input?.focused) this.endRename(true);
-          }),
-        );
-        renaming.input = input;
-        row.add(input);
-        this.railSpaces.add(row);
-        input.focus();
-        return row;
-      }
-      const name = this.line([parts.name], c.muted, {
-        truncate: true,
-        flexShrink: 1,
-        flexGrow: parts.after ? 0 : 1,
-      });
-      row.add(name);
-      if (state && parts.after) {
-        state.marginLeft = space.between;
-        row.add(state);
-      }
-      if (parts.after) row.add(this.box({ flexGrow: 1 }));
-      const button = (mark: string, act: () => void) =>
-        this.line(mark, ground, {
-          marginLeft: space.inset,
-          onMouseUp: this.click((event) => {
-            event.stopPropagation();
-            act();
-          }),
-        });
-      const rename = button(glyph.rename, () => this.startRename(item));
-      const remove = button(glyph.remove, () => this.removeItem(item));
-      row.add(rename);
-      row.add(remove);
-      row.onMouseOver = (event) => {
-        row.backgroundColor = lit;
-        rename.fg = event.target === rename ? c.accent : c.muted;
-        remove.fg = event.target === remove ? c.danger : c.muted;
-        // A name that its room cuts shows whole in a tip of its own.
-        if (event.target === name) return;
-        this.unhover();
-        if (event.isDragging) return;
-        const told: Part[] | undefined =
-          event.target === rename
-            ? [[`Rename this ${noun}`, c.text]]
-            : event.target === remove
-              ? [
-                  [
-                    "sessions" in item
-                      ? "Remove this workspace from the list"
-                      : "Archive or remove this session",
-                    c.text,
-                  ],
-                ]
-              : event.target === state
-                ? tip()
-                : undefined;
-        if (told) this.tip(told, event.x, event.y);
-      };
-      row.onMouseOut = () => {
-        row.backgroundColor = ground;
-        rename.fg = ground;
-        remove.fg = ground;
-        this.unhover();
-      };
-      this.railSpaces.add(row);
-      return row;
-    };
-    for (const [index, group] of library.groups.entries()) {
-      const status = library.groupStatus(group);
-      const current = group === library.groupOf();
-      const quiet = status === "saved" || status === "idle";
-      const count = group.sessions.filter((entry) => entry.status === status).length;
-      itemRow(
-        group,
-        {
-          lead: [[" "], [`${group.collapsed ? glyph.closed : glyph.open} `, c.faint]],
-          name: [group.name, current ? c.text : c.muted, bold],
-          state: quiet ? undefined : statusMark(status),
-          after: true,
-        },
-        () => [
-          statusMark(status),
-          [statusLabels[status], c.text, bold],
-          [
-            `  ${count} of ${group.sessions.length} ${group.sessions.length === 1 ? "session" : "sessions"}`,
-            c.muted,
-          ],
-        ],
-        () => library.toggle(group),
-        { marginTop: index ? space.section : space.stack },
-      );
-      // A folded workspace shows its name alone, and an open one its folder under its name.
-      if (group.collapsed) continue;
-      this.railSpaces.add(
-        this.inset(
-          space.inset + 3,
-          this.whole(
-            this.line(clip(shortenHome(group.directory), inner - space.inset - 1, "end"), c.faint, {
-              truncate: true,
-            }),
-            () => shortenHome(group.directory),
-          ),
-        ),
-      );
-      const sessionRow = (entry: SessionEntry) => {
-        const selected = library.current === entry;
-        itemRow(
-          entry,
-          {
-            lead: [[selected ? glyph.mark : " ", c.accent], ["  "]],
-            state: statusMark(entry.status),
-            name: [entry.name, selected ? c.text : entry.archived ? c.faint : c.muted, selected ? bold : 0],
-          },
-          () => [
-            statusMark(entry.status),
-            [statusLabels[entry.status], c.text, bold],
-            [entry.error ? `  ${entry.error}` : "", c.danger],
-          ],
-          () => {
-            void library.select(entry).catch(this.report);
-          },
-          {},
-          selected,
-        );
-      };
-      // The sidebar shows the sessions that live: the one shown, and each that works, asks, waits for a wake or
-      // failed, and the newest of the others up to three rows. The older sessions fold under a row of their own,
-      // which a click opens.
-      const kept = group.sessions.filter((entry) => !entry.archived);
-      const live = (entry: SessionEntry) =>
-        library.current === entry ||
-        ["working", "opening", "blocked", "paused", "error"].includes(entry.status);
-      const resting = kept.filter((entry) => !live(entry));
-      const room = Math.max(0, 3 - (kept.length - resting.length));
-      const shown = new Set([...kept.filter(live), ...resting.slice(0, room)]);
-      for (const entry of kept.filter((entry) => shown.has(entry))) sessionRow(entry);
-      const earlier = kept.filter((entry) => !shown.has(entry));
-      if (earlier.length) {
-        this.railSpaces.add(
-          this.foldRow(`${group.directory}\nearlier`, "  Earlier", earlier.length, padding),
-        );
-        if (this.unfolded.has(`${group.directory}\nearlier`)) for (const entry of earlier) sessionRow(entry);
-      }
-      line([["   "], ["+ ", c.faint], ["New session", c.faint]], () => {
-        void library.create(group).catch(this.report);
-      });
-      // The archived sessions fold under a row of their own, as the finished chains do, which a click opens.
-      const archived = group.sessions.filter((entry) => entry.archived);
-      if (archived.length) {
-        this.railSpaces.add(this.foldRow(group.directory, "  Archived", archived.length, padding));
-        if (this.unfolded.has(group.directory)) for (const entry of archived) sessionRow(entry);
-      }
-    }
-    line([[" "], ["+ ", c.faint], ["Add a workspace", c.faint]], () => this.insert("/workspace "), {
-      marginTop: space.section,
-    });
   }
   /** A tip that stands under the pointer and ends at its left, or above it where the rows under it cannot hold it,
    * inside the screen. It never covers the row of the pointer, or the pointer would leave the text that shows it. */
@@ -5510,7 +5195,7 @@ export class App {
             }
           : {
               label: "Archive",
-              detail: "Fold it under Archived. Its record stays, and a click opens it again.",
+              detail: "Mark it Archived. Its row and record stay, and a click opens it again.",
               run: () => void library.archive(entry).catch(this.report),
             },
         {
@@ -5526,17 +5211,28 @@ export class App {
       },
     );
   }
-  /** What names a session or a workspace for as long as it lives: the path of its record, or its folder. */
-  private itemKey(item: SessionEntry | Workspace): string {
-    return "sessions" in item ? item.directory : item.path;
-  }
-  /** Rename a session or a workspace in its row: an input takes the place of its name, Enter keeps what it holds,
-   * and Escape leaves the name as it was. */
+  /** Rename in a dialog that keeps the composer draft and the name until Enter or Escape. */
   private startRename(item: SessionEntry | Workspace): void {
-    this.closeOverlay();
-    this.renaming = { item, value: item.name };
-    this.session.notice = "Enter keeps the new name, and Esc leaves it as it was.";
-    this.render();
+    this.openPalette(`Rename ${"sessions" in item ? "workspace" : "session"}`, [], {
+      note: "Enter keeps the new name. Esc leaves it unchanged.",
+    });
+    const input = this.paletteInput;
+    if (!input) return;
+    this.renaming = { item, value: item.name, input };
+    if (this.paletteInputRow) this.paletteInputRow.height = space.bar;
+    input.removeAllListeners(InputRenderableEvents.INPUT);
+    input.removeAllListeners(InputRenderableEvents.ENTER);
+    input.value = item.name;
+    input.cursorOffset = item.name.length;
+    input.on(InputRenderableEvents.INPUT, (value: string) => {
+      if (this.renaming) this.renaming.value = value;
+    });
+    input.on(InputRenderableEvents.ENTER, () => {
+      this.endRename(true);
+      this.closeOverlay();
+      void this.workspacePicker();
+    });
+    input.focus();
   }
   private endRename(keep: boolean): void {
     const renaming = this.renaming;
@@ -5591,7 +5287,7 @@ export class App {
     );
   }
   /** The menu that a right click on the row of a session or a workspace opens, at the pointer. */
-  private itemMenu(item: SessionEntry | Workspace, x: number, y: number): void {
+  private itemMenu(item: SessionEntry | Workspace, x?: number, y?: number): void {
     const library = this.options.workspaces;
     const rename = { label: "Rename", detail: "", run: () => this.startRename(item) };
     const choices: Choice[] =
@@ -5599,7 +5295,7 @@ export class App {
         ? [
             { label: "New session", detail: "", run: () => library.create(item).then(() => {}) },
             rename,
-            { label: item.collapsed ? "Unfold" : "Fold", detail: "", run: () => library.toggle(item) },
+            { label: "Show sessions", detail: "", run: () => this.workspacePicker() },
             { label: "Remove from the list", detail: "", run: () => this.removeItem(item) },
           ]
         : [
@@ -5612,7 +5308,7 @@ export class App {
               : { label: "Archive", detail: "", run: () => library.archive(item) },
             { label: "Move to trash", detail: "", color: c.danger, run: () => this.removeItem(item) },
           ];
-    this.openPalette(item.name, choices, { at: { x, y } });
+    this.openPalette(item.name, choices, x === undefined || y === undefined ? {} : { at: { x, y } });
     this.menuItem = item;
     this.render();
   }
@@ -5631,27 +5327,37 @@ export class App {
               mark: ["+ ", c.accent],
               run: () => this.insert("/workspace "),
             },
-            // Each workspace is a part of the list with its folder in its title, and its sessions under it.
+            // The workspace heads its sessions; its actions row gives the folder.
             ...library.groups.flatMap((group) => [
+              {
+                label: `${group.name} actions`,
+                detail: `${group.name} · Workspace · ${shortenHome(group.directory)}`,
+                heading: group.name,
+                run: () => this.itemMenu(group),
+                menu: () => this.itemMenu(group),
+              },
               ...group.sessions.map((entry) => ({
                 label: entry.name,
-                detail: sessionDetail(entry, library.current === entry),
+                detail: `${entry.archived ? "Archived · " : ""}${sessionDetail(entry, library.current === entry)}`,
+                menu: () => this.itemMenu(entry),
                 status: entry.status,
-                heading: `${group.name}   ${shortenHome(group.directory)}`,
+                heading: group.name,
                 run: () => library.select(entry),
               })),
               {
                 label: "New session",
                 detail: `Start a fresh life in ${group.name}`,
                 mark: ["+ ", c.faint] as Part,
-                heading: `${group.name}   ${shortenHome(group.directory)}`,
+                heading: group.name,
                 run: async () => {
                   await library.create(group);
                 },
               },
             ]),
           ],
-          { note: "Open sessions keep running while you work in another one." },
+          {
+            note: library.notice || "Enter opens. → or ⋯ shows actions. Archived sessions stay in this list.",
+          },
         ),
       )
       .catch(this.report);
@@ -6517,6 +6223,16 @@ export class App {
     // Each thread of the chain folds to its header and opens to its program, as a click on its header does.
     const threads = w.view === "feed" ? this.chainThreadList(w.selected) : [];
     this.openPalette("Details", [
+      {
+        label: "Context details",
+        detail: "Exact tokens, window limit, cost and grant",
+        run: this.contextDetails,
+      },
+      {
+        label: "Find threads",
+        detail: "Inspect any thread, including finished work",
+        run: () => this.threadPicker(),
+      },
       ...threads.map((one) => {
         const folded = this.threadFolded(one.act.id);
         return {
@@ -7406,24 +7122,29 @@ export class App {
       })
       .catch(w.fail);
   }
-  /** The chains of the session, each with its state and the chain it branched from. */
+  /** Every chain, with its full path and a separate source. Search does not remove its ancestry. */
   chains(): void {
     const w = this.session;
     const chains = w.chains;
+    const path = (id: string, seen = new Set<string>()): string => {
+      const chain = chains.find((one) => one.id === id);
+      if (!chain || seen.has(id)) return w.labelOf(id);
+      seen.add(id);
+      const maker = w.actOf(chain.by);
+      const parent = maker?.on && maker.on !== id ? maker.on : undefined;
+      const label = w.labelOf(id);
+      return parent && chains.some((one) => one.id === parent) ? `${path(parent, seen)} / ${label}` : label;
+    };
     this.openPalette(
       "Chains",
       chains.map((chain) => {
         const source = chains.find((one) => one.id === chain.words[1]);
         return {
-          label: w.labelOf(chain.id),
-          detail: [
-            source ? `branched from ${w.labelOf(source.id)}` : "a root chain",
-            chain.id === w.selected ? "current" : "",
-          ]
-            .filter(Boolean)
-            .join("   "),
-          status: this.session.chainStatus(chain.id),
+          label: `${w.labelOf(chain.id)}  ${chain.id === w.selected ? "✓" : ""}`,
+          detail: `${path(chain.id)} · ${chain.id}${source ? ` · source ${w.labelOf(source.id)}` : ""}`,
+          status: w.chainStatus(chain.id),
           run: () => w.select(chain.id),
+          menu: () => this.showValue("Chain path", path(chain.id)),
         };
       }),
       {
@@ -7431,7 +7152,7 @@ export class App {
           0,
           chains.findIndex((chain) => chain.id === w.selected),
         ),
-        note: "Each chain has its own transcript and module. /tree shows the branches.",
+        note: "Search chains. → full path. /tree opens hierarchy.",
       },
     );
   }
@@ -7568,7 +7289,7 @@ export class App {
       };
       return choices
         .filter((choice) =>
-          `${choice.label} ${choice.detail} ${choice.command ?? ""} ${choice.keys ?? ""}`
+          `${choice.label} ${choice.detail} ${choice.heading ?? ""} ${choice.command ?? ""} ${choice.keys ?? ""}`
             .toLowerCase()
             .includes(wanted),
         )
@@ -7669,6 +7390,11 @@ export class App {
           this.selection = index;
           this.choose();
         }),
+        onMouseDown: (event) => {
+          if (event.button !== 2 || !choice.menu) return;
+          event.stopPropagation();
+          choice.menu();
+        },
         onMouseOver: () => {
           if (this.selection === index) return;
           this.selection = index;
@@ -7758,6 +7484,16 @@ export class App {
             () => choice.detail.replace(/\s*\n\s*/g, " "),
           ),
         );
+      if (choice.menu)
+        block.add(
+          this.text(" ⋯", c.accent, {
+            run: () => choice.menu?.(),
+            onMouseUp: this.click((event) => {
+              event.stopPropagation();
+              choice.menu?.();
+            }),
+          }),
+        );
       this.paletteList.add(block);
     }
     if (!this.filtered.length && this.paletteInput?.value)
@@ -7781,6 +7517,7 @@ export class App {
       .catch(this.report);
   }
   closeOverlay(): void {
+    this.endRename(true);
     this.authenticationOpen = false;
     if (this.menuItem) {
       this.menuItem = undefined;
@@ -7884,7 +7621,13 @@ export class App {
       });
     // While a row takes a new name, Escape or Ctrl+C leaves the name as it was, and Ctrl+Q keeps it and quits.
     layer(() => !free(), "rename", [
-      { on: ["escape", "ctrl+c"], run: () => this.endRename(false) },
+      {
+        on: ["escape", "ctrl+c"],
+        run: () => {
+          this.endRename(false);
+          this.closeOverlay();
+        },
+      },
       {
         on: "ctrl+q",
         run: () => {
@@ -8010,12 +7753,12 @@ export class App {
       {
         on: ["return", "enter", "right"],
         run: () => this.enterRail(),
-        hint: ["Enter", () => (this.railChain ? "choose" : "threads")],
+        hint: ["Enter", "inspect"],
       },
       {
         on: ["escape", "left"],
         run: () => this.leaveRail(),
-        hint: ["Esc", () => (this.railChain ? "chains" : "input")],
+        hint: ["Esc", "input"],
       },
       {
         on: "space",
@@ -8024,8 +7767,20 @@ export class App {
         hint: ["Space", "collapse"],
       },
       {
+        on: "t",
+        run: onThread((thread) => this.replyThread(thread.act.id)),
+        when: () => Boolean(this.railThread()) && !this.session.host.reading,
+        hint: ["t", "reply here"],
+      },
+      {
+        on: "n",
+        run: () => this.newThread(),
+        when: () => !this.session.host.reading,
+        hint: ["n", "new thread"],
+      },
+      {
         on: "r",
-        run: onThread((thread) => this.resolveThread(thread)),
+        run: onThread((thread) => this.confirmResolve(thread)),
         when: () => this.railThread()?.resolved === false,
         hint: ["r", "resolve"],
       },
@@ -8055,6 +7810,12 @@ export class App {
     layer(free, "", [
       { on: ["tab", "shift+tab"], run: this.moveAsk, when: () => Boolean(this.overlay && this.answering) },
       ...table(true),
+      {
+        on: "right",
+        run: () => this.filtered[this.selection]?.menu?.(),
+        when: () => Boolean(this.overlay && this.filtered[this.selection]?.menu),
+        hint: ["→", "actions"],
+      },
       { on: "ctrl+c", run: () => this.cancel() },
       { on: "escape", run: this.escape },
       {

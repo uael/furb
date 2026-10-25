@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { type Renderable, TextRenderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
-import { find } from "../script/stage.ts";
+import { find, highlighting } from "../script/stage.ts";
 import { App } from "../src/app.ts";
 import { demoLibrary, demoSession, removeDemoDirectories } from "../src/demo.ts";
 import type { View } from "../src/session.ts";
@@ -464,9 +464,9 @@ test("the keys of the footer and the palette answer the mouse, and a drag over t
     true,
   ));
 
-test("the root chain stands in the threads when it rests, and the other resting chains fold under Finished", () =>
+test("the selected chain keeps its navigator while all resting chains stay in the picker", () =>
   composing(
-    async ({ session, frame }) => {
+    async ({ session, app, screen, frame }) => {
       const { engine } = session;
       const side = await engine.chain({ label: "Side", source: engine.root });
       await engine.chain({ label: "Notes", source: engine.root });
@@ -474,19 +474,22 @@ test("the root chain stands in the threads when it rests, and the other resting 
       await session.select(side);
       const left = 140 - session.preferences.sidebarWidth;
       const rows = (await frame()).split("\n").map((line) => line.slice(left).trim());
-      expect(rows.slice(1, 4)).toEqual(["▎○ Main", "▎○ Side", "▸ Finished  1"]);
+      expect(rows[0]).toContain("Side ⌃B switch");
+      expect(rows.join("\n")).toContain("No threads on this chain yet.");
+      app.chains();
+      const picker = await frame();
+      for (const label of ["Main", "Side", "Notes"]) expect(picker).toContain(label);
+      await screen.mockInput.typeText("Notes");
+      screen.mockInput.pressEnter();
+      await until(session, () => session.label === "Notes");
     },
     { width: 140, height: 30 },
   ));
 
-test("the sidebar says what each thread came to, a question that waits stands first with its values, which a click answers, and a click on a thread shows its chain", () =>
+test("the navigator keeps question identity while choices answer the exact question and the picker changes chain", () =>
   composing(
-    async ({ session, frame, click }) => {
+    async ({ session, app, screen, frame, click }) => {
       await idle(session);
-      let shown = await frame();
-      expect(shown.split("\n").filter((line) => line.includes("✓ Main"))).toContainEqual(
-        expect.stringContaining("A clear starting point"),
-      );
       const question = await session.engine.prompt("bool", {
         message: "Apply the search shortcut?",
         on: session.engine.root,
@@ -494,18 +497,20 @@ test("the sidebar says what each thread came to, a question that waits stands fi
       });
       await until(session.host, () => session.host.prompts.has(question));
       await session.refresh();
-      shown = await frame();
+      const shown = await frame();
       const rows = shown.split("\n");
       const needs = rows.findIndex((line) => line.includes("Needs you"));
       expect(needs).toBeGreaterThan(-1);
-      expect(rows.findIndex((line) => line.includes("Chains"))).toBeGreaterThan(needs);
-      expect(rows[needs + 2]).toContain("◆ Main");
+      expect(rows.findIndex((line) => line.includes("Threads"))).toBeGreaterThan(needs);
+      expect(rows[needs + 1]).toContain("Main");
       expect(shown).toContain("Apply the search shortcut?");
-      expect(shown).toContain(" 3 Other ");
-      await click(" 1 yes ");
+      expect(shown).toContain("3  Other");
+      await click("1  yes");
       expect(await session.engine.result(question)).toBe(true);
-      await click("Finished");
-      await click("Review notes");
+      app.chains();
+      await frame();
+      await screen.mockInput.typeText("Review notes");
+      screen.mockInput.pressEnter();
       await until(session, () => session.label === "Review notes");
       expect(session.selected).not.toBe(session.engine.root);
     },
@@ -519,6 +524,7 @@ test("a folded rung shows the first line of its word in the colors of its gramma
       await idle(session);
       await frame();
       await app.colorsDone();
+      await Promise.all(highlighting(screen.renderer.root));
       app.render();
       await screen.flush();
       const line = screen.captureSpans().lines.find((one) =>
