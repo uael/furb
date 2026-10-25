@@ -265,14 +265,16 @@ def logged(path: str) -> list[list[object]] | None:
 
 class Retold(TypedDict):
   """What a record tells, read with no life: the engine that made it, the engine of this build, the version of the
-  build that made it, the version of this build, whether its facts are those of its log, and its facts."""
+  build that made it, the version of this build, whether its facts are those of its log, and the file that holds its
+  facts, one on each line as JSON, where a line that does not start with `[`, and a line `["keep", "", n]`, holds no
+  fact."""
 
   made: str | None
   engine: str
   version: int | None
   current: int
   logged: bool
-  facts: list[list[object]]
+  file: str
 
 def retold(path: str) -> Retold:
   """What the record at a path tells, read with no life, so no word runs again and a record of any engine opens: the

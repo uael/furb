@@ -6,7 +6,8 @@
  *
  * In each life it measures what one new fact costs, from the moment the view hears of it to the frame that shows it:
  * the read of the view, the draw of the App and the frame of the renderer, for a line of a command that runs, for a
- * new act, and for a token of a model that writes. It measures a fact of the long life and one of the short life in
+ * new act, for a paragraph told on the root chain, which the turns of the chain read, and for a token of a model
+ * that writes. It measures a fact of the long life and one of the short life in
  * turn, so that other work of the machine weighs on both alike, and takes for each kind the least of the medians of
  * three batches of 20 facts. In the long life it measures too the first frame, from the open of the life to its first
  * frame, once cold and twice warm, and the frames while the feed scrolls and a command streams a line of output each
@@ -27,6 +28,7 @@ import {
   closeSync,
   openSync,
   readFileSync,
+  readSync,
   statSync,
   writeFileSync,
   writeSync,
@@ -65,6 +67,8 @@ const ROUNDS = 3;
 /** The new facts of each kind in a batch that the bench measures in each life, and the batches. */
 const NEW = 20;
 const BATCHES = 3;
+/** How many bytes of a record the pace reads at a time. */
+const PART = 16 * 2 ** 20;
 
 /** The size of the heavy text of each kind of fact, in bytes, as real records hold them: the word of a run, the
  * python of a turn of a model, the output of a command, a line of output, the message of a prompt and its value. */
@@ -256,6 +260,13 @@ async function facts({ record, session, app, screen }: Opened, top: Map<string, 
         () => Boolean(session.actOf(read)?.done),
       );
     },
+    tell: (at: number) => {
+      const said = `#tell ${at} of the bench`;
+      return one(
+        () => add(record, ["tell", "chain1", "chain1", [said]]),
+        () => Boolean(session.turns.at(-1)?.[1]?.endsWith(said)),
+      );
+    },
     token: (at: number) => {
       text += `token ${at} `;
       const said = text;
@@ -357,11 +368,26 @@ process.exit(0);`,
 /** The time that this machine takes to parse the facts of a record, the best of three: work that no code of furb
  * does, which says how fast the machine runs, as the empty renderer says how fast it draws. */
 function pace(record: string): number {
-  const lines = readFileSync(record, "utf8").split("\n").filter(Boolean);
+  // The file is read a part at a time, since a string holds less than a record of a long life.
+  const parts: string[] = [];
+  const file = openSync(record, "r");
+  try {
+    const part = Buffer.alloc(PART);
+    let left = "";
+    for (let got = readSync(file, part); got > 0; got = readSync(file, part)) {
+      const text = left + part.toString("utf8", 0, got);
+      const end = text.lastIndexOf("\n") + 1;
+      parts.push(text.slice(0, end));
+      left = text.slice(end);
+    }
+    if (left) parts.push(left);
+  } finally {
+    closeSync(file);
+  }
   let least = Number.POSITIVE_INFINITY;
   for (let at = 0; at < 3; at++) {
     const began = performance.now();
-    for (const line of lines) JSON.parse(line);
+    for (const text of parts) for (const line of text.split("\n")) if (line) JSON.parse(line);
     least = Math.min(least, performance.now() - began);
   }
   return least;
@@ -380,11 +406,11 @@ await cold.close();
 const memory = await held(record);
 const warm = await open(record);
 const shortOpened = await open(short);
-const kinds = ["line", "act", "token"] as const;
+const kinds = ["line", "act", "tell", "token"] as const;
 type Kind = (typeof kinds)[number];
 const sides = [
-  { measure: await facts(shortOpened, shortLife.top), costs: { line: [], act: [], token: [] } },
-  { measure: await facts(warm, top), costs: { line: [], act: [], token: [] } },
+  { measure: await facts(shortOpened, shortLife.top), costs: { line: [], act: [], tell: [], token: [] } },
+  { measure: await facts(warm, top), costs: { line: [], act: [], tell: [], token: [] } },
 ] as { measure: Awaited<ReturnType<typeof facts>>; costs: Record<Kind, number[]> }[];
 for (let at = 0; at < NEW * BATCHES; at++)
   for (const kind of kinds) for (const { measure, costs } of sides) costs[kind].push(await measure[kind](at));
@@ -396,6 +422,7 @@ const calmest = (costs: number[]) =>
 const median = ({ costs }: (typeof sides)[number]) => ({
   line: calmest(costs.line),
   act: calmest(costs.act),
+  tell: calmest(costs.tell),
   token: calmest(costs.token),
 });
 const [before, after] = sides.map(median) as [Record<Kind, number>, Record<Kind, number>];
@@ -440,6 +467,8 @@ const rows: [string, number, string, { under?: number; least?: number }][] = [
   ["a line, long life", after.line, "ms", { under: grown("line") }],
   ["a new act, short life", before.act, "ms", {}],
   ["a new act, long life", after.act, "ms", { under: grown("act") }],
+  ["a tell, short life", before.tell, "ms", {}],
+  ["a tell, long life", after.tell, "ms", { under: grown("tell") }],
   ["a token, short life", before.token, "ms", {}],
   ["a token, long life", after.token, "ms", { under: grown("token") }],
 ];

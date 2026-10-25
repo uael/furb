@@ -31,7 +31,7 @@ const prose = (text: string) => markdown.parse(text, { async: false });
 export function shareHtml(session: Session): string {
   const theme = paletteOf(session.theme);
   const sections: string[] = [];
-  for (const item of conversation(session.turns, session.acts)) {
+  for (const item of conversation(session.turns, (one) => session.actOf(one))) {
     if (item.type === "python")
       sections.push(`<section><h2>Python</h2><pre><code>${escaped(item.code)}</code></pre></section>`);
     else if (item.type === "prompt") {
@@ -65,7 +65,7 @@ export function shareMarkdown(session: Session): string {
     const fence = "`".repeat(Math.max(3, ...[...text.matchAll(/`+/g)].map((match) => match[0].length + 1)));
     return [`${fence}${language}`, text, fence];
   };
-  for (const item of conversation(session.turns, session.acts)) {
+  for (const item of conversation(session.turns, (one) => session.actOf(one))) {
     if (item.type === "python") lines.push("## Python", ...fenced(item.code, "python"), "");
     else if (item.type === "prompt") {
       const message = String(item.act.words[1] ?? "");

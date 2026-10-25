@@ -1,8 +1,19 @@
 import { expect, test } from "bun:test";
-import type { LiveAct } from "../../src/life/acts.ts";
+import type { LiveAct, Measure } from "../../src/life/acts.ts";
 import { measureOf } from "../../src/life/acts.ts";
 import { condense, ladder, makers, thread } from "../../src/life/ladder.ts";
-import { asOf, duration, momentsOf, nowOf, owedAt, spans, subjectOf, weave } from "../../src/life/loom.ts";
+import {
+  asOf,
+  duration,
+  type Loom,
+  momentsOf,
+  nowOf,
+  orderOf,
+  owedAt,
+  spans,
+  subjectOf,
+  weave,
+} from "../../src/life/loom.ts";
 import { act } from "./acts.ts";
 
 const loomOf = (
@@ -288,7 +299,8 @@ test("a condensed thread read from the index of a host gives the lines that cond
   expect(read()).toEqual(condense(ladder("chain1", acts, word, new Map(), owed, index), new Set()));
 });
 
-test("a loom of no width read from the index of a host gives the rows that it gives from every act", () => {
+/** The acts of a life of eight chains under the root, each with a prompt and commands in each state. */
+function boardActs(): LiveAct[] {
   const acts: LiveAct[] = [act("chain1", "chain", "", "operator", 1)];
   const states: Partial<LiveAct>[] = [
     {},
@@ -323,6 +335,11 @@ test("a loom of no width read from the index of a host gives the rows that it gi
       );
     }
   }
+  return acts;
+}
+
+test("a loom of no width read from the index of a host gives the rows that it gives from every act", () => {
+  const acts = boardActs();
   const prompts = [{ id: "prompt4", shape: "str", message: "Work" }];
   const pending = new Map([["bash73", "chain7"]]);
   const index = {
@@ -353,6 +370,66 @@ test("a loom of no width read from the index of a host gives the rows that it gi
   index.live = acts.filter((one) => !one.done);
   stamped.live = index.live;
   expect(weave({ ...base, folds: new Set(), index: stamped })).toEqual(weave({ ...base, folds: new Set() }));
+});
+
+test("a board read from the chains that a host names as touched gives the rows and the order of a whole board", () => {
+  const acts = boardActs();
+  let prompts = [{ id: "prompt4", shape: "str", message: "Work" }];
+  let pending = new Map([["bash73", "chain7"]]);
+  let measures: Record<string, Measure> = {};
+  const touched: string[] = [];
+  const index = {
+    ids: new Map(acts.map((one) => [one.id, one])),
+    on: Map.groupBy(acts, (one) => one.on),
+    chains: acts.filter((one) => one.kind === "chain"),
+    live: acts.filter((one) => !one.done),
+    stamp: (chain: string) => touched.filter((one) => one === chain).length,
+    touched,
+  };
+  const order = ({ rows, asking, looking, place, counts }: ReturnType<typeof orderOf>, loom: Loom) => ({
+    loom,
+    rows,
+    asking,
+    looking,
+    resting: orderOf(loom).resting(3),
+    place: [...place],
+    counts: [...counts].filter(([, count]) => count).sort(([one], [other]) => one.localeCompare(other)),
+  });
+  const same = () => {
+    const base = {
+      acts,
+      prompts,
+      measures,
+      folds: new Set<string>(),
+      width: 0,
+      pending,
+      label: (id: string) => id,
+    };
+    const read = weave({ ...base, index });
+    const whole = weave(base);
+    expect(order(orderOf(read), read)).toEqual(order(orderOf(whole), whole));
+  };
+  same();
+  same();
+  // Each command that runs ends, but on chain7, whose held work waits.
+  for (const [place, one] of acts.entries())
+    if (one.kind === "bash" && !one.done && one.on !== "chain7") {
+      const done = { ...one, done: true, ended: acts.length + 1 };
+      acts[place] = done;
+      index.ids.set(done.id, done);
+      const list = index.on.get(done.on) ?? [];
+      list[list.indexOf(one)] = done;
+      touched.push(done.on);
+    }
+  index.live = acts.filter((one) => !one.done);
+  same();
+  // The question of the operator moves to another chain, the held work goes, and a chain is measured.
+  prompts = [{ id: "prompt5", shape: "str", message: "Work" }];
+  same();
+  pending = new Map();
+  same();
+  measures = { chain3: { answers: 2, dollars: 0.5, spent: 0.5, actor: "a" } };
+  same();
 });
 
 test("the acts as they stood at a moment hold what began by then, and an act that ended later runs, with no value yet", () => {
