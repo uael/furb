@@ -21,6 +21,18 @@ const usage = {
   cache_creation_input_tokens: 3,
 };
 
+if (process.env.FURB_CLAUDE_DISCOVER) {
+  // Furb starts a process of its own to ask the models, with no model prompt. This command line has no discovery, so it
+  // answers each request with an error, as an older one does, and furb offers its fixed models at once.
+  for await (const line of createInterface({ input: process.stdin })) {
+    const request_id = (JSON.parse(line) as { request_id?: string }).request_id;
+    console.log(
+      JSON.stringify({ type: "control_response", response: { subtype: "error", request_id, error: "unsupported" } }),
+    );
+  }
+  process.exit(0);
+}
+
 if (existsSync(beside("deaf"))) {
   // Windows gives a process no new parent when its parent ends, so the parent is asked whether it lives.
   const parent = process.ppid;
