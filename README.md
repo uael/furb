@@ -55,12 +55,12 @@ a local server. [The page of models](https://github.com/uael/furb/blob/main/docs
 
 ## A first life
 
-The TUI runs from a clone of this repository. It needs [uv](https://docs.astral.sh/uv/), the Rust toolchain and
-[Bun](https://bun.sh). The first build takes some minutes:
+The TUI runs from a clone of this repository, with no Python. It needs Git, [Bun](https://bun.sh) 1.4.2 or later and
+the Rust toolchain, and [the TUI](https://github.com/uael/furb/blob/main/tui/README.md#start-it) says how to install
+them on macOS, Linux and Windows. The first build takes some minutes:
 
 ```sh
 git clone https://github.com/uael/furb && cd furb
-uv sync                              # The Python environment, which builds the engine and the command line.
 bun install && bun run build         # The TypeScript package that the TUI runs on.
 bun run demo                         # Watch a life that plays by itself. It asks no model and costs nothing.
 bun run tui                          # Start a real life on your models.
