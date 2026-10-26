@@ -620,6 +620,7 @@ impl Provider {
             if let (Some(writes), Some(reply)) = (&writes, replies.get(&id)) {
               writes(&reply.rung, &reply.chain, &text, &thinking);
             }
+            let Some(chain) = replies.get(&id).map(|reply| reply.chain.clone()) else { continue };
             let Some(watch) = replies.get_mut(&id).and_then(|reply| reply.watch.as_mut()) else {
               continue;
             };
@@ -637,9 +638,28 @@ impl Provider {
                 None => continue,
               }
             };
-            let Some(line) = watch::broken(&word) else { continue };
-            // The word as far as the statement that cannot be python is the turn of the reply, so the gate refuses
-            // it and the chain tells why. The model wrote no more of it that counts, and its call ends with the reply.
+            let line = match watch::broken(&word) {
+              Some(line) => line,
+              None => {
+                let settled = watch::settled(&word);
+                if settled.is_empty() {
+                  continue;
+                }
+                let words = vec![Object::string(&chain), Object::string(&word)];
+                let found = co.call("against", words, vec![]).await.ok();
+                let found: Vec<String> = found
+                  .and_then(|one| {
+                    let items = one.as_ref().items()?;
+                    Some(items.iter().filter_map(|x| x.as_str().map(str::to_owned)).collect())
+                  })
+                  .unwrap_or_default();
+                let Some(line) = watch::refused(&settled, &found) else { continue };
+                line
+              }
+            };
+            // The word as far as the statement that cannot be python, or that the gate refuses for good, is the turn
+            // of the reply, so the gate refuses it and the chain tells why. The model wrote no more of it that counts,
+            // and its call ends with the reply.
             let Ok(turn) = cut(watch.through(line)) else { continue };
             if let Some(Reply { chain, .. }) = replies.remove(&id) {
               mute.remove(&chain);
