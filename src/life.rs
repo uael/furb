@@ -255,6 +255,7 @@ impl Opening {
     let names = self.roster;
     let preferred = self.actor;
     provider = provider.refreshing(Arc::new(move || {
+      world::claude::refresh();
       let fresh = Catalog::load()
         .claude(claude.clone(), stall)
         .configured(Path::new(&directory), config.as_deref())?;

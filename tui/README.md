@@ -228,6 +228,8 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | ⌥Enter | Queue this message after current work |
 | ↑ / ↓ | Previous / next sent input, from the first or the last line |
 | ↑ in an empty input | Take the last queued message back to edit it |
+| → / ⌃F | At the end of the input, take the grey rest of the line that the history suggests |
+| ⌥→ / ⌥F | At the end of the input, take the next word of that grey rest |
 | ⌃S | Put the input aside, or bring it back |
 | Esc twice | Rewind: go back to an earlier point of the chain, with its files or not |
 | ⌃1-3 or ⌥1-3 | Feed / transcript / changes view |

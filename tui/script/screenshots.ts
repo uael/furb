@@ -565,6 +565,18 @@ try {
   app().composer.setText("");
   await test.mockInput.typeText("/effort ");
   await capture("46-value-suggestions");
+  // The grey rest of a line from the history, as fish shows it, which Right takes.
+  const priorHistory = session.histories[session.draftKey];
+  session.histories[session.draftKey] = [
+    "Explain how the history of this project is kept",
+    "Find the slowest test and say why it is slow",
+  ];
+  app().composer.setText("");
+  await test.mockInput.typeText("Find the slow");
+  await capture("46b-history-suggestion");
+  app().composer.setText("");
+  if (priorHistory) session.histories[session.draftKey] = priorHistory;
+  else delete session.histories[session.draftKey];
   // A word of the model that the gate refused, and that its next word replaced, folds and reads as retried.
   app().composer.setText("");
   await session.submit("Give me an answer in a fence.");
