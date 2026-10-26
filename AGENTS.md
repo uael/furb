@@ -22,7 +22,8 @@ API of its own:
   engine that made it, the log of a life beside its record
   in `log.rs`, the reader of a record with no life in `reader.rs`, which opens a record of any engine to read and keeps what it tells
   in a cache beside the record, `<record>.told`, and the provider of models in `provider.rs`, which asks each model through rig and streams what it writes, and asks it again with a backoff after a failure that passes, as a lost connection, and at the reset of a usage limit of the claude command line, which it tells the chain. It reads the statements of the word that a model streams, as the model finishes them, and ends the reply at the first that cannot be python, with the word as far as that statement, which `provider/watch.rs` holds. Its catalog, `provider/catalog.rs`,
-  knows the models of every provider that pi-ai serves and those of the claude command line, and it offers each
+  knows the models of every provider that pi-ai serves and those of the claude command line, which
+  `provider/claude/discover.rs` asks of the program itself and keeps in the cache until the program changes or `/reload`, and it offers each
   model whose credential stands in the environment, the claude command line when it finds the program, and each
   model for chat that a local server lists when `FURB_LOCAL_URL` names its address, which `provider/local.rs` asks.
   `docs/models.md` tells a user how furb finds a model and how to choose one.
