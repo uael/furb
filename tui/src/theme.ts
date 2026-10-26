@@ -1,4 +1,5 @@
 import { RGBA, SyntaxStyle, type ThemeMode } from "@opentui/core";
+import { clock } from "./clock.ts";
 
 /** The roles of a palette. Surfaces go from the background up: the panel of the sidebars and the composer, then the
  * raised surface of a dialog. Text goes from the text down: muted for what supports it, faint for what frames it. */
@@ -348,7 +349,7 @@ export const frame = 100;
  * part of the view moves with time. */
 export const motion = { still: false };
 /** The frame of the spinner at a time, or the mark of work that runs when the view holds still. */
-export function spin(now = Date.now()): string {
+export function spin(now = clock()): string {
   if (motion.still) return glyph.running;
   return spinner[Math.floor(now / frame) % spinner.length] ?? "⠋";
 }
