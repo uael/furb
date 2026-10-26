@@ -1,10 +1,10 @@
-  compaction › Current                                                                   Feed    Transcript    Changes    ⌥1-3    Current ⌃B switch ⌃W
+  compaction › Current                                                       Feed    Transcript    Changes    ⌥1-3    Current ⌃B switch ⌃W
 
-     63 value_63 = 63                                                                                                             Threads  2
-     64 value_64 = 64                                                                                                             ▎◉ Continue afte… working
+     63 value_63 = 63                                                                                                 Threads  2
+     64 value_64 = 64                                                                                                 ▎◉ Continue after the cut working
      65 value_65 = 65
-     66 value_66 = 66                                                                                                             ▸ Finished  1
-     67 value_67 = 67                                                                                                             Find threads  Details
+     66 value_66 = 66                                                                                                 ▸ Finished  1
+     67 value_67 = 67                                                                                                 Find threads  Details
      68 value_68 = 68
      69 value_69 = 69
      70 value_70 = 70
@@ -40,9 +40,9 @@
     100 continuation = "steady"
   ◉ 101 # Check the final value
 
-  ╻▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+  ╻▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
   ┃ Ask anything, or type / for commands
   ┃
   ┃   Prompt    Python    ⌃R   on Current   operator   off effort   returns str
-  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
-  ◉ Working                                                                                  ⌃P commands   Esc pause   F1 help
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+  ◉ Working                                                                      ⌃P commands   Esc pause   F1 help

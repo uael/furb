@@ -1,4 +1,5 @@
-import type { Fact } from "furb";
+import { type Fact, Session as ScriptedSession } from "furb";
+import { until } from "../../bind/typescript/test/until.ts";
 
 /** An inert recording of a legacy continuation and an in-place cut. No word of this recording runs. */
 export function compactionFacts(directory: string): Fact[] {
@@ -101,4 +102,43 @@ export function compactionFacts(directory: string): Fact[] {
       ["done", id, "", null],
     ];
   });
+}
+
+/** The facts of the official helper running inside one model prompt, with scripted answers and no provider call. */
+export async function selfCompactionFacts(directory: string): Promise<{ facts: Fact[]; prompt: string }> {
+  let turn = 0;
+  const session = new ScriptedSession({
+    cwd: directory,
+    model: "claude-cli:sonnet",
+    config: `${directory}/config`,
+    answer: async () => [
+      "assistant",
+      turn++ === 0
+        ? 'before = 1\ncompact(filters=[], summary="Keep before = 1 and continue this same prompt.")'
+        : turn === 2
+          ? "after = before + 1\nclose(after)"
+          : "close(None)",
+      null,
+      null,
+    ],
+  });
+  try {
+    const engine = session.open();
+    const prompt = engine.prompt("int", {
+      message: "Continue the same prompt after compaction.",
+      on: engine.root,
+    });
+    const result = await prompt;
+    if (result !== 2) throw new Error("The scripted prompt did not compact and continue.");
+    await until(
+      session,
+      () =>
+        ![...session.activity.acts.values()].some(
+          (act) => act.kind === "rung" && /^prompt\d+$/.test(act.by) && !act.done,
+        ),
+    );
+    return { facts: [...session.facts], prompt: prompt.id };
+  } finally {
+    await session.dispose();
+  }
 }

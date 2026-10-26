@@ -1,10 +1,11 @@
-import { appendFile, mkdir, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { appendFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { until } from "../../bind/typescript/test/until.ts";
 import { demoSession } from "../src/demo.ts";
 import { loadParsers } from "../src/parsers.ts";
 import { paletteOf } from "../src/theme.ts";
-import { compactionFacts } from "../test/compaction-fixture.ts";
+import { compactionFacts, selfCompactionFacts } from "../test/compaction-fixture.ts";
 import { composing } from "../test/composing.ts";
 import { rasterize } from "./raster.ts";
 import * as stage from "./stage.ts";
@@ -163,3 +164,69 @@ await composing(
   { width: 160, height: 48, useMouse: true },
   session,
 );
+
+const generatedDirectory = await mkdtemp(join(tmpdir(), "furb-self-compaction-proof-"));
+try {
+  const generated = await selfCompactionFacts(generatedDirectory);
+  const record = join(generatedDirectory, "inert.jsonl");
+  await writeFile(
+    record,
+    [JSON.stringify({ recorded: true }), ...generated.facts.map((fact) => JSON.stringify(fact)), ""].join(
+      "\n",
+    ),
+  );
+  const actual = await demoSession({ record, cwd: generatedDirectory });
+  await composing(
+    async ({ session, app, screen, frame }) => {
+      session.preferences.reducedMotion = true;
+      for (const [name, width, height] of [
+        ["same-thread-wide", 160, 48],
+        ["same-thread-narrow", 80, 24],
+      ] as const) {
+        screen.resize(width, height);
+        await frame();
+        await app.colorsDone();
+        await frame();
+        const shown = screen.captureCharFrame();
+        if (!/3 summary =/.test(shown) || !/5 after = before \+ 1/.test(shown))
+          throw new Error("The actual compact helper lost its prompt's display coordinates.");
+        await writeFile(
+          `${out}/${name}.png`,
+          rasterize(screen.captureSpans(), paletteOf(session.theme), "furb"),
+        );
+        await writeFile(
+          `${out}/${name}.txt`,
+          shown
+            .split("\n")
+            .map((line) => line.trimEnd())
+            .join("\n")
+            .trimEnd() + "\n",
+        );
+      }
+      const helper = session.acts.find(
+        (act) => act.kind === "rung" && String(act.words[0]).startsWith("<s:summary>"),
+      );
+      await writeFile(
+        `${out}/same-thread.json`,
+        JSON.stringify(
+          {
+            origin: "Official compact helper in a native session with scripted answers and no provider call",
+            prompt: generated.prompt,
+            helper: helper?.id,
+            originalBy: helper?.by,
+            originalParentPrompt: session.actOf(helper?.by ?? "")?.by,
+            displayLines: { before: 1, compact: 2, summary: 3, reground: 4, after: 5, close: 6 },
+            localSummaryLine: 1,
+            localRegroundLine: 3,
+          },
+          null,
+          2,
+        ) + "\n",
+      );
+    },
+    { width: 160, height: 48 },
+    actual,
+  );
+} finally {
+  await rm(generatedDirectory, { recursive: true, force: true });
+}

@@ -4,8 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { until } from "../../bind/typescript/test/until.ts";
 import { openEngine } from "../src/bridge.ts";
+import { Preferences } from "../src/preferences.ts";
 import { Session } from "../src/session.ts";
-import { compactionFacts } from "./compaction-fixture.ts";
+import { compactionFacts, selfCompactionFacts } from "./compaction-fixture.ts";
 import { composing } from "./composing.ts";
 
 test("selecting any continuation targets its latest head and leaves an ordinary branch separate", async () => {
@@ -47,6 +48,7 @@ test("selecting any continuation targets its latest head and leaves an ordinary 
     }),
     host,
     true,
+    new Preferences(join(directory, "ui.json")),
   );
   await session.refresh();
   let composed = false;
@@ -152,6 +154,7 @@ test("a recorded App offers no disabled built-in, then loads a late enable witho
     }),
     host,
     true,
+    new Preferences(join(directory, "ui.json")),
   );
   await session.refresh();
   try {
@@ -203,7 +206,7 @@ test("each independent thread starts at one and appended steps keep their thread
     [JSON.stringify({ recorded: true }), ...facts.map((fact) => JSON.stringify(fact)), ""].join("\n"),
   );
   const { engine, host } = await openEngine({ demo: true, record, cwd: directory });
-  const session = new Session(engine, host, true);
+  const session = new Session(engine, host, true, new Preferences(join(directory, "ui.json")));
   await session.refresh();
   try {
     await session.select("chain1");
@@ -243,7 +246,7 @@ test("a compacted feed hears appends and a host reset replaces equal-count rows 
       return typeof value === "function" ? value.bind(target) : value;
     },
   });
-  const session = new Session(first.engine, host, true);
+  const session = new Session(first.engine, host, true, new Preferences(join(directory, "ui.json")));
   await session.refresh();
   let second: Awaited<ReturnType<typeof openEngine>> | undefined;
   let composed = false;
@@ -338,7 +341,7 @@ test("ordinary chain lists stay stable across an append and a chain phase update
     ].join("\n"),
   );
   const { engine, host } = await openEngine({ demo: true, record, cwd: directory });
-  const session = new Session(engine, host, true);
+  const session = new Session(engine, host, true, new Preferences(join(directory, "ui.json")));
   try {
     await session.refresh();
     const chains = session.chains;
@@ -356,6 +359,61 @@ test("ordinary chain lists stay stable across an append and a chain phase update
     expect(session.headOf("chain2")).toBe("chain2");
   } finally {
     await session.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("the official compact helper keeps its summary inside the model prompt that called it", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-self-compact-"));
+  const record = join(directory, "inert.jsonl");
+  const generated = await selfCompactionFacts(directory);
+  await writeFile(
+    record,
+    [JSON.stringify({ recorded: true }), ...generated.facts.map((fact) => JSON.stringify(fact)), ""].join(
+      "\n",
+    ),
+  );
+  const { engine, host } = await openEngine({ demo: true, record, cwd: directory });
+  const session = new Session(engine, host, true, new Preferences(join(directory, "ui.json")));
+  let composed = false;
+  try {
+    await session.refresh();
+    composed = true;
+    await composing(
+      async ({ frame, screen, click }) => {
+        const shown = await frame();
+        expect(shown).toMatch(/1 before = 1/);
+        expect(shown).toMatch(/2 compact\(filters=/);
+        expect(shown).toMatch(/3 summary = "Keep before = 1/);
+        expect(shown).toMatch(/4 reground\(\)/);
+        expect(shown).toMatch(/5 after = before \+ 1/);
+        expect(shown).toMatch(/6 close\(after\)/);
+        const summary = session.acts.find(
+          (act) => act.kind === "rung" && String(act.words[0]).startsWith("<s:summary>"),
+        );
+        expect(session.actOf(summary?.by ?? "")?.by).toBe(generated.prompt);
+        expect(summary?.by).not.toBe(generated.prompt);
+        let copied = "";
+        screen.renderer.copyToClipboardOSC52 = (text) => {
+          copied = text;
+          return true;
+        };
+        const rows = shown.split("\n");
+        const y = rows.findIndex((row) => row.includes("3 summary ="));
+        const x = (rows[y] ?? "").indexOf("summary");
+        await screen.mockMouse.click(x + 2, y, 2);
+        await frame();
+        await click("Copy its source");
+        const original = summary?.words[0];
+        if (typeof original !== "string") throw new Error("The helper has no original source.");
+        expect(copied).toBe(original);
+        expect(copied.split("\n")[2]).toBe("reground()");
+      },
+      { width: 160, height: 48, useMouse: true },
+      session,
+    );
+  } finally {
+    if (!composed) await session.dispose();
     await rm(directory, { recursive: true, force: true });
   }
 });

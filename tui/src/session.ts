@@ -27,6 +27,7 @@ import {
   type Desk,
   desk,
   failed,
+  threadOf,
 } from "furb/life";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { expandHome, fileReferences, fromDirectory, projectFiles, shortenHome } from "./files.ts";
@@ -623,8 +624,10 @@ export class Session extends EventEmitter {
             placed(index, act);
             if (act.kind === "chain") {
               const source = (row?: ActRow) => row?.compactions?.find((cut) => cut.source)?.source;
-              if (!previous || source(previous) !== source(act)) this.runsRead = undefined;
-              else {
+              if (!previous || source(previous) !== source(act)) {
+                this.runsRead = undefined;
+                this.cutsRead = undefined;
+              } else {
                 const at = this.runsRead?.headAt.get(act.id);
                 if (at !== undefined && this.runsRead) this.runsRead.heads[at] = act;
               }
@@ -636,8 +639,10 @@ export class Session extends EventEmitter {
                   (cut, i) =>
                     cut.at !== after[i]?.at || cut.by !== after[i]?.by || cut.source !== after[i]?.source,
                 )
-              )
+              ) {
                 this.feedRead = undefined;
+                this.cutsRead = undefined;
+              }
             }
             this.feedAct(act);
             if (!act.done) this.started[act.id] ??= Date.now();
@@ -938,7 +943,9 @@ export class Session extends EventEmitter {
         ? {
             ...row,
             on: held.selected,
-            ...(row.kind === "rung" && held.cuts.has(row.by) ? { by: "operator" } : {}),
+            ...(row.kind === "rung" && held.cuts.has(row.by)
+              ? { by: threadOf(row, held.base.ids) ?? "operator" }
+              : {}),
           }
         : row;
     held.index.ids.set(act.id, act);
@@ -948,7 +955,7 @@ export class Session extends EventEmitter {
   private feedIndex(): Index {
     const original = this.indexed();
     const members = this.runs().get(this.selected)?.members ?? [this.selected];
-    const cuts = members.flatMap((id) => original.ids.get(id)?.compactions ?? []);
+    const cuts = this.compactions;
     if (members.length === 1 && !cuts.length) return original;
     if (this.feedRead?.base === original && this.feedRead.selected === this.selected)
       return this.feedRead.index;
@@ -992,12 +999,34 @@ export class Session extends EventEmitter {
   get activity(): ActRow[] {
     return this.feedIndex().work.get(this.selected) ?? [];
   }
-  /** The cuts in the logical chain shown, in record order. */
-  get compactions() {
-    const index = this.indexed();
-    return (this.runs().get(this.selected)?.members ?? [this.selected])
-      .flatMap((id) => index.ids.get(id)?.compactions ?? [])
+  private cutsRead?: {
+    base: Index;
+    selected: string;
+    cuts: NonNullable<ActRow["compactions"]>;
+    by: Map<string, NonNullable<ActRow["compactions"]>>;
+  };
+  private cutIndex() {
+    const base = this.indexed();
+    if (this.cutsRead?.base === base && this.cutsRead.selected === this.selected) return this.cutsRead;
+    const cuts = (this.runs().get(this.selected)?.members ?? [this.selected])
+      .flatMap((id) => base.ids.get(id)?.compactions ?? [])
       .sort((a, b) => a.at - b.at);
+    const by = new Map<string, NonNullable<ActRow["compactions"]>>();
+    for (const cut of cuts) {
+      const group = by.get(cut.by) ?? [];
+      group.push(cut);
+      by.set(cut.by, group);
+    }
+    this.cutsRead = { base, selected: this.selected, cuts, by };
+    return this.cutsRead;
+  }
+  /** The cuts in the logical chain shown, in record order, retained until its cut metadata changes. */
+  get compactions() {
+    return this.cutIndex().cuts;
+  }
+  /** The cuts by the step that made them, which the feed reads once for all the programs it shows. */
+  get compactionsBy() {
+    return this.cutIndex().by;
   }
   /** The acts of the chain shown that are not done, but its chains, in the order of the acts: what a frame reads of
    * the work that runs, with no pass over every act of the chain. */

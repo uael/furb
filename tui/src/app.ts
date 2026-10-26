@@ -2171,25 +2171,27 @@ export class App {
         this.programs.set(key, { version: then ? -1 : w.version, live, lines: made });
         return made;
       };
+      const cutsByStep = w.compactionsBy;
       const programCard = (id: string, given: readonly ProgramLine[], indent: number) => {
-        const marked = new Set<string>();
-        given = given.flatMap((line): ProgramLine[] => {
-          if (marked.has(line.step.id)) return [line];
-          marked.add(line.step.id);
-          const cuts = w.compactions.filter((cut) => cut.by === line.step.id);
-          return [
-            ...cuts.map(
-              (cut): ProgramLine => ({
-                kind: "note",
-                step: line.step,
-                text: cut.source
-                  ? `# compacted from ${cut.source}; continue on ${w.selected}`
-                  : "# compacted in place",
-              }),
-            ),
-            line,
-          ];
-        });
+        if (cutsByStep.size) {
+          const marked = new Set<string>();
+          given = given.flatMap((line): ProgramLine[] => {
+            if (marked.has(line.step.id)) return [line];
+            marked.add(line.step.id);
+            return [
+              ...(cutsByStep.get(line.step.id) ?? []).map(
+                (cut): ProgramLine => ({
+                  kind: "note",
+                  step: line.step,
+                  text: cut.source
+                    ? `# compacted from ${cut.source}; continue on ${w.selected}`
+                    : "# compacted in place",
+                }),
+              ),
+              line,
+            ];
+          });
+        }
         // Completed steps and the live tail share one retained source node, including the handoff from tokens
         // to the complete word. The original step coordinates still own inspection, copy, edit and string folds.
         const all: ProgramLine[] = given.flatMap((line): ProgramLine[] => {
