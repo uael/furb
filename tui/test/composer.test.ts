@@ -500,12 +500,10 @@ test("the usage counts each token once, and the context share shows from the fir
     expect(session.context).toBe(3240);
     const shown = await frame();
     expect(shown).toContain("0%");
-    expect(shown).toContain("Cache read");
-    expect(shown).not.toContain("Cached");
     expect(shown).toContain("━");
-    const lines = shown.split("\n");
-    expect(lines.find((line) => line.includes("Last prompt"))).toContain("3.2k");
-    expect(lines.find((line) => line.includes("Fresh input"))).toContain(count(440 * answers));
+    const numbers = shown.split("\n").find((line) => line.includes("3.2k prompt"));
+    expect(numbers).toContain(`${count(2800 * answers)} cached`);
+    expect(shown).not.toContain("Fresh input");
   }));
 
 test("the usage of a fork counts the answers of the fork alone, and not those of its origin", () =>
@@ -520,8 +518,8 @@ test("the usage of a fork counts the answers of the fork alone, and not those of
     expect(session.turns.filter((turn) => turn[0] === "assistant").length).toBe(answered);
     expect(session.spend).toEqual({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, dollars: 0 });
     const shown = await frame();
-    expect(shown).toContain("Last prompt");
-    expect(shown).not.toContain("Cache read");
+    expect(shown).toContain("3.2k prompt");
+    expect(shown).not.toContain("cached");
   }));
 
 test("a paused chain says so at the end of its feed and in the footer, and Wake wakes it", () =>
