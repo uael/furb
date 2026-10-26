@@ -1,0 +1,48 @@
+  compaction › Current                                                                   Feed    Transcript    Changes    ⌥1-3    Current ⌃B switch ⌃W
+
+  ╻▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄    Threads  1
+  ┃ Keep the work on one program.                                                              str  ▾ Collapse   ○ Open again     ▎✓ Keep the wor… finished
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                                                                                                                  ▸ Finished  1
+     1 answer = 41               # Middle                                                                                         Find threads  Details
+
+       # compacted from chain1; continue on chain3
+     1 restore("chain1")
+     2 summary = "Keep answer = 41.\n"
+     3 reground()                       # Current
+
+       # compacted from chain2; continue on chain3
+     1 restore("chain2")
+     2 summary = "Keep the answer and check it.\n"
+     3 reground()
+
+       # compacted in place
+     1 compact(summary="Keep the exact value and the pending question.")
+
+     1 summary = "Keep the exact value and the pending question.\nThe next step verifies the answer. Keep t
+       he source of each decision, the exact value that the operator approved, and the pending question tog
+       ether. Check the original files before the next edit. Do not drop this final sentence.\n"
+     2 reground()                                                                                            # Nested work
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  ╻▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+  ┃ Ask anything, or type / for commands
+  ┃
+  ┃   Prompt    Python    ⌃R   on Current   operator   off effort   returns str
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+  ○ Ready                                                                                                ⌃P commands   F1 help

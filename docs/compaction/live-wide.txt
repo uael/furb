@@ -1,0 +1,48 @@
+  compaction › Current                                                                   Feed    Transcript    Changes    ⌥1-3    Current ⌃B switch ⌃W
+
+     63 value_63 = 63                                                                                                             Threads  2
+     64 value_64 = 64                                                                                                             ▎◉ Continue afte… working
+     65 value_65 = 65
+     66 value_66 = 66                                                                                                             ▸ Finished  1
+     67 value_67 = 67                                                                                                             Find threads  Details
+     68 value_68 = 68
+     69 value_69 = 69
+     70 value_70 = 70
+     71 value_71 = 71
+     72 value_72 = 72
+     73 value_73 = 73
+     74 value_74 = 74
+     75 value_75 = 75
+     76 value_76 = 76
+     77 value_77 = 77
+     78 value_78 = 78
+     79 value_79 = 79
+     80 value_80 = 80
+     81 value_81 = 81
+     82 value_82 = 82
+     83 value_83 = 83
+     84 value_84 = 84
+     85 value_85 = 85
+     86 value_86 = 86
+     87 value_87 = 87
+     88 value_88 = 88
+     89 value_89 = 89
+     90 value_90 = 90
+     91 value_91 = 91
+     92 value_92 = 92
+     93 value_93 = 93
+     94 value_94 = 94
+     95 value_95 = 95
+     96 value_96 = 96
+     97 value_97 = 97
+     98 value_98 = 98
+     99 value_99 = 99
+    100 continuation = "steady"
+  ◉ 101 # Check the final value
+
+  ╻▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+  ┃ Ask anything, or type / for commands
+  ┃
+  ┃   Prompt    Python    ⌃R   on Current   operator   off effort   returns str
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+  ◉ Working                                                                                  ⌃P commands   Esc pause   F1 help

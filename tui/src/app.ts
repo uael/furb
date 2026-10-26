@@ -34,6 +34,7 @@ import {
   imageContent,
   imagePath,
   imageReferences,
+  ROOT,
   safeText,
   shapes,
   TIMEOUT,
@@ -819,8 +820,14 @@ export class App {
     session.on("codexModels", this.codexModels);
     this.keymap = keymapOf(renderer);
     this.layersOff = this.layers();
-    this.parts = new Parts(session.host.directory, this.partsChanged);
+    this.parts = new Parts(
+      session.host.directory,
+      this.partsChanged,
+      undefined,
+      async () => session.actOf(ROOT)?.extensions ?? [],
+    );
     void this.parts.load();
+    session.host.on("reset", this.partsReset);
     renderer.on("resize", this.render);
     renderer.on("selection", this.copySelection);
     renderer.on("theme_mode", this.modeChanged);
@@ -1160,7 +1167,7 @@ export class App {
       this.lastSize = size;
     }
     const w = this.session;
-    this.parts.heard(w.written);
+    this.parts.heard(w.written, w.actOf(ROOT)?.extensions);
     motion.still = w.preferences.still;
     if (w.theme !== this.theme) this.applyTheme(w.theme);
     this.call(w.desk.asks);
@@ -2143,6 +2150,24 @@ export class App {
         return made;
       };
       const programCard = (id: string, given: readonly ProgramLine[], indent: number) => {
+        const marked = new Set<string>();
+        given = given.flatMap((line): ProgramLine[] => {
+          if (marked.has(line.step.id)) return [line];
+          marked.add(line.step.id);
+          const cuts = w.compactions.filter((cut) => cut.by === line.step.id);
+          return [
+            ...cuts.map(
+              (cut): ProgramLine => ({
+                kind: "note",
+                step: line.step,
+                text: cut.source
+                  ? `# compacted from ${cut.source}; continue on ${w.selected}`
+                  : "# compacted in place",
+              }),
+            ),
+            line,
+          ];
+        });
         // Completed steps and the live tail share one retained source node, including the handoff from tokens
         // to the complete word. The original step coordinates still own inspection, copy, edit and string folds.
         const all: ProgramLine[] = given.flatMap((line): ProgramLine[] => {
@@ -3581,6 +3606,7 @@ export class App {
    * the ask whole. */
   /** The parts once they loaded: their keys again, and each card again, since a part may draw the row of its act. */
   /** The count of the loads of the parts, which a label that a part gives keys on. */
+  private partsReset = () => this.parts.soon();
   private partsLoaded = 0;
   /** The hunk selected by the review navigation keys. */
   private reviewHunk = 0;
@@ -8105,6 +8131,7 @@ export class App {
     this.session.off("codexModels", this.codexModels);
     for (const off of this.layersOff) off();
     this.partKeysOff?.();
+    this.session.host.off("reset", this.partsReset);
     this.parts.dispose();
     this.renderer.off("resize", this.render);
     this.renderer.off("selection", this.copySelection);
