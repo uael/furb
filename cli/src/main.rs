@@ -150,6 +150,13 @@ enum Command {
     #[arg(long)]
     cwd: Option<PathBuf>,
   },
+  /// Print where the models of this machine came from: for models.dev and for pi-ai, the version, the time of the last
+  /// good fetch, and the error of the last failed one. A running life uses a new catalog at its next stand.
+  Catalog {
+    /// Fetch both sources now. A source that is offline or gives invalid data leaves the last valid catalog in place.
+    #[arg(long)]
+    update: bool,
+  },
   /// Print each extension that a life on the record runs: those it enables, then those that the configs of the user
   /// and of the directory turn on, each with its life word.
   Extensions {
@@ -199,6 +206,7 @@ fn main() -> ExitCode {
     Some(Command::Facts { record, act, chain }) => facts(&record, act.as_deref(), chain.as_deref()),
     Some(Command::Run { word, place, stand }) => run(stand.on(place.opening(true)), word),
     Some(Command::Extensions { place }) => extensions(place.opening(false)),
+    Some(Command::Catalog { update }) => catalog(update),
     Some(Command::Checkpoint { record, cwd }) => {
       checkpoint(Place { record: Some(record.clone()), cwd }.opening(false), &record)
     }
@@ -229,7 +237,7 @@ fn opened(furb: &Furb) -> Option<&Path> {
       Command::Prompt { place, .. } | Command::Run { place, .. } | Command::Extensions { place },
     ) => place.record.as_deref(),
     Some(Command::Turns { record, .. } | Command::Checkpoint { record, .. }) => Some(record),
-    Some(Command::Facts { .. }) => None,
+    Some(Command::Facts { .. } | Command::Catalog { .. }) => None,
     None if furb.mode == Mode::Rpc => furb.place.record.as_deref(),
     None => None,
   }
@@ -251,6 +259,26 @@ fn handed(furb: &Furb) -> Option<ExitCode> {
       eprintln!("furb: the build of version {theirs} at {} does not run: {no}", program.display());
       Some(ExitCode::FAILURE)
     }
+  }
+}
+
+/// Where the models of this machine came from, after an update when the operator asks for one.
+fn catalog(update: bool) -> Result<(), String> {
+  let status = if update { world::catalog::updated() } else { world::catalog::status() };
+  let mut failed = false;
+  for (name, one) in [("models.dev", &status.models_dev), ("pi-ai", &status.pi_ai)] {
+    let (version, fetched) =
+      (one.version.as_deref().unwrap_or("-"), one.fetched.as_deref().unwrap_or("never"));
+    println!("{name}: version {version}, fetched {fetched}");
+    if let Some(why) = &one.error {
+      println!("  error: {why}");
+      failed = true;
+    }
+  }
+  if update && failed {
+    Err("the update failed for a source, and the last valid catalog stays".to_owned())
+  } else {
+    Ok(())
   }
 }
 

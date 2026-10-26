@@ -3,9 +3,9 @@
 //!
 //! The crate carries a snapshot of the catalog, cut down to the providers that pi-ai serves, which
 //! `script/catalog.py` makes again from models.dev and, for the two providers that models.dev does not list, from the
-//! data of pi-ai. A life reads the models of a provider of models.dev from the cache of furb when the cache holds
-//! them newer than the snapshot, and a life refreshes the cache in the background when it is a day old, so no life
-//! waits on the network and a life with no network reads the snapshot. The claude command line is the provider
+//! data of pi-ai. A life reads the models of a provider from the caches of furb when they hold them newer than the
+//! snapshot, and a life updates the caches in the background when they are a day old, so no life waits on the network
+//! and a life with no network reads the snapshot. [`update`] says how a source is fetched and kept. The claude command line is the provider
 //! `claude-cli`, whose models are opus, sonnet, haiku and fable.
 //!
 //! A model is named `provider:id`. The catalog offers the models of a provider when its credential stands in the
@@ -22,6 +22,9 @@
 //! [`local`]: super::local
 
 mod config;
+mod update;
+
+pub use update::{Source, Status, status, updated};
 
 use std::{
   collections::{HashMap, HashSet},
@@ -32,7 +35,7 @@ use std::{
 };
 
 use indexmap::IndexMap;
-use rig_core::{completion::CompletionError, http_client::ReqwestClient};
+use rig_core::completion::CompletionError;
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
@@ -43,7 +46,7 @@ use super::{
   local::{ENV_URL, Heard, LOCAL, Server},
   search,
 };
-use crate::{ear::reactor, world::cache};
+use crate::world::cache;
 
 /// The levels of effort, from least to most, which an actor names after its model, as `claude-cli:opus/low`.
 pub const LEVELS: [&str; 7] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
@@ -57,12 +60,6 @@ pub const DOCTRINE: &str = include_str!("../../../DOCTRINE.md");
 
 /// The snapshot of the catalog that the crate carries.
 const SNAPSHOT: &str = include_str!("catalog.json");
-
-/// Where models.dev serves its catalog.
-const URL: &str = "https://models.dev/api.json";
-
-/// How old the cache grows before a life refreshes it.
-const STALE: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// One provider of the snapshot: the client of rig that asks it, the names of its credential, those whose credential
 /// goes as a bearer, its address, the names of the environment that a place of an address reads before its own, and
@@ -206,8 +203,9 @@ impl Catalog {
     static SERVER: OnceLock<Option<Arc<Server>>> = OnceLock::new();
     let env = |name: &str| env::var(name).ok();
     let server = SERVER.get_or_init(|| Server::named(env).map(Arc::new)).clone();
-    let cached = cache().map(|at| at.join("models.json"));
-    let mut catalog = Catalog::of(listed(cached.as_ref()), Claude::found(), server, env);
+    let cached = cache().map(|at| at.join(update::MODELS));
+    let listed = listed(cached.as_ref());
+    let mut catalog = Catalog::of(&listed, Claude::found(), server, env);
     catalog.providers.push((super::codex::NAME.to_owned(), Vec::new(), false));
     catalog
   }
@@ -695,18 +693,18 @@ pub(super) fn reached(
   }
 }
 
-/// The providers of the snapshot, with the models of each that the cache at a path holds, read once in a process;
-/// and the cache refreshed in the background when it is a day old.
-fn listed(cached: Option<&PathBuf>) -> &'static IndexMap<String, Listed> {
-  static LISTED: OnceLock<IndexMap<String, Listed>> = OnceLock::new();
-  LISTED.get_or_init(|| {
-    let age = cached.and_then(|at| fs::metadata(at).ok()?.modified().ok()?.elapsed().ok());
-    if let Some(at) = cached.filter(|_| !cfg!(test) && age.is_none_or(|age| age > STALE)) {
-      reactor().spawn(refreshed(at.clone()));
-    }
-    let text = cached.and_then(|at| fs::read_to_string(at).ok());
-    parsed(SNAPSHOT, text.as_deref())
-  })
+/// The providers of the snapshot, with the models of each that the caches hold, read again by each catalog so that a
+/// life which stands again sees an update. The cache of models.dev is refreshed in the background when it is a day
+/// old.
+fn listed(cached: Option<&PathBuf>) -> IndexMap<String, Listed> {
+  if let Some(at) = cached {
+    update::background(at);
+  }
+  let text = cached.and_then(|at| fs::read_to_string(at).ok());
+  let mut listed = parsed(SNAPSHOT, text.as_deref());
+  let pi = cached.and_then(|at| fs::read_to_string(at.with_file_name(update::PI)).ok());
+  update::applied(&mut listed, pi.as_deref());
+  listed
 }
 
 /// The providers of a snapshot, each with the models of the cache when the cache holds models of it as new as those
@@ -725,22 +723,6 @@ pub(super) fn parsed(snapshot: &str, cached: Option<&str>) -> IndexMap<String, L
     }
   }
   listed
-}
-
-/// The catalog of models.dev, fetched and kept in the cache at a path, when it reads as one.
-async fn refreshed(at: PathBuf) {
-  let asked = ReqwestClient::new().get(URL).header("user-agent", "furb").send();
-  let Ok(Ok(got)) = asked.await.map(|got| got.error_for_status()) else { return };
-  let Ok(text) = got.text().await else { return };
-  if serde_json::from_str::<HashMap<String, Cached>>(&text).is_err() {
-    return;
-  }
-  let partial = at.with_extension("json.part");
-  let wrote = at.parent().is_some_and(|parent| fs::create_dir_all(parent).is_ok())
-    && fs::write(&partial, text).is_ok();
-  if wrote {
-    let _ = fs::rename(&partial, &at);
-  }
 }
 
 #[cfg(test)]

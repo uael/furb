@@ -5,6 +5,7 @@
   },
   "pi-ai": {
     "version": "1.4.0",
+    "providers": ["ant-ling", "radius"],
     "fetched": "2026-10-26T18:09:17Z"
   }
 }

@@ -214,9 +214,14 @@ export const desk = part({
       ),
     );
     const act = this.row({ gap: space.between });
-    if (ask.choices.length && ask.id === this.picking()?.id)
+    if (this.rows(ask).length && ask.id === this.picking()?.id)
       act.add(
-        this.text("Choose below with ↑↓ and Enter, or its number, or Other for your own words", c.faint),
+        this.text(
+          ask.options.length
+            ? "Tick below with Space, send with Enter, or choose Other for your own words"
+            : "Choose below with ↑↓ and Enter, or its number, or Other for your own words",
+          c.faint,
+        ),
       );
     else if (ask.choices.length) {
       for (const choice of ask.choices)
@@ -233,7 +238,8 @@ export const desk = part({
             ["Enter sends the input to ", c.faint],
             [ask.id, c.muted],
             [` as ${ask.shape}`, c.faint],
-            [asks.length > 1 ? "   ⌃A opens each in turn" : "   ⌃A opens it", c.faint],
+            [ask.hint ? `: ${ask.hint}` : "", c.faint],
+            [ask.hint ? "" : asks.length > 1 ? "   ⌃A opens each in turn" : "   ⌃A opens it", c.faint],
           ],
           c.faint,
           { truncate: true, flexShrink: 1 },

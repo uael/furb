@@ -65,6 +65,14 @@ Model data is cached for five minutes and checked when a life opens, when the Co
 If a refresh fails for a temporary cause, the last model list stays available. A changed model list or window
 updates the standing when the operator reloads it or opens the Codex picker.
 
+The catalog of the other providers comes from two sources: models.dev, and the package pi-ai for the providers that
+models.dev does not list. A life updates both in the background once a day, and `furb catalog --update` updates them
+at once. An update replaces the copy in the cache only when the source answers with data that reads as a catalog, so an
+offline or invalid source leaves the last valid catalog in use. `furb catalog` shows for each source its version, the
+time of its last good fetch, and the error of its last failed one. A running life uses a new catalog at its next
+stand, on `/reload`, with no restart. A scheduled job of the repository makes the bundled catalog again each day, with
+the exact version of pi-ai, and opens a pull request only when the data changes.
+
 Furb keeps its sign-in in the user config directory, under `auth`, outside the project. On Unix, the credential
 file is readable and writable only by its owner. Furb refreshes its own credential when needed. It can read an
 existing Codex access token, but it does not use the Codex refresh token or change the Codex credentials.

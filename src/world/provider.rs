@@ -582,7 +582,8 @@ impl Provider {
   /// A reply reads the turns of its chain: the system prompt is the engine, a user turn goes as its python and the
   /// images that the prompts it opens name, and an assistant turn as the blocks its provider gave. It is done with
   /// the turn of the model, or with a refusal, and a second refusal in a row of the same actor on a chain pauses the
-  /// chain first. A done of a reply that the ear did not say ends the call of its model.
+  /// chain first. A turn whose word lost the line of three backticks at its end tells its chain so before its done. A
+  /// done of a reply that the ear did not say ends the call of its model.
   pub fn ear(self) -> Box<dyn Ear> {
     let Provider {
       directory,
@@ -683,8 +684,16 @@ impl Provider {
             continue;
           }
           // What the model of a reply that still stands came to.
-          Next::Worked(Replied::Came { id, got }) => {
+          Next::Worked(Replied::Came { id, got, dropped }) => {
             let Some(reply) = replies.get(&id) else { continue };
+            // The word that runs is not all the text that the model wrote, so the chain is told what went, before it.
+            if dropped {
+              let note = format!("#{} {UNCLOSED}", reply.rung);
+              say(
+                &mut co,
+                Fact::says("tell", &reply.chain, [Object::list([Object::string(&note)])]),
+              );
+            }
             let got =
               got.map_err(|no| Fault::refused(format!("{} answered nothing: {no}", reply.actor)));
             if got.is_err() && reply.again {
@@ -782,11 +791,11 @@ struct Reply {
 }
 
 /// What the work of a reply gives: a part that its model wrote, a retry of the call of its model, or what the reply
-/// came to.
+/// came to, and whether its turn lost the line of three backticks at the end of its word, which [`unclosed`] drops.
 enum Replied {
   Wrote { id: String, text: String, thinking: String },
   Retried { id: String, retry: Retry, limit: bool },
-  Came { id: String, got: Result<Object, CompletionError> },
+  Came { id: String, got: Result<Object, CompletionError>, dropped: bool },
 }
 
 /// What a turn tells as it streams, sent to the work of its reply, which tells the host and reads the word.
@@ -1047,6 +1056,21 @@ fn unfenced(text: &str) -> Option<String> {
   Some(kept.join("\n").trim_end().to_owned())
 }
 
+/// What the chain is told after the rung of a turn whose word lost the line of three backticks at its end.
+const UNCLOSED: &str = "wrote a line of three backticks alone at the end of its word, and the provider dropped that \
+  line: a reply is python and quotes only, with no fence";
+
+/// A word less the line of three backticks alone at its end, which a model writes out of the habit of a fence that
+/// no line opened. A word gets nothing when its last line is not that fence, when its first line opens a fence, which
+/// the gate refuses whole, when a quote stands open before that line, whose text the line may end, or when nothing
+/// stands before that line.
+fn unclosed(text: &str) -> Option<String> {
+  let (word, last) = text.trim_end().rsplit_once('\n')?;
+  let opens = word.trim_start().starts_with("```");
+  let fence = last.trim() == "```" && !opens && !watch::open(word) && !word.trim().is_empty();
+  fence.then(|| word.trim_end().to_owned())
+}
+
 /// The terminal record of a stream of a provider, from a response of it that came whole.
 fn ended(provider: &str, response: CompletionResponse) -> StreamFinal {
   let mut record = StreamFinal::new(provider, response.usage);
@@ -1078,7 +1102,7 @@ fn answered(
       loop {
         let no = match (model.answers)(asked.clone()).await {
           Ok(Answer::Response(response)) => return turn(&model, &response),
-          Ok(Answer::Turn(turn)) => return hosted(turn.as_ref()),
+          Ok(Answer::Turn(turn)) => return hosted(turn.as_ref()).map(|one| (one, false)),
           Err(no) => no,
         };
         if let Some(reset) = limit(&no, &Zoned::now()) {
@@ -1106,8 +1130,11 @@ fn answered(
         tokio::time::sleep(wait).await;
       }
     };
-    let got = got.await;
-    let _ = tells.send(Replied::Came { id, got });
+    let (got, dropped) = match got.await {
+      Ok((turn, dropped)) => (Ok(turn), dropped),
+      Err(no) => (Err(no), false),
+    };
+    let _ = tells.send(Replied::Came { id, got, dropped });
   };
   // The reply comes through the channel alone, so it comes after all that its model wrote before it.
   let told = stream::poll_fn(move |cx| told.poll_recv(cx));
@@ -1117,14 +1144,15 @@ fn answered(
 
 /// The turn of a model: its text, which is the word of the rung, what it read and wrote, and the blocks it gave.
 ///
-/// A model speaks python alone, so a fence or prose around the code stays in the word, for the gate to refuse; only
-/// a turn of a model that may wrap its word in a fence, as a model of a local server, loses the fence that opens its
-/// text, and the closing fence at its end when it has one. What it read is every token of its input, the cache
+/// A model speaks python alone, so a fence or prose around the code stays in the word, for the gate to refuse, but for
+/// a line of three backticks alone at its end, which [`unclosed`] drops, since it holds no code that runs and a model
+/// writes it out of habit; a turn of a model that may wrap its word in a fence, as a model of a local server, loses
+/// instead the fence that opens its text, and the closing fence at its end when it has one. What it read is every token of its input, the cache
 /// among them, and what it wrote is the rest of its total, its thought among it. A model that says why each turn
 /// ended, and says nothing of the end of this one or says that the most it writes ended it, was cut, so its turn is
 /// refused, and a part of a word never runs. The thought that a model writes in its text, before its word, is a block
 /// of reasoning of its turn.
-fn turn(model: &Model, response: &CompletionResponse) -> Result<Object, CompletionError> {
+fn turn(model: &Model, response: &CompletionResponse) -> Result<(Object, bool), CompletionError> {
   let cut = match response.finish_reason() {
     _ if !model.ends => None,
     None => Some(format!("the stream of {} stopped before its end", model.name)),
@@ -1141,19 +1169,13 @@ fn turn(model: &Model, response: &CompletionResponse) -> Result<Object, Completi
     choice = untagged(choice);
   }
   let mut text = texts(&choice);
+  let mut dropped = false;
   if model.fenced
     && let Some(word) = unfenced(&text)
   {
-    let mut worded = Vec::new();
-    for one in choice {
-      match one {
-        AssistantContent::Text(_)
-          if worded.iter().any(|one| matches!(one, AssistantContent::Text(_))) => {}
-        AssistantContent::Text(_) => worded.push(AssistantContent::text(&word)),
-        other => worded.push(other),
-      }
-    }
-    (choice, text) = (worded, word);
+    (choice, text) = (worded(choice, &word), word);
+  } else if let Some(word) = unclosed(&text) {
+    (choice, text, dropped) = (worded(choice, &word), word, true);
   }
   let spent = response.usage;
   let (read, wrote) = (spent.cached_input_tokens, spent.cache_creation_input_tokens);
@@ -1171,7 +1193,23 @@ fn turn(model: &Model, response: &CompletionResponse) -> Result<Object, Completi
   let count = |n: u64| Object::int(i64::try_from(n).unwrap_or(i64::MAX));
   let usage =
     Object::tuple([count(input), count(output), count(read), count(wrote), Object::float(dollars)]);
-  Ok(Object::tuple([Object::string("assistant"), Object::string(text.trim()), usage, blocks]))
+  let turn =
+    Object::tuple([Object::string("assistant"), Object::string(text.trim()), usage, blocks]);
+  Ok((turn, dropped))
+}
+
+/// These blocks with the word as their one text, at the place of their first text.
+fn worded(choice: Vec<AssistantContent>, word: &str) -> Vec<AssistantContent> {
+  let mut worded = Vec::new();
+  for one in choice {
+    match one {
+      AssistantContent::Text(_)
+        if worded.iter().any(|one| matches!(one, AssistantContent::Text(_))) => {}
+      AssistantContent::Text(_) => worded.push(AssistantContent::text(word)),
+      other => worded.push(other),
+    }
+  }
+  worded
 }
 
 /// The turn of a reply that ended at the first statement of its word that cannot be python: the word as far as that
