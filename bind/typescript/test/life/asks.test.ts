@@ -1,5 +1,15 @@
 import { expect, test } from "bun:test";
-import { aimed, beside, choicesOf, desk, gist, wants } from "../../src/life/asks.ts";
+import {
+  aimed,
+  beside,
+  choicesOf,
+  desk,
+  gist,
+  lineHint,
+  optionsOf,
+  takesNothing,
+  wants,
+} from "../../src/life/asks.ts";
 import { act } from "./acts.ts";
 
 const label = (id: string) => (id === "chain1" ? "Main" : `life3/${id}`);
@@ -111,4 +121,48 @@ test("the gist of a message is its first line that holds words, with the next on
     "chain30 asks the operator: A question on the item answers.",
   );
   expect(gist("Choose one:")).toBe("Choose one:");
+});
+
+test("a list of a Literal gives the values that the operator ticks, each as he reads it and as the list writes it", () => {
+  expect(optionsOf(`list[Literal['a b', 3, True, None]]`)).toEqual([
+    { shown: "a b", json: '"a b"' },
+    { shown: "3", json: "3" },
+    { shown: "True", json: "true" },
+    { shown: "None", json: "null" },
+  ]);
+  for (const shape of ["Literal['a']", "list[str]", "list[Literal[1.5]]", "tuple[Literal['a']]", "list"])
+    expect(optionsOf(shape)).toEqual([]);
+  expect(choicesOf("list[Literal['a']]")).toEqual([]);
+  expect(
+    wants({
+      notice: false,
+      shape: "list[Literal['a', 'b']]",
+      choices: [],
+      options: optionsOf("list[Literal['a', 'b']]"),
+    }),
+  ).toBe("any of a or b");
+});
+
+test("a shape that is more than text says what its line is, with an example, and a text or a choice says nothing", () => {
+  expect(lineHint("int")).toBe("a whole number");
+  expect(lineHint("float")).toBe("a number");
+  expect(lineHint("list[str]")).toBe('a JSON list of text, as ["a", "b"]');
+  expect(lineHint("list")).toBe('a JSON list, as ["a", 1]');
+  expect(lineHint("dict[str, int]")).toBe('a JSON object of whole numbers, as {"a": 1}');
+  expect(lineHint("tuple[int, str]")).toBe('a JSON list of 2 items: a whole number; a text, as [1, "a"]');
+  expect(lineHint("int | None")).toBe("a whole number, or no word for nothing");
+  expect(lineHint("str | None")).toBe("a text, or no word for nothing");
+  for (const shape of ["str", "bool", "None", "Literal['a']", "set", "list[Option]", "tuple[int, ...]"])
+    expect(lineHint(shape)).toBe("");
+});
+
+test("a union of a Literal and None is a line of text, and no choice", () => {
+  expect(choicesOf("Literal['a', 'b'] | None")).toEqual([]);
+});
+
+test("a union that holds None takes a line of no word, and no other shape does", () => {
+  for (const shape of ["int | None", "str | None", "list[str] | None"])
+    expect(takesNothing(shape)).toBe(true);
+  for (const shape of ["int", "None", "str", "list[str]", "int | str", "Literal['a']", "set | None"])
+    expect(takesNothing(shape)).toBe(false);
 });
