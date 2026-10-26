@@ -35,7 +35,8 @@ bun run demo                         # The TUI on a scripted life. It asks no mo
 The first `uv sync` builds the crate, and it takes some minutes. After that, `uv run` builds again only what a change
 touches.
 
-To work on a second branch beside this clone, make its worktree with `script/worktree.sh <path> <branch>`. It copies
+To work on a second branch beside this clone, make its worktree with `script/worktree.sh <path> <branch>`. It takes an
+existing branch too. It copies
 the builds of the clone, so the first build of the worktree is warm: about 6 minutes, in place of about 35.
 
 ## How a word runs
