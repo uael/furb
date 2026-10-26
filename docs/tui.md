@@ -557,6 +557,12 @@ list of suggestions or a walk of the history with Up and Down is open.
 
 ![History suggestion](screenshots/46b-history-suggestion.png)
 
+## Emoji
+
+A colon that starts a word of the prompt lists the emojis whose shortcode holds what follows it, as GitHub names them. Up and Down choose, Tab or Enter puts the emoji in the prompt in place of the word, and Escape, a space or a text that no shortcode holds closes the list and keeps the text. A whole `:shortcode:` in a prompt becomes its emoji.
+
+![Emoji suggestions](screenshots/46c-emoji-suggestions.png)
+
 ## Retried words
 
 A word of a model can fail: the gate refuses it, or it raises. When the next word of the same prompt takes its
