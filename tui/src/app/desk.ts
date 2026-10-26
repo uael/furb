@@ -62,6 +62,7 @@ export const desk = part({
     return {
       chain: w.selected,
       acts: w.acts,
+      compactions: w.host.compactions,
       of: (kind) => w.acts.filter((act) => act.kind === kind),
       run: (word) => w.command(`/run ${word}`),
       say: (text) => {

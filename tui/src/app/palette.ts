@@ -81,7 +81,7 @@ export const palette = part({
   /** The chains of the session, each with its state and the chain it branched from. */
   chains(): void {
     const w = this.session;
-    const chains = w.chains;
+    const chains = w.chains.filter((chain) => w.listed(chain.id));
     this.openPalette(
       "Chains",
       chains.map((chain) => {

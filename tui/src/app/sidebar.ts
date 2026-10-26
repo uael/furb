@@ -30,7 +30,8 @@ export const sidebar = part({
     }
     this.railChain = undefined;
     const loom = this.lifeLoom();
-    const rows = loom.rows.filter((row) => row.id !== "operator");
+    // A run of compactions into new chains stands as one row, which the last chain of the run heads.
+    const rows = loom.rows.filter((row) => row.id !== "operator" && w.listed(row.id));
     const asks = w.desk.asks.filter((ask) => !ask.notice);
     const find = (id: string) => w.actOf(id);
     const remember = (key: string, make: () => string): string => {
@@ -71,9 +72,13 @@ export const sidebar = part({
     // A thread stands in the tree while it or a thread under it needs a look: it works, asks, failed or is paused. The
     // root and the thread shown stand always, and the others fold under Finished at the foot.
     const looks = (row: (typeof rows)[number]) => !["done", "idle"].includes(row.state);
-    const depth = (row: (typeof rows)[number]) => row.lines.length / 2;
+    const shownRow = w.runOf(w.selected).at(-1) ?? w.selected;
+    // A run stands at the place of its first chain, which the tree does not list.
+    const loomed = new Map(loom.rows.map((one) => [one.id, one]));
+    const placed = (row: (typeof rows)[number]) => loomed.get(w.runOf(row.id)[0] ?? row.id) ?? row;
+    const depth = (row: (typeof rows)[number]) => placed(row).lines.length / 2;
     const standing = rows.filter((row, at) => {
-      if (row.id === w.engine.root || row.id === w.selected || looks(row)) return true;
+      if (row.id === w.engine.root || row.id === shownRow || looks(row)) return true;
       for (const below of rows.slice(at + 1)) {
         if (depth(below) <= depth(row)) return false;
         if (looks(below)) return true;
@@ -89,6 +94,7 @@ export const sidebar = part({
       this.theme,
       width,
       w.selected,
+      w.host.compactions.length,
       asks.map((ask) => [ask.id, ask.label, ask.message, ask.choices]),
       lines.map(({ row, said: [text, , since] }) => [row.id, row.label, row.state, row.lines, text, since]),
       resting.map((row) => [row.id, row.label]),
@@ -124,10 +130,15 @@ export const sidebar = part({
       Math.floor(width * 0.38),
       Math.max(8, ...named.map((row) => Bun.stringWidth(label(row.id)) + 2)),
     );
-    const threadRow = (row: (typeof rows)[number], [text, color, since]: [string, RGBA, string]) => {
-      const selected = row.id === w.selected;
+    const threadRow = (row: (typeof rows)[number], [said, color, since]: [string, RGBA, string]) => {
+      let text = said;
+      const selected = row.id === shownRow;
       const [mark, tone] = chainMarks[row.state];
-      const guide = depth(row) ? `  ${row.lines.slice(2)}` : "";
+      const guide = depth(row) ? `  ${placed(row).lines.slice(2)}` : "";
+      // A chain that compacted says how many times, in place or into a new chain of its run.
+      const chains = w.runOf(row.id);
+      const cuts = w.host.compactions.filter((one) => chains.includes(one.chain)).length;
+      if (cuts) text = `${cuts > 1 ? `compacted ${cuts}×` : "compacted"}  ${text}`;
       const title = clip(label(row.id), Math.max(4, name - Bun.stringWidth(guide)));
       // The row spans the sidebar, so its room is the width of the sidebar less its bar, its padding at the right, and
       // the parts before and after the words.
