@@ -7,6 +7,7 @@ import type { Exit } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { type App, follow } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
+import { clock } from "../src/clock.ts";
 import { seedLife } from "../src/demo/life.ts";
 import { seedWorkspaces } from "../src/demo/workspaces.ts";
 import { demoSession, removeDemoDirectories, seedDemo, seedDemoFiles, tour } from "../src/demo.ts";
@@ -17,7 +18,7 @@ import { Session } from "../src/session.ts";
 import { colorless, paletteOf } from "../src/theme.ts";
 import { Workspaces } from "../src/workspaces.ts";
 import { idle } from "../test/idle.ts";
-import { rasterize } from "./raster.ts";
+import { cells, rasterize } from "./raster.ts";
 import { click, end, find, highlighting, home, mount, watch } from "./stage.ts";
 
 /** The recorded life of a conductor, from the fixtures of the TUI. */
@@ -57,6 +58,10 @@ async function project(name: string): Promise<string> {
 const output = resolve(process.env.FURB_GALLERY_OUT ?? "docs/screenshots");
 const only = process.env.FURB_GALLERY_ONLY ? new RegExp(process.env.FURB_GALLERY_ONLY) : undefined;
 await mkdir(output, { recursive: true });
+// FURB_GALLERY_CELLS writes the cells of each shot as JSON to a folder, which the extension converge compares and
+// reads as text.
+const grid = process.env.FURB_GALLERY_CELLS;
+if (grid) await mkdir(grid, { recursive: true });
 /** A new session in the project that the conversation of the gallery is about. */
 const gallerySession = async () => demoSession({ cwd: await project("fieldnotes") });
 let session = await gallerySession();
@@ -81,11 +86,19 @@ const view = isLifeView(process.env.FURB_GALLERY_VIEW) ? process.env.FURB_GALLER
 let standing = new Set<string>();
 async function settle(): Promise<void> {
   await session.refresh();
-  for (let attempt = 0; attempt < 10; attempt++) {
+  for (let attempt = 0, quiet = 0; attempt < 20; attempt++) {
     const pending = session.activity.filter(
       (act) => !act.done && ["prompt", "rung"].includes(act.kind) && !standing.has(act.id),
     );
-    if (!pending.length && !session.queued.length) break;
+    // A message that the queue sent shows its prompt a moment later, so the work settles only when two reads a moment
+    // apart find nothing to wait for.
+    if (!pending.length && !session.queued.length) {
+      if (++quiet === 2) break;
+      await new Promise((done) => setTimeout(done, 100));
+      await session.refresh();
+      continue;
+    }
+    quiet = 0;
     // A queue that waits on no act sends its next message in a moment.
     if (!pending.length) await new Promise((done) => setTimeout(done, 100));
     await Promise.all(pending.map((act) => session.engine.result(act.id).catch(() => {})));
@@ -115,7 +128,9 @@ async function capture(name: string): Promise<void> {
   await test.flush();
   waits(`the screen after ${name}`);
   if (only && !only.test(name)) return;
-  await writeFile(`${output}/${name}.png`, rasterize(test.captureSpans(), paletteOf(session.theme), "furb"));
+  const frame = test.captureSpans();
+  await writeFile(`${output}/${name}.png`, rasterize(frame, paletteOf(session.theme), "furb"));
+  if (grid) await writeFile(join(grid, `${name}.json`), cells(frame));
   // The text of each shot goes to a folder that FURB_GALLERY_TEXT names, to read the gallery without its pictures.
   const texts = process.env.FURB_GALLERY_TEXT;
   if (texts) await writeFile(join(texts, `${name}.txt`), test.captureCharFrame());
@@ -374,7 +389,7 @@ try {
   await session.engine.result(progress);
   // A call of a model that failed for a cause that passes waits for its next attempt, which the footer counts down.
   // The streams hold the retry while the capture reads the life again, which sends the streams of the life anew.
-  const retry = { attempt: 2, most: 10, until: Date.now() + 3600, why: "connection reset" };
+  const retry = { attempt: 2, most: 10, until: clock() + 3600, why: "connection reset" };
   const retrying = new Map([["rung0", { chain: session.selected, text: "", thinking: "", retry }]]);
   Object.defineProperty(session.host, "streams", { configurable: true, get: () => retrying, set: () => {} });
   await capture("62-model-retry");
