@@ -107,22 +107,47 @@ PACED = (
   " and each step is judged and merged on its own."
 )
 
-RULES = """Run no real life of a model. Never open a window on this machine, not even for a test: the owner works on it, and each window takes his mouse and his keyboard. Run a check of the app only on the runners of CI. Start each comment, review, issue and PR body that you write on GitHub with 🤖, since you write from the owner's account and his own words carry no mark; a title keeps its own rule. Never take off the label owner-merge: only the owner takes it off, and that is his approval to merge. The owner sleeps or is away: ask him nothing and wait for nothing of his. Take each decision yourself from the brief and the rulings, say it in your PR body, and go on. Ask the one who gave you this work on its chain only when it alone can decide: await prompt(str, question, on="{home}")."""
+BUILD_SH = """d=${FURB_BUILD_SLOTS:-/tmp/furb-build-slots}
+mkdir -p "$d"
+while :; do
+  for i in 1 2 3; do
+    if [ -f "$d/$i/pid" ] && ! kill -0 "$(cat "$d/$i/pid")" 2>/dev/null; then rm -rf "$d/$i"; fi
+    if mkdir "$d/$i" 2>/dev/null; then
+      echo $$ > "$d/$i/pid"
+      trap 'rm -rf "$d/$i"' EXIT
+      trap 'exit 130' INT TERM
+      "$@"
+      exit $?
+    fi
+  done
+  sleep 2
+done
+"""
+
+RECIPES = """Recipes that fixers found again and again:
+- The SSH push is refused. Push over HTTPS with the credential helper of gh and a lease on the full sha of the remote branch: git -c credential.helper= -c credential.helper='!gh auth git-credential' push --force-with-lease=<branch>:<full sha> https://github.com/<owner>/<repo>.git HEAD:refs/heads/<branch>. A push to a URL moves no tracking ref, so fetch the branch after it.
+- gh run view --log-failed refuses while the run still runs. Take the id of a job from gh run view <run> --json jobs, then read gh api repos/<owner>/<repo>/actions/jobs/<id>/logs | grep -E 'FAILED|panicked|error'.
+- macOS has no timeout and no flock command, and BSD sed needs sed -i '' to edit in place. Edit a file with read and write, or with python3, and bound a command with the timeout of bash.
+- A git commit runs the hooks, which take minutes: give it timeout=1800.
+- The checkout at the root can stand behind origin/main and hold no build. Read and change code only in your worktree.
+- A cause that a brief names is a hypothesis: check it in the log before you build on it."""
+
+RULES = """Run no real life of a model. Never open a window on this machine, not even for a test: the owner works on it, and each window takes his mouse and his keyboard. Run a check of the app only on the runners of CI. Start each comment, review, issue and PR body that you write on GitHub with 🤖, since you write from the owner's account and his own words carry no mark; a title keeps its own rule. Never take off the label owner-merge: only the owner takes it off, and that is his approval to merge. The owner sleeps or is away: ask him nothing and wait for nothing of his. Take each decision yourself from the brief and the rulings, say it in your PR body, and go on. Ask the one who gave you this work on its chain only when it alone can decide: await prompt(str, question, on="{home}").""" + "\n\n" + RECIPES
 
 WORKER = """You are a worker on the repository {repo}. Do one item, and open its PR yourself.
 1. Make a worktree whose build starts warm: {repo}/script/worktree.sh {repo}-w-{key} w/{key}, then work there. Build on origin/main, and stack your branch on an open PR only when your change needs its code; say why in the body, since a stack lands one layer at a time. If that worktree stands already, work in it, rebased onto origin/main. Run each build of Rust through sh $TMPDIR/build.sh <command>, which runs three at once at most.
 2. Change it as the AGENTS.md files of the repository say.
 3. Run only the tests that your change touches.
-4. Commit with the title of the PR as its message, and push the branch. Then open the PR, or update it when it stands, with pr(), which fills the template of the owner from what you give it and checks each of its rules: await pr(title, why, outcome, checks, breaking=[], fixes=0, where=<your worktree>, labels="{labels}"). title is type(area): What changed, 70 characters or fewer: the type is feat, fix, perf, or chore for a change that no user sees, and the area is the part that owns the change (engine, crate, tui, gui, provider, ci, conductor, or an extension by its name). why is the problem and why it matters now, from your own work and not from git log. outcome is a list: what is true now that was not, each with the evidence of what you ran, and each gap that you leave. breaking lists each change that forces a caller of a door or of the contract to change code. 300 words at most, and no how, which the diff holds. checks is six lines, one for each box of the checklist of the template in its order: verify each box one by one, then give the evidence of how you verified it, or not: and the work that it still needs, which leaves that box open. A pr() that breaks a rule raises Refused and says why; never write the body of a PR by hand.
+4. Commit with the title of the PR as its message (a commit that the item brought keeps its own message, since the merge squashes them), and push the branch. Then open the PR, or update it when it stands, with pr(), which fills the template of the owner from what you give it and checks each of its rules: await pr(title, why, outcome, checks, breaking=[], fixes=0, where=<your worktree>, labels="{labels}"). title is type(area): What changed, 70 characters or fewer: the type is feat, fix, perf, or chore for a change that no user sees, and the area is the part that owns the change (engine, crate, tui, gui, provider, ci, conductor, or an extension by its name). why is the problem and why it matters now, from your own work and not from git log. outcome is a list: what is true now that was not, each with the evidence of what you ran, and each gap that you leave. breaking lists each change that forces a caller of a door or of the contract to change code. 300 words at most, and no how, which the diff holds. checks is six lines, one for each box of the checklist of the template in its order: verify each box one by one, then give the evidence of how you verified it, or not: and the work that it still needs, which leaves that box open. A flaw that you name in outcome ticks the box about flaws. When the item says that the owner ruled several changes one PR, that ruling is the evidence of the box about one change. A pr() that breaks a rule raises Refused and says why; never write the body of a PR by hand.
 5. Open your first PR within about an hour of work, as soon as one coherent part serves the item: a large item
 lands as a series of PRs, each one change, opened from this chain, and you close with the number of the last one.
-6. Remove the worktree with git worktree remove --force, and close with a tuple: the number of your PR, or 0 when the item asked for no change, and your report in 200 words at most: what you measured, what you decided, and what is left.
+6. Keep the worktree until your PR merges, since a fix comes back to it and a new worktree builds cold: the round prunes it after the merge. When the item asks for no change, answer it in a comment that starts with 🤖 on its issue or PR. Close with a tuple: the number of your PR, or 0 when the item asked for no change, and your report in 200 words at most: what you measured, what you decided, and what is left.
 """ + RULES + """
 
 The item, {key}:
 {what}"""
 
-FIX = """You fix the open PR #{n} of the repository {repo}: it {problem} at {sha}.{base} Read it with gh pr view, gh pr checks and gh run view --log-failed. Rerun once a check that fails on one system alone. Else work in a worktree of your own at the head of its branch, since its worker may hold another one (git worktree list shows it), and fetch before each push. If the head of the PR is not {sha} any more, or the PR no longer {problem}, change nothing and close with its number and a report that says so. A PR that conflicts runs no checks, so the checks that it shows may be old. Fix it: resolve a conflict with the meaning of both sides, and for a stack read skill("gh-stack") and use gh stack sync. Run the tests that it touches, push with git push --force-with-lease=refs/heads/<branch>:<the sha that you fetched> origin HEAD:refs/heads/<branch>, wait until gh pr view --json headRefOid,mergeable shows your head (GitHub shows the old head and the old mergeable for about 20 seconds after a push), remove the worktree, and close with a tuple: the number of the PR, and your report in 200 words at most. """ + RULES
+FIX = """You fix the open PR #{n} of the repository {repo}: it {problem} at {sha}.{base} Read it with gh pr view, gh pr checks and gh run view --log-failed. Rerun once a check that fails on one system alone. Else work in a worktree of your own at the head of its branch, since its worker may hold another one (git worktree list shows it), and fetch before each push. If the head of the PR is not {sha} any more, or the PR no longer {problem}, change nothing and close with its number and a report that says so. A PR that conflicts runs no checks, so the checks that it shows may be old. Fix it: resolve a conflict with the meaning of both sides, and for a stack read skill("gh-stack") and use gh stack sync. Run the tests that it touches, push with git push --force-with-lease=refs/heads/<branch>:<the sha that you fetched> origin HEAD:refs/heads/<branch>, wait until gh pr view --json headRefOid,mergeable shows your head (GitHub shows the old head and the old mergeable for about 20 seconds after a push), keep the worktree until the PR merges, and close with a tuple: the number of the PR, and your report in 200 words at most. """ + RULES
 
 FIXOWN = "Your open PR #{n} {problem} at {sha}. Fetch origin, rebase your branch onto its base or merge its base into it, resolve each conflict with the meaning of both sides, run the gates that the change touches, push with --force-with-lease, and keep its checks green."
 
@@ -504,6 +529,7 @@ def hire(key: str, what: str, thread: str = "", brief: str = "") -> str:
   marks = [f"w:{key}", *([f"thread:{thread}"] if thread else [])]
   if not brief:
     quietly(bash, "; ".join(f"gh label create {m} --force >/dev/null 2>&1" for m in marks), show=HIDDEN)
+  quietly(write, Text("scratch://build.sh", BUILD_SH))
   text = (custom.get(key) or brief or WORKER).replace("{labels}", "".join(f" --label {m}" for m in marks))
   text = text.replace("{repo}", cwd()).replace("{key}", key).replace("{home}", scope(acting())).replace("{what}", what)
   where = chain(f"{thread or 'w'}/{key}", source=bases.get(model, ""))
@@ -639,7 +665,7 @@ def boxes(pr: dict, now: float) -> str:
       f"You close the open boxes of the checklist of the open PR #{n} of the repository "
       + "{repo}. "
       + order.replace("Your open PR", "The PR")
-      + " Read it with gh pr view, work in a worktree of its branch, push with --force-with-lease, remove the worktree, and close with a tuple: the number of the PR, and your report in 200 words at most. " + RULES
+      + " Read it with gh pr view, work in a worktree of its branch, push with --force-with-lease, keep the worktree until the PR merges, and close with a tuple: the number of the PR, and your report in 200 words at most. " + RULES
     )
     if assist(pr, key, order, f"box{n}", thread, brief):
       crowd(pr, own)
