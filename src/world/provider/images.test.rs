@@ -93,11 +93,8 @@ fn a_turn_hands_a_model_each_image_that_the_message_of_a_prompt_it_opens_names_o
   );
   let file = at.join(kept.uri.strip_prefix("furb-image://").unwrap_or_default());
   fs::remove_file(&file).expect("the image goes");
-  let gone = format!(
-    "The image {} did not load from {}: No such file or directory (os error 2)",
-    kept.uri,
-    file.display()
-  );
+  let system = fs::metadata(&file).expect_err("the image is gone");
+  let gone = format!("The image {} did not load from {}: {system}", kept.uri, file.display());
   assert_eq!(
     images.named(&python).map(|seen| seen.len()),
     Err(gone),
