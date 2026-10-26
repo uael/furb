@@ -217,7 +217,7 @@ def conductor(tmp_path: Path) -> Round:
 
 @JQ
 def test_a_check_counts_by_its_newest_run(conductor: Round) -> None:
-  program = conductor.PRS.split("--jq '", 1)[1].split("'\necho ---", 1)[0]
+  program = conductor.PRS.split("--jq '", 1)[1].split("'\nc=$?", 1)[0]
   title = [
     check("the title", "COMPLETED", c, f"2026-10-23T0{h}:00:00Z")
     for h, c in ((1, "FAILURE"), (3, "SUCCESS"), (2, "FAILURE"))
@@ -289,17 +289,17 @@ async def test_a_lone_failure_reruns_its_failed_jobs_once_before_a_fixer(conduct
 
 
 def test_new_items_wait_while_an_open_pr_needs_a_worker(conductor: Round) -> None:
-  conductor.efforts.update({key: SONNET for key in "abcde"})
+  conductor.efforts.update({key: SONNET for key in "abcdef"})
   conductor.queue[:] = [("a", "", ""), ("b", "", "")]
-  conductor.backlog[:] = [("c", "", ""), ("d", "", ""), ("e", "", "")]
+  conductor.backlog[:] = [("c", "", ""), ("d", "", ""), ("e", "", ""), ("f", "", "")]
   conductor.prs[7] = conductor.pr(n=7, checks=("FAILURE",))
   conductor.staff()
   assert conductor.hired == []
   conductor.working["prompt9"] = "fix7"
   conductor.staff()
   assert [key for key, _ in conductor.hired] == ["a", "b", "c"]
-  assert conductor.queue == [("d", "", "")]
-  assert conductor.backlog == [("e", "", "")]
+  assert conductor.queue == [("d", "", ""), ("e", "", "")]
+  assert conductor.backlog == [("f", "", "")]
 
 
 def test_each_brief_forbids_a_window_on_this_machine(conductor: Round) -> None:
@@ -582,10 +582,12 @@ def test_the_rulings_of_the_owner_stand_in_conducting_in_his_words(conductor: Ro
     "opus/medium should be your default, not opus/high",
     "xhigh for the coordination and my rulings only",
     "From now on: 2 opus workers, 3 sonnet ones. max.",
+    "add one opus/high worker for the most complex stuff",
   ):
     assert words in conductor.CONDUCTING
   assert conductor.ACTOR == OPUS
-  assert conductor.ROOM == {"opus": 2, "sonnet": 3}
+  assert conductor.ROOM == {"opus": 2, "sonnet": 3, "opus/high": 1}
+  assert conductor.CAP == 6
 
 
 def stacked(conductor: Round, tmp_path: Path, clash: bool = False) -> dict[str, str]:
@@ -680,22 +682,27 @@ def test_an_item_that_asks_for_xhigh_waits_and_the_owner_hears(conductor: Round)
   assert len(conductor.prompts) == 1
 
 
-def test_the_round_runs_two_workers_on_opus_and_three_on_sonnet_at_most(conductor: Round) -> None:
-  models = {"o1": OPUS, "o2": TOP, "o3": OPUS, "s1": SONNET, "s2": SONNET, "s3": SONNET, "s4": SONNET}
+def test_the_round_runs_two_on_opus_medium_three_on_sonnet_and_one_on_opus_high(conductor: Round) -> None:
+  models = {"o1": OPUS, "t1": TOP, "o2": OPUS, "t2": TOP, "o3": OPUS, "s1": SONNET, "s2": SONNET, "s3": SONNET}
+  models["s4"] = "claude-cli:sonnet/high"
   conductor.efforts.update(models)
   conductor.queue[:] = [(key, "", "") for key in models]
   conductor.staff()
-  assert [key for key, _ in conductor.hired] == ["o1", "o2", "s1", "s2", "s3"]
-  assert conductor.queue == [("o3", "", ""), ("s4", "", "")]
+  assert [key for key, _ in conductor.hired] == ["o1", "t1", "o2", "s1", "s2", "s3"]
+  assert conductor.queue == [("t2", "", ""), ("o3", "", ""), ("s4", "", "")]
   conductor.done["worker1"] = None
   conductor.staff()
-  assert [key for key, _ in conductor.hired][5:] == ["o3"]
-  assert conductor.queue == [("s4", "", "")]
+  assert [key for key, _ in conductor.hired][6:] == ["o3"]
+  assert conductor.queue == [("t2", "", ""), ("s4", "", "")]
+  conductor.done["worker2"] = None
+  conductor.staff()
+  assert [key for key, _ in conductor.hired][7:] == ["t2"]
 
 
 def test_an_item_with_no_room_keeps_its_place_while_the_next_with_room_starts(conductor: Round) -> None:
   conductor.busy("p1", "a", OPUS)
-  conductor.busy("p2", "b", TOP)
+  conductor.busy("p2", "b", OPUS)
+  conductor.busy("p3", "e", TOP)
   conductor.efforts["d"] = SONNET
   conductor.queue[:] = [("c", "", ""), ("d", "", "")]
   conductor.staff()
@@ -705,7 +712,8 @@ def test_an_item_with_no_room_keeps_its_place_while_the_next_with_room_starts(co
 
 def test_a_fixer_goes_before_a_new_item_and_waits_for_room_on_opus(conductor: Round) -> None:
   conductor.busy("p1", "a", OPUS)
-  conductor.busy("p2", "b", TOP)
+  conductor.busy("p2", "b", OPUS)
+  conductor.busy("p3", "e", TOP)
   conductor.prs[8] = conductor.pr(n=8, open=["- [ ] It is one change."], verdict="open")
   conductor.queue[:] = [("c", "", "")]
   conductor.boxes(conductor.prs[8], 0.0)
@@ -755,6 +763,96 @@ def test_the_round_follows_the_compaction_of_its_orchestrator(conductor: Round, 
   assert calls == ["tend", "sweep"]
   assert conductor.lead == {"home": "chain2"}
   assert new.lead == {"home": "chain2"}
+  assert conductor.prompts == []
+
+
+@POSIX
+@JQ
+def test_a_gh_that_answers_nothing_once_ends_no_round(conductor: Round) -> None:
+  conductor.say(r"issue list", "[]")
+  conductor.say(r"pr list --repo uael/monty", "[]")
+  conductor.queue.append(("a", "", ""))
+  rounds: list[int] = []
+
+  async def waits(every: float, *acts: str) -> None:
+    rounds.append(len(rounds))
+    if len(rounds) == 1:
+      assert "sweep" not in conductor.timers
+      conductor.facts["worker1"] = ("prompt", "worker1", "rung1", "chain-a", "None", "", "")
+      conductor.say(r"pr list --state open", json.dumps([raw(4, "w/four", 5, [])]))
+      conductor.say(r"pr list --state merged", '[{"number": 3}]')
+      conductor.say(r"run list --branch main", json.dumps([{"headSha": "m1", "conclusion": "success"}]))
+    else:
+      conductor.lead["home"] = "chain2"
+
+  conductor.ns["wait"] = waits
+  assert asyncio.run(conductor.conduct()) == {}
+  assert rounds == [0, 1]
+  assert [message for message, _ in conductor.prompts] == [
+    "The command that lists the PRs failed at the open PRs, the merged PRs, the gates of main: gh said nothing."
+  ]
+  assert "sweep" in conductor.timers
+  assert list(conductor.prs) == [4]
+  assert 3 in conductor.merged
+  assert [key for key, _ in conductor.hired] == ["a"]
+
+
+def test_a_fault_of_a_step_is_told_once_and_the_round_goes_on(conductor: Round) -> None:
+  calls: list[str] = []
+
+  def tend() -> None:
+    calls.append("tend")
+    json.loads("")
+
+  async def swept(every: float) -> None:
+    calls.append("sweep")
+
+  async def waits(every: float, *acts: str) -> None:
+    if calls.count("sweep") == 3:
+      conductor.lead["home"] = "chain2"
+
+  conductor.queue.append(("a", "", ""))
+  conductor.ns.update(tend=tend, sweep=swept, staff=lambda: None, wait=waits)
+  assert asyncio.run(conductor.conduct()) == {}
+  assert calls == ["tend", "sweep"] * 3
+  assert [message for message, _ in conductor.prompts] == [
+    "The round on chain1 met a fault in its step tend: JSONDecodeError: Expecting value: line 1 column 1 (char 0)."
+    " The round goes on at the next round, and tells this kind of fault once."
+  ]
+
+
+def test_a_round_that_ends_with_no_work_tells_it_as_a_decision(conductor: Round) -> None:
+  async def swept(every: float) -> None:
+    return None
+
+  conductor.ns.update(tend=lambda: None, sweep=swept, staff=lambda: None)
+  assert asyncio.run(conductor.conduct()) == {}
+  assert conductor.prompts == [
+    (
+      "The round on chain1 ended: it holds no item in queue, in backlog or in working, and no open PR that it tends."
+      " Decide whether it goes on: until you await conduct() again, no sweep, no heal, no merge, no fixer and no"
+      " hire runs, and no worker is tended.",
+      "",
+    )
+  ]
+
+
+def test_a_fault_that_ends_the_round_tells_its_cause(conductor: Round) -> None:
+  async def swept(every: float) -> None:
+    return None
+
+  async def waits(every: float, *acts: str) -> None:
+    fault = RuntimeError("boom")
+    raise fault
+
+  conductor.queue.append(("a", "", ""))
+  conductor.ns.update(tend=lambda: None, sweep=swept, staff=lambda: None, wait=waits)
+  with pytest.raises(RuntimeError, match="boom"):
+    asyncio.run(conductor.conduct())
+  assert len(conductor.prompts) == 1
+  assert conductor.prompts[0][0].startswith(
+    "The round on chain1 ended: the fault RuntimeError: boom, in its step wait."
+  )
 
 
 @POSIX
