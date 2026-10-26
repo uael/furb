@@ -71,6 +71,7 @@ import {
   threadProgram,
   wants,
   weave,
+  writing,
 } from "furb/life";
 import type { Token, Tokens } from "marked";
 import { clipboardImage } from "./clipboard.ts";
@@ -2153,13 +2154,22 @@ export class App {
         // What a model writes changes at each token, so it stands in a card of its own under the program, and the
         // program stays as it was drawn.
         const all = given.filter((line) => line.kind !== "writes");
-        const writing = given.filter((line) => line.kind === "writes");
+        const writers = given.filter((line) => line.kind === "writes");
         const tails = () => {
-          for (const line of writing) {
+          for (const line of writers) {
             const stream = w.host.streams.get(line.step.id);
-            const tail =
-              (stream?.text || stream?.thinking || "").replace(/\n+$/, "").split("\n").at(-1)?.trim() ||
-              line.text;
+            // Each line that the model finished shows as python, highlighted as it comes, and the line that it
+            // still writes stays a comment under it, so the card is made again at each line and not at each token.
+            const { lines, tail: open } = writing(stream);
+            if (lines)
+              add(
+                `wrote-${line.step.id}`,
+                lines,
+                [],
+                (box) => box.add(this.inset(space.between, this.code(lines))),
+                { indent, same: [lines] },
+              );
+            const tail = open || (lines ? "writes" : line.text);
             add(
               `writes-${line.step.id}`,
               `${tail}:${this.feedWidth}:${this.theme}`,

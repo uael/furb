@@ -75,7 +75,8 @@ saw run, since the record holds no time. The line that runs is lit, with a mark 
 its time, and the last lines that its command prints stream under it. A line that the gate refused has a red cross in
 the gutter, and the reason stands under it as a comment. A message that you send to the thread, and each notice of
 the chain, stands as a comment among the steps, and what the model writes before its word comes stands under the
-program. The answer of the thread stands under the name of the model that gave it. A word that you run stands in the
+program: each line of its word that it finished, as Python in its colors, and under them the line that it still
+writes. The answer of the thread stands under the name of the model that gave it. A word that you run stands in the
 same way under You ran, and so does an act that no word made, as a command that `/bash` starts: one line of Python
 that binds the act to its name, as `bash3 = bash("make docs")`.
 
