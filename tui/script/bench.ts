@@ -331,13 +331,13 @@ step();`,
   return { rate: (frames.length * 1000) / took, times };
 }
 
-/** The frames each second that the renderer draws at its target rate with nothing to show: the timers of the runtime
- * wait a whole millisecond at the least, so a loop of 60 frames draws a few less than 60. */
+/** The frames each second that the renderer draws at its target rate with nothing to show. start draws one frame
+ * before it returns, outside the timed window, as the App does before a round. */
 async function ceiling(): Promise<number> {
   const screen = await createTestRenderer({ width: 152, height: 46, exitSignals: [], targetFps: fps });
+  screen.renderer.start();
   let frames = 0;
   screen.renderer.on("frame", () => frames++);
-  screen.renderer.start();
   const began = performance.now();
   await Bun.sleep(2000);
   const rate = (frames * 1000) / (performance.now() - began);
