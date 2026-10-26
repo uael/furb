@@ -11,6 +11,7 @@ import {
 } from "furb";
 import type { Exit } from "furb/life";
 import type { Roster, Snapshot, Usage } from "./bridge.ts";
+import { clock } from "./clock.ts";
 import { lineCounts } from "./format.ts";
 import { queueDispatches } from "./queue.ts";
 import type { ActRow } from "./session.ts";
@@ -134,7 +135,7 @@ export class Snapshots {
 
   /** The time of the facts that the life said, as the session gives them to its host. */
   private time(facts: readonly Fact[]): void {
-    const now = Date.now();
+    const now = clock();
     for (const [kind, id] of facts) {
       if (this.timed++ < this.replayed) continue;
       const began = this.began.get(id);

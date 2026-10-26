@@ -1,5 +1,6 @@
 import { InputRenderableEvents, type KeyEvent } from "@opentui/core";
 import { type Ask, beside } from "furb/life";
+import { clock } from "../clock.ts";
 import { elapsed } from "../format.ts";
 import { theme as c, glyph, spacing as space } from "../theme.ts";
 import { bold, type Part } from "../ui.ts";
@@ -122,7 +123,7 @@ export const questions = part({
 
   /** The time since an act started. */
   progress(id: string): string {
-    return elapsed(Date.now() - (this.session.started[id] ?? Date.now()));
+    return elapsed(clock() - (this.session.started[id] ?? clock()));
   },
 
   resume(): void {

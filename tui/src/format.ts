@@ -1,8 +1,9 @@
 import type { Retry } from "furb";
+import { clock } from "./clock.ts";
 
 /** What the footer says of a retry of the call of a model: the seconds left of its wait, its attempt, and why the
  * attempt before it failed. */
-export function retryLine(retry: Retry, now = Date.now()): string {
+export function retryLine(retry: Retry, now = clock()): string {
   const seconds = Math.max(0, Math.ceil((retry.until - now) / 1000));
   return `Retrying in ${seconds} s, attempt ${retry.attempt} of ${retry.most}, ${retry.why}`;
 }
@@ -86,7 +87,7 @@ export function elapsed(milliseconds: number): string {
 }
 
 /** How long ago a time was, in the largest unit that says it, and the date past a week. */
-export function ago(time: number, now = Date.now()): string {
+export function ago(time: number, now = clock()): string {
   const minutes = Math.floor((now - time) / 60_000);
   const say = (value: number, unit: string) => `${value} ${unit}${value === 1 ? "" : "s"} ago`;
   if (minutes < 1) return "just now";
