@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DamagedJournal, FileChanges } from "../src/changes.ts";
@@ -188,5 +188,44 @@ test("a journal open to read does not prevent its writer from repairing it", asy
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
+  }
+});
+
+test("a read-only journal sees a same-size atomic replacement", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-read-journal-replaced-"));
+  const record = join(directory, "life.jsonl");
+  const path = `${record}.changes.jsonl`;
+  const replacement = `${path}.replacement`;
+  const reader = new FileChanges(record, true);
+  try {
+    await writeFile(path, `${change("one")}\n`);
+    expect(reader.read().map((one) => one.after)).toEqual(["one"]);
+    const before = await stat(path);
+    await writeFile(replacement, `${change("two")}\n`);
+    await utimes(replacement, before.atime, before.mtime);
+    await rename(replacement, path);
+    expect((await stat(path)).size).toBe(before.size);
+    expect(reader.read().map((one) => one.after)).toEqual(["two"]);
+  } finally {
+    reader.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a disposed read-only journal does not reopen its file", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-read-journal-disposed-"));
+  const record = join(directory, "life.jsonl");
+  const path = `${record}.changes.jsonl`;
+  await writeFile(path, `${change("one")}\n`);
+  const reader = new FileChanges(record, true);
+  try {
+    expect(reader.read().map((one) => one.after)).toEqual(["one"]);
+    reader.dispose();
+    expect(reader.read()).toEqual([]);
+    expect(reader.readable()).toEqual([]);
+    expect(await readFile(path, "utf8")).toBe(`${change("one")}\n`);
+  } finally {
+    reader.dispose();
+    await rm(directory, { recursive: true, force: true });
   }
 });

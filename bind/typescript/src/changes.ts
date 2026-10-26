@@ -9,6 +9,7 @@ import {
   readSync,
   renameSync,
   rmSync,
+  statSync,
   truncateSync,
   writeFileSync,
   writeSync,
@@ -77,6 +78,8 @@ export class FileChanges {
   private tail = -1;
   private cut = false;
   private failure: unknown;
+  private indexed = "";
+  private disposed = false;
   constructor(
     record?: string,
     private readonly readOnly = false,
@@ -106,7 +109,11 @@ export class FileChanges {
     this.end = 0;
     this.tail = -1;
     this.cut = false;
-    if (!existsSync(path)) return;
+    const indexed = this.stamp(path);
+    if (!indexed) {
+      this.indexed = "";
+      return;
+    }
     const data = readFileSync(path);
     while (this.end < data.length) {
       const newline = data.indexOf(10, this.end);
@@ -120,6 +127,22 @@ export class FileChanges {
       this.positions.push({ start: this.end, size: newline - this.end });
       this.end = newline + 1;
     }
+    this.indexed = indexed;
+  }
+  private stamp(path: string): string {
+    let stat: ReturnType<typeof statSync>;
+    try {
+      stat = statSync(path);
+    } catch (error) {
+      if ((error as { code?: string }).code === "ENOENT") return "";
+      throw error;
+    }
+    return [stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs, stat.birthtimeMs].join(":");
+  }
+  private refresh(): void {
+    const path = this.path;
+    if (!path) return;
+    if (this.stamp(path) !== this.indexed) this.index(path);
   }
   get length(): number {
     return this.positions.length;
@@ -172,6 +195,7 @@ export class FileChanges {
   }
   /** Read a journal page without holding its file open between calls. */
   private withReader<T>(read: (fd: number) => T): T | undefined {
+    if (this.disposed) return undefined;
     if (!this.readOnly) return this.fd === undefined ? undefined : read(this.fd);
     const path = this.path;
     if (!path || !existsSync(path)) return undefined;
@@ -191,7 +215,7 @@ export class FileChanges {
   /** A page of changes; a line of it that is no change throws a `DamagedJournal`. */
   read(start = 0, count = 20): FileChange[] {
     if (this.failure !== undefined) throw this.failure;
-    if (this.readOnly) this.index(this.path ?? "");
+    if (this.readOnly && !this.disposed) this.refresh();
     return (
       this.withReader((fd) =>
         this.positions.slice(start, start + count).map((position, at) => {
@@ -206,7 +230,7 @@ export class FileChanges {
    * stop for a damaged journal, as the rewind, reads so. */
   readable(start = 0, count = 20): FileChange[] {
     if (this.failure !== undefined) throw this.failure;
-    if (this.readOnly) this.index(this.path ?? "");
+    if (this.readOnly && !this.disposed) this.refresh();
     return (
       this.withReader((fd) =>
         this.positions
@@ -259,6 +283,7 @@ export class FileChanges {
     if (fd !== undefined) closeSync(fd);
   }
   dispose(): void {
+    this.disposed = true;
     this.close();
     if (this.temporary) rmSync(this.temporary, { recursive: true });
   }
