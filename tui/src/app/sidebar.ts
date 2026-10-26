@@ -125,10 +125,17 @@ export const sidebar = part({
     // threads of the first level stand with no guide, and the lines of the tree show from the second level.
     const edge = { marginX: -space.between, paddingRight: space.inset };
     const named = [...standing, ...(this.unfolded.has("finished") ? resting.slice(0, 12) : [])];
+    // The name column holds the deepest name whole, up to a share of the sidebar, so that a deep chain keeps its name
+    // and the words of what it does take the room that is left.
     const name = Math.min(
-      18,
-      Math.floor(width * 0.38),
-      Math.max(8, ...named.map((row) => Bun.stringWidth(label(row.id)) + 2)),
+      Math.floor(width * 0.6),
+      Math.max(
+        8,
+        ...named.map(
+          (row) =>
+            Bun.stringWidth(depth(row) ? `  ${row.lines.slice(2)}` : "") + Bun.stringWidth(label(row.id)) + 1,
+        ),
+      ),
     );
     const threadRow = (row: (typeof rows)[number], [said, color, since]: [string, RGBA, string]) => {
       let text = said;
@@ -142,10 +149,9 @@ export const sidebar = part({
       const title = clip(label(row.id), Math.max(4, name - Bun.stringWidth(guide)));
       // The row spans the sidebar, so its room is the width of the sidebar less its bar, its padding at the right, and
       // the parts before and after the words.
-      const room = Math.max(
-        0,
-        width - 1 - Bun.stringWidth(guide) - 2 - name - 1 - (since ? since.length + 1 : 0) - space.inset,
-      );
+      const room = Math.max(0, width - 4 - name - (since ? since.length + 1 : 0) - space.inset);
+      const clipped = Bun.stringWidth(label(row.id)) > name - Bun.stringWidth(guide);
+      const lit = selected || this.cursorOn(row.id);
       this.railSession.add(
         this.railRow(
           [
@@ -163,9 +169,15 @@ export const sidebar = part({
           ],
           () => this.openThreads(row.id),
           edge,
-          selected || this.cursorOn(row.id),
+          lit,
         ),
       );
+      // The chain that is selected says in full what its row cuts: its whole name, and what it does with its time.
+      if (!lit) return;
+      const more = [clipped ? w.labelOf(row.id) : "", text ? (since ? `${text} · ${since}` : text) : ""];
+      for (const piece of more.filter(Boolean))
+        for (const part of wrapped(piece, inner - 3, 2))
+          this.railSession.add(this.line([["   "], [part, c.muted]], c.muted, { truncate: true }));
     };
     for (const { row, said: told } of lines) threadRow(row, told);
     if (resting.length) {
@@ -199,9 +211,6 @@ export const sidebar = part({
       const room = Math.max(1, inner - Bun.stringWidth(name[0] + note + value[0]));
       return add([name, [note, c.faint], [" ".repeat(room)], value], options);
     };
-    const row = (name: string, value: string, color = c.text) => spread([name, c.muted], "", [value, color]);
-    const section = (name: string, value = "", note = "") =>
-      spread([name, c.text, bold], note, [value, c.faint]);
     const spend = w.spend;
     const ceiling =
       grant?.words[1] === null || grant?.words[1] === undefined ? undefined : Number(grant.words[1]);
@@ -210,10 +219,15 @@ export const sidebar = part({
     // A chain with a source reads the prompt of its origin before it answers once, so its context shows from its birth.
     this.railUsage.visible = tokens > 0 || spend.dollars > 0 || Boolean(grant) || w.context !== undefined;
     if (this.railUsage.visible) {
-      section(
-        "Context",
-        known ? `${Number(((window ?? 0) * 100).toFixed(1))}%` : "",
+      // The share of the window leads the header, with the size of the window when the answer tells it.
+      const prompt = w.context;
+      const size = known && prompt !== undefined && window ? count(Math.round(prompt / window)) : "";
+      spread(
+        ["Context", c.text, bold],
         w.demo ? "  simulated" : "",
+        known
+          ? [`${Number(((window ?? 0) * 100).toFixed(1))}%${size ? ` of ${size}` : ""}`, c.text]
+          : [prompt === undefined ? "No answer yet" : count(prompt), prompt === undefined ? c.faint : c.text],
       );
       // The meter fills with the share of the window that the last answer used, and marks the ceiling of a grant. It
       // stands empty until an answer tells the share, and a hover over it says the share and where the chain pauses.
@@ -230,24 +244,26 @@ export const sidebar = part({
         [ceiling === undefined ? "" : `, pauses at ${Number((ceiling * 100).toFixed(1))}%`, c.warning],
       ];
       this.tipped(add(cells), tip);
-      // The last prompt is the whole prompt of the last answer, its system prompt and the reads of the cache included,
-      // which the share of the window measures. The fresh input, the output and the cache are what every answer of the
-      // chain read past the cache, wrote, and read and wrote in the cache, each token counted once.
-      const prompt = w.context;
-      if (prompt !== undefined)
-        this.tipped(row("Last prompt", count(prompt)), [
-          ["The whole prompt of the last answer, its system prompt and the cache included.", c.text],
-        ]);
-      if (tokens > 0) {
-        this.tipped(row("Fresh input", count(spend.input)), [
-          ["The input of the answers of the chain that the cache did not hold.", c.text],
-        ]);
-        row("Output", count(spend.output));
-        if (spend.cacheRead) row("Cache read", count(spend.cacheRead));
-        if (spend.cacheWrite) row("Cache write", count(spend.cacheWrite));
-      }
-      row("Spent", dollars(spend.dollars));
-      if (grant && grant.words[0] !== null) row("Ceiling", dollars(Number(grant.words[0])), c.muted);
+      // One line holds the numbers: the whole prompt of the last answer, what the cache gave it, and what the chain
+      // spent against its ceiling. A hover over it names each number of the chain, each token counted once.
+      const limit = grant?.words[0];
+      const spent =
+        limit === null || limit === undefined
+          ? dollars(spend.dollars)
+          : `${dollars(spend.dollars)}/${dollars(Number(limit))}`;
+      const left = `${prompt === undefined ? "" : `${count(prompt)} prompt`}${spend.cacheRead ? `${prompt === undefined ? "" : " · "}${count(spend.cacheRead)} cached` : ""}`;
+      const numbers = add([
+        [left, c.muted],
+        [" ".repeat(Math.max(1, inner - Bun.stringWidth(left + spent)))],
+        [spent, c.text],
+      ]);
+      this.tipped(numbers, [
+        [`Prompt ${prompt === undefined ? "none" : count(prompt)}`, c.text, bold],
+        [`  fresh input ${count(spend.input)}`, c.muted],
+        [`  output ${count(spend.output)}`, c.muted],
+        [`  cache read ${count(spend.cacheRead)}`, c.muted],
+        [`  cache write ${count(spend.cacheWrite)}`, c.muted],
+      ]);
     }
   },
 
@@ -397,6 +413,9 @@ export const sidebar = part({
       [" ".repeat(Math.max(1, inner - Bun.stringWidth(name + plain(tally))))],
       ...tally,
     ]);
+    // The whole name of the chain stands under its clipped one, since a deep chain has a long path.
+    if (Bun.stringWidth(w.labelOf(chain)) > Bun.stringWidth(name))
+      for (const part of wrapped(w.labelOf(chain), inner, 3)) line([[part, c.faint]]);
     if (!list.length) line([["No thread on this chain yet.", c.faint]]);
     if (from > 0)
       line([[`↑ ${from} earlier`, c.faint]], () => {
@@ -408,7 +427,9 @@ export const sidebar = part({
       const chosen = w.thread === id;
       const folded = this.threadFolded(id);
       const [mark, tone] = threadMarks(one);
-      const text = clip(shortenHomes(one.title) || id, Math.max(4, width - 6 - space.inset));
+      // A thread that took messages says how many its prompt holds, at the right of its row.
+      const many = one.messages.length ? `  ${one.messages.length + 1} msgs` : "";
+      const text = clip(shortenHomes(one.title) || id, Math.max(4, width - 6 - space.inset - many.length));
       this.railSession.add(
         this.railRow(
           [
@@ -416,6 +437,7 @@ export const sidebar = part({
             [`${mark} `, tone],
             [folded ? `${glyph.closed} ` : "", c.faint],
             [text, chosen ? c.text : one.resolved ? c.faint : c.muted, chosen ? bold : 0],
+            [many, c.faint],
           ],
           () => this.chooseThread(id),
           edge,
