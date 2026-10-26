@@ -15,6 +15,11 @@ inputs:
       What the build of the gate holds beyond its job and its system, as a feature of the crate, which the key of its
       cache names: a build of other artifacts saves a cache of its own.
     default: ""
+  workspaces:
+    description: >-
+      Each workspace of cargo that the gate builds, with its target, as the cache reads them: it keeps the dependencies
+      of each in its target, and removes each other one.
+    default: ". -> target"
 
 runs:
   using: composite
@@ -54,6 +59,7 @@ runs:
     - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       with:
         key: ${{ inputs.key }}
+        workspaces: ${{ inputs.workspaces }}
         add-rust-environment-hash-key: true
         save-if: ${{ github.ref == 'refs/heads/main' }}
         cache-on-failure: false
