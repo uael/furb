@@ -357,10 +357,25 @@ A session that opens with unfinished work stays paused until you resume it.
 
 A record whose replay drifts, as a record that a build of another version made, opens to read. The TUI shows what the record
 kept: each chain, each rung with its word, and each act. No word runs again, no model is asked, and a command that
-would change the life is refused. A dialog names the version of the build that made the record and the version of this build, and
+would change the life is refused. A read leaves the record and its log as they were. It can refresh the derived cache, `<record>.told`.
+
+A dialog gives the build that made the record and this build, each on a line of its own. A record of an earlier engine
+that names no engine says "an earlier engine, not named". The dialog says what a new life from the record carries, and
 offers to read the record or to start a new life in its workspace.
 
 ![A record to read](screenshots/56-record-to-read.png)
+
+While you read, the footer keeps the sentence "Read only" with its reason, and a button, "Start a new life". The
+composer is off, and its placeholder says the same sentence. The command list has an entry, "Read only", that opens the
+dialog again. A chain that the record does not keep takes the first line of its first prompt as its label, or its own
+name, and stands under the chain of the act that made it. Work that had no end when the record ended says "not
+finished when the record ends", with no spinner and no clock. The sidebar and ⌃W show "Read only" for such a record,
+and not "Error".
+
+![A record open to read](screenshots/56b-record-read-only.png)
+
+A new life from the record has the turns of the root chain of the record, up to a limit of size, and the list of the files that
+the record wrote, in its first word, as `earlier` and `earlier_files`.
 
 ## Cancel and take back
 

@@ -25,6 +25,8 @@ export interface LiveAct {
   value: unknown;
   /** Whether a pause stands over the act while it lives. */
   paused: boolean;
+  /** Whether the act had no end when the record ended, in a record open to read, where nothing runs to end it. */
+  unfinished?: boolean;
   run?: RunState;
   /** The place of the act in time: how many facts the life had said when the act was made, and when it was done. It
    * is the order of the record, so a later life gives the same places. */

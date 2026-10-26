@@ -48,7 +48,9 @@ test("a record whose fact drifts opens to read, with what it kept, and a dialog 
         expect(frame).toContain("This record does not replay");
         expect(frame).toContain("Read it");
         expect(frame).toContain("Start a new life from it");
-        expect(frame).toContain(`This build is of version ${reading?.current}, which made it`);
+        expect(frame).toContain(`Made by: version ${reading?.version}`);
+        expect(frame).toContain(`This build: version ${reading?.current}`);
+        expect(frame).toContain("its replay drifts");
       } finally {
         app.dispose();
         screen.renderer.destroy();
