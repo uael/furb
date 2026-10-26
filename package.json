@@ -17,8 +17,8 @@
     "check": "tsc --noEmit && tsc --noEmit -p gui",
     "test": "bun run tui/script/test.ts",
     "bench": "bun run tui/script/bench.ts",
-    "format": "biome format --write bind/typescript tui gui docs/examples package.json tsconfig.json biome.json",
-    "lint": "biome check bind/typescript tui gui docs/examples package.json tsconfig.json biome.json"
+    "format": "biome format --write bind/typescript tui gui docs/examples extensions package.json tsconfig.json biome.json",
+    "lint": "biome check bind/typescript tui gui docs/examples extensions package.json tsconfig.json biome.json"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.6",

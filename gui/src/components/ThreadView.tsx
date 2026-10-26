@@ -1,10 +1,11 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { type Exit, type LiveAct, reason, type Thread } from "furb/life";
+import { compactedRun, type Exit, type LiveAct, reason, type Thread } from "furb/life";
 import { ChevronRight, CornerDownRight } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { actorName } from "../data.ts";
 import { chainName, type Held, type Moment, type Streamed, threadState } from "../life.ts";
-import { steps } from "../steps.ts";
+import { placed, steps } from "../steps.ts";
+import type { Mark } from "../wire.ts";
 import { Code } from "./Code.tsx";
 import { ActMenu, type Rewinding } from "./Controls.tsx";
 import { Glyph } from "./Glyph.tsx";
@@ -59,6 +60,44 @@ function Printing({ act, live }: { act: LiveAct; live: boolean }) {
   );
 }
 
+/** The class of the color of each tone that a part of an extension gives a run of text. */
+const TONES: Record<string, string> = {
+  text: "text-text",
+  muted: "text-muted",
+  faint: "text-faint",
+  accent: "text-accent",
+  success: "text-done",
+  warning: "text-asks",
+  danger: "text-failed",
+};
+
+/** A mark of a part of an extension, as a compaction: a rule with its title across the thread, then its lines. */
+export function Rule({ mark }: { mark: Mark }) {
+  return (
+    <section aria-label={mark.title} className="pb-5">
+      <div className="flex items-center gap-3 text-[12px] text-faint">
+        <span className="h-px w-4 bg-hair-strong" aria-hidden />
+        <span className="shrink-0">{mark.title}</span>
+        <span className="h-px flex-1 bg-hair-strong" aria-hidden />
+      </div>
+      {mark.lines.map((line, at) => (
+        <div
+          // biome-ignore lint/suspicious/noArrayIndexKey: the lines of a mark have no name but their place.
+          key={at}
+          className="mt-1 pl-7 text-[12.5px] leading-relaxed whitespace-pre-wrap"
+        >
+          {line.map((run, n) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: the runs of a line have no name but their place.
+            <span key={n} className={TONES[run.tone] ?? "text-muted"}>
+              {run.text}
+            </span>
+          ))}
+        </div>
+      ))}
+    </section>
+  );
+}
+
 /** One thread read top to bottom: what was asked, each step that its model took, folded to what it did and open to
  * its code, what a model writes and what a command prints while they run, the threads that a step asked, and the
  * answer. */
@@ -79,6 +118,12 @@ export function ThreadView({
   const directory = life?.directory ?? "";
   const live = Boolean(life && !life.reading && !life.recorded);
   const ladder = steps(moment, thread.act, directory);
+  const run = compactedRun(thread.chain, moment.compactions);
+  const marks = placed(
+    ladder,
+    (life?.marks ?? []).filter((mark) => run.includes(mark.chain)),
+    (id) => moment.rows.get(id)?.began ?? 0,
+  );
   const last = ladder.at(-1)?.id;
   const [open, setOpen] = useState<Set<string>>(() => new Set(last ? [last] : []));
   const [whole, setWhole] = useState(false);
@@ -183,75 +228,89 @@ export function ThreadView({
                   className="absolute left-0 w-full pb-5 pl-8"
                   style={{ top: row.start - margin }}
                 >
-                  <span className="absolute top-[5px] left-0 grid h-[13px] w-[13px] place-items-center bg-bg">
-                    <Glyph state={step.state} size={12} />
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => toggle(step.id)}
-                      className="group flex min-w-0 flex-1 items-center gap-2 text-left"
-                    >
-                      <span
-                        className={`text-[14px] ${step.state === "failed" ? "text-failed" : "text-text"}`}
-                      >
-                        {said}
-                      </span>
-                      <span className="text-[12px] text-faint">Step {n + 1}</span>
-                      {step.thinks ? null : (
-                        <ChevronRight
-                          size={14}
-                          className={`text-faint transition-transform duration-200 ease-[var(--ease-out-soft)] ${shown ? "rotate-90" : ""}`}
-                        />
-                      )}
-                    </button>
-                    {moment.rows.get(step.id) ? (
-                      <ActMenu act={moment.rows.get(step.id) as LiveAct} live={live} onRewind={onRewind} />
-                    ) : null}
-                  </div>
-                  {shown && !step.thinks ? (
-                    <div className="mt-2.5 overflow-hidden rounded-xl bg-well py-2 pr-3">
-                      <Code steps={[step]} heads={false} wrap />
+                  {marks[row.index]?.map((mark) => (
+                    <div key={`${mark.chain} ${mark.at} ${mark.title}`} className="-ml-8">
+                      <Rule mark={mark} />
                     </div>
-                  ) : null}
-                  {step.thinks && stream ? <Writing stream={stream} /> : null}
-                  {running.map((act) => (
-                    <Printing key={act.id} act={act} live={live} />
                   ))}
-                  {step.asks.map((id) => {
-                    const asked = moment.threads.find((one) => one.act.id === id);
-                    if (!asked) return null;
-                    // A notice to you asks nothing, so it reads as a quiet line, and opens no thread.
-                    if (asked.to === "operator" && asked.shape === "None")
-                      return (
-                        <div key={id} className="mt-2 flex items-start gap-2 pl-0.5 text-[13px] text-muted">
-                          <span className="pt-[1px] text-faint">·</span>
-                          <span className="whitespace-pre-wrap">
-                            {String(asked.act.words[1] ?? asked.title)}
-                          </span>
-                        </div>
-                      );
-                    return (
+                  <div className="relative">
+                    <span className="absolute top-[5px] -left-8 grid h-[13px] w-[13px] place-items-center bg-bg">
+                      <Glyph state={step.state} size={12} />
+                    </span>
+                    <div className="flex items-center gap-2">
                       <button
-                        key={id}
                         type="button"
-                        onClick={() => onSelect(id)}
-                        className="mt-2.5 flex w-full items-center gap-3 rounded-xl border border-hair bg-panel px-3.5 py-2.5 text-left transition-colors duration-150 hover:border-hair-strong"
+                        onClick={() => toggle(step.id)}
+                        className="group flex min-w-0 flex-1 items-center gap-2 text-left"
                       >
-                        <CornerDownRight size={14} className="text-faint" />
-                        <Glyph state={threadState(moment, asked)} size={12} />
-                        <span className="min-w-0 flex-1 truncate text-[13.5px] text-text">{asked.title}</span>
-                        <span className="shrink-0 text-[12px] text-faint">
-                          {asked.to === "operator" ? "to you" : chainName(moment, asked.chain)}
+                        <span
+                          className={`text-[14px] ${step.state === "failed" ? "text-failed" : "text-text"}`}
+                        >
+                          {said}
                         </span>
+                        <span className="text-[12px] text-faint">Step {n + 1}</span>
+                        {step.thinks ? null : (
+                          <ChevronRight
+                            size={14}
+                            className={`text-faint transition-transform duration-200 ease-[var(--ease-out-soft)] ${shown ? "rotate-90" : ""}`}
+                          />
+                        )}
                       </button>
-                    );
-                  })}
+                      {moment.rows.get(step.id) ? (
+                        <ActMenu act={moment.rows.get(step.id) as LiveAct} live={live} onRewind={onRewind} />
+                      ) : null}
+                    </div>
+                    {shown && !step.thinks ? (
+                      <div className="mt-2.5 overflow-hidden rounded-xl bg-well py-2 pr-3">
+                        <Code steps={[step]} heads={false} wrap />
+                      </div>
+                    ) : null}
+                    {step.thinks && stream ? <Writing stream={stream} /> : null}
+                    {running.map((act) => (
+                      <Printing key={act.id} act={act} live={live} />
+                    ))}
+                    {step.asks.map((id) => {
+                      const asked = moment.threads.find((one) => one.act.id === id);
+                      if (!asked) return null;
+                      // A notice to you asks nothing, so it reads as a quiet line, and opens no thread.
+                      if (asked.to === "operator" && asked.shape === "None")
+                        return (
+                          <div key={id} className="mt-2 flex items-start gap-2 pl-0.5 text-[13px] text-muted">
+                            <span className="pt-[1px] text-faint">·</span>
+                            <span className="whitespace-pre-wrap">
+                              {String(asked.act.words[1] ?? asked.title)}
+                            </span>
+                          </div>
+                        );
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => onSelect(id)}
+                          className="mt-2.5 flex w-full items-center gap-3 rounded-xl border border-hair bg-panel px-3.5 py-2.5 text-left transition-colors duration-150 hover:border-hair-strong"
+                        >
+                          <CornerDownRight size={14} className="text-faint" />
+                          <Glyph state={threadState(moment, asked)} size={12} />
+                          <span className="min-w-0 flex-1 truncate text-[13.5px] text-text">
+                            {asked.title}
+                          </span>
+                          <span className="shrink-0 text-[12px] text-faint">
+                            {asked.to === "operator" ? "to you" : chainName(moment, asked.chain)}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </li>
               );
             })}
           </ol>
         ) : null}
+        {marks[ladder.length]?.map((mark) => (
+          <div key={`${mark.chain} ${mark.at} ${mark.title}`} className={ladder.length ? "" : "mt-8"}>
+            <Rule mark={mark} />
+          </div>
+        ))}
         {life?.reading &&
         !life.reading.logged &&
         !life.loading &&
