@@ -323,6 +323,15 @@ function face(glyph: string, x: number, y: number): string | undefined {
 /** The colors of a window that the palette of a theme gives. */
 type Window = { background: string; border: string; muted: string };
 
+/** A frame as the cells that the renderer drew, for a reader of its text: each line as its runs, each run as its text,
+ * its foreground, its background and its attributes. */
+export function cells(frame: CapturedFrame): string {
+  const lines = frame.lines.map((line) =>
+    line.spans.map((span) => [span.text, hex(span.fg), hex(span.bg), span.attributes]),
+  );
+  return JSON.stringify({ cols: frame.cols, rows: frame.rows, lines });
+}
+
 /** A frame as a PNG of a terminal window: the cells, a title bar with the title, and a soft shadow on a clear
  * ground. The palette gives the colors of the window. */
 export function rasterize(frame: CapturedFrame, palette: Window, title: string): Buffer {
