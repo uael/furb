@@ -7,13 +7,14 @@ import { placed } from "./source.js";
  *
  * - `code`: a line of a word, with the acts that it made, whether it runs now, why it failed, and its hint: what its
  *   acts came to in a few words.
- * - `quote`: a quote of a word, folded to its name, its first line and its count of lines.
+ * - `quote` is a `code` line too: a quote of a word stands as the binding that it makes, its name bound to its text as
+ *   one string with escapes, as python writes it, and its count of lines as its hint.
  * - `output`: a line that a command prints while its line runs.
  * - `writes`: what the model writes while its word has not come yet.
  * - `note`: a quiet comment: a message that came to the thread.
  * - `earlier`: the steps before those that the program keeps, as their count, which stands first.
  *
- * Each line names its step: the rung of its word, or the prompt of its note. A line of code, a quote and the line that
+ * Each line names its step: the rung of its word, or the prompt of its note. A line of code and the line that
  * a model writes hold two numbers: `number`, the line in the word of its step, and `display`, the line in the program
  * of its thread, which goes on across the steps of the thread. */
 export type ProgramLine =
@@ -27,15 +28,6 @@ export type ProgramLine =
       runs: boolean;
       fails?: string;
       hint: string;
-    }
-  | {
-      kind: "quote";
-      step: LiveAct;
-      number: number;
-      display: number;
-      text: string;
-      name: string;
-      lines: number;
     }
   | { kind: "output"; step: LiveAct; act: LiveAct; text: string }
   | { kind: "writes"; step: LiveAct; display: number; text: string }
@@ -169,32 +161,48 @@ export function stepLines(
     const quote = line.match(/^<s:(\w+)>(.*)$/);
     const end = quote ? source.findIndex((one, at) => at >= index && one.endsWith(`</s:${quote[1]}>`)) : -1;
     if (quote && end >= 0) {
-      const body = [quote[2] ?? "", ...source.slice(index + 1, end + 1)].join("\n").replace(/<\/s:\w+>$/, "");
+      // The word binds the text between the marks, less the line break that follows the opening mark.
+      const body = [quote[2] ?? "", ...source.slice(index + 1, end + 1)]
+        .join("\n")
+        .replace(/<\/s:\w+>$/, "")
+        .replace(/^\n/, "");
       out.push({
-        kind: "quote",
+        kind: "code",
         step,
         number: index + 1,
         display: start + index + 1,
-        text: first(body),
-        name: quote[1] ?? "",
-        lines: lineCount(body.replace(/^\n/, "")),
+        text: `${quote[1]} = ${pythonString(body)}`,
+        acts: [],
+        runs: false,
+        hint: lines(lineCount(body)),
       });
       index = end;
       continue;
     }
-    const acts = on[index] ?? [];
+    // A string of three marks that runs over many lines stands in its statement as one string with its escapes.
+    const joined = /"""|'''/.test(line) ? joinedLines(source, index) : undefined;
+    const last = joined?.end ?? index;
+    const acts = last === index ? (on[index] ?? []) : [...new Set(on.slice(index, last + 1).flat())];
     const runs = Boolean(open && acts.includes(open));
     out.push({
       kind: "code",
       step,
       number: index + 1,
       display: start + index + 1,
-      text: line,
+      text: joined?.text ?? line,
       acts,
       runs,
-      ...(failing === index + 1 && why ? { fails: why } : {}),
+      ...(why && failing >= index + 1 && failing <= last + 1 ? { fails: why } : {}),
       hint: hintOf(acts, owed, label),
     });
+    // A quote that ran stands in its word as the binding that it made, with blank lines after it that keep the numbers
+    // of the lines below. Those blank lines stand in the line of the binding, which shows the lines that it took.
+    let pad = 0;
+    const bound = joined?.text ?? line;
+    const escapes =
+      bound.includes("\\n") && /^\w+ = (['"]).*\\n.*\1$/.test(bound) ? (bound.match(/\\n/g) ?? []).length : 0;
+    while (pad <= escapes && escapes && source[last + 1 + pad]?.trim() === "") pad++;
+    index = last + pad;
     if (runs && open?.kind === "bash")
       for (const printed of tailOf(open, OUTPUT_LINES).split("\n"))
         if (printed) out.push({ kind: "output", step, act: open, text: printed });
@@ -267,6 +275,23 @@ export function threadProgram(
   return out;
 }
 
+/** A text as a string of python, as repr writes it: single marks, or double marks for a text that holds a single mark
+ * and no double mark. */
+function pythonString(text: string): string {
+  const mark = text.includes("'") && !text.includes('"') ? '"' : "'";
+  let out = "";
+  for (const char of text) {
+    if (char === "\\") out += "\\\\";
+    else if (char === mark) out += `\\${char}`;
+    else if (char === "\n") out += "\\n";
+    else if (char === "\r") out += "\\r";
+    else if (char === "\t") out += "\\t";
+    else if (char < " " || char === "\x7f") out += `\\x${char.charCodeAt(0).toString(16).padStart(2, "0")}`;
+    else out += char;
+  }
+  return mark + out + mark;
+}
+
 /** A value of an act as python writes it. */
 function python(value: unknown): string {
   if (value === null || value === undefined) return "None";
@@ -329,6 +354,117 @@ export function literals(line: string): Literal[] {
   return found;
 }
 
+/** The statement that starts at a line of a word, when a string of three marks opens on it and runs past the end of the
+ * line: the last line that the statement takes, and its text on one line, each such string written as one string with
+ * its escapes and double marks. A raw string loses its prefix and doubles its backslashes, so it means the same. */
+export function joinedLines(
+  source: readonly string[],
+  index: number,
+): { end: number; text: string } | undefined {
+  const chunk = source.slice(index).join("\n");
+  const endOf = (from: number) => {
+    const found = chunk.indexOf("\n", from);
+    return found < 0 ? chunk.length : found;
+  };
+  let lineEnd = endOf(0);
+  let out = "";
+  let from = 0;
+  let at = 0;
+  let merged = false;
+  while (at < lineEnd) {
+    const char = chunk[at] ?? "";
+    if (char === "#") break;
+    if (char !== '"' && char !== "'") {
+      at++;
+      continue;
+    }
+    const prefix = chunk.slice(Math.max(0, at - 2), at).match(/[rRbBuUfFtT]{0,2}$/)?.[0] ?? "";
+    if (/\w/.test(chunk[at - prefix.length - 1] ?? "")) {
+      at++;
+      continue;
+    }
+    const mark = chunk.startsWith(char.repeat(3), at) ? char.repeat(3) : char;
+    let close = at + mark.length;
+    while (close < chunk.length && !chunk.startsWith(mark, close)) {
+      if (mark.length === 1 && chunk[close] === "\n") break;
+      close += chunk[close] === "\\" ? 2 : 1;
+    }
+    if (close >= chunk.length && mark.length === 3) break;
+    if (mark.length === 1) {
+      at = Math.min(close + 1, chunk.length);
+      if (at > lineEnd) lineEnd = endOf(at);
+      continue;
+    }
+    const body = chunk.slice(at + 3, close);
+    if (body.includes("\n")) {
+      const raw = /[rR]/.test(prefix);
+      let text = "";
+      for (let k = 0; k < body.length; k++) {
+        const one = body[k] ?? "";
+        if (one === "\\" && !raw) {
+          // A backslash before a line break joins the lines, and any other escape stays as the word wrote it.
+          if (body[k + 1] !== "\n") text += one + (body[k + 1] ?? "");
+          k++;
+        } else if (one === "\\") text += "\\\\";
+        else if (one === "\n") text += "\\n";
+        else if (one !== "\r") text += one === '"' ? '\\"' : one;
+      }
+      out += `${chunk.slice(from, at - prefix.length)}${prefix.replace(/[rR]/g, "")}"${text}"`;
+      from = close + 3;
+      merged = true;
+    }
+    at = close + 3;
+    if (at > lineEnd) lineEnd = endOf(at);
+  }
+  if (!merged) return undefined;
+  return {
+    end: index + chunk.slice(0, lineEnd).split("\n").length - 1,
+    text: out + chunk.slice(from, lineEnd),
+  };
+}
+
+/** A part of a line that wraps: where it starts and ends in the line, and how far its row is indented. */
+export type Piece = { from: number; to: number; indent: number };
+
+/** A line of python cut into rows of a width at most, each cut between two tokens: at a space, after a comma or after
+ * an opening bracket. A row after the first is indented two columns past the line. Only a token wider than a row, as
+ * a path with no space, is cut inside. */
+export function wrap(line: string, width: number): Piece[] {
+  const lead = line.match(/^ */)?.[0].length ?? 0;
+  const indent = Math.min(lead + 2, Math.floor(width / 3));
+  const pieces: Piece[] = [];
+  let from = 0;
+  for (;;) {
+    const first = pieces.length === 0;
+    const room = width - (first ? 0 : indent);
+    if (line.length - from <= room) {
+      pieces.push({ from, to: line.length, indent: first ? 0 : indent });
+      return pieces;
+    }
+    let cut = from + room;
+    const floor = from + (first ? lead : 0) + 1;
+    for (let at = from + room; at > floor; at--) {
+      const before = line[at - 1] ?? "";
+      const here = line[at] ?? "";
+      if ((here === " " && before !== " ") || ("([{,".includes(before) && here !== " ")) {
+        cut = at;
+        break;
+      }
+    }
+    pieces.push({ from, to: cut, indent: first ? 0 : indent });
+    from = cut;
+    while (line[from] === " ") from++;
+  }
+}
+
+/** The start of a string that a fold keeps, less an escape that its end would cut. */
+function uncut(part: string): string {
+  if ((part.match(/\\*$/)?.[0].length ?? 0) % 2 === 1) return part.slice(0, -1);
+  return part
+    .replace(/\\(?:u[0-9a-fA-F]{0,3}|U[0-9a-fA-F]{0,7}|x[0-9a-fA-F]?)$/, "")
+    .replace(/[\uD800-\uDBFF]$/, "");
+}
+
 /** The marks that stand for the end of a string that a line folds. */
 export const FOLD = "...";
 /** How many characters of a string stay before its fold. */
@@ -372,7 +508,7 @@ export function foldStrings(
   for (const [index, one] of found.entries()) {
     const kept = keep.get(index);
     if (kept === undefined) continue;
-    text += line.slice(from, one.start) + line.slice(one.start, one.start + kept).trimEnd();
+    text += line.slice(from, one.start) + uncut(line.slice(one.start, one.start + kept)).trimEnd();
     folds.push({ literal: index, at: text.length, whole: line.slice(one.start, one.end) });
     text += FOLD;
     from = one.end;

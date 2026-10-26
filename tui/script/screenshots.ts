@@ -776,6 +776,34 @@ try {
   Object.defineProperty(session.host, "streams", { configurable: true, writable: true, value: streams });
   await session.command(`/cancel ${thinks}`);
   await session.engine.result(thinks).catch(() => {});
+  // A string of three marks over many lines, a quote of a word and a statement too long for its row: each shows as one
+  // line of python, the strings folded to their start and an underlined ..., and the long statement opens at a click
+  // into rows that cut between tokens.
+  const head = "<s" + ":brief>";
+  const foot = "</s" + ":brief>";
+  const word = [
+    `note = """${"Keep the rest for later passes, and say in one sentence what each gap holds. ".repeat(2)}`,
+    `${"A worker acts on it. ".repeat(3)}Close with a tuple."""`,
+    head,
+    "Fix the largest gap that falls in your work,",
+    "and leave each other gap to a later pass.",
+    foot,
+    `names = [${Array.from({ length: 20 }, (_, k) => `"gap${k}"`).join(", ")}]`,
+    "print(len(note), len(brief), len(names))",
+  ].join("\n");
+  const strings = await session.engine.rung({ word, on: session.selected });
+  await session.engine.result(strings);
+  await session.refresh();
+  await capture("86-strings");
+  const lines = test.captureCharFrame().split("\n");
+  const long = lines.findIndex((row) => row.includes("names = ["));
+  if (long < 0) throw new Error("No long statement in the feed.");
+  await test.mockMouse.click((lines[long] ?? "").indexOf("names"), long);
+  await rest();
+  await capture("87-wrapped-line");
+  session.folds = Object.fromEntries(
+    Object.entries(session.folds).filter(([key]) => !key.startsWith("line:")),
+  );
 
   // The feed of a real life: a life of the conductor, recorded from its log, with a score of chains at work, which
   // shows and runs nothing. The library of the demo ends first, with the sessions and the workers that it holds.
