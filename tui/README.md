@@ -138,6 +138,15 @@ folder. Each other operator comes over the network, with a key that gives a role
 
 A recorded life is a log of a life whose first line is a header that says `"recorded": true`. The TUI reads it as it
 reads a record that a build of another version made, from its acts, and runs nothing: what you send to it fails with the reason.
+The demo life that the gallery and the tests read is as dense as a real one, and it asks no model. The models of the
+demo write the words of `tui/src/demo/`, which run for real on a project of files: on the root chain a conductor hires
+a worker for each part of a release on a chain of its own, and the workers hire others, so the tree is four chains deep.
+Their words hold `def`, `while`, `for`, `if`, `try`, `lambda` and `await`, and some are 45 lines long. The life holds each
+state that a record holds: a word that the gate refused, a word that raised, a prompt that was cancelled, a chain that a
+grant paused, a command that runs, and questions of the operator in each shape. `tui/src/demo/workspaces.ts` adds
+four workspaces with sixteen sessions in them, saved, running, blocked, paused and archived. `seedLife` and
+`seedWorkspaces` make them, and `bun run screenshots` reads them.
+
 The demo opens `fixtures/conductor.jsonl`, a life of a conductor of furb with 23 chains, beside its scripted life,
 when it has no `--cwd` and no record. `bun run tui/script/fixture.ts <record>.jsonl.log [out]` makes such a fixture
 from the log of a real life: it keeps the acts that the model of a life reads, keeps each word of a model whole, since
