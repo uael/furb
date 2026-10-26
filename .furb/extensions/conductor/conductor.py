@@ -1426,13 +1426,13 @@ def gh(*args):
     time.sleep(wait)
 def jobs(run, attempt=0):
   at = f"/attempts/{attempt}" if attempt else ""
-  return json.loads(gh("api", f"repos/{{owner}}/{{repo}}/actions/runs/{run}{at}/jobs?per_page=100", "--jq", "[.jobs[] | {id, name, conclusion, started_at, completed_at, steps: [.steps[] | {name, conclusion, started_at, completed_at}]}]"))
+  return json.loads(gh("api", f"repos/{{owner}}/{{repo}}/actions/runs/{run}{at}/jobs?per_page=100", "--jq", "[.jobs[] | {id, name, conclusion, started_at, completed_at, steps: [(.steps // [])[] | {name, conclusion, started_at, completed_at}]}]"))
 def spent(job):
   stamp = lambda s: datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
   return int(stamp(job["completed_at"]) - stamp(job["started_at"]))
 budgets = json.loads(subprocess.run(["git", "show", "origin/main:.github/budgets.json"], capture_output=True, text=True).stdout or "{}")
 path = "repos/{owner}/{repo}/actions/workflows/gates.yml/runs"
-green = json.loads(gh("api", f"{path}?branch=main&status=success&per_page=5", "--jq", "[.workflow_runs[] | {id, at: .created_at, attempt: .run_attempt}]"))
+green = json.loads(gh("api", f"{path}?branch=main&status=success&per_page=5", "--jq", "[.workflow_runs[] | {id, at: (.created_at | tostring), attempt: .run_attempt}]"))
 measured, steps, passed = {}, {}, {}
 for run in green:
   for job in jobs(run["id"]):
@@ -1443,7 +1443,7 @@ for run in green:
         if step["conclusion"] == "success" and step["completed_at"] and step["started_at"]:
           steps.setdefault(job["name"], {}).setdefault(step["name"], []).append(spent(step))
 over = [{"job": n, "median": int(statistics.median(v)), "budget": budgets[n], "runs": [r["id"] for r in green], "steps": {s: int(statistics.median(x)) for s, x in steps.get(n, {}).items()}} for n, v in measured.items() if n in budgets and len(v) >= 3 and statistics.median(v) > budgets[n]]
-runs = json.loads(gh("api", f"{path}?per_page=30", "--jq", "[.workflow_runs[] | {id, sha: .head_sha, at: .created_at, attempt: .run_attempt, conclusion, url: .html_url}]"))
+runs = json.loads(gh("api", f"{path}?per_page=30", "--jq", "[.workflow_runs[] | {id, sha: .head_sha, at: (.created_at | tostring), attempt: .run_attempt, conclusion, url: .html_url}]"))
 flakes, settled = [], []
 for run in runs:
   if run["attempt"] < 2 or run["conclusion"] != "success":
