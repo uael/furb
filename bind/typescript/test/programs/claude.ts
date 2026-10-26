@@ -27,7 +27,10 @@ if (process.env.FURB_CLAUDE_DISCOVER) {
   for await (const line of createInterface({ input: process.stdin })) {
     const request_id = (JSON.parse(line) as { request_id?: string }).request_id;
     console.log(
-      JSON.stringify({ type: "control_response", response: { subtype: "error", request_id, error: "unsupported" } }),
+      JSON.stringify({
+        type: "control_response",
+        response: { subtype: "error", request_id, error: "unsupported" },
+      }),
     );
   }
   process.exit(0);
