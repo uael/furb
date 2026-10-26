@@ -277,7 +277,7 @@ test("Up and Down walk the history from the edges of the input, and Up on an emp
         app.composer.setText(`/name ${name}`);
         await app.submit();
       }
-      app.composer.setText("a draft");
+      app.composer.setText("");
       screen.mockInput.pressArrow("up");
       expect(app.composer.plainText).toBe("/name second");
       screen.mockInput.pressArrow("up");
@@ -285,7 +285,22 @@ test("Up and Down walk the history from the edges of the input, and Up on an emp
       screen.mockInput.pressArrow("down");
       expect(app.composer.plainText).toBe("/name second");
       screen.mockInput.pressArrow("down");
-      expect(app.composer.plainText).toBe("a draft");
+      expect(app.composer.plainText).toBe("");
+      // Typed text keeps the walk to the entries that start with it, and Down brings the text back.
+      app.composer.setText("/name f");
+      screen.mockInput.pressArrow("up");
+      expect(app.composer.plainText).toBe("/name first");
+      screen.mockInput.pressArrow("up");
+      expect(app.composer.plainText).toBe("/name first");
+      screen.mockInput.pressArrow("down");
+      expect(app.composer.plainText).toBe("/name f");
+      // The history holds the entries of the other chains, older than those of this chain.
+      session.histories[`other:${session.mode}`] = ["from another chain", "/name second"];
+      app.composer.setText("from");
+      screen.mockInput.pressArrow("up");
+      expect(app.composer.plainText).toBe("from another chain");
+      screen.mockInput.pressArrow("down");
+      expect(app.composer.plainText).toBe("from");
       app.composer.setText("");
       session.queueHeld = true;
       session.enqueue("a queued message");

@@ -601,6 +601,9 @@ export class App {
   private submitting = false;
   private historyIndex = -1;
   private historyDraft = "";
+  /** The text typed when a walk of the history began, which a walk keeps to the entries that start with it, as fish
+   * does. An empty prefix walks every entry. */
+  private historyPrefix = "";
   private diagnosticsKey = "";
   /** What the footer shows, set again only when it changes. */
   private statusKey = "";
@@ -1109,6 +1112,7 @@ export class App {
     this.draftKey = key;
     this.composer.setText(text);
     this.historyIndex = -1;
+    this.historyPrefix = "";
   }
   private compose = (text: string) => {
     this.closeTree();
@@ -1133,16 +1137,25 @@ export class App {
     this.due = false;
     this.render();
   };
-  /** What the input sent on this chain in this mode. A chain that holds messages the input did not send, as a record
-   * that opens with no saved input, walks those messages instead. */
+  /** What the input sent in this mode, the oldest first: the entries of the other chains, which are older to the
+   * walk, then those of this chain, and an entry that came before comes only once, at its latest place. A chain that
+   * holds messages the input did not send, as a record that opens with no saved input, walks those messages
+   * instead. */
   private history(): string[] {
     const w = this.session;
-    const kept = w.histories[w.draftKey] ?? [];
-    if (kept.length || w.mode !== "prompt" || w.editing) return kept;
-    return w.activity
-      .filter((act) => w.isUserPrompt(act))
-      .map((act) => String(act.words[1] ?? ""))
-      .filter(Boolean);
+    const mode = w.draftKey.slice(w.draftKey.indexOf(":"));
+    const own = w.histories[w.draftKey] ?? [];
+    const others = Object.entries(w.histories)
+      .filter(([key]) => key !== w.draftKey && key.endsWith(mode))
+      .flatMap(([, entries]) => entries);
+    const kept = [...others, ...own];
+    if (!own.length && (w.mode !== "prompt" || w.editing) && !kept.length) return [];
+    if (!kept.length && w.mode === "prompt" && !w.editing)
+      return w.activity
+        .filter((act) => w.isUserPrompt(act))
+        .map((act) => String(act.words[1] ?? ""))
+        .filter(Boolean);
+    return kept.filter((entry, index) => kept.lastIndexOf(entry) === index);
   }
   async submit(): Promise<void> {
     if (this.submitting) return;
@@ -1166,6 +1179,7 @@ export class App {
       if (content && history.at(-1) !== content) history.push(content);
       if (history.length > 200) history.shift();
       this.historyIndex = -1;
+      this.historyPrefix = "";
     } catch (error) {
       // A text that was not sent goes back to its draft, unless that draft holds new text by now.
       if (this.draftKey === key && !this.composer.plainText) this.composer.setText(content);
@@ -7992,7 +8006,8 @@ export class App {
     else this.action("/cancel");
   }
   /** Up on an empty input takes back the last message queued on the chain, and Up and Down at the first and the last
-   * line of the input walk the history of what it sent, as a shell does. Alt+Up and Alt+Down walk it from any line.
+   * line of the input walk the history of what it sent, as a shell does: the entries of this chain first, then those
+   * of the other chains, and with text typed, only the entries that start with it, as fish does. Alt+Up and Alt+Down walk it from any line.
    * It gives false when it does nothing, and the input moves its cursor. */
   private walkHistory = (key?: KeyEvent): boolean => {
     const up = key?.name === "up";
@@ -8006,15 +8021,22 @@ export class App {
     }
     const cursor = this.composer.visualCursor.visualRow;
     const edge = up ? cursor === 0 : cursor >= this.composer.virtualLineCount - 1;
-    const history = this.history();
+    const prefix = this.historyIndex < 0 ? this.composer.plainText : this.historyPrefix;
+    const history = this.history().filter(
+      (entry) => entry.startsWith(prefix) && (this.historyIndex >= 0 || entry !== prefix),
+    );
     if (!(anywhere || edge) || !history.length || !(up || this.historyIndex >= 0)) return false;
     if (this.historyIndex < 0) {
       this.historyDraft = this.composer.plainText;
+      this.historyPrefix = prefix;
       this.historyIndex = history.length;
     }
     this.historyIndex = Math.max(0, Math.min(history.length, this.historyIndex + (up ? -1 : 1)));
     const text = history[this.historyIndex] ?? this.historyDraft;
-    if (this.historyIndex === history.length) this.historyIndex = -1;
+    if (this.historyIndex === history.length) {
+      this.historyIndex = -1;
+      this.historyPrefix = "";
+    }
     this.composer.replaceText(text);
     return true;
   };
