@@ -193,6 +193,11 @@ export class App {
   readonly searchRow: BoxRenderable;
   /** The bar above the feed while the rewind tree is open, which says what a choice does. */
   readonly treeBar: BoxRenderable;
+  /** The bar of a life that the operator watches, pinned over the feed, so that it stays as the feed scrolls. */
+  readonly watchBar: BoxRenderable;
+  watchKey = "";
+  /** Whether the feed shows the welcome, whose check of the setup takes the key r while the input is empty. */
+  welcoming = false;
   /** The view of the life that shows over the feed: the loom or the graph, drawn as rows of text. */
   readonly stage: TextRenderable;
   /** The loom and the graph, each with its own selection, folds and level, which a switch of the view keeps. */
@@ -378,6 +383,8 @@ export class App {
     center.add(this.searchRow);
     this.treeBar = bar({ id: "rewind-bar" });
     center.add(this.treeBar);
+    this.watchBar = this.box({ id: "watch-bar", visible: false, flexShrink: 0 });
+    center.add(this.watchBar);
     this.stage = new TextRenderable(renderer, {
       id: "life-stage",
       content: "",
@@ -848,7 +855,13 @@ export class App {
             ]
           : w.mode === "python"
             ? ["Python", c.secondary, "Write Python. The gate reads it before it runs."]
-            : ["Prompt", c.accent, "Ask anything, or type / for commands"];
+            : this.setupState().none
+              ? [
+                  "Prompt",
+                  c.danger,
+                  "No model answers yet. Fix the setup above, or watch a life, which needs none.",
+                ]
+              : ["Prompt", c.accent, "Ask anything, or type / for commands"];
     for (const edge of this.composeEdges) if (edge.borderColor !== modeColor) edge.borderColor = modeColor;
     this.composer.cursorColor = modeColor;
     this.composer.placeholder = placeholder;

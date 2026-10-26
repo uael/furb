@@ -7,11 +7,12 @@ import { parseArgs } from "node:util";
 import { createCliRenderer, RGBA } from "@opentui/core";
 import { efforts, furbDirectory, onConsoleEnd } from "furb";
 import { follow } from "./app.ts";
-import { demoDirectory, removeDemoDirectories } from "./demo.ts";
+import { demoDirectory, demoSession, removeDemoDirectories, tour } from "./demo.ts";
 import type { EngineOptions } from "./models.ts";
 import { opening } from "./opening.ts";
 import { isLifeView, lifeViews } from "./overview.ts";
 import { Preferences } from "./preferences.ts";
+import type { Session } from "./session.ts";
 import { colorless, fps, own, paletteOf, terminalPalette, themeOf } from "./theme.ts";
 import { Workspaces } from "./workspaces.ts";
 
@@ -123,14 +124,21 @@ const library = new Workspaces(
   values.demo || attached ? join(furbDirectory(directory), "workspaces.json") : undefined,
 );
 const group = await library.add(directory);
+/** The life that the demo plays, which the window shows first. */
+let watched: Session | undefined;
 await library.refresh();
 try {
   if (record) await library.import(record, group);
-  else await library.create(group);
-  // The demo shows a real life beside its scripted one, recorded from a log, and opens on it.
-  const recordedLife = join(import.meta.dir, "..", "fixtures", "conductor.jsonl");
-  if (values.demo && !record && !values.cwd && existsSync(recordedLife))
-    await library.import(recordedLife, group);
+  else if (!values.demo || values.cwd) await library.create(group);
+  else {
+    // The demo holds a real life recorded from a log, which only reads, and opens on a life that plays by itself,
+    // which a new user can go on with.
+    const recordedLife = join(import.meta.dir, "..", "fixtures", "conductor.jsonl");
+    if (existsSync(recordedLife)) await library.import(recordedLife, group);
+    watched = await demoSession({ watch: true, cwd: directory, preferences });
+    watched.sessionName = "Watch a life";
+    await library.show(watched);
+  }
 } catch (error) {
   // A life that does not open ends the TUI with what it said, and with no trace of the stack.
   renderer.destroy();
@@ -173,6 +181,7 @@ const quit = async (end = false) => {
   if (failures.length) process.exitCode = 1;
 };
 const app = follow(renderer, { quit, workspaces: library });
+if (watched) void tour(watched).catch(watched.fail);
 for (const signal of ["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"] as const)
   process.once(signal, () => void quit().finally(() => process.exit()));
 // The runtime gives no signal for Ctrl+Break or for the close of the console of Windows, and ends the process at once.

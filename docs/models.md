@@ -21,8 +21,8 @@ furb looks in three places, in this order:
    [A local model](#a-local-model) says more.
 
 The first model that furb offers is the default. So it is `claude-cli:opus` when you have the claude command line,
-else a model of the network, else a local model. The TUI checks each place on its first run, and says how to fix
-each one that is missing.
+else a model of the network, else a local model. The TUI checks each place on its first run, and whether the claude
+command line is signed in, as `claude auth status` says, and says how to fix each one that is missing.
 
 ## Choose a model
 
