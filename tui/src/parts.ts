@@ -10,10 +10,7 @@ import { type FSWatcher, statSync, watch } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { parts as configured, type LiveAct, type Part } from "furb";
 import * as model from "furb/life";
-import compaction from "../../extensions/compaction/tui.ts";
 import { commands } from "./commands.ts";
-
-const builtins = new Map<string, (furb: Furb) => void>([["compaction", compaction]]);
 
 /** The tone of a run of text, which the theme colors. */
 export type Tone = "text" | "muted" | "faint" | "accent" | "success" | "warning" | "danger";
@@ -92,7 +89,7 @@ let imported = 0;
 /** The part of an extension, from its file as it stands: the module is imported again, and its function says its
  * components. A module that fails to import, that exports no function as its default, or whose function throws,
  * gives a part with no component and the error. */
-export async function loadPart(name: string, file: string, builtin?: (furb: Furb) => void): Promise<Loaded> {
+export async function loadPart(name: string, file: string): Promise<Loaded> {
   const part = bare(name, file);
   const furb: Furb = {
     life: model,
@@ -108,11 +105,9 @@ export async function loadPart(name: string, file: string, builtin?: (furb: Furb
     },
   };
   try {
-    if (!builtin) statSync(file);
+    statSync(file);
     // A new address imports the module again, since Bun keeps each module that it imported by its address.
-    const module: { default?: unknown } = builtin
-      ? { default: builtin }
-      : await import(`${file}?furb=${++imported}`);
+    const module: { default?: unknown } = await import(`${file}?furb=${++imported}`);
     if (typeof module.default !== "function")
       throw new Error("Its module exports no function as its default.");
     await module.default(furb);
@@ -137,7 +132,6 @@ export class Parts {
     readonly project: string,
     private readonly changed: () => void,
     private readonly list: (project: string) => Part[] = configured,
-    private readonly official: () => Promise<readonly string[]> = async () => [],
   ) {}
 
   /** Loads each part again, as the configs give them now, each from its file as it stands, and calls back. A later
@@ -146,19 +140,12 @@ export class Parts {
     const asked = ++this.asked;
     let found: Part[] = [];
     let error = "";
-    let active: readonly string[] = [];
     try {
       found = this.list(this.project);
-      active = await this.official();
     } catch (failure) {
       error = plainError(failure);
     }
-    const loaded = await Promise.all([
-      ...[...builtins]
-        .filter(([name]) => active.includes(name))
-        .map(([name, module]) => loadPart(name, `builtin:${name}`, module)),
-      ...found.map((one) => loadPart(one.name, one.file)),
-    ]);
+    const loaded = await Promise.all(found.map((one) => loadPart(one.name, one.file)));
     if (asked !== this.asked || this.closed) return;
     this.loaded = error ? [bare("extensions", join(this.project, ".furb"), error), ...loaded] : loaded;
     this.follow(found);
@@ -178,13 +165,7 @@ export class Parts {
   private heardCount = 0;
   /** Hears the writes of the life that are done, in a list that only grows: a write that lands in the folder `.furb`
    * of the project or in the folder of a part loads the parts again. */
-  private active = "";
-  heard(writes: readonly LiveAct[], official: readonly string[] = []): void {
-    const active = official.join("\n");
-    if (this.active !== active) {
-      this.active = active;
-      void this.load();
-    }
+  heard(writes: readonly LiveAct[]): void {
     if (writes !== this.heardList) [this.heardList, this.heardCount] = [writes, 0];
     const fresh = writes.slice(this.heardCount);
     this.heardCount = writes.length;

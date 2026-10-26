@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
-import fs, { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { syncBuiltinESMExports } from "node:module";
 import { createConnection, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -24,16 +23,6 @@ function alive(pid: number): boolean {
   }
 }
 
-/** Read the about file, allowing only its absence during host cleanup. */
-function aboutContents(path: string): string | undefined {
-  try {
-    return fs.readFileSync(path, "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-    throw error;
-  }
-}
-
 /** A life of the demo in a folder of its own, whose host each window of the test reaches, and which ends with the
  * test. */
 async function demoLife(use: (record: string, directory: string) => Promise<void>): Promise<void> {
@@ -43,55 +32,15 @@ async function demoLife(use: (record: string, directory: string) => Promise<void
   try {
     await use(record, directory);
   } finally {
-    try {
-      // A host that a failed test left ends here, with its life.
-      if (place) {
-        const contents = aboutContents(place.about);
-        if (contents !== undefined) {
-          const { pid } = JSON.parse(contents) as About;
-          if (alive(pid)) process.kill(pid, "SIGTERM");
-          await eventually(() => !alive(pid), "the host to end").catch(() => process.kill(pid, "SIGKILL"));
-        }
-      }
-    } finally {
-      await rm(directory, { recursive: true, force: true });
+    // A host that a failed test left ends here, with its life.
+    if (place && existsSync(place.about)) {
+      const { pid } = JSON.parse(readFileSync(place.about, "utf8")) as About;
+      if (alive(pid)) process.kill(pid, "SIGTERM");
+      await eventually(() => !alive(pid), "the host to end").catch(() => process.kill(pid, "SIGKILL"));
     }
+    await rm(directory, { recursive: true, force: true });
   }
 }
-
-test.skipIf(process.platform === "win32")(
-  "fixture cleanup ignores an about file removed during its read",
-  async () => {
-    const original = fs.readFileSync;
-    let about = "";
-    let directory = "";
-    try {
-      await demoLife(async (record, fixtureDirectory) => {
-        directory = fixtureDirectory;
-        const place = hostPlace(record);
-        if (!place) throw new Error("No socket serves here.");
-        about = place.about;
-        const pid = process.pid + 100000;
-        expect(pid).toBeGreaterThan(0);
-        expect(alive(pid)).toBe(false);
-        await writeFile(
-          about,
-          JSON.stringify({ pid, record, build: "", engine: "", protocol: 1, started: 0 }),
-        );
-        fs.readFileSync = ((...args: Parameters<typeof original>) => {
-          if (String(args[0]) === about) rmSync(about, { force: true });
-          return original(...args);
-        }) as typeof original;
-        syncBuiltinESMExports();
-      });
-      expect(existsSync(about)).toBe(false);
-      expect(existsSync(directory)).toBe(false);
-    } finally {
-      fs.readFileSync = original;
-      syncBuiltinESMExports();
-    }
-  },
-);
 
 test.skipIf(process.platform === "win32")(
   "a command goes on in the host after its window ends, and a new window attaches and sees it done",
@@ -394,56 +343,4 @@ test("an address of a host reads as its host, its port and its key, and an addre
     { name: "::", port: 1 },
   ]);
   expect(() => listening("a:b:c")).toThrow("a:b:c is no address: give host:port, as 0.0.0.0:7700.");
-});
-
-test.skipIf(process.platform === "win32")(
-  "fixture cleanup rejects malformed about JSON and preserves directory cleanup",
-  async () => {
-    let directory = "";
-    await expect(
-      demoLife(async (record, fixtureDirectory) => {
-        directory = fixtureDirectory;
-        const place = hostPlace(record);
-        if (!place) throw new Error("No socket serves here.");
-        await writeFile(place.about, "{");
-      }),
-    ).rejects.toThrow();
-    expect(existsSync(directory)).toBe(false);
-    await expect(
-      demoLife(async (record, fixtureDirectory) => {
-        directory = fixtureDirectory;
-        const place = hostPlace(record);
-        if (!place) throw new Error("No socket serves here.");
-        await writeFile(place.about, "");
-      }),
-    ).rejects.toThrow();
-    expect(existsSync(directory)).toBe(false);
-  },
-);
-
-test.skipIf(process.platform === "win32")("fixture cleanup propagates non-ENOENT read errors", async () => {
-  const original = fs.readFileSync;
-  let about = "";
-  let directory = "";
-  try {
-    await expect(
-      demoLife(async (record, fixtureDirectory) => {
-        directory = fixtureDirectory;
-        const place = hostPlace(record);
-        if (!place) throw new Error("No socket serves here.");
-        about = place.about;
-        fs.readFileSync = ((...args: Parameters<typeof original>) => {
-          if (String(args[0]) === about) {
-            const error = new Error("denied") as NodeJS.ErrnoException;
-            error.code = "EACCES";
-            throw error;
-          }
-          return original(...args);
-        }) as typeof original;
-      }),
-    ).rejects.toMatchObject({ code: "EACCES" });
-    expect(existsSync(directory)).toBe(false);
-  } finally {
-    fs.readFileSync = original;
-  }
 });
