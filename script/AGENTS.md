@@ -59,10 +59,11 @@ life stands on.
   holds one commit and no tag, so a step builds the tree at a version that git makes up. After the steps, a seed
   installs again, from the tree, each distribution that the image built from it, at the version the image holds.
   What a layer holds is kept under `~/.cache/furb-deepswe/layers`, so each layer is read once.
-- The pip and the poetry of the interpreter are the ones of the image, at the versions the image holds, since a
-  step calls them and this host holds no poetry. With `virtualenvs.create false`, the poetry of the interpreter
-  installs into the interpreter. A step that calls poetry reads and writes its config under `poetry` in the
-  workroot, and not the config of the host.
+- The interpreter starts with each indexed Python distribution of the image, at its version, including pip and
+  poetry. The steps of the Dockerfile then run on that environment. A step that calls poetry reads and writes its
+  config under `poetry` in the workroot, and not the config of the host.
+- The image environment applies to installation, model commands and local grading. Project paths point to the
+  checkout that is running. The checkout's interpreter and the tools of the host remain on PATH.
 - `constraints.txt`, a file in the workroot, pins every distribution that the image took from an index to the
   version that the image holds. The install of pip and poetry takes it, and so does each `pip install` of a seed,
   as `-c constraints.txt`. So the checkout runs the pytest and the libraries that the verifier runs, and not the
@@ -73,8 +74,8 @@ life stands on.
   of the copy, an editable package imports the code of the copy, and an install lands in the copy and not in the
   base.
 - The reaper of the host, which cleans its temporary directory, takes the files of an old workroot and leaves its
-  directories. So a seed writes `.seeded` last, with the commit of the base, and a later seed keeps the base only
-  when `.seeded` names the commit and no file of the commit is gone. Otherwise it fetches and installs it again.
+  directories. So a seed writes `.seeded` last, with the commit of the base, the image config digest and the environment format.
+  A later seed keeps the base only when that seal agrees, no tracked file is gone and its Python is present. Otherwise it fetches and installs it again.
 - The reporters stand under `~/.cache/furb-deepswe` when the path a task names is not this host's to write.
 - Every graded run is archived in `traces/`, as the record it kept and a result beside it. The archive is ignored
   by git.
