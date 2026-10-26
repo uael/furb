@@ -53,5 +53,6 @@ cache-keys = [
   { file = "../../src/**/*.json" },
   { file = "../../extensions/*/*.py" },
   { file = "../../extensions/*/furb.json" },
+  { file = "../../extensions/*/tui.ts" },
   { file = "../../extensions/*/*/SKILL.md" },
 ]

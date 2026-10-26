@@ -1,6 +1,8 @@
 import {
   type ActState,
   actState,
+  type Compaction,
+  compactedRun,
   type LiveAct,
   outline,
   owedAt,
@@ -58,6 +60,8 @@ export interface Moment {
   threads: Thread[];
   chains: LiveAct[];
   word: (rung: LiveAct) => string;
+  /** Each compaction of a chain, in the order of the record. */
+  compactions: readonly Compaction[];
 }
 
 /** How often the views of a life are derived again while the host still reads it. */
@@ -97,8 +101,9 @@ export function useMoment(held: Held): Moment {
       threads: outline(tree, new Set()),
       chains: acts.filter((act) => act.kind === "chain"),
       word,
+      compactions: held.life?.compactions ?? [],
     };
-  }, [held.acts, held.generation, count]);
+  }, [held.acts, held.generation, count, held.life?.compactions]);
 }
 
 /** The state of an act, as a glyph shows it. */
@@ -136,11 +141,13 @@ export function chainState(moment: Moment, chain: string): State {
   )[state];
 }
 
-/** The name of a chain as a person reads it: its label, or its id, and You for the operator. */
+/** The name of a chain as a person reads it: its label, or its id, and You for the operator. The last chain of a run
+ * of compactions into new chains names the run, as the first chain and the last one: root -> compacted. */
 export function chainName(moment: Moment, id: string): string {
   if (id === "operator") return "You";
-  const chain = moment.rows.get(id);
-  return String(chain?.words[0] ?? "") || id;
+  const own = (name: string) => String(moment.rows.get(name)?.words[0] ?? "") || name;
+  const run = compactedRun(id, moment.compactions);
+  return run.length > 1 && run.at(-1) === id ? `${own(run[0] ?? id)} -> ${own(id)}` : own(id);
 }
 
 /** The chain whose rung made a chain, and nothing for the root. */

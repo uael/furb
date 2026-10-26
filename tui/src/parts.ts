@@ -1,14 +1,17 @@
 /** The parts of the extensions for the TUI. A part is a module of TypeScript beside the word of an extension, which
  * the manifest names under `tui`. The TUI loads the part of each extension that the configs turn on, at its start,
  * and again when a file of its folder changes or when a write of an extension or of the config of the project lands,
- * with no restart and no build of furb. The module exports a function as its default, which the TUI calls with a
- * `Furb`: through it, the part adds panels, the rows of the acts of a kind, keys, and commands of the palette. A part
- * imports no value of furb: it takes all that it needs from what the TUI gives it, so it loads in any project. A
- * module that fails to load, and a component that throws, show the error in plain words in the panel of the part,
- * and the TUI goes on. */
-import { type FSWatcher, statSync, watch } from "node:fs";
+ * with no restart and no build of furb. The part of an official extension is the text that the crate carries, which
+ * changes only with a build of furb. The module exports a function as its default, which the TUI calls with a
+ * `Furb`: through it, the part adds panels, the rows of the acts of a kind, marks in the feed of a chain, keys, and
+ * commands of the palette. A part imports no value of furb: it takes all that it needs from what the TUI gives it, so
+ * it loads in any project. A module that fails to load, and a component that throws, show the error in plain words in
+ * the panel of the part, and the TUI goes on. */
+import { type FSWatcher, mkdirSync, statSync, watch, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { parts as configured, type LiveAct, type Part } from "furb";
+import type { Compaction } from "furb/life";
 import * as model from "furb/life";
 import { commands } from "./commands.ts";
 
@@ -22,12 +25,22 @@ export interface Row {
   label?: string;
   details?: readonly Line[];
 }
+/** A place of the feed of a chain that a part marks: the chain, the place in time of the mark, as the place of an act
+ * that `began` gives, its title, and the lines under it. */
+export interface Mark {
+  chain: string;
+  at: number;
+  title: string;
+  lines?: readonly Line[];
+}
 /** What a component reads of the life, and what it can do in it. */
 export interface Seen {
   /** The chain on screen. */
   chain: string;
   /** Every act of the life, in the order of the record. */
   acts: readonly LiveAct[];
+  /** Each compaction of a chain of the life, in the order of the record, as `furb/life` gives it. */
+  compactions: readonly Compaction[];
   /** The acts of a kind, in the order of the record. */
   of(kind: string): LiveAct[];
   /** Runs python on the chain on screen, through the gate, as `/run` does. */
@@ -43,6 +56,10 @@ export interface Furb {
   panel(name: string, draw: (seen: Seen) => readonly Line[]): void;
   /** The row of each act of a kind in the feed. The rows of a rung and of a prompt are the TUI's own. */
   row(kind: string, draw: (act: LiveAct, seen: Seen) => Row): void;
+  /** Marks in the feed: `draw(seen)` gives each mark, and the feed of its chain shows it as a rule with its title,
+   * then its lines, after the last act that began before its place, or at its start. A moment of the past shows only
+   * the marks before that moment. The TUI draws the marks again with the life. */
+  mark(draw: (seen: Seen) => readonly Mark[]): void;
   /** A key, as `ctrl+t`, which acts while no dialog is open. A key with no ctrl, meta or alt acts on an empty input
    * alone, and a key of the TUI wins. */
   key(on: string, run: (seen: Seen) => unknown): void;
@@ -56,6 +73,7 @@ export interface Loaded {
   error?: string;
   panels: { name: string; draw: (seen: Seen) => readonly Line[] }[];
   rows: Map<string, (act: LiveAct, seen: Seen) => Row>;
+  marks: ((seen: Seen) => readonly Mark[])[];
   keys: { on: string; run: (seen: Seen) => unknown }[];
   commands: { name: string; detail: string; run: (argument: string, seen: Seen) => unknown }[];
 }
@@ -79,6 +97,7 @@ const bare = (name: string, file: string, error?: string): Loaded => ({
   ...(error ? { error } : {}),
   panels: [],
   rows: new Map(),
+  marks: [],
   keys: [],
   commands: [],
 });
@@ -86,10 +105,24 @@ const bare = (name: string, file: string, error?: string): Loaded => ({
 /** How many modules this process imported, which makes the address of each import new. */
 let imported = 0;
 
-/** The part of an extension, from its file as it stands: the module is imported again, and its function says its
- * components. A module that fails to import, that exports no function as its default, or whose function throws,
- * gives a part with no component and the error. */
-export async function loadPart(name: string, file: string): Promise<Loaded> {
+/** The file that holds the text of a part that the crate carries, since Bun imports a module from a file: a file in a
+ * folder of the user alone in the folder of the system for temporary files, named by the hash of the text. */
+function carried(file: string, text: string): string {
+  const folder = join(tmpdir(), `furb-parts-${process.getuid?.() ?? "user"}`);
+  mkdirSync(folder, { recursive: true, mode: 0o700 });
+  // The folder for temporary files can be shared, and a folder there that another user made can hold a module of his.
+  const made = statSync(folder);
+  if (process.getuid && (made.uid !== process.getuid() || made.mode & 0o022))
+    throw new Error(`${folder} is not of this user alone.`);
+  const at = join(folder, `${Bun.hash(text).toString(36)}-${basename(file)}`);
+  writeFileSync(at, text);
+  return at;
+}
+
+/** The part of an extension, from its file as it stands, or from its text when the crate carries it: the module is
+ * imported again, and its function says its components. A module that fails to import, that exports no function as
+ * its default, or whose function throws, gives a part with no component and the error. */
+export async function loadPart(name: string, file: string, text?: string): Promise<Loaded> {
   const part = bare(name, file);
   const furb: Furb = {
     life: model,
@@ -98,6 +131,7 @@ export async function loadPart(name: string, file: string): Promise<Loaded> {
       if (kind === "rung" || kind === "prompt") throw new Error(`The row of a ${kind} is the TUI's own.`);
       part.rows.set(String(kind), draw);
     },
+    mark: (draw) => void part.marks.push(draw),
     key: (on, run) => void part.keys.push({ on: String(on), run }),
     command: (title, detail, run) => {
       if (Object.hasOwn(commands, title)) throw new Error(`The command /${title} is the TUI's own.`);
@@ -105,9 +139,10 @@ export async function loadPart(name: string, file: string): Promise<Loaded> {
     },
   };
   try {
-    statSync(file);
+    const from = text === undefined ? file : carried(file, text);
+    statSync(from);
     // A new address imports the module again, since Bun keeps each module that it imported by its address.
-    const module: { default?: unknown } = await import(`${file}?furb=${++imported}`);
+    const module: { default?: unknown } = await import(`${from}?furb=${++imported}`);
     if (typeof module.default !== "function")
       throw new Error("Its module exports no function as its default.");
     await module.default(furb);
@@ -145,7 +180,7 @@ export class Parts {
     } catch (failure) {
       error = plainError(failure);
     }
-    const loaded = await Promise.all(found.map((one) => loadPart(one.name, one.file)));
+    const loaded = await Promise.all(found.map((one) => loadPart(one.name, one.file, one.text)));
     if (asked !== this.asked || this.closed) return;
     this.loaded = error ? [bare("extensions", join(this.project, ".furb"), error), ...loaded] : loaded;
     this.follow(found);
@@ -195,6 +230,27 @@ export class Parts {
     return undefined;
   }
 
+  /** The marks that the parts give for the feed of a chain, which shows each chain of its run of compactions, in the
+   * order of their places, each with the error of a component that throws as its title. */
+  marks(seen: Seen): Mark[] {
+    const run = model.compactedRun(seen.chain, seen.compactions);
+    const out: Mark[] = [];
+    for (const part of this.loaded)
+      for (const draw of part.marks)
+        try {
+          const marks = draw(seen);
+          if (!Array.isArray(marks)) throw new Error("Its marks give no list.");
+          out.push(...marks.filter((one) => run.includes(one.chain)));
+        } catch (error) {
+          out.push({
+            chain: seen.chain,
+            at: 0,
+            title: `A mark of ${part.name} failed: ${plainError(error)}`,
+          });
+        }
+    return out.sort((one, other) => one.at - other.at);
+  }
+
   /** The row of an act of a kind that a part gives. */
   row(kind: string): ((act: LiveAct, seen: Seen) => Row) | undefined {
     for (const part of this.loaded) {
@@ -206,7 +262,7 @@ export class Parts {
 
   /** Watches the folder of each part, and no folder that no part has now. */
   private follow(found: Part[]): void {
-    const folders = new Set(found.map((one) => dirname(one.file)));
+    const folders = new Set(found.flatMap((one) => (one.text ? [] : [dirname(one.file)])));
     for (const [folder, watcher] of this.watchers)
       if (!folders.has(folder)) {
         watcher.close();
