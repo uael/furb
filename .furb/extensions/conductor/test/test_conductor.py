@@ -1136,6 +1136,17 @@ def test_a_stacked_pr_whose_base_moved_names_the_old_and_the_new_head_in_its_ord
 
 @POSIX
 @JQ
+async def test_pr_stops_when_where_is_missing_and_runs_no_gh(conductor: Round) -> None:
+  branch(conductor)
+  got = await conductor.ns["pr"](
+    "feat(tui): Show records", "It matters.", ["It works."], CHECKS, where=str(conductor.tmp / "none")
+  )
+  assert got.code != 0
+  assert conductor.log() == ""
+
+
+@POSIX
+@JQ
 async def test_the_fixer_of_a_stacked_pr_gets_the_base_that_changed(conductor: Round) -> None:
   conductor.prs[7] = conductor.pr(n=7, head="w/parent", sha="new")
   kid = conductor.pr(n=8, head="w/kid", base="w/parent", mergeable="CONFLICTING", sha="kid1")
@@ -1144,6 +1155,26 @@ async def test_the_fixer_of_a_stacked_pr_gets_the_base_that_changed(conductor: R
   conductor.shift()
   await conductor.mend(kid, 0.0, False)
   assert "git rebase --onto origin/w/parent old w/kid" in conductor.hired[0][1]
+
+
+@POSIX
+@JQ
+async def test_pr_gives_the_url_once_and_takes_labels_as_a_list_and_part_of(conductor: Round) -> None:
+  branch(conductor)
+  conductor.say(r"pr create", "https://github.com/o/r/pull/9\n")
+  got = await conductor.ns["pr"](
+    "feat(tui): Show records",
+    "It matters.",
+    ["It works."],
+    CHECKS,
+    labels=["w:k", "thread:t"],
+    part_of=394,
+    where=str(conductor.tmp),
+  )
+  assert got.code == 0
+  assert got.stdout.content.count("https://github.com/o/r/pull/9") == 1
+  assert "--head w/k" in conductor.log()
+  assert "--label w:k --label thread:t" in conductor.log()
 
 
 @POSIX
@@ -1214,3 +1245,25 @@ def test_each_brief_holds_the_recipes_that_fixers_found(conductor: Round) -> Non
     assert word in conductor.WORKER
     assert word in conductor.FIX
   assert "Keep the worktree until your PR merges" in conductor.WORKER
+
+
+@POSIX
+@JQ
+async def test_pr_gives_the_url_of_a_pr_that_stands_when_gh_fails_late(conductor: Round) -> None:
+  branch(conductor)
+  conductor.say(r"pr create", "", 1)
+  conductor.say(r"pr list --state open --head w/k --json url", '[{"url": "https://github.com/o/r/pull/9"}]')
+  got = await conductor.ns["pr"](
+    "feat(tui): Show records", "It matters.", ["It works."], CHECKS, where=str(conductor.tmp)
+  )
+  assert got.code == 0
+  assert got.stdout.content.strip().endswith("https://github.com/o/r/pull/9")
+
+
+def test_prcheck_gives_the_words_and_names_the_part_that_is_too_long(conductor: Round) -> None:
+  check = conductor.ns["prcheck"]
+  assert check("feat(tui): Show records", "one two", ["three"], ["four"]) == len("one two three four".split())
+  with pytest.raises(Refused, match=r"301 words, over 300 \(why 300, outcome 1, breaking 0\)"):
+    check("feat(tui): Show records", "w " * 300, ["x"])
+  with pytest.raises(Refused, match="70 characters"):
+    check("feat(tui): " + "A" * 70, "why", ["x"])
