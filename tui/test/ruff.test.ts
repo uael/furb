@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { makers } from "../../bind/typescript/src/life/ladder.ts";
 import { threadProgram } from "../../bind/typescript/src/life/program.ts";
+import { executable, programs } from "../../bind/typescript/test/executable.ts";
 import { act } from "../../bind/typescript/test/life/acts.ts";
 import { Formatter } from "../src/ruff.ts";
 
@@ -134,6 +135,16 @@ test.skipIf(!ruff)(
   },
 );
 
+async function formatterExecutable(
+  directory: string,
+  name: string,
+  settings: { blocked?: boolean; started?: string; gate?: string; log?: string } = {},
+): Promise<string> {
+  const command = executable(join(programs, "ruff.ts"), directory, name);
+  await writeFile(`${command}.json`, JSON.stringify(settings));
+  return command;
+}
+
 async function until(check: () => Promise<boolean>): Promise<void> {
   for (let at = 0; at < 300; at++) {
     if (await check()) return;
@@ -145,23 +156,10 @@ async function until(check: () => Promise<boolean>): Promise<void> {
 test("per-window callbacks, changed commands, a full FIFO and disposal settle without starvation or late redraw", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-ruff-"));
   const log = join(directory, "calls");
-  const blocked = join(directory, "blocked");
   const started = join(directory, "started");
-  const fast = join(directory, "fast");
+  const blocked = await formatterExecutable(directory, "blocked", { blocked: true, started });
+  const fast = await formatterExecutable(directory, "fast", { log });
   const missing = join(directory, "missing");
-  const fixture = (body: string) => `#!${process.execPath}\n${body}\n`;
-  await writeFile(
-    blocked,
-    fixture(`await Bun.write(${JSON.stringify(started)}, String(process.pid)); setInterval(() => {}, 1000);`),
-  );
-  await writeFile(
-    fast,
-    fixture(
-      `const text = await Bun.stdin.text(); await import("node:fs/promises").then(fs => fs.appendFile(${JSON.stringify(log)}, text + "\\n")); console.log(text.replace(/x=(\\d+)/g, "x = $1"));`,
-    ),
-  );
-  await chmod(blocked, 0o755);
-  await chmod(fast, 0o755);
   let command: string | null = blocked;
   let first = 0;
   let second = 0;
@@ -334,29 +332,17 @@ test.skipIf(!ruff)(
 
 test("a full cross-card queue admits the newest completed word before older pending history", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-ruff-priority-"));
-  const command = join(directory, "formatter");
   const gate = join(directory, "gate");
   const started = join(directory, "started");
   const log = join(directory, "calls");
-  await writeFile(
-    command,
-    `#!${process.execPath}
-const fs = await import("node:fs/promises");
-const text = await Bun.stdin.text();
-await Bun.write(${JSON.stringify(started)}, "ready");
-while (!(await Bun.file(${JSON.stringify(gate)}).exists())) await Bun.sleep(5);
-await fs.appendFile(${JSON.stringify(log)}, text + "\\n");
-console.log(text.replace(/x=(\\d+)/g, "x = $1"));
-`,
-  );
-  await chmod(command, 0o755);
+  const command = await formatterExecutable(directory, "formatter", { gate, started, log });
   const formatter = new Formatter(
     () => {},
     () => command,
   );
   try {
     formatter.shape("x=0", { id: "first-card" }, 0);
-    await until(async () => (await readFile(started, "utf8").catch(() => "")) === "ready");
+    await until(async () => Number(await readFile(started, "utf8").catch(() => "")) > 1);
     for (let n = 1; n <= 64; n++) formatter.shape(`x=${n}`, { id: `old-${n}` }, n);
     formatter.shape("x=999", { id: "new-card" }, 999);
     await writeFile(gate, "go");
@@ -374,15 +360,7 @@ console.log(text.replace(/x=(\\d+)/g, "x = $1"));
 
 test("a completion callback can queue the next word in a microtask without orphaning it", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-ruff-handoff-"));
-  const command = join(directory, "formatter");
-  await writeFile(
-    command,
-    `#!${process.execPath}
-const text = await Bun.stdin.text();
-console.log(text.replace(/x=(\\d+)/g, "x = $1"));
-`,
-  );
-  await chmod(command, 0o755);
+  const command = await formatterExecutable(directory, "formatter");
   let changes = 0;
   let queued = false;
   const formatter = new Formatter(
