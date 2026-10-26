@@ -80,9 +80,10 @@ test("a command that printed more than a row holds sends the tail and its length
       expect(stdout.length).toBeLessThanOrEqual(2000);
       expect(printed.endsWith(stdout)).toBe(true);
       await frame();
-      const line = app.scroll.getChildren().find((node) => node.id === `program-${command.id}`);
+      // A command of the operator stands in a panel, whose first row is its edge.
+      const line = app.scroll.getChildren().find((node) => node.id === command.id);
       if (!line) throw new Error("No line for the command.");
-      await screen.mockMouse.click(line.x + 8, line.y);
+      await screen.mockMouse.click(line.x + 8, line.y + 1);
       await screen.flush();
       await until(
         screen.renderer,

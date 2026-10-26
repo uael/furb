@@ -82,7 +82,7 @@ export const blocks = part({
   ): void {
     const rung = options.act?.kind === "rung" ? options.act : undefined;
     const state = rung?.id ?? id;
-    const closed = this.folded(state, rung, Boolean(options.compact));
+    const closed = !options.open && this.folded(state, rung, Boolean(options.compact));
     key =
       options.compact && closed && !options.preview
         ? "closed"

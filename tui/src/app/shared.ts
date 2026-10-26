@@ -5,7 +5,7 @@ import type { ChainThread, Chip, RowState } from "furb/life";
 import { ago, clip, dollars, kibibytes } from "../format.ts";
 import type { ActRow, SessionStatus, View } from "../session.ts";
 import { statusLabels } from "../session.ts";
-import { theme as c, glyph, terminalThemes, themeLabels } from "../theme.ts";
+import { theme as c, glyph, spacing as space, terminalThemes, themeLabels } from "../theme.ts";
 import type { Part } from "../ui.ts";
 import type { SessionEntry } from "../workspaces.ts";
 
@@ -92,6 +92,14 @@ export const threadMarks = (thread: ChainThread): [string, RGBA] =>
 
 /** How many of the last steps of a thread its program shows until a click shows the earlier ones. */
 export const PROGRAM_STEPS = 6;
+
+/** The width of the numbers of a program, with the space after them: room for two digits at least, so the code of
+ * each thread of under a hundred lines starts at one column. */
+export const gutterWidth = (digits: number) => Math.max(2, digits) + space.inset + 1;
+
+/** A row that a model writes as the tick compares it: its number, and its text with the color of each part. */
+export const saidOf = (number: number, parts: readonly Part[]) =>
+  `${number}:${parts.map(([text, fg]) => `${text}\u0000${fg ? `${fg.r},${fg.g},${fg.b}` : ""}`).join("\u0001")}`;
 
 /** A time in a few characters: milliseconds under a second, tenths under ten seconds, then seconds and minutes. */
 export const spell = (ms: number) =>
@@ -223,6 +231,8 @@ export interface BlockOptions {
   title?: () => Part[];
   /** The columns the card stands in from the edge of the feed, to show that the act above made it. */
   indent?: number;
+  /** A card that no fold of the feed closes, since its body folds itself, as the panel of a message does. */
+  open?: boolean;
 }
 
 export interface Choice {

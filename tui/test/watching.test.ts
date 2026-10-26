@@ -103,7 +103,8 @@ test("the branch of the watch says what it takes, and the views are named in com
       expect(jargonIn(branch)).toEqual([]);
       await session.select(session.engine.root);
       const main = await frame();
-      expect(main).toContain("You ran");
+      // A word of the operator stands as his messages stand, in a panel, with no header of its own.
+      expect(main).not.toContain("You ran");
       expect(jargonIn(main)).toEqual([]);
     },
     { width: 152, height: 60 },
