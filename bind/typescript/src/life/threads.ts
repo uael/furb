@@ -166,7 +166,8 @@ export function threads(acts: readonly LiveAct[], owed: ReadonlySet<string>): Th
       thread.closed += (child.act.done ? 1 : 0) + child.closed;
       thread.owed.push(...child.owed);
       thread.working +=
-        (!child.act.done && !child.act.paused && child.to !== "operator" ? 1 : 0) + child.working;
+        (!child.act.done && !child.act.paused && !child.act.unfinished && child.to !== "operator" ? 1 : 0) +
+        child.working;
       for (const pull of child.pulls) pulls.set(pull.url, pull);
     }
     thread.pulls = [...pulls.values()];

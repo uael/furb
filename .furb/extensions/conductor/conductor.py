@@ -831,7 +831,7 @@ handled: set[str] = set()
 async def take_issues() -> None:
   got = await bash(ISSUES, show=HIDDEN, timeout=120)
   if got.code != 0 or not got.stdout.content.startswith("["):
-    notice(f"issues {int(clock() // 3600)}", "The command that lists the issues failed: " + got.stderr.content[-500:])
+    notice(f"issues {int(clock() // 3600)}", "The command that lists the issues failed: " + (got.stderr.content or got.stdout.content)[-500:])
     return
   for it in json.loads(got.stdout.content):
     key = f"issue{it['n']}"
@@ -1258,11 +1258,17 @@ MANY = 3
 budgeted: dict[str, list[int]] = {}
 flaky: dict[str, list[str]] = {}
 runs_read: set[int] = set()
-CI_PY = r'''import json, re, statistics, subprocess, sys
+CI_PY = r'''import json, re, statistics, subprocess, sys, time
 from datetime import datetime
 read = set(json.loads(sys.argv[1]))
 def gh(*args):
-  return subprocess.run(["gh", *args], capture_output=True, text=True, check=True).stdout
+  for wait in (2, 8, 30, 0):
+    got = subprocess.run(["gh", *args], capture_output=True, text=True)
+    if got.returncode == 0:
+      return got.stdout
+    if not wait or "HTTP 5" not in got.stderr:
+      sys.exit(f"gh {' '.join(args[:2])} failed: {got.stderr.strip()[-400:]}")
+    time.sleep(wait)
 def jobs(run, attempt=0):
   at = f"/attempts/{attempt}" if attempt else ""
   return json.loads(gh("api", f"repos/{{owner}}/{{repo}}/actions/runs/{run}{at}/jobs?per_page=100", "--jq", "[.jobs[] | {id, name, conclusion, started_at, completed_at}]"))
@@ -1278,7 +1284,7 @@ for run in green:
     if job["conclusion"] == "success":
       measured.setdefault(job["name"], []).append(spent(job))
 over = [{"job": n, "median": int(statistics.median(v)), "budget": budgets[n], "runs": green} for n, v in measured.items() if n in budgets and len(v) >= 3 and statistics.median(v) > budgets[n]]
-runs = json.loads(gh("api", f"{path}?per_page=100", "--jq", "[.workflow_runs[] | {id, sha: .head_sha, attempt: .run_attempt, conclusion, url: .html_url}]"))
+runs = json.loads(gh("api", f"{path}?per_page=30", "--jq", "[.workflow_runs[] | {id, sha: .head_sha, attempt: .run_attempt, conclusion, url: .html_url}]"))
 flakes, settled = [], []
 for run in runs:
   if run["attempt"] < 2 or run["conclusion"] != "success":
@@ -1322,7 +1328,7 @@ def taken(key: str) -> str:
 async def watch_ci() -> None:
   got = await bash(f"python3 -I - {shq(json.dumps(sorted(runs_read)))}", stdin=CI_PY, show=HIDDEN, timeout=900)
   if got.code != 0 or not got.stdout.content.startswith("{"):
-    notice(f"ci {int(clock() // 3600)}", "The command that measures the gates failed: " + got.stderr.content[-500:])
+    notice(f"ci {int(clock() // 3600)}", "The command that measures the gates failed: " + (got.stderr.content or got.stdout.content)[-500:])
     return
   seen = json.loads(got.stdout.content)
   runs_read.clear()
@@ -1365,7 +1371,7 @@ async def sweep(every: float) -> None:
   got = await bash(PRS, show=HIDDEN, timeout=300)
   parts = got.stdout.content.split("\n---\n", 3)
   if len(parts) < 4 or not parts[0].startswith("["):
-    notice(f"list {int(clock() // 3600)}", "The command that lists the PRs failed: " + got.stderr.content[-500:])
+    notice(f"list {int(clock() // 3600)}", "The command that lists the PRs failed: " + (got.stderr.content or got.stdout.content)[-500:])
     return
   prs.clear()
   timers["sweep"] = clock()

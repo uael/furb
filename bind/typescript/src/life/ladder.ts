@@ -43,7 +43,7 @@ export interface Chip {
 /** The state of an act, with the prompts that the operator owes. */
 export function actState(act: LiveAct, owed: ReadonlySet<string>): ActState {
   if (owed.has(act.id)) return "asks";
-  if (act.paused && !act.done) return "held";
+  if ((act.paused || act.unfinished) && !act.done) return "held";
   if (cancelled(act)) return "cancelled";
   if (failed(act)) return "failed";
   if (!act.done && !WORK.includes(act.kind)) return "stands";

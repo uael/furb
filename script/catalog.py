@@ -1,4 +1,4 @@
-"""The snapshot of the catalog of models that the crate carries, made again from models.dev and from pi-ai.
+"""The snapshot of the catalog of models that the crate carries, made again from models.dev and from the latest release of pi-ai.
 
 Run it from the root of the repository, as `uv run python script/catalog.py`. It keeps each provider that pi-ai serves,
 under the client of rig that asks it, the names of its credential, and its address, and of each model the fields that
@@ -11,15 +11,20 @@ import io
 import json
 import re
 import tarfile
+import time
 import urllib.request
 from pathlib import Path
 
 URL = "https://models.dev/api.json"
 """URL is the public catalog of models.dev."""
-PI = "https://registry.npmjs.org/@earendil-works/pi-ai/-/pi-ai-1.4.0.tgz"
-"""PI is the package of pi-ai, whose data holds the providers that models.dev does not list."""
+PI = "https://registry.npmjs.org/@earendil-works/pi-ai"
+"""PI is the registry entry of pi-ai, whose data holds the providers that models.dev does not list. Each run resolves
+its latest release and keeps the exact version in SOURCES, so a build of the snapshot is repeatable."""
 SNAPSHOT = Path(__file__).parents[1] / "src" / "world" / "provider" / "catalog.json"
 """SNAPSHOT is the file that the crate carries."""
+SOURCES = SNAPSHOT.with_name("catalog.sources.json")
+"""SOURCES says where the snapshot came from: the version of each source and the time of its fetch. A run writes it only
+when the snapshot or the version of pi-ai changed, so a run with no change in the data makes no change in the tree."""
 AWS = [
   "AWS_PROFILE",
   "AWS_ACCESS_KEY_ID",
@@ -102,6 +107,12 @@ def fetched(url: str) -> bytes:
     return got.read()
 
 
+def release() -> tuple[str, str]:
+  """The latest release of pi-ai: its version and the address of its package."""
+  latest = json.loads(fetched(f"{PI}/latest"))
+  return latest["version"], latest["dist"]["tarball"]
+
+
 def placed(api: str | None) -> set[str]:
   """The names of the environment that an address holds a place for."""
   return set(re.findall(r"\$\{([^}]+)\}", api or ""))
@@ -130,7 +141,8 @@ def pi(listing: dict) -> dict:
 def main() -> None:
   """The snapshot, written again, one model on each line."""
   catalog = json.loads(fetched(URL))
-  with tarfile.open(fileobj=io.BytesIO(fetched(PI))) as package:
+  version, tarball = release()
+  with tarfile.open(fileobj=io.BytesIO(fetched(tarball))) as package:
 
     def data(name: str) -> dict:
       held = package.extractfile(f"package/dist/providers/data/{name}.json")
@@ -161,7 +173,15 @@ def main() -> None:
     )
     lines.append("}}" + ("," if at + 1 < len(providers) else ""))
   lines.append("}")
-  SNAPSHOT.write_text("\n".join(lines) + "\n", encoding="utf-8")
+  text = "\n".join(lines) + "\n"
+  old = SNAPSHOT.read_text(encoding="utf-8") if SNAPSHOT.exists() else ""
+  held = json.loads(SOURCES.read_text(encoding="utf-8")) if SOURCES.exists() else {}
+  if text == old and held.get("pi-ai", {}).get("version") == version:
+    return
+  stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+  sources = {"models.dev": {"url": URL, "fetched": stamp}, "pi-ai": {"version": version, "fetched": stamp}}
+  SNAPSHOT.write_text(text, encoding="utf-8")
+  SOURCES.write_text(json.dumps(sources, indent=2) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

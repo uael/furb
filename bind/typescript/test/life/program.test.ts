@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { makers } from "../../src/life/ladder.ts";
-import { actLines, foldStrings, hintOf, literals, threadProgram } from "../../src/life/program.ts";
+import { actLines, foldStrings, hintOf, literals, threadProgram, writing } from "../../src/life/program.ts";
 import { act } from "./acts.ts";
 
 const label = (chain: string) => `label of ${chain}`;
@@ -162,4 +162,16 @@ test("the literals of a line skip a name that ends in a prefix, keep their escap
     { start: 34, end: 35, raw: false },
   ]);
   expect(literals('brief = """first line')).toEqual([{ start: 11, end: 21, raw: false }]);
+});
+
+test("what a model writes splits into the lines of its word that it finished and the line that it still writes", () => {
+  const thinking = "plans\nthe first step";
+  expect(writing(undefined)).toEqual({ lines: "", tail: "" });
+  expect(writing({ text: "", thinking })).toEqual({ lines: "", tail: "the first step" });
+  expect(writing({ text: "got = await", thinking })).toEqual({ lines: "", tail: "got = await" });
+  expect(writing({ text: "a = 1\nfor x in a:\n  b = await bash(", thinking })).toEqual({
+    lines: "a = 1\nfor x in a:",
+    tail: "b = await bash(",
+  });
+  expect(writing({ text: "a = 1\n\n", thinking })).toEqual({ lines: "a = 1", tail: "" });
 });

@@ -59,6 +59,7 @@ export type SessionStatus =
   | "paused"
   | "done"
   | "error"
+  | "reading"
   | "opening";
 export const statusLabels: Record<SessionStatus, string> = {
   saved: "Saved",
@@ -68,10 +69,12 @@ export const statusLabels: Record<SessionStatus, string> = {
   paused: "Paused",
   done: "Finished, unread",
   error: "Error",
+  reading: "Read only",
   opening: "Opening",
 };
 /** Whether an act is at work: it lives, no pause holds it, and its kind is one whose work takes time. */
-export const working = (act: ActRow): boolean => !act.done && !act.paused && WORK.includes(act.kind);
+export const working = (act: ActRow): boolean =>
+  !act.done && !act.paused && !act.unfinished && WORK.includes(act.kind);
 /** The phase of an act that a view of the whole life reads: whether it is done or held, when it began and ended, and
  * how its rung ran. The output that a command streams is no part of it. */
 function phaseOf(act?: ActRow): string {
@@ -516,6 +519,7 @@ export class Session extends EventEmitter {
   }
   /** A repair or a new journal acts on a journal that a view found damaged. */
   private damagedOnly(): void {
+    if (this.host.reading) throw new Error("This record is open to read.");
     if (!this.journalDamaged) throw new Error("The journal of file changes is not damaged.");
   }
   private async journalMended(notice: string): Promise<void> {
@@ -668,6 +672,7 @@ export class Session extends EventEmitter {
    * a question waits for the operator, a reopened record holds work, or what the acts do. A pause of the chain holds
    * it while none of its acts runs or asks. */
   status(chain?: string): SessionStatus {
+    if (this.host.reading) return "reading";
     // A damaged journal of file changes fails the view that shows it, and not the session that the list marks.
     if (chain ? this.error : Object.entries(this.errors).some(([key, error]) => error && !this.damaged[key]))
       return "error";
@@ -712,7 +717,9 @@ export class Session extends EventEmitter {
     if (asked(this.host.prompts.keys())) return "blocked";
     if (asked(this.host.pending.keys())) return "paused";
     // Only an act that is not done works or waits under a pause, and the index holds each such act.
-    const live = (chain ? (this.liveOn().get(chain) ?? []) : [...index.live.values()]).filter(mine);
+    const live = (chain ? (this.liveOn().get(chain) ?? []) : [...index.live.values()]).filter(
+      (act) => mine(act) && !act.unfinished,
+    );
     if (live.some(working)) return "working";
     if (live.some((act) => act.paused && !act.done)) return "paused";
     const latest = chain ? index.latest.get(chain) : this.acts.findLast(mine);
@@ -1095,6 +1102,10 @@ export class Session extends EventEmitter {
   /** One hunk of a change reverted by a word of the operator on the chain shown, so the World writes the file and the
    * record keeps the write. The word refuses when the file no longer holds the hunk where the review showed it. */
   async revert(change: ShownChange, hunk: Hunk): Promise<void> {
+    if (this.host.reading) {
+      this.notice = "This record is open to read.";
+      return;
+    }
     const path = fromDirectory(this.host.directory, change.path);
     await this.engine.result(
       await this.engine.rung({ word: revertWord(change.path, hunk), on: this.selected }),
@@ -1771,8 +1782,9 @@ export class Session extends EventEmitter {
   save(): void {
     this.preferences.save();
     const record = this.host.record;
-    // A recorded life keeps no view beside its log, which a later reader takes as it was made.
-    if (!record || this.host.recorded) return;
+    // A recorded life keeps no view beside its log, which a later reader takes as it was made, and a record open to
+    // read stays as it was.
+    if (!record || this.host.recorded || this.host.reading) return;
     const path = `${record}.ui.json`;
     this.savedCost = this.cost;
     const view: SavedView = {

@@ -1,5 +1,5 @@
 // The worker loads no module that loads OpenTUI, whose native library belongs to the thread that draws.
-import { type FSWatcher, readFileSync, watch as watchFile } from "node:fs";
+import { existsSync, type FSWatcher, readFileSync, watch as watchFile } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { Engine, FileChange, SessionOptions, Turn } from "furb";
 import { Act, actorParts, codexAuth, ENGINE, model, models, retold, Session, setup, standingOf } from "furb";
@@ -8,7 +8,7 @@ import type { HostState } from "./bridge.ts";
 import { type EngineOptions, roster } from "./models.ts";
 import { changeProvider } from "./providers.ts";
 import { queueDispatches, queueHash } from "./queue.ts";
-import { isRecorded, Reader } from "./reading.ts";
+import { guard, isRecorded, Reader } from "./reading.ts";
 import { branchChanges, net } from "./review.ts";
 import type { FollowUp } from "./session.ts";
 import { Snapshots } from "./snapshots.ts";
@@ -22,6 +22,8 @@ function* written(
   writes: unknown,
 ): Generator<FileChange> {
   const named = Array.isArray(writes) ? new Set(writes.map(String)) : undefined;
+  // A failed read of even an empty journal must not look like a scope with no changes.
+  changes.read(0, 0);
   for (let start = 0; start < changes.length; start += 50)
     for (const change of changes.read(start, 50))
       if (!named || (change.act && named.has(change.act))) yield change;
@@ -67,7 +69,7 @@ const state = () => {
         notices: [],
         streams: [],
         pending: [],
-        changes: 0,
+        changes: reader.changes.length,
         reading: reader.reading,
         recorded: reader.recorded,
         measures: measuresOf(reader.activity.answers),
@@ -269,16 +271,26 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     userConfig = options.config;
     demo = (scripted || watch) ?? false;
     await refreshCodex(options.cwd);
-    const opened = demo
-      ? scriptedSession(options, watch)
-      : new Session({ ...options, roster: roster(options) });
+    // The session constructor can create a journal, so the guard stands before it as well as before the replay.
+    const held = options.record && existsSync(options.record) ? guard(options.record) : undefined;
+    let opened: Session | undefined;
     try {
+      opened = demo ? scriptedSession(options, watch) : new Session({ ...options, roster: roster(options) });
       engine = opened.open();
+      held?.keep();
     } catch (error) {
       // A record that a build of another version made drifts on a replay, so it opens to read, with the facts that
       // it kept.
       const why = error instanceof Error ? error.message : String(error);
-      if (!why.startsWith("Drift") || !opened.record) throw error;
+      if (!opened) {
+        held?.undo();
+        throw error;
+      }
+      if (!why.startsWith("Drift") || !opened.record) {
+        held?.keep();
+        throw error;
+      }
+      held?.undo();
       const { file, made, engine: ours, version, current, logged } = retold(opened.record);
       reader = new Reader(
         opened.directory,
@@ -461,12 +473,14 @@ function read(data: { target: string; method: string; args: unknown[] }): unknow
     return snapshots?.take(String(data.args[0]), Number(data.args[1]), Number(data.args[2] ?? 0));
   if (data.target === "library" && data.method === "source") return ENGINE;
   if (data.target === "library" && data.method === "made") return open.reading?.made ?? null;
+  if (data.target === "library" && data.method === "carry") return open.carry();
   if (data.target === "library" && data.method === "catalog") return [];
   if (data.target === "library" && data.method === "setup") return null;
   if (data.target === "library" && data.method === "sees") return false;
   if (data.target === "library" && data.method === "model") return null;
-  if (data.target === "library" && data.method === "changes") return [];
-  if (data.target === "library" && data.method === "net") return [];
+  if (data.target === "library" && data.method === "changes")
+    return open.changes.readable(Number(data.args[0]), Number(data.args[1]));
+  if (data.target === "library" && data.method === "net") return net(written(open.changes, data.args[0]));
   if (data.target === "library" && data.method === "branch") return branchChanges(open.directory);
   if (data.target === "library" && data.method === "act") return open.act(String(data.args[0]));
   if (data.target === "library" && data.method === "look") {
@@ -477,7 +491,7 @@ function read(data: { target: string; method: string; args: unknown[] }): unknow
       throw new Error(`There is no file at ${path}.`);
     }
   }
-  if (data.target === "session" && data.method === "dispose") return;
+  if (data.target === "session" && data.method === "dispose") return open.dispose();
   if (data.target === "engine" && views.includes(data.method)) {
     const method = Reflect.get(open, data.method) as (...args: unknown[]) => unknown;
     return Reflect.apply(method, open, data.args);
