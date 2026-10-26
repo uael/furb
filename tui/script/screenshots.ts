@@ -685,6 +685,31 @@ try {
     await session.command(`/cancel ${guide}`);
     await session.engine.result(guide).catch(() => {});
   }
+  // The last row of a thread while its model works: a loader left of the number of the line that comes, and
+  // `# thinking` while the model shows no thought, then the last line of what it thinks.
+  const thinks = await session.engine.prompt("str", {
+    message: "Think until I cancel.",
+    on: session.selected,
+  });
+  await until(session, () =>
+    session.acts.some((act) => act.kind === "rung" && act.by === thinks && !act.done),
+  );
+  await session.refresh();
+  await capture("84-thinking-row");
+  const step = session.acts.find((act) => act.kind === "rung" && act.by === thinks)?.id ?? "";
+  const streams = session.host.streams;
+  const thought = "The two workers think in parallel, so I wait for both before I read their notes.";
+  // The streams of the life are held still for the capture, so no piece that the life writes changes the row.
+  Object.defineProperty(session.host, "streams", {
+    configurable: true,
+    get: () => new Map([[step, { chain: session.selected, text: "", thinking: thought }]]),
+    set: () => {},
+  });
+  await new Promise((done) => setTimeout(done, 200));
+  await capture("85-thinking-tokens");
+  Object.defineProperty(session.host, "streams", { configurable: true, writable: true, value: streams });
+  await session.command(`/cancel ${thinks}`);
+  await session.engine.result(thinks).catch(() => {});
 
   // The feed of a real life: a life of the conductor, recorded from its log, with a score of chains at work, which
   // shows and runs nothing. The library of the demo ends first, with the sessions and the workers that it holds.

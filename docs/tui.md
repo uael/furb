@@ -69,25 +69,35 @@ A click on a chain, or Enter after ⌥T, shows that chain and lists its threads 
 it. Its row has the color of its thread, its mark, as asks you, runs or resolved, and the first line of its message,
 and the list scrolls. A click on a thread scrolls the feed to it, and the input then sends each message to it, as
 `prompt(None, message, on=thread)`, which its model reads at its next step. A message to a resolved thread opens it
-again. Under the thread chosen, Collapse folds it in the feed to its header line alone, and Resolve closes it, as
+again. Under the thread chosen, Collapse folds it in the feed to its panel on one line, and Resolve closes it, as
 `close(None, thread)` does, or Open again takes the message that opens it. Space, r and o do the same after ⌥T, and
 the header of the thread in the feed holds the same controls. At the foot of the sidebar, Context says how full the
 window of the chain shown is and where a grant pauses it, its tokens, and what it spent.
 
-The feed shows the threads of the chain, each in its color. A thread is a prompt: its message heads it in a panel,
-and under it the words of its steps stand as one Python program, line by line, with the number of each line in the
-gutter. No step and no act takes a row of its own. Each line ends with a quiet hint of what its acts came to: a read
+The feed shows the threads of the chain, each in its color. A thread is a prompt: its message heads it in a panel of
+its color, as each of your messages stands, with at its right who sent it and to which model when you did not, the
+type of its answer, its state and its controls. Under it the words of its steps stand as one Python program, line by
+line, with the number of each line in the gutter, in the color of the thread. The numbers go on from one step to the
+next, so a thread counts the lines of its program from its first step to its last, also past the steps that a fold
+keeps out. No step and no act takes a row of its own. Each line ends with a quiet hint of what its acts came to: a read
 the count of its lines, a write the lines that it added and removed, a command its exit and the count of the lines
 that it printed, a question its answer or what it waits for, and a loop its count, as x6. The first line of each
 step says how long the step ran and what the answers of its model cost. The time is known for the work that the TUI
 saw run, since the record holds no time. The line that runs is lit, with a mark in the gutter and, after a second,
 its time, and the last lines that its command prints stream under it. A line that the gate refused has a red cross in
 the gutter, and the reason stands under it as a comment. A message that you send to the thread, and each notice of
-the chain, stands as a comment among the steps, and what the model writes before its word comes stands under the
-program: each line of its word that it finished, as Python in its colors, and under them the line that it still
-writes. The answer of the thread stands under the name of the model that gave it. A word that you run stands in the
-same way under You ran, and so does an act that no word made, as a command that `/bash` starts: one line of Python
+the chain, stands as a comment among the steps. While the model of the thread works on a step, each line of its word
+that it finished stands above as Python in its colors, and the last row of the thread is the line that comes: a loader
+left of its number, and the line that the model still writes, else the last line that it thinks, as a comment, or
+`# thinking` while it shows no thought, whose letters a light crosses. The answer of the thread stands in a panel of
+the color of the thread, with the model that gave it and its effort at its right. A word that you run stands as your
+messages stand, as its program in a panel of its own color, and so does an act that no word made, as a command that
+`/bash` starts: one line of Python
 that binds the act to its name, as `bash3 = bash("make docs")`.
+
+![The last row of a thread while its model works](screenshots/84-thinking-row.png)
+
+![The last row of a thread while its model thinks](screenshots/85-thinking-tokens.png)
 
 A click on a line opens it in place: its whole text, cut into rows at the column of the code, and under it what each
 of its acts gave, as the output of a command or the text of a read. A second click folds it. A line too long for the
@@ -101,8 +111,8 @@ colors of a line come from its whole statement, so a line that is cut or folded 
 ![An open string](screenshots/83-open-string.png)
 
 Collapse on the header
-of a thread, or ⌥D, which lists the threads, folds the thread to its header line, which says its state, the first
-line of its message and the count of its steps, and a click on that line opens it again. A resolved thread that is
+of a thread, or ⌥D, which lists the threads, folds the thread to its panel on one line, which says its state, the
+first line of its message and the count of its steps, and Expand, or a click on that line, opens it again. A resolved thread that is
 not the last of its chain starts folded, and `/autocollapse` turns that fold off, and on again. A right click on a
 name inspects it.
 
@@ -173,8 +183,8 @@ The model picker names the current model and the window of each. ⇧Tab chooses 
 ## Questions and notices for you
 
 A model asks you a question with a prompt to the operator, and a prompt of None is a notice, which tells you
-something and asks nothing. A notice waits for nothing: it settles in the feed as a quiet line, `◇ Notice`, with the
-first line of its message and the count of its other lines, and a click opens it to its whole message. No key
+something and asks nothing. A notice waits for nothing: it settles in the feed as a panel on one line, as a folded thread
+does, with the first line of its message and the count of its other lines, and a click opens it to its whole message. No key
 dismisses it. Many questions can wait at once, on many chains. The desk over the input shows what waits: a mark `◆`
 for each question, in the order that they came, and the one that you act on in the color of a question, with its place, its chain, its id, and what it wants. Under it stand the first line of
 its message, the count of its other lines, and its choices or where the input sends its answer. A click on a mark

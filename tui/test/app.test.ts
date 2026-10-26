@@ -77,7 +77,7 @@ test("the real native life drives the feed, the transcript, and responsive views
       await seedDemo(session);
       await frame();
       // The answer of a prompt stands under the name of the model that gave it, once its markdown is drawn.
-      expect(screen.captureCharFrame()).toContain("● sonnet");
+      expect(screen.captureCharFrame()).toMatch(/sonnet {2}high/);
       for (
         let pass = 0;
         pass < 100 &&
@@ -106,7 +106,7 @@ test("the real native life drives the feed, the transcript, and responsive views
       // The control on the header of a thread folds it to its header, and a click on that header opens it again.
       const control = async () => {
         const rows = (await frame()).split("\n");
-        const at = /▾ Collapse|▸ Explore this project/;
+        const at = /▾ Collapse|▸ Expand/;
         const y = rows.findIndex((row) => at.test(row));
         const x = rows[y]?.search(at) ?? -1;
         if (y < 0 || x < 0) throw new Error("No control on the header of the thread.");
@@ -360,6 +360,26 @@ test("a question of a choice offers its values as a list in place of the input, 
     { width: 120, height: 40 },
   ));
 
+test("the last row of a thread whose model works shows a loader left of the number of the line that comes, and # thinking until the model shows a thought, then the last line of that thought", () =>
+  composing(async ({ session, app, frame }) => {
+    app.composer.setText("Think until I cancel.");
+    await app.submit();
+    await until(session, () => session.activity.some((act) => act.kind === "rung" && !act.done));
+    await session.refresh();
+    const row = async () => (await frame()).split("\n").find((line) => / 1 # /.test(line)) ?? "";
+    expect(await row()).toMatch(/^ +[^\s\d] +1 # thinking/);
+    const step = session.activity.find((act) => act.kind === "rung" && !act.done)?.id ?? "";
+    session.host.streams.set(step, {
+      chain: session.selected,
+      text: "",
+      thinking: "First I read.\nThen I wait.",
+    });
+    // The tick draws the row again from the stream, and no other part of the feed.
+    await new Promise((done) => setTimeout(done, 250));
+    expect(await row()).toMatch(/^ +[^\s\d] +1 # Then I wait\./);
+    await session.submit("/cancel");
+  }));
+
 test("a prompt of None to the operator is a notice that settles as a quiet line, which no key dismisses", () =>
   composing(
     async ({ session, screen, frame }) => {
@@ -378,7 +398,7 @@ test("a prompt of None to the operator is a notice that settles as a quiet line,
       expect(session.operatorPrompt).toBeUndefined();
       expect(session.desk.asks).toEqual([]);
       const shown = await drawn(frame, screen.renderer.root);
-      expect(shown).toMatch(/▸ ◇ Notice {2}for you {2}The build is green\. {2}\+1 line/);
+      expect(shown).toMatch(/┃ The build is green\. +\+1 line/);
       expect(shown).not.toContain("Each check passed.");
       expect(shown).not.toContain("You answered");
       expect(shown).not.toContain("⌃A");
@@ -494,9 +514,9 @@ test("the markdown of a message draws each element with no marks, and a code blo
       const spans = screen.captureSpans();
       const palette = palettes.ink;
       expect(cellAt(spans, x, label + 1).fg?.equals(RGBA.fromHex(palette.syntaxKeyword))).toBe(true);
-      // The notice stands on the background, and its code block on the panel.
-      expect(cellAt(spans, x - 1, label + 1).bg?.equals(RGBA.fromHex(palette.panel))).toBe(true);
-      expect(cellAt(spans, x, label - 2).bg?.equals(RGBA.fromHex(palette.background))).toBe(true);
+      // The notice stands on a panel, as a message of the operator does, and its code block on the ground, inset in it.
+      expect(cellAt(spans, x - 1, label + 1).bg?.equals(RGBA.fromHex(palette.background))).toBe(true);
+      expect(cellAt(spans, x, label - 2).bg?.equals(RGBA.fromHex(palette.panel))).toBe(true);
     },
     { width: 100, height: 60 },
   ));
@@ -604,7 +624,7 @@ test("rewind is a recorded rung and keeps the selected transcript after reopenin
   }
 });
 
-test("an act that no word made stands as a lit line of python, which says its time after a second under a header that stays in place", () =>
+test("an act that no word made stands as a lit line of python in a panel, which says its time after a second", () =>
   composing(
     async ({ session, app, screen, frame }) => {
       // The clock stands still from before the wait starts, so the elapsed time is what the test moves it by, however
@@ -618,11 +638,11 @@ test("an act that no word made stands as a lit line of python, which says its ti
         expect(before).toContain(`${id} = wait(60)`);
         expect(before).not.toContain("1.0s");
         const card = app.scroll.getChildren().find((node) => node.id === id);
-        if (!card) throw new Error("No header for the pending wait.");
-        // The clock moves past a second of the elapsed time: the line says it, and the header stays.
+        if (!card) throw new Error("No panel for the pending wait.");
+        // The clock moves past a second of the elapsed time, and the line says it.
         setSystemTime(new Date(start + 1300));
         await frame();
-        expect(app.scroll.getChildren().find((node) => node.id === id)).toBe(card);
+        expect(app.scroll.getChildren().some((node) => node.id === id)).toBe(true);
         expect(screen.captureCharFrame()).toMatch(new RegExp(`${id} = wait\\(60\\) +# waits 60s +1\\.0s`));
       } finally {
         setSystemTime();

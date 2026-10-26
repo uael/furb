@@ -8,6 +8,7 @@ import {
   InputRenderable,
   InputRenderableEvents,
   type KeyEvent,
+  type LineNumberRenderable,
   type MouseEvent,
   type Renderable,
   ScrollBoxRenderable,
@@ -138,6 +139,11 @@ export class App {
   /** The program of each thread and each word of the operator, as it stood at a version of the acts and of the words
    * that its models write. */
   programs = new Map<string, { version: number; live: string; lines: ProgramLine[] }>();
+  /** The rows that a model writes, by the step that it writes, which the tick draws again. */
+  thinkingRows = new Map<
+    string,
+    { view: LineNumberRenderable; text: TextRenderable; display: number; room: number; said: string }
+  >();
   /** The chain whose threads the sidebar lists in place of the tree of the chains, once a click or Enter chose it. */
   railChain?: string;
   /** Whether the keys move in the sidebar, after ⌥T, and the row that they stand on: a chain in the tree, or a thread in
@@ -555,6 +561,7 @@ export class App {
         if (card.title) this.label(card, [...card.marker, ...card.title()]);
       if (this.statusMoves) this.renderStatus();
       if (this.stage.visible && this.cursor === undefined && this.moves()) this.renderStage();
+      if (this.thinkingRows.size) this.tickThinking();
     }, frame);
     this.render();
     this.composer.focus();

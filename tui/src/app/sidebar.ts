@@ -589,14 +589,15 @@ export const sidebar = part({
     const thread = this.chainThreadsBy(this.session.selected).by.get(act.id);
     if (!thread) return undefined;
     const id = thread.act.id;
+    const folded = this.threadFolded(id);
     const row = this.row({ gap: 3, paddingLeft: space.between });
     row.add(
       this.link(
         [
-          [`${glyph.open} `, c.faint],
-          ["Collapse", c.faint],
+          [`${folded ? glyph.closed : glyph.open} `, c.faint],
+          [folded ? "Expand" : "Collapse", c.faint],
         ],
-        () => this.foldThread(id, true),
+        () => this.foldThread(id, !folded),
       ),
     );
     if (thread?.resolved)

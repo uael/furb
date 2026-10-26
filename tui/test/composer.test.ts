@@ -396,9 +396,10 @@ test("/feed lists the commands whose stdin is open, and the line of such a comma
       await frame();
       // Each line opens at a click, and what its act gave under it says whether its input is open.
       for (const id of [open, shut]) {
-        const line = app.scroll.getChildren().find((node) => node.id === `program-${id}`);
+        // A command of the operator stands in a panel, whose first row is its edge.
+        const line = app.scroll.getChildren().find((node) => node.id === id);
         if (!line) throw new Error(`No line for ${id}.`);
-        await screen.mockMouse.click(line.x + 8, line.y);
+        await screen.mockMouse.click(line.x + 8, line.y + 1);
         await screen.flush();
       }
       const cards = await frame();
@@ -624,7 +625,7 @@ test("a cancelled message keeps its place in the feed, and its cancel reads as a
     // before it wrote a word shows nothing.
     const lines = shown.split("\n");
     const first = lines.findIndex((line) => line.includes("Think until I cancel."));
-    expect(lines[first]).toContain("⊘ ▸ Think until I cancel.");
+    expect(lines[first]).toMatch(/┃ ⊘ Think until I cancel\.\s+1 step {2}cancelled {2}▸ Expand/);
     expect(lines[first]).not.toContain("✗");
     expect(first).toBeLessThan(lines.findIndex((line) => line.includes("A second message.")));
     expect(lines.filter((line) => line.includes(" cancelled") && line.includes("⊘"))).toHaveLength(1);
@@ -644,10 +645,11 @@ test("a word that the gate refused shows a cross on the line that the refusal na
       await idle(session);
       await session.refresh();
       const lines = (await frame()).split("\n");
-      const refused = lines.findIndex((line) => /✗ 1 ```python/.test(line));
+      const refused = lines.findIndex((line) => /✗ +1 ```python/.test(line));
       expect(refused).toBeGreaterThan(0);
       expect(lines[refused + 1]).toMatch(/^ +# Got unexpected token/);
-      const retried = lines.findIndex((line) => / 1 close\("Here it is again as plain Python/.test(line));
+      // The numbers of the thread go on from the refused word to the word that replaced it.
+      const retried = lines.findIndex((line) => / 4 close\("Here it is again as plain Python/.test(line));
       expect(retried).toBeGreaterThan(refused + 1);
       expect(lines.slice(retried).join("\n")).not.toContain("✗");
       expect(lines.join("\n")).not.toContain("failed");

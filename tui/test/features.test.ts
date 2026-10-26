@@ -18,7 +18,7 @@ import { transcriptOf } from "./transcript.ts";
 
 afterAll(removeDemoDirectories);
 
-test("a word of the operator stands as its program under You ran: its line that waits is lit until its act ends, then says what the act came to, in each view and in a later life, and a word that the gate refused shows a cross and its finding", async () => {
+test("a word of the operator stands as his messages stand, as its program in a panel of his color: its line that waits is lit until its act ends, then says what the act came to, in each view and in a later life, and a word that the gate refused shows a cross and its finding", async () => {
   let record: string | undefined;
   const line = (shown: string) => shown.split("\n").find((row) => row.includes("await wait(60)")) ?? "";
   await composing(
@@ -26,9 +26,10 @@ test("a word of the operator stands as its program under You ran: its line that 
       const rung = await session.engine.rung({ word: "await wait(60)", on: session.engine.root });
       await session.refresh();
       const running = await frame();
-      expect(running).toContain("You ran");
+      expect(running).not.toContain("You ran");
       expect(line(running)).toMatch(/◉ +1 await wait\(60\) +# waits 60s/);
-      expect(app.scroll.getChildren().some((card) => card.id === `program-${rung}`)).toBe(true);
+      expect(app.scroll.getChildren().some((card) => card.id === rung)).toBe(true);
+      expect(line(running)).toMatch(/^ +┃ /);
       const wait = session.acts.find((act) => act.kind === "wait" && act.by === rung);
       if (!wait) throw new Error("No pending wait.");
       await session.engine.close(null, { id: wait.id });
@@ -54,7 +55,7 @@ test("a word of the operator stands as its program under You ran: its line that 
       const rows = (await frame()).split("\n");
       const at = rows.findIndex((row) => /✗ +1 this is invalid python !!!/.test(row));
       expect(at).toBeGreaterThan(0);
-      expect(rows[at + 1]).toMatch(/^ +# \S/);
+      expect(rows[at + 1]).toMatch(/^ +┃ +# \S/);
       record = session.host.record;
     },
     { width: 140, height: 42, useMouse: true },
