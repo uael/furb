@@ -577,6 +577,10 @@ try {
   app().composer.setText("");
   if (priorHistory) session.histories[session.draftKey] = priorHistory;
   else delete session.histories[session.draftKey];
+  // A colon that starts a word lists the emojis whose shortcode holds what follows it.
+  await test.mockInput.typeText("Ship it :grin");
+  await capture("46c-emoji-suggestions");
+  app().composer.setText("");
   // A word of the model that the gate refused, and that its next word replaced, folds and reads as retried.
   app().composer.setText("");
   await session.submit("Give me an answer in a fence.");
