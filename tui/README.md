@@ -10,17 +10,46 @@ record, and goes on with unfinished work when you open it again.
 
 ## Start it
 
-The TUI runs from a clone of this repository. It needs uv, the Rust toolchain, and Bun 1.4.2 or later. On Windows,
-Bun 1.3 crashes the TUI when it calls into OpenTUI.
+The TUI runs from a clone of this repository, on every system. It needs no Python and no uv. Do these steps in order.
+
+**1. Install three tools.** Git, Bun 1.4.2 or later, and Rust through rustup, which reads the version of Rust from
+`rust-toolchain.toml` and installs it on the first build. Bun 1.3 crashes the TUI on Windows, so check
+`bun --version`.
+
+| System | Also needed | Install |
+| --- | --- | --- |
+| macOS | A C compiler and linker | `xcode-select --install`, then `curl -fsSL https://bun.sh/install \| bash`, then `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
+| Linux | A C compiler and linker, as `build-essential` on Debian and Ubuntu | The same two `curl` lines as macOS |
+| Windows | [Git for Windows](https://gitforwindows.org), whose `sh` runs the commands of a life, and the C++ build tools of [Visual Studio](https://visualstudio.microsoft.com/visual-cpp-build-tools/) | `powershell -c "irm bun.sh/install.ps1 \| iex"`, then `rustup-init.exe` from [rustup.rs](https://rustup.rs) |
+
+Open a new terminal after the install, so that it finds `bun` and `cargo`. On Windows, use Windows Terminal with
+PowerShell or Git Bash.
+
+**2. Build it.** The first build takes some minutes, since it builds the engine in Rust. Later builds are short.
 
 ```sh
-uv sync
+git clone https://github.com/uael/furb
+cd furb
 bun install
 bun run build
+```
+
+**3. Start it.** The demo asks no model and costs nothing: use it first to see that the TUI works.
+
+```sh
 bun run demo                 # A scripted life, and a real life recorded from its log. It asks no model.
 bun run tui                  # A real life, on the models of the catalog of the crate.
+bun run tui -- --cwd ~/work/my-project    # A real life on another project: its folder is the workspace.
 bun run tui -- --resume .furb/sessions/example.jsonl
 ```
+
+Run these commands from the clone. Press ⌃Q to save and quit, and F1 for the keys. A real life needs a model: the
+welcome checks the setup and says what is missing, as below. When `bun run build` fails with a message about a
+linker, the C tools of your system are missing. When `bun: command not found` shows, open a new terminal.
+
+The desktop app is a preview, and it is not part of this path: [`gui/README.md`](../gui/README.md) says how to build
+and start it. `furb`, the command line of `pip install furb`, opens this TUI too, but it still finds the TUI in a
+clone, so the steps above come first.
 
 `furb`, the command line, opens this TUI when it has no command, with `--demo`, `--record`, `--cwd`, the model and
 the effort of its `--model` as `--model` and `--effort`, each `--roster`, and the words after `--`, as
