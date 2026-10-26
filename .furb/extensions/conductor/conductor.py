@@ -31,9 +31,9 @@ from furb.engine import (
 )
 
 CONDUCTING = """Conduct the work in one loop, and plan no further than the next step.
-Put each item in queue as (key, brief, thread), or in backlog to wait behind queue, then await conduct(). Each round tends the workers and the open PRs, hires a worker for each item, CAP at once, and waits every seconds or until a worker ends. It hires only when no open PR of the round needs a worker that it has not got: a failed check, a conflict or an open box, on a PR with no label paused or hold. So the fixers take the free slots first, and the round merges before it starts new work. It moves the first item of backlog to queue while queue and working hold fewer than CAP items.
-The owner rules, on 10-23: "this kind of item should be done by sonnet, not opus. You need to use Sonnet more, when it make sense. And opus/medium should be your default, not opus/high. opus/high is kinda the max, xhigh for the coordination and my rulings only. most of the time sonnet/{medium,high} and opus/high are perfect." So the default of a worker, a fixer and a debrief, which asks the model of its worker, is ACTOR, opus/medium. A worker runs only a model of MODELS: sonnet/medium, sonnet/high, opus/medium or opus/high. hire() refuses xhigh and max, and the round starts no item that asks for one and tells you. You choose sonnet for an item where it makes sense, as efforts[key] = "claude-cli:sonnet/medium" before you queue it.
-The owner rules again, on 10-23: "From now on: 2 opus workers, 3 sonnet ones. max." The owner rules again, on 10-26: "add one opus/high worker for the most complex stuff". So ROOM gives the room of each family of model: the round runs at most 2 workers on opus/medium, 3 on sonnet and 1 on opus/high at once, and counts only the workers whose prompt is not over. You give opus/high only to the most complex items, as efforts[key] = "claude-cli:opus/high". An item whose model has no room keeps its place in queue while the next item whose model has room starts. A fixer goes before a new item. A worker that ended and whose PR needs a worker goes on in its own chain on HANDOVER, sonnet, with a new prompt there, when sonnet has room; else a fixer starts on opus when it has room.
+Put each item in queue as (key, brief, thread), or in backlog to wait behind queue, then await conduct(). Each round tends the workers and the open PRs, hires a worker for each item, cap() at once, and waits every seconds or until a worker ends. It hires only when no open PR of the round needs a worker that it has not got: a failed check, a conflict or an open box, on a PR with no label paused or hold. So the fixers take the free slots first, and the round merges before it starts new work. It moves the first item of backlog to queue while queue and working hold fewer than cap() items.
+The owner rules, on 10-23: "this kind of item should be done by sonnet, not opus. You need to use Sonnet more, when it make sense. And opus/medium should be your default, not opus/high. opus/high is kinda the max, xhigh for the coordination and my rulings only. most of the time sonnet/{medium,high} and opus/high are perfect." So the default of a worker and of a debrief, which asks the model of its worker, is ACTOR, opus/medium. A fixer (fixN, boxN) runs on limits["fixer"], sonnet/high, by the ruling of the operator. A worker runs only a model of MODELS: sonnet/medium, sonnet/high, opus/medium or opus/high. hire() refuses xhigh and max, and the round starts no item that asks for one and tells you. You choose sonnet for an item where it makes sense, as efforts[key] = "claude-cli:sonnet/medium" before you queue it.
+The owner rules again, on 10-23: "From now on: 2 opus workers, 3 sonnet ones. max." The owner rules again, on 10-26: "add one opus/high worker for the most complex stuff". So limits["room"] gives the room of each family of model: the round runs at most 1 worker on opus/medium, 3 on sonnet and 1 on opus/high at once, by the ruling of the operator, and counts only the workers whose prompt is not over. limits lives in the state of the round, so a reload of the extension keeps it: you change it there, as limits["room"]["opus"] = 2, and cap() gives the sum of the room. You give opus/high only to the most complex items, as efforts[key] = "claude-cli:opus/high". An item whose model has no room keeps its place in queue while the next item whose model has room starts. A fixer goes before a new item. A worker that ended and whose PR needs a worker goes on in its own chain on HANDOVER, sonnet, with a new prompt there, when sonnet has room; else a fixer starts on limits["fixer"] when sonnet has room.
 The round runs on one chain, lead["home"]. After a compaction of your chain, await conduct() in the new chain: it names that chain, the round of the old chain ends at its next wake, and the state that the round reads is the state of the new chain, which you change there.
 A fault of one step of a round, as an empty answer of gh, ends no round: the round tells you once each kind of fault, with the fault and its step, and goes on at the next round. Each json.loads of a command reads its output only when the command succeeded. When the round ends for any cause but a new home, it tells you as a decision, with the cause and what stops.
 hire(key, brief, thread) starts a worker from the base chain of its actor in bases, at its actor in efforts or ACTOR, on a chain labeled thread/key, with the brief in custom or WORKER, and its PR carries the labels w:key and thread:thread.
@@ -56,8 +56,8 @@ debrief(name) asks the chain of a worker that ended for the frictions that it me
 Each act of the round is made through quietly(verb, ...), so its end wakes nobody: you hear only a notice, and each merge rides on the next one. Make each act that you do not await the same way.
 A review blocks only on a defect that a command reproduces, or on a false sentence of a contract."""
 
-ROOM = {"opus": 2, "sonnet": 3, "opus/high": 1}
-CAP = sum(ROOM.values())
+LIMITS = {"room": {"opus": 1, "sonnet": 3, "opus/high": 1}, "fixer": "claude-cli:sonnet/high"}
+limits: dict = globals().setdefault("limits", LIMITS)
 ACTOR = "claude-cli:opus/medium"
 HANDOVER = "claude-cli:sonnet/medium"
 MODELS = (HANDOVER, "claude-cli:sonnet/high", ACTOR, "claude-cli:opus/high")
@@ -379,13 +379,18 @@ async def patch(title: str, why: str, ask: str) -> tuple[str, str, str]:
     quietly(bash, f"git worktree remove --force {tree}; git branch -D w/{key}", show=HIDDEN)
 
 
+def cap() -> int:
+  return sum(limits["room"].values())
+
+
 def model_of(key: str) -> str:
-  return efforts.get(key, ACTOR)
+  fixer = limits["fixer"] if re.fullmatch(r"(fix|box)\d+", key) else ACTOR
+  return efforts.get(key, fixer)
 
 
 def family(model: str) -> str:
   name = model.split(":")[-1]
-  return name if name in ROOM else name.split("/")[0]
+  return name if name in limits["room"] else name.split("/")[0]
 
 
 def room(model: str) -> bool:
@@ -393,7 +398,7 @@ def room(model: str) -> bool:
     return False
   mine = family(model)
   live = [n for n in working if not over(n) and family(models.get(n, ACTOR)) == mine]
-  return len(live) < ROOM[mine]
+  return len(live) < limits["room"][mine]
 
 
 def can(key: str) -> bool:
@@ -683,8 +688,8 @@ async def land(pr: dict, red: bool) -> None:
       return
     moved, _, own = got.stdout.content.partition("---\n")
     if {x for x in moved.splitlines() if x and not x.endswith(".md")} & {x for x in own.splitlines() if x}:
-      if not red and f"update {sha}" not in noticed:
-        noticed.add(f"update {sha}")
+      if not red and f"land update {sha}" not in noticed:
+        noticed.add(f"land update {sha}")
         await bash(f"gh pr update-branch {n}", show=HIDDEN, timeout=120)
       return
   kids = [up for up in prs.values() if up["base"] == pr["head"]]
@@ -981,8 +986,14 @@ async def heal(pr: dict, red: bool) -> str:
     got = await bash(rehead(pr, '.conclusion == "cancelled"'), show=HIDDEN, timeout=300)
     ran = got.stdout.content.strip()
     return f"#{n} had a run cancelled at its head {sha[:7]}, and the round ran it again." if ran else ""
-  if pr["base"] == "main" and not red and f"update {sha}" not in noticed:
-    noticed.add(f"update {sha}")
+  if (
+    pr["base"] == "main"
+    and not red
+    and not pr["draft"]
+    and not {"hold", "paused"} & set(pr["labels"])
+    and f"heal update {sha}" not in noticed
+  ):
+    noticed.add(f"heal update {sha}")
     got = await bash(BEHIND.replace("{sha}", sha).replace("{n}", str(n)), show=HIDDEN, timeout=180)
     if "updated" in got.stdout.content:
       return f"#{n} failed at {sha[:7]} behind main, which is green, so the round updated its branch."
@@ -1019,7 +1030,7 @@ def needs(pr: dict) -> bool:
 def staff() -> None:
   if any(needs(pr) for pr in prs.values()):
     return
-  while backlog and len(working) + len(queue) < CAP:
+  while backlog and len(working) + len(queue) < cap():
     queue.append(backlog.pop(0))
   for item in list(queue):
     if can(item[0]):

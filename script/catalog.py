@@ -24,7 +24,8 @@ SNAPSHOT = Path(__file__).parents[1] / "src" / "world" / "provider" / "catalog.j
 """SNAPSHOT is the file that the crate carries."""
 SOURCES = SNAPSHOT.with_name("catalog.sources.json")
 """SOURCES says where the snapshot came from: the version of each source and the time of its fetch. A run writes it only
-when the snapshot or the version of pi-ai changed, so a run with no change in the data makes no change in the tree."""
+when the snapshot or the version of pi-ai changed, so a run with no change in the data makes no change in the tree. It
+names the providers that only pi-ai lists, which a life asks pi-ai for."""
 AWS = [
   "AWS_PROFILE",
   "AWS_ACCESS_KEY_ID",
@@ -176,10 +177,13 @@ def main() -> None:
   text = "\n".join(lines) + "\n"
   old = SNAPSHOT.read_text(encoding="utf-8") if SNAPSHOT.exists() else ""
   held = json.loads(SOURCES.read_text(encoding="utf-8")) if SOURCES.exists() else {}
-  if text == old and held.get("pi-ai", {}).get("version") == version:
+  if text == old and held.get("pi-ai", {}).get("version") == version and held["pi-ai"].get("providers") == list(PIS):
     return
   stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-  sources = {"models.dev": {"url": URL, "fetched": stamp}, "pi-ai": {"version": version, "fetched": stamp}}
+  sources = {
+    "models.dev": {"url": URL, "fetched": stamp},
+    "pi-ai": {"version": version, "providers": list(PIS), "fetched": stamp},
+  }
   SNAPSHOT.write_text(text, encoding="utf-8")
   SOURCES.write_text(json.dumps(sources, indent=2) + "\n", encoding="utf-8")
 

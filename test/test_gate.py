@@ -137,9 +137,12 @@ async def test_each_finding_names_the_line_of_the_word_it_is_found_on_and_quotes
 
 
 async def test_a_word_that_holds_a_fence_markup_or_prose_finds_that_a_reply_is_python_and_quotes_only() -> None:
-  """A word that is not python and that holds a fence of markdown, the markup of a tool call or a sentence of prose finds that a reply is python and quotes only, with no fence, no markup and no prose."""
+  """A word that is not python and that holds a fence of markdown, the markup of a tool call or a sentence of prose finds that a reply is python and quotes only, with no fence, no markup and no prose, so nothing of this word ran: delete each such line."""
   _, _, root = born()
-  stray = "a reply is python and quotes only, with no fence, no markup and no prose"
+  stray = (
+    "a reply is python and quotes only, with no fence, no markup and no prose, so nothing of this word ran: delete each"
+    " such line"
+  )
   for word, line in [
     ("```python\nclose(1)\n```", "```python"),
     ('<invoke name="bash">\nclose(1)', '<invoke name="bash">'),
@@ -149,6 +152,22 @@ async def test_a_word_that_holds_a_fence_markup_or_prose_finds_that_a_reply_is_p
     assert found.startswith("line 1: ") and found.endswith(f"; {stray}, in {line!r}")
   (found,) = engine.gate("= 1", on=root)
   assert stray not in found and found.endswith(", in '= 1'")
+
+
+async def test_a_word_that_is_not_python_on_a_line_that_starts_with_a_lone_equals_finds_that_its_binding_has_no_name() -> (
+  None
+):
+  """A word that is not python on a line that starts with a lone = finds that the line starts with =, so its binding has no name: write the name before =, as in got = 1, and nothing of this word ran."""
+  _, _, root = born()
+  nameless = (
+    "the line starts with =, so its binding has no name: write the name before =, as in got = 1, and nothing of this"
+    " word ran"
+  )
+  for word, line in [("= 1", "= 1"), ("k = 1\n= await bash('ls')", "= await bash('ls')")]:
+    (found,) = engine.gate(word, on=root)
+    assert found.endswith(f"; {nameless}, in {line!r}")
+  (found,) = engine.gate("== 1", on=root)
+  assert nameless not in found and found.endswith(", in '== 1'")
 
 
 async def test_an_open_mark_of_a_quote_that_has_no_close_mark_is_a_finding_of_its_own() -> None:

@@ -80,8 +80,17 @@ CUT = 80
 """CUT is the most characters of a line that a finding quotes."""
 PROSE = 3
 """PROSE is the fewest words of a line that starts with a capital letter that a finding reads as a sentence."""
-STRAY = "a reply is python and quotes only, with no fence, no markup and no prose"
+STRAY = (
+  "a reply is python and quotes only, with no fence, no markup and no prose, so nothing of this word ran: delete each"
+  " such line"
+)
 """STRAY is what a finding adds when a word that is not python holds a fence, the markup of a tool call or prose."""
+NAMELESS = (
+  "the line starts with =, so its binding has no name: write the name before =, as in got = 1, and nothing of this word"
+  " ran"
+)
+"""NAMELESS is what a finding adds when the line of a word that is not python starts with a lone =, as the line of a
+model that left out the name that it binds."""
 
 
 def quoted(word: str, n: int, why: str) -> str:
@@ -121,11 +130,15 @@ def python(word: str) -> list[str]:
   except SyntaxError as bad:
     # Which line and what it said is what an interpreter offers of it, and one that offers neither gives the text.
     why = str(getattr(bad, "msg", None) or bad)
-    if any(stray(one) for one in lines):
-      why += f"; {STRAY}"
     # An interpreter that gives no line number may name the line at the end of its text, as (<string>, line 2).
     tail = str(bad).rpartition(", line ")[2].removesuffix(")")
-    return [quoted(word, getattr(bad, "lineno", None) or (int(tail) if tail.isdigit() else 1), why)]
+    n = getattr(bad, "lineno", None) or (int(tail) if tail.isdigit() else 1)
+    line = lines[n - 1].strip() if 0 < n <= len(lines) else ""
+    if line.startswith("=") and not line.startswith("=="):
+      why += f"; {NAMELESS}"
+    if any(stray(one) for one in lines):
+      why += f"; {STRAY}"
+    return [quoted(word, n, why)]
   return []
 
 
