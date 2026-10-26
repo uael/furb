@@ -651,7 +651,13 @@ fn a_configured_claude_prefix_reaches_completions_and_search_and_project_setting
   assert_eq!(args[4], "-p");
 
   let search_bin = yard.at.join("search");
-  fs::write(&search_bin, "#!/bin/sh\nprintf '[%s]\\n' \"$@\"\necho ---\ncat\n").unwrap();
+  // A process that asks for the models ends at once, as one of a command line that lists none: else the discovery
+  // waits for its answer until its deadline, twenty seconds.
+  fs::write(
+    &search_bin,
+    "#!/bin/sh\n[ -n \"$FURB_CLAUDE_DISCOVER\" ] && exit 0\nprintf '[%s]\\n' \"$@\"\necho ---\ncat\n",
+  )
+  .unwrap();
   use std::os::unix::fs::PermissionsExt;
   fs::set_permissions(&search_bin, fs::Permissions::from_mode(0o755)).unwrap();
   fs::write(

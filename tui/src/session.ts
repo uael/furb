@@ -19,6 +19,7 @@ import {
 } from "furb";
 import { type ActIndex, type Ask, aimed, beside, compactedRun, type Desk, desk, failed } from "furb/life";
 import type { Engine, HostView, Usage } from "./bridge.ts";
+import { clock } from "./clock.ts";
 import { expandHome, fileReferences, fromDirectory, projectFiles, shortenHome } from "./files.ts";
 import { dollars } from "./format.ts";
 import { Preferences } from "./preferences.ts";
@@ -587,7 +588,7 @@ export class Session extends EventEmitter {
             else index.at.set(act.id, next.push(act) - 1);
             index.ids.set(act.id, act);
             placed(index, act);
-            if (!act.done) this.started[act.id] ??= Date.now();
+            if (!act.done) this.started[act.id] ??= clock();
             if (act.took !== undefined) this.took[act.id] = act.took;
           }
           if (moved) this.version++;

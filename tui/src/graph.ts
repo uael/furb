@@ -17,6 +17,7 @@ import {
   valueText,
   you,
 } from "furb/life";
+import { clock } from "./clock.ts";
 import { clip, dollars } from "./format.ts";
 import { questionOf, shortActor } from "./overview.ts";
 import type { ActRow } from "./session.ts";
@@ -224,7 +225,7 @@ export class Graph {
    * levels of one program take the whole width. */
   rows(width: number, height: number): Part[][] {
     const { acts, owed } = this.stage;
-    const now = Date.now();
+    const now = clock();
     for (const act of acts)
       if (act.kind === "prompt" && act.done && !this.seen.has(act.id)) this.seen.set(act.id, now);
     this.tree = threads(acts, owed);
@@ -465,8 +466,8 @@ export class Graph {
     }
     // The messages flow along the edges, from the chain of the rung that made a prompt to the chain that serves it,
     // and an answer flows back for a moment once it closes.
-    const recent = (act: ActRow) => !this.stage.frozen && Date.now() - (this.seen.get(act.id) ?? 0) < 4000;
-    const tick = Math.floor(Date.now() / 120);
+    const recent = (act: ActRow) => !this.stage.frozen && clock() - (this.seen.get(act.id) ?? 0) < 4000;
+    const tick = Math.floor(clock() / 120);
     const trails = new Map<RGBA, RGBA>();
     for (const message of messages(acts, recent)) {
       const key = `${message.from} ${message.to}`;

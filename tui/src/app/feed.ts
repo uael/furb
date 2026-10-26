@@ -15,6 +15,7 @@ import {
   wants,
   writing,
 } from "furb/life";
+import { clock } from "../clock.ts";
 import { fromDirectory, shortenHomes } from "../files.ts";
 import { clip, dollars, plainFailure } from "../format.ts";
 import type { Mark as PartMark } from "../parts.ts";
@@ -338,7 +339,7 @@ export const feed = part({
                 .join(" ");
         const since = (act?: ActRow) => {
           const began = act && w.started[act.id];
-          const ms = began ? Date.now() - began : 0;
+          const ms = began ? clock() - began : 0;
           return ms >= 1000 ? spell(Math.floor(ms / 1000) * 1000) : "";
         };
         // A program that a panel frames, as a word of the operator, leaves the room of the bar and the inset of the panel.
