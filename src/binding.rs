@@ -554,13 +554,14 @@ fn configured_catalog(
     .map_err(Fault::refused)
 }
 
-/// What a first run checks of this machine, as a host reads it: whether the claude command line offers a model,
-/// each configured provider with the names of its credential and how many of its models the catalog offers, and
-/// the local server that `FURB_LOCAL_URL` names, with the models it offers or why it listed none.
+/// What a first run checks of this machine, as a host reads it: whether the claude command line offers a model and
+/// whether it is signed in, each configured provider with the names of its credential and how many of its models the
+/// catalog offers, and the local server that `FURB_LOCAL_URL` names, with the models it offers or why it listed none.
 #[cfg_attr(feature = "typescript", napi(object, object_from_js = false))]
 #[cfg_attr(feature = "python", derive(pyo3::IntoPyObject))]
 pub struct SetupInfo {
   pub claude: bool,
+  pub signed: bool,
   pub providers: Vec<ProviderInfo>,
   pub local: Option<LocalInfo>,
 }
@@ -601,6 +602,7 @@ pub fn setup(
   let found = configured_catalog(claude, directory, config)?.setup();
   Ok(SetupInfo {
     claude: found.claude,
+    signed: found.signed,
     providers: (found.providers.into_iter())
       .map(|one| ProviderInfo {
         provider: one.provider,

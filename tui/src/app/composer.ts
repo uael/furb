@@ -26,6 +26,7 @@ export const composer = part({
     this.draftKey = key;
     this.composer.setText(text);
     this.historyIndex = -1;
+    this.historyPrefix = "";
   },
 
   compose(text: string) {
@@ -52,16 +53,45 @@ export const composer = part({
     this.render();
   },
 
-  /** What the input sent on this chain in this mode. A chain that holds messages the input did not send, as a record
-   * that opens with no saved input, walks those messages instead. */
+  /** What the input sent in this mode, the oldest first: the entries of the other chains, which are older to the
+   * walk, then those of this chain, and an entry that came before comes only once, at its latest place. A chain that
+   * holds messages the input did not send, as a record that opens with no saved input, walks those messages
+   * instead. */
   history(): string[] {
     const w = this.session;
-    const kept = w.histories[w.draftKey] ?? [];
-    if (kept.length || w.mode !== "prompt" || w.editing) return kept;
-    return w.activity
-      .filter((act) => w.isUserPrompt(act))
-      .map((act) => String(act.words[1] ?? ""))
-      .filter(Boolean);
+    const mode = w.draftKey.slice(w.draftKey.indexOf(":"));
+    const own = w.histories[w.draftKey] ?? [];
+    const others = Object.entries(w.histories)
+      .filter(([key]) => key !== w.draftKey && key.endsWith(mode))
+      .flatMap(([, entries]) => entries);
+    const kept = [...others, ...own];
+    if (!kept.length && w.mode === "prompt" && !w.editing)
+      return w.activity
+        .filter((act) => w.isUserPrompt(act))
+        .map((act) => String(act.words[1] ?? ""))
+        .filter(Boolean);
+    return kept.filter((entry, index) => kept.lastIndexOf(entry) === index);
+  },
+
+  /** Sets the grey rest of the line again: what the latest entry of the history that starts with the text adds to it.
+   * It is empty while a walk of the history runs, while the suggestions of a token show, and unless the cursor ends
+   * the text. */
+  ghosting(): void {
+    const text = this.composer.plainText;
+    let rest = "";
+    if (
+      text &&
+      this.historyIndex < 0 &&
+      !this.suggestionBox.visible &&
+      !this.session.host.reading &&
+      this.beforeCursor() === text
+    ) {
+      const entry = this.history().findLast((one) => one.length > text.length && one.startsWith(text));
+      rest = entry?.slice(text.length) ?? "";
+    }
+    if (rest === this.composer.ghost) return;
+    this.composer.ghost = rest;
+    this.composer.requestRender();
   },
 
   async submit(): Promise<void> {
@@ -90,6 +120,7 @@ export const composer = part({
       if (content && history.at(-1) !== content) history.push(content);
       if (history.length > 200) history.shift();
       this.historyIndex = -1;
+      this.historyPrefix = "";
     } catch (error) {
       // A text that was not sent goes back to its draft, unless that draft holds new text by now.
       if (this.draftKey === key && !this.composer.plainText) this.composer.setText(content);

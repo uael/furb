@@ -156,21 +156,25 @@ def gate(
   return [quoted(word, n - above, why) for n, why in checked(text) if n > above]
 
 
-def gating(engine: dict[str, object], checked: Checked) -> Ear:
-  """The gate as the ear of a life: it answers each gate with what it finds against the word on the sheet of the
-  engine whose names it is given, after the program of the chain as it stands when the gate takes it, with the names
-  of the acts of the chain."""
-  program, question = engine["program"], engine["question"]
+def against(engine: dict[str, object], checked: Checked, on: str, word: str) -> list[str]:
+  """What the gate finds against a word on the sheet of the engine whose names it is given, after the program of its
+  chain as it stands now, with the names of the acts of the chain. It makes no fact, so a host may read it while a
+  model still writes the word."""
+  program, question, transcript = engine["program"], engine["question"], engine["transcript"]
   assert callable(program)
   assert callable(question)
+  assert callable(transcript)
+  words, facts = program(on), transcript(on)
+  assert isinstance(words, dict)
+  assert isinstance(facts, list)
+  return gate(engine, [*words.values()], word, checked, [str(x[1]) for x in facts if question(x)])
+
+
+def gating(engine: dict[str, object], checked: Checked) -> Ear:
+  """The gate as the ear of a life: it answers each gate with what it finds against the word, on its chain as the
+  chain stands when the gate takes it."""
   gates = {"gate"}
   while True:
     match (yield gates):
       case ("gate", qid, _, on, word):
-        words, transcript = program(on), engine["transcript"]
-        assert isinstance(words, dict)
-        assert callable(transcript)
-        facts = transcript(on)
-        assert isinstance(facts, list)
-        acts = [str(x[1]) for x in facts if question(x)]
-        yield "done", qid, gate(engine, [*words.values()], word, checked, acts)
+        yield "done", qid, against(engine, checked, on, word)

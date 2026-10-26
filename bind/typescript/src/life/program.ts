@@ -13,21 +13,32 @@ import { placed } from "./source.js";
  * - `note`: a quiet comment: a message that came to the thread.
  * - `earlier`: the steps before those that the program keeps, as their count, which stands first.
  *
- * Each line names its step: the rung of its word, or the prompt of its note. */
+ * Each line names its step: the rung of its word, or the prompt of its note. A line of code, a quote and the line that
+ * a model writes hold two numbers: `number`, the line in the word of its step, and `display`, the line in the program
+ * of its thread, which goes on across the steps of the thread. */
 export type ProgramLine =
   | {
       kind: "code";
       step: LiveAct;
       number: number;
+      display: number;
       text: string;
       acts: LiveAct[];
       runs: boolean;
       fails?: string;
       hint: string;
     }
-  | { kind: "quote"; step: LiveAct; number: number; text: string; name: string; lines: number }
+  | {
+      kind: "quote";
+      step: LiveAct;
+      number: number;
+      display: number;
+      text: string;
+      name: string;
+      lines: number;
+    }
   | { kind: "output"; step: LiveAct; act: LiveAct; text: string }
-  | { kind: "writes"; step: LiveAct; text: string }
+  | { kind: "writes"; step: LiveAct; display: number; text: string }
   | { kind: "note"; step: LiveAct; text: string }
   | { kind: "earlier"; step: LiveAct; count: number; text: string };
 
@@ -122,7 +133,7 @@ export function writing(stream?: { text: string; thinking: string }): { lines: s
 
 /** The lines of one step: its word, with each quote folded, the acts and the hint of each line, the line that runs
  * with the output that streams under it, and the line that a refusal names. A step whose word has not come shows what
- * its model writes. */
+ * its model writes. `start` is the count of the lines of the thread before the step, which its numbers go on from. */
 export function stepLines(
   step: LiveAct,
   made: ReadonlyMap<string, readonly LiveAct[]>,
@@ -130,6 +141,7 @@ export function stepLines(
   owed: ReadonlySet<string>,
   label: (chain: string) => string,
   streams?: ReadonlyMap<string, { text: string; thinking: string }>,
+  start = 0,
 ): ProgramLine[] {
   const out: ProgramLine[] = [];
   const text = word(step);
@@ -137,7 +149,12 @@ export function stepLines(
   if (!text) {
     if (why) out.push({ kind: "note", step, text: `# ${step.id} failed: ${first(why)}` });
     else if (!step.done) {
-      out.push({ kind: "writes", step, text: writing(streams?.get(step.id)).tail || "writes a step" });
+      out.push({
+        kind: "writes",
+        step,
+        display: start + 1,
+        text: writing(streams?.get(step.id)).tail || "thinking",
+      });
     }
     return out;
   }
@@ -157,6 +174,7 @@ export function stepLines(
         kind: "quote",
         step,
         number: index + 1,
+        display: start + index + 1,
         text: first(body),
         name: quote[1] ?? "",
         lines: lineCount(body.replace(/^\n/, "")),
@@ -170,6 +188,7 @@ export function stepLines(
       kind: "code",
       step,
       number: index + 1,
+      display: start + index + 1,
       text: line,
       acts,
       runs,
@@ -184,8 +203,9 @@ export function stepLines(
   return out;
 }
 
-/** The program of a thread: the words of its steps, in the order they began, as one program. A thread is its prompt
- * and the messages that came to it, and each message stands as a quiet comment among the steps. */
+/** The program of a thread: the words of its steps, in the order they began, as one program, whose line numbers go on
+ * from each step to the next, also across the steps that a fold keeps out. A thread is its prompt and the messages
+ * that came to it, and each message stands as a quiet comment among the steps. */
 export function threadProgram(
   prompts: readonly LiveAct[],
   made: ReadonlyMap<string, readonly LiveAct[]>,
@@ -201,6 +221,14 @@ export function threadProgram(
     for (const rung of made.get(prompt.id) ?? []) if (rung.kind === "rung") steps.push(rung);
   }
   steps.sort((a, b) => a.began - b.began);
+  // The count of the lines of the thread before each step, which the numbers of the step go on from.
+  const starts = new Map<LiveAct, number>();
+  let count = 0;
+  for (const step of steps) {
+    if (step.kind !== "rung") continue;
+    starts.set(step, count);
+    count += lineCount(word(step));
+  }
   const out: ProgramLine[] = [];
   // A thread of many steps makes the lines of its last steps alone, and the messages that came before them fold with
   // the earlier steps.
@@ -233,7 +261,7 @@ export function threadProgram(
     }
     flush(last);
     if (step.kind === "prompt") out.push({ kind: "note", step, text: `# you: ${message}` });
-    else out.push(...stepLines(step, made, word, owed, label, streams));
+    else out.push(...stepLines(step, made, word, owed, label, streams, starts.get(step)));
   }
   flush(last);
   return out;
@@ -264,6 +292,7 @@ export function actLines(
       kind: "code",
       step: act,
       number: 1,
+      display: 1,
       text: `${act.id} = ${act.kind}(${words.map(python).join(", ")})`,
       acts: [act],
       runs,

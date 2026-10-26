@@ -165,12 +165,16 @@ pub struct Catalog {
   providers: Vec<(String, Vec<String>, bool)>,
   local: Option<Arc<Server>>,
   thinking: Option<String>,
+  /// The claude command line that the catalog found, which a first run asks whether it is signed in.
+  claude: Option<Claude>,
 }
 
-/// What this machine offers through each way to a model: the claude command line, each configured provider, and
-/// the local server that the environment names.
+/// What this machine offers through each way to a model, as a first run checks it: the claude command line and
+/// whether it is signed in, each configured provider, and the local server that the environment names.
 pub struct Setup {
   pub claude: bool,
+  /// Whether the claude command line is signed in, which is false when the catalog found none.
+  pub signed: bool,
   pub providers: Vec<Ready>,
   pub local: Option<Local>,
 }
@@ -214,11 +218,12 @@ impl Catalog {
   pub fn claude(self, bin: Option<PathBuf>, stall: Option<Duration>) -> Catalog {
     let Some(bin) = bin.or_else(|| stall.and_then(|_| claude::located())) else { return self };
     let claude = Claude::with(Some(bin), stall);
+    let found = Some(claude.clone());
     let prefix = format!("{}:", claude::CLAUDE);
     let network = self.models.into_iter().filter(|(model, _)| !model.name.starts_with(&prefix));
     let mut models: Vec<_> = claude.models().into_iter().map(|model| (model, true)).collect();
     models.extend(network);
-    Catalog { models, ..self }
+    Catalog { models, claude: found, ..self }
   }
 
   /// The catalog of the claude command line, which it offers when it found the program, of these providers, each model
@@ -232,8 +237,12 @@ impl Catalog {
   ) -> Catalog {
     let env = |name: &str| env(name).filter(|one| !one.is_empty());
     let found = claude.is_some();
-    let claude = claude.unwrap_or_else(|| Claude::with(None, None)).models().into_iter();
-    let mut models: Vec<_> = claude.map(|model| (model, found)).collect();
+    let kept = claude.clone();
+    let claude = match claude {
+      Some(claude) => claude.models(),
+      None => Claude::with(None, None).fixed(),
+    };
+    let mut models: Vec<_> = claude.into_iter().map(|model| (model, found)).collect();
     let mut providers = Vec::new();
     for (provider, one) in listed {
       providers.push((provider.clone(), one.env.clone(), true));
@@ -245,7 +254,7 @@ impl Catalog {
         models.push((model(provider, id, listing, client, reach), offered));
       }
     }
-    Catalog { models, providers, local, thinking: env(super::ENV_THINKING) }
+    Catalog { models, providers, local, thinking: env(super::ENV_THINKING), claude: kept }
   }
 
   /// What a first run checks: the claude command line, each provider of the network, and the local server, which it
@@ -258,6 +267,7 @@ impl Catalog {
     let providers = self.providers.iter();
     Setup {
       claude: offered(claude::CLAUDE) > 0,
+      signed: self.claude.as_ref().is_some_and(Claude::signed),
       providers: providers
         .map(|(provider, env, enabled)| Ready {
           provider: provider.clone(),

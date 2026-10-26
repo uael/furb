@@ -7,9 +7,12 @@ one on your own machine.
 
 furb looks in three places, in this order:
 
-1. **The claude command line.** When furb finds the program `claude`, it offers its models: `claude-cli:opus`,
-   `claude-cli:sonnet`, `claude-cli:haiku` and `claude-cli:fable`. They use the plan that you signed in to `claude`
-   with. furb finds the program that `FURB_CLAUDE_BIN` names, else the `claude` on PATH or in your home, else, on
+1. **The claude command line.** When furb finds the program `claude`, it offers its models, as `claude-cli:opus`,
+   `claude-cli:sonnet`, `claude-cli:haiku` and `claude-cli:fable`. Furb asks the program for them: its aliases, the
+   window of each and the efforts that each takes. The question costs no model prompt. Furb keeps the answer in its
+   cache until the program changes, and `/reload` asks again, so a new model or a new window shows with no new build
+   of furb. An older program that does not answer gives the four models above, with the windows that furb knows. They
+   use the plan that you signed in to `claude` with. furb finds the program that `FURB_CLAUDE_BIN` names, else the `claude` on PATH or in your home, else, on
    macOS, the one that Claude Desktop installed.
 2. **A provider of the network.** furb offers the models of each provider whose key stands in the environment, as
    `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`. It knows the providers that [models.dev](https://models.dev) and pi-ai
@@ -18,8 +21,8 @@ furb looks in three places, in this order:
    [A local model](#a-local-model) says more.
 
 The first model that furb offers is the default. So it is `claude-cli:opus` when you have the claude command line,
-else a model of the network, else a local model. The TUI checks each place on its first run, and says how to fix
-each one that is missing.
+else a model of the network, else a local model. The TUI checks each place on its first run, and whether the claude
+command line is signed in, as `claude auth status` says, and says how to fix each one that is missing.
 
 ## Choose a model
 

@@ -23,15 +23,16 @@ import {
   foldStrings,
   literals,
   type ProgramLine,
+  writing,
 } from "furb/life";
 import { conversation } from "../conversation.ts";
 import { shortenHomes } from "../files.ts";
 import { clip, dollars, modelName, share } from "../format.ts";
 import type { ActRow } from "../session.ts";
-import { theme as c, glyph, spacing as space } from "../theme.ts";
-import { bold, type Part, underline } from "../ui.ts";
+import { theme as c, frame, glyph, motion, spacing as space, spin } from "../theme.ts";
+import { bold, italic, type Part, styled, underline } from "../ui.ts";
 import { part } from "./part.ts";
-import { seconds, stateOf } from "./shared.ts";
+import { gutterWidth, saidOf, seconds, stateOf } from "./shared.ts";
 
 export const details = part({
   /** The rung that took the place of a rung of a model that failed: a later rung for the same prompt, which the model
@@ -123,23 +124,6 @@ export const details = part({
     const model = this.model(String(act.words[2] ?? "")).name;
     const maker = this.session.actOf(act.by);
     return maker?.kind === "chain" ? `the chain told ${model}` : `${act.by} asked ${model}`;
-  },
-
-  /** The heading of the answer to a prompt: the model that answered it with its effort, and the prompt when others
-   * closed with it. */
-  answerLabel(act: ActRow, parallel: boolean): Part[] {
-    const { name, effort } = this.model(String(act.words[2] ?? ""));
-    return [
-      [`${glyph.dot} `, c.secondary],
-      [name, c.text, bold],
-      [effort && effort !== "off" ? `  ${effort}` : "", c.faint],
-      [
-        parallel
-          ? `  answers “${this.preview(String(act.words[1]).split("\n")[0] ?? "", Bun.stringWidth(name) + 34)}”`
-          : "",
-        c.muted,
-      ],
-    ];
   },
 
   /** A word of Python in a card: its numbered lines, the reason it failed, and what to do after a refusal of the
@@ -273,6 +257,70 @@ export const details = part({
       }, this.report);
   },
 
+  /** What the last row of a thread shows while its model works on a step: the line that it still writes, at its
+   * number after the lines it finished, else the last line that it thinks, as a comment, else `# thinking`, whose
+   * letters a light crosses while the view moves. */
+  thinkingParts(step: string, display: number, room: number): { number: number; parts: Part[] } {
+    const stream = this.session.host.streams.get(step);
+    // The lines that the model finished stand above as python, so the row takes the number after them.
+    const { lines, tail } = writing(stream);
+    const done = lines ? lines.split("\n").length : 0;
+    if (stream?.text.trim()) return { number: display + done, parts: [[clip(tail || "…", room), c.muted]] };
+    const thought = (stream?.thinking ?? "").trimEnd().split("\n").at(-1)?.trim();
+    if (thought)
+      return { number: display, parts: [[`# ${clip(thought, room - 2)}`, c.syntaxComment, italic]] };
+    const word = "thinking";
+    if (motion.still) return { number: display, parts: [[`# ${word}`, c.syntaxComment]] };
+    // The light rests for a few frames after it crosses the word, so the row breathes and does not flicker.
+    const lit = Math.floor(Date.now() / frame) % (word.length + 8);
+    return {
+      number: display,
+      parts: [
+        ["# ", c.syntaxComment],
+        ...[...word].map(
+          (letter, at): Part => [
+            letter,
+            at === lit ? c.text : Math.abs(at - lit) === 1 ? c.muted : c.syntaxComment,
+          ],
+        ),
+      ],
+    };
+  },
+
+  /** The last row of a thread while its model works on a step: a loader in the column of the signs, left of the number
+   * of the line that comes, and what the model thinks or writes, which the tick draws again. */
+  thinkingRow(step: string, display: number, digits: number, tone: RGBA, room: number): LineNumberRenderable {
+    const { number, parts } = this.thinkingParts(step, display, room);
+    const text = this.text(parts, c.muted, { wrapMode: "none" });
+    const view = new LineNumberRenderable(this.renderer, {
+      target: text,
+      paddingRight: space.inset,
+      fg: tone,
+      minWidth: gutterWidth(digits),
+      lineNumbers: new Map([[0, number]]),
+      lineSigns: new Map([[0, { before: spin(), beforeColor: c.accent }]]),
+    });
+    this.thinkingRows.set(step, { view, text, display, room, said: saidOf(number, parts) });
+    return view;
+  },
+
+  /** The rows that models write move with the tick: the loader turns, and the text follows the stream. */
+  tickThinking(): void {
+    for (const [step, row] of this.thinkingRows) {
+      if (row.view.isDestroyed) {
+        this.thinkingRows.delete(step);
+        continue;
+      }
+      row.view.setLineSign(0, { before: spin(), beforeColor: c.accent });
+      const { number, parts } = this.thinkingParts(step, row.display, row.room);
+      const said = saidOf(number, parts);
+      if (said === row.said) continue;
+      row.said = said;
+      row.view.setLineNumbers(new Map([[0, number]]));
+      row.text.content = styled(parts);
+    }
+  },
+
   /** A program of the feed: its lines as one block of python, each numbered as a line of its word, with what the
    * acts of a line came to as a quiet comment beside it, the line that runs lit with its time, and the line that failed
    * marked, with its reason under it as a comment. */
@@ -282,6 +330,8 @@ export const details = part({
     took: (step: ActRow) => string,
     since: (act?: ActRow) => string,
     heads: ReadonlySet<ProgramLine>,
+    tone: RGBA = c.faint,
+    digits = 1,
   ): Renderable {
     const texts: string[] = [];
     const numbers = new Map<number, number>();
@@ -339,7 +389,7 @@ export const details = part({
         const hint = note ? `# ${fit(note, room - column - 4)}` : "";
         const at = push(
           hint ? `${code}${" ".repeat(Math.max(0, column - Bun.stringWidth(code)))}  ${hint}` : code,
-          line.number,
+          line.display,
           line,
         );
         if (hint) comment(at, (texts[at]?.length ?? 0) - hint.length);
@@ -378,7 +428,7 @@ export const details = part({
       } else if (line.kind === "quote") {
         const at = push(
           `${line.name} = "${fit(line.text, column - line.name.length - 6)}"  # ${line.lines} lines`,
-          line.number,
+          line.display,
         );
         const end = (texts[at] ?? "").lastIndexOf('"  # ');
         fixed.push([at, line.name.length + 3, end + 1, "string"]);
@@ -458,11 +508,14 @@ export const details = part({
       return [...out, ...marks];
     };
     const target = this.code(texts.join("\n"), marks, hoverFold, highlights);
+    // Each program keeps a column for the sign of a line, so the code of every program and of every row that a model
+    // writes starts at one column of the feed.
+    if (!signs.has(0)) signs.set(0, { before: " ", beforeColor: c.faint });
     const view = new LineNumberRenderable(this.renderer, {
       target,
       paddingRight: space.inset,
-      fg: c.faint,
-      minWidth: 3,
+      fg: tone,
+      minWidth: gutterWidth(digits),
       lineNumbers: numbers,
       hideLineNumbers: hidden,
       lineColors: colors,

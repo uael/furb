@@ -1,4 +1,4 @@
-import { type BoxRenderable, DiffRenderable } from "@opentui/core";
+import { type BoxRenderable, DiffRenderable, type RGBA } from "@opentui/core";
 import { display } from "furb";
 import {
   actLines,
@@ -22,6 +22,7 @@ import { hunkPatch, type Scope } from "../review.ts";
 import type { ActRow, View } from "../session.ts";
 import { theme as c, glyph, spacing as space, spin, threadTone } from "../theme.ts";
 import { bold, italic, type Part, plain } from "../ui.ts";
+import { branchMessages, branchStart, branchTakes, earlierSteps } from "../watching.ts";
 import { part } from "./part.ts";
 import { type BlockOptions, MESSAGE_ROWS, PROGRAM_STEPS, spell, threadMarks, viewLabels } from "./shared.ts";
 
@@ -46,6 +47,7 @@ export const feed = part({
       }
     }
     this.renderStage();
+    this.renderWatch();
     if (this.tree) {
       this.renderTree();
       return;
@@ -169,7 +171,24 @@ export const feed = part({
           ],
         ),
       );
-    if (w.view === "feed") {
+    // A chain that holds no act of the operator or of a model shows the welcome, so that the steps of the extensions,
+    // which each chain runs as it starts, do not hide it.
+    this.welcoming =
+      w.view === "feed" &&
+      !w.search &&
+      !w.loading &&
+      !w.error &&
+      w.moment === undefined &&
+      !w.paused &&
+      !w.actOf(w.selected)?.words[1] &&
+      !w.activity.some((act) => act.by === "operator" || act.kind === "prompt");
+    if (this.welcoming) {
+      const { width, height } = this.scroll.viewport;
+      add("welcome", `welcome:${width}:${height}:${this.theme}:${this.welcomeKey()}`, [], (box) =>
+        this.welcome(box, height),
+      );
+      items++;
+    } else if (w.view === "feed") {
       // The feed shows the acts as they stood at the moment that the operator moved to, or as they stand now.
       const shown = w.at(w.acts);
       // The acts of now are found by the index of the session, and those of a moment of the past by a map of their own.
@@ -184,9 +203,6 @@ export const feed = part({
         made ??= makers(shown);
         return made?.get(id) ?? [];
       };
-      if (w.watching) {
-        add("watch", `watch:${w.moment}:${w.cost}:${this.theme}`, [], (box) => this.watchBanner(box));
-      }
       // The feed of a chain is its ladder, which the model of a life gives every host: each prompt with the rungs of
       // its ladder, the acts of each rung, and what the prompt closed with.
       // A fold that the operator opened shows the earlier prompts of the thread, or the earlier rungs of a ladder.
@@ -251,17 +267,30 @@ export const feed = part({
         this.programs.set(key, { version: then ? -1 : w.version, live, lines: made });
         return made;
       };
-      const programCard = (id: string, given: readonly ProgramLine[], indent: number) => {
-        // What a model writes changes at each token, so it stands in a card of its own under the program, and the
-        // program stays as it was drawn.
+      const programCard = (
+        id: string,
+        given: readonly ProgramLine[],
+        indent: number,
+        {
+          tone = threadTone(id),
+          frame: framed,
+          first,
+          shown,
+        }: { tone?: RGBA; frame?: boolean; first?: string; shown?: string } = {},
+      ) => {
+        // The numbers of a thread stand in one column: its widest number sets the gutter of each part of its program.
+        const digits = String(
+          given.reduce((most, line) => ("display" in line ? Math.max(most, line.display) : most), 1),
+        ).length;
+        // What a model writes changes at each token, so its row stands in a card of its own under the program, which
+        // the tick draws again, and the program stays as it was drawn.
         const all = given.filter((line) => line.kind !== "writes");
         const writers = given.filter((line) => line.kind === "writes");
         const tails = () => {
           for (const line of writers) {
-            const stream = w.host.streams.get(line.step.id);
-            // Each line that the model finished shows as python, highlighted as it comes, and the line that it
-            // still writes stays a comment under it, so the card is made again at each line and not at each token.
-            const { lines, tail: open } = writing(stream);
+            // Each line that the model finished shows as python, highlighted as it comes, and the card is made again
+            // at each line and not at each token. The row under it takes the next number and the line still written.
+            const { lines } = writing(w.host.streams.get(line.step.id));
             if (lines)
               add(
                 `wrote-${line.step.id}`,
@@ -270,21 +299,18 @@ export const feed = part({
                 (box) => box.add(this.inset(space.between, this.code(lines))),
                 { indent, same: [lines] },
               );
-            const tail = open || (lines ? "writes" : line.text);
             add(
               `writes-${line.step.id}`,
-              `${tail}:${this.feedWidth}:${this.theme}`,
+              `${line.display}:${digits}:${this.feedWidth}:${this.theme}`,
               [],
-              (box) =>
-                box.add(
-                  this.inset(
-                    space.between,
-                    this.text([
-                      [`${glyph.running} `, c.accent],
-                      [`# ${clip(tail, this.feedWidth - indent - 12)}`, c.syntaxComment],
-                    ]),
-                  ),
-                ),
+              (box) => {
+                // The row stands in the column of the program above it.
+                const row = this.box({ paddingLeft: space.between });
+                row.add(
+                  this.thinkingRow(line.step.id, line.display, digits, tone, this.feedWidth - indent - 12),
+                );
+                box.add(row);
+              },
               { indent },
             );
           }
@@ -315,7 +341,8 @@ export const feed = part({
           const ms = began ? Date.now() - began : 0;
           return ms >= 1000 ? spell(Math.floor(ms / 1000) * 1000) : "";
         };
-        const room = this.feedWidth - indent - 8;
+        // A program that a panel frames, as a word of the operator, leaves the room of the bar and the inset of the panel.
+        const room = this.feedWidth - indent - 8 - (framed ? space.between + space.inset : 0);
         // A click on a line opens it in place: its whole text, and under it what each act of the line gave. The
         // program parts at each open line, so that the cards of its acts stand under it.
         const segments: ProgramLine[][] = [[]];
@@ -355,10 +382,12 @@ export const feed = part({
             ),
           ].join("\n");
           add(
-            at ? `program-${id}-${at}` : `program-${id}`,
+            at ? `program-${id}-${at}` : (first ?? `program-${id}`),
             key,
             [],
-            (box) => {
+            (outer) => {
+              const box = framed ? this.panel(outer, tone) : this.box({ paddingLeft: space.between });
+              if (!framed) outer.add(box);
               if (hide && !at)
                 box.add(
                   this.link(
@@ -373,9 +402,14 @@ export const feed = part({
                     },
                   ),
                 );
-              box.add(this.programView(segment, room, took, since, heads));
+              box.add(this.programView(segment, room, took, since, heads, tone, digits));
             },
-            { indent, same: [key] },
+            {
+              indent,
+              same: [key],
+              ...(framed ? { group: "user", heading: false, open: true } : {}),
+              ...(shown !== undefined && !at ? { shown } : {}),
+            },
           );
           const open = segment.at(-1);
           if (open?.kind === "code" && this.lineOpen(open) && open.acts.length)
@@ -443,7 +477,6 @@ export const feed = part({
       };
       let collapsed = -1;
       for (const line of lines) {
-        if (placing(line)) for (const mark of due(line.act.began, (line.act as ActRow).on)) showMark(mark);
         if (collapsed >= 0 && line.depth > collapsed) continue;
         collapsed = -1;
         // The steps of a thread stand in its program, and its messages as comments there. What a thread closed with
@@ -455,6 +488,8 @@ export const feed = part({
         )
           continue;
         if (line.type === "prompt" && threadsOwn.of.has(line.act.id)) continue;
+        // Only a line that the feed shows places a mark: a step under a step stands folded, whenever it began.
+        if (placing(line)) for (const mark of due(line.act.began, (line.act as ActRow).on)) showMark(mark);
         const depth = line.depth;
         const act = line.act as ActRow;
         const indent = line.depth * space.between;
@@ -465,18 +500,37 @@ export const feed = part({
             if (retold || continuing.has(act.by)) continue;
             retold = true;
             const source = String(rows.get(act.by)?.words[1] ?? "");
+            // The branch says what it takes of its source: each message before the moment it starts at, which the
+            // word that made it does not leave out.
+            const maker = w.actOf(String(rows.get(act.by)?.by ?? ""));
+            const messages =
+              maker &&
+              branchMessages(w.acts, source, maker, this.subject(maker), (one) => w.isUserPrompt(one));
+            const name = w.labelOf(source);
             if (source)
-              add(`retold-${act.by}`, `${source}:${this.theme}`, [], (box) =>
-                box.add(
-                  this.link(
-                    [
-                      ["↳ ", c.secondary],
-                      ["Branched from ", c.muted],
-                      [w.labelOf(source), c.text, bold],
-                    ],
-                    () => void w.select(source).catch(w.fail),
-                  ),
-                ),
+              add(
+                `retold-${act.by}`,
+                `${source}:${name}:${messages}:${w.watching}:${this.theme}`,
+                [],
+                (box) => {
+                  box.add(
+                    this.link(
+                      w.watching
+                        ? [
+                            ["↳ ", c.secondary],
+                            [branchStart(name), c.muted],
+                          ]
+                        : [
+                            ["↳ ", c.secondary],
+                            ["Branched from ", c.muted],
+                            [name, c.text, bold],
+                          ],
+                      () => void w.select(source).catch(w.fail),
+                    ),
+                  );
+                  if (messages !== undefined)
+                    box.add(this.text(branchTakes(messages), c.faint, { paddingLeft: space.between }));
+                },
               );
             continue;
           }
@@ -517,23 +571,14 @@ export const feed = part({
           // its whole word, and each act that it made stands under it.
           // A rung that a cancel ended before its model wrote a word shows nothing, since the message says the cancel.
           if (!code.trim() && cancelled(act)) continue;
-          // A word of the operator stands as its program under a quiet header.
-          add(
-            act.id,
-            `you:${this.theme}`,
-            [
-              [glyph.mark, threadTone(act.id)],
-              ["You ran", c.muted],
-            ],
-            () => {},
-            { indent, heading: true, shown: code },
-          );
+          // A word of the operator stands as his messages stand: its program in a panel of his color.
           programCard(
             act.id,
             programFor(act.id, stepOf(act), () =>
               stepLines(act, madeMap(), word, owed, named, w.host.streams),
             ),
             indent,
+            { frame: true, first: act.id, shown: code },
           );
           // A word of the operator that the gate refused says what to do under it.
           const hint = this.gateHint(act);
@@ -564,32 +609,55 @@ export const feed = part({
             // A command that runs shows its last lines under the folded rung that made it.
             add(`tail-${act.id}`, line.text, [], (box) => this.excerpt(box, line.text, true), { indent });
         } else if (line.type === "value") {
-          // A notice closes with nothing, which its quiet line says already.
+          // A notice closes with nothing, which its panel says already.
           if (act.words[0] === "None") continue;
           const value = typeof act.value === "boolean" ? (act.value ? "yes" : "no") : display(act.value);
           const answered = asksOperator(act);
           const short = !value.includes("\n") && Bun.stringWidth(value) < this.feedWidth - 20 - indent;
+          // The answer of a model closes its thread as the thread opened: a panel of its color, with the model and its
+          // effort at its right.
+          const tone = threadTone(threadsOwn.of.get(act.id)?.act.id ?? act.id);
           add(
             `value-${act.id}`,
-            `${value}\n${short}\n${answered}`,
+            `${value}\n${short}\n${answered}\n${this.feedWidth}\n${this.theme}`,
             answered
               ? [
                   [`${glyph.done} `, c.success],
                   ["You answered", c.text, bold],
                   [short ? `  ${value}` : "", c.muted],
                 ]
-              : this.answerLabel(act, false),
+              : [],
             (box) => {
               if (answered && short) return;
+              if (answered) {
+                const answer = this.box({ paddingLeft: space.between });
+                answer.add(this.markdown(value));
+                box.add(answer);
+                return;
+              }
+              const { name, effort } = this.model(String(act.words[2] ?? ""));
+              const row = this.box({ flexDirection: "row" });
               // A column, and not a row, holds the answer, so that its paragraphs wrap at the width of the feed.
-              const answer = this.box({ paddingLeft: space.between });
-              answer.add(this.markdown(value));
-              box.add(answer);
+              const answer = this.box({ flexGrow: 1, flexShrink: 1 });
+              answer.add(this.markdown(value, c.prose, c.background));
+              row.add(answer);
+              row.add(
+                this.text(
+                  [
+                    [name, c.muted],
+                    [effort && effort !== "off" ? `  ${effort}` : "", c.faint],
+                  ],
+                  c.faint,
+                  { marginLeft: space.between },
+                ),
+              );
+              this.panel(box, tone).add(row);
             },
             {
               group: answered ? "question" : "assistant",
               act,
               heading: true,
+              open: !answered,
               indent: indent - space.between,
               shown: value,
             },
@@ -640,7 +708,7 @@ export const feed = part({
                 this.link(
                   [
                     [`${glyph.closed} `, c.faint],
-                    [`${count} earlier ${noun}`, c.muted],
+                    [w.watching ? earlierSteps(count) : `${count} earlier ${noun}`, c.muted],
                   ],
                   () => {
                     w.folds[key] = false;
@@ -655,47 +723,46 @@ export const feed = part({
           // The ceiling of a grant stands in the sidebar, so the feed shows no grant. An act that no word made stands as
           // a line of python under a quiet header, as a word that the operator runs.
           if (act.kind === "grant") continue;
-          add(
-            act.id,
-            `ran:${act.by}:${this.theme}`,
-            [
-              [glyph.mark, threadTone(act.id)],
-              [act.by === "operator" ? "You ran" : `${act.by} ran`, c.muted],
-            ],
-            () => {},
-            { indent, heading: true, shown: act.id },
-          );
           programCard(
             act.id,
             programFor(`act:${act.id}`, `${act.done}:${act.paused}:${act.output ?? 0}`, () =>
               actLines(act, owed, named),
             ),
             indent,
+            { frame: true, first: act.id, shown: act.id },
           );
         } else if (asksOperator(act) && act.words[0] === "None") {
-          // A prompt of None asks nothing: the console closed it as it took it, and it settles as a quiet line, its
-          // first line, which opens to the whole message. No key dismisses it.
+          // A prompt of None asks nothing: the console closed it as it took it. It stands as a message of the
+          // operator stands, a panel of its color, on its first line until a click opens the whole message.
           const message = String(act.words[1] ?? "");
-          const from = act.by === "operator" ? "for you" : `from ${act.by}`;
+          const from = act.by === "operator" ? "" : `from ${act.by}`;
+          const opened = w.folds[act.id] === false;
           const lines = message.split("\n").filter((one) => one.trim()).length;
-          const more = lines > 1 ? `  +${lines - 1} ${lines === 2 ? "line" : "lines"}` : "";
-          const room = this.feedWidth - indent - 12 - Bun.stringWidth(from + more);
+          const more = !opened && lines > 1 ? `+${lines - 1} ${lines === 2 ? "line" : "lines"}` : "";
+          const meta = [more, from].filter(Boolean).join("  ");
+          const room = this.feedWidth - indent - 12 - Bun.stringWidth(meta);
+          const tone = threadTone(act.id);
+          const toggle = () => {
+            w.folds[act.id] = opened;
+            w.save();
+            this.renderContent();
+          };
           add(
             act.id,
-            `${message}\n${this.feedWidth}\n${this.theme}`,
-            [
-              [`${glyph.notice} `, c.faint],
-              ["Notice", c.muted],
-              [`  ${from}`, c.faint],
-              [`  ${clip(shortenHomes(gist(message)), room)}`, c.muted],
-              [more, c.faint],
-            ],
+            `${message}\n${opened}\n${this.feedWidth}\n${this.theme}`,
+            [],
             (box) => {
-              const body = this.box({ paddingLeft: space.between });
-              body.add(this.markdown(message, c.muted));
-              box.add(body);
+              const row = this.box({ flexDirection: "row" });
+              const text = opened
+                ? this.markdown(message, c.text, c.background)
+                : this.link([[clip(shortenHomes(gist(message)), room), c.muted]], toggle);
+              text.flexGrow = 1;
+              text.flexShrink = 1;
+              row.add(text);
+              if (meta) row.add(this.text(meta, c.faint, { marginLeft: space.between, run: toggle }));
+              this.panel(box, tone).add(row);
             },
-            { compact: true, group: "notice", act, indent, shown: message },
+            { group: "user", heading: false, open: true, act, indent, shown: message },
           );
         } else if (asksOperator(act)) {
           const message = String(act.words[1] ?? "");
@@ -748,81 +815,83 @@ export const feed = part({
           if (host && this.threadFolded(host.act.id)) {
             collapsed = depth;
             if (!thread) continue;
-            const [mark, color] = thread ? threadMarks(thread) : [glyph.ring, c.faint];
-            const steps = (madeBy(act.id).length || 0) + (thread?.messages.length ?? 0);
-            const room = this.feedWidth - indent - 16;
+            // A folded thread stands as a message of the operator stands: a panel of its color, here on one line.
+            const [mark, color] = threadMarks(thread);
+            const steps = (madeBy(act.id).length || 0) + (thread.messages.length ?? 0);
+            const ended = thread.state === "cancelled" || thread.state === "failed" ? thread.state : "";
+            const meta = [steps ? `${steps} ${steps === 1 ? "step" : "steps"}` : "", ended]
+              .filter(Boolean)
+              .join("  ");
+            // The controls of the thread take about 30 columns at the right of its line.
+            const room = this.feedWidth - indent - 32 - Bun.stringWidth(meta);
             add(
               act.id,
-              `folded\n${message}\n${mark}\n${steps}\n${this.feedWidth}\n${this.theme}`,
+              `folded\n${message}\n${mark}\n${meta}\n${this.feedWidth}\n${this.theme}`,
               [],
-              (box) =>
-                box.add(
-                  this.link(
-                    [
-                      [`${glyph.mark}`, tone],
-                      [`${mark} `, color],
-                      [`${glyph.closed} `, c.faint],
-                      [clip(shortenHomes(gist(message)), room), c.muted],
-                      [steps ? `  ${steps} ${steps === 1 ? "step" : "steps"}` : "", c.faint],
-                      // A folded thread that a cancel or a failure ended says so in words, beside its mark.
-                      [
-                        thread.state === "cancelled" || thread.state === "failed" ? `  ${thread.state}` : "",
-                        thread.state === "failed" ? c.danger : c.faint,
-                      ],
-                    ],
-                    () => this.foldThread(act.id, false),
-                  ),
-                ),
-              { act, indent, shown: message },
+              (box) => {
+                const row = this.box({ flexDirection: "row" });
+                const text = this.link(
+                  [
+                    [`${mark} `, color],
+                    [clip(shortenHomes(gist(message)), room), c.muted],
+                  ],
+                  () => this.foldThread(act.id, false),
+                );
+                text.flexGrow = 1;
+                text.flexShrink = 1;
+                row.add(text);
+                if (meta)
+                  row.add(
+                    this.text(meta, thread.state === "failed" ? c.danger : c.faint, {
+                      marginLeft: space.between,
+                    }),
+                  );
+                const controls = this.threadControls(act);
+                if (controls) row.add(controls);
+                this.panel(box, tone).add(row);
+              },
+              { act, group: "user", heading: false, open: true, indent, shown: message },
             );
             continue;
           }
-          // A message that the chain or a rung sent is its heading when it is one short line, and stands under its
-          // heading otherwise. The heading says who sent it, and to which model.
+          // Each thread opens on a panel of its color, as a message of the operator does: its message, then at its
+          // right who sent it to which model when the operator did not, the type of the answer, its state, and its
+          // controls.
           const sent = user ? "" : this.sender(act);
-          const line =
-            !message.includes("\n") && Bun.stringWidth(message) + Bun.stringWidth(sent) < this.feedWidth - 8;
-          const state = user ? this.promptState(act) : [];
+          // A message that asks no answer, as a message that a rung adds to a thread, names no type.
+          const state = this.promptState(act).filter(([text]) => text !== "None");
           // A long message shows its first rows until a click opens it, so that a brief of a page leaves the feed
           // readable at a glance.
           const [shortened, rest] =
             w.folds[`message:${act.id}`] === false ? [message, 0] : this.firstRows(message, MESSAGE_ROWS);
           add(
             act.id,
-            `${message}\n${line}\n${sent}\n${plain(state)}\n${rest}\n${thread?.resolved}\n${this.theme}`,
-            user
-              ? [["You", tone]]
-              : [
-                  [`${glyph.mark}`, tone],
-                  [`${glyph.ring} `, c.faint],
-                  [line ? message : sent, c.muted, line ? bold : 0],
-                  [line ? `  ${sent}` : "", c.faint],
-                ],
+            `${message}\n${sent}\n${plain(state)}\n${rest}\n${thread?.resolved}\n${this.feedWidth}\n${this.theme}`,
+            // The label stays hidden: the panel says who sent the message.
+            user ? [["You", tone]] : [[sent, c.faint]],
             (box) => {
-              // A message shows as the operator typed it, with each image it attached named by a mark that opens it.
-              // Its first line says at its right the type of the answer that it asks for, and where it stands.
-              if (user) {
-                // A right click on a message opens its menu, as on the heading of any other act.
-                const row = this.box({
-                  flexDirection: "row",
-                  onMouseDown: (event) => {
-                    if (event.button === 2)
-                      this.actActions(this.session.acts.find((one) => one.id === act.id) ?? act);
-                  },
-                });
-                const text = this.message(shortened);
-                text.flexGrow = 1;
-                text.flexShrink = 1;
-                row.add(text);
-                row.add(this.text(state, c.faint, { marginLeft: space.between }));
-                const controls = this.threadControls(act);
-                if (controls) row.add(controls);
-                this.panel(box, tone).add(row);
-              } else if (!line) {
-                const note = this.box({ paddingLeft: space.between });
-                note.add(this.markdown(shortened, c.muted));
-                box.add(note);
-              }
+              // A message shows as its sender wrote it, with each image it attached named by a mark that opens it.
+              // A right click on a message opens its menu, as on the heading of any other act.
+              const row = this.box({
+                flexDirection: "row",
+                onMouseDown: (event) => {
+                  if (event.button === 2)
+                    this.actActions(this.session.acts.find((one) => one.id === act.id) ?? act);
+                },
+              });
+              // The operator's own words show as he typed them, and the words of a model as the markdown it wrote.
+              const text = user ? this.message(shortened) : this.markdown(shortened, c.text, c.background);
+              text.flexGrow = 1;
+              text.flexShrink = 1;
+              row.add(text);
+              row.add(
+                this.text([...(sent ? [[`${sent}  `, c.faint] as Part] : []), ...state], c.faint, {
+                  marginLeft: space.between,
+                }),
+              );
+              const controls = this.threadControls(act);
+              if (controls) row.add(controls);
+              this.panel(box, tone).add(row);
               if (rest)
                 box.add(
                   this.inset(
@@ -840,10 +909,8 @@ export const feed = part({
                     ),
                   ),
                 );
-              const controls = user ? undefined : this.threadControls(act);
-              if (controls) box.add(controls);
             },
-            { group: user ? "user" : "sent", act, heading: user ? false : undefined, indent, shown: message },
+            { group: user ? "user" : "sent", act, heading: false, open: true, indent, shown: message },
           );
           const parts = [act, ...(thread?.messages ?? [])];
           programCard(
@@ -891,16 +958,7 @@ export const feed = part({
       }
       if (!items && !w.search && !w.loading && !w.error) {
         const { width, height } = this.scroll.viewport;
-        const welcomeKey = JSON.stringify([
-          this.reader,
-          w.catalogRead,
-          w.catalog.length,
-          w.setup,
-          w.actorChoice.model,
-          w.workingDirectory,
-          w.watching,
-        ]);
-        add("welcome", `welcome:${width}:${height}:${this.theme}:${welcomeKey}`, [], (box) =>
+        add("welcome", `welcome:${width}:${height}:${this.theme}:${this.welcomeKey()}`, [], (box) =>
           this.welcome(box, height),
         );
         items++;

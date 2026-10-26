@@ -173,6 +173,7 @@ def __parking(ear):
   __parking,
   lambda names: __parked.update(names),
   lambda name: __parked.discard(name),
+  lambda on, word: __sheet["against"](__engine, __gate, on, word),
 )"#;
 
 /// The next number a callable or a class goes out under, in this process.
@@ -309,13 +310,15 @@ struct Opened {
   base: Object,
   /// A name taken out of the parked names of the park.
   unpark: Object,
+  /// What the gate finds against a word on a chain, which makes no fact.
+  against: Object,
 }
 
 impl Opened {
   /// The callables of the opening, each at its place in what the opening gave, and nothing at a place that boot alone
   /// takes, as a snapshot holds them.
   fn list(&self) -> Vec<Object> {
-    let mut held = vec![Object::none(); 14];
+    let mut held = vec![Object::none(); 15];
     let named = [
       (0, &self.names),
       (1, &self.call),
@@ -327,6 +330,7 @@ impl Opened {
       (9, &self.shown),
       (10, &self.base),
       (13, &self.unpark),
+      (14, &self.against),
     ];
     for (at, one) in named {
       held[at] = one.clone();
@@ -347,6 +351,7 @@ impl Opened {
       shown: at(9),
       base: at(10),
       unpark: at(13),
+      against: at(14),
     }
   }
 }
@@ -441,10 +446,10 @@ impl Outside {
   fn new(given: Handed, opened: &Object) -> Outside {
     let got = opened.as_ref();
     let at = |i: usize| {
-      entry(&got, i).map(|one| one.to_owned()).expect("the opening gives fourteen callables")
+      entry(&got, i).map(|one| one.to_owned()).expect("the opening gives fifteen callables")
     };
     let opened = Opened::of(at);
-    let kept = (0..14).filter_map(|i| at(i).as_ref().handle()).collect();
+    let kept = (0..15).filter_map(|i| at(i).as_ref().handle()).collect();
     Outside { handed: given, opened, kept, ..Outside::default() }
   }
 
@@ -894,8 +899,8 @@ impl Outside {
     });
   }
 
-  /// What the host calls while the life waits on it, answered at once: who speaks, a callable the engine made, or a
-  /// verb of the engine, as it goes out.
+  /// What the host calls while the life waits on it, answered at once: who speaks, a callable the engine made, what
+  /// the gate finds against a word on a chain with no fact, or a verb of the engine, as it goes out.
   fn asked(&mut self, sand: &mut Sand, call: Call) -> Result<Object, Fault> {
     let Call { verb, args, kwargs } = call;
     let kwargs: Vec<_> = kwargs.iter().map(|(key, one)| (key.as_str(), one.clone())).collect();
@@ -912,6 +917,12 @@ impl Outside {
         let named =
           pairs.iter().filter_map(|(key, one)| Some((key.as_str()?, one.to_owned()))).collect();
         self.made(sand, n, words, named)
+      }
+      "against" => {
+        let (args, _) = self.inwards(sand, args, vec![])?;
+        let against = self.opened.against.clone();
+        let got = sand.call(self, &against, args, vec![])?;
+        self.outward(sand, &got)
       }
       _ => self.verb(sand, &verb, args, kwargs),
     }

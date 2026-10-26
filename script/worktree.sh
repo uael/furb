@@ -42,7 +42,7 @@ for dir in target node_modules bind/typescript/node_modules tui/node_modules bin
     clone "$main/$dir" "$path/$dir"
   fi
 done
-for node in "$main"/bind/typescript/*.node; do
+for node in "$main"/bind/typescript/*.node "$main"/bind/typescript/index.cjs; do
   if [ -e "$node" ]; then
     clone "$node" "$path/bind/typescript/"
   fi
@@ -52,4 +52,14 @@ if [ -d "$path/target" ]; then
   find "$path/target" -type d -name incremental -prune -exec rm -rf {} +
 fi
 
-echo "$path is ready on $branch. Run uv sync there, and bun run build for the TUI."
+# The copied dist and native module are those of the main checkout, whose commit may differ from the base. Link the
+# workspace from the copied cache, then build the native module and the TypeScript package of this tree on the warm
+# target, so that bun run check and bun run test run at once.
+if [ -d "$path/node_modules" ] && command -v bun >/dev/null 2>&1; then
+  if ! (cd "$path" && bun install --frozen-lockfile --offline >/dev/null 2>&1 && bun run build >/dev/null 2>&1); then
+    echo "$path is ready on $branch, but the TypeScript side did not build. Run bun install and bun run build there."
+    exit 0
+  fi
+fi
+
+echo "$path is ready on $branch. Run uv sync there for python."

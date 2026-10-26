@@ -18,6 +18,33 @@
 # it, each turn costs the dollars that it holds. It writes the MAX_THINKING_TOKENS of each process beside it too, or
 # unset.
 here=$(dirname "$0")
+# A process that furb starts to ask for the models (FURB_CLAUDE_DISCOVER) answers control requests and no turn, and
+# leaves no trace of a process of a turn. It writes a line in discoveries for each one. When the file models stands
+# beside it, each of its lines is an alias, its window and its efforts joined by commas, or - for none, and it
+# answers from them; else it answers each request with an error, as a command line that has no discovery does.
+if [ -n "${FURB_CLAUDE_DISCOVER-}" ]; then
+  echo "$$" >> "$here/discoveries"
+  while IFS= read -r line; do
+    id=$(printf '%s' "$line" | sed 's/.*"request_id":"\([^"]*\)".*/\1/')
+    body=
+    if [ -f "$here/models" ]; then
+      case $line in
+        *'"initialize"'*)
+          list=$(awk '{n = split($3, e, ","); l = ""; if ($3 != "-") for (i = 1; i <= n; i++) l = l (i > 1 ? "," : "") "\"" e[i] "\""; printf "%s{\"value\":\"%s\",\"supportsEffort\":%s,\"supportedEffortLevels\":[%s]}", (NR > 1 ? "," : ""), $1, ($3 == "-" ? "false" : "true"), l}' "$here/models")
+          body="{\"models\":[{\"value\":\"default\",\"supportsEffort\":true},$list]}" ;;
+        *set_model*) printf '%s' "$line" | sed 's/.*"model":"\([^"]*\)".*/\1/' > "$here/model"; body='{}' ;;
+        *get_context_usage*)
+          body=$(awk -v m="$(cat "$here/model")" '$1 == m {printf "{\"maxTokens\":%s,\"model\":\"resolved-%s\"}", $2, m}' "$here/models") ;;
+      esac
+    fi
+    if [ -n "$body" ]; then
+      printf '%s\n' "{\"type\":\"control_response\",\"response\":{\"subtype\":\"success\",\"request_id\":\"$id\",\"response\":$body}}"
+    else
+      printf '%s\n' "{\"type\":\"control_response\",\"response\":{\"subtype\":\"error\",\"request_id\":\"$id\",\"error\":\"unsupported\"}}"
+    fi
+  done
+  exit 0
+fi
 printf '%s\0' "$@" > "$here/args.$$"
 printf '%s' "${MAX_THINKING_TOKENS-unset}" > "$here/thinking.$$"
 echo "$$" >> "$here/pids"

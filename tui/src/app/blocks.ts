@@ -82,7 +82,7 @@ export const blocks = part({
   ): void {
     const rung = options.act?.kind === "rung" ? options.act : undefined;
     const state = rung?.id ?? id;
-    const closed = this.folded(state, rung, Boolean(options.compact));
+    const closed = !options.open && this.folded(state, rung, Boolean(options.compact));
     key =
       options.compact && closed && !options.preview
         ? "closed"
@@ -386,7 +386,12 @@ export const blocks = part({
    * nothing, since its glyph says it. */
   actState(act: ActRow): State {
     const w = this.session;
-    const running = () => ({ word: `running ${this.progress(act.id)}`, mark: spin(), color: c.accent });
+    // At a moment of the past, an act that had not ended yet shows so, with no spinner and no time, since nothing runs
+    // there.
+    const running = () =>
+      w.moment === undefined
+        ? { word: `running ${this.progress(act.id)}`, mark: spin(), color: c.accent }
+        : { word: "not done yet", mark: glyph.ring, color: c.faint };
     if (act.kind === "grant" && act.done) return { word: "ended", mark: glyph.ring, color: c.faint };
     // Only work moves: an act of another kind that lives, as a grant or the watcher of an extension, lives until
     // something ends it, as a chain does, and shows a dot.
