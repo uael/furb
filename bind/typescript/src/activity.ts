@@ -104,7 +104,10 @@ export class Activity {
       this.runs.set(id, String(fact[4]));
       // A record that keeps no ready holds the word of a rung in the run of that word.
       const rung = this.acts.get(String(fact[4]));
-      if (rung?.kind === "rung" && rung.word === undefined) this.worded(rung, fact[5]);
+      if (rung?.kind === "rung") {
+        if (rung.word === undefined) this.worded(rung, fact[5]);
+        this.compactionWord(rung, String(rung.words[0] || rung.word || ""));
+      }
     }
     if (question && kind === "reply") this.replies.set(id, [String(fact[3]), String(fact[4]), by]);
     if (question && !STEPS.has(kind)) {
@@ -137,6 +140,19 @@ export class Activity {
       return;
     }
     const act = this.acts.get(id);
+    if (
+      kind === "enable" &&
+      act?.kind === "chain" &&
+      typeof fact[3] === "string" &&
+      !act.extensions?.includes(fact[3])
+    ) {
+      act.extensions = [...(act.extensions ?? []), fact[3]];
+      this.mark(act);
+    }
+    if (kind === "prefix" && act?.kind === "chain" && by !== id) {
+      act.compactions = [...(act.compactions ?? []), { at, by }];
+      this.mark(act);
+    }
     if (kind === "pause" || kind === "wake") {
       const paused = kind === "pause";
       this.controls.delete(id);
@@ -220,6 +236,21 @@ export class Activity {
   private worded(act: LiveAct, word: unknown): void {
     act.word = String(word ?? "");
     this.mark(act);
+  }
+  private compactionWord(act: LiveAct, word: string): void {
+    const chain = this.acts.get(act.on);
+    if (chain?.kind !== "chain") return;
+    const summary = word.match(/^<s:(summary\w*)>\n?([\s\S]*?)<\/s:\1>$/m)?.[2];
+    const restore = word.match(
+      /^\s*restore\((["'])(chain\d+)\1\)[ \t]*\n<s:(summary\w*)>\n?[\s\S]*<\/s:\3>\nreground\(\)\s*$/,
+    )?.[2];
+    const reground = /^reground\(\)\s*$/m.test(word);
+    if (restore && restore === chain.words[1] && reground && summary !== undefined) {
+      if (!chain.compactions?.some((cut) => cut.source === restore)) {
+        chain.compactions = [...(chain.compactions ?? []), { at: act.began, by: act.id, source: restore }];
+        this.mark(chain);
+      }
+    }
   }
   private updateRun(act: LiveAct): void {
     if (act.kind !== "rung") return;

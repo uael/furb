@@ -1,0 +1,24 @@
+  furb-self-compaction-proof-CfrBsZ › Main     Feed    Transcript    Changes
+
+  ┃ Continue the same prompt after             int  ▾ Collapse   ○ Open again
+  ┃ compaction.
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+       # compacted in place
+     1 before = 1
+     2 compact(filters=[], summary="Keep before = 1 and continue this...")
+     3 summary = "Keep before = 1 and continue this same prompt."
+     4 reground()
+     5 after = before + 1
+     6 close(after)
+     7 close(None)
+
+  ● sonnet  high
+    2
+
+  ╻▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+  ┃ Ask anything, or type / for commands
+  ┃
+  ┃   Prompt    Python    ⌃R   on Main   sonnet   high effort   returns str
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+  ○ Ready                                                ⌃P commands   F1 help
