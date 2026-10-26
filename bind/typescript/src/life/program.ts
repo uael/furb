@@ -7,7 +7,7 @@ import { placed } from "./source.js";
  *
  * - `code`: a line of a word, with the acts that it made, whether it runs now, why it failed, and its hint: what its
  *   acts came to in a few words.
- * - `quote`: a quote of a word, with its name, value and original source for display as a string binding.
+ * - `quote`: a quote of a word, folded to its name, its first line and its count of lines.
  * - `output`: a line that a command prints while its line runs.
  * - `writes`: what the model writes while its word has not come yet.
  * - `note`: a quiet comment: a message that came to the thread.
@@ -19,29 +19,15 @@ export type ProgramLine =
       kind: "code";
       step: LiveAct;
       number: number;
-      /** The number in the thread, separate from the line in the original step. */
-      display?: number;
-      /** The original source when one display line holds more than one source line. */
-      source?: string;
       text: string;
       acts: LiveAct[];
       runs: boolean;
       fails?: string;
       hint: string;
     }
-  | {
-      kind: "quote";
-      step: LiveAct;
-      number: number;
-      display?: number;
-      text: string;
-      name: string;
-      lines: number;
-      value: string;
-      source: string;
-    }
+  | { kind: "quote"; step: LiveAct; number: number; text: string; name: string; lines: number }
   | { kind: "output"; step: LiveAct; act: LiveAct; text: string }
-  | { kind: "writes"; step: LiveAct; text: string; display?: number }
+  | { kind: "writes"; step: LiveAct; text: string }
   | { kind: "note"; step: LiveAct; text: string }
   | { kind: "earlier"; step: LiveAct; count: number; text: string };
 
@@ -149,7 +135,6 @@ export function stepLines(
   const running = actState(step, owed) === "running";
   const open = running ? children.findLast((act) => !act.done && followed.has(act.kind)) : undefined;
   const source = text.split("\n");
-  const compact = compactRows(text);
   const failing = why ? Number(why.match(/\bline (\d+)/)?.[1] ?? source.length) : 0;
   for (let index = 0; index < source.length; index++) {
     const line = source[index] ?? "";
@@ -164,26 +149,20 @@ export function stepLines(
         text: first(body),
         name: quote[1] ?? "",
         lines: lineCount(body.replace(/^\n/, "")),
-        value: body.replace(/^\n/, ""),
-        source: source.slice(index, end + 1).join("\n"),
       });
       index = end;
       continue;
     }
-    const row = compact.get(index);
-    if (row?.skip) continue;
-    const endRow = row?.end ?? index;
-    const acts = on.slice(index, endRow + 1).flat();
+    const acts = on[index] ?? [];
     const runs = Boolean(open && acts.includes(open));
     out.push({
       kind: "code",
       step,
       number: index + 1,
-      text: row?.text ?? line,
-      ...(endRow > index ? { source: source.slice(index, endRow + 1).join("\n") } : {}),
+      text: line,
       acts,
       runs,
-      ...(failing > index && failing <= endRow + 1 && why ? { fails: why } : {}),
+      ...(failing === index + 1 && why ? { fails: why } : {}),
       hint: hintOf(acts, owed, label),
     });
     if (runs && open?.kind === "bash")
@@ -191,10 +170,7 @@ export function stepLines(
         if (printed) out.push({ kind: "output", step, act: open, text: printed });
   }
   if (failed(step) && !why) out.push({ kind: "note", step, text: `# ${step.id} failed` });
-  let display = 0;
-  return out.map((line) =>
-    line.kind === "code" || line.kind === "quote" ? { ...line, display: ++display } : line,
-  );
+  return out;
 }
 
 /** The program of a thread: the words of its steps, in the order they began, as one program. A thread is its prompt
@@ -215,23 +191,6 @@ export function threadProgram(
   }
   steps.sort((a, b) => a.began - b.began);
   const out: ProgramLine[] = [];
-  const offsets = new Map<string, number>();
-  let number = 0;
-  for (const step of steps) {
-    offsets.set(step.id, number);
-    if (step.kind === "rung") {
-      const source = word(step);
-      const compact = compactRows(source);
-      number += Math.max(1, source.split("\n").filter((_, at) => !compact.get(at)?.skip).length);
-    }
-  }
-  const positions = new Map<string, number>();
-  const numbered = (line: ProgramLine): ProgramLine => {
-    if (line.kind !== "code" && line.kind !== "quote" && line.kind !== "writes") return line;
-    const next = (positions.get(line.step.id) ?? offsets.get(line.step.id) ?? 0) + 1;
-    positions.set(line.step.id, next);
-    return { ...line, display: next };
-  };
   // A thread of many steps makes the lines of its last steps alone, and the messages that came before them fold with
   // the earlier steps.
   const rungs = steps.filter((step) => step.kind === "rung");
@@ -263,7 +222,7 @@ export function threadProgram(
     }
     flush(last);
     if (step.kind === "prompt") out.push({ kind: "note", step, text: `# you: ${message}` });
-    else out.push(...stepLines(step, made, word, owed, label, streams).map(numbered));
+    else out.push(...stepLines(step, made, word, owed, label, streams));
   }
   flush(last);
   return out;
@@ -364,11 +323,8 @@ export function foldStrings(
     const size = one.end - one.start;
     const kept = Math.max(KEEP, size - excess - FOLD.length);
     if (kept + FOLD.length >= size) continue;
-    let boundary = one.start + kept;
-    if (/[\uDC00-\uDFFF]/.test(line[boundary] ?? "")) boundary--;
-    while (boundary > one.start && line[boundary - 1] === "\\") boundary--;
-    keep.set(index, boundary - one.start);
-    excess -= size - (boundary - one.start) - FOLD.length;
+    keep.set(index, kept);
+    excess -= size - kept - FOLD.length;
   }
   let text = "";
   let from = 0;
@@ -382,79 +338,4 @@ export function foldStrings(
     from = one.end;
   }
   return { text: text + line.slice(from), folds };
-}
-
-/** Display rows of Python with complete multiline literals on one escaped line. Incomplete literals stay as source,
- * so a stream never invents a closing mark or hides what has not arrived. */
-function compactRows(source: string): Map<number, { text?: string; end?: number; skip?: boolean }> {
-  const rows = new Map<number, { text?: string; end?: number; skip?: boolean }>();
-  let line = 0;
-  let start = 0;
-  let shown = "";
-  let firstLine = 0;
-  for (let at = 0; at < source.length; ) {
-    const char = source[at] ?? "";
-    const quote = at === start ? source.slice(at).match(/^<s:(\w+)>/) : undefined;
-    if (quote) {
-      const close = new RegExp(`</s:${quote[1]}>$`, "m");
-      const end = close.exec(source.slice(at));
-      if (!end) break;
-      const to = at + end.index + end[0].length;
-      const count = source.slice(at, to).split("\n").length - 1;
-      for (let k = 1; k <= count; k++) rows.set(line + k, { skip: true });
-      line += count;
-      firstLine = line;
-      at = to;
-      continue;
-    }
-    if (char === "#") {
-      const end = source.indexOf("\n", at);
-      at = end < 0 ? source.length : end;
-      continue;
-    }
-    if (char === "\n") {
-      if (line > firstLine) rows.set(firstLine, { text: shown + source.slice(start, at), end: line });
-      line++;
-      firstLine = line;
-      start = at + 1;
-      shown = "";
-      at++;
-      continue;
-    }
-    if (char !== "'" && char !== '"') {
-      at++;
-      continue;
-    }
-    const triple = source.startsWith(char.repeat(3), at);
-    const mark = triple ? char.repeat(3) : char;
-    let end = at + mark.length;
-    while (end < source.length && !source.startsWith(mark, end)) end += source[end] === "\\" ? 2 : 1;
-    if (end >= source.length) break;
-    const body = source.slice(at + mark.length, end);
-    if (triple && body.includes("\n")) {
-      const prefix = source.slice(start, at).match(/(?<![\w])[rRbBuUfFtT]{1,2}$/)?.[0] ?? "";
-      const raw = /r/i.test(prefix);
-      const literal = raw
-        ? JSON.stringify(body)
-        : `"${body.replace(/\\[\s\S]|["\n\r]/g, (part) =>
-            part === "\n"
-              ? "\\n"
-              : part === "\r"
-                ? "\\r"
-                : part === '"'
-                  ? '\\"'
-                  : part === "\\\n"
-                    ? ""
-                    : part,
-          )}"`;
-      shown += source.slice(start, at - prefix.length) + prefix.replace(/[rR]/g, "") + literal;
-      const count = body.split("\n").length - 1;
-      for (let k = 1; k <= count; k++) rows.set(line + k, { skip: true });
-      line += count;
-      start = end + mark.length;
-    }
-    at = end + mark.length;
-  }
-  if (line > firstLine) rows.set(firstLine, { text: shown + source.slice(start), end: line });
-  return rows;
 }

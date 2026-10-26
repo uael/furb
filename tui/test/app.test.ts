@@ -370,9 +370,8 @@ test("a prompt of None to the operator is a notice that settles as a quiet line,
       expect(session.operatorPrompt).toBeUndefined();
       expect(session.desk.asks).toEqual([]);
       const shown = await drawn(frame, screen.renderer.root);
-      expect(shown).toContain("┃ The build is green.");
-      expect(shown).toContain("┃ Each check passed.");
-      expect(shown).not.toContain("◇ Notice");
+      expect(shown).toMatch(/▸ ◇ Notice {2}for you {2}The build is green\. {2}\+1 line/);
+      expect(shown).not.toContain("Each check passed.");
       expect(shown).not.toContain("You answered");
       expect(shown).not.toContain("⌃A");
     },
@@ -459,7 +458,8 @@ test("the markdown of a message draws each element with no marks, and a code blo
         on: session.engine.root,
       });
       await until(session.host, () => session.acts.some((act) => act.id === id && act.done));
-      // A notice settles with its whole Markdown message in the common message panel.
+      // A notice settles folded, and opens to its message.
+      session.folds[id] = false;
       await session.refresh();
       await drawn(frame, screen.renderer.root);
       const rows = (await frame()).split("\n");
@@ -486,9 +486,9 @@ test("the markdown of a message draws each element with no marks, and a code blo
       const spans = screen.captureSpans();
       const palette = palettes.ink;
       expect(cellAt(spans, x, label + 1).fg?.equals(RGBA.fromHex(palette.syntaxKeyword))).toBe(true);
-      // The notice uses the message panel, with its code block on the contrasting feed surface.
-      expect(cellAt(spans, x - 1, label + 1).bg?.equals(RGBA.fromHex(palette.background))).toBe(true);
-      expect(cellAt(spans, x, label - 2).bg?.equals(RGBA.fromHex(palette.panel))).toBe(true);
+      // The notice stands on the background, and its code block on the panel.
+      expect(cellAt(spans, x - 1, label + 1).bg?.equals(RGBA.fromHex(palette.panel))).toBe(true);
+      expect(cellAt(spans, x, label - 2).bg?.equals(RGBA.fromHex(palette.background))).toBe(true);
     },
     { width: 100, height: 60 },
   ));
@@ -596,7 +596,7 @@ test("rewind is a recorded rung and keeps the selected transcript after reopenin
   }
 });
 
-test("an act that no word made stands as a lit line of python, which says its time after a second on a source surface that stays in place", () =>
+test("an act that no word made stands as a lit line of python, which says its time after a second under a header that stays in place", () =>
   composing(
     async ({ session, app, screen, frame }) => {
       // The clock stands still from before the wait starts, so the elapsed time is what the test moves it by, however
@@ -609,12 +609,12 @@ test("an act that no word made stands as a lit line of python, which says its ti
         const before = await frame();
         expect(before).toContain(`${id} = wait(60)`);
         expect(before).not.toContain("1.0s");
-        const card = app.scroll.getChildren().find((node) => node.id === `program-${id}`);
-        if (!card) throw new Error("No source surface for the pending wait.");
-        // The clock moves past a second of the elapsed time: the line says it, and the source stays.
+        const card = app.scroll.getChildren().find((node) => node.id === id);
+        if (!card) throw new Error("No header for the pending wait.");
+        // The clock moves past a second of the elapsed time: the line says it, and the header stays.
         setSystemTime(new Date(start + 1300));
         await frame();
-        expect(app.scroll.getChildren().find((node) => node.id === `program-${id}`)).toBe(card);
+        expect(app.scroll.getChildren().find((node) => node.id === id)).toBe(card);
         expect(screen.captureCharFrame()).toMatch(new RegExp(`${id} = wait\\(60\\) +# waits 60s +1\\.0s`));
       } finally {
         setSystemTime();

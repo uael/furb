@@ -1,5 +1,0 @@
-<s:summary>
-Keep the exact value and the pending question.
-The next step verifies the answer. Keep the source of each decision, the exact value that the operator approved, and the pending question together. Check the original files before the next edit. Do not drop this final sentence.
-</s:summary>
-reground()

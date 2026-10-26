@@ -74,19 +74,10 @@ step says how long the step ran and what the answers of its model cost. The time
 saw run, since the record holds no time. The line that runs is lit, with a mark in the gutter and, after a second,
 its time, and the last lines that its command prints stream under it. A line that the gate refused has a red cross in
 the gutter, and the reason stands under it as a comment. A message that you send to the thread, and each notice of
-the chain, stands as a comment among the steps. What the model writes before its word comes stands at the end of
-the same program as Python. A complete statement takes its syntax colors while the next statement arrives. The
-source keeps its selection when the full word arrives. Its last numbered line shows the model's thought as a
-comment, or `# thinking` when none came.
-The loader stands before the number and does not move when reduced motion is on. A word that you run stands in the
-same source column without another heading. So does an act that no word made, as a command that `/bash` starts:
-one line of Python that binds the act to its name, as `bash3 = bash("make docs")`.
-
-The numbers continue through the steps of a thread, even when earlier steps fold. A quote and a complete multiline
-string each take one display line as an escaped string binding. They open in place like other long strings. Copy
-its source keeps the original word, with its original lines and quotes; display numbers do not change source
-locations. Questions, notices and folded threads share the panel of your messages. A question's choices point the
-input at that answer; Enter sends it, and Other lets you write your own words.
+the chain, stands as a comment among the steps, and what the model writes before its word comes stands under the
+program. The answer of the thread stands under the name of the model that gave it. A word that you run stands in the
+same way under You ran, and so does an act that no word made, as a command that `/bash` starts: one line of Python
+that binds the act to its name, as `bash3 = bash("make docs")`.
 
 A click on a line opens it in place: its whole text, cut into rows at the column of the code, and under it what each
 of its acts gave, as the output of a command or the text of a read. A second click folds it. A line too long for the

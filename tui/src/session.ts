@@ -17,18 +17,7 @@ import {
   shapes,
   WORK,
 } from "furb";
-import {
-  type ActIndex,
-  type Ask,
-  aimed,
-  beside,
-  type ChainRun,
-  chainRuns,
-  type Desk,
-  desk,
-  failed,
-  threadOf,
-} from "furb/life";
+import { type ActIndex, type Ask, aimed, beside, type Desk, desk, failed } from "furb/life";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { expandHome, fileReferences, fromDirectory, projectFiles, shortenHome } from "./files.ts";
 import { dollars } from "./format.ts";
@@ -122,28 +111,6 @@ interface Index {
   /** The last act on each chain that is no chain and no grant, and the chains whose last act failed. */
   latest: Map<string, ActRow>;
   failing: Set<string>;
-}
-
-/** An empty index, filled in record order and updated only for the acts that changed. */
-function emptyIndex(acts: readonly ActRow[]): Index {
-  return {
-    of: acts,
-    ids: new Map(),
-    at: new Map(),
-    on: new Map(),
-    made: new Map(),
-    chains: [],
-    places: new Map(),
-    words: new Map(),
-    live: new Map(),
-    stamps: new Map(),
-    chained: new Map(),
-    touched: [],
-    written: [],
-    work: new Map(),
-    latest: new Map(),
-    failing: new Set(),
-  };
 }
 
 /** The place of an act in each list of an index that holds it, and whether it is among the writes that are done. */
@@ -339,12 +306,6 @@ export class Session extends EventEmitter {
   filled?: number;
   /** The net change of each file in the scope of the review. */
   changes: ShownChange[] = [];
-  /** Why a scope has no changes when its source cannot be read. */
-  changesReason = "";
-  /** An optional branch base selected by /changes branch <base>. */
-  branchBase = "";
-  /** A changes command that needs the view to choose a hunk. */
-  reviewAction?: (kind: "revert" | "comment") => void | Promise<void>;
   /** Which changes the view of changes reviews: this turn, this chain, the life, or the branch against main. */
   scope: Scope = "chain";
   program: Record<string, string> = {};
@@ -457,10 +418,6 @@ export class Session extends EventEmitter {
     // acts are of the host that made them.
     host.on("reset", () => {
       this.counted = 0;
-      this.held = 0;
-      this.acts = [];
-      this.feedRead = undefined;
-      this.version++;
       void this.refresh();
     });
     // A report of the life that no model reads, such as a file that the scratch directory leaves out, shows as a
@@ -612,61 +569,17 @@ export class Session extends EventEmitter {
           let moved = false;
           for (const act of acts) {
             const place = index.at.get(act.id);
-            moved ||=
-              place === undefined ||
-              phaseOf(next[place]) !== phaseOf(act) ||
-              next[place]?.compactions !== act.compactions ||
-              next[place]?.extensions !== act.extensions;
-            const previous = place === undefined ? undefined : next[place];
+            moved ||= place === undefined || phaseOf(next[place]) !== phaseOf(act);
             if (place !== undefined) next[place] = act;
             else index.at.set(act.id, next.push(act) - 1);
             index.ids.set(act.id, act);
             placed(index, act);
-            if (act.kind === "chain") {
-              const source = (row?: ActRow) => row?.compactions?.find((cut) => cut.source)?.source;
-              if (!previous || source(previous) !== source(act)) {
-                this.runsRead = undefined;
-                this.cutsRead = undefined;
-              } else {
-                const at = this.runsRead?.headAt.get(act.id);
-                if (at !== undefined && this.runsRead) this.runsRead.heads[at] = act;
-              }
-              const before = previous?.compactions ?? [];
-              const after = act.compactions ?? [];
-              if (
-                before.length !== after.length ||
-                before.some(
-                  (cut, i) =>
-                    cut.at !== after[i]?.at || cut.by !== after[i]?.by || cut.source !== after[i]?.source,
-                )
-              ) {
-                this.feedRead = undefined;
-                this.cutsRead = undefined;
-              }
-            }
-            this.feedAct(act);
             if (!act.done) this.started[act.id] ??= Date.now();
             if (act.took !== undefined) this.took[act.id] = act.took;
           }
           if (moved) this.version++;
         }
         this.counted = count;
-        const head = this.headOf(this.selected);
-        if (head !== this.selected) {
-          for (const [key, draft] of Object.entries(this.drafts))
-            if (key.startsWith(`${this.selected}:`)) {
-              const next = `${head}:${key.slice(this.selected.length + 1)}`;
-              this.drafts[next] ??= draft;
-            }
-          this.selected = head;
-          this.held = 0;
-          this.editing = undefined;
-          this.turns = [];
-          this.answers = [];
-          this.program = {};
-          this.dirty = true;
-          continue;
-        }
         // The acts and the actor of one snapshot are of one moment: the choice holds until its rung is done there.
         const choice = this.choices.get(selected);
         if (choice?.rung && this.actOf(choice.rung)?.done) this.choices.delete(selected);
@@ -683,27 +596,19 @@ export class Session extends EventEmitter {
         }
         if (this.view === "changes") {
           const writes = this.scope === "branch" ? null : this.writes();
-          const read = `${this.scope}:${this.branchBase}:${this.host.changes}:${writes ? `${writes[0]}:${writes.length}:${writes.at(-1)}` : ""}`;
+          const read = `${this.scope}:${this.host.changes}:${writes ? `${writes[0]}:${writes.length}:${writes.at(-1)}` : ""}`;
           if (read !== this.changesRead) {
             try {
               const changes = await (this.scope === "branch"
-                ? this.host.branchChanges(this.branchBase || undefined)
+                ? this.host.branchChanges()
                 : this.host.netChanges(this.scope === "life" ? null : writes));
               this.changes = changes.map(reviewed);
-              this.changesReason = "";
               this.changesRead = read;
             } catch (error) {
-              const kind = (error as { name?: unknown } | undefined)?.name;
-              if (kind === "DamagedJournal") {
-                this.changes = [];
-                this.fail(error);
-              } else if (this.scope === "branch" && kind === "ReviewUnavailable") {
-                this.changes = [];
-                this.changesReason = error instanceof Error ? error.message : String(error);
-              } else {
-                throw error;
-              }
-              this.changesRead = read;
+              // A damaged journal is the failure of the view of changes alone, and it never stops the session: the
+              // view says it and offers to repair it, and the next read tries again.
+              if ((error as { name?: unknown } | undefined)?.name !== "DamagedJournal") throw error;
+              this.fail(error);
             }
           }
         }
@@ -775,7 +680,6 @@ export class Session extends EventEmitter {
   /** What the acts of a chain do, or the acts of every chain: one asks the operator, one waits for the resume of a
    * reopened record, one runs, a pause holds one, or the last act failed. */
   private actStatus(chain?: string): SessionStatus {
-    if (chain) chain = this.headOf(chain);
     // The state holds while no act starts, ends, pauses or wakes, and the prompts and the held work stay as they are.
     if (this.states.version !== this.version) this.states = { version: this.version, of: new Map() };
     const key = `${chain ?? ""}\n${[...this.host.prompts.keys()].join(" ")}\n${[...this.host.pending.keys()].join(" ")}`;
@@ -791,10 +695,9 @@ export class Session extends EventEmitter {
     if (this.liveRead.version === this.version) return this.liveRead.on;
     const on = new Map<string, ActRow[]>();
     for (const act of this.indexed().live.values()) {
-      const chain = this.headOf(act.on);
-      const list = on.get(chain);
+      const list = on.get(act.on);
       if (list) list.push(act);
-      else on.set(chain, [act]);
+      else on.set(act.on, [act]);
     }
     this.liveRead = { version: this.version, on };
     return on;
@@ -804,10 +707,7 @@ export class Session extends EventEmitter {
   private statusOf(chain?: string): SessionStatus {
     const index = this.indexed();
     const mine = (act?: ActRow): act is ActRow =>
-      act !== undefined &&
-      act.kind !== "chain" &&
-      act.kind !== "grant" &&
-      (!chain || this.headOf(act.on) === chain);
+      act !== undefined && act.kind !== "chain" && act.kind !== "grant" && (!chain || act.on === chain);
     const asked = (ids: Iterable<string>) => [...ids].some((id) => mine(index.ids.get(id)));
     if (asked(this.host.prompts.keys())) return "blocked";
     if (asked(this.host.pending.keys())) return "paused";
@@ -815,15 +715,7 @@ export class Session extends EventEmitter {
     const live = (chain ? (this.liveOn().get(chain) ?? []) : [...index.live.values()]).filter(mine);
     if (live.some(working)) return "working";
     if (live.some((act) => act.paused && !act.done)) return "paused";
-    const latest = chain
-      ? (this.runs().get(chain)?.members ?? [chain])
-          .map((id) => index.latest.get(id))
-          .reduce<ActRow | undefined>(
-            (last, act) =>
-              act && (!last || (index.at.get(act.id) ?? 0) > (index.at.get(last.id) ?? 0)) ? act : last,
-            undefined,
-          )
-      : this.acts.findLast(mine);
+    const latest = chain ? index.latest.get(chain) : this.acts.findLast(mine);
     return latest && failed(latest) ? "error" : "idle";
   }
   /** The state of a chain. A chain that the operator started, directly or by a word of their own, and that finished
@@ -855,7 +747,7 @@ export class Session extends EventEmitter {
         (id) => index.ids.get(id)?.on ?? [],
       ),
     ]);
-    const active = [...new Set([...restless].map((id) => this.headOf(id)))]
+    const active = [...restless]
       .flatMap((id) => {
         const chain = index.ids.get(id);
         return chain?.kind === "chain" ? [[chain, this.chainStatus(id)] as [ActRow, SessionStatus]] : [];
@@ -866,13 +758,13 @@ export class Session extends EventEmitter {
       .sort(
         ([one], [other]) => (index.places.get(one.id)?.chain ?? 0) - (index.places.get(other.id)?.chain ?? 0),
       );
-    return { active, resting: this.chains.length - active.length };
+    return { active, resting: index.chains.length - active.length };
   }
   /** The first chains that rest, in the order of the chains, up to a count. */
   restingChains(count: number): ActRow[] {
     const shown = new Set(this.activeChains().active.map(([chain]) => chain.id));
     const out: ActRow[] = [];
-    for (const chain of this.chains) {
+    for (const chain of this.indexed().chains) {
       if (out.length >= count) break;
       if (!shown.has(chain.id)) out.push(chain);
     }
@@ -893,38 +785,32 @@ export class Session extends EventEmitter {
    * the operator to look at them, and the state that each chain had when the view last read it. */
   private readonly unread = new Set<string>();
   private readonly phases = new Map<string, SessionStatus>();
-  private runsRead?: {
-    base: Index;
-    runs: Map<string, ChainRun>;
-    heads: ActRow[];
-    headAt: Map<string, number>;
-  };
-  private runs(): Map<string, ChainRun> {
-    const base = this.indexed();
-    if (this.runsRead?.base !== base) {
-      const runs = chainRuns(base.chains);
-      const separate = base.chains.every((chain) => runs.get(chain.id)?.head === chain.id);
-      const heads = separate
-        ? base.chains
-        : base.chains.filter((chain) => runs.get(chain.id)?.head === chain.id);
-      this.runsRead = { base, runs, heads, headAt: new Map(heads.map((chain, at) => [chain.id, at])) };
-    }
-    return this.runsRead.runs;
-  }
-  /** The work destination of a logical chain. Ordinary branches keep their own destination. */
-  headOf(id: string): string {
-    return this.runs().get(id)?.head ?? id;
-  }
   get chains(): ActRow[] {
-    this.runs();
-    return this.runsRead?.heads ?? this.indexed().chains;
+    return this.indexed().chains;
   }
   /** The index of the acts. A snapshot that changes the acts places each act that changed, and a list of acts that
    * the session did not index, as one that a test sets, is indexed whole. */
   private index?: Index;
   private indexed(): Index {
     if (this.index?.of === this.acts) return this.index;
-    const index = emptyIndex(this.acts);
+    const index: Index = {
+      of: this.acts,
+      ids: new Map(),
+      at: new Map(),
+      on: new Map(),
+      made: new Map(),
+      chains: [],
+      places: new Map(),
+      words: new Map(),
+      live: new Map(),
+      stamps: new Map(),
+      chained: new Map(),
+      touched: [],
+      written: [],
+      work: new Map(),
+      latest: new Map(),
+      failing: new Set(),
+    };
     for (const [place, act] of this.acts.entries()) {
       index.ids.set(act.id, act);
       index.at.set(act.id, place);
@@ -934,56 +820,10 @@ export class Session extends EventEmitter {
     return index;
   }
   /** The index of the acts that the ladder of the chain shown reads, so that a frame makes no pass over every act. */
-  private feedRead?: { base: Index; selected: string; members: Set<string>; cuts: Set<string>; index: Index };
-  private feedAct(row: ActRow): void {
-    const held = this.feedRead;
-    if (!held || (!held.members.has(row.on) && !held.index.ids.has(row.by))) return;
-    const act =
-      held.members.has(row.on) && row.kind !== "chain"
-        ? {
-            ...row,
-            on: held.selected,
-            ...(row.kind === "rung" && held.cuts.has(row.by)
-              ? { by: threadOf(row, held.base.ids) ?? "operator" }
-              : {}),
-          }
-        : row;
-    held.index.ids.set(act.id, act);
-    held.index.at.set(act.id, held.base.at.get(act.id) ?? 0);
-    placed(held.index, act);
-  }
-  private feedIndex(): Index {
-    const original = this.indexed();
-    const members = this.runs().get(this.selected)?.members ?? [this.selected];
-    const cuts = this.compactions;
-    if (members.length === 1 && !cuts.length) return original;
-    if (this.feedRead?.base === original && this.feedRead.selected === this.selected)
-      return this.feedRead.index;
-    const index = emptyIndex(this.acts);
-    this.feedRead = {
-      base: original,
-      selected: this.selected,
-      members: new Set(members),
-      cuts: new Set(cuts.map((cut) => cut.by)),
-      index,
-    };
-    // Only the selected run and the acts that its words made are indexed. Other chains stay in the life index.
-    const local = new Map<string, ActRow>();
-    for (const id of members)
-      for (const row of original.on.get(id) ?? []) {
-        local.set(row.id, row);
-        for (const child of original.made.get(row.id) ?? []) local.set(child.id, child);
-      }
-    for (const row of [...local.values()].sort(
-      (a, b) => (original.at.get(a.id) ?? 0) - (original.at.get(b.id) ?? 0),
-    ))
-      this.feedAct(row);
-    return index;
-  }
   get ladderIndex(): ActIndex & { live: Iterable<ActRow>; stamp: (id: string) => number } {
-    const index = this.feedIndex();
+    const index = this.indexed();
     return {
-      on: index.work.get(this.selected) ?? [],
+      on: this.activity,
       made: index.made,
       ids: index.ids,
       live: index.live.values(),
@@ -997,36 +837,7 @@ export class Session extends EventEmitter {
   /** The acts of the chain shown, but its chains, as the index holds them: a list that grows as acts come, in which an
    * act that changed takes its place. */
   get activity(): ActRow[] {
-    return this.feedIndex().work.get(this.selected) ?? [];
-  }
-  private cutsRead?: {
-    base: Index;
-    selected: string;
-    cuts: NonNullable<ActRow["compactions"]>;
-    by: Map<string, NonNullable<ActRow["compactions"]>>;
-  };
-  private cutIndex() {
-    const base = this.indexed();
-    if (this.cutsRead?.base === base && this.cutsRead.selected === this.selected) return this.cutsRead;
-    const cuts = (this.runs().get(this.selected)?.members ?? [this.selected])
-      .flatMap((id) => base.ids.get(id)?.compactions ?? [])
-      .sort((a, b) => a.at - b.at);
-    const by = new Map<string, NonNullable<ActRow["compactions"]>>();
-    for (const cut of cuts) {
-      const group = by.get(cut.by) ?? [];
-      group.push(cut);
-      by.set(cut.by, group);
-    }
-    this.cutsRead = { base, selected: this.selected, cuts, by };
-    return this.cutsRead;
-  }
-  /** The cuts in the logical chain shown, in record order, retained until its cut metadata changes. */
-  get compactions() {
-    return this.cutIndex().cuts;
-  }
-  /** The cuts by the step that made them, which the feed reads once for all the programs it shows. */
-  get compactionsBy() {
-    return this.cutIndex().by;
+    return this.indexed().work.get(this.selected) ?? [];
   }
   /** The acts of the chain shown that are not done, but its chains, in the order of the acts: what a frame reads of
    * the work that runs, with no pass over every act of the chain. */
@@ -1082,10 +893,6 @@ export class Session extends EventEmitter {
       prompts: [...host.prompts.values()].filter(held),
       notices: [],
       label: (id) => this.labelOf(id),
-    });
-    made.asks = made.asks.map((ask) => {
-      const chain = this.headOf(ask.chain);
-      return chain === ask.chain ? ask : { ...ask, chain, label: this.labelOf(chain) };
     });
     this.deskRead = { version: this.version, prompts: host.prompts, gone, desk: made };
     return made;
@@ -1192,7 +999,7 @@ export class Session extends EventEmitter {
     return {
       ids: index.ids,
       on: index.on,
-      chains: this.chains,
+      chains: index.chains,
       live: index.live.values(),
       stamp: (chain) => index.chained.get(chain) ?? 0,
       touched: index.touched,
@@ -1224,7 +1031,6 @@ export class Session extends EventEmitter {
     return id === this.engine.root ? "Main" : String((chain?.kind === "chain" && chain.words[0]) || "Chain");
   }
   async select(id: string): Promise<void> {
-    id = this.headOf(id);
     // The moment that the feed shows is one of the chain shown, so another chain is shown as it stands now.
     if (id !== this.selected) this.moment = undefined;
     // The turns and the program of the chain left are not the chain selected, which shows them once it has read them.
@@ -1241,27 +1047,6 @@ export class Session extends EventEmitter {
     this.search = "";
     await this.refresh();
   }
-  /** What the empty review says when writes made no net change. */
-  get changesWriteSummary(): string {
-    const ids = this.scope === "life" ? this.written.map((act) => act.id) : this.writes();
-    if (!ids.length) return "";
-    const paths = ids
-      .map(
-        (id) =>
-          this.indexed()
-            .ids.get(id)
-            ?.words.find((word): word is { path: string } =>
-              Boolean(
-                word &&
-                  typeof word === "object" &&
-                  "path" in word &&
-                  typeof (word as { path?: unknown }).path === "string",
-              ),
-            )?.path,
-      )
-      .filter((path): path is string => Boolean(path));
-    return `No net change across ${ids.length} ${ids.length === 1 ? "write" : "writes"}${paths.length ? `: ${[...new Set(paths)].join(", ")}` : "."}`;
-  }
   /** The writes of the scope of the review on the chain shown: those since the last message of the operator for this
    * turn, and those of the chain for this chain. */
   private writes(): string[] {
@@ -1277,8 +1062,6 @@ export class Session extends EventEmitter {
       typeof scope === "string"
         ? scope
         : (scopes[(scopes.indexOf(this.scope) + scope + scopes.length) % scopes.length] ?? "chain");
-    if (this.scope !== "branch") this.branchBase = "";
-    this.changesReason = "";
     this.changesRead = "";
     this.save();
     this.show("changes");
@@ -1287,14 +1070,10 @@ export class Session extends EventEmitter {
    * record keeps the write. The word refuses when the file no longer holds the hunk where the review showed it. */
   async revert(change: ShownChange, hunk: Hunk): Promise<void> {
     const path = fromDirectory(this.host.directory, change.path);
-    try {
-      await this.engine.result(
-        await this.engine.rung({ word: revertWord(change.path, hunk, change), on: this.selected }),
-      );
-      this.notice = `The hunk at line ${hunk.newStart} of ${path} is reverted.`;
-    } catch (error) {
-      this.notice = `Could not revert the hunk: ${error instanceof Error ? error.message : String(error)}`;
-    }
+    await this.engine.result(
+      await this.engine.rung({ word: revertWord(change.path, hunk), on: this.selected }),
+    );
+    this.notice = `The hunk at line ${hunk.newStart} of ${path} is reverted.`;
     this.changesRead = "";
     await this.refresh();
   }
@@ -1351,18 +1130,17 @@ export class Session extends EventEmitter {
         : this.queued.find(
             (entry) =>
               !passed.has(entry.id) &&
-              !this.actOf(this.headOf(entry.chain))?.paused &&
-              !(this.liveOn().get(this.headOf(entry.chain)) ?? []).some(
+              !this.actOf(entry.chain)?.paused &&
+              !(this.liveOn().get(entry.chain) ?? []).some(
                 (act) => !act.done && ["prompt", "rung"].includes(act.kind),
               ),
           );
     try {
       for (let entry = next(); entry; entry = next()) {
         passed.add(entry.id);
-        const chain = this.headOf(entry.chain);
-        await this.attachFiles(entry.text, chain);
+        await this.attachFiles(entry.text, entry.chain);
         if (!queued(entry)) continue;
-        this.track(await this.host.sendQueued({ ...entry, chain }));
+        this.track(await this.host.sendQueued(entry));
         this.queued = this.queued.filter((item) => item.id !== entry.id);
         this.save();
         await this.refresh();
@@ -1870,26 +1648,11 @@ export class Session extends EventEmitter {
         if (!shapes().includes(argument)) throw new Error(`Choose ${shapes().join(", ")}.`);
         this.shape = argument;
         break;
-      case "changes": {
-        const [requested, ...base] = argument.split(/\s+/);
-        if (requested === "revert" || requested === "comment") {
-          await this.reviewAction?.(requested);
-          if (!this.reviewAction) this.notice = `Open the changes view to ${requested} a hunk.`;
-          break;
-        }
-        if (requested === "branch") {
-          this.scope = "branch";
-          this.branchBase = base.join(" ");
-          this.changesReason = "";
-          this.changesRead = "";
-          this.show("changes");
-          break;
-        }
-        if (requested && !(scopes as readonly string[]).includes(requested))
-          throw new Error(`Choose ${scopes.join(", ")}, branch <base>, revert, or comment.`);
-        this.review((requested as Scope) || this.scope);
+      case "changes":
+        if (argument && !(scopes as readonly string[]).includes(argument))
+          throw new Error(`Choose ${scopes.join(", ")}.`);
+        this.review((argument as Scope) || this.scope);
         break;
-      }
       case "theme":
         if (!isThemeChoice(argument))
           throw new Error(`Choose terminal, ${Object.keys(palettes).join(", ")}.`);

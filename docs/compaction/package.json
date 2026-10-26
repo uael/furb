@@ -1,9 +1,0 @@
-{
-  "bundle": "Bun target bun, Parts entry, native furb external",
-  "disabled": true,
-  "enabled": true,
-  "existingCompactCall": true,
-  "reloadSingleCommand": true,
-  "resetRemovesBuiltin": true,
-  "projectPartPreserved": true
-}
