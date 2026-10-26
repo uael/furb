@@ -1,6 +1,6 @@
 //! The watch over the word of a reply.
 
-use super::{Watch, broken, open};
+use super::{Watch, broken, open, refused, settled};
 
 #[test]
 fn a_fence_that_opens_a_word_is_a_fault_at_its_line() {
@@ -72,4 +72,29 @@ fn a_quote_stands_open_from_its_open_mark_to_its_close_mark() {
   assert!(open("<s:text>\nHello\n"));
   assert!(!open("<s:text>\nHello\n</s:text>\n"));
   assert!(open("<s:a>\n</s:a>\n<s:b>\nHello\n"));
+}
+
+#[test]
+fn a_statement_that_runs_at_once_is_settled_over_each_of_its_lines() {
+  assert_eq!(settled("x = 1\nif x:\n  y = (\n    2)\n"), vec![(1, 1), (2, 4)]);
+}
+
+#[test]
+fn a_statement_that_holds_a_part_that_runs_later_or_never_is_not_settled() {
+  let word = "def f():\n  return g()\nclass C: ...\nh = lambda: g()\nn = [g() for _ in ()]\nm: G = 1\nz = 1\n";
+  assert_eq!(settled(word), vec![(7, 7)]);
+}
+
+#[test]
+fn a_word_that_is_not_python_has_no_settled_statement() {
+  assert_eq!(settled("x = (1,\n"), vec![]);
+}
+
+#[test]
+fn the_word_is_refused_after_the_first_settled_statement_that_holds_a_finding() {
+  let settled = [(1, 1), (3, 5), (6, 6)];
+  let found =
+    ["line 2: in a def".to_owned(), "line 4: unknown name".to_owned(), "line 6: x".to_owned()];
+  assert_eq!(refused(&settled, &found), Some(5));
+  assert_eq!(refused(&settled, &found[..1]), None);
 }

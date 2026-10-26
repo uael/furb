@@ -425,6 +425,39 @@ fn a_reply_ends_after_a_fault_that_follows_a_quote_at_the_line_of_the_fault() {
 }
 
 #[test]
+fn a_reply_ends_after_the_first_statement_whose_fault_no_later_statement_mends() {
+  let parts = ["x = 1\n", "y = (\n", "  nothing_binds_this)\n", "close(x)\n"];
+  let model = Halting::writes(&parts);
+  let (mut engine, _) = life("settled", vec![Model::new("m", 1000, model.clone())]);
+  asked(&mut engine);
+  assert_eq!(replied(&mut engine), cut("x = 1\ny = (\n  nothing_binds_this)"));
+  assert!(
+    until(&mut engine, |_| model.dropped.load(Ordering::SeqCst)),
+    "the call of the model ended before it wrote the rest"
+  );
+  assert!(
+    until(&mut engine, |engine| told_of(engine, &["refused", "line 3"])),
+    "the gate refused the word as far as the statement"
+  );
+}
+
+#[test]
+fn a_name_that_a_later_statement_binds_does_not_end_a_reply_in_a_function() {
+  let parts = ["def f():\n", "  return later()\n", "def later():\n", "  return 4\n", "close(f())"];
+  let usage = Usage { input_tokens: 10, output_tokens: 5, total_tokens: 15, ..Default::default() };
+  let events: Vec<_> = parts
+    .iter()
+    .map(|part| MockStreamEvent::text(*part))
+    .chain([MockStreamEvent::FinalResponse(StreamFinal::new("mock", usage))])
+    .collect();
+  let model = MockCompletionModel::from_stream_turns([events]);
+  let (mut engine, _) = life("later", vec![scripted(&model)]);
+  let id = asked(&mut engine);
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  assert_eq!(got.as_ref().as_int(), Some(4));
+}
+
+#[test]
 fn a_word_whose_statements_stand_over_many_lines_is_not_ended_while_the_model_writes_it() {
   let parts = [
     "x = (\n",
