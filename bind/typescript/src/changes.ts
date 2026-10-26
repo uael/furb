@@ -88,7 +88,6 @@ export class FileChanges {
     if (readOnly) {
       try {
         this.index(path);
-        if (existsSync(path)) this.fd = openSync(path, "r");
       } catch (error) {
         // A record can still be read when its journal cannot: its changes view reports this failed read.
         this.failure = error;
@@ -171,6 +170,18 @@ export class FileChanges {
     this.positions.push({ start: this.end, size: data.length - 1 });
     this.end += data.length;
   }
+  /** Read a journal page without holding its file open between calls. */
+  private withReader<T>(read: (fd: number) => T): T | undefined {
+    if (!this.readOnly) return this.fd === undefined ? undefined : read(this.fd);
+    const path = this.path;
+    if (!path || !existsSync(path)) return undefined;
+    const fd = openSync(path, "r");
+    try {
+      return read(fd);
+    } finally {
+      closeSync(fd);
+    }
+  }
   /** The line of the journal at a position. */
   private line(fd: number, position: { start: number; size: number }): string {
     const data = Buffer.alloc(position.size);
@@ -180,23 +191,31 @@ export class FileChanges {
   /** A page of changes; a line of it that is no change throws a `DamagedJournal`. */
   read(start = 0, count = 20): FileChange[] {
     if (this.failure !== undefined) throw this.failure;
-    const fd = this.fd;
-    if (fd === undefined) return [];
-    return this.positions.slice(start, start + count).map((position, at) => {
-      const change = start + at === this.tail ? undefined : parse(this.line(fd, position));
-      if (!change) throw new DamagedJournal(this.path ?? "", start + at);
-      return change;
-    });
+    if (this.readOnly) this.index(this.path ?? "");
+    return (
+      this.withReader((fd) =>
+        this.positions.slice(start, start + count).map((position, at) => {
+          const change = start + at === this.tail ? undefined : parse(this.line(fd, position));
+          if (!change) throw new DamagedJournal(this.path ?? "", start + at);
+          return change;
+        }),
+      ) ?? []
+    );
   }
   /** A page of lines of the journal as changes, with each line that is no change left out. A reader that must not
    * stop for a damaged journal, as the rewind, reads so. */
   readable(start = 0, count = 20): FileChange[] {
     if (this.failure !== undefined) throw this.failure;
-    const fd = this.fd;
-    if (fd === undefined) return [];
-    return this.positions
-      .slice(start, start + count)
-      .flatMap((position, at) => (start + at === this.tail ? [] : (parse(this.line(fd, position)) ?? [])));
+    if (this.readOnly) this.index(this.path ?? "");
+    return (
+      this.withReader((fd) =>
+        this.positions
+          .slice(start, start + count)
+          .flatMap((position, at) =>
+            start + at === this.tail ? [] : (parse(this.line(fd, position)) ?? []),
+          ),
+      ) ?? []
+    );
   }
   /** The journal read again whole from its file, which holds each change that was appended since the session opened,
    * and written again with each line that is a change, in its order, then indexed anew. It says the count of changes

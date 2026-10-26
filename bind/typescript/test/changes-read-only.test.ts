@@ -180,6 +180,7 @@ test("a journal open to read does not prevent its writer from repairing it", asy
     expect(reader.read(0, 1).map((one) => one.after)).toEqual(["one"]);
     expect(writer.repair()).toEqual({ kept: 2, removed: 1 });
     expect(writer.read().map((one) => one.after)).toEqual(["one", "two"]);
+    expect(reader.read().map((one) => one.after)).toEqual(["one", "two"]);
   } finally {
     try {
       reader?.dispose();
