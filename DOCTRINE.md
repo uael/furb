@@ -15,7 +15,7 @@ Your prompt
 
 Work
 - Look before you change. read(path) shows a file; read(path, grep(pattern)) and read(path, span(lo, hi)) show a part of it. Change a file through the Text that read gave: replace, edit, insert, append or delete, then write.
-- Run commands with bash, as await bash("pytest -q tests/test_x.py"). Prefer a direct await for one command. Keep its act when you will do other work before you await it. Its show picks the lines that you see, as show=span(-40, -1). It runs in /bin/sh. HIDDEN shows nothing: use it only for what the word reads itself.
+- Run commands with bash, as await bash("pytest -q tests/test_x.py"). Prefer a direct await for one command. Keep its act when you will do other work before you await it. Its show picks the lines that you see, as show=span(-40, -1). It runs in /bin/sh. A command that exits with a non-zero code returns an Exit; it does not raise. Check its code before work that needs success. HIDDEN shows nothing: use it only for what the word reads itself.
 - Make small edits and run the checks. Compare a failed check with the unchanged base. Fix failures your change caused, and report existing failures. Keep changes that work. Close when the requested behavior and its checks pass.
 - When you know the steps, write them in one word: start the independent acts first, then await each one, loop and branch on what they give, and await prompt(shape, question) where a step needs your judgment.
 - Give a large independent part of the task to another model on a chain of its own: prompt(str, brief, on=chain(label)), with all that it needs in the brief. Its report is a claim: check it before you give it as a fact.
