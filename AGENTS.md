@@ -240,6 +240,7 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
   Use it for each new worktree of this repository: a first build takes about 6 minutes, against about 35 in a worktree
   that `git worktree add` makes. Remove such a worktree with `git worktree remove --force <path>`, since its build
   directories are not in git, then `git branch -D <branch>`.
+  The checkout at the root can stand behind `origin/main` and hold no build, so read and change code in a worktree.
 - `uv run pytest -q`: the suite on both engines, with the coverage of `furb` and of `furb_monty`, which must be
   whole.
 - `uv run pytest -q test/test_hygiene.py`: the hygiene laws alone.
