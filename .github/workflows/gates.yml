@@ -170,25 +170,56 @@ jobs:
       - run: bun run check
       - run: bun run lint
       - run: bun run test
-      # The app on macOS, whose web view is the WKWebView of the system: furb-gui --check opens the record of a life of
-      # the demo that gui/src-tauri/tests/fixtures holds, through its host, draws it whole with the counts of furb facts,
-      # under the budget of its web view, and ends, in a window that shows and in one that is hidden, as a window
-      # behind others. The app is a workspace of its own, whose lints the hooks do not run. A change that no path of the
-      # app or of the crate holds does not run it.
-      - if: runner.os == 'macOS' && needs.scope.outputs.gui == 'true'
-        run: cargo build -p furb-cli
-      - if: runner.os == 'macOS' && needs.scope.outputs.gui == 'true'
-        working-directory: gui
-        run: bun run build
-      - if: runner.os == 'macOS' && needs.scope.outputs.gui == 'true'
-        working-directory: gui/src-tauri
-        run: cargo fmt --check && cargo clippy --all-targets -- -D warnings
-      - if: runner.os == 'macOS' && needs.scope.outputs.gui == 'true'
-        working-directory: gui/src-tauri
-        run: FURB_CLI="$GITHUB_WORKSPACE/target/$CARGO_BUILD_TARGET/debug/furb" cargo test --features tauri/custom-protocol -- --test-threads 1
       # The budget of the speed of the TUI holds on Linux, whose machines of the gates run no other work: the first
       # frame of a life of 160000 facts, the frames of the renderer at 60 each second while it scrolls and streams,
       # and the cost of a new fact against that in a life of a tenth of the size, each against a measure of the same
       # machine, since one runner of ubuntu-latest is half as fast as another.
       - if: runner.os == 'Linux'
         run: bun run bench
+
+  app:
+    # The app on macOS, whose web view is the WKWebView of the system: furb-gui --check opens the record of a life of
+    # the demo that gui/src-tauri/tests/fixtures holds, through its host, draws it whole with the counts of furb facts,
+    # under the budget of its web view, and ends, in a window that shows and in one that is hidden, as a window behind
+    # others. The app is a workspace of its own, whose lints the hooks do not run. A change that no path of the app or
+    # of the crate holds does not run it. It is a job of its own, beside the bindings on macOS, so neither job waits
+    # for the other.
+    name: the app on macos-latest
+    needs: scope
+    if: needs.scope.outputs.gui == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The cache keeps the dependencies of a workspace and removes each other one from its target before it saves.
+      # The app builds in the target of the crate on a machine, so the cache of that target lost each dependency of
+      # the app, and each run built them again, in about 5 minutes. On the gates the app builds in a target of its own,
+      # which the cache keeps as the workspace of the app.
+      - uses: ./.github/actions/setup
+        with:
+          python: none
+          key: app
+          workspaces: |
+            . -> target
+            gui/src-tauri -> target
+      - run: |
+          echo "CARGO_BUILD_TARGET=$(rustc -vV | sed -n 's/^host: //p')" >> "$GITHUB_ENV"
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.2"
+      - run: bun install --frozen-lockfile
+      # The host of the app runs on the package of the bindings, and the check runs the program furb.
+      - run: bun run build
+      - run: cargo build -p furb-cli
+      - working-directory: gui
+        run: bun run build
+      - working-directory: gui/src-tauri
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/gui/src-tauri/target
+        run: cargo fmt --check && cargo clippy --all-targets -- -D warnings
+      - working-directory: gui/src-tauri
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/gui/src-tauri/target
+        run: FURB_CLI="$GITHUB_WORKSPACE/target/$CARGO_BUILD_TARGET/debug/furb" cargo test --features tauri/custom-protocol -- --test-threads 1
