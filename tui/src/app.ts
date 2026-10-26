@@ -114,6 +114,7 @@ import {
   type Seen,
 } from "./parts.ts";
 import { commentStart, type Hunk, hunkPatch, lines, type Scope, scopeLabels, scopes } from "./review.ts";
+import { Formatter } from "./ruff.ts";
 import {
   type ActRow,
   type Cancel,
@@ -2163,7 +2164,13 @@ export class App {
             ].join(" "),
           )
           .join("|");
+      this.formatter.begin();
+      const shape = (step: ActRow) =>
+        w.preferences.rawPython || !step.done
+          ? undefined
+          : this.formatter.shape(word(step), step, step.began);
       const programFor = (key: string, live: string, make: () => ProgramLine[]): ProgramLine[] => {
+        live += `|ruff:${w.preferences.rawPython}:${this.formatter.version}`;
         const known = this.programs.get(key);
         if (!then && known?.version !== -1 && known?.live === live) return known.lines;
         const made = make();
@@ -2431,7 +2438,7 @@ export class App {
           programCard(
             act.id,
             programFor(act.id, stepOf(act), () =>
-              stepLines(act, madeMap(), word, owed, named, w.host.streams),
+              stepLines(act, madeMap(), word, owed, named, w.host.streams, shape(act)),
             ),
             indent,
           );
@@ -2735,6 +2742,7 @@ export class App {
                 named,
                 undefined,
                 w.folds[`steps:${act.id}`] === false ? undefined : PROGRAM_STEPS,
+                shape,
               ),
             ),
             indent,
@@ -4183,7 +4191,9 @@ export class App {
         // An open line, and a line whose strings the operator opened, show the whole text, cut at the column into
         // rows of their own. Another line folds its longest strings until it fits.
         const shown =
-          this.lineOpen(line) || this.openStrings(line).size ? undefined : foldStrings(line.text, column);
+          this.lineOpen(line) || this.openStrings(line).size
+            ? undefined
+            : foldStrings(line.text, column, undefined, Bun.stringWidth);
         const parts = shown ? [fit(shown.text, column)] : [""];
         if (!shown)
           for (const { segment } of graphemes.segment(line.text)) {
@@ -4415,6 +4425,7 @@ export class App {
     };
     return view;
   }
+  private readonly formatter = new Formatter(() => this.schedule());
   private streamedSource = new Map<string, { text: string; thinking: string }>();
   private sourcePainting = new Set<Promise<void>>();
   private programLoaders = new Map<LineNumberRenderable, number>();
@@ -4431,7 +4442,7 @@ export class App {
   /** The strings of a line of a program that the operator opened, which show whole. */
   private openStrings(line: Extract<ProgramLine, { kind: "code" }>): Set<number> {
     const folds = this.session.folds;
-    const key = `string:${line.step.id}:${line.number}:`;
+    const key = `string:${line.step.id}:${line.projection ?? line.number}:`;
     // Each frame asks of each line of each program, so the lines with an open string are read once from the folds.
     if (this.stringLines?.folds !== folds)
       this.stringLines = {
@@ -4450,7 +4461,8 @@ export class App {
   /** A string of a line of a program opens in place, or folds again. */
   private openString(line: Extract<ProgramLine, { kind: "code" }>, literal: number): void {
     const w = this.session;
-    w.folds[`string:${line.step.id}:${line.number}:${literal}`] = this.openStrings(line).has(literal);
+    w.folds[`string:${line.step.id}:${line.projection ?? line.number}:${literal}`] =
+      this.openStrings(line).has(literal);
     this.stringLines = undefined;
     w.save();
     this.unhover();
@@ -4462,13 +4474,16 @@ export class App {
   }
   /** Whether a line of a program stands open: its whole text, and what its acts gave under it. */
   private lineOpen(line: ProgramLine): boolean {
-    return line.kind === "code" && this.session.folds[`line:${line.step.id}:${line.number}`] === false;
+    return (
+      line.kind === "code" &&
+      this.session.folds[`line:${line.step.id}:${line.projection ?? line.number}`] === false
+    );
   }
   /** A line of a program opens, or folds again. */
   private openLine(line: ProgramLine): void {
     if (line.kind !== "code") return;
     const w = this.session;
-    w.folds[`line:${line.step.id}:${line.number}`] = this.lineOpen(line);
+    w.folds[`line:${line.step.id}:${line.projection ?? line.number}`] = this.lineOpen(line);
     w.save();
     this.renderContent();
   }
@@ -8128,6 +8143,7 @@ export class App {
     models: () => this.models(),
     effort: () => this.effortPicker(),
     themes: () => this.themes(),
+    pythonDisplay: () => void this.session.command("/python").catch(this.report),
     workspaces: () => void this.workspacePicker(),
     sidebar: () => this.options.workspaces.toggle(),
     details: () => this.details(),
@@ -8247,6 +8263,7 @@ export class App {
   dispose = (): void => {
     if (this.closed) return;
     this.closed = true;
+    this.formatter.dispose();
     clearInterval(this.tick);
     clearTimeout(this.redraw);
     clearTimeout(this.hoverTimer);

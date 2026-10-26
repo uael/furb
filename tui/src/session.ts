@@ -1794,6 +1794,15 @@ export class Session extends EventEmitter {
         if (!argument) throw new Error("Use /queue followed by a message.");
         this.enqueue(argument);
         break;
+      case "python":
+        if (argument && argument !== "raw" && argument !== "ruff")
+          throw new Error("Use /python raw or /python ruff.");
+        this.preferences.rawPython = argument ? argument === "raw" : !this.preferences.rawPython;
+        this.preferences.save();
+        this.notice = this.preferences.rawPython
+          ? "Showing original Python. Copy and edit always use the original source."
+          : "Showing local Ruff-100 Python when available; otherwise original source. Copy and edit stay original.";
+        break;
       case "autocollapse":
         this.preferences.foldThreads = !this.preferences.foldThreads;
         this.preferences.save();

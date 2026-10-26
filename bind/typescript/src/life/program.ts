@@ -23,6 +23,8 @@ export type ProgramLine =
       display?: number;
       /** The original source when one display line holds more than one source line. */
       source?: string;
+      /** Stable display-row identity; never a source/refusal coordinate. */
+      projection?: string;
       text: string;
       acts: LiveAct[];
       runs: boolean;
@@ -131,6 +133,7 @@ export function stepLines(
   owed: ReadonlySet<string>,
   label: (chain: string) => string,
   streams?: ReadonlyMap<string, { text: string; thinking: string }>,
+  shaped?: Shaped,
 ): ProgramLine[] {
   const out: ProgramLine[] = [];
   const text = word(step);
@@ -192,7 +195,7 @@ export function stepLines(
   }
   if (failed(step) && !why) out.push({ kind: "note", step, text: `# ${step.id} failed` });
   let display = 0;
-  return out.map((line) =>
+  return project(out, text, shaped).map((line) =>
     line.kind === "code" || line.kind === "quote" ? { ...line, display: ++display } : line,
   );
 }
@@ -207,6 +210,7 @@ export function threadProgram(
   label: (chain: string) => string,
   streams?: ReadonlyMap<string, { text: string; thinking: string }>,
   keep?: number,
+  shape?: (step: LiveAct) => Shaped | undefined,
 ): ProgramLine[] {
   let steps: LiveAct[] = [];
   for (const [at, prompt] of prompts.entries()) {
@@ -216,13 +220,23 @@ export function threadProgram(
   steps.sort((a, b) => a.began - b.began);
   const out: ProgramLine[] = [];
   const offsets = new Map<string, number>();
+  const shapes = new Map<string, Shaped | undefined>();
+  // The latest words get the first available formatter slots, even in a folded history of many old steps.
+  for (const step of [...steps].reverse())
+    if (step.kind === "rung" && step.done) shapes.set(step.id, shape?.(step));
   let number = 0;
   for (const step of steps) {
     offsets.set(step.id, number);
     if (step.kind === "rung") {
       const source = word(step);
       const compact = compactRows(source);
-      number += Math.max(1, source.split("\n").filter((_, at) => !compact.get(at)?.skip).length);
+      let count = source.split("\n").filter((_, at) => !compact.get(at)?.skip).length;
+      for (const [from, part] of shapes.get(step.id) ?? []) {
+        for (let at = from; at <= part.to; at++) if (!compact.get(at)?.skip) count--;
+        const folded = compactRows(part.lines.join("\n"));
+        count += part.lines.filter((_, at) => !folded.get(at)?.skip).length;
+      }
+      number += Math.max(1, count);
     }
   }
   const positions = new Map<string, number>();
@@ -263,7 +277,7 @@ export function threadProgram(
     }
     flush(last);
     if (step.kind === "prompt") out.push({ kind: "note", step, text: `# you: ${message}` });
-    else out.push(...stepLines(step, made, word, owed, label, streams).map(numbered));
+    else out.push(...stepLines(step, made, word, owed, label, streams, shapes.get(step.id)).map(numbered));
   }
   flush(last);
   return out;
@@ -346,8 +360,9 @@ export function foldStrings(
   line: string,
   room: number,
   open: ReadonlySet<number> = new Set(),
+  width: (text: string) => number = (text) => text.length,
 ): { text: string; folds: Fold[] } {
-  let excess = line.length - room;
+  let excess = width(line) - room;
   if (excess <= 0) return { text: line, folds: [] };
   const found = literals(line);
   const keep = new Map<number, number>();
@@ -365,10 +380,12 @@ export function foldStrings(
     const kept = Math.max(KEEP, size - excess - FOLD.length);
     if (kept + FOLD.length >= size) continue;
     let boundary = one.start + kept;
+    const target = width(line.slice(one.start, one.end)) - excess - width(FOLD);
+    while (boundary > one.start + KEEP && width(line.slice(one.start, boundary)) > target) boundary--;
     if (/[\uDC00-\uDFFF]/.test(line[boundary] ?? "")) boundary--;
     while (boundary > one.start && line[boundary - 1] === "\\") boundary--;
     keep.set(index, boundary - one.start);
-    excess -= size - (boundary - one.start) - FOLD.length;
+    excess -= width(line.slice(one.start, one.end)) - width(line.slice(one.start, boundary)) - width(FOLD);
   }
   let text = "";
   let from = 0;
@@ -382,6 +399,141 @@ export function foldStrings(
     from = one.end;
   }
   return { text: text + line.slice(from), folds };
+}
+
+/** Display rows by original statement start, with the last source line of each statement. */
+export type Shaped = ReadonlyMap<number, { to: number; lines: readonly string[] }>;
+
+/** A top-level statement of a word, as the range of its lines, from 0. A quote of the word is a statement of its own. */
+export type Statement = { from: number; to: number; quote: boolean };
+
+/** The top-level statements of a word, in order. A statement holds the lines that its brackets, its strings, its
+ * continuations, its decorators and its indented body take, and the blank lines after it. */
+export function statements(source: string): Statement[] {
+  const lines = source.split("\n");
+  const out: Statement[] = [];
+  let depth = 0;
+  let open = "";
+  let continued = false;
+  let decorated = false;
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index] ?? "";
+    const quote = !depth && !open && !continued ? line.match(/^<s:(\w+)>/) : null;
+    const end = quote ? lines.findIndex((one, at) => at >= index && one.endsWith(`</s:${quote[1]}>`)) : -1;
+    if (quote && end >= 0) {
+      out.push({ from: index, to: end, quote: true });
+      index = end;
+      continue;
+    }
+    const last = out.at(-1);
+    const top =
+      !depth &&
+      !open &&
+      !continued &&
+      /^\S/.test(line) &&
+      !/^(else|elif|except|finally)\b/.test(line) &&
+      !decorated;
+    if (top || !last || last.quote) out.push({ from: index, to: index, quote: false });
+    else last.to = index;
+    if (!depth && !open && !continued && /^\S/.test(line)) decorated = line.startsWith("@");
+    for (let at = 0; at < line.length; at++) {
+      const char = line[at] ?? "";
+      if (open) {
+        if (char === "\\") at++;
+        else if (line.startsWith(open, at)) {
+          at += open.length - 1;
+          open = "";
+        }
+        continue;
+      }
+      if (char === "#") break;
+      if (char === '"' || char === "'") open = line.startsWith(char.repeat(3), at) ? char.repeat(3) : char;
+      if (open.length === 3) at += 2;
+      else if ("([{".includes(char)) depth++;
+      else if (")]}".includes(char)) depth = Math.max(0, depth - 1);
+    }
+    // A string of one mark ends with its line, and a backslash at the end of a line goes on to the next.
+    if (open.length === 1) open = "";
+    continued = !open && line.endsWith("\\");
+  }
+  return out;
+}
+
+/** The mark that parts the statements of a word in the program that a formatter of python reads. */
+const PART = "# furb:statement";
+const marker = (source: string) => {
+  let mark = PART;
+  for (let suffix = 1; source.includes(mark); suffix++) mark = `${PART}-${suffix}`;
+  return mark;
+};
+
+/** The python statements of a word as one program for a formatter, each after a mark, with the statements that the
+ * formatter cannot read left out. */
+export function formatInput(
+  source: string,
+  parts: readonly Statement[],
+  skip: ReadonlySet<number> = new Set(),
+): string {
+  const lines = source.split("\n");
+  return parts
+    .flatMap((part, index) =>
+      part.quote || skip.has(index)
+        ? []
+        : [marker(source), ...lines.slice(part.from, part.to + 1)].join("\n").trimEnd(),
+    )
+    .join("\n");
+}
+
+/** What a formatter gave for the statements of a word, as the lines of each statement that it changed, by the index of
+ * its statement. It gives nothing when the formatter lost a mark. */
+export function formatOutput(
+  source: string,
+  parts: readonly Statement[],
+  formatted: string,
+  skip: ReadonlySet<number> = new Set(),
+): Map<number, string[]> | undefined {
+  const lines = source.split("\n");
+  const shown = parts.flatMap((part, index) => (part.quote || skip.has(index) ? [] : [index]));
+  const mark = marker(source);
+  const pieces = formatted.split(new RegExp("^" + mark + "\\n?", "m")).slice(1);
+  if (pieces.length !== shown.length) return undefined;
+  const out = new Map<number, string[]>();
+  for (const [at, index] of shown.entries()) {
+    const part = parts[index];
+    const made = (pieces[at] ?? "").replace(/^\n+|\n+$/g, "").split("\n");
+    const was = part
+      ? lines
+          .slice(part.from, part.to + 1)
+          .join("\n")
+          .replace(/\n+$/, "")
+      : "";
+    if (part && made.join("\n") !== was) out.set(index, made);
+  }
+  return out;
+}
+
+/** The statement of a word that holds a line of the program that a formatter read, from 1, as a refusal names it. */
+export function statementAt(
+  parts: readonly Statement[],
+  source: string,
+  line: number,
+  skip: ReadonlySet<number> = new Set(),
+): number {
+  const lines = source.split("\n");
+  let row = 0;
+  for (const [index, part] of parts.entries()) {
+    if (part.quote || skip.has(index)) continue;
+    const size =
+      1 +
+      lines
+        .slice(part.from, part.to + 1)
+        .join("\n")
+        .trimEnd()
+        .split("\n").length;
+    if (line <= row + size) return index;
+    row += size;
+  }
+  return -1;
 }
 
 /** Display rows of Python with complete multiline literals on one escaped line. Incomplete literals stay as source,
@@ -457,4 +609,64 @@ function compactRows(source: string): Map<number, { text?: string; end?: number;
   }
   if (line > firstLine) rows.set(firstLine, { text: shown + source.slice(start), end: line });
   return rows;
+}
+
+/** Replace only the display rows of a statement. Its acts and failure stay on its first row, with the exact
+ * original range available for source inspection. No displayed offset is ever an engine coordinate. */
+function project(rows: ProgramLine[], source: string, shaped?: Shaped): ProgramLine[] {
+  if (!shaped?.size) return rows;
+  const out: ProgramLine[] = [];
+  const original = source.split("\n");
+  for (let at = 0; at < rows.length; at++) {
+    const row = rows[at];
+    if (!row || row.kind !== "code") {
+      if (row) out.push(row);
+      continue;
+    }
+    const part = shaped.get(row.number - 1);
+    if (!part) {
+      out.push(row);
+      continue;
+    }
+    const owned = [row];
+    const outputs: ProgramLine[] = [];
+    while (at + 1 < rows.length) {
+      const next = rows[at + 1];
+      if (next?.kind === "code" && next.number <= part.to + 1) {
+        owned.push(next);
+        at++;
+      } else if (next?.kind === "output") {
+        outputs.push(next);
+        at++;
+      } else break;
+    }
+    const text = part.lines.join("\n");
+    const compact = compactRows(text);
+    const acts = owned.flatMap((one) => one.acts);
+    const failure = owned.find((one) => one.fails);
+    let first = true;
+    for (const [index, line] of part.lines.entries()) {
+      const folded = compact.get(index);
+      if (folded?.skip) continue;
+      out.push({
+        ...row,
+        number: failure?.number ?? row.number,
+        projection: `${row.number}:${index}`,
+        source: original.slice(row.number - 1, part.to + 1).join("\n"),
+        text: folded?.text ?? line,
+        acts: first ? acts : [],
+        runs: first && owned.some((one) => one.runs),
+        fails: first ? failure?.fails : undefined,
+        hint: first
+          ? owned
+              .map((one) => one.hint)
+              .filter(Boolean)
+              .join("  ")
+          : "",
+      });
+      first = false;
+    }
+    out.push(...outputs);
+  }
+  return out;
 }

@@ -1,0 +1,28 @@
+bun test v1.3.14 (d1632b29)
+
+tui/test/ruff.test.ts:
+392 |   try {
+393 |     formatter.shape("x=1");
+394 |     await formatter.idle();
+395 |     expect(queued).toBe(true);
+396 |     expect(formatter.shape("x=1")?.get(0)?.lines).toEqual(["x = 1"]);
+397 |     expect(formatter.shape("x=2")?.get(0)?.lines).toEqual(["x = 2"]);
+                                                        ^
+error: expect(received).toEqual(expected)
+
+- [
+-   "x = 2",
+- ]
++ undefined
+
+- Expected  - 3
++ Received  + 1
+
+      at <anonymous> (/Users/uael/src/github.com/uael/furb-w-tui-ruff-finish/tui/test/ruff.test.ts:397:51)
+(fail) a completion callback can queue the next word in a microtask without orphaning it [277.18ms]
+
+ 0 pass
+ 6 filtered out
+ 1 fail
+ 3 expect() calls
+Ran 1 test across 1 file. [673.00ms]

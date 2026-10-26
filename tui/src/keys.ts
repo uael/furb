@@ -30,6 +30,11 @@ export interface Key {
  * modifiers by their marks: ⌃ for Control, ⌥ for Option or Alt, and ⇧ for Shift. No key of the TUI needs ⌘, since a
  * terminal keeps most chords of ⌘ for itself. */
 export const keys = [
+  {
+    chord: "⌃⌥R",
+    action: "Toggle original / Ruff-100 Python",
+    bindings: [{ on: ["ctrl+meta+r"], run: "pythonDisplay", command: "python" }],
+  },
   { chord: "Enter", action: "Send a message, or run Python input" },
   { chord: "⇧Enter", legacy: "⌃J", action: "Insert a new line" },
   {

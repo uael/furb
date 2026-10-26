@@ -1,6 +1,16 @@
 import { expect, test } from "bun:test";
 import { makers } from "../../src/life/ladder.ts";
-import { actLines, foldStrings, hintOf, literals, threadProgram } from "../../src/life/program.ts";
+import {
+  actLines,
+  foldStrings,
+  formatInput,
+  formatOutput,
+  hintOf,
+  literals,
+  statementAt,
+  statements,
+  threadProgram,
+} from "../../src/life/program.ts";
 import { act } from "./acts.ts";
 
 const label = (chain: string) => `label of ${chain}`;
@@ -212,4 +222,62 @@ test("multiline and raw strings stay single escaped display lines without changi
     label,
   );
   expect(incomplete.map((line) => line.text)).toEqual(['text = """still', "arriving"]);
+});
+
+test("formatter input partitions complete Python statements while leaving quotes alone and guards marker-like comments", () => {
+  const source = "# furb:statement\nx=1\n<s:brief>\nquoted\n</s:brief>\ny = [\n  2,\n]";
+  const parts = statements(source);
+  const input = formatInput(source, parts);
+  expect(input).toContain("# furb:statement-1\n# furb:statement\n# furb:statement-1\nx=1");
+  expect(input).toContain("# furb:statement-1\ny = [");
+  expect(input).not.toContain("quoted");
+  expect(statementAt(parts, source, 1)).toBe(0);
+  expect(statementAt(parts, source, 5)).toBe(3);
+});
+
+test("formatter output maps changes to original statement indices and rejects lost partition marks", () => {
+  const source = "x=1\n<s:brief>\nquoted\n</s:brief>\ny = [\n  2,\n]";
+  const parts = statements(source);
+  const formatted = "# furb:statement\nx = 1\n# furb:statement\ny = [2]";
+  expect(formatOutput(source, parts, formatted)).toEqual(
+    new Map([
+      [0, ["x = 1"]],
+      [2, ["y = [2]"]],
+    ]),
+  );
+  expect(formatOutput(source, parts, "x = 1")).toBeUndefined();
+});
+
+test("completed formatted statements project as one program while ownership and source remain original", () => {
+  const prompt = act("prompt1", "prompt", "chain1", "operator", 1);
+  const rung = act("rung1", "rung", "chain1", "prompt1", 2, 5, {
+    run: { status: "failed", reason: "line 1: refused" },
+  });
+  const read = act("read1", "read", "chain1", "rung1", 3, 4);
+  const next = act("rung2", "rung", "chain1", "prompt1", 6, 7);
+  const source = 'got = read("notes.md")';
+  const shaped = new Map([[0, { to: 0, lines: ["got = read(", '    "notes.md"', ")"] }]]);
+  const rows = threadProgram(
+    [prompt],
+    makers([prompt, rung, read, next]),
+    (step) => (step === rung ? source : "print(1)"),
+    new Set(),
+    label,
+    undefined,
+    undefined,
+    (step) => (step === rung ? shaped : undefined),
+  );
+  const code = rows.filter((line) => line.kind === "code");
+  expect(code.map((line) => [line.text, line.display])).toEqual([
+    ["got = read(", 1],
+    ['    "notes.md"', 2],
+    [")", 3],
+    ["print(1)", 4],
+  ]);
+  expect(code[0]?.acts).toEqual([read]);
+  expect(code[0]?.fails).toBe("line 1: refused");
+  expect(code.slice(0, 3).map((line) => [line.step, line.number, line.source])).toEqual(
+    Array.from({ length: 3 }, () => [rung, 1, source]),
+  );
+  expect(new Set(code.slice(0, 3).map((line) => line.projection)).size).toBe(3);
 });

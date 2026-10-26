@@ -1,0 +1,37 @@
+{
+  "path": "docs/ruff/ruff.gif",
+  "gif_sha256": "d97e923292c411214c3bdc8aab43a82eaea04a23e40c50134e7298e5c707b299",
+  "frame_count": 4,
+  "loop": 0,
+  "total_ms": 5600,
+  "size": [
+    1524,
+    1064
+  ],
+  "frames": [
+    {
+      "index": 0,
+      "duration_ms": 1400,
+      "path": "docs/ruff/ruff-frame-00.png",
+      "sha256": "c3117cc856a9ad7da49f97af52fa508bc6acf91362f955492cea600ca9bc4c4e"
+    },
+    {
+      "index": 1,
+      "duration_ms": 1400,
+      "path": "docs/ruff/ruff-frame-01.png",
+      "sha256": "e5df1e77c5bc30ffe2aea215f0f23f7322e4629decc5ba7a59dc59fd1b3dd847"
+    },
+    {
+      "index": 2,
+      "duration_ms": 1400,
+      "path": "docs/ruff/ruff-frame-02.png",
+      "sha256": "4502fba54a688eda28b721e29747cc22d0468c8a603a37b502b30c6ac245b49c"
+    },
+    {
+      "index": 3,
+      "duration_ms": 1400,
+      "path": "docs/ruff/ruff-frame-03.png",
+      "sha256": "5b1025a0699e04513bbf8ed3dd932c1a0a899202f3656e37efc4e42332ef276e"
+    }
+  ]
+}

@@ -12,6 +12,8 @@ export class Preferences {
   sidebarWidth = 44;
   /** Whether a thread that is over, and is not the last of its chain, starts folded in the feed. */
   foldThreads = true;
+  /** Show original Python instead of the local Ruff-100 display projection. */
+  rawPython = false;
   /** Whether the welcome showed the check of the first run, which it shows once, and again while no model answers. */
   setupSeen = false;
   /** The view of the life that the TUI shows: main, the loom, or the graph. */
@@ -31,6 +33,7 @@ export class Preferences {
         sidebar?: boolean;
         sidebarWidth?: number;
         foldThreads?: boolean;
+        rawPython?: boolean;
         foldRungs?: boolean;
         setupSeen?: boolean;
         view?: string;
@@ -40,6 +43,7 @@ export class Preferences {
       if (isThemeChoice(saved?.theme)) this.theme = saved.theme;
       if (typeof saved?.screenReader === "boolean") this.screenReader = saved.screenReader;
       if (typeof saved?.reducedMotion === "boolean") this.reducedMotion = saved.reducedMotion;
+      if (typeof saved?.rawPython === "boolean") this.rawPython = saved.rawPython;
       if (typeof saved?.sidebar === "boolean") this.sidebar = saved.sidebar;
       // A file of an earlier version names the fold of what is over foldRungs.
       const fold = saved?.foldThreads ?? saved?.foldRungs;
@@ -64,6 +68,7 @@ export class Preferences {
       sidebar: this.sidebar,
       sidebarWidth: this.sidebarWidth,
       foldThreads: this.foldThreads,
+      rawPython: this.rawPython,
       setupSeen: this.setupSeen,
       view: this.view,
       screenReader: this.screenReader,
