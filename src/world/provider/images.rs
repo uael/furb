@@ -97,15 +97,20 @@ pub fn path(directory: &Path, uri: &str) -> Result<(PathBuf, String), String> {
 /// The bytes of the image of a uri, and its media type, once the bytes have the digest the uri names.
 pub fn read(directory: &Path, uri: &str) -> Result<(&'static str, Vec<u8>), String> {
   let (path, named) = path(directory, uri)?;
-  let size = fs::metadata(&path).map_err(|no| no.to_string())?.len();
+  let size = fs::metadata(&path).map_err(|no| unloaded(uri, &path, &no))?.len();
   if size > LARGEST {
     return Err("The saved image is too large.".to_owned());
   }
-  let bytes = fs::read(&path).map_err(|no| no.to_string())?;
+  let bytes = fs::read(&path).map_err(|no| unloaded(uri, &path, &no))?;
   if digest(&bytes) != named {
     return Err("The saved image attachment has changed.".to_owned());
   }
   Ok((kind(&bytes)?.0, bytes))
+}
+
+/// Why the image of a uri did not load: the file it was read from, and what the system said.
+fn unloaded(uri: &str, path: &Path, no: &std::io::Error) -> String {
+  format!("The image {uri} did not load from {}: {no}", path.display())
 }
 
 /// How a message names an image: `![name](uri)`, with each bracket and line break of the name as `_`.
@@ -192,7 +197,7 @@ impl Images {
   /// The content of the image of a uri: the one read before while its file stays the same, or read now.
   fn image(&mut self, directory: &Path, uri: &str) -> Result<UserContent, String> {
     let (path, _) = path(directory, uri)?;
-    let info = fs::metadata(&path).map_err(|no| no.to_string())?;
+    let info = fs::metadata(&path).map_err(|no| unloaded(uri, &path, &no))?;
     let stamp = (info.len(), info.modified().ok());
     if let Some((held, content)) = self.held.get(&path)
       && *held == stamp

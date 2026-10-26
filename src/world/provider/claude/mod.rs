@@ -88,6 +88,10 @@ const FIRST: Duration = Duration::from_millis(100);
 /// The longest pause before a process tries its program again.
 const PAUSE: Duration = Duration::from_secs(5);
 
+/// The words that begin the failure of a turn whose program was missing or did not run, as while an update of claude
+/// replaces it, which the provider takes for a failure that passes.
+pub(super) const MISSING: &str = "No program to run";
+
 /// The claude command line: its program, how long a turn may go with no progress, how long a process waits for a
 /// program that is missing or does not run, and the conversations it holds.
 ///
@@ -547,8 +551,15 @@ impl Conversation {
     };
     let asked = messages.last().cloned();
     let again = again && !anew;
-    let mut flight =
-      Flight { conversation: self, incoming, asked, again, heard: false, reply: None };
+    let mut flight = Flight {
+      conversation: self,
+      incoming,
+      asked,
+      again,
+      heard: false,
+      reply: None,
+      restored: None,
+    };
     let got = flight.run(delta, spend, program, stall, gone, deltas).await;
     if let Ok(response) = &got {
       let reply = Message::Assistant { id: None, content: response.choice.clone() };
@@ -613,7 +624,12 @@ impl Conversation {
       };
       tokio::time::sleep(wait).await;
     }
-    .map_err(|no| failed(format!("{} did not start: {no}", program.name())))?;
+    .map_err(|no| {
+      let absent =
+        matches!(no.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied);
+      let missing = if absent { format!("{MISSING}: ") } else { String::new() };
+      failed(format!("{missing}{} did not start: {no}", program.name()))
+    })?;
     let (Some(stdin), Some(stdout), Some(stderr)) =
       (child.stdin.take(), child.stdout.take(), child.stderr.take())
     else {
@@ -759,11 +775,27 @@ fn stalled(stall: Duration, odd: &str) -> CompletionError {
 }
 
 /// The failure of a turn whose process ended, with its code or by a signal, and all that it wrote on its stderr,
-/// which the stderr gives until its end or for a grace.
-async fn exited(code: Option<i32>, tail: &mut Tail) -> CompletionError {
+/// which the stderr gives until its end or for a grace; and whether the process found no program to run: it wrote no
+/// line of its stream, and its stderr says so, as a prefix of the command line says while an update replaces claude.
+async fn exited(
+  code: Option<i32>,
+  tail: &mut Tail,
+  program: &Program,
+  spoke: bool,
+) -> (CompletionError, bool) {
   let _ = tokio::time::timeout(GRACE, tail.drained()).await;
   let code = code.map_or_else(|| "a signal".to_owned(), |code| code.to_string());
-  failed(format!("Claude exited ({code}){}", tail.said()))
+  if !spoke && absent(&tail.kept) {
+    let said = tail.said();
+    return (failed(format!("{MISSING}: {} exited ({code}){said}", program.name())), true);
+  }
+  (failed(format!("Claude exited ({code}){}", tail.said())), false)
+}
+
+/// Whether what a process wrote on its stderr says that it found no program.
+fn absent(said: &str) -> bool {
+  let said = said.to_lowercase();
+  said.contains("not found") || said.contains("no such file or directory")
 }
 
 /// A turn in flight. However it ends, the conversation holds the request, what the command line heard of it, and
@@ -779,12 +811,18 @@ struct Flight<'a> {
   /// Whether the command line heard the line of the turn.
   heard: bool,
   reply: Option<String>,
+  /// Whether the conversation was resumed before the turn, which it is again when the process of the turn found no
+  /// program to run, since the command line then holds nothing of the turn.
+  restored: Option<bool>,
 }
 
 impl Drop for Flight<'_> {
   fn drop(&mut self) {
     let held = &mut *self.conversation;
     held.requested = self.incoming.clone();
+    if let Some(resumed) = self.restored {
+      held.resumed = resumed;
+    }
     if self.heard {
       held.chain = self.incoming.clone();
       held.asked = self.asked.take();
@@ -814,6 +852,7 @@ impl Flight<'_> {
   ) -> Result<CompletionResponse, CompletionError> {
     let line = input(delta)?;
     let held = &mut *self.conversation;
+    let before = held.resumed;
     // A process spends what it started at, so a turn at another effort or another most of thought ends it.
     if held.process.as_mut().is_some_and(|one| one.spend != spend || !one.stands()) {
       held.process = None;
@@ -837,18 +876,25 @@ impl Flight<'_> {
       Ok(Err(no)) => {
         // A process that took no input ended, and the failure says all that it wrote on its stderr.
         let _ = tokio::time::timeout(GRACE, process.tail.drained()).await;
-        return Err(failed(format!("claude took no input: {no}{}", process.tail.said())));
+        let said = process.tail.said();
+        if absent(&process.tail.kept) {
+          self.restored = Some(before);
+          return Err(failed(format!("{MISSING}: {} took no input: {no}{said}", program.name())));
+        }
+        return Err(failed(format!("claude took no input: {no}{said}")));
       }
       Err(_) => return Err(stalled(stall, "")),
     }
     self.heard = true;
     let mut reply = Reply { deltas, ..Reply::default() };
     let mut odd = String::new();
+    // Whether the process wrote a line, as a process that found no program to run writes none.
+    let mut spoke = false;
     // The code of a process that ended. A process that it started may hold its stdout open, so the turn sees the end
     // of the process itself, and then reads what its stdout holds for a grace.
     let mut ended = None;
     due = tokio::time::Instant::now() + stall;
-    loop {
+    let code = loop {
       let heard = tokio::select! {
         line = process.tail.beside(process.out.line()) => line,
         status = process.child.wait(), if ended.is_none() => {
@@ -857,15 +903,14 @@ impl Flight<'_> {
           continue;
         }
         () = tokio::time::sleep_until(due) => {
-          return Err(match ended {
-            Some(code) => exited(code, &mut process.tail).await,
-            None => stalled(stall, &odd),
-          });
+          let Some(code) = ended else { return Err(stalled(stall, &odd)) };
+          break code;
         }
       };
       let event = match heard {
         Line::Event(event) => event,
         Line::Odd(text) => {
+          spoke = true;
           last(&text).clone_into(&mut odd);
           continue;
         }
@@ -881,9 +926,10 @@ impl Flight<'_> {
               }
             }
           };
-          return Err(exited(code, &mut process.tail).await);
+          break code;
         }
       };
+      spoke = true;
       let kind = event.get("type").and_then(Value::as_str).unwrap_or_default();
       if matches!(kind, "stream_event" | "assistant" | "result") {
         due = tokio::time::Instant::now() + stall;
@@ -908,7 +954,13 @@ impl Flight<'_> {
         }
         _ => {}
       }
+    };
+    let (no, missing) = exited(code, &mut process.tail, program, spoke).await;
+    if missing {
+      self.heard = false;
+      self.restored = Some(before);
     }
+    Err(no)
   }
 }
 

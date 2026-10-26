@@ -528,6 +528,32 @@ fn the_replies_of_a_chain_keep_one_process_of_the_claude_command_line_and_each_l
 
 #[cfg(unix)]
 #[test]
+fn a_claude_that_an_update_took_away_is_asked_again_after_its_backoff_until_it_comes_back() {
+  use super::claude::{Claude, test::Yard};
+  let fake = Yard::new("away");
+  let claude = Claude::with_command(fake.prefix(), Vec::new(), Some(Duration::from_secs(10)));
+  let (retries, told) = retried();
+  let backoff = Backoff { most: 10, first: Duration::from_millis(100) };
+  let provider = Provider::new(yard("away").display().to_string(), claude.models())
+    .backoff(backoff)
+    .retries(retries);
+  let mut engine = lived(provider);
+  let root = engine.root().to_owned();
+  fake.away();
+  let with = verbs::Prompt { message: Some("task".into()), on: on(&root), ..Default::default() };
+  let id = engine.prompt(Object::string("str"), with).expect("a prompt is made").id().to_owned();
+  let waited = until(&mut engine, |_| told.lock().expect("the retries told").len() >= 2);
+  assert!(waited, "the call is made again while the program is away");
+  fake.back();
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  assert_eq!(got.py_repr(), "'reply 1'");
+  let retries = told.lock().expect("the retries told").clone();
+  assert!(retries.iter().all(|one| one.2.why == "the program is missing"), "{retries:?}");
+  assert_eq!(retries[..2].iter().map(|one| one.2.attempt).collect::<Vec<_>>(), [2, 3]);
+}
+
+#[cfg(unix)]
+#[test]
 fn the_claude_command_line_is_told_the_most_thought_of_the_provider_unless_the_environment_gave_it()
 {
   use super::claude::test::Yard;
@@ -753,6 +779,12 @@ fn only_a_failure_of_the_network_or_of_the_side_of_the_provider_passes() {
   assert_eq!(provider("unavailable"), None);
   assert_eq!(provider("boom"), None);
   assert_eq!(provider("No model is m/x."), None);
+  assert_eq!(
+    provider("No program to run: claude did not start: No such file or directory (os error 2)")
+      .as_deref(),
+    Some("the program is missing")
+  );
+  assert_eq!(provider("Claude exited (1): Error: 'claude' was not found on PATH."), None);
   assert_eq!(passing(&CompletionError::ResponseError("the stream stopped, 503".into())), None);
 }
 

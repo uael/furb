@@ -91,7 +91,16 @@ fn a_turn_hands_a_model_each_image_that_the_message_of_a_prompt_it_opens_names_o
     Ok(0),
     "a life with no directory hands none"
   );
-  fs::remove_file(at.join(kept.uri.strip_prefix("furb-image://").unwrap_or_default()))
-    .expect("the image goes");
-  assert!(images.named(&python).is_err(), "an image whose file is gone is read again, and fails");
+  let file = at.join(kept.uri.strip_prefix("furb-image://").unwrap_or_default());
+  fs::remove_file(&file).expect("the image goes");
+  let gone = format!(
+    "The image {} did not load from {}: No such file or directory (os error 2)",
+    kept.uri,
+    file.display()
+  );
+  assert_eq!(
+    images.named(&python).map(|seen| seen.len()),
+    Err(gone),
+    "an image whose file is gone fails"
+  );
 }

@@ -148,9 +148,10 @@ impl Backoff {
   }
 }
 
-/// Why a call of a model failed, in a few words, when the cause passes: the connection was lost or timed out, or the
-/// provider is overloaded, limits the rate, or failed on its side. A failure of the request, of the turn, or of a
-/// model that the provider cannot make does not pass, and the model is not asked again.
+/// Why a call of a model failed, in a few words, when the cause passes: the connection was lost or timed out, the
+/// provider is overloaded, limits the rate, or failed on its side, or the program of the claude command line was
+/// missing, as while an update replaces it. A failure of the request, of the turn, or of a model that the provider
+/// cannot make does not pass, and the model is not asked again.
 fn passing(no: &CompletionError) -> Option<String> {
   let said = match no {
     CompletionError::HttpError(no) => no.to_string(),
@@ -162,7 +163,9 @@ fn passing(no: &CompletionError) -> Option<String> {
   let status = said
     .split(|one: char| !one.is_ascii_digit())
     .find(|one| matches!(*one, "408" | "429" | "500" | "502" | "503" | "504" | "529"));
-  let why = if has(&["connection reset", "reset by peer"]) {
+  let why = if said.starts_with(&claude::MISSING.to_lowercase()) {
+    "the program is missing".to_owned()
+  } else if has(&["connection reset", "reset by peer"]) {
     "connection reset".to_owned()
   } else if has(&["timed out", "timeout"]) || status == Some("408") {
     "timed out".to_owned()
