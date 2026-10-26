@@ -138,7 +138,7 @@ WORKER = """You are a worker on the repository {repo}. Do one item, and open its
 1. Make a worktree whose build starts warm: {repo}/script/worktree.sh {repo}-w-{key} w/{key}, then work there. Build on origin/main, and stack your branch on an open PR only when your change needs its code; say why in the body, since a stack lands one layer at a time. If that worktree stands already, work in it, rebased onto origin/main. Run each build of Rust through sh $TMPDIR/build.sh <command>, which runs three at once at most.
 2. Change it as the AGENTS.md files of the repository say.
 3. Run only the tests that your change touches.
-4. Commit with the title of the PR as its message (a commit that the item brought keeps its own message, since the merge squashes them), and push the branch. Then open the PR, or update it when it stands, with pr(), which fills the template of the owner from what you give it and checks each of its rules: await pr(title, why, outcome, checks, breaking=[], fixes=0, where=<your worktree>, labels="{labels}"). title is type(area): What changed, 70 characters or fewer: the type is feat, fix, perf, or chore for a change that no user sees, and the area is the part that owns the change (engine, crate, tui, gui, provider, ci, conductor, or an extension by its name). why is the problem and why it matters now, from your own work and not from git log. outcome is a list: what is true now that was not, each with the evidence of what you ran, and each gap that you leave. breaking lists each change that forces a caller of a door or of the contract to change code. 300 words at most, and no how, which the diff holds. checks is six lines, one for each box of the checklist of the template in its order: verify each box one by one, then give the evidence of how you verified it, or not: and the work that it still needs, which leaves that box open. A flaw that you name in outcome ticks the box about flaws. When the item says that the owner ruled several changes one PR, that ruling is the evidence of the box about one change. A pr() that breaks a rule raises Refused and says why; never write the body of a PR by hand.
+4. Commit with the title of the PR as its message (a commit that the item brought keeps its own message, since the merge squashes them), and push the branch. Then open the PR, or update it when it stands, with pr(), which fills the template of the owner from what you give it and checks each of its rules: await pr(title, why, outcome, checks, breaking=[], fixes=0, where=<your worktree>, labels="{labels}"). title is type(area): What changed, 70 characters or fewer: the type is feat, fix, perf, or chore for a change that no user sees, and the area is the part that owns the change (engine, crate, tui, gui, provider, ci, conductor, or an extension by its name). why is the problem and why it matters now, from your own work and not from git log. outcome is a list: what is true now that was not, each with the evidence of what you ran, and each gap that you leave. breaking lists each change that forces a caller of a door or of the contract to change code. 300 words at most, and no how, which the diff holds. prcheck(title, why, outcome, breaking) before the commit checks the title and gives the word count. checks is six lines, one for each box of the checklist of the template in its order: verify each box one by one, then give the evidence of how you verified it, or not: and the work that it still needs, which leaves that box open. A flaw that you name in outcome ticks the box about flaws. When the item says that the owner ruled several changes one PR, that ruling is the evidence of the box about one change. A pr() that breaks a rule raises Refused and says why; never write the body of a PR by hand.
 5. Open your first PR within about an hour of work, as soon as one coherent part serves the item: a large item
 lands as a series of PRs, each one change, opened from this chain, and you close with the number of the last one.
 6. Keep the worktree until your PR merges, since a fix comes back to it and a new worktree builds cold: the round prunes it after the merge. When the item asks for no change, answer it in a comment that starts with 🤖 on its issue or PR. Close with a tuple: the number of your PR, or 0 when the item asked for no change, and your report in 200 words at most: what you measured, what you decided, and what is left.
@@ -212,31 +212,67 @@ def pr_box(box: str, check: str) -> str:
   return f"- [x] {box}"
 
 
-def pr_body(why: str, outcome: list[str], breaking: list[str], fixes: int, checks: list[str]) -> str:
-  parts = ["🤖" + (f" Fixes #{fixes}." if fixes else ""), "## Why", why.strip(), "## Outcome", "\n".join(f"- {x.strip()}" for x in outcome)]
+def pr_body(
+  why: str, outcome: list[str], breaking: list[str], fixes: int, checks: list[str], part_of: int = 0
+) -> str:
+  head = "🤖" + (f" Fixes #{fixes}." if fixes else "") + (f" Part of #{part_of}." if part_of else "")
+  parts = [head, "## Why", why.strip(), "## Outcome", "\n".join(f"- {x.strip()}" for x in outcome)]
   if breaking:
     parts += ["## Breaking changes", "\n".join(f"- {x.strip()}" for x in breaking)]
   return "\n\n".join([*parts, "---", "\n".join(pr_box(b, c) for b, c in zip(PR_BOXES, checks))]) + "\n"
 
 
-def pr(title: str, why: str, outcome: list[str], checks: list[str], breaking: list[str] | None = None, fixes: int = 0, where: str = "", labels: str = "", number: int = 0, base: str = "main") -> Act:
+def prcheck(title: str, why: str, outcome: list[str], breaking: list[str] | None = None) -> int:
   if len(title) > 70 or not re.fullmatch(PR_TITLE, title):
     raise Refused(f"the title {title!r} is not type(area): What changed, in 70 characters or fewer")
   if not why.strip() or not outcome:
     raise Refused("a PR needs a why and at least one outcome")
+  parts = [len(why.split()), len(" ".join(outcome).split()), len(" ".join(breaking or []).split())]
+  if sum(parts) > 300:
+    raise Refused(
+      f"the body holds {sum(parts)} words, over 300 (why {parts[0]}, outcome {parts[1]}, breaking {parts[2]}):"
+      " delete a whole paragraph, not a word"
+    )
+  return sum(parts)
+
+
+PR_OPEN = (
+  "{ B=$(git branch --show-current); N=$(gh pr list --state open --head \"$B\" --json number --jq '.[0].number // empty');"
+  " out=$(if [ -n \"$N\" ]; then gh pr edit \"$N\" --title @NAME@ --body-file -@ADDED@ >/dev/null"
+  " && gh pr view \"$N\" --json url --jq .url; else gh pr create --base @BASE@ --head \"$B\" --title @NAME@"
+  " --body-file -@FLAGS@; fi); c=$?;"
+  " if [ $c -ne 0 ]; then u=$(gh pr list --state open --head \"$B\" --json url --jq '.[0].url // empty' 2>/dev/null);"
+  " [ -n \"$u\" ] && { echo \"$u\"; exit 0; }; fi; echo \"$out\"; exit $c; }"
+)
+
+
+def pr(
+  title: str,
+  why: str,
+  outcome: list[str],
+  checks: list[str],
+  *,
+  breaking: list[str] | None = None,
+  fixes: int = 0,
+  where: str = "",
+  labels: str | list[str] = "",
+  number: int = 0,
+  base: str = "main",
+  part_of: int = 0,
+) -> Act[Exit]:
+  prcheck(title, why, outcome, breaking)
   if len(checks) != len(PR_BOXES) or not all(c.strip() and c.strip().lower() != "not:" for c in checks):
     raise Refused(f"checks needs {len(PR_BOXES)} lines, one for each box of the checklist in its order: the evidence of how you verified that box, or not: and the work that it still needs")
-  words = len(" ".join([why, *outcome, *(breaking or [])]).split())
-  if words > 300:
-    raise Refused(f"the body holds {words} words, over 300: delete a whole paragraph, not a word")
-  body = pr_body(why, outcome, breaking or [], fixes, checks)
+  body = pr_body(why, outcome, breaking or [], fixes, checks, part_of)
   name = shq(title)
+  flags = "".join(f" --label {shq(x)}" for x in labels) if isinstance(labels, list) else labels
   rules = 'R=CLAUDE.md; [ -f AGENTS.md ] && R=AGENTS.md; sed "s/{rules}/$R/g" | '
   if number:
-    command = rules + f"gh pr edit {number} --title {name} --body-file - && gh pr view {number} --json url --jq .url"
+    command = rules + f"gh pr edit {number} --title {name} --body-file - >/dev/null && gh pr view {number} --json url --jq .url"
   else:
-    added = labels.replace("--label", "--add-label")
-    command = (f"cd {shq(where)} && " if where else "") + rules + "{ N=$(gh pr list --state open --head \"$(git branch --show-current)\" --json number --jq '.[0].number // empty'); " + f"if [ -n \"$N\" ]; then gh pr edit \"$N\" --title {name} --body-file -{added} && gh pr view \"$N\" --json url --jq .url; else gh pr create --base {base} --title {name} --body-file -{labels}; fi; }}"
+    opening = PR_OPEN.replace("@NAME@", name).replace("@BASE@", shq(base))
+    opening = opening.replace("@ADDED@", flags.replace("--label", "--add-label")).replace("@FLAGS@", flags)
+    command = (f"cd {shq(where)} || exit 1; " if where else "") + rules + opening
   return bash(command, stdin=body, show=span(-2, -1), timeout=180)
 
 
