@@ -160,6 +160,8 @@ and the word, so a change of either needs `uv sync --reinstall-package furb-mont
 
 A screen must read clearly at first sight. After a change that a screen shows, run `bun run screenshots` and read each
 capture. With `FURB_GALLERY_ONLY` set to a pattern, such as `^0[1-5]-`, it writes only the captures that match.
+Do not commit them: after a push to `main` that changes a screen, `.github/workflows/gallery.yml` draws the gallery
+and the animation again on a runner of CI, and keeps one pull request on the branch `w/gallery` with the new files.
 
 ### The desktop preview
 
