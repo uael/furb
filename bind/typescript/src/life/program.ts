@@ -6,7 +6,8 @@ import { placed } from "./source.js";
 /** One line of the program of a thread, as the feed shows it.
  *
  * - `code`: a line of a word, with the acts that it made, whether it runs now, why it failed, and its hint: what its
- *   acts came to in a few words.
+ *   acts came to in a few words. A line that runs as it awaits an act that an earlier line made names that act and
+ *   the line that made it in `awaits`, and that line holds the line that awaits it in `awaited`.
  * - `quote` is a `code` line too: a quote of a word stands as the binding that it makes, its name bound to its text as
  *   one string with escapes, as python writes it, and its count of lines as its hint.
  * - `output`: a line that a command prints while its line runs.
@@ -28,6 +29,8 @@ export type ProgramLine =
       runs: boolean;
       fails?: string;
       hint: string;
+      awaits?: { act: LiveAct; display: number };
+      awaited?: number;
     }
   | { kind: "output"; step: LiveAct; act: LiveAct; text: string }
   | { kind: "writes"; step: LiveAct; display: number; text: string }
@@ -155,6 +158,15 @@ export function stepLines(
   const running = actState(step, owed) === "running";
   const open = running ? children.findLast((act) => !act.done && followed.has(act.kind)) : undefined;
   const source = text.split("\n");
+  // A line that awaits the act of the name that an earlier line binds, as `b = await build` after
+  // `build = bash(...)`, is where the word stands while that act runs.
+  const maker = open ? on.findIndex((acts) => acts.includes(open)) : -1;
+  const bound = maker >= 0 ? source[maker]?.match(/^\s*(\w+)\s*=(?!=)(?![^#]*\bawait\b)/)?.[1] : undefined;
+  const waits = bound
+    ? source.findIndex(
+        (line, at) => at > maker && new RegExp(`\\bawait\\s+${bound}\\b`).test(line.split("#")[0] ?? ""),
+      )
+    : -1;
   const failing = why ? Number(why.match(/\bline (\d+)/)?.[1] ?? source.length) : 0;
   for (let index = 0; index < source.length; index++) {
     const line = source[index] ?? "";
@@ -182,8 +194,11 @@ export function stepLines(
     // A string of three marks that runs over many lines stands in its statement as one string with its escapes.
     const joined = /"""|'''/.test(line) ? joinedLines(source, index) : undefined;
     const last = joined?.end ?? index;
+    const here = index;
     const acts = last === index ? (on[index] ?? []) : [...new Set(on.slice(index, last + 1).flat())];
-    const runs = Boolean(open && acts.includes(open));
+    const runs = waits >= 0 ? index === waits : Boolean(open && acts.includes(open));
+    const awaits = index === waits && open ? { act: open, display: start + maker + 1 } : undefined;
+    const hint = awaits ? `waits on ${open?.id} of line ${awaits.display}` : hintOf(acts, owed, label);
     out.push({
       kind: "code",
       step,
@@ -193,7 +208,9 @@ export function stepLines(
       acts,
       runs,
       ...(why && failing >= index + 1 && failing <= last + 1 ? { fails: why } : {}),
-      hint: hintOf(acts, owed, label),
+      hint,
+      ...(awaits ? { awaits } : {}),
+      ...(waits >= 0 && here === maker ? { awaited: start + waits + 1 } : {}),
     });
     // A quote that ran stands in its word as the binding that it made, with blank lines after it that keep the numbers
     // of the lines below. Those blank lines stand in the line of the binding, which shows the lines that it took.
@@ -203,7 +220,7 @@ export function stepLines(
       bound.includes("\\n") && /^\w+ = (['"]).*\\n.*\1$/.test(bound) ? (bound.match(/\\n/g) ?? []).length : 0;
     while (pad <= escapes && escapes && source[last + 1 + pad]?.trim() === "") pad++;
     index = last + pad;
-    if (runs && open?.kind === "bash")
+    if (open?.kind === "bash" && (waits >= 0 ? here === maker : runs))
       for (const printed of tailOf(open, OUTPUT_LINES).split("\n"))
         if (printed) out.push({ kind: "output", step, act: open, text: printed });
   }

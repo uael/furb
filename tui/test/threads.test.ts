@@ -188,6 +188,74 @@ test("a string too long for its line folds to its start and an underlined ..., w
     true,
   ));
 
+test("a hover on the line of a read shows the text that it read, and on a line that the gate refused shows its error", () =>
+  composing(
+    async ({ session, screen, frame }) => {
+      const root = session.engine.root;
+      const wrote = await session.engine.rung({
+        word: 'write(Text("hover.txt", "HOVER" + "TEXT first\\nsecond"))\nseen = read("hover.txt")',
+        on: root,
+      });
+      await session.engine.result(wrote);
+      await session.refresh();
+      const shown = await frame();
+      const rows = shown.split("\n");
+      const y = rows.findIndex((row) => row.includes('seen = read("hover.txt")'));
+      expect(y).toBeGreaterThanOrEqual(0);
+      expect(shown).not.toContain("HOVERTEXT");
+      await screen.mockMouse.moveTo((rows[y] ?? "").indexOf("seen") + 1, y);
+      await until(screen.renderer, () => screen.captureCharFrame().includes("HOVERTEXT first"), "frame");
+      keep("hover-read", screen.captureCharFrame());
+      await screen.mockMouse.moveTo(1, 1);
+      const refused = await session.engine.rung({ word: "ok = 1\nbad = = 2", on: root });
+      await session.engine.result(refused).catch(() => undefined);
+      await session.refresh();
+      const failed = await frame();
+      keep("gate", failed);
+      const lines = failed.split("\n");
+      const row = lines.findIndex((line) => line.includes("bad = = 2"));
+      expect(row).toBeGreaterThanOrEqual(0);
+      expect(lines[row]).toContain(glyph.failed);
+      await screen.mockMouse.moveTo((lines[row] ?? "").indexOf("bad") + 1, row);
+      await until(
+        screen.renderer,
+        () => screen.captureCharFrame().includes("The gate refused line 2"),
+        "frame",
+      );
+      keep("hover-gate", screen.captureCharFrame());
+    },
+    { ...size, useMouse: true },
+    true,
+  ));
+
+test("a line that awaits a command lights the line that made it, names it, and shows its time after a second", () =>
+  composing(
+    async ({ session, frame }) => {
+      const rung = await session.engine.rung({
+        word: 'build = bash("sleep 30")\nx = 1\nb = await build',
+        on: session.engine.root,
+      });
+      // The time of a line comes after a second of its wait, so the frames are read until it shows.
+      let rows: string[] = [];
+      const ready = () => {
+        const waits = rows.find((row) => row.includes("b = await build")) ?? "";
+        return /waits on bash\d+ of line 1/.test(waits) && /\b\d+s\b/.test(waits);
+      };
+      for (let step = 0; step < 160 && !ready(); step++) {
+        await session.refresh();
+        rows = (await frame()).split("\n");
+        if (!ready()) await Bun.sleep(50);
+      }
+      keep("awaits", rows.join("\n"));
+      expect(ready()).toBe(true);
+      expect(rows.find((row) => row.includes("b = await build"))).toContain(glyph.running);
+      expect(rows.find((row) => row.includes('build = bash("sleep 30")'))).toContain(glyph.awaited);
+      await session.engine.cancel(rung);
+    },
+    size,
+    true,
+  ));
+
 test("a line cut to its room and a folded string keep the colors of their whole statement", () =>
   composing(
     async ({ session, screen, frame }) => {

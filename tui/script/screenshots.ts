@@ -1024,6 +1024,35 @@ try {
   app().dispose();
   await library.dispose();
 
+  // A program that lives: a line under the pointer shows what its acts came to, a line that the gate refused shows its
+  // error under the pointer, and a line that awaits the act of an earlier line runs with its time and lights that line.
+  await show(await demoSession({ cwd: await project("living") }));
+  const point = async (pattern: RegExp, name: string) => {
+    const rows = test.captureCharFrame().split("\n");
+    const y = rows.findIndex((row) => pattern.test(row));
+    if (y < 0) throw new Error(`No line for ${name} in the feed.`);
+    await test.mockMouse.moveTo((rows[y]?.search(pattern) ?? 0) + 2, y);
+    await new Promise((done) => setTimeout(done, 600));
+    await capture(name);
+    await rest();
+  };
+  await session.command('/run notes = read("README.md")\nfirst = notes.lines[0]');
+  await settle();
+  app().render();
+  await test.flush();
+  await point(/notes = read\(/, "97-read-hover");
+  await session.command("/run ready = True\nnext = = 2").catch(() => {});
+  await settle();
+  app().render();
+  await test.flush();
+  await point(/next = = 2/, "98-gate-hover");
+  void session.command('/run build = bash("sleep 3")\nsize = 1\nbuilt = await build').catch(() => {});
+  await new Promise((done) => setTimeout(done, 1600));
+  await capture("99-awaited-line");
+  await settle();
+  app().dispose();
+  await library.dispose();
+
   // Access: the mode of a screen reader, a terminal with no color, and the theme of a light terminal, on a life of
   // the demo that holds a conversation and a question.
   const access = await gallerySession();
