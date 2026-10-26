@@ -206,6 +206,11 @@ export const input = part({
       },
     ]);
     layer(bare, "", [
+      {
+        on: ["right", "ctrl+f", "meta+right", "meta+f"],
+        run: this.acceptGhost,
+        when: () => this.composer.focused && Boolean(this.composer.ghost),
+      },
       // As in Claude Code, Ctrl+D acts on an empty input.
       { on: "ctrl+d", run: () => this.exit(), when: () => !this.composer.plainText },
       ...table(false),
@@ -314,9 +319,17 @@ export const input = part({
     else this.action("/cancel");
   },
 
+  /** Right and Ctrl+F at the end of the line take the grey rest of it, and Alt+Right and Alt+F take its next word, as
+   * fish does. */
+  acceptGhost(key?: KeyEvent): void {
+    const word = key?.meta ? /^\s*\S+/.exec(this.composer.ghost)?.[0] : undefined;
+    this.composer.insertText(word ?? this.composer.ghost);
+  },
+
   /** Up on an empty input takes back the last message queued on the chain, and Up and Down at the first and the last
-   * line of the input walk the history of what it sent, as a shell does. Alt+Up and Alt+Down walk it from any line.
-   * It gives false when it does nothing, and the input moves its cursor. */
+   * line of the input walk the history of what it sent, as a shell does: the entries of this chain first, then those
+   * of the other chains, and with text typed, only the entries that start with it, as fish does. Alt+Up and Alt+Down
+   * walk it from any line. It gives false when it does nothing, and the input moves its cursor. */
   walkHistory(key?: KeyEvent): boolean {
     const up = key?.name === "up";
     const anywhere = key?.meta;
@@ -329,15 +342,22 @@ export const input = part({
     }
     const cursor = this.composer.visualCursor.visualRow;
     const edge = up ? cursor === 0 : cursor >= this.composer.virtualLineCount - 1;
-    const history = this.history();
+    const prefix = this.historyIndex < 0 ? this.composer.plainText : this.historyPrefix;
+    const history = this.history().filter(
+      (entry) => entry.startsWith(prefix) && (this.historyIndex >= 0 || entry !== prefix),
+    );
     if (!(anywhere || edge) || !history.length || !(up || this.historyIndex >= 0)) return false;
     if (this.historyIndex < 0) {
       this.historyDraft = this.composer.plainText;
+      this.historyPrefix = prefix;
       this.historyIndex = history.length;
     }
     this.historyIndex = Math.max(0, Math.min(history.length, this.historyIndex + (up ? -1 : 1)));
     const text = history[this.historyIndex] ?? this.historyDraft;
-    if (this.historyIndex === history.length) this.historyIndex = -1;
+    if (this.historyIndex === history.length) {
+      this.historyIndex = -1;
+      this.historyPrefix = "";
+    }
     this.composer.replaceText(text);
     return true;
   },
@@ -592,4 +612,11 @@ export const input = part({
 
 export type InputPart = typeof input;
 
-export const inputBound = ["pageQuestion", "newline", "walkHistory", "escape", "dispose"] as const;
+export const inputBound = [
+  "pageQuestion",
+  "newline",
+  "acceptGhost",
+  "walkHistory",
+  "escape",
+  "dispose",
+] as const;

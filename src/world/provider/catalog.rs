@@ -238,8 +238,11 @@ impl Catalog {
     let env = |name: &str| env(name).filter(|one| !one.is_empty());
     let found = claude.is_some();
     let kept = claude.clone();
-    let claude = claude.unwrap_or_else(|| Claude::with(None, None)).models().into_iter();
-    let mut models: Vec<_> = claude.map(|model| (model, found)).collect();
+    let claude = match claude {
+      Some(claude) => claude.models(),
+      None => Claude::with(None, None).fixed(),
+    };
+    let mut models: Vec<_> = claude.into_iter().map(|model| (model, found)).collect();
     let mut providers = Vec::new();
     for (provider, one) in listed {
       providers.push((provider.clone(), one.env.clone(), true));

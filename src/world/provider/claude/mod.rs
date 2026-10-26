@@ -39,17 +39,16 @@ use sha2::{Digest, Sha256};
 use super::{Model, ended, search, uuid};
 use crate::ear::reactor;
 
+mod discover;
+use discover::Found;
+pub use discover::refresh;
+
 /// The name of the command line as a provider: each response of it says this name, and each of its models is named
 /// by it and the alias of its family.
 pub const CLAUDE: &str = "claude-cli";
 
 /// The efforts the command line spends on a turn, from least to most.
 pub const EFFORTS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];
-
-/// The models of the command line, by the alias of their family, and the window of each, the one a life stands on
-/// when its host names none first.
-const FAMILY: [(&str, u64); 4] =
-  [("opus", 1_000_000), ("sonnet", 1_000_000), ("haiku", 200_000), ("fable", 1_000_000)];
 
 /// How many conversations keep a process at most.
 const WARM: usize = 8;
@@ -175,21 +174,35 @@ impl Claude {
   }
 
   /// The models of the command line as the provider offers them, each named `claude-cli:` and its alias: each with
-  /// its window, every effort, and the images of a turn, the conversation of a reply under the setting `session`, and
-  /// the most tokens of thought of a turn under the setting `max_thinking_tokens`. The command line counts what it read of the cache apart from the rest of what it read.
+  /// the window and the efforts that the command line reports for it, the images of a turn, the conversation of a
+  /// reply under the setting `session`, and the most tokens of thought of a turn under the setting
+  /// `max_thinking_tokens`. The command line counts what it read of the cache apart from the rest of what it read.
+  ///
+  /// The command line says its models itself, with no model prompt, once for each version of its program: a process
+  /// of its own asks it, and furb keeps the answer in its cache until the program changes or [`refresh`] is called.
+  /// A command line that does not answer, as an older one does not, gives the fixed table of furb, within 20 seconds.
   pub fn models(&self) -> Vec<Model> {
-    FAMILY
-      .iter()
-      .map(|(alias, window)| {
-        let named = format!("{CLAUDE}:{alias}");
-        let model =
-          Model::new(named, *window, self.completion_model(*alias)).conversation("session");
-        let mut model = model.searches(search::claude(self.program.clone(), (*alias).to_owned()));
+    self.family(discover::models(&self.program).unwrap_or_else(discover::fallback))
+  }
+
+  /// The models that furb offers when it cannot ask the command line: the fixed table, which asks nothing.
+  pub fn fixed(&self) -> Vec<Model> {
+    self.family(discover::fallback())
+  }
+
+  fn family(&self, found: Vec<Found>) -> Vec<Model> {
+    found
+      .into_iter()
+      .map(|one| {
+        let named = format!("{CLAUDE}:{}", one.alias);
+        let model = Model::new(named, one.window, self.completion_model(one.alias.as_str()))
+          .conversation("session");
+        let mut model = model.searches(search::claude(self.program.clone(), one.alias.clone()));
         model.apart = true;
         model.thought = Some(super::Thought::Told);
-        EFFORTS
-          .iter()
-          .fold(model.images(), |model, effort| model.effort(*effort, json!({"effort": effort})))
+        one.efforts.iter().fold(model.images(), |model, effort| {
+          model.effort(effort.as_str(), json!({"effort": effort}))
+        })
       })
       .collect()
   }
@@ -286,7 +299,9 @@ impl Claude {
     }
     let settings = request.additional_params.unwrap_or_default();
     let effort = settings.get("effort").and_then(Value::as_str).map(str::to_owned);
-    if let Some(effort) = effort.as_deref().filter(|one| !EFFORTS.contains(one)) {
+    if let Some(effort) =
+      effort.as_deref().filter(|one| !discover::takes(&self.program, &name, one))
+    {
       let efforts = EFFORTS.join(", ");
       return Err(failed(format!("{name} spends one of {efforts} on a turn, never {effort}.")));
     }

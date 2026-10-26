@@ -277,7 +277,7 @@ test("Up and Down walk the history from the edges of the input, and Up on an emp
         app.composer.setText(`/name ${name}`);
         await app.submit();
       }
-      app.composer.setText("a draft");
+      app.composer.setText("");
       screen.mockInput.pressArrow("up");
       expect(app.composer.plainText).toBe("/name second");
       screen.mockInput.pressArrow("up");
@@ -285,7 +285,22 @@ test("Up and Down walk the history from the edges of the input, and Up on an emp
       screen.mockInput.pressArrow("down");
       expect(app.composer.plainText).toBe("/name second");
       screen.mockInput.pressArrow("down");
-      expect(app.composer.plainText).toBe("a draft");
+      expect(app.composer.plainText).toBe("");
+      // Typed text keeps the walk to the entries that start with it, and Down brings the text back.
+      app.composer.setText("/name f");
+      screen.mockInput.pressArrow("up");
+      expect(app.composer.plainText).toBe("/name first");
+      screen.mockInput.pressArrow("up");
+      expect(app.composer.plainText).toBe("/name first");
+      screen.mockInput.pressArrow("down");
+      expect(app.composer.plainText).toBe("/name f");
+      // The history holds the entries of the other chains, older than those of this chain.
+      session.histories[`other:${session.mode}`] = ["from another chain", "/name second"];
+      app.composer.setText("from");
+      screen.mockInput.pressArrow("up");
+      expect(app.composer.plainText).toBe("from another chain");
+      screen.mockInput.pressArrow("down");
+      expect(app.composer.plainText).toBe("from");
       app.composer.setText("");
       session.queueHeld = true;
       session.enqueue("a queued message");
@@ -396,9 +411,10 @@ test("/feed lists the commands whose stdin is open, and the line of such a comma
       await frame();
       // Each line opens at a click, and what its act gave under it says whether its input is open.
       for (const id of [open, shut]) {
-        const line = app.scroll.getChildren().find((node) => node.id === `program-${id}`);
+        // A command of the operator stands in a panel, whose first row is its edge.
+        const line = app.scroll.getChildren().find((node) => node.id === id);
         if (!line) throw new Error(`No line for ${id}.`);
-        await screen.mockMouse.click(line.x + 8, line.y);
+        await screen.mockMouse.click(line.x + 8, line.y + 1);
         await screen.flush();
       }
       const cards = await frame();
@@ -624,7 +640,7 @@ test("a cancelled message keeps its place in the feed, and its cancel reads as a
     // before it wrote a word shows nothing.
     const lines = shown.split("\n");
     const first = lines.findIndex((line) => line.includes("Think until I cancel."));
-    expect(lines[first]).toContain("⊘ ▸ Think until I cancel.");
+    expect(lines[first]).toMatch(/┃ ⊘ Think until I cancel\.\s+1 step {2}cancelled {2}▸ Expand/);
     expect(lines[first]).not.toContain("✗");
     expect(first).toBeLessThan(lines.findIndex((line) => line.includes("A second message.")));
     expect(lines.filter((line) => line.includes(" cancelled") && line.includes("⊘"))).toHaveLength(1);
@@ -644,10 +660,11 @@ test("a word that the gate refused shows a cross on the line that the refusal na
       await idle(session);
       await session.refresh();
       const lines = (await frame()).split("\n");
-      const refused = lines.findIndex((line) => /✗ 1 ```python/.test(line));
+      const refused = lines.findIndex((line) => /✗ +1 ```python/.test(line));
       expect(refused).toBeGreaterThan(0);
       expect(lines[refused + 1]).toMatch(/^ +# Got unexpected token/);
-      const retried = lines.findIndex((line) => / 1 close\("Here it is again as plain Python/.test(line));
+      // The numbers of the thread go on from the refused word to the word that replaced it.
+      const retried = lines.findIndex((line) => / 4 close\("Here it is again as plain Python/.test(line));
       expect(retried).toBeGreaterThan(refused + 1);
       expect(lines.slice(retried).join("\n")).not.toContain("✗");
       expect(lines.join("\n")).not.toContain("failed");
@@ -709,4 +726,41 @@ test("Escape, a space, a removed colon, or no match closes the emoji list and ke
     screen.mockInput.pressEnter();
     await until(session, () => session.activity.length > sent);
     expect(app.composer.plainText).toBe("");
+  }));
+
+test("The input draws the rest of a line from the history in grey, and Right, Ctrl+F and Alt+Right take it at the end of the line", () =>
+  composing(async ({ session, app, screen, frame }) => {
+    session.histories[session.draftKey] = ["tell me about the weather", "tell me about the harbor today"];
+    await screen.mockInput.typeText("tell me about the h");
+    const rows = (await frame()).split("\n");
+    const row = rows.findIndex((line) => line.includes("tell me about the harbor today"));
+    expect(row).toBeGreaterThanOrEqual(0);
+    const column = (rows[row] ?? "").indexOf("arbor today");
+    const typed = cellAt(screen.captureSpans(), column - 1, row);
+    const grey = cellAt(screen.captureSpans(), column, row);
+    expect(grey.fg?.equals(RGBA.fromHex(palettes.ink.faint))).toBe(true);
+    expect(typed.fg?.equals(grey.fg ?? RGBA.fromHex("#000000"))).toBe(false);
+    // The grey rest is no text: the input holds only what was typed.
+    expect(app.composer.plainText).toBe("tell me about the h");
+    screen.mockInput.pressArrow("right");
+    expect(app.composer.plainText).toBe("tell me about the harbor today");
+    expect(await frame()).toContain("tell me about the harbor today");
+    app.composer.setText("");
+    await screen.mockInput.typeText("tell me about the h");
+    screen.mockInput.pressKey("f", { ctrl: true });
+    expect(app.composer.plainText).toBe("tell me about the harbor today");
+    app.composer.setText("");
+    await screen.mockInput.typeText("tell me about the h");
+    screen.mockInput.pressArrow("right", { meta: true });
+    expect(app.composer.plainText).toBe("tell me about the harbor");
+    // Away from the end of the text, or with no longer entry, the keys only move the cursor.
+    app.composer.setText("");
+    await screen.mockInput.typeText("tell me about the h");
+    screen.mockInput.pressArrow("left");
+    expect(await frame()).not.toContain("harbor today");
+    screen.mockInput.pressArrow("right");
+    expect(app.composer.plainText).toBe("tell me about the h");
+    app.composer.setText("");
+    await screen.mockInput.typeText("something else");
+    expect(await frame()).not.toContain("tell me about");
   }));

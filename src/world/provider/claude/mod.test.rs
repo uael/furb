@@ -677,3 +677,71 @@ pub(crate) fn gone(pid: &str) -> bool {
   }
   false
 }
+
+/// The models of a yard: what the scripted command line says of them, and how many times it was asked.
+fn said(claude: &Claude) -> Vec<(String, u64, Vec<String>)> {
+  claude
+    .models()
+    .iter()
+    .map(|one| (one.name.clone(), one.window, one.efforts.iter().map(|e| e.0.clone()).collect()))
+    .collect()
+}
+
+#[test]
+fn the_models_are_what_the_command_line_says_of_its_aliases_its_windows_and_its_efforts_with_no_model_prompt()
+ {
+  let yard = Yard::new("discover");
+  fs::write(
+    yard.at.join("models"),
+    "haiku 1000000 low,high\nnova 333000 low,turbo\nplain 5000 -\n",
+  )
+  .unwrap();
+  let got = said(&yard.claude(10_000));
+  let both = |a: &[&str]| a.iter().map(|one| (*one).to_owned()).collect::<Vec<_>>();
+  assert_eq!(
+    got,
+    [
+      ("claude-cli:haiku".to_owned(), 1_000_000, both(&["low", "high"])),
+      ("claude-cli:nova".to_owned(), 333_000, both(&["low", "turbo"])),
+      ("claude-cli:plain".to_owned(), 5_000, both(&[])),
+    ]
+  );
+  assert!(yard.pids().is_empty() && yard.heard().is_empty());
+  assert!(!yard.at.join("count").exists());
+}
+
+#[test]
+fn the_models_are_asked_again_after_a_refresh() {
+  let yard = Yard::new("refresh");
+  fs::write(yard.at.join("models"), "nova 100 low\n").unwrap();
+  let claude = yard.claude(10_000);
+  assert_eq!(said(&claude)[0].1, 100);
+  fs::write(yard.at.join("models"), "nova 200 low\n").unwrap();
+  super::refresh();
+  assert_eq!(said(&claude)[0].1, 200);
+}
+
+#[test]
+fn a_command_line_that_answers_no_discovery_gives_the_fixed_models() {
+  let yard = Yard::new("fixed");
+  let got = said(&yard.claude(10_000));
+  let names: Vec<_> = got.iter().map(|one| one.0.as_str()).collect();
+  assert_eq!(
+    names,
+    ["claude-cli:opus", "claude-cli:sonnet", "claude-cli:haiku", "claude-cli:fable"]
+  );
+  assert_eq!(got[2].1, 200_000);
+  assert!(yard.pids().is_empty());
+}
+
+#[test]
+fn an_effort_that_the_command_line_reported_is_taken_on_a_turn() {
+  let yard = Yard::new("reported");
+  fs::write(yard.at.join("models"), "nova 100 low,turbo\n").unwrap();
+  let claude = yard.claude(10_000);
+  assert_eq!(said(&claude).len(), 1);
+  let model = claude.completion_model("nova");
+  let got = asked(&model, &[user("first")], json!({"effort": "turbo"}));
+  assert!(got.is_ok(), "{got:?}");
+  assert_eq!(after(&yard.args(&yard.pids()[0]), "--effort").as_deref(), Some("turbo"));
+}

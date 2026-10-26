@@ -8,6 +8,7 @@ import {
   InputRenderable,
   InputRenderableEvents,
   type KeyEvent,
+  type LineNumberRenderable,
   type MouseEvent,
   type Renderable,
   ScrollBoxRenderable,
@@ -24,6 +25,7 @@ import { type ComposerPart, composer, composerBound } from "./app/composer.ts";
 import { type DeskPart, desk, deskBound } from "./app/desk.ts";
 import { type DetailsPart, details } from "./app/details.ts";
 import { type FeedPart, feed } from "./app/feed.ts";
+import { GhostTextarea } from "./app/ghost.ts";
 import { type InputPart, input, inputBound } from "./app/input.ts";
 import { type PalettePart, palette } from "./app/palette.ts";
 import { assemble, bindAll } from "./app/part.ts";
@@ -114,7 +116,7 @@ export class App {
   readonly bound = bindAll(this, bounds);
 
   readonly root: BoxRenderable;
-  readonly composer: TextareaRenderable;
+  readonly composer: GhostTextarea;
   readonly scroll: ScrollBoxRenderable;
   style: ReturnType<typeof syntax>;
   theme: ThemeName = defaultTheme;
@@ -138,6 +140,11 @@ export class App {
   /** The program of each thread and each word of the operator, as it stood at a version of the acts and of the words
    * that its models write. */
   programs = new Map<string, { version: number; live: string; lines: ProgramLine[] }>();
+  /** The rows that a model writes, by the step that it writes, which the tick draws again. */
+  thinkingRows = new Map<
+    string,
+    { view: LineNumberRenderable; text: TextRenderable; display: number; room: number; said: string }
+  >();
   /** The chain whose threads the sidebar lists in place of the tree of the chains, once a click or Enter chose it. */
   railChain?: string;
   /** Whether the keys move in the sidebar, after ⌥T, and the row that they stand on: a chain in the tree, or a thread in
@@ -284,6 +291,9 @@ export class App {
   submitting = false;
   historyIndex = -1;
   historyDraft = "";
+  /** The text typed when a walk of the history began, which a walk keeps to the entries that start with it, as fish
+   * does. An empty prefix walks every entry. */
+  historyPrefix = "";
   diagnosticsKey = "";
   /** What the footer shows, set again only when it changes. */
   statusKey = "";
@@ -447,7 +457,7 @@ export class App {
     // The composer is a panel, whose three rows the mode colors.
     this.composeBox = this.panel(center, c.accent, { id: "composer-box" });
     this.composeEdges = this.reader ? [] : (center.getChildren().slice(-3) as BoxRenderable[]);
-    this.composer = new TextareaRenderable(renderer, {
+    this.composer = new GhostTextarea(renderer, {
       id: "composer",
       flexGrow: 1,
       minHeight: 1,
@@ -468,10 +478,12 @@ export class App {
         this.schedule();
         void this.highlightEditor();
         this.suggest();
+        this.ghosting();
       },
       onCursorChange: () => {
         void this.highlightEditor();
         this.suggest();
+        this.ghosting();
       },
       onSubmit: () => {
         void this.submit();
@@ -480,6 +492,7 @@ export class App {
     this.pickBox = this.box({ id: "choices", visible: false });
     this.composeBox.add(this.pickBox);
     this.composeBox.add(this.composer);
+    this.composer.tint = () => c.faint;
     this.meta = this.row({ overflow: "hidden", flexGrow: 1 });
     // The line under the text holds the switch of the mode and where the input goes, a row of space under the text.
     const metaLine = this.row({ marginTop: space.section });
@@ -555,6 +568,7 @@ export class App {
         if (card.title) this.label(card, [...card.marker, ...card.title()]);
       if (this.statusMoves) this.renderStatus();
       if (this.stage.visible && this.cursor === undefined && this.moves()) this.renderStage();
+      if (this.thinkingRows.size) this.tickThinking();
     }, frame);
     this.render();
     this.composer.focus();
@@ -882,6 +896,7 @@ export class App {
     this.renderContent();
     this.renderRail();
     this.suggest();
+    this.ghosting();
     const diagnostics = JSON.stringify([w.rejectedWord, w.findings]);
     if (diagnostics !== this.diagnosticsKey) {
       this.diagnosticsKey = diagnostics;
