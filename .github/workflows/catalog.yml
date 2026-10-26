@@ -1,0 +1,52 @@
+name: catalog
+
+# The catalog of models that the crate carries, made again each day from models.dev and the latest release of pi-ai.
+# It opens a pull request only when the data changes, so a new model reaches furb with no edit by a person.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 5 * * *"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    name: the refresh
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: python3 script/catalog.py
+      - name: open the pull request
+        env:
+          # A pull request that GITHUB_TOKEN opens starts no workflow, so the gates run only with a token of a person
+          # or an app: the secret CATALOG_TOKEN. Without it the pull request waits for a push of a maintainer.
+          GH_TOKEN: ${{ secrets.CATALOG_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          if git diff --quiet -- src/world/provider; then
+            echo "The catalog has not changed."
+            exit 0
+          fi
+          version=$(python3 -c 'import json; print(json.load(open("src/world/provider/catalog.sources.json"))["pi-ai"]["version"])')
+          branch=catalog/refresh
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C "$branch"
+          git add src/world/provider/catalog.json src/world/provider/catalog.sources.json
+          git commit -m "chore(provider): Refresh the catalog of models"
+          git push --force origin "$branch"
+          if [ -z "$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')" ]; then
+            gh pr create --base main --head "$branch" --title "chore(provider): Refresh the catalog of models" \
+              --body "🤖 ## Why
+
+          The catalog of models went out of date, and a new model stayed absent from furb until a person made it again.
+
+          ## Outcome
+
+          - The data of models.dev and of pi-ai $version, as fetched today, replaces the snapshot of the catalog.
+          - catalog.sources.json keeps the exact version and the time of each source.
+
+          Part of #448."
+          fi
