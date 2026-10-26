@@ -586,10 +586,10 @@ test("the footer offers the keys of the top layer that acts, and a click on one 
       app.composer.setText("Think until I cancel.");
       await app.submit();
       await until(session, () => session.activity.some((act) => act.kind === "rung" && !act.done));
-      expect(await footer()).toEndWith("⌃P commands   Esc pause   F1 help");
+      expect(await footer()).toEndWith("⌃P commands   ⌃C take back   Esc pause   F1 help");
       screen.mockInput.pressEscape();
       await until(session, () => session.paused);
-      expect(await footer()).toEndWith("/wake wake the chain   ⌃P commands   F1 help");
+      expect(await footer()).toEndWith("/wake wake the chain   ⌃P commands   ⌃C take back   F1 help");
     },
     undefined,
     true,
