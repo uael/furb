@@ -10,7 +10,7 @@ name: gallery
 on:
   workflow_dispatch:
   push:
-    branches: [main, w/gallery-refresh]
+    branches: [main]
     # What a capture reads: the TUI and its fixtures, the bindings that it draws a life with, the engine and the crate
     # behind them, the words of the official extensions, the doctrine that a chain tells, and the toolchain.
     paths:
