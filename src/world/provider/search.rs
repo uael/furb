@@ -3,14 +3,17 @@
 //! of the Responses API of OpenAI and of xAI, the grounding of Gemini in Google Search, and the search API of
 //! DeepSeek. A search answers with text in Markdown, which ends with its sources.
 
-use std::{future::Future, path::Path, process::Stdio, sync::Arc, time::Duration};
+use std::{future::Future, process::Stdio, sync::Arc, time::Duration};
 
 use futures::future::BoxFuture;
 use rig_core::http_client::ReqwestClient;
 use serde_json::{Value, json};
-use tokio::{io::AsyncWriteExt, process::Command, task::AbortHandle};
+use tokio::{io::AsyncWriteExt, task::AbortHandle};
 
-use super::clients::{Client, Reach};
+use super::{
+  claude::Program,
+  clients::{Client, Reach},
+};
 use crate::ear::reactor;
 
 /// A search of the web: given a query, the answer in Markdown with its sources, or why it gives none.
@@ -88,13 +91,13 @@ pub(crate) fn sourced(text: &str, sources: &[(String, String)]) -> String {
   }
 }
 
-/// The search of a model of the claude command line: the command line at that program, on that model, with its tool
-/// WebSearch alone, which is told the query on its stdin and answers on its stdout.
-pub(super) fn claude(bin: Arc<Path>, model: String) -> Searches {
+/// The search of a model of the claude command line: the command line that this program starts, on that model,
+/// with its tool WebSearch alone, which is told the query on its stdin and answers on its stdout.
+pub(super) fn claude(program: Program, model: String) -> Searches {
   Arc::new(move |query| {
-    let (bin, model) = (Arc::clone(&bin), model.clone());
+    let (program, model) = (program.clone(), model.clone());
     spawned(async move {
-      let mut command = Command::new(&*bin);
+      let mut command = program.command();
       command.args(["-p", "--model", &model, "--output-format", "text", "--system-prompt", BRIEF]);
       command.args(["--setting-sources", "", "--strict-mcp-config", "--disable-slash-commands"]);
       command.args([
@@ -112,7 +115,7 @@ pub(super) fn claude(bin: Arc<Path>, model: String) -> Searches {
         .stderr(Stdio::piped())
         .kill_on_drop(true);
       let mut child =
-        command.spawn().map_err(|no| format!("{} did not start: {no}", bin.display()))?;
+        command.spawn().map_err(|no| format!("{} did not start: {no}", program.name()))?;
       // A command line that ends before it reads the query closes its stdin, and its exit says why.
       if let Some(mut stdin) = child.stdin.take()
         && let Err(no) = stdin.write_all(query.as_bytes()).await

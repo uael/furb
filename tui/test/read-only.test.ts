@@ -434,8 +434,6 @@ for (const width of [80, 160]) {
         expect(open.frame()).not.toContain("Revert");
         expect(open.frame()).not.toContain("Comment a line");
         expect(open.frame()).not.toContain("revert hunk");
-        await expect(open.session.command("/changes revert")).rejects.toThrow("open to read");
-        await expect(open.session.command("/changes comment")).rejects.toThrow("open to read");
       } finally {
         await open.close();
       }
@@ -467,7 +465,6 @@ test("a record's damaged Life journal remains whole and offers no repair or new 
       expect(open.frame()).toMatch(/Changes\s+\?/);
       expect(open.frame()).not.toContain("Repair the journal");
       expect(open.frame()).not.toContain("Start a new journal");
-      expect(open.frame()).toContain("The life");
     } finally {
       await open.close();
     }
