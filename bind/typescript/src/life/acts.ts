@@ -10,7 +10,17 @@ export interface RunState {
   /** Whether the gate refused the word, so that the reason holds its findings, one for each line. */
   refused?: boolean;
 }
+/** A transcript cut, at its place in the record. A source names a legacy continuation, not an ordinary branch. */
+export interface Compaction {
+  at: number;
+  by: string;
+  source?: string;
+}
 export interface LiveAct {
+  /** Transcript cuts of a chain, derived from facts without running its words. */
+  compactions?: Compaction[];
+  /** Names enabled by extension facts on the root. Words stay in the record, not in the view rows. */
+  extensions?: string[];
   id: string;
   kind: string;
   by: string;

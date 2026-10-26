@@ -1,0 +1,29 @@
+{
+  "selected": "chain3",
+  "chains": [
+    "chain3",
+    "chain4",
+    "chain7"
+  ],
+  "cuts": [
+    {
+      "at": 12,
+      "by": "rung2",
+      "source": "chain1"
+    },
+    {
+      "at": 17,
+      "by": "rung3",
+      "source": "chain2"
+    },
+    {
+      "at": 24,
+      "by": "rung4"
+    }
+  ],
+  "passiveFocusPreserved": true,
+  "reader": true,
+  "scriptedStreamSelectionAndFocus": true,
+  "continuationGutter": 100,
+  "motion": true
+}

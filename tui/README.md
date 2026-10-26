@@ -238,12 +238,16 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | ⌃⌥← | Return from a definition jump |
 | ⌥[ / ⌥] or ⌥P / ⌥N | Previous / next message of the feed |
 | ⌥V / ⌥G | Switch the view of the life: main, the loom, or the graph / move in the loom or the graph |
-| ⌥T | Move in the sidebar: the tree of the chains, and the threads of a chain |
-| ↑↓ / Enter or → / Esc or ← after ⌥T | Move / list the threads of a chain, or choose a thread / back to the tree, then to the input |
-| Space / r / o after ⌥T | Collapse or expand / resolve / open again the thread |
+| ⌥T | Move through the threads of the selected chain |
+| ↑↓ / Enter or → / Esc or ← after ⌥T | Move / inspect a thread without changing the reply target / return to the input |
+| Space / r / o / t / n after ⌥T | Fold / resolve with confirmation / open again / reply here / new thread |
 | ↑↓←→ / Enter / Esc after ⌥G | Move, fold or zoom / zoom in / zoom out or go back |
 | [ ] / { } after ⌥G | Move the cursor in time by one / ten moments |
 | Space / x / n / b after ⌥G | Pause or wake / cancel / step / branch at the cursor the chain |
+| ⌥↑ | Previous hunk in changes |
+| ⌥↓ | Next hunk in changes |
+| ⇧⌥R | Revert selected hunk |
+| ⇧⌥C | Comment on selected hunk |
 | ⌃PageUp / ⌃PageDown | Previous / next scope of file changes: this turn, this chain, the life, the branch |
 | ⌥R / ⌥J | Repair the journal of file changes / start a new journal, once the view of changes finds it damaged |
 | ⌃C | Clear the input, close a dialog, or cancel what you sent last (a message goes back to the input) |
@@ -279,7 +283,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/run <python>` | Write a rung through the gate |
 | `/bash <command>` | Stream a shell command |
 | `/read <path>` | Show a file to this chain |
-| `/changes [turn|chain|life|branch]` | Show the files that this turn, this chain, the life or the branch against main changed |
+| `/changes [turn|chain|life|branch [base]|revert|comment]` | Review file changes, choose a branch base, revert a hunk, or comment on a line |
 | `/repair` | Keep each change that the journal of file changes can read, and remove the lines that it cannot |
 | `/renew` | Start a new journal of file changes, and keep the damaged one beside it |
 | `/cd <path>` | Change this chain's working directory |

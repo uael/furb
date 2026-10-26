@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { type Renderable, TextRenderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
-import { find } from "../script/stage.ts";
+import { find, highlighting } from "../script/stage.ts";
 import { App } from "../src/app.ts";
 import { demoLibrary, demoSession, removeDemoDirectories } from "../src/demo.ts";
 import type { View } from "../src/session.ts";
@@ -99,7 +99,7 @@ test("a command that printed more than a row holds sends the tail and its length
     { width: 120, height: 40, useMouse: true },
   ));
 
-test("the views say each quantity one way, read the changes of a scope once, and set a heading only when it changes", () =>
+test("the views say each quantity one way, read the changes of a scope once, and set source content only when it changes", () =>
   composing(
     async ({ session, app, frame }) => {
       const reads: (string[] | null)[] = [];
@@ -117,11 +117,14 @@ test("the views say each quantity one way, read the changes of a scope once, and
         await session.submit("/grant 1.5");
         await session.refresh();
         expect(await frame()).toContain("$1.50");
-        // The word of a folded rung takes its colors off the main thread, which change its heading once.
+        // Source takes its colors off the main thread, then keeps its content across unchanged frames.
         await app.colorsDone();
         await frame();
-        const card = app.scroll.getChildren().find((node) => /^rung\d+$/.test(node.id));
-        const heading = card?.getChildren()[0] as TextRenderable | undefined;
+        const card = app.scroll.getChildren().find((node) => /^program-rung\d+$/.test(node.id));
+        const heading = card
+          ?.getChildren()
+          .flatMap((node) => node.getChildren())
+          .find((node) => node instanceof TextRenderable) as TextRenderable | undefined;
         if (!heading) throw new Error("No card for the rung.");
         const content = heading.content;
         await frame();
@@ -252,7 +255,8 @@ test("the standing of a chain is no card of the conversation, though its turns b
         `${root}_actor`,
       ]);
       const headings = app.scroll.getChildren().map((card) => (texts(card)[0] ?? "").replace(/^[▸▾] /, ""));
-      expect(headings).toContain("You");
+      expect(headings).not.toContain("You");
+      expect(app.scroll.getChildren().flatMap(texts).join("\n")).toContain("Explore this project");
       expect(headings.filter((heading) => /^(standing|roster|cwd|actor)\b/.test(heading))).toEqual([]);
     },
     { width: 120, height: 30 },
@@ -267,7 +271,7 @@ test("a card that the view goes to, or a thread that Details expands, is in view
         await screen.flush();
       };
       const card = (id: string) => {
-        const found = app.scroll.getChildren().find((node) => node.id === id);
+        const found = app.scroll.getChildren().find((node) => node.id === id || node.id === `program-${id}`);
         if (!found) throw new Error(`No card ${id} in the view.`);
         return found;
       };
@@ -293,6 +297,20 @@ test("a card that the view goes to, or a thread that Details expands, is in view
       expect(session.view).toBe("feed");
       expect(app.scroll.scrollHeight).toBeGreaterThan(app.scroll.viewport.height * 2);
       expect(seen(rung)).toBe(true);
+      // A name from a model's step jumps to that step's source inside its thread, not to a removed rung header.
+      session.show("transcript");
+      await session.refresh();
+      await laid();
+      await app.inspect("notes");
+      await laid();
+      screen.mockInput.pressEnter();
+      await laid();
+      expect(session.view).toBe("feed");
+      const sourceThread = session.acts.find(
+        (act) => act.kind === "prompt" && String(act.words[1]).startsWith("Explore"),
+      );
+      if (!sourceThread) throw new Error("No source thread of the demo.");
+      expect(seen(`program-${sourceThread.id}`)).toBe(true);
       // A thread folded to its header, far above the foot of the view, opens from Details and comes into view.
       const thread = session.acts.find(
         (act) => act.kind === "prompt" && String(act.words[1]).startsWith("Explore"),
@@ -446,9 +464,9 @@ test("the keys of the footer and the palette answer the mouse, and a drag over t
     true,
   ));
 
-test("the root chain stands in the threads when it rests, and the other resting chains fold under Finished", () =>
+test("the selected chain keeps its navigator while all resting chains stay in the picker", () =>
   composing(
-    async ({ session, frame }) => {
+    async ({ session, app, screen, frame }) => {
       const { engine } = session;
       const side = await engine.chain({ label: "Side", source: engine.root });
       await engine.chain({ label: "Notes", source: engine.root });
@@ -456,19 +474,22 @@ test("the root chain stands in the threads when it rests, and the other resting 
       await session.select(side);
       const left = 140 - session.preferences.sidebarWidth;
       const rows = (await frame()).split("\n").map((line) => line.slice(left).trim());
-      expect(rows.slice(1, 4)).toEqual(["▎○ Main", "▎○ Side", "▸ Finished  1"]);
+      expect(rows[0]).toContain("Side ⌃B switch");
+      expect(rows.join("\n")).toContain("No threads on this chain yet.");
+      app.chains();
+      const picker = await frame();
+      for (const label of ["Main", "Side", "Notes"]) expect(picker).toContain(label);
+      await screen.mockInput.typeText("Notes");
+      screen.mockInput.pressEnter();
+      await until(session, () => session.label === "Notes");
     },
     { width: 140, height: 30 },
   ));
 
-test("the sidebar says what each thread came to, a question that waits stands first with its values, which a click answers, and a click on a thread shows its chain", () =>
+test("the navigator keeps question identity while choices answer the exact question and the picker changes chain", () =>
   composing(
-    async ({ session, frame, click }) => {
+    async ({ session, app, screen, frame, click }) => {
       await idle(session);
-      let shown = await frame();
-      expect(shown.split("\n").filter((line) => line.includes("✓ Main"))).toContainEqual(
-        expect.stringContaining("A clear starting point"),
-      );
       const question = await session.engine.prompt("bool", {
         message: "Apply the search shortcut?",
         on: session.engine.root,
@@ -476,18 +497,20 @@ test("the sidebar says what each thread came to, a question that waits stands fi
       });
       await until(session.host, () => session.host.prompts.has(question));
       await session.refresh();
-      shown = await frame();
+      const shown = await frame();
       const rows = shown.split("\n");
       const needs = rows.findIndex((line) => line.includes("Needs you"));
       expect(needs).toBeGreaterThan(-1);
-      expect(rows.findIndex((line) => line.includes("Chains"))).toBeGreaterThan(needs);
-      expect(rows[needs + 2]).toContain("◆ Main");
+      expect(rows.findIndex((line) => line.includes("Threads"))).toBeGreaterThan(needs);
+      expect(rows[needs + 1]).toContain("Main");
       expect(shown).toContain("Apply the search shortcut?");
-      expect(shown).toContain(" 3 Other ");
-      await click(" 1 yes ");
+      expect(shown).toContain("3  Other");
+      await click("1  yes");
       expect(await session.engine.result(question)).toBe(true);
-      await click("Finished");
-      await click("Review notes");
+      app.chains();
+      await frame();
+      await screen.mockInput.typeText("Review notes");
+      screen.mockInput.pressEnter();
       await until(session, () => session.label === "Review notes");
       expect(session.selected).not.toBe(session.engine.root);
     },
@@ -501,6 +524,7 @@ test("a folded rung shows the first line of its word in the colors of its gramma
       await idle(session);
       await frame();
       await app.colorsDone();
+      await Promise.all(highlighting(screen.renderer.root));
       app.render();
       await screen.flush();
       const line = screen.captureSpans().lines.find((one) =>

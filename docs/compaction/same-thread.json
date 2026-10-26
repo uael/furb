@@ -1,0 +1,17 @@
+{
+  "origin": "Official compact helper in a native session with scripted answers and no provider call",
+  "prompt": "prompt1",
+  "helper": "rung7",
+  "originalBy": "rung6",
+  "originalParentPrompt": "prompt1",
+  "displayLines": {
+    "before": 1,
+    "compact": 2,
+    "summary": 3,
+    "reground": 4,
+    "after": 5,
+    "close": 6
+  },
+  "localSummaryLine": 1,
+  "localRegroundLine": 3
+}
