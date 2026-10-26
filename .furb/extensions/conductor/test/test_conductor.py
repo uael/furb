@@ -502,7 +502,7 @@ async def test_a_flake_of_the_gates_is_queued_at_once_and_read_once(conductor: R
     "completed_at": "2026-10-23T10:01:00Z",
   }
   conductor.say(r"runs\?branch=main&status=success", '{"workflow_runs": []}')
-  conductor.say(r"runs\?per_page=100", json.dumps({"workflow_runs": flaky}))
+  conductor.say(r"runs\?per_page=30", json.dumps({"workflow_runs": flaky}))
   conductor.say(r"runs/50/attempts/1/jobs", json.dumps({"jobs": [job]}))
   conductor.say(r"jobs/7/logs", "2026-10-23T10:00:30.0000000Z (fail) a host test [30000.17ms]\n")
   await conductor.watch_ci()
@@ -533,7 +533,7 @@ async def test_a_job_over_its_budget_is_queued_once_until_new_runs_measure_it(co
   }
   conductor.say(r"runs\?branch=main&status=success", json.dumps(green))
   conductor.say(r"runs/\d+/jobs", json.dumps({"jobs": [job]}))
-  conductor.say(r"runs\?per_page=100", '{"workflow_runs": []}')
+  conductor.say(r"runs\?per_page=30", '{"workflow_runs": []}')
   await conductor.watch_ci()
   await conductor.watch_ci()
   assert [(key, thread) for key, _, thread in conductor.queue] == [("budget-the-hooks", "ci")]
