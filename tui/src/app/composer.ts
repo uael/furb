@@ -64,7 +64,6 @@ export const composer = part({
       .filter(([key]) => key !== w.draftKey && key.endsWith(mode))
       .flatMap(([, entries]) => entries);
     const kept = [...others, ...own];
-    if (!own.length && (w.mode !== "prompt" || w.editing) && !kept.length) return [];
     if (!kept.length && w.mode === "prompt" && !w.editing)
       return w.activity
         .filter((act) => w.isUserPrompt(act))
