@@ -1,0 +1,152 @@
+name: prompt history paired diagnosis
+
+on:
+  push:
+    branches: [diagnostic/tui-history-fps]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prompt-history-paired-diagnosis
+  cancel-in-progress: false
+
+env:
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_DEV_INCREMENTAL: "false"
+
+jobs:
+  typescript:
+    name: one pair on one Linux runner
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: ./.github/actions/setup
+        with:
+          python: none
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.2"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: b0da4e3d9f335b776d346e321f7b3c0ee9f7d448
+          path: baseline
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: 8e2cee7bcb5315c912744019277f3a4ed62dc89c
+          path: candidate
+          persist-credentials: false
+      - name: Record the inputs and seed two build directories
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/paired/evidence"
+          echo "CARGO_BUILD_TARGET=$(rustc -vV | sed -n 's/^host: //p')" >> "$GITHUB_ENV"
+          {
+            echo "Order: baseline, then candidate. One original bench command for each."
+            echo "Each command keeps its original three rounds and internal warm opens."
+            echo "Both builds finish before either measure. No extra warm-up bench runs."
+            echo "Both targets start from the same restored cache before either build."
+            echo "Bun download caches, cargo targets, and temporary data are separate."
+            echo "This is a diagnosis, not a replacement for a pull request gate."
+            date -u
+            uname -a
+            lscpu
+            rustc -vV
+            cargo -V
+            bun --version
+            df -h .
+            git rev-parse HEAD
+          } | tee "$RUNNER_TEMP/paired/evidence/environment.txt"
+          test "$(git -C baseline rev-parse HEAD)" = b0da4e3d9f335b776d346e321f7b3c0ee9f7d448
+          test "$(git -C candidate rev-parse HEAD)" = 8e2cee7bcb5315c912744019277f3a4ed62dc89c
+          cmp baseline/tui/script/bench.ts candidate/tui/script/bench.ts
+          cmp baseline/tui/fixtures/conductor.jsonl candidate/tui/fixtures/conductor.jsonl
+          test -z "${FURB_BENCH_FACTS:-}"
+          for side in baseline candidate; do
+            mkdir -p "$RUNNER_TEMP/paired/$side-target"
+            mkdir -p "$RUNNER_TEMP/paired/$side-bun-cache"
+            mkdir -p "$RUNNER_TEMP/paired/$side-tmp"
+            mkdir -p "$RUNNER_TEMP/paired/$side-home"
+            if test -d target; then
+              cp -a target/. "$RUNNER_TEMP/paired/$side-target/"
+            fi
+            (
+              cd "$side"
+              git rev-parse HEAD
+              git ls-files 'bun.lock*' Cargo.lock rust-toolchain.toml tui/script/bench.ts tui/fixtures/conductor.jsonl | xargs sha256sum
+            ) > "$RUNNER_TEMP/paired/evidence/$side-inputs.txt"
+          done
+          du -sk "$RUNNER_TEMP/paired/"*-target > "$RUNNER_TEMP/paired/evidence/initial-target-sizes.txt"
+          cp .github/workflows/tui-history-diagnostic.yml "$RUNNER_TEMP/paired/evidence/"
+          git diff b0da4e3d9f335b776d346e321f7b3c0ee9f7d448 HEAD > "$RUNNER_TEMP/paired/evidence/workflow.diff"
+      - name: Build both revisions before the measures
+        run: |
+          set -euo pipefail
+          for side in baseline candidate; do
+            (
+              cd "$GITHUB_WORKSPACE/$side"
+              export CARGO_TARGET_DIR="$RUNNER_TEMP/paired/$side-target"
+              export BUN_INSTALL_CACHE_DIR="$RUNNER_TEMP/paired/$side-bun-cache"
+              echo "BUILD $side $(git rev-parse HEAD)"
+              date -u
+              bun install --frozen-lockfile
+              bun run build
+              date -u
+            ) 2>&1 | tee "$RUNNER_TEMP/paired/evidence/$side-build.log"
+          done
+      - name: Measure each revision once with its unchanged benchmark
+        run: |
+          set -euo pipefail
+          for side in baseline candidate; do
+            (
+              cd "$GITHUB_WORKSPACE/$side"
+              export CARGO_TARGET_DIR="$RUNNER_TEMP/paired/$side-target"
+              export BUN_INSTALL_CACHE_DIR="$RUNNER_TEMP/paired/$side-bun-cache"
+              export TMPDIR="$RUNNER_TEMP/paired/$side-tmp"
+              export HOME="$RUNNER_TEMP/paired/$side-home"
+              export XDG_CONFIG_HOME="$RUNNER_TEMP/paired/$side-xdg-config"
+              export XDG_CACHE_HOME="$RUNNER_TEMP/paired/$side-xdg-cache"
+              export XDG_DATA_HOME="$RUNNER_TEMP/paired/$side-xdg-data"
+              export FURB_BENCH_JSON="$RUNNER_TEMP/paired/evidence/$side-measures.jsonl"
+              test -z "${FURB_BENCH_FACTS:-}"
+              echo "MEASURE $side $(git rev-parse HEAD)"
+              echo "Command: bun run bench"
+              printf "HOME=%s\\nTMPDIR=%s\\nXDG_CONFIG_HOME=%s\\nXDG_CACHE_HOME=%s\\n" "$HOME" "$TMPDIR" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME"
+              date -u
+              cat /proc/loadavg
+              ps -eo pid,comm,%cpu,%mem
+              set +e
+              bun run bench
+              result=$?
+              set -e
+              printf '%s\n' "$result" > "$RUNNER_TEMP/paired/evidence/$side-exit.txt"
+              echo "BENCH_EXIT=$result"
+              date -u
+            ) 2>&1 | tee "$RUNNER_TEMP/paired/evidence/$side-bench.log"
+          done
+          {
+            echo "## One paired diagnosis"
+            echo "Baseline: b0da4e3d9f335b776d346e321f7b3c0ee9f7d448"
+            echo "Candidate: 8e2cee7bcb5315c912744019277f3a4ed62dc89c"
+            echo "Order: baseline, then candidate. No repeat or changed budget."
+            echo "Baseline exit: $(cat "$RUNNER_TEMP/paired/evidence/baseline-exit.txt")"
+            echo "Candidate exit: $(cat "$RUNNER_TEMP/paired/evidence/candidate-exit.txt")"
+            echo "Read the tables and logs in the artifact. Official PR gates remain required."
+          } >> "$GITHUB_STEP_SUMMARY"
+          test "$(cat "$RUNNER_TEMP/paired/evidence/baseline-exit.txt")" = 0
+          test "$(cat "$RUNNER_TEMP/paired/evidence/candidate-exit.txt")" = 0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: prompt-history-paired-diagnosis
+          path: ${{ runner.temp }}/paired/evidence/
+          if-no-files-found: error
+          retention-days: 14
