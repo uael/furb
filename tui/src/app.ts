@@ -4617,8 +4617,8 @@ export class App {
     const looks = (row: (typeof rows)[number]) => !["done", "idle"].includes(row.state);
     const shownRow = w.runOf(w.selected).at(-1) ?? w.selected;
     // A run stands at the place of its first chain, which the tree does not list.
-    const placed = (row: (typeof rows)[number]) =>
-      loom.rows.find((one) => one.id === w.runOf(row.id)[0]) ?? row;
+    const loomed = new Map(loom.rows.map((one) => [one.id, one]));
+    const placed = (row: (typeof rows)[number]) => loomed.get(w.runOf(row.id)[0] ?? row.id) ?? row;
     const depth = (row: (typeof rows)[number]) => placed(row).lines.length / 2;
     const standing = rows.filter((row, at) => {
       if (row.id === w.engine.root || row.id === shownRow || looks(row)) return true;
