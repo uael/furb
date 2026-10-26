@@ -716,6 +716,7 @@ def test_a_worker_runs_only_sonnet_or_opus_at_medium_or_high(conductor: Round) -
   del conductor.efforts["k"]
   assert conductor.models[conductor.real_hire("k", "w")] == OPUS
   assert conductor.targets[-1] == OPUS
+  assert conductor.files["scratch://build.sh"] == conductor.BUILD_SH
 
 
 def test_an_item_that_asks_for_xhigh_waits_and_the_owner_hears(conductor: Round) -> None:
@@ -1167,3 +1168,10 @@ async def test_a_child_stays_when_its_parent_only_gains_a_commit(conductor: Roun
   push_parent(conductor, tmp_path, False)
   assert await conductor.restack_forced() == set()
   assert history(tmp_path, conductor, "w/kid") == ["kid", "parent", "base"]
+
+
+def test_each_brief_holds_the_recipes_that_fixers_found(conductor: Round) -> None:
+  for word in ("credential.helper", "actions/jobs", "sed -i ''", "timeout=1800", "hypothesis"):
+    assert word in conductor.WORKER
+    assert word in conductor.FIX
+  assert "Keep the worktree until your PR merges" in conductor.WORKER
