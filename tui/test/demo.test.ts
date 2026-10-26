@@ -14,6 +14,9 @@ test("the temporary directory of a demo goes when the process that made it remov
 });
 
 test("the life that the operator watches asks three models in one word, branches, and spends nothing", async () => {
+  const pace = process.env.FURB_DEMO_PACE;
+  // The test checks the streamed result, not the delay that lets a person read each piece.
+  process.env.FURB_DEMO_PACE = "1";
   const session = await demoSession({ watch: true });
   try {
     await tour(session, 0);
@@ -41,6 +44,8 @@ test("the life that the operator watches asks three models in one word, branches
   } finally {
     await session.dispose();
     await removeDemoDirectories();
+    if (pace === undefined) delete process.env.FURB_DEMO_PACE;
+    else process.env.FURB_DEMO_PACE = pace;
   }
 }, 20_000);
 
