@@ -40,6 +40,30 @@ interface SavedWorkspace {
   /** The records of the sessions that the operator archived. */
   archived: string[];
 }
+/** The longest record, in bytes, that the list replays to tell whether it holds unfinished work. A replay holds about
+ * ten times the size of its record in memory, so a record past it shows as saved until the operator opens it. */
+const INSPECT_LIMIT = 16 * 2 ** 20;
+/** What the replay of a record told, and the key of the record, its time and size, when it told it. */
+interface InspectedState {
+  path: string;
+  key: string;
+  pending: number;
+  error?: string;
+  reading?: boolean;
+}
+function readInspected(path: string): Map<string, InspectedState> {
+  try {
+    const list: unknown = JSON.parse(readFileSync(path, "utf8"));
+    return new Map(
+      (Array.isArray(list) ? list : [])
+        .filter((one) => one && typeof one.path === "string" && typeof one.key === "string")
+        .map((one) => [one.path, one as InspectedState]),
+    );
+  } catch {
+    return new Map();
+  }
+}
+
 /** One change of the saved list: a workspace it names, made when the list has none, and what changes in it. */
 interface ListChange {
   directory: string;
@@ -87,6 +111,11 @@ export class Workspaces extends EventEmitter {
   private readonly opening = new Map<string, Promise<SessionEntry>>();
   private readonly subscriptions = new Map<Session, () => void>();
   private readonly inspected = new Map<string, string>();
+  /** What the replays of saved records told, by record, which a file beside the list keeps from one run to the next. */
+  private remembered?: Map<string, InspectedState>;
+  private get inspectedPath(): string {
+    return join(dirname(this.path), "inspected.json");
+  }
   /** Ends the inspections of saved records that are still at work when the workspaces close. */
   private readonly stop = new AbortController();
   private selection = 0;
@@ -226,12 +255,40 @@ export class Workspaces extends EventEmitter {
     const changed: string[] = [];
     for (const entry of group.sessions.filter(saved)) {
       const key = `${entry.modified}:${entry.size}`;
-      if (this.inspected.get(entry.path) !== key) {
-        this.inspected.set(entry.path, key);
-        changed.push(entry.path);
-      }
+      if (this.inspected.get(entry.path) === key) continue;
+      this.inspected.set(entry.path, key);
+      // A record that no replay read since it last changed, and that is small enough, is replayed. A record that a
+      // replay read keeps what that replay told, and a long or archived one stays as saved until the operator opens it.
+      const told = this.told(entry.path, key);
+      if (told) this.apply(entry, told);
+      else if (!entry.archived && (entry.size ?? 0) <= INSPECT_LIMIT) changed.push(entry.path);
     }
-    this.inspect(changed);
+    if (changed.length) this.inspect(changed);
+  }
+  /** What the replay of a record told when the record stood as the key says, from this run or from an earlier one. */
+  private told(path: string, key: string): InspectedState | undefined {
+    this.remembered ??= readInspected(this.inspectedPath);
+    const found = this.remembered.get(path);
+    return found?.key === key ? found : undefined;
+  }
+  /** The state of a saved row that a replay told, unless the session of the row runs. */
+  private apply(entry: SessionEntry, state: Pick<InspectedState, "pending" | "error" | "reading">): void {
+    if (entry.session) return;
+    // A record that a build of another version made drifts, and opens to read: that is no error.
+    entry.error = state.reading ? undefined : state.error;
+    entry.status = state.reading ? "reading" : state.error ? "error" : state.pending ? "paused" : "saved";
+  }
+  /** Keep what the replays told in a file beside the list, so that the next run replays only the records that changed
+   * since. */
+  private remember(told: InspectedState[]): void {
+    const kept = readInspected(this.inspectedPath);
+    for (const state of told) kept.set(state.path, state);
+    for (const path of kept.keys()) if (!existsSync(path)) kept.delete(path);
+    this.remembered = kept;
+    try {
+      mkdirSync(dirname(this.inspectedPath), { recursive: true });
+      saveFile(this.inspectedPath, JSON.stringify([...kept.values()]));
+    } catch {}
   }
   /** Find the unfinished work of saved records by their replay, which takes a time that grows with each record, so
    * the rows show their state when it comes and nothing waits for it. */
@@ -241,19 +298,18 @@ export class Workspaces extends EventEmitter {
     const keys = new Map(paths.map((path) => [path, this.inspected.get(path)]));
     inspectRecords(paths, this.stop.signal).then(
       (states) => {
+        this.remember(
+          paths.flatMap((path) => {
+            const key = keys.get(path);
+            const state = states[path];
+            return key && state && this.inspected.get(path) === key ? [{ path, key, ...state }] : [];
+          }),
+        );
         for (const group of this.groups)
           for (const entry of group.sessions) {
             const state = states[entry.path];
-            if (!state || entry.session || this.inspected.get(entry.path) !== keys.get(entry.path)) continue;
-            // A record that a build of another version made drifts, and opens to read: that is no error.
-            entry.error = state.reading ? undefined : state.error;
-            entry.status = state.reading
-              ? "reading"
-              : state.error
-                ? "error"
-                : state.pending
-                  ? "paused"
-                  : "saved";
+            if (!state || this.inspected.get(entry.path) !== keys.get(entry.path)) continue;
+            this.apply(entry, state);
           }
         this.emit("change");
       },

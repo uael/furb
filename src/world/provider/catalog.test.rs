@@ -527,6 +527,31 @@ fn an_id_alone_of_the_local_server_whose_part_before_its_colon_is_a_provider_is_
   );
 }
 
+#[cfg(unix)]
+#[test]
+fn a_first_run_reads_whether_the_claude_command_line_is_signed_in() {
+  use std::os::unix::fs::PermissionsExt;
+  let folder = std::env::temp_dir().join(format!("furb-signed-{}", std::process::id()));
+  std::fs::create_dir_all(&folder).expect("a folder for the programs");
+  let signed = |name: &str, script: &str| {
+    let bin = folder.join(name);
+    std::fs::write(&bin, format!("#!/bin/sh\n{script}\n")).expect("the program");
+    std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).expect("its mode");
+    catalog(&[]).claude(Some(bin), None).setup().signed
+  };
+  assert!(!signed("words", "echo 'Not logged in'; exit 1"), "it says that it is not logged in");
+  assert!(
+    !signed("json", r#"echo '{"loggedIn": false}'; exit 1"#),
+    "its JSON says that it is not logged in"
+  );
+  assert!(signed("in", r#"echo '{"loggedIn": true}'"#), "its JSON says that it is logged in");
+  assert!(
+    signed("old", "echo 'unknown command: auth' >&2; exit 1"),
+    "a version with no such command passes"
+  );
+  let _ = std::fs::remove_dir_all(&folder);
+}
+
 #[test]
 fn a_first_run_checks_the_claude_command_line_each_provider_and_the_local_server() {
   let none = catalog(&["ANTHROPIC_API_KEY"]).setup();
@@ -550,6 +575,8 @@ fn a_first_run_checks_the_claude_command_line_each_provider_and_the_local_server
   assert!(none.local.is_none(), "the environment names no local server");
   let claude = catalog(&[]).claude(Some(PathBuf::from("/bin/true")), None).setup();
   assert!(claude.claude, "the claude command line is found at its path");
+  assert!(claude.signed, "a command line that says nothing of its sign in passes");
+  assert!(!none.signed, "no claude command line is signed in");
   let (url, _) = qwen();
   let local = catalog(&[&url]).setup().local.expect("the environment names a local server");
   assert_eq!((local.offered, local.failed), (1, None), "the local server lists its models");

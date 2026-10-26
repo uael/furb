@@ -3,11 +3,13 @@ import { imageReferences } from "furb";
 import { demoSession, tour } from "../demo.ts";
 import { shortenHome } from "../files.ts";
 import { clip, dollars, modelName } from "../format.ts";
-import { type Check, checks } from "../setup.ts";
+import type { View } from "../session.ts";
+import { answering, type Check, checks } from "../setup.ts";
 import { theme as c, glyph, spacing as space } from "../theme.ts";
 import { bold, logo, mix, type Part } from "../ui.ts";
+import { modelsRead, watchBar } from "../watching.ts";
 import { part } from "./part.ts";
-import { noBorder, starters, watching } from "./shared.ts";
+import { noBorder, starters, viewLabels, watching } from "./shared.ts";
 
 export const welcome = part({
   /** A panel of the feed that says a state of the view: its heading, what the state holds, and a link that acts on it
@@ -88,32 +90,30 @@ export const welcome = part({
           ),
         );
     column.add(
-      this.text("The model answers in Python. Read and steer each word it runs.", c.muted, {
+      this.text("The model answers in Python. Read and steer each step it runs.", c.muted, {
         marginTop: space.section,
       }),
     );
-    const model = modelName(w.actorChoice.model).id;
+    // The check of the setup, once the worker said what this machine holds.
+    const { found, none, shown } = this.setupState();
+    // With no model that answers, the actor is the operator, which the line does not name.
+    const model = none ? "" : modelName(w.actorChoice.model).id.replace(/^operator$/, "");
     column.add(
       this.whole(
         this.text(
           [
             [clip(shortenHome(w.workingDirectory), 40, "end"), c.faint],
-            ["   ", c.faint],
+            [model ? "   " : "", c.faint],
             [model, c.faint],
           ],
           c.faint,
           { truncate: true },
         ),
-        () => `${shortenHome(w.workingDirectory)}   ${model}`,
+        () => `${shortenHome(w.workingDirectory)}${model ? `   ${model}` : ""}`,
       ),
     );
-    // The check of the setup shows on the first run, and on each run while no model answers, once the worker said
-    // what this machine holds. The demo needs no model and checks nothing.
-    const setup = w.setup;
-    const found = setup && w.catalogRead ? checks(setup, w.catalog.length) : [];
     // With no model, a prompt has nothing to answer it, so the welcome offers only the life to watch.
-    const none = Boolean(found.length) && !w.catalog.length;
-    if (found.length && (this.firstRun || none)) {
+    if (shown) {
       column.add(this.setupCheck(found, width));
       if (!w.preferences.setupSeen) {
         w.preferences.setupSeen = true;
@@ -192,6 +192,59 @@ export const welcome = part({
     this.centered(box, height, column);
   },
 
+  /** The check of the setup, once the worker said what this machine holds: its checks, whether no model answers, and
+   * whether the welcome shows it, which it does on the first run, and on each run while no model answers. The demo
+   * needs no model and checks nothing. */
+  setupState(): { found: Check[]; none: boolean; shown: boolean } {
+    const w = this.session;
+    const found = w.setup && w.catalogRead ? checks(w.setup, answering(w.setup, w.catalog)) : [];
+    const none = found.at(-1)?.state === "missing";
+    return { found, none, shown: Boolean(found.length) && (this.firstRun || none) };
+  },
+
+  /** What the welcome depends on, which says when its card is made again. */
+  welcomeKey(): string {
+    const w = this.session;
+    return JSON.stringify([
+      this.reader,
+      w.catalogRead,
+      w.catalog.length,
+      w.setup,
+      w.actorChoice.model,
+      w.workingDirectory,
+      w.watching,
+    ]);
+  },
+
+  /** The check of the setup again, after the operator fixed a part of it. */
+  checkAgain(): void {
+    this.session.notice = "Checking the setup again.";
+    void this.session
+      .checkSetup()
+      .then(() => {
+        this.session.notice = this.setupState().none ? "Still no model answers." : "A model answers now.";
+        this.renderContent();
+      })
+      .catch(this.report);
+  },
+
+  /** The name of a view of a chain: the watch names the transcript by what it is. */
+  viewLabel(view: View): string {
+    return view === "transcript" && this.session.watching ? modelsRead : viewLabels[view];
+  },
+
+  /** The bar of the watch, pinned over the feed: drawn again only when what it says changed. */
+  renderWatch(): void {
+    const w = this.session;
+    const visible = w.watching && !this.tree;
+    if (this.watchBar.visible !== visible) this.watchBar.visible = visible;
+    const key = visible ? `${w.moment === undefined}:${w.cost}:${this.theme}` : "";
+    if (key === this.watchKey) return;
+    this.watchKey = key;
+    this.clear(this.watchBar);
+    if (visible) this.watchBanner(this.watchBar);
+  },
+
   /** The check of the setup: each way to a model that this machine holds or lacks, with a fix for each one that is
    * missing, and a clear word when no model answers. */
   setupCheck(found: Check[], width: number): BoxRenderable {
@@ -247,29 +300,17 @@ export const welcome = part({
     const w = this.session;
     const panel = this.panel(box, c.accent);
     // The demo asks no model: its script answers each turn, so no call goes out and nothing is spent.
+    const earlier = w.moment !== undefined;
+    const [title, count, shows, keys] = watchBar(dollars(w.cost), earlier);
     panel.add(
       this.text([
         [`${glyph.running} `, c.accent],
-        ["Watching a life", c.text, bold],
-        [`   0 model calls, ${dollars(w.cost)}`, c.muted],
+        [title, c.text, bold],
+        [`   ${count}`, c.muted],
       ]),
     );
-    panel.add(
-      this.text(
-        "Many models answer in one life. A word of Python is a program. Any point can start a new branch.",
-        c.muted,
-        { paddingLeft: space.between },
-      ),
-    );
-    panel.add(
-      this.text(
-        w.moment === undefined
-          ? "Press [ to step back in time, then b to start a branch from there."
-          : "This is an earlier moment. Press ] to step on, b to start a branch here, or Esc to come back to now.",
-        w.moment === undefined ? c.faint : c.warning,
-        { paddingLeft: space.between },
-      ),
-    );
+    panel.add(this.text(shows, c.muted, { paddingLeft: space.between }));
+    panel.add(this.text(keys, earlier ? c.warning : c.faint, { paddingLeft: space.between }));
   },
 
   /** Watch a life: a new demo that plays by itself, asks no model, and shows in a workspace of its own. */
@@ -286,4 +327,4 @@ export const welcome = part({
 
 export type WelcomePart = typeof welcome;
 
-export const welcomeBound = ["watch"] as const;
+export const welcomeBound = ["watch", "checkAgain"] as const;
