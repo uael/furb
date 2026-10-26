@@ -7,7 +7,9 @@
 //! and the operator. So the reader says, after the facts that name them, the facts that the engine said and the record
 //! does not keep, as far as the kept facts show them:
 //!
-//! - each chain that a kept act stands on, made by the rung that makes the first prompt on it, or by the operator;
+//! - each chain that a kept act stands on, made by the rung that makes the first prompt on it, or by the operator,
+//!   named by the first line of that prompt, or by its own name when the record keeps no prompt on it, and standing
+//!   under the chain that its maker ran on;
 //! - each rung that a kept act names as its maker, on the open prompt of its chain that is no question to the
 //!   operator, or on its chain, which ends the rung before it of the same maker;
 //! - the run of the word of each rung, which the rung holds or the reply that it asked for gives, once the gate lets it
@@ -245,12 +247,36 @@ fn told(kept: Vec<Object>) -> Vec<Object> {
   out
 }
 
+/// The label of a chain from the message of its first prompt: its first line that says something, in at most 80
+/// characters.
+fn titled(message: &str) -> String {
+  let line = message.lines().map(str::trim).find(|one| !one.is_empty()).unwrap_or_default();
+  match line.char_indices().nth(80) {
+    Some((at, _)) => format!("{}…", line[..at].trim_end()),
+    None => line.to_owned(),
+  }
+}
+
 /// What the reader needs to know of all the facts that a record kept before it tells the first of them: each chain
-/// that the record holds, and the chain and the maker of each prompt that a rung made, in order.
+/// that the record holds, the chain and the maker of each prompt that a rung made, in order, the chain that each rung
+/// ran on, and the first prompt on each chain.
 #[derive(Default)]
 struct Makers {
   chains: HashSet<String>,
   prompts: Vec<(String, String)>,
+  homes: HashMap<String, String>,
+  labels: HashMap<String, String>,
+}
+
+/// What the reader knows of the chains that the record does not hold.
+#[derive(Default)]
+struct Known {
+  /// The maker of each chain: the rung that makes the first prompt on it.
+  makers: HashMap<String, String>,
+  /// The chain of each rung that a kept act on a chain names as its maker, which is the chain that the rung ran on.
+  homes: HashMap<String, String>,
+  /// The label of each chain: the first line of the first prompt that the record kept on it.
+  labels: HashMap<String, String>,
 }
 
 impl Makers {
@@ -261,25 +287,35 @@ impl Makers {
     if one.question() && one.kind() == "prompt" && named(one.by(), "rung") {
       self.prompts.push((one.on().to_owned(), one.by().to_owned()));
     }
+    if one.question() && named(one.on(), "chain") {
+      if named(one.by(), "rung") && one.kind() != "prompt" {
+        self.homes.entry(one.by().to_owned()).or_insert_with(|| one.on().to_owned());
+      }
+      if one.kind() == "prompt" {
+        self.labels.entry(one.on().to_owned()).or_insert_with(|| titled(&text(one, 2)));
+      }
+    }
   }
 
-  /// The maker of each chain that the record does not hold: the rung that makes the first prompt on it.
-  fn ended(self) -> HashMap<String, String> {
+  /// What the reader knows of the chains that the record does not hold.
+  fn ended(self) -> Known {
     let mut makers = HashMap::new();
     for (on, by) in self.prompts.into_iter().filter(|(on, _)| !self.chains.contains(on)) {
       makers.entry(on).or_insert(by);
     }
-    makers
+    Known { makers, homes: self.homes, labels: self.labels }
   }
 }
 
 impl<'a> Reader<'a> {
-  /// The reader that tells each fact to out, with the maker of each chain that the record does not hold.
-  fn new(makers: HashMap<String, String>, out: &'a mut dyn FnMut(Object)) -> Reader<'a> {
+  /// The reader that tells each fact to out, with what it knows of the chains that the record does not hold.
+  fn new(known: Known, out: &'a mut dyn FnMut(Object)) -> Reader<'a> {
     Reader {
       out,
       stage: Vec::new(),
-      makers,
+      makers: known.makers,
+      homes: known.homes,
+      labels: known.labels,
       scopes: HashMap::new(),
       done: HashSet::new(),
       prompts: Vec::new(),
@@ -298,6 +334,10 @@ struct Reader<'a> {
   out: &'a mut dyn FnMut(Object),
   /// The facts that the reader said and did not tell yet.
   stage: Vec<Object>,
+  /// The chain of each rung that a kept act on a chain names as its maker, which is the chain that the rung ran on.
+  homes: HashMap<String, String>,
+  /// The label of each chain that the record does not hold: the first line of the first prompt that it kept on it.
+  labels: HashMap<String, String>,
   /// The maker of each chain that the record does not hold, when a rung makes the first prompt on it.
   makers: HashMap<String, String>,
   /// Each act that a fact names, and the chain of each.
@@ -372,8 +412,10 @@ impl Reader<'_> {
     let (kind, about, by, on) = (fact.kind(), fact.about(), fact.by(), fact.on());
     if kind != "chain" && named(on, "chain") && !self.scopes.contains_key(on) {
       let maker = self.makers.get(on).cloned().unwrap_or_else(|| "operator".to_owned());
-      let under = self.scopes.get(&maker).cloned().unwrap_or_default();
-      self.stage.push(question("chain", on, &maker, [under.as_str(), "", ""]));
+      let under =
+        self.scopes.get(&maker).or_else(|| self.homes.get(&maker)).cloned().unwrap_or_default();
+      let label = self.labels.get(on).cloned().unwrap_or_else(|| on.to_owned());
+      self.stage.push(question("chain", on, &maker, [under.as_str(), label.as_str(), ""]));
       self.scopes.insert(on.to_owned(), on.to_owned());
     }
     let chain = self.scope(on);

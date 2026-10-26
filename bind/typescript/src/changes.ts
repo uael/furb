@@ -9,6 +9,7 @@ import {
   readSync,
   renameSync,
   rmSync,
+  statSync,
   truncateSync,
   writeFileSync,
   writeSync,
@@ -45,7 +46,11 @@ export class DamagedJournal extends Error {
 function parse(line: string): FileChange | undefined {
   try {
     const change: unknown = JSON.parse(line);
-    return typeof change === "object" && change !== null && typeof (change as FileChange).path === "string"
+    return typeof change === "object" &&
+      change !== null &&
+      typeof (change as FileChange).path === "string" &&
+      typeof (change as FileChange).before === "string" &&
+      typeof (change as FileChange).after === "string"
       ? (change as FileChange)
       : undefined;
   } catch {
@@ -61,7 +66,8 @@ export interface Repaired {
 
 /** Append file snapshots once. Keep only their positions in memory and read a page on demand. As an ear that comes
  * before the files, it reads the text a write replaces before the files take the write, and keeps the change once the
- * write is done. */
+ * write is done. Open to read, it reads the existing journal without creating or changing a file, and refuses writes.
+ * A failed open is reported by a read, so the other views of a record can still open. */
 export class FileChanges {
   private readonly positions: { start: number; size: number }[] = [];
   private readonly temporary?: string;
@@ -69,32 +75,74 @@ export class FileChanges {
   readonly path?: string;
   private fd?: number;
   private end = 0;
-  constructor(record?: string, readOnly = false) {
-    if (readOnly) return;
+  private tail = -1;
+  private cut = false;
+  private failure: unknown;
+  private indexed = "";
+  private disposed = false;
+  constructor(
+    record?: string,
+    private readonly readOnly = false,
+  ) {
+    if (readOnly && !record) return;
     if (!record) this.temporary = mkdtempSync(join(tmpdir(), "furb-changes-"));
     const path = record ? `${record}.changes.jsonl` : join(this.temporary ?? "", "changes.jsonl");
     this.path = path;
+    if (readOnly) {
+      try {
+        this.index(path);
+      } catch (error) {
+        // A record can still be read when its journal cannot: its changes view reports this failed read.
+        this.failure = error;
+      }
+      return;
+    }
     // The changes stand beside the record, whose directory may not stand yet when the session is made.
     mkdirSync(dirname(path), { recursive: true });
     this.index(path);
     this.fd = openSync(path, "a+", 0o600);
   }
-  /** The position of each complete line of the journal, which a page reads; a line that a crash cut goes. A line that
-   * is no change opens with the session, and the page that holds it says that the journal is damaged. */
+  /** The position of each complete line of the journal. A writable journal replaces a cut tail only on a write,
+   * since opening a life can still fail. Open to read, the tail stays and its page reports it as damaged. */
   private index(path: string): void {
     this.positions.length = 0;
     this.end = 0;
-    if (!existsSync(path)) return;
+    this.tail = -1;
+    this.cut = false;
+    const indexed = this.stamp(path);
+    if (!indexed) {
+      this.indexed = "";
+      return;
+    }
     const data = readFileSync(path);
     while (this.end < data.length) {
       const newline = data.indexOf(10, this.end);
       if (newline < 0) {
-        truncateSync(path, this.end);
+        if (this.readOnly) {
+          this.tail = this.positions.length;
+          this.positions.push({ start: this.end, size: data.length - this.end });
+        } else this.cut = true;
         break;
       }
       this.positions.push({ start: this.end, size: newline - this.end });
       this.end = newline + 1;
     }
+    this.indexed = indexed;
+  }
+  private stamp(path: string): string {
+    let stat: ReturnType<typeof statSync>;
+    try {
+      stat = statSync(path);
+    } catch (error) {
+      if ((error as { code?: string }).code === "ENOENT") return "";
+      throw error;
+    }
+    return [stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs, stat.birthtimeMs].join(":");
+  }
+  private refresh(): void {
+    const path = this.path;
+    if (!path) return;
+    if (this.stamp(path) !== this.indexed) this.index(path);
   }
   get length(): number {
     return this.positions.length;
@@ -131,13 +179,32 @@ export class FileChanges {
       }
     }
   }
+  private writable(): void {
+    if (this.readOnly) throw new Error("The journal of file changes is open to read.");
+  }
   append(change: FileChange): void {
-    if (this.fd === undefined) return;
+    this.writable();
+    const path = this.path;
+    if (this.fd === undefined || !path) return;
+    if (this.cut) this.reopen(path, () => truncateSync(path, this.end));
     const data = Buffer.from(`${JSON.stringify(change)}\n`);
     writeSync(this.fd, data);
     fsyncSync(this.fd);
     this.positions.push({ start: this.end, size: data.length - 1 });
     this.end += data.length;
+  }
+  /** Read a journal page without holding its file open between calls. */
+  private withReader<T>(read: (fd: number) => T): T | undefined {
+    if (this.disposed) return undefined;
+    if (!this.readOnly) return this.fd === undefined ? undefined : read(this.fd);
+    const path = this.path;
+    if (!path || !existsSync(path)) return undefined;
+    const fd = openSync(path, "r");
+    try {
+      return read(fd);
+    } finally {
+      closeSync(fd);
+    }
   }
   /** The line of the journal at a position. */
   private line(fd: number, position: { start: number; size: number }): string {
@@ -147,27 +214,38 @@ export class FileChanges {
   }
   /** A page of changes; a line of it that is no change throws a `DamagedJournal`. */
   read(start = 0, count = 20): FileChange[] {
-    const fd = this.fd;
-    if (fd === undefined) return [];
-    return this.positions.slice(start, start + count).map((position, at) => {
-      const change = parse(this.line(fd, position));
-      if (!change) throw new DamagedJournal(this.path ?? "", start + at);
-      return change;
-    });
+    if (this.failure !== undefined) throw this.failure;
+    if (this.readOnly && !this.disposed) this.refresh();
+    return (
+      this.withReader((fd) =>
+        this.positions.slice(start, start + count).map((position, at) => {
+          const change = start + at === this.tail ? undefined : parse(this.line(fd, position));
+          if (!change) throw new DamagedJournal(this.path ?? "", start + at);
+          return change;
+        }),
+      ) ?? []
+    );
   }
   /** A page of lines of the journal as changes, with each line that is no change left out. A reader that must not
    * stop for a damaged journal, as the rewind, reads so. */
   readable(start = 0, count = 20): FileChange[] {
-    const fd = this.fd;
-    if (fd === undefined) return [];
-    return this.positions
-      .slice(start, start + count)
-      .flatMap((position) => parse(this.line(fd, position)) ?? []);
+    if (this.failure !== undefined) throw this.failure;
+    if (this.readOnly && !this.disposed) this.refresh();
+    return (
+      this.withReader((fd) =>
+        this.positions
+          .slice(start, start + count)
+          .flatMap((position, at) =>
+            start + at === this.tail ? [] : (parse(this.line(fd, position)) ?? []),
+          ),
+      ) ?? []
+    );
   }
   /** The journal read again whole from its file, which holds each change that was appended since the session opened,
    * and written again with each line that is a change, in its order, then indexed anew. It says the count of changes
    * that it kept and of lines that it removed. */
   repair(): Repaired {
+    this.writable();
     const path = this.path;
     if (this.fd === undefined || !path) return { kept: 0, removed: 0 };
     const lines = readFileSync(path, "utf8").split("\n");
@@ -182,6 +260,7 @@ export class FileChanges {
   }
   /** A new journal that holds no change, and the path that the damaged journal is kept at beside it. */
   renew(): string {
+    this.writable();
     const path = this.path;
     if (this.fd === undefined || !path) return "";
     const aside = `${path}.damaged-${Date.now()}`;
@@ -190,13 +269,22 @@ export class FileChanges {
   }
   /** The journal closed, changed on disk, and opened again on its lines. */
   private reopen(path: string, change: () => void): void {
-    if (this.fd !== undefined) closeSync(this.fd);
-    change();
-    this.index(path);
-    this.fd = openSync(path, "a+", 0o600);
+    this.close();
+    try {
+      change();
+    } finally {
+      this.index(path);
+      this.fd = openSync(path, "a+", 0o600);
+    }
+  }
+  private close(): void {
+    const fd = this.fd;
+    this.fd = undefined;
+    if (fd !== undefined) closeSync(fd);
   }
   dispose(): void {
-    if (this.fd !== undefined) closeSync(this.fd);
+    this.disposed = true;
+    this.close();
     if (this.temporary) rmSync(this.temporary, { recursive: true });
   }
 }
