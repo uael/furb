@@ -112,6 +112,10 @@ export const input = part({
       { on: ["return", "enter"], run: () => void this.submit(), hint: ["Enter", "run"] },
       { on: "escape", run: this.escape, hint: ["Esc", "leave the program"] },
     ]);
+    // While the welcome shows the check of the setup and the input is empty, r checks it again.
+    layer(() => bare() && this.welcoming && this.setupState().shown && !this.composer.plainText, "setup", [
+      { on: "r", run: this.checkAgain, hint: ["r", "check again"] },
+    ]);
     // While the operator watches a life and the input is empty, [ and ] move the moment of the feed, b starts a
     // branch there, and Escape comes back to now.
     const watched = () => bare() && this.session.watching && !this.composer.plainText;
