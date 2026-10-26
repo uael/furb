@@ -71,6 +71,8 @@ test("the composer answers the question that waits on the chain shown, and not o
     message: "Which effort should the next step take?",
     notice: false,
     choices: [],
+    options: [],
+    hint: "",
     began: 9,
   };
   const held = heldOf(lifeOf({ asks: [ask] }));
@@ -88,6 +90,8 @@ test("a question of a choice gives a button for each of its values, and a notice
     message: "Which effort?",
     notice: false,
     choices: ["low", "high"],
+    options: [],
+    hint: "",
     began: 9,
   };
   const markup = composer(heldOf(lifeOf({ asks: [ask] })));

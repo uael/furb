@@ -305,7 +305,10 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 - `bun run screenshots` and `bun run animation`: capture `docs/screenshots/` and `docs/furb.gif` again from the
   real renderer. Run both after a change that a screen shows, and read each capture. One run of each at a time holds
   its home in `/tmp`, and a second run waits until the first ends. A screen that does not come in three minutes ends
-  the run with an error that names the screen, and a run never waits past thirty minutes.
+  the run with an error that names the screen, and a run never waits past thirty minutes. A push to `main` that
+  changes a path that a capture reads runs `.github/workflows/gallery.yml`, which draws both again on a runner of CI
+  and keeps one pull request open on the branch `w/gallery` with the files that changed. So a change of a screen
+  commits no capture.
 
 - `python script/budgets.py`: set the budget of time of each job of the gates, in `.github/budgets.json`, from the
   times of its last green runs on main. The round of the conductor holds each job to its budget, and turns a job that
