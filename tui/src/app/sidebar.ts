@@ -1,5 +1,6 @@
 import type { BoxOptions, BoxRenderable, Renderable, RGBA } from "@opentui/core";
 import { type Ask, type ChainThread, chainThreads, doingOf, gist, nowOf } from "furb/life";
+import { clock } from "../clock.ts";
 import { shortenHomes } from "../files.ts";
 import { clip, count, dollars } from "../format.ts";
 import type { ActRow } from "../session.ts";
@@ -65,7 +66,7 @@ export const sidebar = part({
         return act ? doingOf(act, find, label) : "writes a step";
       });
       const began = w.started[waits];
-      const minutes = began === undefined ? 0 : Math.floor((Date.now() - began) / 60000);
+      const minutes = began === undefined ? 0 : Math.floor((clock() - began) / 60000);
       const since = minutes < 1 ? "" : minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h`;
       return [text, minutes >= 15 ? c.warning : c.muted, since];
     };

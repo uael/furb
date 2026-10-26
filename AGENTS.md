@@ -225,17 +225,22 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
   runs as fast as in a release while the crates of the workspace build quickly. A wheel for PyPI takes the release.
 - `script/builds.sh <version>`: build the command line at the last commit of `origin/main` that holds a version, and
   put it in the store of builds of the machine, so a record of that version opens with `furb` again.
-- `script/worktree.sh <path> <branch> [base]`: make a git worktree on a new branch from `base`, `origin/main` by
-  default, whose build starts warm. Run it from any directory. It copies on write the build directories of the main
+- `script/worktree.sh <path> <branch> [base]`: make a git worktree, whose build starts warm. A branch that stands on origin or in
+  this clone is checked out and not made again: a local branch that lags behind origin moves up to it, a local branch
+  with work that origin lacks stays as it is, and git names the worktree that holds a branch already. A new branch
+  starts from `base`, `origin/main` by default, which no existing branch uses. Run it from any directory. It copies on write the build directories of the main
   checkout into the worktree: the `target` of cargo, which maturin and napi share, with its timestamps, the
   `node_modules` of bun, the build of the TypeScript package, and the cache of the tests of the TUI. A copy on write
   shares the blocks of each file until a build changes it, so it takes less than 1 GiB of the disk. Then cargo builds
   only the crates of the workspace again, because their path changed, and no dependency. The script does not copy
-  `.venv`, whose scripts name the path of the main checkout: `uv sync` makes it again on the warm `target`. The script then links the workspace with `bun install --offline` from the copied cache and runs `bun run build`, so `bun run check` and `bun run test` run at once; it adds about a minute. The copy on
+  `.venv`, whose scripts name the path of the main checkout: `uv sync` makes it again on the warm `target`, in minutes,
+  and the script prints that command. Before it runs, `uv run --no-sync` falls back to the system python, so probe
+  with the `.venv/bin/python` of the main checkout. The script then links the workspace with `bun install --offline` from the copied cache and runs `bun run build`, so `bun run check` and `bun run test` run at once; it adds about a minute. The copy on
   write works on APFS on macOS and on Btrfs or XFS on Linux. On another file system, the script makes a plain worktree.
   Use it for each new worktree of this repository: a first build takes about 6 minutes, against about 35 in a worktree
   that `git worktree add` makes. Remove such a worktree with `git worktree remove --force <path>`, since its build
   directories are not in git, then `git branch -D <branch>`.
+  The checkout at the root can stand behind `origin/main` and hold no build, so read and change code in a worktree.
 - `uv run pytest -q`: the suite on both engines, with the coverage of `furb` and of `furb_monty`, which must be
   whole.
 - `uv run pytest -q test/test_hygiene.py`: the hygiene laws alone.
