@@ -241,3 +241,103 @@ test("the Context part of the sidebar holds three lines: its share, its meter an
     size,
     true,
   ));
+
+test("a string of three marks over many lines shows as one string with its escapes, folded to its start and an underlined ..., and its statement keeps its colors", () =>
+  composing(
+    async ({ session, screen, frame }) => {
+      const word = `note = """${"alpha beta ".repeat(10)}\n${"gamma delta ".repeat(10)}ENDMARK"""\nprint(len(note))`;
+      const rung = await session.engine.rung({ word, on: session.engine.root });
+      await session.engine.result(rung);
+      await session.refresh();
+      const folded = await frame();
+      keep("multiline", folded);
+      const rows = folded.split("\n");
+      const y = rows.findIndex((row) => row.includes('note = "alpha beta'));
+      expect(y).toBeGreaterThanOrEqual(0);
+      expect(rows[y]).toContain('..."');
+      expect(folded).not.toContain("ENDMARK");
+      expect(folded).not.toContain('"""');
+      expect(rows[y + 1]).toContain("print(len(note))");
+      const fg = (x: number, row: number) => cellAt(screen.captureSpans(), x, row).fg;
+      const string = RGBA.fromHex(palettes.ink.syntaxString);
+      // The closing mark of the string, after its underlined ..., is a string of the statement, as it is whole.
+      const x = (rows[y] ?? "").indexOf('..."');
+      await until(screen.renderer, () => Boolean(fg(x + 3, y)?.equals(string)), "frame");
+      await screen.mockMouse.moveTo(x + 1, y);
+      await until(screen.renderer, () => screen.captureCharFrame().includes("ENDMARK"), "frame");
+      await screen.mockMouse.click(x + 1, y);
+      await until(session, () => session.folds[`string:${rung}:1:0`] === false);
+      const opened = await frame();
+      keep("multiline-open", opened);
+      expect(opened).toContain("ENDMARK");
+      const shownRows = opened.split("\n");
+      const first = shownRows.findIndex((row) => row.includes('note = "alpha beta'));
+      const end = shownRows.findIndex((row) => row.includes("ENDMARK"));
+      expect(end).toBeGreaterThan(first);
+      expect(shownRows.slice(first, end + 1).some((row) => row.includes('..."'))).toBe(false);
+      expect(shownRows.slice(first, end + 1).join("")).toContain("\\ngamma");
+    },
+    { ...size, useMouse: true },
+    true,
+  ));
+
+test("a quote of a word shows as the string that it binds: its name, an equal sign and one string with its escapes", () =>
+  composing(
+    async ({ session, screen, frame }) => {
+      const body = `Fix the largest gap.\nKeep the rest for later passes, and say in one sentence what each gap holds, so that a worker can act on it. ${"More words. ".repeat(8)}`;
+      const word = `<s:brief>\n${body}\n</s:brief>\nprint(brief)`;
+      const rung = await session.engine.rung({ word, on: session.engine.root });
+      await session.engine.result(rung);
+      await session.refresh();
+      const shown = await frame();
+      keep("quote", shown);
+      const rows = shown.split("\n");
+      const y = rows.findIndex((row) => row.includes("brief = 'Fix the largest gap."));
+      expect(y).toBeGreaterThanOrEqual(0);
+      expect(rows[y]).toContain("\\n");
+      expect(rows[y]).toContain("...'");
+      expect(shown).not.toContain("<s:brief>");
+      expect(rows[y + 1]).toContain("print(brief)");
+      const fg = (x: number, row: number) => cellAt(screen.captureSpans(), x, row).fg;
+      const x = (rows[y] ?? "").indexOf("Fix");
+      await until(
+        screen.renderer,
+        () => Boolean(fg(x, y)?.equals(RGBA.fromHex(palettes.ink.syntaxString))),
+        "frame",
+      );
+    },
+    size,
+    true,
+  ));
+
+test("a line that opens wraps at tokens within its column, and each row keeps the colors of its whole statement", () =>
+  composing(
+    async ({ session, screen, frame }) => {
+      const names = Array.from({ length: 24 }, (_, k) => `"n${k}xyz"`).join(", ");
+      const rung = await session.engine.rung({ word: `names = [${names}]`, on: session.engine.root });
+      await session.engine.result(rung);
+      await session.refresh();
+      const shut = (await frame()).split("\n");
+      const y = shut.findIndex((row) => row.includes("names = ["));
+      expect(shut[y]).toContain("…");
+      await screen.mockMouse.click((shut[y] ?? "").indexOf("names"), y);
+      await until(session, () => session.folds[`line:${rung}:1`] === false);
+      const opened = await frame();
+      keep("wrapped", opened);
+      const rows = opened.split("\n");
+      expect(rows[y]).toContain("names = [");
+      // Every name is whole on some row, and no row cuts one.
+      for (let k = 0; k < 24; k++) expect(opened).toContain(`"n${k}xyz"`);
+      expect(opened).not.toMatch(/"n\d+(?!\d|xyz)/);
+      expect(opened).not.toMatch(/(?<!n\d{0,2})xyz"/);
+      const last = rows.findIndex((row) => row.includes('"n23xyz"'));
+      expect(last).toBeGreaterThan(y);
+      expect(rows[last]).not.toContain("names = [");
+      const fg = (x: number, row: number) => cellAt(screen.captureSpans(), x, row).fg;
+      const string = RGBA.fromHex(palettes.ink.syntaxString);
+      const at = (rows[last] ?? "").indexOf('"n23xyz"') + 2;
+      await until(screen.renderer, () => Boolean(fg(at, last)?.equals(string)), "frame");
+    },
+    { ...size, useMouse: true },
+    true,
+  ));
