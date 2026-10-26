@@ -8,6 +8,7 @@ import { openEngine } from "./bridge.ts";
 import { expandHome } from "./files.ts";
 import { type EngineOptions, roster } from "./models.ts";
 import { Preferences } from "./preferences.ts";
+import type { Carry } from "./reading.ts";
 import { inspectRecords } from "./records.ts";
 import { Session, type SessionStatus, savedView } from "./session.ts";
 
@@ -172,6 +173,7 @@ export class Workspaces extends EventEmitter {
     const order: SessionStatus[] = [
       "blocked",
       "error",
+      "reading",
       "paused",
       "working",
       "done",
@@ -243,8 +245,15 @@ export class Workspaces extends EventEmitter {
           for (const entry of group.sessions) {
             const state = states[entry.path];
             if (!state || entry.session || this.inspected.get(entry.path) !== keys.get(entry.path)) continue;
-            entry.error = state.error;
-            entry.status = state.error ? "error" : state.pending ? "paused" : "saved";
+            // A record that a build of another version made drifts, and opens to read: that is no error.
+            entry.error = state.reading ? undefined : state.error;
+            entry.status = state.reading
+              ? "reading"
+              : state.error
+                ? "error"
+                : state.pending
+                  ? "paused"
+                  : "saved";
           }
         this.emit("change");
       },
@@ -373,7 +382,7 @@ export class Workspaces extends EventEmitter {
     if (session.host.pending.size) await session.host.resume();
     await session.command(command);
   }
-  async create(group = this.groupOf(), name?: string): Promise<SessionEntry> {
+  async create(group = this.groupOf(), name?: string, carry?: Carry): Promise<SessionEntry> {
     if (!group) throw new Error("Add a workspace first.");
     const directory = furbDirectory(group.directory, "sessions");
     const path = join(
@@ -384,6 +393,11 @@ export class Workspaces extends EventEmitter {
     const entry: SessionEntry = { path, name: label, status: "opening", unread: false };
     group.sessions.unshift(entry);
     await this.load(entry, group);
+    // A life that starts from a record opens with the earlier work of that record in its first word.
+    if (carry && entry.session) {
+      const { engine } = entry.session;
+      await engine.result(await engine.rung({ word: carry.word, on: engine.root }));
+    }
     if (entry.session) {
       entry.session.sessionName = label;
       entry.name = label;

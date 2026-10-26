@@ -88,11 +88,41 @@ fn a_chain_that_the_record_does_not_hold_is_made_by_the_rung_of_its_first_prompt
   assert_eq!(
     shown(&told(kept.clone()))[4..],
     [
-      "['chain', 'chain2', 'rung1', 'chain1', '', '']",
+      "['chain', 'chain2', 'rung1', 'chain1', 'Help.', '']",
       "['prompt', 'prompt2', 'rung1', 'chain2', 'str', 'Help.', '']",
     ]
     .map(str::to_owned)
   );
+}
+
+#[test]
+fn a_chain_that_the_record_does_not_hold_takes_the_first_line_of_its_first_prompt_as_its_label() {
+  let long = format!("\\n  {}  \\nSecond line.", "a".repeat(100));
+  let first = format!(r#"["prompt", "prompt2", "operator", "chain2", "str", "{long}", ""]"#);
+  let kept = facts(&[
+    OPENS[0],
+    &first,
+    r#"["prompt", "prompt3", "operator", "chain2", "str", "Later.", ""]"#,
+  ]);
+  let told = shown(&told(kept.clone()));
+  assert_eq!(told[1], format!("['chain', 'chain2', 'operator', '', '{}…', '']", "a".repeat(80)));
+}
+
+#[test]
+fn a_chain_that_the_record_does_not_hold_and_that_no_prompt_names_takes_its_own_name_as_its_label()
+{
+  let kept = facts(&[OPENS[0], r#"["bash", "bash1", "rung3", "chain2", "ls", "", 600]"#]);
+  assert_eq!(shown(&told(kept.clone()))[1], "['chain', 'chain2', 'operator', '', 'chain2', '']");
+}
+
+#[test]
+fn a_chain_that_the_record_does_not_hold_stands_under_the_chain_that_its_maker_ran_on() {
+  let kept = facts(&[
+    OPENS[0],
+    r#"["prompt", "prompt2", "rung5", "chain2", "str", "Help.", ""]"#,
+    r#"["bash", "bash1", "rung5", "chain3", "ls", "", 600]"#,
+  ]);
+  assert_eq!(shown(&told(kept.clone()))[1], "['chain', 'chain2', 'rung5', 'chain3', 'Help.', '']");
 }
 
 #[test]
@@ -153,7 +183,7 @@ fn a_record_names_its_engine_and_reads_its_log_while_the_log_agrees() {
     shown(&filed(&read)),
     [
       "['made', 'chain1', 'store', 'abc']",
-      "['chain', 'chain1', 'operator', '', '', '']",
+      "['chain', 'chain1', 'operator', '', 'chain1', '']",
       "['stand', 'stand1', 'operator', 'chain1']",
     ]
     .map(str::to_owned)

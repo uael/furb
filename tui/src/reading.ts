@@ -1,10 +1,25 @@
-import { closeSync, existsSync, fstatSync, openSync, readSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  fstatSync,
+  linkSync,
+  openSync,
+  readdirSync,
+  readSync,
+  renameSync,
+  rmSync,
+  statSync,
+  truncateSync,
+  utimesSync,
+} from "node:fs";
+import { basename, dirname, join } from "node:path";
 import {
   Activity,
   type Actor,
   type Call,
   type Entry,
   type Fact,
+  FileChanges,
   isQuestion,
   type LiveAct,
   questionKind,
@@ -24,6 +39,105 @@ export interface Reading {
   /** Whether the facts are those of the log, which holds every fact that the life said, or those that the record
    * kept, with the acts that they name. */
   logged: boolean;
+  /** What a new life from the record carries: the turns of its root chain and the files that its acts wrote. */
+  carries?: { turns: number; files: number };
+}
+
+/** What a new life from a record open to read carries: the turns of the root chain and the files that the record
+ * wrote, as the first word of the new life binds them. */
+export interface Carry {
+  turns: number;
+  files: string[];
+  word: string;
+}
+
+/** The build that made a record and this build, as the dialog and the footer name them: an engine by the first twelve
+ * characters of its hash, or a version with its engine, or an earlier engine that the record does not name. */
+export function engines(reading: Reading): { made: string; build: string } {
+  const ours = reading.engine.slice(0, 12);
+  const theirs = reading.made?.slice(0, 12);
+  return reading.version !== null
+    ? {
+        made: `version ${reading.version}${theirs ? ` (${theirs})` : ""}`,
+        build: `version ${reading.current} (${ours})`,
+      }
+    : { made: theirs ?? "an earlier engine, not named", build: ours };
+}
+
+/** Whether this build made the record, so that its replay drifts on its own. */
+export function sameBuild(reading: Reading): boolean {
+  return reading.version === null ? reading.made === reading.engine : reading.version === reading.current;
+}
+
+/** The sentence that the footer and the composer of a record open to read say. */
+export function readOnly(reading: Reading): string {
+  return `Read only: ${sameBuild(reading) ? "its replay drifts" : "made by another build"}`;
+}
+
+/** The lines of the dialog of a record open to read: each engine on a line of its own, why it opens to read, and what
+ * a new life carries. */
+export function readingNote(reading: Reading): string[] {
+  const { made, build } = engines(reading);
+  const { turns = 0, files = 0 } = reading.carries ?? {};
+  const count = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
+  return [
+    `Made by: ${made}`,
+    `This build: ${build}`,
+    sameBuild(reading)
+      ? `This build made it, and its replay drifts: ${reading.why}`
+      : "A replay would drift, so it opens to read. No word runs again.",
+    ...(reading.carries
+      ? [
+          `A new life carries ${count(turns, "turn")} of its root chain and the ${count(files, "file")} that it wrote.`,
+        ]
+      : []),
+  ];
+}
+
+/** What a read of a record leaves as it was. A life that opens on a record writes beside it before its replay drifts:
+ * it adds the entries that it says, replaces the log, and makes files of its own. The guard holds the sizes of the
+ * record and its siblings and a link to the log, and `undo` gives back what the open changed, so a record that opens
+ * to read is the record that it was. `keep` lets the guard go when the life opened. */
+export function guard(record: string): { undo(): void; keep(): void } {
+  const folder = dirname(record);
+  const name = basename(record);
+  const siblings = () => readdirSync(folder).filter((one) => one === name || one.startsWith(`${name}.`));
+  const before = new Map(
+    siblings().map((one) => {
+      const info = statSync(join(folder, one));
+      return [one, { size: info.size, atime: info.atimeMs, mtime: info.mtimeMs }] as const;
+    }),
+  );
+  const log = `${record}.log`;
+  const held = `${record}.log.held`;
+  const logged = before.has(`${name}.log`);
+  if (logged) linkSync(log, held);
+  const size = before.get(`${name}.log`)?.size ?? 0;
+  const release = () => {
+    if (logged) rmSync(held, { force: true });
+  };
+  return {
+    keep: release,
+    undo() {
+      for (const one of siblings())
+        if (!before.has(one) && one !== `${name}.log.held`)
+          rmSync(join(folder, one), { recursive: true, force: true });
+      const length = before.get(name)?.size;
+      if (length !== undefined && statSync(record).size > length) truncateSync(record, length);
+      if (logged) {
+        // A log that the life wrote on in place is the file that the link holds, and one it replaced is not.
+        if (existsSync(log) && statSync(log).ino === statSync(held).ino) rmSync(held);
+        else renameSync(held, log);
+        if (statSync(log).size > size) truncateSync(log, size);
+      }
+      // A file that the open wrote and gave back keeps the time it had, since the times tell when a record was used.
+      for (const [one, was] of before) {
+        const path = join(folder, one);
+        if (existsSync(path) && statSync(path).mtimeMs !== was.mtime)
+          utimesSync(path, was.atime / 1000, was.mtime / 1000);
+      }
+    },
+  };
 }
 
 /** Whether a record is a recorded life: a log of a life whose first line is a header that says so, which a host reads
@@ -51,6 +165,25 @@ export function isRecorded(record: string): boolean {
 /** How many bytes of the file of a recorded life the reader reads at a time. */
 const PART = 16 * 2 ** 20;
 
+/** The items of a tuple as a record keeps it, which is a list of its items or the map of the tuple that wraps them. */
+function tupled(value: unknown): unknown[] | undefined {
+  if (Array.isArray(value)) return value;
+  const held = value as { is?: unknown; args?: unknown } | null;
+  if (held?.is !== "tuple" || !Array.isArray(held.args)) return undefined;
+  return Array.isArray(held.args[0]) ? held.args[0] : held.args;
+}
+
+/** The tuple value of a recorded model answer, as the values that Activity reads. */
+function answerValue(value: unknown): unknown[] | undefined {
+  const items = tupled(value);
+  if (!items || items.length !== 4) return undefined;
+  return [items[0], items[1], tupled(items[2]) ?? items[2], items[3]];
+}
+
+/** How many characters of a turn the first word of a new life keeps, and how many it keeps of all turns. */
+const TURN = 1500;
+const BUDGET = 30000;
+
 /** How many characters of a text the reader holds of a fact whose text no view reads whole, and the kinds of fact that
  * it holds whole, since the turns, the program and the rows read their texts. The file holds each fact whole. */
 const HELD = 2000;
@@ -58,6 +191,10 @@ const WHOLE = new Set(["tell", "run", "rung", "prompt", "prefix", "module", "cha
 
 /** The place of a line in a file, and its length, in bytes. */
 type Line = [at: number, length: number];
+
+/** What a fold of the facts of a chain holds: how many facts it read, its turns, the paragraphs told since the last
+ * answer, and how many of them stand before the last reply that it asked. */
+type Folded = { read: number; turns: Turn[]; told: string[]; cut: number };
 
 /** A value with each text longer than HELD cut to its start, or the value itself when no text is so long. */
 function shortened<T>(value: T): T {
@@ -89,7 +226,7 @@ export class Reader {
   readonly pending = new Map<string, string>();
   readonly streams = new Map<string, never>();
   readonly console = { prompts: new Map<string, never>(), notices: new Map<string, never>() };
-  readonly changes = { length: 0, read: () => [], readable: () => [] };
+  readonly changes: FileChanges;
   /** The facts of each chain, as the transcript of the chain holds them. */
   private readonly held = new Map<string, Fact[]>();
   /** The lines of the file that hold whole the question and the done of each act whose texts the reader cut. */
@@ -101,13 +238,104 @@ export class Reader {
     /** The file of the facts: the record of a recorded life, or the file that the crate retold the record in. */
     private readonly file = record,
   ) {
+    this.changes = new FileChanges(record, true);
     if (reading) this.read();
     // The life stopped where the record ends, and nothing runs on a record open to read, so the work that is not done
-    // waits, as paused work does. A chain is no work, and stays as it is. A recorded life shows a moment of a life,
+    // stays so, with no end to come: it neither runs nor waits for a wake, so it counts as no work at all. A chain is no work, and stays as it is. A
+    // rung whose run ended in the facts that the record kept ended with it. A recorded life shows a moment of a life,
     // so its work stands as it stood at that moment.
+    if (reading) this.settle();
+    if (reading) reading.carries = this.carries();
     if (reading)
-      for (const act of this.activity.acts.values())
-        if (!act.done && WORK.includes(act.kind)) act.paused = true;
+      for (const act of this.activity.acts.values()) {
+        // A rung that the record ended, with no run in its facts, has no run left to go on.
+        if (act.kind === "rung" && act.done && act.run?.status === "running")
+          act.run = { status: "done", reason: "" };
+        if (!act.done && WORK.includes(act.kind) && !(act.kind === "rung" && act.run?.status !== "running"))
+          act.unfinished = true;
+      }
+  }
+  /** A model answer whose tuple values the activity reads from the live engine. */
+  private normalize(fact: Fact): Fact {
+    if (fact[0] !== "done" || !isQuestion("reply", fact[1])) return fact;
+    const value = answerValue(fact[3]);
+    return value ? ([fact[0], fact[1], fact[2], value, ...fact.slice(4)] as Fact) : fact;
+  }
+  /** Ends work that a recorded close or cancel already ended in the life. */
+  private settle(): void {
+    for (const [at, fact] of this.facts.entries()) {
+      const [kind, about, , value] = fact;
+      if (kind !== "close" && kind !== "cancel") continue;
+      for (const act of [...this.activity.acts.values()]) {
+        if (act.done || act.began > at || !WORK.includes(act.kind) || !this.covers(fact, act.id)) continue;
+        const ended = kind === "close" && act.id === about ? value : { is: "CancelledError", args: [] };
+        this.feed(["done", act.id, "", ended] as Fact);
+      }
+    }
+  }
+  /** Feeds a derived end fact through the activity. */
+  private feed(fact: Fact): void {
+    const ear = this.activity.hear(fact);
+    for (let step = ear.next(); !step.done; ) {
+      const asked = step.value as Call;
+      step = ear.next(
+        asked.call === "covers" ? this.covers(asked.args[0] as Fact, String(asked.args[1])) : null,
+      );
+    }
+  }
+  /** How many turns of the root chain say something, and how many files the acts of the record wrote. */
+  private carries(): { turns: number; files: number } {
+    return { turns: this.said().length, files: this.written().length };
+  }
+  private said(): [string, string][] {
+    const chain = this.activity.scope(this.root) || this.root;
+    const folded = this.fold(
+      { read: 0, turns: [], told: [], cut: 0 },
+      this.held.get(chain) ?? [],
+      Boolean(this.reading && !this.reading.logged),
+    );
+    return folded.flatMap(([role, text]) =>
+      String(text ?? "").trim() ? [[String(role), String(text)] as [string, string]] : [],
+    );
+  }
+  private written(): string[] {
+    const paths = new Set<string>();
+    for (const act of this.activity.acts.values()) {
+      const path = (act.words[0] as { path?: unknown } | null)?.path;
+      if (act.kind === "write" && typeof path === "string" && !path.includes("://")) paths.add(path);
+    }
+    return [...paths];
+  }
+  /** What a new life from the record carries, and the first word that binds it: the last turns of the root chain, each
+   * cut to a length, up to a budget, and the files that the record wrote. */
+  carry(): Carry {
+    const said = this.said();
+    const files = this.written();
+    const pieces = said.map(([role, text]) => {
+      // The end of a message to the model says what it asked, and the start of an answer says what it did.
+      const user = role === "user";
+      const cut =
+        text.length <= TURN
+          ? text
+          : user
+            ? `[the start is cut at ${TURN} characters]\n${text.slice(-TURN)}`
+            : `${text.slice(0, TURN)}\n[cut at ${TURN} characters]`;
+      return `${user ? "User" : "Assistant"}:\n${cut}`;
+    });
+    let used = 0;
+    let first = pieces.length;
+    while (first > 0 && used + (pieces[first - 1]?.length ?? 0) <= BUDGET)
+      used += pieces[--first]?.length ?? 0;
+    const left = first ? `[${first} earlier turns of the record are left out]\n\n` : "";
+    const body = left + pieces.slice(first).join("\n\n");
+    let name = "earlier";
+    while (body.includes(`</s:${name}>`)) name += "_";
+    const word = [
+      `# The earlier work of the record ${JSON.stringify(basename(this.record))}, which this life carries.`,
+      `<s:${name}>\n${body}\n</s:${name}>`,
+      `earlier_files = ${JSON.stringify(files.slice(0, 200))}`,
+    ].join("\n");
+    return { turns: said.length, files, word };
   }
   /** A recorded life, read from its file: a log of a life whose first line is a header that says so, which the
    * reader shows at the moment where the log ends. */
@@ -173,14 +401,9 @@ export class Reader {
 
   /** One fact: the activity hears it, and the transcript of its chain holds it. A fact of a line of the file is held
    * with its long texts cut, and an act that it ends keeps of them what its row shows, since the file holds them whole. */
-  private hear(whole: Fact, line?: Line): void {
-    const ear = this.activity.hear(whole);
-    for (let step = ear.next(); !step.done; ) {
-      const asked = step.value as Call;
-      step = ear.next(
-        asked.call === "covers" ? this.covers(asked.args[0] as Fact, String(asked.args[1])) : null,
-      );
-    }
+  private hear(told: Fact, line?: Line): void {
+    const whole = this.normalize(told);
+    this.feed(whole);
     const fact = line ? this.cut(whole, line) : whole;
     this.facts.push(fact);
     const [kind, about] = fact;
@@ -273,24 +496,35 @@ export class Reader {
 
   /** The turns of each chain as far as the reader read its facts: the turns before its last answer, the paragraphs told
    * since, and how many of them stand before the last reply that it asked. */
-  private readonly turned = new Map<string, { read: number; turns: Turn[]; told: string[]; cut: number }>();
+  private readonly turned = new Map<string, Folded>();
   /** The turns of a chain: the paragraphs told on it between two answers, and each answer of a model. Each read takes
    * only the facts that the chain heard since the last. */
   turns({ on = this.root }: { on?: string } = {}): Turn[] {
     const chain = this.activity.scope(on) || on;
-    const facts = this.held.get(chain) ?? [];
     const kept = this.turned.get(chain) ?? { read: 0, turns: [], told: [], cut: 0 };
     this.turned.set(chain, kept);
+    return this.fold(kept, this.held.get(chain) ?? [], false);
+  }
+  /** The turns of the facts of a chain that the fold has not read yet, with the message of each prompt told as a
+   * paragraph when the facts hold no tell, since the facts that a record kept hold the prompts and not the paragraphs
+   * that the engine told. */
+  private fold(kept: Folded, facts: Fact[], prompts: boolean): Turn[] {
     for (const fact of facts.slice(kept.read)) {
       const [kind, about] = fact;
-      if (kind === "reply" && isQuestion("reply", about)) kept.cut = kept.told.length;
-      else if (
-        kind === "done" &&
-        isQuestion("reply", about) &&
-        Array.isArray(fact[3]) &&
-        fact[3].length === 4
-      ) {
-        kept.turns.push(["user", kept.told.slice(0, kept.cut).join("\n\n"), null, null], fact[3] as Turn);
+      if (
+        prompts &&
+        kind === "prompt" &&
+        isQuestion("prompt", about) &&
+        typeof fact[5] === "string" &&
+        fact[5]
+      )
+        kept.told.push(fact[5]);
+      else if (kind === "reply" && isQuestion("reply", about)) kept.cut = kept.told.length;
+      else if (kind === "done" && isQuestion("reply", about) && tupled(fact[3])?.length === 4) {
+        kept.turns.push(
+          ["user", kept.told.slice(0, kept.cut).join("\n\n"), null, null],
+          tupled(fact[3]) as Turn,
+        );
         kept.told = kept.told.slice(kept.cut);
         kept.cut = 0;
       } else if (kind === "tell" && Array.isArray(fact[3])) kept.told.push(fact[3].join("\n"));
@@ -325,7 +559,9 @@ export class Reader {
     return this.activity.acts.get(id)?.paused ?? false;
   }
 
-  dispose(): void {}
+  dispose(): void {
+    this.changes.dispose();
+  }
 
   /** Each other verb, which would make an act or change the life. */
   refuse(): never {
