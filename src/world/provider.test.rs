@@ -30,7 +30,7 @@ use jiff::{Zoned, civil};
 
 use super::{
   Backoff, Hosted, Model, Provider, Retries, Retry, Thinking, Writes, catalog::Catalog, images,
-  limit, local::Server, passing, resets, thinking, unfenced,
+  limit, local::Server, passing, resets, thinking, unclosed, unfenced,
 };
 use crate::{Act, Ear, Engine, Fact, Object, SYSTEM, verbs, world};
 
@@ -1445,6 +1445,49 @@ fn the_fence_that_opens_a_text_goes_with_its_closing_fence_at_its_end_and_any_ot
     unfenced("<answer>\nx = '<b>'\n<b>\nclose(x)").as_deref(),
     Some("x = '<b>'\n<b>\nclose(x)"),
     "a line of another tag stays"
+  );
+}
+
+#[test]
+fn a_line_of_three_backticks_alone_at_the_end_goes_unless_a_fence_or_a_quote_opens_before_it() {
+  assert_eq!(unclosed("close(3)\n```").as_deref(), Some("close(3)"));
+  assert_eq!(unclosed("x = 1\nclose(x)\n  ```  \n\n").as_deref(), Some("x = 1\nclose(x)"));
+  assert_eq!(
+    unclosed("```python\nclose(3)\n```"),
+    None,
+    "a fence that opens the word keeps its close"
+  );
+  assert_eq!(unclosed("<s:doc>\nrun:\n```"), None, "the text of an open quote keeps its fence");
+  assert_eq!(
+    unclosed("<s:doc>\n```sh\nls\n```\n</s:doc>\nclose(doc)\n```").as_deref(),
+    Some("<s:doc>\n```sh\nls\n```\n</s:doc>\nclose(doc)"),
+    "the fences of a closed quote stay"
+  );
+  assert_eq!(unclosed("close(3)\n```\nDone."), None, "a fence before prose stays");
+  assert_eq!(unclosed("close(3)\n```python"), None);
+  assert_eq!(unclosed("close(3)"), None);
+  assert_eq!(unclosed("```"), None);
+  assert_eq!(unclosed("\n```"), None);
+}
+
+#[test]
+fn a_word_that_ends_with_a_line_of_three_backticks_runs_without_it_and_the_chain_is_told_first() {
+  let model = streaming(&[("x = 3\nclose(x)\n```\n", Usage::new())]);
+  let (mut engine, _) = life("unclosed", vec![scripted(&model)]);
+  let id = asked(&mut engine);
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  assert_eq!(got.as_ref().as_int(), Some(3));
+  let root = engine.root().to_owned();
+  let facts = said(&mut engine);
+  let kinds: Vec<_> =
+    facts.iter().map(|(kind, about, _)| (kind.as_str(), about.as_str())).collect();
+  assert_eq!(kinds, [("started", "reply1"), ("tell", root.as_str()), ("done", "reply1")]);
+  assert!(facts[1].2.contains("the provider dropped that line"), "{}", facts[1].2);
+  assert!(facts[2].2.starts_with("('assistant', 'x = 3\\nclose(x)', "), "{}", facts[2].2);
+  assert!(
+    facts[2].2.ends_with("[{'type': 'text', 'text': 'x = 3\\nclose(x)'}])"),
+    "{}",
+    facts[2].2
   );
 }
 
