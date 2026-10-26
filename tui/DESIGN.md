@@ -276,7 +276,7 @@ The first version of the Loom follows this document, with these changes that the
 What is left for later work: the feed, which the next part of this document designs; the commands of the old TUI that acted on its screens alone, such as the share of a
 conversation as HTML, images in the word line, the external editor, and the queue of follow-ups in the screen; a
 measure of a convergence loop beyond the dollars and the window, such as the count of retries of a ladder; and the
-replay of a record that an older engine made, which drifts, so an old record does not open.
+replay of a record that an older engine made, which drifts: such a record opens to read, and a new session resumes it from its turns.
 
 ## The variants
 

@@ -40,7 +40,7 @@ export interface Reading {
    * kept, with the acts that they name. */
   logged: boolean;
   /** What a new life from the record carries: the turns of its root chain and the files that its acts wrote. */
-  carries?: { turns: number; files: number };
+  carries?: { turns: number; files: number; prompts: number };
 }
 
 /** What a new life from a record open to read carries: the turns of the root chain and the files that the record
@@ -49,6 +49,11 @@ export interface Carry {
   turns: number;
   files: string[];
   word: string;
+  /** The word that resumes the record instead: it goes on from the turns of the root chain and asks again each prompt
+   * of a model that the record left open, as the engine reads them from the record of any engine. */
+  resume: string;
+  /** How many open prompts of a model the resume asks again. */
+  prompts: number;
 }
 
 /** The build that made a record and this build, as the dialog and the footer name them: an engine by the first twelve
@@ -78,7 +83,7 @@ export function readOnly(reading: Reading): string {
  * a new life carries. */
 export function readingNote(reading: Reading): string[] {
   const { made, build } = engines(reading);
-  const { turns = 0, files = 0 } = reading.carries ?? {};
+  const { turns = 0, files = 0, prompts = 0 } = reading.carries ?? {};
   const count = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
   return [
     `Made by: ${made}`,
@@ -89,6 +94,9 @@ export function readingNote(reading: Reading): string[] {
     ...(reading.carries
       ? [
           `A new life carries ${count(turns, "turn")} of its root chain and the ${count(files, "file")} that it wrote.`,
+          ...(prompts
+            ? [`Its ${count(prompts, "open prompt")} of a model stay open, and a resume asks them again.`]
+            : []),
         ]
       : []),
   ];
@@ -284,8 +292,14 @@ export class Reader {
     }
   }
   /** How many turns of the root chain say something, and how many files the acts of the record wrote. */
-  private carries(): { turns: number; files: number } {
-    return { turns: this.said().length, files: this.written().length };
+  private carries(): { turns: number; files: number; prompts: number } {
+    // The prompts that a resume asks again are those of a model on the root chain that no end came to, as the carry of
+    // the engine counts them.
+    const chain = this.activity.scope(this.root) || this.root;
+    let prompts = 0;
+    for (const act of this.activity.acts.values())
+      if (act.kind === "prompt" && !act.done && act.on === chain && act.words[2] !== "operator") prompts++;
+    return { turns: this.said().length, files: this.written().length, prompts };
   }
   private said(): [string, string][] {
     const chain = this.activity.scope(this.root) || this.root;
@@ -335,7 +349,8 @@ export class Reader {
       `<s:${name}>\n${body}\n</s:${name}>`,
       `earlier_files = ${JSON.stringify(files.slice(0, 200))}`,
     ].join("\n");
-    return { turns: said.length, files, word };
+    const resume = `await inherit(${JSON.stringify(this.record)}, ${JSON.stringify(this.root)})`;
+    return { turns: said.length, files, word, resume, prompts: this.carries().prompts };
   }
   /** A recorded life, read from its file: a log of a life whose first line is a header that says so, which the
    * reader shows at the moment where the log ends. */
