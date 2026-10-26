@@ -243,8 +243,10 @@ The model of a life is the views that a host derives from the acts of a life, in
 gives. It holds no native code and no module of node, so a terminal and a window of the web read the same views:
 
 - `acts`: the act as a view reads it, `LiveAct`, the kinds of work, `WORK`, what a command came to, `Exit`, the
-  measure of a chain, `Measure`, which `measureOf` gives from the answers of its models, and whether an act failed or
-  was cancelled.
+  measure of a chain, `Measure`, which `measureOf` gives from the answers of its models, a compaction of a chain,
+  `Compaction`, which an `Activity` keeps for each prefix said on a chain after its birth and for each new chain whose
+  first word restores its source, the chains that compactions into new chains join into one run, `compactedRun`, and
+  whether an act failed or was cancelled.
 - `asks`: the desk of the operator, `desk`: each question that waits for him and each notice that he did not dismiss,
   the oldest first, each with its chain and the choices of its shape, `choicesOf`: yes and no for a bool, and each
   value of a Literal. `aimed` gives the ask that the operator acts on, on the chain that he reads, `beside` the ask a

@@ -91,7 +91,10 @@ and not their layout or their look.
   pick a folder or a record with the dialog of the system.
 - Thread: one thread read top to bottom: what was asked, each step that its model took, folded to what it did and
   open to its code, the word of a model as it writes it, the output of a command as it prints it, the threads that a
-  step asked, and the answer. The composer under it sends to its chain.
+  step asked, and the answer. The composer under it sends to its chain. Each mark that a part of an extension gives
+  its chain, as a compaction, stands as a rule with its title and its lines before the first step that began after
+  it: the host loads the parts as the TUI loads them, and sends their marks with the life. A run of compactions into
+  new chains names its last chain as its first chain and that one, as `root -> compacted`.
 - The rail at the left holds the life and what it spent, the questions that wait for you, and the tree of threads,
   each with its whole title and what its steps came to in a tip.
 - The header says the thread, the last notice of the session, and the mark Read only on a record of another engine.

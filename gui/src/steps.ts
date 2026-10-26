@@ -1,6 +1,7 @@
 import { actState, type LiveAct, outcome, reason, source } from "furb/life";
 import type { State } from "./data.ts";
 import { chainName, glyphOf, type Moment } from "./life.ts";
+import type { Mark } from "./wire.ts";
 
 /** One act beside the line that made it: its name, its kind, its state, and what it came to in a few words. */
 export interface ActMark {
@@ -98,6 +99,20 @@ export function steps(moment: Moment, prompt: LiveAct, directory: string): Step[
     }
     if (step.thinks) continue;
     step.lines.push({ text: line.text, here: line.runs, acts: line.acts.map(mark) });
+  }
+  return out;
+}
+/** The marks of a thread, each before the first step that began after its place, as the feed of the TUI places a mark
+ * after the last act that began before it: one list for each step, then one for the end of the ladder. */
+export function placed(
+  ladder: readonly Step[],
+  marks: readonly Mark[],
+  began: (id: string) => number,
+): Mark[][] {
+  const out: Mark[][] = Array.from({ length: ladder.length + 1 }, () => []);
+  for (const mark of marks) {
+    const at = ladder.findLastIndex((step) => began(step.id) < mark.at) + 1;
+    out[at]?.push(mark);
   }
   return out;
 }

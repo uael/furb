@@ -17,6 +17,7 @@ import {
 } from "furb/life";
 import { fromDirectory, shortenHomes } from "../files.ts";
 import { clip, dollars, plainFailure } from "../format.ts";
+import type { Mark as PartMark } from "../parts.ts";
 import { hunkPatch, type Scope } from "../review.ts";
 import type { ActRow, View } from "../session.ts";
 import { theme as c, glyph, spacing as space, spin, threadTone } from "../theme.ts";
@@ -197,9 +198,15 @@ export const feed = part({
       // The thread of now is read from the index, in the time of what it shows, and that of a moment of the past whole.
       const owed = new Set(w.host.prompts.keys());
       const word = (rung: ActRow) => this.subject(rung);
-      const lines = index
-        ? thread(w.selected, word, w.host.streams, owed, opened, index)
-        : condense(ladder(w.selected, shown, word, w.host.streams, owed), opened);
+      // A run of compactions into new chains shows as one feed: the feed of each chain of the run in its order, which
+      // the rule of each compaction parts.
+      const run = w.runOf(w.selected);
+      const continuing = new Set(run.slice(1));
+      const lines = run.flatMap((chain) =>
+        index && chain === w.selected
+          ? thread(chain, word, w.host.streams, owed, opened, index)
+          : condense(ladder(chain, shown, word, w.host.streams, owed), opened),
+      );
       let retold = false;
       // The feed is one program of threads: each thread is its header, then the words of its steps as python, with
       // what each line came to as a quiet comment beside it. A thread that the operator collapsed shows its header
@@ -312,7 +319,18 @@ export const feed = part({
         // A click on a line opens it in place: its whole text, and under it what each act of the line gave. The
         // program parts at each open line, so that the cards of its acts stand under it.
         const segments: ProgramLine[][] = [[]];
+        // A mark whose place falls between two steps of the program parts it there.
+        const cuts = new Map<number, PartMark[]>();
+        let stepped: ActRow | undefined;
         for (const line of program) {
+          if (line.kind === "code" && line.step !== stepped) {
+            stepped = line.step;
+            const marked = due(line.step.began, line.step.on);
+            if (marked.length) {
+              if (segments.at(-1)?.length) segments.push([]);
+              cuts.set(segments.length - 1, [...(cuts.get(segments.length - 1) ?? []), ...marked]);
+            }
+          }
           segments.at(-1)?.push(line);
           if (this.lineOpen(line)) segments.push([]);
         }
@@ -325,6 +343,7 @@ export const feed = part({
             before = line.step;
           }
         for (const [at, segment] of segments.entries()) {
+          for (const mark of cuts.get(at) ?? []) showMark(mark);
           if (!segment.length) continue;
           const key = [
             at ? 0 : hide,
@@ -375,8 +394,56 @@ export const feed = part({
         }
         tails();
       };
+      // The marks of the parts stand after the last act that began before their place: a rule with the title of the
+      // mark, then its lines. A line that only shows more of an act, or a fold of earlier lines, places no mark.
+      const moment = w.moment;
+      const marks = this.parts.marks(this.seen()).filter((one) => moment === undefined || one.at < moment);
+      const placing = (line: (typeof lines)[number]) =>
+        line.type !== "tail" && line.type !== "value" && line.type !== "more";
+      // A mark waits until the first act that began at its place or later, and shows before it: before a line of the
+      // feed, or inside a program, between two of its steps.
+      const pending = [...marks].sort((one, other) => one.at - other.at);
+      // A mark of a later chain of the run waits for the feed of that chain, since the feed of an earlier chain ends
+      // where the compaction cut it, whatever began after in time.
+      const due = (began: number, on: string) => {
+        const out: PartMark[] = [];
+        const here = run.indexOf(on);
+        for (const one of [...pending])
+          if (one.at <= began && (here < 0 || run.indexOf(one.chain) <= here)) {
+            pending.splice(pending.indexOf(one), 1);
+            out.push(one);
+          }
+        return out;
+      };
+      const showMark = (mark: PartMark) => {
+        const said = JSON.stringify(mark.lines ?? []);
+        add(
+          `mark-${mark.chain}-${mark.at}`,
+          `${mark.title}\n${said}`,
+          [],
+          (box) => {
+            box.add(
+              this.line(
+                [
+                  [`${glyph.rule.repeat(2)} `, c.border],
+                  [mark.title, c.muted],
+                  [
+                    ` ${glyph.rule.repeat(Math.max(0, this.feedWidth - Bun.stringWidth(mark.title) - 8))}`,
+                    c.border,
+                  ],
+                ],
+                c.muted,
+              ),
+            );
+            for (const one of mark.lines ?? [])
+              box.add(this.inset(space.between * 2, this.text(this.partLine(one), c.muted)));
+          },
+          { same: [mark.title, said] },
+        );
+      };
       let collapsed = -1;
       for (const line of lines) {
+        if (placing(line)) for (const mark of due(line.act.began, (line.act as ActRow).on)) showMark(mark);
         if (collapsed >= 0 && line.depth > collapsed) continue;
         collapsed = -1;
         // The steps of a thread stand in its program, and its messages as comments there. What a thread closed with
@@ -395,7 +462,7 @@ export const feed = part({
           const code = this.subject(act);
           // The words that a chain wrote to retell its source stand as one line, which names the source.
           if (rows.get(act.by)?.kind === "chain") {
-            if (retold) continue;
+            if (retold || continuing.has(act.by)) continue;
             retold = true;
             const source = String(rows.get(act.by)?.words[1] ?? "");
             if (source)
@@ -796,6 +863,7 @@ export const feed = part({
           );
         }
       }
+      for (const mark of pending.splice(0)) showMark(mark);
       // A paused chain says so at the end of its feed, with the reason that the last failure gave, and a button that
       // wakes it, since nothing new runs on it until then.
       if (w.paused && !w.search) {
