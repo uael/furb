@@ -443,7 +443,6 @@ export const feed = part({
       };
       let collapsed = -1;
       for (const line of lines) {
-        if (placing(line)) for (const mark of due(line.act.began, (line.act as ActRow).on)) showMark(mark);
         if (collapsed >= 0 && line.depth > collapsed) continue;
         collapsed = -1;
         // The steps of a thread stand in its program, and its messages as comments there. What a thread closed with
@@ -455,6 +454,8 @@ export const feed = part({
         )
           continue;
         if (line.type === "prompt" && threadsOwn.of.has(line.act.id)) continue;
+        // Only a line that the feed shows places a mark: a step under a step stands folded, whenever it began.
+        if (placing(line)) for (const mark of due(line.act.began, (line.act as ActRow).on)) showMark(mark);
         const depth = line.depth;
         const act = line.act as ActRow;
         const indent = line.depth * space.between;
