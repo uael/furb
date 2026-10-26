@@ -1,0 +1,24 @@
+  furb-ruff-view-YgL9BM › Main           Feed    Transcript    Changes    ⌥1-3
+
+  ╻▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+  ┃ Keep original Python                          str  ▾ Collapse   ✓ Resolve
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+     1 brief = "Keep every quoted line, including Unicode value, quotes..."
+     2 text = "one \"quoted\" line\nsecond line Unicode value"
+     3 path = "C:\\new\n\\drafts"
+     4 result = await bash(
+     5     "printf origi...", stdin="keep the who...", timeout=600, on="c…
+     6 )
+     7 next_value = 2
+     8 streamed = [1,
+  ◉  9 # Choosing the next value
+
+
+
+  ╻▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+  ┃ Ask anything, or type / for commands
+  ┃
+  ┃   Prompt    Python    ⌃R   on Main   gpt-6.1-sol   high effort
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+  ◉ Working                                  ⌃P commands   Esc pause   F1 help

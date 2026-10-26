@@ -521,6 +521,9 @@ test("a completed statement is colored while tokens stream and the full word kee
 test("CJK, emoji and combining characters before an expanded literal refold on its second click at terminal-cell coordinates", () =>
   composing(
     async ({ session, screen, frame }) => {
+      // This checks the literal indices and terminal-cell coordinates of the ORIGINAL semicolon line.
+      // Ruff may split that statement into two lines; its projected fold behavior has its own renderer fixture.
+      session.preferences.rawPython = true;
       const value = "漢字 👩‍💻 e\u0301 ".repeat(26);
       const rung = await session.engine.rung({
         word: `prefix = "漢字👩‍💻e\u0301"; brief = ${JSON.stringify(value)}`,

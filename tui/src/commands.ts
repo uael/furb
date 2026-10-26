@@ -65,6 +65,7 @@ export const commands = {
     "Show or hide the chains and their threads, the context, and the workspaces",
   ],
   delete: ["Delete session", "", "Archive a session, or move it and its files to the workspace trash"],
+  python: ["Python display", "[raw|ruff]", "Toggle original Python or local Ruff formatting at 100 columns"],
   autocollapse: ["Automatic fold", "", "Toggle the fold of the threads that are over"],
   extensions: ["Extensions", "", "List the extensions that this life runs"],
   serve: [

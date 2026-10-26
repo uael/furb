@@ -146,6 +146,14 @@ with the most chains at work.
 
 ## Look and access
 
+Completed Python words use local `ruff format --isolated --line-length 100` for display only. Install Ruff on
+`PATH`, or set `FURB_RUFF` to its executable path (an empty value disables it). `/python raw` shows the original
+Python; `/python ruff` restores the formatted view, and ⌃⌥R toggles the saved preference. Missing Ruff, invalid or
+incomplete Python, an oversized word, or a failed formatter leaves the source unchanged. Streaming words stay raw.
+Ruff can leave indivisible literals longer than 100 columns; display string folds still expand in place.
+Copy its source and Edit its program always use the original word, including `<s:...>` quotes and multiline literals.
+Formatting never changes the engine, refusal coordinates, ownership, or the code that runs.
+
 Python words have offline Tree-sitter colors. The default theme, Terminal, follows the terminal: it takes the
 background of the terminal, and its text a step softer than the foreground of the terminal, when the terminal says
 its colors. Else it shows Ink on a dark terminal or on one that does not say its mode, and Day on a light one, and it
@@ -209,6 +217,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 
 | Key | Action |
 | --- | --- |
+| ⌃⌥R | Toggle original / Ruff-100 Python |
 | Enter | Send a message, or run Python input |
 | ⇧Enter or ⌃J | Insert a new line |
 | ⌥Enter | Queue this message after current work |
@@ -304,6 +313,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/view [main|loom|graph]` | Show the life as main, the loom, or the graph |
 | `/sidebar` | Show or hide the chains and their threads, the context, and the workspaces |
 | `/delete` | Archive a session, or move it and its files to the workspace trash |
+| `/python [raw|ruff]` | Toggle original Python or local Ruff formatting at 100 columns |
 | `/autocollapse` | Toggle the fold of the threads that are over |
 | `/extensions` | List the extensions that this life runs |
 | `/serve [address]` | Give the addresses at which other operators read this life, or read and drive it, over the network |
