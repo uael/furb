@@ -107,6 +107,19 @@ export function hintOf(
     .join("  ");
 }
 
+/** What a model writes while its word has not come yet: the lines of the word that it finished, which are python,
+ * and the line that it still writes. While it writes no word, the tail is the last line that it thinks. */
+export function writing(stream?: { text: string; thinking: string }): { lines: string; tail: string } {
+  const text = stream?.text ?? "";
+  const end = text.lastIndexOf("\n");
+  const lines = end < 0 ? "" : text.slice(0, end).replace(/\n+$/, "");
+  if (lines) return { lines, tail: text.slice(end + 1).trim() };
+  return {
+    lines,
+    tail: ((text || stream?.thinking || "").replace(/\n+$/, "").split("\n").at(-1) ?? "").trim(),
+  };
+}
+
 /** The lines of one step: its word, with each quote folded, the acts and the hint of each line, the line that runs
  * with the output that streams under it, and the line that a refusal names. A step whose word has not come shows what
  * its model writes. */
@@ -124,9 +137,7 @@ export function stepLines(
   if (!text) {
     if (why) out.push({ kind: "note", step, text: `# ${step.id} failed: ${first(why)}` });
     else if (!step.done) {
-      const stream = streams?.get(step.id);
-      const tail = (stream?.text || stream?.thinking || "").replace(/\n+$/, "").split("\n").at(-1) ?? "";
-      out.push({ kind: "writes", step, text: tail || "writes a step" });
+      out.push({ kind: "writes", step, text: writing(streams?.get(step.id)).tail || "writes a step" });
     }
     return out;
   }
