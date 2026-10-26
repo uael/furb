@@ -176,21 +176,68 @@ export async function seedRichDemo(
     '  report = report.append(f"- {path}: {detail}\\n")',
     "write(report)",
     "await wait(0.01)",
-    'close("The scripted fieldwork report is ready.")',
+    "",
+    "def classify_row(path, detail):",
+    "  try:",
+    "    if path.endswith('.md'):",
+    "      kind = 'guide'",
+    "    elif path.endswith('.ts'):",
+    "      kind = 'source'",
+    "    else:",
+    "      kind = 'other'",
+    "    if isinstance(detail, int):",
+    "      if detail > 20:",
+    "        depth = 'long'",
+    "      else:",
+    "        depth = 'short'",
+    "    else:",
+    "      depth = 'refused'",
+    "    return (path, kind, depth, detail)",
+    "  except (TypeError, ValueError) as error:",
+    "    return (path, 'invalid', str(error))",
+    "classified = [classify_row(path, detail) for path, detail in rows]",
+    "for index, item in enumerate(classified):",
+    "  if index % 2 == 0:",
+    "    print('even', item[1], item[0])",
+    "  else:",
+    "    print('odd', item[1], item[0])",
+    "try:",
+    "  totals = sum(1 for item in classified if item[2] == 'long')",
+    "  if totals < 0:",
+    "    raise Refused('invalid total')",
+    "except Refused as error:",
+    "  print(str(error))",
   ];
-  const longProgram = [
-    ...source,
-    ...Array.from(
-      { length: 48 },
-      (_, index) =>
-        `# Field note ${index + 1}: compare the path, its line count, and the next useful action.`,
-    ),
-  ].join("\n");
-  let longProgramId = "";
+  const longProgram = source.join("\n");
+  await engine.pause(root);
+  const rootParent = await engine.prompt("str", {
+    message: "Review the fieldwork overview and prepare the next-step report.",
+    on: root,
+  });
+  engine.write({ path: rootParent, content: longProgram }, { on: root });
+  await session.refresh();
+  await engine.wake(root);
+  await session.refresh();
+  const rootProgram = session.acts.find(
+    (act) => act.kind === "rung" && act.by === rootParent && act.words[0] === longProgram,
+  );
+  if (!rootProgram) throw new Error("The overview prompt did not take its scripted fieldwork program.");
+  await engine.result(rootProgram.id);
+  await engine.close("The fieldwork report is ready.", { id: rootParent });
+  const longProgramId = rootParent;
   for (const [index, chain] of branches.entries()) {
-    const program = await engine.rung({ word: longProgram, on: chain });
-    if (index === 0) longProgramId = program;
-    await engine.result(program);
+    const branchProgram = [
+      `batch = ["notes", "archive", "fieldwork-${index + 1}"]`,
+      "selected = []",
+      "for item in batch:",
+      "  try:",
+      "    if item.strip():",
+      "      selected.append(item.strip())",
+      "  except AttributeError as error:",
+      "    selected.append(str(error))",
+      `print("Fieldwork ${index + 1}", selected)`,
+    ].join("\n");
+    await engine.result(await engine.rung({ word: branchProgram, on: chain }));
     await engine.result(
       await engine.rung({
         word: `write(Text("FIELDWORK-${index + 1}.md", ${JSON.stringify(
@@ -206,6 +253,13 @@ export async function seedRichDemo(
     return longProgramId;
   }
 
+  const rootThreads = Array.from({ length: 10 }, (_, index) =>
+    engine.prompt("str", {
+      message: `Overview question ${index + 1}: which evidence should guide the next investigation?`,
+      to: "operator",
+      on: rootParent,
+    }),
+  );
   const parents: string[] = [];
   for (const [index, chain] of branches.entries()) {
     const parent = await engine.prompt("str", {
@@ -224,7 +278,7 @@ export async function seedRichDemo(
       }),
     ),
   );
-  await Promise.all(threads);
+  await Promise.all([...rootThreads, ...threads]);
   await session.refresh();
   return longProgramId;
 }

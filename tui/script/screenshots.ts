@@ -67,7 +67,12 @@ const view = isLifeView(process.env.FURB_GALLERY_VIEW) ? process.env.FURB_GALLER
 async function settle(): Promise<void> {
   await session.refresh();
   for (let attempt = 0; attempt < 10; attempt++) {
-    const pending = session.activity.filter((act) => !act.done && ["prompt", "rung"].includes(act.kind));
+    const pending = session.activity.filter(
+      (act) =>
+        !act.done &&
+        ["prompt", "rung"].includes(act.kind) &&
+        !(act.kind === "prompt" && act.words[2] === "operator"),
+    );
     if (!pending.length && !session.queued.length) break;
     // A queue that waits on no act sends its next message in a moment.
     if (!pending.length) await new Promise((done) => setTimeout(done, 100));
@@ -104,7 +109,118 @@ async function capture(name: string): Promise<void> {
   if (texts) await writeFile(join(texts, `${name}.txt`), test.captureCharFrame());
 }
 
+async function richWorkspaceGallery(): Promise<void> {
+  const previousSession = session;
+  const previousEntry = library.current;
+  let showcase: Awaited<ReturnType<typeof library.create>> | undefined;
+  let showcaseDirectory: string | undefined;
+  for (let workspaceIndex = 1; workspaceIndex <= 4; workspaceIndex++) {
+    const directory = await project(`fieldwork-${workspaceIndex}`);
+    const group = await library.add(directory);
+    for (let sessionIndex = 1; sessionIndex <= 8; sessionIndex++) {
+      const entry = await library.create(group, `Fieldwork ${workspaceIndex}.${sessionIndex}`);
+      if (!entry.session) throw new Error(`Fieldwork ${workspaceIndex}.${sessionIndex} did not open.`);
+      if (workspaceIndex === 1 && sessionIndex === 1) {
+        showcase = entry;
+        showcaseDirectory = directory;
+      }
+      if (sessionIndex === 1)
+        await entry.session.engine.result(
+          await entry.session.engine.rung({
+            word: `def inspect_batch(items):\n    results = []\n    for item in items:\n        if item:\n            results.append(item)\n    return results\n\nreport = inspect_batch(["notes", "archive", ""])`,
+            on: entry.session.engine.root,
+          }),
+        );
+      if (sessionIndex === 2)
+        await entry.session.engine.prompt("str", {
+          message: "Which field note should be checked next?",
+          to: "operator",
+          on: entry.session.engine.root,
+        });
+      if (sessionIndex >= 3) await library.archive(entry);
+    }
+  }
+  await library.refresh();
+  if (!showcase?.session || !showcaseDirectory) throw new Error("The rich showcase session did not open.");
+  const live = await demoSession({ watch: true, cwd: showcaseDirectory });
+  const program = await seedRichDemo(live);
+  await library.show(live);
+  session = live;
+  session.folds[`steps:${program}`] = false;
+  session.folds[`thread:${program}`] = false;
+  session.folds[`prompts:${session.engine.root}`] = false;
+  await session.select(session.engine.root);
+  session.thread = undefined;
+  const showRichProgram = async () => {
+    app().render();
+    await test.flush();
+    app().scroll.stickyScroll = false;
+    app().scroll.scrollTo(app().scroll.scrollHeight);
+    await test.flush();
+    let code = app()
+      .scroll.getChildren()
+      .find((node) => node.id === `program-${program}`);
+    for (let tries = 0; !code && tries < 100; tries++) {
+      app().scroll.scrollBy(-Math.max(1, app().scroll.viewport.height - 5));
+      await test.flush();
+      code = app()
+        .scroll.getChildren()
+        .find((node) => node.id === `program-${program}`);
+    }
+    if (!code) throw new Error(`The Feed did not render thread program ${program}.`);
+    app().scroll.scrollTo(Math.max(0, code.y - app().scroll.y + app().scroll.scrollTop - 3));
+    await test.flush();
+  };
+  if (session.chains.filter((chain) => session.labelOf(chain.id).startsWith("Fieldwork ")).length !== 12)
+    throw new Error("The showcase session did not build its twelve real fieldwork chains.");
+  await showRichProgram();
+  await capture("84-rich-workspaces");
+  if (
+    !test.captureCharFrame().includes("index_notes") ||
+    !test.captureCharFrame().includes(`Needs you ${session.host.prompts.size}`)
+  )
+    throw new Error("The Feed showcase must show the long program and its pending questions.");
+  test.resize(80, 24);
+  await showRichProgram();
+  await capture("85-rich-workspaces-80x24");
+  if (!test.captureCharFrame().includes("index_notes"))
+    throw new Error("The 80x24 Feed capture does not show the long fieldwork program.");
+  test.resize(160, 48);
+  await showRichProgram();
+  await capture("86-rich-workspaces-160x48");
+  if (
+    !test.captureCharFrame().includes("index_notes") ||
+    !test.captureCharFrame().includes(`Needs you ${session.host.prompts.size}`)
+  )
+    throw new Error("The 160x48 Feed capture must show the long program and its pending questions.");
+  test.resize(152, 46);
+  app().render();
+  await test.flush();
+  if (!process.env.FURB_GALLERY_RICH_ONLY && previousEntry?.session) {
+    await library.select(previousEntry);
+    session = previousSession;
+    session.thread = undefined;
+  }
+}
+
 let failed = false;
+if (process.env.FURB_GALLERY_RICH_ONLY) {
+  try {
+    await loadParsers();
+    await richWorkspaceGallery();
+  } catch (error) {
+    console.error(error);
+    failed = true;
+  }
+  waits("the end of the script");
+  await end(
+    failed,
+    () => app().dispose(),
+    () => test.renderer.destroy(),
+    () => library.dispose(),
+    removeDemoDirectories,
+  );
+}
 try {
   await loadParsers();
   await capture("01-welcome");
@@ -456,59 +572,7 @@ try {
   );
   await capture("28-workspace-tree");
 
-  // A generated workspace gallery overflows the navigator with real sessions and archived history.
-  let showcase: typeof main | undefined;
-  for (let workspaceIndex = 1; workspaceIndex <= 4; workspaceIndex++) {
-    const directory = await project(`fieldwork-${workspaceIndex}`);
-    const group = await library.add(directory);
-    for (let sessionIndex = 1; sessionIndex <= 8; sessionIndex++) {
-      const entry = await library.create(group, `Fieldwork ${workspaceIndex}.${sessionIndex}`);
-      if (!entry.session) throw new Error(`Fieldwork ${workspaceIndex}.${sessionIndex} did not open.`);
-      if (workspaceIndex === 1 && sessionIndex === 1) showcase = entry;
-      if (sessionIndex === 1)
-        await entry.session.engine.result(
-          await entry.session.engine.rung({
-            word: `def inspect_batch(items):\n    results = []\n    for item in items:\n        if item:\n            results.append(item)\n    return results\n\nreport = inspect_batch(["notes", "archive", ""])`,
-            on: entry.session.engine.root,
-          }),
-        );
-      if (sessionIndex === 2)
-        await entry.session.engine.prompt("str", {
-          message: "Which field note should be checked next?",
-          to: "operator",
-          on: entry.session.engine.root,
-        });
-      if (sessionIndex === 8) await library.archive(entry);
-    }
-  }
-  await library.refresh();
-  if (!showcase?.session) throw new Error("The rich showcase session did not open.");
-  await library.select(showcase);
-  session = showcase.session;
-  const program = await seedRichDemo(session, { questions: false });
-  const richBranch = session.chains.find((chain) => session.labelOf(chain.id) === "Fieldwork 01")?.id;
-  if (!richBranch) throw new Error("The showcase session has no generated Fieldwork chain.");
-  session.folds[`steps:${program}`] = false;
-  await session.select(richBranch);
-  await click(test, "Transcript");
-  app().scroll.stickyScroll = false;
-  app().scroll.scrollTo(0);
-  if (session.chains.filter((chain) => session.labelOf(chain.id).startsWith("Fieldwork ")).length !== 12)
-    throw new Error("The showcase session did not build its twelve real fieldwork chains.");
-  await capture("84-rich-workspaces");
-  if (!test.captureCharFrame().includes("index_notes"))
-    throw new Error("The rich workspace capture does not show the long fieldwork program.");
-  test.resize(80, 24);
-  app().scroll.scrollTo(18);
-  await capture("85-rich-workspaces-80x24");
-  if (!test.captureCharFrame().includes("index_notes"))
-    throw new Error("The 80x24 rich workspace capture does not show the long fieldwork program.");
-  test.resize(160, 48);
-  await capture("86-rich-workspaces-160x48");
-  test.resize(152, 46);
-  app().render();
-  await test.flush();
-  await test.flush();
+  await richWorkspaceGallery();
   // A click on a line of a program that made an act opens it in place, with what the act gave.
   const rows = test.captureCharFrame().split("\n");
   const line = rows.findIndex((row) => /^ +\d+ .*\b(bash|read)\(/.test(row));
@@ -528,6 +592,7 @@ try {
   await app().submit();
   await capture("33-session-tree");
   app().closeTree();
+  session.thread = undefined;
   await session.submit("show live progress");
   session.enqueue("Check keyboard navigation after this answer.");
   await capture("34-queued-follow-up");
@@ -537,6 +602,7 @@ try {
   app().closeOverlay();
   // The queued message is sent before the next one, so that the feed reads in the same order at each run.
   await settle();
+  session.thread = undefined;
   await session.attachImage(resolve("docs/screenshots/01-welcome.png"));
   app().composer.setText("Review the layout in this image.");
   await capture("36-image-attachment");
