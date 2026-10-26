@@ -154,9 +154,14 @@ worker.onmessage = ({ data }) => {
     return;
   }
   if (data.state || data.log || data.fault) {
-    // A state holds the measures of the chains that changed since the state before it, so the last state holds them
-    // all, which a window that attaches reads first.
-    if (data.state) last = { ...data.state, measures: { ...last?.measures, ...data.state.measures } };
+    // A state holds the measures of the chains that changed and the compactions since the state before it, so the last
+    // state holds them all, which a window that attaches reads first.
+    if (data.state)
+      last = {
+        ...data.state,
+        measures: { ...last?.measures, ...data.state.measures },
+        compactions: [...(last?.compactions ?? []), ...data.state.compactions],
+      };
     for (const send of windows.keys()) send(data);
     return;
   }

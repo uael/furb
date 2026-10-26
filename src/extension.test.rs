@@ -168,7 +168,17 @@ fn the_parts_for_a_tui_are_those_of_the_extensions_that_the_configs_turn_on_and_
   let at = place("parts");
   let places = Places { config: at.join("user"), home: None };
   let project = at.join("project");
-  assert_eq!(parts(&places, &project).unwrap(), [], "an official extension has none");
+  let compaction = Part {
+    name: "compaction".to_owned(),
+    file: "extensions/compaction/tui.ts".to_owned(),
+    text: Some(include_str!("../extensions/compaction/tui.ts").to_owned()),
+  };
+  let alone = parts(&places, &project).unwrap();
+  assert_eq!(
+    alone,
+    std::slice::from_ref(&compaction),
+    "the crate carries the part of an official extension"
+  );
   let todo = project.join(".furb").join("extensions").join("todo");
   folder(&todo, r#"{"name": "todo", "word": "note.py", "tui": "tui.ts"}"#, "t = 1");
   folder(&project.join("plain"), r#"{"name": "plain", "word": "note.py"}"#, "p = 1");
@@ -178,9 +188,14 @@ fn the_parts_for_a_tui_are_those_of_the_extensions_that_the_configs_turn_on_and_
     r#"{"extensions": {"todo": "extensions/todo", "plain": "../plain", "off": false}}"#,
   );
   let got = parts(&places, &project).unwrap();
+  let todo =
+    Part { name: "todo".to_owned(), file: todo.join("tui.ts").display().to_string(), text: None };
+  assert_eq!(got, [compaction, todo]);
+  config(&project.join(".furb").join("config.json"), r#"{"extensions": {"compaction": false}}"#);
   assert_eq!(
-    got,
-    [Part { name: "todo".to_owned(), file: todo.join("tui.ts").display().to_string() }]
+    parts(&places, &project).unwrap(),
+    [],
+    "a config turns off the part of an official extension"
   );
 }
 

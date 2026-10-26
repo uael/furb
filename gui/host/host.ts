@@ -5,10 +5,11 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
+import { type Line, Parts, type Seen } from "@furb/tui/src/parts.ts";
 import type { Cancel, Session } from "@furb/tui/src/session.ts";
 import type { Workspace, Workspaces } from "@furb/tui/src/workspaces.ts";
 import type { LiveAct, Stream } from "furb";
-import type { Life, Part, Project, Said, StreamPart } from "../src/wire.ts";
+import type { Life, Mark, Part, Project, Said, StreamPart } from "../src/wire.ts";
 
 /** How many milliseconds at least stand between two parts that the host sends while the life changes. */
 const PACE = 50;
@@ -49,6 +50,10 @@ export class Host {
   private last = 0;
   /** The cancel that waits for the operator to confirm it, since it ends running work. */
   private cancelling?: Cancel;
+  /** The parts of the extensions of the project of the life shown, as the TUI loads them, and the marks that they
+   * gave last, with what the life held then. */
+  private parts?: Parts;
+  private marked = { held: "", marks: [] as Mark[] };
   constructor(readonly workspaces: Workspaces) {
     workspaces.on("change", this.changed);
     workspaces.on("select", this.changed);
@@ -71,6 +76,10 @@ export class Host {
     this.shown?.off("compose", this.composing);
     this.shown = session;
     this.cancelling = undefined;
+    this.parts?.dispose();
+    this.parts = session ? new Parts(session.host.directory, this.changed) : undefined;
+    void this.parts?.load();
+    this.marked = { held: "", marks: [] };
     session?.on("change", this.changed);
     session?.on("confirm", this.confirming);
     session?.on("compose", this.composing);
@@ -135,7 +144,39 @@ export class Host {
       measures: host.measures,
       asks: session.desk.asks,
       ...(session.aimed ? { aimed: session.aimed.id } : {}),
+      compactions: host.compactions,
+      marks: this.marksOf(session),
     };
+  }
+
+  /** The marks that the parts give for each chain that a compaction holds, as the feed of the TUI shows them, given
+   * again only when the parts, the compactions or the acts changed. */
+  private marksOf(session: Session): Mark[] {
+    const { compactions } = session.host;
+    const parts = this.parts;
+    if (!parts || !compactions.length) return [];
+    const held = `${parts.version} ${compactions.length} ${session.acts.length} ${session.acts.at(-1)?.id}`;
+    if (held === this.marked.held) return this.marked.marks;
+    const seen = (chain: string): Seen => ({
+      chain,
+      acts: session.acts,
+      compactions,
+      of: (kind) => session.acts.filter((act) => act.kind === kind),
+      run: (word) => session.command(`/run ${word}`),
+      say: (text) => {
+        session.notice = text;
+      },
+    });
+    const runs = (line: Line) =>
+      typeof line === "string"
+        ? [{ text: line, tone: "text" }]
+        : line.map(([text, tone]) => ({ text, tone: tone ?? "text" }));
+    const marks = new Map<string, Mark>();
+    for (const chain of new Set(compactions.map((one) => one.chain)))
+      for (const { chain: on, at, title, lines } of parts.marks(seen(chain)))
+        marks.set(`${on} ${at} ${title}`, { chain: on, at, title, lines: (lines ?? []).map(runs) });
+    this.marked = { held, marks: [...marks.values()].sort((one, other) => one.at - other.at) };
+    return this.marked.marks;
   }
 
   /** The projects that the TUI and the app know, each with its records that are not archived. */
@@ -355,6 +396,7 @@ export class Host {
     this.shown?.off("change", this.changed);
     this.shown?.off("confirm", this.confirming);
     this.shown?.off("compose", this.composing);
+    this.parts?.dispose();
     await this.workspaces.dispose();
   }
 }

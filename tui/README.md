@@ -138,6 +138,15 @@ folder. Each other operator comes over the network, with a key that gives a role
 
 A recorded life is a log of a life whose first line is a header that says `"recorded": true`. The TUI reads it as it
 reads a record that a build of another version made, from its acts, and runs nothing: what you send to it fails with the reason.
+The demo life that the gallery and the tests read is as dense as a real one, and it asks no model. The models of the
+demo write the words of `tui/src/demo/`, which run for real on a project of files: on the root chain a conductor hires
+a worker for each part of a release on a chain of its own, and the workers hire others, so the tree is four chains deep.
+Their words hold `def`, `while`, `for`, `if`, `try`, `lambda` and `await`, and some are 45 lines long. The life holds each
+state that a record holds: a word that the gate refused, a word that raised, a prompt that was cancelled, a chain that a
+grant paused, a command that runs, and questions of the operator in each shape. `tui/src/demo/workspaces.ts` adds
+four workspaces with sixteen sessions in them, saved, running, blocked, paused and archived. `seedLife` and
+`seedWorkspaces` make them, and `bun run screenshots` reads them.
+
 The demo opens `fixtures/conductor.jsonl`, a life of a conductor of furb with 23 chains, beside its scripted life,
 when it has no `--cwd` and no record. `bun run tui/script/fixture.ts <record>.jsonl.log [out]` makes such a fixture
 from the log of a real life: it keeps the acts that the model of a life reads, keeps each word of a model whole, since
@@ -215,6 +224,8 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | ⌥Enter | Queue this message after current work |
 | ↑ / ↓ | Previous / next sent input, from the first or the last line |
 | ↑ in an empty input | Take the last queued message back to edit it |
+| → / ⌃F | At the end of the input, take the grey rest of the line that the history suggests |
+| ⌥→ / ⌥F | At the end of the input, take the next word of that grey rest |
 | ⌃S | Put the input aside, or bring it back |
 | Esc twice | Rewind: go back to an earlier point of the chain, with its files or not |
 | ⌃1-3 or ⌥1-3 | Feed / transcript / changes view |
@@ -366,3 +377,35 @@ panels over the input, the hint of the line of each act of a kind, keys and comm
 [the guide of the extensions](../docs/extensions.md#a-part-for-the-tui) says. `/extensions` lists what the life
 runs, and `/run` runs a word of one on the chain on screen, as `/run skill("pdf")`. A cancel ends one act and the work under it, and
 not what an extension started on the chain, such as the watcher of the memory.
+
+## The parts of the App
+
+`tui/src/app.ts` holds the shell of the TUI: the `App` class with its fields and its constructor, which wire the
+parts together, `follow` and `AppOptions`. Each part of the App is a group of methods in its own file in
+`tui/src/app/`, and `app.ts` puts the methods of each part on the class. A change to one part leaves the other
+files alone, so parallel work on the TUI does not conflict in one file.
+
+| File | Owns |
+| --- | --- |
+| `feed.ts` | The feed of the conversation: `renderContent`. |
+| `blocks.ts` | The blocks that the feed and the panels draw: cards, panels, code, Markdown, excerpts and chips. |
+| `details.ts` | The details of an act: prompts, commands, programs, and the references that open a value. |
+| `sidebar.ts` | The sidebar: the session, the usage, what waits for the operator, the chains and the threads. |
+| `spaces.ts` | The workspaces and the sessions in the sidebar, with their menus, rename, archive and delete. |
+| `composer.ts` | The input: drafts, history, submit, and the suggestions for a command, a path or a value. |
+| `questions.ts` | The questions that wait for the operator: the pick at the desk and the dialog of a question. |
+| `desk.ts` | The desk over the input and the dock, which show the parts that extensions add. |
+| `chrome.ts` | The bar at the top, the line of meta data and the line of status. |
+| `welcome.ts` | The welcome screen, the check of the setup and the banner of a life that the operator watches. |
+| `stage.ts` | The loom and the graph of a life, and the keys that move in them. |
+| `tree.ts` | The tree of the session, and the rewind. |
+| `palette.ts` | The palette, the list of chains, the other overlays and the help. |
+| `settings.ts` | The choice of a model, a provider, an effort, a theme and the mode of the display. |
+| `values.ts` | The inspector of a value, its hover, and the completion of names. |
+| `actions.ts` | The global commands, the pickers of files, queue and images, and the actions on an act. |
+| `input.ts` | The table of keys: what each action does, escape, cancel, search, stash and `dispose`. |
+| `shared.ts` | The types and the helpers that more than one part uses. |
+| `part.ts` | The helpers that join the parts into the class. |
+
+Add a method to the part that owns it. A name lives in one part: `assemble` throws when two parts hold the same
+name. A part reaches the other members of the class with `this`, so each member of the class is public.
