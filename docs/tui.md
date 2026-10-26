@@ -521,6 +521,16 @@ paths of the project, the chains, and the acts. Enter on a value runs the comman
 
 ![Value suggestions](screenshots/46-value-suggestions.png)
 
+## Suggestions from the history
+
+As you type, the input shows in grey the rest of the latest line from the history that starts with the text, as fish
+does. The history is what the input sent in this mode, on this chain and on the others, and it stays with the record.
+Right or `⌃F` at the end of the line takes the whole rest, and `⌥→` or `⌥F` takes its next word. Tab keeps
+completing commands, paths, and emojis. The grey rest shows only while the cursor ends the text, and not while the
+list of suggestions or a walk of the history with Up and Down is open.
+
+![History suggestion](screenshots/46b-history-suggestion.png)
+
 ## Retried words
 
 A word of a model can fail: the gate refuses it, or it raises. When the next word of the same prompt takes its
