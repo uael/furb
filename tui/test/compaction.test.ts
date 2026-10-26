@@ -250,6 +250,8 @@ test("a compacted feed hears appends and a host reset replaces equal-count rows 
   try {
     await session.select("chain1");
     const before = session.activity;
+    const heads = session.chains;
+    expect(session.chains).toBe(heads);
     facts.push(["prompt", "prompt20", "rung1", "chain1", "str", "Keep this old-link question", "operator"]);
     await appendFile(record, `${JSON.stringify(facts.at(-1))}\n`);
     await until(session, () => Boolean(session.actOf("prompt20")));
@@ -276,12 +278,14 @@ test("a compacted feed hears appends and a host reset replaces equal-count rows 
     await appendFile(record, appended.map((fact) => JSON.stringify(fact)).join("\n") + "\n");
     await until(session, () => Boolean(session.actOf("rung10")));
     expect(session.activity).toBe(before);
+    expect(session.chains).toBe(heads);
     expect(session.activity.find((act) => act.id === "rung10")?.word).toBe("after_cut = 10");
     expect(session.actOf("rung1")?.on).toBe("chain1");
     const unrelated = ["rung", "rung11", "operator", "chain4", "other_append = 11", "", ""];
     await appendFile(record, JSON.stringify(unrelated) + "\n");
     await until(session, () => Boolean(session.actOf("rung11")));
     expect(session.activity).toBe(before);
+    expect(session.chains).toBe(heads);
     expect(session.activity.some((act) => act.id === "rung11")).toBe(false);
     const replacement = join(directory, "second.jsonl");
     await save(
@@ -317,6 +321,41 @@ test("a compacted feed hears appends and a host reset replaces equal-count rows 
   } finally {
     if (!composed) await session.dispose();
     if (second) await second.host.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("ordinary chain lists stay stable across an append and a chain phase update", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-ordinary-append-"));
+  const record = join(directory, "inert.jsonl");
+  await writeFile(
+    record,
+    [
+      JSON.stringify({ recorded: true }),
+      JSON.stringify(["chain", "chain1", "operator", "", "First", ""]),
+      JSON.stringify(["chain", "chain2", "operator", "", "Second", ""]),
+      "",
+    ].join("\n"),
+  );
+  const { engine, host } = await openEngine({ demo: true, record, cwd: directory });
+  const session = new Session(engine, host, true);
+  try {
+    await session.refresh();
+    const chains = session.chains;
+    await appendFile(
+      record,
+      `${JSON.stringify(["rung", "rung1", "operator", "chain2", "answer = 42", "", ""])}\n`,
+    );
+    await until(session, () => Boolean(session.actOf("rung1")));
+    expect(session.chains).toBe(chains);
+    expect(session.chains.map((chain) => chain.id)).toEqual(["chain1", "chain2"]);
+    await appendFile(record, `${JSON.stringify(["pause", "chain2", "operator"])}\n`);
+    await until(session, () => session.actOf("chain2")?.paused === true);
+    expect(session.chains).toBe(chains);
+    expect(session.chains[1]?.paused).toBe(true);
+    expect(session.headOf("chain2")).toBe("chain2");
+  } finally {
+    await session.dispose();
     await rm(directory, { recursive: true, force: true });
   }
 });

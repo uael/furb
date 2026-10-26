@@ -616,14 +616,30 @@ export class Session extends EventEmitter {
               phaseOf(next[place]) !== phaseOf(act) ||
               next[place]?.compactions !== act.compactions ||
               next[place]?.extensions !== act.extensions;
+            const previous = place === undefined ? undefined : next[place];
             if (place !== undefined) next[place] = act;
             else index.at.set(act.id, next.push(act) - 1);
             index.ids.set(act.id, act);
             placed(index, act);
             if (act.kind === "chain") {
-              this.runsRead.version = -1;
-              this.feedRead = undefined;
-            } else this.feedAct(act);
+              const source = (row?: ActRow) => row?.compactions?.find((cut) => cut.source)?.source;
+              if (!previous || source(previous) !== source(act)) this.runsRead = undefined;
+              else {
+                const at = this.runsRead?.headAt.get(act.id);
+                if (at !== undefined && this.runsRead) this.runsRead.heads[at] = act;
+              }
+              const before = previous?.compactions ?? [];
+              const after = act.compactions ?? [];
+              if (
+                before.length !== after.length ||
+                before.some(
+                  (cut, i) =>
+                    cut.at !== after[i]?.at || cut.by !== after[i]?.by || cut.source !== after[i]?.source,
+                )
+              )
+                this.feedRead = undefined;
+            }
+            this.feedAct(act);
             if (!act.done) this.started[act.id] ??= Date.now();
             if (act.took !== undefined) this.took[act.id] = act.took;
           }
@@ -872,13 +888,22 @@ export class Session extends EventEmitter {
    * the operator to look at them, and the state that each chain had when the view last read it. */
   private readonly unread = new Set<string>();
   private readonly phases = new Map<string, SessionStatus>();
-  private runsRead: { version: number; acts?: readonly ActRow[]; runs: Map<string, ChainRun> } = {
-    version: -1,
-    runs: new Map(),
+  private runsRead?: {
+    base: Index;
+    runs: Map<string, ChainRun>;
+    heads: ActRow[];
+    headAt: Map<string, number>;
   };
   private runs(): Map<string, ChainRun> {
-    if (this.runsRead.version === -1 || this.runsRead.acts !== this.acts)
-      this.runsRead = { version: this.version, acts: this.acts, runs: chainRuns(this.indexed().chains) };
+    const base = this.indexed();
+    if (this.runsRead?.base !== base) {
+      const runs = chainRuns(base.chains);
+      const separate = base.chains.every((chain) => runs.get(chain.id)?.head === chain.id);
+      const heads = separate
+        ? base.chains
+        : base.chains.filter((chain) => runs.get(chain.id)?.head === chain.id);
+      this.runsRead = { base, runs, heads, headAt: new Map(heads.map((chain, at) => [chain.id, at])) };
+    }
     return this.runsRead.runs;
   }
   /** The work destination of a logical chain. Ordinary branches keep their own destination. */
@@ -886,7 +911,8 @@ export class Session extends EventEmitter {
     return this.runs().get(id)?.head ?? id;
   }
   get chains(): ActRow[] {
-    return this.indexed().chains.filter((chain) => this.headOf(chain.id) === chain.id);
+    this.runs();
+    return this.runsRead?.heads ?? this.indexed().chains;
   }
   /** The index of the acts. A snapshot that changes the acts places each act that changed, and a list of acts that
    * the session did not index, as one that a test sets, is indexed whole. */
