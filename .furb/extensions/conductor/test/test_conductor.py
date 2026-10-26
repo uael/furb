@@ -275,6 +275,32 @@ async def test_a_red_main_updates_no_branch(conductor: Round) -> None:
 
 @POSIX
 @JQ
+async def test_a_green_pr_behind_main_updates_its_branch_though_heal_updated_it_at_that_head(conductor: Round) -> None:
+  conductor.say(r"compare/main\.\.\.abc", '{"behind_by": 3}')
+  conductor.say(r"compare/abc\.\.\.main", '{"files": [{"filename": "b.py"}]}')
+  conductor.say(r"pr view 5 --json files", '{"files": [{"path": "b.py"}]}')
+  await conductor.mend(conductor.pr(checks=("FAILURE", "FAILURE")), 0.0, False)
+  assert conductor.log().count("update-branch") == 1
+  green = conductor.pr(checks=("SUCCESS",), names=["the hooks"])
+  await conductor.land(green, False)
+  assert conductor.log().count("update-branch") == 2
+  await conductor.land(green, False)
+  assert conductor.log().count("update-branch") == 2
+
+
+@POSIX
+@JQ
+async def test_a_draft_or_a_held_or_a_paused_pr_gets_no_branch_update_from_heal(conductor: Round) -> None:
+  conductor.say(r"compare/main\.\.\.abc", '{"behind_by": 3}')
+  for more in ({"draft": True}, {"labels": ["hold"]}, {"labels": ["paused"]}):
+    assert await conductor.heal(conductor.pr(checks=("FAILURE", "FAILURE"), **more), False) == ""
+  assert "update-branch" not in conductor.log()
+  assert "heal update abc" not in conductor.noticed
+  assert "behind main" in await conductor.heal(conductor.pr(checks=("FAILURE", "FAILURE")), False)
+
+
+@POSIX
+@JQ
 async def test_a_lone_failure_reruns_its_failed_jobs_once_before_a_fixer(conductor: Round) -> None:
   conductor.say(r"compare/main\.\.\.abc", '{"behind_by": 0}')
   conductor.say(r"pr view 5 --json headRefOid", '{"headRefOid": "abc"}')
@@ -298,8 +324,8 @@ def test_new_items_wait_while_an_open_pr_needs_a_worker(conductor: Round) -> Non
   conductor.working["prompt9"] = "fix7"
   conductor.staff()
   assert [key for key, _ in conductor.hired] == ["a", "b", "c"]
-  assert conductor.queue == [("d", "", ""), ("e", "", "")]
-  assert conductor.backlog == [("f", "", "")]
+  assert conductor.queue == [("d", "", "")]
+  assert conductor.backlog == [("e", "", ""), ("f", "", "")]
 
 
 def test_each_brief_forbids_a_window_on_this_machine(conductor: Round) -> None:
@@ -575,6 +601,7 @@ def test_the_environment_of_each_git_holds_no_variable_of_a_commit(
 OPUS = "claude-cli:opus/medium"
 SONNET = "claude-cli:sonnet/medium"
 TOP = "claude-cli:opus/high"
+SONNET_HIGH = "claude-cli:sonnet/high"
 
 
 def test_the_rulings_of_the_owner_stand_in_conducting_in_his_words(conductor: Round) -> None:
@@ -586,8 +613,29 @@ def test_the_rulings_of_the_owner_stand_in_conducting_in_his_words(conductor: Ro
   ):
     assert words in conductor.CONDUCTING
   assert conductor.ACTOR == OPUS
-  assert conductor.ROOM == {"opus": 2, "sonnet": 3, "opus/high": 1}
-  assert conductor.CAP == 6
+  assert conductor.limits == {"room": {"opus": 1, "sonnet": 3, "opus/high": 1}, "fixer": SONNET_HIGH}
+  assert conductor.cap() == 5
+  for words in ('limits["room"] gives the room', 'limits["fixer"], sonnet/high', "a reload of the extension keeps it"):
+    assert words in conductor.CONDUCTING
+
+
+def test_a_fixer_runs_on_sonnet_high_unless_its_effort_says_otherwise(conductor: Round) -> None:
+  assert [conductor.model_of(key) for key in ("fix5", "box8", "k")] == [SONNET_HIGH, SONNET_HIGH, OPUS]
+  conductor.efforts["fix5"] = TOP
+  assert conductor.model_of("fix5") == TOP
+  assert conductor.model_of("fix50") == SONNET_HIGH
+
+
+def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(conductor: Round) -> None:
+  conductor.limits["room"]["opus"] = 2
+  conductor.limits["fixer"] = OPUS
+  exec(compile(IMPORT.sub("", SOURCE), str(HERE / "conductor.py"), "exec"), conductor.ns)  # noqa: S102
+  assert conductor.limits == {"room": {"opus": 2, "sonnet": 3, "opus/high": 1}, "fixer": OPUS}
+  assert (conductor.cap(), conductor.model_of("box8")) == (6, OPUS)
+  conductor.busy("p1", "a", OPUS)
+  assert conductor.room(OPUS)
+  conductor.busy("p2", "b", OPUS)
+  assert not conductor.room(OPUS)
 
 
 def stacked(conductor: Round, tmp_path: Path, clash: bool = False) -> dict[str, str]:
@@ -682,21 +730,21 @@ def test_an_item_that_asks_for_xhigh_waits_and_the_owner_hears(conductor: Round)
   assert len(conductor.prompts) == 1
 
 
-def test_the_round_runs_two_on_opus_medium_three_on_sonnet_and_one_on_opus_high(conductor: Round) -> None:
-  models = {"o1": OPUS, "t1": TOP, "o2": OPUS, "t2": TOP, "o3": OPUS, "s1": SONNET, "s2": SONNET, "s3": SONNET}
-  models["s4"] = "claude-cli:sonnet/high"
+def test_the_round_runs_one_on_opus_medium_three_on_sonnet_and_one_on_opus_high(conductor: Round) -> None:
+  models = {"o1": OPUS, "t1": TOP, "o2": OPUS, "t2": TOP, "s1": SONNET, "s2": SONNET, "s3": SONNET}
+  models["s4"] = SONNET_HIGH
   conductor.efforts.update(models)
   conductor.queue[:] = [(key, "", "") for key in models]
   conductor.staff()
-  assert [key for key, _ in conductor.hired] == ["o1", "t1", "o2", "s1", "s2", "s3"]
-  assert conductor.queue == [("t2", "", ""), ("o3", "", ""), ("s4", "", "")]
+  assert [key for key, _ in conductor.hired] == ["o1", "t1", "s1", "s2", "s3"]
+  assert conductor.queue == [("o2", "", ""), ("t2", "", ""), ("s4", "", "")]
   conductor.done["worker1"] = None
   conductor.staff()
-  assert [key for key, _ in conductor.hired][6:] == ["o3"]
+  assert [key for key, _ in conductor.hired][5:] == ["o2"]
   assert conductor.queue == [("t2", "", ""), ("s4", "", "")]
   conductor.done["worker2"] = None
   conductor.staff()
-  assert [key for key, _ in conductor.hired][7:] == ["t2"]
+  assert [key for key, _ in conductor.hired][6:] == ["t2"]
 
 
 def test_an_item_with_no_room_keeps_its_place_while_the_next_with_room_starts(conductor: Round) -> None:
@@ -710,10 +758,9 @@ def test_an_item_with_no_room_keeps_its_place_while_the_next_with_room_starts(co
   assert conductor.queue == [("c", "", "")]
 
 
-def test_a_fixer_goes_before_a_new_item_and_waits_for_room_on_opus(conductor: Round) -> None:
-  conductor.busy("p1", "a", OPUS)
-  conductor.busy("p2", "b", OPUS)
-  conductor.busy("p3", "e", TOP)
+def test_a_fixer_goes_before_a_new_item_and_waits_for_room_on_sonnet(conductor: Round) -> None:
+  for name, key in (("p1", "a"), ("p2", "b"), ("p3", "e")):
+    conductor.busy(name, key, SONNET)
   conductor.prs[8] = conductor.pr(n=8, open=["- [ ] It is one change."], verdict="open")
   conductor.queue[:] = [("c", "", "")]
   conductor.boxes(conductor.prs[8], 0.0)
@@ -722,6 +769,7 @@ def test_a_fixer_goes_before_a_new_item_and_waits_for_room_on_opus(conductor: Ro
   conductor.done["p1"] = None
   conductor.boxes(conductor.prs[8], 0.0)
   assert [key for key, _ in conductor.hired] == ["box8"]
+  assert conductor.models["worker1"] == SONNET_HIGH
 
 
 def test_an_ended_worker_goes_on_in_its_own_chain_on_sonnet(conductor: Round) -> None:
