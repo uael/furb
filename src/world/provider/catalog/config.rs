@@ -23,6 +23,37 @@ struct ProviderConfig {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct ClaudeConfig {
+  enabled: Option<bool>,
+  command: Option<CommandPrefix>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum CommandPrefix {
+  Executable(String),
+  Words(Vec<String>),
+}
+
+impl CommandPrefix {
+  fn parts(self) -> Result<(std::path::PathBuf, Vec<String>), String> {
+    let mut words = match self {
+      CommandPrefix::Executable(bin) => vec![bin],
+      CommandPrefix::Words(words) => words,
+    };
+    if words.first().is_none_or(|bin| bin.trim().is_empty()) {
+      return Err("The claude-cli command needs a nonempty executable".to_owned());
+    }
+    if words.iter().any(|word| word.contains('\0')) {
+      return Err("The claude-cli command must not contain a null byte".to_owned());
+    }
+    let bin = words.remove(0);
+    Ok((bin.into(), words))
+  }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ConfiguredModel {
   window: u64,
   output: Option<u64>,
@@ -111,7 +142,20 @@ impl Catalog {
         return Err(format!("No built-in provider is {name}"));
       }
       if name == claude::CLAUDE {
-        return Err("The claude-cli provider accepts true or false".to_owned());
+        let settings: ClaudeConfig =
+          serde_json::from_value(form).map_err(|no| format!("Invalid provider {name}: {no}"))?;
+        let _ = settings.enabled;
+        if let Some(command) = settings.command {
+          let (bin, args) = command.parts()?;
+          let command = claude::Claude::with_command(bin, args, None);
+          let prefix = format!("{name}:");
+          let at =
+            self.models.iter().position(|(model, _)| model.name.starts_with(&prefix)).unwrap_or(0);
+          self.models.retain(|(model, _)| !model.name.starts_with(&prefix));
+          self.models.splice(at..at, command.models().into_iter().map(|model| (model, true)));
+          self.providers.retain(|(id, _, _)| id != &name);
+        }
+        continue;
       }
       if name == LOCAL {
         self.local = None;
