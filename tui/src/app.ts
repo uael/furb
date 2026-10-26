@@ -91,6 +91,7 @@ import {
   share,
 } from "./format.ts";
 import { Graph, type Stage } from "./graph.ts";
+import { matchingHistory } from "./history.ts";
 import { type Action, bindings, chords, keys, shown } from "./keys.ts";
 import {
   actorOf,
@@ -479,7 +480,7 @@ export class App {
   private readonly suggestionBox: BoxRenderable;
   private suggestions: Suggestion[] = [];
   private suggestionIndex = 0;
-  /** The token whose suggestions Escape hid, which a change of the token shows again. */
+  /** The token or history prefix whose suggestions Escape hid, which a change shows again. */
   private dismissed = "";
   private lastToken = "";
   private readonly search: InputRenderable;
@@ -572,7 +573,10 @@ export class App {
   private readonly firstRun: boolean;
   private submitting = false;
   private historyIndex = -1;
+  private historyBrowsing = false;
   private historyDraft = "";
+  private historyMatches: string[] = [];
+  private historyCursor = 0;
   private diagnosticsKey = "";
   /** What the footer shows, set again only when it changes. */
   private statusKey = "";
@@ -1009,6 +1013,7 @@ export class App {
   };
   /** The text that a drag selected goes to the clipboard as the drag ends. */
   private copySelection = (selection: { getSelectedText(): string } | null): void => {
+    this.suggest();
     const text = selection?.getSelectedText() ?? "";
     if (this.closed || !text.trim()) return;
     this.renderer.copyToClipboardOSC52(text);
@@ -1083,6 +1088,8 @@ export class App {
     this.draftKey = key;
     this.composer.setText(text);
     this.historyIndex = -1;
+    this.historyBrowsing = false;
+    this.historyMatches = [];
   }
   private compose = (text: string) => {
     this.closeTree();
@@ -1107,23 +1114,29 @@ export class App {
     this.due = false;
     this.render();
   };
-  /** What the input sent on this chain in this mode. A chain that holds messages the input did not send, as a record
-   * that opens with no saved input, walks those messages instead. */
+  /** The first line of a history entry, with line breaks and tabs shown as marks, cut to one line. */
+  private historyPreview(text: string): string {
+    return clip(text.replace(/\r\n|\r|\n/g, "\\n").replace(/\t/g, "\\t"), 64);
+  }
+  /** The saved entries for the input type and prefix shown, within this chain and mode. */
   private history(): string[] {
-    const w = this.session;
-    const kept = w.histories[w.draftKey] ?? [];
-    if (kept.length || w.mode !== "prompt" || w.editing) return kept;
-    return w.activity
-      .filter((act) => w.isUserPrompt(act))
-      .map((act) => String(act.words[1] ?? ""))
-      .filter(Boolean);
+    if (this.session.operatorPrompt && !this.session.editing) return [];
+    const kept = this.session.histories[this.draftKey] ?? [];
+    const commands = this.session.histories[`${this.draftKey}:commands`] ?? [];
+    const prefix = this.beforeCursor().trimStart();
+    const isCommand = (text: string) => /^\s*[!/]/.test(text);
+    return prefix.startsWith("/") || prefix.startsWith("!")
+      ? [...kept.filter(isCommand), ...commands]
+      : kept.filter((text) => !isCommand(text));
   }
   async submit(): Promise<void> {
     if (this.submitting) return;
     this.submitting = true;
     const key = this.draftKey;
     const content = this.composer.plainText;
-    const python = this.session.mode === "python" && !this.session.editing && !content.startsWith("/");
+    const editing = Boolean(this.session.editing);
+    const answering = Boolean(this.session.operatorPrompt);
+    const python = this.session.mode === "python" && !editing && !content.startsWith("/");
     // The text leaves its draft as it is sent, so what is typed while it is sent stays in the composer.
     this.composer.setText("");
     try {
@@ -1135,11 +1148,20 @@ export class App {
         await this.session.submit(python ? `/run ${content}` : content);
         if (woke) this.session.notice = "This message woke the paused chain.";
       }
-      const history = this.session.histories[key] ?? [];
-      this.session.histories[key] = history;
-      if (content && history.at(-1) !== content) history.push(content);
-      if (history.length > 200) history.shift();
+      if (!editing && !answering && !declined && content.trim()) {
+        const command = content.trimStart().startsWith("/") || content.trimStart().startsWith("!");
+        const historyKey = command ? `${key}:commands` : key;
+        const history = this.session.histories[historyKey] ?? [];
+        this.session.histories[historyKey] = history;
+        const prior = history.indexOf(content);
+        if (prior >= 0) history.splice(prior, 1);
+        history.push(content);
+        if (history.length > 200) history.shift();
+        this.session.save();
+      }
       this.historyIndex = -1;
+      this.historyBrowsing = false;
+      this.historyMatches = [];
     } catch (error) {
       // A text that was not sent goes back to its draft, unless that draft holds new text by now.
       if (this.draftKey === key && !this.composer.plainText) this.composer.setText(content);
@@ -5809,6 +5831,13 @@ export class App {
     const token = this.token();
     if (token)
       this.replaceBefore(token.kind === "value" ? token.text : `${token.kind}${token.text}`, suggestion.text);
+    else {
+      this.composer.setText(suggestion.text);
+      this.composer.cursorOffset = suggestion.text.length;
+      this.historyIndex = -1;
+      this.historyBrowsing = false;
+      this.historyMatches = [];
+    }
   }
   /** The paths of the project, which the suggestions read, as a pick of them gives them: none until the read of the
    * session ends, which draws the suggestions again. An `@` that starts a word reads them afresh. */
@@ -5922,6 +5951,15 @@ export class App {
     }));
   }
   private suggest = (): void => {
+    if (
+      this.historyBrowsing &&
+      this.historyIndex >= 0 &&
+      this.composer.plainText !== this.historyMatches[this.historyIndex]
+    ) {
+      this.historyIndex = -1;
+      this.historyBrowsing = false;
+      this.historyMatches = [];
+    }
     // A whole `:shortcode:` of a prompt that names an emoji becomes that emoji.
     const whole = this.beforeCursor().match(/(?:^|\s)(:([\w+-]+):)$/);
     const named =
@@ -5931,14 +5969,39 @@ export class App {
       return;
     }
     const token = this.token();
-    const key = token ? `${token.kind}${token.text}` : "";
+    if (this.historyBrowsing) {
+      this.suggestions = [];
+      this.renderSuggestions();
+      return;
+    }
+    const prefix = this.beforeCursor();
+    const key = token ? `${token.kind}${token.text}` : prefix ? `history:${prefix}` : "";
     const started = key === "@" && this.lastToken !== "@";
     // A new filter chooses anew from its first suggestion, and a move of the cursor keeps the choice.
     if (key !== this.lastToken) this.suggestionIndex = 0;
     this.lastToken = key;
     if (key !== this.dismissed) this.dismissed = "";
     if (!token || this.overlay || this.dismissed) {
-      this.suggestions = [];
+      const history =
+        !token &&
+        !this.overlay &&
+        !this.dismissed &&
+        this.composer.focused &&
+        !this.session.editing &&
+        !this.session.operatorPrompt &&
+        this.session.mode === "prompt" &&
+        Boolean(prefix);
+      this.suggestions =
+        history && !this.renderer.getSelection()?.getSelectedText()
+          ? matchingHistory(this.history(), prefix)
+              .filter((text) => this.historyIndex < 0 && text !== this.composer.plainText)
+              .slice(0, 8)
+              .map((text) => ({
+                label: `↳ ${this.historyPreview(text)}`,
+                detail: "prompt history · Tab to use",
+                text,
+              }))
+          : [];
       this.renderSuggestions();
       return;
     }
@@ -6007,7 +6070,8 @@ export class App {
   };
   private renderSuggestions(): void {
     const token = this.overlay || this.dismissed ? undefined : this.token();
-    const shown = token ? this.suggestions : [];
+    const history = !token && !this.overlay && !this.dismissed && this.historySuggestion();
+    const shown = token || history ? this.suggestions : [];
     const files = this.session.files;
     // An emoji list that matches nothing closes.
     const state =
@@ -7680,11 +7744,21 @@ export class App {
       { on: "escape", run: () => this.closeTree(), hint: ["Esc", "back"] },
     ]);
     layer(() => bare() && this.suggestionBox.visible, "suggestions", [
-      { on: "up", run: () => this.stepSuggestion(-1), hint: ["↑↓", "choose"] },
-      { on: "down", run: () => this.stepSuggestion(1) },
+      {
+        on: "up",
+        run: (key) => (this.historySuggestion() ? this.walkHistory(key) : this.stepSuggestion(-1)),
+        hint: ["↑↓", "choose"],
+      },
+      {
+        on: "down",
+        run: (key) => (this.historySuggestion() ? this.walkHistory(key) : this.stepSuggestion(1)),
+      },
       { on: "tab", run: () => this.takeSuggestion(false), when: chosen, hint: ["Tab", "complete"] },
       { on: ["return", "enter"], run: () => this.takeSuggestion(true), when: chosen },
       { on: "escape", run: () => this.dismissSuggestions(), hint: ["Esc", "hide"] },
+    ]);
+    layer(() => bare() && this.historyBrowsing && this.composer.focused, "history", [
+      { on: "tab", run: () => this.acceptHistory(), hint: ["Tab", "accept history"] },
     ]);
     layer(() => bare() && Boolean(this.session.editing), "edit", [
       { on: ["return", "enter"], run: () => void this.submit(), hint: ["Enter", "run"] },
@@ -7837,6 +7911,10 @@ export class App {
   private get kitty(): boolean {
     return this.renderer.capabilities?.kitty_keyboard === true;
   }
+  /** Whether the list shows prompt history rather than completion of a token. */
+  private historySuggestion(): boolean {
+    return this.suggestions[0]?.detail === "prompt history · Tab to use";
+  }
   /** The suggestion a step away from the one chosen, round from the last to the first. */
   private stepSuggestion(step: number): void {
     const count = this.suggestions.length;
@@ -7892,12 +7970,43 @@ export class App {
     else if (this.composer.plainText) this.composer.replaceText("");
     else this.action("/cancel");
   }
+  /** Keep the selected history entry in the input without sending it. */
+  private acceptHistory(): void {
+    const text = this.historyMatches[this.historyIndex];
+    if (text === undefined) return;
+    this.composer.replaceText(text);
+    this.composer.cursorOffset = text.length;
+    this.historyIndex = -1;
+    this.historyBrowsing = false;
+    this.historyMatches = [];
+    this.suggest();
+  }
+  /** Restore the draft saved before history navigation. */
+  private restoreHistoryDraft(): boolean {
+    if (!this.historyBrowsing) return false;
+    if (this.historyIndex >= 0 && this.composer.plainText !== this.historyMatches[this.historyIndex]) {
+      this.historyIndex = -1;
+      this.historyBrowsing = false;
+      this.historyMatches = [];
+      return false;
+    }
+    this.composer.replaceText(this.historyDraft);
+    this.composer.cursorOffset = this.historyCursor;
+    this.historyIndex = -1;
+    this.historyBrowsing = false;
+    this.historyMatches = [];
+    return true;
+  }
   /** Up on an empty input takes back the last message queued on the chain, and Up and Down at the first and the last
    * line of the input walk the history of what it sent, as a shell does. Alt+Up and Alt+Down walk it from any line.
    * It gives false when it does nothing, and the input moves its cursor. */
   private walkHistory = (key?: KeyEvent): boolean => {
     const up = key?.name === "up";
     const anywhere = key?.meta;
+    if (this.historyIndex >= 0 && this.composer.plainText !== this.historyMatches[this.historyIndex]) {
+      this.historyIndex = -1;
+      this.historyMatches = [];
+    }
     const queued = this.session.queued.findLast((entry) => entry.chain === this.session.selected);
     if (up && !anywhere && !this.composer.plainText && queued && this.historyIndex < 0) {
       this.session.removeQueued(queued.id);
@@ -7907,21 +8016,42 @@ export class App {
     }
     const cursor = this.composer.visualCursor.visualRow;
     const edge = up ? cursor === 0 : cursor >= this.composer.virtualLineCount - 1;
-    const history = this.history();
-    if (!(anywhere || edge) || !history.length || !(up || this.historyIndex >= 0)) return false;
+    if (!(anywhere || edge) || !(up || this.historyIndex >= 0)) return false;
     if (this.historyIndex < 0) {
       this.historyDraft = this.composer.plainText;
-      this.historyIndex = history.length;
+      this.historyCursor = this.composer.cursorOffset;
+      const before = this.beforeCursor();
+      const prefix = before.split("\n").at(-1) ?? "";
+      const history = this.history();
+      this.historyMatches = matchingHistory(history, prefix);
+      this.historyIndex = -1;
+      this.historyBrowsing = this.historyMatches.length > 0;
     }
-    this.historyIndex = Math.max(0, Math.min(history.length, this.historyIndex + (up ? -1 : 1)));
-    const text = history[this.historyIndex] ?? this.historyDraft;
-    if (this.historyIndex === history.length) this.historyIndex = -1;
+    if (!this.historyMatches.length) {
+      this.historyIndex = -1;
+      this.historyBrowsing = false;
+      return false;
+    }
+    if (up) this.historyIndex = Math.min(this.historyMatches.length - 1, this.historyIndex + 1);
+    else this.historyIndex--;
+    const restore = this.historyIndex < 0;
+    const text = restore ? this.historyDraft : (this.historyMatches[this.historyIndex] ?? this.historyDraft);
     this.composer.replaceText(text);
+    this.composer.cursorOffset = Math.min(this.historyCursor, text.length);
+    if (restore) {
+      this.historyIndex = -1;
+      this.historyBrowsing = false;
+      this.historyMatches = [];
+    }
     return true;
   };
   /** Escape closes what is open, or pauses the model at work. An Escape with nothing to do asks for a second one,
    * which opens the rewind tree. */
   private escape = (): void => {
+    if (this.restoreHistoryDraft()) {
+      this.dismissSuggestions();
+      return;
+    }
     const open = Boolean(this.overlay || this.searchRow.visible || this.session.editing);
     if (!open && this.pausing()) this.action("/pause");
     else if (!open) {
@@ -8035,9 +8165,12 @@ export class App {
     this.render();
   }
   private dismissSuggestions(): void {
+    this.restoreHistoryDraft();
     const token = this.token();
-    this.dismissed = token ? `${token.kind}${token.text}` : "";
-    this.suggest();
+    const prefix = this.beforeCursor();
+    this.dismissed = token ? `${token.kind}${token.text}` : prefix ? `history:${prefix}` : "";
+    this.suggestions = [];
+    this.renderSuggestions();
   }
   private leaveEdit(): void {
     if (!this.session.editing) return;

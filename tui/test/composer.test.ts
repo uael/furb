@@ -1,4 +1,5 @@
 import { afterAll, expect, setSystemTime, test } from "bun:test";
+import { readFile } from "node:fs/promises";
 import { RGBA } from "@opentui/core";
 import { setRendererCapabilities } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
@@ -168,7 +169,7 @@ test("a sent text leaves its draft at once, and a program under edit opens from 
       await frame();
       expect(session.drafts[prompt]).toBeUndefined();
       expect(session.drafts[edited]).toBeUndefined();
-      expect(session.histories[edited]).toEqual(['close("edited once")']);
+      expect(session.histories[edited]).toBeUndefined();
       app.composer.setText("/edit");
       await app.submit();
       expect(app.composer.plainText).toBe('close("edited once")');
@@ -190,7 +191,13 @@ test("a sent text leaves its draft at once, and a program under edit opens from 
       await sending;
       session.submit = submit;
       expect(app.composer.plainText).toBe("the next one");
-      expect(session.histories[prompt]).toEqual(["/edit", "a question"]);
+      expect(session.histories[prompt]).toEqual(["a question"]);
+      const record = session.host.record;
+      if (!record) throw new Error("The demo session has no record.");
+      const saved = JSON.parse(await readFile(`${record}.ui.json`, "utf8")) as {
+        histories?: Record<string, string[]>;
+      };
+      expect(saved.histories?.[prompt]).toEqual(["a question"]);
       // A text that is not sent goes back to its draft.
       app.composer.setText("");
       app.composer.setText("/model nothing");
@@ -270,22 +277,36 @@ test("a slash command typed under edit runs as the command it names, and the pro
     true,
   ));
 
-test("Up and Down walk the history from the edges of the input, and Up on an empty input takes back a queued message", () =>
+test("prompt history suggestions accept a match without sending it", () =>
+  composing(
+    async ({ session, app, screen, frame }) => {
+      session.histories[session.draftKey] = ["summarize the notes", "summarize the issue"];
+      await screen.mockInput.typeText("summarize the");
+      expect(await frame()).toContain("prompt history · Tab to use");
+      screen.mockInput.pressTab();
+      expect(app.composer.plainText).toBe("summarize the issue");
+      app.composer.setText("");
+      await screen.mockInput.typeText("summarize the");
+      screen.mockInput.pressEnter();
+      expect(app.composer.plainText).toBe("summarize the issue");
+      expect(session.activity.filter((act) => session.isUserPrompt(act))).toHaveLength(0);
+    },
+    { width: 80, height: 24 },
+  ));
+
+test("Up and Down walk prefix history, restore the draft, and leave queued messages available", () =>
   composing(
     async ({ session, app, screen }) => {
-      for (const name of ["first", "second"]) {
-        app.composer.setText(`/name ${name}`);
-        await app.submit();
-      }
-      app.composer.setText("a draft");
+      session.histories[session.draftKey] = ["task first", "task second"];
+      app.composer.setText("task");
       screen.mockInput.pressArrow("up");
-      expect(app.composer.plainText).toBe("/name second");
+      expect(app.composer.plainText).toBe("task second");
       screen.mockInput.pressArrow("up");
-      expect(app.composer.plainText).toBe("/name first");
+      expect(app.composer.plainText).toBe("task first");
       screen.mockInput.pressArrow("down");
-      expect(app.composer.plainText).toBe("/name second");
+      expect(app.composer.plainText).toBe("task second");
       screen.mockInput.pressArrow("down");
-      expect(app.composer.plainText).toBe("a draft");
+      expect(app.composer.plainText).toBe("task");
       app.composer.setText("");
       session.queueHeld = true;
       session.enqueue("a queued message");
@@ -296,6 +317,31 @@ test("Up and Down walk the history from the edges of the input, and Up on an emp
     },
     { width: 120, height: 44, kittyKeyboard: true },
   ));
+
+test("Escape restores the exact draft while browsing prefix history", () =>
+  composing(async ({ session, app, screen, frame }) => {
+    await idle(session);
+    session.histories[session.draftKey] = ["task from history"];
+    const draft = "task draft with spacing  ";
+    app.composer.setText(draft);
+    app.composer.cursorOffset = 4;
+    screen.mockInput.pressArrow("up");
+    expect(app.composer.plainText).toBe("task from history");
+    screen.mockInput.pressEscape();
+    await frame();
+    expect(app.composer.plainText).toBe(draft);
+    screen.mockInput.pressEscape();
+    for (
+      let attempt = 0;
+      attempt < 100 && !session.paused && session.notice !== "Press Escape again to rewind.";
+      attempt++
+    ) {
+      await frame();
+      await Bun.sleep(10);
+    }
+    expect(session.paused || session.notice === "Press Escape again to rewind.").toBe(true);
+    expect(app.composer.plainText).toBe(draft);
+  }));
 
 test("Ctrl+S puts the input aside, the line under the input shows it, and Ctrl+S brings it back", () =>
   composing(async ({ session, app, screen, frame }) => {
@@ -735,4 +781,92 @@ test("Escape, a space, a removed colon, or no match closes the emoji list and ke
     screen.mockInput.pressEnter();
     await until(session, () => session.activity.length > sent);
     expect(app.composer.plainText).toBe("");
+  }));
+
+test("autocomplete uses saved history only, never messages from an older transcript", () =>
+  composing(async ({ session, app, frame }) => {
+    await session.submit("A private earlier prompt");
+    await until(session, () => session.activity.some((act) => session.isUserPrompt(act)));
+    await idle(session);
+    const old = session.activity.find((act) => session.isUserPrompt(act));
+    if (!old) throw new Error("The session has no earlier prompt.");
+    delete session.histories[session.draftKey];
+    const text = String(old.words[1] ?? "");
+    app.composer.setText(text.slice(0, 12));
+    expect(await frame()).not.toContain("prompt history · Tab to use");
+    const promptKey = session.draftKey;
+    app.toggleMode();
+    session.histories[session.draftKey] = ["task in code"];
+    app.composer.setText("task");
+    expect(await frame()).not.toContain("prompt history · Tab to use");
+    app.toggleMode();
+    expect(session.draftKey).toBe(promptKey);
+  }));
+
+test("a text selection hides prompt-history hints without taking composer focus", () =>
+  composing(
+    async ({ session, app, screen, frame }) => {
+      session.histories[session.draftKey] = ["private prompt"];
+      const renderer = screen.renderer as unknown as {
+        getSelection: () => { getSelectedText(): string } | null;
+      };
+      const getSelection = renderer.getSelection;
+      renderer.getSelection = () => ({ getSelectedText: () => "selected text" });
+      await screen.mockInput.typeText("private");
+      expect(app.composer.focused).toBe(true);
+      expect(await frame()).not.toContain("prompt history · Tab to use");
+      renderer.getSelection = () => null;
+      app.render();
+      expect(await frame()).toContain("prompt history · Tab to use");
+      renderer.getSelection = getSelection;
+    },
+    { width: 80, height: 24 },
+  ));
+
+test("prompt history stays on its chain and does not enter Python input", () =>
+  composing(
+    async ({ session, app, frame }) => {
+      const origin = session.selected;
+      const promptKey = session.draftKey;
+      session.histories[promptKey] = ["private prompt"];
+      session.histories[`${origin}:python`] = ["private code"];
+      await session.command("/chain Isolated history");
+      app.render();
+      app.composer.setText("private");
+      expect(await frame()).not.toContain("prompt history · Tab to use");
+      app.toggleMode();
+      app.composer.setText("private");
+      expect(await frame()).not.toContain("prompt history · Tab to use");
+    },
+    { width: 80, height: 24 },
+  ));
+
+test("Python and command history remain available without entering prompt history", () =>
+  composing(async ({ session, app, screen, frame }) => {
+    app.toggleMode();
+    session.histories[session.draftKey] = ["value = 1", "value = 2"];
+    app.composer.setText("");
+    screen.mockInput.pressArrow("up");
+    expect(app.composer.plainText).toBe("value = 2");
+    screen.mockInput.pressArrow("down");
+    expect(app.composer.plainText).toBe("");
+
+    app.toggleMode();
+    const promptKey = session.draftKey;
+    for (const name of ["first", "second"]) {
+      app.composer.setText(`/name ${name}`);
+      await app.submit();
+    }
+    expect(session.histories[`${promptKey}:commands`]).toEqual(["/name first", "/name second"]);
+    app.composer.setText("first");
+    expect(await frame()).not.toContain("prompt history · Tab to use");
+    app.composer.setText("/name");
+    app.composer.cursorOffset = app.composer.plainText.length;
+    const navigate = app as unknown as {
+      walkHistory(key: { name: string; meta: boolean }): boolean;
+    };
+    expect(navigate.walkHistory({ name: "up", meta: true })).toBe(true);
+    expect(app.composer.plainText).toBe("/name second");
+    screen.mockInput.pressTab();
+    expect(app.composer.plainText).toBe("/name second");
   }));
