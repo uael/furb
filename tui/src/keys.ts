@@ -39,6 +39,8 @@ export const keys = [
   },
   { chord: "↑ / ↓", action: "Previous / next sent input, from the first or the last line" },
   { chord: "↑ in an empty input", action: "Take the last queued message back to edit it" },
+  { chord: "→ / ⌃F", action: "At the end of the input, take the grey rest of the line that the history suggests" },
+  { chord: "⌥→ / ⌥F", action: "At the end of the input, take the next word of that grey rest" },
   {
     chord: "⌃S",
     action: "Put the input aside, or bring it back",

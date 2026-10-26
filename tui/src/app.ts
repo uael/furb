@@ -607,6 +607,9 @@ export class App {
   /** The text typed when a walk of the history began, which a walk keeps to the entries that start with it, as fish
    * does. An empty prefix walks every entry. */
   private historyPrefix = "";
+  /** What the latest entry of the history that starts with the text adds to it, drawn in grey after the cursor as fish
+   * does while the cursor ends the text. An empty text means no entry adds anything. */
+  private ghost = "";
   private diagnosticsKey = "";
   /** What the footer shows, set again only when it changes. */
   private statusKey = "";
@@ -789,10 +792,12 @@ export class App {
         this.schedule();
         void this.highlightEditor();
         this.suggest();
+        this.ghosting();
       },
       onCursorChange: () => {
         void this.highlightEditor();
         this.suggest();
+        this.ghosting();
       },
       onSubmit: () => {
         void this.submit();
@@ -801,6 +806,7 @@ export class App {
     this.pickBox = this.box({ id: "choices", visible: false });
     this.composeBox.add(this.pickBox);
     this.composeBox.add(this.composer);
+    this.composer.renderAfter = (buffer) => this.drawGhost(buffer);
     this.meta = this.row({ overflow: "hidden", flexGrow: 1 });
     // The line under the text holds the switch of the mode and where the input goes, a row of space under the text.
     const metaLine = this.row({ marginTop: space.section });
@@ -1308,6 +1314,7 @@ export class App {
     this.renderContent();
     this.renderRail();
     this.suggest();
+    this.ghosting();
     const diagnostics = JSON.stringify([w.rejectedWord, w.findings]);
     if (diagnostics !== this.diagnosticsKey) {
       this.diagnosticsKey = diagnostics;
@@ -7973,6 +7980,11 @@ export class App {
       },
     ]);
     layer(bare, "", [
+      {
+        on: ["right", "ctrl+f", "meta+right", "meta+f"],
+        run: this.acceptGhost,
+        when: () => this.composer.focused && Boolean(this.ghost),
+      },
       // As in Claude Code, Ctrl+D acts on an empty input.
       { on: "ctrl+d", run: () => this.exit(), when: () => !this.composer.plainText },
       ...table(false),
@@ -8067,6 +8079,42 @@ export class App {
     else if (this.composer.plainText) this.composer.replaceText("");
     else this.action("/cancel");
   }
+  /** Sets the grey rest of the line again: what the latest entry of the history that starts with the text adds to it.
+   * It is empty while a walk of the history runs, while the suggestions of a token show, and unless the cursor ends
+   * the text. */
+  private ghosting(): void {
+    const text = this.composer.plainText;
+    let rest = "";
+    if (
+      text &&
+      this.historyIndex < 0 &&
+      !this.suggestionBox.visible &&
+      !this.session.host.reading &&
+      this.beforeCursor() === text
+    ) {
+      const entry = this.history().findLast((one) => one.length > text.length && one.startsWith(text));
+      rest = entry?.slice(text.length) ?? "";
+    }
+    if (rest === this.ghost) return;
+    this.ghost = rest;
+    this.composer.requestRender();
+  }
+  /** Draws the grey rest of the line from the cursor to the end of its row, with an ellipsis where a line is cut. */
+  private drawGhost(buffer: Parameters<NonNullable<TextareaRenderable["renderAfter"]>>[0]): void {
+    const composer = this.composer;
+    const x = composer.x + composer.visualCursor.visualCol;
+    const y = composer.y + composer.visualCursor.visualRow - composer.scrollY;
+    const room = composer.x + composer.width - x;
+    if (!this.ghost || room < 1 || y < composer.y || y >= composer.y + composer.height) return;
+    const [first = "", ...more] = this.ghost.split("\n");
+    buffer.drawText(clip(first.replaceAll("\t", "  ") + (more.length ? "…" : ""), room), x, y, c.faint);
+  }
+  /** Right and Ctrl+F at the end of the line take the grey rest of it, and Alt+Right and Alt+F take its next word, as
+   * fish does. */
+  private acceptGhost = (key?: KeyEvent): void => {
+    const word = key?.meta ? /^\s*\S+/.exec(this.ghost)?.[0] : undefined;
+    this.composer.insertText(word ?? this.ghost);
+  };
   /** Up on an empty input takes back the last message queued on the chain, and Up and Down at the first and the last
    * line of the input walk the history of what it sent, as a shell does: the entries of this chain first, then those
    * of the other chains, and with text typed, only the entries that start with it, as fish does. Alt+Up and Alt+Down walk it from any line.

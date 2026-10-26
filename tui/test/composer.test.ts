@@ -727,3 +727,40 @@ test("Escape, a space, a removed colon, or no match closes the emoji list and ke
     await until(session, () => session.activity.length > sent);
     expect(app.composer.plainText).toBe("");
   }));
+
+test("The input draws the rest of a line from the history in grey, and Right, Ctrl+F and Alt+Right take it at the end of the line", () =>
+  composing(async ({ session, app, screen, frame }) => {
+    session.histories[session.draftKey] = ["tell me about the weather", "tell me about the harbor today"];
+    await screen.mockInput.typeText("tell me about the h");
+    const rows = (await frame()).split("\n");
+    const row = rows.findIndex((line) => line.includes("tell me about the harbor today"));
+    expect(row).toBeGreaterThanOrEqual(0);
+    const column = (rows[row] ?? "").indexOf("arbor today");
+    const typed = cellAt(screen.captureSpans(), column - 1, row);
+    const grey = cellAt(screen.captureSpans(), column, row);
+    expect(grey.fg?.equals(RGBA.fromHex(palettes.ink.faint))).toBe(true);
+    expect(typed.fg?.equals(grey.fg ?? RGBA.fromHex("#000000"))).toBe(false);
+    // The grey rest is no text: the input holds only what was typed.
+    expect(app.composer.plainText).toBe("tell me about the h");
+    screen.mockInput.pressArrow("right");
+    expect(app.composer.plainText).toBe("tell me about the harbor today");
+    expect(await frame()).toContain("tell me about the harbor today");
+    app.composer.setText("");
+    await screen.mockInput.typeText("tell me about the h");
+    screen.mockInput.pressKey("f", { ctrl: true });
+    expect(app.composer.plainText).toBe("tell me about the harbor today");
+    app.composer.setText("");
+    await screen.mockInput.typeText("tell me about the h");
+    screen.mockInput.pressArrow("right", { meta: true });
+    expect(app.composer.plainText).toBe("tell me about the harbor");
+    // Away from the end of the text, or with no longer entry, the keys only move the cursor.
+    app.composer.setText("");
+    await screen.mockInput.typeText("tell me about the h");
+    screen.mockInput.pressArrow("left");
+    expect(await frame()).not.toContain("harbor today");
+    screen.mockInput.pressArrow("right");
+    expect(app.composer.plainText).toBe("tell me about the h");
+    app.composer.setText("");
+    await screen.mockInput.typeText("something else");
+    expect(await frame()).not.toContain("tell me about");
+  }));
