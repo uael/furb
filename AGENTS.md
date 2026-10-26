@@ -274,8 +274,10 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 - `script/real.py` is no command: it holds what `smoke.py`, `play.py` and `deepswe.py` share, which is the life
   they open on the engine of this interpreter, the claude they ask, and what the answers of a record cost.
 - `uv run python script/catalog.py`: make the snapshot of the catalog, `src/world/provider/catalog.json`, again from
-  models.dev and from the data of pi-ai. A life refreshes its own copy of models.dev in the cache of furb once a
-  day, and the newer of the two holds for each provider.
+  models.dev and from the data of pi-ai. A life updates its own copy of models.dev and of the providers of
+  pi-ai in the cache of furb once a day, and the newer of the cache and the snapshot holds for each provider.
+  `furb catalog [--update]` shows where the models came from and updates them at once; a source that fails leaves the
+  last valid copy, and a life that stands again reads the caches again.
 - `uv run python script/links.py`: check that each link in a README that a package carries works on the page of the
   package on PyPI, npm or crates.io, which read no relative link. It lists each package and its README from the
   manifests, and fails on a relative link, which `--fix` writes as absolute, at `main` on GitHub. The hooks run it.
