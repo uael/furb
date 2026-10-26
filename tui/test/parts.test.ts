@@ -35,10 +35,15 @@ function project(part = PART): { directory: string; file: string } {
   return { directory, file: join(folder, "tui.ts") };
 }
 
-/** The frame of the App once it shows a text, drawn again until it does. */
-async function shows(frame: () => Promise<string>, text: string): Promise<string> {
+/** The frame of the App once it shows a text, and once `ready` holds of it when it is given, drawn again until it
+ * does: a machine under load draws the feed in more than one frame. */
+async function shows(
+  frame: () => Promise<string>,
+  text: string,
+  ready: (shown: string) => boolean = () => true,
+): Promise<string> {
   let shown = await frame();
-  for (let tries = 0; tries < 400 && !shown.includes(text); tries++) {
+  for (let tries = 0; tries < 400 && !(shown.includes(text) && ready(shown)); tries++) {
     await Bun.sleep(25);
     shown = await frame();
   }
@@ -138,7 +143,14 @@ test("the part of compaction, which the crate carries, marks each compaction in 
       expect(shown.indexOf("the first step")).toBeLessThan(shown.indexOf("Compaction:"));
       await session.command('/run after = "the next step"');
       await session.command('/run compact(summary="It ran " + "the tests.")');
-      shown = await shows(frame, "It ran the tests.");
+      shown = await shows(
+        frame,
+        "It ran the tests.",
+        (now) =>
+          now.includes("compacted 2×") &&
+          now.indexOf("Compaction 1 of 2") < now.indexOf("the next step") &&
+          now.indexOf("the next step") < now.indexOf("Compaction 2 of 2"),
+      );
       expect(shown).toContain("Compaction 2 of 2");
       expect(shown).toContain("Compaction 1 of 2");
       expect(shown.indexOf("Compaction 1 of 2")).toBeLessThan(shown.indexOf("the next step"));
@@ -187,7 +199,11 @@ test("a run of compactions into new chains, as an older compaction made them, sh
       await session.command(
         `/run older = chain("compacted", "${root}")\nrung("restore('${root}')\\n${summary}", on=older)\nrung('after = "the step after"', on=older)`,
       );
-      const shown = await shows(frame, "the step after");
+      const shown = await shows(
+        frame,
+        "the step after",
+        (now) => session.runOf(root).length > 1 && now.includes("goes on in a new chain from here"),
+      );
       const newer = session.chains.find((chain) => chain.words[0] === "compacted")?.id ?? "";
       expect(session.runOf(root)).toEqual([root, newer]);
       expect(session.labelOf(newer)).toBe("Main -> compacted");
