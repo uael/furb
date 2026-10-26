@@ -120,9 +120,12 @@ The life says its events as they happen, after the response of the command that 
 
 - `prompt`: each prompt to the operator, which the client answers with `close`. It comes from a `prompt` of the
   client to `operator`, or from a word of a model that asks the operator. The operator answers the shapes `str`,
-  `None`, `bool`, `int`, `float`, `list` and `dict`, and a `Literal` whose values are strings, whole numbers, truths
-  or `None`, as `Literal['a', 'b']`, as at the terminal. A prompt to the operator of another shape
-  is not sent: furb closes it at once with a refusal, such as `the operator answers no set`. A prompt of the shape
+  `None`, `bool`, `int`, `float`, `list` and `dict`, a `Literal` whose values are strings, whole numbers, truths
+  or `None`, as `Literal['a', 'b']`, and each shape that these make: a list, a dict with keys of text or a tuple, as
+  `list[str]`, `dict[str, int]` or `tuple[int, str]`, and a union, as `int | None`, as at the terminal. A line for a
+  list, a dict or a tuple is JSON, and each item has the shape of its place. An empty line answers a union that holds
+  `None` with `None`. A prompt to the operator of another shape, such as `set` or the name of a class of a word, is not
+  sent: furb closes it at once with a refusal, such as `the operator answers no set`. A prompt of the shape
   `None` asks nothing: furb closes it with `None` as it sends it, so the client shows it as a notice and answers it
   not.
 

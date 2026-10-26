@@ -64,13 +64,26 @@ export const input = part({
     layer(() => choosing() && !this.choice.other, "choices", [
       { on: "up", run: () => this.stepPick(-1), hint: ["↑↓", "choose"] },
       { on: "down", run: () => this.stepPick(1) },
-      { on: ["return", "enter"], run: () => void this.takePick(), hint: ["Enter", "answer"] },
+      { on: "space", run: () => void this.takePick(), when: () => this.onTick(), hint: ["Space", "tick"] },
+      {
+        on: ["return", "enter"],
+        run: () => void (this.onTick() ? this.sendTicked() : this.takePick()),
+        hint: [
+          "Enter",
+          () =>
+            this.picking()?.options.length && this.onTick()
+              ? `send ${this.choice.ticked.length || "none"}`
+              : this.picking()?.options.length
+                ? "write your words"
+                : "answer",
+        ],
+      },
       ...Array.from(
         { length: 9 },
         (_, at): KeyCommand => ({
           on: String(at + 1),
           run: () => void this.takePick(at),
-          when: () => at <= (this.picking()?.choices.length ?? -1),
+          when: () => at <= this.pickCount(),
         }),
       ),
     ]);
@@ -82,6 +95,15 @@ export const input = part({
           this.render();
         },
         hint: ["Esc", "back to the values"],
+      },
+      // Up from an empty field goes back to the values, as the list itself does at its first row.
+      {
+        on: "up",
+        run: () => {
+          this.choice = { ...this.choice, other: false };
+          this.render();
+        },
+        when: () => !this.composer.plainText,
       },
     ]);
     layer(() => bare() && Boolean(this.tree), "tree", [

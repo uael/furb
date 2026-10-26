@@ -177,8 +177,9 @@ export class App {
   readonly composeBox: BoxRenderable;
   /** The values of a question of a choice, which the box of the prompt offers in place of its input. */
   readonly pickBox: BoxRenderable;
-  /** The question that the list offers the values of, the row of its pointer, and whether Other takes the input. */
-  choice = { id: "", at: 0, other: false };
+  /** The question that the list offers the values of, the row of its pointer, whether Other takes the input, and the
+   * rows that a list of many values has ticked. */
+  choice = { id: "", at: 0, other: false, ticked: [] as number[] };
   pickKey = "";
   readonly queueBox: BoxRenderable;
   readonly imageBox: BoxRenderable;
@@ -844,7 +845,7 @@ export class App {
               c.warning,
               choosing
                 ? `Your own words in place of ${wants(pending)}. Esc goes back to the values.`
-                : `Your answer to ${pending.id}, as ${pending.shape}`,
+                : `Your answer to ${pending.id}, as ${pending.shape}${pending.hint ? `: ${pending.hint}` : ""}`,
             ]
           : w.mode === "python"
             ? ["Python", c.secondary, "Write Python. The gate reads it before it runs."]
@@ -859,7 +860,7 @@ export class App {
       6,
       Math.max(space.bar, this.composer.lineCount, this.composer.lineInfo.lineSources.length),
     );
-    const listed = choosing ? choosing.choices.length + 1 : 0;
+    const listed = choosing ? this.rows(choosing).length + 1 : 0;
     this.composeBox.height =
       (choosing && !this.choice.other ? listed : listed + typed) + space.section + space.bar;
     this.renderMeta(mode, modeColor);

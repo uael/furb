@@ -205,8 +205,43 @@ try {
   await session.refresh();
   await session.point(runner);
   await capture("09-choice-question");
+  // Other gives the input to the words of the operator, under the values that stay listed.
+  test.mockInput.pressKey("4");
+  await test.mockInput.typeText("None of them: keep the plain Markdown.");
+  await capture("94-other-answer");
+  app().composer.setText("");
   await session.host.answer(runner, "mkdocs");
   await until(session.host, () => !session.host.prompts.has(runner));
+  // A list of values is ticked with Space and sent with Enter.
+  const flags = await session.engine.prompt("list[Literal['fast', 'safe', 'quiet']]", {
+    message: "Which flags does the release build use?",
+    on: session.selected,
+    to: "operator",
+  });
+  await until(session.host, () => session.host.prompts.has(flags));
+  await session.refresh();
+  await session.point(flags);
+  test.mockInput.pressKey(" ");
+  test.mockInput.pressArrow("down");
+  test.mockInput.pressArrow("down");
+  test.mockInput.pressKey(" ");
+  await capture("95-many-choice");
+  await session.host.answer(flags, '["fast", "quiet"]');
+  await until(session.host, () => !session.host.prompts.has(flags));
+  // A shape that is more than text says what its line is.
+  const files = await session.engine.prompt("list[str]", {
+    message: "Which files does the change touch?",
+    on: session.selected,
+    to: "operator",
+  });
+  await until(session.host, () => session.host.prompts.has(files));
+  await session.refresh();
+  await session.point(files);
+  await test.mockInput.typeText('["README.md", "docs/tui.md"]');
+  await capture("96-list-question");
+  app().composer.setText("");
+  await session.host.answer(files, '["README.md", "docs/tui.md"]');
+  await until(session.host, () => !session.host.prompts.has(files));
   const notice = await session.engine.prompt("None", {
     message: "The search shortcut is on the main chain.",
     on: session.selected,

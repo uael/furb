@@ -286,7 +286,7 @@ export const sidebar = part({
           for (const [at, value] of ask.choices.entries())
             chip(`${at + 1} ${value}`, () => void w.answer(ask, value).catch(this.report));
           chip(`${ask.choices.length + 1} Other`, () => {
-            this.choice = { id: ask.id, at: ask.choices.length, other: true };
+            this.choice = { id: ask.id, at: ask.choices.length, other: true, ticked: [] };
             void w.point(ask.id).catch(this.report);
           });
         } else chip(`Answer as ${ask.shape}`, () => void w.point(ask.id).catch(this.report));

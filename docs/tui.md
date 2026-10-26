@@ -177,12 +177,28 @@ the input answers it. A click on the card of another question points the input a
 
 ![Many questions](screenshots/52-many-questions.png)
 
-Each question takes an answer of its shape. A str, an int, a float, a list, or a dict takes a line of the input,
-which the console reads in that shape. A choice offers its values as a list in place of the input: a bool offers yes
-and no, and a Literal offers each of its values. ↑ and ↓ move the pointer, Enter or a click sends the value, and a
-number sends the value at that place. The last row, Other, gives the input to your own words when no value fits:
-Enter closes the question with them as Refused, so the await of the word that asked raises them and its model reads
-them. Esc goes back to the values.
+Each question takes an answer of its shape. A str, an int, a float, a list, a dict, a tuple or a union takes a line of
+the input, which the console reads in that shape. A shape that is more than text says what its line is: the input and
+the desk name it, with an example, as `a JSON list of text, as ["a", "b"]`. A line of JSON has an item of the shape of
+its place, and a line that has not that shape is refused with its reason, and stays in the input. A union that holds
+None, as `int | None`, takes an empty line as None.
+
+![A question of a list](screenshots/96-list-question.png)
+
+A choice offers its values as a list in place of the input: a bool offers yes and no, and a Literal offers each of its
+values. ↑ and ↓ move the pointer, Enter or a click sends the value, and a number sends the value at that place. The
+last row, Other, gives the input to your own words when no value fits, under the values that stay listed. Enter closes
+the question with them as Refused, so the await of the word that asked raises them and its model reads them. An empty
+field sends nothing and says so. Esc, and ↑ from an empty field, go back to the values, and the words stay for the next
+time.
+
+![Other, with the words of the operator](screenshots/94-other-answer.png)
+
+A list of a Literal, as `list[Literal['fast', 'safe', 'quiet']]`, lists its values with a box before each. Space or a
+number ticks the value at the pointer or at that place, and Enter sends the ticked values as a list, in the order of the
+list. Other gives the input to your own words here too.
+
+![A question of many values](screenshots/95-many-choice.png)
 
 ![Operator question](screenshots/08-operator-question.png)
 
