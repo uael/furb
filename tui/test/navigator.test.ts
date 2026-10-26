@@ -1,14 +1,8 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { until } from "../../bind/typescript/test/until.ts";
-import { rasterize } from "../script/raster.ts";
 import { highlighting } from "../script/stage.ts";
-import { paletteOf } from "../src/theme.ts";
 import { composing } from "./composing.ts";
 import { idle } from "./idle.ts";
-
-const evidence = "/tmp/furb-tui-sidebar-evidence";
 
 for (const { width, height } of [
   { width: 80, height: 24 },
@@ -18,23 +12,17 @@ for (const { width, height } of [
     composing(
       async ({ session, app, screen, frame }) => {
         await idle(session);
-        const capture = async (name: string) => {
+        const capture = async () => {
           await frame();
           await Promise.all(highlighting(screen.renderer.root));
           await app.colorsDone();
           const text = await frame();
-          mkdirSync(evidence, { recursive: true });
-          writeFileSync(join(evidence, `${name}-${width}x${height}.txt`), text);
-          writeFileSync(
-            join(evidence, `${name}-${width}x${height}.png`),
-            rasterize(screen.captureSpans(), paletteOf(session.theme), "furb"),
-          );
           return text;
         };
         if (width < 100) {
           app.scroll.stickyScroll = false;
           app.scroll.scrollTo(0);
-          const codeFrame = await capture("navigator-code");
+          const codeFrame = await capture();
           expect(codeFrame).toContain("notes = read");
         }
         let parent = session.engine.root;
@@ -53,17 +41,17 @@ for (const { width, height } of [
         await frame();
         await screen.mockInput.typeText("Find threads");
         screen.mockInput.pressEnter();
-        const threadPicker = await capture("thread-picker");
+        const threadPicker = await capture();
         expect(threadPicker).toContain("Threads");
         expect(threadPicker.split("\n").find((line) => line.includes("prompt1"))).toMatch(/prompt1\s+done/);
         screen.mockInput.pressArrow("right");
-        expect(await capture("thread-menu")).toContain("Reopen and reply");
+        expect(await capture()).toContain("Reopen and reply");
         expect(session.thread).toBe(targetBeforeInspect);
         app.closeOverlay();
         if (width === 80) {
           app.switchView("loom");
           screen.mockInput.pressKey("g", { meta: true });
-          const footer = await capture("navigation-footer");
+          const footer = await capture();
           expect(footer.trimEnd().split("\n").at(-1)).toContain("F1 help");
           app.switchView("main");
         }
@@ -86,7 +74,7 @@ for (const { width, height } of [
         app.render();
         expect(session.operatorPrompt?.id).toBe(firstQuestion);
         expect(session.operatorPrompt?.choices).toEqual(["yes", "no"]);
-        const text = await capture("navigator");
+        const text = await capture();
         expect(text).toContain("Review scripted navigation question 1");
         expect(text).toContain("yes");
         expect(text).toContain("Answer");
@@ -100,10 +88,10 @@ for (const { width, height } of [
         app.chains();
         await frame();
         await screen.mockInput.typeText(parent);
-        const picker = await capture("chain-picker");
+        const picker = await capture();
         expect(picker).toContain("Nested 22");
         screen.mockInput.pressArrow("right");
-        const path = await capture("chain-path");
+        const path = await capture();
         expect(path).toContain("Chain path");
         expect(path).toContain("Nested 01");
         app.closeOverlay();
@@ -119,7 +107,7 @@ for (const { width, height } of [
         await frame();
         await screen.mockInput.typeText("Context details");
         screen.mockInput.pressEnter();
-        expect(await capture("context-details")).toContain("3,240 tokens");
+        expect(await capture()).toContain("3,240 tokens");
         app.closeOverlay();
         const free = await session.engine.prompt("str", {
           message: "Describe the scripted change in your own words",
@@ -132,7 +120,7 @@ for (const { width, height } of [
         app.composer.setText("Keep this answer draft");
         expect(session.operatorPrompt?.id).toBe(free);
         expect(session.operatorPrompt?.shape).toBe("str");
-        expect(await capture("free-answer")).toContain("returns str");
+        expect(await capture()).toContain("returns str");
         expect(app.composer.plainText).toBe("Keep this answer draft");
         await session.point(firstQuestion);
         await frame();
@@ -141,7 +129,7 @@ for (const { width, height } of [
         app.composer.setText("A different proposal");
         expect(session.operatorPrompt?.id).toBe(firstQuestion);
         expect(session.actOf(firstQuestion)?.done).toBe(false);
-        expect(await capture("other-answer")).toContain("A different proposal");
+        expect(await capture()).toContain("A different proposal");
         expect(app.composer.focused).toBe(true);
       },
       { width, height, exitSignals: [] },

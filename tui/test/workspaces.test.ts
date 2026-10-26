@@ -1,19 +1,17 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
 import { type NativeEar, scratch, store } from "furb";
 import { until } from "../../bind/typescript/test/until.ts";
-import { rasterize } from "../script/raster.ts";
 import { click as clickStage } from "../script/stage.ts";
 import { type App, follow } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { seedDemoFiles } from "../src/demo.ts";
 import { Preferences } from "../src/preferences.ts";
 import { Session, savedView } from "../src/session.ts";
-import { paletteOf } from "../src/theme.ts";
 import { type SessionEntry, Workspaces } from "../src/workspaces.ts";
 
 /** A library in the sidebar of an App on a test terminal: the terminal, the App that shows the session that the
@@ -696,25 +694,18 @@ for (const [width, height] of [
       await session.point(question);
       const use = await sidebar(library, width, height);
       const { screen, app, frame } = use;
-      const capture = async (name: string) => {
+      const capture = async () => {
         await screen.mockMouse.moveTo(0, height - 1);
         const text = (await frame()).join("\n");
-        const folder = "/tmp/furb-tui-sidebar-evidence";
-        mkdirSync(folder, { recursive: true });
-        writeFileSync(join(folder, `${name}-${width}x${height}.txt`), text);
-        writeFileSync(
-          join(folder, `${name}-${width}x${height}.png`),
-          rasterize(screen.captureSpans(), paletteOf(session.theme), "furb"),
-        );
         return text;
       };
       await app().workspacePicker();
-      expect(await capture("workspaces")).toContain("Workspaces and sessions");
+      expect(await capture()).toContain("Workspaces and sessions");
       await actions(use, current.name);
-      expect(await capture("session-menu")).toContain("Move to trash");
+      expect(await capture()).toContain("Move to trash");
       await pick(use, "Rename");
       await screen.mockInput.typeText(" renamed");
-      expect(await capture("session-rename")).toContain("Rename session");
+      expect(await capture()).toContain("Rename session");
       expect(app().composer.focused).toBe(false);
       expect(session.operatorPrompt?.id).toBe(question);
       screen.mockInput.pressEnter();
@@ -724,14 +715,14 @@ for (const [width, height] of [
       await until(library, () => current.archived === true);
       await app().workspacePicker();
       await screen.mockInput.typeText(current.name);
-      expect(await capture("archived-session")).toContain("Archived");
+      expect(await capture()).toContain("Archived");
       await actions(use, current.name);
-      expect(await capture("restore-menu")).toContain("Restore");
+      expect(await capture()).toContain("Restore");
       await pick(use, "Restore");
       expect(current.archived).toBe(false);
       await actions(use, current.name);
       await pick(use, "Move to trash");
-      expect(await capture("trash-confirm")).toContain("Remove the session");
+      expect(await capture()).toContain("Remove the session");
       expect(library.groups.flatMap((group) => group.sessions)).toContain(current);
       app().closeOverlay();
       expect(session.operatorPrompt?.id).toBe(question);
