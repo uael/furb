@@ -254,7 +254,8 @@ def gate(word: str, on: str = "") -> list[str]:
   The gate checks the word of a rung against the rungs before it in record order.
   A response that is not python is a finding like any other.
   Each finding names the line of the word it is found on, and quotes that line, cut to 80 characters, so a model reads what the gate read.
-  A word that is not python and that holds a fence of markdown, the markup of a tool call or a sentence of prose finds that a reply is python and quotes only, with no fence, no markup and no prose.
+  A word that is not python and that holds a fence of markdown, the markup of a tool call or a sentence of prose finds that a reply is python and quotes only, with no fence, no markup and no prose, so nothing of this word ran: delete each such line.
+  A word that is not python on a line that starts with a lone = finds that the line starts with =, so its binding has no name: write the name before =, as in got = 1, and nothing of this word ran.
   An open mark of a quote that has no close mark is a finding of its own, which names that mark and the close mark it wants.
   A word that binds a name that the transcript binds, the name of an act of its chain or a name of a value that a tell of that act binds, as bash12_stdout, finds that the transcript binds that name, also for an act that the chain did not tell yet.
   The gate gives no finding when the gate accepts the rung.
