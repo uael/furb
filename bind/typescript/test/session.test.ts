@@ -805,6 +805,44 @@ test("an operator answer of a list keeps its numbers exact, and a map in it that
   }
 });
 
+test("an operator answers a prompt of a list, a dict, a tuple or a union of the shapes that he answers, and a shape he answers not is refused at once", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-shapes-"));
+  const session = new Session({ cwd });
+  const engine = session.open();
+  try {
+    const on = engine.root;
+    const cases: [string, string, string][] = [
+      ["list[str]", '["a", "b"]', "['a', 'b']"],
+      ["list[float]", "[1, 2.5]", "[1.0, 2.5]"],
+      ["list[Literal['a', 'b']]", '["b"]', "['b']"],
+      ["dict[str, list[int]]", '{"a": [1]}', "{'a': [1]}"],
+      ["tuple[int, str]", '[1, "a"]', "(1, 'a')"],
+      ["int | None", "4", "4"],
+      ["int | None", "", "None"],
+      ["str | None", "words", "'words'"],
+    ];
+    for (const [shape, line, value] of cases) {
+      const question = engine.rung({
+        word: `x = await prompt(${shape}, "Q", to=OPERATOR)\nclose(repr(x))`,
+        on,
+      });
+      await until(session, () => [...session.console.prompts.values()].some((one) => one.shape === shape));
+      const ask = [...session.console.prompts.values()].find((one) => one.shape === shape);
+      expect(ask).toBeDefined();
+      if (/^(list|dict|tuple)/.test(shape))
+        expect(() => session.console.answer(ask?.id ?? "", "[")).toThrow();
+      session.console.answer(ask?.id ?? "", line);
+      expect(await engine.result<string>(question.id)).toBe(value);
+    }
+    const refused = engine.rung({ word: "close(await prompt(list[Option], 'Q', to=OPERATOR))", on });
+    await expect(engine.result(refused.id)).rejects.toThrow();
+    expect(session.console.prompts.size).toBe(0);
+  } finally {
+    await session.dispose();
+    await rm(cwd, { recursive: true });
+  }
+});
+
 test("a session with no model puts to the operator every prompt that names no actor, the acknowledgment among them", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-operator-alone-"));
   const { promise: acknowledgment, resolve: acknowledged } = Promise.withResolvers<string>();

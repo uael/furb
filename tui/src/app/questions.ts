@@ -2,7 +2,7 @@ import { InputRenderableEvents, type KeyEvent } from "@opentui/core";
 import { type Ask, beside } from "furb/life";
 import { elapsed } from "../format.ts";
 import { theme as c, glyph, spacing as space } from "../theme.ts";
-import { bold } from "../ui.ts";
+import { bold, type Part } from "../ui.ts";
 import { part } from "./part.ts";
 
 export const questions = part({
@@ -10,9 +10,15 @@ export const questions = part({
    * its shape is a choice, a Literal or a bool, and no program is under edit. */
   picking(): Ask | undefined {
     const ask = this.session.operatorPrompt;
-    if (!ask?.choices.length || this.session.editing) return undefined;
-    if (this.choice.id !== ask.id) this.choice = { id: ask.id, at: 0, other: false };
+    if (!ask || !this.rows(ask).length || this.session.editing) return undefined;
+    if (this.choice.id !== ask.id) this.choice = { id: ask.id, at: 0, other: false, ticked: [] };
     return ask;
+  },
+
+  /** The values that a question of a choice lists before Other: its values, or the values of the list that it takes
+   * many of. */
+  rows(ask: Ask): string[] {
+    return ask.choices.length ? ask.choices : ask.options.map((one) => one.shown);
   },
 
   /** The values of a question of a choice, each after its number, and a last row, Other, whose words go in place of
@@ -32,19 +38,27 @@ export const questions = part({
       this.pickKey = "";
       return;
     }
-    const key = JSON.stringify([ask.id, ask.choices, this.choice, this.theme]);
+    const key = JSON.stringify([ask.id, ask.choices, ask.options, this.choice, this.theme]);
     if (key === this.pickKey) return;
     this.pickKey = key;
     this.clear(this.pickBox);
-    for (const [index, label] of [...ask.choices, "Other"].entries()) {
+    const values = this.rows(ask);
+    for (const [index, label] of [...values, "Other"].entries()) {
       const here = index === this.choice.at;
+      const ticked = this.choice.ticked.includes(index);
+      // A list of many values shows a box before each value, which Space ticks.
+      const box: Part[] =
+        ask.options.length && index < values.length
+          ? [[ticked ? "[x] " : "[ ] ", ticked ? c.warning : c.faint]]
+          : [];
       this.pickBox.add(
         this.line(
           [
             [here ? glyph.pointer : " ", c.warning],
             [` ${index + 1}  `, here ? c.muted : c.faint],
+            ...box,
             [label, here ? c.text : c.muted, here ? bold : 0],
-            [index === ask.choices.length ? "  in your own words" : "", c.faint],
+            [index === values.length ? "  in your own words" : "", c.faint],
           ],
           c.text,
           { truncate: true, run: () => void this.takePick(index) },
@@ -57,7 +71,7 @@ export const questions = part({
   stepPick(by: number): void {
     const ask = this.picking();
     if (!ask) return;
-    const rows = ask.choices.length + 1;
+    const rows = this.rows(ask).length + 1;
     this.choice = { ...this.choice, at: (this.choice.at + by + rows) % rows };
     this.render();
   },
@@ -68,10 +82,42 @@ export const questions = part({
     const at = place ?? this.choice.at;
     const ask = this.picking();
     if (!ask) return;
-    const value = ask.choices[at];
-    this.choice = { id: ask.id, at, other: value === undefined };
+    const values = this.rows(ask);
+    // A value of a list of many is ticked or not, and nothing is sent until Enter sends the ticked values.
+    if (ask.options.length && at < values.length) {
+      const ticked = this.choice.ticked.includes(at)
+        ? this.choice.ticked.filter((one) => one !== at)
+        : [...this.choice.ticked, at];
+      this.choice = { ...this.choice, id: ask.id, at, ticked };
+      this.render();
+      return;
+    }
+    const value = values[at];
+    this.choice = { ...this.choice, id: ask.id, at, other: value === undefined };
     if (value !== undefined) await this.session.answer(ask, value).catch(this.report);
     this.render();
+  },
+
+  /** The values that a list of many has ticked, in the order of the list, as the line of that list. */
+  async sendTicked(): Promise<void> {
+    const ask = this.picking();
+    if (!ask?.options.length) return;
+    const ticked = [...this.choice.ticked].sort((one, other) => one - other);
+    const line = `[${ticked.map((at) => ask.options[at]?.json).join(", ")}]`;
+    await this.session.answer(ask, line).catch(this.report);
+    this.render();
+  },
+
+  /** How many values the list of the question aimed holds before Other, or -1 when no list stands. */
+  pickCount(): number {
+    const ask = this.picking();
+    return ask ? this.rows(ask).length : -1;
+  },
+
+  /** Whether the pointer stands on a value of a list of many, which Space ticks and Enter does not send. */
+  onTick(): boolean {
+    const ask = this.picking();
+    return Boolean(ask?.options.length && this.choice.at < ask.options.length);
   },
 
   /** The time since an act started. */
@@ -117,14 +163,22 @@ export const questions = part({
       else this.closeOverlay();
     };
     if (ask.choices.length) {
-      this.openPalette(
-        title,
-        ask.choices.map((choice) => ({
+      this.openPalette(title, [
+        ...ask.choices.map((choice) => ({
           label: choice,
           detail: "",
           run: () => w.answer(ask, choice).then(next),
         })),
-      );
+        {
+          label: "Other",
+          detail: "in your own words",
+          run: () => {
+            this.choice = { id: ask.id, at: ask.choices.length, other: true, ticked: [] };
+            this.closeOverlay();
+            this.render();
+          },
+        },
+      ]);
       this.showQuestionText(ask.message);
       this.answering = ask.id;
       return;
@@ -135,7 +189,8 @@ export const questions = part({
     if (prompt) prompt.visible = true;
     if (this.paletteInputRow) this.paletteInputRow.height = space.bar;
     this.showQuestionText(ask.message);
-    if (this.paletteInput) this.paletteInput.placeholder = `Type the answer to ${ask.id}, as ${ask.shape}`;
+    if (this.paletteInput)
+      this.paletteInput.placeholder = `Type the answer to ${ask.id}, as ${ask.shape}${ask.hint ? `: ${ask.hint}` : ""}`;
     const error = this.text(`Enter sends it. Esc leaves the question open.${moves}`, c.muted);
     this.paletteList?.add(error);
     this.answering = ask.id;

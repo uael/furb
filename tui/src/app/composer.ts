@@ -1,4 +1,5 @@
 import { shapes } from "furb";
+import { takesNothing } from "furb/life";
 import { slashes } from "../commands.ts";
 import { emojiNamed, emojis } from "../emoji.ts";
 import { shortenHome } from "../files.ts";
@@ -103,8 +104,12 @@ export const composer = part({
     this.composer.setText("");
     try {
       const declined = this.picking();
+      const ask = this.session.operatorPrompt;
       if (declined && this.choice.other && !content.startsWith("/")) {
         if (content.trim()) await this.session.decline(declined, content);
+        else this.session.notice = "Write your own words, or press Esc to go back to the values.";
+      } else if (!content.trim() && ask && !ask.notice && !declined && takesNothing(ask.shape)) {
+        await this.session.answer(ask, "");
       } else if (!(await this.globalCommand(content.trim()))) {
         const woke = !content.startsWith("/") && (await this.session.wakeForInput());
         await this.session.submit(python ? `/run ${content}` : content);
