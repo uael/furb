@@ -107,6 +107,31 @@ directly; `key_env` wins when both are present. A custom server with neither fie
 `enabled` to false to disable a provider and keep its other fields. The names `claude-cli` and `local` can be false
 to remove the command line or the server that the environment names from the roster.
 
+To start Claude through a wrapper, set `providers.claude-cli.command` in `.furb/config.json`:
+
+```json
+{
+  "providers": {
+    "claude-cli": {
+      "command": ["cswap", "run", "3", "--"]
+    }
+  }
+}
+```
+
+The first item is the executable. Each later item is one argument, before the flags that furb gives Claude for
+completions and web search. Spaces stay within an item. No shell reads the command, so shell operators and variable
+references have no special meaning. An executable name uses PATH; a path selects that file. The command can also
+be a single executable string, such as `"command": "/opt/bin/claude"`, with no arguments.
+
+The `--` in the `cswap` example separates its account options from the Claude flags that furb appends. Without
+that separator, `cswap` rejects those flags.
+
+A configured command replaces the default Claude executable, including `FURB_CLAUDE_BIN`. Without `command`, furb
+keeps its default discovery. An empty array or executable is invalid. Set `"enabled": false` in the object to
+disable Claude without removing its command. Project fields override user fields; a project `true` or `false`
+changes only whether the provider is enabled when the user config holds an object.
+
 An optional model `cost` gives `input`, `output`, `cache_read` and `cache_write`, in dollars for one million tokens.
 A custom model has no dollar price when `cost` is unsaid, so a dollar ceiling cannot bound its cost.
 

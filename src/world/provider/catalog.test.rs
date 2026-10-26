@@ -561,3 +561,113 @@ fn a_first_run_checks_the_claude_command_line_each_provider_and_the_local_server
     "a server that does not answer says why"
   );
 }
+
+#[cfg(unix)]
+#[test]
+fn a_configured_claude_prefix_reaches_completions_and_search_and_project_settings_win() {
+  use super::super::{Answer, claude::test::Yard};
+  use std::fs;
+
+  let yard = Yard::new("configured-prefix");
+  let user = yard.at.join("user");
+  let project = yard.at.join("project");
+  fs::create_dir_all(&user).unwrap();
+  fs::create_dir_all(project.join(".furb")).unwrap();
+  let settings = project.join(".furb/config.json");
+  let bin = yard.at.join("claude");
+  fs::write(
+    user.join("config.json"),
+    json!({"providers": {"claude-cli": {"command": [bin, "user-prefix"]}}}).to_string(),
+  )
+  .unwrap();
+  fs::write(
+    &settings,
+    json!({"providers": {"claude-cli": {
+      "command": [bin, "run", "3", "two words", "$HOME;literal"]
+    }}})
+    .to_string(),
+  )
+  .unwrap();
+  let configured = || catalog(&["OPENAI_API_KEY"]).configured(&project, Some(&user));
+  let models = configured().expect("a command prefix is valid");
+  assert!(models.setup().claude);
+  assert!(models.find("openai:gpt-5").is_some(), "other providers stay");
+  let model = models.find("claude-cli:sonnet").unwrap();
+  let request = CompletionRequest {
+    model: None,
+    preamble: Some("ENGINE ONLY".to_owned()),
+    chat_history: vec![Message::user("first")],
+    documents: Vec::new(),
+    tools: Vec::new(),
+    temperature: None,
+    max_tokens: None,
+    tool_choice: None,
+    additional_params: None,
+    output_schema: None,
+    record_telemetry_content: false,
+  };
+  let asked = Asked {
+    actor: "claude-cli:sonnet".into(),
+    chain: "chain1".into(),
+    request,
+    told: Arc::new(|_, _| {}),
+    thought: None,
+  };
+  let answer = reactor().block_on((model.answers)(asked)).unwrap();
+  let Answer::Response(answer) = answer else { panic!("a Claude response") };
+  assert_eq!(answer.choice, [rig_core::message::AssistantContent::text("close(\"reply 1\")")]);
+  let pids = yard.pids();
+  assert_eq!(pids.len(), 1);
+  let prefix = ["run", "3", "two words", "$HOME;literal"];
+  let args = yard.args(&pids[0]);
+  assert_eq!(args[..4], prefix);
+  assert_eq!(args[4], "-p");
+
+  let search_bin = yard.at.join("search");
+  fs::write(&search_bin, "#!/bin/sh\nprintf '[%s]\\n' \"$@\"\necho ---\ncat\n").unwrap();
+  use std::os::unix::fs::PermissionsExt;
+  fs::set_permissions(&search_bin, fs::Permissions::from_mode(0o755)).unwrap();
+  fs::write(
+    &settings,
+    json!({"providers": {"claude-cli": {
+      "command": [search_bin, "run", "3", "two words", "$HOME;literal"]
+    }}})
+    .to_string(),
+  )
+  .unwrap();
+  let fresh = configured().unwrap();
+  let model = fresh.find("claude-cli:sonnet").unwrap();
+  let search = model.search.as_ref().unwrap();
+  let got = reactor().block_on(search("what is rust".to_owned())).unwrap();
+  let (args, query) = got.split_once("---\n").unwrap();
+  assert!(args.starts_with("[run]\n[3]\n[two words]\n[$HOME;literal]\n[-p]\n"), "{args}");
+  assert_eq!(query, "what is rust");
+
+  fs::write(&settings, r#"{"providers":{"claude-cli":false}}"#).unwrap();
+  assert!(!configured().unwrap().setup().claude);
+  fs::write(&settings, r#"{"providers":{"claude-cli":true}}"#).unwrap();
+  assert!(configured().unwrap().setup().claude, "true keeps the user command");
+  fs::write(&settings, json!({"providers":{"claude-cli":{"command":bin}}}).to_string()).unwrap();
+  assert!(configured().unwrap().setup().claude, "a single executable string is valid");
+}
+
+#[test]
+fn an_invalid_claude_command_is_refused_before_it_starts_a_process() {
+  use std::fs;
+  let root =
+    std::env::temp_dir().join(format!("furb-invalid-claude-command-{}", std::process::id()));
+  fs::create_dir_all(root.join(".furb")).unwrap();
+  for command in
+    [json!([]), json!(""), json!([" "]), json!(12), json!(["claude", 3]), json!(["claude", "\0"])]
+  {
+    fs::write(
+      root.join(".furb/config.json"),
+      json!({"providers":{"claude-cli":{"command":command}}}).to_string(),
+    )
+    .unwrap();
+    let result = catalog(&[]).configured(&root, Some(&root));
+    let Err(no) = result else { panic!("invalid command {command} was accepted") };
+    assert!(no.contains("claude-cli"), "{no}");
+  }
+  fs::remove_dir_all(root).unwrap();
+}
