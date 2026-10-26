@@ -23,6 +23,7 @@ import {
   foldStrings,
   literals,
   type ProgramLine,
+  wrap,
   writing,
 } from "furb/life";
 import { clock } from "../clock.ts";
@@ -381,11 +382,10 @@ export const details = part({
         // rows of their own. Another line folds its longest strings until it fits.
         const shown =
           this.lineOpen(line) || this.openStrings(line).size ? undefined : foldStrings(line.text, column);
+        const cuts = shown ? [] : wrap(line.text, column);
         const parts = shown
           ? [fit(shown.text, column)]
-          : Array.from({ length: Math.max(1, Math.ceil(line.text.length / column)) }, (_, k) =>
-              line.text.slice(k * column, (k + 1) * column),
-            );
+          : cuts.map((cut) => " ".repeat(cut.indent) + line.text.slice(cut.from, cut.to));
         const code = parts[0] ?? "";
         const hint = note ? `# ${fit(note, room - column - 4)}` : "";
         const at = push(
@@ -397,7 +397,7 @@ export const details = part({
         for (const more of parts.slice(1)) push(more, undefined, line);
         const folds = shown?.folds.filter((fold) => fold.at + FOLD.length <= Bun.stringWidth(code)) ?? [];
         if (folds.length) folded.set(at, { line, folds });
-        if (!shown) for (const k of parts.keys()) whole.set(at + k, k * column);
+        if (!shown) for (const [k, cut] of cuts.entries()) whole.set(at + k, cut.from - cut.indent);
         const base = program.length;
         program += `${line.text}\n`;
         if (shown) {
@@ -413,7 +413,8 @@ export const details = part({
           }
           if (from < code.length) pieces.push([at, from, code.length, source]);
         } else
-          for (const [k, part] of parts.entries()) pieces.push([at + k, 0, part.length, base + k * column]);
+          for (const [k, cut] of cuts.entries())
+            pieces.push([at + k, cut.indent, cut.indent + cut.to - cut.from, base + cut.from]);
         if (line.runs) {
           colors.set(at, { content: c.selected, gutter: c.selected });
           signs.set(at, { before: glyph.running, beforeColor: c.accent });
@@ -426,14 +427,6 @@ export const details = part({
             .slice(0, 3))
             comment(push(`# ${fit(why.replace(/^line \d+: /, ""), room - 4)}`));
         }
-      } else if (line.kind === "quote") {
-        const at = push(
-          `${line.name} = "${fit(line.text, column - line.name.length - 6)}"  # ${line.lines} lines`,
-          line.display,
-        );
-        const end = (texts[at] ?? "").lastIndexOf('"  # ');
-        fixed.push([at, line.name.length + 3, end + 1, "string"]);
-        comment(at, end + 3);
       } else if (line.kind === "output") comment(push(`#   ${fit(line.text, room - 6)}`));
       else if (line.kind === "writes") {
         const at = push(`# ${fit(line.text, room - 4)}`);

@@ -1,11 +1,21 @@
 import { expect, test } from "bun:test";
 import { makers } from "../../src/life/ladder.ts";
-import { actLines, foldStrings, hintOf, literals, threadProgram, writing } from "../../src/life/program.ts";
+import {
+  actLines,
+  foldStrings,
+  hintOf,
+  joinedLines,
+  literals,
+  stepLines,
+  threadProgram,
+  wrap,
+  writing,
+} from "../../src/life/program.ts";
 import { act } from "./acts.ts";
 
 const label = (chain: string) => `label of ${chain}`;
 
-test("the program of a thread holds the words of its steps and its messages in order, with a quote folded and the output of the line that runs", () => {
+test("the program of a thread holds the words of its steps and its messages in order, with a quote bound as a string and the output of the line that runs", () => {
   const prompt = act("prompt1", "prompt", "chain1", "operator", 1, undefined, {
     words: ["str", "Look at it", "opus"],
   });
@@ -38,7 +48,7 @@ test("the program of a thread holds the words of its steps and its messages in o
     label,
   );
   expect(lines.map((line) => [line.kind, line.text])).toEqual([
-    ["quote", "ls"],
+    ["code", "cmd = 'ls\\npwd\\n'"],
     ["code", "got = await bash(cmd)"],
     ["code", "print(got)"],
     ["note", "# you: And this too"],
@@ -50,7 +60,11 @@ test("the program of a thread holds the words of its steps and its messages in o
     ["output", "7"],
   ]);
   const quote = lines[0];
-  expect(quote?.kind === "quote" && [quote.name, quote.lines]).toEqual(["cmd", 2]);
+  expect(quote?.kind === "code" && [quote.hint, quote.runs, quote.acts.length]).toEqual([
+    "2 lines",
+    false,
+    0,
+  ]);
   const ran = lines[1];
   expect(ran?.kind === "code" && [ran.hint, ran.runs]).toEqual(["exit 0, 3 lines", false]);
   const runs = lines[4];
@@ -82,14 +96,14 @@ test("the numbers of the lines of a thread go on from each step to the next, acr
   expect(program()).toEqual([
     ["code", 1, 1],
     ["code", 2, 2],
-    ["quote", 3, 1],
+    ["code", 3, 1],
     ["code", 6, 4],
     ["code", 7, 5],
     ["writes", 8, undefined],
   ]);
   expect(program(2)).toEqual([
     ["earlier", undefined, undefined],
-    ["quote", 3, 1],
+    ["code", 3, 1],
     ["code", 6, 4],
     ["code", 7, 5],
     ["writes", 8, undefined],
@@ -213,4 +227,73 @@ test("what a model writes splits into the lines of its word that it finished and
     tail: "b = await bash(",
   });
   expect(writing({ text: "a = 1\n\n", thinking })).toEqual({ lines: "a = 1", tail: "" });
+});
+
+test("a string of three marks that runs over many lines stands in its statement as one string with its escapes, on the line that starts the statement", () => {
+  const word = ['text = f"""first', 'second "x" line', 'third""" + "!"', "print(text)"].join("\n");
+  const rung = act("rung1", "rung", "chain1", "prompt1", 2, 3);
+  const lines = stepLines(rung, makers([rung]), () => word, new Set(), label);
+  expect(lines.map((line) => [line.kind, line.text, "number" in line ? line.number : 0])).toEqual([
+    ["code", 'text = f"first\\nsecond \\"x\\" line\\nthird" + "!"', 1],
+    ["code", "print(text)", 4],
+  ]);
+  expect(lines.map((line) => ("display" in line ? line.display : 0))).toEqual([1, 4]);
+});
+
+test("a raw string loses its prefix and doubles its backslashes, a backslash before a line break joins the lines, and a statement with two such strings takes all their lines", () => {
+  expect(joinedLines(['x = r"""a\\d', 'b"""'], 0)).toEqual({ end: 1, text: 'x = "a\\\\d\\nb"' });
+  expect(joinedLines(['y = """one \\', 'two"""'], 0)).toEqual({ end: 1, text: 'y = "one two"' });
+  expect(joinedLines(['f("""a', 'b""", """c', 'd""")  # done'], 0)).toEqual({
+    end: 2,
+    text: 'f("a\\nb", "c\\nd")  # done',
+  });
+});
+
+test("a line with no string that runs past it stands as it is", () => {
+  expect(joinedLines(['x = """one line"""', "y = 2"], 0)).toBeUndefined();
+  expect(joinedLines(['x = "a # b"  # """', "y = 2"], 0)).toBeUndefined();
+  expect(joinedLines(['x = """open', "y = 2"], 0)).toBeUndefined();
+});
+
+test("a line too wide wraps between tokens in rows of a width at most, and the rows hold the line whole", () => {
+  const line =
+    '  result = await prompt(tuple[list[str], str], "Choose what it keeps: each act that holds a decision", to=CHOOSER, on=here)';
+  for (const width of [30, 40, 60, 100]) {
+    const rows = wrap(line, width);
+    expect(rows.length).toBeGreaterThan(line.length > width ? 1 : 0);
+    expect(rows[0]?.from).toBe(0);
+    expect(rows.at(-1)?.to).toBe(line.length);
+    for (const [at, row] of rows.entries()) {
+      expect(row.indent + row.to - row.from).toBeLessThanOrEqual(width);
+      expect(row.indent).toBe(at ? 4 : 0);
+      const next = rows[at + 1];
+      if (!next) continue;
+      // A row ends between two tokens, and the text that the rows leave out is spaces.
+      expect(line[row.to] === " " || "([{,".includes(line[row.to - 1] ?? "")).toBe(true);
+      expect(line.slice(row.to, next.from).trim()).toBe("");
+    }
+  }
+  expect(wrap("short", 100)).toEqual([{ from: 0, to: 5, indent: 0 }]);
+  // A token wider than a row is the one thing that a row cuts inside.
+  const path = wrap(`cd ${"p".repeat(30)}`, 12);
+  expect(path.every((row) => row.indent + row.to - row.from <= 12)).toBe(true);
+  expect(path.map((row) => row.to - row.from).reduce((a, b) => a + b, 0)).toBeGreaterThanOrEqual(30);
+});
+
+test("a fold never cuts an escape of the string that it folds", () => {
+  const line = 'x = "aaaaaaaaaaa\\nbbbb cccc dddd eeee"';
+  expect(foldStrings(line, 20).text).toBe('x = "aaaaaaaaaaa..."');
+  expect(foldStrings('x = "aaaaaaaaaa\\u00e9bbbb cccc dddd eeee"', 20).text).toBe('x = "aaaaaaaaaa..."');
+});
+
+test("a quote that ran stands in its word as one binding, and the blank lines that keep the numbers below it stand in its line", () => {
+  const word = ["brief = 'a\\nb\\n'", "", "", "", "print(brief)", "", "x = 1"].join("\n");
+  const rung = act("rung1", "rung", "chain1", "prompt1", 2, 3);
+  const lines = stepLines(rung, makers([rung]), () => word, new Set(), label);
+  expect(lines.map((line) => [line.kind, line.text, "number" in line ? line.number : 0])).toEqual([
+    ["code", "brief = 'a\\nb\\n'", 1],
+    ["code", "print(brief)", 5],
+    ["code", "", 6],
+    ["code", "x = 1", 7],
+  ]);
 });
