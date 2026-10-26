@@ -19,6 +19,7 @@ import tomllib
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from email import message_from_string
+from functools import cache
 from http.client import HTTPResponse
 from pathlib import Path
 from tempfile import gettempdir, mkdtemp
@@ -65,12 +66,6 @@ stand untouched, or the suite looks for its modules under the rewritten root and
 """
 CONTAINER = ("apt-get", "apt", "apk", "yum", "dnf")
 """CONTAINER is every step of a Dockerfile that only a container can take, which this rig steps over."""
-INSTALLERS = ("pip", "poetry")
-"""INSTALLERS is every installer of the python of an image that a step of a Dockerfile calls.
-
-The interpreter of the checkout holds each one that the image holds, at the version of the image. pip 26.2 could not
-build an sdist that a step of dateutil fetches, and the steps of textual and tomlkit call a poetry this host lacks.
-"""
 MANIFEST = "application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json"
 """MANIFEST is the two forms of the manifest of one image that a registry is asked for."""
 SAID = (
@@ -303,6 +298,47 @@ def layer(named: str, digest: str) -> tuple[dict[str, dict[str, str | bool]], li
   return dists, gone
 
 
+@cache
+def image_config(named: str) -> tuple[dict, dict[str, str]]:
+  """The manifest and the environment of the task image, read once for this process."""
+  with registry(named, f"manifests/{named.rpartition(':')[2]}", MANIFEST) as got:
+    manifest = json.load(got)
+  if "config" not in manifest:
+    say(f"[deepswe] {named} is an index of images, and the rig reads one image only")
+    raise SystemExit(1)
+  with registry(named, f"blobs/{manifest['config']['digest']}", "*/*") as got:
+    env = dict(one.partition("=")[::2] for one in json.load(got).get("config", {}).get("Env") or [])
+  return manifest, env
+
+
+def task_env(task: Path, repo: Path) -> dict[str, str]:
+  """The image environment, with its project and tool paths on this host and the checkout's python first."""
+  _, held = image_config(image(task))
+  paths = {
+    "/app": str(repo),
+    "/opt/venv": str(repo / ".venv"),
+    "/root": str(Path.home()),
+    "/usr/local/cargo": str(Path.home() / ".cargo"),
+    "/usr/local/rustup": str(Path.home() / ".rustup"),
+    "/opt/gocache": str(HOMES / "go-cache"),
+    "/deno-cache": str(HOMES / "deno"),
+  }
+  pattern = re.compile(r"(?<![\w.-])(" + "|".join(re.escape(path) for path in paths) + r")(?=/|:|$)")
+
+  def moved(value: str) -> str:
+    return pattern.sub(lambda match: paths[match[0]], value)
+
+  env = {key: moved(value) for key, value in held.items()}
+  for key in ("PATH", "PYTHONPATH"):
+    if key in held:
+      env[key] = os.pathsep.join(moved(part) for part in held[key].split(":"))
+  first = [str(repo / ".venv" / "bin")] if (repo / ".venv" / "bin").is_dir() else []
+  env["PATH"] = os.pathsep.join(
+    dict.fromkeys([*first, *env.get("PATH", "").split(os.pathsep), *os.environ.get("PATH", "").split(os.pathsep)])
+  )
+  return env
+
+
 def interpreter(named: str) -> tuple[str, dict[str, tuple[str, str, bool]]]:
   """The python that the image of a task runs, which is the python its verifier runs.
 
@@ -312,13 +348,7 @@ def interpreter(named: str) -> tuple[str, dict[str, tuple[str, str, bool]]]:
   The layers say what the site holds, each in order over the ones before it. All of it is read from the registry,
   with no pull and no docker.
   """
-  with registry(named, f"manifests/{named.rpartition(':')[2]}", MANIFEST) as got:
-    manifest = json.load(got)
-  if "config" not in manifest:
-    say(f"[deepswe] {named} is an index of images, and the rig reads the python of one image only")
-    raise SystemExit(1)
-  with registry(named, f"blobs/{manifest['config']['digest']}", "*/*") as got:
-    env = dict(one.partition("=")[::2] for one in json.load(got).get("config", {}).get("Env") or [])
+  manifest, env = image_config(named)
   version = env.get("PYTHON_VERSION", "")
   if not version:
     say(f"[deepswe] {named} names no PYTHON_VERSION, so the rig cannot run the python that its verifier runs")
@@ -418,7 +448,11 @@ def installed(task: Path, repo: Path, lang: str) -> None:
   """Take the steps of the task's own Dockerfile in the checkout, so the tree is the one its verifier wants."""
   # A step of poetry reads and writes its config in the workroot: no setting of the host reaches the step, and
   # `poetry config` changes nothing of the host.
-  env = {"npm_config_confirm_modules_purge": "false", "POETRY_CONFIG_DIR": str(repo.parent / "poetry")}
+  env = {
+    **task_env(task, repo),
+    "npm_config_confirm_modules_purge": "false",
+    "POETRY_CONFIG_DIR": str(repo.parent / "poetry"),
+  }
   swaps = SAID
   dists: Mapping[str, tuple[str, str, bool]] = {}
   if lang == "python":
@@ -429,9 +463,9 @@ def installed(task: Path, repo: Path, lang: str) -> None:
       say(f"[deepswe] uv could not make an interpreter of python {version}")
       raise SystemExit(1)
     pins = constrained(dists, repo.parent / "constraints.txt")
-    held = [f"{name}=={dists[name][0]}" for name in INSTALLERS if name in dists]
-    if held and ran([tool("uv"), "pip", "install", "-q", "--python", str(python), "-c", str(pins), *held]):
-      say(f"[deepswe] uv could not install {' and '.join(held)}, as the image holds them")
+    say(f"[deepswe] installing the {len(pins.read_text().splitlines())} index distributions of the image")
+    if ran([tool("uv"), "pip", "install", "-q", "--python", str(python), "--no-deps", "-r", str(pins)]):
+      say("[deepswe] the image distributions could not be installed")
       raise SystemExit(1)
     # A constraint in the environment of pip reaches the builds that pip isolates, where the image had none, so it
     # is told on the command line of each install.
@@ -478,14 +512,14 @@ def submodules(slug: str, base: str, into: Path) -> None:
       path = ""
 
 
-def whole(base: Path, seal: Path, sha: str) -> bool:
-  """Whether the base stands as its seed left it: the seal names its commit, and no file of that commit is gone.
+def whole(base: Path, seal: Path, stamp: str) -> bool:
+  """Whether the base stands as its seed left it: the seal names its commit and image, and no tracked file is gone.
 
   The reaper of this host takes the files of an old checkout and leaves its directories. The seal is written last,
   so a seed that stopped halfway leaves none, and the reaper takes it with the rest.
   """
   said = seal.read_text(encoding="utf-8") if seal.is_file() else ""
-  return said == sha and captured([*gits(base), "diff", "--quiet", "--diff-filter=D", "HEAD", "--"]).returncode == 0
+  return said == stamp and captured([*gits(base), "diff", "--quiet", "--diff-filter=D", "HEAD", "--"]).returncode == 0
 
 
 def seeded(task: str, *, keep_app: bool = False) -> tuple[Path, Path, Mapping[str, str], str]:
@@ -494,12 +528,19 @@ def seeded(task: str, *, keep_app: bool = False) -> tuple[Path, Path, Mapping[st
   work = WORK / task
   base, app, seal = work / "base", work / "app", work / ".seeded"
   work.mkdir(parents=True, exist_ok=True)
-  if not whole(base, seal, meta["base_commit_hash"]):
+  manifest, _ = image_config(image(where))
+  stamp = json.dumps(
+    {"base": meta["base_commit_hash"], "image": manifest["config"]["digest"], "environment": 1}, sort_keys=True
+  )
+  complete = whole(base, seal, stamp)
+  if meta["language"] == "python" and not (base / ".venv" / "bin" / "python").is_file():
+    complete = False
+  if not complete:
     seal.unlink(missing_ok=True)
     based(meta["repository_url"], meta["base_commit_hash"], base)
     say(f"[deepswe] installing dependencies ({meta['language']}, from the Dockerfile of the task)")
     installed(where, base, meta["language"])
-    seal.write_text(meta["base_commit_hash"], encoding="utf-8")
+    seal.write_text(stamp, encoding="utf-8")
   submodules(
     meta["repository_url"].removeprefix("https://github.com/").removesuffix(".git"), meta["base_commit_hash"], base
   )
@@ -603,8 +644,9 @@ def graded(task: Path, base: Path, syn: str, patch: Path, out: Path) -> Mapping[
     pristine(base, syn, app)
     rewritten(tests, app, logs, syn)
     node = os.environ.get("DEEPSWE_NODE_HOME", "")
-    first = [p for p in (str(app / ".venv" / "bin") if (app / ".venv").is_dir() else "", node) if p]
-    env = {"npm_config_confirm_modules_purge": "false", "PATH": os.pathsep.join([*first, os.environ["PATH"]])}
+    env = {**task_env(task, app), "npm_config_confirm_modules_purge": "false"}
+    if node:
+      env["PATH"] = os.pathsep.join([node, env["PATH"]])
     if how == "unshare":
       bind = (
         "mount --bind $1 /app && mount --bind $2 /tests && mount --bind $3 /logs && cd /app && exec bash /tests/test.sh"
@@ -762,9 +804,7 @@ def run(args: argparse.Namespace) -> int:
     shutil.rmtree(run_dir, ignore_errors=True)
   run_dir.mkdir(parents=True, exist_ok=True)
   told = (task / "instruction.md").read_text(encoding="utf-8").rstrip()
-  if (app / ".venv" / "bin").is_dir():
-    # The commands of the model find the interpreter of the checkout first, as the verifier will.
-    os.environ["PATH"] = os.pathsep.join([str(app / ".venv" / "bin"), os.environ["PATH"]])
+  os.environ.update(task_env(task, app))
   # The life works in the checkout, so the process that holds it stands there too: a word of a model runs in this
   # process, where python's own getcwd would otherwise name the directory of the rig and land a file outside the
   # tree that is graded.

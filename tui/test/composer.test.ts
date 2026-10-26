@@ -631,7 +631,9 @@ test("a cancelled message keeps its place in the feed, and its cancel reads as a
     expect(first).toBeLessThan(lines.findIndex((line) => line.includes("A second message.")));
     expect(lines.filter((line) => line.includes(" cancelled") && line.includes("⊘"))).toHaveLength(1);
     // A message that its answer closed says no state, only the type of its answer.
-    expect(lines.find((line) => line.includes("A second message."))).not.toContain("✓");
+    expect(lines.find((line) => line.includes("A second message."))).toMatch(
+      /┃ A second message\.\s+str\s+▾ Collapse/,
+    );
   }));
 
 test("a word that the gate refused shows a cross on the line that the refusal names and the reason under it, and the word that replaced it follows in the program of its thread", () =>

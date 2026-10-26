@@ -30,11 +30,20 @@ export async function externalEditor(
   }
 }
 
-/** The command that opens a file in the application the system gives its type. `start` is a command of cmd, and its
- * first quoted word is the title of a window, so an empty title comes before the path. */
+/** The command that opens a file or URL in the application the system gives its type. Encoding the Windows command
+ * keeps an ampersand in a URL query from becoming another shell command. */
 export function opener(platform: NodeJS.Platform, path: string): string[] {
   if (platform === "darwin") return ["open", path];
-  if (platform === "win32") return ["cmd", "/c", "start", "", path];
+  if (platform === "win32") {
+    const script = `Start-Process -FilePath '${path.replaceAll("'", "''")}'`;
+    return [
+      "powershell.exe",
+      "-NoProfile",
+      "-NonInteractive",
+      "-EncodedCommand",
+      Buffer.from(script, "utf16le").toString("base64"),
+    ];
+  }
   return ["xdg-open", path];
 }
 

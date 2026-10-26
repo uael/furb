@@ -2,7 +2,7 @@
 //! searches with its tool WebSearch alone.
 
 #[cfg(unix)]
-use std::{fs, path::Path, sync::Arc};
+use std::fs;
 
 use serde_json::json;
 
@@ -10,7 +10,7 @@ use serde_json::json;
 use super::claude;
 use super::{anthropic, deepseek, gemini, responses, sourced};
 #[cfg(unix)]
-use crate::ear::reactor;
+use crate::{ear::reactor, world::provider::claude::Program};
 
 fn pair(title: &str, url: &str) -> (String, String) {
   (title.to_owned(), url.to_owned())
@@ -84,9 +84,10 @@ fn deepseek_answers_with_each_result_its_title_its_address_and_its_summary() {
   assert_eq!(deepseek(&json!({"results": []})).unwrap(), "No result.");
 }
 
-/// A command line that writes its arguments and what its stdin holds, or that fails, in a folder of its own.
+/// A command line that starts with these words, writes its arguments and what its stdin holds, or fails, in a folder
+/// of its own.
 #[cfg(unix)]
-fn program(name: &str, body: &str) -> Arc<Path> {
+fn program(name: &str, args: &[&str], body: &str) -> Program {
   let at = std::env::temp_dir().join(format!("furb-search-{name}-{}", std::process::id()));
   let _ = fs::remove_dir_all(&at);
   fs::create_dir_all(&at).unwrap();
@@ -94,14 +95,14 @@ fn program(name: &str, body: &str) -> Arc<Path> {
   fs::write(&bin, format!("#!/bin/sh\n{body}\n")).unwrap();
   use std::os::unix::fs::PermissionsExt;
   fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).unwrap();
-  bin.into()
+  Program::new(bin, args.iter().map(|one| (*one).to_owned()).collect())
 }
 
 #[cfg(unix)]
 #[test]
 fn the_claude_command_line_searches_on_its_model_with_its_tool_web_search_alone_and_the_query_on_its_stdin()
  {
-  let bin = program("echo", r#"echo "$@"; cat"#);
+  let bin = program("echo", &[], r#"echo "$@"; cat"#);
   let got = reactor().block_on(claude(bin, "haiku".to_owned())("what is rust".to_owned())).unwrap();
   let (args, query) = got.split_once('\n').unwrap();
   assert!(
@@ -110,7 +111,19 @@ fn the_claude_command_line_searches_on_its_model_with_its_tool_web_search_alone_
   );
   assert!(args.ends_with("--allowedTools WebSearch --tools WebSearch"), "{args}");
   assert_eq!(query, "what is rust");
-  let bin = program("fails", "echo out; echo 'no credit' >&2; exit 3");
+  let bin = program("fails", &[], "echo out; echo 'no credit' >&2; exit 3");
   let no = reactor().block_on(claude(bin, "haiku".to_owned())("q".to_owned())).unwrap_err();
   assert_eq!(no, "claude exit status: 3: no credit");
+}
+
+#[cfg(unix)]
+#[test]
+fn the_claude_command_line_searches_with_its_command_prefix_once_before_its_flags() {
+  let show = r#"printf '[%s]\n' "$@"; echo ---; cat"#;
+  let bin = program("prefix", &["run", "two words"], show);
+  let got = reactor().block_on(claude(bin, "haiku".to_owned())("what is rust".to_owned())).unwrap();
+  let (args, query) = got.split_once("---\n").unwrap();
+  assert!(args.starts_with("[run]\n[two words]\n[-p]\n[--model]\n[haiku]\n"), "{args}");
+  assert_eq!(args.matches("[run]").count() + args.matches("[two words]").count(), 2);
+  assert_eq!(query, "what is rust");
 }

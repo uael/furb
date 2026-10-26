@@ -321,6 +321,82 @@ test("a model of the catalog that the roster does not hold joins the session, wh
   }
 });
 
+test("the model picker keeps a roster model distinct from the same id in the catalog", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-workspaces-"));
+  const config = join(directory, "config");
+  await mkdir(config);
+  await mkdir(join(directory, ".furb"));
+  await writeFile(
+    join(config, "config.json"),
+    JSON.stringify({
+      providers: {
+        openai: { key_env: "FURB_MISSING_MODEL_PICKER_KEY", models: { "gpt-6.1-sol": { window: 1000000 } } },
+      },
+    }),
+  );
+  await writeFile(
+    join(directory, ".furb/config.json"),
+    JSON.stringify({
+      providers: {
+        subscription: { url: "http://127.0.0.1:8741/v1", models: { "gpt-6.1-sol": { window: 500000 } } },
+      },
+    }),
+  );
+  const library = new Workspaces(new Preferences(join(config, "ui.json")), {
+    config,
+    claude: join(directory, "claude"),
+    host: false,
+    roster: ["claude-cli:opus", "subscription:gpt-6.1-sol"],
+  });
+  const screen = await createTestRenderer({ width: 130, height: 44, exitSignals: [] });
+  let app: (() => App) | undefined;
+  try {
+    const entry = await library.create(await library.add(directory), "Models");
+    const session = entry.session;
+    if (!session) throw new Error("The session did not open.");
+    await until(library, () => session.catalogRead);
+    app = follow(screen.renderer, { workspaces: library, quit() {} });
+    app().models();
+    await screen.flush();
+    await screen.mockInput.typeText("gpt-6.1-sol");
+    screen.mockInput.pressEnter();
+    await until(
+      screen.renderer,
+      () =>
+        session.actor === "subscription:gpt-6.1-sol" ||
+        screen.captureCharFrame().includes("Could not complete action"),
+      "frame",
+    );
+    expect(screen.captureCharFrame()).not.toContain("Could not complete action");
+    expect(session.actor).toBe("subscription:gpt-6.1-sol");
+  } finally {
+    app?.().dispose();
+    screen.renderer.destroy();
+    await library.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a provider added during a life can be selected by its full model name", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-workspaces-"));
+  const library = new Workspaces(new Preferences(join(directory, "config/ui.json")), {
+    claude: join(directory, "claude"),
+  });
+  try {
+    const entry = await library.create(await library.add(directory), "Providers");
+    const session = entry.session;
+    if (!session) throw new Error("The session did not open.");
+    await session.submit("/provider add subscription http://127.0.0.1:8741/v1 gpt-6.1-sol 500000");
+    expect(session.roster.map(([name]) => name)).toContain("subscription:gpt-6.1-sol");
+    session.host.model = async () => null;
+    await session.submit("/model subscription:gpt-6.1-sol");
+    expect(session.actor).toBe("subscription:gpt-6.1-sol");
+  } finally {
+    await library.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("the list of saved sessions comes before their replays, and a row shows its state when its replay lands", () =>
   withLibrary(async ({ directory, open }) => {
     let library = open();

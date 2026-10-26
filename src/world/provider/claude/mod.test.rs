@@ -167,6 +167,32 @@ fn a_turn_starts_the_command_line_for_a_pure_completion_and_says_its_blocks_and_
 }
 
 #[test]
+fn a_command_prefix_reaches_each_process_of_a_conversation_once_before_its_flags() {
+  let yard = Yard::new("prefix");
+  let prefix = ["run", "two words", "--again"];
+  let words = prefix.map(str::to_owned).to_vec();
+  let stall = Some(Duration::from_millis(10_000));
+  let claude = Claude::with_command(yard.at.join("claude"), words, stall);
+  let model = claude.completion_model("sonnet");
+  let mut messages = vec![user("first")];
+  let one = asked(&model, &messages, json!({"effort": "low", "session": "chain"})).unwrap();
+  messages.push(Message::Assistant { id: None, content: one.choice });
+  messages.push(user("second"));
+  asked(&model, &messages, json!({"effort": "high", "session": "chain"})).unwrap();
+  let pids = yard.pids();
+  assert_eq!(pids.len(), 2, "a new effort starts a new process");
+  for pid in &pids {
+    let args = yard.args(pid);
+    assert_eq!(args[..3], prefix);
+    let flags = ["-p", "--input-format", "stream-json", "--output-format", "stream-json"];
+    assert_eq!(args[3..8], flags);
+    for word in prefix {
+      assert_eq!(args.iter().filter(|one| one.as_str() == word).count(), 1, "{word} in {args:?}");
+    }
+  }
+}
+
+#[test]
 fn a_turn_of_many_requests_says_the_usage_of_its_last_request() {
   let yard = Yard::new("loop");
   let model = yard.claude(10_000).completion_model("sonnet");

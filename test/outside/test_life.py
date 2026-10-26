@@ -10,7 +10,7 @@ import pytest
 
 import furb
 
-FAKE = Path(__file__).parents[2] / "src" / "world" / "provider" / "fake-claude.sh"
+FAKE = Path(__file__).parents[2] / "src" / "world" / "provider" / "claude" / "fake-claude.sh"
 
 pytestmark = pytest.mark.skipif(
   sys.platform == "win32", reason="the claude of the tests is a script of sh, which Windows does not start"

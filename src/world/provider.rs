@@ -11,6 +11,7 @@
 pub mod catalog;
 pub mod claude;
 mod clients;
+pub mod codex;
 pub mod images;
 mod local;
 mod pi;

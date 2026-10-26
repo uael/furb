@@ -95,7 +95,7 @@ const PAUSE: Duration = Duration::from_secs(5);
 /// a time. When the last clone goes, the keeper ends, and every process it started ends.
 #[derive(Clone)]
 pub struct Claude {
-  bin: Arc<Path>,
+  program: Program,
   stall: Duration,
   gone: Duration,
   keeper: mpsc::UnboundedSender<Kept>,
@@ -113,13 +113,20 @@ impl Claude {
   /// that `FURB_CLAUDE_GONE` gives, or for 60 seconds.
   pub fn with(bin: Option<PathBuf>, stall: Option<Duration>) -> Claude {
     let bin = bin.or_else(located).unwrap_or_else(|| PROGRAM.into());
+    Claude::with_command(bin, Vec::new(), stall)
+  }
+
+  /// The command line that this program starts with these words before every flag that furb gives it, as `cswap run
+  /// 3` holds the program `cswap` and the words `run` and `3`. No shell reads the words: each reaches the program as
+  /// it stands, with its spaces, once, for a turn and for a search alike. The stall is the one of [`Claude::with`].
+  pub fn with_command(bin: PathBuf, args: Vec<String>, stall: Option<Duration>) -> Claude {
     let stall = stall.unwrap_or_else(|| {
       let seconds = env::var("FURB_CLAUDE_STALL").ok().and_then(|one| one.parse::<f64>().ok());
       seconds.and_then(|one| Duration::try_from_secs_f64(one).ok()).unwrap_or(STALL)
     });
     let (keeper, asked) = mpsc::unbounded_channel();
     reactor().spawn(kept(asked));
-    Claude { bin: bin.into(), stall, gone: patience(), keeper }
+    Claude { program: Program::new(bin, args), stall, gone: patience(), keeper }
   }
 
   /// The same command line, whose process waits this long for a program that is missing or does not run.
@@ -143,7 +150,7 @@ impl Claude {
         let named = format!("{CLAUDE}:{alias}");
         let model =
           Model::new(named, *window, self.completion_model(*alias)).conversation("session");
-        let mut model = model.searches(search::claude(Arc::clone(&self.bin), (*alias).to_owned()));
+        let mut model = model.searches(search::claude(self.program.clone(), (*alias).to_owned()));
         model.apart = true;
         model.thought = Some(super::Thought::Told);
         EFFORTS
@@ -151,6 +158,33 @@ impl Claude {
           .fold(model.images(), |model, effort| model.effort(*effort, json!({"effort": effort})))
       })
       .collect()
+  }
+}
+
+/// The program that starts the command line: its file, and the words that come before each flag that furb gives it,
+/// as `cswap run 3` holds the file `cswap` and the words `run` and `3`. It starts a process with no shell, so each
+/// word reaches the program as it stands.
+#[derive(Clone)]
+pub(super) struct Program {
+  bin: Arc<Path>,
+  args: Arc<[String]>,
+}
+
+impl Program {
+  pub(super) fn new(bin: PathBuf, args: Vec<String>) -> Program {
+    Program { bin: bin.into(), args: args.into() }
+  }
+
+  /// A command that holds the program and its words, to which a turn or a search adds its own flags.
+  pub(super) fn command(&self) -> Command {
+    let mut command = Command::new(&*self.bin);
+    command.args(&*self.args);
+    command
+  }
+
+  /// The file of the program, as a failure to start it names it.
+  pub(super) fn name(&self) -> std::path::Display<'_> {
+    self.bin.display()
   }
 }
 
@@ -238,7 +272,7 @@ impl Claude {
     self.keeper.send(asked).map_err(|_| gone())?;
     let conversation = borrowed.await.map_err(|_| gone())?;
     let mut lent = Lent { key, conversation: Some(conversation), keeper: self.keeper.clone() };
-    lent.conversation().turn(&messages, spend, &self.bin, self.stall, self.gone, deltas).await
+    lent.conversation().turn(&messages, spend, &self.program, self.stall, self.gone, deltas).await
   }
 }
 
@@ -478,7 +512,7 @@ impl Conversation {
     &mut self,
     messages: &[Message],
     spend: Spend,
-    bin: &Path,
+    program: &Program,
     stall: Duration,
     gone: Duration,
     deltas: Option<&Deltas>,
@@ -515,7 +549,7 @@ impl Conversation {
     let again = again && !anew;
     let mut flight =
       Flight { conversation: self, incoming, asked, again, heard: false, reply: None };
-    let got = flight.run(delta, spend, bin, stall, gone, deltas).await;
+    let got = flight.run(delta, spend, program, stall, gone, deltas).await;
     if let Ok(response) = &got {
       let reply = Message::Assistant { id: None, content: response.choice.clone() };
       flight.reply = Some(canonical(&reply));
@@ -528,11 +562,11 @@ impl Conversation {
   /// passed.
   async fn start(
     &mut self,
-    bin: &Path,
+    program: &Program,
     spend: Spend,
     gone: Duration,
   ) -> Result<Process, CompletionError> {
-    let mut command = Command::new(bin);
+    let mut command = program.command();
     command.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json"]);
     command.args(["--verbose", "--include-partial-messages", "--model", &self.name]);
     let prompt = prompt_file(&self.system)?;
@@ -579,7 +613,7 @@ impl Conversation {
       };
       tokio::time::sleep(wait).await;
     }
-    .map_err(|no| failed(format!("{} did not start: {no}", bin.display())))?;
+    .map_err(|no| failed(format!("{} did not start: {no}", program.name())))?;
     let (Some(stdin), Some(stdout), Some(stderr)) =
       (child.stdin.take(), child.stdout.take(), child.stderr.take())
     else {
@@ -773,7 +807,7 @@ impl Flight<'_> {
     &mut self,
     delta: &[Message],
     spend: Spend,
-    bin: &Path,
+    program: &Program,
     stall: Duration,
     gone: Duration,
     deltas: Option<&Deltas>,
@@ -785,7 +819,7 @@ impl Flight<'_> {
       held.process = None;
     }
     if held.process.is_none() {
-      held.process = Some(held.start(bin, spend, gone).await?);
+      held.process = Some(held.start(program, spend, gone).await?);
     }
     let Conversation { process: Some(process), id, name, .. } = held else {
       return Err(failed("claude is not running"));
@@ -1238,5 +1272,5 @@ fn numbered(version: &Path) -> Vec<u64> {
 }
 
 #[cfg(all(test, unix))]
-#[path = "claude.test.rs"]
+#[path = "mod.test.rs"]
 pub(super) mod test;

@@ -37,6 +37,37 @@ An **actor** is a model and an effort, which is how hard the model thinks: `off`
 
 ## Provider settings
 
+For a ChatGPT subscription, open `/providers` and choose `codex`. Furb uses an existing ChatGPT sign-in when
+one is available. Otherwise, it opens the browser for sign-in. When it connects, the Codex model picker opens.
+Choose a model there. No API key, server, model id or context size is needed.
+
+`codex` uses the limits of the ChatGPT subscription. `openai` remains the provider for an OpenAI API key.
+Claude Code stays available by default. Connecting Codex does not change a running model call.
+
+The account service supplies the model list, the input window, image support and the supported reasoning efforts.
+Furb reserves the input headroom that the service specifies, or 5% when it leaves that value unsaid. For a model
+with a 500,000-token default window and 5% headroom, the picker shows 475,000 input tokens.
+
+To request a larger window, set `model_context_window` under the `codex` provider in `.furb/config.json`:
+
+```json
+{"providers": {"codex": {"model_context_window": 1000000}}}
+```
+
+As in Codex, the value is capped at the maximum window from the account service before the input reserve is
+applied. With an 872,000-token maximum and a 95% usable share, this setting gives 828,400 input tokens. Without
+this setting, furb uses the default window from the account service.
+
+Model data is cached for five minutes and checked when a life opens, when the Codex model picker opens, and on `/reload`.
+If a refresh fails for a temporary cause, the last model list stays available. A changed model list or window
+updates the standing when the operator reloads it or opens the Codex picker.
+
+Furb keeps its sign-in in the user config directory, under `auth`, outside the project. On Unix, the credential
+file is readable and writable only by its owner. Furb refreshes its own credential when needed. It can read an
+existing Codex access token, but it does not use the Codex refresh token or change the Codex credentials.
+
+Disabling `codex` removes its models from this project and keeps the sign-in for a later connection.
+
 Run `/providers` in the TUI to add or remove a provider for the current project. A built-in provider uses the
 credential in the environment. To add a server that uses OpenAI chat completions, enter:
 
@@ -75,6 +106,31 @@ of that window when unsaid. `reasoning` and `images` are false when unsaid. The 
 directly; `key_env` wins when both are present. A custom server with neither field sends no key. An object can set
 `enabled` to false to disable a provider and keep its other fields. The names `claude-cli` and `local` can be false
 to remove the command line or the server that the environment names from the roster.
+
+To start Claude through a wrapper, set `providers.claude-cli.command` in `.furb/config.json`:
+
+```json
+{
+  "providers": {
+    "claude-cli": {
+      "command": ["cswap", "run", "3", "--"]
+    }
+  }
+}
+```
+
+The first item is the executable. Each later item is one argument, before the flags that furb gives Claude for
+completions and web search. Spaces stay within an item. No shell reads the command, so shell operators and variable
+references have no special meaning. An executable name uses PATH; a path selects that file. The command can also
+be a single executable string, such as `"command": "/opt/bin/claude"`, with no arguments.
+
+The `--` in the `cswap` example separates its account options from the Claude flags that furb appends. Without
+that separator, `cswap` rejects those flags.
+
+A configured command replaces the default Claude executable, including `FURB_CLAUDE_BIN`. Without `command`, furb
+keeps its default discovery. An empty array or executable is invalid. Set `"enabled": false` in the object to
+disable Claude without removing its command. Project fields override user fields; a project `true` or `false`
+changes only whether the provider is enabled when the user config holds an object.
 
 An optional model `cost` gives `input`, `output`, `cache_read` and `cache_write`, in dollars for one million tokens.
 A custom model has no dollar price when `cost` is unsaid, so a dollar ceiling cannot bound its cost.

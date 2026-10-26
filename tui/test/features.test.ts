@@ -439,9 +439,23 @@ test("a queued dispatch recovers both sides of the prompt-write boundary without
 test("a file opens with the command of the system it runs on", () => {
   const path = "C:\\Users\\me\\a picture.png";
   expect(opener("darwin", path)).toEqual(["open", path]);
-  expect(opener("win32", path)).toEqual(["cmd", "/c", "start", "", path]);
   expect(opener("linux", path)).toEqual(["xdg-open", path]);
   expect(opener("freebsd", path)).toEqual(["xdg-open", path]);
+});
+
+test.skipIf(process.platform !== "win32")("a browser URL reaches Windows with its query intact", async () => {
+  const url = "https://example.invalid/authorize?code=a&state=one's%20value&next=$(ignored)";
+  const command = opener("win32", url);
+  const body = Buffer.from(command.at(-1) ?? "", "base64").toString("utf16le");
+  const capture =
+    "function Start-Process { param([string]$FilePath) ConvertTo-Json -InputObject $FilePath -Compress }; ";
+  const child = Bun.spawn(
+    [...command.slice(0, -1), Buffer.from(capture + body, "utf16le").toString("base64")],
+    { stdout: "pipe", stderr: "pipe" },
+  );
+  const output = await new Response(child.stdout).text();
+  expect(await child.exited).toBe(0);
+  expect(JSON.parse(output)).toBe(url);
 });
 
 test("/wake with no chain wakes every paused chain of the life, and /wake with a chain wakes that one alone", () =>
