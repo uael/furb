@@ -298,7 +298,7 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
   which the gates hold on Linux. Each budget is set from a measure of the machine with no code of furb, so that it holds
   on a fast runner and on a slow one: the pace, the time that the machine takes to parse the facts of the long life,
   and the frames that the renderer draws with nothing to show. The warm first frame takes less than 32 paces, the
-  renderer draws at least 95 in each hundred of the frames that it draws with nothing to show, the 95th percentile of
+  renderer draws at least 95 in each hundred of the frames that it draws with nothing to show, at most its target rate, the 95th percentile of
   the frames takes less than a pace and less than 16.7 ms, and a new fact costs in the long life at most twice what it
   costs in the short one, or 2 ms. `FURB_BENCH_JSON` names a file that takes the measures of each run, from which the
   budgets are set again, and `FURB_BENCH_FACTS` sets the size of the long life.

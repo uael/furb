@@ -10,7 +10,7 @@ import { type App, follow } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { seedDemoFiles } from "../src/demo.ts";
 import { Preferences } from "../src/preferences.ts";
-import { Session, savedView } from "../src/session.ts";
+import { Session, savedView, statusLabels } from "../src/session.ts";
 import { type SessionEntry, Workspaces } from "../src/workspaces.ts";
 import { cellAt } from "./composing.ts";
 
@@ -458,6 +458,30 @@ test("a session whose record a build of another version made opens to read befor
     expect(reading?.why).toEndWith(then);
     expect(row.error).toBeUndefined();
     expect(await readFile(made.path, "utf8")).toBe(other);
+  }));
+
+test("a saved record that a build of another version made shows as read only before and after it opens, and no error", () =>
+  withLibrary(async ({ directory, open }) => {
+    let library = open();
+    const made = await library.create(await library.add(directory), "Made elsewhere");
+    await library.dispose();
+    const text = await readFile(made.path, "utf8");
+    const found = /\["made","chain1","store","([0-9a-f]{64})",(\d+)\]/.exec(text);
+    if (!found?.[1] || !found[2]) throw new Error("The record names no build.");
+    await writeFile(
+      made.path,
+      text.replace(found[0], `["made","chain1","store","${"0".repeat(64)}",${Number(found[2]) + 1}]`),
+    );
+    library = open();
+    const row = (await library.add(directory)).sessions.find((entry) => entry.path === made.path);
+    if (!row) throw new Error("No row for the record.");
+    await until(library, () => row.status === "reading");
+    expect(row.error).toBeUndefined();
+    expect(statusLabels[row.status]).toBe("Read only");
+    await library.select(row);
+    expect(row.status).toBe("reading");
+    expect(row.error).toBeUndefined();
+    expect(library.groupStatus(library.groupOf(row) as never)).toBe("reading");
   }));
 
 test("deleting the current session moves to the next session that opens, and to a new one when none does", () =>
