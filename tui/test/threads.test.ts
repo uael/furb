@@ -225,3 +225,19 @@ test("a line cut to its room and a folded string keep the colors of their whole 
     size,
     true,
   ));
+
+test("the Context part of the sidebar holds three lines: its share, its meter and its numbers, and no row of tokens under them", () =>
+  composing(
+    async (use) => {
+      const { session, frame } = use;
+      await idle(session);
+      const rows = rail(session, await frame()).map((line) => line.trim());
+      const at = rows.findIndex((line) => line.startsWith("Context"));
+      expect(at).toBeGreaterThan(0);
+      expect(rows[at + 1]).toMatch(/^━+$/);
+      expect(rows[at + 2]).toContain("prompt");
+      expect(rows.slice(at + 3).join("\n")).not.toMatch(/Fresh input|Cache write|Output|Last prompt/);
+    },
+    size,
+    true,
+  ));
