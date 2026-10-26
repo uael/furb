@@ -91,6 +91,15 @@ timers: dict[str, float] = {}
 noted: list[str] = []
 debriefs: dict[str, str] = {}
 vetoes: dict = {}
+PACE = 3600.0
+hired: dict[str, float] = {}
+paced: set[str] = set()
+PACED = (
+  "An hour passed since you took this item, and no PR of yours is open. Land it in steps: commit now the coherent"
+  " part that serves his words, open its PR with pr(), and go on with the rest in a next PR from this chain,"
+  " each PR one change. A PR that waits for every detail lands nothing,"
+  " and each step is judged and merged on its own."
+)
 
 RULES = """Run no real life of a model. Never open a window on this machine, not even for a test: the owner works on it, and each window takes his mouse and his keyboard. Run a check of the app only on the runners of CI. Start each comment, review, issue and PR body that you write on GitHub with 🤖, since you write from the owner's account and his own words carry no mark; a title keeps its own rule. Never take off the label owner-merge: only the owner takes it off, and that is his approval to merge. The owner sleeps or is away: ask him nothing and wait for nothing of his. Take each decision yourself from the brief and the rulings, say it in your PR body, and go on. Ask the one who gave you this work on its chain only when it alone can decide: await prompt(str, question, on="{home}")."""
 
@@ -99,7 +108,9 @@ WORKER = """You are a worker on the repository {repo}. Do one item, and open its
 2. Change it as the AGENTS.md files of the repository say.
 3. Run only the tests that your change touches.
 4. Commit with the title of the PR as its message, and push the branch. Then open the PR, or update it when it stands, with pr(), which fills the template of the owner from what you give it and checks each of its rules: await pr(title, why, outcome, checks, breaking=[], fixes=0, where=<your worktree>, labels="{labels}"). title is type(area): What changed, 70 characters or fewer: the type is feat, fix, perf, or chore for a change that no user sees, and the area is the part that owns the change (engine, crate, tui, gui, provider, ci, conductor, or an extension by its name). why is the problem and why it matters now, from your own work and not from git log. outcome is a list: what is true now that was not, each with the evidence of what you ran, and each gap that you leave. breaking lists each change that forces a caller of a door or of the contract to change code. 300 words at most, and no how, which the diff holds. checks is six lines, one for each box of the checklist of the template in its order: verify each box one by one, then give the evidence of how you verified it, or not: and the work that it still needs, which leaves that box open. A pr() that breaks a rule raises Refused and says why; never write the body of a PR by hand.
-5. Remove the worktree with git worktree remove --force, and close with a tuple: the number of your PR, or 0 when the item asked for no change, and your report in 200 words at most: what you measured, what you decided, and what is left.
+5. Open your first PR within about an hour of work, as soon as one coherent part serves the item: a large item
+lands as a series of PRs, each one change, opened from this chain, and you close with the number of the last one.
+6. Remove the worktree with git worktree remove --force, and close with a tuple: the number of your PR, or 0 when the item asked for no change, and your report in 200 words at most: what you measured, what you decided, and what is left.
 """ + RULES + """
 
 The item, {key}:
@@ -399,6 +410,7 @@ def handover(key: str, text: str) -> str:
   name = str(quietly(prompt, tuple[int, str], text, to=HANDOVER, on=where))
   working[name] = key
   models[name] = HANDOVER
+  hired[name] = clock()
   return name
 
 
@@ -443,6 +455,7 @@ def hire(key: str, what: str, thread: str = "", brief: str = "") -> str:
   name = str(quietly(prompt, tuple[int, str], text, to=model, on=where))
   working[name] = key
   models[name] = model
+  hired[name] = clock()
   homes[key] = where
   return name
 
@@ -532,6 +545,18 @@ def tend() -> None:
         f"silent {where} {len(facts)}",
         f"The worker {key} on {where} has said nothing for {int(now - silent[where][1]) // 60} minutes. Look at it.",
       )
+  pace()
+
+
+def pace() -> None:
+  now = clock()
+  owners = {owner_of(pr) for pr in prs.values()}
+  for name in [x for x in working if not over(x) and x not in paced]:
+    if name in owners:
+      paced.add(name)
+    elif now - hired.get(name, now) > PACE:
+      paced.add(name)
+      quietly(prompt, None, PACED, on=working_at(name))
 
 
 def boxes(pr: dict, now: float) -> str:
