@@ -12,6 +12,12 @@ export interface Check {
 /** The providers whose keys the fix names first, as most users hold one of them. */
 const usual = ["anthropic", "openai", "google", "openrouter"];
 
+/** How many models of the catalog answer: each one that it offers, less those of a claude command line that is not
+ * signed in, since it answers no prompt. */
+export function answering(info: SetupInfo, catalog: readonly (readonly [string, ...unknown[]])[]): number {
+  return catalog.filter(([name]) => info.signed || !name.startsWith("claude-cli:")).length;
+}
+
 /** The checks of the first run, from what the catalog of the crate found on this machine and how many models it
  * offers: the claude command line, the other providers, the local server, and the models that answer. */
 export function checks(info: SetupInfo, offered: number): Check[] {
@@ -28,14 +34,21 @@ export function checks(info: SetupInfo, offered: number): Check[] {
   return [
     disabled("claude-cli")
       ? { label: "Claude command line", state: "optional", found: "Disabled in the provider settings." }
-      : info.claude
+      : info.claude && info.signed
         ? { label: "Claude command line", state: "ready", found: "Found. Your Claude plan answers." }
-        : {
-            label: "Claude command line",
-            state: "missing",
-            found: "Not found.",
-            fix: "Install Claude Code from claude.com/claude-code and run claude once to sign in, or set FURB_CLAUDE_BIN to its path.",
-          },
+        : info.claude
+          ? {
+              label: "Claude command line",
+              state: "missing",
+              found: "Found, but not signed in.",
+              fix: "Run claude in a terminal, sign in, then press r here to check again.",
+            }
+          : {
+              label: "Claude command line",
+              state: "missing",
+              found: "Not found.",
+              fix: "Install Claude Code from claude.com/claude-code and run claude once to sign in, or set FURB_CLAUDE_BIN to its path.",
+            },
     ready.length
       ? {
           label: "Other providers",
@@ -92,7 +105,7 @@ export function checks(info: SetupInfo, offered: number): Check[] {
           label: "Models",
           state: "missing",
           found: "No model answers.",
-          fix: "Fix one check above, then run /reload. Watch a life needs no model.",
+          fix: "Fix one check above, then press r here to check again, or run /reload. Watch a life needs no model.",
         },
   ];
 }

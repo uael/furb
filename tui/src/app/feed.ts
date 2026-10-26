@@ -22,6 +22,7 @@ import { hunkPatch, type Scope } from "../review.ts";
 import type { ActRow, View } from "../session.ts";
 import { theme as c, glyph, spacing as space, spin, threadTone } from "../theme.ts";
 import { bold, italic, type Part, plain } from "../ui.ts";
+import { branchMessages, branchStart, branchTakes, earlierSteps } from "../watching.ts";
 import { part } from "./part.ts";
 import { type BlockOptions, MESSAGE_ROWS, PROGRAM_STEPS, spell, threadMarks, viewLabels } from "./shared.ts";
 
@@ -46,6 +47,7 @@ export const feed = part({
       }
     }
     this.renderStage();
+    this.renderWatch();
     if (this.tree) {
       this.renderTree();
       return;
@@ -169,7 +171,24 @@ export const feed = part({
           ],
         ),
       );
-    if (w.view === "feed") {
+    // A chain that holds no act of the operator or of a model shows the welcome, so that the steps of the extensions,
+    // which each chain runs as it starts, do not hide it.
+    this.welcoming =
+      w.view === "feed" &&
+      !w.search &&
+      !w.loading &&
+      !w.error &&
+      w.moment === undefined &&
+      !w.paused &&
+      !w.actOf(w.selected)?.words[1] &&
+      !w.activity.some((act) => act.by === "operator" || act.kind === "prompt");
+    if (this.welcoming) {
+      const { width, height } = this.scroll.viewport;
+      add("welcome", `welcome:${width}:${height}:${this.theme}:${this.welcomeKey()}`, [], (box) =>
+        this.welcome(box, height),
+      );
+      items++;
+    } else if (w.view === "feed") {
       // The feed shows the acts as they stood at the moment that the operator moved to, or as they stand now.
       const shown = w.at(w.acts);
       // The acts of now are found by the index of the session, and those of a moment of the past by a map of their own.
@@ -184,9 +203,6 @@ export const feed = part({
         made ??= makers(shown);
         return made?.get(id) ?? [];
       };
-      if (w.watching) {
-        add("watch", `watch:${w.moment}:${w.cost}:${this.theme}`, [], (box) => this.watchBanner(box));
-      }
       // The feed of a chain is its ladder, which the model of a life gives every host: each prompt with the rungs of
       // its ladder, the acts of each rung, and what the prompt closed with.
       // A fold that the operator opened shows the earlier prompts of the thread, or the earlier rungs of a ladder.
@@ -465,18 +481,37 @@ export const feed = part({
             if (retold || continuing.has(act.by)) continue;
             retold = true;
             const source = String(rows.get(act.by)?.words[1] ?? "");
+            // The branch says what it takes of its source: each message before the moment it starts at, which the
+            // word that made it does not leave out.
+            const maker = w.actOf(String(rows.get(act.by)?.by ?? ""));
+            const messages =
+              maker &&
+              branchMessages(w.acts, source, maker, this.subject(maker), (one) => w.isUserPrompt(one));
+            const name = w.labelOf(source);
             if (source)
-              add(`retold-${act.by}`, `${source}:${this.theme}`, [], (box) =>
-                box.add(
-                  this.link(
-                    [
-                      ["↳ ", c.secondary],
-                      ["Branched from ", c.muted],
-                      [w.labelOf(source), c.text, bold],
-                    ],
-                    () => void w.select(source).catch(w.fail),
-                  ),
-                ),
+              add(
+                `retold-${act.by}`,
+                `${source}:${name}:${messages}:${w.watching}:${this.theme}`,
+                [],
+                (box) => {
+                  box.add(
+                    this.link(
+                      w.watching
+                        ? [
+                            ["↳ ", c.secondary],
+                            [branchStart(name), c.muted],
+                          ]
+                        : [
+                            ["↳ ", c.secondary],
+                            ["Branched from ", c.muted],
+                            [name, c.text, bold],
+                          ],
+                      () => void w.select(source).catch(w.fail),
+                    ),
+                  );
+                  if (messages !== undefined)
+                    box.add(this.text(branchTakes(messages), c.faint, { paddingLeft: space.between }));
+                },
               );
             continue;
           }
@@ -640,7 +675,7 @@ export const feed = part({
                 this.link(
                   [
                     [`${glyph.closed} `, c.faint],
-                    [`${count} earlier ${noun}`, c.muted],
+                    [w.watching ? earlierSteps(count) : `${count} earlier ${noun}`, c.muted],
                   ],
                   () => {
                     w.folds[key] = false;
@@ -891,16 +926,7 @@ export const feed = part({
       }
       if (!items && !w.search && !w.loading && !w.error) {
         const { width, height } = this.scroll.viewport;
-        const welcomeKey = JSON.stringify([
-          this.reader,
-          w.catalogRead,
-          w.catalog.length,
-          w.setup,
-          w.actorChoice.model,
-          w.workingDirectory,
-          w.watching,
-        ]);
-        add("welcome", `welcome:${width}:${height}:${this.theme}:${welcomeKey}`, [], (box) =>
+        add("welcome", `welcome:${width}:${height}:${this.theme}:${this.welcomeKey()}`, [], (box) =>
           this.welcome(box, height),
         );
         items++;

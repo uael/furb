@@ -22,24 +22,33 @@ session does and offers the keys that act now, each a button that does what its 
 
 ## First run
 
-On the first run, and on each run while no model answers, the welcome checks the setup: the claude command line,
-the keys in the environment, the local server, and the models that answer. Each part that is missing shows its fix.
-When no model answers, the welcome says so, and offers only the life to watch, which needs no model.
+On the first run, and on each run while no model answers, the welcome checks the setup: the claude command line and
+whether it is signed in, the keys in the environment, the local server, and the models that answer. Each part that is
+missing shows its fix. When no model answers, the welcome says so first, then offers only the life to watch, which
+needs no model, and the input says so too. While the input is empty, `r` checks the setup again, as after a sign in.
+The welcome shows on each chain that holds no act of you or of a model, so the steps that the extensions run as a
+chain starts do not hide it. The capture is a real life on a home that holds no model.
 
 ![Setup with no model](screenshots/63-setup-no-model.png)
 
 ## Watch a life
 
 "Watch a life", or `/watch`, plays a short life on a small project by itself. It asks no model, so the bar at the
-top counts 0 model calls and $0.00. Three models answer one word of Python, which runs as a program, and a branch
-then goes another way from an earlier point.
+top counts 0 model calls and $0.00, as the board does. A short Python program asks three models at once, and a branch
+then goes another way from an earlier moment, with the files as they were. The watch says each step in common words:
+who wrote it, and what it did, as "read a file". `bun run demo` opens on it.
 
 ![Watch a life](screenshots/64-watch-a-life.png)
 
 While the input is empty, `[` and `]` move the feed back and on in time: an act that began later is not there yet,
-and an act that ended later still runs. `b` starts a branch at the moment shown, and Esc comes back to now.
+and an act that ended later is not done yet. `b` starts a branch at the moment shown, with the files as they were
+then, and Esc comes back to now.
 
 ![An earlier moment](screenshots/65-watch-earlier.png)
+
+The bar stays over the feed as it scrolls, on the smallest terminal too.
+
+![The watch at 80 by 24](screenshots/81-watch-small.png)
 
 ## Feed
 

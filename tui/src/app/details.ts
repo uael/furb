@@ -30,6 +30,7 @@ import { clip, dollars, modelName, share } from "../format.ts";
 import type { ActRow } from "../session.ts";
 import { theme as c, glyph, spacing as space } from "../theme.ts";
 import { bold, type Part, underline } from "../ui.ts";
+import { asker } from "../watching.ts";
 import { part } from "./part.ts";
 import { seconds, stateOf } from "./shared.ts";
 
@@ -122,6 +123,7 @@ export const details = part({
   sender(act: ActRow): string {
     const model = this.model(String(act.words[2] ?? "")).name;
     const maker = this.session.actOf(act.by);
+    if (this.session.watching) return asker(model, maker?.kind === "chain");
     return maker?.kind === "chain" ? `the chain told ${model}` : `${act.by} asked ${model}`;
   },
 

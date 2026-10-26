@@ -67,7 +67,10 @@ export const chrome = part({
     const chord = `${this.kitty ? "⌃" : "⌥"}1-3`;
     const toggle = views.reduce(
       (sum, view) =>
-        sum + viewLabels[view].length + 4 + (view === "changes" && changes ? String(changes).length + 1 : 0),
+        sum +
+        this.viewLabel(view).length +
+        4 +
+        (view === "changes" && changes ? String(changes).length + 1 : 0),
       0,
     );
     const head = Bun.stringWidth(w.sessionName) + 3 + Bun.stringWidth(w.label);
@@ -80,7 +83,7 @@ export const chrome = part({
       this.switcher(
         this.toggle,
         views.map((view) => ({
-          label: viewLabels[view],
+          label: this.viewLabel(view),
           badge: view === "changes" && changes ? String(changes) : "",
           color: c.accent,
           run: () => this.showView(view),
@@ -115,7 +118,10 @@ export const chrome = part({
     const w = this.session;
     const pending = w.operatorPrompt;
     const { model, effort } = w.actorChoice;
-    const { provider, id: name } = modelName(model);
+    const { provider, id } = modelName(model);
+    // With no model that answers, the actor falls to the operator, which the line names as no model, with no effort.
+    const none = id === "operator";
+    const name = none ? "no model" : id;
     const stash = w.stashes[w.draftKey];
     const reading = Boolean(w.host.reading);
     const prompt = w.mode === "prompt" && !w.editing && !pending && !reading;
@@ -143,7 +149,12 @@ export const chrome = part({
     // A narrow input leaves out, in this order, the provider, the type of the answer, the effort, and the chord of the
     // switch, and the stash shows less of what waits in it.
     const edited = Boolean(w.editing || pending || reading);
-    const shown = { chord: !edited, provider: prompt && Boolean(provider), shape: prompt, effort: prompt };
+    const shown = {
+      chord: !edited,
+      provider: prompt && Boolean(provider) && !none,
+      shape: prompt,
+      effort: prompt && !none,
+    };
     const gaps = 3;
     const width = () =>
       (edited ? Bun.stringWidth(mode) + 4 : "Prompt".length + "Python".length + 8) +
@@ -201,7 +212,7 @@ export const chrome = part({
       gap();
       button(
         [
-          [name, c.text],
+          [name, none ? c.danger : c.text],
           [shown.provider ? ` ${provider}` : "", c.faint],
         ],
         () => this.models(),

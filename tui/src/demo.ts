@@ -93,7 +93,7 @@ export async function tour(session: Session, pause = 1500): Promise<void> {
   const point = session.activity.at(-1)?.id;
   await wait();
   const word = [
-    "# One word is a program: it asks three models at once, and waits for each answer.",
+    "# A short Python program: it asks three models at once, and waits for each answer.",
     `asks = {m: prompt(str, "In one line, what would you change first?", to=m) for m in ${JSON.stringify(asked).replaceAll(",", ", ")}}`,
     "answers = {m: await a for m, a in asks.items()}",
   ].join("\n");
@@ -101,8 +101,9 @@ export async function tour(session: Session, pause = 1500): Promise<void> {
   await session.refresh();
   await wait();
   if (!point) throw new Error("The first answer made no act.");
-  // The branch keeps the chain up to the point, and the chain after it stays as it is.
-  const branch = await session.rewind(point, "Another way");
+  // The branch keeps the chain up to the point, with the files as they were there, and the chain after it stays as it
+  // is.
+  const branch = await session.rewind(point, "Another way", await session.filesAt(point));
   await wait();
   await engine.result(
     await engine.prompt("str", { message: "Add the search shortcut, Ctrl+K.", on: branch }),
