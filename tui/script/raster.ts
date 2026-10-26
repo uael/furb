@@ -244,7 +244,9 @@ function terminal(frame: CapturedFrame): string {
       for (const { segment } of new Intl.Segmenter().segment(span.text)) {
         const shape = drawn[segment];
         const x = at * cell;
-        const figure = shape ? undefined : mark(segment, x + cell / 2, y + row / 2 + 0.5, color);
+        const figure = shape
+          ? undefined
+          : (mark(segment, x + cell / 2, y + row / 2 + 0.5, color) ?? face(segment, x + cell, y + row / 2));
         if (shape || figure) {
           flush();
           if (figure) parts.push(figure);
@@ -292,6 +294,30 @@ function terminal(frame: CapturedFrame): string {
       `The fonts of the gallery draw no ${[...lacking].join(" ")}: draw each in mark, or in drawn.`,
     );
   return parts.join("");
+}
+
+/** The emoji of the gallery, drawn as shapes around the center of their two cells, since the fonts of the gallery draw
+ * no emoji and a capture takes no font of the machine: the faces that the emoji list of the composer shows. */
+function face(glyph: string, x: number, y: number): string | undefined {
+  const grin = glyph === "\u{1F601}";
+  if (!grin && glyph !== "\u{1F600}") return undefined;
+  const r = row * 0.42;
+  const ink = "#4a2c0a";
+  const eyes = grin
+    ? [-1, 1]
+        .map(
+          (side) =>
+            `<path d="M ${x + side * r * 0.62 - r * 0.2} ${y - r * 0.2} Q ${x + side * r * 0.62} ${y - r * 0.5} ${x + side * r * 0.62 + r * 0.2} ${y - r * 0.2}" stroke="${ink}" stroke-width="1.1" stroke-linecap="round" fill="none"/>`,
+        )
+        .join("")
+    : [-1, 1]
+        .map(
+          (side) =>
+            `<ellipse cx="${x + side * r * 0.42}" cy="${y - r * 0.25}" rx="${r * 0.11}" ry="${r * 0.17}" fill="${ink}"/>`,
+        )
+        .join("");
+  const mouth = `<path d="M ${x - r * 0.62} ${y + r * 0.1} Q ${x} ${y + r * 0.95} ${x + r * 0.62} ${y + r * 0.1} Z" fill="${ink}" stroke="${ink}" stroke-width="0.6" stroke-linejoin="round"/><path d="M ${x - r * 0.5} ${y + r * 0.16} L ${x + r * 0.5} ${y + r * 0.16} L ${x + r * 0.4} ${y + r * 0.34} L ${x - r * 0.4} ${y + r * 0.34} Z" fill="#ffffff"/>`;
+  return `<circle cx="${x}" cy="${y}" r="${r}" fill="#ffcb3d"/>${eyes}${mouth}`;
 }
 
 /** The colors of a window that the palette of a theme gives. */
