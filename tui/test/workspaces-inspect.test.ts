@@ -1,7 +1,7 @@
 import { expect, mock, test } from "bun:test";
 import { mkdir, mkdtemp, rm, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { Preferences } from "../src/preferences.ts";
 import { Workspaces } from "../src/workspaces.ts";
 
@@ -35,7 +35,7 @@ test("the list replays a record once for each change of it, and no record past t
   try {
     await first.add(directory);
     await settle(first, "work", "paused");
-    expect(asked.map((paths) => paths.map((path) => path.split("/").pop()))).toEqual([["work.jsonl"]]);
+    expect(asked.map((paths) => paths.map((path) => basename(path)))).toEqual([["work.jsonl"]]);
     expect(rows(first)).toEqual({ work: "paused", long: "saved" });
     await first.refresh();
     expect(asked).toHaveLength(1);
@@ -52,7 +52,7 @@ test("the list replays a record once for each change of it, and no record past t
     await writeFile(small, "x");
     await second.refresh();
     await Bun.sleep(100);
-    expect(asked.map((paths) => paths.map((path) => path.split("/").pop()))).toEqual([["work.jsonl"]]);
+    expect(asked.map((paths) => paths.map((path) => basename(path)))).toEqual([["work.jsonl"]]);
   } finally {
     await second.dispose();
     await rm(directory, { recursive: true, force: true });
