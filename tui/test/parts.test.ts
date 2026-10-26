@@ -153,6 +153,7 @@ test("the part of compaction, which the crate carries, marks each compaction in 
       );
       expect(shown).toContain("Compaction 2 of 2");
       expect(shown).toContain("Compaction 1 of 2");
+      expect(shown).toMatch(/Compaction 1 of 2[\s\S]*the next step[\s\S]*Compaction 2 of 2/);
       expect(shown.indexOf("Compaction 1 of 2")).toBeLessThan(shown.indexOf("the next step"));
       expect(shown.indexOf("the next step")).toBeLessThan(shown.indexOf("Compaction 2 of 2"));
       expect(shown).toContain("compacted 2×");
