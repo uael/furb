@@ -214,7 +214,7 @@ export async function seedRichDemo(
     message: "Review the fieldwork overview and prepare the next-step report.",
     on: root,
   });
-  engine.write({ path: rootParent, content: longProgram }, { on: root });
+  await engine.write({ path: rootParent, content: longProgram }, { on: root });
   await session.refresh();
   await engine.wake(root);
   await session.refresh();
@@ -225,28 +225,30 @@ export async function seedRichDemo(
   await engine.result(rootProgram.id);
   await engine.close("The fieldwork report is ready.", { id: rootParent });
   const longProgramId = rootParent;
-  for (const [index, chain] of branches.entries()) {
-    const branchProgram = [
-      `batch = ["notes", "archive", "fieldwork-${index + 1}"]`,
-      "selected = []",
-      "for item in batch:",
-      "  try:",
-      "    if item.strip():",
-      "      selected.append(item.strip())",
-      "  except AttributeError as error:",
-      "    selected.append(str(error))",
-      `print("Fieldwork ${index + 1}", selected)`,
-    ].join("\n");
-    await engine.result(await engine.rung({ word: branchProgram, on: chain }));
-    await engine.result(
-      await engine.rung({
-        word: `write(Text("FIELDWORK-${index + 1}.md", ${JSON.stringify(
-          `# Fieldwork ${index + 1}\n\nA generated report from the scripted demo.\n`,
-        )}))`,
-        on: chain,
-      }),
-    );
-  }
+  await Promise.all(
+    branches.map(async (chain, index) => {
+      const branchProgram = [
+        `batch = ["notes", "archive", "fieldwork-${index + 1}"]`,
+        "selected = []",
+        "for item in batch:",
+        "  try:",
+        "    if item.strip():",
+        "      selected.append(item.strip())",
+        "  except AttributeError as error:",
+        "    selected.append(str(error))",
+        `print("Fieldwork ${index + 1}", selected)`,
+      ].join("\n");
+      await engine.result(await engine.rung({ word: branchProgram, on: chain }));
+      await engine.result(
+        await engine.rung({
+          word: `write(Text("FIELDWORK-${index + 1}.md", ${JSON.stringify(
+            `# Fieldwork ${index + 1}\n\nA generated report from the scripted demo.\n`,
+          )}))`,
+          on: chain,
+        }),
+      );
+    }),
+  );
 
   if (!questions) {
     await session.refresh();
