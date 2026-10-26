@@ -3,8 +3,10 @@ import { existsSync, type FSWatcher, readFileSync, watch as watchFile } from "no
 import { dirname, join, resolve } from "node:path";
 import type { Engine, FileChange, SessionOptions, Turn } from "furb";
 import { Act, actorParts, codexAuth, ENGINE, model, models, retold, Session, setup, standingOf } from "furb";
-import { type Measure, measureOf } from "furb/life";
+import { type Compaction, type Measure, measureOf } from "furb/life";
 import type { HostState } from "./bridge.ts";
+import { scripts } from "./demo/index.ts";
+import { scripted } from "./demo/script.ts";
 import { type EngineOptions, roster } from "./models.ts";
 import { changeProvider } from "./providers.ts";
 import { queueDispatches, queueHash } from "./queue.ts";
@@ -73,6 +75,7 @@ const state = () => {
         reading: reader.reading,
         recorded: reader.recorded,
         measures: measuresOf(reader.activity.answers),
+        compactions: compactionsOf(reader.activity.compactions),
       } satisfies HostState,
     });
     return;
@@ -94,6 +97,7 @@ const state = () => {
     pending: [...owner.pending],
     changes: owner.changes.length,
     measures: measuresOf(owner.activity.answers),
+    compactions: compactionsOf(owner.activity.compactions),
   };
   sentFacts = owner.facts.length;
   self.postMessage({ state: snapshot });
@@ -173,6 +177,14 @@ function scriptedSession(options: SessionOptions, watch = false): Session {
       // Only the turn that asks for live progress is slow, and not every later turn of its chain: it thinks, then
       // writes its word a few words at a time, as a model streams it. FURB_DEMO_STREAM=1 makes every turn so, for a
       // recording of the demo.
+      const life = scripted(scripts, messages);
+      // A step that the script does not hold closes the prompt, so that a word that failed never loops.
+      const step = life
+        ? (life.script.steps[life.step] ?? {
+            thinking: "I report what I did.",
+            word: 'close("The work is done, and the project holds it.")',
+          })
+        : undefined;
       const slow = watch || process.env.FURB_DEMO_STREAM === "1" || last.includes("show live progress");
       await pause(slow ? 300 : 180);
       const first = !messages.some((message) => (message as { role?: string }).role === "assistant");
@@ -191,7 +203,7 @@ function scriptedSession(options: SessionOptions, watch = false): Session {
       // A message that adds the search shortcut writes the README, so a rewind to a point before it can give the file
       // back as it was.
       const shortcut = !first && last.includes("Add the search shortcut");
-      const code = hires
+      const fallback = hires
         ? 'for label in ("w/one", "w/two"):\n  prompt(str, "Think until I cancel.", on=chain(label))\nawait wait(3600)'
         : shortcut
           ? 'notes = read("README.md")\nwrite(notes.replace("- Find it when it matters", "- Find it when it matters, with Ctrl+K"))\nclose("Ctrl+K opens the search now, and the README says so.")'
@@ -202,8 +214,9 @@ function scriptedSession(options: SessionOptions, watch = false): Session {
               : first
                 ? 'notes = read("README.md")\ncheck = await bash("printf \'✓ capture\\n✓ search\\n✓ local storage\\n\'")\nclose("## A clear starting point\\nFieldnotes keeps ideas close. The project has three small parts: capture, search, and local storage.\\n\\nAll three checks passed. A useful next step is to add a **search shortcut**, then cover it with a focused test.")'
                 : `close(${JSON.stringify(answer)})`;
+      const code = step?.word ?? fallback;
       if (slow) {
-        write({ thinking });
+        write({ thinking: step?.thinking ?? thinking });
         await pause(200);
         // FURB_DEMO_PACE sets the time between two pieces, in milliseconds, which a capture of work in progress
         // lengthens.
@@ -214,7 +227,12 @@ function scriptedSession(options: SessionOptions, watch = false): Session {
         }
         await pause(200);
       }
-      return ["assistant", code, [3240, 184, 2800, 0, watch ? 0 : 0.0024], null];
+      // A scripted prompt asks more tokens at each step, as the chain that it reads grows.
+      const weight = life?.script.weight;
+      const usage: [number, number, number, number, number] = weight
+        ? [weight.input + 1400 * (life?.step ?? 0), weight.output, 2800, 0, watch ? 0 : weight.cost]
+        : [3240, 184, 2800, 0, watch ? 0 : 0.0024];
+      return ["assistant", code, usage, null];
     },
   });
 }
@@ -233,6 +251,15 @@ function measuresOf(answers: ReadonlyMap<string, readonly { actor: string; usage
       changed[chain] = measureOf(list);
     }
   return changed;
+}
+
+/** How many compactions of the life the host holds. */
+let compacted = 0;
+/** The compactions of a life since the last state, which the host adds to those that it holds. */
+function compactionsOf(compactions: readonly Compaction[]): Compaction[] {
+  const fresh = compactions.slice(compacted);
+  compacted = compactions.length;
+  return fresh;
 }
 
 /** What a request of the session comes to. */

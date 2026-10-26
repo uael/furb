@@ -6,6 +6,8 @@ import type { Exit } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { type App, follow } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
+import { seedLife } from "../src/demo/life.ts";
+import { seedWorkspaces } from "../src/demo/workspaces.ts";
 import { demoSession, removeDemoDirectories, seedDemo, seedDemoFiles, tour } from "../src/demo.ts";
 import { isLifeView } from "../src/overview.ts";
 import { loadParsers } from "../src/parsers.ts";
@@ -57,10 +59,14 @@ const notices = /^(34|36|37|42|43|44|45|50|55|58)-/;
  * captured again in the loom and in the graph. */
 const view = isLifeView(process.env.FURB_GALLERY_VIEW) ? process.env.FURB_GALLERY_VIEW : "main";
 /** The work of the chain completes, and the queue sends what waits in it, until nothing is left to do. */
+/** The acts that the life of the demo leaves open on purpose, which no step waits for. */
+let standing = new Set<string>();
 async function settle(): Promise<void> {
   await session.refresh();
   for (let attempt = 0; attempt < 10; attempt++) {
-    const pending = session.activity.filter((act) => !act.done && ["prompt", "rung"].includes(act.kind));
+    const pending = session.activity.filter(
+      (act) => !act.done && ["prompt", "rung"].includes(act.kind) && !standing.has(act.id),
+    );
     if (!pending.length && !session.queued.length) break;
     // A queue that waits on no act sends its next message in a moment.
     if (!pending.length) await new Promise((done) => setTimeout(done, 100));
@@ -101,9 +107,8 @@ let failed = false;
 try {
   await loadParsers();
   await capture("01-welcome");
-  await seedDemo(session);
-  await session.command("/name Explore project");
-  await idle(session);
+  standing = await seedLife(session);
+  await session.command("/name Release 0.4");
   await session.refresh();
   session.show("transcript");
   await capture("03-transcript");
@@ -183,12 +188,13 @@ try {
   });
   await until(session.host, () => session.host.prompts.has(question));
   await session.refresh();
+  await session.point(question);
   await capture("08-operator-question");
   app().question();
   await capture("09-operator-dialog");
   app().closeOverlay();
-  await session.host.answer(session.operatorPrompt?.id ?? "", "yes");
-  await until(session.host, () => !session.host.prompts.size);
+  await session.host.answer(question, "yes");
+  await until(session.host, () => !session.host.prompts.has(question));
   // A question of a choice offers its values as a list in place of the input, and Other for the words of the operator.
   const runner = await session.engine.prompt("Literal['vitepress', 'mkdocs', 'plain']", {
     message: "Which runner builds the docs of the project?",
@@ -197,9 +203,10 @@ try {
   });
   await until(session.host, () => session.host.prompts.has(runner));
   await session.refresh();
+  await session.point(runner);
   await capture("09-choice-question");
   await session.host.answer(runner, "mkdocs");
-  await until(session.host, () => !session.host.prompts.size);
+  await until(session.host, () => !session.host.prompts.has(runner));
   const notice = await session.engine.prompt("None", {
     message: "The search shortcut is on the main chain.",
     on: session.selected,
@@ -209,7 +216,7 @@ try {
   await session.refresh();
   await capture("22-operator-notice");
   app().question();
-  await until(session.host, () => !session.host.notices.size);
+  await until(session.host, () => !session.host.notices.has(notice));
   const markdown = await session.engine.prompt("None", {
     message: [
       "## The search shortcut",
@@ -399,53 +406,36 @@ try {
 
   app().dispose();
   await library.dispose();
-  const notes = await project("fieldnotes"),
-    atlas = await project("atlas");
   const preferences = new Preferences(join(projects, "config/ui.json"));
-  const archive = await demoSession({
-    cwd: atlas,
-    record: join(atlas, ".furb/sessions/archive.jsonl"),
-    preferences,
-  });
-  await archive.command("/name Archive");
-  await archive.dispose();
   library = new Workspaces(preferences, { demo: true });
-  const first = await library.add(notes),
-    second = await library.add(atlas);
-  const main = await library.create(first, "Implementation");
-  const checks = await library.create(first, "Checks");
-  const review = await library.create(first, "Review");
-  const changelog = await library.create(second, "Changelog");
-  const research = await library.create(second, "Research");
-  if (!main.session || !checks.session || !review.session || !changelog.session || !research.session)
-    throw new Error("The workspace fixtures did not open.");
-  await seedDemo(main.session);
-  await checks.session.engine.bash("printf 'Checking the project...\\n'; sleep 60", {
-    on: checks.session.engine.root,
+  // Four projects of one developer: sessions that past windows left on disk, and sessions that run in this one, each in
+  // the state that a real day leaves it, around the life of the release that the window shows.
+  const { groups, entries } = await seedWorkspaces({
+    library,
+    preferences,
+    directory: async (name) => {
+      const folder = join(projects, name);
+      await rm(folder, { recursive: true, force: true });
+      await mkdir(folder, { recursive: true });
+      return folder;
+    },
   });
-  await review.session.engine.prompt("bool", {
-    message: "Apply the new navigation?",
-    to: "operator",
-    on: review.session.engine.root,
-  });
-  await changelog.session.engine.result(
-    await changelog.session.engine.rung({
-      word: 'summary = "Release notes are ready"',
-      on: changelog.session.engine.root,
-    }),
-  );
-  await research.session.engine.wait([], { seconds: 60, on: research.session.engine.root });
-  await research.session.submit("/pause");
+  const first = groups.fieldnotes;
+  const second = groups.atlas;
+  if (!first || !second) throw new Error("The workspace fixtures did not open.");
+  const main = await library.create(first, "Release 0.4");
+  if (!main.session) throw new Error("The workspace fixtures did not open.");
+  standing = await seedLife(main.session);
   await library.select(main);
   session = main.session;
   app = follow(test.renderer, { quit() {}, workspaces: library });
   await until(
     library,
     () =>
-      checks.status === "working" &&
-      review.status === "blocked" &&
-      changelog.status === "done" &&
-      research.status === "paused",
+      entries.Changelog?.status === "done" &&
+      entries["Offline mode"]?.status === "blocked" &&
+      entries["Pagination bug"]?.status === "working" &&
+      entries.Research?.status === "paused",
   );
   await capture("28-workspace-tree");
   app().render();
@@ -469,6 +459,13 @@ try {
   await app().submit();
   await capture("33-session-tree");
   app().closeTree();
+  // The next shots are about the input, and an undo waits for each prompt to end, which the release does not while its
+  // workers run. They use a session of the same workspace whose conversation ends.
+  const desk = await library.create(first, "Search shortcut");
+  if (!desk.session) throw new Error("The session Search shortcut did not open.");
+  await seedDemo(desk.session);
+  await library.select(desk);
+  session = desk.session;
   await session.submit("show live progress");
   session.enqueue("Check keyboard navigation after this answer.");
   await capture("34-queued-follow-up");
@@ -580,47 +577,9 @@ try {
   app().dispose();
   await library.dispose();
   await show(await gallerySession());
-  await seedDemo(session);
+  standing = await seedLife(session);
   await session.command("/name Conduct the work");
-  await idle(session);
-  const chains: Record<string, string> = {};
-  for (const label of [
-    "life3/feed",
-    "life3/answers",
-    "life3/fix305",
-    "life2/literal",
-    "life2/rpc",
-    "life2/cache",
-  ])
-    chains[label] = await session.engine.chain({ label });
-  const ask = async (shape: string, message: string, on: string) =>
-    session.engine.rung({ word: `await prompt(${shape}, ${JSON.stringify(message)}, to=OPERATOR)`, on });
-  await ask(
-    "str",
-    [
-      "chain30 asks the operator:",
-      "",
-      "A question on the item answers, before I build. The owner asks that the operator answers each question by its shape, a choice of a Literal among them. No host can answer a prompt of a Literal today:",
-      "",
-      "1. monty cannot subscript `Literal`, so the word fails before its prompt.",
-      "2. `close` checks `isinstance(value, Literal)`, which never fits.",
-      "3. The console answers no shape outside `SHAPES`, so it refuses the prompt at once.",
-      "",
-      "- **A.** One stack: the engine, monty and the crate first, then this PR on top.",
-      "- **B.** This PR builds the flow on the shapes that the console answers now, and a separate item adds the Literal.",
-      "",
-      "Answer A or B, with any change.",
-    ].join("\n"),
-    session.engine.root,
-  );
-  await ask("bool", "Merge #305 into main now that its checks are green?", chains["life3/feed"] ?? "");
-  await ask(
-    "int",
-    "The test of a stable heading failed 2 times in 40 runs. How many retries should it get?",
-    chains["life3/fix305"] ?? "",
-  );
-  await ask("None", "#306 stands on w/feed again, and its checks run.", chains["life3/feed"] ?? "");
-  await until(session.host, () => session.host.prompts.size === 3 && session.host.notices.size === 1);
+  await until(session.host, () => session.host.prompts.size >= 4);
   await session.select(session.engine.root);
   await rest();
   await capture("52-many-questions");
@@ -628,7 +587,7 @@ try {
   await capture("53-question-dialog");
   // Tab goes to the next question, and shows its chain under the dialog.
   test.mockInput.pressTab();
-  await until(session, () => session.selected === chains["life3/feed"]);
+  await until(session, () => session.selected !== session.engine.root);
   await capture("54-next-question");
   const merge = session.aimed?.id ?? "";
   test.mockInput.pressEnter();
@@ -856,8 +815,49 @@ try {
   await rest();
   await capture("74-extension-part");
   await writeFile(join(folder, "tui.ts"), "export default (furb) => { furb.panel(");
-  while (!app().parts.loaded[0]?.error) await Bun.sleep(10);
+  while (!app().parts.loaded.find((one) => one.name === "todo")?.error) await Bun.sleep(10);
   await capture("75-extension-part-error");
+  app().dispose();
+  await library.dispose();
+
+  // The part of the official extension compaction, which the crate carries: a rule at each compaction of a chain,
+  // with its summary, between what the model no longer reads and what it reads now. The board says how many times
+  // each chain compacted.
+  await show(await demoSession({ cwd: await project("compaction") }));
+  const compaction = (
+    await readFile(resolve(import.meta.dir, "..", "..", "extensions", "compaction", "compaction.py"), "utf8")
+  ).replace(/^from furb\.engine import \([^)]*\)\n+/m, "");
+  await session.command(`/run ${compaction}\nchain("review")\nplan = read("README.md")`);
+  await settle();
+  await session.command(
+    '/run compact(summary="The plan stands in README.md, and the operator chose the calm palette.\\nThe parser is done and its tests pass. The docs wait.")',
+  );
+  await settle();
+  await session.command('/run docs = "The docs of the parser"');
+  await settle();
+  await session.command(
+    '/run compact(summary="The docs of the parser are written.\\nThe screenshots of the parser wait.")',
+  );
+  await settle();
+  await rest();
+  await capture("75-compaction");
+  app().dispose();
+  await library.dispose();
+
+  // An older compaction went on in a new chain, as Main -> compacted: the run shows as one row of the sidebar and as one
+  // feed, with the rule of the compaction between the feed of each chain.
+  await show(await demoSession({ cwd: await project("compacted") }));
+  const root = session.engine.root;
+  await session.command(
+    `/run ${compaction}\ndef restore(source, on=""):\n  return None\nchain("review")\nplan = read("README.md")`,
+  );
+  await settle();
+  await session.command(
+    `/run newer = chain("compacted", "${root}")\nrung("restore('${root}')\\n<s:summary>\\nThe plan stands in README.md, and the parser is done.\\nThe docs wait.</s:summary>\\nreground()", on=newer)\nrung('docs = "The docs of the parser"', on=newer)`,
+  );
+  await settle();
+  await rest();
+  await capture("75-compaction-chains");
   app().dispose();
   await library.dispose();
 

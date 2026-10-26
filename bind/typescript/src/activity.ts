@@ -1,5 +1,5 @@
 import { type Call, call, isFault } from "./ears.js";
-import { type LiveAct, WORK } from "./life/acts.js";
+import { type Compaction, type LiveAct, WORK } from "./life/acts.js";
 import { bound, display, type Fact, isQuestion } from "./types.js";
 
 /** One answer of a model on a chain: its place in time, the actor whose reply it answered, and its usage, which is
@@ -25,6 +25,8 @@ export class Activity {
   readonly acts = new Map<string, LiveAct>();
   completed = 0;
   cost = 0;
+  /** Each compaction of a chain, in the order of the record. */
+  readonly compactions: Compaction[] = [];
   /** The answers of the models on each chain, in order, by the chain that the reply stands on, so that a host reads
    * the dollars of a chain and the share of the window that its last answer read. */
   readonly answers = new Map<string, Answered[]>();
@@ -132,12 +134,16 @@ export class Activity {
       this.acts.set(id, act);
       this.open.add(id);
       this.mark(act);
+      if (kind === "rung") this.continued(act);
       if (!this.children.has(by)) this.children.set(by, new Set());
       this.children.get(by)?.add(id);
       return;
     }
     const act = this.acts.get(id);
-    if (kind === "pause" || kind === "wake") {
+    if (kind === "prefix" && by !== id) {
+      // A chain says its own prefix at its birth, as a chain with a source does, and that prefix cuts nothing.
+      this.compactions.push({ chain: id, by, at });
+    } else if (kind === "pause" || kind === "wake") {
       const paused = kind === "pause";
       this.controls.delete(id);
       this.controls.set(id, fact);
@@ -204,6 +210,16 @@ export class Activity {
       stream.content += String(fact[3]);
       this.mark(act);
     }
+  }
+  /** A compaction into a new chain, when a rung is the first word that such a compaction gives a chain with a source:
+   * a word that starts by restoring that source. */
+  private continued(rung: LiveAct): void {
+    const chain = this.acts.get(rung.on);
+    const source = chain?.kind === "chain" ? String(chain.words[1] ?? "") : "";
+    const restored = /^restore\((['"])(\w+)\1\)/.exec(String(rung.words[0] ?? ""))?.[2];
+    if (!chain || !source || restored !== source || this.compactions.some((one) => one.chain === chain.id))
+      return;
+    this.compactions.push({ chain: chain.id, from: source, by: rung.by, at: chain.began });
   }
   /** Whether the last control over a new act is a pause. Only a control no older than the oldest pause can make
    * it one. */

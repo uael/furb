@@ -17,6 +17,12 @@ const fixture = resolve(import.meta.dir, "..", "fixtures", "todo");
 const PART = readFileSync(join(fixture, "tui.ts"), "utf8");
 const TODO = readFileSync(join(fixture, "todo.py"), "utf8").replace(/^from furb\.engine import .*\n+/m, "");
 
+/** The word of the extension compaction, less its import of furb, as a life plays it. */
+const COMPACTION = readFileSync(
+  resolve(import.meta.dir, "..", "..", "extensions", "compaction", "compaction.py"),
+  "utf8",
+).replace(/^from furb\.engine import \([^)]*\)\n+/m, "");
+
 /** A project whose config turns on the extension todo of the fixtures, with the part that it is given. */
 function project(part = PART): { directory: string; file: string } {
   const directory = mkdtempSync(join(tmpdir(), "furb-parts-"));
@@ -29,10 +35,15 @@ function project(part = PART): { directory: string; file: string } {
   return { directory, file: join(folder, "tui.ts") };
 }
 
-/** The frame of the App once it shows a text, drawn again until it does. */
-async function shows(frame: () => Promise<string>, text: string): Promise<string> {
+/** The frame of the App once it shows a text, and once `ready` holds of it when it is given, drawn again until it
+ * does: a machine under load draws the feed in more than one frame. */
+async function shows(
+  frame: () => Promise<string>,
+  text: string,
+  ready: (shown: string) => boolean = () => true,
+): Promise<string> {
   let shown = await frame();
-  for (let tries = 0; tries < 400 && !shown.includes(text); tries++) {
+  for (let tries = 0; tries < 400 && !(shown.includes(text) && ready(shown)); tries++) {
     await Bun.sleep(25);
     shown = await frame();
   }
@@ -49,7 +60,7 @@ test("a life gains the panel of a part of a project extension, which draws again
       let shown = await shows(frame, "○ write the part");
       expect(shown).toContain("✓ read the capture");
       expect(shown).toContain("1 open of 2");
-      expect(app.parts.loaded.map((one) => one.name)).toEqual(["todo"]);
+      expect(app.parts.loaded.map((one) => one.name)).toEqual(["compaction", "todo"]);
       // The hint of the line of each act todo says what the part draws as its row.
       await shows(frame, "to do: write the part");
       // A change of the file of the part draws again, with no restart.
@@ -101,7 +112,10 @@ test("the parts load the part of each extension that the configs give, and a con
   let changes = 0;
   const parts = new Parts(directory, () => changes++);
   await parts.load();
-  expect(parts.loaded.map((one) => [one.name, one.file, one.error])).toEqual([["todo", file, undefined]]);
+  expect(parts.loaded.map((one) => [one.name, one.file, one.error])).toEqual([
+    ["compaction", "extensions/compaction/tui.ts", undefined],
+    ["todo", file, undefined],
+  ]);
   expect(parts.row("todo")).toBeDefined();
   expect(parts.command("todos")?.detail).toBe("Say how many items are open");
   writeFileSync(join(directory, ".furb", "config.json"), '{"extensions": []}\n');
@@ -110,4 +124,106 @@ test("the parts load the part of each extension that the configs give, and a con
   expect(parts.loaded[0]?.error).toContain("A config is a map, whose extensions is a map");
   expect(changes).toBe(2);
   parts.dispose();
+});
+
+test("the part of compaction, which the crate carries, marks each compaction in the feed of its chain with its summary, and the board counts them", async () => {
+  const { directory } = project();
+  const session = await demoSession({ cwd: directory });
+  await composing(
+    async ({ app, frame }) => {
+      await session.command(`/run ${COMPACTION}`);
+      await session.command(`/run chain("aside")\nbefore = "the first step"`);
+      // The word shows in the feed too, so its summary is split in pieces: the whole text stands only in the mark.
+      await session.command('/run compact(summary="It read " + "the plan.\\nThe tests " + "wait.")');
+      let shown = await shows(frame, "The tests wait.");
+      expect(shown).toContain("Compaction: the model reads on from here");
+      expect(app.parts.loaded.find((one) => one.name === "compaction")?.error).toBeUndefined();
+      expect(shown).toContain("It read the plan.");
+      expect(shown).toContain("The tests wait.");
+      expect(shown.indexOf("the first step")).toBeLessThan(shown.indexOf("Compaction:"));
+      await session.command('/run after = "the next step"');
+      await session.command('/run compact(summary="It ran " + "the tests.")');
+      shown = await shows(
+        frame,
+        "It ran the tests.",
+        (now) =>
+          now.includes("compacted 2×") &&
+          now.indexOf("Compaction 1 of 2") < now.indexOf("the next step") &&
+          now.indexOf("the next step") < now.indexOf("Compaction 2 of 2"),
+      );
+      expect(shown).toContain("Compaction 2 of 2");
+      expect(shown).toContain("Compaction 1 of 2");
+      expect(shown).toMatch(/Compaction 1 of 2[\s\S]*the next step[\s\S]*Compaction 2 of 2/);
+      expect(shown.indexOf("Compaction 1 of 2")).toBeLessThan(shown.indexOf("the next step"));
+      expect(shown.indexOf("the next step")).toBeLessThan(shown.indexOf("Compaction 2 of 2"));
+      expect(shown).toContain("compacted 2×");
+    },
+    { width: 120, height: 60 },
+    session,
+  );
+});
+
+test("a mark of a part stands at its place in the feed of its chain, and a mark that throws shows its error", async () => {
+  const { file } = project(
+    'export default (furb) => furb.mark((seen) => { if (seen.chain === "none") throw new Error("No marks."); return [{ chain: seen.chain, at: 2, title: "Here" }, { chain: "other", at: 1, title: "Not here" }] })\n',
+  );
+  const part = await loadPart("todo", file);
+  const parts = new Parts(
+    "",
+    () => {},
+    () => [],
+  );
+  parts.loaded = [part];
+  const seen = {
+    chain: "chain1",
+    acts: [],
+    compactions: [],
+    of: () => [],
+    run: async () => {},
+    say: () => {},
+  };
+  expect(parts.marks(seen)).toEqual([{ chain: "chain1", at: 2, title: "Here" }]);
+  expect(parts.marks({ ...seen, chain: "none" })).toEqual([
+    { chain: "none", at: 0, title: "A mark of todo failed: No marks." },
+  ]);
+});
+
+test("a run of compactions into new chains, as an older compaction made them, shows as one chain: one row named first -> last, and one feed with the rule of each compaction", async () => {
+  const { directory } = project();
+  const session = await demoSession({ cwd: directory });
+  const root = session.engine.root;
+  await composing(
+    async ({ frame }) => {
+      await session.command(`/run ${COMPACTION}\ndef restore(source, on=""):\n  return None\nchain("aside")`);
+      await session.command('/run before = "the first step"');
+      const summary = "<s:summary>\\nIt read the plan.</s:summary>\\nreground()";
+      await session.command(
+        `/run older = chain("compacted", "${root}")\nrung("restore('${root}')\\n${summary}", on=older)\nrung('after = "the step after"', on=older)`,
+      );
+      const shown = await shows(
+        frame,
+        "the step after",
+        (now) => session.runOf(root).length > 1 && now.includes("goes on in a new chain from here"),
+      );
+      const newer = session.chains.find((chain) => chain.words[0] === "compacted")?.id ?? "";
+      expect(session.runOf(root)).toEqual([root, newer]);
+      expect(session.labelOf(newer)).toBe("Main -> compacted");
+      expect(session.activeChains().active.map(([chain]) => chain.id)).not.toContain(root);
+      // A link or the graph that names the first chain of the run puts the operator on its last chain, which the headline
+      // names and which a message, a command and a grant go on.
+      await session.select(root);
+      expect(session.selected).toBe(newer);
+      expect(session.label).toBe("Main -> compacted");
+      expect(shown).toContain("Main -> compacted");
+      expect(shown).toContain("It read the plan.");
+      expect(shown).toContain("compacted  ");
+      expect(shown.indexOf("the first step")).toBeLessThan(shown.indexOf("goes on in a new chain from here"));
+      // The word of the operator that made the step stands in the feed too, so the step is its last line.
+      expect(shown.indexOf("goes on in a new chain from here")).toBeLessThan(
+        shown.lastIndexOf("the step after"),
+      );
+    },
+    { width: 120, height: 60 },
+    session,
+  );
 });
