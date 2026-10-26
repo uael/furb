@@ -25,6 +25,8 @@ export interface LiveAct {
   value: unknown;
   /** Whether a pause stands over the act while it lives. */
   paused: boolean;
+  /** Whether the act had no end when the record ended, in a record open to read, where nothing runs to end it. */
+  unfinished?: boolean;
   run?: RunState;
   /** The place of the act in time: how many facts the life had said when the act was made, and when it was done. It
    * is the order of the record, so a later life gives the same places. */
@@ -32,6 +34,36 @@ export interface LiveAct {
   ended?: number;
   /** The dollars of the answers of the models that wrote the word of a rung, once one is done. */
   cost?: number;
+}
+/** A compaction of a chain. In place, it is a prefix that a word said on the chain after its birth, which takes the
+ * place of what its transcript held, so that its model reads only what the prefix kept. Into a new chain, as an older
+ * compaction made it, it is a chain whose source it goes on `from`: the first word that the compaction gave it restores
+ * that source, as `restore('chain1')`, then binds the summary and reads the files again. It gives the chain, the source
+ * that a new chain goes on from, the act that said the prefix or the word, and its place in time, as the place of an
+ * act: the prefix, or the birth of the new chain. */
+export interface Compaction {
+  chain: string;
+  from?: string;
+  by: string;
+  at: number;
+}
+
+/** The chains that compactions into a new chain join into one run with a chain, in order: the chain that the run
+ * starts from, then each chain that goes on from the one before it. A chain that no such compaction joins is a run of
+ * its own. */
+export function compactedRun(chain: string, compactions: readonly Compaction[]): string[] {
+  const from = new Map<string, string>();
+  const into = new Map<string, string>();
+  for (const one of compactions)
+    if (one.from) {
+      from.set(one.chain, one.from);
+      into.set(one.from, one.chain);
+    }
+  let first = chain;
+  for (let before = from.get(first); before && before !== chain; before = from.get(first)) first = before;
+  const run = [first];
+  for (let next = into.get(first); next && !run.includes(next); next = into.get(next)) run.push(next);
+  return run;
 }
 /** What a command came to: its code, and what it printed on each stream. */
 export type Exit = { stdout?: { content: string }; stderr?: { content: string }; code?: number };

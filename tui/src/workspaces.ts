@@ -8,6 +8,7 @@ import { openEngine } from "./bridge.ts";
 import { expandHome } from "./files.ts";
 import { type EngineOptions, roster } from "./models.ts";
 import { Preferences } from "./preferences.ts";
+import type { Carry } from "./reading.ts";
 import { inspectRecords } from "./records.ts";
 import { Session, type SessionStatus, savedView } from "./session.ts";
 
@@ -48,6 +49,7 @@ interface InspectedState {
   key: string;
   pending: number;
   error?: string;
+  reading?: boolean;
 }
 function readInspected(path: string): Map<string, InspectedState> {
   try {
@@ -200,6 +202,7 @@ export class Workspaces extends EventEmitter {
     const order: SessionStatus[] = [
       "blocked",
       "error",
+      "reading",
       "paused",
       "working",
       "done",
@@ -269,10 +272,11 @@ export class Workspaces extends EventEmitter {
     return found?.key === key ? found : undefined;
   }
   /** The state of a saved row that a replay told, unless the session of the row runs. */
-  private apply(entry: SessionEntry, state: Pick<InspectedState, "pending" | "error">): void {
+  private apply(entry: SessionEntry, state: Pick<InspectedState, "pending" | "error" | "reading">): void {
     if (entry.session) return;
-    entry.error = state.error;
-    entry.status = state.error ? "error" : state.pending ? "paused" : "saved";
+    // A record that a build of another version made drifts, and opens to read: that is no error.
+    entry.error = state.reading ? undefined : state.error;
+    entry.status = state.reading ? "reading" : state.error ? "error" : state.pending ? "paused" : "saved";
   }
   /** Keep what the replays told in a file beside the list, so that the next run replays only the records that changed
    * since. */
@@ -434,7 +438,7 @@ export class Workspaces extends EventEmitter {
     if (session.host.pending.size) await session.host.resume();
     await session.command(command);
   }
-  async create(group = this.groupOf(), name?: string): Promise<SessionEntry> {
+  async create(group = this.groupOf(), name?: string, carry?: Carry): Promise<SessionEntry> {
     if (!group) throw new Error("Add a workspace first.");
     const directory = furbDirectory(group.directory, "sessions");
     const path = join(
@@ -445,6 +449,11 @@ export class Workspaces extends EventEmitter {
     const entry: SessionEntry = { path, name: label, status: "opening", unread: false };
     group.sessions.unshift(entry);
     await this.load(entry, group);
+    // A life that starts from a record opens with the earlier work of that record in its first word.
+    if (carry && entry.session) {
+      const { engine } = entry.session;
+      await engine.result(await engine.rung({ word: carry.word, on: engine.root }));
+    }
     if (entry.session) {
       entry.session.sessionName = label;
       entry.name = label;

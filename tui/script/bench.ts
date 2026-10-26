@@ -232,6 +232,7 @@ async function facts({ record, session, app, screen }: Opened, top: Map<string, 
     reading: host.reading,
     recorded: host.recorded,
     measures: {},
+    compactions: [],
     seq: host.seq,
     facts: 0,
     prompts: [...host.prompts.values()],
@@ -332,7 +333,9 @@ step();`,
 }
 
 /** The frames each second that the renderer draws at its target rate with nothing to show. start draws one frame
- * before it returns, outside the timed window, as the App does before a round. */
+ * before it returns, outside the timed window, as the App does before a round. A runner whose timer fires early draws
+ * more frames than the target in a second (62.0 against 60 on ubuntu-latest, in the issue 467), and no loaded renderer
+ * can match that, so the rate is never more than the target. */
 async function ceiling(): Promise<number> {
   const screen = await createTestRenderer({ width: 152, height: 46, exitSignals: [], targetFps: fps });
   screen.renderer.start();
@@ -342,7 +345,7 @@ async function ceiling(): Promise<number> {
   await Bun.sleep(2000);
   const rate = (frames * 1000) / (performance.now() - began);
   screen.renderer.destroy();
-  return rate;
+  return Math.min(rate, fps);
 }
 
 /** The memory that a process holds once it opened a life, after a collection of its garbage: a process of its own,

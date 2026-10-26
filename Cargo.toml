@@ -14,6 +14,7 @@ include = [
   "/src/**",
   "/extensions/*/furb.json",
   "/extensions/*/*.py",
+  "/extensions/*/tui.ts",
   "/extensions/*/*/SKILL.md",
   "/DOCTRINE.md",
   "/docs/examples/rust/*.rs",

@@ -75,7 +75,8 @@ saw run, since the record holds no time. The line that runs is lit, with a mark 
 its time, and the last lines that its command prints stream under it. A line that the gate refused has a red cross in
 the gutter, and the reason stands under it as a comment. A message that you send to the thread, and each notice of
 the chain, stands as a comment among the steps, and what the model writes before its word comes stands under the
-program. The answer of the thread stands under the name of the model that gave it. A word that you run stands in the
+program: each line of its word that it finished, as Python in its colors, and under them the line that it still
+writes. The answer of the thread stands under the name of the model that gave it. A word that you run stands in the
 same way under You ran, and so does an act that no word made, as a command that `/bash` starts: one line of Python
 that binds the act to its name, as `bash3 = bash("make docs")`.
 
@@ -356,10 +357,25 @@ A session that opens with unfinished work stays paused until you resume it.
 
 A record whose replay drifts, as a record that a build of another version made, opens to read. The TUI shows what the record
 kept: each chain, each rung with its word, and each act. No word runs again, no model is asked, and a command that
-would change the life is refused. A dialog names the version of the build that made the record and the version of this build, and
+would change the life is refused. A read leaves the record and its log as they were. It can refresh the derived cache, `<record>.told`.
+
+A dialog gives the build that made the record and this build, each on a line of its own. A record of an earlier engine
+that names no engine says "an earlier engine, not named". The dialog says what a new life from the record carries, and
 offers to read the record or to start a new life in its workspace.
 
 ![A record to read](screenshots/56-record-to-read.png)
+
+While you read, the footer keeps the sentence "Read only" with its reason, and a button, "Start a new life". The
+composer is off, and its placeholder says the same sentence. The command list has an entry, "Read only", that opens the
+dialog again. A chain that the record does not keep takes the first line of its first prompt as its label, or its own
+name, and stands under the chain of the act that made it. Work that had no end when the record ended says "not
+finished when the record ends", with no spinner and no clock. The sidebar and ⌃W show "Read only" for such a record,
+and not "Error".
+
+![A record open to read](screenshots/56b-record-read-only.png)
+
+A new life from the record has the turns of the root chain of the record, up to a limit of size, and the list of the files that
+the record wrote, in its first word, as `earlier` and `earlier_files`.
 
 ## Cancel and take back
 
@@ -541,6 +557,18 @@ TUI goes on.
 ![The part of an extension](screenshots/74-extension-part.png)
 
 ![The error of a part](screenshots/75-extension-part-error.png)
+
+The official extension `compaction` has a part too, which comes with furb. At each compaction of a chain, the feed
+shows a rule with the summary of the compaction under it: the model of the chain no longer reads what stands above
+the last rule. The row of a chain in the sidebar says how many times it compacted.
+
+![The compactions of a chain](screenshots/75-compaction.png)
+
+An older compaction went on in a new chain with the work that its source still needed, as `Main -> compacted`. Such
+a run of chains shows as one chain: one row named after its first chain and its last one, and one feed, which shows
+the feed of each chain of the run in its order, with the rule of each compaction between them.
+
+![A run of compactions into new chains](screenshots/75-compaction-chains.png)
 
 ## Undo and redo
 

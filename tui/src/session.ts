@@ -17,7 +17,7 @@ import {
   shapes,
   WORK,
 } from "furb";
-import { type ActIndex, type Ask, aimed, beside, type Desk, desk, failed } from "furb/life";
+import { type ActIndex, type Ask, aimed, beside, compactedRun, type Desk, desk, failed } from "furb/life";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { expandHome, fileReferences, fromDirectory, projectFiles, shortenHome } from "./files.ts";
 import { dollars } from "./format.ts";
@@ -59,6 +59,7 @@ export type SessionStatus =
   | "paused"
   | "done"
   | "error"
+  | "reading"
   | "opening";
 export const statusLabels: Record<SessionStatus, string> = {
   saved: "Saved",
@@ -68,10 +69,12 @@ export const statusLabels: Record<SessionStatus, string> = {
   paused: "Paused",
   done: "Finished, unread",
   error: "Error",
+  reading: "Read only",
   opening: "Opening",
 };
 /** Whether an act is at work: it lives, no pause holds it, and its kind is one whose work takes time. */
-export const working = (act: ActRow): boolean => !act.done && !act.paused && WORK.includes(act.kind);
+export const working = (act: ActRow): boolean =>
+  !act.done && !act.paused && !act.unfinished && WORK.includes(act.kind);
 /** The phase of an act that a view of the whole life reads: whether it is done or held, when it began and ended, and
  * how its rung ran. The output that a command streams is no part of it. */
 function phaseOf(act?: ActRow): string {
@@ -516,6 +519,7 @@ export class Session extends EventEmitter {
   }
   /** A repair or a new journal acts on a journal that a view found damaged. */
   private damagedOnly(): void {
+    if (this.host.reading) throw new Error("This record is open to read.");
     if (!this.journalDamaged) throw new Error("The journal of file changes is not damaged.");
   }
   private async journalMended(notice: string): Promise<void> {
@@ -668,6 +672,7 @@ export class Session extends EventEmitter {
    * a question waits for the operator, a reopened record holds work, or what the acts do. A pause of the chain holds
    * it while none of its acts runs or asks. */
   status(chain?: string): SessionStatus {
+    if (this.host.reading) return "reading";
     // A damaged journal of file changes fails the view that shows it, and not the session that the list marks.
     if (chain ? this.error : Object.entries(this.errors).some(([key, error]) => error && !this.damaged[key]))
       return "error";
@@ -712,7 +717,9 @@ export class Session extends EventEmitter {
     if (asked(this.host.prompts.keys())) return "blocked";
     if (asked(this.host.pending.keys())) return "paused";
     // Only an act that is not done works or waits under a pause, and the index holds each such act.
-    const live = (chain ? (this.liveOn().get(chain) ?? []) : [...index.live.values()]).filter(mine);
+    const live = (chain ? (this.liveOn().get(chain) ?? []) : [...index.live.values()]).filter(
+      (act) => mine(act) && !act.unfinished,
+    );
     if (live.some(working)) return "working";
     if (live.some((act) => act.paused && !act.done)) return "paused";
     const latest = chain ? index.latest.get(chain) : this.acts.findLast(mine);
@@ -736,29 +743,34 @@ export class Session extends EventEmitter {
    * that failed, or a state that was not idle when it was read last, and no other chain. */
   activeChains(): { active: [ActRow, SessionStatus][]; resting: number } {
     const index = this.indexed();
-    const restless = new Set([
-      this.engine.root,
-      this.selected,
-      ...this.liveOn().keys(),
-      ...index.failing,
-      ...this.unread,
-      ...[...this.phases].flatMap(([id, phase]) => (phase === "idle" ? [] : [id])),
-      ...[...this.host.prompts.keys(), ...this.host.pending.keys()].flatMap(
-        (id) => index.ids.get(id)?.on ?? [],
-      ),
-    ]);
+    // A chain of a run of compactions into new chains stands as its run, which the last chain of it heads.
+    const head = (id: string) => this.runOf(id).at(-1) ?? id;
+    const root = head(this.engine.root);
+    const selected = head(this.selected);
+    const restless = new Set(
+      [
+        this.engine.root,
+        this.selected,
+        ...this.liveOn().keys(),
+        ...index.failing,
+        ...this.unread,
+        ...[...this.phases].flatMap(([id, phase]) => (phase === "idle" ? [] : [id])),
+        ...[...this.host.prompts.keys(), ...this.host.pending.keys()].flatMap(
+          (id) => index.ids.get(id)?.on ?? [],
+        ),
+      ].map(head),
+    );
     const active = [...restless]
       .flatMap((id) => {
         const chain = index.ids.get(id);
         return chain?.kind === "chain" ? [[chain, this.chainStatus(id)] as [ActRow, SessionStatus]] : [];
       })
-      .filter(
-        ([chain, status]) => chain.id === this.engine.root || chain.id === this.selected || status !== "idle",
-      )
+      .filter(([chain, status]) => chain.id === root || chain.id === selected || status !== "idle")
       .sort(
         ([one], [other]) => (index.places.get(one.id)?.chain ?? 0) - (index.places.get(other.id)?.chain ?? 0),
       );
-    return { active, resting: index.chains.length - active.length };
+    const listed = index.chains.filter((chain) => this.listed(chain.id)).length;
+    return { active, resting: listed - active.length };
   }
   /** The first chains that rest, in the order of the chains, up to a count. */
   restingChains(count: number): ActRow[] {
@@ -766,7 +778,7 @@ export class Session extends EventEmitter {
     const out: ActRow[] = [];
     for (const chain of this.indexed().chains) {
       if (out.length >= count) break;
-      if (!shown.has(chain.id)) out.push(chain);
+      if (!shown.has(chain.id) && this.listed(chain.id)) out.push(chain);
     }
     return out;
   }
@@ -865,8 +877,9 @@ export class Session extends EventEmitter {
   get context(): number | undefined {
     return this.turns.findLast(([role, , used]) => role === "assistant" && used)?.[2]?.[0];
   }
+  /** The name of the chain shown, which a run of compactions into new chains names as a whole. */
   get label(): string {
-    return this.labelOf(this.selected);
+    return this.labelOf(this.runOf(this.selected).at(-1) ?? this.selected);
   }
   get actorChoice(): { model: string; effort: string } {
     return actorParts(
@@ -1026,11 +1039,31 @@ export class Session extends EventEmitter {
       ...(this.images[this.selected] ?? []).map(({ name, uri }) => imageReference(name, uri)),
     ].join("\n");
   }
+  /** The name of a chain: its label, or Main for the root. The last chain of a run of compactions into new chains
+   * names the run, as the first chain and the last one: Main -> compacted. */
   labelOf(id: string): string {
-    const chain = this.indexed().ids.get(id);
-    return id === this.engine.root ? "Main" : String((chain?.kind === "chain" && chain.words[0]) || "Chain");
+    const own = (name: string) => {
+      const chain = this.indexed().ids.get(name);
+      return name === this.engine.root
+        ? "Main"
+        : String((chain?.kind === "chain" && chain.words[0]) || "Chain");
+    };
+    const run = this.runOf(id);
+    return run.length > 1 && run.at(-1) === id ? `${own(run[0] ?? id)} -> ${own(id)}` : own(id);
   }
-  async select(id: string): Promise<void> {
+  /** The run of compactions into new chains that holds a chain, as `furb/life` gives it. */
+  runOf(id: string): string[] {
+    return compactedRun(id, this.host.compactions);
+  }
+  /** Whether a list of the chains shows a chain: a chain that a later chain of its run goes on from shows as that run,
+   * under the last chain of it. */
+  listed(id: string): boolean {
+    return this.runOf(id).at(-1) === id;
+  }
+  async select(chosen: string): Promise<void> {
+    // A chain of a run of compactions into new chains is shown as its run, whose last chain the operator speaks to: a
+    // message, a command and a grant go on that chain, whichever chain of the run a link or the graph names.
+    const id = this.runOf(chosen).at(-1) ?? chosen;
     // The moment that the feed shows is one of the chain shown, so another chain is shown as it stands now.
     if (id !== this.selected) this.moment = undefined;
     // The turns and the program of the chain left are not the chain selected, which shows them once it has read them.
@@ -1069,6 +1102,10 @@ export class Session extends EventEmitter {
   /** One hunk of a change reverted by a word of the operator on the chain shown, so the World writes the file and the
    * record keeps the write. The word refuses when the file no longer holds the hunk where the review showed it. */
   async revert(change: ShownChange, hunk: Hunk): Promise<void> {
+    if (this.host.reading) {
+      this.notice = "This record is open to read.";
+      return;
+    }
     const path = fromDirectory(this.host.directory, change.path);
     await this.engine.result(
       await this.engine.rung({ word: revertWord(change.path, hunk), on: this.selected }),
@@ -1745,8 +1782,9 @@ export class Session extends EventEmitter {
   save(): void {
     this.preferences.save();
     const record = this.host.record;
-    // A recorded life keeps no view beside its log, which a later reader takes as it was made.
-    if (!record || this.host.recorded) return;
+    // A recorded life keeps no view beside its log, which a later reader takes as it was made, and a record open to
+    // read stays as it was.
+    if (!record || this.host.recorded || this.host.reading) return;
     const path = `${record}.ui.json`;
     this.savedCost = this.cost;
     const view: SavedView = {

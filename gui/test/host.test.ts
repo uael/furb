@@ -1,10 +1,11 @@
 import { afterAll, expect, test } from "bun:test";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { removeDemoDirectories } from "@furb/tui/src/demo.ts";
 import { projectOf } from "../host/host.ts";
 import { serve } from "../host/serve.ts";
 import type { Part } from "../src/wire.ts";
-import { until, windowOf, withHost } from "./hosting.ts";
+import { until, windowOf, withHost, withLife } from "./hosting.ts";
 
 afterAll(removeDemoDirectories);
 
@@ -106,4 +107,27 @@ test("the socket lets in only a window that holds its token, and answers each ca
     } finally {
       served.stop();
     }
+  }));
+test("a compaction reaches the window with the mark that the part of the extension gives it, as the TUI shows it", () =>
+  withLife(async (host, window) => {
+    const session = host.workspaces.current?.session;
+    if (!session) throw new Error("No session is open.");
+    const word = readFileSync(
+      resolve(import.meta.dir, "..", "..", "extensions", "compaction", "compaction.py"),
+      "utf8",
+    ).replace(/^from furb\.engine import \([^)]*\)\n+/m, "");
+    await session.command(`/run ${word}`);
+    await session.command('/run before = "the first step"');
+    await session.command('/run compact(summary="It read the plan.\\nThe tests wait.")');
+    await until("the mark with its summary", () => Boolean(window.held().life?.marks[0]?.lines.length));
+    const life = window.held().life;
+    expect(life?.compactions.map((one) => one.chain)).toEqual([life?.root ?? ""]);
+    expect(life?.marks).toEqual([
+      {
+        chain: life?.root ?? "",
+        at: life?.compactions[0]?.at ?? 0,
+        title: "Compaction: the model reads on from here",
+        lines: [[{ text: "It read the plan.", tone: "muted" }], [{ text: "The tests wait.", tone: "muted" }]],
+      },
+    ]);
   }));
