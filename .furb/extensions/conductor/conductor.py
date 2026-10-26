@@ -1,4 +1,5 @@
 import json
+from asyncio import CancelledError
 
 from furb.engine import (
   HIDDEN,
@@ -32,8 +33,9 @@ from furb.engine import (
 CONDUCTING = """Conduct the work in one loop, and plan no further than the next step.
 Put each item in queue as (key, brief, thread), or in backlog to wait behind queue, then await conduct(). Each round tends the workers and the open PRs, hires a worker for each item, CAP at once, and waits every seconds or until a worker ends. It hires only when no open PR of the round needs a worker that it has not got: a failed check, a conflict or an open box, on a PR with no label paused or hold. So the fixers take the free slots first, and the round merges before it starts new work. It moves the first item of backlog to queue while queue and working hold fewer than CAP items.
 The owner rules, on 10-23: "this kind of item should be done by sonnet, not opus. You need to use Sonnet more, when it make sense. And opus/medium should be your default, not opus/high. opus/high is kinda the max, xhigh for the coordination and my rulings only. most of the time sonnet/{medium,high} and opus/high are perfect." So the default of a worker, a fixer and a debrief, which asks the model of its worker, is ACTOR, opus/medium. A worker runs only a model of MODELS: sonnet/medium, sonnet/high, opus/medium or opus/high. hire() refuses xhigh and max, and the round starts no item that asks for one and tells you. You choose sonnet for an item where it makes sense, as efforts[key] = "claude-cli:sonnet/medium" before you queue it.
-The owner rules again, on 10-23: "From now on: 2 opus workers, 3 sonnet ones. max." So ROOM gives the room of each family of model: the round runs at most 2 workers on opus and 3 on sonnet at once, and counts only the workers whose prompt is not over. An item whose model has no room keeps its place in queue while the next item whose model has room starts. A fixer goes before a new item. A worker that ended and whose PR needs a worker goes on in its own chain on HANDOVER, sonnet, with a new prompt there, when sonnet has room; else a fixer starts on opus when it has room.
+The owner rules again, on 10-23: "From now on: 2 opus workers, 3 sonnet ones. max." The owner rules again, on 10-26: "add one opus/high worker for the most complex stuff". So ROOM gives the room of each family of model: the round runs at most 2 workers on opus/medium, 3 on sonnet and 1 on opus/high at once, and counts only the workers whose prompt is not over. You give opus/high only to the most complex items, as efforts[key] = "claude-cli:opus/high". An item whose model has no room keeps its place in queue while the next item whose model has room starts. A fixer goes before a new item. A worker that ended and whose PR needs a worker goes on in its own chain on HANDOVER, sonnet, with a new prompt there, when sonnet has room; else a fixer starts on opus when it has room.
 The round runs on one chain, lead["home"]. After a compaction of your chain, await conduct() in the new chain: it names that chain, the round of the old chain ends at its next wake, and the state that the round reads is the state of the new chain, which you change there.
+A fault of one step of a round, as an empty answer of gh, ends no round: the round tells you once each kind of fault, with the fault and its step, and goes on at the next round. Each json.loads of a command reads its output only when the command succeeded. When the round ends for any cause but a new home, it tells you as a decision, with the cause and what stops.
 hire(key, brief, thread) starts a worker from the base chain of its actor in bases, at its actor in efforts or ACTOR, on a chain labeled thread/key, with the brief in custom or WORKER, and its PR carries the labels w:key and thread:thread.
 A worker does one item in a worktree of its own, runs only the tests that its change touches, opens its PR, and closes with its URL.
 The round tells you a worker that ends with no PR, with its answer, or that says nothing for 45 minutes, relays to you each question that a worker puts to the operator, and wakes a worker that paused. results keeps the answer of each worker under its prompt.
@@ -54,8 +56,8 @@ debrief(name) asks the chain of a worker that ended for the frictions that it me
 Each act of the round is made through quietly(verb, ...), so its end wakes nobody: you hear only a notice, and each merge rides on the next one. Make each act that you do not await the same way.
 A review blocks only on a defect that a command reproduces, or on a false sentence of a contract."""
 
-ROOM = {"opus": 2, "sonnet": 3}
-CAP = ROOM["opus"] + ROOM["sonnet"]
+ROOM = {"opus": 2, "sonnet": 3, "opus/high": 1}
+CAP = sum(ROOM.values())
 ACTOR = "claude-cli:opus/medium"
 HANDOVER = "claude-cli:sonnet/medium"
 MODELS = (HANDOVER, "claude-cli:sonnet/high", ACTOR, "claude-cli:opus/high")
@@ -125,11 +127,11 @@ DEBRIEF = """Your work is done. As a user of furb, list each friction, defect or
 LABELS = "gh label create hold -c FBCA04 -d 'It waits for the fix of a review before a merge' 2>/dev/null; gh label create owner-merge -c 5319E7 -d 'The owner merges it or not' 2>/dev/null; gh label create paused -c BFBFBF -d 'The owner paused it: no fix and no merge' 2>/dev/null; true"
 
 PRS = """gh pr list --state open --limit 200 --json number,isDraft,labels,mergeable,mergeStateStatus,baseRefName,headRefName,headRefOid,statusCheckRollup,updatedAt,body --jq '[.[] | ([.statusCheckRollup[]?] | group_by(.name // .context // "") | map(max_by(if (.status // "COMPLETED") == "COMPLETED" then (.startedAt // .completedAt // "") else "~" end))) as $c | {n: .number, draft: .isDraft, labels: [.labels[].name], mergeable, state: .mergeStateStatus, base: .baseRefName, head: .headRefName, sha: .headRefOid, checks: [$c[] | (.conclusion // .state // "")], names: [$c[] | (.name // .context // "")], open: [(.body // "") | splits("\\n") | select(startswith("- [ ] "))], idle: ((now - (.updatedAt | fromdateiso8601)) / 60 | floor)}]'
-echo ---
+c=$?; echo; echo "--- $c"
 gh pr list --state merged --limit 200 --json number --jq '[.[].number]'
-echo ---
+c=$?; echo; echo "--- $c"
 gh run list --branch main --workflow gates.yml --limit 20 --json headSha,conclusion --jq '.[0].headSha as $s | {sha: ($s // ""), runs: [.[] | select(.headSha == $s) | .conclusion]}'
-echo ---
+c=$?; echo; echo "--- $c"
 cat DECISIONS.md 2>/dev/null"""
 
 REVIEWS = r"""for n in $(gh pr list --state open --json number --jq '.[].number') $(gh issue list --state open --json number --jq '.[].number'); do
@@ -382,7 +384,8 @@ def model_of(key: str) -> str:
 
 
 def family(model: str) -> str:
-  return model.split(":")[-1].split("/")[0]
+  name = model.split(":")[-1]
+  return name if name in ROOM else name.split("/")[0]
 
 
 def room(model: str) -> bool:
@@ -1369,17 +1372,27 @@ async def watch_ci() -> None:
 
 async def sweep(every: float) -> None:
   got = await bash(PRS, show=HIDDEN, timeout=300)
-  parts = got.stdout.content.split("\n---\n", 3)
-  if len(parts) < 4 or not parts[0].startswith("["):
-    notice(f"list {int(clock() // 3600)}", "The command that lists the PRs failed: " + (got.stderr.content or got.stdout.content)[-500:])
+  bits = re.split(r"\n--- (\d+)\n", got.stdout.content)
+  steps = ("the open PRs", "the merged PRs", "the gates of main")
+  whole = len(bits) == 2 * len(steps) + 1
+  failed = [
+    s for s, code, out in zip(steps, bits[1::2], bits[0::2], strict=False) if not whole or code != "0" or not out.strip()
+  ]
+  if not whole or failed:
+    notice(
+      f"list {int(clock() // 3600)}",
+      f"The command that lists the PRs failed at {', '.join(failed) or 'its output'}: "
+      + (got.stderr.content.strip()[-500:] or "gh said nothing."),
+    )
     return
+  parts = [bits[0], bits[2], bits[4], bits[6]]
   prs.clear()
   timers["sweep"] = clock()
   for pr in json.loads(parts[0]):
     pr["verdict"] = verdict(pr)
     prs[pr["n"]] = pr
-  merged.update(json.loads(parts[1] or "[]"))
-  main = json.loads(parts[2] or '{"sha": "", "runs": []}')
+  merged.update(json.loads(parts[1]))
+  main = json.loads(parts[2])
   red = "failure" in main["runs"]
   if red and f"red {main['sha']}" not in noticed:
     failed = await bash(REDLINES.replace("{sha}", str(main["sha"])), show=HIDDEN, timeout=300)
@@ -1438,22 +1451,58 @@ async def sweep(every: float) -> None:
     timers["audit"] = now
 
 
+def faulted(here: str, step: str, fault: Exception) -> None:
+  notice(
+    f"fault {step} {type(fault).__name__}",
+    f"The round on {here} met a fault in its step {step}: {type(fault).__name__}: {str(fault)[:1000]}. The round goes"
+    " on at the next round, and tells this kind of fault once.",
+  )
+
+
+def ended(here: str, cause: str) -> None:
+  try:
+    quietly(
+      prompt,
+      None,
+      f"The round on {here} ended: {cause}. Decide whether it goes on: until you await conduct() again, no sweep, no"
+      " heal, no merge, no fixer and no hire runs, and no worker is tended." + merged_since(),
+    )
+  except Exception:
+    return
+
+
 async def conduct(every: float = 300) -> dict[str, object]:
-  here = follow()
-  made = "".join(f"gh label create {s} --force -c {c} -d {shq(d)} >/dev/null 2>&1; " for s, (c, d) in STATUS.items())
-  await bash(made + LABELS, show=HIDDEN)
-  while lead.get("home") == here:
-    tend()
-    await sweep(every)
-    staff()
-    if not (
-      queue
-      or backlog
-      or working
-      or any("owner-merge" not in pr["labels"] and "paused" not in pr["labels"] for pr in prs.values())
-    ):
-      return results
-    await wait(every, *working, *[x for x in relays.values() if x])
+  here, at = follow(), "labels"
+  try:
+    made = "".join(f"gh label create {s} --force -c {c} -d {shq(d)} >/dev/null 2>&1; " for s, (c, d) in STATUS.items())
+    await bash(made + LABELS, show=HIDDEN)
+    while lead.get("home") == here:
+      for at in ("tend", "sweep", "staff"):
+        try:
+          if at == "tend":
+            tend()
+          elif at == "sweep":
+            await sweep(every)
+          else:
+            staff()
+        except Exception as fault:
+          faulted(here, at, fault)
+      if not (
+        queue
+        or backlog
+        or working
+        or any("owner-merge" not in pr["labels"] and "paused" not in pr["labels"] for pr in prs.values())
+      ):
+        ended(here, "it holds no item in queue, in backlog or in working, and no open PR that it tends")
+        return results
+      at = "wait"
+      await wait(every, *working, *[x for x in relays.values() if x])
+  except CancelledError:
+    ended(here, f"it was cancelled in its step {at}")
+    raise
+  except Exception as fault:
+    ended(here, f"the fault {type(fault).__name__}: {str(fault)[:1000]}, in its step {at}")
+    raise
   return results
 
 
