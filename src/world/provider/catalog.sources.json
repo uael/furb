@@ -1,0 +1,10 @@
+{
+  "models.dev": {
+    "url": "https://models.dev/api.json",
+    "fetched": "2026-10-26T18:09:17Z"
+  },
+  "pi-ai": {
+    "version": "1.4.0",
+    "fetched": "2026-10-26T18:09:17Z"
+  }
+}
