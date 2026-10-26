@@ -77,7 +77,7 @@ async function show(next: Session): Promise<void> {
 await show(session);
 
 /** The shots whose notice tells what the step did, which keep it. The others show no notice of an earlier step. */
-const notices = /^(34|36|37|42|43|44|45|50|55|58)-/;
+const notices = /^(34|36|37|42|43|44|45|50|55|58|98)-/;
 /** The view of the life that each shot of main shows, which FURB_GALLERY_VIEW names, so that the gallery of main is
  * captured again in the loom and in the graph. */
 const view = isLifeView(process.env.FURB_GALLERY_VIEW) ? process.env.FURB_GALLERY_VIEW : "main";
@@ -275,6 +275,30 @@ try {
   app().composer.setText("");
   await session.host.answer(files, '["README.md", "docs/tui.md"]');
   await until(session.host, () => !session.host.prompts.has(files));
+  // The words written for a question stay with it: when it closes meanwhile, they wait in the history of the input.
+  const branch = await session.engine.prompt("str", {
+    message: "Which branch does the release come from?",
+    on: session.selected,
+    to: "operator",
+  });
+  const version = await session.engine.prompt("str", {
+    message: "Which version does it carry?",
+    on: session.selected,
+    to: "operator",
+  });
+  await until(session.host, () => session.host.prompts.has(branch) && session.host.prompts.has(version));
+  await session.refresh();
+  await session.point(branch);
+  app().render();
+  await test.flush();
+  await test.mockInput.typeText("release/0.3, the one that");
+  await session.host.answer(branch, "main");
+  await until(session.host, () => !session.host.prompts.has(branch));
+  await session.point(version);
+  await session.refresh();
+  await capture("98-words-kept");
+  await session.host.answer(version, "0.3.0");
+  await until(session.host, () => !session.host.prompts.has(version));
   const notice = await session.engine.prompt("None", {
     message: "The search shortcut is on the main chain.",
     on: session.selected,
@@ -717,6 +741,8 @@ try {
   await session.refresh();
   app().render();
   await test.flush();
+  // The footer offers ⌃C to take the message back while it runs.
+  await capture("97-take-back-hint");
   // A right click on the message offers to take it back.
   const [column, row] = find(test, "┃ Think until I cancel.");
   await test.mockMouse.click(column + 4, row, 2);
