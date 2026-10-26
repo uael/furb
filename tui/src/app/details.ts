@@ -25,6 +25,7 @@ import {
   type ProgramLine,
   writing,
 } from "furb/life";
+import { clock } from "../clock.ts";
 import { conversation } from "../conversation.ts";
 import { shortenHomes } from "../files.ts";
 import { clip, dollars, modelName, share } from "../format.ts";
@@ -272,7 +273,7 @@ export const details = part({
     const word = "thinking";
     if (motion.still) return { number: display, parts: [[`# ${word}`, c.syntaxComment]] };
     // The light rests for a few frames after it crosses the word, so the row breathes and does not flicker.
-    const lit = Math.floor(Date.now() / frame) % (word.length + 8);
+    const lit = Math.floor(clock() / frame) % (word.length + 8);
     return {
       number: display,
       parts: [
