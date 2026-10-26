@@ -117,7 +117,13 @@ test("a repair keeps both good changes and says 2 changes kept, 1 line removed",
         await session.refresh().catch(session.fail);
         expect(await frame()).toContain("Repair the journal");
         await click("Repair the journal");
-        await until(session, () => session.notice.startsWith("The journal is repaired"));
+        await until(
+          session,
+          () =>
+            session.notice.startsWith("The journal is repaired") ||
+            Boolean(session.error && !session.damagedJournal),
+        );
+        expect(session.error).toBe("");
         expect(session.notice).toBe("The journal is repaired: 2 changes kept, 1 line removed.");
         expect(await afters(session)).toEqual(["a\n", "c\n"]);
         expect((await readFile(journal, "utf8")).split("\n").filter(Boolean)).toHaveLength(2);
@@ -146,7 +152,13 @@ test("a change written while the session is open, by it or by another program, i
         );
         await frame();
         await click("Repair the journal");
-        await until(session, () => session.notice.startsWith("The journal is repaired"));
+        await until(
+          session,
+          () =>
+            session.notice.startsWith("The journal is repaired") ||
+            Boolean(session.error && !session.damagedJournal),
+        );
+        expect(session.error).toBe("");
         expect(session.notice).toBe("The journal is repaired: 4 changes kept, 1 line removed.");
         expect(await afters(session)).toEqual(["a\n", "c\n", "d\n", "e\n"]);
       },
@@ -188,7 +200,13 @@ test("the key of a repair acts only on a journal found damaged, and repairs it",
         await session.refresh().catch(session.fail);
         expect(await frame()).toContain("⌥R");
         screen.mockInput.pressKey("r", { meta: true });
-        await until(session, () => session.notice.startsWith("The journal is repaired"));
+        await until(
+          session,
+          () =>
+            session.notice.startsWith("The journal is repaired") ||
+            Boolean(session.error && !session.damagedJournal),
+        );
+        expect(session.error).toBe("");
         expect(session.notice).toBe("The journal is repaired: 2 changes kept, 1 line removed.");
         await until(session.host, () => session.host.changes === 2);
         await expect(session.renewJournal()).rejects.toThrow("The journal of file changes is not damaged.");

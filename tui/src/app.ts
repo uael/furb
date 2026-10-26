@@ -114,6 +114,7 @@ import {
   type Row,
   type Seen,
 } from "./parts.ts";
+import { readingNote, readOnly, sameBuild } from "./reading.ts";
 import { commentStart, type Hunk, hunkPatch, lines, type Scope, scopeLabels, scopes } from "./review.ts";
 import {
   type ActRow,
@@ -178,6 +179,7 @@ const statusMark = (status: SessionStatus): Part =>
       blocked: [`${glyph.asks} `, c.warning],
       paused: [`${glyph.held} `, c.warning],
       error: [`${glyph.failed} `, c.danger],
+      reading: [`${glyph.ring} `, c.warning],
       done: [`${glyph.dot} `, c.success],
       idle: [`${glyph.ring} `, c.faint],
       saved: [`${glyph.ring} `, c.faint],
@@ -778,6 +780,11 @@ export class App {
       ],
       syntaxStyle: this.style,
       onContentChange: () => {
+        // A record open to read takes no text: its composer stays empty.
+        if (this.session.host.reading && this.composer.plainText) {
+          this.composer.setText("");
+          return;
+        }
         this.schedule();
         void this.highlightEditor();
         this.suggest();
@@ -892,38 +899,32 @@ export class App {
   }
 
   /** The dialog of a record that a life refused for a drift, as a record that a build of another version made, which
-   * opens to read: it names both versions, or both engines for a record of a build before the versions, and offers
-   * to read the record, or to start a new life in its workspace. */
+   * opens to read: it names the build that made the record and this build, each on a line of its own, says what a new
+   * life from the record carries, and offers to read the record, or to start a new life in its workspace. */
   private readOrRenew(): void {
     const reading = this.session.host.reading;
     if (!reading) return;
     this.session.readingTold = true;
-    const ours = reading.engine.slice(0, 12);
-    const same =
-      reading.version === null ? reading.made === reading.engine : reading.version === reading.current;
-    const theirs =
-      reading.version !== null
-        ? `a build of version ${reading.version}`
-        : reading.made
-          ? `the engine ${reading.made.slice(0, 12)}`
-          : "an earlier engine, which the record does not name";
-    const build = reading.version !== null ? `is of version ${reading.current}` : `runs the engine ${ours}`;
-    const note = same
-      ? `This build ${build}, which made it, and its replay drifts: ${clip(reading.why, 240)}`
-      : `It was made by ${theirs}, and this build ${build}. A replay would drift, so it opens to read.`;
-    const library = this.options.workspaces;
     this.openPalette(
-      same ? "This record does not replay" : "This record was made by another build",
+      sameBuild(reading) ? "This record does not replay" : "This record was made by another build",
       [
         { label: "Read it", detail: "See what it kept. No word runs again.", run: () => {} },
         {
           label: "Start a new life from it",
-          detail: "A new session in its workspace",
-          run: () => library.create().then(() => {}, this.session.fail),
+          detail: "A new session in its workspace, with the earlier work of the record",
+          run: () => this.startFrom(),
         },
       ],
-      { note },
+      { note: readingNote(reading) },
     );
+  }
+  /** A new life in the workspace of a record open to read, whose first word carries the earlier work of the record. */
+  private startFrom(): void {
+    const library = this.options.workspaces;
+    void this.session.host
+      .carry()
+      .then((carry) => library.create(library.groupOf(), undefined, carry))
+      .then(() => {}, this.session.fail);
   }
 
   private box(options: BoxOptions = {}): BoxRenderable {
@@ -1158,7 +1159,7 @@ export class App {
     return kept.filter((entry, index) => kept.lastIndexOf(entry) === index);
   }
   async submit(): Promise<void> {
-    if (this.submitting) return;
+    if (this.submitting || this.session.host.reading) return;
     this.submitting = true;
     const key = this.draftKey;
     const content = this.composer.plainText;
@@ -1270,19 +1271,22 @@ export class App {
       );
     }
     const choosing = this.picking();
-    const [mode, modeColor, placeholder] = w.editing
-      ? ["Edit program", c.warning, "Edit this prompt's Python program"]
-      : pending
-        ? [
-            "Answer",
-            c.warning,
-            choosing
-              ? `Your own words in place of ${wants(pending)}. Esc goes back to the values.`
-              : `Your answer to ${pending.id}, as ${pending.shape}`,
-          ]
-        : w.mode === "python"
-          ? ["Python", c.secondary, "Write Python. The gate reads it before it runs."]
-          : ["Prompt", c.accent, "Ask anything, or type / for commands"];
+    const reading = w.host.reading;
+    const [mode, modeColor, placeholder] = reading
+      ? ["Read only", c.faint, readOnly(reading)]
+      : w.editing
+        ? ["Edit program", c.warning, "Edit this prompt's Python program"]
+        : pending
+          ? [
+              "Answer",
+              c.warning,
+              choosing
+                ? `Your own words in place of ${wants(pending)}. Esc goes back to the values.`
+                : `Your answer to ${pending.id}, as ${pending.shape}`,
+            ]
+          : w.mode === "python"
+            ? ["Python", c.secondary, "Write Python. The gate reads it before it runs."]
+            : ["Prompt", c.accent, "Ask anything, or type / for commands"];
     for (const edge of this.composeEdges) if (edge.borderColor !== modeColor) edge.borderColor = modeColor;
     this.composer.cursorColor = modeColor;
     this.composer.placeholder = placeholder;
@@ -1348,10 +1352,16 @@ export class App {
     }
     if (chord) box.add(this.line(`  ${chord}`, c.faint));
   }
+  /** Without journal entries, a read cannot say that the writes had no net change. */
+  private get unrecordedChanges(): boolean {
+    const w = this.session;
+    return !!w.host.reading && w.host.changes === 0 && w.scope !== "branch";
+  }
   /** The top line: the session and the chain at its left, each a button, and the toggle of the views at its right. */
   private renderTop(): void {
     const w = this.session;
-    const changes = w.host.changes;
+    const unknown = w.view === "changes" && (w.journalDamaged || w.error || this.unrecordedChanges);
+    const changes = unknown ? "?" : w.host.changes;
     const shown = this.tree ? "feed" : w.view;
     const directory = shortenHome(w.workingDirectory);
     // The top line spends its room in this order: the session and the chain, the switch of the views, the key of the
@@ -1409,7 +1419,8 @@ export class App {
     const { model, effort } = w.actorChoice;
     const { provider, id: name } = modelName(model);
     const stash = w.stashes[w.draftKey];
-    const prompt = w.mode === "prompt" && !w.editing && !pending;
+    const reading = Boolean(w.host.reading);
+    const prompt = w.mode === "prompt" && !w.editing && !pending && !reading;
     // The line spans the input but its bar and its padding.
     const room = this.feedWidth - 3;
     if (
@@ -1424,6 +1435,7 @@ export class App {
         pending?.shape,
         stash,
         prompt,
+        reading,
         room,
         this.theme,
       ])
@@ -1432,7 +1444,7 @@ export class App {
     this.clear(this.meta);
     // A narrow input leaves out, in this order, the provider, the type of the answer, the effort, and the chord of the
     // switch, and the stash shows less of what waits in it.
-    const edited = Boolean(w.editing || pending);
+    const edited = Boolean(w.editing || pending || reading);
     const shown = { chord: !edited, provider: prompt && Boolean(provider), shape: prompt, effort: prompt };
     const gaps = 3;
     const width = () =>
@@ -1568,13 +1580,15 @@ export class App {
       ? "Loading"
       : retry
         ? retryLine(retry)
-        : status === "error"
-          ? w.damagedJournal
-            ? "The journal of file changes is damaged"
-            : w.error
-              ? "The view could not load"
-              : "The last act failed"
-          : statusLabels[status];
+        : w.host.reading
+          ? readOnly(w.host.reading)
+          : status === "error"
+            ? w.damagedJournal
+              ? "The journal of file changes is damaged"
+              : w.error
+                ? "The view could not load"
+                : "The last act failed"
+            : statusLabels[status];
     // The footer offers the keys of the top layer that offers any, each of which does what its key does, and under
     // the layer of the table, the wake of a paused chain.
     type Offer = readonly [chord: string, action: string, run: () => void];
@@ -1587,6 +1601,7 @@ export class App {
       });
     const group = offered[0]?.hint[2];
     const keys: readonly Offer[] = [
+      ...(w.host.reading ? ([["/new", "Start a new life", () => this.startFrom()]] as readonly Offer[]) : []),
       ...(group === "" && w.paused
         ? ([["/wake", "wake the chain", () => this.action("/wake")]] as const)
         : []),
@@ -2025,8 +2040,22 @@ export class App {
         );
       });
     if (w.error && w.view === "changes" && w.damagedJournal)
-      // A damaged journal of file changes says what broke, and offers to repair it or to start a new one.
-      add("view-error", `${w.view}:${w.damagedJournal}`, [], (box) =>
+      // A damaged journal says what broke; only a writable life offers to repair it or to start a new one.
+      add("view-error", `${w.view}:${w.damagedJournal}`, [], (box) => {
+        const actions: [string, string, () => void][] = w.host.reading
+          ? []
+          : [
+              [
+                "Repair the journal",
+                `keeps each change that it can read, ${this.chordOf("repair")}`,
+                () => void w.repairJournal().catch(w.fail),
+              ],
+              [
+                "Start a new journal",
+                `keeps the damaged one beside it, ${this.chordOf("renew")}`,
+                () => void w.renewJournal().catch(w.fail),
+              ],
+            ];
         this.banner(
           box,
           c.danger,
@@ -2035,18 +2064,9 @@ export class App {
             ["The journal of file changes is damaged", c.text, bold],
           ],
           this.text(w.damagedJournal, c.muted),
-          [
-            "Repair the journal",
-            `keeps each change that it can read, ${this.chordOf("repair")}`,
-            () => void w.repairJournal().catch(w.fail),
-          ],
-          [
-            "Start a new journal",
-            `keeps the damaged one beside it, ${this.chordOf("renew")}`,
-            () => void w.renewJournal().catch(w.fail),
-          ],
-        ),
-      );
+          ...actions,
+        );
+      });
     else if (w.error)
       add("view-error", `${w.view}:${w.error}`, [], (box) =>
         this.banner(
@@ -2823,8 +2843,10 @@ export class App {
                   c.faint,
                 ),
               );
-              bar.add(this.link("Revert", () => void w.revert(change, hunk).catch(this.report)));
-              bar.add(this.link("Comment a line", () => this.commentLine(path, hunk)));
+              if (!w.host.reading) {
+                bar.add(this.link("Revert", () => void w.revert(change, hunk).catch(this.report)));
+                bar.add(this.link("Comment a line", () => this.commentLine(path, hunk)));
+              }
               box.add(bar);
               box.add(
                 new DiffRenderable(this.renderer, {
@@ -2891,7 +2913,12 @@ export class App {
       };
       const [title, hint] = w.search
         ? [`Nothing matches “${w.search}”`, "Change the filter, or press Esc to clear it."]
-        : empty[w.view];
+        : w.view === "changes" && this.unrecordedChanges
+          ? [
+              "No file-change snapshots are available",
+              "The Feed still shows the writes that the record kept.",
+            ]
+          : empty[w.view];
       // An empty review offers its other scopes under its hint, where the eye already is.
       const scoped = w.view === "changes" && !w.search;
       add("empty", `${title}:${height}:${this.theme}:${scoped && w.scope}`, [], (box) =>
@@ -3216,6 +3243,10 @@ export class App {
     // Only work moves: an act of another kind that lives, as a grant or the watcher of an extension, lives until
     // something ends it, as a chain does, and shows a dot.
     if (!act.done && !WORK.includes(act.kind)) return { word: "", mark: glyph.dot, color: c.accent };
+    // In a record open to read, the work that had no end when the record ended has none to come: it neither runs nor
+    // waits for a wake.
+    if (act.unfinished && !act.done)
+      return { word: "not finished when the record ends", mark: glyph.ring, color: c.faint };
     // A rung that a pause holds waits for the wake, and says so, where it would otherwise seem to run.
     if (act.kind === "rung")
       return cancelled(act)
@@ -3830,9 +3861,11 @@ export class App {
   private renderPick(ask: Ask | undefined): void {
     if (this.pickBox.visible !== Boolean(ask)) this.pickBox.visible = Boolean(ask);
     const typing = !ask || this.choice.other;
-    if (this.composer.visible !== typing) {
-      this.composer.visible = typing;
-      // The input takes the keys again once no list holds them.
+    const changed = this.composer.visible !== typing;
+    if (changed) this.composer.visible = typing;
+    // A record open to read has no input. Other inputs, such as a row being renamed, keep their focus.
+    if (this.session.host.reading) this.composer.blur();
+    else if (changed) {
       if (typing && !this.overlay) this.composer.focus();
       else this.composer.blur();
     }
@@ -3942,6 +3975,8 @@ export class App {
    * for, and a mark and a word only when a cancel or a failure ended it, or a pause holds it. */
   private promptState(act: ActRow): Part[] {
     const shape: Part = [String(act.words[0] ?? ""), c.faint];
+    if (act.unfinished && !act.done)
+      return [shape, [`   ${glyph.ring} not finished when the record ends`, c.faint]];
     const state = act.done
       ? failed(act)
         ? stateOf("failed")
@@ -4973,6 +5008,7 @@ export class App {
   /** A thread opens again: the input takes the message that goes to it. */
   private reopenThread(id: string): void {
     const w = this.session;
+    if (w.host.reading) return;
     w.thread = id;
     this.railAt = id;
     w.notice = `Your next message goes to ${id} and opens it again.`;
@@ -5835,7 +5871,7 @@ export class App {
             value: act.value,
           }),
       },
-      ...(w.editable(act)
+      ...(!w.host.reading && w.editable(act)
         ? [
             {
               label: "Edit its program",
@@ -5844,7 +5880,7 @@ export class App {
             },
           ]
         : []),
-      ...(!act.done && WORK.includes(act.kind)
+      ...(!w.host.reading && !act.done && !act.unfinished && WORK.includes(act.kind)
         ? [
             w.lastOwn?.id === act.id && message
               ? {
@@ -5859,7 +5895,7 @@ export class App {
                 },
           ]
         : []),
-      ...(this.isPoint(act)
+      ...(!w.host.reading && this.isPoint(act)
         ? [
             {
               label: message ? "Edit and send again" : "Branch after it",
@@ -5909,6 +5945,16 @@ export class App {
         });
     }
     const choices: Choice[] = [
+      ...(this.session.host.reading
+        ? [
+            {
+              label: "Read only",
+              detail: "Why this record opens to read, and how to start a new life from it",
+              command: "",
+              run: () => this.readOrRenew(),
+            },
+          ]
+        : []),
       { label: "New session", detail: commands.new[2], command: "/new", run: () => this.action("/new") },
     ];
     // One key names the three views, as 1-3.
@@ -7320,7 +7366,7 @@ export class App {
       note = "",
       rich = false,
       at,
-    }: { selected?: number; note?: string; rich?: boolean; at?: { x: number; y: number } } = {},
+    }: { selected?: number; note?: string | string[]; rich?: boolean; at?: { x: number; y: number } } = {},
   ): void {
     // A dialog or a menu takes the keys, so a name that a row takes ends first, and is kept.
     this.endRename(true);
@@ -7395,9 +7441,15 @@ export class App {
     heading.add(this.text(label, c.text, { attributes: bold, truncate: true, flexGrow: 1, flexShrink: 1 }));
     heading.add(this.text("Esc", c.faint, { run: () => this.closeOverlay() }));
     this.overlay.add(heading);
-    this.paletteNote = note ? space.bar : 0;
-    if (note)
-      this.overlay.add(this.inset(space.between, this.line(clip(note, this.paletteWidth - 8), c.muted)));
+    // A note in a list lays out on as many lines as its items need, and a single text takes one line.
+    const notes = Array.isArray(note)
+      ? note.flatMap((item) => wrapped(item, this.paletteWidth - 8, Number.MAX_SAFE_INTEGER))
+      : note
+        ? [clip(note, this.paletteWidth - 8)]
+        : [];
+    this.paletteNote = notes.length * space.bar;
+    for (const line of notes)
+      this.overlay.add(this.inset(space.between, this.line(clip(line, this.paletteWidth - 8), c.muted)));
     // A short list shows its filter only once the operator types in it, and until then the filter takes no row.
     const quiet = choices.length <= 5;
     this.paletteInputRow = this.row({
@@ -8067,7 +8119,7 @@ export class App {
   /** Whether Escape pauses the chain: a model is at work on it, and no pause holds it. */
   private pausing(): boolean {
     const w = this.session;
-    return !w.paused && w.open.some((act) => act.kind === "prompt" && !asksOperator(act));
+    return !w.host.reading && !w.paused && w.open.some((act) => act.kind === "prompt" && !asksOperator(act));
   }
   /** What each action of the table of keys does, with the key that ran it. */
   private readonly actions: Record<Action, (key?: KeyEvent) => unknown> = {
@@ -8125,8 +8177,8 @@ export class App {
   private readonly when: Partial<Record<Action, () => boolean>> = {
     answer: () => this.session.desk.asks.length > 0,
     scope: () => this.session.view === "changes",
-    repair: () => this.session.journalDamaged,
-    renew: () => this.session.journalDamaged,
+    repair: () => this.session.journalDamaged && !this.session.host.reading,
+    renew: () => this.session.journalDamaged && !this.session.host.reading,
     pause: () => !this.searchRow.visible && this.pausing(),
   };
   /** The view shown, with the rewind tree closed. */

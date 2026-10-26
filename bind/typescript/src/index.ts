@@ -1,6 +1,6 @@
 export * from "../index.cjs";
 export { Activity, type Answered } from "./activity.js";
-export { DamagedJournal, type FileChange, type Repaired } from "./changes.js";
+export { DamagedJournal, type FileChange, FileChanges, type Repaired } from "./changes.js";
 export { Console, type ConsoleOptions } from "./console.js";
 export { type Call, call, driving, type Ear, type Saying, speaking } from "./ears.js";
 export { Chain, Life, type LifeAct, type LifeOptions, open, Question, Thread } from "./framework.js";
