@@ -20,6 +20,8 @@ const demoFiles: Record<string, string> = {
     "export interface Note {\n  text: string;\n  at: number;\n}\n\nconst notes: Note[] = [];\n\nexport const save = (note: Note) => notes.push(note);\nexport const load = () => notes;\n",
   "test/search.test.ts":
     'import { expect, test } from "bun:test";\nimport { capture } from "../src/capture.ts";\nimport { search } from "../src/search.ts";\n\ntest("search finds a captured note", () => {\n  capture("small ideas");\n  expect(search("ideas")).toHaveLength(1);\n});\n',
+  "examples/fieldwork/notes/2026/rounds/01/session/runs/immutable/cache/observations/research/field-notes/summary.md":
+    "# Field notes\\n\\nCafé, 東京, and a compass 🧭.\\n",
 };
 
 export async function seedDemoFiles(directory: string): Promise<void> {
@@ -108,6 +110,7 @@ export async function tour(session: Session, pause = 1500): Promise<void> {
     await engine.prompt("str", { message: "Add the search shortcut, Ctrl+K.", on: branch }),
   );
   await session.refresh();
+  await seedRichDemo(session);
 }
 
 /** A library that holds a demo session in the workspace of its directory, with the session selected, as the command
@@ -116,6 +119,168 @@ export async function demoLibrary(session: Session): Promise<Workspaces> {
   const library = new Workspaces(session.preferences, { demo: true });
   await library.select(library.adopt(session, await library.add(session.host.directory)));
   return library;
+}
+
+/**
+ * Add a generated, scripted life for gallery and stress checks. Every act goes through the demo engine, so the
+ * views read real chains, prompts and file changes rather than a painted frame.
+ */
+export async function seedRichDemo(
+  session: Session,
+  { questions = true }: { questions?: boolean } = {},
+): Promise<string> {
+  const { engine } = session;
+  const root = engine.root;
+  const branches: string[] = [];
+  for (let group = 0; group < 12; group++)
+    branches.push(
+      await engine.chain({ label: `Fieldwork ${String(group + 1).padStart(2, "0")}`, source: root }),
+    );
+
+  const longPath =
+    "examples/fieldwork/notes/2026/rounds/01/session/runs/immutable/cache/observations/research/field-notes/summary.md";
+  const source = [
+    "def index_notes(paths):",
+    "  found = []",
+    "  for path in paths:",
+    "    try:",
+    "      text = read(path)",
+    "      if text.content:",
+    "        found.append((path, len(text.lines)))",
+    "    except Refused as error:",
+    "      found.append((path, str(error)))",
+    "  return found",
+    "",
+    `paths = ["README.md", "src/capture.ts", "src/search.ts", "src/storage.ts", ` +
+      `${JSON.stringify(longPath)}]`,
+    "rows = index_notes(paths)",
+    "cursor = 0",
+    "while cursor < len(rows):",
+    "  path, detail = rows[cursor]",
+    "  if isinstance(detail, int):",
+    '    print(f"{path}: {detail} lines")',
+    "  else:",
+    '    print(f"{path}: {detail}")',
+    "  cursor += 1",
+    "",
+    "for part in range(4):",
+    "  try:",
+    '    result = await bash("printf \'Fieldwork pass %s\\\\n\' " + str(part) + "")',
+    "    if result.code != 0:",
+    '      raise Refused("the scripted check failed")',
+    "  except Refused as error:",
+    "    print(str(error))",
+    "",
+    'report = Text("FIELDWORK.md", "# Fieldwork\\n\\n")',
+    "for path, detail in rows:",
+    '  report = report.append(f"- {path}: {detail}\\n")',
+    "write(report)",
+    "await wait(0.01)",
+    "",
+    "def classify_row(path, detail):",
+    "  try:",
+    "    if path.endswith('.md'):",
+    "      kind = 'guide'",
+    "    elif path.endswith('.ts'):",
+    "      kind = 'source'",
+    "    else:",
+    "      kind = 'other'",
+    "    if isinstance(detail, int):",
+    "      if detail > 20:",
+    "        depth = 'long'",
+    "      else:",
+    "        depth = 'short'",
+    "    else:",
+    "      depth = 'refused'",
+    "    return (path, kind, depth, detail)",
+    "  except (TypeError, ValueError) as error:",
+    "    return (path, 'invalid', str(error))",
+    "classified = [classify_row(path, detail) for path, detail in rows]",
+    "for index, item in enumerate(classified):",
+    "  if index % 2 == 0:",
+    "    print('even', item[1], item[0])",
+    "  else:",
+    "    print('odd', item[1], item[0])",
+    "try:",
+    "  totals = sum(1 for item in classified if item[2] == 'long')",
+    "  if totals < 0:",
+    "    raise Refused('invalid total')",
+    "except Refused as error:",
+    "  print(str(error))",
+  ];
+  const longProgram = source.join("\n");
+  await engine.pause(root);
+  const rootParent = await engine.prompt("str", {
+    message: "Review the fieldwork overview and prepare the next-step report.",
+    on: root,
+  });
+  engine.write({ path: rootParent, content: longProgram }, { on: root });
+  await session.refresh();
+  await engine.wake(root);
+  await session.refresh();
+  const rootProgram = session.acts.find(
+    (act) => act.kind === "rung" && act.by === rootParent && act.words[0] === longProgram,
+  );
+  if (!rootProgram) throw new Error("The overview prompt did not take its scripted fieldwork program.");
+  await engine.result(rootProgram.id);
+  await engine.close("The fieldwork report is ready.", { id: rootParent });
+  const longProgramId = rootParent;
+  for (const [index, chain] of branches.entries()) {
+    const branchProgram = [
+      `batch = ["notes", "archive", "fieldwork-${index + 1}"]`,
+      "selected = []",
+      "for item in batch:",
+      "  try:",
+      "    if item.strip():",
+      "      selected.append(item.strip())",
+      "  except AttributeError as error:",
+      "    selected.append(str(error))",
+      `print("Fieldwork ${index + 1}", selected)`,
+    ].join("\n");
+    await engine.result(await engine.rung({ word: branchProgram, on: chain }));
+    await engine.result(
+      await engine.rung({
+        word: `write(Text("FIELDWORK-${index + 1}.md", ${JSON.stringify(
+          `# Fieldwork ${index + 1}\n\nA generated report from the scripted demo.\n`,
+        )}))`,
+        on: chain,
+      }),
+    );
+  }
+
+  if (!questions) {
+    await session.refresh();
+    return longProgramId;
+  }
+
+  const rootThreads = Array.from({ length: 10 }, (_, index) =>
+    engine.prompt("str", {
+      message: `Overview question ${index + 1}: which evidence should guide the next investigation?`,
+      to: "operator",
+      on: rootParent,
+    }),
+  );
+  const parents: string[] = [];
+  for (const [index, chain] of branches.entries()) {
+    const parent = await engine.prompt("str", {
+      message: `Review fieldwork ${index + 1}: check the report and name one follow-up.`,
+      to: "operator",
+      on: chain,
+    });
+    parents.push(parent);
+  }
+  const threads = parents.flatMap((parent, group) =>
+    Array.from({ length: 10 }, (_, index) =>
+      engine.prompt("str", {
+        message: `Fieldwork ${group + 1}, question ${index + 1}: what should the next check cover?`,
+        to: "operator",
+        on: parent,
+      }),
+    ),
+  );
+  await Promise.all([...rootThreads, ...threads]);
+  await session.refresh();
+  return longProgramId;
 }
 
 export async function seedDemo(session: Session): Promise<void> {

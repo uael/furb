@@ -7,7 +7,7 @@ import { parseArgs } from "node:util";
 import { createCliRenderer, RGBA } from "@opentui/core";
 import { efforts, furbDirectory, onConsoleEnd } from "furb";
 import { follow } from "./app.ts";
-import { demoDirectory, removeDemoDirectories } from "./demo.ts";
+import { demoDirectory, removeDemoDirectories, seedDemoFiles, seedRichDemo } from "./demo.ts";
 import type { EngineOptions } from "./models.ts";
 import { opening } from "./opening.ts";
 import { isLifeView, lifeViews } from "./overview.ts";
@@ -125,12 +125,31 @@ const library = new Workspaces(
 const group = await library.add(directory);
 await library.refresh();
 try {
-  if (record) await library.import(record, group);
-  else await library.create(group);
-  // The demo shows a real life beside its scripted one, recorded from a log, and opens on it.
   const recordedLife = join(import.meta.dir, "..", "fixtures", "conductor.jsonl");
-  if (values.demo && !record && !values.cwd && existsSync(recordedLife))
-    await library.import(recordedLife, group);
+  if (record) await library.import(record, group);
+  else {
+    // Keep the public scripted story in the library, but leave the freshly seeded rich life selected.
+    if (values.demo && !values.cwd && existsSync(recordedLife)) await library.import(recordedLife, group);
+    const demoEntry = await library.create(group);
+    if (values.demo && !values.cwd) {
+      const demo = demoEntry.session;
+      if (!demo) throw new Error("The demo session did not open.");
+      await seedDemoFiles(directory);
+      await seedRichDemo(demo);
+      for (let workspaceIndex = 1; workspaceIndex <= 3; workspaceIndex++) {
+        const project = join(directory, `fieldwork-${workspaceIndex}`);
+        await mkdir(project, { recursive: true });
+        await seedDemoFiles(project);
+        const workspace = await library.add(project);
+        for (let sessionIndex = 1; sessionIndex <= 6; sessionIndex++) {
+          const entry = await library.create(workspace, `Fieldwork ${workspaceIndex}.${sessionIndex}`);
+          if (!entry.session) throw new Error(`Fieldwork ${workspaceIndex}.${sessionIndex} did not open.`);
+          if (sessionIndex === 6) await library.archive(entry);
+        }
+      }
+      await library.select(demoEntry);
+    }
+  }
 } catch (error) {
   // A life that does not open ends the TUI with what it said, and with no trace of the stack.
   renderer.destroy();

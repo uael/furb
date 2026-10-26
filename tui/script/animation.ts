@@ -2,7 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
-import { demoSession, removeDemoDirectories, seedDemoFiles } from "../src/demo.ts";
+import { demoSession, removeDemoDirectories, seedDemoFiles, seedRichDemo } from "../src/demo.ts";
 import { loadParsers } from "../src/parsers.ts";
 import { paletteOf } from "../src/theme.ts";
 import { idle } from "../test/idle.ts";
@@ -22,7 +22,7 @@ const columns = 138,
   zoom = 2;
 const output = resolve(process.env.FURB_ANIMATION_OUT ?? "docs/furb.gif");
 await seedDemoFiles(directory);
-const session = await demoSession({ cwd: directory });
+const session = await demoSession({ cwd: directory, watch: true });
 await session.command("/name Explore project");
 // With the kitty keyboard protocol, an Escape is a key of its own that no key after it joins.
 const test = await createTestRenderer({ width: columns, height: rows, useMouse: true, kittyKeyboard: true });
@@ -148,6 +148,23 @@ try {
   await type("github", 1, 8);
   test.mockInput.pressEnter();
   await still(220);
+  // End on the generated, model-free gallery: many real chains, long programs and waiting threads.
+  const program = await seedRichDemo(session);
+  session.folds[`steps:${program}`] = false;
+  session.folds[`thread:${program}`] = false;
+  session.folds[`prompts:${session.engine.root}`] = false;
+  await session.select(session.engine.root);
+  await session.refresh();
+  app().render();
+  await test.flush();
+  app().scroll.stickyScroll = false;
+  const card = app()
+    .scroll.getChildren()
+    .find((node) => node.id === `program-${program}`);
+  if (!card) throw new Error(`The final animation did not render rich thread program ${program}.`);
+  app().scroll.scrollTo(Math.max(0, card.y - app().scroll.y + app().scroll.scrollTop - 3));
+  await test.flush();
+  await still(260);
   // The lights of the title bar are rare pixels, which the palette keeps all the same.
   await writeFile(output, gif(stills, size.width, size.height, [0xff5f57, 0xfebc2e, 0x28c840]));
   console.log(`${output}: ${stills.length} pictures`);

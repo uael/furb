@@ -6,7 +6,14 @@ import type { Exit } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { type App, follow } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
-import { demoSession, removeDemoDirectories, seedDemo, seedDemoFiles, tour } from "../src/demo.ts";
+import {
+  demoSession,
+  removeDemoDirectories,
+  seedDemo,
+  seedDemoFiles,
+  seedRichDemo,
+  tour,
+} from "../src/demo.ts";
 import { isLifeView } from "../src/overview.ts";
 import { loadParsers } from "../src/parsers.ts";
 import { Preferences } from "../src/preferences.ts";
@@ -60,7 +67,12 @@ const view = isLifeView(process.env.FURB_GALLERY_VIEW) ? process.env.FURB_GALLER
 async function settle(): Promise<void> {
   await session.refresh();
   for (let attempt = 0; attempt < 10; attempt++) {
-    const pending = session.activity.filter((act) => !act.done && ["prompt", "rung"].includes(act.kind));
+    const pending = session.activity.filter(
+      (act) =>
+        !act.done &&
+        ["prompt", "rung"].includes(act.kind) &&
+        !(act.kind === "prompt" && act.words[2] === "operator"),
+    );
     if (!pending.length && !session.queued.length) break;
     // A queue that waits on no act sends its next message in a moment.
     if (!pending.length) await new Promise((done) => setTimeout(done, 100));
@@ -97,7 +109,118 @@ async function capture(name: string): Promise<void> {
   if (texts) await writeFile(join(texts, `${name}.txt`), test.captureCharFrame());
 }
 
+async function richWorkspaceGallery(): Promise<void> {
+  const previousSession = session;
+  const previousEntry = library.current;
+  let showcase: Awaited<ReturnType<typeof library.create>> | undefined;
+  let showcaseDirectory: string | undefined;
+  for (let workspaceIndex = 1; workspaceIndex <= 4; workspaceIndex++) {
+    const directory = await project(`fieldwork-${workspaceIndex}`);
+    const group = await library.add(directory);
+    for (let sessionIndex = 1; sessionIndex <= 8; sessionIndex++) {
+      const entry = await library.create(group, `Fieldwork ${workspaceIndex}.${sessionIndex}`);
+      if (!entry.session) throw new Error(`Fieldwork ${workspaceIndex}.${sessionIndex} did not open.`);
+      if (workspaceIndex === 1 && sessionIndex === 1) {
+        showcase = entry;
+        showcaseDirectory = directory;
+      }
+      if (sessionIndex === 1)
+        await entry.session.engine.result(
+          await entry.session.engine.rung({
+            word: `def inspect_batch(items):\n    results = []\n    for item in items:\n        if item:\n            results.append(item)\n    return results\n\nreport = inspect_batch(["notes", "archive", ""])`,
+            on: entry.session.engine.root,
+          }),
+        );
+      if (sessionIndex === 2)
+        await entry.session.engine.prompt("str", {
+          message: "Which field note should be checked next?",
+          to: "operator",
+          on: entry.session.engine.root,
+        });
+      if (sessionIndex >= 3) await library.archive(entry);
+    }
+  }
+  await library.refresh();
+  if (!showcase?.session || !showcaseDirectory) throw new Error("The rich showcase session did not open.");
+  const live = await demoSession({ watch: true, cwd: showcaseDirectory });
+  const program = await seedRichDemo(live);
+  await library.show(live);
+  session = live;
+  session.folds[`steps:${program}`] = false;
+  session.folds[`thread:${program}`] = false;
+  session.folds[`prompts:${session.engine.root}`] = false;
+  await session.select(session.engine.root);
+  session.thread = undefined;
+  const showRichProgram = async () => {
+    app().render();
+    await test.flush();
+    app().scroll.stickyScroll = false;
+    app().scroll.scrollTo(app().scroll.scrollHeight);
+    await test.flush();
+    let code = app()
+      .scroll.getChildren()
+      .find((node) => node.id === `program-${program}`);
+    for (let tries = 0; !code && tries < 100; tries++) {
+      app().scroll.scrollBy(-Math.max(1, app().scroll.viewport.height - 5));
+      await test.flush();
+      code = app()
+        .scroll.getChildren()
+        .find((node) => node.id === `program-${program}`);
+    }
+    if (!code) throw new Error(`The Feed did not render thread program ${program}.`);
+    app().scroll.scrollTo(Math.max(0, code.y - app().scroll.y + app().scroll.scrollTop - 3));
+    await test.flush();
+  };
+  if (session.chains.filter((chain) => session.labelOf(chain.id).startsWith("Fieldwork ")).length !== 12)
+    throw new Error("The showcase session did not build its twelve real fieldwork chains.");
+  await showRichProgram();
+  await capture("84-rich-workspaces");
+  if (
+    !test.captureCharFrame().includes("index_notes") ||
+    !test.captureCharFrame().includes(`Needs you ${session.host.prompts.size}`)
+  )
+    throw new Error("The Feed showcase must show the long program and its pending questions.");
+  test.resize(80, 24);
+  await showRichProgram();
+  await capture("85-rich-workspaces-80x24");
+  if (!test.captureCharFrame().includes("index_notes"))
+    throw new Error("The 80x24 Feed capture does not show the long fieldwork program.");
+  test.resize(160, 48);
+  await showRichProgram();
+  await capture("86-rich-workspaces-160x48");
+  if (
+    !test.captureCharFrame().includes("index_notes") ||
+    !test.captureCharFrame().includes(`Needs you ${session.host.prompts.size}`)
+  )
+    throw new Error("The 160x48 Feed capture must show the long program and its pending questions.");
+  test.resize(152, 46);
+  app().render();
+  await test.flush();
+  if (!process.env.FURB_GALLERY_RICH_ONLY && previousEntry?.session) {
+    await library.select(previousEntry);
+    session = previousSession;
+    session.thread = undefined;
+  }
+}
+
 let failed = false;
+if (process.env.FURB_GALLERY_RICH_ONLY) {
+  try {
+    await loadParsers();
+    await richWorkspaceGallery();
+  } catch (error) {
+    console.error(error);
+    failed = true;
+  }
+  waits("the end of the script");
+  await end(
+    failed,
+    () => app().dispose(),
+    () => test.renderer.destroy(),
+    () => library.dispose(),
+    removeDemoDirectories,
+  );
+}
 try {
   await loadParsers();
   await capture("01-welcome");
@@ -298,7 +421,7 @@ try {
   // After a second, the line says how long its command has run.
   await new Promise((done) => setTimeout(done, 1200));
   await session.refresh();
-  app().scroll.scrollTo(app().scroll.scrollHeight);
+  app().scroll.scrollTo(0);
   await capture("18-live-command");
   await session.engine.result(command);
   const progress = await session.engine.prompt("str", {
@@ -448,8 +571,8 @@ try {
       research.status === "paused",
   );
   await capture("28-workspace-tree");
-  app().render();
-  await test.flush();
+
+  await richWorkspaceGallery();
   // A click on a line of a program that made an act opens it in place, with what the act gave.
   const rows = test.captureCharFrame().split("\n");
   const line = rows.findIndex((row) => /^ +\d+ .*\b(bash|read)\(/.test(row));
@@ -469,6 +592,7 @@ try {
   await app().submit();
   await capture("33-session-tree");
   app().closeTree();
+  session.thread = undefined;
   await session.submit("show live progress");
   session.enqueue("Check keyboard navigation after this answer.");
   await capture("34-queued-follow-up");
@@ -478,6 +602,7 @@ try {
   app().closeOverlay();
   // The queued message is sent before the next one, so that the feed reads in the same order at each run.
   await settle();
+  session.thread = undefined;
   await session.attachImage(resolve("docs/screenshots/01-welcome.png"));
   app().composer.setText("Review the layout in this image.");
   await capture("36-image-attachment");
@@ -555,24 +680,36 @@ try {
   await session.submit("Give me an answer in a fence.");
   await settle();
   await capture("47-retried-word");
-  // An archived session folds under Archived, and the pointer on a session row shows its remove button.
-  const stale = library.groups[1]?.sessions.find((entry) => entry.name === "Archive");
-  if (!stale) throw new Error("The gallery has no Archive session.");
-  await library.archive(stale);
-  app().render();
-  await test.flush();
-  const [, changelogRow] = find(test, "Changelog");
-  const removeAt = (test.captureCharFrame().split("\n")[changelogRow] ?? "").lastIndexOf("×");
-  await test.mockMouse.moveTo(removeAt, changelogRow);
+  // The workspace picker filters sessions; Right opens the selected session's actions.
+  if (!changelog.session || !research.session) throw new Error("The workspace sessions did not open.");
+  await app().workspacePicker();
+  await test.mockInput.typeText("Changelog");
   await capture("48-archive-session");
-  // A right click on a session row opens its menu at the pointer, and Rename takes the new name in the row.
-  const [researchAt, researchRow] = find(test, "Research");
-  await test.mockMouse.click(researchAt + 2, researchRow, 2);
+  test.mockInput.pressArrow("right");
+  await capture("48-archive-session");
+  const archiveMenuFrame = test.captureCharFrame().split(/\r?\n/);
+  if (
+    !archiveMenuFrame.some((line) => line.includes("Changelog")) ||
+    !archiveMenuFrame.some((line) => line.includes("Archive")) ||
+    !archiveMenuFrame.some((line) => line.includes("Move to trash"))
+  )
+    throw new Error("The Changelog session action menu did not show its title and Archive choices.");
+  await click(test, "Archive");
+  await until(library, () => changelog.archived === true);
+  if (changelog.archived !== true)
+    throw new Error("The Archive action did not mark the Changelog session archived.");
+  await app().workspacePicker();
+  await test.mockInput.typeText("Research");
   await capture("49-session-menu");
-  await click(test, "Rename", researchAt);
+  test.mockInput.pressArrow("right");
+  await capture("49-session-menu");
+  await click(test, "Rename");
   await test.flush();
   await test.mockInput.typeText(" notes");
-  await rest();
+  test.mockInput.pressEnter();
+  await until(library, () => research.name === "Research notes");
+  await library.select(research);
+  session = research.session;
   await capture("50-rename-session");
   // A life at the scale of a real one: many chains, and questions to the owner open on three of them at once, one of
   // which a conductor relays at its length. The desk over the input counts them, and says which one the input answers.
