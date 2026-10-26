@@ -2201,7 +2201,7 @@ export class App {
         for (const line of program) {
           if (line.kind === "code" && line.step !== stepped) {
             stepped = line.step;
-            const marked = due(line.step.began);
+            const marked = due(line.step.began, line.step.on);
             if (marked.length) {
               if (segments.at(-1)?.length) segments.push([]);
               cuts.set(segments.length - 1, [...(cuts.get(segments.length - 1) ?? []), ...marked]);
@@ -2279,9 +2279,16 @@ export class App {
       // A mark waits until the first act that began at its place or later, and shows before it: before a line of the
       // feed, or inside a program, between two of its steps.
       const pending = [...marks].sort((one, other) => one.at - other.at);
-      const due = (began: number) => {
+      // A mark of a later chain of the run waits for the feed of that chain, since the feed of an earlier chain ends
+      // where the compaction cut it, whatever began after in time.
+      const due = (began: number, on: string) => {
         const out: PartMark[] = [];
-        while (pending.length && (pending[0]?.at ?? Infinity) <= began) out.push(pending.shift() as PartMark);
+        const here = run.indexOf(on);
+        for (const one of [...pending])
+          if (one.at <= began && (here < 0 || run.indexOf(one.chain) <= here)) {
+            pending.splice(pending.indexOf(one), 1);
+            out.push(one);
+          }
         return out;
       };
       const showMark = (mark: PartMark) => {
@@ -2312,7 +2319,7 @@ export class App {
       };
       let collapsed = -1;
       for (const line of lines) {
-        if (placing(line)) for (const mark of due(line.act.began)) showMark(mark);
+        if (placing(line)) for (const mark of due(line.act.began, (line.act as ActRow).on)) showMark(mark);
         if (collapsed >= 0 && line.depth > collapsed) continue;
         collapsed = -1;
         // The steps of a thread stand in its program, and its messages as comments there. What a thread closed with

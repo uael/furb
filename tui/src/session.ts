@@ -1053,7 +1053,10 @@ export class Session extends EventEmitter {
   listed(id: string): boolean {
     return this.runOf(id).at(-1) === id;
   }
-  async select(id: string): Promise<void> {
+  async select(chosen: string): Promise<void> {
+    // A chain of a run of compactions into new chains is shown as its run, whose last chain the operator speaks to: a
+    // message, a command and a grant go on that chain, whichever chain of the run a link or the graph names.
+    const id = this.runOf(chosen).at(-1) ?? chosen;
     // The moment that the feed shows is one of the chain shown, so another chain is shown as it stands now.
     if (id !== this.selected) this.moment = undefined;
     // The turns and the program of the chain left are not the chain selected, which shows them once it has read them.

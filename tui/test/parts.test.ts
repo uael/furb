@@ -192,6 +192,11 @@ test("a run of compactions into new chains, as an older compaction made them, sh
       expect(session.runOf(root)).toEqual([root, newer]);
       expect(session.labelOf(newer)).toBe("Main -> compacted");
       expect(session.activeChains().active.map(([chain]) => chain.id)).not.toContain(root);
+      // A link or the graph that names the first chain of the run puts the operator on its last chain, which the headline
+      // names and which a message, a command and a grant go on.
+      await session.select(root);
+      expect(session.selected).toBe(newer);
+      expect(session.label).toBe("Main -> compacted");
       expect(shown).toContain("Main -> compacted");
       expect(shown).toContain("It read the plan.");
       expect(shown).toContain("compacted  ");
