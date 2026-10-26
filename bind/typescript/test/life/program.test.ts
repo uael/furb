@@ -57,6 +57,45 @@ test("the program of a thread holds the words of its steps and its messages in o
   expect(runs?.kind === "code" && [runs.hint, runs.runs]).toEqual(["runs", true]);
 });
 
+test("the numbers of the lines of a thread go on from each step to the next, across the steps that a fold keeps out, to the line that its model writes", () => {
+  const prompt = act("prompt1", "prompt", "chain1", "operator", 1, undefined, {
+    words: ["str", "Go on", "opus"],
+  });
+  const rung1 = act("rung1", "rung", "chain1", "prompt1", 2, 3);
+  const rung2 = act("rung2", "rung", "chain1", "prompt1", 4, 5);
+  const rung3 = act("rung3", "rung", "chain1", "prompt1", 6);
+  const words: Record<string, string> = { rung1: "a = 1\nb = 2", rung2: "<s:q>\nx\n</s:q>\nc = 3\nd = 4" };
+  const program = (keep?: number) =>
+    threadProgram(
+      [prompt],
+      makers([prompt, rung1, rung2, rung3]),
+      (rung) => words[rung.id] ?? "",
+      new Set(),
+      label,
+      undefined,
+      keep,
+    ).map((line) => [
+      line.kind,
+      "display" in line ? line.display : undefined,
+      "number" in line ? line.number : undefined,
+    ]);
+  expect(program()).toEqual([
+    ["code", 1, 1],
+    ["code", 2, 2],
+    ["quote", 3, 1],
+    ["code", 6, 4],
+    ["code", 7, 5],
+    ["writes", 8, undefined],
+  ]);
+  expect(program(2)).toEqual([
+    ["earlier", undefined, undefined],
+    ["quote", 3, 1],
+    ["code", 6, 4],
+    ["code", 7, 5],
+    ["writes", 8, undefined],
+  ]);
+});
+
 test("a word that the gate refused marks the line that its reason names", () => {
   const prompt = act("prompt1", "prompt", "chain1", "operator", 1, 5, {
     words: ["str", "Go", "opus"],
