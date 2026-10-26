@@ -331,8 +331,9 @@ step();`,
   return { rate: (frames.length * 1000) / took, times };
 }
 
-/** The frames each second that the renderer draws at its target rate with nothing to show. start draws one frame
- * before it returns, outside the timed window, as the App does before a round. */
+/** The frames each second that the renderer draws with nothing to show, up to the rate that the round offers.
+ * Timers can round a frame's wait down and make the empty renderer run faster than its target, but the writer and
+ * scroll offer only fps updates each second. start draws one frame before it returns, outside the timed window. */
 async function ceiling(): Promise<number> {
   const screen = await createTestRenderer({ width: 152, height: 46, exitSignals: [], targetFps: fps });
   screen.renderer.start();
@@ -342,7 +343,7 @@ async function ceiling(): Promise<number> {
   await Bun.sleep(2000);
   const rate = (frames * 1000) / (performance.now() - began);
   screen.renderer.destroy();
-  return rate;
+  return Math.min(fps, rate);
 }
 
 /** The memory that a process holds once it opened a life, after a collection of its garbage: a process of its own,
