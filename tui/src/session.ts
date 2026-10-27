@@ -1859,6 +1859,19 @@ export class Session extends EventEmitter {
     };
     saveFile(path, JSON.stringify(view));
   }
+  /** The window reaches the life again, after the life ended in another window or the host was lost or stopped. */
+  async reopen(): Promise<void> {
+    await this.host.reopen();
+    this.error = "";
+    this.notice = this.host.lost || "The life is open again.";
+    this.emit("change");
+  }
+  /** The host of the life ends by force, for a host that the end of the life does not reach. */
+  async stopHost(): Promise<void> {
+    await this.host.stop();
+    this.notice = "The host of the life was stopped. /reopen opens the life again.";
+    this.emit("change");
+  }
   /** Save the view, then let the session go whatever the save came to: the window detaches from the life, which goes
    * on when it runs in a host of its own, or the life ends when end is set. */
   async dispose(end = false): Promise<void> {

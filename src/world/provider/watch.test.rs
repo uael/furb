@@ -51,10 +51,70 @@ fn the_statements_to_read_end_where_the_last_line_at_the_left_edge_starts() {
 #[test]
 fn a_word_is_cut_after_the_end_of_a_line_of_it() {
   let mut watch = Watch::default();
-  watch.wrote("```python\nx = 1\ny");
-  assert_eq!(watch.through(1), "```python");
-  assert_eq!(watch.through(2), "```python\nx = 1");
-  assert_eq!(watch.through(3), "```python\nx = 1\ny");
+  watch.wrote("x = 1\ny = 2\nz");
+  assert_eq!(watch.through(1), "x = 1");
+  assert_eq!(watch.through(2), "x = 1\ny = 2");
+}
+
+#[test]
+fn a_fence_around_a_word_goes_as_each_of_its_lines_ends() {
+  let mut watch = Watch::default();
+  assert_eq!(watch.wrote("```python\nx = 1\n"), None);
+  assert!(watch.dropped());
+  let end = watch.wrote("y = 2\n```").expect("the fence stands at the left edge");
+  assert_eq!(watch.upto(end), "x = 1\ny = 2\n");
+  assert_eq!(broken(watch.upto(end)), None);
+}
+
+#[test]
+fn the_markup_of_a_tool_call_around_a_word_goes_as_each_of_its_lines_ends() {
+  let mut watch = Watch::default();
+  watch.wrote(
+    "<invoke name=\"python\">\n<parameter name=\"code\">x = 1\ny = 2</parameter>\n</invoke>\nz",
+  );
+  assert!(watch.dropped());
+  assert_eq!(watch.through(2), "x = 1\ny = 2");
+  let mut plain = Watch::default();
+  plain.wrote("x = 1\n");
+  assert!(!plain.dropped());
+}
+
+#[test]
+fn a_text_loses_the_marks_of_a_fence_or_of_a_tool_call_around_it_and_keeps_all_else() {
+  assert_eq!(super::bare("```python\nclose(3)\n```").as_deref(), Some("close(3)"));
+  assert_eq!(
+    super::bare("```\nclose(3)").as_deref(),
+    Some("close(3)"),
+    "a fence with no close goes"
+  );
+  let call =
+    "<invoke name=\"python\">\n<parameter name=\"code\">\nclose(3)\n</parameter>\n</invoke>";
+  assert_eq!(super::bare(call).as_deref(), Some("close(3)"));
+  let inline = "<function_calls>\n<invoke name=\"python\">\n<parameter name=\"code\">x = 1\nclose(x)</parameter>\n</invoke>\n</function_calls>";
+  assert_eq!(super::bare(inline).as_deref(), Some("x = 1\nclose(x)"));
+  assert_eq!(
+    super::bare("<invoke name=\"bash\">").as_deref(),
+    Some(""),
+    "a word of marks alone is empty"
+  );
+  let quoted = "```python\n<s:doc>\n```sh\nls\n```\n</s:doc>\nclose(doc)\n```";
+  assert_eq!(
+    super::bare(quoted).as_deref(),
+    Some("<s:doc>\n```sh\nls\n```\n</s:doc>\nclose(doc)"),
+    "the fences of a quote stay"
+  );
+  assert_eq!(super::bare("close(3)\n```"), None, "a fence that no mark opened stays");
+  assert_eq!(
+    super::bare("x = 1\n<invoke name=\"a\">"),
+    None,
+    "a tag after a line of the word stays"
+  );
+  assert_eq!(
+    super::bare("<s:invoke>\nhi\n</s:invoke>\nclose(invoke)"),
+    None,
+    "the mark of a quote is no tag"
+  );
+  assert_eq!(super::bare("```js and more\nclose(3)"), None, "a fence with words after it stays");
 }
 
 #[test]

@@ -124,7 +124,26 @@ export const feed = part({
           }),
         );
       });
-    if (w.error && w.view === "changes" && w.damagedJournal)
+    if (w.host.lost)
+      add("life-lost", w.host.lost, [], (box) => {
+        const actions: [string, string, () => void][] = w.host.local
+          ? [
+              ["Open the life again", "reaches it again, /reopen", () => void w.reopen().catch(w.fail)],
+              ["Stop the host", "ends its process by force, /stop", () => void w.stopHost().catch(w.fail)],
+            ]
+          : [];
+        this.banner(
+          box,
+          c.danger,
+          [
+            [`${glyph.failed} `, c.danger],
+            ["The life is not open in this window", c.text, bold],
+          ],
+          this.text(w.host.lost, c.muted),
+          ...actions,
+        );
+      });
+    else if (w.error && w.view === "changes" && w.damagedJournal)
       // A damaged journal says what broke; only a writable life offers to repair it or to start a new one.
       add("view-error", `${w.view}:${w.damagedJournal}`, [], (box) => {
         const actions: [string, string, () => void][] = w.host.reading

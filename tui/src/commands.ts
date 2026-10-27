@@ -82,6 +82,16 @@ export const commands = {
     "Give the addresses at which other operators read this life, or read and drive it, over the network",
   ],
   end: ["End the lives", "", "End each open life, its commands and its models, then quit"],
+  reopen: [
+    "Open the life again",
+    "",
+    "Reach the life again after it ended in another window or its host was lost, in a host of this machine",
+  ],
+  stop: [
+    "Stop the host",
+    "",
+    "End by force the process that holds this life, when the end of the life does not reach it",
+  ],
   exit: ["Exit", "", "Save every session and quit, while a life in a host of its own goes on"],
 } as const;
 /** Each slash command with its name, and as it is typed with its arguments. */
