@@ -3,7 +3,7 @@ import type { Loom, Row } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { drawChains, quietFolds } from "../src/chains.ts";
 import { plain } from "../src/ui.ts";
-import { composing } from "./composing.ts";
+import { composing, pressEscape } from "./composing.ts";
 import { idle } from "./idle.ts";
 
 const row = (
@@ -98,7 +98,7 @@ test("ctrl+b opens the panel of the chains over the feed, Enter opens the chain 
       expect(await frame()).not.toContain("↑↓ move");
       screen.mockInput.pressKey("b", { ctrl: true });
       expect(await frame()).toContain("↑↓ move");
-      screen.mockInput.pressEscape();
+      await pressEscape(screen);
       expect(await frame()).not.toContain("↑↓ move");
     },
     size,
