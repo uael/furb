@@ -563,9 +563,12 @@ try {
   if (line >= 0) await test.mockMouse.click((rows[line]?.search(/\d+ /) ?? 0) + 4, line);
   await rest();
   await capture("29-open-line");
+  // A workspace that does not hold the focus opens to peek at its sessions, in the outline.
+  process.env.FURB_SIDEBAR = "outline";
   app().peekWorkspace(second);
   await capture("30-peeked-workspace");
   app().peekWorkspace(second);
+  delete process.env.FURB_SIDEBAR;
   library.toggle();
   await capture("31-hidden-sidebar");
   library.toggle();
@@ -691,6 +694,7 @@ try {
   const stale = library.groups[1]?.sessions.find((entry) => entry.name === "Archive");
   if (!stale) throw new Error("The gallery has no Archive session.");
   await library.archive(stale);
+  process.env.FURB_SIDEBAR = "outline";
   app().peekWorkspace(second);
   app().render();
   await test.flush();
@@ -707,6 +711,7 @@ try {
   await test.mockInput.typeText(" notes");
   await rest();
   await capture("50-rename-session");
+  delete process.env.FURB_SIDEBAR;
   // A life at the scale of a real one: many chains, and questions to the owner open on three of them at once, one of
   // which a conductor relays at its length. The desk over the input counts them, and says which one the input answers.
   test.mockInput.pressEscape();
