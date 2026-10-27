@@ -5,5 +5,3 @@ use_small_heuristics = "Max"
 tab_spaces = 2
 reorder_imports = true
 reorder_modules = true
-group_imports = "StdExternalCrate"
-imports_granularity = "Crate"
