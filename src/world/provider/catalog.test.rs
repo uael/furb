@@ -704,3 +704,104 @@ fn an_invalid_claude_command_is_refused_before_it_starts_a_process() {
   }
   fs::remove_dir_all(root).unwrap();
 }
+
+/// A first turn of a model of the claude command line, which the fake answers with its first reply.
+#[cfg(unix)]
+fn first_turn(model: &Model) {
+  use super::super::Answer;
+  let request = CompletionRequest {
+    model: None,
+    preamble: Some("ENGINE ONLY".to_owned()),
+    chat_history: vec![Message::user("first")],
+    documents: Vec::new(),
+    tools: Vec::new(),
+    temperature: None,
+    max_tokens: None,
+    tool_choice: None,
+    additional_params: None,
+    output_schema: None,
+    record_telemetry_content: false,
+  };
+  let asked = Asked {
+    actor: "claude-cli:sonnet".into(),
+    chain: "chain1".into(),
+    request,
+    told: Arc::new(|_, _| {}),
+    thought: None,
+  };
+  let Ok(Answer::Response(answer)) = reactor().block_on((model.answers)(asked)) else {
+    panic!("a Claude response")
+  };
+  assert_eq!(answer.choice, [rig_core::message::AssistantContent::text("close(\"reply 1\")")]);
+}
+
+#[cfg(unix)]
+#[test]
+fn configured_claude_accounts_give_their_token_to_a_turn_and_to_a_search() {
+  use super::claude::test::Yard;
+  use std::{fs, os::unix::fs::PermissionsExt};
+
+  let yard = Yard::new("configured-accounts");
+  let project = yard.at.join("project");
+  fs::create_dir_all(project.join(".furb")).unwrap();
+  let token = yard.at.join("a.token");
+  fs::write(&token, "tok-a\n").unwrap();
+  let settings = project.join(".furb/config.json");
+  let configure = |bin: &std::path::Path| {
+    let accounts = json!([{"name": "a", "token_file": token}]);
+    let claude = json!({"command": [bin], "accounts": accounts, "switch": "spread"});
+    fs::write(&settings, json!({"providers": {"claude-cli": claude}}).to_string()).unwrap();
+  };
+  configure(&yard.at.join("claude"));
+  let configured = || catalog(&[]).configured(&project, Some(&project));
+  let models = configured().expect("accounts are valid");
+  first_turn(&models.find("claude-cli:sonnet").unwrap());
+  let pids = yard.pids();
+  assert_eq!(pids.len(), 1);
+  assert_eq!(fs::read_to_string(yard.at.join(format!("token.{}", pids[0]))).unwrap(), "tok-a");
+
+  let search_bin = yard.at.join("search");
+  fs::write(
+    &search_bin,
+    "#!/bin/sh\n[ -n \"$FURB_CLAUDE_DISCOVER\" ] && exit 0\nprintf 'token=%s\\n' \"$CLAUDE_CODE_OAUTH_TOKEN\"\necho ---\ncat\n",
+  )
+  .unwrap();
+  fs::set_permissions(&search_bin, fs::Permissions::from_mode(0o755)).unwrap();
+  configure(&search_bin);
+  let fresh = configured().unwrap();
+  let model = fresh.find("claude-cli:sonnet").unwrap();
+  let search = model.search.as_ref().unwrap();
+  let got = reactor().block_on(search("q".to_owned())).unwrap();
+  assert_eq!(got, "token=tok-a\n---\nq");
+}
+
+#[test]
+fn invalid_claude_accounts_are_refused_before_they_start_a_process() {
+  use std::fs;
+  let root =
+    std::env::temp_dir().join(format!("furb-invalid-claude-accounts-{}", std::process::id()));
+  fs::create_dir_all(root.join(".furb")).unwrap();
+  let one = json!({"name": "a", "token_env": "X"});
+  for settings in [
+    json!({"accounts": []}),
+    json!({"accounts": [{"name": "a"}]}),
+    json!({"accounts": [{"name": "a", "token_env": "X", "token_file": "/x"}]}),
+    json!({"accounts": [{"name": "a", "token_file": "relative"}]}),
+    json!({"accounts": [{"name": "a", "token_env": ""}]}),
+    json!({"accounts": [one, one]}),
+    json!({"accounts": [{"name": "two words", "token_env": "X"}]}),
+    json!({"accounts": [{"name": "a", "token_env": "X", "other": 1}]}),
+    json!({"accounts": [one], "switch": "random"}),
+    json!({"switch": "spread"}),
+  ] {
+    fs::write(
+      root.join(".furb/config.json"),
+      json!({"providers": {"claude-cli": settings}}).to_string(),
+    )
+    .unwrap();
+    let result = catalog(&[]).configured(&root, Some(&root));
+    let Err(no) = result else { panic!("invalid accounts {settings} were accepted") };
+    assert!(no.contains("claude-cli"), "{no}");
+  }
+  fs::remove_dir_all(root).unwrap();
+}

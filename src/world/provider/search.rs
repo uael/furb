@@ -97,7 +97,7 @@ pub(super) fn claude(program: Program, model: String) -> Searches {
   Arc::new(move |query| {
     let (program, model) = (program.clone(), model.clone());
     spawned(async move {
-      let mut command = program.command();
+      let mut command = program.command()?;
       command.args(["-p", "--model", &model, "--output-format", "text", "--system-prompt", BRIEF]);
       command.args(["--setting-sources", "", "--strict-mcp-config", "--disable-slash-commands"]);
       command.args([

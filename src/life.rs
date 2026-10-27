@@ -17,7 +17,7 @@ use std::{
 
 use crate::{
   Ear, Engine, Fault, Object, checkpoint,
-  ear::{hear, hearing},
+  ear::{hear, hearing, lasting},
   extension::{self, Places, compaction::compaction, memory::memory, skills::skills, web::web},
   snapshot::{self, Keeper},
   world::{self, Catalog, Retries, Scratch, Writes},
@@ -217,16 +217,31 @@ impl Opening {
     let (provider, search) = self.provider()?;
     let working = |made: Option<Box<dyn Ear>>| made.unwrap_or_else(silent);
     let config = places.config;
+    // An ear that holds nothing that a fresh one lacks starts again after it raises. A fresh ear of the commands
+    // reads no record, since the first one ended each command that the record left open.
+    let held = config.clone();
     let mut ears = vec![
       ("provider", provider),
       ("extensions", extension::extensions(extensions)),
-      ("memory", memory(config.clone())),
-      ("skills", skills(config)),
-      ("web", working(works.then(|| web(search)))),
-      ("compaction", working(works.then(compaction))),
-      ("files", working(scratch.clone().map(world::files))),
-      ("bash", working(scratch.map(|scratch| world::bash(scratch, &record)))),
-      ("time", working(works.then(world::time))),
+      ("memory", lasting(memory(config.clone()), move || memory(held.clone()))),
+      ("skills", lasting(skills(config.clone()), move || skills(config.clone()))),
+      ("web", working(works.then(|| lasting(web(search.clone()), move || web(search.clone()))))),
+      ("compaction", working(works.then(|| lasting(compaction(), compaction)))),
+      (
+        "files",
+        working(
+          scratch
+            .clone()
+            .map(|one| lasting(world::files(one.clone()), move || world::files(one.clone()))),
+        ),
+      ),
+      (
+        "bash",
+        working(scratch.map(|one| {
+          lasting(world::bash(one.clone(), &record), move || world::bash(one.clone(), &[]))
+        })),
+      ),
+      ("time", working(works.then(|| lasting(world::time(), world::time)))),
     ];
     ears.extend(store.map(|store| ("store", store)));
     ears.extend(logs.map(|log| ("log", log)));

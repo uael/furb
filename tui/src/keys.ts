@@ -82,13 +82,17 @@ export const keys = [
   },
   {
     chord: "⌃B / ⌃N",
-    action: "Switch / create a chain",
+    action: "Chains / create a chain",
     bindings: [
       {
         on: ["ctrl+b"],
         run: "chains",
         chord: "⌃B",
-        choice: { label: "Switch chain", detail: "Go to any chain of this session", before: "chain" },
+        choice: {
+          label: "Chains",
+          detail: "The chains of this session as a loom, to open one",
+          before: "chain",
+        },
       },
       { on: ["ctrl+n"], run: "newChain", chord: "⌃N", command: "chain" },
     ],

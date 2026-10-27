@@ -159,7 +159,7 @@ fn plain(alias: &str) -> bool {
 
 /// Ask the program of its models, with one process that spends no model prompt.
 fn probe(program: &Program) -> Option<Vec<Found>> {
-  let mut tokio = program.command();
+  let mut tokio = program.command().ok()?;
   let command = tokio.as_std_mut();
   command.args([
     "-p",

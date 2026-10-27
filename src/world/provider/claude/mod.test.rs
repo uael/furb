@@ -14,6 +14,7 @@ use futures::{
   StreamExt,
   future::{Either, select},
 };
+use jiff::Zoned;
 use rig_core::{
   completion::{CompletionModel, CompletionRequest},
   message::{AssistantContent, Message, Reasoning, Text, UserContent},
@@ -21,7 +22,7 @@ use rig_core::{
 };
 use serde_json::{Value, json};
 
-use super::{Claude, Completion};
+use super::{Account, Claude, Completion, Source, Switch};
 use crate::ear::reactor;
 
 /// The fake command line, which the tests of the command line of furb run too.
@@ -46,6 +47,18 @@ impl Yard {
   /// The fake as the command line, with a stall of these milliseconds.
   pub fn claude(&self, stall: u64) -> Claude {
     Claude::with(Some(self.at.join("claude")), Some(Duration::from_millis(stall)))
+  }
+
+  /// The fake as the command line that runs as these accounts.
+  pub fn claude_as(&self, accounts: Vec<Account>, switch: Switch) -> Claude {
+    let stall = Some(Duration::from_millis(10_000));
+    Claude::with_accounts(Some(self.at.join("claude")), Vec::new(), accounts, switch, stall)
+  }
+
+  /// The token each process the fake was started with, in the order they started.
+  pub fn tokens(&self) -> Vec<String> {
+    let token = |pid: &String| fs::read_to_string(self.at.join(format!("token.{pid}")));
+    self.pids().iter().map(|pid| token(pid).unwrap_or_default()).collect()
   }
 
   /// The id of each process the fake was, in the order they started.
@@ -744,4 +757,140 @@ fn an_effort_that_the_command_line_reported_is_taken_on_a_turn() {
   let got = asked(&model, &[user("first")], json!({"effort": "turbo"}));
   assert!(got.is_ok(), "{got:?}");
   assert_eq!(after(&yard.args(&yard.pids()[0]), "--effort").as_deref(), Some("turbo"));
+}
+
+/// The accounts of a test, each with a token file in the yard that holds `tok-` and its name.
+fn listed(yard: &Yard, names: &[&str]) -> Vec<Account> {
+  let account = |name: &&str| {
+    let file = yard.at.join(format!("{name}.token"));
+    fs::write(&file, format!("tok-{name}\n")).expect("a token file");
+    Account { name: (*name).to_owned(), source: Source::TokenFile(file) }
+  };
+  names.iter().map(account).collect()
+}
+
+#[test]
+fn a_usage_limit_parks_its_account_and_the_turn_that_asks_again_runs_as_the_next_one() {
+  let yard = Yard::new("accounts-limit");
+  let claude = yard.claude_as(listed(&yard, &["a", "b"]), Switch::Failover);
+  let model = claude.completion_model("sonnet");
+  fs::write(yard.at.join("limited.tok-a"), "600").unwrap();
+  let settings = json!({"session": "chain"});
+  let no = asked(&model, &[user("first")], settings.clone()).unwrap_err().to_string();
+  assert_eq!(no, "ProviderError: Switched account from a to b: its usage limit");
+  let got = asked(&model, &[user("first")], settings.clone()).unwrap();
+  assert_eq!(got.choice, [AssistantContent::text("close(\"reply 1\")")]);
+  let more = [user("first"), Message::Assistant { id: None, content: got.choice }, user("second")];
+  asked(&model, &more, settings).unwrap();
+  assert_eq!(
+    yard.tokens(),
+    ["tok-a", "tok-b"],
+    "the conversation stays on the account it moved to"
+  );
+}
+
+#[test]
+fn a_failed_sign_in_parks_its_account_until_the_command_line_stands_again() {
+  let yard = Yard::new("accounts-signed-out");
+  let accounts = listed(&yard, &["a", "b"]);
+  fs::write(yard.at.join("signedout.tok-a"), "").unwrap();
+  let model = yard.claude_as(accounts.clone(), Switch::Failover).completion_model("sonnet");
+  let no = asked(&model, &[user("first")], json!({"session": "one"})).unwrap_err().to_string();
+  assert_eq!(no, "ProviderError: Switched account from a to b: its sign in failed");
+  fs::remove_file(yard.at.join("signedout.tok-a")).unwrap();
+  asked(&model, &[user("first")], json!({"session": "two"})).unwrap();
+  let again = yard.claude_as(accounts, Switch::Failover).completion_model("sonnet");
+  asked(&again, &[user("first")], json!({"session": "three"})).unwrap();
+  assert_eq!(yard.tokens(), ["tok-a", "tok-b", "tok-a"]);
+}
+
+#[test]
+fn every_account_parked_waits_for_the_first_reset_as_the_command_line_says_it() {
+  let yard = Yard::new("accounts-parked");
+  let claude = yard.claude_as(listed(&yard, &["a", "b"]), Switch::Failover);
+  let model = claude.completion_model("sonnet");
+  fs::write(yard.at.join("limited.tok-a"), "600").unwrap();
+  fs::write(yard.at.join("limited.tok-b"), "900").unwrap();
+  let settings = json!({"session": "chain"});
+  let first = asked(&model, &[user("first")], settings.clone()).unwrap_err();
+  assert_eq!(first.to_string(), "ProviderError: Switched account from a to b: its usage limit");
+  let second = asked(&model, &[user("first")], settings.clone()).unwrap_err();
+  let said = second.to_string();
+  assert!(said.starts_with("ProviderError: Claude AI usage limit reached|"), "{said}");
+  let now = Zoned::now();
+  let Some(Some(end)) = super::super::limit(&second, &now) else { panic!("a limit with a reset") };
+  let wait = end.timestamp().as_second() - now.timestamp().as_second();
+  assert!((500..=610).contains(&wait), "the first reset is the one of a: {wait}");
+  let third = asked(&model, &[user("first")], settings).unwrap_err();
+  assert_eq!(third.to_string(), said);
+  assert_eq!(yard.tokens(), ["tok-a", "tok-b"], "no process starts while every account waits");
+}
+
+#[test]
+fn spread_gives_each_new_conversation_the_account_that_served_least_recently() {
+  let yard = Yard::new("accounts-spread");
+  let claude = yard.claude_as(listed(&yard, &["a", "b"]), Switch::Spread);
+  let model = claude.completion_model("sonnet");
+  let one = asked(&model, &[user("x")], json!({"session": "s1"})).unwrap();
+  asked(&model, &[user("x")], json!({"session": "s2"})).unwrap();
+  asked(&model, &[user("x")], json!({"session": "s3"})).unwrap();
+  let more = [user("x"), Message::Assistant { id: None, content: one.choice }, user("y")];
+  asked(&model, &more, json!({"session": "s1"})).unwrap();
+  assert_eq!(yard.tokens(), ["tok-a", "tok-b", "tok-a"], "a conversation stays on its account");
+}
+
+#[test]
+fn an_account_whose_token_cannot_be_read_starts_no_process_and_counts_as_signed_out() {
+  let yard = Yard::new("accounts-no-token");
+  let mut accounts = listed(&yard, &["b"]);
+  let missing = yard.at.join("missing.token");
+  accounts.insert(0, Account { name: "a".to_owned(), source: Source::TokenFile(missing) });
+  let model = yard.claude_as(accounts, Switch::Failover).completion_model("sonnet");
+  let settings = json!({"session": "chain"});
+  let no = asked(&model, &[user("first")], settings.clone()).unwrap_err().to_string();
+  assert_eq!(no, "ProviderError: Switched account from a to b: its sign in failed");
+  assert!(yard.pids().is_empty(), "no process ran as the account with no token");
+  asked(&model, &[user("first")], settings).unwrap();
+  assert_eq!(yard.tokens(), ["tok-b"]);
+}
+
+#[test]
+fn a_single_account_is_never_parked_and_its_limit_stays_the_wait_of_the_provider() {
+  let yard = Yard::new("accounts-single");
+  let model = yard.claude_as(listed(&yard, &["a"]), Switch::Failover).completion_model("sonnet");
+  fs::write(yard.at.join("limited.tok-a"), "600").unwrap();
+  for _ in 0..2 {
+    let no = asked(&model, &[user("first")], json!({"session": "chain"})).unwrap_err();
+    assert!(no.to_string().starts_with("ProviderError: Claude AI usage limit reached|"), "{no}");
+  }
+  assert_eq!(yard.tokens(), ["tok-a", "tok-a"]);
+}
+
+#[test]
+fn an_account_of_a_config_dir_runs_there_and_without_a_token_of_the_environment() {
+  let yard = Yard::new("accounts-dir");
+  let dir = yard.at.join("dir");
+  let accounts = vec![Account { name: "a".to_owned(), source: Source::ConfigDir(dir.clone()) }];
+  let model = yard.claude_as(accounts, Switch::Failover).completion_model("sonnet");
+  asked(&model, &[user("first")], json!({"session": "chain"})).unwrap();
+  let pid = &yard.pids()[0];
+  let held = fs::read_to_string(yard.at.join(format!("configdir.{pid}"))).unwrap();
+  assert_eq!(held, dir.display().to_string());
+  assert_eq!(yard.tokens(), ["unset"]);
+}
+
+#[test]
+fn the_command_line_is_signed_in_when_any_of_its_accounts_is() {
+  let yard = Yard::new("accounts-signed");
+  let script = yard.at.join("status");
+  let says = "#!/bin/sh\nif [ \"$CLAUDE_CODE_OAUTH_TOKEN\" = tok-b ]; then echo '{\"loggedIn\": true}'; \
+    else echo '{\"loggedIn\": false}'; exit 1; fi\n";
+  fs::write(&script, says).unwrap();
+  fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+  let claude = |names: &[&str]| {
+    let accounts = listed(&yard, names);
+    Claude::with_accounts(Some(script.clone()), Vec::new(), accounts, Switch::Failover, None)
+  };
+  assert!(claude(&["a", "b"]).signed());
+  assert!(!claude(&["a"]).signed());
 }
