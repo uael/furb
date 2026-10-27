@@ -939,6 +939,31 @@ try {
   real.emit("change");
   await capture("93-setup-configured-local-missing");
 
+  // A real life that reads a file of markdown and a file that its memory already knows: a heading of the file is no
+  // row of the feed, and a question of memory that found nothing new shows no row.
+  app().dispose();
+  await library.dispose();
+  const quiet = await project("quiet");
+  await writeFile(
+    join(quiet, "AGENTS.md"),
+    "# Field notes\n\nThe notes of the project.\n\n## The contract\n\nA note has one address.\n\n## The bar\n\nRead before a change.\n",
+  );
+  await writeFile(join(quiet, "a.txt"), "one\n");
+  const quietLife = await openEngine({ cwd: quiet, record: join(quiet, "session.jsonl") });
+  const quietSession = new Session(quietLife.engine, quietLife.host, true);
+  await quietSession.refresh();
+  await show(quietSession);
+  await quietSession.command('/run read("a.txt")');
+  await until(quietSession, () =>
+    quietSession.activity.some(
+      (act) => act.kind === "memory" && String(act.words[0]).endsWith("a.txt") && act.done,
+    ),
+  );
+  // The extensions stand on one quiet row: the file of markdown that memory told shows no row for each heading, and
+  // the question of memory about a file that it knew shows none.
+  await quietSession.refresh();
+  await capture("100-quiet-feed");
+
   // Watch a life: the demo plays by itself, asks no model, and costs nothing.
   app().dispose();
   await library.dispose();
