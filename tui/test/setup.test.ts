@@ -58,7 +58,7 @@ test("a claude command line that is not signed in is missing, with the way to si
     label: "Claude command line",
     state: "missing",
     found: "Found, but not signed in.",
-    fix: "Run claude in a terminal, sign in, then press r here to check again.",
+    fix: "Run claude in a terminal, sign in, then press F5 here to check again.",
   });
   expect(models?.state).toBe("missing");
 });

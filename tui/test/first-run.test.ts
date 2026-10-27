@@ -67,7 +67,7 @@ test.skipIf(process.platform === "win32")(
   async () => {
     const { frame } = await firstRun("echo 'Not logged in'; exit 1");
     expect(frame).toContain("Claude command line  Found, but not signed in.");
-    expect(frame).toContain("Run claude in a terminal, sign in, then press r here to check again.");
+    expect(frame).toContain("Run claude in a terminal, sign in, then press F5 here to check");
     expect(frame).toContain("No model answers yet");
   },
 );
