@@ -170,23 +170,11 @@ class Running:
     the globals of its chain, and a job that holds no such statement is over at once. A job of a word that a part of
     it raised in is done with that raise, since a word is over where it raises. A job whose part follows another
     word than the one that ran is refused, since the Kernel runs no statement twice."""
-    kind, _, _, chain, rung, word, *rest = self.of(run)
+    _, _, _, chain, rung, *_ = self.of(run)
     rung, held = str(rung), self.ran.get(str(rung), "")
-    if (broke := self.broke.get(rung)) is not None:
-      return self.ended(run, broke)
-    if kind == "run":
-      whole = str(word)
-      # A turn ends with no blank at its end, so the word may hold what ran less the blank lines after it.
-      if whole.startswith(held):
-        part = whole[len(held) :]
-      elif held.startswith(whole) and not held[len(whole) :].strip():
-        part = ""
-      else:
-        return self.ended(run, self.refusing(f"{held!r:.100} of the word of {rung} ran, and its run holds another"))
-    else:
-      if rest[0] != len(held):
-        return self.ended(run, self.refusing(f"{run} follows {rest[0]} characters of {rung}, and {len(held)} ran"))
-      part = str(word)
+    part = self.broke.get(rung) or self.part(run, held)
+    if isinstance(part, BaseException):
+      return self.ended(run, part)
     self.ran[rung] = held + part
     if not part.strip():
       return self.ended(run, None)
@@ -202,6 +190,21 @@ class Running:
       return self.ended(run, None)
     self.frames[run] = ran
     return self.carry(run, None)
+
+  def part(self, run: str, held: str) -> str | BaseException:
+    """What a job runs of the word of its rung, given what ran of it: what a run holds past what ran, and the part of
+    a writing that follows what ran; or the refusal of a job that does not follow it."""
+    kind, _, _, _, rung, word, *rest = self.of(run)
+    whole = str(word)
+    if kind != "run":
+      ok = rest[0] == len(held)
+      return whole if ok else self.refusing(f"{run} follows {rest[0]} characters of {rung}, and {len(held)} ran")
+    if whole.startswith(held):
+      return whole[len(held) :]
+    # A turn ends with no blank at its end, so the word may hold what ran less the blank lines after it.
+    if held.startswith(whole) and not held[len(whole) :].strip():
+      return ""
+    return self.refusing(f"{held!r:.100} of the word of {rung} ran, and its run holds another")
 
   def cancelled(self) -> BaseException:
     """The CancelledError of the engine, which a run is done with when its word is dropped or never begins."""

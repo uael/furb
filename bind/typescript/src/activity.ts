@@ -16,7 +16,18 @@ function* covers(control: Fact, id: string): Generator<Call, boolean, unknown> {
 /** The questions the engine asks on the way to what an act does, which are no acts a person follows: each is
  * answered for the act that asked it, which shows what it came to. A read and a write are acts that a person follows,
  * since each says which file it read or changed. */
-const STEPS = new Set(["stand", "clock", "chance", "gate", "cd", "merged", "run", "wants", "reply"]);
+const STEPS = new Set([
+  "stand",
+  "clock",
+  "chance",
+  "gate",
+  "cd",
+  "merged",
+  "run",
+  "writing",
+  "wants",
+  "reply",
+]);
 
 /** The observable state of the acts a person follows, updated once as facts enter the life. It asks the engine
  * what a fact alone cannot say: covers, for a pause or a wake and each live act whose state it would change, and
