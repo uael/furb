@@ -45,7 +45,7 @@ Then the round sends a conflict or a failed check at a new head to the worker th
 The round merges each green PR into main from the lowest number when no file that it changes changed on main since its branch forked, after it moves the PRs that stack on it onto main and rebases each there with git rebase --onto from the head that it held of the PR that merged, in a scratch worktree, and pushes it with --force-with-lease (a rebase that conflicts is left to the fixer); else it updates the branch, and only when main is green.
 The label paused takes a PR out of the round. A draft, the label hold, a review that waits for its fix, and the label owner-merge, until the owner takes it off as his approval, keep a PR from a merge.
 A notice wakes you only for a decision, with the context that it needs: each event that needs none, as a worker that ends with a PR, a heal, a merge or a PR made outside the round, is one line in the next notice. The round tells you when main is red, with the lines that failed, when a PR fails to merge, with what gh said, or when a PR on main with no draft, no hold, no worker and no check that runs has no change for 45 minutes, with its checks, and each comment or issue of the owner in the private repository of the decisions, which PRIVATE names beside this word and git does not hold. await decide(title, text) opens a decision there as an issue, and news(line) adds a line at the top of its digest issue.
-Each round queues each open issue that the owner opened, or that he assigned to himself, as an item issueN, once, and its PR closes it.
+Each round queues each open issue that the owner opened, or that he assigned to himself, as an item issueN, once, and its PR closes it. It queues an open issue again, once for each worker that ended on it with a PR, when no item of it works or waits and no open PR with the label w:issueN holds it, with the PRs that ended it in its brief.
 Each round tells you once each fork PR of UPSTREAM that holds the label upstream-ready and not upstreamed: by the ruling of the owner, you then open its PR on pydantic/monty with the body that he reviewed, and put the label upstreamed on the fork PR.
 Each round sends each new comment of the owner on a PR or on his issue to the worker that owns it, puts the label hold on that PR, and tells you only the comments that no worker owns. A text on GitHub counts only when the owner wrote it with no 🤖 at its start, or when he put a 👍 on it; each worker starts what it writes there with 🤖.
 Each round sets one status label on each open PR and on each issue of the owner that it took: s:queued, s:working, s:checks, s:red, s:boxes, s:held, s:conflict, s:stacked, s:ready, or s:owner (green, waits for the owner).
@@ -635,6 +635,7 @@ def tend() -> None:
     key = working.pop(name)
     got = peek(name)
     results[name] = got
+    ends.setdefault(key, []).append((name, got[0] if isinstance(got, tuple) and got and isinstance(got[0], int) else 0))
     if f"debrief {name}" not in noticed and get(name):
       noticed.add(f"debrief {name}")
       debriefs[str(quietly(debrief, name))] = key
@@ -1009,6 +1010,9 @@ Title: {title}
 Read the issue whole with its comments first: gh issue view {n} --comments. Do what it asks. When it asks for a change, open the PR with Fixes #{n} in its body, so that the merge closes the issue. When it asks a question or a decision and no change, answer it in a comment on the issue, and close with that answer."""
 
 handled: set[str] = set()
+ends: dict[str, list[tuple[str, int]]] = {}
+requeued: set[str] = set()
+AGAIN = """Workers did parts of this issue before, and it is still open. Their PRs: {prs}. Read each with gh pr view, find what the issue still lacks on origin/main, and do the next part. Give pr() fixes={n} only when your change finishes the issue; else leave fixes at 0, so that the merge leaves the issue open for a next part."""
 
 
 async def take_issues() -> None:
@@ -1019,15 +1023,24 @@ async def take_issues() -> None:
   for it in json.loads(got.stdout.content):
     key = f"issue{it['n']}"
     body = str(it["body"] or "")
-    if key in handled or "paused" in it["labels"] or body.startswith(MARKS):
+    if "paused" in it["labels"] or body.startswith(MARKS):
+      continue
+    fresh = [name for name, n in ends.get(key, []) if n and name not in requeued]
+    if key in handled and not fresh:
       continue
     handled.add(key)
-    if key in working.values() or any(q[0] == key for q in queue) or any(f"w:{key}" in pr["labels"] for pr in prs.values()):
+    if taken(key) or any(q[0] == key for q in backlog) or any(f"w:{key}" in pr["labels"] for pr in prs.values()):
       continue
+    requeued.update(fresh)
     brief = ISSUE.replace("{n}", str(it["n"])).replace("{url}", it["url"]).replace("{title}", it["title"])
-    queue.append((key, brief.replace("{body}", body[:6000]), "issues"))
-    heard.append(f"The issue #{it['n']}, {it['title']}, is queued as the item {key}.")
-    quietly(bash, f"gh issue comment {it['n']} --body '🤖 Taken: a worker of furb does this as the item {key}, and its PR or its answer comes here.'", show=HIDDEN)
+    brief = brief.replace("{body}", body[:6000])
+    if fresh:
+      listed = ", ".join(f"#{n}" for _, n in ends[key] if n)
+      brief += "\n\n" + AGAIN.replace("{prs}", listed).replace("{n}", str(it["n"]))
+    queue.append((key, brief, "issues"))
+    again = "again " if fresh else ""
+    heard.append(f"The issue #{it['n']}, {it['title']}, is queued {again}as the item {key}.")
+    quietly(bash, f"gh issue comment {it['n']} --body '🤖 Taken {again}: a worker of furb does this as the item {key}, and its PR or its answer comes here.'".replace(" :", ":"), show=HIDDEN)
 
 
 STATUS = {
