@@ -1,11 +1,11 @@
 import type { Retry } from "furb";
 import { clock } from "./clock.ts";
 
-/** What the footer says of a retry of the call of a model: the seconds left of its wait, its attempt, and why the
- * attempt before it failed. */
+/** What the footer says of a retry of the call of a model: the seconds left of its wait, its attempt, why the
+ * attempt before it failed, and the commands that end the wait. */
 export function retryLine(retry: Retry, now = clock()): string {
   const seconds = Math.max(0, Math.ceil((retry.until - now) / 1000));
-  return `Retrying in ${seconds} s, attempt ${retry.attempt} of ${retry.most}, ${retry.why}`;
+  return `Retrying in ${seconds} s, attempt ${retry.attempt} of ${retry.most}, ${retry.why}: /retry asks now, /cancel ends it`;
 }
 
 /** A failure in plain words: a file that holds data that cannot be read says so, in place of the words of the parser

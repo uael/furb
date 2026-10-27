@@ -1606,6 +1606,67 @@ fn a_call_that_the_usage_limit_refuses_waits_for_its_reset_and_the_chain_is_told
   assert!(note.contains(&format!("#{root} waits on m/high: usage limit until ")), "{note}");
 }
 
+#[test]
+fn a_stand_ends_the_wait_of_a_usage_limit_and_asks_the_model_again_at_once() {
+  let later = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .expect("a time after the epoch")
+    .as_secs()
+    + 86_400;
+  let (host, calls) = failing(&[&format!("Claude AI usage limit reached|{later}")]);
+  let (retries, told) = retried();
+  let model = scripted(&MockCompletionModel::default()).hosted(host);
+  let provider =
+    Provider::new(yard("limit-now").display().to_string(), vec![model]).retries(retries);
+  let mut engine = lived(provider);
+  let id = asked(&mut engine);
+  let heard = Arc::clone(&told);
+  assert!(until(&mut engine, move |_| heard.lock().expect("the retries told").len() == 1));
+  assert!(told.lock().expect("the retries told")[0].2.wait > Duration::from_secs(80_000));
+  engine.stand(verbs::Stand::default()).expect("the life stands");
+  let done = |engine: &mut Engine| {
+    engine.peek(&id, verbs::Peek::default()).is_ok_and(|one| one.as_ref().as_int() == Some(7))
+  };
+  assert!(until(&mut engine, done), "the reply waits no more for the reset of the limit");
+  assert_eq!(calls.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn a_stand_on_new_settings_asks_a_reply_that_waits_for_a_usage_limit_again_on_the_new_command_line()
+{
+  let later = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .expect("a time after the epoch")
+    .as_secs()
+    + 86_400;
+  let limit = format!("Claude AI usage limit reached|{later}");
+  let (old, before) = failing(&[&limit, &limit, &limit]);
+  let (new, after) = failing(&[]);
+  let fresh = scripted(&MockCompletionModel::default()).hosted(new);
+  let (retries, told) = retried();
+  let model = scripted(&MockCompletionModel::default()).hosted(old);
+  let stale = model.clone();
+  let switched = Arc::new(std::sync::atomic::AtomicBool::new(false));
+  let flipped = Arc::clone(&switched);
+  let provider = Provider::new(yard("limit-switch").display().to_string(), vec![model])
+    .retries(retries)
+    .refreshing(Arc::new(move || {
+      let models = if flipped.load(Ordering::SeqCst) { &fresh } else { &stale };
+      Ok((vec![models.clone()], None, Thinking::default()))
+    }));
+  let mut engine = lived(provider);
+  let id = asked(&mut engine);
+  let heard = Arc::clone(&told);
+  assert!(until(&mut engine, move |_| !heard.lock().expect("the retries told").is_empty()));
+  switched.store(true, Ordering::SeqCst);
+  engine.stand(verbs::Stand::default()).expect("the life stands");
+  let done = |engine: &mut Engine| {
+    engine.peek(&id, verbs::Peek::default()).is_ok_and(|one| one.as_ref().as_int() == Some(7))
+  };
+  assert!(until(&mut engine, done), "the reply asks the new command line");
+  assert_eq!((before.load(Ordering::SeqCst), after.load(Ordering::SeqCst)), (1, 1));
+}
+
 /// A moment in Paris.
 fn paris(month: i8, day: i8, hour: i8, minute: i8) -> Zoned {
   civil::date(2026, month, day)

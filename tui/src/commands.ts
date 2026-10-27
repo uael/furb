@@ -11,6 +11,11 @@ export const commands = {
     "Save a provider in the project settings and use it now",
   ],
   reload: ["Reload settings", "", "Read provider settings again and update the standing of this life"],
+  retry: [
+    "Retry now",
+    "",
+    "Ask again at once each model that waits to retry, as at a usage limit, on the provider settings of now",
+  ],
   effort: ["Choose effort", "[level]", "Set the reasoning effort of the selected model"],
   shape: ["Response shape", "[type]", "Choose the result type of the next prompt"],
   theme: ["Color theme", "[name]", "Change the palette of every surface, or follow the terminal"],

@@ -596,6 +596,10 @@ impl Provider {
   /// a writing of its rung, unless a pause holds the rung. A reply whose part ran is done with the word that ran when
   /// the part raised, when a later statement holds a fault, and when its call fails, which is then made no more; and
   /// with its turn when the gate finds nothing against the whole word, which holds the word that ran.
+  ///
+  /// A stand ends the wait of each reply whose call waits for a retry, a usage limit among them, and asks its model
+  /// again at once, on the models that stand then: so a change of the command line or of its account, or the operator
+  /// who asks to retry now, ends a wait at once.
   pub fn ear(self) -> Box<dyn Ear> {
     let Provider {
       directory,
@@ -629,6 +633,9 @@ impl Provider {
           Next::Heard(a) => a,
           // What the model of a reply that still stands writes, told to the host under the rung it writes for.
           Next::Worked(Replied::Wrote { id, text, thinking }) => {
+            if let Some(reply) = replies.get_mut(&id) {
+              reply.waits = false;
+            }
             if let (Some(writes), Some(reply)) = (&writes, replies.get(&id)) {
               writes(&reply.rung, &reply.chain, &text, &thinking);
             }
@@ -718,8 +725,11 @@ impl Provider {
               }
               continue;
             }
-            if let Some(watch) = replies.get_mut(&id).and_then(|reply| reply.watch.as_mut()) {
-              watch.forget();
+            if let Some(reply) = replies.get_mut(&id) {
+              reply.waits = true;
+              if let Some(watch) = reply.watch.as_mut() {
+                watch.forget();
+              }
             }
             if let (Some(retries), Some(reply)) = (&retries, replies.get(&id)) {
               retries(&reply.rung, &reply.chain, &retry);
@@ -825,34 +835,57 @@ impl Provider {
                 }
               }
             }
-            let held = models.read().unwrap_or_else(PoisonError::into_inner);
-            say(&mut co, Fact::says("done", &about, [standing(&held, &directory, &actor)]));
+            let stood =
+              standing(&models.read().unwrap_or_else(PoisonError::into_inner), &directory, &actor);
+            say(&mut co, Fact::says("done", &about, [stood]));
+            // A stand reads the settings again, as after a change of the command line or of its account, or when the
+            // operator asks to retry now, so a reply whose call waits for a retry, which can wait for days at a usage
+            // limit, ends its wait and asks again at once, on the models that stand now.
+            let waiting: Vec<String> =
+              replies.iter().filter(|(_, reply)| reply.waits).map(|(id, _)| id.clone()).collect();
+            for id in waiting {
+              let Some(reply) = replies.get(&id) else { continue };
+              let (chain, actor) = (reply.chain.clone(), reply.actor.clone());
+              let (watch, stop) = asking(
+                &mut co,
+                &id,
+                &chain,
+                &actor,
+                &life,
+                &models,
+                &mut images,
+                thinking,
+                backoff,
+              )
+              .await?;
+              if let Some(reply) = replies.get_mut(&id) {
+                reply.waits = false;
+                reply.watch = watch.then(Watch::default);
+                reply._stop = stop;
+              }
+            }
           }
           "reply" if a.question() => {
             say(&mut co, Fact::says("started", &about, []));
             let chain = a.on().to_owned();
             let actor = a.word(1).and_then(|one| one.as_str()).unwrap_or_default().to_owned();
-            let turns = co.call("turns", vec![], vec![("on", Object::string(&chain))]).await?;
-            let (tells, told) = mpsc::unbounded_channel();
-            let wrote = written(&about, &tells);
-            let key = format!("{life}/{chain}");
-            let asked = requested(
-              &models.read().unwrap_or_else(PoisonError::into_inner),
-              &actor,
+            let (watch, stop) = asking(
+              &mut co,
+              &about,
               &chain,
-              turns.as_ref(),
-              &key,
+              &actor,
+              &life,
+              &models,
               &mut images,
-              wrote,
+              thinking,
+              backoff,
             )
-            .map(|one| thinks(one, thinking));
-            let watch = asked.as_ref().is_ok_and(|(model, _)| model.streams_its_word());
+            .await?;
             let again = mute.get(&chain) == Some(&actor);
-            let (stop, stopped) = oneshot::channel();
-            co.work(answered(about.clone(), asked, backoff, tells, told, stopped));
             let rung = a.by().to_owned();
             let watch = watch.then(Watch::default);
-            replies.insert(about, Reply { chain, actor, rung, again, watch, _stop: stop });
+            let reply = Reply { chain, actor, rung, again, watch, waits: false, _stop: stop };
+            replies.insert(about, reply);
           }
           // A part of a word that raised ends the word where it raised, so its reply ends with the word that ran,
           // whose run is done with that raise.
@@ -903,7 +936,36 @@ struct Reply {
   rung: String,
   again: bool,
   watch: Option<Watch>,
+  waits: bool,
   _stop: oneshot::Sender<()>,
+}
+
+/// The call of the model of a reply, begun on the turns of its chain and the models that stand now, as a work of the
+/// ear; whether its model streams its word, which the ear reads as it comes; and what ends the call once dropped.
+#[allow(clippy::too_many_arguments)]
+async fn asking(
+  co: &mut Co<Replied>,
+  about: &str,
+  chain: &str,
+  actor: &str,
+  life: &str,
+  models: &RwLock<Vec<Model>>,
+  images: &mut Images,
+  thinking: Thinking,
+  backoff: Backoff,
+) -> Result<(bool, oneshot::Sender<()>), Fault> {
+  let turns = co.call("turns", vec![], vec![("on", Object::string(chain))]).await?;
+  let (tells, told) = mpsc::unbounded_channel();
+  let wrote = written(about, &tells);
+  let key = format!("{life}/{chain}");
+  let held = models.read().unwrap_or_else(PoisonError::into_inner);
+  let asked = requested(&held, actor, chain, turns.as_ref(), &key, images, wrote)
+    .map(|one| thinks(one, thinking));
+  drop(held);
+  let streams = asked.as_ref().is_ok_and(|(model, _)| model.streams_its_word());
+  let (stop, stopped) = oneshot::channel();
+  co.work(answered(about.to_owned(), asked, backoff, tells, told, stopped));
+  Ok((streams, stop))
 }
 
 /// What the work of a reply gives: a part that its model wrote, a retry of the call of its model, or what the reply

@@ -1578,6 +1578,10 @@ export class Session extends EventEmitter {
         await this.reloadCatalog();
         this.notice = "Provider settings reloaded. The life stands on the new settings.";
         break;
+      case "retry":
+        await this.host.reload();
+        this.notice = "Each model that waited to retry is asked again now, on the provider settings of now.";
+        break;
       case "provider": {
         const [verb, name, url, id, window, key_env, protocol] = argument.split(/\s+/);
         if (!name || !["add", "remove"].includes(verb ?? ""))

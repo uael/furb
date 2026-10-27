@@ -324,6 +324,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/providers` | Add or remove a provider for this project |
 | `/provider <add|remove> <name> [URL model window key_env protocol]` | Save a provider in the project settings and use it now |
 | `/reload` | Read provider settings again and update the standing of this life |
+| `/retry` | Ask again at once each model that waits to retry, as at a usage limit, on the provider settings of now |
 | `/effort [level]` | Set the reasoning effort of the selected model |
 | `/shape [type]` | Choose the result type of the next prompt |
 | `/theme [name]` | Change the palette of every surface, or follow the terminal |
