@@ -42,7 +42,10 @@ const bare = {
       .map((name) => [name, ""]),
   ),
 };
-const projects = await home("furb-gallery", { FURB_DEMO_PACE: "200", ...bare });
+// The clock of the view stands still, as FURB_STILL_CLOCK says, so that two runs of the same code draw the same
+// captures: no spinner turns and no time shows. A run that sets FURB_STILL_CLOCK itself keeps its own time.
+const still = process.env.FURB_STILL_CLOCK || "1767225600000";
+const projects = await home("furb-gallery", { FURB_DEMO_PACE: "200", FURB_STILL_CLOCK: still, ...bare });
 /** What the script waits for: a screen whose state never comes ends the script with an error that names the screen. */
 const waits = watch();
 /** A project of the gallery in its home, new, with the files of the demo. */
@@ -110,6 +113,8 @@ async function settle(): Promise<void> {
 async function rest(): Promise<void> {
   await test.mockMouse.moveTo(0, test.renderer.height - 1);
 }
+/** The captures that this run wrote. */
+let written = 0;
 async function capture(name: string): Promise<void> {
   waits(`the screen ${name}`);
   if (!notices.test(name)) session.notice = "";
@@ -128,6 +133,7 @@ async function capture(name: string): Promise<void> {
   await test.flush();
   waits(`the screen after ${name}`);
   if (only && !only.test(name)) return;
+  written++;
   const frame = test.captureSpans();
   await writeFile(`${output}/${name}.png`, rasterize(frame, paletteOf(session.theme), "furb"));
   if (grid) await writeFile(join(grid, `${name}.json`), cells(frame));
@@ -578,7 +584,8 @@ try {
   if (!imagePrompt) throw new Error("The image prompt was not submitted.");
   await session.engine.result(imagePrompt.id);
   await session.refresh();
-  await session.submit("/share");
+  // The page has a name of its own, since the name that /share makes holds the time of the machine.
+  await session.submit("/share .furb/shares/conversation.html");
   await capture("37-share-conversation");
   app().closeOverlay();
   app().composer.setText("/delete");
@@ -1124,6 +1131,10 @@ try {
   failed = true;
 }
 waits("the end of the script");
+if (only && !written) {
+  console.error(`FURB_GALLERY_ONLY ${only} matched no capture, so this run wrote none.`);
+  failed = true;
+} else if (!failed) console.log(`Wrote ${written} captures to ${output}.`);
 await end(
   failed,
   () => app().dispose(),

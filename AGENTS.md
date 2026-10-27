@@ -246,6 +246,9 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 - `uv run pytest -q test/test_hygiene.py`: the hygiene laws alone.
 - `uv run ruff format src test script extensions` then `uv run ruff check src test script extensions`: format and
   lint. Two spaces of indentation, 120 columns.
+- `.furb` is outside ruff, even for a path that you give it: its words keep the form of the engine. Run the tests of
+  an extension of the project alone with `uv run --no-sync pytest -q <folder> -p no:cacheprovider --no-cov`, since the
+  coverage of 100 applies to the whole suite only.
 - `uv run ty check --error-on-warning`: the type check. The tests are checked against `engine.pyi`.
 - `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace`:
   the gates of the crate and of the command line. The tests of a module stand beside it, `src/engine.test.rs` beside
@@ -295,8 +298,9 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
   cache of `.furb/tests`, and not those of the machine. `tui/script/test.ts` deals the tests of each file into runs,
   each a process of its own that runs one test at a time, so a test counts its own time alone and no test runs
   beside one that changes the environment or the clock. Twice as many runs go at once as the machine has cores. A
-  word after `bun run test` filters the files. Each script of `bind/typescript/test/programs`, which a test runs as a
-  program, compiles before any run starts, so no compile takes the machine from a test.
+  word after `bun run test` filters the files, and a filter that matches no file fails. The last line counts the
+  passes and the fails, and `FURB_TEST_OUTPUT=1` shows all that each run wrote, a `console.log` among it. Each
+  script of `bind/typescript/test/programs`, which a test runs as a program, compiles before any run starts, so no compile takes the machine from a test.
   As root, the test of a folder that cannot be read fails, since root reads every folder.
 - `bun run demo` and `bun run tui`: the TUI on the demo session, which asks no model, or on a real life.
 - `bun run docs`: write the tables of keys and commands in `tui/README.md` again from `tui/src/keys.ts` and
@@ -315,7 +319,12 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 - `bun run screenshots` and `bun run animation`: capture `docs/screenshots/` and `docs/furb.gif` again from the
   real renderer. Run both after a change that a screen shows, and read each capture. One run of each at a time holds
   its home in `/tmp`, and a second run waits until the first ends. A screen that does not come in three minutes ends
-  the run with an error that names the screen, and a run never waits past thirty minutes. A push to `main` that
+  the run with an error that names the screen, and a run never waits past thirty minutes. A run that waits says how
+  long the run that holds the home has held it. The clock of the view stands still by default, so that two runs of
+  the same code draw the same captures, and `FURB_STILL_CLOCK`, a time in milliseconds, sets another time.
+  `FURB_GALLERY_ONLY=<pattern>` writes only the captures whose names match, and ends with an error when none match.
+  `FURB_GALLERY_TEXT=<folder>` writes the text of each capture too, which a model that cannot see an image reads.
+  A run ends with the line `Wrote N captures to <folder>.`. A push to `main` that
   changes a path that a capture reads runs `.github/workflows/gallery.yml`, which draws both again on a runner of CI
   and keeps one pull request open on the branch `w/gallery` with the files that changed. So a change of a screen
   commits no capture.
