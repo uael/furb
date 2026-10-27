@@ -292,6 +292,7 @@ export const feed = part({
             // Each line that the model finished shows as python, highlighted as it comes, and the card is made again
             // at each line and not at each token. The row under it takes the next number and the line still written.
             const { lines } = writing(w.host.streams.get(line.step.id));
+            this.followThinking(line.step.id, lines ? lines.split("\n").length : 0);
             if (lines)
               add(
                 `wrote-${line.step.id}`,

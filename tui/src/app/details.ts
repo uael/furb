@@ -308,7 +308,14 @@ export const details = part({
       lineNumbers: new Map([[0, number]]),
       lineSigns: new Map([[0, { before: spin(), beforeColor: c.accent }]]),
     });
-    this.thinkingRows.set(step, { view, text, display, room, said: saidOf(number, parts) });
+    this.thinkingRows.set(step, {
+      view,
+      text,
+      display,
+      room,
+      said: saidOf(number, parts),
+      wrote: number - display,
+    });
     return view;
   },
 
@@ -320,13 +327,27 @@ export const details = part({
         continue;
       }
       row.view.setLineSign(0, { before: spin(), beforeColor: c.accent });
-      const { number, parts } = this.thinkingParts(step, row.display, row.room);
-      const said = saidOf(number, parts);
-      if (said === row.said) continue;
-      row.said = said;
-      row.view.setLineNumbers(new Map([[0, number]]));
-      row.text.content = styled(parts);
+      this.followThinking(step);
     }
+  },
+
+  /** The row of a model follows its stream. A line that the model finished stands in the card above the row, which the
+   * next frame of the feed makes: until the card shows it, the row keeps its text and its number, so that no frame
+   * shows the line twice, or the next number under a program that lacks its line. */
+  followThinking(step: string, wrote?: number): void {
+    const row = this.thinkingRows.get(step);
+    if (!row || row.view.isDestroyed) return;
+    if (wrote !== undefined) row.wrote = wrote;
+    const { number, parts } = this.thinkingParts(step, row.display, row.room);
+    if (number - row.display !== row.wrote) {
+      this.schedule();
+      return;
+    }
+    const said = saidOf(number, parts);
+    if (said === row.said) return;
+    row.said = said;
+    row.view.setLineNumbers(new Map([[0, number]]));
+    row.text.content = styled(parts);
   },
 
   /** A program of the feed: its lines as one block of python, each numbered as a line of its word, with what the
