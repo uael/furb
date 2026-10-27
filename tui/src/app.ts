@@ -12,6 +12,7 @@ import {
   type MouseEvent,
   type Renderable,
   ScrollBoxRenderable,
+  type SimpleHighlight,
   TextareaRenderable,
   TextRenderable,
 } from "@opentui/core";
@@ -147,10 +148,18 @@ export class App {
   replyFocus?: string;
   /** The input at the end of each thread that the feed shows, by the thread. */
   readonly replyInputs = new Map<string, InputRenderable>();
-  /** The rows that a model writes, by the step that it writes, which the tick draws again. */
+  /** The rows that a model writes, by the step that it writes, which the tick draws again, each with the lines that
+   * the card above it shows. */
   thinkingRows = new Map<
     string,
-    { view: LineNumberRenderable; text: TextRenderable; display: number; room: number; said: string }
+    {
+      view: LineNumberRenderable;
+      text: TextRenderable;
+      display: number;
+      room: number;
+      said: string;
+      wrote: number;
+    }
   >();
   /** The chain whose threads the sidebar lists in place of the tree of the chains, once a click or Enter chose it. */
   railChain?: string;
@@ -924,6 +933,8 @@ export class App {
   /** The cards of the feed in their order, read once while no card moves, since each read of them copies them. */
   feedOrder?: Renderable[];
   sourceGroups = new Map<string, Promise<(string | undefined)[]>>();
+  /** The highlights that the parser gave each line of code last, by its filetype and its text, the newest last. */
+  readonly paintedLines = new Map<string, SimpleHighlight[]>();
 
   readonly coloring = new Map<string, Promise<void>>();
   /** The loom that the threads of the sidebar read last, and what it was woven of, which a frame of the same life

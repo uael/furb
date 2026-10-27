@@ -25,7 +25,7 @@ use unsync::oneshot;
 
 use crate::{
   Act, Ear, Engine, Exit, Fact, Fault, Object, Text,
-  ear::{Co, Next, ear, hear, say},
+  ear::{Co, Next, ear, hear, hearing, lasting, say},
   engine::{CRASHES, HEARING, callable},
   verbs, world,
 };
@@ -1209,4 +1209,118 @@ fn the_rule_by_which_a_restore_tells_an_ear_the_past_is_the_rule_of_the_bus_of_t
   let rule = ears.lines().find_map(|line| line.trim().strip_prefix("k = ")).expect("ears names k");
   let held = HEARING.split_whitespace().collect::<String>();
   assert!(held.contains(&rule.split_whitespace().collect::<String>()), "{rule} is not in HEARING");
+}
+
+/// An ear of the test that takes each probe, and raises at the probes that `raises` names, by their count.
+fn prober(count: Rc<RefCell<i64>>, raises: &'static [i64]) -> Box<dyn Ear> {
+  hearing(&["probe"], move |mut co| async move {
+    loop {
+      let a = hear(&mut co).await;
+      if a.kind() != "probe" || !a.question() {
+        continue;
+      }
+      let n = {
+        let mut held = count.borrow_mut();
+        *held += 1;
+        *held
+      };
+      if raises.contains(&n) {
+        return Err(Fault::refused(format!("probe {n} broke")));
+      }
+      say(&mut co, done(a.about(), Object::int(n)));
+    }
+  })
+}
+
+/// A life on the provider of the test and on these ears, and its root.
+fn probed(yard: &str, ears: Vec<(&str, Box<dyn Ear>)>) -> (Engine, String) {
+  let at = std::env::temp_dir().join(format!("furb-engine-{yard}-{}", std::process::id()));
+  fs::create_dir_all(&at).expect("a yard of the test");
+  let mut all = vec![("provider", provider(at, Rc::default(), Rc::default()))];
+  all.extend(ears);
+  let engine = Engine::boot(Vec::new(), all).unwrap();
+  let root = engine.root().to_owned();
+  (engine, root)
+}
+
+/// One probe on the root, and what it came to.
+fn probe(engine: &mut Engine, root: &str) -> Result<Object, Fault> {
+  let made =
+    engine.verb("act", vec![Object::string("probe"), Object::string(root), Object::none()], vec![]);
+  let name = made.unwrap().as_ref().as_str().unwrap_or_default().to_owned();
+  block_on(Act::<Object>::of(engine, &name))
+}
+
+/// The messages of the prompts to the operator on the root.
+fn notices(engine: &mut Engine) -> Vec<String> {
+  let got = engine
+    .word("[str(x[5]) for x in transcript(ROOT, 'prompt') if x[6] == OPERATOR]", vec![])
+    .unwrap();
+  got
+    .as_ref()
+    .items()
+    .unwrap_or_default()
+    .into_iter()
+    .map(|one| one.as_str().unwrap_or_default().to_owned())
+    .collect()
+}
+
+#[test]
+fn an_ear_of_the_crate_that_raises_refuses_that_act_starts_again_and_tells_the_operator_once() {
+  let count = Rc::new(RefCell::new(0));
+  let made = Rc::clone(&count);
+  let first = prober(Rc::clone(&count), &[1, 3]);
+  let ears = vec![("probe", lasting(first, move || prober(Rc::clone(&made), &[1, 3])))];
+  let (mut engine, root) = probed("lasting", ears);
+  let no = probe(&mut engine, &root).unwrap_err();
+  assert_eq!(no.name, "Refused");
+  assert!(no.message().contains("The ear probe raised Refused: probe 1 broke"), "{no}");
+  assert_eq!(probe(&mut engine, &root).unwrap().as_ref().as_int(), Some(2));
+  assert!(probe(&mut engine, &root).unwrap_err().message().contains("probe 3 broke"));
+  assert_eq!(probe(&mut engine, &root).unwrap().as_ref().as_int(), Some(4));
+  let told = notices(&mut engine);
+  assert_eq!(told.len(), 1, "{told:?}");
+  assert!(told[0].contains("probe 1 broke. It starts again and takes the next act."), "{told:?}");
+}
+
+#[test]
+fn an_ear_that_cannot_start_again_tells_the_operator_why_it_ended() {
+  let ears = vec![("probe", prober(Rc::new(RefCell::new(0)), &[1]))];
+  let (mut engine, root) = probed("unlasting", ears);
+  assert!(probe(&mut engine, &root).unwrap_err().message().contains("probe 1 broke"));
+  let no = probe(&mut engine, &root).unwrap_err();
+  assert!(no.message().contains("nothing takes probe"), "{no}");
+  let told = notices(&mut engine);
+  assert_eq!(told.len(), 1, "{told:?}");
+  assert!(told[0].contains("probe 1 broke. It cannot start again."), "{told:?}");
+}
+
+#[test]
+fn the_gate_refuses_a_word_that_monty_cannot_compile_and_reads_the_next_word() {
+  let (mut engine, root) = probed("gate", vec![]);
+  let word =
+    "from typing import TypedDict\nclass Point(TypedDict, total=False):\n  x: int\nclose(1)";
+  let found =
+    engine.verb("gate", vec![Object::string(word)], vec![("on", Object::string(&root))]).unwrap();
+  let found = found.py_repr();
+  assert!(found.starts_with("[\"line ") && found.contains("metaclasses"), "{found}");
+  let next = engine
+    .verb("gate", vec![Object::string("x = 1")], vec![("on", Object::string(&root))])
+    .unwrap();
+  assert_eq!(next.py_repr(), "[]");
+}
+
+#[test]
+fn the_gate_answers_a_word_that_it_fails_on_with_a_refusal_and_reads_the_next_word() {
+  let (mut engine, root) = probed("gatefault", vec![]);
+  engine.word("globals().update(program_held=program, program=lambda on: 1 / 0)", vec![]).unwrap();
+  let no = engine
+    .verb("gate", vec![Object::string("x = 1")], vec![("on", Object::string(&root))])
+    .unwrap_err();
+  assert!(no.message().contains("ZeroDivisionError"), "{no}");
+  engine.word("globals().update(program=program_held)", vec![]).unwrap();
+  let next = engine
+    .verb("gate", vec![Object::string("x = 1")], vec![("on", Object::string(&root))])
+    .unwrap();
+  assert_eq!(next.py_repr(), "[]");
 }

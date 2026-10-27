@@ -1,6 +1,6 @@
 //! The watch over the word of a reply.
 
-use super::{Watch, broken, open, refused, settled};
+use super::{Watch, broken, last, open, refused, settled};
 
 #[test]
 fn a_fence_that_opens_a_word_is_a_fault_at_its_line() {
@@ -108,4 +108,36 @@ fn the_word_is_refused_after_the_first_settled_statement_that_holds_a_finding() 
     ["line 2: in a def".to_owned(), "line 4: unknown name".to_owned(), "line 6: x".to_owned()];
   assert_eq!(refused(&settled, &found), Some(5));
   assert_eq!(refused(&settled, &found[..1]), None);
+}
+
+#[test]
+fn a_part_is_the_word_that_is_new_since_the_parts_given_and_counts_the_characters_before_it() {
+  let mut watch = Watch::default();
+  assert_eq!(watch.part("x = 1\n"), Some(("x = 1\n", 0)));
+  assert_eq!(watch.ran(), None, "no part was given yet");
+  watch.wrote("é = 1\ny");
+  watch.gave("é = 1\n", "é = 1\n".len());
+  assert_eq!(watch.ran(), Some("é = 1\n"));
+  assert_eq!(
+    watch.part("é = 1\ny = 2\n"),
+    Some(("y = 2\n", 6)),
+    "python counts characters, not bytes"
+  );
+  assert_eq!(watch.part("é = 1\n\n"), None, "a part holds a statement");
+  assert_eq!(watch.part("z = 3\n"), None, "a word that does not follow what was given has no part");
+  watch.untaken();
+  assert_eq!(watch.part("é = 1\ny = 2\n"), None, "a word that no Kernel takes is given whole");
+}
+
+#[test]
+fn a_line_that_opens_a_clause_of_the_statement_before_it_holds_that_statement() {
+  let mut watch = Watch::default();
+  let end = watch.wrote("if x:\n  y = 1\nelse:\n").expect("a line at the left edge");
+  assert!(watch.clause(end));
+  assert_eq!(last("z = 0\nif x:\n  y = 1\n"), Some(2));
+  assert_eq!(watch.start(3), "if x:\n  y = 1\n".len());
+  assert_eq!(watch.start(1), 0);
+  let mut other = Watch::default();
+  let end = other.wrote("x = 1\nelsewhere = 2\n").expect("a line at the left edge");
+  assert!(!other.clause(end), "a name that starts with a keyword opens no clause");
 }

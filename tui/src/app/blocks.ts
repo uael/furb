@@ -10,7 +10,10 @@ import {
   type RenderNodeContext,
   type RGBA,
   type SimpleHighlight,
+  StyledText,
+  type SyntaxStyle,
   type TextRenderable,
+  treeSitterToTextChunks,
 } from "@opentui/core";
 import { safeText, WORK } from "furb";
 import { type Chip, cancelled, failed } from "furb/life";
@@ -22,6 +25,10 @@ import { theme as c, glyph, spacing as space, spin } from "../theme.ts";
 import { type Part, plain, styled } from "../ui.ts";
 import { part } from "./part.ts";
 import { type BlockOptions, chipColors, noBorder, type State, stateOf } from "./shared.ts";
+
+/** The lines of code whose colors the view keeps, and the widest line that it keeps. */
+const PAINTED_LINES = 4096,
+  PAINTED_WIDTH = 1000;
 
 export const blocks = part({
   /** The columns of the feed: the screen but the sidebar that shows and the gutters. It is known before the feed is
@@ -228,19 +235,73 @@ export const blocks = part({
     hover?: (event: MouseEvent) => boolean,
     colors?: () => Promise<SimpleHighlight[]>,
   ): CodeRenderable {
+    const text = safeText(content);
     const code = new CodeRenderable(this.renderer, {
-      content: safeText(content),
+      content: text,
       filetype: "python",
       syntaxStyle: this.style,
       wrapMode: "word",
       drawUnstyledText: true,
-      ...(colors
-        ? { onHighlight: () => colors() }
-        : marks?.length
-          ? { onHighlight: (highlights: SimpleHighlight[]) => [...highlights, ...marks] }
-          : {}),
+      initialStyledText: this.painted(text, "python", this.style),
+      onHighlight: async (highlights, context) => {
+        const made = colors ? await colors() : [...highlights, ...(marks ?? [])];
+        this.paint(context.content, "python", made);
+        return made;
+      },
     });
     return this.pointable(code, content, hover);
+  },
+
+  /** Code in the colors that the parser gave each of its lines last, and a line that it never colored in the color of
+   * plain code. A node of code draws it until the parser colors the node, which takes a frame or more: the feed makes
+   * its nodes again at each change, so code drawn plain would blink at each change. The node draws this text again
+   * when its content changes, so a node that takes it keeps its content. */
+  painted(content: string, filetype: string, style: SyntaxStyle): StyledText {
+    const highlights: SimpleHighlight[] = [];
+    let start = 0;
+    for (const line of content.split("\n")) {
+      for (const [from, to, ...rest] of this.paintedLines.get(`${filetype}\n${line}`) ?? [])
+        highlights.push([start + from, start + to, ...rest] as SimpleHighlight);
+      start += line.length + 1;
+    }
+    return new StyledText(treeSitterToTextChunks(content, highlights, style));
+  },
+
+  /** Keeps the highlights that the parser gave code, cut at each line, for the lines that came last. */
+  paint(content: string, filetype: string, highlights: SimpleHighlight[]): void {
+    const lines = content.split("\n");
+    const starts: number[] = [];
+    let offset = 0;
+    for (const line of lines) {
+      starts.push(offset);
+      offset += line.length + 1;
+    }
+    const kept = lines.map((): SimpleHighlight[] => []);
+    for (const [from, to, ...rest] of highlights) {
+      let low = 0,
+        high = lines.length - 1;
+      while (low < high) {
+        const middle = (low + high + 1) >> 1;
+        if ((starts[middle] ?? 0) <= from) low = middle;
+        else high = middle - 1;
+      }
+      for (let row = low; row < lines.length && (starts[row] ?? 0) < to; row++) {
+        const begin = starts[row] ?? 0;
+        const left = Math.max(from, begin) - begin,
+          right = Math.min(to, begin + (lines[row]?.length ?? 0)) - begin;
+        if (left < right) kept[row]?.push([left, right, ...rest] as SimpleHighlight);
+      }
+    }
+    for (const [row, line] of lines.entries()) {
+      if (line.length > PAINTED_WIDTH) continue;
+      const key = `${filetype}\n${line}`;
+      this.paintedLines.delete(key);
+      this.paintedLines.set(key, kept[row] ?? []);
+    }
+    for (const key of this.paintedLines.keys()) {
+      if (this.paintedLines.size <= PAINTED_LINES) break;
+      this.paintedLines.delete(key);
+    }
   },
 
   /** The group of each character of a program, as the parser of python highlights it, kept for the last programs. */
@@ -355,16 +416,26 @@ export const blocks = part({
       marginBottom: followed ? space.section : 0,
     });
     if (language) block.add(this.text(language, c.faint));
+    const filetype = infoStringToFiletype(language);
     block.add(
       new CodeRenderable(this.renderer, {
         content: text,
-        filetype: infoStringToFiletype(language),
+        filetype,
         syntaxStyle: context.syntaxStyle,
         treeSitterClient: context.treeSitterClient,
         fg: c.text,
         wrapMode: "none",
         drawUnstyledText: true,
         width: "100%",
+        ...(filetype
+          ? {
+              initialStyledText: this.painted(text, filetype, context.syntaxStyle),
+              onHighlight: (highlights: SimpleHighlight[]) => {
+                this.paint(text, filetype, highlights);
+                return highlights;
+              },
+            }
+          : {}),
       }),
     );
     return block;

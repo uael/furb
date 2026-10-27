@@ -107,6 +107,8 @@ meanings. The entry of such a name here gives only its form in the engine.
   World takes and answers with the turn of the model.
 - run: the act a chain makes to run the word of a rung, which the Kernel takes and says done with what the word
   gave.
+- writing: the act the World makes, as a rung, to run the part of the word of that rung that its model finished,
+  while the model writes the rest, which the Kernel takes and says done with what the part raised.
 - wants: the act a run makes when its word waits for an act that is not done, which the rung takes and answers
   with what that act came to.
 - step: one turn of a model and the run of its word, which is one rung.
