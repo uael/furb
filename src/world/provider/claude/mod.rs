@@ -16,9 +16,10 @@ use std::{
   path::{Path, PathBuf},
   process::Stdio,
   sync::Arc,
-  time::{Duration, Instant},
+  time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+use jiff::Zoned;
 use rig_core::{
   completion::{
     CompletionError, CompletionModel, CompletionRequest, CompletionResponse, FinishReason, Usage,
@@ -39,7 +40,10 @@ use sha2::{Digest, Sha256};
 use super::{Model, ended, search, uuid};
 use crate::ear::reactor;
 
+mod accounts;
 mod discover;
+pub use accounts::{Account, Source, Switch};
+use accounts::{Accounts, NO_TOKEN};
 use discover::Found;
 pub use discover::refresh;
 
@@ -91,6 +95,20 @@ const PAUSE: Duration = Duration::from_secs(5);
 /// replaces it, which the provider takes for a failure that passes.
 pub(super) const MISSING: &str = "No program to run";
 
+/// The words that begin the failure of a turn whose account was parked, which the provider takes for a failure that
+/// passes: the turn that asks again runs as another account.
+pub(super) const SWITCHED: &str = "Switched account";
+
+/// What a failed sign in of the command line says, in lower case.
+const SIGNED_OUT: [&str; 6] = [
+  "please run /login",
+  "not logged in",
+  "invalid api key",
+  "oauth token has expired",
+  "authentication_error",
+  NO_TOKEN,
+];
+
 /// The claude command line: its program, how long a turn may go with no progress, how long a process waits for a
 /// program that is missing or does not run, and the conversations it holds.
 ///
@@ -123,43 +141,38 @@ impl Claude {
   /// 3` holds the program `cswap` and the words `run` and `3`. No shell reads the words: each reaches the program as
   /// it stands, with its spaces, once, for a turn and for a search alike. The stall is the one of [`Claude::with`].
   pub fn with_command(bin: PathBuf, args: Vec<String>, stall: Option<Duration>) -> Claude {
+    Claude::with_accounts(Some(bin), args, Vec::new(), Switch::default(), stall)
+  }
+
+  /// The command line that runs as these accounts, in the order of the list. The program and the stall are those of
+  /// [`Claude::with`], and the words come before each flag as [`Claude::with_command`] says. A turn that meets a usage
+  /// limit or a failed sign in parks its account and ends as a failure that passes, so the turn that asks again runs
+  /// as another account: a limit parks an account until its reset, and a failed sign in until a new command line
+  /// stands, as after a reload. With one account or none, nothing is parked.
+  pub fn with_accounts(
+    bin: Option<PathBuf>,
+    args: Vec<String>,
+    accounts: Vec<Account>,
+    switch: Switch,
+    stall: Option<Duration>,
+  ) -> Claude {
+    let bin = bin.or_else(located).unwrap_or_else(|| PROGRAM.into());
     let stall = stall.unwrap_or_else(|| {
       let seconds = env::var("FURB_CLAUDE_STALL").ok().and_then(|one| one.parse::<f64>().ok());
       seconds.and_then(|one| Duration::try_from_secs_f64(one).ok()).unwrap_or(STALL)
     });
+    let accounts = Arc::new(Accounts::new(accounts, switch));
     let (keeper, asked) = mpsc::unbounded_channel();
-    reactor().spawn(kept(asked));
-    Claude { program: Program::new(bin, args), stall, gone: patience(), keeper }
+    reactor().spawn(kept(asked, Arc::clone(&accounts)));
+    Claude { program: Program::with(bin, args, accounts), stall, gone: patience(), keeper }
   }
 
   /// Whether the command line is signed in, as `claude auth status` says. It counts as signed in unless that command
   /// says it is not, in its JSON or in its words, so a version with no such command, or one that does not end in ten
-  /// seconds, passes, and a turn says what is wrong.
+  /// seconds, passes, and a turn says what is wrong. With accounts, it is signed in when any account is, and an
+  /// account whose token cannot be read is not.
   pub fn signed(&self) -> bool {
-    let Ok(mut child) = std::process::Command::new(&*self.program.bin)
-      .args(["auth", "status"])
-      .stdin(std::process::Stdio::null())
-      .stdout(std::process::Stdio::piped())
-      .stderr(std::process::Stdio::piped())
-      .spawn()
-    else {
-      return true;
-    };
-    let until = std::time::Instant::now() + Duration::from_secs(10);
-    while matches!(child.try_wait(), Ok(None)) {
-      if std::time::Instant::now() >= until {
-        let _ = child.kill();
-        let _ = child.wait();
-        return true;
-      }
-      std::thread::sleep(Duration::from_millis(20));
-    }
-    let Ok(out) = child.wait_with_output() else { return true };
-    let said = String::from_utf8_lossy(&out.stdout);
-    let logged =
-      serde_json::from_str::<Value>(&said).ok().and_then(|one| one["loggedIn"].as_bool());
-    let words = format!("{said}{}", String::from_utf8_lossy(&out.stderr)).to_lowercase();
-    logged.unwrap_or(!words.contains("not logged in"))
+    (0..self.program.accounts.count()).any(|at| self.program.under(at).signed())
   }
 
   /// The same command line, whose process waits this long for a program that is missing or does not run.
@@ -215,18 +228,64 @@ impl Claude {
 pub(super) struct Program {
   bin: Arc<Path>,
   args: Arc<[String]>,
+  accounts: Arc<Accounts>,
+  /// The account that each command of this program runs as, or none for the first that is not parked.
+  pin: Option<usize>,
 }
 
 impl Program {
+  #[cfg(all(test, unix))]
   pub(super) fn new(bin: PathBuf, args: Vec<String>) -> Program {
-    Program { bin: bin.into(), args: args.into() }
+    Program::with(bin, args, Arc::new(Accounts::new(Vec::new(), Switch::default())))
   }
 
-  /// A command that holds the program and its words, to which a turn or a search adds its own flags.
-  pub(super) fn command(&self) -> Command {
+  fn with(bin: PathBuf, args: Vec<String>, accounts: Arc<Accounts>) -> Program {
+    Program { bin: bin.into(), args: args.into(), accounts, pin: None }
+  }
+
+  /// The same program, whose commands all run as this account.
+  fn under(&self, at: usize) -> Program {
+    Program { pin: Some(at), ..self.clone() }
+  }
+
+  /// A command that holds the program and its words, to which a turn or a search adds its own flags, and the
+  /// credential of its account. It fails with the reason when the token of the account cannot be read.
+  pub(super) fn command(&self) -> Result<Command, String> {
     let mut command = Command::new(&*self.bin);
     command.args(&*self.args);
-    command
+    let at = self.pin.unwrap_or_else(|| self.accounts.first_free(SystemTime::now()));
+    self.accounts.apply(at, command.as_std_mut())?;
+    Ok(command)
+  }
+
+  /// Whether this program, as its account, is signed in.
+  fn signed(&self) -> bool {
+    let Ok(mut tokio) = self.command() else { return false };
+    let Ok(mut child) = tokio
+      .as_std_mut()
+      .args(["auth", "status"])
+      .stdin(std::process::Stdio::null())
+      .stdout(std::process::Stdio::piped())
+      .stderr(std::process::Stdio::piped())
+      .spawn()
+    else {
+      return true;
+    };
+    let until = std::time::Instant::now() + Duration::from_secs(10);
+    while matches!(child.try_wait(), Ok(None)) {
+      if std::time::Instant::now() >= until {
+        let _ = child.kill();
+        let _ = child.wait();
+        return true;
+      }
+      std::thread::sleep(Duration::from_millis(20));
+    }
+    let Ok(out) = child.wait_with_output() else { return true };
+    let said = String::from_utf8_lossy(&out.stdout);
+    let logged =
+      serde_json::from_str::<Value>(&said).ok().and_then(|one| one["loggedIn"].as_bool());
+    let words = format!("{said}{}", String::from_utf8_lossy(&out.stderr)).to_lowercase();
+    logged.unwrap_or(!words.contains("not logged in"))
   }
 
   /// The file of the program, as a failure to start it names it.
@@ -321,8 +380,85 @@ impl Claude {
     self.keeper.send(asked).map_err(|_| gone())?;
     let conversation = borrowed.await.map_err(|_| gone())?;
     let mut lent = Lent { key, conversation: Some(conversation), keeper: self.keeper.clone() };
-    lent.conversation().turn(&messages, spend, &self.program, self.stall, self.gone, deltas).await
+    let accounts = &self.program.accounts;
+    let now = SystemTime::now();
+    let held = lent.conversation();
+    let at = match held.account.filter(|at| accounts.free(*at, now)) {
+      Some(at) => at,
+      None => {
+        let Some(at) = accounts.pick(now) else { return Err(self.exhausted(now)) };
+        if held.account.is_some() {
+          // The conversation of a parked account stays in its config dir, so this one begins again.
+          *held = Conversation::new(&held.name, &held.system);
+        }
+        held.account = Some(at);
+        at
+      }
+    };
+    let program = self.program.under(at);
+    let got = held.turn(&messages, spend, &program, self.stall, self.gone, deltas).await;
+    got.map_err(|no| self.switched(at, no))
   }
+
+  /// The failure of a turn that finds every account parked: the wait for the first reset of a limit, in the words of
+  /// the command line, or that every account is signed out.
+  fn exhausted(&self, now: SystemTime) -> CompletionError {
+    match self.program.accounts.earliest(now) {
+      Some(end) => failed(format!("Claude AI usage limit reached|{}", epoch(end))),
+      None => failed(
+        "Every account of the claude command line is signed out. Sign one in, then run /reload.",
+      ),
+    }
+  }
+
+  /// What a failed turn of an account comes to. A usage limit or a failed sign in parks the account, and the turn
+  /// ends as a failure that passes when another account stands, so the provider asks again as that account. When none
+  /// stands, it ends as the wait for the first reset, or as it was.
+  fn switched(&self, at: usize, no: CompletionError) -> CompletionError {
+    let accounts = &self.program.accounts;
+    if !accounts.switchable() {
+      return no;
+    }
+    let Some(why) = refusal(&no) else { return no };
+    let now = SystemTime::now();
+    let (until, reason) = match why {
+      Refusal::Limit(end) => (Some(end.unwrap_or(now + super::LIMIT_POLL)), "its usage limit"),
+      Refusal::SignedOut => (None, "its sign in failed"),
+    };
+    accounts.park(at, until);
+    match (accounts.peek(now), accounts.earliest(now)) {
+      (Some(next), _) => failed(format!(
+        "{SWITCHED} from {} to {}: {reason}",
+        accounts.name(at),
+        accounts.name(next)
+      )),
+      (None, Some(_)) => self.exhausted(now),
+      (None, None) => no,
+    }
+  }
+}
+
+/// Why an account cannot serve: a usage limit, and the moment it ends if the message names one, or a failed sign in.
+enum Refusal {
+  Limit(Option<SystemTime>),
+  SignedOut,
+}
+
+fn refusal(no: &CompletionError) -> Option<Refusal> {
+  if let Some(reset) = super::limit(no, &Zoned::now()) {
+    let end = reset
+      .and_then(|at| u64::try_from(at.timestamp().as_second()).ok())
+      .map(|seconds| UNIX_EPOCH + Duration::from_secs(seconds));
+    return Some(Refusal::Limit(end));
+  }
+  let CompletionError::ProviderError(said) = no else { return None };
+  let said = said.to_lowercase();
+  SIGNED_OUT.iter().any(|one| said.contains(one)).then_some(Refusal::SignedOut)
+}
+
+/// A time as the seconds since 1970, which the older message of a usage limit gives.
+fn epoch(at: SystemTime) -> u64 {
+  at.duration_since(UNIX_EPOCH).map_or(0, |one| one.as_secs())
 }
 
 /// What the keeper of the conversations is asked: to lend the conversation of a key to a turn, or to take it back.
@@ -371,7 +507,7 @@ impl Drop for Lent {
 /// The keeper of the conversations: it lends each to one turn at a time, and the next turn of a conversation lent
 /// waits for it; it takes each back, and then sweeps; and it sweeps once in each span that a process may sit idle.
 /// It ends when the last clone of the command line goes, and every conversation goes with it.
-async fn kept(mut asked: mpsc::UnboundedReceiver<Kept>) {
+async fn kept(mut asked: mpsc::UnboundedReceiver<Kept>, accounts: Arc<Accounts>) {
   let mut held: HashMap<String, Slot> = HashMap::new();
   let mut ticks = tokio::time::interval(IDLE);
   ticks.tick().await;
@@ -380,7 +516,7 @@ async fn kept(mut asked: mpsc::UnboundedReceiver<Kept>) {
       one = asked.recv() => match one {
         None => return,
         Some(Kept::Lend { key, name, system, messages, lent }) => {
-          lend(&mut held, key, &name, &system, &messages, lent);
+          lend(&mut held, &accounts, key, &name, &system, &messages, lent);
         }
         Some(Kept::Back { key, conversation }) => {
           back(&mut held, key, conversation);
@@ -394,9 +530,11 @@ async fn kept(mut asked: mpsc::UnboundedReceiver<Kept>) {
 
 /// The conversation of a key, lent to a turn: the one the keeper holds, or a new one, which forks the idle
 /// conversation it grows out of when there is one, so it takes all that conversation holds. A turn of a conversation
-/// lent waits for it.
+/// lent waits for it. A new conversation takes the account that the policy gives, and forks only a conversation that
+/// stands in the same config dir.
 fn lend(
   held: &mut HashMap<String, Slot>,
+  accounts: &Accounts,
   key: String,
   name: &str,
   system: &str,
@@ -413,6 +551,8 @@ fn lend(
     None => {
       let incoming: Vec<String> = messages.iter().map(canonical).collect();
       let mut made = Conversation::new(name, system);
+      made.account = accounts.pick(SystemTime::now());
+      let store = accounts.store(made.account);
       let donor = held
         .values()
         .filter_map(|one| match one {
@@ -424,6 +564,7 @@ fn lend(
           chain > 0
             && one.name == name
             && one.system == system
+            && accounts.store(one.account) == store
             && chain < incoming.len()
             && incoming[..chain] == one.chain[..]
             && messages[chain..].iter().all(|one| !matches!(one, Message::Assistant { .. }))
@@ -516,6 +657,8 @@ struct Conversation {
   id: String,
   /// The conversation that the first process of this one forks.
   parent: Option<String>,
+  /// The account that the processes of this conversation run as, which its config dir keeps the conversation for.
+  account: Option<usize>,
   /// Whether a process of this conversation stood, so the next resumes it.
   resumed: bool,
   /// The messages the command line heard, as their meaning alone, the reply of the last turn among them.
@@ -538,6 +681,7 @@ impl Conversation {
       name: name.to_owned(),
       system: system.to_owned(),
       id: uuid(),
+      account: None,
       parent: None,
       resumed: false,
       chain: Vec::new(),
@@ -590,7 +734,9 @@ impl Conversation {
       (Some(_), Some(one)) if !anew => std::slice::from_ref(one),
       (Some(at), None) if !anew => &messages[if again { last } else { at }..],
       _ => {
+        let account = self.account;
         *self = Conversation::new(&self.name, &self.system);
+        self.account = account;
         messages
       }
     };
@@ -622,7 +768,7 @@ impl Conversation {
     spend: Spend,
     gone: Duration,
   ) -> Result<Process, CompletionError> {
-    let mut command = program.command();
+    let mut command = program.command().map_err(failed)?;
     command.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json"]);
     command.args(["--verbose", "--include-partial-messages", "--model", &self.name]);
     let prompt = prompt_file(&self.system)?;

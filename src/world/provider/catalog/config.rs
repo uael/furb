@@ -26,6 +26,87 @@ struct ProviderConfig {
 struct ClaudeConfig {
   enabled: Option<bool>,
   command: Option<CommandPrefix>,
+  accounts: Option<Vec<AccountConfig>>,
+  switch: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AccountConfig {
+  name: String,
+  token_file: Option<String>,
+  token_env: Option<String>,
+  config_dir: Option<String>,
+}
+
+/// The accounts of the claude command line and the policy that moves among them. Each account names exactly one place
+/// for its credential, and a path is absolute or starts with `~`, since a project file has no folder to count from.
+fn account_list(
+  accounts: Option<Vec<AccountConfig>>,
+  switch: Option<String>,
+) -> Result<(Vec<claude::Account>, claude::Switch), String> {
+  let given = switch.is_some();
+  let switch = match switch.as_deref() {
+    None | Some("failover") => claude::Switch::Failover,
+    Some("spread") => claude::Switch::Spread,
+    Some(other) => {
+      return Err(format!("The claude-cli switch is failover or spread, not {other:?}"));
+    }
+  };
+  let Some(list) = accounts else {
+    return if given {
+      Err("The claude-cli switch needs accounts".to_owned())
+    } else {
+      Ok((Vec::new(), switch))
+    };
+  };
+  if list.is_empty() {
+    return Err("The claude-cli accounts need at least one account".to_owned());
+  }
+  let mut made: Vec<claude::Account> = Vec::new();
+  for one in list {
+    let name = one.name;
+    if name.is_empty() || name.chars().any(|one| one.is_whitespace() || one.is_control()) {
+      return Err(format!("An account of claude-cli needs a name with no space: {name:?}"));
+    }
+    if made.iter().any(|held| held.name == name) {
+      return Err(format!("Two accounts of claude-cli are named {name}"));
+    }
+    let source = match (one.token_file, one.token_env, one.config_dir) {
+      (Some(file), None, None) => claude::Source::TokenFile(absolute(&name, &file)?),
+      (None, Some(var), None) if !var.is_empty() && !var.contains(['=', '\0']) => {
+        claude::Source::TokenEnv(var)
+      }
+      (None, None, Some(dir)) => claude::Source::ConfigDir(absolute(&name, &dir)?),
+      _ => {
+        return Err(format!(
+          "The account {name} of claude-cli needs exactly one of token_file, token_env and config_dir"
+        ));
+      }
+    };
+    made.push(claude::Account { name, source });
+  }
+  Ok((made, switch))
+}
+
+/// A path of an account, with a leading `~` taken for the home of the user.
+fn absolute(name: &str, path: &str) -> Result<std::path::PathBuf, String> {
+  let home = || {
+    env::home_dir()
+      .ok_or_else(|| format!("The account {name} of claude-cli names ~, and there is no home"))
+  };
+  let full = match path.strip_prefix("~/") {
+    Some(rest) => home()?.join(rest),
+    None if path == "~" => home()?,
+    None => path.into(),
+  };
+  if full.is_absolute() && !path.contains('\0') {
+    Ok(full)
+  } else {
+    Err(format!(
+      "A path of the account {name} of claude-cli must be absolute or start with ~: {path}"
+    ))
+  }
 }
 
 #[derive(Deserialize)]
@@ -145,9 +226,13 @@ impl Catalog {
         let settings: ClaudeConfig =
           serde_json::from_value(form).map_err(|no| format!("Invalid provider {name}: {no}"))?;
         let _ = settings.enabled;
-        if let Some(command) = settings.command {
-          let (bin, args) = command.parts()?;
-          let command = claude::Claude::with_command(bin, args, None);
+        if settings.command.is_some() || settings.accounts.is_some() || settings.switch.is_some() {
+          let (bin, args) = match settings.command {
+            Some(command) => command.parts().map(|(bin, args)| (Some(bin), args))?,
+            None => (None, Vec::new()),
+          };
+          let (accounts, switch) = account_list(settings.accounts, settings.switch)?;
+          let command = claude::Claude::with_accounts(bin, args, accounts, switch, None);
           let prefix = format!("{name}:");
           let at =
             self.models.iter().position(|(model, _)| model.name.starts_with(&prefix)).unwrap_or(0);
