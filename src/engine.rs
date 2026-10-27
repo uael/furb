@@ -83,6 +83,8 @@ const EAR: &str = "ear:";
 
 /// The name of the function of the host that the gate calls with a sheet, which answers each finding by its line.
 const GATE: &str = "gate";
+/// The function of the host that starts an ear of the host again after it raised, by its name.
+const AGAIN: &str = "again";
 
 /// The kinds of act that are work an operator waits for: a prompt, a rung, a command and a wait.
 const WORK: [&str; 4] = ["prompt", "rung", "bash", "wait"];
@@ -158,11 +160,45 @@ def __parking(ear):
     return
 
 
+__fresh = {"kernel": lambda: __kernel["kernel"](__engine), "gate": lambda: __sheet["gating"](__engine, __gate)}
+
+
+def __lasting(name, ear):
+  told = False
+  while True:
+    heard, wait = None, None
+    try:
+      said = ear.send(None)
+      while True:
+        if not isinstance(said, tuple):
+          wait = said
+        heard = yield said
+        said = ear.send(heard)
+    except StopIteration:
+      return
+    except Exception as fault:
+      why = f"The ear {name} raised {type(fault).__name__}: {fault}"
+      get, over = __engine["get"], __engine["over"]
+      if isinstance(heard, tuple) and isinstance(wait, (set, frozenset)) and heard[0] in wait:
+        if get(heard[1]) is heard and not over(heard[1]):
+          yield "done", heard[1], __engine["Refused"](why)
+      ear = __fresh[name]() if name in __fresh else ear if __again(name) else None
+      if not told:
+        told = True
+        then = "It starts again and takes the next act." if ear is not None else "It cannot start again."
+        try:
+          __engine["prompt"](None, f"{why}. {then}", to=__engine["OPERATOR"], on=__engine["ROOT"])
+        except Exception:
+          pass
+      if ear is None:
+        return
+
+
 (
   lambda: {name: x for name, x in __engine.items() if not name.startswith("_") and callable(x)},
   lambda name, /, *args, **kwargs: __engine[name](*args, **kwargs),
-  __kernel["kernel"](__engine),
-  __sheet["gating"](__engine, __gate),
+  __fresh["kernel"](),
+  __fresh["gate"](),
   lambda: __engine["site"].get(),
   lambda by: __engine["site"].set(by),
   lambda token: __engine["site"].reset(token),
@@ -174,6 +210,7 @@ def __parking(ear):
   lambda names: __parked.update(names),
   lambda name: __parked.discard(name),
   lambda on, word: __sheet["against"](__engine, __gate, on, word),
+  __lasting,
 )"#;
 
 /// The next number a callable or a class goes out under, in this process.
@@ -318,7 +355,7 @@ impl Opened {
   /// The callables of the opening, each at its place in what the opening gave, and nothing at a place that boot alone
   /// takes, as a snapshot holds them.
   fn list(&self) -> Vec<Object> {
-    let mut held = vec![Object::none(); 15];
+    let mut held = vec![Object::none(); 16];
     let named = [
       (0, &self.names),
       (1, &self.call),
@@ -423,7 +460,9 @@ impl Host for Outside {
     args: Vec<Object>,
   ) -> Answer {
     let got = match on {
-      None if name == GATE => gated(args.first()),
+      // A gate that cannot read a word raises where the gate was called, so the ear of the gate answers that word.
+      None if name == GATE => return gated(args.first()).map_or_else(Answer::Fault, Answer::Value),
+      None if name == AGAIN => Ok(Object::bool(self.reborn(args.first()))),
       None => self.called(sand, name, &args),
       Some(on) if name == "send" => return self.sent(sand, on, args.first()),
       Some(on) => Err(Fault::refused(format!("{on} is no generator of the host that has {name}"))),
@@ -442,6 +481,24 @@ fn gated(sheet: Option<&Object>) -> Result<Object, Fault> {
 }
 
 impl Outside {
+  /// Whether the ear of the host by this name, which raised, starts again: it is born again under the same object,
+  /// when the ear makes a fresh one in its place.
+  fn reborn(&mut self, name: Option<&Object>) -> bool {
+    let Some(name) = name.and_then(|one| one.as_ref().as_str().map(str::to_owned)) else {
+      return false;
+    };
+    let over = self.standing.iter().find(|(_, (one, at))| *one == name && *at == At::Over);
+    let Some(on) = over.map(|(on, _)| *on) else {
+      return false;
+    };
+    if !self.handed.ears.get_mut(&name).is_some_and(|ear| ear.again()) {
+      return false;
+    }
+    self.waits.remove(&on);
+    self.standing.insert(on, (name, At::Unborn));
+    true
+  }
+
   /// Each ear of the host has its say at the end of a run, in turn, and the first fault of one is what they give.
   fn ran(&mut self) -> Result<(), Fault> {
     self.handed.ears.values_mut().map(|ear| ear.ran()).fold(Ok(()), Result::and)
@@ -451,10 +508,10 @@ impl Outside {
   fn new(given: Handed, opened: &Object) -> Outside {
     let got = opened.as_ref();
     let at = |i: usize| {
-      entry(&got, i).map(|one| one.to_owned()).expect("the opening gives fifteen callables")
+      entry(&got, i).map(|one| one.to_owned()).expect("the opening gives sixteen callables")
     };
     let opened = Opened::of(at);
-    let kept = (0..15).filter_map(|i| at(i).as_ref().handle()).collect();
+    let kept = (0..16).filter_map(|i| at(i).as_ref().handle()).collect();
     Outside { handed: given, opened, kept, ..Outside::default() }
   }
 
@@ -1358,6 +1415,7 @@ impl Engine {
     inputs.push("__sheet_source", Object::string(SHEET));
     inputs.push("__kernel_source", Object::string(KERNEL));
     inputs.push("__gate", Object::function(GATE, None));
+    inputs.push("__again", Object::function(AGAIN, None));
     let opened = sand.run(OPENING, inputs, &mut Nobody("the opening"))?;
     let outside = Outside::new(given, &opened);
     let got = opened.as_ref();
@@ -1366,6 +1424,7 @@ impl Engine {
       kernel.expect("the opening gives the Kernel").to_owned(),
       gate.expect("and the gate").to_owned(),
     );
+    let lasting = entry(&got, 15).expect("the opening gives the lasting ear").to_owned();
     let (parking, park) = (entry(&got, 11), entry(&got, 12));
     let (parking, park) = (
       parking.expect("the opening gives the park").to_owned(),
@@ -1401,6 +1460,11 @@ impl Engine {
         let on = outside.fresh();
         outside.standing.insert(on, (name.clone(), At::Unborn));
         given.push((name, object("Ear", on)));
+      }
+      // Each ear that boot is given starts again after it raises, or tells the operator why it cannot.
+      for (name, one) in &mut given {
+        *one =
+          sand.call(outside, &lasting, vec![Object::string(name.clone()), one.clone()], vec![])?;
       }
       if parks {
         sand.call(outside, &park, vec![names_parked], vec![])?;

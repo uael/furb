@@ -138,6 +138,12 @@ pub trait Ear {
   fn ran(&mut self) -> Result<(), Fault> {
     Ok(())
   }
+
+  /// Whether the ear starts again after it raised: a fresh ear stands in its place and hears from its birth. An ear
+  /// that [`lasting`] made does, and any other ear stays over.
+  fn again(&mut self) -> bool {
+    false
+  }
 }
 
 /// What an ear says of its own accord: a saying, or a verb of the engine with its words, which the life answers.
@@ -366,6 +372,45 @@ where
   F: Future<Output = Result<(), Fault>> + 'static,
 {
   coroutine(Some(Object::set(kinds.iter().map(|one| Object::string(*one)))), body)
+}
+
+/// An ear that starts again after it raises: first the ear it is given, and after each raise a fresh one that `make`
+/// gives, which the life starts in its place, so a fault of one act ends no ear of the crate.
+pub fn lasting(first: Box<dyn Ear>, make: impl FnMut() -> Box<dyn Ear> + 'static) -> Box<dyn Ear> {
+  Box::new(Lasting { ear: first, make: Box::new(make) })
+}
+
+/// The ear that [`lasting`] makes: the ear that hears now, and how to make the next one.
+struct Lasting {
+  ear: Box<dyn Ear>,
+  make: Box<dyn FnMut() -> Box<dyn Ear>>,
+}
+
+impl Ear for Lasting {
+  fn resume(&mut self, heard: Heard, cx: &mut Context<'_>) -> Step {
+    self.ear.resume(heard, cx)
+  }
+
+  fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Spoken> {
+    self.ear.poll(cx)
+  }
+
+  fn answered(&mut self, got: Result<Object, Fault>) {
+    self.ear.answered(got);
+  }
+
+  fn lent(&mut self, heard: Heard, cx: &mut Context<'_>, life: Life) -> (Step, Life) {
+    self.ear.lent(heard, cx, life)
+  }
+
+  fn ran(&mut self) -> Result<(), Fault> {
+    self.ear.ran()
+  }
+
+  fn again(&mut self) -> bool {
+    self.ear = (self.make)();
+    true
+  }
 }
 
 /// An ear of rust from its body and what it waits for.
