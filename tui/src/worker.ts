@@ -149,9 +149,9 @@ function reply(turn: string, actor: string, chain: string): [thinking: string, a
       ];
 }
 
-/** The turns that think until a cancel. Each stays here, since a promise that nothing holds can be collected, and its
- * turn then fails. */
-const held = new Set<(turn: Turn) => void>();
+/** The turns that think until a cancel, each with what writes its stream. Each stays here, since a promise that nothing
+ * holds can be collected, and its turn then fails. */
+const held = new Map<(turn: Turn) => void, (part: { thinking: string }) => void>();
 
 /** A session whose models are the demo, which asks no model and answers each turn from the script above. It enables
  * no extension, so the demo shows the same on every machine. A session that the operator watches streams each turn,
@@ -173,7 +173,8 @@ function scriptedSession(options: SessionOptions, watch = false): Session {
       // A turn whose last message asks to think until a cancel never answers, so its work stays in progress until the
       // operator cancels it, however slow the machine that shows it.
       const message = [...last.matchAll(/prompt\d+_message = '([^']*)'/g)].at(-1)?.[1];
-      if (message === "Think until I cancel.") return await new Promise<Turn>((resolve) => held.add(resolve));
+      if (message === "Think until I cancel.")
+        return await new Promise<Turn>((resolve) => held.set(resolve, write));
       // Only the turn that asks for live progress is slow, and not every later turn of its chain: it thinks, then
       // writes its word a few words at a time, as a model streams it. FURB_DEMO_STREAM=1 makes every turn so, for a
       // recording of the demo.
@@ -449,6 +450,12 @@ async function answer(data: { target: string; method: string; args: unknown[] })
   }
   if (data.target === "library" && data.method === "act")
     return session?.activity.acts.get(String(data.args[0]));
+  // A turn that thinks until a cancel writes the thought that it is given, as a model streams one. The stream then
+  // reaches the host in each state of the worker, which replaces the streams that the host held.
+  if (data.target === "library" && data.method === "think") {
+    for (const write of held.values()) write({ thinking: String(data.args[0]) });
+    return null;
+  }
   // The commands and the replies of the models that run, which a host waits for before it hands the life over.
   if (data.target === "library" && data.method === "running")
     return session
