@@ -239,7 +239,7 @@ test("a life whose replay drifts is kept, with what boot raised", () => {
   expect(second.engine.cwd({ on: second.engine.chain({ label: "two" }).id })).toBe("/tmp");
 });
 
-test("an ear that throws raises in the life, and an ear of the crate hears in one engine", () => {
+test("an ear that throws ends alone, the life goes on, and an ear of the crate hears in one engine", () => {
   function* world(): Ear {
     for (;;) {
       const fact = (yield null) as Fact | undefined;
@@ -256,7 +256,8 @@ test("an ear that throws raises in the life, and an ear of the crate hears in on
     ],
   );
   engines.push(engine);
-  expect(() => engine.clock({ on: engine.root })).toThrow("no clock here");
+  // The ear that threw ends and takes no act that it waits for, so the next ear answers.
+  expect(typeof engine.clock({ on: engine.root })).toBe("number");
   expect(() => Engine.boot([], [["time", once]])).toThrow("hears in one engine");
 });
 
