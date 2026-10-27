@@ -323,7 +323,7 @@ export const feed = part({
               (box) => {
                 // The row stands in the column of the program above it.
                 const row = this.box({ paddingLeft: space.between });
-                row.add(this.thinkingRow(line.step.id, line.display, digits, this.feedWidth - indent - 15));
+                row.add(this.thinkingRow(line.step.id, line.display, digits, this.feedWidth - indent - 13));
                 box.add(row);
               },
               { indent },
@@ -655,8 +655,8 @@ export const feed = part({
                 writer ? writer.display + wrote : 1,
               ),
             ).length;
-            // The panel of the thread, its line and the block of code take 7 columns, and the numbers about 5.
-            const room = this.feedWidth - indent - 15;
+            // The panel of the thread and its line take 5 columns, and the numbers about 5.
+            const room = this.feedWidth - indent - 13;
             // A click on a line opens it in place: its whole text, and under it what each act of the line gave. The
             // window parts at each open line, so that the cards of its acts stand under it.
             const segments: ProgramLine[][] = [[]];
@@ -711,13 +711,9 @@ export const feed = part({
                 id: index || at ? `program-${act.id}-${index}-${at}` : `program-${act.id}`,
                 key,
                 body: (box) => {
-                  // The block of code stands on a surface of its own in the panel of the thread, and the numbers of
-                  // its lines stand inside it, or right of it.
-                  const block = this.box({
-                    backgroundColor: c.background,
-                    paddingLeft: space.inset,
-                    ...(side === "right" ? {} : { paddingRight: space.inset }),
-                  });
+                  // The code stands on the one surface of the thread, as a code block of the markdown does but with no
+                  // surface of its own, and the numbers of its lines stand at its left, or right of it.
+                  const block = this.box({});
                   if (segment.length) {
                     const view = this.programView(segment, room, took, since, heads, digits, {
                       gutter: side,

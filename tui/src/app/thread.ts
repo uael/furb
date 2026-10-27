@@ -94,7 +94,7 @@ export const thread = part({
       flexShrink: 1,
       value: w.drafts[draft] ?? "",
       placeholder: over ? "Reply to open this thread again" : "Reply to this thread",
-      ...inputColors(c.background),
+      ...inputColors(c.panel),
     });
     this.replyInputs.set(id, input);
     input.on(InputRenderableEvents.INPUT, (value: string) => {
@@ -122,7 +122,7 @@ export const thread = part({
       }),
     );
     const row = this.row({
-      backgroundColor: c.background,
+      backgroundColor: c.panel,
       paddingX: space.inset,
       onMouseDown: () => input.focus(),
     });
