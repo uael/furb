@@ -2,16 +2,18 @@ import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { closeSync, openSync, readFileSync } from "node:fs";
 import { createConnection, type Socket } from "node:net";
-import type {
-  Act,
-  FileChange,
-  ImageAttachment,
-  LiveAct,
-  Engine as Native,
-  Repaired,
-  SetupInfo,
-  Stream,
-  Turn,
+import { dirname, resolve } from "node:path";
+import {
+  type Act,
+  type FileChange,
+  type ImageAttachment,
+  type LiveAct,
+  type Engine as Native,
+  type Repaired,
+  ROOT,
+  type SetupInfo,
+  type Stream,
+  type Turn,
 } from "furb";
 import type { Compaction, Measure } from "furb/life";
 import {
@@ -237,16 +239,21 @@ type Message = {
 
 /** The requests of a window to the holder of its life, and what comes back: each request takes a number, and each
  * answer goes to its request, while each push goes to the host view. */
-class Link {
+export class Link {
   closed = false;
   /** Why the link ended, which each later request fails with. */
   private why = "The session is disposed.";
   readonly host: HostView;
   private sequence = 0;
   private readonly waiting = new Map<number, { resolve(value: unknown): void; reject(error: Error): void }>();
-  /** The requests that wait for a transport, as a window that attaches again holds them. */
+  /** The requests that wait for a transport, as a window that attaches again holds them, or for the open of the life. */
   private held: Request[] = [];
   private sender?: (message: Request) => void;
+  /** Whether the life is not open yet, so that a request waits for it, in the order it was made, but for the requests
+   * that open the life and for the end of the window's hold on it. */
+  opening = false;
+  /** The requests that go while the life opens. */
+  private readonly early = new WeakSet<Request>();
   constructor(local?: (target: string, method: string) => Promise<unknown> | undefined) {
     this.host = new HostView(
       (target, method, args) => local?.(target, method) ?? this.request(target, method, args),
@@ -254,9 +261,23 @@ class Link {
   }
   set send(sender: ((message: Request) => void) | undefined) {
     this.sender = sender;
-    if (sender) for (const message of this.held.splice(0)) sender(message);
+    this.flush();
   }
-  request(target: string, method: string, args: unknown[]): Promise<unknown> {
+  /** Sends the requests that wait, but for those that wait for the open of the life while it opens. */
+  private flush(): void {
+    const sender = this.sender;
+    if (!sender) return;
+    const goes = (message: Request) => !this.opening || this.early.has(message);
+    const now = this.held.filter(goes);
+    this.held = this.held.filter((message) => !goes(message));
+    for (const message of now) sender(message);
+  }
+  /** The life answered its open: the requests that waited for it go. */
+  open(): void {
+    this.opening = false;
+    this.flush();
+  }
+  request(target: string, method: string, args: unknown[], first = false): Promise<unknown> {
     return new Promise<unknown>((resolve, reject) => {
       if (this.closed) {
         reject(new Error(this.why));
@@ -264,7 +285,8 @@ class Link {
       }
       const message = { id: ++this.sequence, target, method, args };
       this.waiting.set(message.id, { resolve, reject });
-      if (this.sender) this.sender(message);
+      if (first || (target === "session" && method === "dispose")) this.early.add(message);
+      if (this.sender && (!this.opening || this.early.has(message))) this.sender(message);
       else this.held.push(message);
     });
   }
@@ -328,24 +350,56 @@ class Link {
 /** The life of a record, in a host of its own when the options ask it and a socket serves, or in a worker of the
  * window. A recorded life runs nothing, so it stays in the window. A window that names the address of a host on the
  * network attaches to that host, and keeps its view at its own record. */
-export async function openEngine(options: EngineOptions): Promise<{ engine: Engine; host: HostView }> {
+export async function openEngine(
+  options: EngineOptions,
+  made?: (link: Link) => void,
+): Promise<{ engine: Engine; host: HostView }> {
   if (options.attach) {
     const { host, port, key } = reachOf(options.attach);
-    return attach(options, () => dial(host, port), key);
+    return attach(options, () => dial(host, port), key, false, made);
   }
   const place =
     options.host && options.record && !isRecorded(options.record) ? hostPlace(options.record) : undefined;
-  return place ? attach(options, () => reach(options, place), "", true) : inWindow(options);
+  return place ? attach(options, () => reach(options, place), "", true, made) : inWindow(options, made);
+}
+
+/** A life that opens in the background: its engine and its host stand at once, so a session can draw its view before
+ * the life is open. Each request of the view waits for the open, in the order it was made, and ready tells when the
+ * life is open, or why it is not. The root of a life is the same for each life, and so is its record. */
+export function openingEngine(options: EngineOptions): {
+  engine: Engine;
+  host: HostView;
+  ready: Promise<void>;
+} {
+  const made: { link?: Link } = {};
+  const opened = openEngine(options, (link) => {
+    made.link = link;
+    link.opening = true;
+    link.host.directory = resolve(options.cwd ?? (options.record ? dirname(options.record) : "."));
+    link.host.record = options.record && resolve(options.record);
+  });
+  // The open is begun by now, and it made the link before its first wait.
+  const held = made.link;
+  if (!held) throw new Error("The life did not begin to open.");
+  const ready = opened.then(({ engine }) => {
+    if (engine.root !== ROOT)
+      throw new Error(`The life opened on the chain ${engine.root}, and not on ${ROOT}.`);
+  });
+  return { engine: held.engine(ROOT), host: held.host, ready };
 }
 
 /** The life in a worker of the window, which ends with the window. */
-async function inWindow(options: EngineOptions): Promise<{ engine: Engine; host: HostView }> {
+async function inWindow(
+  options: EngineOptions,
+  made?: (link: Link) => void,
+): Promise<{ engine: Engine; host: HostView }> {
   const worker = new Worker(new URL("worker.ts", import.meta.url).href, { type: "module" });
   const link = new Link((target) =>
     target === "host"
       ? Promise.reject(new Error("This life runs in its window, so no other operator reaches it."))
       : undefined,
   );
+  made?.(link);
   link.send = (message) => worker.postMessage(message);
   worker.onmessage = ({ data }) => link.receive(data);
   worker.onerror = (event) => {
@@ -354,7 +408,8 @@ async function inWindow(options: EngineOptions): Promise<{ engine: Engine; host:
   };
   let root: string;
   try {
-    root = (await link.request("session", "open", [options])) as string;
+    root = (await link.request("session", "open", [options], true)) as string;
+    link.open();
   } catch (error) {
     // No caller holds a worker whose life did not open, so it ends here.
     link.end("The session is disposed.");
@@ -447,6 +502,7 @@ async function attach(
   reachHost: () => Promise<Socket>,
   key = "",
   takes = false,
+  made?: (link: Link) => void,
 ): Promise<{ engine: Engine; host: HostView }> {
   let socket: Socket | undefined;
   const link: Link = new Link((target, method) => {
@@ -455,6 +511,7 @@ async function attach(
     socket?.end();
     return Promise.resolve();
   });
+  made?.(link);
   const lost = "The host of the life ended before it answered.";
   const mine = buildOf().catch((error: unknown) => `unknown: ${error}`);
   let first: Hello | undefined;
@@ -486,9 +543,12 @@ async function attach(
       // the window waits on it, so the socket would wait with no close.
       held.on("end", () => held.destroy());
       const build = await mine;
-      const said = (await link.request("host", "hello", [
-        { window: process.pid, protocol: PROTOCOL, build, key },
-      ])) as Hello;
+      const said = (await link.request(
+        "host",
+        "hello",
+        [{ window: process.pid, protocol: PROTOCOL, build, key }],
+        true,
+      )) as Hello;
       // A host that this window started after a takeover keeps its build, so two windows of two builds that open
       // the life at once do not take it over from each other with no end.
       if (takes && !took && said.build !== build) {
@@ -523,7 +583,14 @@ async function attach(
       }
     }
   };
-  first = await hello();
+  try {
+    first = await hello();
+  } catch (error) {
+    // The requests that wait for the open of the life fail with the reason it did not open.
+    link.end(error instanceof Error ? error.message : String(error));
+    throw error;
+  }
+  link.open();
   return { engine: link.engine(first.root), host: link.host };
 }
 

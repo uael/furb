@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { mkdir, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { enabled, furbDirectory, ROOT, saveFile, scratch, store } from "furb";
-import { openEngine } from "./bridge.ts";
+import { openEngine, openingEngine } from "./bridge.ts";
 import { checkoutOf, checkouts, mainCheckout } from "./checkout.ts";
 import { expandHome } from "./files.ts";
 import { type EngineOptions, roster } from "./models.ts";
@@ -25,6 +25,8 @@ export interface SessionEntry {
   cost?: number;
   /** Whether the operator archived the session, which the sidebar folds under a row of its own. */
   archived?: boolean;
+  /** For a session that opens in the background, whether its life opened: it tells false once the life failed. */
+  ready?: Promise<boolean>;
 }
 export interface Workspace {
   directory: string;
@@ -235,7 +237,10 @@ export class Workspaces extends EventEmitter {
     ];
     return order.find((status) => group.sessions.some((entry) => entry.status === status)) ?? "idle";
   }
-  async add(directory: string): Promise<Workspace> {
+  /** Add a workspace to the list. Its records, which the list saved, stand in it at once, and the scan of its folder,
+   * which finds the others and tells their size, their cost and their state, waits for the next refresh when scan is
+   * false, so a window draws before it reads any record. */
+  async add(directory: string, scan = true): Promise<Workspace> {
     const opened = await realpath(resolve(expandHome(directory)));
     if (!(await stat(opened)).isDirectory()) throw new Error("A workspace must be a project folder.");
     // A worktree belongs to the workspace of its main checkout.
@@ -245,7 +250,7 @@ export class Workspaces extends EventEmitter {
       group = { directory: path, name: basename(path), collapsed: false, sessions: [] };
       this.groups.push(group);
     }
-    await this.scan(group);
+    if (scan) await this.scan(group);
     this.save({ directory: group.directory });
     this.emit("change");
     return group;
@@ -393,10 +398,53 @@ export class Workspaces extends EventEmitter {
     this.save({ directory: group.directory, add: path });
     return row;
   }
-  private async load(entry: SessionEntry, group: Workspace): Promise<SessionEntry> {
+  /** A session that opens in the background: its view stands at once, on a life that is not open yet, and the life
+   * fills it in when it opens. A life that fails to open leaves the row with its error. */
+  private lazily(entry: SessionEntry, group: Workspace): SessionEntry {
+    this.inspected.delete(entry.path);
+    entry.error = undefined;
+    const { view } = savedView(entry.path);
+    const demo = view.demo ?? this.options.demo ?? false;
+    const named = { ...this.options, demo };
+    const life = openingEngine({
+      ...named,
+      cwd: checkoutOf(entry.path, group.directory),
+      record: entry.path,
+      roster: roster(named, view.models),
+    });
+    const session = new Session(life.engine, life.host, demo, this.preferences);
+    const row = this.adopt(session, group);
+    // The first read of the life waits for its open, and the view shows that it loads meanwhile.
+    const first = session.refresh();
+    first.catch(() => {});
+    entry.ready = life.ready.then(
+      async () => {
+        await first;
+        return !this.closed;
+      },
+      async (error: unknown) => {
+        const listener = this.subscriptions.get(session);
+        if (listener) session.off("change", listener);
+        this.subscriptions.delete(session);
+        if (entry.session === session) entry.session = undefined;
+        if (this.closed) return false;
+        entry.status = "error";
+        entry.error = error instanceof Error ? error.message : String(error);
+        session.fail(error);
+        this.save({ directory: group.directory, remove: entry.path });
+        await session.dispose().catch(() => {});
+        this.emit("failed", entry, error);
+        this.emit("change");
+        return false;
+      },
+    );
+    return row;
+  }
+  private async load(entry: SessionEntry, group: Workspace, lazy = false): Promise<SessionEntry> {
     if (entry.session) return entry;
     const pending = this.opening.get(entry.path);
     if (pending) return pending;
+    if (lazy) return this.lazily(entry, group);
     const opening = (async () => {
       this.inspected.delete(entry.path);
       entry.status = "opening";
@@ -468,14 +516,17 @@ export class Workspaces extends EventEmitter {
     if (session.host.pending.size) await session.host.resume();
     await session.command(command);
   }
-  /** Make a session in a workspace. It runs in `checkout`, the main checkout of the workspace or one of its worktrees,
-   * and its record stands in the .furb/sessions of that checkout. */
+  /** A new session. It selects after its life opens, unless lazy is set: the session then stands and selects at once,
+   * on a life that opens in the background and fills it in, and a life that fails to open tells so with the event
+   * failed. Its record stands in the .furb/sessions of `checkout`, the main checkout of the workspace or one of its
+   * worktrees, where it runs. */
   async create(
     group = this.groupOf(),
     name?: string,
     carry?: Carry,
     resume = false,
     checkout = group?.directory,
+    lazy = false,
   ): Promise<SessionEntry> {
     if (!group || !checkout) throw new Error("Add a workspace first.");
     const directory = furbDirectory(checkout, "sessions");
@@ -486,10 +537,11 @@ export class Workspaces extends EventEmitter {
     const label = name ?? `Session ${group.sessions.length + 1}`;
     const entry: SessionEntry = { path, name: label, status: "opening", unread: false };
     group.sessions.unshift(entry);
-    await this.load(entry, group);
+    await this.load(entry, group, lazy);
     // A life that starts from a record opens with the earlier work of that record in its first word, or resumes the
     // record: it goes on from the turns of its root chain and asks again its open prompts.
     if (carry && entry.session) {
+      if (entry.ready && !(await entry.ready)) throw new Error(entry.error ?? "The session did not open.");
       const { engine } = entry.session;
       // The resume is the word of the compaction extension, so a life that runs none carries the text instead.
       const goes =

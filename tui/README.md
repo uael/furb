@@ -228,6 +228,11 @@ The TUI serves each person who uses it:
 A Bun worker holds the life and the ears of each open session, in the host of the life or in the window. So rendering, input, and
 syntax coloring stay responsive while the sandbox gates and runs Python. The renderer draws at 60 frames each second.
 The first frame shows at once, before the TUI reads the record: the top line, and which record opens with its size.
+A new life shows its view and its composer at once, before the life is open: the host starts and the engine opens in the
+background, and the requests of the view wait for the open and go in the order they were made. The records of the
+earlier lives are read after the first frame, and their rows fill in as they come. The first frame of a new life, with
+eight records of 150 MB in the project, takes less than 2 seconds on any machine, where the open of the life takes
+many seconds.
 
 A view costs what it shows, and not what the life holds. A new fact makes the worker send only what changed of the
 chain shown, the session places only the acts that changed in its index, the feed reads only the steps of the thread
