@@ -563,6 +563,30 @@ close([outcome(1, False), outcome("a", False), outcome(None, True), outcome(1, T
   assert got == [expected, expected]
 
 
+async def test_a_word_that_substitutes_with_a_function_scans_from_a_position_and_translates_gives_what_it_gives_here() -> (
+  None
+):
+  """A word that calls re.sub with a function, a method of re.Pattern from pos and str.translate gives what it gives on this interpreter."""
+  word = """import re
+pattern = re.compile("a")
+found = pattern.search("banana", 2, 5)
+assert found
+close([
+  re.sub("[0-9]+", lambda m: str(int(m.group()) * 2), "a1 b22"),
+  list(found.span()),
+  pattern.match("banana", 2),
+  re.compile("na").findall("banana", 3),
+  "hello".translate(str.maketrans("lo", "01", "h")),
+])"""
+  got = []
+  for each in (furb.python, furb_monty.engine):
+    swapped(each)
+    _, root = life(Sand(stands=STANDS))
+    got.append(await engine.rung(word, on=root))
+  expected = ["a2 b44", [3, 4], None, ["na"], "e001"]
+  assert got == [expected, expected]
+
+
 GROWN = """import asyncio, sys
 sys.path.insert(0, sys.argv[1])
 from conftest import STANDS, Dead, swapped
