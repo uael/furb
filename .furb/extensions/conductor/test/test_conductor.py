@@ -540,6 +540,45 @@ async def test_a_flake_of_the_gates_is_queued_at_once_and_read_once(conductor: R
 
 @POSIX
 @JQ
+async def test_a_flake_that_the_newest_runs_of_main_healed_is_queued_by_no_item(conductor: Round) -> None:
+  conductor.says.clear()
+  conductor.say(r"workflows/gates\.yml/runs\?", '{"workflow_runs": []}')
+  await conductor.watch_ci()
+  conductor.says.clear()
+  url = "https://github.com/o/r/actions/runs/50"
+  name = "the bindings and the TUI on ubuntu-latest"
+  flaky = [
+    {
+      "id": 50,
+      "head_sha": "s1",
+      "run_attempt": 2,
+      "conclusion": "success",
+      "html_url": url,
+      "created_at": "2026-10-23T10:00:00Z",
+    }
+  ]
+  green = [{"id": n, "run_attempt": 1, "created_at": "2026-10-24T10:00:00Z"} for n in range(1, 6)]
+  ok = {
+    "id": 1,
+    "name": name,
+    "conclusion": "success",
+    "started_at": "2026-10-24T10:00:00Z",
+    "completed_at": "2026-10-24T10:01:00Z",
+  }
+  bad = {**ok, "id": 7, "conclusion": "failure"}
+  conductor.say(r"runs\?branch=main&status=success", json.dumps({"workflow_runs": green}))
+  conductor.say(r"runs\?per_page=30", json.dumps({"workflow_runs": flaky}))
+  conductor.say(r"runs/50/attempts/1/jobs", json.dumps({"jobs": [bad]}))
+  conductor.say(r"runs/\d+/jobs", json.dumps({"jobs": [ok]}))
+  conductor.say(r"jobs/7/logs", "fps p95 frame   21.3 ms <= 16.7 OVER\n")
+  await conductor.watch_ci()
+  assert conductor.queue == []
+  assert conductor.flaky["bench: fps p95 frame"] == [f"{url}/attempts/1"]
+  assert any("the 5 newest runs of main" in line for line in conductor.heard)
+
+
+@POSIX
+@JQ
 async def test_a_job_over_its_budget_is_queued_once_until_new_runs_measure_it(conductor: Round) -> None:
   tree = conductor.tmp
   (tree / ".github").mkdir()
