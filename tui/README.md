@@ -140,8 +140,17 @@ window of a new build takes the life over with its record whole.
   lease another process holds, ends, and the window shows why.
 - Two windows can attach to one life. Each sees each change of the life, and the first answer to a question of the
   operator wins. `/end` in one window ends the life, and each other window shows that the life ended.
-- When a host ends while the life goes on, as at a crash, the window starts a host again and reads the acts of the
-  life again from the start.
+- When a host ends while the life goes on, as at a crash or at a signal such as the one of `kill`, the window starts a
+  host again and reads the acts of the life again from the start. A window hears that a window ended the life only
+  when a window did.
+- A host says of itself in `<key>.json` as soon as it starts. A window that finds a host that still opens the life, as
+  on a long record, waits for that host while its process runs, and starts no second one. A record that another
+  program holds, which is no host, fails with the words to end that program.
+- A window that lost its life, as one that another window ended or one whose host was stopped, shows why in plain
+  words, with two actions. `/reopen` reaches the life again, in the host that answers or in a host that the window
+  starts, and reads the acts from the start. `/stop` ends the process of the host by force. `/end` does the same
+  when the host does not answer the end of the life in 15 seconds, so no `pkill` is needed. `FURB_HOST_ENDING` and
+  `FURB_HOST_GRACE` set these waits, in milliseconds, as the tests do.
 - A window whose build is not the build of the host takes the host over. The host waits up to 10 seconds for each
   command and each reply of a model that runs, ends the life, and exits, and each other window shows that a window of
   another build took the life. Then the window starts a host of its own build, which opens the life again on the same
@@ -366,6 +375,8 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/extensions` | List the extensions that this life runs, with what their parts give the TUI |
 | `/serve [address]` | Give the addresses at which other operators read this life, or read and drive it, over the network |
 | `/end` | End each open life, its commands and its models, then quit |
+| `/reopen` | Reach the life again after it ended in another window or its host was lost, in a host of this machine |
+| `/stop` | End by force the process that holds this life, when the end of the life does not reach it |
 | `/exit` | Save every session and quit, while a life in a host of its own goes on |
 
 <!-- commands:end -->

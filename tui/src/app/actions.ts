@@ -32,6 +32,8 @@ export const actions = part({
       theme: () => this.themes(),
       exit: () => this.options.quit(),
       end: () => this.options.quit(true),
+      reopen: () => this.session.reopen(),
+      stop: () => this.session.stopHost(),
       editor: () => this.editDraft(),
       files: this.filesPicker,
       new: () => library.create(),
