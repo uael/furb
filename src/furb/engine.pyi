@@ -460,6 +460,7 @@ def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[No
   The name of a shape is the word a chain says it by, so a shape that holds a class of the engine or of the chain names it as the chain does, under no module.
   The acknowledgment carries no shape and a message that names the act and what happened to it, as prompt3 done.
   The acknowledgment is a prompt on the thread that made the rung that made the act, so the actor of that thread sees it in that thread, and a prompt on the chain when that rung answers no prompt.
+  When that thread is over, the acknowledgment is on the nearest thread above it that is open, or on the thread at the top of its lineage when each is over, so a model whose task is open reads it as a message of that task and closes no prompt for it.
   A prompt on a thread is on the chain of that thread, and goes to the actor of the thread unless it names one.
   A prompt on a thread tells the thread it is on under the word thread, as prompt4_thread = 'prompt1'.
   A prompt of None on a thread that is open and that a model answers is a message of that thread: it tells its message, makes no rung, and is done with None at once, so the model of the thread reads it at its next step.
@@ -930,6 +931,9 @@ def acting() -> str:
 
 def question(a: Saying) -> bool:
   """Whether a fact is a question, which its name says: a question is about itself, and its name is under its kind."""
+
+def prompted(name: str) -> bool:
+  """Whether a name is the name of a prompt, which its name says, as prompt3, and not prompt, chain3 or an empty name."""
 
 def scope(name: str) -> str:
   """The scope of a question, from its name: the chain it is on, or the scope of the thread it is on, and itself for a chain, and nothing for a name of no question of the life."""

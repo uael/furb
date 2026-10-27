@@ -516,6 +516,38 @@ async def test_the_acknowledgment_is_a_prompt_on_the_thread_that_made_the_rung_t
   assert [one[6] for one in said(log, "rung") if one[4] == ""] == ["m/high", "m/high", "m/low"]
 
 
+async def test_when_that_thread_is_over_the_acknowledgment_is_on_the_nearest_thread_above_it_that_is_open() -> None:
+  """When that thread is over, the acknowledgment is on the nearest thread above it that is open, or on the thread at the top of its lineage when each is over, so a model whose task is open reads it as a message of that task and closes no prompt for it."""
+  sand, log, root = born(
+    "s = prompt(int, 'sub', on='prompt1')\nawait s\nawait bash('slow')",
+    "x = bash('slow')\ny = bash('slow')\nclose(2)",
+    "close(3)",
+    "close(None)",
+    auto=False,
+  )
+  task = engine.prompt(int, "task", to="m/high", on=root)
+  assert task == "prompt1"
+  await settle()
+  first, second, third = (one[1] for one in said(log, "bash"))
+  sand.exits(first, 0)
+  await settle()
+  (message,) = [one[1] for one in said(log, "prompt") if one[4] == "None"]
+  assert engine.get(message)[3] == task and engine.peek(message, ...) is None
+  assert [one for one in said(log, "rung") if one[2] == message] == []
+  sand.exits(third, 0)
+  assert await task == 3
+  sand.exits(second, 0)
+  await settle()
+  acks = [one[1] for one in said(log, "prompt") if one[4] == "None"]
+  assert [(engine.get(one)[3], engine.get(one)[5]) for one in acks] == [
+    (task, f"{first} done"),
+    (task, f"{second} done"),
+  ]
+  assert await engine.Act(acks[1]) is None
+  assert len([one for one in said(log, "rung") if one[2] == acks[1]]) == 1
+  assert len(said(log, "reply")) == 4
+
+
 async def test_a_prompt_on_a_thread_is_on_the_chain_of_that_thread() -> None:
   """A prompt on a thread is on the chain of that thread, and goes to the actor of the thread unless it names one."""
   _, log, root = born("close(1)", "close(2)", "close(3)")
