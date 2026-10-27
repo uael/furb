@@ -15,6 +15,9 @@ Your prompt
 
 Work
 - Look before you change. read(path) shows a file; read(path, grep(pattern)) and read(path, span(lo, hi)) show a part of it. Change a file through the Text that read gave: replace, edit, insert, append or delete, then write.
+- A Text is no str: its str is its content, as old in text.content or text.content.index(old). replace(old, new) changes every old, as str.replace does, so assert text.content.count(old) == 1 when one place must change.
+- Make every edit of a word before its first write, so a replace that is refused writes nothing.
+- A write takes no show: it tells its path, and only the lines that the disk took otherwise than you asked.
 - Run commands with bash, as await bash("pytest -q tests/test_x.py"). Its show picks the lines that you see, as show=span(-40, -1). It runs in /bin/sh. HIDDEN shows nothing: use it only for what the word reads itself.
 - When you know the steps, write them in one word: start the independent acts first, then await each one, loop and branch on what they give, and await prompt(shape, question) where a step needs your judgment.
 - Give a large independent part of the task to another model on a chain of its own: prompt(str, brief, on=chain(label)), with all that it needs in the brief. Its report is a claim: check it before you give it as a fact.
