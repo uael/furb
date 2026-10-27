@@ -424,18 +424,14 @@ const sides = [
 for (let at = 0; at < WARM + PAIRS; at++)
   for (const kind of kinds) for (const { measure, costs } of sides) costs[kind].push(await measure[kind](at));
 const counted = (costs: number[]) => costs.slice(WARM);
-const [before, after] = sides.map(
-  ({ costs }) =>
-    Object.fromEntries(kinds.map((kind) => [kind, percentile(counted(costs[kind]), 0.5)])) as Record<
-      Kind,
-      number
-    >,
-);
+const [before, after] = sides.map(({ costs }) =>
+  Object.fromEntries(kinds.map((kind) => [kind, percentile(counted(costs[kind]), 0.5)])),
+) as [Record<Kind, number>, Record<Kind, number>];
 /** The median of the ratios of the pairs, each a fact of the long life against the fact of the short life just before
  * it: a ratio of two medians, each taken alone, moves with each slow moment of the machine on one side. */
 const growth = Object.fromEntries(
   kinds.map((kind) => {
-    const [small, large] = sides.map(({ costs }) => counted(costs[kind]));
+    const [small, large] = sides.map(({ costs }) => counted(costs[kind])) as [number[], number[]];
     return [
       kind,
       percentile(
