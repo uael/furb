@@ -60,7 +60,13 @@ repos:
         pass_filenames: false
       - id: links
         name: the links of the READMEs of the packages
-        entry: uv run python script/links.py
+        # No sync: a sync in a new worktree builds the crate, and that outlasts a bash. The script reads git only.
+        entry: uv run --no-sync python script/links.py
         language: system
-        always_run: true
+        files: (^|/)(README\.md|pyproject\.toml|Cargo\.toml|package\.json)$
         pass_filenames: false
+      - id: stray
+        name: no backup or reject file
+        entry: A backup or reject file of a patch or of sed is in the commit. Delete it.
+        language: fail
+        files: (\.rej|\.orig|-E)$
