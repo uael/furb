@@ -129,7 +129,7 @@ let watched: Session | undefined;
 await library.refresh();
 try {
   if (record) await library.import(record, group);
-  else if (!values.demo || values.cwd) await library.create(group);
+  else if (!values.demo || values.cwd) await library.create(group, undefined, undefined, false, directory);
   else {
     // The demo holds a real life recorded from a log, which only reads, and opens on a life that plays by itself,
     // which a new user can go on with.
