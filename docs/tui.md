@@ -125,6 +125,12 @@ line that made the act is lit too, with ↓, and what its command prints stands 
 
 ![A line that awaits the act of an earlier line](screenshots/99-awaited-line.png)
 
+The steps that the extensions play on a chain stand on one quiet row. A file of Markdown that memory told shows no row
+for each of its headings, and a question of memory that found nothing new shows no row. A prompt of None, a notice,
+blocks no word: the word that awaits it goes on at once, and no row of the feed keeps running for it.
+
+![The quiet row of the extensions](screenshots/100-quiet-feed.png)
+
 Collapse on the header
 of a thread, or ⌥D, which lists the threads, folds the thread to its panel on one line, which says its state, the
 first line of its message and the count of its steps, and Expand, or a click on that line, opens it again. A resolved thread that is
