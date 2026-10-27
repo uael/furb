@@ -7,14 +7,17 @@ import { type AddressInfo, createServer, type Socket } from "node:net";
 import type { HostState } from "./bridge.ts";
 import {
   type About,
+  aboutOf,
   addressOf,
   buildOf,
   framed,
   HELLO,
   type Hello,
   hostPlace,
+  isHost,
   listening,
   PROTOCOL,
+  RIVAL,
   type Role,
   reads,
   type Served,
@@ -38,6 +41,16 @@ if (!record || !place) {
 const started = Date.now();
 const about: About = { pid: process.pid, record, build: "", engine: "", protocol: PROTOCOL, started };
 const tell = () => writeFileSync(place.about, `${JSON.stringify(about)}\n`, { mode: 0o600 });
+// Another host of the life that runs owns it, so this one ends before it opens a second life on the record. The host
+// says of itself at once, so a window knows who opens the life while it opens.
+const rival = aboutOf(place);
+if (rival && rival.pid !== process.pid && isHost(rival.pid)) {
+  const said = `${RIVAL}, the process ${rival.pid}.`;
+  writeFileSync(place.failed, `${JSON.stringify({ pid: process.pid, error: said })}\n`, { mode: 0o600 });
+  console.error(`furb-host: ${said}`);
+  process.exit(1);
+}
+tell();
 const building = buildOf().catch((error: unknown) => `unknown: ${error}`);
 
 const worker = new Worker(new URL("worker.ts", import.meta.url).href, { type: "module" });
@@ -51,7 +64,10 @@ let sequence = 0;
 let last: HostState | undefined;
 let ending = false;
 /** What each other window hears when the life ends. */
-let why = "The life ended in another window.";
+let why = "The life was ended from another window.";
+/** Whether a signal ends the host: no window ended the life, so no window is told that one did, and each window
+ * that stays reaches a new host, as it does when a kill ends the host. */
+let signalled = false;
 /** How long a host that hands its life over waits for the commands and the replies of the models that run, so that
  * each that ends in time lands in the record. Each other ends as interrupted in the life of the next host, as a
  * command that a crash cut does. */
@@ -171,7 +187,7 @@ worker.onmessage = ({ data }) => {
   to?.send?.({ ...data, id: to.id });
   if (!data.disposed) return;
   // The life ended: each other window hears so, and the host ends once each window has its answer.
-  for (const send of windows.keys()) if (send !== to?.send) send({ ended: why });
+  if (!signalled) for (const send of windows.keys()) if (send !== to?.send) send({ ended: why });
   server.close();
   setTimeout(() => close(0), 50);
 };
@@ -253,6 +269,7 @@ try {
   const why = error instanceof Error ? error.message : String(error);
   writeFileSync(place.failed, `${JSON.stringify({ pid: process.pid, error: why })}\n`, { mode: 0o600 });
   console.error(`furb-host: ${why}`);
+  rmSync(place.about, { force: true });
   process.exit(1);
 }
 about.build = await building;
@@ -262,6 +279,7 @@ server.listen(place.socket, tell);
 // A signal ends the life as the end of a window does, so the commands and the models end with it.
 for (const signal of ["SIGINT", "SIGTERM"] as const)
   process.once(signal, () => {
+    signalled = true;
     if (!ending) {
       ending = true;
       ask("session", "end", [], { id: 0 });

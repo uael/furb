@@ -86,6 +86,7 @@ while IFS= read -r line; do
     *ORPHAN*) sleep 60 & echo $! > "$here/orphan"; echo "orphan left" >&2; exit 4 ;;
     *LONG*) head -c 33554433 /dev/zero; echo; continue ;;
     *ERROR*) echo '{"type":"result","is_error":true,"result":"the model is overloaded"}'; continue ;;
+    *DETAIL*) echo '{"type":"result","subtype":"error_during_execution","is_error":true,"result":"","api_error_status":401,"errors":["Invalid API key","Please run /login"]}'; continue ;;
     *LIMIT*)
       if [ ! -f "$here/limited" ]; then
         touch "$here/limited"

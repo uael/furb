@@ -30,7 +30,7 @@ use jiff::{Zoned, civil};
 
 use super::{
   Backoff, Hosted, Model, Provider, Retries, Retry, Thinking, Writes, catalog::Catalog, images,
-  limit, local::Server, passing, resets, thinking, unclosed, unfenced,
+  limit, local::Server, messages, passing, resets, thinking, unclosed, unfenced,
 };
 use crate::{Act, Ear, Engine, Fact, Object, SYSTEM, verbs, world};
 
@@ -417,10 +417,10 @@ fn cut(text: &str) -> String {
 
 #[test]
 fn a_reply_ends_at_the_first_statement_that_cannot_be_python_and_the_gate_refuses_its_word() {
-  let model = Halting::writes(&["```python\n", "foo()\n", "bar()\n"]);
+  let model = Halting::writes(&["Here is the code:\n", "foo()\n", "bar()\n"]);
   let (mut engine, _) = life("stops", vec![Model::new("m", 1000, model.clone())]);
   asked(&mut engine);
-  assert_eq!(replied(&mut engine), cut("```python"));
+  assert_eq!(replied(&mut engine), cut("Here is the code:"));
   assert!(
     until(&mut engine, |_| model.dropped.load(Ordering::SeqCst)),
     "the call of the model ended before it wrote the rest"
@@ -1534,6 +1534,41 @@ fn the_fence_that_opens_a_text_goes_with_its_closing_fence_at_its_end_and_any_ot
 }
 
 #[test]
+fn a_turn_of_a_model_loses_its_marks_and_a_turn_of_marks_alone_goes_with_the_user_turns_around_it_joined()
+ {
+  let turn = |role: &str, text: &str| {
+    Object::tuple([Object::string(role), Object::string(text), Object::none(), Object::none()])
+  };
+  let call = "<invoke name=\"python\">\n<parameter name=\"code\">close(1)</parameter>\n</invoke>";
+  let turns = Object::list([
+    turn("user", "ask"),
+    turn("assistant", "```python"),
+    turn("user", "#rung2 refused"),
+    turn("assistant", call),
+    turn("user", "next"),
+  ]);
+  let model = scripted(&MockCompletionModel::new([]));
+  let got = messages(turns.as_ref(), &model, &mut images::Images::new(None)).unwrap();
+  let said: Vec<Value> = got
+    .iter()
+    .map(|one| match one {
+      super::Message::User { content } => json!(["user", format!("{content:?}")]),
+      super::Message::Assistant { content, .. } => json!(["assistant", format!("{content:?}")]),
+      super::Message::System { .. } => json!(["system"]),
+    })
+    .collect();
+  assert_eq!(said.len(), 3, "{said:?}");
+  let text = |at: usize| said[at][1].as_str().unwrap_or_default().to_owned();
+  assert!(text(0).contains("ask\\n\\n#rung2 refused"), "{said:?}");
+  assert!(
+    text(1).contains("close(1)") && !text(1).contains("invoke") && !text(1).contains("parameter"),
+    "{said:?}"
+  );
+  assert_eq!(said[2][0], "user");
+  assert!(text(2).contains("next"), "{said:?}");
+}
+
+#[test]
 fn a_line_of_three_backticks_alone_at_the_end_goes_unless_a_fence_or_a_quote_opens_before_it() {
   assert_eq!(unclosed("close(3)\n```").as_deref(), Some("close(3)"));
   assert_eq!(unclosed("x = 1\nclose(x)\n  ```  \n\n").as_deref(), Some("x = 1\nclose(x)"));
@@ -1604,6 +1639,67 @@ fn a_call_that_the_usage_limit_refuses_waits_for_its_reset_and_the_chain_is_told
   assert_eq!(kinds, [("started", "reply1"), ("tell", root.as_str()), ("done", "reply1")]);
   let note = &facts[1].2;
   assert!(note.contains(&format!("#{root} waits on m/high: usage limit until ")), "{note}");
+}
+
+#[test]
+fn a_stand_ends_the_wait_of_a_usage_limit_and_asks_the_model_again_at_once() {
+  let later = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .expect("a time after the epoch")
+    .as_secs()
+    + 86_400;
+  let (host, calls) = failing(&[&format!("Claude AI usage limit reached|{later}")]);
+  let (retries, told) = retried();
+  let model = scripted(&MockCompletionModel::default()).hosted(host);
+  let provider =
+    Provider::new(yard("limit-now").display().to_string(), vec![model]).retries(retries);
+  let mut engine = lived(provider);
+  let id = asked(&mut engine);
+  let heard = Arc::clone(&told);
+  assert!(until(&mut engine, move |_| heard.lock().expect("the retries told").len() == 1));
+  assert!(told.lock().expect("the retries told")[0].2.wait > Duration::from_secs(80_000));
+  engine.stand(verbs::Stand::default()).expect("the life stands");
+  let done = |engine: &mut Engine| {
+    engine.peek(&id, verbs::Peek::default()).is_ok_and(|one| one.as_ref().as_int() == Some(7))
+  };
+  assert!(until(&mut engine, done), "the reply waits no more for the reset of the limit");
+  assert_eq!(calls.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn a_stand_on_new_settings_asks_a_reply_that_waits_for_a_usage_limit_again_on_the_new_command_line()
+{
+  let later = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .expect("a time after the epoch")
+    .as_secs()
+    + 86_400;
+  let limit = format!("Claude AI usage limit reached|{later}");
+  let (old, before) = failing(&[&limit, &limit, &limit]);
+  let (new, after) = failing(&[]);
+  let fresh = scripted(&MockCompletionModel::default()).hosted(new);
+  let (retries, told) = retried();
+  let model = scripted(&MockCompletionModel::default()).hosted(old);
+  let stale = model.clone();
+  let switched = Arc::new(std::sync::atomic::AtomicBool::new(false));
+  let flipped = Arc::clone(&switched);
+  let provider = Provider::new(yard("limit-switch").display().to_string(), vec![model])
+    .retries(retries)
+    .refreshing(Arc::new(move || {
+      let models = if flipped.load(Ordering::SeqCst) { &fresh } else { &stale };
+      Ok((vec![models.clone()], None, Thinking::default()))
+    }));
+  let mut engine = lived(provider);
+  let id = asked(&mut engine);
+  let heard = Arc::clone(&told);
+  assert!(until(&mut engine, move |_| !heard.lock().expect("the retries told").is_empty()));
+  switched.store(true, Ordering::SeqCst);
+  engine.stand(verbs::Stand::default()).expect("the life stands");
+  let done = |engine: &mut Engine| {
+    engine.peek(&id, verbs::Peek::default()).is_ok_and(|one| one.as_ref().as_int() == Some(7))
+  };
+  assert!(until(&mut engine, done), "the reply asks the new command line");
+  assert_eq!((before.load(Ordering::SeqCst), after.load(Ordering::SeqCst)), (1, 1));
 }
 
 /// A moment in Paris.

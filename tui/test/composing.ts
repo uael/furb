@@ -69,6 +69,21 @@ export async function composing(
   }
 }
 
+/** Presses Escape and returns once the keys have heard it. A terminal holds a lone Escape for a short pause, to tell it
+ * from the start of a sequence, so a frame that the test draws just after the press can come before the key. The
+ * listener goes first, since a key that a binding takes stops before the listeners that come after. */
+export function pressEscape(screen: Composing["screen"]): Promise<void> {
+  const heard = new Promise<void>((resolve) => {
+    const listener = () => {
+      screen.renderer.keyInput.off("keypress", listener);
+      resolve();
+    };
+    screen.renderer.keyInput.prependListener("keypress", listener);
+  });
+  screen.mockInput.pressEscape();
+  return heard;
+}
+
 /** The text, the color and the ground of the cell at a column of a row of the screen. */
 export function cellAt(frame: CapturedFrame, x: number, y: number): { text: string; fg?: RGBA; bg?: RGBA } {
   let at = 0;

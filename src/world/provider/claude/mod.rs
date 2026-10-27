@@ -1139,7 +1139,7 @@ impl Flight<'_> {
           }
           if event.get("is_error").and_then(Value::as_bool).unwrap_or_default() {
             let said = event.get("result").and_then(Value::as_str).filter(|one| !one.is_empty());
-            return Err(failed(said.unwrap_or("Claude reported an error.")));
+            return Err(failed(said.map_or_else(|| unexplained(&event), str::to_owned)));
           }
           return Ok(reply.response(&event, name, id, process));
         }
@@ -1475,6 +1475,30 @@ fn canonical(message: &Message) -> String {
 /// A failure of the command line, in its own words.
 fn failed(why: impl Into<String>) -> CompletionError {
   CompletionError::ProviderError(why.into())
+}
+
+/// What an error result tells when its text is empty: its subtype, its status and its errors, so that a login error
+/// shows apart from a limit.
+fn unexplained(event: &Value) -> String {
+  let mut facts = Vec::new();
+  if let Some(subtype) = event.get("subtype").and_then(Value::as_str).filter(|one| !one.is_empty())
+  {
+    facts.push(format!("subtype {subtype}"));
+  }
+  if let Some(status) = event.get("api_error_status").filter(|one| !one.is_null()) {
+    facts.push(format!("api_error_status {status}"));
+  }
+  let errors = match event.get("errors") {
+    Some(Value::Array(all)) => all
+      .iter()
+      .map(|one| one.as_str().map_or_else(|| one.to_string(), str::to_owned))
+      .collect::<Vec<_>>()
+      .join("; "),
+    _ => String::new(),
+  };
+  let head = if facts.is_empty() { String::new() } else { format!(" ({})", facts.join(", ")) };
+  let tail = if errors.is_empty() { String::new() } else { format!(": {errors}") };
+  format!("Claude reported an error{head}{tail}.")
 }
 
 /// The name of the program of the command line.

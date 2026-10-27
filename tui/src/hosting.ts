@@ -2,7 +2,7 @@
 // of itself. It loads no module that loads OpenTUI, since the host draws nothing.
 
 import { deserialize, serialize } from "bun:jsc";
-import { chmodSync, mkdirSync, readdirSync } from "node:fs";
+import { chmodSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import type { Socket } from "node:net";
 import { hostname, tmpdir, userInfo } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -212,4 +212,48 @@ export async function buildOf(): Promise<string> {
   for await (const chunk of Bun.file(native.includes("/") ? native : join(root, native)).stream())
     hasher.update(chunk);
   return `${version}+${hasher.digest("hex").slice(0, 12)}`;
+}
+
+/** What a host that failed to start says when another host of the same life runs: the window then waits for that host. */
+export const RIVAL = "Another host of this life runs";
+
+/** What the lease of a record says when a process that is no host holds it. */
+export const OWNED = "Another process owns";
+
+/** What the host at a place said of itself, or nothing when it said none or the file does not read. */
+export function aboutOf(place: Place): About | undefined {
+  try {
+    return JSON.parse(readFileSync(place.about, "utf8")) as About;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Whether a process is a host of a life: it runs, and its command line names the program of the host. A process
+ * that ended, one that waits to be reaped, and an unrelated process that took the number of a host are no host. */
+export function isHost(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+  } catch {
+    return false;
+  }
+  const got = Bun.spawnSync(["ps", "-o", "command=", "-p", String(pid)]);
+  return got.stdout.toString().includes("host.ts");
+}
+
+/** The end of a host that does not answer: the signal that ends a life as the end of a window does, and the kill after
+ * a grace in milliseconds. A host that a signal stopped wakes to hear the end first. It gives when the process is gone. */
+export async function stopProcess(pid: number, grace = 12000): Promise<void> {
+  try {
+    process.kill(pid, "SIGTERM");
+    process.kill(pid, "SIGCONT");
+  } catch {
+    return;
+  }
+  for (const deadline = Date.now() + grace; isHost(pid) && Date.now() < deadline; ) await Bun.sleep(50);
+  if (!isHost(pid)) return;
+  try {
+    process.kill(pid, "SIGKILL");
+  } catch {}
+  for (const deadline = Date.now() + 5000; isHost(pid) && Date.now() < deadline; ) await Bun.sleep(50);
 }
