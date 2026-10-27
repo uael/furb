@@ -141,3 +141,65 @@ test("a question of a shape that is more than text says what its line is, and ta
     },
     { width: 120, height: 40 },
   ));
+
+test("the words that the operator writes for a question stay with it when another question is aimed, and go to no other question", () =>
+  composing(
+    async (context) => {
+      const { session, app, frame } = context;
+      const one = await asked(context, "str", "First?");
+      const two = await asked(context, "str", "Second?");
+      await frame();
+      expect(session.operatorPrompt?.id).toBe(one);
+      app.composer.setText("answer one");
+      await session.point(two);
+      await frame();
+      expect(session.operatorPrompt?.id).toBe(two);
+      expect(app.composer.plainText).toBe("");
+      app.composer.setText("answer two");
+      await session.point(one);
+      await frame();
+      expect(app.composer.plainText).toBe("answer one");
+      await app.submit();
+      expect(await session.engine.result(one)).toBe("answer one");
+      await frame();
+      expect(session.operatorPrompt?.id).toBe(two);
+      expect(app.composer.plainText).toBe("answer two");
+      await app.submit();
+      expect(await session.engine.result(two)).toBe("answer two");
+    },
+    { width: 120, height: 40 },
+  ));
+
+test("the words written for a question that another window answered go to the history of the input, and the next question takes none of them", () =>
+  composing(
+    async (context) => {
+      const { session, app, frame } = context;
+      const one = await asked(context, "str", "First?");
+      const two = await asked(context, "str", "Second?");
+      await frame();
+      app.composer.setText("half written for the first");
+      await session.host.answer(one, "from the other window");
+      await until(session, () => session.operatorPrompt?.id === two);
+      await frame();
+      expect(app.composer.plainText).toBe("");
+      expect(session.notice).toBe(`${one} closed. ↑ brings your words back.`);
+      expect(session.histories[session.draftKey]).toContain("half written for the first");
+      expect(session.desk.asks.map((ask) => ask.id)).toEqual([two]);
+      await app.submit();
+      expect(session.desk.asks.map((ask) => ask.id)).toEqual([two]);
+    },
+    { width: 120, height: 40 },
+  ));
+
+test("the footer offers ⌃C to take back your last message while it runs and the input is empty", () =>
+  composing(
+    async ({ session, app, frame }) => {
+      expect(await frame()).not.toContain("take back");
+      await session.submit("Think until I cancel.");
+      await until(session, () => Boolean(session.lastOwn));
+      expect(await frame()).toContain("⌃C take back");
+      app.composer.setText("a new message");
+      expect(await frame()).not.toContain("⌃C take back");
+    },
+    { width: 140, height: 44, exitOnCtrlC: false },
+  ));
