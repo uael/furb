@@ -48,7 +48,7 @@ async def test_the_word_of_a_rung_runs_only_if_the_gate_accepts_the_word_or_if_t
   assert ran(log) == told and "k" not in engine.module(root)
   laid = engine.rung("k = 1", on=root)
   assert await laid is None
-  refused = f"#{bad} refused\n{bad}_findings = {BAD!r}\n\n#{bad} closed\n{bad}_value = Refused()"
+  refused = f"#{bad} refused\n{bad}_findings = {BAD!r}\n\n#{bad} closed by chain1\n{bad}_value = Refused()"
   told.append(f"{refused}\n\n{written(laid, 'k = 1')}")
   assert ran(log) == [*told, "k = 1"] and engine.module(root)["k"] == 1
   sand.script[root] = ["close(k)"]
@@ -76,7 +76,7 @@ async def test_the_gate_checks_the_word_of_a_rung_against_the_rungs_before_it_in
   again = engine.rung("c = later", on=root)
   await again
   (finding,) = next(one for one in findings(log) if one)
-  refused = f"#{early} refused\n{early}_findings = {finding!r}\n\n#{early} closed\n{early}_value = Refused()"
+  refused = f"#{early} refused\n{early}_findings = {finding!r}\n\n#{early} closed by chain1\n{early}_value = Refused()"
   told = [
     fresh(root, written(first, "a = 1")),
     written(second, "b = a + 1"),
@@ -107,12 +107,12 @@ async def test_a_response_that_is_not_python_is_a_finding_like_any_other() -> No
   assert [one for one in paragraphs(engine.turns(on=root)) if one.startswith(f"#{step} ")] == [
     f"#{step} advance on {act}",
     f"#{step} refused\n{step}_findings = {found!r}",
-    f"#{step} closed\n{step}_value = Refused()",
+    f"#{step} closed by chain1\n{step}_value = Refused()",
   ]
   (_, last) = [a[1] for a in said(log, "rung") if a[2] == act]
   told = [
     fresh(root, prompted(act, "int", "try"), f"#{step} advance on {act}"),
-    f"#{step} refused\n{step}_findings = {found!r}\n\n#{step} closed\n{step}_value = Refused()\n\n#{last} advance on {act}",
+    f"#{step} refused\n{step}_findings = {found!r}\n\n#{step} closed by chain1\n{step}_value = Refused()\n\n#{last} advance on {act}",
   ]
   assert ran(log) == [told[0], told[1], "close(1)"]
 

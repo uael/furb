@@ -26,7 +26,7 @@ def ask(kind, on, *words):
 
 
 def span(lo: int, hi: int) -> Show:
-  return lambda lines: [*range(1, len(lines) + 1)[lo - 1 if lo > 0 else lo : hi if hi >= 0 else hi + 1 or None]]
+  return lambda lines: [*range(1, len(lines) + 1)[lo - (lo > 0) : hi if hi >= 0 else hi + 1 or None]]
 
 
 def grep(pattern: str) -> Show:
@@ -65,7 +65,7 @@ def turns(on: str = "") -> list[tuple]:
       case ("reply", *_):
         sent += user
         user = []
-      case ("done", about, _, (_, _, _, _) as turn) if question(("reply", about)):
+      case ("done", about, _, [*_] as turn) if question(("reply", about)):
         folded += [("user", "\n\n".join(sent), None, None), turn]
         sent = []
       case ("tell", *_, notes):
@@ -118,25 +118,24 @@ def cwd(on: str = "") -> str:
   return answer("cd", on, "") or standing()[1]
 
 
-def pause(id: str) -> None:
+def pause(id: str):
   control("pause", "paused", id)
 
 
-def wake(id: str) -> None:
+def wake(id: str):
   control("wake", "woke", id)
 
 
-def cancel(id: str) -> None:
-  control("cancel", "cancelled by " + site.get(), id)
+def cancel(id: str):
+  control("cancel", "cancelled", id)
 
 
-def close(value: object, id: str = "") -> None:
+def close(value: object, id: str = ""):
   match get(who := acting()):
     case ("rung", _, by, _, _, retells, *_):
       if retells:
         raise CancelledError()
-      if not id and question(("prompt", by)):
-        id = by
+      id = id or by * prompted(by)
   match get(id := id or who):
     case ("prompt", _, _, on, shape, *_) if not isinstance(value, BaseException):
       try:
@@ -154,7 +153,7 @@ def close(value: object, id: str = "") -> None:
     raise CancelledError()
 
 
-def debug(template: Template) -> None:
+def debug(template: Template):
   text = "".join(
     x
     if isinstance(x, str)
@@ -214,7 +213,7 @@ def prompt[T](shape: type[T] | object, message: str = "", to: str = "", on: str 
   named = (
     shape if isinstance(shape, str) else re.sub(r"""<class '|'>|('[^']*'|"[^"]*")|[\w.:/]*\.""", r"\1", repr(shape))
   )
-  thread = on if question(("prompt", on)) else ""
+  thread = on * prompted(on)
   to = to or (thread and get(thread)[6])
   who = to or module(on).get("actor")
   asks = who != OPERATOR
@@ -277,7 +276,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
       yield (
         "prefix",
         id,
-        [it for it in theirs if not get(it[1]) or (get(it[1])[2] if question(("reply", it[1])) else it[1]) in kin],
+        [it for it in theirs if not get(it[1]) or (get(it[1])[2] * question(("reply", it[1])) or it[1]) in kin],
       )
     yield "started", id
     yield told(id, "", bound(id), label=label, source=source)
@@ -313,9 +312,9 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
       if a[0] in ("ready", "done"):
         waiting.pop(a[1], None)
       match a:
-        case ("read", about, by, _, path) if question(("prompt", path)) and scope(path) == id:
+        case ("read", about, by, _, path) if prompted(path) and scope(path) == id:
           yield "done", about, Text(path, "\n".join(w for x, w in rungs.items() if x != by and under(x, path)))
-        case ("write", about, by, _, Text(path, content) as text) if question(("prompt", path)) and scope(path) == id:
+        case ("write", about, by, _, Text(path, content) as text) if prompted(path) and scope(path) == id:
           under(by, path) and rungs.pop(by, None)
           yield from replay(path, content.rstrip("\n"))
           yield "done", about, text
@@ -360,17 +359,25 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
       if asking not in waiting and (asking := next((x for x in waiting if not paused(x)), "")):
         maker, to = get(asking)[2::4]
         if offered(last[0], to) is None:
-          close(Refused(f"{to} no actor"), maker if question(("prompt", maker)) else asking)
+          close(Refused(to + " no actor"), maker * prompted(maker) or asking)
         else:
           if ran and not heard:
             yield told(ran, "told nothing")
           teach(id, to)
-          yield told(asking, f"advance on {maker}", share=filled(reply) or None)
+          yield told(
+            asking,
+            f"advance on {maker}",
+            share=filled(reply) or None,
+            waits=[c for *_, c in transcript(id, "wants") if not over(c)] or None,
+          )
           with site.set(asking):
             reply = act("reply", id, controlled(idle), to)
           unseen = ""
       if unseen and not waiting and (r[2] in running or over(r[2]) or a[0] == "tell"):
-        prompt(None, unseen[0], on=ours if question(("prompt", ours := get(unseen[1])[2])) else "")
+        ours = get(unseen[1])[2]
+        while over(ours) and prompted(up := get(ours)[3]):
+          ours = up
+        prompt(None, unseen[0], on=ours * prompted(ours))
         unseen = ""
 
   return act("chain", on, ear, label, source)
@@ -445,7 +452,7 @@ class Text:
 
   def replace(self, old: str, new: str, count: int = -1) -> Text:
     if old not in self.content:
-      raise Refused(f"{self.path} no {old!r}")
+      raise Refused(self.path + " no " + repr(old))
     (made := Text(self.path, self.content.replace(old, new, count))).before = self
     return made
 
@@ -505,7 +512,11 @@ def under(name, of):
 
 
 def acting():
-  return site.get() if get(site.get()) else ""
+  return site.get() * bool(get(site.get()))
+
+
+def prompted(name):
+  return question(("prompt", name))
 
 
 def question(a):
@@ -572,7 +583,7 @@ def told(id, what="", *notes, **words):
 def control(kind, name, id, *words):
   if not get(id):
     raise Refused(f"no act {id!r}")
-  return (over(id) or say(*told(id, name, value=(*words, None)[0]))) and say(kind, id, *words)
+  return (over(id) or say(*told(id, name + " by " + site.get(), value=(*words, None)[0]))) and say(kind, id, *words)
 
 
 def headed(id, what="", **words):
@@ -609,7 +620,7 @@ def covers(a, id):
   kind, of, *_ = a
 
   def on(name):
-    while name != of and question(("prompt", name)):
+    while name != of and prompted(name):
       name = get(name)[3]
     return name == of
 
@@ -815,14 +826,14 @@ def boot(record=(), **outside):
     hears(name, g, None)
     dispatch()
 
-  def get(about: str) -> Any:
+  def get(about):
     return known.get(about)
 
-  def peek(at: str, waiting: object = None) -> object:
+  def peek(at, waiting=None):
     return done.get(at, waiting)
 
-  def transcript(on: str = "", of: str = "") -> list[tuple]:
-    return [*held.get((scope(on or site.get()), of), [])]
+  def transcript(on="", of=""):
+    return held.get((scope(on or site.get()), of), [])[:]
 
   for who, hearer in [(OPERATOR, idle(OPERATOR)), *outside.items(), ("journal", journal())]:
     drive(hearer, who)

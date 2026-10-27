@@ -69,7 +69,7 @@ async def test_a_word_that_awaits_a_chain_raises_refused_where_it_waited() -> No
     "#rung1 advance on prompt1",
     "#rung1 raised",
     "#rung2 advance on prompt1",
-    "#prompt1 closed",
+    "#prompt1 closed by rung2",
   ]
   assert "#rung1 raised\nrung1_raised = Refused('chain2 never settles')" in paragraphs(engine.turns(on=root))
   assert [(a[1], a[4]) for a in said(log, "chain")] == [("chain1", "root"), ("chain2", "sub")]

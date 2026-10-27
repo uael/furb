@@ -412,6 +412,32 @@ test("a prompt of None to the operator is a notice that settles as a quiet line,
     { width: 120, height: 40 },
   ));
 
+test("a word that awaits a prompt of None to the operator goes on at once, since a notice blocks no one", () =>
+  composing(
+    async ({ session, frame }) => {
+      const rung = await session.engine.rung({
+        word: 'await prompt(None, "The build is green.", to="operator")\nafter = 1',
+        on: session.engine.root,
+      });
+      await until(session, () =>
+        session.activity.some((act) => act.id === rung && act.run?.status === "done"),
+      );
+      await session.refresh();
+      // The word ran to its end: no desk holds a question, no dialog waits, and no row of the feed still runs or asks.
+      expect(session.operatorPrompt).toBeUndefined();
+      expect(session.desk.asks).toEqual([]);
+      const notices = session.activity.filter((act) => act.kind === "prompt" && act.by === rung);
+      expect(notices.length).toBe(1);
+      expect(notices.every((act) => act.done)).toBe(true);
+      const shown = await frame();
+      expect(shown).toContain("after = 1");
+      expect(shown).not.toContain("◉");
+      expect(shown).not.toContain("needs input");
+      expect(shown).not.toContain("running");
+    },
+    { width: 120, height: 40 },
+  ));
+
 test("many questions wait on the desk, which says which one the input answers, and the dialog goes from one to the next", () =>
   composing(
     async ({ session, app, screen, frame }) => {

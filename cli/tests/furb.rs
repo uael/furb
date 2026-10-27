@@ -210,7 +210,7 @@ fn a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it() {
   turns.arg(yard.record()).arg("--cwd").arg(&elsewhere);
   let said = printed(turns, "");
   assert!(
-    said.contains("#rung2 closed\nrung2_value = 4"),
+    said.contains("#rung2 closed by rung2\nrung2_value = 4"),
     "the turns of a record run every word again: {said}"
   );
   assert!(!said.contains("remember()"), "an inspection enables no extension: {said}");
@@ -464,7 +464,7 @@ fn a_prompt_the_record_already_holds_is_taken_up_and_never_asked_again() {
   turns.arg(yard.record());
   let said = printed(turns, "");
   assert!(said.starts_with("[user] #chain1\nchain1_label = 'root'\n"), "{said}");
-  let paragraphs = "\n\n#prompt1\nprompt1_message = 'say a number'\nprompt1: Act[int] = Act('prompt1')\n\n#prompt1 closed\nprompt1_value = 7";
+  let paragraphs = "\n\n#prompt1\nprompt1_message = 'say a number'\nprompt1: Act[int] = Act('prompt1')\n\n#prompt1 closed by console\nprompt1_value = 7";
   assert!(said.contains(paragraphs), "the turns of a root as a model read them: {said}");
   assert!(said.contains(&format!("\n[assistant] {COUNT}\n")), "{said}");
 }

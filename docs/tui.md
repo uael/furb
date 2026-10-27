@@ -125,6 +125,12 @@ line that made the act is lit too, with ↓, and what its command prints stands 
 
 ![A line that awaits the act of an earlier line](screenshots/99-awaited-line.png)
 
+The steps that the extensions play on a chain stand on one quiet row. A file of Markdown that memory told shows no row
+for each of its headings, and a question of memory that found nothing new shows no row. A prompt of None, a notice,
+blocks no word: the word that awaits it goes on at once, and no row of the feed keeps running for it.
+
+![The quiet row of the extensions](screenshots/100-quiet-feed.png)
+
 Collapse on the header
 of a thread, or ⌥D, which lists the threads, folds the thread to its panel on one line, which says its state, the
 first line of its message and the count of its steps, and Expand, or a click on that line, opens it again. A resolved thread that is
@@ -293,6 +299,12 @@ one. Each color keeps one meaning in every theme: the accent marks the operator 
 for the operator, red a failure, and a quiet green what is done. Paper and Day are light, and Ink, GitHub Dark,
 Midnight, Forest and Dusk are dark. ⌃T opens the themes, each with a swatch of its
 colors.
+
+In Ink, the text is a soft gray and never white. Python has one color for each part, in the feed and in the graph:
+purple for a keyword, green for a string, orange for a number, `None`, `True`, `False` and a backslash sequence, teal
+for a name that the code calls or defines, gold for a type, and gray italic for a comment. An operator keeps the color of
+the text, so a keyword is the one purple on a line. None of these colors is pastel, and each one reads on every surface
+of the feed.
 
 ![The theme of a light terminal](screenshots/78-terminal-light.png)
 

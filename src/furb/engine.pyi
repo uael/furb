@@ -322,7 +322,6 @@ def cancel(id: str) -> None:
   A cancelled prompt raises CancelledError to whoever awaits it.
   A cancel touches nothing else on the chain.
   The awaiter of a cancelled command raises CancelledError in its step.
-  The paragraph of a cancel names in its header the one that said it, as #rung5 cancelled by operator, so a turn says what ended the act.
   A cancel of a name of no act of the life raises Refused, which names it, and says nothing.
   """
 
@@ -460,6 +459,7 @@ def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[No
   The name of a shape is the word a chain says it by, so a shape that holds a class of the engine or of the chain names it as the chain does, under no module.
   The acknowledgment carries no shape and a message that names the act and what happened to it, as prompt3 done.
   The acknowledgment is a prompt on the thread that made the rung that made the act, so the actor of that thread sees it in that thread, and a prompt on the chain when that rung answers no prompt.
+  When that thread is over, the acknowledgment is on the nearest thread above it that is open, or on the thread at the top of its lineage when each is over, so a model whose task is open reads it as a message of that task and closes no prompt for it.
   A prompt on a thread is on the chain of that thread, and goes to the actor of the thread unless it names one.
   A prompt on a thread tells the thread it is on under the word thread, as prompt4_thread = 'prompt1'.
   A prompt of None on a thread that is open and that a model answers is a message of that thread: it tells its message, makes no rung, and is done with None at once, so the model of the thread reads it at its next step.
@@ -561,6 +561,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   A write of a door that drops no rung that ran, since the gate refused each rung that it drops, keeps the module and every rung of the chain as they stand, and makes only the rung of what is new.
   Before every reply the chain tells the last paragraph of the turn, whose header says what the answer is for, as #rung5 advance on prompt1, which names the one that made the rung.
   The advance binds the share of the window that the last reply on the chain read, as rung5_share = 0.25: the tokens that reply read over the window that the roster gives its actor, to two places, and no share before a reply that read a token.
+  The advance binds each act that a word of the chain awaits and that is not over, as rung5_waits = ['bash3'], and no waits when no word awaits, so the model sees which acts the words that it wrote before still wait for.
   Before the first prompt to an actor whose roster entry holds a doctrine, the chain tells that doctrine as the quote doctrine, in a paragraph headed doctrine, so the doctrine stands before the message that changes from chain to chain, and each chain that starts the same holds it in the same prefix.
   Before the advance of a reply to such an actor, the chain tells its doctrine when no prompt told it, and the chain never tells a doctrine that its transcript tells already, so the model reads it once, and a chain that asks no such actor tells nothing of it.
   When nothing was told on the chain since the word of the last rung that the chain did not make was ready, the chain tells that rung under the header told nothing before the advance, so the model sees that the word showed it nothing.
@@ -931,6 +932,9 @@ def acting() -> str:
 def question(a: Saying) -> bool:
   """Whether a fact is a question, which its name says: a question is about itself, and its name is under its kind."""
 
+def prompted(name: str) -> bool:
+  """Whether a name is the name of a prompt, which its name says, as prompt3, and not prompt, chain3 or an empty name."""
+
 def scope(name: str) -> str:
   """The scope of a question, from its name: the chain it is on, or the scope of the thread it is on, and itself for a chain, and nothing for a name of no question of the life."""
 
@@ -968,6 +972,7 @@ def control(kind: str, name: str, id: str, *words: object) -> Fact:
   """A control said over the act it names, after a tell of a header of its name headed with that act, which is how pause, wake, cancel and close say theirs.
   The call gives the control as the life made it whole, so a close that named no act reads which act it is over.
   A control is said over any act of the life, and it tells its header only while the act it names is not over, so a control over an act that is over tells nothing and still reaches each act under it that is not over.
+  The header of a control names the one that said it, as #rung5 paused by operator or #chain1 paused by grant1, so a turn says who paused, woke, cancelled or closed the act.
   """
 
 def headed(id: str, what: str = "", **words: object) -> str:

@@ -55,7 +55,7 @@ async def test_the_engine_asks_the_model_again_after_a_refusal() -> None:
   assert [a[2] for a in said(log, "reply")] == [first, second]
   assert engine.turns(on=root)[2][1] == (
     f"#{first} refused\n{first}_findings = {BAD!r}\n\n"
-    f"#{first} closed\n{first}_value = Refused()\n\n#{second} advance on {act}"
+    f"#{first} closed by chain1\n{first}_value = Refused()\n\n#{second} advance on {act}"
   )
 
 
@@ -370,9 +370,12 @@ async def test_its_close_tells_what_closed_it_from_outside() -> None:
   hurt, step = [a[1] for a in said(log, "rung") if a[2] == other]
   assert [(a[1], a[2]) for a in said(log, "close")] == [(act, OPERATOR), (other, step)]
   told = heads(engine.turns(on=root))
-  assert [one for one in told if one.split(" ")[1:2] == ["closed"]] == [f"#{act} closed", f"#{other} closed"]
-  closed = [one for one in paragraphs(engine.turns(on=root)) if one.split("\n")[0].endswith(" closed")]
-  assert closed == [f"#{act} closed\n{act}_value = 21", f"#{other} closed\n{other}_value = 7"]
+  assert [one for one in told if one.split(" ")[1:2] == ["closed"]] == [
+    f"#{act} closed by operator",
+    f"#{other} closed by {step}",
+  ]
+  closed = [one for one in paragraphs(engine.turns(on=root)) if one.split("\n")[0].split(" ")[1:2] == ["closed"]]
+  assert closed == [f"#{act} closed by operator\n{act}_value = 21", f"#{other} closed by {step}\n{other}_value = 7"]
   raised = (hurt, [f"#{hurt} raised\n{hurt}_raised = ValueError('boom')"])
   assert [(a[2], a[3]) for a in said(log, "tell") if a[1] == hurt][-1] == raised
 
@@ -516,6 +519,38 @@ async def test_the_acknowledgment_is_a_prompt_on_the_thread_that_made_the_rung_t
   assert [one[6] for one in said(log, "rung") if one[4] == ""] == ["m/high", "m/high", "m/low"]
 
 
+async def test_when_that_thread_is_over_the_acknowledgment_is_on_the_nearest_thread_above_it_that_is_open() -> None:
+  """When that thread is over, the acknowledgment is on the nearest thread above it that is open, or on the thread at the top of its lineage when each is over, so a model whose task is open reads it as a message of that task and closes no prompt for it."""
+  sand, log, root = born(
+    "s = prompt(int, 'sub', on='prompt1')\nawait s\nawait bash('slow')",
+    "x = bash('slow')\ny = bash('slow')\nclose(2)",
+    "close(3)",
+    "close(None)",
+    auto=False,
+  )
+  task = engine.prompt(int, "task", to="m/high", on=root)
+  assert task == "prompt1"
+  await settle()
+  first, second, third = (one[1] for one in said(log, "bash"))
+  sand.exits(first, 0)
+  await settle()
+  (message,) = [one[1] for one in said(log, "prompt") if one[4] == "None"]
+  assert engine.get(message)[3] == task and engine.peek(message, ...) is None
+  assert [one for one in said(log, "rung") if one[2] == message] == []
+  sand.exits(third, 0)
+  assert await task == 3
+  sand.exits(second, 0)
+  await settle()
+  acks = [one[1] for one in said(log, "prompt") if one[4] == "None"]
+  assert [(engine.get(one)[3], engine.get(one)[5]) for one in acks] == [
+    (task, f"{first} done"),
+    (task, f"{second} done"),
+  ]
+  assert await engine.Act(acks[1]) is None
+  assert len([one for one in said(log, "rung") if one[2] == acks[1]]) == 1
+  assert len(said(log, "reply")) == 4
+
+
 async def test_a_prompt_on_a_thread_is_on_the_chain_of_that_thread() -> None:
   """A prompt on a thread is on the chain of that thread, and goes to the actor of the thread unless it names one."""
   _, log, root = born("close(1)", "close(2)", "close(3)")
@@ -568,7 +603,7 @@ async def test_every_other_prompt_on_a_thread_is_answered_in_steps() -> None:
   assert engine.read(first, on=root).content == "close(1)"
   assert engine.read(more, on=root).content == "x = 2\nclose(x + 1)"
   told = paragraphs(engine.turns(on=root))
-  assert told.index(f"#{first} closed\n{first}_value = 1") < told.index(prompted(more, "None", "go on", first))
+  assert told.index(f"#{first} closed by rung1\n{first}_value = 1") < told.index(prompted(more, "None", "go on", first))
 
 
 async def test_a_later_life_makes_each_prompt_on_a_thread_again_at_its_place() -> None:

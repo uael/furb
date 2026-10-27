@@ -23,4 +23,7 @@ async def test_differs_lines_is_the_show_of_the_lines_that_differ_from_the_lines
   assert await engine.prompt(str, "a door of my own", on=root) == "one\ntwo\n"
   await settle()
   told = "#write1\nwrite1_path = 'note://a'\n<s:write1_text>\none\ntwo</s:write1_text>"
-  assert engine.turns(on=root)[-1][1] == f"{told}\n\n#prompt1 closed\n<s:prompt1_value>\none\ntwo\n</s:prompt1_value>"
+  assert (
+    engine.turns(on=root)[-1][1]
+    == f"{told}\n\n#prompt1 closed by rung1\n<s:prompt1_value>\none\ntwo\n</s:prompt1_value>"
+  )

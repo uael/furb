@@ -16,7 +16,9 @@ def crossed(log: list[tuple], root: str, act: str, message: str) -> str:
   answer is for, of the ledger of that answer, and of the pause that the grant said, joined by blank lines."""
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
   ledger = "#grant1 ledger\ngrant1_spent = 1.5"
-  return fresh(root, GRANT, prompted(act, "int", message), f"#{step} advance on {act}", ledger, f"#{root} paused")
+  return fresh(
+    root, GRANT, prompted(act, "int", message), f"#{step} advance on {act}", ledger, f"#{root} paused by grant1"
+  )
 
 
 async def capped(*script: str, message: str = "count") -> tuple[Sand, list[tuple], str, Act[None], Act[int]]:
@@ -150,7 +152,7 @@ async def test_a_grant_of_nothing_of_a_ceiling_under_zero_or_of_a_share_past_one
   assert isinstance(engine.peek(ghost), Refused) and said(log, "reply") == []
   assert paragraphs(engine.turns(on=root))[2:] == [
     prompted(ghost, "int", "hi"),
-    f"#{ghost} closed\n{ghost}_value = Refused('ghost no actor')",
+    f"#{ghost} closed by chain1\n{ghost}_value = Refused('ghost no actor')",
   ]
 
 
@@ -183,7 +185,7 @@ async def test_a_later_grant_that_stands_closes_every_grant_of_the_chain_before_
     if one.split(" ")[0].split("\n")[0] in (f"#{ceiling}", f"#{top}", f"#{none}") and " ledger" not in one
   ] == [
     f"#{ceiling}\n{ceiling}_usd = 2.0\n{ceiling}: Act[None] = Act({ceiling!r})",
-    f"#{ceiling} closed",
+    f"#{ceiling} closed by grant2",
     f"#{top}\n{top}_usd = 4.0\n{top}: Act[None] = Act({top!r})",
   ]
 

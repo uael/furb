@@ -24,7 +24,7 @@ async def test_a_control_tells_a_header_of_its_own_name() -> None:
   _, _, root = born()
   act = engine.bash("echo hi", on=root)
   engine.pause(act)
-  assert heads(engine.turns(on=root)) == [f"#{root}", f"#{root} standing", f"#{act}", f"#{act} paused"]
+  assert heads(engine.turns(on=root)) == [f"#{root}", f"#{root} standing", f"#{act}", f"#{act} paused by operator"]
 
 
 async def test_pause_is_given_the_id_of_a_pending_act_or_the_id_of_a_chain() -> None:
@@ -43,7 +43,7 @@ async def test_pause_is_given_the_id_of_a_pending_act_or_the_id_of_a_chain() -> 
   engine.wake(root)
   engine.wake(one)
   await settle()
-  assert heads(engine.turns(on=root))[-3:] == [f"#{root} woke", f"#{one} exited 0", f"#{two} exited 0"]
+  assert heads(engine.turns(on=root))[-3:] == [f"#{root} woke by operator", f"#{one} exited 0", f"#{two} exited 0"]
 
 
 async def test_a_pause_stops_no_reply_in_flight_the_reply_returns() -> None:
@@ -77,7 +77,7 @@ async def test_a_kind_a_pause_stops_it_starts_its_ear() -> None:
   world_says("out", act, "two\n", "stdout")
   sand.exits(act, 0)
   await settle()
-  assert paragraphs(engine.turns(on=root))[-1] == f"#{root} paused"
+  assert paragraphs(engine.turns(on=root))[-1] == f"#{root} paused by operator"
   engine.wake(root)
   await settle()
   assert paragraphs(engine.turns(on=root))[-1] == f"#{act} exited 0\n<s:{act}_stdout>\none\ntwo</s:{act}_stdout>"
@@ -123,7 +123,7 @@ async def test_a_control_is_on_the_scope_of_what_it_is_over() -> None:
   await settle()
   held = said(log, "pause")[0]
   assert (held[0], held[1], held[2]) == ("pause", act, engine.OPERATOR) and engine.scope(act) == two
-  assert heads(engine.turns(on=two))[-2:] == [f"#{act}", f"#{act} paused"]
+  assert heads(engine.turns(on=two))[-2:] == [f"#{act}", f"#{act} paused by operator"]
   assert heads(engine.turns(on=root)) == [f"#{root}", f"#{root} standing"]
 
 
