@@ -356,11 +356,17 @@ fn a_cancel_over_a_reply_ends_the_call_of_its_model_and_the_ear_says_nothing_mor
 struct Halting {
   parts: Vec<&'static str>,
   dropped: Arc<AtomicBool>,
+  breaks: bool,
 }
 
 impl Halting {
   fn writes(parts: &[&'static str]) -> Halting {
-    Halting { parts: parts.to_vec(), dropped: Arc::default() }
+    Halting { parts: parts.to_vec(), dropped: Arc::default(), breaks: false }
+  }
+
+  /// A model that writes these parts of its text, and whose stream then fails, in place of waiting.
+  fn breaks(parts: &[&'static str]) -> Halting {
+    Halting { breaks: true, ..Halting::writes(parts) }
   }
 }
 
@@ -377,6 +383,11 @@ impl CompletionModel for Halting {
     let said = futures::stream::iter(
       self.parts.clone().into_iter().map(|part| Ok(RawStreamingChoice::Message(part.to_owned()))),
     );
+    if self.breaks {
+      let broke =
+        futures::stream::iter([Err(CompletionError::ProviderError("the stream broke".into()))]);
+      return Ok(StreamingCompletionResponse::stream("halting", Box::pin(said.chain(broke))));
+    }
     let held = futures::stream::once(async move {
       let _flag = flag;
       std::future::pending::<()>().await;
@@ -423,26 +434,32 @@ fn a_reply_ends_at_the_first_statement_that_cannot_be_python_and_the_gate_refuse
 
 #[test]
 fn a_reply_ends_after_a_fault_that_follows_a_quote_at_the_line_of_the_fault() {
+  // The quote is whole python, so it runs, and the reply ends with it, which is the word that ran.
   let parts = ["<s:note>\n", "Hello\n", "</s:note>\n", "Here is the code:\n", "close(1)\n"];
   let model = Halting::writes(&parts);
   let (mut engine, _) = life("quotes", vec![Model::new("m", 1000, model.clone())]);
   asked(&mut engine);
-  assert_eq!(replied(&mut engine), cut("<s:note>\nHello\n</s:note>\nHere is the code:"));
+  assert_eq!(replied(&mut engine), cut("<s:note>\nHello\n</s:note>"));
+  assert!(
+    until(&mut engine, |engine| told_of(engine, &["is the word that ran", "line 4"])),
+    "the chain is told the fault at its line"
+  );
 }
 
 #[test]
 fn a_reply_ends_after_the_first_statement_whose_fault_no_later_statement_mends() {
-  let parts = ["x = 1\n", "y = (\n", "  nothing_binds_this)\n", "close(x)\n"];
+  // The fault stands first, so no part of the word ran before it.
+  let parts = ["y = (\n", "  nothing_binds_this)\n", "x = 1\n", "close(x)\n"];
   let model = Halting::writes(&parts);
   let (mut engine, _) = life("settled", vec![Model::new("m", 1000, model.clone())]);
   asked(&mut engine);
-  assert_eq!(replied(&mut engine), cut("x = 1\ny = (\n  nothing_binds_this)"));
+  assert_eq!(replied(&mut engine), cut("y = (\n  nothing_binds_this)"));
   assert!(
     until(&mut engine, |_| model.dropped.load(Ordering::SeqCst)),
     "the call of the model ended before it wrote the rest"
   );
   assert!(
-    until(&mut engine, |engine| told_of(engine, &["refused", "line 3"])),
+    until(&mut engine, |engine| told_of(engine, &["refused", "line 2"])),
     "the gate refused the word as far as the statement"
   );
 }
@@ -1147,12 +1164,21 @@ fn thinking_local(
   events: String,
   most: Thinking,
 ) -> (Engine, String, std::thread::JoinHandle<[String; 2]>) {
+  serving(name, most, move |listener| exchanged(listener, &events))
+}
+
+/// The life of [`local`], whose server streams the reply as it likes, with what it read of the request.
+fn serving(
+  name: &str,
+  most: Thinking,
+  serve: impl FnOnce(&TcpListener) -> String + Send + 'static,
+) -> (Engine, String, std::thread::JoinHandle<[String; 2]>) {
   let listener = TcpListener::bind("127.0.0.1:0").expect("a port of this machine");
   let port = listener.local_addr().expect("the port").port();
   let listing =
     json!({"object": "list", "data": [{"id": "qwen", "object": "model", "meta": {"n_ctx": 1000}}]});
   let asked_of =
-    thread::spawn(move || [listing.to_string(), events].map(|one| exchanged(&listener, &one)));
+    thread::spawn(move || [exchanged(&listener, &listing.to_string()), serve(&listener)]);
   let address = format!("http://127.0.0.1:{port}");
   let env = |name: &str| (name == "FURB_LOCAL_URL").then(|| address.clone());
   let catalog =
@@ -1531,23 +1557,23 @@ fn a_line_of_three_backticks_alone_at_the_end_goes_unless_a_fence_or_a_quote_ope
 
 #[test]
 fn a_word_that_ends_with_a_line_of_three_backticks_runs_without_it_and_the_chain_is_told_first() {
-  let model = streaming(&[("x = 3\nclose(x)\n```\n", Usage::new())]);
+  // The fence is a line at the left edge, so the statements before it ran as the model wrote it.
+  let model = streaming(&[("x = 3\ny = x\n```\n", Usage::new())]);
   let (mut engine, _) = life("unclosed", vec![scripted(&model)]);
-  let id = asked(&mut engine);
-  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
-  assert_eq!(got.as_ref().as_int(), Some(3));
+  asked(&mut engine);
+  replied(&mut engine);
+  assert!(until(&mut engine, |engine| ran(engine, "y = x")), "the word runs");
   let root = engine.root().to_owned();
   let facts = said(&mut engine);
   let kinds: Vec<_> =
-    facts.iter().map(|(kind, about, _)| (kind.as_str(), about.as_str())).collect();
-  assert_eq!(kinds, [("started", "reply1"), ("tell", root.as_str()), ("done", "reply1")]);
-  assert!(facts[1].2.contains("the provider dropped that line"), "{}", facts[1].2);
-  assert!(facts[2].2.starts_with("('assistant', 'x = 3\\nclose(x)', "), "{}", facts[2].2);
-  assert!(
-    facts[2].2.ends_with("[{'type': 'text', 'text': 'x = 3\\nclose(x)'}])"),
-    "{}",
-    facts[2].2
+    facts.iter().map(|(kind, about, _)| (kind.as_str(), about.as_str())).take(4).collect();
+  assert_eq!(
+    kinds,
+    [("started", "reply1"), ("writing", "writing1"), ("tell", root.as_str()), ("done", "reply1")]
   );
+  assert!(facts[2].2.contains("the provider dropped that line"), "{}", facts[2].2);
+  assert!(facts[3].2.starts_with("('assistant', 'x = 3\\ny = x', "), "{}", facts[3].2);
+  assert!(facts[3].2.ends_with("[{'type': 'text', 'text': 'x = 3\\ny = x'}])"), "{}", facts[3].2);
 }
 
 #[test]
@@ -1670,4 +1696,87 @@ fn a_claude_command_line_at_its_usage_limit_is_asked_again_at_the_reset_and_answ
   let kinds: Vec<_> = said(&mut engine).into_iter().map(|(kind, ..)| kind).collect();
   assert_eq!(kinds, ["started", "tell", "done"]);
   assert_eq!(yard.heard().len(), 2, "the reply asked the command line again after the reset");
+}
+
+/// Whether a writing of this part of a word is done with nothing, which is that the part ran.
+fn wrote(engine: &mut Engine, part: &str) -> bool {
+  let root = engine.root().to_owned();
+  let facts = engine
+    .transcript(verbs::Transcript { on: on(&root), of: None })
+    .expect("the root has a transcript");
+  let holds =
+    |one: &Fact| (0..4).any(|at| one.word(at).and_then(|word| word.as_str()) == Some(part));
+  let made: Vec<_> = facts
+    .iter()
+    .filter(|one| one.kind() == "writing" && holds(one))
+    .map(|one| one.about().to_owned())
+    .collect();
+  facts.iter().any(|one| {
+    one.kind() == "done"
+      && made.iter().any(|name| name == one.about())
+      && one.word(0).is_some_and(|word| word.type_name() == "NoneType")
+  })
+}
+
+#[test]
+fn a_statement_that_a_model_finished_runs_while_the_model_writes_the_rest_of_its_word() {
+  let model = Halting::writes(&["x = 3\n", "y = x\n"]);
+  let (mut engine, _) = life("early", vec![Model::new("m", 1000, model.clone())]);
+  asked(&mut engine);
+  assert!(
+    until(&mut engine, |engine| wrote(engine, "x = 3\n")),
+    "the statement ran as its model wrote"
+  );
+  assert!(
+    !wrote(&mut engine, "y = x\n"),
+    "a statement that may go on runs once a line after it starts"
+  );
+  assert!(!ran(&mut engine, "x = 3"), "the word has no run while its model writes it");
+}
+
+#[test]
+fn a_statement_that_raised_ends_the_reply_with_the_word_that_ran_whose_run_is_done_with_the_raise()
+{
+  let model = Halting::writes(&["x = int(\"a\")\n", "close(5)\n"]);
+  let (mut engine, _) = life("raised", vec![Model::new("m", 1000, model.clone())]);
+  asked(&mut engine);
+  assert_eq!(replied(&mut engine), cut("x = int(\"a\")"));
+  assert!(
+    until(&mut engine, |_| model.dropped.load(Ordering::SeqCst)),
+    "the call of the model ended before it wrote the rest"
+  );
+  assert!(
+    until(&mut engine, |engine| told_of(engine, &["raised", "ValueError"])),
+    "the run of the word that ran is done with the raise"
+  );
+  assert!(!ran(&mut engine, "close(5)"), "no statement after the raise runs");
+}
+
+#[test]
+fn once_a_part_ran_a_fault_after_it_ends_the_reply_with_the_word_that_ran_and_the_chain_is_told_the_fault()
+ {
+  let model = Halting::writes(&["x = 3\n", "y = nothing_binds_this\n", "z = 1\n"]);
+  let (mut engine, _) = life("after", vec![Model::new("m", 1000, model.clone())]);
+  asked(&mut engine);
+  assert_eq!(replied(&mut engine), cut("x = 3"));
+  assert!(
+    until(&mut engine, |engine| told_of(engine, &["is the word that ran", "nothing_binds_this"])),
+    "the chain is told the fault of the statement after the word that ran"
+  );
+  assert!(until(&mut engine, |engine| ran(engine, "x = 3")), "the word that ran runs");
+}
+
+#[test]
+fn a_reply_whose_call_ended_after_a_part_of_its_word_ran_is_the_word_that_ran() {
+  let model = Halting::breaks(&["x = 3\n", "y = x"]);
+  let (mut engine, _) = life("ended", vec![Model::new("m", 1000, model)]);
+  asked(&mut engine);
+  assert_eq!(replied(&mut engine), cut("x = 3"));
+  assert!(
+    until(&mut engine, |engine| told_of(
+      engine,
+      &["the call of its model ended after a part of it ran"]
+    )),
+    "the chain is told why its turn is the word that ran"
+  );
 }

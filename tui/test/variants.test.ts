@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { openEngine } from "../src/bridge.ts";
 import { Preferences } from "../src/preferences.ts";
 import { Session } from "../src/session.ts";
-import { composing } from "./composing.ts";
+import { composing, drawn } from "./composing.ts";
 
 /** The recorded life of a conductor on preferences of its own, which no other test shares. */
 async function recorded(): Promise<{ session: Session; path: string }> {
@@ -23,15 +23,14 @@ test("the current view is the default, a switch at run time shows each variant, 
     async ({ session, app, screen, frame }) => {
       await session.refresh();
       expect(app.lifeView).toBe("main");
-      // The frame settles once the feed has read its chain; the spinner and the hint beside it change with time.
-      await frame();
-      await Bun.sleep(300);
+      // A card shows its markdown only once its highlighting ends, and the spinner and the hint beside it change with
+      // time alone.
       const still = (text: string) =>
         text
           .split("\n")
           .filter((line) => !line.includes("Working"))
           .join("\n");
-      const before = still(await frame());
+      const before = await drawn(frame, screen.renderer.root, still);
       const seen = new Map<string, string>();
       for (const view of ["loom", "graph"] as const) {
         screen.mockInput.pressKey("v", { meta: true });
@@ -44,7 +43,7 @@ test("the current view is the default, a switch at run time shows each variant, 
       screen.mockInput.pressKey("v", { meta: true });
       expect(app.lifeView).toBe("main");
       expect(new Preferences(path).view).toBe("main");
-      expect(still(await frame())).toBe(before);
+      expect(await drawn(frame, screen.renderer.root, still)).toBe(before);
     },
     { width: 152, height: 46 },
     opened,

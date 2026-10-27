@@ -10,6 +10,12 @@
 //! holds a part that python runs later or never: a function, a class, a lambda, a comprehension or an annotation. So
 //! the provider asks the gate about the statements that a model finished, and ends the reply after the first
 //! statement with no such part that holds a fault.
+//!
+//! The statements that a model finished, and that the gate finds nothing against, run as the model writes the rest:
+//! the provider gives the Kernel each new part of the word as a writing of its rung. A statement that raised ends
+//! the word where it raised, so the reply ends there. Once a part ran, the turn of the reply is never a word other
+//! than the one that ran: it is the word as far as the parts that ran, whatever the model wrote after them that the
+//! chain would refuse, since a later life runs the word of the rung and a statement of it must run there as it ran.
 
 use ruff_python_ast::{
   Expr, Stmt,
@@ -30,6 +36,12 @@ pub(super) struct Watch {
   text: String,
   /// Where the last statements to read ended: the start of a line at the left edge, or 0.
   seen: usize,
+  /// The word, as python, that the parts given to the Kernel hold.
+  sent: String,
+  /// Where in the text the parts given to the Kernel end: the start of a line at the left edge, or 0.
+  given: usize,
+  /// Whether the word is given to the Kernel in no part, as when no Kernel takes a writing.
+  whole: bool,
 }
 
 impl Watch {
@@ -64,6 +76,55 @@ impl Watch {
   pub(super) fn forget(&mut self) {
     *self = Watch::default();
   }
+
+  /// The part of a word, as python, that is new since the parts given to the Kernel, and how many characters of the
+  /// word stand before it, as python counts them; nothing when the word holds no new statement, or does not follow
+  /// what was given.
+  pub(super) fn part<'a>(&self, word: &'a str) -> Option<(&'a str, usize)> {
+    let part = word.strip_prefix(self.sent.as_str()).filter(|_| !self.whole)?;
+    (!part.trim().is_empty()).then(|| (part, self.sent.chars().count()))
+  }
+
+  /// The word, as python, given to the Kernel as far as where it ends in the text.
+  pub(super) fn gave(&mut self, word: &str, end: usize) {
+    self.sent = word.to_owned();
+    self.given = end;
+  }
+
+  /// The word given to the Kernel in no part from now on, since no Kernel takes a part of it.
+  pub(super) fn untaken(&mut self) {
+    self.whole = true;
+  }
+
+  /// Whether the line that starts at this place in the text opens a clause of the statement before it, as `else` does
+  /// of an `if`, so that statement is not whole yet though a line at the left edge starts after it.
+  pub(super) fn clause(&self, end: usize) -> bool {
+    let line = self.text[end..].lines().next().unwrap_or_default();
+    let word =
+      line.split(|one: char| !(one.is_alphanumeric() || one == '_')).next().unwrap_or_default();
+    matches!(word, "else" | "elif" | "except" | "finally")
+  }
+
+  /// Where a line of the text starts, counted from 1.
+  pub(super) fn start(&self, line: usize) -> usize {
+    if line <= 1 {
+      return 0;
+    }
+    self.text.match_indices('\n').nth(line - 2).map_or(self.text.len(), |(at, _)| at + 1)
+  }
+
+  /// The text of the word as far as the parts given to the Kernel, when a part was given.
+  pub(super) fn ran(&self) -> Option<&str> {
+    (self.given > 0).then(|| &self.text[..self.given])
+  }
+}
+
+/// The line, counted from 1, on which the last statement at the top of a word starts, if the word is python and holds
+/// one.
+pub(super) fn last(word: &str) -> Option<usize> {
+  let parsed = parse_module(word).ok()?;
+  let start = parsed.syntax().body.last()?.start().to_usize();
+  Some(word[..start].matches('\n').count() + 1)
 }
 
 /// Whether a quote stands open in a word, since the text of a quote is no python until its end is written. A quote
