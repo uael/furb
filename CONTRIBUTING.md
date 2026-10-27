@@ -84,7 +84,7 @@ contract needs a request of the owner.
 | File | What it holds |
 | --- | --- |
 | `src/world.rs` | The ears of the World that the crate writes, one for each concern. |
-| `src/world/files.rs` | The files: a read and a write of a path, and of a path of `scratch://`. |
+| `src/world/files.rs` | The files: a read and a write of a path, and of a path of `scratch://`, and a read of an image, which a model sees. |
 | `src/world/scratch.rs` | The scratch directory of a life: its place in the cache of furb for each record, the paths of `scratch://`, and the files that a record makes again in it. |
 | `src/world/bash.rs` | The commands: each runs in a shell of the machine, in the working directory of its chain, with `TMPDIR` set to the scratch directory. |
 | `src/world/time.rs` | The clock, a chance, and a wait. |
