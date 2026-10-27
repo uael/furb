@@ -123,14 +123,27 @@ const library = new Workspaces(
   engineOptions,
   values.demo || attached ? join(furbDirectory(directory), "workspaces.json") : undefined,
 );
-const group = await library.add(directory);
+// The list of the earlier lives stands as the file of the list kept it, and its records are read after the first frame.
+const group = await library.add(directory, false);
 /** The life that the demo plays, which the window shows first. */
 let watched: Session | undefined;
-await library.refresh();
+/** A life that does not open ends the TUI with what it said, and with no trace of the stack. */
+const fatal = async (error: unknown): Promise<never> => {
+  renderer.destroy();
+  console.error(`furb-tui: ${error instanceof Error ? error.message : String(error)}`);
+  await library.dispose();
+  if (attached) await rm(attached, { recursive: true, force: true });
+  process.exit(1);
+};
 try {
   if (record) await library.import(record, group);
-  else if (!values.demo || values.cwd) await library.create(group, undefined, undefined, false, directory);
-  else {
+  else if (!values.demo || values.cwd) {
+    // The life opens in the background, so the window draws at once, and a life that fails to open ends the TUI then.
+    const entry = await library.create(group, undefined, undefined, false, directory, true);
+    void entry.ready?.then((open) => {
+      if (!open && entry.status === "error") void fatal(entry.error);
+    });
+  } else {
     // The demo holds a real life recorded from a log, which only reads, and opens on a life that plays by itself,
     // which a new user can go on with.
     const recordedLife = join(import.meta.dir, "..", "fixtures", "conductor.jsonl");
@@ -140,12 +153,7 @@ try {
     await library.show(watched);
   }
 } catch (error) {
-  // A life that does not open ends the TUI with what it said, and with no trace of the stack.
-  renderer.destroy();
-  console.error(`furb-tui: ${error instanceof Error ? error.message : String(error)}`);
-  await library.dispose();
-  if (attached) await rm(attached, { recursive: true, force: true });
-  process.exit(1);
+  await fatal(error);
 }
 const initial = library.current?.session;
 if (!initial) {
@@ -158,6 +166,8 @@ if (palette) {
   if (own.palette) renderer.setBackgroundColor(own.palette.background);
 }
 opened();
+// The records of the earlier lives are read after the first frame, and their rows fill in as they come.
+void library.refresh();
 let closing = false;
 /** Each step runs whatever the steps before it came to, so that the sessions close even when the terminal is gone. The
  * window detaches from each life, and a life in a host of its own goes on, unless end is set, which ends each life. */
