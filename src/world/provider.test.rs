@@ -30,7 +30,7 @@ use jiff::{Zoned, civil};
 
 use super::{
   Backoff, Hosted, Model, Provider, Retries, Retry, Thinking, Writes, catalog::Catalog, images,
-  limit, local::Server, passing, resets, thinking, unclosed, unfenced,
+  limit, local::Server, messages, passing, resets, thinking, unclosed, unfenced,
 };
 use crate::{Act, Ear, Engine, Fact, Object, SYSTEM, verbs, world};
 
@@ -417,10 +417,10 @@ fn cut(text: &str) -> String {
 
 #[test]
 fn a_reply_ends_at_the_first_statement_that_cannot_be_python_and_the_gate_refuses_its_word() {
-  let model = Halting::writes(&["```python\n", "foo()\n", "bar()\n"]);
+  let model = Halting::writes(&["Here is the code:\n", "foo()\n", "bar()\n"]);
   let (mut engine, _) = life("stops", vec![Model::new("m", 1000, model.clone())]);
   asked(&mut engine);
-  assert_eq!(replied(&mut engine), cut("```python"));
+  assert_eq!(replied(&mut engine), cut("Here is the code:"));
   assert!(
     until(&mut engine, |_| model.dropped.load(Ordering::SeqCst)),
     "the call of the model ended before it wrote the rest"
@@ -1531,6 +1531,41 @@ fn the_fence_that_opens_a_text_goes_with_its_closing_fence_at_its_end_and_any_ot
     Some("x = '<b>'\n<b>\nclose(x)"),
     "a line of another tag stays"
   );
+}
+
+#[test]
+fn a_turn_of_a_model_loses_its_marks_and_a_turn_of_marks_alone_goes_with_the_user_turns_around_it_joined()
+ {
+  let turn = |role: &str, text: &str| {
+    Object::tuple([Object::string(role), Object::string(text), Object::none(), Object::none()])
+  };
+  let call = "<invoke name=\"python\">\n<parameter name=\"code\">close(1)</parameter>\n</invoke>";
+  let turns = Object::list([
+    turn("user", "ask"),
+    turn("assistant", "```python"),
+    turn("user", "#rung2 refused"),
+    turn("assistant", call),
+    turn("user", "next"),
+  ]);
+  let model = scripted(&MockCompletionModel::new([]));
+  let got = messages(turns.as_ref(), &model, &mut images::Images::new(None)).unwrap();
+  let said: Vec<Value> = got
+    .iter()
+    .map(|one| match one {
+      super::Message::User { content } => json!(["user", format!("{content:?}")]),
+      super::Message::Assistant { content, .. } => json!(["assistant", format!("{content:?}")]),
+      super::Message::System { .. } => json!(["system"]),
+    })
+    .collect();
+  assert_eq!(said.len(), 3, "{said:?}");
+  let text = |at: usize| said[at][1].as_str().unwrap_or_default().to_owned();
+  assert!(text(0).contains("ask\\n\\n#rung2 refused"), "{said:?}");
+  assert!(
+    text(1).contains("close(1)") && !text(1).contains("invoke") && !text(1).contains("parameter"),
+    "{said:?}"
+  );
+  assert_eq!(said[2][0], "user");
+  assert!(text(2).contains("next"), "{said:?}");
 }
 
 #[test]
