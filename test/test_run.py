@@ -24,7 +24,7 @@ from furb import engine
 
 
 async def test_a_run_is_the_act_of_running_the_word_of_a_rung() -> None:
-  """A run is the act of running the word of a rung or the text of a told rung, which the chain makes on itself and the Kernel takes: it says started as the run, runs the word as the rung, and says the run done with what the word gave."""
+  """A run is the act of running the word of a rung or the text of a told rung, which the chain makes on itself and the Kernel takes: it says started as the run, runs what the writings of that rung left of the word, as the rung, and says the run done with what the word gave."""
   log, root, laid, act, step = await counted()
   first = fresh(root, written(laid, "k = 1"))
   second = f"{prompted(act, 'int', 'count')}\n\n#{step} advance on {act}"
