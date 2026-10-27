@@ -259,6 +259,9 @@ test("the up arrow in the input of a thread takes its last message back to edit 
     async ({ session, app, screen, click, frame }) => {
       await idle(session);
       const id = listed(session)[0]?.act.id ?? "";
+      // A pause holds the message open, as a model that works on it does. A model that answers at once leaves
+      // nothing to take back, which a fast machine reaches before the key.
+      await session.engine.pause(session.engine.root);
       await session.reply(id, "First wording");
       await until(session, () => (listed(session)[0]?.messages.length ?? 0) === 1);
       let seen = await frame();
