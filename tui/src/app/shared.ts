@@ -233,6 +233,9 @@ export interface BlockOptions {
   indent?: number;
   /** A card that no fold of the feed closes, since its body folds itself, as the panel of a message does. */
   open?: boolean;
+  /** A card that is a part of the box of a thread: the cards of one thread share a panel, and the first and the last
+   * of them draw its edges. */
+  join?: "only" | "first" | "middle" | "last";
 }
 
 export interface Choice {

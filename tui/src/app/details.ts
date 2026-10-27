@@ -34,6 +34,7 @@ import { clip, dollars, modelName, share } from "../format.ts";
 import type { ActRow } from "../session.ts";
 import { theme as c, frame, glyph, motion, spacing as space, spin } from "../theme.ts";
 import { bold, italic, type Part, styled, underline } from "../ui.ts";
+import { RightNumbered } from "./gutter.ts";
 import { part } from "./part.ts";
 import { gutterWidth, saidOf, seconds, stateOf } from "./shared.ts";
 
@@ -297,13 +298,22 @@ export const details = part({
 
   /** The last row of a thread while its model works on a step: a loader in the column of the signs, left of the number
    * of the line that comes, and what the model thinks or writes, which the tick draws again. */
-  thinkingRow(step: string, display: number, digits: number, tone: RGBA, room: number): LineNumberRenderable {
+  thinkingRow(
+    step: string,
+    display: number,
+    digits: number,
+    tone: RGBA,
+    room: number,
+    right = false,
+  ): LineNumberRenderable {
     const { number, parts } = this.thinkingParts(step, display, room);
     const text = this.text(parts, c.muted, { wrapMode: "none" });
-    const view = new LineNumberRenderable(this.renderer, {
+    const Numbers = right ? RightNumbered : LineNumberRenderable;
+    const view = new Numbers(this.renderer, {
       target: text,
       paddingRight: space.inset,
       fg: tone,
+      ...(right ? { bg: c.panel } : {}),
       minWidth: gutterWidth(digits),
       lineNumbers: new Map([[0, number]]),
       lineSigns: new Map([[0, { before: spin(), beforeColor: c.accent }]]),
@@ -340,8 +350,10 @@ export const details = part({
     heads: ReadonlySet<ProgramLine>,
     tone: RGBA = c.faint,
     digits = 1,
+    options: { gutter?: "left" | "right"; more?: (line: ProgramLine) => void } = {},
   ): Renderable {
     const texts: string[] = [];
+    const ellipses: number[] = [];
     const numbers = new Map<number, number>();
     const hidden = new Set<number>();
     const colors = new Map<number, { content: RGBA; gutter: RGBA }>();
@@ -447,7 +459,8 @@ export const details = part({
         const at = push(`# ${fit(line.text, room - 4)}`);
         comment(at);
         signs.set(at, { before: glyph.running, beforeColor: c.accent });
-      } else comment(push(fit(line.text, room - 2)));
+      } else if (line.kind === "earlier") ellipses.push(push(line.text, undefined, line));
+      else comment(push(fit(line.text, room - 2)));
     }
     // Each fold is underlined, at its place in the text of the program.
     const starts: number[] = [];
@@ -456,6 +469,11 @@ export const details = part({
       starts.push(offset);
       offset += text.length + 1;
     }
+    // A row that stands for lines that the window leaves out is an underlined ..., which a click opens.
+    const ellipsis = (): SimpleHighlight[] =>
+      ellipses.map(
+        (row): SimpleHighlight => [starts[row] ?? 0, (starts[row] ?? 0) + (texts[row]?.length ?? 0), "fold"],
+      );
     const marks: SimpleHighlight[] = [...folded].flatMap(([row, { folds }]) =>
       folds.map(
         (fold): SimpleHighlight => [
@@ -541,16 +559,18 @@ export const details = part({
       }
       for (const [row, from, to, group] of fixed)
         out.push([(starts[row] ?? 0) + from, (starts[row] ?? 0) + to, group]);
-      return [...out, ...marks];
+      return [...out, ...marks, ...ellipsis()];
     };
     const target = this.code(texts.join("\n"), marks, hover, highlights);
     // Each program keeps a column for the sign of a line, so the code of every program and of every row that a model
     // writes starts at one column of the feed.
     if (!signs.has(0)) signs.set(0, { before: " ", beforeColor: c.faint });
-    const view = new LineNumberRenderable(this.renderer, {
+    const Numbers = options.gutter === "right" ? RightNumbered : LineNumberRenderable;
+    const view = new Numbers(this.renderer, {
       target,
       paddingRight: space.inset,
       fg: tone,
+      ...(options.gutter === "right" ? { bg: c.panel } : {}),
       minWidth: gutterWidth(digits),
       lineNumbers: numbers,
       hideLineNumbers: hidden,
@@ -568,6 +588,8 @@ export const details = part({
     view.onMouseUp = (event) => {
       const row = event.y - view.y;
       const line = sources[row];
+      if (line?.kind === "earlier" && options.more && !this.renderer.getSelection()?.getSelectedText())
+        return options.more(line);
       if (line?.kind !== "code" || this.renderer.getSelection()?.getSelectedText()) return;
       const hit = foldAt(event.x, event.y);
       if (hit) return this.openString(hit.line, hit.fold.literal);

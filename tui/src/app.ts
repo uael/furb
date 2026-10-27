@@ -45,6 +45,7 @@ import {
 import { type SidebarPart, sidebar } from "./app/sidebar.ts";
 import { type SpacesPart, spaces, spacesBound } from "./app/spaces.ts";
 import { type StagePart, stage } from "./app/stage.ts";
+import { type ThreadPart, thread } from "./app/thread.ts";
 import { type TreePart, tree, treeBound } from "./app/tree.ts";
 import { type ValuesPart, values, valuesBound } from "./app/values.ts";
 import { type WelcomePart, welcome, welcomeBound } from "./app/welcome.ts";
@@ -140,6 +141,12 @@ export class App {
   /** The program of each thread and each word of the operator, as it stood at a version of the acts and of the words
    * that its models write. */
   programs = new Map<string, { version: number; live: string; lines: ProgramLine[] }>();
+  /** What each thread showed when it was last seen open, which tells a folded thread that new work came. */
+  readonly seenThreads = new Map<string, { seen: string; folded: boolean }>();
+  /** The thread whose input at the end has the keys, which Escape gives back to the input of the chain. */
+  replyFocus?: string;
+  /** The input at the end of each thread that the feed shows, by the thread. */
+  readonly replyInputs = new Map<string, InputRenderable>();
   /** The rows that a model writes, by the step that it writes, which the tick draws again. */
   thinkingRows = new Map<
     string,
@@ -965,25 +972,37 @@ export class App {
     });
     this.closeTree();
     this.session.show(view);
-    if (id) this.reveal(id);
+    const head = id ? this.reveal(id) : undefined;
     this.render();
-    if (id) this.scrollAfterLayout({ card: id });
+    if (id) this.scrollAfterLayout({ card: head && !this.cards.has(id) ? head : id });
   }
   /** Open each fold of the feed that holds an act, so that a jump to it finds its card: the earlier steps of its
-   * chain, the earlier steps of each prompt and rung over it, and the rung that made it. */
-  reveal(id: string): void {
+   * chain, the earlier steps of each prompt and rung over it, and the rung that made it. An act that a thread made
+   * has no card of its own, so a jump to it opens the box of its thread and the windows of code in it, and gives the
+   * thread whose card it goes to. */
+  reveal(id: string): string | undefined {
     const w = this.session;
     const rows = new Map(w.acts.map((one) => [one.id, one]));
     let at = rows.get(id);
-    if (!at || at.on !== w.selected) return;
+    if (!at || at.on !== w.selected) return undefined;
     w.folds[`prompts:${w.selected}`] = false;
+    let head: string | undefined;
+    const threads = this.chainThreadsBy(w.selected).by;
     for (let step = 0; at && step < 64; step++) {
       const maker = rows.get(at.by);
       if (!maker || maker.on !== w.selected) break;
-      if (maker.kind === "prompt") w.folds[`rungs:${maker.id}`] = false;
+      if (maker.kind === "prompt") {
+        w.folds[`rungs:${maker.id}`] = false;
+        if (threads.has(maker.id)) head = maker.id;
+      }
       if (maker.kind === "rung") w.folds[at.kind === "prompt" ? `prompts:${maker.id}` : maker.id] = false;
       at = maker;
     }
+    if (head) {
+      w.folds[`thread:${head}`] = false;
+      w.folds[`window:${head}`] = false;
+    }
+    return head;
   }
   async back(): Promise<void> {
     const previous = this.navigation.pop();
@@ -1074,6 +1093,7 @@ export interface App
     SettingsPart,
     ValuesPart,
     TreePart,
+    ThreadPart,
     InputPart {}
 assemble(
   App,
@@ -1093,5 +1113,6 @@ assemble(
   settings,
   values,
   tree,
+  thread,
   input,
 );

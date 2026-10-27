@@ -12,6 +12,8 @@ export class Preferences {
   sidebarWidth = 44;
   /** Whether a thread that is over, and is not the last of its chain, starts folded in the feed. */
   foldThreads = true;
+  /** Where the numbers of the lines of a program stand: inside the block of code, at its left, or right of the block. */
+  gutter: "left" | "right" = "left";
   /** Whether the welcome showed the check of the first run, which it shows once, and again while no model answers. */
   setupSeen = false;
   /** The view of the life that the TUI shows: main, the loom, or the graph. */
@@ -32,6 +34,7 @@ export class Preferences {
         sidebarWidth?: number;
         foldThreads?: boolean;
         foldRungs?: boolean;
+        gutter?: string;
         setupSeen?: boolean;
         view?: string;
         screenReader?: boolean;
@@ -44,6 +47,7 @@ export class Preferences {
       // A file of an earlier version names the fold of what is over foldRungs.
       const fold = saved?.foldThreads ?? saved?.foldRungs;
       if (typeof fold === "boolean") this.foldThreads = fold;
+      if (saved?.gutter === "left" || saved?.gutter === "right") this.gutter = saved.gutter;
       if (typeof saved?.setupSeen === "boolean") this.setupSeen = saved.setupSeen;
       if (isLifeView(saved?.view)) this.view = saved.view;
       if (typeof saved?.sidebarWidth === "number")
@@ -64,6 +68,7 @@ export class Preferences {
       sidebar: this.sidebar,
       sidebarWidth: this.sidebarWidth,
       foldThreads: this.foldThreads,
+      gutter: this.gutter,
       setupSeen: this.setupSeen,
       view: this.view,
       screenReader: this.screenReader,

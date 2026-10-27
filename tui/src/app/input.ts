@@ -58,6 +58,18 @@ export const input = part({
         },
       },
     ]);
+    // While the input at the end of a thread has the keys, Escape gives them back to the input of the chain.
+    layer(() => Boolean(this.replyFocus) && !this.overlay, "reply", [
+      {
+        on: "escape",
+        run: () => {
+          this.replyFocus = undefined;
+          this.composer.focus();
+          this.render();
+        },
+        hint: ["Esc", "input"],
+      },
+    ]);
     // While a question of a choice is aimed, its list takes the arrows, Enter and the numbers, and Escape gives the
     // list back the keys that Other gave the input.
     const choosing = () => bare() && !this.tree && Boolean(this.picking());
@@ -223,9 +235,9 @@ export const input = part({
       },
       {
         on: "o",
-        run: onThread((thread) => this.reopenThread(thread.act.id)),
-        when: () => this.railThread()?.resolved === true,
-        hint: ["o", "open again"],
+        run: onThread((thread) => this.replyTo(thread.act.id)),
+        when: () => Boolean(this.railThread()),
+        hint: ["o", "reply"],
       },
     ]);
     layer(bare, "", [

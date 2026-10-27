@@ -66,6 +66,11 @@ export const commands = {
   ],
   delete: ["Delete session", "", "Archive a session, or move it and its files to the workspace trash"],
   autocollapse: ["Automatic fold", "", "Toggle the fold of the threads that are over"],
+  gutter: [
+    "Line numbers",
+    "[left|right]",
+    "Put the numbers of the lines inside the block of code, at its left, or right of the block",
+  ],
   extensions: [
     "Extensions",
     "",

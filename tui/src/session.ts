@@ -1525,6 +1525,20 @@ export class Session extends EventEmitter {
     this.track(choice.rung);
   }
 
+  /** A message to a thread, from the box at the end of the thread. It goes to the thread whatever the input is
+   * doing, and a message to a thread that is over opens it again. */
+  async reply(thread: string, input: string): Promise<void> {
+    if (!input.trim() || this.host.reading) return;
+    this.error = "";
+    this.notice = "";
+    const pending = this.host.pending.size > 0;
+    const id = await this.engine.prompt("None", { message: input.trim(), on: thread });
+    this.notice = `Your message went to the thread ${thread}.`;
+    if (pending) this.emit("resume");
+    this.track(id);
+    await this.refresh();
+  }
+
   async submit(input: string): Promise<void> {
     const text = input.trim();
     if (!text) return;
@@ -1678,6 +1692,17 @@ export class Session extends EventEmitter {
           ? "The threads that are over fold automatically."
           : "The threads that are over stay open.";
         break;
+      case "gutter": {
+        const side = argument || (this.preferences.gutter === "left" ? "right" : "left");
+        if (side !== "left" && side !== "right") throw new Error("Use /gutter left or /gutter right.");
+        this.preferences.gutter = side;
+        this.preferences.save();
+        this.notice =
+          side === "left"
+            ? "The numbers of the lines stand inside the block of code."
+            : "The numbers of the lines stand right of the block of code.";
+        break;
+      }
       case "grant": {
         const amount = Number(argument);
         if (!argument || !Number.isFinite(amount) || amount < 0)

@@ -808,8 +808,22 @@ try {
   await new Promise((done) => setTimeout(done, 200));
   await capture("85-thinking-tokens");
   Object.defineProperty(session.host, "streams", { configurable: true, writable: true, value: streams });
+  // A thread that the operator folded while its model worked marks the work that came since with a dot.
+  app().foldThread(thinks, true);
+  app().render();
+  await test.flush();
   await session.command(`/cancel ${thinks}`);
   await session.engine.result(thinks).catch(() => {});
+  await session.refresh();
+  await capture("88-thread-folded-news");
+  // The thread opens, and its input waits for a reply at its end, in place of a button that opens it again.
+  app().foldThread(thinks, false);
+  session.drafts[`reply:${thinks}`] = "Thanks. Now check the search shortcut too.";
+  app().replyTo(thinks);
+  await capture("89-thread-reply");
+  app().replyFocus = undefined;
+  app().composer.focus();
+  delete session.drafts[`reply:${thinks}`];
   // A string of three marks over many lines, a quote of a word and a statement too long for its row: each shows as one
   // line of python, the strings folded to their start and an underlined ..., and the long statement opens at a click
   // into rows that cut between tokens.
@@ -866,6 +880,17 @@ try {
   // A worker of the life, whose ladders are long: the earlier rungs of a ladder fold into one line.
   await session.select(session.chains.find((chain) => session.labelOf(chain.id) === "life3/feed")?.id ?? "");
   await capture("60-long-ladder");
+  // The window of code of a thread opens in a block that scrolls, and the gutter stands right of the block.
+  const windowed = app()
+    .scroll.getChildren()
+    .filter((node) => node.id.startsWith("program-"))
+    .map((node) => `window:${node.id.slice("program-".length)}`);
+  for (const key of windowed) session.folds[key] = false;
+  await capture("101-window-open");
+  for (const key of windowed) delete session.folds[key];
+  await session.command("/gutter right");
+  await capture("102-gutter-right");
+  await session.command("/gutter left");
   // The conductor runs one long word, under which its messages pile up, and the earlier ones fold into one line.
   await session.select(session.engine.root);
   app().render();

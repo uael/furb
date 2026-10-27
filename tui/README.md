@@ -302,7 +302,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | ⌥V / ⌥G | Switch the view of the life: main, the loom, or the graph / move in the loom or the graph |
 | ⌥T | Move in the sidebar: the tree of the chains, and the threads of a chain |
 | ↑↓ / Enter or → / Esc or ← after ⌥T | Move / list the threads of a chain, or choose a thread / back to the tree, then to the input |
-| Space / r / o after ⌥T | Collapse or expand / resolve / open again the thread |
+| Space / r / o after ⌥T | Collapse or expand / resolve / reply to the thread |
 | ↑↓←→ / Enter / Esc after ⌥G | Move, fold or zoom / zoom in / zoom out or go back |
 | [ ] / { } after ⌥G | Move the cursor in time by one / ten moments |
 | Space / x / n / b after ⌥G | Pause or wake / cancel / step / branch at the cursor the chain |
@@ -363,6 +363,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/sidebar` | Show or hide the chains and their threads, the context, and the workspaces |
 | `/delete` | Archive a session, or move it and its files to the workspace trash |
 | `/autocollapse` | Toggle the fold of the threads that are over |
+| `/gutter [left|right]` | Put the numbers of the lines inside the block of code, at its left, or right of the block |
 | `/extensions` | List the extensions that this life runs, with what their parts give the TUI |
 | `/serve [address]` | Give the addresses at which other operators read this life, or read and drive it, over the network |
 | `/end` | End each open life, its commands and its models, then quit |

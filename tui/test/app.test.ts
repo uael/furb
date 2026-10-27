@@ -155,11 +155,11 @@ test("a click on a line of a program opens it in place, with its whole text and 
       await until(session, () => session.turns.some((turn) => turn[0] === "assistant"));
       const shut = await row();
       expect(shut.y).toBeGreaterThan(0);
-      expect(shut.rows.join("\n")).not.toMatch(/^ +✓ search *$/m);
+      expect(shut.rows.join("\n")).not.toMatch(/^ +✓ search\b/m);
       await screen.mockMouse.click(shut.x, shut.y);
       await screen.flush();
       const open = await row();
-      expect(open.rows.join("\n")).toMatch(/^ +✓ search *$/m);
+      expect(open.rows.join("\n")).toMatch(/^ +✓ search\b/m);
       // The whole line shows, cut into rows at the column of the code, past the mark where it was cut.
       expect(open.rows[open.y]).not.toContain("…");
       await screen.mockMouse.click(open.x, open.y);

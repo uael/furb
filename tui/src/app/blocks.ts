@@ -118,8 +118,9 @@ export const blocks = part({
       },
     });
     box.add(labelNode);
-    if (!closed) body(box);
-    else if (!rung) options.preview?.(box);
+    const into = options.join && !this.reader ? this.joined(box, options.join) : box;
+    if (!closed) body(into);
+    else if (!rung) options.preview?.(into);
     this.placeCard(box, index);
     const card = {
       key,
@@ -148,6 +149,23 @@ export const blocks = part({
   placeCard(node: Renderable, index: number): void {
     this.scroll.add(node, index);
     this.feedOrder = undefined;
+  },
+
+  /** The surface that the cards of one thread share: a panel, whose top edge the first card draws and whose bottom
+   * edge the last one draws, so that the cards stand as one box. It gives the node that the body of the card fills. */
+  joined(box: BoxRenderable, join: "only" | "first" | "middle" | "last"): BoxRenderable {
+    const edge = (side: "top" | "bottom") =>
+      this.box({
+        height: space.bar,
+        border: [side === "top" ? "bottom" : "top"],
+        borderColor: c.panel,
+        customBorderChars: { ...noBorder, horizontal: side === "top" ? glyph.halfTop : glyph.halfBottom },
+      });
+    if (join === "only" || join === "first") box.add(edge("top"));
+    const inner = this.box({ paddingX: space.between, backgroundColor: c.panel });
+    box.add(inner);
+    if (join === "only" || join === "last") box.add(edge("bottom"));
+    return inner;
   },
 
   /** A panel in a box: a bar of a color at its left, and half a row of the panel above and below what it holds. */
