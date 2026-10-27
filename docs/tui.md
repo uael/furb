@@ -589,6 +589,10 @@ paths of the project, the chains, and the acts. Enter on a value runs the comman
 
 As you type, the input shows in grey the rest of the latest line from the history that starts with the text, as fish
 does. The history is what the input sent in this mode, on this chain and on the others, and it stays with the record.
+It persists for each workspace too: the input also reads what the other sessions of the workspace sent, in this
+life and in earlier ones, and `.furb/history.json` in the workspace keeps it. A worktree is part of the workspace of
+its repository, so it shares that history. The lines of the session now open come first, in a walk with Up and Down
+and in a suggestion, and the lines of the other sessions come after them. Another workspace shares nothing.
 Right or `⌃F` at the end of the line takes the whole rest, and `⌥→` or `⌥F` takes its next word. Tab keeps
 completing commands, paths, and emojis. The grey rest shows only while the cursor ends the text, and not while the
 list of suggestions or a walk of the history with Up and Down is open.
