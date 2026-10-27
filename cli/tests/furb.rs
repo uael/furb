@@ -622,6 +622,19 @@ fn a_prompt_of_the_client_is_answered_by_a_model_and_its_done_is_sent() {
 }
 
 #[test]
+fn a_life_killed_after_a_run_leaves_its_record_whole_and_a_later_life_replays_it() {
+  let yard = Yard::new("rpc-killed");
+  yard.words(&[COUNT]);
+  let mut client = Client::new(&yard);
+  client.data("1", json!({"type": "prompt", "message": "count the lines", "shape": "int"}));
+  assert_eq!(client.done("prompt1"), json!({"type": "done", "act": "prompt1", "value": 3}));
+  client.child.kill().expect("furb is killed");
+  client.child.wait().expect("furb ends");
+  assert_eq!(printed(yard.kept(&["run", "close(peek('prompt1'))"]), ""), "3\n");
+  assert_eq!(yard.answered(), 1, "the later life asks no model again");
+}
+
+#[test]
 fn a_prompt_of_the_client_with_no_shape_wants_a_str() {
   let yard = Yard::new("rpc-no-shape");
   yard.words(&["close('done')"]);

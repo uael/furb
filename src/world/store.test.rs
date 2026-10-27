@@ -102,6 +102,35 @@ macro_rules! conformance {
       }
 
       #[test]
+      fn a_sync_succeeds_with_no_entry_kept_since_the_last_one() {
+        let path = at("idle");
+        let mut one = open(&path).unwrap();
+        one.entries().unwrap();
+        one.sync().unwrap();
+        one.sync().unwrap();
+        assert!(kept(&path).unwrap().is_empty());
+      }
+
+      #[test]
+      fn a_later_store_reads_each_entry_kept_before_and_after_a_sync_in_order() {
+        let path = at("synced");
+        let (all, half) = (facts(), facts().len() / 2);
+        let mut one = open(&path).unwrap();
+        one.entries().unwrap();
+        for entry in &all[..half] {
+          one.keep(entry.as_ref()).unwrap();
+        }
+        one.sync().unwrap();
+        assert_eq!(shown(&kept(&path).unwrap()), shown(&all[..half]));
+        for entry in &all[half..] {
+          one.keep(entry.as_ref()).unwrap();
+        }
+        one.sync().unwrap();
+        drop(one);
+        assert_eq!(shown(&open(&path).unwrap().entries().unwrap()), shown(&all));
+      }
+
+      #[test]
       fn the_store_of_a_path_whose_name_ends_so_is_this_store() {
         let path = at("named");
         let (record, ear) = store(&path).unwrap();

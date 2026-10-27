@@ -132,6 +132,12 @@ pub trait Ear {
   fn lent(&mut self, heard: Heard, cx: &mut Context<'_>, life: Life) -> (Step, Life) {
     (self.resume(heard, cx), life)
   }
+
+  /// What the ear does at the end of each run of the sandbox, once the run said all that it says: the ear that keeps
+  /// the record syncs its store there. A fault that it gives is what the run gives, when the run raised nothing.
+  fn ran(&mut self) -> Result<(), Fault> {
+    Ok(())
+  }
 }
 
 /// What an ear says of its own accord: a saying, or a verb of the engine with its words, which the life answers.

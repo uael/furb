@@ -20,7 +20,7 @@ const TABLE: &str = "CREATE TABLE IF NOT EXISTS entries \
 /// The record at a path as a database of SQLite, under its lease, as for a file of lines.
 ///
 /// The database writes ahead in a log and syncs each entry in full, so an entry that the store kept outlives a
-/// crash, and a crash while it keeps one leaves the record as it stood before.
+/// crash, and a crash while it keeps one leaves the record as it stood before. So a sync has nothing more to do.
 pub struct Sqlite {
   path: PathBuf,
   db: Connection,
@@ -53,6 +53,10 @@ impl Store for Sqlite {
       .execute("INSERT INTO entries (entry, at) VALUES (?1, ?2)", (record(entry).to_string(), at))
       .map(drop)
       .map_err(|no| failed(&self.path, no))
+  }
+
+  fn sync(&mut self) -> Result<(), Fault> {
+    Ok(())
   }
 }
 

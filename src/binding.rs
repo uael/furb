@@ -213,6 +213,10 @@ impl Ear for Lent {
       None => (Step::Over, life),
     }
   }
+
+  fn ran(&mut self) -> Result<(), Fault> {
+    self.0.borrow_mut().as_mut().map_or(Ok(()), |ear| ear.ran())
+  }
 }
 
 #[cfg_attr(feature = "python", pyo3::pymethods)]
