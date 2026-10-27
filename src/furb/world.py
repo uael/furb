@@ -16,7 +16,7 @@ from collections.abc import Callable, Coroutine, Generator, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TextIO
+from typing import BinaryIO
 
 from furb import engine
 from furb.engine import Refused
@@ -52,11 +52,13 @@ def answered(entries: Sequence[tuple]) -> list[tuple]:
   ]
 
 
-def handed(loop: asyncio.AbstractEventLoop, reader: asyncio.StreamReader, stream: TextIO) -> None:
+def handed(loop: asyncio.AbstractEventLoop, reader: asyncio.StreamReader, stream: BinaryIO) -> None:
   """The lines of the operator, read on a thread of their own and each handed to the loop with the end of the terminal
-  after them: the thread reads the terminal and runs nothing else, and it stops when the loop is closed."""
-  with suppress(RuntimeError):
-    for line in iter(stream.buffer.readline, b""):
+  after them: the thread reads the terminal and runs nothing else, and it stops when the loop is closed.
+
+  The stream is the thread's own, and the thread closes it at its end."""
+  with stream, suppress(RuntimeError):
+    for line in iter(stream.readline, b""):
       loop.call_soon_threadsafe(reader.feed_data, line)
     loop.call_soon_threadsafe(reader.feed_eof)
 
@@ -133,7 +135,10 @@ class Live:
         and await loop.connect_read_pipe(lambda: made, sys.stdin)
       )
       if not piped:
-        threading.Thread(target=handed, args=(loop, reader, sys.stdin), name="furb-operator", daemon=True).start()
+        # The thread reads a copy of the descriptor of the terminal: whoever closes sys.stdin closes only its own,
+        # so no read of the thread meets a closed file.
+        own = os.fdopen(os.dup(sys.stdin.fileno()), "rb")
+        threading.Thread(target=handed, args=(loop, reader, own), name="furb-operator", daemon=True).start()
     return (await self.reader.readline()).decode(errors="replace").rstrip("\r\n")
 
   async def show(self, about: str, shape: str, message: str) -> None:
