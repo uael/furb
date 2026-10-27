@@ -106,7 +106,27 @@ export const input = part({
         when: () => !this.composer.plainText,
       },
     ]);
-    layer(() => bare() && Boolean(this.tree), "tree", [
+    // While the panel of the chains shows, the arrows move the pointer on the tree, Enter opens the chain under it, and
+    // a letter acts on that chain.
+    layer(() => bare() && Boolean(this.tree?.panel), "chains", [
+      { on: ["up", "k"], run: () => this.moveChains(-1), hint: ["↑↓", "move"] },
+      { on: ["down", "j"], run: () => this.moveChains(1) },
+      { on: "pageup", run: () => this.moveChains(-8) },
+      { on: "pagedown", run: () => this.moveChains(8) },
+      { on: ["left", "h"], run: () => this.foldChains(false), hint: ["←→", "fold"] },
+      { on: ["right", "l"], run: () => this.foldChains(true) },
+      {
+        on: ["return", "enter"],
+        run: () => void this.enterChains().catch(this.report),
+        hint: ["Enter", "open"],
+      },
+      { on: "tab", run: () => this.askChains(1), hint: ["Tab", "next question"] },
+      { on: "shift+tab", run: () => this.askChains(-1) },
+      { on: "space", run: () => this.holdChains(), hint: ["Space", "pause"] },
+      { on: "x", run: () => this.cancelChains(), hint: ["x", "cancel"] },
+      { on: "escape", run: () => this.closeTree(), hint: ["Esc", "back"] },
+    ]);
+    layer(() => bare() && Boolean(this.tree) && !this.tree?.panel, "tree", [
       ...Object.entries(steps).map(
         ([on, step]): KeyCommand => ({
           on,

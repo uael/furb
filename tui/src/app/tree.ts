@@ -242,6 +242,10 @@ export const tree = part({
   renderTree(): void {
     const tree = this.tree;
     if (!tree) return;
+    if (tree.panel) {
+      this.renderChains();
+      return;
+    }
     const selected = tree.selected;
     tree.rows = this.treeRows();
     if (!tree.rows.some((row) => row.id === selected)) tree.selected = tree.rows[0]?.id ?? "";
