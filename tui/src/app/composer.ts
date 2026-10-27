@@ -4,6 +4,7 @@ import { slashes } from "../commands.ts";
 import { emojiNamed, emojis } from "../emoji.ts";
 import { shortenHome } from "../files.ts";
 import { clip, count, dollars, graphemes, modelName, share } from "../format.ts";
+import { modeOf } from "../history.ts";
 import { working } from "../session.ts";
 import { theme as c, glyph, palettes, spacing as space, type ThemeChoice, themeLabels } from "../theme.ts";
 import { bold, type Part } from "../ui.ts";
@@ -37,9 +38,7 @@ export const composer = part({
       if (at < 0 || key === this.draftKey || open.has(key.slice(at + 1))) continue;
       delete w.drafts[key];
       if (!text.trim()) continue;
-      const history = w.histories[key.slice(0, at)] ?? [];
-      w.histories[key.slice(0, at)] = history;
-      if (history.at(-1) !== text) history.push(text);
+      w.remember(key.slice(0, at), text);
       w.notice = `${key.slice(at + 1)} closed. ↑ brings your words back.`;
     }
   },
@@ -78,24 +77,31 @@ export const composer = part({
     this.render();
   },
 
-  /** What the input sent in this mode, the oldest first: the entries of the other chains, which are older to the
-   * walk, then those of this chain, and an entry that came before comes only once, at its latest place. A chain that
-   * holds messages the input did not send, as a record that opens with no saved input, walks those messages
-   * instead. */
+  /** What the input sent in this mode, the oldest first: the lines of the other sessions of the workspace and of its
+   * worktrees, then those of the other chains of this session, then those of this chain, so that the session now open
+   * comes first in a walk and in a suggestion. A line that came before comes only once, at its latest place. A chain
+   * that holds messages the input did not send, as a record that opens with no saved input, walks those messages
+   * instead of the lines of its session. */
   history(): string[] {
     const w = this.session;
-    const mode = w.draftKey.slice(w.draftKey.indexOf(":"));
+    const mode = modeOf(w.draftKey);
     const own = w.histories[w.draftKey] ?? [];
     const others = Object.entries(w.histories)
       .filter(([key]) => key !== w.draftKey && key.endsWith(mode))
       .flatMap(([, entries]) => entries);
-    const kept = [...others, ...own];
-    if (!kept.length && w.mode === "prompt" && !w.editing)
-      return w.activity
-        .filter((act) => w.isUserPrompt(act))
-        .map((act) => String(act.words[1] ?? ""))
-        .filter(Boolean);
-    return kept.filter((entry, index) => kept.lastIndexOf(entry) === index);
+    const sent = [...others, ...own];
+    const session =
+      !sent.length && w.mode === "prompt" && !w.editing
+        ? w.activity
+            .filter((act) => w.isUserPrompt(act))
+            .map((act) => String(act.words[1] ?? ""))
+            .filter(Boolean)
+        : sent;
+    const seen = new Set<string>();
+    return [...w.workspaceHistory(mode), ...session]
+      .reverse()
+      .filter((entry) => !seen.has(entry) && seen.add(entry))
+      .reverse();
   },
 
   /** Sets the grey rest of the line again: what the latest entry of the history that starts with the text adds to it.
@@ -141,10 +147,7 @@ export const composer = part({
         await this.session.submit(python ? `/run ${content}` : content);
         if (woke) this.session.notice = "This message woke the paused chain.";
       }
-      const history = this.session.histories[base] ?? [];
-      this.session.histories[base] = history;
-      if (content && history.at(-1) !== content) history.push(content);
-      if (history.length > 200) history.shift();
+      this.session.remember(base, content);
       this.historyIndex = -1;
       this.historyPrefix = "";
     } catch (error) {

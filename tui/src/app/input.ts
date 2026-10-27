@@ -350,7 +350,7 @@ export const input = part({
 
   /** Up on an empty input takes back the last message queued on the chain, and Up and Down at the first and the last
    * line of the input walk the history of what it sent, as a shell does: the entries of this chain first, then those
-   * of the other chains, and with text typed, only the entries that start with it, as fish does. Alt+Up and Alt+Down
+   * of the other chains of the session, then those of the other sessions of the workspace, and with text typed, only the entries that start with it, as fish does. Alt+Up and Alt+Down
    * walk it from any line. It gives false when it does nothing, and the input moves its cursor. */
   walkHistory(key?: KeyEvent): boolean {
     const up = key?.name === "up";

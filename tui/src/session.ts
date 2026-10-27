@@ -22,6 +22,7 @@ import type { Engine, HostView, Usage } from "./bridge.ts";
 import { clock } from "./clock.ts";
 import { expandHome, fileReferences, fromDirectory, projectFiles, shortenHome } from "./files.ts";
 import { dollars } from "./format.ts";
+import { append, modeOf, seed, sentIn, workspaceRoot } from "./history.ts";
 import { Preferences } from "./preferences.ts";
 import { type Hunk, type Reviewed, revertWord, reviewed, type Scope, scopes } from "./review.ts";
 import { shareHtml, shareMarkdown } from "./share.ts";
@@ -359,6 +360,8 @@ export class Session extends EventEmitter {
   redo: { from: string; to: string }[] = [];
   private draining = false;
   private savedCost = 0;
+  /** The folder that owns the history of the workspace of the session: the main checkout, for a worktree. */
+  private readonly workspace: string;
   histories: Record<string, string[]> = {};
   started: Record<string, number> = {};
   /** How many milliseconds each act took that a life of the session ran, which a later life does not know, since the
@@ -402,6 +405,14 @@ export class Session extends EventEmitter {
       // A saved queue waits for the choice of the operator before it sends.
       this.queueHeld = this.queued.length > 0;
       if (damage) this.notice = damage;
+    }
+    this.workspace = workspaceRoot(host.directory);
+    if (path && this.keeps) {
+      try {
+        seed(this.workspace, path, this.histories);
+      } catch {
+        // The history of the workspace is a convenience: a folder that cannot take it leaves the session its own.
+      }
     }
     if (host.role === "read") this.notice = "This window reads the life only, so it changes nothing in it.";
     // A view that an older release saved, and that this release has no more, opens as the feed.
@@ -677,6 +688,35 @@ export class Session extends EventEmitter {
    * input. */
   get draftKey(): string {
     return `${this.selected}:${this.editing ?? this.mode}`;
+  }
+  /** Whether the session saves what it sends to the history of its workspace: a recorded life or a record open to
+   * read keeps nothing, and a window that reads only changes nothing. */
+  private get keeps(): boolean {
+    const { host } = this;
+    return Boolean(host.record) && !host.recorded && !host.reading && host.role !== "read";
+  }
+  /** Keep a line that the input sent under the key of a draft: in the history of its chain, which the record of the
+   * session keeps, and in the history of the workspace, which the other sessions of it read. */
+  remember(key: string, text: string): void {
+    const history = this.histories[key] ?? [];
+    this.histories[key] = history;
+    if (text && history.at(-1) !== text) history.push(text);
+    if (history.length > 200) history.shift();
+    if (!text || !this.keeps) return;
+    try {
+      append(this.workspace, { text, mode: modeOf(key), session: this.host.record as string });
+    } catch (error) {
+      this.notice = `The history of the workspace was not saved: ${error instanceof Error ? error.message : error}`;
+    }
+  }
+  /** What the other sessions of the workspace sent in a mode, the oldest first. The sessions of its worktrees count as
+   * its own. */
+  workspaceHistory(mode: string): string[] {
+    const record = this.host.record;
+    if (!record) return [];
+    return sentIn(this.workspace)
+      .filter((one) => one.mode === mode && one.session !== record)
+      .map((one) => one.text);
   }
   /** What the session is doing, over the acts of the selected chain or of every chain: the view failed, the queue or
    * a question waits for the operator, a reopened record holds work, or what the acts do. A pause of the chain holds
