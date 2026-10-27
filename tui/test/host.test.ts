@@ -102,9 +102,9 @@ test.skipIf(process.platform === "win32")(
       two.host.on("fault", (error: Error) => faults.push(error.message));
       await one.host.end();
       await eventually(() => faults.length > 0, "the other window to hear the end");
-      expect(faults).toEqual(["The life ended in another window."]);
+      expect(faults).toEqual(["The life was ended from another window."]);
       expect(await two.engine.peek(command).catch((error: Error) => error.message)).toBe(
-        "The life ended in another window.",
+        "The life was ended from another window.",
       );
     }),
 );
@@ -344,3 +344,103 @@ test("an address of a host reads as its host, its port and its key, and an addre
   ]);
   expect(() => listening("a:b:c")).toThrow("a:b:c is no address: give host:port, as 0.0.0.0:7700.");
 });
+
+test.skipIf(process.platform === "win32")(
+  "a host that a signal ends tells no window that another window ended the life, and the window reaches a new host",
+  () =>
+    demoLife(async (record, directory) => {
+      const place = hostPlace(record);
+      if (!place) throw new Error("No socket serves here.");
+      const { engine, host } = await openEngine({ demo: true, host: true, cwd: directory, record });
+      const command = await engine.bash("echo kept", { on: engine.root });
+      await eventually(async () => (await engine.peek(command)) !== null, "the command to end");
+      const { pid } = JSON.parse(readFileSync(place.about, "utf8")) as About;
+      const faults: string[] = [];
+      host.on("fault", (error: Error) => faults.push(error.message));
+      const reset = new Promise<void>((resolve) => host.once("reset", resolve));
+      process.kill(pid, "SIGTERM");
+      await reset;
+      expect(faults).toEqual([]);
+      expect(host.lost).toBe("");
+      expect((JSON.parse(readFileSync(place.about, "utf8")) as About).pid).not.toBe(pid);
+      expect(await engine.peek(command)).toMatchObject({ code: 0, stdout: { content: "kept\n" } });
+      await host.end();
+    }),
+);
+
+test.skipIf(process.platform === "win32")(
+  "a window whose life another window ended says so, and opens the life again with reopen",
+  () =>
+    demoLife(async (record, directory) => {
+      const options = { demo: true, host: true, cwd: directory, record };
+      const one = await openEngine(options);
+      const two = await openEngine(options);
+      const command = await one.engine.bash("echo kept", { on: one.engine.root });
+      await eventually(async () => (await two.engine.peek(command)) !== null, "the command to end");
+      const heard = new Promise<void>((resolve) => two.host.once("fault", () => resolve()));
+      await one.host.end();
+      await heard;
+      expect(two.host.lost).toBe("The life was ended from another window.");
+      await two.host.reopen();
+      expect(two.host.lost).toBe("");
+      expect(await two.engine.peek(command)).toMatchObject({ code: 0, stdout: { content: "kept\n" } });
+      await two.host.end();
+    }),
+);
+
+test.skipIf(process.platform === "win32")(
+  "a window stops a host that does not answer the end of the life, and opens the life again in a host of its own",
+  () =>
+    demoLife(async (record, directory) => {
+      const place = hostPlace(record);
+      if (!place) throw new Error("No socket serves here.");
+      const { engine, host } = await openEngine({ demo: true, host: true, cwd: directory, record });
+      const command = await engine.bash("echo kept", { on: engine.root });
+      await eventually(async () => (await engine.peek(command)) !== null, "the command to end");
+      const { pid } = JSON.parse(readFileSync(place.about, "utf8")) as About;
+      const kept = [process.env.FURB_HOST_ENDING, process.env.FURB_HOST_GRACE];
+      process.env.FURB_HOST_ENDING = "300";
+      process.env.FURB_HOST_GRACE = "300";
+      try {
+        // A host that a signal froze hears nothing, so the end of the life never gets its answer.
+        process.kill(pid, "SIGSTOP");
+        await host.end();
+        await eventually(() => !alive(pid), "the host to end");
+        expect(host.lost).toBe("The host of the life was stopped from this window.");
+        expect(existsSync(place.socket)).toBe(false);
+        await host.reopen();
+        expect(host.lost).toBe("");
+        expect((JSON.parse(readFileSync(place.about, "utf8")) as About).pid).not.toBe(pid);
+        expect(await engine.peek(command)).toMatchObject({ code: 0, stdout: { content: "kept\n" } });
+        await host.end();
+      } finally {
+        for (const [name, value] of [
+          ["FURB_HOST_ENDING", kept[0]],
+          ["FURB_HOST_GRACE", kept[1]],
+        ] as const)
+          if (value === undefined) delete process.env[name];
+          else process.env[name] = value;
+      }
+    }),
+);
+
+test.skipIf(process.platform === "win32")(
+  "a window that finds the host of its life still opening waits for that host, and starts no second one",
+  () =>
+    demoLife(async (record, directory) => {
+      const place = hostPlace(record);
+      if (!place) throw new Error("No socket serves here.");
+      const options = { demo: true, host: true, cwd: directory, record };
+      const first = Bun.spawn(
+        [process.execPath, join(import.meta.dir, "../src/host.ts"), JSON.stringify(options)],
+        { stdout: "ignore", stderr: "ignore" },
+      );
+      await eventually(() => existsSync(place.about), "the host to say of itself");
+      const { engine, host } = await openEngine(options);
+      expect(engine.root).toBeTruthy();
+      expect((JSON.parse(readFileSync(place.about, "utf8")) as About).pid).toBe(first.pid);
+      expect(alive(first.pid)).toBe(true);
+      await host.end();
+      await first.exited;
+    }),
+);

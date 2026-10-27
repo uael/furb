@@ -292,13 +292,15 @@ export const chrome = part({
         ? retryLine(retry)
         : w.host.reading
           ? readOnly(w.host.reading)
-          : status === "error"
-            ? w.damagedJournal
-              ? "The journal of file changes is damaged"
-              : w.error
-                ? "The view could not load"
-                : "The last act failed"
-            : statusLabels[status];
+          : w.host.lost
+            ? "The life is not open"
+            : status === "error"
+              ? w.damagedJournal
+                ? "The journal of file changes is damaged"
+                : w.error
+                  ? "The view could not load"
+                  : "The last act failed"
+              : statusLabels[status];
     // The footer offers the keys of the top layer that offers any, each of which does what its key does, and under
     // the layer of the table, the wake of a paused chain.
     type Offer = readonly [chord: string, action: string, run: () => void];
