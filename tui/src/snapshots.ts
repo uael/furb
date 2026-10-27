@@ -152,7 +152,10 @@ export class Snapshots {
     // The kind of the question that a done answers.
     const answered = kind === "done" ? questionKind(id) : undefined;
     // A word may bind the actor of its chain again, so the actor is read again at each step of a word.
-    if (["run", "ready", "wants"].includes(kind) || answered === "run" || answered === "wants")
+    if (
+      ["run", "writing", "ready", "wants"].includes(kind) ||
+      ["run", "writing", "wants"].includes(answered ?? "")
+    )
       for (const cached of this.chains.values()) cached.actor = undefined;
     // The standing has one home, the root, and every chain that takes it tells it and holds its actor.
     if (answered === "stand")
