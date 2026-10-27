@@ -155,16 +155,16 @@ test("a click on a line of a program opens it in place, with its whole text and 
       await until(session, () => session.turns.some((turn) => turn[0] === "assistant"));
       const shut = await row();
       expect(shut.y).toBeGreaterThan(0);
-      expect(shut.rows.join("\n")).not.toMatch(/^ +✓ search\b/m);
+      expect(shut.rows.join("\n")).not.toMatch(/^[ ┃]+✓ search\b/m);
       await screen.mockMouse.click(shut.x, shut.y);
       await screen.flush();
       const open = await row();
-      expect(open.rows.join("\n")).toMatch(/^ +✓ search\b/m);
+      expect(open.rows.join("\n")).toMatch(/^[ ┃]+✓ search\b/m);
       // The whole line shows, cut into rows at the column of the code, past the mark where it was cut.
       expect(open.rows[open.y]).not.toContain("…");
       await screen.mockMouse.click(open.x, open.y);
       await screen.flush();
-      expect((await row()).rows.join("\n")).not.toMatch(/^ +✓ search *$/m);
+      expect((await row()).rows.join("\n")).not.toMatch(/^[ ┃]+✓ search *$/m);
     },
     { width: 145, height: 45, useMouse: true },
   ));
@@ -675,7 +675,7 @@ test("an act that no word made stands as a lit line of python in a panel, which 
         setSystemTime(new Date(start + 1300));
         await frame();
         expect(app.scroll.getChildren().some((node) => node.id === id)).toBe(true);
-        expect(screen.captureCharFrame()).toMatch(new RegExp(`${id} = wait\\(60\\) +# waits 60s +1\\.0s`));
+        expect(screen.captureCharFrame()).toMatch(new RegExp(`${id} = wait\\(60\\) +◉ # waits 60s +1\\.0s`));
       } finally {
         setSystemTime();
       }

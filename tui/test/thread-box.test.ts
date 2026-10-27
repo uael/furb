@@ -25,7 +25,7 @@ async function recorded(): Promise<Session> {
   return new Session(engine, host, true);
 }
 
-test("a thread is one box: its message with a line of its color, its program as code, its answer as markdown with no line, and an input at its end in place of Open again", () =>
+test("a thread is one box: its message with a line of its color, its program as code, its answer as markdown with a quiet line, and an input at its end in place of Open again", () =>
   composing(
     async ({ session, app, frame }) => {
       await idle(session);
@@ -50,8 +50,9 @@ test("a thread is one box: its message with a line of its color, its program as 
         `${head}-reply`,
       ]);
       expect(rows[at("Explore this project")]).toMatch(/┃ Explore this project/);
-      expect(rows[at("A clear starting point")]).not.toContain("┃");
-      expect(rows[at("Fieldnotes keeps ideas close")]).not.toContain("┃");
+      // The answer stands as markdown in the box, and the quiet line of the box runs through it.
+      expect(rows.some((row) => /┃ ## A clear starting point/.test(row))).toBe(true);
+      expect(at("Fieldnotes keeps ideas close")).toBeGreaterThan(0);
       // The box has an edge above its message and an edge under its input.
       expect(rows[at("Explore this project") - 1]).toContain("▄▄▄▄");
       expect(rows[at("Reply to open this thread again") + 1]).toContain("▀▀▀▀");
