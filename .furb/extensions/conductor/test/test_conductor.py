@@ -680,6 +680,74 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
   assert not conductor.room(OPUS)
 
 
+STATE = (
+  "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed fixes silent"
+  " comments measures timers noted debriefs vetoes ordered tips shifted hired paced landed heard handled ends requeued"
+  " statused secret budgeted flaky runs_read"
+).split()
+
+
+def play(conductor: Round) -> None:
+  exec(compile(IMPORT.sub("", SOURCE), str(HERE / "conductor.py"), "exec"), conductor.ns)  # noqa: S102
+
+
+def test_each_name_of_the_state_binds_its_default_only_when_the_module_lacks_it() -> None:
+  bound = re.findall(r'^(\w+): .+ = globals\(\)\.setdefault\("\1", ', SOURCE, re.M)
+  assert bound == STATE
+  assert re.findall(r"^\w+: [^=\n]+ = (?:\[\]|\{\}|set\(\))$", SOURCE, re.M) == []
+
+
+def test_the_word_plays_on_a_module_of_the_previous_conductor_that_binds_no_name_of_the_state(
+  conductor: Round,
+) -> None:
+  for name in STATE:
+    del conductor.ns[name]
+  play(conductor)
+  assert conductor.limits == {"room": {"opus": 1, "sonnet": 3, "opus/high": 1}, "fixer": SONNET_HIGH}
+  assert conductor.cap() == 5
+  for name in STATE[1:]:
+    assert conductor.ns[name] in ([], {}, set()), name
+  assert type(conductor.ns["merged"]) is set
+  assert type(conductor.ns["queue"]) is list
+  assert type(conductor.ns["prs"]) is dict
+
+
+def test_the_word_plays_on_a_module_that_holds_the_state_and_keeps_each_value() -> None:
+  # A new Round binds the state once; the word then plays again on the same module with values in every name.
+  import tempfile
+
+  with tempfile.TemporaryDirectory() as folder:
+    conductor = Round(Path(folder))
+    held = {name: conductor.ns[name] for name in STATE}
+    conductor.limits["room"]["opus"] = 2
+    for name in STATE[1:]:
+      one = held[name]
+      if isinstance(one, list):
+        one.append("kept")
+      elif isinstance(one, set):
+        one.add("kept")
+      else:
+        one["kept"] = "kept"
+    play(conductor)
+    for name in STATE:
+      assert conductor.ns[name] is held[name], name
+    assert conductor.limits["room"] == {"opus": 2, "sonnet": 3, "opus/high": 1}
+    assert conductor.cap() == 6
+    for name in STATE[1:]:
+      one = held[name]
+      assert "kept" in one, name
+
+
+def test_the_gate_finds_no_name_of_the_state_undefined_in_the_word() -> None:
+  import furb
+  import furb_monty
+  from furb import sheet
+
+  word = IMPORT.sub("", SOURCE)
+  found = sheet.gate(vars(furb.python), {}, word, furb_monty.gate)
+  assert [x for x in found if any(f"`{name}`" in x for name in STATE)] == []
+
+
 def stacked(conductor: Round, tmp_path: Path, clash: bool = False) -> dict[str, str]:
   env, origin = conductor.env, tmp_path / "origin.git"
   git("init", "-q", "--bare", str(origin), cwd=tmp_path, env=env)
