@@ -786,3 +786,103 @@ test("a rename in a row ends when a dialog opens or another row is clicked, and 
     await until(library, () => library.current === first);
     expect(second.name).toBe("bar2x");
   }));
+
+/** A repository `project` with a commit, and two worktrees of it, `wt-a` and `wt-b`, beside it. */
+async function withWorktrees(directory: string) {
+  const main = join(directory, "project");
+  await mkdir(main);
+  const git = (cwd: string, ...args: string[]) => {
+    const done = Bun.spawnSync(["git", "-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd });
+    if (done.exitCode !== 0) throw new Error(done.stderr.toString());
+  };
+  git(main, "init", "-q", "-b", "main");
+  await writeFile(join(main, "a.txt"), "a\n");
+  git(main, "add", ".");
+  git(main, "commit", "-q", "-m", "first");
+  const a = join(directory, "wt-a");
+  const b = join(directory, "wt-b");
+  git(main, "worktree", "add", "-q", "-b", "a", a);
+  git(main, "worktree", "add", "-q", "-b", "b", b);
+  return { main: await realpath(main), a: await realpath(a), b: await realpath(b) };
+}
+
+test("a worktree belongs to the workspace of its main checkout, with its sessions, and is no workspace of its own", () =>
+  withLibrary(async ({ directory, open }) => {
+    const { main, a, b } = await withWorktrees(directory);
+    const library = open();
+    const group = await library.add(a);
+    expect(group.directory).toBe(main);
+    expect(await library.add(b)).toBe(group);
+    expect(await library.add(main)).toBe(group);
+    expect(library.groups.length).toBe(1);
+    const inA = await library.create(group, "in a", undefined, false, a);
+    const inB = await library.create(group, "in b", undefined, false, b);
+    const inMain = await library.create(group, "in main");
+    expect(dirname(inA.path)).toBe(join(a, ".furb/sessions"));
+    expect(dirname(inB.path)).toBe(join(b, ".furb/sessions"));
+    expect(dirname(inMain.path)).toBe(join(main, ".furb/sessions"));
+    expect(inA.session?.host.directory).toBe(a);
+    expect(group.sessions).toEqual(expect.arrayContaining([inA, inB, inMain]));
+    // A later run reads one workspace, with the three sessions, whichever folder it starts in.
+    await library.dispose();
+    const later = open();
+    expect(later.groups.map((one) => one.directory)).toEqual([main]);
+    const again = await later.add(b);
+    await later.scan(again);
+    expect(again.sessions.map((entry) => entry.path).sort()).toEqual(
+      [inA.path, inB.path, inMain.path].sort(),
+    );
+    // The settings of the workspace are one: the name that the operator gave it reaches it from a worktree.
+    later.rename(again, "Furb");
+    expect((await later.add(a)).name).toBe("Furb");
+  }));
+
+test("a list of an earlier version that holds a worktree as a workspace folds it into its main checkout", () =>
+  withLibrary(async ({ directory, open }) => {
+    const { main, a, b } = await withWorktrees(directory);
+    await mkdir(join(directory, "config"), { recursive: true });
+    const one = join(main, ".furb/sessions/one.jsonl");
+    const two = join(a, ".furb/sessions/two.jsonl");
+    const three = join(b, ".furb/sessions/three.jsonl");
+    await writeFile(
+      join(directory, "config/workspaces.json"),
+      JSON.stringify({
+        workspaces: [
+          { directory: a, name: "wt-a", collapsed: true, records: [two], archived: [two] },
+          { directory: main, name: "project", collapsed: false, records: [one], archived: [] },
+          { directory: b, name: "Review", collapsed: true, records: [three], archived: [] },
+        ],
+      }),
+    );
+    const library = open();
+    expect(library.groups.length).toBe(1);
+    const [group] = library.groups;
+    expect(group?.directory).toBe(main);
+    expect(group?.name).toBe("Review");
+    expect(group?.collapsed).toBe(false);
+    expect(group?.sessions.map((entry) => [entry.path, entry.archived])).toEqual([
+      [two, true],
+      [one, false],
+      [three, false],
+    ]);
+  }));
+
+test("the sidebar shows a checkout with its two worktrees as one workspace, and names the worktree of a session", () =>
+  withLibrary(async ({ directory, open, sidebar }) => {
+    const { a, b } = await withWorktrees(directory);
+    const library = open();
+    const group = await library.add(a);
+    await library.add(b);
+    await library.create(group, "main work");
+    await library.create(group, "fix", undefined, false, a);
+    await library.create(group, "review", undefined, false, b);
+    const { frame, left } = await sidebar(library);
+    const lines = (await frame()).map((line) => line.slice(left).trimEnd());
+    const text = lines.join("\n");
+    expect(lines.filter((line) => line.includes("▾ project")).length).toBe(1);
+    expect(lines.filter((line) => /▾ /.test(line)).length).toBe(1);
+    expect(text).not.toMatch(/▾ wt-/);
+    expect(text).toMatch(/fix\s+wt-a/);
+    expect(text).toMatch(/review\s+wt-b/);
+    expect(text).toMatch(/main work(?!\s+wt-)/);
+  }));

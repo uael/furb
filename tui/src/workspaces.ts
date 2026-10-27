@@ -5,6 +5,7 @@ import { mkdir, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/p
 import { basename, dirname, join, resolve } from "node:path";
 import { enabled, furbDirectory, ROOT, saveFile, scratch, store } from "furb";
 import { openEngine } from "./bridge.ts";
+import { checkoutOf, checkouts, mainCheckout } from "./checkout.ts";
 import { expandHome } from "./files.ts";
 import { type EngineOptions, roster } from "./models.ts";
 import { Preferences } from "./preferences.ts";
@@ -89,7 +90,7 @@ function readList(path: string): SavedWorkspace[] {
     throw error;
   }
   if (!Array.isArray(data?.workspaces)) throw new Error(`${path} holds no list of workspaces.`);
-  return data.workspaces
+  const listed: SavedWorkspace[] = data.workspaces
     .filter((item) => item && typeof item.directory === "string")
     .map((item) => ({
       directory: item.directory,
@@ -102,6 +103,28 @@ function readList(path: string): SavedWorkspace[] {
         ? item.archived.filter((path: unknown): path is string => typeof path === "string")
         : [],
     }));
+  return grouped(listed);
+}
+
+/** The list with each worktree folded into the workspace of its main checkout, as a list of an earlier version may
+ * hold it as a workspace of its own: its records and its archived records go there, and a name that the operator
+ * gave stays. */
+function grouped(list: SavedWorkspace[]): SavedWorkspace[] {
+  const merged = new Map<string, SavedWorkspace>();
+  for (const item of list) {
+    const directory = mainCheckout(item.directory);
+    const named = item.name !== basename(item.directory);
+    const seen = merged.get(directory);
+    if (!seen) {
+      merged.set(directory, { ...item, directory, name: named ? item.name : basename(directory) });
+      continue;
+    }
+    if (named && seen.name === basename(directory)) seen.name = item.name;
+    seen.collapsed &&= item.collapsed;
+    seen.records.push(...item.records.filter((record) => !seen.records.includes(record)));
+    seen.archived.push(...item.archived.filter((record) => !seen.archived.includes(record)));
+  }
+  return [...merged.values()];
 }
 
 export class Workspaces extends EventEmitter {
@@ -213,8 +236,10 @@ export class Workspaces extends EventEmitter {
     return order.find((status) => group.sessions.some((entry) => entry.status === status)) ?? "idle";
   }
   async add(directory: string): Promise<Workspace> {
-    const path = await realpath(resolve(expandHome(directory)));
-    if (!(await stat(path)).isDirectory()) throw new Error("A workspace must be a project folder.");
+    const opened = await realpath(resolve(expandHome(directory)));
+    if (!(await stat(opened)).isDirectory()) throw new Error("A workspace must be a project folder.");
+    // A worktree belongs to the workspace of its main checkout.
+    const path = mainCheckout(opened);
     let group = this.groups.find((group) => group.directory === path);
     if (!group) {
       group = { directory: path, name: basename(path), collapsed: false, sessions: [] };
@@ -226,17 +251,22 @@ export class Workspaces extends EventEmitter {
     return group;
   }
   async scan(group: Workspace): Promise<void> {
-    const directory = join(group.directory, ".furb/sessions");
-    const names = await readdir(directory).catch((error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") return [] as string[];
-      throw error;
-    });
-    for (const name of names.sort().reverse()) {
-      if (!name.endsWith(".jsonl") || name.endsWith(".changes.jsonl")) continue;
-      const path = join(directory, name);
+    // The sessions of the main checkout and of each of its worktrees are the sessions of one workspace.
+    const found: { name: string; path: string }[] = [];
+    for (const checkout of checkouts(group.directory)) {
+      const directory = join(checkout, ".furb/sessions");
+      const names = await readdir(directory).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return [] as string[];
+        throw error;
+      });
+      for (const name of names)
+        if (name.endsWith(".jsonl") && !name.endsWith(".changes.jsonl"))
+          found.push({ name, path: join(directory, name) });
+    }
+    found.sort((a, b) => (a.name < b.name ? 1 : a.name > b.name ? -1 : 0));
+    for (const { name, path } of found)
       if (!group.sessions.some((entry) => entry.path === path))
         group.sessions.push({ path, name: basename(name, ".jsonl"), status: "saved", unread: false });
-    }
     // A session that opens stands in the list before its record does.
     const saved = (entry: SessionEntry) => !entry.session && !this.opening.has(entry.path);
     group.sessions = group.sessions.filter((entry) => !saved(entry) || existsSync(entry.path));
@@ -380,7 +410,7 @@ export class Workspaces extends EventEmitter {
         const named = { ...this.options, demo };
         opened = await openEngine({
           ...named,
-          cwd: group.directory,
+          cwd: checkoutOf(entry.path, group.directory),
           record: entry.path,
           roster: roster(named, view.models),
         });
@@ -406,7 +436,7 @@ export class Workspaces extends EventEmitter {
    * runs and never saves, and select it. */
   async show(session: Session): Promise<void> {
     const directory = await realpath(resolve(session.host.directory));
-    this.passing.add(directory);
+    this.passing.add(mainCheckout(directory));
     const group = await this.add(directory);
     await this.select(this.adopt(session, group));
   }
@@ -438,9 +468,17 @@ export class Workspaces extends EventEmitter {
     if (session.host.pending.size) await session.host.resume();
     await session.command(command);
   }
-  async create(group = this.groupOf(), name?: string, carry?: Carry, resume = false): Promise<SessionEntry> {
-    if (!group) throw new Error("Add a workspace first.");
-    const directory = furbDirectory(group.directory, "sessions");
+  /** Make a session in a workspace. It runs in `checkout`, the main checkout of the workspace or one of its worktrees,
+   * and its record stands in the .furb/sessions of that checkout. */
+  async create(
+    group = this.groupOf(),
+    name?: string,
+    carry?: Carry,
+    resume = false,
+    checkout = group?.directory,
+  ): Promise<SessionEntry> {
+    if (!group || !checkout) throw new Error("Add a workspace first.");
+    const directory = furbDirectory(checkout, "sessions");
     const path = join(
       directory,
       `${new Date().toISOString().replaceAll(":", "-")}-${randomUUID().slice(0, 8)}.jsonl`,
@@ -514,7 +552,8 @@ export class Workspaces extends EventEmitter {
       if (this.current !== entry) break;
       await this.select(next).catch(() => {});
     }
-    if (this.current === entry) await this.create(group);
+    if (this.current === entry)
+      await this.create(group, undefined, undefined, false, checkoutOf(entry.path, group.directory));
   }
   /** End the life of the open session of an entry, and tell whether it was open. */
   private async release(entry: SessionEntry): Promise<boolean> {

@@ -112,7 +112,9 @@ offers the new life, and the composer is off. [The desktop preview](../gui/READM
 unfinished work through native replay without locking or changing the saved record. The list shows at once, and each
 saved session shows its state when its replay ends. A replay holds about ten times the size of its record in memory,
 so the list replays only a record of 16 MB or less that is not archived, and only when it changed: `inspected.json`,
-beside `workspaces.json`, keeps what each replay told. A longer record shows as saved until you open it. `/workspace path` adds a folder, and `/new` starts a session in
+beside `workspaces.json`, keeps what each replay told. A longer record shows as saved until you open it. `/workspace path` adds a folder. A git worktree is part of the workspace of its main checkout, which
+`git rev-parse --git-common-dir` names, and no workspace of its own: its sessions list there, each with the name of its
+worktree. `/new` starts a session in
 the current workspace. `/delete` archives a chosen session, or moves it and its companions to `.furb/trash` and
 removes its scratch directory from the cache of furb. The trash holds a `restore.json` with the original paths, and
 its record can be opened with `--resume`, which makes again the scratch files that its words wrote.
