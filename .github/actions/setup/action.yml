@@ -15,6 +15,11 @@ inputs:
       What the build of the gate holds beyond its job and its system, as a feature of the crate, which the key of its
       cache names: a build of other artifacts saves a cache of its own.
     default: ""
+  shared:
+    description: >-
+      The job whose cache of rust the gate restores in place of a cache of its own, when it builds a part of what that
+      job builds: the gate never saves that cache, which holds only what the job that owns it built.
+    default: ""
   workspaces:
     description: >-
       Each workspace of cargo that the gate builds, with its target, as the cache reads them: it keeps the dependencies
@@ -59,9 +64,10 @@ runs:
     - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       with:
         key: ${{ inputs.key }}
+        shared-key: ${{ inputs.shared }}
         workspaces: ${{ inputs.workspaces }}
         add-rust-environment-hash-key: true
-        save-if: ${{ github.ref == 'refs/heads/main' }}
+        save-if: ${{ github.ref == 'refs/heads/main' && inputs.shared == '' }}
         cache-on-failure: false
     - if: inputs.python != 'none'
       run: uv python install
