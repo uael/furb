@@ -228,13 +228,13 @@ async def test_the_chain_holds_the_control_it_says_itself() -> None:
   step, last = steps(log, one)
   held = engine.transcript(root)
   assert [(a[1], a[2]) for a in said(held, "close")] == [(ghost, root), (step, root), (one, last)]
-  shut = [(a[1], a[2], a[3]) for a in said(held, "tell") if a[3][0].split("\n")[0].endswith(" closed")]
+  shut = [(a[1], a[2], a[3]) for a in said(held, "tell") if a[3][0].split("\n")[0].split(" ")[1:2] == ["closed"]]
   assert shut == [
-    (ghost, root, [f"#{ghost} closed\n{ghost}_value = Refused('ghost no actor')"]),
-    (step, root, [f"#{step} closed\n{step}_value = Refused()"]),
-    (one, last, [f"#{one} closed\n{one}_value = 1"]),
+    (ghost, root, [f"#{ghost} closed by chain1\n{ghost}_value = Refused('ghost no actor')"]),
+    (step, root, [f"#{step} closed by chain1\n{step}_value = Refused()"]),
+    (one, last, [f"#{one} closed by {last}\n{one}_value = 1"]),
   ]
-  closed = [one for one in paragraphs(engine.turns(on=root)) if one.split("\n")[0].endswith(" closed")]
+  closed = [one for one in paragraphs(engine.turns(on=root)) if one.split("\n")[0].split(" ")[1:2] == ["closed"]]
   assert closed == [told[0] for _, _, told in shut]
 
 
@@ -424,7 +424,7 @@ async def test_a_chain_holds_whole_every_act_made_on_the_chain() -> None:
   told = [
     "#read1\nread1_path = 'a.txt'\n<s:read1_text>\none\ntwo</s:read1_text>",
     f"#bash1\nbash1_command = 'echo hi'\n{binding('bash1', 'Exit')}",
-    "#prompt1 closed\nprompt1_value = 1",
+    "#prompt1 closed by rung1\nprompt1_value = 1",
     prompted("prompt2", "None", "bash1 done", "prompt1"),
     "#bash1 exited 0\nbash1_stdout = 'ran echo hi'",
     "#rung2 advance on prompt2",
@@ -1036,7 +1036,7 @@ async def test_a_replay_makes_the_rungs_of_a_chain_again_from_its_donor() -> Non
   kept = engine.program(root)
   held = [f"{made[0][1]}_told", f"{first}_told", first, *[one for _, one in advances], f"{last}_told", last]
   told = [
-    f"#{act} closed",
+    f"#{act} closed by rung4",
     bind,
     "a = 1",
     *[one for one, _ in advances],
@@ -1080,7 +1080,7 @@ async def test_a_write_of_a_door_gives_the_words_of_that_ladder_alone() -> None:
   program = engine.program(root)
   first, closer, made = steps(log, act)
   assert list(program.values()) == [
-    f"#{act} closed",
+    f"#{act} closed by rung3",
     fresh(root, written(laid, "mine = 1")),
     "mine = 1",
     f"{prompted(act, 'None', 'count')}\n\n#{first} advance on {act}",
@@ -1186,6 +1186,19 @@ async def test_the_advance_binds_the_share_of_the_window_that_the_last_reply_rea
   first, second = steps(log, act)
   told = paragraphs(engine.turns(on=root))
   assert f"#{first} advance on {act}" in told and f"#{second} advance on {act}\n{second}_share = 0.25" in told
+
+
+async def test_the_advance_binds_each_act_that_a_word_of_the_chain_awaits() -> None:
+  """The advance binds each act that a word of the chain awaits and that is not over, as rung5_waits = ['bash3'], and no waits when no word awaits, so the model sees which acts the words that it wrote before still wait for."""
+  _, log, root = born("x = bash('slow')\nawait x", "close(2)", auto=False)
+  one = engine.prompt(int, "count", on=root)
+  await settle()
+  two = engine.prompt(int, "tally", on=root)
+  assert await two == 2
+  waited = said(log, "bash")[0][1]
+  (first,), (second,) = steps(log, one), steps(log, two)
+  told = paragraphs(engine.turns(on=root))
+  assert f"#{first} advance on {one}" in told and f"#{second} advance on {two}\n{second}_waits = [{waited!r}]" in told
 
 
 async def test_the_chain_tells_a_doctrine_before_the_first_prompt_to_its_actor() -> None:

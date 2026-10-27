@@ -697,12 +697,17 @@ impl Provider {
                 Fact::says("tell", &reply.chain, [Object::list([Object::string(&note)])]),
               );
             }
-            let got =
-              got.map_err(|no| Fault::refused(format!("{} answered nothing: {no}", reply.actor)));
-            if got.is_err() && reply.again {
+            let got = got.map_err(|no| format!("{} answered nothing: {no}", reply.actor));
+            // The pause names the provider alone, so the chain is told why, before it.
+            if let (Err(why), true) = (&got, reply.again) {
+              let note = format!("#{} {why}", reply.chain);
+              say(
+                &mut co,
+                Fact::says("tell", &reply.chain, [Object::list([Object::string(&note)])]),
+              );
               let _ = co.call("pause", vec![Object::string(&reply.chain)], vec![]).await;
             }
-            let got = got.unwrap_or_else(|fault| fault.object());
+            let got = got.map_err(Fault::refused).unwrap_or_else(|fault| fault.object());
             say(&mut co, Fact::says("done", &id, [got]));
             continue;
           }

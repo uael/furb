@@ -14,4 +14,4 @@ async def test_head_is_the_span_of_the_first_2000_lines_which_a_read_without_a_s
   assert await engine.prompt(int, "read it", on=root) == 1
   await settle()
   told = "\n".join(["#read1", "read1_path = 'long.txt'", "<s:read1_text>", *[f"line {i}" for i in range(1, 2001)]])
-  assert engine.turns(on=root)[-1][1] == f"{told}</s:read1_text>\n\n#prompt1 closed\nprompt1_value = 1"
+  assert engine.turns(on=root)[-1][1] == f"{told}</s:read1_text>\n\n#prompt1 closed by rung1\nprompt1_value = 1"

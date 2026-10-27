@@ -45,11 +45,11 @@ async def test_a_wake_it_ends_the_pause_over_the_same_act_and_what_waited_is_hea
   engine.pause(act)
   sand.exits(act, 3)
   await settle()
-  assert paragraphs(engine.turns(on=root))[-1] == f"#{act} paused"
+  assert paragraphs(engine.turns(on=root))[-1] == f"#{act} paused by operator"
   engine.wake(act)
   await settle()
   assert (await act).code == 3
-  assert paragraphs(engine.turns(on=root))[-2:] == [f"#{act} paused", f"#{act} exited 3"]
+  assert paragraphs(engine.turns(on=root))[-2:] == [f"#{act} paused by operator", f"#{act} exited 3"]
 
 
 async def test_delivery_carries_on_the_rungs_that_await_the_result_on_whatever_chain() -> None:
@@ -94,16 +94,16 @@ async def test_wake_is_given_the_id_of_an_act_or_the_id_of_a_chain() -> None:
     engine.wake(woken)
     await settle()
     assert heads(engine.turns(on=root))[-1] == f"#{exited} exited 0"
-    assert (f"#{woken} woke" in heads(engine.turns(on=root))) == (woken == root)
+    assert (f"#{woken} woke by operator" in heads(engine.turns(on=root))) == (woken == root)
 
 
 async def test_a_wake_lifts_the_pause_and_delivers_every_held_result() -> None:
   """A wake lifts the pause and delivers every held result."""
   root, one, two = await withheld(1, 2)
-  assert heads(engine.turns(on=root))[-1] == f"#{root} paused"
+  assert heads(engine.turns(on=root))[-1] == f"#{root} paused by operator"
   engine.wake(root)
   await settle()
-  assert heads(engine.turns(on=root))[-3:] == [f"#{root} woke", f"#{one} exited 1", f"#{two} exited 2"]
+  assert heads(engine.turns(on=root))[-3:] == [f"#{root} woke by operator", f"#{one} exited 1", f"#{two} exited 2"]
 
 
 async def test_a_wake_gates_and_runs_a_held_response() -> None:
@@ -113,7 +113,13 @@ async def test_a_wake_gates_and_runs_a_held_response() -> None:
   engine.wake(root)
   await settle()
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
-  bound = fresh(root, prompted(act, "int", "count"), f"#{step} advance on {act}", f"#{root} paused", f"#{root} woke")
+  bound = fresh(
+    root,
+    prompted(act, "int", "count"),
+    f"#{step} advance on {act}",
+    f"#{root} paused by operator",
+    f"#{root} woke by operator",
+  )
   assert gated(log) == ["close(7)"] and ran(log) == [bound, "close(7)"] and (await act) == 7
 
 

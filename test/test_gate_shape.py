@@ -51,7 +51,9 @@ async def test_a_gate_carries_the_word_alone() -> None:
   assert [len(e[0]) for e in sand.record if e[0][0] == "gate"] == [5] * 6
   first, bad, after, edit, made, last = [a[1] for a in said(log, "rung") if a[2] == act]
   bind = fresh(root, prompted(act, "int", "edit"), f"#{first} advance on {act}")
-  refused = f"#{bad} refused\n{bad}_findings = {faulted('x = BAD')!r}\n\n#{bad} closed\n{bad}_value = Refused()"
+  refused = (
+    f"#{bad} refused\n{bad}_findings = {faulted('x = BAD')!r}\n\n#{bad} closed by chain1\n{bad}_value = Refused()"
+  )
   told = [
     f"#{first} told nothing\n\n#{bad} advance on {act}",
     f"{refused}\n\n#{after} advance on {act}",
@@ -87,7 +89,7 @@ async def test_the_chain_has_the_word_of_a_rung_gated_before_it_runs() -> None:
   assert await act == 7
   first, last = [a[1] for a in said(log, "rung") if a[2] == act]
   bind = fresh(root, prompted(act, "int", "try"), f"#{first} advance on {act}")
-  refused = f"#{first} refused\n{first}_findings = {BAD!r}\n\n#{first} closed\n{first}_value = Refused()"
+  refused = f"#{first} refused\n{first}_findings = {BAD!r}\n\n#{first} closed by chain1\n{first}_value = Refused()"
   again = f"{refused}\n\n#{last} advance on {act}"
   assert [a[5] for a in said(log, "run") if a[4].endswith("_told")] == [bind, again]
   assert gated(log) == ["k = BAD", "close(7)"] and findings(log) == [[BAD], []]
@@ -104,7 +106,7 @@ async def test_a_refused_word_of_a_rung_stands_in_the_ladder_of_its_prompt() -> 
   program = engine.program(root)
   first, last = [a[1] for a in said(log, "rung") if a[2] == act]
   bind = fresh(root, prompted(act, "int", "try"), f"#{first} advance on {act}")
-  refused = f"#{first} refused\n{first}_findings = {BAD!r}\n\n#{first} closed\n{first}_value = Refused()"
+  refused = f"#{first} refused\n{first}_findings = {BAD!r}\n\n#{first} closed by chain1\n{first}_value = Refused()"
   again = f"{refused}\n\n#{last} advance on {act}"
   assert list(program.values()) == [bind, again, "close(7)"] == ran(log)
 
@@ -122,7 +124,7 @@ async def test_a_rung_that_retells_stands_with_the_gate_where_the_one_it_retells
   first = [a[1] for a in said(log, "rung") if not a[5]]
   copies = [(a[1], a[4], a[5]) for a in said(log, "rung") if a[5]]
   bind = fresh(root, prompted(act, "int", "count"), f"#{first[0]} advance on {act}")
-  refused = f"#{first[1]} refused\n{first[1]}_findings = {faulted('x = BAD')!r}\n\n#{first[1]} closed\n{first[1]}_value = Refused()"
+  refused = f"#{first[1]} refused\n{first[1]}_findings = {faulted('x = BAD')!r}\n\n#{first[1]} closed by chain1\n{first[1]}_value = Refused()"
   bad = f"{refused}\n\n#{first[2]} advance on {act}"
   assert [(word, donor) for _, word, donor in copies] == [
     (bind, f"{first[0]}_told"),
@@ -136,12 +138,12 @@ async def test_a_rung_that_retells_stands_with_the_gate_where_the_one_it_retells
     (first[1], f"#{first[1]} refused")
   ]
   assert engine.read(act, on=root).content == "k = 1\nx = BAD"
-  assert [one for one in heads(engine.turns(on=root)) if one.endswith(" closed")] == [
-    f"#{first[1]} closed",
-    f"#{act} closed",
+  assert [one for one in heads(engine.turns(on=root)) if one.split(" ")[1:2] == ["closed"]] == [
+    f"#{first[1]} closed by chain1",
+    f"#{act} closed by rung3",
   ]
   assert engine.program(root) == {
-    f"{copies[0][0]}_told": f"#{act} closed\n{act}_value = 1",
+    f"{copies[0][0]}_told": f"#{act} closed by rung3\n{act}_value = 1",
     **{donor: word for _, word, donor in copies},
   }
 
@@ -154,15 +156,19 @@ async def test_the_chain_tells_the_findings_that_refused_a_word() -> None:
   await settle()
   first, again = (a[1] for a in said(log, "rung"))
   bind = fresh(root, prompted(act, "int", "work"), f"#{first} advance on {act}")
-  refused = f"#{first} refused\n{first}_findings = {BAD!r}\n\n#{first} closed\n{first}_value = Refused()"
+  refused = f"#{first} refused\n{first}_findings = {BAD!r}\n\n#{first} closed by chain1\n{first}_value = Refused()"
   assert [one for one in paragraphs(engine.turns(on=root)) if one.startswith(f"#{first} ")] == [
     f"#{first} advance on {act}",
     f"#{first} refused\n{first}_findings = {BAD!r}",
-    f"#{first} closed\n{first}_value = Refused()",
+    f"#{first} closed by chain1\n{first}_value = Refused()",
   ]
   refusal = engine.peek(first)
   assert isinstance(refusal, Refused) and refusal.args == ()
-  assert heads(engine.turns(on=root))[-3:] == [f"#{first} closed", f"#{again} advance on {act}", f"#{act} closed"]
+  assert heads(engine.turns(on=root))[-3:] == [
+    f"#{first} closed by chain1",
+    f"#{again} advance on {act}",
+    f"#{act} closed by {again}",
+  ]
   assert ran(log) == [bind, f"{refused}\n\n#{again} advance on {act}", "close(1)"]
 
 
@@ -176,6 +182,6 @@ async def test_a_word_that_the_chain_cannot_gate_or_run_is_refused_as_the_gate_r
   first, again, *_ = (a[1] for a in said(log, "rung"))
   told = paragraphs(engine.turns(on=root))
   assert f"#{first} refused\n{first}_findings = 'nothing takes gate'" in told
-  assert f"#{first} closed\n{first}_value = Refused()" in told
+  assert f"#{first} closed by chain1\n{first}_value = Refused()" in told
   assert f"#{again} advance on {act}" in told
   assert isinstance(engine.peek(first), Refused) and not engine.over(act)

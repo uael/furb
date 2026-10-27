@@ -18,9 +18,9 @@ async def test_a_control_said_over_the_act_it_names_with_a_header_of_its_name() 
   assert [one[1:] for one in said(log, "wake")] == [(act, OPERATOR)]
   told = [(one[0], one[1], one[-1]) for one in log if one[0] in ("tell", "pause", "wake") and one[1] == act]
   assert told[-4:] == [
-    ("tell", act, ["#bash1 paused"]),
+    ("tell", act, ["#bash1 paused by operator"]),
     ("pause", act, OPERATOR),
-    ("tell", act, ["#bash1 woke"]),
+    ("tell", act, ["#bash1 woke by operator"]),
     ("wake", act, OPERATOR),
   ]
 
@@ -64,3 +64,25 @@ async def test_a_control_is_said_over_any_act_and_tells_its_header_only_while_th
   assert isinstance(engine.peek(far), CancelledError)
   assert said(log, "cancel")[-1] == ("cancel", second, OPERATOR)
   assert f"#{second} cancelled" not in heads(engine.turns(on=root))
+
+
+async def test_the_header_of_a_control_names_the_one_that_said_it() -> None:
+  """The header of a control names the one that said it, as #rung5 paused by operator or #chain1 paused by grant1, so a turn says who paused, woke, cancelled or closed the act."""
+  _, log, root = born(auto=False)
+  first = engine.bash("slow", on=root)
+  word = engine.rung(f"pause({first!r})\nwake({first!r})\ncancel({first!r})", on=root)
+  await word
+  other = engine.bash("slow", on=root)
+  engine.pause(other)
+  engine.wake(other)
+  engine.cancel(other)
+  await settle()
+  told = [a[3][0] for a in said(log, "tell") if a[1] in (first, other) and " by " in a[3][0]]
+  assert told == [
+    f"#{first} paused by {word}",
+    f"#{first} woke by {word}",
+    f"#{first} cancelled by {word}",
+    f"#{other} paused by {OPERATOR}",
+    f"#{other} woke by {OPERATOR}",
+    f"#{other} cancelled by {OPERATOR}",
+  ]

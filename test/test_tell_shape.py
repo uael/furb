@@ -46,9 +46,9 @@ async def test_a_fact_that_carries_notes_is_what_the_turns_are_folded_from() -> 
   ]
   carrying = [a for a in log if a[0] == "tell"]
   assert [a[3] for a in carrying][-4:] == [
-    [f"#{root} paused"],
-    [f"#{root} woke"],
+    [f"#{root} paused by operator"],
+    [f"#{root} woke by operator"],
     [f"#{held} cancelled by operator"],
-    [f"#{root} closed"],
+    [f"#{root} closed by operator"],
   ]
   assert paragraphs(engine.turns(on=root)) == ["\n".join(a[3]) for a in carrying]

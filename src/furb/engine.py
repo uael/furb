@@ -118,19 +118,19 @@ def cwd(on: str = "") -> str:
   return answer("cd", on, "") or standing()[1]
 
 
-def pause(id: str) -> None:
+def pause(id: str):
   control("pause", "paused", id)
 
 
-def wake(id: str) -> None:
+def wake(id: str):
   control("wake", "woke", id)
 
 
-def cancel(id: str) -> None:
-  control("cancel", "cancelled by " + site.get(), id)
+def cancel(id: str):
+  control("cancel", "cancelled", id)
 
 
-def close(value: object, id: str = "") -> None:
+def close(value: object, id: str = ""):
   match get(who := acting()):
     case ("rung", _, by, _, _, retells, *_):
       if retells:
@@ -153,7 +153,7 @@ def close(value: object, id: str = "") -> None:
     raise CancelledError()
 
 
-def debug(template: Template) -> None:
+def debug(template: Template):
   text = "".join(
     x
     if isinstance(x, str)
@@ -359,12 +359,17 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
       if asking not in waiting and (asking := next((x for x in waiting if not paused(x)), "")):
         maker, to = get(asking)[2::4]
         if offered(last[0], to) is None:
-          close(Refused(f"{to} no actor"), maker * prompted(maker) or asking)
+          close(Refused(to + " no actor"), maker * prompted(maker) or asking)
         else:
           if ran and not heard:
             yield told(ran, "told nothing")
           teach(id, to)
-          yield told(asking, f"advance on {maker}", share=filled(reply) or None)
+          yield told(
+            asking,
+            f"advance on {maker}",
+            share=filled(reply) or None,
+            waits=[c for *_, c in transcript(id, "wants") if not over(c)] or None,
+          )
           with site.set(asking):
             reply = act("reply", id, controlled(idle), to)
           unseen = ""
@@ -447,7 +452,7 @@ class Text:
 
   def replace(self, old: str, new: str, count: int = -1) -> Text:
     if old not in self.content:
-      raise Refused(f"{self.path} no {old!r}")
+      raise Refused(self.path + " no " + repr(old))
     (made := Text(self.path, self.content.replace(old, new, count))).before = self
     return made
 
@@ -578,7 +583,7 @@ def told(id, what="", *notes, **words):
 def control(kind, name, id, *words):
   if not get(id):
     raise Refused(f"no act {id!r}")
-  return (over(id) or say(*told(id, name, value=(*words, None)[0]))) and say(kind, id, *words)
+  return (over(id) or say(*told(id, name + " by " + site.get(), value=(*words, None)[0]))) and say(kind, id, *words)
 
 
 def headed(id, what="", **words):
@@ -825,13 +830,13 @@ def boot(record=(), **outside):
     hears(name, g, None)
     dispatch()
 
-  def get(about: str) -> Any:
+  def get(about):
     return known.get(about)
 
-  def peek(at: str, waiting: object = None) -> object:
+  def peek(at, waiting=None):
     return done.get(at, waiting)
 
-  def transcript(on: str = "", of: str = "") -> list[tuple]:
+  def transcript(on="", of=""):
     return held.get((scope(on or site.get()), of), [])[:]
 
   for who, hearer in [(OPERATOR, idle(OPERATOR)), *outside.items(), ("journal", journal())]:
