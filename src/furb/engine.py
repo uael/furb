@@ -276,7 +276,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
       yield (
         "prefix",
         id,
-        [it for it in theirs if not get(it[1]) or (get(it[1])[2] * question(("reply", it[1])) or it[1]) in kin],
+        [it for it in theirs if not (b := get(it[1])) or (b[2] if b[0] == "reply" else it[1]) in kin],
       )
     yield "started", id
     yield told(id, "", bound(id), label=label, source=source)
@@ -292,7 +292,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           last = standing()
           yield takes()
         case ("done", about, _, value) if running.get(maker := r[2]) is False and about not in [
-          x[4] for x in transcript(id, "wants")
+          c for *_, c in transcript(id, "wants")
         ]:
           if scope(about) != id:
             yield "tell", maker, [headed(about, "done", value=value)]
@@ -366,7 +366,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           teach(id, to)
           yield told(
             asking,
-            f"advance on {maker}",
+            "advance on " + maker,
             share=filled(reply) or None,
             waits=[c for *_, c in transcript(id, "wants") if not over(c)] or None,
           )
@@ -524,10 +524,9 @@ def question(a):
 
 
 def scope(name):
-  match get(name):
-    case (kind, _, _, on, *_):
-      return name if kind == "chain" else scope(on)
-  return ""
+  while (a := get(name)) and a[0] != "chain":
+    name = a[3]
+  return name * bool(a)
 
 
 def asked(id, on=""):
@@ -570,7 +569,7 @@ def tells(id):
 
 
 def teach(on, to):
-  if (taught := offered(standing()[0], to, 3)) and (quote := f"<s:doctrine>\n{taught}</s:doctrine>") not in [
+  if (taught := offered(standing()[0], to, 3)) and (quote := "<s:doctrine>\n" + taught + "</s:doctrine>") not in [
     n for x in transcript(on, "tell") for n in x[3]
   ]:
     say(*told(on, "doctrine", quote))
@@ -582,25 +581,25 @@ def told(id, what="", *notes, **words):
 
 def control(kind, name, id, *words):
   if not get(id):
-    raise Refused(f"no act {id!r}")
+    raise Refused("no act " + repr(id))
   return (over(id) or say(*told(id, name + " by " + site.get(), value=(*words, None)[0]))) and say(kind, id, *words)
 
 
 def headed(id, what="", **words):
-  lines = [f"#{id} {what}".rstrip()]
+  text = f"#{id} {what}".rstrip()
   for word, value in words.items():
-    name = f"{id}_{word}"
+    name = id + "_" + word
     if isinstance(value, str) and "\n" in value:
-      while f"</s:{name}>\n" in value + "\n":
+      while "</s:" + name + ">\n" in value + "\n":
         name += "_"
-      lines.append(f"<s:{name}>\n{value}</s:{name}>")
+      text += f"\n<s:{name}>\n{value}</s:{name}>"
     elif value not in (None, ""):
-      lines.append(f"{name} = " + re.sub(r"^[\w.]+\.(?=[A-Z]\w*\()", "", repr(value)))
-  return "\n".join(lines)
+      text += f"\n{name} = " + re.sub(r"^[\w.]+\.(?=[A-Z]\w*\()", "", repr(value))
+  return text
 
 
 def bound(id, of="object"):
-  return f"{id}: Act[{of}] = Act({id!r})"
+  return id + ": Act[" + of + "] = Act(" + repr(id) + ")"
 
 
 def shown(text, show):
@@ -661,9 +660,8 @@ def controlled(ear, lasting=False):
       if over(id) and not lasting:
         return
       match a:
-        case ("pause" | "wake", *_) if covers(a, id):
-          stopped = a[0] == "pause"
-          stopped or (w := lives(g, a))
+        case ("pause" | "wake", *_) if covers(a, id) and (stopped := a[0] == "pause"):
+          pass
         case ("cancel" | "close", _, by, *_) if covers(a, id) and not (over(id) or (stopped and under(by, id))):
           yield "done", id, a[3] if a[:2] == ("close", id) else CancelledError()
         case _ if stopped and get(a[1]) is not a:
@@ -711,13 +709,13 @@ def boot(record=(), **outside):
             case (kind, about, _, *words) if scope(about):
               yield kind, about, *words
         match a := (yield):
-          case (kind, about, by, *_) if about in known and by != "journal":
+          case (kind, about, by, *_) if (q := get(about)) and by != "journal":
             if not by and (owed() or about in first):
               raise drift(about)
             if by not in known and by not in driven:
               if about not in kept:
-                yield "keep", "", (kept.setdefault(about, known[about]),)
-              if a is not known[about]:
+                yield "keep", "", (kept.setdefault(about, q),)
+              if a is not q:
                 yield "keep", "", (a,)
             if kind == "wake":
               for name in [x for x in taken if taken[x] and covers(a, x) and not over(x)]:
