@@ -1,4 +1,4 @@
-import { mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type CliRenderer, CodeRenderable, type Renderable } from "@opentui/core";
@@ -24,6 +24,15 @@ function alive(pid: number): boolean {
   }
 }
 
+/** How long a run has held a lock, in whole minutes, by the time of the file that holds its process. */
+async function held(lock: string): Promise<number> {
+  const since = await stat(join(lock, "pid")).then(
+    (file) => file.mtimeMs,
+    () => Date.now(),
+  );
+  return Math.floor((Date.now() - since) / 60000);
+}
+
 /** The lock of the home of a script, which one run holds at a time: a folder that holds the process of the run, made
  * by a rename, which is atomic. A lock whose process ended is taken. Another run waits at most WAIT seconds. */
 async function hold(lock: string): Promise<void> {
@@ -32,7 +41,7 @@ async function hold(lock: string): Promise<void> {
   await mkdir(draft);
   await writeFile(join(draft, "pid"), String(process.pid));
   const deadline = Date.now() + WAIT * 1000;
-  let told = false;
+  let next = 0;
   for (;;) {
     try {
       await rename(draft, lock);
@@ -52,8 +61,13 @@ async function hold(lock: string): Promise<void> {
       await rm(draft, { recursive: true, force: true });
       throw new Error(`The run of process ${owner} held ${lock} for ${WAIT} seconds, so this run ends.`);
     }
-    if (!told) console.error(`The run of process ${owner} holds ${lock}, so this run waits until it ends.`);
-    told = true;
+    if (Date.now() >= next) {
+      console.error(
+        `The run of process ${owner} has held ${lock} for ${await held(lock)} minutes, so this run waits for it, ` +
+          `at most ${Math.round((deadline - Date.now()) / 60000)} minutes more.`,
+      );
+      next = Date.now() + 60000;
+    }
     await new Promise((done) => setTimeout(done, 1000));
   }
 }

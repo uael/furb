@@ -319,7 +319,12 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 - `bun run screenshots` and `bun run animation`: capture `docs/screenshots/` and `docs/furb.gif` again from the
   real renderer. Run both after a change that a screen shows, and read each capture. One run of each at a time holds
   its home in `/tmp`, and a second run waits until the first ends. A screen that does not come in three minutes ends
-  the run with an error that names the screen, and a run never waits past thirty minutes. A push to `main` that
+  the run with an error that names the screen, and a run never waits past thirty minutes. A run that waits says how
+  long the run that holds the home has held it. The clock of the view stands still by default, so that two runs of
+  the same code draw the same captures, and `FURB_STILL_CLOCK`, a time in milliseconds, sets another time.
+  `FURB_GALLERY_ONLY=<pattern>` writes only the captures whose names match, and ends with an error when none match.
+  `FURB_GALLERY_TEXT=<folder>` writes the text of each capture too, which a model that cannot see an image reads.
+  A run ends with the line `Wrote N captures to <folder>.`. A push to `main` that
   changes a path that a capture reads runs `.github/workflows/gallery.yml`, which draws both again on a runner of CI
   and keeps one pull request open on the branch `w/gallery` with the files that changed. So a change of a screen
   commits no capture.
