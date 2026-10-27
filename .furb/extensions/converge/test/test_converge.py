@@ -334,7 +334,9 @@ def shoot(tmp: Path, was: dict | None, now: dict, fails: str = "", whole: bool =
     [sys.executable, "-I", "-", *words, "1" if whole else "0", "main", "head"],
     input=World(tmp).ns["SHOTS"],
     capture_output=True,
-    text=True,
+    # On Windows, text=True encodes the input in the code page, which holds no braille spinner: the write fails in a
+    # thread of its own, stdin never closes, and the child waits until the timeout kills the worker.
+    encoding="utf-8",
     check=True,
   )
   return json.loads(got.stdout)
