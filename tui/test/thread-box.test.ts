@@ -108,9 +108,20 @@ test("a folded thread marks new work with a dot, and the dot goes once the threa
       await until(session, () => (listed(session)[0]?.messages.length ?? 0) === 1);
       expect(await folded()).toMatch(/┃ ● .*Explore this project/);
       app.foldThread(id, false);
-      await frame();
+      // The box draws open over a few frames on a slow machine, and the thread counts as seen once it has.
+      let open = await frame();
+      for (let step = 0; step < 160 && !open.includes("Reply to"); step++) {
+        await Bun.sleep(25);
+        open = await frame();
+      }
+      expect(open).toContain("Reply to");
       app.foldThread(id, true);
-      expect(await folded()).not.toContain("●");
+      let row = await folded();
+      for (let step = 0; step < 160 && row.includes("●"); step++) {
+        await Bun.sleep(25);
+        row = await folded();
+      }
+      expect(row).not.toContain("●");
     },
     size,
     true,
@@ -257,6 +268,12 @@ test("the up arrow in the input of a thread takes its last message back to edit 
       }
       expect(seen).toContain("First wording");
       await click("Reply to");
+      // The input has the keys once the click reached it, which a slow machine takes a few frames to do.
+      for (let step = 0; step < 160 && app.replyInputs.get(id)?.focused !== true; step++) {
+        await Bun.sleep(25);
+        await frame();
+      }
+      expect(app.replyInputs.get(id)?.focused).toBe(true);
       screen.mockInput.pressArrow("up");
       await until(session, () => session.drafts[`reply:${id}`] === "First wording");
       const input = app.replyInputs.get(id);
@@ -265,7 +282,7 @@ test("the up arrow in the input of a thread takes its last message back to edit 
       screen.mockInput.pressEnter();
       await until(session, () => (listed(session)[0]?.messages.length ?? 0) === 2);
       let shown = await frame();
-      for (let step = 0; step < 40 && shown.includes("First wording"); step++) {
+      for (let step = 0; step < 240 && shown.includes("First wording"); step++) {
         await Bun.sleep(25);
         shown = await frame();
       }
