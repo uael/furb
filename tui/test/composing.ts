@@ -1,4 +1,4 @@
-import type { CapturedFrame, RGBA } from "@opentui/core";
+import { type CapturedFrame, CodeRenderable, type Renderable, type RGBA } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import * as stage from "../script/stage.ts";
 import { App } from "../src/app.ts";
@@ -77,4 +77,27 @@ export function cellAt(frame: CapturedFrame, x: number, y: number): { text: stri
     at += span.width;
   }
   throw new Error(`No cell stands at column ${x} of row ${y}.`);
+}
+/** Draws the App until no code of it is being highlighted and a frame and the next are the same, since a card that the
+ * App draws anew shows its markdown only once its highlighting ends. `still` drops from each frame what changes with
+ * time alone, as a spinner. */
+export async function drawn(
+  frame: () => Promise<string>,
+  root: Renderable,
+  still: (text: string) => string = (text) => text,
+): Promise<string> {
+  let shown = still(await frame());
+  for (let tries = 0; tries < 200; tries++) {
+    await Promise.all(stage.highlighting(root));
+    await Bun.sleep(5);
+    const next = still(await frame());
+    if (next === shown && !busy(root)) return next;
+    shown = next;
+  }
+  return shown;
+}
+
+/** Whether a code of a node, or of a node that it holds, is still being highlighted. */
+function busy(node: Renderable): boolean {
+  return (node instanceof CodeRenderable && node.isHighlighting) || node.getChildren().some(busy);
 }
