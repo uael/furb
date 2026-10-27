@@ -199,7 +199,9 @@ test("the footer counts down the wait of a call of a model that the provider mak
       stream();
       session.host.on("change", stream);
       try {
-        expect(await frame()).toContain("Retrying in 4 s, attempt 2 of 10, connection reset");
+        expect(await frame()).toContain(
+          "Retrying in 4 s, attempt 2 of 10, connection reset: /retry or /cancel",
+        );
         setSystemTime(new Date(start + 1000));
         expect(await frame()).toContain("Retrying in 3 s, attempt 2 of 10, connection reset");
       } finally {
