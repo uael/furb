@@ -17,7 +17,17 @@ import {
   shapes,
   WORK,
 } from "furb";
-import { type ActIndex, type Ask, aimed, beside, compactedRun, type Desk, desk, failed } from "furb/life";
+import {
+  type ActIndex,
+  type Ask,
+  aimed,
+  beside,
+  cancelled,
+  compactedRun,
+  type Desk,
+  desk,
+  failed,
+} from "furb/life";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { clock } from "./clock.ts";
 import { expandHome, fileReferences, fromDirectory, projectFiles, shortenHome } from "./files.ts";
@@ -1525,6 +1535,28 @@ export class Session extends EventEmitter {
     this.track(choice.rung);
   }
 
+  /** The messages that the operator took back from the box of a thread, which the box does not offer again. */
+  private readonly retaken = new Set<string>();
+  /** The last message of the operator in a thread that still runs, or that a cancel ended, taken back: a message that
+   * runs is cancelled, and its text comes back to be edited and sent again. The cancelled message leaves the box. */
+  async takeBackMessage(thread: string): Promise<string | undefined> {
+    const last = this.acts.findLast(
+      (act) =>
+        act.thread === thread &&
+        act.kind === "prompt" &&
+        this.isUserPrompt(act) &&
+        !this.retaken.has(act.id) &&
+        (!act.done || cancelled(act)),
+    );
+    if (!last) return undefined;
+    this.retaken.add(last.id);
+    if (!last.done) {
+      this.cancels.add(last.id);
+      await this.engine.cancel(last.id);
+    }
+    await this.refresh();
+    return String(last.words[1] ?? "");
+  }
   /** A message to a thread, from the box at the end of the thread. It goes to the thread whatever the input is
    * doing, and a message to a thread that is over opens it again. */
   async reply(thread: string, input: string): Promise<void> {
@@ -1532,7 +1564,7 @@ export class Session extends EventEmitter {
     this.error = "";
     this.notice = "";
     const pending = this.host.pending.size > 0;
-    const id = await this.engine.prompt("None", { message: input.trim(), on: thread });
+    const id = await this.engine.prompt("str", { message: input.trim(), on: thread });
     this.notice = `Your message went to the thread ${thread}.`;
     if (pending) this.emit("resume");
     this.track(id);
@@ -1565,7 +1597,7 @@ export class Session extends EventEmitter {
         const pending = this.host.pending.size > 0;
         const thread = this.thread;
         const id = thread
-          ? await this.engine.prompt("None", { message: this.withImages(input), on: thread })
+          ? await this.engine.prompt("str", { message: this.withImages(input), on: thread })
           : await this.engine.prompt(this.shape, { message: this.withImages(input), on: this.selected });
         if (thread) this.notice = `Your message went to the thread ${thread}.`;
         delete this.images[this.selected];

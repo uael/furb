@@ -538,7 +538,16 @@ export const feed = part({
               if (controls) row.add(controls);
               this.barred(box, tone).add(row);
             },
-            { act, group: "user", heading: false, open: true, indent, shown: message, join: "only" },
+            {
+              act,
+              group: "user",
+              heading: false,
+              open: true,
+              indent,
+              shown: message,
+              join: "only",
+              edge: tone,
+            },
           );
           return;
         }
@@ -603,6 +612,36 @@ export const feed = part({
               );
           },
         });
+        // What a model answered stands as markdown with no line of color, since it is no message of the operator.
+        const answerOf = (target: ActRow, id: string): Section => {
+          const value =
+            typeof target.value === "boolean" ? (target.value ? "yes" : "no") : display(target.value);
+          const model = String(target.words[2] || act.words[2] || "");
+          return {
+            id,
+            key: `${value}\n${model}\n${this.feedWidth}\n${this.theme}`,
+            apart: true,
+            body: (box) => {
+              const { name, effort } = this.model(model);
+              const row = this.box({ flexDirection: "row" });
+              // A column, and not a row, holds the answer, so that its paragraphs wrap at the width of the feed.
+              const answer = this.box({ flexGrow: 1, flexShrink: 1 });
+              answer.add(this.markdown(value, c.prose, c.background));
+              row.add(answer);
+              row.add(
+                this.text(
+                  [
+                    [name, c.muted],
+                    [effort && effort !== "off" ? `  ${effort}` : "", c.faint],
+                  ],
+                  c.faint,
+                  { marginLeft: space.between },
+                ),
+              );
+              box.add(row);
+            },
+          };
+        };
         // The program parts at each message of the operator that came to the thread: the code before it, the message,
         // and the code after.
         const runs: { lines: ProgramLine[]; writes?: Extract<ProgramLine, { kind: "writes" }> }[] = [
@@ -611,6 +650,8 @@ export const feed = part({
         const says: ActRow[] = [];
         for (const line of program) {
           if (line.kind === "note" && line.step.kind === "prompt" && line.step.by === "operator") {
+            // A message that the operator took back leaves the box, and the message that replaces it stands in its place.
+            if (cancelled(line.step)) continue;
             says.push(line.step as ActRow);
             runs.push({ lines: [] });
             continue;
@@ -768,42 +809,21 @@ export const feed = part({
               bar: tone,
               body: (box) => box.add(said(text)),
             });
+            // A message of a shape that asks an answer stands with its answer, so that a thread holds pairs of a
+            // message and its answer.
+            if (next.done && next.words[0] !== "None" && !cancelled(next))
+              sections.push(answerOf(next, `${act.id}-say-${next.id}-answer`));
           }
         }
-        // What the model answered stands last, as markdown with no line of color, since it is no message of the operator.
-        if (valued.has(act.id) && act.words[0] !== "None") {
-          const value = typeof act.value === "boolean" ? (act.value ? "yes" : "no") : display(act.value);
-          sections.push({
-            id: `${act.id}-answer`,
-            key: `${value}\n${act.words[2] ?? ""}\n${this.feedWidth}\n${this.theme}`,
-            apart: true,
-            body: (box) => {
-              const { name, effort } = this.model(String(act.words[2] ?? ""));
-              const row = this.box({ flexDirection: "row" });
-              // A column, and not a row, holds the answer, so that its paragraphs wrap at the width of the feed.
-              const answer = this.box({ flexGrow: 1, flexShrink: 1 });
-              answer.add(this.markdown(value, c.prose, c.background));
-              row.add(answer);
-              row.add(
-                this.text(
-                  [
-                    [name, c.muted],
-                    [effort && effort !== "off" ? `  ${effort}` : "", c.faint],
-                  ],
-                  c.faint,
-                  { marginLeft: space.between },
-                ),
-              );
-              box.add(row);
-            },
-          });
-        }
+        // What the model answered stands last.
+        if (valued.has(act.id) && act.words[0] !== "None") sections.push(answerOf(act, `${act.id}-answer`));
         if (!w.host.reading) {
           const over = Boolean(thread?.resolved);
           sections.push({
             id: `${act.id}-reply`,
             key: `reply\n${over}\n${this.feedWidth}\n${this.theme}`,
             apart: true,
+            bar: tone,
             body: (box) => this.replyBox(box, act.id, over),
           });
         }
@@ -827,6 +847,7 @@ export const feed = part({
             {
               indent,
               join,
+              edge: tone,
               heading: false,
               separate: at === 0,
               open: true,

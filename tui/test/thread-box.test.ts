@@ -223,3 +223,50 @@ test("the gutter stands inside the block of code at its left, or right of it whe
     size,
     true,
   ));
+
+test("the box of a thread starts where the input of the chain starts, and its reply starts where the text of that input starts", () =>
+  composing(
+    async ({ session, frame }) => {
+      await idle(session);
+      const rows = (await frame()).split("\n").map((row) => feedOf(session, row));
+      const ask = rows.find((row) => row.includes("Ask anything")) ?? "";
+      const reply = rows.find((row) => row.includes("Reply to")) ?? "";
+      expect(ask).not.toBe("");
+      expect(reply).not.toBe("");
+      expect(reply.indexOf("Reply to")).toBe(ask.indexOf("Ask anything"));
+      expect(reply.indexOf("┃")).toBe(ask.indexOf("┃"));
+      // The rows of the box stand on the same line, whether they are code, markdown or the input.
+      const bars = rows.filter((row) => row.includes("┃")).map((row) => row.indexOf("┃"));
+      expect(new Set(bars).size).toBe(1);
+    },
+    size,
+    true,
+  ));
+
+test("the up arrow in the input of a thread takes its last message back to edit it, and the message that replaces it takes its place in the box", () =>
+  composing(
+    async ({ session, app, screen, click, frame }) => {
+      await idle(session);
+      const id = listed(session)[0]?.act.id ?? "";
+      await session.reply(id, "First wording");
+      await until(session, () => (listed(session)[0]?.messages.length ?? 0) === 1);
+      expect(await frame()).toContain("First wording");
+      await click("Reply to");
+      screen.mockInput.pressArrow("up");
+      await until(session, () => session.drafts[`reply:${id}`] === "First wording");
+      const input = app.replyInputs.get(id);
+      if (!input) throw new Error("The thread has no input.");
+      input.value = "Second wording";
+      screen.mockInput.pressEnter();
+      await until(session, () => (listed(session)[0]?.messages.length ?? 0) === 2);
+      let shown = await frame();
+      for (let step = 0; step < 40 && shown.includes("First wording"); step++) {
+        await Bun.sleep(25);
+        shown = await frame();
+      }
+      expect(shown).not.toContain("First wording");
+      expect(shown).toContain("Second wording");
+    },
+    { ...size, useMouse: true },
+    true,
+  ));

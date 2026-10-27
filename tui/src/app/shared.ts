@@ -236,6 +236,8 @@ export interface BlockOptions {
   /** A card that is a part of the box of a thread: the cards of one thread share a panel, and the first and the last
    * of them draw its edges. */
   join?: "only" | "first" | "middle" | "last";
+  /** The color of the caps at the ends of the surface that the cards of a thread share. */
+  edge?: RGBA;
 }
 
 export interface Choice {

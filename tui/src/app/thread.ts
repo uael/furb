@@ -121,12 +121,21 @@ export const thread = part({
         if (!input.isDestroyed && this.replyFocus === id) this.replyFocus = undefined;
       }),
     );
-    const row = this.row({
-      backgroundColor: c.panel,
-      paddingX: space.inset,
-      onMouseDown: () => input.focus(),
-    });
-    row.add(this.text(`${glyph.prompt} `, c.accent));
+    // The input starts where the text of the box starts, with the line of the thread at its left.
+    input.onKeyDown = (key) => {
+      if (key.name !== "up" || input.value) return;
+      key.preventDefault();
+      void w
+        .takeBackMessage(id)
+        .then((text) => {
+          if (text === undefined || input.isDestroyed) return;
+          input.value = text;
+          input.cursorOffset = text.length;
+          w.drafts[draft] = text;
+        })
+        .catch(this.report);
+    };
+    const row = this.row({ backgroundColor: c.panel, onMouseDown: () => input.focus() });
     row.add(input);
     box.add(row);
     if (this.replyFocus === id) queueMicrotask(() => !input.isDestroyed && input.focus());
