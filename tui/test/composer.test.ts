@@ -554,7 +554,9 @@ test("a paused chain says so at the end of its feed and in the footer, and Wake 
 test("the footer offers the keys of the top layer that acts, and a click on one does what its key does", () =>
   composing(
     async ({ session, app, screen, frame, click }) => {
-      const footer = async () => ((await frame()).trimEnd().split("\n").at(-1) ?? "").trim();
+      // The last row holds the usage of the chain at the right, in the sidebar, so the footer is the row to the end of the feed.
+      const footer = async () =>
+        ((await frame()).trimEnd().split("\n").at(-1) ?? "").slice(0, app.feedWidth + 2).trim();
       await idle(session);
       expect(await footer()).toEndWith("⌃P commands   F1 help");
       const id = await session.engine.prompt("bool", {
