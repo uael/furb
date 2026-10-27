@@ -1462,20 +1462,24 @@ def gh(*args):
     time.sleep(wait)
 def jobs(run, attempt=0):
   at = f"/attempts/{attempt}" if attempt else ""
-  return json.loads(gh("api", f"repos/{{owner}}/{{repo}}/actions/runs/{run}{at}/jobs?per_page=100", "--jq", "[.jobs[] | {id, name, conclusion, started_at, completed_at}]"))
+  return json.loads(gh("api", f"repos/{{owner}}/{{repo}}/actions/runs/{run}{at}/jobs?per_page=100", "--jq", "[.jobs[] | {id, name, conclusion, started_at, completed_at, steps: [(.steps // [])[] | {name, conclusion, started_at, completed_at}]}]"))
 def spent(job):
   stamp = lambda s: datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
   return int(stamp(job["completed_at"]) - stamp(job["started_at"]))
 budgets = json.loads(subprocess.run(["git", "show", "origin/main:.github/budgets.json"], capture_output=True, text=True).stdout or "{}")
 path = "repos/{owner}/{repo}/actions/workflows/gates.yml/runs"
-green = json.loads(gh("api", f"{path}?branch=main&status=success&per_page=5", "--jq", "[.workflow_runs[].id]"))
-measured = {}
+green = json.loads(gh("api", f"{path}?branch=main&status=success&per_page=5", "--jq", "[.workflow_runs[] | {id, at: (.created_at | tostring), attempt: .run_attempt}]"))
+measured, steps, passed = {}, {}, {}
 for run in green:
-  for job in jobs(run):
+  for job in jobs(run["id"]):
     if job["conclusion"] == "success":
+      passed.setdefault(run["id"], set()).add(job["name"])
       measured.setdefault(job["name"], []).append(spent(job))
-over = [{"job": n, "median": int(statistics.median(v)), "budget": budgets[n], "runs": green} for n, v in measured.items() if n in budgets and len(v) >= 3 and statistics.median(v) > budgets[n]]
-runs = json.loads(gh("api", f"{path}?per_page=30", "--jq", "[.workflow_runs[] | {id, sha: .head_sha, attempt: .run_attempt, conclusion, url: .html_url}]"))
+      for step in job["steps"]:
+        if step["conclusion"] == "success" and step["completed_at"] and step["started_at"]:
+          steps.setdefault(job["name"], {}).setdefault(step["name"], []).append(spent(step))
+over = [{"job": n, "median": int(statistics.median(v)), "budget": budgets[n], "runs": [r["id"] for r in green], "steps": {s: int(statistics.median(x)) for s, x in steps.get(n, {}).items()}} for n, v in measured.items() if n in budgets and len(v) >= 3 and statistics.median(v) > budgets[n]]
+runs = json.loads(gh("api", f"{path}?per_page=30", "--jq", "[.workflow_runs[] | {id, sha: .head_sha, at: (.created_at | tostring), attempt: .run_attempt, conclusion, url: .html_url}]"))
 flakes, settled = [], []
 for run in runs:
   if run["attempt"] < 2 or run["conclusion"] != "success":
@@ -1492,17 +1496,25 @@ for run in runs:
       for line in log.splitlines():
         line = re.sub(r"\x1b\[[0-9;]*m", "", re.sub(r"^\S+Z ", "", line))
         hit = re.match(r"\(fail\) (.+?)(?: \[[\d.]+m?s\])?$", line) or re.match(r"FAILED (\S+)", line) or re.match(r"test (\S+) \.\.\. FAILED$", line)
+        over_row = re.match(r"(\S.*?)\s+-?[\d.]+\s+\S+.* OVER$", line)
+        hit = hit or (over_row and re.match(r"(.+)", "bench: " + over_row[1]))
         if hit and hit[1] not in tests:
           tests.append(hit[1])
-      flakes.append({"tests": tests, "job": job["name"], "sha": run["sha"], "url": f"{run['url']}/attempts/{attempt}"})
+      newer = [g for g in green if g["at"] > run["at"] and g["attempt"] == 1 and job["name"] in passed.get(g["id"], ())]
+      flakes.append({"tests": tests, "job": job["name"], "sha": run["sha"], "url": f"{run['url']}/attempts/{attempt}", "stale": len(newer) >= 5})
 print(json.dumps({"over": over, "flakes": flakes, "read": settled}))
 '''
 
-BUDGET = """The job {job} of the gates took {median} s in the median of its last green runs on main, {runs}, over its budget of {budget} s in .github/budgets.json, so each loop of feedback waits longer for it. Find where the job spends its time, from the times of its steps in gh run view --json jobs and from its logs, and bring the job under its budget at the cause: a cache that misses, a build done twice, or a test that waits. Never drop or weaken a gate to save time: move it, share it or make it faster. Change a budget only with the measures of script/budgets.py, and say why in the PR."""
+BUDGET = """The job {job} of the gates took {median} s in the median of its last green runs on main, {runs}, over its budget of {budget} s in .github/budgets.json, so each loop of feedback waits longer for it. Find where the job spends its time, from the times of its steps in gh run view --json jobs and from its logs, and bring the job under its budget at the cause: a cache that misses, a build done twice, or a test that waits. Never drop or weaken a gate to save time: move it, share it or make it faster. Change a budget only with the measures of script/budgets.py, and say why in the PR.
+The median of each step of the job over those runs, in seconds:
+{steps}
+A change to CI itself is proved only by the gates of its PR: after you open the PR, wait for them with gh pr checks --watch before you close."""
 
 FLAKE = """The gates failed, then passed when they ran again, on the same commit {sha}, so a test or a job is flaky, and a flake hides a defect and slows each loop of feedback. In the job {job}, at {url}, it failed in:
 {tests}
 The ledger of the flakes holds every attempt that failed this way: {seen}.
+First check origin/main: when the same failure shows at no run newer than the commit that fixed its cause, the cause is fixed, so change nothing and close with 0.
+No check of the app runs outside CI, and gh workflow run gates.yml --ref <your branch> starts the gates on your branch by hand, as often as you need, to show the cause before and after your fix.
 Read the log of the attempt that failed: gh run view <run> --attempt <attempt> --log-failed. Find the cause, and prove it with a command that shows it, before and after your fix. {many}Fix it at its cause: never with a skip, a retry, a longer bound or a weaker assertion."""
 
 MANY_SAID = "More than {n} tests failed in one attempt, so one cause, as a machine that is slow or a shared resource that waits, probably holds them all: find it first. "
@@ -1532,15 +1544,20 @@ async def watch_ci() -> None:
     if taken(key) or set(ran) & set(budgeted.get(job, [])):
       continue
     budgeted[job] = ran
-    brief = BUDGET.format(job=job, median=one["median"], runs=", ".join(map(str, ran)), budget=one["budget"])
+    said = "\n".join(f"- {s}: {x} s" for s, x in sorted(one["steps"].items(), key=lambda kv: -kv[1])[:15]) or "- none measured"
+    brief = BUDGET.format(job=job, median=one["median"], runs=", ".join(map(str, ran)), budget=one["budget"], steps=said)
     queue.append((key, brief, "ci"))
     heard.append(f"The job {job} took {one['median']} s, over its budget of {one['budget']} s: queued as the item {key}.")
   for one in seen["flakes"]:
     tests = [str(x) for x in one["tests"]]
     many = len(tests) > MANY
     name = str(one["job"]) if many or not tests else tests[0]
-    flaky.setdefault(name, []).append(str(one["url"]))
+    if str(one["url"]) not in flaky.setdefault(name, []):
+      flaky[name].append(str(one["url"]))
     if seed:
+      continue
+    if one.get("stale"):
+      heard.append(f"The gates flaked at {one['url']} in {name[:120]}, but the job passed at the first try in the 5 newest runs of main, so the round queued no item.")
       continue
     key = "flake-" + slug(name)
     listed = "\n".join(f"- {x}" for x in tests) or "- the job itself, with no test named in its log"
