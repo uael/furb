@@ -623,6 +623,7 @@ try {
   app().composer.setText("/extensions");
   await app().submit();
   await capture("42-extension-command");
+  app().closeOverlay();
   await settle();
   await session.submit("/undo");
   await capture("43-undo-message");
@@ -980,6 +981,47 @@ try {
   await writeFile(join(folder, "tui.ts"), "export default (furb) => { furb.panel(");
   while (!app().parts.loaded.find((one) => one.name === "todo")?.error) await Bun.sleep(10);
   await capture("75-extension-part-error");
+  app().dispose();
+  await library.dispose();
+
+  // A model adds a component to a life that runs. It reads the teaching of the extension ouroboros and the skill
+  // extending, writes an extension with a part for the TUI, and the panel stands over the input with no restart. A
+  // change that it gets wrong shows its error in the panel, the operator tells it, and the panel draws again. The
+  // dialog of /extensions says what each part gives.
+  await show(await demoSession({ cwd: await project("extend"), extensions: true }));
+  const shows = async (text: string, yes = true) => {
+    for (let tries = 0; tries < 400 && test.captureCharFrame().includes(text) !== yes; tries++) {
+      await Bun.sleep(25);
+      app().render();
+      await test.flush();
+    }
+    if (test.captureCharFrame().includes(text) !== yes)
+      throw new Error(`The screen never ${yes ? "showed" : "dropped"} ${text}.`);
+  };
+  await session.submit(
+    "Add a component for this todo list: a panel with the items, and a line in the feed for each.",
+  );
+  await settle();
+  await shows("Ready");
+  await shows("2 open of 3");
+  await rest();
+  await capture("74b-extend-live");
+  await session.submit("Sort the Todo panel: the open items first.");
+  await settle();
+  await shows("Ready");
+  await shows("evaluating 'seen.todos");
+  await rest();
+  await capture("75b-extend-broken");
+  await session.submit("The Todo panel shows an error. Fix it.");
+  await settle();
+  await shows("Ready");
+  await shows("evaluating 'seen.todos", false);
+  await rest();
+  await capture("75c-extend-fixed");
+  app().composer.setText("/extensions");
+  await app().submit();
+  await rest();
+  await capture("75d-extensions");
   app().dispose();
   await library.dispose();
 

@@ -623,7 +623,7 @@ session keeps its name in its saved view, and a workspace in the list of workspa
 
 ## Extensions
 
-`/extensions` lists the extensions that the life runs, and `/run` runs a word of one. The demo runs none.
+`/extensions` opens a dialog of the extensions that the life runs, each with what its part for the TUI gives, or the error that stopped its load. `/run` runs a word of one. The demo runs none.
 
 ![Extension command](screenshots/42-extension-command.png)
 
@@ -634,6 +634,23 @@ TUI goes on.
 ![The part of an extension](screenshots/74-extension-part.png)
 
 ![The error of a part](screenshots/75-extension-part-error.png)
+
+A model can add a part to a life that runs. The operator asks for a component, here a panel for a todo list. The model
+reads the guide of the skill `extending`, makes the acts of its kind with a def, and writes an extension with
+`extend`. The panel stands over the input at once, and the feed shows a line for each act. Nothing restarts.
+
+![A model adds a panel](screenshots/74b-extend-live.png)
+
+A change that the model gets wrong shows its error in the panel, in plain words, and the rest of the TUI goes on. The
+operator tells the model, and the panel draws again from the file that the model mends.
+
+![The error of a panel](screenshots/75b-extend-broken.png)
+
+![The panel mended](screenshots/75c-extend-fixed.png)
+
+`/extensions` says what each part gives.
+
+![The extensions of a life](screenshots/75d-extensions.png)
 
 The official extension `compaction` has a part too, which comes with furb. At each compaction of a chain, the feed
 shows a rule with the summary of the compaction under it: the model of the chain no longer reads what stands above

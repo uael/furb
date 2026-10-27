@@ -113,6 +113,14 @@ export function hintOf(
     .join("  ");
 }
 
+/** The acts of a line that does not fail, less the ones that failed while its word went on, as a read of a file that may
+ * not stand: the word handled them, so the hint of the line says nothing of them. Every act of the line failed: all
+ * stay. */
+function handled(acts: readonly LiveAct[], owed: ReadonlySet<string>): readonly LiveAct[] {
+  const failed = acts.filter((act) => actState(act, owed) === "failed");
+  return failed.length && failed.length < acts.length ? acts.filter((act) => !failed.includes(act)) : acts;
+}
+
 /** What a model writes while its word has not come yet: the lines of the word that it finished, which are python,
  * and the line that it still writes. While it writes no word, the tail is the last line that it thinks. */
 export function writing(stream?: { text: string; thinking: string }): { lines: string; tail: string } {
@@ -198,7 +206,10 @@ export function stepLines(
     const acts = last === index ? (on[index] ?? []) : [...new Set(on.slice(index, last + 1).flat())];
     const runs = waits >= 0 ? index === waits : Boolean(open && acts.includes(open));
     const awaits = index === waits && open ? { act: open, display: start + maker + 1 } : undefined;
-    const hint = awaits ? `waits on ${open?.id} of line ${awaits.display}` : hintOf(acts, owed, label);
+    const failed = Boolean(why) && failing >= index + 1 && failing <= last + 1;
+    const hint = awaits
+      ? `waits on ${open?.id} of line ${awaits.display}`
+      : hintOf(failed ? acts : handled(acts, owed), owed, label);
     out.push({
       kind: "code",
       step,

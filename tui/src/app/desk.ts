@@ -2,7 +2,14 @@ import type { RGBA } from "@opentui/core";
 import { gist, wants } from "furb/life";
 import { shortenHomes } from "../files.ts";
 import { clip } from "../format.ts";
-import { type Line as PartLine, type Tone as PartTone, plainError, type Row, type Seen } from "../parts.ts";
+import {
+  type Line as PartLine,
+  type Tone as PartTone,
+  plainError,
+  type Row,
+  type Seen,
+  summary,
+} from "../parts.ts";
 import type { ActRow } from "../session.ts";
 import { theme as c, glyph, spacing as space } from "../theme.ts";
 import { bold, type Part } from "../ui.ts";
@@ -40,6 +47,33 @@ export const desk = part({
     this.partRows = rows;
     this.dockKey = "";
     this.schedule();
+  },
+
+  /** The dialog of the extensions that the life runs, each with its part for the TUI: what the part gives, or the error
+   * that stopped its load. A part of an extension that the life does not run stands in it too, since the configs
+   * turn it on. */
+  async extensionsDialog(): Promise<void> {
+    const running = await this.session.extensionsRun();
+    const names = [
+      ...new Set([...running.map((one) => one.name), ...this.parts.loaded.map((one) => one.name)]),
+    ];
+    const choices = names.map((name) => {
+      const life = running.find((one) => one.name === name)?.life;
+      const part = this.parts.loaded.find((one) => one.name === name);
+      const detail = part ? summary(part) : "It has no part for the TUI.";
+      return {
+        label: life ? `${name} with ${life}` : name,
+        detail,
+        ...(part?.error ? { color: c.danger } : {}),
+        run: () => {
+          this.session.notice = `${name}: ${detail}`;
+          this.schedule();
+        },
+      };
+    });
+    this.openPalette("Extensions", choices, {
+      note: "A part for the TUI loads live from the folder of its extension. A part that fails shows its error in a panel.",
+    });
   },
 
   /** Runs what a part does, and shows in the footer the error of one that fails. */

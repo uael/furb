@@ -1,6 +1,7 @@
 import { keyboard } from "./audit.ts";
 import { ci } from "./ci.ts";
 import { conductor } from "./conductor.ts";
+import { extending } from "./extend.ts";
 import { guide } from "./guide.ts";
 import { more } from "./more.ts";
 import { rivals } from "./rivals.ts";
@@ -22,4 +23,5 @@ export const scripts: readonly Script[] = [
   ...more,
   ...side,
   ...keyboard,
+  ...extending,
 ];
