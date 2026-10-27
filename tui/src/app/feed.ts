@@ -557,7 +557,6 @@ export const feed = part({
         const program = programFor(act.id, liveOf(parts.map((one) => one.id)), () =>
           threadProgram(parts, madeMap(), word, owed, named),
         );
-        const side = w.preferences.gutter;
         const sections: Section[] = [];
         // A message to the thread shows as its sender wrote it, with each image that it attached named by a mark.
         const said = (text: string) =>
@@ -740,7 +739,6 @@ export const feed = part({
               const key = [
                 window.opened,
                 room,
-                side,
                 digits,
                 writer && thinks ? writer.display + wrote : "",
                 ...segment.map((line) =>
@@ -757,11 +755,10 @@ export const feed = part({
                 apart: at === 0,
                 body: (box) => {
                   // The code stands on the one surface of the thread, as a code block of the markdown does but with no
-                  // surface of its own, and the numbers of its lines stand at its left, or right of it.
+                  // surface of its own, and the numbers of its lines stand at its left.
                   const block = this.box({});
                   if (segment.length) {
                     const view = this.programView(segment, room, took, since, heads, digits, {
-                      gutter: side,
                       more: () => this.openWindow(where),
                     });
                     block.add(
@@ -771,9 +768,7 @@ export const feed = part({
                     );
                   }
                   if (thinks && writer)
-                    block.add(
-                      this.thinkingRow(writer.step.id, writer.display, digits, room, side === "right"),
-                    );
+                    block.add(this.thinkingRow(writer.step.id, writer.display, digits, room));
                   box.add(block);
                   if (window.opened && at === segments.length - 1)
                     box.add(
@@ -846,7 +841,7 @@ export const feed = part({
             section.label ?? [],
             (box) =>
               section.body(
-                this.barred(box, section.bar ?? c.border, section.apart && at > 0 ? space.section : 0),
+                this.barred(box, section.bar ?? tone, section.apart && at > 0 ? space.section : 0),
               ),
             {
               indent,

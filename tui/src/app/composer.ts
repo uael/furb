@@ -258,15 +258,6 @@ export const composer = part({
           detail: name === "terminal" ? terminalDetail : themeLabels[name].join(", "),
           current: name === this.session.preferences.theme,
         })),
-      gutter: () =>
-        (["left", "right"] as const).map((side) => ({
-          value: side,
-          detail:
-            side === "left"
-              ? "The numbers stand inside the block of code"
-              : "The numbers stand right of the block",
-          current: side === this.session.preferences.gutter,
-        })),
       access: () =>
         (["reader", "motion"] as const).map((name) => ({
           value: name,

@@ -1724,17 +1724,6 @@ export class Session extends EventEmitter {
           ? "The threads that are over fold automatically."
           : "The threads that are over stay open.";
         break;
-      case "gutter": {
-        const side = argument || (this.preferences.gutter === "left" ? "right" : "left");
-        if (side !== "left" && side !== "right") throw new Error("Use /gutter left or /gutter right.");
-        this.preferences.gutter = side;
-        this.preferences.save();
-        this.notice =
-          side === "left"
-            ? "The numbers of the lines stand inside the block of code."
-            : "The numbers of the lines stand right of the block of code.";
-        break;
-      }
       case "grant": {
         const amount = Number(argument);
         if (!argument || !Number.isFinite(amount) || amount < 0)

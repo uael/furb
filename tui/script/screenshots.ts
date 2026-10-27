@@ -880,7 +880,7 @@ try {
   // A worker of the life, whose ladders are long: the earlier rungs of a ladder fold into one line.
   await session.select(session.chains.find((chain) => session.labelOf(chain.id) === "life3/feed")?.id ?? "");
   await capture("60-long-ladder");
-  // The window of code of a thread opens in a block that scrolls, and the gutter stands right of the block.
+  // The window of code of a thread opens in a block that scrolls.
   const windowed = app()
     .scroll.getChildren()
     .filter((node) => node.id.startsWith("program-"))
@@ -888,9 +888,6 @@ try {
   for (const key of windowed) session.folds[key] = false;
   await capture("101-window-open");
   for (const key of windowed) delete session.folds[key];
-  await session.command("/gutter right");
-  await capture("102-gutter-right");
-  await session.command("/gutter left");
   // The conductor runs one long word, under which its messages pile up, and the earlier ones fold into one line.
   await session.select(session.engine.root);
   app().render();

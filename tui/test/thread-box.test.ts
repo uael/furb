@@ -212,29 +212,6 @@ test("a click on a ... of a window of code opens it in a block that scrolls, and
     await recorded(),
   ));
 
-test("the gutter stands inside the block of code at its left, or right of it when the flag says so", () =>
-  composing(
-    async ({ session, frame }) => {
-      await idle(session);
-      const row = async () =>
-        feedOf(
-          session,
-          (await frame()).split("\n").find((one) => one.includes('notes = read("README.md")')) ?? "",
-        );
-      expect(await row()).toMatch(/^[\s┃]+1 notes = read/);
-      await session.submit("/gutter right");
-      expect(session.preferences.gutter).toBe("right");
-      expect(await row()).toMatch(/^[\s┃]+notes = read\("README\.md"\).* 1\s*$/);
-      // Without a value the flag turns over.
-      await session.submit("/gutter");
-      expect(session.preferences.gutter).toBe("left");
-      expect(await row()).toMatch(/^[\s┃]+1 notes = read/);
-      expect(String(await session.submit("/gutter up").catch((error) => error))).toContain("/gutter left");
-    },
-    size,
-    true,
-  ));
-
 test("the box of a thread starts where the input of the chain starts, and its reply starts where the text of that input starts", () =>
   composing(
     async ({ session, frame }) => {

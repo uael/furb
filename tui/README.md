@@ -363,7 +363,6 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/sidebar` | Show or hide the chains and their threads, the context, and the workspaces |
 | `/delete` | Archive a session, or move it and its files to the workspace trash |
 | `/autocollapse` | Toggle the fold of the threads that are over |
-| `/gutter [left|right]` | Put the numbers of the lines inside the block of code, at its left, or right of the block |
 | `/extensions` | List the extensions that this life runs, with what their parts give the TUI |
 | `/serve [address]` | Give the addresses at which other operators read this life, or read and drive it, over the network |
 | `/end` | End each open life, its commands and its models, then quit |

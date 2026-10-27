@@ -34,7 +34,6 @@ import { clip, dollars, modelName, share } from "../format.ts";
 import type { ActRow } from "../session.ts";
 import { theme as c, frame, glyph, motion, spacing as space, spin } from "../theme.ts";
 import { bold, italic, type Part, styled, underline } from "../ui.ts";
-import { RightNumbered } from "./gutter.ts";
 import { part } from "./part.ts";
 import { gutterWidth, saidOf, seconds, stateOf } from "./shared.ts";
 
@@ -298,21 +297,13 @@ export const details = part({
 
   /** The last row of a thread while its model works on a step: the number of the line that comes, then what the model
    * thinks or writes, which the tick draws again, and a loader at the right end of the row. */
-  thinkingRow(
-    step: string,
-    display: number,
-    digits: number,
-    room: number,
-    right = false,
-  ): LineNumberRenderable {
+  thinkingRow(step: string, display: number, digits: number, room: number): LineNumberRenderable {
     const { number, parts } = this.thinkingParts(step, display, room - 3);
     const text = this.text(this.loading(parts), c.muted, { wrapMode: "none" });
-    const Numbers = right ? RightNumbered : LineNumberRenderable;
-    const view = new Numbers(this.renderer, {
+    const view = new LineNumberRenderable(this.renderer, {
       target: text,
       paddingRight: space.inset,
       fg: c.faint,
-      ...(right ? { bg: c.panel } : {}),
       minWidth: gutterWidth(digits),
       lineNumbers: new Map([[0, number]]),
     });
@@ -374,7 +365,7 @@ export const details = part({
     since: (act?: ActRow) => string,
     heads: ReadonlySet<ProgramLine>,
     digits = 1,
-    options: { gutter?: "left" | "right"; more?: (line: ProgramLine) => void } = {},
+    options: { more?: (line: ProgramLine) => void } = {},
   ): Renderable {
     const texts: string[] = [];
     const ellipses: number[] = [];
@@ -604,12 +595,10 @@ export const details = part({
     const target = this.code(texts.join("\n"), marks, hover, highlights);
     // Each row is cut to its room already, so none wraps: a row that is too long loses its end, and no mark falls under it.
     target.wrapMode = "none";
-    const Numbers = options.gutter === "right" ? RightNumbered : LineNumberRenderable;
-    const view = new Numbers(this.renderer, {
+    const view = new LineNumberRenderable(this.renderer, {
       target,
       paddingRight: space.inset,
       fg: c.faint,
-      ...(options.gutter === "right" ? { bg: c.panel } : {}),
       minWidth: gutterWidth(digits),
       lineNumbers: numbers,
       hideLineNumbers: hidden,

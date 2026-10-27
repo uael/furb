@@ -79,8 +79,8 @@ with a line at its left that runs down the whole box: it takes the color of the 
 quiet color elsewhere. At the right of the message stands who sent it and to which model when you did not, the type of
 its answer, its state and its controls. Each message that came to the thread later stands in the box the same way, and
 the answer of the model stands as markdown with no line of color. The words of its steps stand in the same box as code, with no
-surface of their own, as one Python program, line by line, with the number of each line in the gutter, in a quiet color. `/gutter right` puts the
-numbers right of the block, and `/gutter left` inside it again, while the TUI runs. At the end of an open thread an
+surface of their own, as one Python program, line by line, with the number of each line in the gutter, in a quiet color.
+At the end of an open thread an
 input takes your reply, and a reply to a thread that is over opens it again. The numbers go on from one step to the
 next, so a thread counts the lines of its program from its first step to its last, also past the steps that a fold keeps
 out. No step and no act takes a row of its own. Each line ends with a quiet hint of what its acts came to: a read the
