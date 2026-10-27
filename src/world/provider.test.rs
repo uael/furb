@@ -495,6 +495,27 @@ fn a_word_whose_statements_stand_over_many_lines_is_not_ended_while_the_model_wr
 }
 
 #[test]
+fn a_close_mark_inside_a_line_of_a_quote_does_not_end_the_reply_at_its_open_mark() {
+  let parts =
+    ["<s:old>\n", "x = \"</s:old>\" in text\n", "more text\n", "</s:old>\n", "close(len(old))"];
+  let usage = Usage { input_tokens: 10, output_tokens: 5, total_tokens: 15, ..Default::default() };
+  let events: Vec<_> = parts
+    .iter()
+    .map(|part| MockStreamEvent::text(*part))
+    .chain([MockStreamEvent::FinalResponse(StreamFinal::new("mock", usage))])
+    .collect();
+  let model = MockCompletionModel::from_stream_turns([events]);
+  let (mut engine, _) = life("inline", vec![scripted(&model)]);
+  let id = asked(&mut engine);
+  assert!(
+    until(&mut engine, |engine| ran(engine, "len(old)")),
+    "the whole word ran, past the close mark inside a line of the quote"
+  );
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  assert_eq!(got.as_ref().as_int(), Some(33));
+}
+
+#[test]
 fn what_a_function_of_the_host_tells_is_no_word_that_ends_its_reply() {
   let host: Hosted = Arc::new(|_, told| {
     async move {

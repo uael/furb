@@ -75,6 +75,17 @@ fn a_quote_stands_open_from_its_open_mark_to_its_close_mark() {
 }
 
 #[test]
+fn a_close_mark_inside_a_line_of_a_quote_ends_nothing() {
+  assert!(open("<s:old>\nlet end = \"</s:old>\" in it\nmore\n"));
+  assert!(open("<s:old>\nthe mark </s:old> and more\n"));
+  assert!(!open("<s:old>\nthe mark </s:old> and more\n</s:old>\n"));
+  assert!(!open("<s:old>text</s:old>"));
+  assert!(open("x = 1\n<s:b>\nHello</s:a>\n"));
+  assert!(!open("x = \"<s:b>\" + y\n"));
+  assert!(!open("<s:old-text>\nHello\n"));
+}
+
+#[test]
 fn a_statement_that_runs_at_once_is_settled_over_each_of_its_lines() {
   assert_eq!(settled("x = 1\nif x:\n  y = (\n    2)\n"), vec![(1, 1), (2, 4)]);
 }

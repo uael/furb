@@ -122,6 +122,27 @@ def stray(line: str) -> bool:
   )
 
 
+def swallowed(lines: list[str]) -> list[tuple[int, str, int]]:
+  """The open marks that stand inside the text of the quote of their own name, as (line, name, line of the quote).
+  The word is read after its quotes became strings of one line each, so the text of a quote is the string on the line
+  of its open mark, and each line of it follows as a newline of the string."""
+  found: list[tuple[int, str, int]] = []
+  for n, one in enumerate(lines, 1):
+    name, equals, rest = one.partition(" = ")
+    if not (equals and name.isidentifier() and rest[:1] in ("'", '"') and rest[1:][-1:] == rest[:1]):
+      continue
+    text, at = [""], 1
+    while at < len(rest) - 1:
+      step = rest[at : at + 2] if rest[at] == "\\" else rest[at]
+      if step == "\\n":
+        text.append("")
+      else:
+        text[-1] += step
+      at += len(step)
+    found += [(n + 1 + k, name, n) for k, x in enumerate(text) if x.strip() == f"<s:{name}>"]
+  return found
+
+
 def python(word: str) -> list[str]:
   """What the word is as python, before ty reads what it means: nothing for a word the interpreter takes as the
   body of a module, and the fault for one it does not."""
@@ -132,6 +153,16 @@ def python(word: str) -> list[str]:
   if opened:
     return [
       quoted(word, n, f"the quote <s:{name}> has no close mark </s:{name}> at the end of a line") for n, name in opened
+    ]
+  if inside := swallowed(lines):
+    return [
+      quoted(
+        word,
+        n,
+        f"the open mark <s:{name}> stands inside the quote <s:{name}> of line {first}, and one close mark"
+        f" </s:{name}> ends both: close the first quote, or delete this mark",
+      )
+      for n, name, first in inside
     ]
   try:
     compile(word, "<gate>", "exec", flags=PyCF_ALLOW_TOP_LEVEL_AWAIT)
