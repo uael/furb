@@ -1,11 +1,14 @@
 {
   "models.dev": {
     "url": "https://models.dev/api.json",
-    "fetched": "2026-10-26T18:09:17Z"
+    "fetched": "2026-10-27T05:30:42Z"
   },
   "pi-ai": {
     "version": "1.4.0",
-    "providers": ["ant-ling", "radius"],
-    "fetched": "2026-10-26T18:09:17Z"
+    "providers": [
+      "ant-ling",
+      "radius"
+    ],
+    "fetched": "2026-10-27T05:30:42Z"
   }
 }
