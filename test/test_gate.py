@@ -203,3 +203,16 @@ async def test_a_word_that_binds_a_name_that_the_transcript_binds_finds_that_the
     f"line 2: {told.format(act)}, in 'for {act} in []:'"
   ]
   assert engine.gate(f"{act}x = 1\nbash99_stdout = ''", on=root) == []
+
+
+async def test_a_word_that_binds_a_name_that_a_rung_before_it_declares_finds_the_rung_that_declares_it() -> None:
+  """A word that binds a name to a value of another type than the one that a rung before it declares for that name, as a def, a class, an import or a name with a type does, finds the rung that declares that name, so the model gives the value another name."""
+  _, _, root = born()
+  act = engine.rung("def pr() -> int:\n  return 1", on=root)
+  await act
+  word = "pr = 'a'"
+  assert engine.gate(word, on=root) == [
+    'line 1: error[invalid-assignment] Object of type `Literal["a"]` is not assignable to `def pr() -> int`;'
+    f" the word of {act} declares `pr` with that type, so give this value another name, in {word!r}"
+  ]
+  assert engine.gate("pr: str = 'a'\nclose(pr)", on=root) == []

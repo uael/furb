@@ -14,6 +14,7 @@ The word stands on a sheet of its own::
     actor = ""
     raised: BaseException | None = None
     __acts = (<the name of each act of the chain>, ...)
+    __words = (<the name of the rung of each word of the program>, ...)
     try:
       acting()
       <a word of the program of the chain before the word>
@@ -31,7 +32,11 @@ body binds each of them next, with the type the engine gives it. Each is a plain
 of a chain, so a word may read a name of the engine and bind it again to any value, as the contract lets it. The
 two names a chain binds of its own come next, with the types the contract gives them. The names of the acts of the
 chain come next, as ACTS, which the gate reads: the transcript binds the name of each act and each name of a value
-that a tell of it binds, as bash12_stdout, so a word that binds one says what no act gave, and the gate refuses it. Each word of the program
+that a tell of it binds, as bash12_stdout, so a word that binds one says what no act gave, and the gate refuses it.
+The names of the rungs of the program come next, as WORDS, in the order of their words, which the gate reads too:
+a def, a class, an import and a name with a type declare that name, and ty refuses a later value of another type
+for it, though python binds it, so the gate names the rung that declares the name, which may be the rung of an
+extension, and the model gives its value another name. Each word of the program
 stands in a try of its own, since a rung that raised keeps what it bound before the raise and the word after it
 runs all the same: ty reads the next word through the except, with every name the words before it bound before
 they raised, so a word that raises at its top level hides no name a later word binds, and a rung that never ends
@@ -49,7 +54,7 @@ word of a rung does not.
 """
 
 from ast import PyCF_ALLOW_TOP_LEVEL_AWAIT
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
 
 type Checked = Callable[[str], Sequence[tuple[int, str]]]
 """What reads a sheet: ty, in whichever form the Kernel holds it, giving each finding by its line."""
@@ -70,6 +75,9 @@ some of them."""
 ACTS = "__acts"
 """ACTS is the name the sheet binds to the names of the acts of the chain, which the gate reads to refuse a word that
 binds a name that the transcript binds."""
+WORDS = "__words"
+"""WORDS is the name the sheet binds to the names of the rungs of the program, in the order of their words, which the
+gate reads to name the rung that declares a name that a word binds again."""
 BOUND = '  actor = ""\n  raised: BaseException | None = None\n'
 """BOUND binds the two names a chain binds of its own."""
 OPENED = "  try:\n    acting()\n"
@@ -148,18 +156,20 @@ def laid(text: str, depth: int) -> str:
   return "".join(f"{' ' * depth}{line}\n" if line.strip() else "\n" for line in text.split("\n"))
 
 
-def sheet(engine: dict[str, object], program: Sequence[str], word: str, acts: Sequence[str] = ()) -> tuple[str, int]:
+def sheet(
+  engine: dict[str, object], program: Mapping[str, str], word: str, acts: Sequence[str] = ()
+) -> tuple[str, int]:
   """The word on its sheet, laid out as this module says, and how many lines stand above the word, which every
-  finding is counted back by."""
+  finding is counted back by. The program gives each word under the name of its rung, in its order."""
   unbound = "".join(f"  {name}: object\n" for name in UNBOUND)
   names = "".join(f"  {name} = {MODULE}.{name}\n" for name in engine if not name.startswith("_"))
-  words = "".join(OPENED + laid(one, 4) + CAUGHT for one in program)
-  above = f"import {MODULE}\nasync def __body():\n{unbound}{names}{BOUND}  {ACTS} = {tuple(acts)!r}\n{words or OPENED + CAUGHT}"
+  words = "".join(OPENED + laid(one, 4) + CAUGHT for one in program.values())
+  above = f"import {MODULE}\nasync def __body():\n{unbound}{names}{BOUND}  {ACTS} = {tuple(acts)!r}\n  {WORDS} = {tuple(program)!r}\n{words or OPENED + CAUGHT}"
   return above + laid(word, 2), above.count("\n")
 
 
 def gate(
-  engine: dict[str, object], program: Sequence[str], word: str, checked: Checked, acts: Sequence[str] = ()
+  engine: dict[str, object], program: Mapping[str, str], word: str, checked: Checked, acts: Sequence[str] = ()
 ) -> list[str]:
   """What the gate finds against a word: the word is read for what the interpreter will take, and then ty reads it
   on its sheet after the program of its chain, and each finding below the word is counted back to its line."""
@@ -171,8 +181,8 @@ def gate(
 
 def against(engine: dict[str, object], checked: Checked, on: str, word: str) -> list[str]:
   """What the gate finds against a word on the sheet of the engine whose names it is given, after the program of its
-  chain as it stands now, with the names of the acts of the chain. It makes no fact, so a host may read it while a
-  model still writes the word."""
+  chain as it stands now, each word under the name of its rung, with the names of the acts of the chain. It makes no
+  fact, so a host may read it while a model still writes the word."""
   program, question, transcript = engine["program"], engine["question"], engine["transcript"]
   assert callable(program)
   assert callable(question)
@@ -180,7 +190,7 @@ def against(engine: dict[str, object], checked: Checked, on: str, word: str) -> 
   words, facts = program(on), transcript(on)
   assert isinstance(words, dict)
   assert isinstance(facts, list)
-  return gate(engine, [*words.values()], word, checked, [str(x[1]) for x in facts if question(x)])
+  return gate(engine, words, word, checked, [str(x[1]) for x in facts if question(x)])
 
 
 def gating(engine: dict[str, object], checked: Checked) -> Ear:
