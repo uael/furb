@@ -56,6 +56,8 @@ jobs:
       DRAFT: ${{ github.ref == 'refs/heads/main' && 'false' || 'true' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup
         with:
           python: none
@@ -78,14 +80,19 @@ jobs:
           retention-days: 7
       - name: open the pull request
         env:
-          GH_TOKEN: ${{ github.token }}
+          # The secret GALLERY_TOKEN is optional: a fine-grained token of this repository with the permissions contents
+          # and pull requests, both write. A push and a pull request of such a token start the gates and the check of
+          # the title by themselves. With no secret, the job uses GITHUB_TOKEN and starts both by hand, as below.
+          GH_TOKEN: ${{ secrets.GALLERY_TOKEN || github.token }}
+          OWN_TOKEN: ${{ secrets.GALLERY_TOKEN }}
           TITLE: "chore(tui): Render the gallery again"
         run: |
           set -euo pipefail
           files="docs/screenshots docs/furb.gif"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch -q origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" 2>/dev/null || true
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch -q "$remote" "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" 2>/dev/null || true
           number=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
           git add -A -- $files
           if git diff --cached --quiet; then
@@ -93,7 +100,7 @@ jobs:
             if [ -n "$number" ]; then
               gh pr close "$number" --delete-branch --comment "🤖 The gallery of $(git rev-parse --short HEAD) shows what main holds, so this pull request has nothing to change."
             elif git rev-parse -q --verify "origin/$BRANCH" >/dev/null; then
-              git push origin --delete "$BRANCH"
+              git push "$remote" --delete "$BRANCH"
             fi
             exit 0
           fi
@@ -128,7 +135,7 @@ jobs:
           if [ -z "$number" ] || ! git rev-parse -q --verify "origin/$BRANCH" >/dev/null || ! git diff --cached --quiet "origin/$BRANCH" -- $files; then
             git switch -q -C "$BRANCH"
             git commit -q -m "$TITLE"
-            git push -q --force origin "$BRANCH"
+            git push -q --force "$remote" "$BRANCH"
             pushed=true
           fi
           if [ -z "$number" ]; then
@@ -138,8 +145,9 @@ jobs:
           else
             gh pr edit "$number" --title "$TITLE" --body-file "$RUNNER_TEMP/body.md"
           fi
-          # A push by GITHUB_TOKEN starts no workflow, so the gates and the check of the title start by hand on the new head.
-          if [ "$pushed" = true ]; then
+          # A push by GITHUB_TOKEN starts no workflow, so with no GALLERY_TOKEN the gates and the check of the title
+          # start by hand on the new head.
+          if [ "$pushed" = true ] && [ -z "$OWN_TOKEN" ]; then
             gh workflow run gates.yml --ref "$BRANCH"
             gh workflow run titles.yml --ref "$BRANCH"
           fi
