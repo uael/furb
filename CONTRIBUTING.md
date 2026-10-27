@@ -163,10 +163,12 @@ A screen must read clearly at first sight. After a change that a screen shows, r
 capture. With `FURB_GALLERY_ONLY` set to a pattern, such as `^0[1-5]-`, it writes only the captures that match.
 Do not commit them: after a push to `main` that changes a screen, `.github/workflows/gallery.yml` draws the gallery
 and the animation again on a runner of CI, and keeps one pull request on the branch `w/gallery` with the new files.
-With `FURB_GALLERY_CELLS` set to a folder, it also writes there the cells of each capture as JSON. With
-`FURB_STILL_CLOCK` set to a time in milliseconds, the clock of the view stands still at that time, so that two runs of
-the same code draw the same captures. The extension converge uses both to compare the captures of a pull request with
-those of main.
+It ends with an error when no capture matches, and otherwise with the line `Wrote N captures to <folder>.`.
+With `FURB_GALLERY_TEXT` set to a folder, it also writes there the text of each capture, which you read when you
+cannot see an image. With `FURB_GALLERY_CELLS` set to a folder, it writes there the cells of each capture as JSON.
+The clock of the view stands still by default, so that two runs of the same code draw the same captures, and
+`FURB_STILL_CLOCK` set to a time in milliseconds sets another time. The extension converge uses the cells and the
+clock to compare the captures of a pull request with those of main.
 
 ### The desktop preview
 
