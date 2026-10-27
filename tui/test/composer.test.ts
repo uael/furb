@@ -6,7 +6,7 @@ import { removeDemoDirectories } from "../src/demo.ts";
 import { emojis } from "../src/emoji.ts";
 import { count } from "../src/format.ts";
 import { palettes } from "../src/theme.ts";
-import { cellAt, composing } from "./composing.ts";
+import { cellAt, composing, drawn } from "./composing.ts";
 import { idle } from "./idle.ts";
 
 // Each test opens a demo session, with its worker and its record, as the tests of the App do, and so has their time:
@@ -625,7 +625,7 @@ test("a notice cut to the room of the footer keeps one line and the mark of its 
   ));
 
 test("a cancelled message keeps its place in the feed, and its cancel reads as a cancel, not as a failure", () =>
-  composing(async ({ session, app, frame }) => {
+  composing(async ({ session, app, screen, frame }) => {
     app.composer.setText("Think until I cancel.");
     await app.submit();
     await until(session, () => session.activity.some((act) => act.kind === "rung" && !act.done));
@@ -635,7 +635,7 @@ test("a cancelled message keeps its place in the feed, and its cancel reads as a
     await app.submit();
     await until(session, () => session.turns.some((turn) => turn[0] === "assistant"));
     await session.refresh();
-    const shown = await frame();
+    const shown = await drawn(frame, screen.renderer.root);
     expect(shown).not.toContain("failed");
     expect(shown).not.toContain("CancelledError");
     // The first message says its cancel at its right, above the second message, and the rung that the cancel ended

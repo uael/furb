@@ -24,7 +24,7 @@ import {
   themeOf,
 } from "../src/theme.ts";
 import { mix, styled } from "../src/ui.ts";
-import { composing } from "./composing.ts";
+import { composing, drawn } from "./composing.ts";
 
 afterEach(() => {
   colorless.on = false;
@@ -33,20 +33,20 @@ afterEach(() => {
 });
 
 /** The glyphs of a border, of the bar of a panel, and of the spinner, which the mode of a screen reader draws none of. */
-const drawn = /[┃╻╹│─┌┐└┘╭╮╰╯▄▀⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/g;
+const borders = /[┃╻╹│─┌┐└┘╭╮╰╯▄▀⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/g;
 /** The glyphs of the frame that the mode of a screen reader draws none of. */
-const glyphs = (frame: string) => [...frame.matchAll(drawn)].map(([found]) => found).join("");
+const glyphs = (frame: string) => [...frame.matchAll(borders)].map(([found]) => found).join("");
 
 test("the mode of a screen reader draws one column of text, with no box, no spinner, and no sidebar", async () => {
   const session = await demoSession({ seed: true });
   session.preferences.screenReader = true;
   session.preferences.view = "loom";
   await composing(
-    async ({ app, frame }) => {
+    async ({ app, screen, frame }) => {
       await session.engine.result(
         await session.engine.rung({ word: "await wait(0.2)", on: session.engine.root }),
       );
-      const shown = await frame();
+      const shown = await drawn(frame, screen.renderer.root);
       expect(shown).toContain("Explore this project");
       expect(glyphs(shown)).toBe("");
       expect(app.lifeView).toBe("main");

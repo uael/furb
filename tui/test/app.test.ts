@@ -1,10 +1,9 @@
 import { afterAll, expect, setSystemTime, test } from "bun:test";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { CodeRenderable, type Renderable, RGBA } from "@opentui/core";
+import { RGBA } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
-import { highlighting } from "../script/stage.ts";
 import { App, sessionDetail } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { demoLibrary, demoSession, removeDemoDirectories, seedDemo } from "../src/demo.ts";
@@ -12,28 +11,9 @@ import { Preferences } from "../src/preferences.ts";
 import type { Session } from "../src/session.ts";
 import { palettes } from "../src/theme.ts";
 import { type SessionEntry, Workspaces } from "../src/workspaces.ts";
-import { cellAt, composing, withDemo } from "./composing.ts";
+import { cellAt, composing, drawn, withDemo } from "./composing.ts";
 import { idle } from "./idle.ts";
 import { transcriptOf } from "./transcript.ts";
-
-/** Whether a code of a node, or of a node that it holds, is still being highlighted. */
-function busy(node: Renderable): boolean {
-  return (node instanceof CodeRenderable && node.isHighlighting) || node.getChildren().some(busy);
-}
-
-/** Draws the App until no code of it is being highlighted and a frame and the next are the same, since a card that the
- * App draws anew shows its markdown only once its highlighting ends. */
-async function drawn(frame: () => Promise<string>, root: Renderable): Promise<string> {
-  let shown = await frame();
-  for (let tries = 0; tries < 200; tries++) {
-    await Promise.all(highlighting(root));
-    await Bun.sleep(5);
-    const next = await frame();
-    if (next === shown && !busy(root)) return next;
-    shown = next;
-  }
-  return shown;
-}
 
 afterAll(removeDemoDirectories);
 

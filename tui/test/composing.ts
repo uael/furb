@@ -1,4 +1,4 @@
-import type { CapturedFrame, RGBA } from "@opentui/core";
+import { type CapturedFrame, CodeRenderable, type Renderable, type RGBA } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import * as stage from "../script/stage.ts";
 import { App } from "../src/app.ts";
@@ -67,6 +67,25 @@ export async function composing(
     screen.renderer.destroy();
     await library.dispose();
   }
+}
+
+/** Whether a code of a node, or of a node that it holds, is still being highlighted. */
+function busy(node: Renderable): boolean {
+  return (node instanceof CodeRenderable && node.isHighlighting) || node.getChildren().some(busy);
+}
+
+/** Draws the App until no code of it is being highlighted and a frame and the next are the same, since a card that the
+ * App draws anew shows its markdown only once its highlighting ends. */
+export async function drawn(frame: () => Promise<string>, root: Renderable): Promise<string> {
+  let shown = await frame();
+  for (let tries = 0; tries < 200; tries++) {
+    await Promise.all(stage.highlighting(root));
+    await Bun.sleep(5);
+    const next = await frame();
+    if (next === shown && !busy(root)) return next;
+    shown = next;
+  }
+  return shown;
 }
 
 /** The text, the color and the ground of the cell at a column of a row of the screen. */
