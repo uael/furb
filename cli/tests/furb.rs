@@ -473,9 +473,12 @@ fn a_prompt_the_record_already_holds_is_taken_up_and_never_asked_again() {
 fn a_prompt_the_world_paused_ends_its_command_with_why_and_goes_on_when_it_is_taken_up() {
   let yard = Yard::new("paused");
   let counted = ["prompt", "count the lines", "--shape", "int"];
-  let mut missing = yard.kept(&counted);
-  missing.env("FURB_CLAUDE_BIN", yard.at.join("missing")).env("FURB_CLAUDE_GONE", "0");
-  let said = refused(missing, "");
+  // A missing program is a failure that passes, which the provider asks again for minutes: this one fails at once.
+  let broken = yard.at.join("broken");
+  program(&broken, "#!/bin/sh\necho 'claude is broken' >&2\nexit 1\n");
+  let mut failing = yard.kept(&counted);
+  failing.env("FURB_CLAUDE_BIN", &broken);
+  let said = refused(failing, "");
   assert!(
     said.contains("furb: prompt1 is paused: claude-cli:opus/high answered nothing: "),
     "{said}"
