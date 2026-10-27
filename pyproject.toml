@@ -64,6 +64,8 @@ target-version = "py314"
 src = ["src", "test", "bind/python"]
 # A word of an extension of the project runs in a chain, on the names of the engine, and keeps its own form.
 extend-exclude = [".furb"]
+# A path given on the command line, as a hook or a worker gives it, keeps the exclude.
+force-exclude = true
 
 [tool.ruff.lint]
 select = [

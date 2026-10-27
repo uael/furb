@@ -246,6 +246,9 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 - `uv run pytest -q test/test_hygiene.py`: the hygiene laws alone.
 - `uv run ruff format src test script extensions` then `uv run ruff check src test script extensions`: format and
   lint. Two spaces of indentation, 120 columns.
+- `.furb` is outside ruff, even for a path that you give it: its words keep the form of the engine. Run the tests of
+  an extension of the project alone with `uv run --no-sync pytest -q <folder> -p no:cacheprovider --no-cov`, since the
+  coverage of 100 applies to the whole suite only.
 - `uv run ty check --error-on-warning`: the type check. The tests are checked against `engine.pyi`.
 - `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace`:
   the gates of the crate and of the command line. The tests of a module stand beside it, `src/engine.test.rs` beside
