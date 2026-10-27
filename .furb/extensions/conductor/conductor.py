@@ -163,10 +163,13 @@ gh run list --branch main --workflow gates.yml --limit 20 --json headSha,conclus
 c=$?; echo; echo "--- $c"
 cat DECISIONS.md 2>/dev/null"""
 
-REVIEWS = r"""for n in $(gh pr list --state open --json number --jq '.[].number') $(gh issue list --state open --json number --jq '.[].number'); do
-gh api "repos/{owner}/{repo}/pulls/$n/comments" --jq '.[] | "\(.pull_request_url | split("/") | last)\tc\(.id)\t\(.user.login)\t\(.reactions["+1"] // 0)\t\(.path):\(.line // .original_line)\t\(.body | gsub("[\n\t]"; " "))"' 2>/dev/null
-gh api "repos/{owner}/{repo}/issues/$n/comments" --jq '.[] | "\(.issue_url | split("/") | last)\ti\(.id)\t\(.user.login)\t\(.reactions["+1"] // 0)\t-\t\(.body | gsub("[\n\t]"; " "))"' 2>/dev/null
-gh api "repos/{owner}/{repo}/pulls/$n/reviews" --jq '.[] | select(.body != "") | "\(.pull_request_url | split("/") | last)\tr\(.id)\t\(.user.login)\t0\t-\t\(.body | gsub("[\n\t]"; " "))"' 2>/dev/null
+REVIEWS = r"""prs=$(gh pr list --state open --json number --jq '.[].number')
+for n in $prs; do
+{ gh api "repos/{owner}/{repo}/pulls/$n/comments" --jq '.[] | "\(.pull_request_url | split("/") | last)\tc\(.id)\t\(.user.login)\t\(.reactions["+1"] // 0)\t\(.path):\(.line // .original_line)\t\(.body | gsub("[\r\n\t]"; " "))"' 2>/dev/null; echo; }
+{ gh api "repos/{owner}/{repo}/pulls/$n/reviews" --jq '.[] | select(.body != "") | "\(.pull_request_url | split("/") | last)\tr\(.id)\t\(.user.login)\t0\t-\t\(.body | gsub("[\r\n\t]"; " "))"' 2>/dev/null; echo; }
+done
+for n in $prs $(gh issue list --state open --json number --jq '.[].number'); do
+{ gh api "repos/{owner}/{repo}/issues/$n/comments" --jq '.[] | "\(.issue_url | split("/") | last)\ti\(.id)\t\(.user.login)\t\(.reactions["+1"] // 0)\t-\t\(.body | gsub("[\r\n\t]"; " "))"' 2>/dev/null; echo; }
 done"""
 
 
