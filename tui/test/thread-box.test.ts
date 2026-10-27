@@ -285,7 +285,11 @@ test("the up arrow in the input of a thread takes its last message back to edit 
       screen.mockInput.pressEnter();
       await until(session, () => (listed(session)[0]?.messages.length ?? 0) === 2);
       let shown = await frame();
-      for (let step = 0; step < 240 && shown.includes("First wording"); step++) {
+      for (
+        let step = 0;
+        step < 240 && (shown.includes("First wording") || !shown.includes("Second wording"));
+        step++
+      ) {
         await Bun.sleep(25);
         shown = await frame();
       }
