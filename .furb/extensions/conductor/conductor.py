@@ -1361,6 +1361,11 @@ for block in run('git', 'worktree', 'list', '--porcelain')[1].split(chr(10) * 2)
   ahead = [x for x in out.splitlines() if x.startswith('+')]
   if state == 'OPEN' or code != 0 or (ahead and state not in ('MERGED', 'CLOSED')):
     continue
+  listed = run('git', 'status', '--porcelain', cwd=path)[1]
+  touched = [line[3:].split(' -> ')[-1].strip('"') for line in listed.splitlines() if len(line) > 3]
+  files = [os.path.join(path, x) for x in touched]
+  if max([age(path), *(age(x) for x in files if os.path.lexists(x))]) >= old:
+    continue
   if run('git', 'status', '--porcelain', cwd=path)[1].strip():
     run('git', 'add', '-A', cwd=path)
     diff = subprocess.run(['git', 'diff', '--cached', '--binary', 'HEAD'], cwd=path, capture_output=True)

@@ -515,17 +515,19 @@ async def test_a_key_of_the_client_makes_its_act_once_in_a_life_and_in_a_later_l
   assert furb_monty.engine.keyed("k1", "wait", 600, on=root) == "wait1"
 
 
-def test_the_door_gives_the_catalog_of_the_crate(tmp_path: Path) -> None:
+def test_the_door_gives_the_catalog_of_the_crate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
   """The door gives the catalog of the crate, as the door to TypeScript gives it: the levels of effort, a model by
   its name whether this machine offers it or not, the models this machine offers, and what a first run checks."""
+  claude = tmp_path / "claude"
+  claude.write_text("#!/bin/sh\n")
+  claude.chmod(0o755)
+  # The aliases of the claude command line come from the program itself, so a real one on PATH changes them.
+  monkeypatch.setenv("FURB_CLAUDE_BIN", str(claude))
   assert _monty.levels() == ["off", "minimal", "low", "medium", "high", "xhigh", "max"]
   efforts = ["low", "medium", "high", "xhigh", "max"]
   haiku = {"name": "claude-cli:haiku", "efforts": efforts, "window": 200000, "images": True, "price": None}
   assert _monty.model("claude-cli:haiku") == haiku
   assert _monty.model("nobody:none") is None
-  claude = tmp_path / "claude"
-  claude.write_text("#!/bin/sh\n")
-  claude.chmod(0o755)
   opus = {"name": "claude-cli:opus", "efforts": efforts, "window": 1000000, "images": True, "price": None}
   assert opus in _monty.models(str(claude))
   found = _monty.setup(str(claude))

@@ -448,13 +448,15 @@ def test_the_prune_removes_what_the_work_left_and_keeps_its_work(conductor: Roun
   git("remote", "add", "origin", str(origin), cwd=root, env=env)
   git("push", "-q", "-u", "origin", "main", cwd=root, env=env)
   main = git("rev-parse", "main", cwd=root, env=env).strip()
-  for key in ("merged", "open", "busy", "empty"):
+  for key in ("merged", "open", "busy", "empty", "fresh"):
     git("worktree", "add", "-q", "-b", f"w/{key}", str(tmp_path / f"furb-w-{key}"), cwd=root, env=env)
   merged = tmp_path / "furb-w-merged"
   (merged / "b.txt").write_text("b\n", encoding="utf-8")
   git("add", "-A", cwd=merged, env=env)
   git("commit", "-q", "-m", "b", cwd=merged, env=env)
   (merged / "notes.txt").write_text("not committed\n", encoding="utf-8")
+  for key in ("merged", "open", "busy", "empty"):
+    aged(tmp_path / f"furb-w-{key}", 3)
   git("push", "-q", "origin", "w/open", "main:refs/heads/w/closed", "main:refs/heads/w/moved", cwd=root, env=env)
   listed = [
     {"number": 1, "state": "MERGED", "headRefName": "w/merged", "headRefOid": "x", "isCrossRepository": False},
@@ -490,9 +492,10 @@ def test_the_prune_removes_what_the_work_left_and_keeps_its_work(conductor: Roun
     )
   assert got.stdout.startswith("The prune removed the worktrees ")
   assert "; 1 remote branch, listed in .furb/trashed.tsv; 1 scratch directory; 1 folder of " in got.stdout
-  assert sorted(p.name for p in tmp_path.glob("furb-w-*")) == ["furb-w-busy", "furb-w-open"]
+  assert sorted(p.name for p in tmp_path.glob("furb-w-*")) == ["furb-w-busy", "furb-w-fresh", "furb-w-open"]
   assert git("for-each-ref", "--format=%(refname:short)", "refs/heads/w", cwd=root, env=env).split() == [
     "w/busy",
+    "w/fresh",
     "w/open",
   ]
   kept = sorted((root / ".furb" / "archive").glob("*/*"))
