@@ -177,6 +177,27 @@ async def test_an_open_mark_of_a_quote_that_has_no_close_mark_is_a_finding_of_it
     "line 2: the quote <s:plan> has no close mark </s:plan> at the end of a line, in '<s:plan>'"
   ]
   assert engine.gate("<s:plan>\nstep one</s:plan>\nclose(plan)", on=root) == []
+  mark = "the quote <s:edit> has no close mark </s:edit> at the end of a line, in '<s:edit>'"
+  for word, line in [
+    ("<s:a>\nt\n</s:a>\nk = 1\n<s:edit>\nx = 1\nclose(1)", 5),
+    ("<s:edit>\nt\n<s:old>\no\n</s:old>\nclose(1)", 1),
+    ("<s:edit>\nt </s:edit> more\nclose(1)", 1),
+    ("<s:edit>\nt\n</s:old>\nclose(1)", 1),
+    ("if 1:\n  <s:edit>\n  x\nclose(1)", 2),
+  ]:
+    assert engine.gate(word, on=root) == [f"line {line}: {mark}"]
+
+
+async def test_an_open_mark_that_stands_inside_a_quote_of_its_own_name_is_a_finding_of_its_own() -> None:
+  """An open mark that stands inside a quote of its own name is a finding of its own, which names that mark and the line of the quote that holds it, since one close mark ends both."""
+  _, _, root = born()
+  why = (
+    "the open mark <s:edit> stands inside the quote <s:edit> of line {}, and one close mark </s:edit> ends both:"
+    " close the first quote, or delete this mark"
+  )
+  assert engine.gate("k = 1\n<s:edit>\nA\n<s:edit>\nB\n</s:edit>\nclose(k)", on=root) == [f"line 4: {why.format(2)}"]
+  assert engine.gate("<s:edit>\nA\n<s:old>\nB\n</s:old>\n</s:edit>\nclose(1)", on=root) == []
+  assert engine.gate("<s:a>\nA\n</s:a>\n<s:a>\nB\n</s:a>\nclose(a)", on=root) == []
 
 
 async def test_the_journal_keeps_what_the_gate_found() -> None:

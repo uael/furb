@@ -66,9 +66,29 @@ impl Watch {
   }
 }
 
-/// Whether a quote stands open in a word, since the text of a quote is no python until its end is written.
+/// Whether a quote stands open in a word, since the text of a quote is no python until its end is written. A quote
+/// opens at `<s:name>` at the start of a line and ends at the first `</s:name>` after it that ends a line, as the
+/// engine reads one, so a close mark inside a line of its text ends nothing.
 pub(super) fn open(word: &str) -> bool {
-  word.rfind(QUOTE) > word.rfind(UNQUOTE)
+  let mut from = 0;
+  while let Some(start) = word[from..].find(QUOTE).map(|at| from + at) {
+    from = start + QUOTE.len();
+    let Some((name, _)) = word[from..].split_once('>') else { continue };
+    let named = !name.is_empty() && name.chars().all(|one| one.is_alphanumeric() || one == '_');
+    if !named || !(start == 0 || word[..start].ends_with('\n')) {
+      continue;
+    }
+    let text = from + name.len() + 1;
+    let close = format!("{UNQUOTE}{name}>");
+    let ends = word[text..]
+      .match_indices(&close)
+      .find(|(at, _)| matches!(word[text + at + close.len()..].chars().next(), None | Some('\n')));
+    match ends {
+      Some((at, _)) => from = text + at + close.len(),
+      None => return true,
+    }
+  }
+  false
 }
 
 /// The line, counted from 1, of the first fault of a word that more text cannot mend, if it has one: a fault at the
