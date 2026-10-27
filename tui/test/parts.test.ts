@@ -85,7 +85,7 @@ test("a life gains the panel of a part of a project extension, which draws again
       await screen.mockInput.typeText("+");
       await shows(frame, "○ one more");
     },
-    { width: 120, height: 44 },
+    { width: 132, height: 44 },
     session,
   );
 });
@@ -316,7 +316,7 @@ test("a word that writes an extension with extend() gives the TUI its part in a 
       );
       await shows(frame, "○ write the part");
     },
-    { width: 120, height: 44 },
+    { width: 132, height: 44 },
     session,
   );
 });
@@ -343,7 +343,7 @@ test("/extensions opens a dialog of the extensions that the life runs, each with
       shown = await shows(frame, "tui.ts of todo");
       expect(shown).not.toContain("Its part gives panel Todo");
     },
-    { width: 150, height: 44 },
+    { width: 162, height: 44 },
     session,
   );
 });
