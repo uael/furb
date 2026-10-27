@@ -1,5 +1,6 @@
 import json
 from asyncio import CancelledError
+from typing import Any
 
 from furb.engine import (
   HIDDEN,
@@ -57,7 +58,7 @@ Each act of the round is made through quietly(verb, ...), so its end wakes nobod
 A review blocks only on a defect that a command reproduces, or on a false sentence of a contract."""
 
 LIMITS = {"room": {"opus": 1, "sonnet": 3, "opus/high": 1}, "fixer": "claude-cli:sonnet/high"}
-limits: dict = globals().setdefault("limits", LIMITS)
+limits: dict[str, Any] = globals().setdefault("limits", LIMITS)
 ACTOR = "claude-cli:opus/medium"
 HANDOVER = "claude-cli:sonnet/medium"
 MODELS = (HANDOVER, "claude-cli:sonnet/high", ACTOR, "claude-cli:opus/high")
@@ -71,35 +72,36 @@ UPSTREAM = "uael/monty"
 TOOLING = ".furb/tooling.json"
 ARCHIVE = ".furb/archive"
 TRASHED = ".furb/trashed-branches.tsv"
-queue: list[tuple[str, str, str]] = []
-backlog: list[tuple[str, str, str]] = []
-working: dict[str, str] = {}
-results: dict[str, object] = {}
-relays: dict[str, str] = {}
-bases: dict[str, str] = {}
-efforts: dict[str, str] = {}
-homes: dict[str, str] = {}
-models: dict[str, str] = {}
-lead: dict[str, str] = {}
-custom: dict[str, str] = {}
-prs: dict[int, dict] = {}
-merged: set[int] = set()
-noticed: set[str] = set()
-fixes: dict[str, float] = {}
-silent: dict[str, tuple[int, float]] = {}
-comments: set[str] = set()
-measures: list[int] = []
-timers: dict[str, float] = {}
-noted: list[str] = []
-debriefs: dict[str, str] = {}
-vetoes: dict = {}
+# The module of a chain may hold these names already, with values: a name binds its default only when it is not there.
+queue: list[tuple[str, str, str]] = globals().setdefault("queue", [])
+backlog: list[tuple[str, str, str]] = globals().setdefault("backlog", [])
+working: dict[str, str] = globals().setdefault("working", {})
+results: dict[str, object] = globals().setdefault("results", {})
+relays: dict[str, str] = globals().setdefault("relays", {})
+bases: dict[str, str] = globals().setdefault("bases", {})
+efforts: dict[str, str] = globals().setdefault("efforts", {})
+homes: dict[str, str] = globals().setdefault("homes", {})
+models: dict[str, str] = globals().setdefault("models", {})
+lead: dict[str, str] = globals().setdefault("lead", {})
+custom: dict[str, str] = globals().setdefault("custom", {})
+prs: dict[int, dict] = globals().setdefault("prs", {})
+merged: set[int] = globals().setdefault("merged", set())
+noticed: set[str] = globals().setdefault("noticed", set())
+fixes: dict[str, float] = globals().setdefault("fixes", {})
+silent: dict[str, tuple[int, float]] = globals().setdefault("silent", {})
+comments: set[str] = globals().setdefault("comments", set())
+measures: list[int] = globals().setdefault("measures", [])
+timers: dict[str, float] = globals().setdefault("timers", {})
+noted: list[str] = globals().setdefault("noted", [])
+debriefs: dict[str, str] = globals().setdefault("debriefs", {})
+vetoes: dict = globals().setdefault("vetoes", {})
 ORDERED = 600.0
-ordered: dict[int, float] = {}
-tips: dict[str, str] = {}
-shifted: dict[int, tuple[str, str]] = {}
+ordered: dict[int, float] = globals().setdefault("ordered", {})
+tips: dict[str, str] = globals().setdefault("tips", {})
+shifted: dict[int, tuple[str, str]] = globals().setdefault("shifted", {})
 PACE = 3600.0
-hired: dict[str, float] = {}
-paced: set[str] = set()
+hired: dict[str, float] = globals().setdefault("hired", {})
+paced: set[str] = globals().setdefault("paced", set())
 PACED = (
   "An hour passed since you took this item, and no PR of yours is open. Land it in steps: commit now the coherent"
   " part that serves his words, open its PR with pr(), and go on with the rest in a next PR from this chain,"
@@ -173,8 +175,8 @@ for n in $prs $(gh issue list --state open --json number --jq '.[].number'); do
 done"""
 
 
-landed: list[int] = []
-heard: list[str] = []
+landed: list[int] = globals().setdefault("landed", [])
+heard: list[str] = globals().setdefault("heard", [])
 OWNER = "uael"
 MARKS = ("🤖", "[furb")
 
@@ -1012,9 +1014,9 @@ Title: {title}
 
 Read the issue whole with its comments first: gh issue view {n} --comments. Do what it asks. When it asks for a change, open the PR with Fixes #{n} in its body, so that the merge closes the issue. When it asks a question or a decision and no change, answer it in a comment on the issue, and close with that answer."""
 
-handled: set[str] = set()
-ends: dict[str, list[tuple[str, int]]] = {}
-requeued: set[str] = set()
+handled: set[str] = globals().setdefault("handled", set())
+ends: dict[str, list[tuple[str, int]]] = globals().setdefault("ends", {})
+requeued: set[str] = globals().setdefault("requeued", set())
 AGAIN = """Workers did parts of this issue before, and it is still open. Their PRs: {prs}. Read each with gh pr view, find what the issue still lacks on origin/main, and do the next part. Give pr() fixes={n} only when your change finishes the issue; else leave fixes at 0, so that the merge leaves the issue open for a next part."""
 
 
@@ -1058,7 +1060,7 @@ STATUS = {
   "s:ready": ("0E8A16", "Green: the round merges it"),
   "s:owner": ("5319E7", "Green, and waits for the merge of the owner"),
 }
-statused: dict[int, str] = {}
+statused: dict[int, str] = globals().setdefault("statused", {})
 
 
 async def mark() -> None:
@@ -1102,7 +1104,7 @@ async def mark() -> None:
 
 
 PRIVATE = ".furb/extensions/conductor/private.json"
-secret: dict[str, str] = {}
+secret: dict[str, str] = globals().setdefault("secret", {})
 NEWS_PY = """import subprocess, sys
 repo, digest, line = sys.argv[1:4]
 got = subprocess.run(["gh", "issue", "view", digest, "--repo", repo, "--json", "body", "--jq", ".body"], capture_output=True, text=True, check=True)
@@ -1467,9 +1469,9 @@ async def prune() -> str:
 
 
 MANY = 3
-budgeted: dict[str, list[int]] = {}
-flaky: dict[str, list[str]] = {}
-runs_read: set[int] = set()
+budgeted: dict[str, list[int]] = globals().setdefault("budgeted", {})
+flaky: dict[str, list[str]] = globals().setdefault("flaky", {})
+runs_read: set[int] = globals().setdefault("runs_read", set())
 CI_PY = r'''import json, re, statistics, subprocess, sys, time
 from datetime import datetime
 read = set(json.loads(sys.argv[1]))
