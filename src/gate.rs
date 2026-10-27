@@ -11,7 +11,9 @@
 //! stubs import, `types` among them, which the sandbox does not run, and it lacks some modules that the sandbox
 //! runs, `ast` among them. So the sandbox alone says which import runs: each import of the sheet runs in a sandbox
 //! of its own, and one that raises is refused before the word runs. A word that binds a name that the transcript
-//! binds, which the sheet names, is refused too. The errors alone count, since a warning refuses no word.
+//! binds, which the sheet names, is refused too. A value of another type for a name that a rung of the program
+//! declares, which a def, a class, an import or a name with a type does, names that rung, as the sheet names it, so a
+//! model reads where the type of the name comes from. The errors alone count, since a warning refuses no word.
 
 use std::cell::RefCell;
 
@@ -57,6 +59,12 @@ const TOLD: &str = "error[transcript-name]";
 /// The name the sheet binds to the names of the acts of the chain, which is `ACTS` of `furb.sheet`.
 const ACTS: &str = "__acts";
 
+/// The name the sheet binds to the names of the rungs of the program, which is `WORDS` of `furb.sheet`.
+const WORDS: &str = "__words";
+
+/// The rule of a finding on a value that is not of the type that its name is declared with.
+const ASSIGN: &str = "error[invalid-assignment]";
+
 thread_local! {
   /// The one checker of this thread, which every life of the thread and the Kernel of a python host read with,
   /// and nothing before its first reading. It holds one reading of the typeshed and one of the engine, which cost
@@ -68,11 +76,12 @@ thread_local! {
 /// What the gate found on a sheet, in the order of its lines: each error of the checker by the line it stands on,
 /// in the concise form it writes, and no warning, since a warning refuses no word; each import that the
 /// sandbox cannot run, in place of what the checker says of the imports; each await in a function that is not
-/// async; and each name that the word binds and that the transcript binds. Each is read on the sheet with each
-/// literal that holds more than `DEEP` brackets cut, which the checker could not read in time.
+/// async; and each name that the word binds and that the transcript binds. An error on a value of another type for
+/// a name that a rung of the program declares names that rung. Each is read on the sheet with each literal that
+/// holds more than `DEEP` brackets cut, which the checker could not read in time.
 pub fn checked(sheet: &str) -> Result<Vec<(usize, String)>, Fault> {
   let sheet = &shallowed(sheet);
-  let mut found = typed(sheet)?;
+  let mut found = declared(sheet, typed(sheet)?);
   found.extend(unrun(sheet));
   found.extend(unawaited(sheet));
   found.extend(told(sheet));
@@ -219,10 +228,7 @@ fn rebound(sheet: &str) -> (String, Vec<usize>) {
   let lines: Vec<&str> = sheet.split_inclusive('\n').collect();
   let mut deleted: Vec<(usize, String)> = vec![];
   if let Ok(parsed) = parse_module(sheet) {
-    let body = parsed.syntax().body.iter().find_map(|stmt| match stmt {
-      Stmt::FunctionDef(def) if def.is_async => Some(&def.body),
-      _ => None,
-    });
+    let body = bodied(parsed.syntax());
     let mut bound: Vec<&str> = vec![];
     for stmt in body.into_iter().flatten() {
       let names: Vec<&str> = match stmt {
@@ -256,6 +262,138 @@ fn rebound(sheet: &str) -> (String, Vec<usize>) {
     stands.push(at + 1);
   }
   (text, stands)
+}
+
+/// The body of the one async function of the sheet, which holds the program and the word.
+fn bodied(module: &ruff_python_ast::ModModule) -> Option<&[Stmt]> {
+  module.body.iter().find_map(|stmt| match stmt {
+    Stmt::FunctionDef(def) if def.is_async => Some(def.body.as_slice()),
+    _ => None,
+  })
+}
+
+/// The strings of the tuple that the body binds to a name, as the sheet binds `ACTS` and `WORDS`.
+fn strings<'a>(body: &'a [Stmt], name: &str) -> Vec<&'a str> {
+  body
+    .iter()
+    .find_map(|stmt| match stmt {
+      Stmt::Assign(one) if matches!(one.targets.as_slice(), [Expr::Name(it)] if it.id.as_str() == name) => {
+        match &*one.value {
+          Expr::Tuple(names) => Some(
+            names
+              .elts
+              .iter()
+              .filter_map(|one| match one {
+                Expr::StringLiteral(text) => Some(text.value.to_str()),
+                _ => None,
+              })
+              .collect(),
+          ),
+          _ => None,
+        }
+      }
+      _ => None,
+    })
+    .unwrap_or_default()
+}
+
+/// The statements of the word, which stand after the last try of a word of the program.
+fn word_of(body: &[Stmt]) -> &[Stmt] {
+  body
+    .iter()
+    .rposition(|stmt| matches!(stmt, Stmt::Try(one) if worded(one)))
+    .map_or(&body[body.len()..], |at| &body[at + 1..])
+}
+
+/// Each finding with the rung that declares the name that its line binds, when the finding is an error on the type of
+/// that value and a word of the program declares the name.
+///
+/// A def, a class, an import and a name with a type declare that name, and the checker refuses a later value of
+/// another type for it, though python binds it. The checker says only that the value is not assignable to the type,
+/// and the model cannot see that an extension declared the name, so it binds the name again. So the finding names
+/// the rung that declared the name last, of the names that the sheet binds as `WORDS`, and says to give the value
+/// another name. A name that the word binds in a def, a class, a lambda or a comprehension is its own, and names no
+/// rung.
+fn declared(sheet: &str, found: Vec<(usize, String)>) -> Vec<(usize, String)> {
+  if !found.iter().any(|(_, why)| why.starts_with(ASSIGN)) {
+    return found;
+  }
+  let Ok(parsed) = parse_module(sheet) else { return found };
+  let Some(body) = bodied(parsed.syntax()) else { return found };
+  let rungs = strings(body, WORDS);
+  let mut declares: Vec<(&str, Option<&str>)> = vec![];
+  let tries = body.iter().filter_map(|stmt| match stmt {
+    Stmt::Try(one) if worded(one) => Some(one),
+    _ => None,
+  });
+  for (at, one) in tries.enumerate() {
+    for stmt in &one.body {
+      let names = match stmt {
+        Stmt::AnnAssign(it) => named(&it.target),
+        Stmt::FunctionDef(_)
+        | Stmt::ClassDef(_)
+        | Stmt::TypeAlias(_)
+        | Stmt::Import(_)
+        | Stmt::ImportFrom(_) => binds(stmt),
+        _ => vec![],
+      };
+      for name in names {
+        declares.retain(|(held, _)| *held != name);
+        declares.push((name, rungs.get(at).copied()));
+      }
+    }
+  }
+  let mut stored = Stored(vec![]);
+  stored.visit_body(word_of(body));
+  let line = |at: usize| sheet[..at].matches('\n').count() + 1;
+  found
+    .into_iter()
+    .map(|(at, why)| {
+      let by = stored.0.iter().filter(|(start, _)| line(*start) == at).find_map(|(_, name)| {
+        declares.iter().find(|(held, _)| held == name).map(|(_, rung)| (*name, *rung))
+      });
+      match by {
+        Some((name, rung)) if why.starts_with(ASSIGN) => {
+          let who = rung.map_or("a word of the program of this chain".to_owned(), |one| {
+            format!("the word of {one}")
+          });
+          (
+            at,
+            format!(
+              "{why}; {who} declares `{name}` with that type, so give this value another name"
+            ),
+          )
+        }
+        _ => (at, why),
+      }
+    })
+    .collect()
+}
+
+/// The names that a body binds in its own scope, each by where it starts: each target of a statement or of an
+/// expression, but none in a def, a class, a lambda or a comprehension, which bind in a scope of their own.
+struct Stored<'a>(Vec<(usize, &'a str)>);
+
+impl<'a> Visitor<'a> for Stored<'a> {
+  fn visit_stmt(&mut self, stmt: &'a Stmt) {
+    if !matches!(stmt, Stmt::FunctionDef(_) | Stmt::ClassDef(_)) {
+      visitor::walk_stmt(self, stmt);
+    }
+  }
+
+  fn visit_expr(&mut self, expr: &'a Expr) {
+    match expr {
+      Expr::Name(one) if matches!(one.ctx, ExprContext::Store) => {
+        self.0.push((one.start().to_usize(), one.id.as_str()))
+      }
+      Expr::Lambda(_)
+      | Expr::ListComp(_)
+      | Expr::SetComp(_)
+      | Expr::DictComp(_)
+      | Expr::Generator(_) => {}
+      _ => visitor::walk_expr(self, expr),
+    }
+  }
 }
 
 /// Whether a try is the try of a word of the program, as `furb.sheet` writes it: `acting()` first, and one except
@@ -415,37 +553,9 @@ impl<'a> Visitor<'a> for Awaits<'a> {
 /// of the program, and a name that it binds at any depth counts.
 fn told(sheet: &str) -> Vec<(usize, String)> {
   let Ok(parsed) = parse_module(sheet) else { return vec![] };
-  let Some(body) = parsed.syntax().body.iter().find_map(|stmt| match stmt {
-    Stmt::FunctionDef(def) if def.is_async => Some(&def.body),
-    _ => None,
-  }) else {
-    return vec![];
-  };
-  let acts: Vec<&str> = body
-    .iter()
-    .find_map(|stmt| match stmt {
-      Stmt::Assign(one) if matches!(one.targets.as_slice(), [Expr::Name(name)] if name.id.as_str() == ACTS) => {
-        match &*one.value {
-          Expr::Tuple(names) => Some(
-            names
-              .elts
-              .iter()
-              .filter_map(|one| match one {
-                Expr::StringLiteral(name) => Some(name.value.to_str()),
-                _ => None,
-              })
-              .collect(),
-          ),
-          _ => None,
-        }
-      }
-      _ => None,
-    })
-    .unwrap_or_default();
-  let word = body
-    .iter()
-    .rposition(|stmt| matches!(stmt, Stmt::Try(one) if worded(one)))
-    .map_or(&body[body.len()..], |at| &body[at + 1..]);
+  let Some(body) = bodied(parsed.syntax()) else { return vec![] };
+  let acts = strings(body, ACTS);
+  let word = word_of(body);
   let mut bound = Bound(vec![]);
   bound.visit_body(word);
   let line = |at: usize| sheet[..at].matches('\n').count() + 1;
@@ -544,13 +654,14 @@ mod tests {
     acted(program, &[], word)
   }
 
-  /// The sheet of one word after a program, on a chain whose acts have the names it is given.
+  /// The sheet of one word after a program, on a chain whose acts have the names it is given. Each word of the
+  /// program is of the rung `rung<n>`, its place in the program from 1.
   fn acted(program: &[&str], acts: &[&str], word: &str) -> (String, usize) {
-    let code = "__engine = {}\nexec(__source, __engine)\n__sheet = {}\nexec(__sheet_source, __sheet)\n__sheet['sheet'](__engine, __program, __word, __acts)";
+    let code = "__engine = {}\nexec(__source, __engine)\n__sheet = {}\nexec(__sheet_source, __sheet)\n__program = {f'rung{n}': one for n, one in enumerate(__words, 1)}\n__sheet['sheet'](__engine, __program, __word, __acts)";
     let mut named = NamedValues::new();
     named.push("__source", Object::string(ENGINE));
     named.push("__sheet_source", Object::string(SOURCE));
-    named.push("__program", Object::list(program.iter().map(|one| Object::string(*one))));
+    named.push("__words", Object::list(program.iter().map(|one| Object::string(*one))));
     named.push("__word", Object::string(word));
     named.push("__acts", Object::list(acts.iter().map(|one| Object::string(*one))));
     let got =
@@ -685,6 +796,42 @@ mod tests {
       got,
       vec![(2, told("bash1_stdout")), (3, told("prompt2")), (8, told("prompt2_value"))]
     );
+  }
+
+  #[test]
+  fn a_value_of_another_type_for_a_name_that_a_rung_declares_names_that_rung() {
+    let program = ["def pr() -> int:\n  return 1", "import json\nmerged: set[int] = set()\nk = 1"];
+    let word = "pr = 'a'\nfor merged in [[1]]:\n  pass\nk = 'b'\ndef f() -> int:\n  json = 1\n  return json\nclose(pr)";
+    let (text, above) = sheet(&program, word);
+    let got: Vec<_> = found(&text)
+      .into_iter()
+      .filter(|(line, _)| *line > above)
+      .map(|(line, why)| (line - above, why))
+      .collect();
+    assert_eq!(got.iter().map(|(line, _)| *line).collect::<Vec<_>>(), vec![1, 2], "{got:?}");
+    assert!(got[0].1.starts_with(ASSIGN), "{got:?}");
+    assert!(
+      got[0].1.ends_with(
+        "; the word of rung1 declares `pr` with that type, so give this value another name"
+      ),
+      "{got:?}"
+    );
+    assert!(
+      got[1].1.ends_with(
+        "; the word of rung2 declares `merged` with that type, so give this value another name"
+      ),
+      "{got:?}"
+    );
+    let (text, above) = sheet(&program, "pr = 'a'");
+    let unnamed = found(&text.replace("__words = ('rung1', 'rung2')", "__words = ()"));
+    let tail = "; a word of the program of this chain declares `pr` with that type, so give this value another name";
+    assert_eq!(
+      unnamed.iter().map(|(line, _)| *line).collect::<Vec<_>>(),
+      vec![above + 1],
+      "{unnamed:?}"
+    );
+    assert!(unnamed[0].1.ends_with(tail), "{unnamed:?}");
+    assert_eq!(said(&program, "pr: str = 'a'\nclose(pr)"), vec![]);
   }
 
   /// A name that a tell binds to a value of lists, `depth` levels deep, as monty writes it.

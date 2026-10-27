@@ -369,7 +369,7 @@ class Py:
 
   def gate(self, word: str, program: list[str]) -> list[str]:
     """What the gate finds against a word: the sheet of the engine, read by the gate of the crate."""
-    return sheet.gate(ENGINE, program, word, furb_monty.gate)
+    return sheet.gate(ENGINE, {f"rung{n}": one for n, one in enumerate(program, 1)}, word, furb_monty.gate)
 
   def gating(self) -> Kernel:
     """The gate as the ear of a life, which answers each gate with what it finds against the word."""
