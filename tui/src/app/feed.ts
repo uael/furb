@@ -752,6 +752,9 @@ export const feed = part({
               sections.push({
                 id: index || at ? `program-${act.id}-${index}-${at}` : `program-${act.id}`,
                 key,
+                // A blank row parts the code from the message above it, as the edge of the box parts the message from
+                // the top of the box.
+                apart: at === 0,
                 body: (box) => {
                   // The code stands on the one surface of the thread, as a code block of the markdown does but with no
                   // surface of its own, and the numbers of its lines stand at its left, or right of it.
