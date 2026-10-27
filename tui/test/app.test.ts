@@ -369,11 +369,17 @@ test("the last row of a thread whose model works shows a loader left of the numb
     const row = async () => (await frame()).split("\n").find((line) => / 1 # /.test(line)) ?? "";
     expect(await row()).toMatch(/^ +[^\s\d] +1 # thinking/);
     const step = session.activity.find((act) => act.kind === "rung" && !act.done)?.id ?? "";
-    session.host.streams.set(step, {
-      chain: session.selected,
-      text: "",
-      thinking: "First I read.\nThen I wait.",
-    });
+    // The thought streams in the worker, since each state of the worker replaces the streams that the host holds.
+    const think = Reflect.get(session.host, "ask") as (
+      target: string,
+      method: string,
+      thought: string,
+    ) => Promise<null>;
+    await think.call(session.host, "library", "think", "First I read.\nThen I wait.");
+    await until(
+      session.host,
+      () => session.host.streams.get(step)?.thinking === "First I read.\nThen I wait.",
+    );
     // The tick draws the row again from the stream, and no other part of the feed.
     await new Promise((done) => setTimeout(done, 250));
     expect(await row()).toMatch(/^ +[^\s\d] +1 # Then I wait\./);
