@@ -28,6 +28,7 @@ import { type DetailsPart, details } from "./app/details.ts";
 import { type FeedPart, feed } from "./app/feed.ts";
 import { GhostTextarea } from "./app/ghost.ts";
 import { type InputPart, input, inputBound } from "./app/input.ts";
+import { type ChainsPanel, type LoomsPart, looms } from "./app/looms.ts";
 import { type PalettePart, palette } from "./app/palette.ts";
 import { assemble, bindAll } from "./app/part.ts";
 import { type QuestionsPart, questions, questionsBound } from "./app/questions.ts";
@@ -247,7 +248,7 @@ export class App {
   answering?: string;
   /** The rewind tree, which the feed shows in place of its cards while it is open: its rows, and the row that the
    * pointer stands on. */
-  tree?: { rows: TreeRow[]; selected: string; title: string };
+  tree?: { rows: TreeRow[]; selected: string; title: string; panel?: ChainsPanel };
   readonly treeFolds = new Map<string, boolean>();
   /** When the last Escape that had nothing to close was pressed. */
   escapedAt = 0;
@@ -578,6 +579,7 @@ export class App {
       if (this.statusMoves) this.renderStatus();
       if (this.stage.visible && this.cursor === undefined && this.moves()) this.renderStage();
       if (this.thinkingRows.size) this.tickThinking();
+      if (this.tree?.panel?.live) this.renderChains();
     }, frame);
     this.render();
     this.composer.focus();
@@ -1085,6 +1087,7 @@ export interface App
     SettingsPart,
     ValuesPart,
     TreePart,
+    LoomsPart,
     InputPart {}
 assemble(
   App,
@@ -1104,5 +1107,6 @@ assemble(
   settings,
   values,
   tree,
+  looms,
   input,
 );

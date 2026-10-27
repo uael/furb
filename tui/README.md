@@ -289,7 +289,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | ⌃1-3 or ⌥1-3 | Feed / transcript / changes view |
 | ⌃Tab / ⇧⌃Tab | Next / previous chain |
 | ⌃P | Search all actions |
-| ⌃B / ⌃N | Switch / create a chain |
+| ⌃B / ⌃N | Chains / create a chain |
 | ⌃M or ⌥M | Choose a model |
 | ⇧Tab / ⌃T | Choose an effort / a theme |
 | ⌃W / ⌃\\ | Workspaces and sessions / show or hide the sidebar |

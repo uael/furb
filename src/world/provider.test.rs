@@ -1780,3 +1780,11 @@ fn a_reply_whose_call_ended_after_a_part_of_its_word_ran_is_the_word_that_ran() 
     "the chain is told why its turn is the word that ran"
   );
 }
+
+#[test]
+fn a_switched_account_is_a_failure_that_passes_in_its_own_words_and_no_wait_for_a_limit() {
+  let said = "Switched account from perso to team: its usage limit";
+  let no = CompletionError::ProviderError(said.to_owned());
+  assert_eq!(passing(&no), Some(said.to_owned()));
+  assert_eq!(limit(&no, &jiff::Zoned::now()), None);
+}

@@ -376,6 +376,10 @@ try {
   session.theme = "github";
   app().chains();
   await capture("15-chains");
+  app().askChains(1);
+  app().askChains(1);
+  await capture("15b-chains-question");
+  app().closeTree();
   app().closeOverlay();
   app().openThreads(session.selected);
   await capture("81-chain-threads");
@@ -907,6 +911,12 @@ try {
   await capture("72-graph-act");
   app().steer(false);
   app().switchView("main");
+
+  // The panel of the chains on the life of a conductor, whose chains hire chains under them.
+  await session.select(session.engine.root);
+  app().chains();
+  await capture("15c-chains-conductor");
+  app().closeTree();
 
   // A first run of a real life, not a demo, on this home, which holds no model: the welcome checks the setup, with a
   // fix for each part that is missing, over the steps that the extensions played on the chain.

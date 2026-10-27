@@ -326,11 +326,21 @@ surface takes the default colors of the terminal.
 
 ## Chains
 
-⌃B lists the chains, each with its state and the chain it branched from. Each chain has its own feed and module. The
-sidebar lists in its tree the root chain, the chain on screen, and each chain that is not at rest, and the other chains
+⌃B opens the panel of the chains over the feed, drawn as a loom: each chain is a thread, in the order of the tree, and
+time runs to the right up to now. A branch drops from the thread of its chain at the moment it was made. A ◆ is a
+question for you, and a ✗ is a failure. The panel only picks a chain. ↑↓ move the pointer, ←→ fold and unfold a
+branch, Tab goes to the next chain that asks you, Space pauses or wakes a chain, x cancels what it waits on, and Enter
+opens the chain under the pointer in the feed and closes the panel. A click puts the pointer on a row, a second click
+opens it, a click on an arrow folds its branch, and the wheel scrolls. A branch that is all finished starts folded, and
+the finished chains of a chain, with no branch of their own, join one row, which Enter opens. ⌃B or Esc closes the
+panel. Each chain has its own feed and module. The sidebar lists in its tree the root chain, the chain on screen, and each chain that is not at rest, and the other chains
 fold under Finished. A click on a chain lists its threads, each in the color of its thread.
 
 ![Chains](screenshots/15-chains.png)
+
+![A chain that asks you](screenshots/15b-chains-question.png)
+
+![The chains of a conductor](screenshots/15c-chains-conductor.png)
 
 ![The threads of a chain](screenshots/81-chain-threads.png)
 

@@ -143,6 +143,50 @@ keeps its default discovery. An empty array or executable is invalid. Set `"enab
 disable Claude without removing its command. Project fields override user fields; a project `true` or `false`
 changes only whether the provider is enabled when the user config holds an object.
 
+To run Claude as one account, or as a list of accounts, set `providers.claude-cli.accounts`:
+
+```json
+{
+  "providers": {
+    "claude-cli": {
+      "accounts": [
+        {"name": "perso", "token_file": "~/.config/furb/perso.token"},
+        {"name": "team", "token_env": "FURB_CLAUDE_TEAM"},
+        {"name": "pro", "config_dir": "~/.claude-pro"}
+      ],
+      "switch": "failover"
+    }
+  }
+}
+```
+
+Each account has a `name` and exactly one place for its credential:
+
+- `token_file` is a file that holds a token of `claude setup-token`. Furb reads the file each time that it starts a
+  process, so a new token needs no reload. Let only you read the file.
+- `token_env` is the name of a variable of the environment of furb that holds such a token.
+- `config_dir` is a config directory of Claude where the account logged in with `claude auth login`.
+
+A path is absolute or starts with `~`. Furb never writes a token in a config, a message or a log. A token of
+`claude setup-token` lives one year and never refreshes, so many processes can share it, and no refresh that fails can
+empty it. It serves inference, which is all that a completion needs. A config directory refreshes its token in place,
+and many processes can race for that refresh.
+
+`switch` says which account a new conversation takes:
+
+- `failover`, the default, takes the first account of the list that is not parked.
+- `spread` takes the account that a conversation took least recently.
+
+A conversation stays on its account. When an account meets a usage limit, furb parks it until the reset that the limit
+names, or for five minutes when it names none. When an account fails to sign in, or its token cannot be read, furb
+parks it until `/reload`. The turn then fails with `Switched account from perso to team: its usage limit`, which the
+chain shows as a retry, and the retry runs as the next account, on a new conversation that holds the whole history.
+When every account is parked, furb waits for the first reset, as it does for one account. With one account, furb parks
+nothing.
+
+`command` and `accounts` work together: the command starts each process of each account. The list of models and the
+web search run as the first account that is not parked, and Claude counts as signed in when any account is.
+
 An optional model `cost` gives `input`, `output`, `cache_read` and `cache_write`, in dollars for one million tokens.
 A custom model has no dollar price when `cost` is unsaid, so a dollar ceiling cannot bound its cost.
 
