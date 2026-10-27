@@ -252,7 +252,10 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
   `src/engine.rs`, and those of the engine drive the real engine on ears in rust. `cli/tests/furb.rs` runs `furb` as
   a process, on a claude command line that answers from a script.
 - `cargo run -p furb-cli -- <words>`, or `uv run furb <words>`: the command line, as `furb --help` says.
-- `uv run pre-commit run --all-files`: every gate the commit hook runs.
+- `uv run pre-commit run --all-files`: every gate the commit hook runs. A `git commit` runs the hooks, `cargo test`
+  among them, and takes minutes: give it a timeout of 3600 s in `bash`, and chain the push after it with `&&`, so a
+  commit that fails stops the push. The hook of the links runs only for a README or a manifest, and reads git alone.
+  The hook `stray` refuses a `*.rej`, `*.orig` or `*-E` file.
 - `uv run python script/smoke.py`: one real life on the default actor: claude-cli:opus/high through the claude command
   line on PATH, or the one `FURB_CLAUDE_BIN` names, and with no claude the first model of the network or of the local
   server that the catalog offers, which may cost dollars. `--model` names the actor, as `--model local:qwen3` on the
