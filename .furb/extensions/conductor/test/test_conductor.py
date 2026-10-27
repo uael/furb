@@ -31,7 +31,7 @@ for pattern, out, code in says:
     break
 else:
   sys.exit(0)
-if jq and out:
+if jq and out and not code:
   out = subprocess.run(["jq", "-r", jq], input=out, capture_output=True, text=True, check=True).stdout
 sys.stdout.write(out)
 sys.exit(code)
@@ -1324,3 +1324,39 @@ def test_an_open_issue_whose_worker_ended_with_a_pr_is_queued_again_once_for_eac
   ends("prompt4", 0)
   asyncio.run(conductor.take_issues())
   assert conductor.queue == []
+
+
+NOT_FOUND = '{"message":"Not Found","documentation_url":"https://docs.github.com/rest","status":"404"}'
+
+
+def says_issues(conductor: Round, bodies: dict[int, str]) -> None:
+  conductor.say(r"pr list", json.dumps([{"number": 7}]))
+  conductor.say(r"issue list", json.dumps([{"number": n} for n in bodies]))
+  conductor.say(r"pulls/39\d/", NOT_FOUND, 1)
+  for n, body in bodies.items():
+    comment = {"issue_url": f"u/issues/{n}", "id": n, "user": {"login": "uael"}, "reactions": {"+1": 0}, "body": body}
+    conductor.say(rf"issues/{n}/comments", json.dumps([comment]))
+
+
+@POSIX
+@JQ
+def test_a_404_body_of_gh_on_an_issue_loses_no_comment_of_the_next_number(conductor: Round) -> None:
+  says_issues(conductor, {394: "first", 395: "second"})
+  conductor.handled.update({"issue394", "issue395"})
+  asyncio.run(conductor.review(False))
+  assert len(conductor.prompts) == 1
+  message = conductor.prompts[0][0]
+  assert "#394 i394 - by uael: first" in message
+  assert "#395 i395 - by uael: second" in message
+  assert "Not Found" not in message
+  assert "pulls/394" not in conductor.log() and "pulls/7/" in conductor.log()
+
+
+@POSIX
+@JQ
+def test_each_row_of_the_reviews_ends_its_line_and_a_body_holds_no_carriage_return(conductor: Round) -> None:
+  says_issues(conductor, {394: "a\r\nb\tc\rd"})
+  conductor.say(r"pulls/7/reviews", NOT_FOUND, 1)
+  got = asyncio.run(conductor.bash(conductor.REVIEWS))
+  rows = [x for x in got.stdout.content.split("\n") if x]
+  assert rows == [NOT_FOUND, "394\ti394\tuael\t0\t-\ta  b c d"]
