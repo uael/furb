@@ -201,6 +201,12 @@ changes when the terminal changes. ⌃T or `/theme` chooses another. Sessions sh
 `sidebarWidth` in the preferences file sets the width of the sidebar, from 26 to 56 columns, and 44 by default. On a terminal narrower
 than 100 columns the sidebar is hidden, and `/workspace` keeps all sessions available from the keyboard.
 
+A line of a word is 100 columns wide at most, less the room of its hint. A string of three marks over many lines
+shows as one string with its escapes, and so does a quote of a word, `<s:name>`, as the binding that it makes. A string
+too long for its line shows its start and an underlined `...`. A click on a line opens it in rows that cut between
+tokens, never inside one. The colors come from the complete statement, so a cut line and a folded string keep the
+colors of the whole.
+
 The TUI serves each person who uses it:
 
 - `--screen-reader`, or `/access reader`, shows one column of text for a screen reader: no sidebar, no box, no

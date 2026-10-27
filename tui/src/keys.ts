@@ -254,6 +254,7 @@ export const keys = [
     chord: "⌃C",
     action:
       "Clear the input, close a dialog, or cancel what you sent last (a message goes back to the input)",
+    bindings: [{ on: ["ctrl+c"], run: "takeBack", hint: "take back" }],
   },
   {
     chord: "Esc",

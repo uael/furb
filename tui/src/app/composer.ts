@@ -19,6 +19,31 @@ export const composer = part({
     else delete this.session.drafts[this.draftKey];
   },
 
+  /** The key of the draft that the input shows: the draft of the chain, or the draft of the question that the input
+   * answers, so that the words written for a question never go to another one. */
+  composeKey(): string {
+    const ask = this.session.operatorPrompt;
+    const key = this.session.draftKey;
+    return ask && !ask.notice && !this.session.editing ? `${key}#${ask.id}` : key;
+  },
+
+  /** The words that were written for a question that closed meanwhile go to the history of the input, where the
+   * operator finds them again with the up key, and no later question takes them. */
+  orphans(): void {
+    const w = this.session;
+    const open = new Set(w.desk.asks.map((ask) => ask.id));
+    for (const [key, text] of Object.entries(w.drafts)) {
+      const at = key.lastIndexOf("#");
+      if (at < 0 || key === this.draftKey || open.has(key.slice(at + 1))) continue;
+      delete w.drafts[key];
+      if (!text.trim()) continue;
+      const history = w.histories[key.slice(0, at)] ?? [];
+      w.histories[key.slice(0, at)] = history;
+      if (history.at(-1) !== text) history.push(text);
+      w.notice = `${key.slice(at + 1)} closed. ↑ brings your words back.`;
+    }
+  },
+
   /** The composer shows the draft of a key, and the draft it showed stays under its own key. */
   showDraft(key: string, shown?: string): void {
     const text = shown ?? this.session.drafts[key] ?? "";
@@ -31,7 +56,7 @@ export const composer = part({
 
   compose(text: string) {
     this.closeTree();
-    this.showDraft(this.session.draftKey, text);
+    this.showDraft(this.composeKey(), text);
     this.composer.focus();
   },
 
@@ -98,6 +123,7 @@ export const composer = part({
     if (this.submitting || this.session.host.reading) return;
     this.submitting = true;
     const key = this.draftKey;
+    const base = this.session.draftKey;
     const content = this.composer.plainText;
     const python = this.session.mode === "python" && !this.session.editing && !content.startsWith("/");
     // The text leaves its draft as it is sent, so what is typed while it is sent stays in the composer.
@@ -115,8 +141,8 @@ export const composer = part({
         await this.session.submit(python ? `/run ${content}` : content);
         if (woke) this.session.notice = "This message woke the paused chain.";
       }
-      const history = this.session.histories[key] ?? [];
-      this.session.histories[key] = history;
+      const history = this.session.histories[base] ?? [];
+      this.session.histories[base] = history;
       if (content && history.at(-1) !== content) history.push(content);
       if (history.length > 200) history.shift();
       this.historyIndex = -1;
@@ -135,7 +161,7 @@ export const composer = part({
   /** The composer holds a text in place of the draft that the session shows, and an undo gives the draft back. */
   insert(text: string): void {
     this.closeOverlay();
-    if (this.draftKey !== this.session.draftKey) this.showDraft(this.session.draftKey);
+    if (this.draftKey !== this.composeKey()) this.showDraft(this.composeKey());
     this.composer.replaceText(text);
     this.composer.focus();
   },

@@ -792,7 +792,8 @@ export class App {
     motion.still = w.preferences.still;
     if (w.theme !== this.theme) this.applyTheme(w.theme);
     this.call(w.desk.asks);
-    if (this.draftKey !== w.draftKey) this.showDraft(w.draftKey);
+    if (this.draftKey !== this.composeKey()) this.showDraft(this.composeKey());
+    this.orphans();
     // The mode of a screen reader shows one column of text, and no sidebar beside it.
     this.rail.visible = w.preferences.sidebar && !this.reader && this.renderer.width >= 100;
     this.rail.width = w.preferences.sidebarWidth;

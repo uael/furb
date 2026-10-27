@@ -138,7 +138,7 @@ WORKER = """You are a worker on the repository {repo}. Do one item, and open its
 1. Make a worktree whose build starts warm: {repo}/script/worktree.sh {repo}-w-{key} w/{key}, then work there. Build on origin/main, and stack your branch on an open PR only when your change needs its code; say why in the body, since a stack lands one layer at a time. If that worktree stands already, work in it, rebased onto origin/main. Run each build of Rust through sh $TMPDIR/build.sh <command>, which runs three at once at most.
 2. Change it as the AGENTS.md files of the repository say.
 3. Run only the tests that your change touches.
-4. Commit with the title of the PR as its message (a commit that the item brought keeps its own message, since the merge squashes them), and push the branch. Then open the PR, or update it when it stands, with pr(), which fills the template of the owner from what you give it and checks each of its rules: await pr(title, why, outcome, checks, breaking=[], fixes=0, where=<your worktree>, labels="{labels}"). title is type(area): What changed, 70 characters or fewer: the type is feat, fix, perf, or chore for a change that no user sees, and the area is the part that owns the change (engine, crate, tui, gui, provider, ci, conductor, or an extension by its name). why is the problem and why it matters now, from your own work and not from git log. outcome is a list: what is true now that was not, each with the evidence of what you ran, and each gap that you leave. breaking lists each change that forces a caller of a door or of the contract to change code. 300 words at most, and no how, which the diff holds. checks is six lines, one for each box of the checklist of the template in its order: verify each box one by one, then give the evidence of how you verified it, or not: and the work that it still needs, which leaves that box open. A flaw that you name in outcome ticks the box about flaws. When the item says that the owner ruled several changes one PR, that ruling is the evidence of the box about one change. A pr() that breaks a rule raises Refused and says why; never write the body of a PR by hand.
+4. Commit with the title of the PR as its message (a commit that the item brought keeps its own message, since the merge squashes them), and push the branch. Then open the PR, or update it when it stands, with pr(), which fills the template of the owner from what you give it and checks each of its rules: await pr(title, why, outcome, checks, breaking=[], fixes=0, where=<your worktree>, labels="{labels}"). title is type(area): What changed, 70 characters or fewer: the type is feat, fix, perf, or chore for a change that no user sees, and the area is the part that owns the change (engine, crate, tui, gui, provider, ci, conductor, or an extension by its name). why is the problem and why it matters now, from your own work and not from git log. outcome is a list: what is true now that was not, each with the evidence of what you ran, and each gap that you leave. breaking lists each change that forces a caller of a door or of the contract to change code. 300 words at most, and no how, which the diff holds. prcheck(title, why, outcome, breaking) before the commit checks the title and gives the word count. checks is six lines, one for each box of the checklist of the template in its order: verify each box one by one, then give the evidence of how you verified it, or not: and the work that it still needs, which leaves that box open. A flaw that you name in outcome ticks the box about flaws. When the item says that the owner ruled several changes one PR, that ruling is the evidence of the box about one change. A pr() that breaks a rule raises Refused and says why; never write the body of a PR by hand.
 5. Open your first PR within about an hour of work, as soon as one coherent part serves the item: a large item
 lands as a series of PRs, each one change, opened from this chain, and you close with the number of the last one.
 6. Keep the worktree until your PR merges, since a fix comes back to it and a new worktree builds cold: the round prunes it after the merge. When the item asks for no change, answer it in a comment that starts with 🤖 on its issue or PR. Close with a tuple: the number of your PR, or 0 when the item asked for no change, and your report in 200 words at most: what you measured, what you decided, and what is left.
@@ -212,31 +212,67 @@ def pr_box(box: str, check: str) -> str:
   return f"- [x] {box}"
 
 
-def pr_body(why: str, outcome: list[str], breaking: list[str], fixes: int, checks: list[str]) -> str:
-  parts = ["🤖" + (f" Fixes #{fixes}." if fixes else ""), "## Why", why.strip(), "## Outcome", "\n".join(f"- {x.strip()}" for x in outcome)]
+def pr_body(
+  why: str, outcome: list[str], breaking: list[str], fixes: int, checks: list[str], part_of: int = 0
+) -> str:
+  head = "🤖" + (f" Fixes #{fixes}." if fixes else "") + (f" Part of #{part_of}." if part_of else "")
+  parts = [head, "## Why", why.strip(), "## Outcome", "\n".join(f"- {x.strip()}" for x in outcome)]
   if breaking:
     parts += ["## Breaking changes", "\n".join(f"- {x.strip()}" for x in breaking)]
   return "\n\n".join([*parts, "---", "\n".join(pr_box(b, c) for b, c in zip(PR_BOXES, checks))]) + "\n"
 
 
-def pr(title: str, why: str, outcome: list[str], checks: list[str], breaking: list[str] | None = None, fixes: int = 0, where: str = "", labels: str = "", number: int = 0, base: str = "main") -> Act:
+def prcheck(title: str, why: str, outcome: list[str], breaking: list[str] | None = None) -> int:
   if len(title) > 70 or not re.fullmatch(PR_TITLE, title):
     raise Refused(f"the title {title!r} is not type(area): What changed, in 70 characters or fewer")
   if not why.strip() or not outcome:
     raise Refused("a PR needs a why and at least one outcome")
+  parts = [len(why.split()), len(" ".join(outcome).split()), len(" ".join(breaking or []).split())]
+  if sum(parts) > 300:
+    raise Refused(
+      f"the body holds {sum(parts)} words, over 300 (why {parts[0]}, outcome {parts[1]}, breaking {parts[2]}):"
+      " delete a whole paragraph, not a word"
+    )
+  return sum(parts)
+
+
+PR_OPEN = (
+  "{ B=$(git branch --show-current); N=$(gh pr list --state open --head \"$B\" --json number --jq '.[0].number // empty');"
+  " out=$(if [ -n \"$N\" ]; then gh pr edit \"$N\" --title @NAME@ --body-file -@ADDED@ >/dev/null"
+  " && gh pr view \"$N\" --json url --jq .url; else gh pr create --base @BASE@ --head \"$B\" --title @NAME@"
+  " --body-file -@FLAGS@; fi); c=$?;"
+  " if [ $c -ne 0 ]; then u=$(gh pr list --state open --head \"$B\" --json url --jq '.[0].url // empty' 2>/dev/null);"
+  " [ -n \"$u\" ] && { echo \"$u\"; exit 0; }; fi; echo \"$out\"; exit $c; }"
+)
+
+
+def pr(
+  title: str,
+  why: str,
+  outcome: list[str],
+  checks: list[str],
+  *,
+  breaking: list[str] | None = None,
+  fixes: int = 0,
+  where: str = "",
+  labels: str | list[str] = "",
+  number: int = 0,
+  base: str = "main",
+  part_of: int = 0,
+) -> Act[Exit]:
+  prcheck(title, why, outcome, breaking)
   if len(checks) != len(PR_BOXES) or not all(c.strip() and c.strip().lower() != "not:" for c in checks):
     raise Refused(f"checks needs {len(PR_BOXES)} lines, one for each box of the checklist in its order: the evidence of how you verified that box, or not: and the work that it still needs")
-  words = len(" ".join([why, *outcome, *(breaking or [])]).split())
-  if words > 300:
-    raise Refused(f"the body holds {words} words, over 300: delete a whole paragraph, not a word")
-  body = pr_body(why, outcome, breaking or [], fixes, checks)
+  body = pr_body(why, outcome, breaking or [], fixes, checks, part_of)
   name = shq(title)
+  flags = "".join(f" --label {shq(x)}" for x in labels) if isinstance(labels, list) else labels
   rules = 'R=CLAUDE.md; [ -f AGENTS.md ] && R=AGENTS.md; sed "s/{rules}/$R/g" | '
   if number:
-    command = rules + f"gh pr edit {number} --title {name} --body-file - && gh pr view {number} --json url --jq .url"
+    command = rules + f"gh pr edit {number} --title {name} --body-file - >/dev/null && gh pr view {number} --json url --jq .url"
   else:
-    added = labels.replace("--label", "--add-label")
-    command = (f"cd {shq(where)} && " if where else "") + rules + "{ N=$(gh pr list --state open --head \"$(git branch --show-current)\" --json number --jq '.[0].number // empty'); " + f"if [ -n \"$N\" ]; then gh pr edit \"$N\" --title {name} --body-file -{added} && gh pr view \"$N\" --json url --jq .url; else gh pr create --base {base} --title {name} --body-file -{labels}; fi; }}"
+    opening = PR_OPEN.replace("@NAME@", name).replace("@BASE@", shq(base))
+    opening = opening.replace("@ADDED@", flags.replace("--label", "--add-label")).replace("@FLAGS@", flags)
+    command = (f"cd {shq(where)} || exit 1; " if where else "") + rules + opening
   return bash(command, stdin=body, show=span(-2, -1), timeout=180)
 
 
@@ -1426,20 +1462,24 @@ def gh(*args):
     time.sleep(wait)
 def jobs(run, attempt=0):
   at = f"/attempts/{attempt}" if attempt else ""
-  return json.loads(gh("api", f"repos/{{owner}}/{{repo}}/actions/runs/{run}{at}/jobs?per_page=100", "--jq", "[.jobs[] | {id, name, conclusion, started_at, completed_at}]"))
+  return json.loads(gh("api", f"repos/{{owner}}/{{repo}}/actions/runs/{run}{at}/jobs?per_page=100", "--jq", "[.jobs[] | {id, name, conclusion, started_at, completed_at, steps: [(.steps // [])[] | {name, conclusion, started_at, completed_at}]}]"))
 def spent(job):
   stamp = lambda s: datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
   return int(stamp(job["completed_at"]) - stamp(job["started_at"]))
 budgets = json.loads(subprocess.run(["git", "show", "origin/main:.github/budgets.json"], capture_output=True, text=True).stdout or "{}")
 path = "repos/{owner}/{repo}/actions/workflows/gates.yml/runs"
-green = json.loads(gh("api", f"{path}?branch=main&status=success&per_page=5", "--jq", "[.workflow_runs[].id]"))
-measured = {}
+green = json.loads(gh("api", f"{path}?branch=main&status=success&per_page=5", "--jq", "[.workflow_runs[] | {id, at: (.created_at | tostring), attempt: .run_attempt}]"))
+measured, steps, passed = {}, {}, {}
 for run in green:
-  for job in jobs(run):
+  for job in jobs(run["id"]):
     if job["conclusion"] == "success":
+      passed.setdefault(run["id"], set()).add(job["name"])
       measured.setdefault(job["name"], []).append(spent(job))
-over = [{"job": n, "median": int(statistics.median(v)), "budget": budgets[n], "runs": green} for n, v in measured.items() if n in budgets and len(v) >= 3 and statistics.median(v) > budgets[n]]
-runs = json.loads(gh("api", f"{path}?per_page=30", "--jq", "[.workflow_runs[] | {id, sha: .head_sha, attempt: .run_attempt, conclusion, url: .html_url}]"))
+      for step in job["steps"]:
+        if step["conclusion"] == "success" and step["completed_at"] and step["started_at"]:
+          steps.setdefault(job["name"], {}).setdefault(step["name"], []).append(spent(step))
+over = [{"job": n, "median": int(statistics.median(v)), "budget": budgets[n], "runs": [r["id"] for r in green], "steps": {s: int(statistics.median(x)) for s, x in steps.get(n, {}).items()}} for n, v in measured.items() if n in budgets and len(v) >= 3 and statistics.median(v) > budgets[n]]
+runs = json.loads(gh("api", f"{path}?per_page=30", "--jq", "[.workflow_runs[] | {id, sha: .head_sha, at: (.created_at | tostring), attempt: .run_attempt, conclusion, url: .html_url}]"))
 flakes, settled = [], []
 for run in runs:
   if run["attempt"] < 2 or run["conclusion"] != "success":
@@ -1456,17 +1496,25 @@ for run in runs:
       for line in log.splitlines():
         line = re.sub(r"\x1b\[[0-9;]*m", "", re.sub(r"^\S+Z ", "", line))
         hit = re.match(r"\(fail\) (.+?)(?: \[[\d.]+m?s\])?$", line) or re.match(r"FAILED (\S+)", line) or re.match(r"test (\S+) \.\.\. FAILED$", line)
+        over_row = re.match(r"(\S.*?)\s+-?[\d.]+\s+\S+.* OVER$", line)
+        hit = hit or (over_row and re.match(r"(.+)", "bench: " + over_row[1]))
         if hit and hit[1] not in tests:
           tests.append(hit[1])
-      flakes.append({"tests": tests, "job": job["name"], "sha": run["sha"], "url": f"{run['url']}/attempts/{attempt}"})
+      newer = [g for g in green if g["at"] > run["at"] and g["attempt"] == 1 and job["name"] in passed.get(g["id"], ())]
+      flakes.append({"tests": tests, "job": job["name"], "sha": run["sha"], "url": f"{run['url']}/attempts/{attempt}", "stale": len(newer) >= 5})
 print(json.dumps({"over": over, "flakes": flakes, "read": settled}))
 '''
 
-BUDGET = """The job {job} of the gates took {median} s in the median of its last green runs on main, {runs}, over its budget of {budget} s in .github/budgets.json, so each loop of feedback waits longer for it. Find where the job spends its time, from the times of its steps in gh run view --json jobs and from its logs, and bring the job under its budget at the cause: a cache that misses, a build done twice, or a test that waits. Never drop or weaken a gate to save time: move it, share it or make it faster. Change a budget only with the measures of script/budgets.py, and say why in the PR."""
+BUDGET = """The job {job} of the gates took {median} s in the median of its last green runs on main, {runs}, over its budget of {budget} s in .github/budgets.json, so each loop of feedback waits longer for it. Find where the job spends its time, from the times of its steps in gh run view --json jobs and from its logs, and bring the job under its budget at the cause: a cache that misses, a build done twice, or a test that waits. Never drop or weaken a gate to save time: move it, share it or make it faster. Change a budget only with the measures of script/budgets.py, and say why in the PR.
+The median of each step of the job over those runs, in seconds:
+{steps}
+A change to CI itself is proved only by the gates of its PR: after you open the PR, wait for them with gh pr checks --watch before you close."""
 
 FLAKE = """The gates failed, then passed when they ran again, on the same commit {sha}, so a test or a job is flaky, and a flake hides a defect and slows each loop of feedback. In the job {job}, at {url}, it failed in:
 {tests}
 The ledger of the flakes holds every attempt that failed this way: {seen}.
+First check origin/main: when the same failure shows at no run newer than the commit that fixed its cause, the cause is fixed, so change nothing and close with 0.
+No check of the app runs outside CI, and gh workflow run gates.yml --ref <your branch> starts the gates on your branch by hand, as often as you need, to show the cause before and after your fix.
 Read the log of the attempt that failed: gh run view <run> --attempt <attempt> --log-failed. Find the cause, and prove it with a command that shows it, before and after your fix. {many}Fix it at its cause: never with a skip, a retry, a longer bound or a weaker assertion."""
 
 MANY_SAID = "More than {n} tests failed in one attempt, so one cause, as a machine that is slow or a shared resource that waits, probably holds them all: find it first. "
@@ -1496,15 +1544,20 @@ async def watch_ci() -> None:
     if taken(key) or set(ran) & set(budgeted.get(job, [])):
       continue
     budgeted[job] = ran
-    brief = BUDGET.format(job=job, median=one["median"], runs=", ".join(map(str, ran)), budget=one["budget"])
+    said = "\n".join(f"- {s}: {x} s" for s, x in sorted(one["steps"].items(), key=lambda kv: -kv[1])[:15]) or "- none measured"
+    brief = BUDGET.format(job=job, median=one["median"], runs=", ".join(map(str, ran)), budget=one["budget"], steps=said)
     queue.append((key, brief, "ci"))
     heard.append(f"The job {job} took {one['median']} s, over its budget of {one['budget']} s: queued as the item {key}.")
   for one in seen["flakes"]:
     tests = [str(x) for x in one["tests"]]
     many = len(tests) > MANY
     name = str(one["job"]) if many or not tests else tests[0]
-    flaky.setdefault(name, []).append(str(one["url"]))
+    if str(one["url"]) not in flaky.setdefault(name, []):
+      flaky[name].append(str(one["url"]))
     if seed:
+      continue
+    if one.get("stale"):
+      heard.append(f"The gates flaked at {one['url']} in {name[:120]}, but the job passed at the first try in the 5 newest runs of main, so the round queued no item.")
       continue
     key = "flake-" + slug(name)
     listed = "\n".join(f"- {x}" for x in tests) or "- the job itself, with no test named in its log"
