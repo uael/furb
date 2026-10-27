@@ -204,8 +204,11 @@ It asks again when the limit resets, and the work goes on with no act from you. 
 end. A limit that still stands after its reset makes furb ask again every five minutes at most.
 
 The claude command line can be missing for a moment while it updates itself. Then a turn tries it again for 60
-seconds, or for the seconds that `FURB_CLAUDE_GONE` gives. A turn that makes no progress for 15 minutes fails, or
-after the seconds that `FURB_CLAUDE_STALL` gives.
+seconds, or for the seconds that `FURB_CLAUDE_GONE` gives. When it is still missing, or when the command that starts
+it, as `cswap run 3 --`, says that it found no claude, furb asks again as after a lost connection, and tells the chain
+that it waits, as `#chain1 waits on claude-cli:opus/high: the program is missing`. When the attempts are spent, the
+chain says which program it did not find. A turn that makes no progress for 15 minutes fails, or after the seconds
+that `FURB_CLAUDE_STALL` gives.
 
 ## The doctrine
 

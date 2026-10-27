@@ -65,6 +65,27 @@ impl Yard {
     let heard = fs::read_to_string(self.at.join("in")).unwrap_or_default();
     heard.lines().map(str::to_owned).collect()
   }
+
+  /// A command that starts the fake beside it, as `cswap` starts claude, and that fails and says that it found no
+  /// claude while the fake is away, as `cswap` says while an update replaces claude.
+  pub fn prefix(&self) -> PathBuf {
+    let prefix = self.at.join("prefix");
+    let script = "#!/bin/sh\nhere=$(dirname \"$0\")\n[ -x \"$here/claude\" ] || \
+      { echo \"Error: 'claude' was not found on PATH.\" >&2; exit 1; }\nexec \"$here/claude\" \"$@\"\n";
+    fs::write(&prefix, script).expect("the prefix is written");
+    fs::set_permissions(&prefix, fs::Permissions::from_mode(0o755)).expect("the prefix runs");
+    prefix
+  }
+
+  /// The fake taken away, as an update of claude takes its program away for a moment.
+  pub fn away(&self) {
+    fs::rename(self.at.join("claude"), self.at.join("away")).expect("the fake goes away");
+  }
+
+  /// The fake back where it was.
+  pub fn back(&self) {
+    fs::rename(self.at.join("away"), self.at.join("claude")).expect("the fake comes back");
+  }
 }
 
 /// The fake, written once for all the tests of this process, after it ran once. The system examines a new program
@@ -190,6 +211,58 @@ fn a_command_prefix_reaches_each_process_of_a_conversation_once_before_its_flags
       assert_eq!(args.iter().filter(|one| one.as_str() == word).count(), 1, "{word} in {args:?}");
     }
   }
+}
+
+#[test]
+fn a_turn_waits_for_a_program_that_an_update_took_away_and_then_names_the_program_it_did_not_find()
+{
+  let yard = Yard::new("update");
+  let settings = json!({"session": "chain"});
+  let model = yard.claude(10_000).waiting(Duration::from_secs(10)).completion_model("sonnet");
+  yard.away();
+  let back = std::thread::scope(|scope| {
+    scope.spawn(|| {
+      std::thread::sleep(Duration::from_millis(300));
+      yard.back();
+    });
+    asked(&model, &[user("first")], settings.clone())
+  });
+  assert_eq!(back.unwrap().choice, [AssistantContent::text("close(\"reply 1\")")]);
+  let model = yard.claude(10_000).waiting(Duration::ZERO).completion_model("sonnet");
+  yard.away();
+  let no = asked(&model, &[user("first")], settings).unwrap_err();
+  let bin = yard.at.join("claude");
+  let said = format!(
+    "ProviderError: {}: {} did not start: No such file or directory (os error 2)",
+    super::MISSING,
+    bin.display()
+  );
+  assert_eq!(no.to_string(), said);
+}
+
+#[test]
+fn a_prefix_that_found_no_claude_fails_as_a_missing_program_and_the_next_turn_begins_the_conversation()
+ {
+  let yard = Yard::new("vanish");
+  let prefix = yard.prefix();
+  let claude = Claude::with_command(prefix.clone(), Vec::new(), Some(Duration::from_secs(10)));
+  let model = claude.completion_model("sonnet");
+  let settings = json!({"session": "chain"});
+  yard.away();
+  let no = asked(&model, &[user("first")], settings.clone()).unwrap_err().to_string();
+  let missing = format!("ProviderError: {}: {} ", super::MISSING, prefix.display());
+  assert!(no.starts_with(&missing), "{no}");
+  assert!(no.ends_with(": Error: 'claude' was not found on PATH."), "{no}");
+  yard.back();
+  let got = asked(&model, &[user("first")], settings).unwrap();
+  assert_eq!(got.choice, [AssistantContent::text("close(\"reply 1\")")]);
+  let pids = yard.pids();
+  assert_eq!(pids.len(), 1);
+  let args = yard.args(&pids[0]);
+  assert!(
+    after(&args, "--session-id").is_some(),
+    "the command line holds no conversation to resume: {args:?}"
+  );
 }
 
 #[test]
