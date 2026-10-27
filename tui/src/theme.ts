@@ -46,8 +46,8 @@ export const palettes = {
     raised: "#22262e",
     selected: "#262c37",
     border: "#2c3039",
-    text: "#c8cdd5",
-    prose: "#bec4cc",
+    text: "#bbc1ca",
+    prose: "#aeb4bd",
     muted: "#8f96a1",
     faint: "#70767f",
     accent: "#82a7d8",
@@ -59,12 +59,12 @@ export const palettes = {
     added: "#1d2a22",
     removed: "#33211f",
     backdrop: "#0b0c0fb0",
-    syntaxKeyword: "#b49ad0",
-    syntaxString: "#a7b89a",
-    syntaxNumber: "#c9a979",
-    syntaxFunction: "#c8cdd5",
-    syntaxType: "#93b2c4",
-    syntaxComment: "#7d838d",
+    syntaxKeyword: "#c678dd",
+    syntaxString: "#8abf72",
+    syntaxNumber: "#e09a5a",
+    syntaxFunction: "#4fbfae",
+    syntaxType: "#cfc66b",
+    syntaxComment: "#8a919c",
   },
   github: {
     background: "#0d1117",
@@ -279,7 +279,8 @@ export function terminalPalette(foreground: string | null, background: string | 
     added: blend(background, base.success, 0.16),
     removed: blend(background, base.danger, 0.16),
     backdrop: `${background}b0`,
-    syntaxFunction: toward(0.84),
+    // Ink gives a function its own color, and a light terminal keeps the color of its text for one.
+    syntaxFunction: dark(background) ? base.syntaxFunction : toward(0.84),
   };
 }
 /** A choice of a theme: a theme by its name, or the one that follows the terminal. */
@@ -386,11 +387,16 @@ export function syntax(): SyntaxStyle {
     default: { fg: theme.text },
     keyword: { fg: theme.syntaxKeyword },
     string: { fg: theme.syntaxString },
+    // A backslash sequence in a string, and None, True and False, take the color of a number.
+    escape: { fg: theme.syntaxNumber },
+    "constant.builtin": { fg: theme.syntaxNumber },
     comment: { fg: theme.syntaxComment, italic: true },
     number: { fg: theme.syntaxNumber },
     function: { fg: theme.syntaxFunction },
     type: { fg: theme.syntaxType },
-    operator: { fg: theme.syntaxKeyword },
+    constructor: { fg: theme.syntaxType },
+    // An operator keeps the color of the text, so that a keyword is the one purple on a line.
+    operator: { fg: theme.text },
     punctuation: { fg: theme.muted },
     diagnostic: { fg: theme.danger, bg: theme.removed, underline: true },
     fold: { fg: theme.link, underline: true },

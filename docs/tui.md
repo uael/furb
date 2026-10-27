@@ -294,6 +294,12 @@ for the operator, red a failure, and a quiet green what is done. Paper and Day a
 Midnight, Forest and Dusk are dark. ⌃T opens the themes, each with a swatch of its
 colors.
 
+In Ink, the text is a soft gray and never white. Python has one color for each part, in the feed and in the graph:
+purple for a keyword, green for a string, orange for a number, `None`, `True`, `False` and a backslash sequence, teal
+for a name that the code calls or defines, gold for a type, and gray italic for a comment. An operator keeps the color of
+the text, so a keyword is the one purple on a line. None of these colors is pastel, and each one reads on every surface
+of the feed.
+
 ![The theme of a light terminal](screenshots/78-terminal-light.png)
 
 ![Paper theme](screenshots/12-light-theme.png)

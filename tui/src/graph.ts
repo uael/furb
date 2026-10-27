@@ -904,10 +904,11 @@ export function progress(done: number, whole: number, cells: number): string {
 }
 
 const keywords = new Set(
-  "def async await for in if elif else while return import from with as try except raise not and or is None True False lambda class pass break continue".split(
+  "def async await for in if elif else while return import from with as try except raise not and or is lambda class pass break continue".split(
     " ",
   ),
 );
+const constants = new Set(["None", "True", "False"]);
 const verbs = new Set([
   "bash",
   "read",
@@ -924,8 +925,8 @@ const verbs = new Set([
   "cancel",
   "debug",
 ]);
-/** A line of python in the colors of its parts: a comment, a string, a keyword, and a verb of the engine that the line
- * calls. */
+/** A line of python in the colors of its parts, the same as the feed gives them: a comment, a string, a number, a
+ * keyword, and a call, in bold when it calls a verb of the engine. */
 export function highlight(text: string, faint = false): Part[] {
   if (faint) return [[text, c.faint]];
   const out: Part[] = [];
@@ -933,10 +934,13 @@ export function highlight(text: string, faint = false): Part[] {
   for (const match of text.matchAll(pattern)) {
     const [whole, comment, string, word] = match;
     const after = text.slice((match.index ?? 0) + whole.length).trimStart();
-    if (comment) out.push([whole, c.secondary]);
-    else if (string) out.push([whole, c.success]);
-    else if (word && verbs.has(word) && after.startsWith("(")) out.push([whole, c.accent, bold]);
-    else if (word && keywords.has(word)) out.push([whole, c.warning]);
+    if (comment) out.push([whole, c.syntaxComment]);
+    else if (string) out.push([whole, c.syntaxString]);
+    else if (word && after.startsWith("(") && !keywords.has(word))
+      out.push(verbs.has(word) ? [whole, c.syntaxFunction, bold] : [whole, c.syntaxFunction]);
+    else if (word && constants.has(word)) out.push([whole, c.syntaxNumber]);
+    else if (word && /^\d/.test(word)) out.push([whole, c.syntaxNumber]);
+    else if (word && keywords.has(word)) out.push([whole, c.syntaxKeyword]);
     else out.push([whole, c.text]);
   }
   return out;
