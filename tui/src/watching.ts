@@ -11,8 +11,8 @@ export function watchBar(
     `0 model calls, ${cost}`,
     "A short Python program asks three models at once.",
     earlier
-      ? "An earlier moment. b branches here, ] steps on, Esc comes back."
-      : "Press [ to go back in time, then b to start a branch from there.",
+      ? "An earlier moment. ⌥B branches here, ⌃→ steps on, Esc comes back."
+      : "Press ⌃← to go back in time, then ⌥B to start a branch from there.",
   ];
 }
 

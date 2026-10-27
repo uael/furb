@@ -29,9 +29,11 @@ test("the bar of the watch says what plays, what it costs, and how to move in ti
     "Watching a life",
     "0 model calls, $0.00",
     "A short Python program asks three models at once.",
-    "Press [ to go back in time, then b to start a branch from there.",
+    "Press ⌃← to go back in time, then ⌥B to start a branch from there.",
   ]);
-  expect(watchBar("$0.00", true)[3]).toBe("An earlier moment. b branches here, ] steps on, Esc comes back.");
+  expect(watchBar("$0.00", true)[3]).toBe(
+    "An earlier moment. ⌥B branches here, ⌃→ steps on, Esc comes back.",
+  );
   for (const line of [...watchBar("$0.00", false), ...watchBar("$0.00", true)])
     expect(line).not.toMatch(jargon);
 });
@@ -81,7 +83,7 @@ test("the watch keeps its bar over the feed at 80x24, and no act runs at an earl
       const rows = shown.split("\n");
       // The bar stands at the top, under the header, whatever the feed shows.
       expect(rows.slice(0, 6).join("\n")).toContain("Watching a life   0 model calls, $0.00");
-      expect(shown).toContain("An earlier moment. b branches here, ] steps on, Esc comes back.");
+      expect(shown).toContain("An earlier moment. ⌥B branches here, ⌃→ steps on, Esc comes back.");
       expect(shown).not.toContain("<$0.01");
       expect(shown).not.toContain("running");
       expect(jargonIn(shown)).toEqual([]);
