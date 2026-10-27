@@ -378,7 +378,7 @@ export const feed = part({
             room,
             ...segment.map((line) =>
               line.kind === "code"
-                ? `${line.text}|${this.lineHint(line)}|${line.runs ? since(line.acts.at(-1)) : ""}|${line.fails ?? ""}|${took(line.step)}|${this.lineOpen(line)}|${[...this.openStrings(line)]}`
+                ? `${line.text}|${this.lineHint(line)}|${line.runs ? since(line.awaits?.act ?? line.acts.at(-1)) : ""}|${line.awaited ?? ""}|${line.fails ?? ""}|${took(line.step)}|${this.lineOpen(line)}|${[...this.openStrings(line)]}`
                 : `${line.kind}|${line.text}`,
             ),
           ].join("\n");

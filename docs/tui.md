@@ -110,6 +110,21 @@ colors of a line come from its whole statement, so a line that is cut or folded 
 
 ![An open string](screenshots/83-open-string.png)
 
+A line of a program shows what it holds when the pointer rests on it, in a card right of the program: the text that a
+read gave, what a command printed, the value of each other act of the line, and a message of a thread whole. A line
+that the gate refused, or that raised, has a red ✗, and its card gives the error whole. A press on the card opens the
+act.
+
+![A read under the pointer](screenshots/97-read-hover.png)
+
+![A refused line under the pointer](screenshots/98-gate-hover.png)
+
+While a word awaits an act that an earlier line made, as `built = await build` after `build = bash(...)`, the line
+that awaits runs: it is lit, it names the act and the line that made it, and it shows its time after a second. The
+line that made the act is lit too, with ↓, and what its command prints stands under it.
+
+![A line that awaits the act of an earlier line](screenshots/99-awaited-line.png)
+
 Collapse on the header
 of a thread, or ⌥D, which lists the threads, folds the thread to its panel on one line, which says its state, the
 first line of its message and the count of its steps, and Expand, or a click on that line, opens it again. A resolved thread that is

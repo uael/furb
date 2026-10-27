@@ -317,6 +317,7 @@ export const glyph = {
   closed: "▸",
   dot: "●",
   running: "◉",
+  awaited: "↓",
   ring: "○",
   held: "◌",
   asks: "◆",

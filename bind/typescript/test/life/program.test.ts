@@ -124,6 +124,31 @@ test("a word that the gate refused marks the line that its reason names", () => 
   expect(lines.at(-1)?.kind).toBe("code");
 });
 
+test("a line that awaits an act that an earlier line made runs, names that act and its line, and lights that line with the output of its command", () => {
+  const prompt = act("prompt1", "prompt", "chain1", "operator", 1, undefined, {
+    words: ["str", "Go", "opus"],
+  });
+  const rung = act("rung1", "rung", "chain1", "prompt1", 2);
+  const bash = act("bash1", "bash", "chain1", "rung1", 3, undefined, {
+    words: ["make"],
+    value: { code: null, stdout: { path: "", content: "compiling\n" }, stderr: { path: "", content: "" } },
+  });
+  const word = 'build = bash("make")\nx = 1\nb = await build';
+  const lines = threadProgram([prompt], makers([prompt, rung, bash]), () => word, new Set(), label);
+  expect(lines.map((line) => [line.kind, line.text])).toEqual([
+    ["code", 'build = bash("make")'],
+    ["output", "compiling"],
+    ["code", "x = 1"],
+    ["code", "b = await build"],
+  ]);
+  const made = lines[0];
+  const waits = lines[3];
+  expect(made?.kind === "code" && [made.runs, made.awaited]).toEqual([false, 3]);
+  expect(
+    waits?.kind === "code" && [waits.runs, waits.awaits?.act.id, waits.awaits?.display, waits.hint],
+  ).toEqual([true, "bash1", 1, "waits on bash1 of line 1"]);
+});
+
 test("a loop on a line says how many times it ran and what its last turn came to", () => {
   const reads = [1, 2, 3].map((n) =>
     act(`read${n}`, "read", "chain1", "rung1", n, n, { value: { path: "f", content: "x\ny\n" } }),

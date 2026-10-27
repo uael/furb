@@ -23,6 +23,7 @@ import {
   foldStrings,
   literals,
   type ProgramLine,
+  tailOf,
   wrap,
   writing,
 } from "furb/life";
@@ -35,6 +36,11 @@ import { theme as c, frame, glyph, motion, spacing as space, spin } from "../the
 import { bold, italic, type Part, styled, underline } from "../ui.ts";
 import { part } from "./part.ts";
 import { gutterWidth, saidOf, seconds, stateOf } from "./shared.ts";
+
+/** A reason of the gate or of a raise as one line says it: without the line that the row already shows, and
+ * without the place that the parser names, `(<string>, line 2), in 'x = = 1'`, which repeats the line. */
+const plainReason = (why: string) =>
+  why.replace(/^line \d+: /, "").replace(/\s*\(<string>, line \d+\)(?:, in '.*'$)?/, "");
 
 export const details = part({
   /** The rung that took the place of a rung of a model that failed: a later rung for the same prompt, which the model
@@ -345,7 +351,11 @@ export const details = part({
       ...lines.map((line) => (line.kind === "code" ? Bun.stringWidth(line.text) : 0)),
     );
     const noteOf = (line: Extract<ProgramLine, { kind: "code" }>) =>
-      [this.lineHint(line), line.runs ? since(line.acts.at(-1)) : "", heads.has(line) ? took(line.step) : ""]
+      [
+        this.lineHint(line),
+        line.runs ? since(line.awaits?.act ?? line.acts.at(-1)) : "",
+        heads.has(line) ? took(line.step) : "",
+      ]
         .filter(Boolean)
         .join("  ");
     // The code takes the room that its hints leave, and the hints take 30 columns at most: a longer hint is cut.
@@ -419,13 +429,18 @@ export const details = part({
           colors.set(at, { content: c.selected, gutter: c.selected });
           signs.set(at, { before: glyph.running, beforeColor: c.accent });
         }
+        // The line that made the act that a running line awaits is lit too, with a link to the line that awaits it.
+        if (line.awaited !== undefined) {
+          colors.set(at, { content: c.selected, gutter: c.selected });
+          signs.set(at, { before: glyph.awaited, beforeColor: c.link });
+        }
         if (line.fails) {
           signs.set(at, { before: glyph.failed, beforeColor: c.danger });
           for (const why of line.fails
             .split("\n")
             .filter((one) => one.trim())
             .slice(0, 3))
-            comment(push(`# ${fit(why.replace(/^line \d+: /, ""), room - 4)}`));
+            comment(push(`# ${fit(plainReason(why), room - 4)}`));
         }
       } else if (line.kind === "output") comment(push(`#   ${fit(line.text, room - 6)}`));
       else if (line.kind === "writes") {
@@ -483,6 +498,33 @@ export const details = part({
       }, 220);
       return true;
     };
+    // A line under the pointer shows what it holds in a card once the pointer rests on it: the whole reason of a line
+    // that failed, what each act of the line came to, the act that it awaits, or a message whole.
+    let pointed: ProgramLine | undefined;
+    const widestRow = Math.max(0, ...texts.map((text) => Bun.stringWidth(text)));
+    const hoverLine = (event: MouseEvent) => {
+      const line = sources[event.y - view.y];
+      const telling =
+        line?.kind === "code"
+          ? Boolean(line.fails || line.acts.length || line.awaits)
+          : line?.kind === "note" && line.step.kind === "prompt";
+      if (!line || !telling) {
+        pointed = undefined;
+        return false;
+      }
+      if (pointed === line && this.hover) return true;
+      clearTimeout(this.hoverTimer);
+      this.unhover();
+      pointed = line;
+      // The card stands right of the program, on the height of the row, so it hides no line of the program.
+      const right = target.x + widestRow + space.between;
+      this.hoverTimer = setTimeout(
+        () => void this.lineCard(line, Math.max(event.x, right), event.y - 1),
+        220,
+      );
+      return true;
+    };
+    const hover = (event: MouseEvent) => hoverFold(event) || hoverLine(event);
     // Each run of characters of one group in a part of a row takes the group that it has in the program.
     const highlights = async (): Promise<SimpleHighlight[]> => {
       const groups = await this.groupsOf(program);
@@ -501,7 +543,7 @@ export const details = part({
         out.push([(starts[row] ?? 0) + from, (starts[row] ?? 0) + to, group]);
       return [...out, ...marks];
     };
-    const target = this.code(texts.join("\n"), marks, hoverFold, highlights);
+    const target = this.code(texts.join("\n"), marks, hover, highlights);
     // Each program keeps a column for the sign of a line, so the code of every program and of every row that a model
     // writes starts at one column of the feed.
     if (!signs.has(0)) signs.set(0, { before: " ", beforeColor: c.faint });
@@ -517,7 +559,7 @@ export const details = part({
     });
     // The gutter of the numbers takes the events of the pointer over the program, so it shows the string of a fold.
     view.onMouseMove = (event) => {
-      if (hoverFold(event)) return;
+      if (hover(event)) return;
       clearTimeout(this.hoverTimer);
       this.unhover();
     };
@@ -538,6 +580,72 @@ export const details = part({
       if (line.acts.length || Bun.stringWidth(line.text) > column) this.openLine(line);
     };
     return view;
+  },
+
+  /** The card of a line of a program under the pointer: the reason of a line that failed whole, in the color of a
+   * failure, the act that a running line awaits, and what each act of the line came to, read whole from the host, or
+   * the message of a note whole. A press opens the act, or the line. */
+  async lineCard(line: ProgramLine, x: number, y: number): Promise<void> {
+    const nodes: Renderable[] = [];
+    let open = () => this.openLine(line);
+    if (line.kind === "note") {
+      nodes.push(this.text(clip(String(line.step.words[1] ?? line.text), 1200), c.text));
+      open = () => this.go("feed", line.step.id);
+    } else if (line.kind === "code") {
+      if (line.fails) {
+        const refused = Boolean((line.step as ActRow).run?.refused);
+        nodes.push(
+          this.text(
+            `${glyph.failed} ${refused ? "The gate refused" : `${line.step.id} raised at`} line ${line.display}`,
+            c.danger,
+            { attributes: bold },
+          ),
+          this.text(
+            shortenHomes(line.fails.split("\n").map(plainReason).join("\n")).slice(0, 1200),
+            c.danger,
+          ),
+        );
+      }
+      const acts = [...(line.awaits ? [line.awaits.act] : []), ...line.acts.slice(-3)] as ActRow[];
+      for (const act of acts) {
+        const held = await this.actPreview(act);
+        const state = act.done
+          ? stateOf(failed(act) ? "failed" : "done")
+          : { word: "runs", mark: glyph.running, color: c.accent };
+        const head: Part[] = [
+          [act.id, c.link, bold],
+          [`  ${act.kind}  `, c.secondary],
+          [clip(this.subject(act).split("\n")[0] ?? "", 30), c.muted],
+          [
+            `  ${state.mark} ${line.awaits?.act === act ? `made on line ${line.awaits.display}` : state.word}`,
+            state.color,
+          ],
+        ];
+        nodes.push(this.text(head), this.text(held.slice(0, 1200) || " ", c.muted, { maxHeight: 10 }));
+      }
+      const first = acts[0];
+      if (first && !line.fails) open = () => void this.follow(first.id).catch(this.report);
+    }
+    if (!nodes.length || this.closed || this.overlay) return;
+    this.hoverCard(x, y, 16, open, ...nodes);
+  },
+
+  /** What an act came to, as its card under the pointer shows it: the text of a read or of a write, what a command
+   * printed, and the value of any other act, read whole from the host. */
+  async actPreview(act: ActRow): Promise<string> {
+    if (!act.done) return act.kind === "bash" ? tailOf(act, 10) || "runs" : "pending";
+    const whole = (await this.session.host.act(act.id).catch(() => undefined)) ?? act;
+    const text = (value: unknown) => (value as { content?: unknown } | null)?.content;
+    if (act.kind === "read" && typeof text(whole.value) === "string")
+      return String(text(whole.value)).trimEnd();
+    if (act.kind === "write" && typeof text(whole.words[0]) === "string")
+      return String(text(whole.words[0])).trimEnd();
+    if (act.kind === "bash") {
+      const exit = (whole.value ?? {}) as Exit;
+      const printed = [exit.stdout?.content, exit.stderr?.content].filter(Boolean).join("\n").trimEnd();
+      return printed || (exit.code === null || exit.code === undefined ? "timed out" : `exit ${exit.code}`);
+    }
+    return display(whole.value);
   },
 
   /** The strings of a line of a program that the operator opened, which show whole. */
