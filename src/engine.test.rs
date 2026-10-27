@@ -1080,12 +1080,12 @@ fn spy(heard: Rc<RefCell<Vec<(String, String)>>>) -> Box<dyn Ear> {
 }
 
 #[test]
-fn an_ear_of_the_host_hears_on_after_a_word_that_failed_where_it_reached_that_ear() {
-  // The sandbox cannot step an ear of the host from a generator that map() walks, so the word fails at the read,
-  // where the act reaches the first ear of the host that the engine drives.
+fn an_ear_of_the_host_hears_the_read_of_a_generator_that_map_walks() {
+  // map() reads the generator on the loop of the sandbox, so the read reaches the first ear of the host that the
+  // engine drives, and the word goes on with what that ear gave.
   let word =
-    "def h(p):\n  return read(p).content\nclose(len(list(map(str, (h(p) for p in ['a.txt'])))))";
-  let mut lived = Lived::new("reached", &[word, "close(8)"], true).unwrap();
+    "def h(p):\n  return read(p).content\nclose(len(''.join(map(str, (h(p) for p in ['a.txt'])))))";
+  let mut lived = Lived::new("reached", &[word], true).unwrap();
   fs::write(lived.at.join("a.txt"), "one\ntwo\n").unwrap();
   let root = lived.root();
   let heard = Rc::new(RefCell::new(Vec::new()));
@@ -1097,10 +1097,25 @@ fn an_ear_of_the_host_hears_on_after_a_word_that_failed_where_it_reached_that_ea
   let facts = lived.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
   let raised = facts.iter().find(|one| one.kind() == "done" && one.about() == "rung1");
   let raised = raised.and_then(|one| one.word(0)).and_then(|one| Fault::of(one));
-  assert_eq!(raised.map(|one| one.name).as_deref(), Some("NotImplementedError"));
+  // The word ends at its close, which ends its own step.
+  assert_eq!(raised.map(|one| one.name).as_deref(), Some("CancelledError"));
   let heard = heard.borrow();
   assert!(heard.contains(&("read".to_owned(), "read1".to_owned())), "the spy heard the read");
   assert!(heard.contains(&("done".to_owned(), id)), "the spy heard the done of the prompt");
+}
+
+#[test]
+fn a_key_of_sorted_and_a_function_of_map_wait_on_an_act() {
+  // Each callback calls a verb that reaches an ear of the host, which the sandbox steps on its own loop.
+  let word = "def h(p):\n  return len(read(p).content)\norder = sorted(['a.txt', 'b.txt'], key=h)\n\
+              close(sum(map(h, order)) * 100 + h(order[0]))";
+  let mut lived = Lived::new("called", &[word], true).unwrap();
+  fs::write(lived.at.join("a.txt"), "one\ntwo\n").unwrap();
+  fs::write(lived.at.join("b.txt"), "x\n").unwrap();
+  let root = lived.root();
+  let with = verbs::Prompt { on: on(&root), ..Default::default() };
+  let act = lived.engine.prompt(Object::string("int"), with).unwrap();
+  assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(1002));
 }
 
 #[test]
