@@ -44,6 +44,8 @@ async function withLibrary(
     return library;
   };
   const sidebar = async (library: Workspaces): Promise<Sidebar> => {
+    // These tests read the outline of the workspaces, in which each workspace stands on a row of its own.
+    library.preferences.sidebarStyle = "outline";
     const screen = await createTestRenderer({ width: 152, height: 42, useMouse: true, exitSignals: [] });
     const app = follow(screen.renderer, { quit() {}, workspaces: library });
     const left = 152 - library.preferences.sidebarWidth;

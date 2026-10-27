@@ -459,6 +459,7 @@ export const rail = part({
       lib.groups.map((group) => [
         group.name,
         group.directory,
+        group.collapsed,
         group.sessions.map((entry) => [
           entry.path,
           entry.name,
@@ -750,16 +751,25 @@ export const rail = part({
     } else {
       for (const [index, group] of lib.groups.entries()) {
         const mine = group === current;
-        const open = mine || this.unfolded.has(`ws:${group.directory}`);
+        // The workspace shown folds to its row when the operator asks, and the others open to peek.
+        const open = mine ? !group.collapsed : this.unfolded.has(`ws:${group.directory}`);
         const id = `ws:${group.directory}`;
         const attention = this.attentionOf(group.sessions);
         const status = lib.groupStatus(group);
-        const focus = () => void this.focusWorkspace(group).catch(this.report);
+        const focus = mine
+          ? () => lib.toggle(group)
+          : () => void this.focusWorkspace(group).catch(this.report);
         order(id, {
           enter: focus,
-          right: () => (open ? focus() : this.peekWorkspace(group)),
-          ...(open && !mine ? { left: () => this.peekWorkspace(group) } : {}),
-          ...(mine ? {} : { space: () => this.peekWorkspace(group) }),
+          right: mine
+            ? () => {
+                if (!open) lib.toggle(group);
+              }
+            : () => (open ? focus() : this.peekWorkspace(group)),
+          left: mine
+            ? () => (open ? lib.toggle(group) : this.railSteer(false))
+            : () => (open ? this.peekWorkspace(group) : this.railSteer(false)),
+          space: mine ? () => lib.toggle(group) : () => this.peekWorkspace(group),
         });
         const margin = index ? space.section : 0;
         this.itemRow(

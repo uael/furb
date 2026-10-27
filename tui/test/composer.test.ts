@@ -369,7 +369,7 @@ test("Escape twice opens the rewind tree in the feed, which keys move, fold, and
       expect(rows().some((id) => id.startsWith("tree-"))).toBe(false);
       expect(session.selected).toBe(last?.on ?? "");
     },
-    { width: 120, height: 44, kittyKeyboard: true },
+    { width: 132, height: 44, kittyKeyboard: true },
     true,
   ));
 
@@ -442,7 +442,7 @@ test("⌃Tab rolls to the next chain and ⇧⌃Tab to the one before it, round f
       screen.mockInput.pressKey("TAB", { ctrl: true, shift: true });
       await until(session, () => session.selected === chains.at(-1));
     },
-    { width: 120, height: 44, kittyKeyboard: true },
+    { width: 132, height: 44, kittyKeyboard: true },
     true,
   ));
 
@@ -631,6 +631,7 @@ test("a cancelled message keeps its place in the feed, and its cancel reads as a
     await until(session, () => session.activity.some((act) => act.kind === "rung" && !act.done));
     await session.submit("/cancel");
     await idle(session);
+    await session.submit("/newthread");
     app.composer.setText("A second message.");
     await app.submit();
     await until(session, () => session.turns.some((turn) => turn[0] === "assistant"));
@@ -655,6 +656,7 @@ test("a cancelled message keeps its place in the feed, and its cancel reads as a
 test("a word that the gate refused shows a cross on the line that the refusal names and the reason under it, and the word that replaced it follows in the program of its thread", () =>
   composing(
     async ({ session, frame }) => {
+      await session.submit("/newthread");
       await session.submit("Give me an answer in a fence.");
       await until(session, () =>
         session.turns.some((turn) => turn[0] === "assistant" && turn[1].includes("plain Python")),
@@ -671,7 +673,7 @@ test("a word that the gate refused shows a cross on the line that the refusal na
       expect(lines.slice(retried).join("\n")).not.toContain("✗");
       expect(lines.join("\n")).not.toContain("failed");
     },
-    { width: 140, height: 44 },
+    { width: 152, height: 44 },
     true,
   ));
 

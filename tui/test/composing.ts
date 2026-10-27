@@ -34,7 +34,7 @@ export async function withDemo(
  * holds the session, as the command line holds it. */
 export async function composing(
   use: (context: Composing) => Promise<void>,
-  options: Parameters<typeof createTestRenderer>[0] = { width: 120, height: 44 },
+  options: Parameters<typeof createTestRenderer>[0] = { width: 132, height: 44 },
   opened: boolean | Session = false,
 ): Promise<void> {
   const session = typeof opened === "boolean" ? await demoSession({ seed: opened }) : opened;

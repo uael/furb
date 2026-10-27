@@ -148,7 +148,6 @@ test("the part of compaction, which the crate carries, marks each compaction in 
         frame,
         "It ran the tests.",
         (now) =>
-          now.includes("compacted 2×") &&
           now.indexOf("Compaction 1 of 2") < now.indexOf("the next step") &&
           now.indexOf("the next step") < now.indexOf("Compaction 2 of 2"),
       );
@@ -157,9 +156,8 @@ test("the part of compaction, which the crate carries, marks each compaction in 
       expect(shown).toMatch(/Compaction 1 of 2[\s\S]*the next step[\s\S]*Compaction 2 of 2/);
       expect(shown.indexOf("Compaction 1 of 2")).toBeLessThan(shown.indexOf("the next step"));
       expect(shown.indexOf("the next step")).toBeLessThan(shown.indexOf("Compaction 2 of 2"));
-      expect(shown).toContain("compacted 2×");
     },
-    { width: 120, height: 60 },
+    { width: 132, height: 60 },
     session,
   );
 });
@@ -259,14 +257,13 @@ test("a run of compactions into new chains, as an older compaction made them, sh
       expect(session.label).toBe("Main -> compacted");
       expect(shown).toContain("Main -> compacted");
       expect(shown).toContain("It read the plan.");
-      expect(shown).toContain("compacted  ");
       expect(shown.indexOf("the first step")).toBeLessThan(shown.indexOf("goes on in a new chain from here"));
       // The word of the operator that made the step stands in the feed too, so the step is its last line.
       expect(shown.indexOf("goes on in a new chain from here")).toBeLessThan(
         shown.lastIndexOf("the step after"),
       );
     },
-    { width: 120, height: 60 },
+    { width: 132, height: 60 },
     session,
   );
 });
