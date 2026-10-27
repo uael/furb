@@ -6,7 +6,9 @@
 //! call of a model is a future of the ear, which the life polls, and a call that its reply no longer needs ends. It
 //! streams, and the host is told what the model writes as it writes it; what the reply came to the ear says of its
 //! own accord. The ear reads the statements of the word of a reply as the model finishes them, and when one cannot be
-//! python it ends the reply there, with the word as far as that statement, which the gate refuses.
+//! python it ends the reply there, with the word as far as that statement, which the gate refuses. The statements that
+//! the gate finds nothing against run as the model writes the rest, each new part of them as a writing of the rung,
+//! and a part that raised ends the reply with the word that ran.
 
 pub mod catalog;
 pub mod claude;
@@ -587,6 +589,11 @@ impl Provider {
   /// the turn of the model, or with a refusal, and a second refusal in a row of the same actor on a chain pauses the
   /// chain first. A turn whose word lost the line of three backticks at its end tells its chain so before its done. A
   /// done of a reply that the ear did not say ends the call of its model.
+  ///
+  /// The ear gives the Kernel each part of a word that the model finished and that the gate finds nothing against, as
+  /// a writing of its rung, unless a pause holds the rung. A reply whose part ran is done with the word that ran when
+  /// the part raised, when a later statement holds a fault, and when its call fails, which is then made no more; and
+  /// with its turn when the gate finds nothing against the whole word, which holds the word that ran.
   pub fn ear(self) -> Box<dyn Ear> {
     let Provider {
       directory,
@@ -607,12 +614,14 @@ impl Provider {
         .map_or_else(|| OPERATOR.to_owned(), |model| model.at(None))
     });
     let mut images = Images::new(images);
-    hearing(&["stand", "reply"], move |mut co: Co<Replied>| async move {
+    hearing(&["stand", "reply", "writing"], move |mut co: Co<Replied>| async move {
       // The ids of chains repeat in every life, so a conversation of this life is keyed by the life too.
       let life = uuid();
       let mut replies: HashMap<String, Reply> = HashMap::new();
       // The actor whose last reply on each chain the ear refused.
       let mut mute: HashMap<String, String> = HashMap::new();
+      // The reply of each writing that the ear made and whose done it has not heard.
+      let mut writings: HashMap<String, String> = HashMap::new();
       loop {
         let a = match co.next().await {
           Next::Heard(a) => a,
@@ -621,7 +630,11 @@ impl Provider {
             if let (Some(writes), Some(reply)) = (&writes, replies.get(&id)) {
               writes(&reply.rung, &reply.chain, &text, &thinking);
             }
-            let Some(chain) = replies.get(&id).map(|reply| reply.chain.clone()) else { continue };
+            let Some((chain, rung)) =
+              replies.get(&id).map(|one| (one.chain.clone(), one.rung.clone()))
+            else {
+              continue;
+            };
             let Some(watch) = replies.get_mut(&id).and_then(|reply| reply.watch.as_mut()) else {
               continue;
             };
@@ -639,37 +652,70 @@ impl Provider {
                 None => continue,
               }
             };
-            let line = match watch::broken(&word) {
-              Some(line) => line,
+            let (line, why) = match watch::broken(&word) {
+              Some(line) => (line, format!("line {line}: the statement there cannot be python")),
               None => {
-                let settled = watch::settled(&word);
-                if settled.is_empty() {
+                let found = findings(&mut co, &chain, &word).await;
+                if found.is_empty() {
+                  // The word holds no fault so far, so its new statements run now, as the turn holds them: from its
+                  // first line that is not blank. A statement whose clause starts at the end, as an `else`, waits.
+                  let (word, end) = match watch.clause(end).then(|| watch::last(&word)).flatten() {
+                    Some(line) => {
+                      let held: String = word.split_inclusive('\n').take(line - 1).collect();
+                      (held, watch.start(line))
+                    }
+                    None if watch.clause(end) => continue,
+                    None => (word, end),
+                  };
+                  let given = word.trim_start();
+                  let Some((part, before)) = watch.part(given) else { continue };
+                  match writing(&mut co, &chain, &rung, part, before).await {
+                    Some(made) => {
+                      watch.gave(given, end);
+                      writings.insert(made, id.clone());
+                    }
+                    // A writing that no Kernel took is done already, so no later part of the word is given.
+                    None if watch.ran().is_none() => watch.untaken(),
+                    None => {}
+                  }
                   continue;
                 }
-                let words = vec![Object::string(&chain), Object::string(&word)];
-                let found = co.call("against", words, vec![]).await.ok();
-                let found: Vec<String> = found
-                  .and_then(|one| {
-                    let items = one.as_ref().items()?;
-                    Some(items.iter().filter_map(|x| x.as_str().map(str::to_owned)).collect())
-                  })
-                  .unwrap_or_default();
+                let settled = watch::settled(&word);
                 let Some(line) = watch::refused(&settled, &found) else { continue };
-                line
+                (line, found.join("\n"))
               }
             };
             // The word as far as the statement that cannot be python, or that the gate refuses for good, is the turn
-            // of the reply, so the gate refuses it and the chain tells why. The model wrote no more of it that counts,
-            // and its call ends with the reply.
-            let Ok(turn) = cut(watch.through(line)) else { continue };
+            // of the reply, so the gate refuses it and the chain tells why; and once a part of the word ran, the
+            // turn is the word that ran, which the chain runs as it ran, and the chain is told why before it. The
+            // model wrote no more of it that counts, and its call ends with the reply.
+            let ran = watch.ran().map(str::to_owned);
+            let Ok(turn) = cut(ran.as_deref().unwrap_or_else(|| watch.through(line))) else {
+              continue;
+            };
             if let Some(Reply { chain, .. }) = replies.remove(&id) {
               mute.remove(&chain);
+              if ran.is_some() {
+                told(&mut co, &chain, &format!("#{rung} {AFTER}\n{why}"));
+              }
               say(&mut co, Fact::says("done", &id, [turn]));
             }
             continue;
           }
           // A retry of the call of the model of a reply that still stands, told to the host under its rung.
           Next::Worked(Replied::Retried { id, retry, limit }) => {
+            // A model asked again writes another word, and a part of this one ran, so the reply ends with the word
+            // that ran, and the model is not asked again.
+            let ran =
+              replies.get(&id).and_then(|reply| reply.watch.as_ref()?.ran().map(str::to_owned));
+            if let Some(Ok(turn)) = ran.as_deref().map(cut) {
+              if let Some(Reply { chain, rung, .. }) = replies.remove(&id) {
+                mute.remove(&chain);
+                told(&mut co, &chain, &format!("#{rung} {STOPPED}: {}", retry.why));
+                say(&mut co, Fact::says("done", &id, [turn]));
+              }
+              continue;
+            }
             if let Some(watch) = replies.get_mut(&id).and_then(|reply| reply.watch.as_mut()) {
               watch.forget();
             }
@@ -688,6 +734,51 @@ impl Provider {
           }
           // What the model of a reply that still stands came to.
           Next::Worked(Replied::Came { id, got, dropped }) => {
+            let Some(reply) = replies.get(&id) else { continue };
+            // Once a part of the word ran, the turn is a word that holds the word that ran and that the gate finds
+            // nothing against, so the chain runs it whole; any other end of the reply is the word that ran.
+            let ran = reply.watch.as_ref().and_then(Watch::ran).map(str::to_owned);
+            let got = match (ran, got) {
+              (Some(ran), got) => {
+                let (chain, rung) = (reply.chain.clone(), reply.rung.clone());
+                let word = got
+                  .as_ref()
+                  .ok()
+                  .and_then(|turn| Some(turn.as_ref().items()?.get(1)?.as_str()?.to_owned()));
+                let why = match &word {
+                  Some(word) if word.starts_with(ran.trim()) => {
+                    let python = if word.contains(watch::QUOTE) {
+                      let got = co.call("unquoted", vec![Object::string(word)], vec![]).await;
+                      got.ok().and_then(|one| one.as_ref().as_str().map(str::to_owned))
+                    } else {
+                      Some(word.clone())
+                    };
+                    match python {
+                      Some(python) => findings(&mut co, &chain, &python).await.join("\n"),
+                      None => "the word holds a quote that is not whole".to_owned(),
+                    }
+                  }
+                  Some(_) => "the turn does not hold the word that ran".to_owned(),
+                  None => match &got {
+                    Err(no) => format!("{STOPPED}: {no}"),
+                    Ok(_) => "the turn holds no word".to_owned(),
+                  },
+                };
+                if why.is_empty() {
+                  got
+                } else {
+                  let Ok(turn) = cut(&ran) else { continue };
+                  let note = if got.is_err() {
+                    format!("#{rung} {why}")
+                  } else {
+                    format!("#{rung} {AFTER}\n{why}")
+                  };
+                  told(&mut co, &chain, &note);
+                  Ok(turn)
+                }
+              }
+              (None, got) => got,
+            };
             let Some(reply) = replies.get(&id) else { continue };
             // The word that runs is not all the text that the model wrote, so the chain is told what went, before it.
             if dropped {
@@ -761,6 +852,21 @@ impl Provider {
             let watch = watch.then(Watch::default);
             replies.insert(about, Reply { chain, actor, rung, again, watch, _stop: stop });
           }
+          // A part of a word that raised ends the word where it raised, so its reply ends with the word that ran,
+          // whose run is done with that raise.
+          "done" if writings.contains_key(&about) => {
+            let Some(id) = writings.remove(&about) else { continue };
+            if a.word(0).is_none_or(|one| one.type_name() == "NoneType") {
+              continue;
+            }
+            let ran =
+              replies.get(&id).and_then(|reply| reply.watch.as_ref()?.ran().map(str::to_owned));
+            let Some(Ok(turn)) = ran.as_deref().map(cut) else { continue };
+            if let Some(Reply { chain, .. }) = replies.remove(&id) {
+              mute.remove(&chain);
+              say(&mut co, Fact::says("done", &id, [turn]));
+            }
+          }
           "done" => {
             let Some(Reply { chain, actor, .. }) = replies.remove(&about) else { continue };
             // A done that the ear said of its own reply ends the row of refusals on the chain with a turn, or adds
@@ -804,6 +910,58 @@ enum Replied {
   Wrote { id: String, text: String, thinking: String },
   Retried { id: String, retry: Retry, limit: bool },
   Came { id: String, got: Result<Object, CompletionError>, dropped: bool },
+}
+
+/// What the chain is told after the rung of a turn whose model wrote a fault after the part of its word that ran.
+const AFTER: &str = "wrote a statement after the part of its word that ran, which the chain would refuse, so its turn \
+  is the word that ran, and the gate found:";
+
+/// What the chain is told after the rung of a reply whose call ended after a part of its word ran.
+const STOPPED: &str =
+  "is the word that ran, since the call of its model ended after a part of it ran";
+
+/// What the gate finds against a word, as python, on a chain, and nothing when the gate gives no answer.
+async fn findings(co: &mut Co<Replied>, chain: &str, word: &str) -> Vec<String> {
+  let words = vec![Object::string(chain), Object::string(word)];
+  let found = co.call("against", words, vec![]).await.ok();
+  let found = found.and_then(|one| {
+    let items = one.as_ref().items()?;
+    Some(items.iter().filter_map(|x| x.as_str().map(str::to_owned)).collect())
+  });
+  found.unwrap_or_default()
+}
+
+/// A writing of the part of the word of a rung that is new, made as that rung, which the Kernel runs: its name, and
+/// nothing when a pause holds the rung, since no part of a word runs while a pause holds its chain, or when no Kernel
+/// takes it: the Kernel says what it says of a writing as that writing, and the life says the done of a writing that
+/// nothing takes as no one. The Kernel may run the part before the life gives the ear its name.
+async fn writing(
+  co: &mut Co<Replied>,
+  chain: &str,
+  rung: &str,
+  part: &str,
+  before: usize,
+) -> Option<String> {
+  let paused = co.call("paused", vec![Object::string(rung)], vec![]).await.ok()?;
+  if paused.as_ref().as_bool() != Some(false) {
+    return None;
+  }
+  let previous = co.call("spoken", vec![Object::string(rung)], vec![]).await.ok()?;
+  let before = Object::int(i64::try_from(before).unwrap_or(i64::MAX));
+  let words = [Object::string("writing"), Object::string(chain), Object::none()];
+  let words =
+    words.into_iter().chain([Object::string(rung), Object::string(part), before]).collect();
+  let made = co.call("act", words, vec![]).await;
+  let _ = co.call("spoken", vec![previous], vec![]).await;
+  let made = made.ok()?.as_ref().as_str()?.to_owned();
+  let of = [("on", Object::string(chain)), ("of", Object::string(&made))];
+  let said = co.call("transcript", vec![], of.into()).await.ok()?;
+  said.as_ref().items().is_some_and(|items| !items.is_empty()).then_some(made)
+}
+
+/// A note told to a chain.
+fn told(co: &mut Co<Replied>, chain: &str, note: &str) {
+  say(co, Fact::says("tell", chain, [Object::list([Object::string(note)])]));
 }
 
 /// What a turn tells as it streams, sent to the work of its reply, which tells the host and reads the word.
@@ -1158,7 +1316,8 @@ fn answered(
 /// instead the fence that opens its text, and the closing fence at its end when it has one. What it read is every token of its input, the cache
 /// among them, and what it wrote is the rest of its total, its thought among it. A model that says why each turn
 /// ended, and says nothing of the end of this one or says that the most it writes ended it, was cut, so its turn is
-/// refused, and a part of a word never runs. The thought that a model writes in its text, before its word, is a block
+/// refused, and no more of its word runs than the parts that ran as it wrote them, whose word the ear gives in place
+/// of the refusal. The thought that a model writes in its text, before its word, is a block
 /// of reasoning of its turn.
 fn turn(model: &Model, response: &CompletionResponse) -> Result<(Object, bool), CompletionError> {
   let cut = match response.finish_reason() {
@@ -1224,13 +1383,14 @@ fn worded(choice: Vec<AssistantContent>, word: &str) -> Vec<AssistantContent> {
 /// statement, as the turn of a model that wrote nothing more. It counts nothing, since the usage of a stream comes
 /// with its end.
 fn cut(word: &str) -> Result<Object, CompletionError> {
+  let word = word.trim();
   let failed = |why: String| CompletionError::ResponseError(why);
   let blocks =
     serde_json::to_value([AssistantContent::text(word)]).map_err(|no| failed(no.to_string()))?;
   let blocks = wire::inward(&blocks).map_err(|fault| failed(fault.message()))?;
   let zero = || Object::int(0);
   let usage = Object::tuple([zero(), zero(), zero(), zero(), Object::float(0.0)]);
-  Ok(Object::tuple([Object::string("assistant"), Object::string(word.trim()), usage, blocks]))
+  Ok(Object::tuple([Object::string("assistant"), Object::string(word), usage, blocks]))
 }
 
 /// How many characters of the end of a cut turn its refusal shows.
