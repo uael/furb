@@ -442,6 +442,11 @@ fn gated(sheet: Option<&Object>) -> Result<Object, Fault> {
 }
 
 impl Outside {
+  /// Each ear of the host has its say at the end of a run, in turn, and the first fault of one is what they give.
+  fn ran(&mut self) -> Result<(), Fault> {
+    self.handed.ears.values_mut().map(|ear| ear.ran()).fold(Ok(()), Result::and)
+  }
+
   /// The side of the host, on what the opening gave.
   fn new(given: Handed, opened: &Object) -> Outside {
     let got = opened.as_ref();
@@ -1283,8 +1288,9 @@ impl Engine {
       Ok(got) => got,
       Err(fault) => self.told().and(Err(fault)),
     };
+    let ran = self.outside.ran();
     self.kept_now(false);
-    got
+    got.and_then(|got| ran.map(|()| got))
   }
 
   /// Whoever watches an act that is done now is told.

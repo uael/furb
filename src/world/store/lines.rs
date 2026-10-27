@@ -19,10 +19,13 @@ use super::{Lease, Store, entry_of, failed, leased, now};
 ///
 /// A final line that a crash tore is removed, and a final line that is whole but not ended is ended, before the
 /// store keeps anything after it. Each line holds the entry and, after the fact, the time at which the store kept
-/// it, which the life never reads. The store syncs the data of the file after each line.
+/// it, which the life never reads. The store writes each line at once, and syncs the data of the file only at a sync
+/// that follows a line.
 pub struct Lines {
   path: PathBuf,
   file: File,
+  /// Whether the store wrote a line since its last sync.
+  unsynced: bool,
   _lease: Lease,
 }
 
@@ -33,7 +36,7 @@ impl Lines {
     let lease = leased(&path)?;
     let file =
       OpenOptions::new().create(true).append(true).open(&path).map_err(|no| failed(&path, no))?;
-    Ok(Self { path, file, _lease: lease })
+    Ok(Self { path, file, unsynced: false, _lease: lease })
   }
 }
 
@@ -46,11 +49,16 @@ impl Store for Lines {
 
   fn keep(&mut self, entry: ObjectRef<'_>) -> Result<(), Fault> {
     let line = stamped(record(entry), now());
-    self
-      .file
-      .write_all(line.as_bytes())
-      .and_then(|()| self.file.sync_data())
-      .map_err(|no| failed(&self.path, no))
+    self.unsynced = true;
+    self.file.write_all(line.as_bytes()).map_err(|no| failed(&self.path, no))
+  }
+
+  fn sync(&mut self) -> Result<(), Fault> {
+    if self.unsynced {
+      self.file.sync_data().map_err(|no| failed(&self.path, no))?;
+      self.unsynced = false;
+    }
+    Ok(())
   }
 }
 

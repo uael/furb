@@ -5,9 +5,12 @@ mod lines;
 mod sqlite;
 
 use std::{
+  cell::RefCell,
   fmt::Display,
   fs::{File, OpenOptions, TryLockError, create_dir_all},
   path::{Path, PathBuf},
+  rc::Rc,
+  task::{Context, Poll},
   time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -18,8 +21,8 @@ use monty_types::unstable::{MontyGraph, MontyNode};
 
 use crate::{
   ENGINE, KERNEL,
-  ear::{Ear, hear, hearing, say},
-  engine::ROOT,
+  ear::{Ear, Heard, Spoken, Step, hear, hearing, say},
+  engine::{Life, ROOT},
   fact::Fact,
   value::{Fault, Object, ObjectRef},
   wire::{built, whole},
@@ -41,6 +44,11 @@ pub trait Store {
   /// Keep one entry after each entry that the store kept before it. When keep returns, the entry outlives a crash of
   /// the process.
   fn keep(&mut self, entry: ObjectRef<'_>) -> Result<(), Fault>;
+
+  /// Make each entry that the store kept durable. When sync returns, each entry kept before it outlives a loss of
+  /// power. The life syncs its store once at the end of each run of the sandbox, so a loss of power loses at most what
+  /// the last run kept.
+  fn sync(&mut self) -> Result<(), Fault>;
 }
 
 /// The record at a path, read under its lease, and the ear that keeps on it what the journal says to keep: a
@@ -134,8 +142,10 @@ pub fn version(record: &[Object]) -> Option<i64> {
 /// A new record names the engine and the version of this build: the ear says them as it hears the root at its birth,
 /// so a later life says them again at the same place. A record of a build before the fact made names no engine, and
 /// stays so, since this engine did not make it.
-pub fn keeping(mut store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>), Fault> {
-  let entries = store.entries()?;
+pub fn keeping(store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>), Fault> {
+  let store = Rc::new(RefCell::new(store));
+  let entries = store.borrow_mut().entries()?;
+  let held = Rc::clone(&store);
   // A record whose last checkpoint has no fact made after it is new to the build that goes on from it.
   let new = entries.is_empty()
     || crate::checkpoint::last(&entries).is_some_and(|at| made(&entries[at + 1..]).is_none());
@@ -145,7 +155,7 @@ pub fn keeping(mut store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn 
       match a.kind() {
         "keep" => {
           let Some(entry) = a.word(0) else { continue };
-          store.keep(entry)?;
+          held.borrow_mut().keep(entry)?;
         }
         "chain" if new && a.about() == ROOT => {
           say(&mut co, Fact::says(MADE, ROOT, [Object::string(engine()), Object::int(VERSION)]));
@@ -154,7 +164,35 @@ pub fn keeping(mut store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn 
       }
     }
   });
-  Ok((entries, kept))
+  Ok((entries, Box::new(Keeping { ear: kept, store })))
+}
+
+/// The ear that keeps the record, which syncs its store at the end of each run.
+struct Keeping<S> {
+  ear: Box<dyn Ear>,
+  store: Rc<RefCell<S>>,
+}
+
+impl<S: Store> Ear for Keeping<S> {
+  fn resume(&mut self, heard: Heard, cx: &mut Context<'_>) -> Step {
+    self.ear.resume(heard, cx)
+  }
+
+  fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Spoken> {
+    self.ear.poll(cx)
+  }
+
+  fn answered(&mut self, got: Result<Object, Fault>) {
+    self.ear.answered(got);
+  }
+
+  fn lent(&mut self, heard: Heard, cx: &mut Context<'_>, life: Life) -> (Step, Life) {
+    self.ear.lent(heard, cx, life)
+  }
+
+  fn ran(&mut self) -> Result<(), Fault> {
+    self.store.borrow_mut().sync()
+  }
 }
 
 /// Whether the record at a path is a database of SQLite, which its name says.

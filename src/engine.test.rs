@@ -608,6 +608,52 @@ fn a_wait_that_a_wake_starts_again_says_nothing_after_a_cancel() {
   assert_eq!(dones.map(|one| one.by().to_owned()).collect::<Vec<_>>(), ["wait1"]);
 }
 
+/// A store that keeps nothing and writes in a ledger each entry that it keeps and each sync.
+struct Ledger(Rc<RefCell<Vec<&'static str>>>);
+
+impl world::Store for Ledger {
+  fn entries(&mut self) -> Result<Vec<Object>, Fault> {
+    Ok(Vec::new())
+  }
+
+  fn keep(&mut self, _: crate::value::ObjectRef<'_>) -> Result<(), Fault> {
+    self.0.borrow_mut().push("keep");
+    Ok(())
+  }
+
+  fn sync(&mut self) -> Result<(), Fault> {
+    self.0.borrow_mut().push("sync");
+    Ok(())
+  }
+}
+
+#[test]
+fn a_life_syncs_its_store_at_the_end_of_each_run_and_not_after_each_entry() {
+  let ledger = Rc::new(RefCell::new(Vec::new()));
+  let (record, store) = world::keeping(Ledger(Rc::clone(&ledger))).unwrap();
+  let at = std::env::temp_dir().join(format!("furb-engine-ledger-{}", std::process::id()));
+  fs::create_dir_all(&at).expect("a yard of the test");
+  let words = Rc::new(RefCell::new(VecDeque::from(["close(1)".to_owned()])));
+  let scratch = world::Scratch::own();
+  let ears = [
+    ("provider", provider(at, words, Rc::default())),
+    ("files", world::files(scratch.clone())),
+    ("bash", world::bash(scratch, &record)),
+    ("time", world::time()),
+    ("store", store),
+  ];
+  let mut engine = Engine::boot(record, ears).unwrap();
+  let root = engine.root().to_owned();
+  let with = verbs::Prompt { on: on(&root), ..Default::default() };
+  let act = engine.prompt(Object::string("int"), with).unwrap();
+  assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(1));
+  let ledger = ledger.borrow();
+  let (keeps, syncs) =
+    ["keep", "sync"].map(|one| ledger.iter().filter(|it| **it == one).count()).into();
+  assert_eq!(ledger.last(), Some(&"sync"), "the last run synced what it kept: {ledger:?}");
+  assert!(syncs < keeps, "{syncs} syncs for {keeps} entries: {ledger:?}");
+}
+
 #[test]
 fn a_second_life_on_the_record_the_store_kept_makes_the_same_acts_again() {
   let (root, id) = {
