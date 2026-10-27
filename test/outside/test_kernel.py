@@ -10,7 +10,7 @@ import pytest
 import furb
 import furb_monty.engine
 from conftest import Py, kernel, swapped
-from furb import engine
+from furb import engine, sheet
 from furb.engine import OPERATOR, WINDOW, Refused
 from outside.doubles import booted, worlds
 
@@ -84,6 +84,43 @@ async def test_a_word_reads_a_name_of_the_engine_as_the_program_bound_it_last(wh
       await engine.rung("close(read('a'))", on=root)
   finally:
     swapped(furb.python)
+
+
+@pytest.mark.parametrize("which", [furb.python, furb_monty.engine], ids=["python", "monty"])
+async def test_a_word_that_the_interpreter_cannot_compile_leaves_the_gate_to_the_next_word(which: object) -> None:
+  """A pin of the life that asked its models six thousand times: monty compiles no class with a keyword of its
+  metaclass and raises NotImplementedError, which ended the ear of the gate, so every later word was refused. The
+  gate now gives the fault as a finding of the word, and reads the next word."""
+  swapped(which)
+  try:
+    root = engine.boot((), world=worlds(STANDS), **kernel())
+    found = engine.gate("class P(dict, total=False):\n  x: int\nclose(1)", on=root)
+    assert found == [] if which is furb.python else found[0].startswith("line 1: ")
+    assert engine.gate("close(1)", on=root) == []
+    assert await engine.rung("close(2)", on=root) == 2
+  finally:
+    swapped(furb.python)
+
+
+def test_a_gate_that_fails_answers_a_refusal_and_takes_the_next_gate() -> None:
+  """A fault of the checker is no finding of the word, so the ear of the gate answers that gate with a refusal that
+  says the fault, and it lives on to take the next gate."""
+
+  def checked(_: str) -> list[tuple[int, str]]:
+    raise RuntimeError("the checker broke")
+
+  names: dict[str, object] = {
+    "program": lambda _: {},
+    "question": lambda _: True,
+    "transcript": lambda _: [],
+    "Refused": Refused,
+  }
+  ear = sheet.gating(names, checked)
+  assert next(ear) == {"gate"}
+  got = ear.send(("gate", "gate1", "chain1", "chain1", "x = 1"))
+  assert isinstance(got, tuple) and got[:2] == ("done", "gate1")
+  assert isinstance(got[2], Refused) and "RuntimeError: the checker broke" in str(got[2])
+  assert ear.send(None) == {"gate"}
 
 
 @pytest.mark.parametrize("which", [furb.python, furb_monty.engine], ids=["python", "monty"])

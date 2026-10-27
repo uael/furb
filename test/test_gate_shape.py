@@ -173,15 +173,21 @@ async def test_the_chain_tells_the_findings_that_refused_a_word() -> None:
 
 
 async def test_a_word_that_the_chain_cannot_gate_or_run_is_refused_as_the_gate_refuses_a_word() -> None:
-  """A word that the chain cannot gate or run, as when the life refuses its gate, is refused as the gate refuses a word, with what went wrong as its one finding, so no word and no told text ends the ear of a chain."""
+  """A word that the chain cannot gate or run, as when the life refuses its gate, is refused as the gate refuses a word, with what went wrong as its one finding, and the chain pauses, so a fault of the outside asks the model nothing again until a wake, and no word and no told text ends the ear of a chain."""
   sand, log = sown(), []
   root = engine.boot((), kernel=Py().kernel(), probe=watched(log), world=sand.hears())
   sand.script[root] = ["k = 1", "close(1)"]
   act = engine.prompt(int, "work", on=root)
   await settle(300)
-  first, again, *_ = (a[1] for a in said(log, "rung"))
+  rungs = [a[1] for a in said(log, "rung")]
   told = paragraphs(engine.turns(on=root))
+  first = rungs[0]
   assert f"#{first} refused\n{first}_findings = 'nothing takes gate'" in told
   assert f"#{first} closed by chain1\n{first}_value = Refused()" in told
-  assert f"#{again} advance on {act}" in told
+  assert f"#{root} paused by {root}" in told
+  assert len(rungs) == 1
   assert isinstance(engine.peek(first), Refused) and not engine.over(act)
+  engine.wake(root)
+  await settle(300)
+  again = [a[1] for a in said(log, "rung")][1]
+  assert f"#{again} advance on {act}" in paragraphs(engine.turns(on=root))

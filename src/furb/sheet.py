@@ -166,7 +166,8 @@ def python(word: str) -> list[str]:
     ]
   try:
     compile(word, "<gate>", "exec", flags=PyCF_ALLOW_TOP_LEVEL_AWAIT)
-  except SyntaxError as bad:
+  except (SyntaxError, NotImplementedError) as bad:
+    # monty raises NotImplementedError for a syntax that it does not support, as a keyword of a metaclass.
     # Which line and what it said is what an interpreter offers of it, and one that offers neither gives the text.
     why = str(getattr(bad, "msg", None) or bad)
     # An interpreter that gives no line number may name the line at the end of its text, as (<string>, line 2).
@@ -231,4 +232,11 @@ def gating(engine: dict[str, object], checked: Checked) -> Ear:
   while True:
     match (yield gates):
       case ("gate", qid, _, on, word):
-        yield "done", qid, against(engine, checked, on, word)
+        try:
+          found: object = against(engine, checked, on, word)
+        except Exception as fault:
+          # A gate that fails on one word answers it, so the ear lives on to read the next word.
+          refused = engine["Refused"]
+          assert callable(refused)
+          found = refused(f"the gate failed on the word: {type(fault).__name__}: {fault}")
+        yield "done", qid, found
