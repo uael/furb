@@ -460,6 +460,7 @@ export const input = part({
       jump: (key) => this.jumpMessage(["]", "n"].includes(key?.name ?? "") ? 1 : -1),
       scope: (key) => this.session.review(key?.name === "pageup" ? -1 : 1),
       pause: this.escape,
+      takeBack: () => this.cancel(),
       help: () => this.help(),
       quit: () => void this.options.quit(),
       lifeView: () => this.switchView(),
@@ -477,6 +478,14 @@ export const input = part({
       repair: () => this.session.journalDamaged && !this.session.host.reading,
       renew: () => this.session.journalDamaged && !this.session.host.reading,
       pause: () => !this.searchRow.visible && this.pausing(),
+      takeBack: () => {
+        const last = this.session.lastOwn;
+        return (
+          !this.composer.plainText &&
+          !this.searchRow.visible &&
+          Boolean(last && this.session.isUserPrompt(last) && last.words[2] !== "operator")
+        );
+      },
     };
   },
 

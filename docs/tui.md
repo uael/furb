@@ -196,6 +196,13 @@ the input answers it. A click on the card of another question points the input a
 
 ![Many questions](screenshots/52-many-questions.png)
 
+The words that you write for a question stay with it. When another question becomes the one that the input answers, the
+input shows the words of that question, and the first words come back when you go back to it. When a question closes
+while you write for it, as when another window answers it, your words go to the history of the input, ↑ brings them
+back, and no other question takes them.
+
+![Words kept for a closed question](screenshots/98-words-kept.png)
+
 Each question takes an answer of its shape. A str, an int, a float, a list, a dict, a tuple or a union takes a line of
 the input, which the console reads in that shape. A shape that is more than text says what its line is: the input and
 the desk name it, with an example, as `a JSON list of text, as ["a", "b"]`. A line of JSON has an item of the shape of
@@ -420,6 +427,10 @@ and it never cancels a prompt that a model made, such as the prompt of a worker.
 it back: the message is cancelled and its text goes back to the input, so you change it and send it again, and the
 other work of the life goes on. A right click on a message opens its menu, which offers Take back for your last
 message that runs, and Cancel for another act that runs. `/cancel <id>` cancels the act that you name.
+
+While the last message that you sent runs and the input is empty, the footer offers ⌃C to take it back.
+
+![Take back in the footer](screenshots/97-take-back-hint.png)
 
 ![Message menu](screenshots/57-message-menu.png)
 
