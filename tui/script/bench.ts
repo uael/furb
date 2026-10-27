@@ -7,22 +7,23 @@
  * In each life it measures what one new fact costs, from the moment the view hears of it to the frame that shows it:
  * the read of the view, the draw of the App and the frame of the renderer, for a line of a command that runs, for a
  * new act, for a paragraph told on the root chain, which the turns of the chain read, and for a token of a model
- * that writes. It measures a fact of the long life and one of the short life in
- * turn, so that other work of the machine weighs on both alike, and takes for each kind the least of the medians of
- * three batches of 20 facts. In the long life it measures too the first frame, from the open of the life to its first
- * frame, once cold and twice warm, and the frames while the feed scrolls and a command streams a line of output each
- * frame at the target rate of the renderer, each round after a measure of the renderer with nothing to show, and how
- * much memory a process of its own holds once it opened the life. It takes the best of the warm first frames and the round that
- * draws the most of the frames of its empty renderer, since other work of the machine makes a measure worse and
+ * that writes. It measures a fact of the short life and one of the long life one after the other, as a pair, so that
+ * other work of the machine weighs on both alike, and takes for each kind the median of each life and the median of
+ * the ratios of 60 pairs, after a first batch of 20 pairs that warms the code of the kind and counts not. In the long
+ * life it measures too the first frame, from the open of the life to its first frame, once cold and twice warm, and
+ * the frames while the feed scrolls and a command streams a line of output each frame at the target rate of the
+ * renderer, each round after a measure of the renderer with nothing to show, and how much memory a process of its own
+ * holds once it opened the life. It takes the best of the warm first frames and the round that draws the most of the
+ * frames of its empty renderer, since other work of the machine makes a measure worse and
  * never better. The pace is the time that the machine takes to parse the facts of the long life, with no code of
  * furb, which says how fast the machine runs. Each budget is set from these measures of the machine, so that it holds
  * on a fast machine and on a slow one, and on a machine whose other work loads each core three times.
  *
  * It fails when the warm first frame takes 32 paces or more, when the renderer draws fewer than 95 in each hundred of
  * the frames that it draws with nothing to show, when the 95th percentile of the frames takes a pace or more, or
- * longer than a frame at the target rate, or when a new fact of a kind costs in the long life more than twice what it
- * costs in the short life, and more than 2 ms. FURB_BENCH_JSON names a file that takes one line of the measures of each
- * run, and FURB_BENCH_FACTS sets about how many facts the long life holds. */
+ * longer than a frame at the target rate, or when a new fact of a kind costs in the long life more than 2 ms, and its
+ * pairs cost in the long life more than twice what they cost in the short life. FURB_BENCH_JSON names a file that
+ * takes one line of the measures of each run, and FURB_BENCH_FACTS sets about how many facts the long life holds. */
 import {
   appendFileSync,
   closeSync,
@@ -64,9 +65,9 @@ const FRAME = 1000 / fps;
 /** The steps of a round, one for each frame at the target rate: three seconds. */
 const STEPS = fps * 3;
 const ROUNDS = 3;
-/** The new facts of each kind in a batch that the bench measures in each life, and the batches. */
-const NEW = 20;
-const BATCHES = 3;
+/** The pairs of new facts of each kind that warm the code of the kind and count not, and the pairs that count. */
+const WARM = 20;
+const PAIRS = 60;
 /** How many bytes of a record the pace reads at a time. */
 const PART = 16 * 2 ** 20;
 
@@ -211,12 +212,17 @@ async function facts({ record, session, app, screen }: Opened, top: Map<string, 
     const began = await told;
     while (!seen()) await changed();
     const read = performance.now() - began;
+    const frames = screen.renderer.getStats().frameTimes.length;
     const drawing = performance.now();
     app.render();
     const drawn = performance.now() - drawing;
+    // The App asks the renderer for no frame after most facts, and the last frame of the stats is then one of an
+    // earlier fact, so the bench draws the frame that shows the fact itself, lets the renderer settle, and counts only
+    // the frames that it drew since.
+    await screen.renderOnce();
     await screen.flush();
-    // The frame of the renderer is its own work, and the test terminal waits for the next frame of its rate besides.
-    return read + drawn + (screen.renderer.getStats().frameTimes.at(-1) ?? 0);
+    const framed = screen.renderer.getStats().frameTimes.slice(frames);
+    return read + drawn + framed.reduce((sum, time) => sum + time, 0);
   };
   const output = () =>
     (session.actOf(bash)?.value as { stdout?: { content?: string } } | undefined)?.stdout?.content;
@@ -415,20 +421,26 @@ const sides = [
   { measure: await facts(shortOpened, shortLife.top), costs: { line: [], act: [], tell: [], token: [] } },
   { measure: await facts(warm, top), costs: { line: [], act: [], tell: [], token: [] } },
 ] as { measure: Awaited<ReturnType<typeof facts>>; costs: Record<Kind, number[]> }[];
-for (let at = 0; at < NEW * BATCHES; at++)
+for (let at = 0; at < WARM + PAIRS; at++)
   for (const kind of kinds) for (const { measure, costs } of sides) costs[kind].push(await measure[kind](at));
-/** The least of the medians of the batches of new facts of a kind. */
-const calmest = (costs: number[]) =>
-  Math.min(
-    ...Array.from({ length: BATCHES }, (_, at) => percentile(costs.slice(at * NEW, (at + 1) * NEW), 0.5)),
-  );
-const median = ({ costs }: (typeof sides)[number]) => ({
-  line: calmest(costs.line),
-  act: calmest(costs.act),
-  tell: calmest(costs.tell),
-  token: calmest(costs.token),
-});
-const [before, after] = sides.map(median) as [Record<Kind, number>, Record<Kind, number>];
+const counted = (costs: number[]) => costs.slice(WARM);
+const [before, after] = sides.map(({ costs }) =>
+  Object.fromEntries(kinds.map((kind) => [kind, percentile(counted(costs[kind]), 0.5)])),
+) as [Record<Kind, number>, Record<Kind, number>];
+/** The median of the ratios of the pairs, each a fact of the long life against the fact of the short life just before
+ * it: a ratio of two medians, each taken alone, moves with each slow moment of the machine on one side. */
+const growth = Object.fromEntries(
+  kinds.map((kind) => {
+    const [small, large] = sides.map(({ costs }) => counted(costs[kind])) as [number[], number[]];
+    return [
+      kind,
+      percentile(
+        large.map((cost, at) => cost / (small[at] ?? cost)),
+        0.5,
+      ),
+    ];
+  }),
+) as Record<Kind, number>;
 await shortOpened.close();
 const rounds: (Awaited<ReturnType<typeof round>> & { empty: number })[] = [];
 for (let at = 1; at <= ROUNDS; at++) {
@@ -447,7 +459,10 @@ await rm(root, { recursive: true, force: true });
 /** The best of the rounds for each measure: other work of the machine makes a measure worse, and never better. */
 const least = (of: (one: (typeof rounds)[number]) => number) => Math.min(...rounds.map(of));
 const first = Math.min(warm.first, again.first);
-const grown = (kind: Kind) => Math.max(FLOOR, GROWTH * before[kind]);
+/** A new fact that costs less than FLOOR in the long life passes, and one that costs more passes when it grew less than
+ * GROWTH times. */
+const floor = (kind: Kind) => (after[kind] < FLOOR ? { under: FLOOR } : {});
+const grown = (kind: Kind) => (after[kind] < FLOOR ? {} : { under: GROWTH });
 /** The round that drew the most of the frames that an empty renderer drew just before it. */
 const fullest = rounds.reduce((best, one) => (one.rate / one.empty > best.rate / best.empty ? one : best));
 /** Each measure, its unit, and its budget: a value that it must stay under, or the least that it must reach. */
@@ -467,16 +482,20 @@ const rows: [string, number, string, { under?: number; least?: number }][] = [
   ],
   ["frame, longest", least((one) => Math.max(...one.times)), "ms", {}],
   ["a line, short life", before.line, "ms", {}],
-  ["a line, long life", after.line, "ms", { under: grown("line") }],
+  ["a line, long life", after.line, "ms", floor("line")],
+  ["a line, growth", growth.line, "x", grown("line")],
   ["a new act, short life", before.act, "ms", {}],
-  ["a new act, long life", after.act, "ms", { under: grown("act") }],
+  ["a new act, long life", after.act, "ms", floor("act")],
+  ["a new act, growth", growth.act, "x", grown("act")],
   ["a tell, short life", before.tell, "ms", {}],
-  ["a tell, long life", after.tell, "ms", { under: grown("tell") }],
+  ["a tell, long life", after.tell, "ms", floor("tell")],
+  ["a tell, growth", growth.tell, "x", grown("tell")],
   ["a token, short life", before.token, "ms", {}],
-  ["a token, long life", after.token, "ms", { under: grown("token") }],
+  ["a token, long life", after.token, "ms", floor("token")],
+  ["a token, growth", growth.token, "x", grown("token")],
 ];
 console.log(
-  `A life of ${made} facts, ${(bytes / 2 ** 20).toFixed(0)} MB or ${(bytes / made / 1024).toFixed(1)} KB for each fact, and ${heard} acts, against a life of ${shortLife.facts} facts. The best of ${ROUNDS} rounds of ${STEPS / fps} seconds that scroll and stream, at ${rounds.map((one) => one.rate.toFixed(1)).join(", ")} fps, and the least median of ${BATCHES} batches of ${NEW} new facts of each kind.`,
+  `A life of ${made} facts, ${(bytes / 2 ** 20).toFixed(0)} MB or ${(bytes / made / 1024).toFixed(1)} KB for each fact, and ${heard} acts, against a life of ${shortLife.facts} facts. The best of ${ROUNDS} rounds of ${STEPS / fps} seconds that scroll and stream, at ${rounds.map((one) => one.rate.toFixed(1)).join(", ")} fps, and the medians of ${PAIRS} pairs of new facts of each kind, after ${WARM} that warm.`,
 );
 let over = false;
 for (const [name, value, unit, { under, least }] of rows) {
