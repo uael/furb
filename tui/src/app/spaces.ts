@@ -1,5 +1,6 @@
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { type BoxOptions, InputRenderable, InputRenderableEvents, type Renderable } from "@opentui/core";
+import { checkoutOf } from "../checkout.ts";
 import { shortenHome } from "../files.ts";
 import { clip } from "../format.ts";
 import { type Cancel, statusLabels } from "../session.ts";
@@ -205,12 +206,15 @@ export const spaces = part({
       );
       const sessionRow = (entry: SessionEntry) => {
         const selected = library.current === entry;
+        // A session that runs in a worktree of the workspace names the worktree after its own name.
+        const checkout = checkoutOf(entry.path, group.directory);
+        const label = checkout === group.directory ? entry.name : `${entry.name}  ${basename(checkout)}`;
         itemRow(
           entry,
           {
             lead: [[selected ? glyph.mark : " ", c.accent], ["  "]],
             state: statusMark(entry.status),
-            name: [entry.name, selected ? c.text : entry.archived ? c.faint : c.muted, selected ? bold : 0],
+            name: [label, selected ? c.text : entry.archived ? c.faint : c.muted, selected ? bold : 0],
           },
           () => [
             statusMark(entry.status),

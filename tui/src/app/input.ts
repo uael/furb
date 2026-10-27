@@ -134,22 +134,23 @@ export const input = part({
       { on: ["return", "enter"], run: () => void this.submit(), hint: ["Enter", "run"] },
       { on: "escape", run: this.escape, hint: ["Esc", "leave the program"] },
     ]);
-    // While the welcome shows the check of the setup and the input is empty, r checks it again.
-    layer(() => bare() && this.welcoming && this.setupState().shown && !this.composer.plainText, "setup", [
-      { on: "r", run: this.checkAgain, hint: ["r", "check again"] },
+    // While the welcome shows the check of the setup, F5 checks it again. A key with no modifier that prints a letter
+    // never acts while the input has the focus, since typed text always wins.
+    layer(() => bare() && this.welcoming && this.setupState().shown, "setup", [
+      { on: "f5", run: this.checkAgain, hint: ["F5", "check again"] },
     ]);
-    // While the operator watches a life and the input is empty, [ and ] move the moment of the feed, b starts a
-    // branch there, and Escape comes back to now.
+    // While the operator watches a life and the input is empty, Ctrl+Left and Ctrl+Right move the moment of the feed,
+    // Alt+B starts a branch there, and Escape comes back to now.
     const watched = () => bare() && this.session.watching && !this.composer.plainText;
     const past = () => this.session.moment !== undefined;
     layer(watched, "watch", [
-      { on: "[", run: () => this.session.travel(-1), hint: ["[ ]", "move in time"] },
-      { on: "]", run: () => this.session.travel(1) },
+      { on: "ctrl+left", run: () => this.session.travel(-1), hint: ["⌃←→", "move in time"] },
+      { on: "ctrl+right", run: () => this.session.travel(1) },
       {
-        on: "b",
+        on: "meta+b",
         run: () => void this.session.branchHere().catch(this.report),
         when: past,
-        hint: ["b", "branch here"],
+        hint: ["⌥B", "branch here"],
       },
       {
         on: "escape",

@@ -1267,3 +1267,60 @@ def test_prcheck_gives_the_words_and_names_the_part_that_is_too_long(conductor: 
     check("feat(tui): Show records", "w " * 300, ["x"])
   with pytest.raises(Refused, match="70 characters"):
     check("feat(tui): " + "A" * 70, "why", ["x"])
+
+
+
+@POSIX
+@JQ
+def test_an_open_issue_whose_worker_ended_with_a_pr_is_queued_again_once_for_each_end(conductor: Round) -> None:
+  owned = {"number": 394, "title": "T", "body": "b", "author": {"login": "uael"}, "assignees": [], "labels": [], "url": "u"}
+  conductor.say(r"issue list", json.dumps([owned]))
+  commands: list[str] = []
+
+  def quiet(verb: object, *args: object, **words: object) -> object:
+    got = verb(*args, **words)  # type: ignore[operator]
+    if asyncio.iscoroutine(got):
+      commands.append(str(args[0]))
+      got.close()
+    return got
+
+  conductor.ns["quietly"] = quiet
+
+  def ends(name: str, pr: int) -> None:
+    conductor.working[name] = "issue394"
+    conductor.done[name] = (pr, "report")
+    conductor.tend()
+
+  asyncio.run(conductor.take_issues())
+  assert [key for key, _, _ in conductor.queue] == ["issue394"]
+  assert "Their PRs" not in conductor.queue[0][1]
+  conductor.queue.clear()
+  ends("prompt1", 483)
+  conductor.prs[500] = conductor.pr(500, labels=["w:issue394"])
+  asyncio.run(conductor.take_issues())
+  assert conductor.queue == []
+  conductor.prs.clear()
+  conductor.backlog.append(("issue394", "", ""))
+  asyncio.run(conductor.take_issues())
+  assert conductor.queue == []
+  conductor.backlog.clear()
+  conductor.working["prompt9"] = "issue394"
+  asyncio.run(conductor.take_issues())
+  assert conductor.queue == []
+  del conductor.working["prompt9"]
+  asyncio.run(conductor.take_issues())
+  assert [key for key, _, _ in conductor.queue] == ["issue394"]
+  assert "Their PRs: #483." in conductor.queue[0][1]
+  assert "queued again as the item issue394" in conductor.heard[-1]
+  assert "Taken again:" in commands[-1] and "Taken:" in commands[0]
+  conductor.queue.clear()
+  asyncio.run(conductor.take_issues())
+  assert conductor.queue == []
+  ends("prompt2", 440)
+  ends("prompt3", 0)
+  asyncio.run(conductor.take_issues())
+  assert "Their PRs: #483, #440." in conductor.queue[0][1]
+  conductor.queue.clear()
+  ends("prompt4", 0)
+  asyncio.run(conductor.take_issues())
+  assert conductor.queue == []
