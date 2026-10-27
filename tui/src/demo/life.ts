@@ -1,8 +1,10 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import type { LiveAct } from "furb";
 import { seedDemo } from "../demo.ts";
 import type { Session } from "../session.ts";
 import { audit, checklist } from "./audit.ts";
+import { checks } from "./ci.ts";
 import { release, watching } from "./conductor.ts";
 import { research } from "./rivals.ts";
 
@@ -32,6 +34,36 @@ export async function quiet(session: Session, still = 1000, limit = 90_000): Pro
   throw new Error(`The life of the demo did not settle in ${limit} ms: ${last}`);
 }
 
+/** Wait until the life can do nothing more by itself: no model of it answers, no command of it runs but the checks,
+ * which run until a change ends them, and no wait of it ends by its time within the limit. What stays open waits for
+ * the operator, for a pause, for the checks, for a wait that holds the thread of a conductor, or for an act that
+ * `stands` names, as a model that thinks until a cancel. */
+export async function settle(
+  session: Session,
+  stands: (act: LiveAct) => boolean = () => false,
+  limit = 90_000,
+): Promise<void> {
+  const start = Date.now();
+  let busy: string[] = [];
+  while (Date.now() - start < limit) {
+    await session.refresh();
+    busy = session.acts.filter((act) => !act.done && works(act, limit) && !stands(act)).map((act) => act.id);
+    if (busy.length === 0) return;
+    await new Promise((done) => setTimeout(done, 20));
+  }
+  throw new Error(`The life of the demo did not settle in ${limit} ms: ${busy.join(", ")} still work.`);
+}
+
+/** Whether an open act ends by itself: a rung whose model has not answered and that no pause holds, a command but the
+ * checks, or a wait whose time ends within the limit. A prompt, a chain or a rung that runs its word moves only when
+ * one of those ends. */
+function works(act: LiveAct, limit: number): boolean {
+  if (act.kind === "rung") return act.word === undefined && !act.paused;
+  if (act.kind === "bash") return act.words[0] !== checks;
+  if (act.kind === "wait") return Number(act.words[0]) * 1000 < limit;
+  return false;
+}
+
 /** The life of a real project, as a conductor makes it: the owner gives one task on the root chain, and its model
  * hires a worker on a chain of its own for each part, which read, write, fail, mend and ask in turn. It goes on after
  * the small conversation of seedDemo, and gives the acts that stay open on purpose: the work that waits for the
@@ -41,13 +73,13 @@ export async function seedLife(session: Session): Promise<Set<string>> {
   await seedResearch(session.host.directory);
   const { engine } = session;
   await engine.prompt("str", { message: release, on: engine.root });
-  await quiet(session);
+  await settle(session);
   await engine.prompt("str", { message: watching, on: engine.root });
-  await quiet(session);
+  await settle(session);
   await engine.prompt("str", { message: audit, on: engine.root });
-  await quiet(session);
+  await settle(session);
   await engine.prompt("str", { message: checklist, on: engine.root });
-  await quiet(session);
+  await settle(session);
   await seedAsks(session);
   return new Set(session.acts.filter((act) => !act.done).map((act) => act.id));
 }
@@ -97,7 +129,7 @@ export async function seedAsks(session: Session): Promise<void> {
   });
   const notes = await engine.chain({ label: "w/notes" });
   const held = await engine.prompt("str", { message: "Think until I cancel.", on: notes });
-  await quiet(session);
+  await settle(session, (act) => act.by === held);
   await engine.cancel(held);
-  await quiet(session);
+  await settle(session);
 }

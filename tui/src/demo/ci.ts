@@ -1,5 +1,8 @@
 import type { Script } from "./script.ts";
 
+/** The command of the checks, which runs until a change ends it, so it stays open in the life of the demo. */
+export const checks = "sh ci.sh";
+
 const loop = String.raw`CI = """printf 'Checking the project...\n'
 for check in capture search storage keys; do
   printf '✓ %s\n' "$check"
@@ -9,7 +12,7 @@ printf 'Watching for a change\n'
 sleep 600
 """
 write(Text("ci.sh", CI))
-run = await bash("sh ci.sh", timeout=900)
+run = await bash("${checks}", timeout=900)
 print(run.code)`;
 
 export const ci: Script[] = [
