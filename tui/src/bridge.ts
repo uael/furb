@@ -144,7 +144,17 @@ export class HostView extends EventEmitter implements Plain {
     this.read[part] = text;
     return true;
   }
-  update({ facts, prompts, notices, streams, pending, measures, compactions, ...plain }: HostState): void {
+  // A host of an older build that speaks the same protocol sends a state with no measures and no compactions.
+  update({
+    facts,
+    prompts,
+    notices,
+    streams,
+    pending,
+    measures = {},
+    compactions = [],
+    ...plain
+  }: HostState): void {
     Object.assign(this, plain);
     if (Object.keys(measures).length) this.measures = { ...this.measures, ...measures };
     if (compactions.length) this.compactions = [...this.compactions, ...compactions];
