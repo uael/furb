@@ -42,21 +42,32 @@ pub(super) struct Watch {
   given: usize,
   /// Whether the word is given to the Kernel in no part, as when no Kernel takes a writing.
   whole: bool,
+  /// What the model wrote after the last end of a line, which the text takes once its line ends.
+  tail: String,
+  /// The marks of a fence or of a tool call that the text drops as each line ends.
+  bare: Bare,
 }
 
 impl Watch {
   /// The word grown by a part the model wrote, and where the statements to read end if a new line at the left edge
   /// started: the start of the last such line. A statement that starts there may not be whole, but every statement
-  /// before it is, unless a string or a bracket stays open, which the faults of [`broken`] leave to a later read.
+  /// before it is, unless a string or a bracket stays open, which the faults of [`broken`] leave to a later read. The
+  /// text takes each line once it ends, less the marks that [`Bare`] drops, so a line that the text has not taken
+  /// yet only says whether a line at the left edge starts.
   pub(super) fn wrote(&mut self, part: &str) -> Option<usize> {
-    self.text.push_str(part);
-    let end = self.text[self.seen..]
-      .match_indices('\n')
-      .filter(|(at, _)| {
-        self.text[self.seen + at + 1..].chars().next().is_some_and(|one| !one.is_whitespace())
-      })
-      .map(|(at, _)| self.seen + at + 1)
-      .next_back()?;
+    self.tail.push_str(part);
+    while let Some(at) = self.tail.find('\n') {
+      let line: String = self.tail.drain(..=at).collect();
+      if let Some(kept) = self.bare.line(&line[..at], &self.text) {
+        self.text.push_str(&kept);
+        self.text.push('\n');
+      }
+    }
+    let (text, tail) = (&self.text, &self.tail);
+    let end =
+      text[self.seen..].match_indices('\n').map(|(at, _)| self.seen + at + 1).rfind(|after| {
+        text[*after..].chars().chain(tail.chars()).next().is_some_and(|one| !one.is_whitespace())
+      })?;
     self.seen = end;
     Some(end)
   }
@@ -99,7 +110,8 @@ impl Watch {
   /// Whether the line that starts at this place in the text opens a clause of the statement before it, as `else` does
   /// of an `if`, so that statement is not whole yet though a line at the left edge starts after it.
   pub(super) fn clause(&self, end: usize) -> bool {
-    let line = self.text[end..].lines().next().unwrap_or_default();
+    let rest = if end < self.text.len() { &self.text[end..] } else { self.tail.as_str() };
+    let line = rest.lines().next().unwrap_or_default();
     let word =
       line.split(|one: char| !(one.is_alphanumeric() || one == '_')).next().unwrap_or_default();
     matches!(word, "else" | "elif" | "except" | "finally")
@@ -117,6 +129,86 @@ impl Watch {
   pub(super) fn ran(&self) -> Option<&str> {
     (self.given > 0).then(|| &self.text[..self.given])
   }
+
+  /// Whether the text dropped a mark of a fence or of a tool call.
+  pub(super) fn dropped(&self) -> bool {
+    self.bare.dropped
+  }
+}
+
+/// The marks that a model writes around its word out of the habit of a fence or of a tool call, which the word loses
+/// line by line: a fence, as ``` alone or with a language, or a line that is a tag of a tool call alone, as
+/// `<invoke name="python">`, `<parameter name="code">` or their close, while no line of the word stands before it;
+/// and once one went, each such line and each fence, a tag `<parameter ...>` at the start of a line and its close at
+/// the end of one, outside a quote. A word that no such mark opens keeps each line.
+#[derive(Default)]
+pub(super) struct Bare {
+  /// Whether a line of the word that is no mark stood.
+  started: bool,
+  /// Whether a mark went.
+  dropped: bool,
+}
+
+/// The names of the tags of a tool call.
+const TAGS: [&str; 3] = ["invoke", "parameter", "function_calls"];
+
+impl Bare {
+  /// A line of the text as the word holds it, or none when it is a mark that goes. `before` is the word before it.
+  pub(super) fn line(&mut self, line: &str, before: &str) -> Option<String> {
+    let mut line = line.to_owned();
+    if (!self.started || self.dropped) && !open(before) {
+      let trimmed = line.trim();
+      if fence(trimmed) || tag(trimmed).is_some_and(str::is_empty) {
+        self.dropped = true;
+        return None;
+      }
+      if let Some(rest) = trimmed.strip_prefix("<parameter").and_then(|_| tag(trimmed)) {
+        self.dropped = true;
+        line = rest.to_owned();
+      }
+      if self.dropped {
+        let end = line.trim_end();
+        if let Some(kept) =
+          end.strip_suffix("</parameter>").or_else(|| end.strip_suffix("</invoke>"))
+        {
+          line = kept.to_owned();
+        }
+      }
+    }
+    self.started |= !line.trim().is_empty();
+    Some(line)
+  }
+}
+
+/// Whether a line, trimmed, is a fence: ``` alone or with the name of a language.
+fn fence(line: &str) -> bool {
+  line
+    .strip_prefix("```")
+    .is_some_and(|name| name.chars().all(|one| one.is_ascii_alphanumeric() || "_+-.".contains(one)))
+}
+
+/// What follows a tag of a tool call that opens a line, trimmed: `<invoke ...>`, `<parameter ...>`, `<function_calls>`
+/// or the close of one; none when the line opens with no such tag.
+fn tag(line: &str) -> Option<&str> {
+  let inside = line.strip_prefix("</").or_else(|| line.strip_prefix('<'))?;
+  let name = TAGS.into_iter().find(|name| inside.starts_with(name))?;
+  let after = &inside[name.len()..];
+  if !after.starts_with([' ', '>']) {
+    return None;
+  }
+  Some(after[after.find('>')? + 1..].trim())
+}
+
+/// A whole text less the marks that [`Bare`] drops, or none when it drops none.
+pub(super) fn bare(text: &str) -> Option<String> {
+  let (mut bare, mut kept) = (Bare::default(), String::new());
+  for line in text.split('\n') {
+    if let Some(line) = bare.line(line, &kept) {
+      kept.push_str(&line);
+      kept.push('\n');
+    }
+  }
+  bare.dropped.then(|| kept.trim_end().to_owned())
 }
 
 /// The line, counted from 1, on which the last statement at the top of a word starts, if the word is python and holds

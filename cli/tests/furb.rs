@@ -436,6 +436,38 @@ fn a_model_answers_a_prompt_of_any_shape() {
 }
 
 #[test]
+fn a_word_that_a_model_wraps_in_a_fence_runs_less_the_fence_and_its_chain_is_told_once() {
+  let yard = Yard::new("fence");
+  yard.words(&["```python\nx = 1\nclose(x + 2)\n```"]);
+  assert_eq!(printed(yard.kept(&["prompt", "three", "--shape", "int"]), ""), "3\n");
+  assert_eq!(yard.answered(), 1);
+  let record = fs::read_to_string(yard.record()).expect("the record");
+  let told: Vec<&str> =
+    record.lines().filter(|line| line.contains("wrapped its word in a fence")).collect();
+  assert_eq!(
+    told.len(),
+    1,
+    "{}",
+    told.iter().map(|line| &line[..line.len().min(400)]).collect::<Vec<_>>().join("\n")
+  );
+  assert!(!record.contains("```"), "{record}");
+}
+
+#[test]
+fn a_word_that_a_model_wraps_in_a_tool_call_runs_less_its_markup_and_the_next_turn_holds_none_of_it()
+ {
+  let yard = Yard::new("invoke");
+  let call = "<invoke name=\"bash\">\n<parameter name=\"command\">ls</parameter>\n</invoke>";
+  yard.words(&[call, "close(5)"]);
+  assert_eq!(printed(yard.kept(&["prompt", "five", "--shape", "int"]), ""), "5\n");
+  assert_eq!(yard.answered(), 2);
+  let input = fs::read_to_string(yard.fake.join("in")).expect("the input of the fake");
+  let next = input.lines().last().unwrap_or_default();
+  assert!(next.contains("refused") && next.contains("wrapped its word"), "{next}");
+  assert!(!next.contains("invoke") && !next.contains("parameter"), "{next}");
+}
+
+#[test]
 fn the_life_of_a_prompt_offers_the_model_of_the_actor_it_names() {
   for (name, roster) in [("to", &[][..]), ("to-named", &["--roster", "haiku"][..])] {
     let yard = Yard::new(name);
