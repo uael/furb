@@ -177,7 +177,9 @@ test("a click on a ... of a window of code opens it in a block that scrolls, and
       );
       const gaps = async () => {
         const shown = (await frame()).split("\n").map((row) => feedOf(session, row));
-        return shown.flatMap((row, y) => (/^\s+\.\.\.\s*$/.test(row) ? [{ x: row.indexOf("..."), y }] : []));
+        return shown.flatMap((row, y) =>
+          /^[\s┃]+\.\.\.\s*$/.test(row) ? [{ x: row.indexOf("..."), y }] : [],
+        );
       };
       const first = (await gaps())[0];
       if (!first) throw new Error("No window is rolled.");
@@ -207,14 +209,14 @@ test("the gutter stands inside the block of code at its left, or right of it whe
           session,
           (await frame()).split("\n").find((one) => one.includes('notes = read("README.md")')) ?? "",
         );
-      expect(await row()).toMatch(/^\s+1 notes = read/);
+      expect(await row()).toMatch(/^[\s┃]+1 notes = read/);
       await session.submit("/gutter right");
       expect(session.preferences.gutter).toBe("right");
-      expect(await row()).toMatch(/^\s+notes = read\("README\.md"\).* 1\s*$/);
+      expect(await row()).toMatch(/^[\s┃]+notes = read\("README\.md"\).* 1\s*$/);
       // Without a value the flag turns over.
       await session.submit("/gutter");
       expect(session.preferences.gutter).toBe("left");
-      expect(await row()).toMatch(/^\s+1 notes = read/);
+      expect(await row()).toMatch(/^[\s┃]+1 notes = read/);
       expect(String(await session.submit("/gutter up").catch((error) => error))).toContain("/gutter left");
     },
     size,

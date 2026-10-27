@@ -95,7 +95,7 @@ export const PROGRAM_STEPS = 6;
 
 /** The width of the numbers of a program, with the space after them: room for two digits at least, so the code of
  * each thread of under a hundred lines starts at one column. */
-export const gutterWidth = (digits: number) => Math.max(2, digits) + space.inset + 1;
+export const gutterWidth = (digits: number) => Math.max(2, digits) + space.inset;
 
 /** A row that a model writes as the tick compares it: its number, and its text with the color of each part. */
 export const saidOf = (number: number, parts: readonly Part[]) =>

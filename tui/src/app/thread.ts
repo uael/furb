@@ -59,13 +59,16 @@ export const thread = part({
     this.renderContent();
   },
 
-  /** A message of the operator in the box of a thread: a line of the color of the thread at its left. */
-  barred(box: BoxRenderable, color: RGBA): BoxRenderable {
+  /** A part of the box of a thread, with a line at its left: the color of the thread for a message of the operator, and
+   * a quiet color for the rest, so that one line runs the height of the box. A part that a blank row parts from the one
+   * above it holds that row, and the line goes through it. */
+  barred(box: BoxRenderable, color: RGBA, gap = 0): BoxRenderable {
     const bar = this.box({
       border: ["left"],
       borderColor: color,
       customBorderChars: { ...noBorder, vertical: glyph.bar },
       paddingLeft: space.inset,
+      ...(gap ? { paddingTop: gap } : {}),
     });
     box.add(bar);
     return bar;

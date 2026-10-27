@@ -323,9 +323,7 @@ export const feed = part({
               (box) => {
                 // The row stands in the column of the program above it.
                 const row = this.box({ paddingLeft: space.between });
-                row.add(
-                  this.thinkingRow(line.step.id, line.display, digits, tone, this.feedWidth - indent - 12),
-                );
+                row.add(this.thinkingRow(line.step.id, line.display, digits, this.feedWidth - indent - 15));
                 box.add(row);
               },
               { indent },
@@ -405,7 +403,7 @@ export const feed = part({
                     },
                   ),
                 );
-              box.add(this.programView(segment, room, took, since, heads, tone, digits));
+              box.add(this.programView(segment, room, took, since, heads, digits));
             },
             {
               indent,
@@ -484,6 +482,8 @@ export const feed = part({
         body: (box: BoxRenderable) => void;
         /** A section that a blank row parts from the one above it. */
         apart?: boolean;
+        /** The color of the line at its left: the color of the thread for a message of the operator. */
+        bar?: RGBA;
         same?: readonly unknown[];
         act?: ActRow;
         shown?: string;
@@ -563,6 +563,7 @@ export const feed = part({
           id: act.id,
           label: user ? [["You", tone]] : [[sent, c.faint]],
           key: `${message}\n${sent}\n${plain(state)}\n${rest}\n${thread?.resolved}\n${this.feedWidth}\n${this.theme}`,
+          bar: tone,
           act,
           shown: message,
           body: (box) => {
@@ -585,10 +586,9 @@ export const feed = part({
             );
             const controls = this.threadControls(act);
             if (controls) row.add(controls);
-            const bar = this.barred(box, tone);
-            bar.add(row);
+            box.add(row);
             if (rest)
-              bar.add(
+              box.add(
                 this.link(
                   [
                     [`${glyph.closed} `, c.faint],
@@ -655,8 +655,8 @@ export const feed = part({
                 writer ? writer.display + wrote : 1,
               ),
             ).length;
-            // The panel of the thread and the block of code take 6 columns, and the numbers about 5.
-            const room = this.feedWidth - indent - 12;
+            // The panel of the thread, its line and the block of code take 7 columns, and the numbers about 5.
+            const room = this.feedWidth - indent - 15;
             // A click on a line opens it in place: its whole text, and under it what each act of the line gave. The
             // window parts at each open line, so that the cards of its acts stand under it.
             const segments: ProgramLine[][] = [[]];
@@ -710,7 +710,6 @@ export const feed = part({
               sections.push({
                 id: index || at ? `program-${act.id}-${index}-${at}` : `program-${act.id}`,
                 key,
-                apart: at === 0,
                 body: (box) => {
                   // The block of code stands on a surface of its own in the panel of the thread, and the numbers of
                   // its lines stand inside it, or right of it.
@@ -720,7 +719,7 @@ export const feed = part({
                     ...(side === "right" ? {} : { paddingRight: space.inset }),
                   });
                   if (segment.length) {
-                    const view = this.programView(segment, room, took, since, heads, tone, digits, {
+                    const view = this.programView(segment, room, took, since, heads, digits, {
                       gutter: side,
                       more: () => this.openWindow(where),
                     });
@@ -732,7 +731,7 @@ export const feed = part({
                   }
                   if (thinks && writer)
                     block.add(
-                      this.thinkingRow(writer.step.id, writer.display, digits, tone, room, side === "right"),
+                      this.thinkingRow(writer.step.id, writer.display, digits, room, side === "right"),
                     );
                   box.add(block);
                   if (window.opened && at === segments.length - 1)
@@ -770,7 +769,8 @@ export const feed = part({
               id: `${act.id}-say-${next.id}`,
               key: `${text}\n${this.feedWidth}\n${this.theme}`,
               apart: true,
-              body: (box) => this.barred(box, tone).add(said(text)),
+              bar: tone,
+              body: (box) => box.add(said(text)),
             });
           }
         }
@@ -824,14 +824,10 @@ export const feed = part({
             section.id,
             `${section.key}\n${join}`,
             section.label ?? [],
-            (box) => {
-              let into = box;
-              if (section.apart && at > 0) {
-                into = this.box({ marginTop: space.section });
-                box.add(into);
-              }
-              section.body(into);
-            },
+            (box) =>
+              section.body(
+                this.barred(box, section.bar ?? c.border, section.apart && at > 0 ? space.section : 0),
+              ),
             {
               indent,
               join,
