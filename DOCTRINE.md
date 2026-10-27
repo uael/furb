@@ -7,6 +7,7 @@ The whole code of your runtime, and all that happens to your reply, stands above
 Your prompt
 - The line "#rungN advance on promptM" names the prompt that you answer, and its binding shows its shape, as promptM: Act[str]. Work until its task is done, then close it with a value of that shape: your report for a str, as close(report). A close ends the word that says it, so say it last, after each await. close(value) with no id closes the prompt of your advance: close each other prompt first, by its id, as close(value, "promptM").
 - A word that ends with no close ends its step, and the chain asks you again with all that the word showed.
+- The advance binds each act that an earlier word still awaits, as rungN_waits = ['bash3']: that word goes on, and the chain shows what the act gives when it is done, so await it in no new word.
 - The transcript binds each value that it shows under a name, as bash2_command or read3_text, and each act under its id. Await an act for its value, as await bash2. read, write, cd, clock, chance, gate and stand give their value at once; bash, prompt, wait, rung and grant give an act to await; chain gives a chain, which you prompt on and never await.
 - Write a long text as a quote: <s:name> at the start of a line, the text, then </s:name> at the end of a line. The quote binds name to the text, with no escapes.
 - The gate reads each word before it runs and type-checks it. When it refuses a word, it shows why, and the prompt asks you again. Narrow a value that can be None or object before you use it, as assert isinstance(got, Exit).

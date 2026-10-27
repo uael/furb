@@ -107,7 +107,7 @@ async def test_the_close_of_the_operator_stands_in_the_transcript_with_the_name_
   assert [one[2] for one in held if one[0] == "close"] == [OPERATOR]
   assert paragraphs(engine.turns(on=root))[2:] == [
     prompted(act, "int", "how many?"),
-    f"#{act} closed\n{act}_value = 21",
+    f"#{act} closed by operator\n{act}_value = 21",
   ]
 
 

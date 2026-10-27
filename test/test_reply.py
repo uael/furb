@@ -130,7 +130,9 @@ async def test_the_life_refuses_a_reply_that_no_ear_owns() -> None:
   (reply,) = [a[1] for a in said(log, "reply")]
   assert isinstance(got := engine.peek(reply), Refused) and str(got) == "nothing takes reply"
   assert (
-    engine.paused(root) and engine.peek(asked, ...) is ... and heads(engine.turns(on=root))[-1] == f"#{root} paused"
+    engine.paused(root)
+    and engine.peek(asked, ...) is ...
+    and heads(engine.turns(on=root))[-1] == f"#{root} paused by chain1"
   )
   engine.wake(root)
   await settle()

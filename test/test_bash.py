@@ -301,7 +301,7 @@ async def test_the_world_takes_it_once_and_closes_a_command_that_a_crash_cut_as_
   got, why = engine.peek(two), "'sleep 9' was interrupted: the life that ran it ended before it did"
   assert isinstance(got, Refused) and str(got) == why
   assert third.outs == {} and [a[1] for a in heard if a[0] == "close"] == [two]
-  assert f"#{two} closed\n{two}_value = Refused({why!r})" in paragraphs(engine.turns(on=over))
+  assert f"#{two} closed by world\n{two}_value = Refused({why!r})" in paragraphs(engine.turns(on=over))
 
 
 async def test_with_a_hidden_show_it_tells_its_header_and_its_binding_alone() -> None:
@@ -398,7 +398,9 @@ async def test_a_pause_stops_no_command() -> None:
   world_says("out", one, "half\n", "stdout")
   sand.exits(one, 0)
   await settle()
-  assert [a[2] for a in dones(log, "bash")] == [WORLD] and paragraphs(engine.turns(on=root))[-1] == f"#{root} paused"
+  assert [a[2] for a in dones(log, "bash")] == [WORLD] and paragraphs(engine.turns(on=root))[
+    -1
+  ] == f"#{root} paused by operator"
   engine.wake(root)
   await settle()
   assert paragraphs(engine.turns(on=root))[-1] == f"#{one} exited 0\n{one}_stdout = 'half'"

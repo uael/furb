@@ -25,9 +25,7 @@ async def test_the_word_of_a_rung_enters_the_program_when_the_gate_accepts_it_or
   assert await act == 2
   refused, first, second = [a[1] for a in said(log, "rung") if a[2] == act]
   wrote = fresh(root, prompted(act, "int", "count"), f"#{refused} advance on {act}")
-  shut = (
-    f"#{refused} refused\n{refused}_findings = {faulted('a = BAD')!r}\n\n#{refused} closed\n{refused}_value = Refused()"
-  )
+  shut = f"#{refused} refused\n{refused}_findings = {faulted('a = BAD')!r}\n\n#{refused} closed by chain1\n{refused}_value = Refused()"
   bound = f"{shut}\n\n#{first} advance on {act}"
   assert engine.program(root) == {
     f"{refused}_told": wrote,
@@ -65,7 +63,7 @@ async def test_the_old_words_stay_in_the_program_and_in_the_turns_after_a_rung_r
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
   program = engine.program(root)
   wrote = fresh(root, prompted(act, "None", "bind it"), f"#{step} advance on {act}")
-  shut = engine.unquoted(f"#{act} closed\n\n{written(laid, new)}")
+  shut = engine.unquoted(f"#{act} closed by rung1\n\n{written(laid, new)}")
   assert program == {f"{step}_told": wrote, step: old, f"{laid}_told": shut, laid: new}
   assert [turn[1] for turn in engine.turns(on=root) if turn[0] == "assistant"] == [old]
   assert engine.turns(on=root)[-1][1].endswith(f"#{laid} by operator\n<s:{laid}_word>\n{new}</s:{laid}_word>")
