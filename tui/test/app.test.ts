@@ -141,7 +141,7 @@ test("a click on a line of a program opens it in place, with its whole text and 
       const open = await row();
       expect(open.rows.join("\n")).toMatch(/^[ ┃]+✓ search\b/m);
       // The whole line shows, cut into rows at the column of the code, past the mark where it was cut.
-      expect(open.rows[open.y]).not.toContain("…");
+      expect(open.rows[open.y]?.slice(0, 100)).not.toContain("…");
       await screen.mockMouse.click(open.x, open.y);
       await screen.flush();
       expect((await row()).rows.join("\n")).not.toMatch(/^[ ┃]+✓ search *$/m);

@@ -572,7 +572,7 @@ export const feed = part({
           id: act.id,
           label: user ? [["You", tone]] : [[sent, c.faint]],
           key: `${message}\n${sent}\n${plain(state)}\n${rest}\n${thread?.resolved}\n${this.feedWidth}\n${this.theme}`,
-          bar: tone,
+          ...(user ? { bar: tone } : {}),
           act,
           shown: message,
           body: (box) => {
@@ -822,7 +822,6 @@ export const feed = part({
             id: `${act.id}-reply`,
             key: `reply\n${over}\n${this.feedWidth}\n${this.theme}`,
             apart: true,
-            bar: tone,
             body: (box) => this.replyBox(box, act.id, over),
           });
         }
@@ -835,22 +834,21 @@ export const feed = part({
                 : at === sections.length - 1
                   ? "last"
                   : "middle";
+          // A message of the operator holds its own blank rows, so no blank row parts a part from it.
+          const gap = section.apart && at > 0 && !section.bar && !sections[at - 1]?.bar ? space.section : 0;
           add(
             section.id,
-            `${section.key}\n${join}`,
+            `${section.key}\n${join}\n${gap}\n${Boolean(section.bar)}`,
             section.label ?? [],
-            (box) =>
-              section.body(
-                this.barred(box, section.bar ?? tone, section.apart && at > 0 ? space.section : 0),
-              ),
+            (box) => section.body(this.barred(box, section.bar, gap)),
             {
               indent,
               join,
-              edge: tone,
+              edge: c.border,
               heading: false,
               separate: at === 0,
               open: true,
-              same: [...(section.same ?? [section.key]), join],
+              same: [...(section.same ?? [section.key]), join, gap, Boolean(section.bar)],
               ...(section.act ? { act: section.act } : {}),
               ...(section.shown !== undefined ? { shown: section.shown } : {}),
             },

@@ -50,11 +50,18 @@ test("a thread is one box: its message with a line of its color, its program as 
         `${head}-reply`,
       ]);
       expect(rows[at("Explore this project")]).toMatch(/┃ Explore this project/);
-      // The answer stands as markdown in the box, and the quiet line of the box runs through it.
-      expect(rows.some((row) => /┃ (## )?A clear starting point/.test(row))).toBe(true);
+      // The answer stands as markdown with no line of color, in the column of the text of the message.
       expect(at("Fieldnotes keeps ideas close")).toBeGreaterThan(0);
+      expect(rows[at("Fieldnotes keeps ideas close")]).not.toContain("┃");
+      expect(rows[at("Fieldnotes keeps ideas close")]?.indexOf("Fieldnotes")).toBe(
+        rows[at("Explore this project")]?.indexOf("Explore"),
+      );
+      // The line of the message runs one blank row above it and one below it, and the rows between do not have it.
+      expect(rows[at("Explore this project") - 1]).toMatch(/^\s*┃\s*$/);
+      expect(rows[at("Explore this project") + 1]).toMatch(/^\s*┃\s*$/);
+      expect(rows[at("Explore this project") + 2]).not.toContain("┃");
       // The box has an edge above its message and an edge under its input.
-      expect(rows[at("Explore this project") - 1]).toContain("▄▄▄▄");
+      expect(rows[at("Explore this project") - 2]).toContain("▄▄▄▄");
       expect(rows[at("Reply to open this thread again") + 1]).toContain("▀▀▀▀");
       expect(rows.join("\n")).not.toContain("Open again");
       expect(rows.join("\n")).toContain("▾ Collapse");
@@ -222,8 +229,7 @@ test("the box of a thread starts where the input of the chain starts, and its re
       expect(ask).not.toBe("");
       expect(reply).not.toBe("");
       expect(reply.indexOf("Reply to")).toBe(ask.indexOf("Ask anything"));
-      expect(reply.indexOf("┃")).toBe(ask.indexOf("┃"));
-      // The rows of the box stand on the same line, whether they are code, markdown or the input.
+      // The line of the box stands on one column, whatever the row.
       const bars = rows.filter((row) => row.includes("┃")).map((row) => row.indexOf("┃"));
       expect(new Set(bars).size).toBe(1);
     },

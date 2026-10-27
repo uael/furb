@@ -59,19 +59,23 @@ export const thread = part({
     this.renderContent();
   },
 
-  /** A part of the box of a thread, with a line at its left: the color of the thread for a message of the operator, and
-   * a quiet color for the rest, so that one line runs the height of the box. A part that a blank row parts from the one
-   * above it holds that row, and the line goes through it. */
-  barred(box: BoxRenderable, color: RGBA, gap = 0): BoxRenderable {
-    const bar = this.box({
-      border: ["left"],
-      borderColor: color,
-      customBorderChars: { ...noBorder, vertical: glyph.bar },
-      paddingLeft: space.inset,
-      ...(gap ? { paddingTop: gap } : {}),
-    });
-    box.add(bar);
-    return bar;
+  /** A part of the box of a thread. A message of the operator has a line of the color of the thread at its left, which
+   * runs one blank row above it and one below it, so that it stands out of the rest. Any other part has no line, and its
+   * text starts at the column of the text of a message. A part that a blank row parts from the one above it holds that
+   * row. */
+  barred(box: BoxRenderable, color?: RGBA, gap = 0): BoxRenderable {
+    const part = color
+      ? this.box({
+          border: ["left"],
+          borderColor: color,
+          customBorderChars: { ...noBorder, vertical: glyph.bar },
+          paddingLeft: space.inset,
+          paddingTop: space.section,
+          paddingBottom: space.section,
+        })
+      : this.box({ paddingLeft: space.inset + 1, ...(gap ? { paddingTop: gap } : {}) });
+    box.add(part);
+    return part;
   },
 
   /** Whether a thread that stands folded has new work since it was last seen open. A thread that stands open is seen. */
