@@ -4,6 +4,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { isBuiltin } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, extname, join } from "node:path";
+import { type HostState, HostView } from "../src/bridge.ts";
 
 test("a session whose life does not open ends its worker, so the process that asked it can exit", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-open-fail-"));
@@ -60,4 +61,12 @@ test("no worker and no host of the TUI loads OpenTUI, so its native library stay
     expect(named.size).toBeGreaterThan(1);
     expect([...named].filter(([path]) => path.startsWith("@opentui/"))).toEqual([]);
   }
+});
+test("a window reads a state with no measures and no compactions, as a host of an older build sends it", () => {
+  const view = new HostView(() => Promise.resolve(undefined));
+  const state = { facts: 1, prompts: [], notices: [], streams: [], pending: [], seq: 7 };
+  expect(() => view.update(state as unknown as HostState)).not.toThrow();
+  expect(view.measures).toEqual({});
+  expect(view.compactions).toEqual([]);
+  expect(view.seq).toBe(7);
 });
