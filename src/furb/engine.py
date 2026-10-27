@@ -344,7 +344,6 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
               running[rid] = act("run", id, None, rid, unquoted(word), donor)
           except Exception as e:
             found = [str(e)]
-            pause(id)
           if found:
             yield told(rid, "refused", findings="\n".join(found))
             refused.add(rid)
