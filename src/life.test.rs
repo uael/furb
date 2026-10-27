@@ -361,19 +361,53 @@ fn a_snapshot_that_its_record_outgrew_is_dropped_and_the_life_replays() {
 }
 
 #[test]
-fn a_life_whose_outside_works_keeps_no_snapshot_of_that_work() {
+fn a_life_whose_outside_works_keeps_a_snapshot_and_a_later_life_holds_that_work_as_a_replay_holds_it()
+ {
   let at = place("works");
-  let open =
-    || Opening { extensions: Some(false), ..opening(&at, true) }.boot::<String>([]).unwrap().0;
-  let mut first = open();
-  let wait = first.wait(&[], verbs::Wait { seconds: Some(60.0), on: Some("chain1".to_owned()) });
-  drop(wait.unwrap());
+  let (record, again) = (at.join("record.jsonl"), at.join("again.jsonl"));
+  let open = |record: &Path, snapshot: bool| {
+    let record = Some(record.display().to_string());
+    let opening =
+      Opening { extensions: Some(false), snapshot: Some(snapshot), record, ..opening(&at, true) };
+    opening.boot::<String>([]).unwrap().0
+  };
+  let mut first = open(&record, true);
+  let on = Some("chain1".to_owned());
+  drop(first.wait(&[], verbs::Wait { seconds: Some(60.0), on: on.clone() }).unwrap());
+  drop(first.bash("sleep 30", verbs::Bash { on, ..Default::default() }).unwrap());
   drop(first);
-  let second = open();
-  assert!(
-    !second.restored(),
-    "the snapshot that the life kept before the wait covers fewer entries than the record"
+  let one = heads(&record, 0).len();
+  for end in ["", ".log", ".snapshot"] {
+    fs::copy(format!("{}{end}", record.display()), format!("{}{end}", again.display())).unwrap();
+  }
+  let mut restored = open(&record, true);
+  let mut replayed = open(&again, false);
+  assert!(restored.restored(), "the snapshot covers the work that ran when the life ended");
+  let left = restored.pending().unwrap();
+  assert_eq!(
+    left,
+    [("wait1", "wait"), ("bash1", "bash")].map(|(a, b)| (a.to_owned(), b.to_owned()))
   );
+  assert_eq!(
+    left,
+    replayed.pending().unwrap(),
+    "the work that ran waits for a wake, as in a replay"
+  );
+  for engine in [&mut restored, &mut replayed] {
+    engine.wake("chain1").unwrap();
+    assert!(engine.pending().unwrap().is_empty(), "the wake put that work to the outside again");
+  }
+  drop((restored, replayed));
+  // The life from the snapshot stands again at its tip, and each ear hears the wake in its own order.
+  let acts = |record: &Path| {
+    let mut facts = heads(record, one);
+    facts.retain(|one| !one.contains("'stand") && !one.starts_with("['tell', 'chain1'"));
+    facts.sort();
+    facts
+  };
+  let (restored, replayed) = (acts(&record), acts(&again));
+  assert!(restored.iter().any(|one| one.starts_with("['started', 'wait1'")), "{restored:?}");
+  assert_eq!(restored, replayed, "both lives go on with the same facts");
 }
 
 #[test]
@@ -689,10 +723,20 @@ fn measure_how_long_a_life_opens_from_its_snapshot_and_by_a_replay() {
     opening.boot::<String>([]).unwrap().0
   };
   let n: usize = std::env::var("RUNGS").ok().and_then(|one| one.parse().ok()).unwrap_or(200);
+  let size: usize = std::env::var("CHARS").ok().and_then(|one| one.parse().ok()).unwrap_or(0);
   let mut engine = open(true);
   for i in 0..n {
-    closed(&mut engine, &format!("x{i} = [{i}] * 50\nclose(len(x{i}))"));
+    let word = match size {
+      0 => format!("x{i} = [{i}] * 50\nclose(len(x{i}))"),
+      // A rung that closes with a large text weighs on the record, the log and the snapshot, as a command does.
+      _ => format!("x{i} = '{i} ' * {}\nclose(x{i})", size / 2),
+    };
+    closed(&mut engine, &word);
   }
+  // A life that works always holds work of the outside that runs, as a wait.
+  drop(
+    engine.wait(&[], verbs::Wait { seconds: Some(3600.0), on: Some("chain1".to_owned()) }).unwrap(),
+  );
   drop(engine);
   let entries = world::kept(at.join("record.jsonl")).unwrap().len();
   let size = fs::metadata(at.join("record.jsonl.snapshot")).unwrap().len();

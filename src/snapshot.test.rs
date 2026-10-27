@@ -2,7 +2,9 @@
 
 use std::{fs, path::PathBuf};
 
-use super::Keeper;
+use std::time::{Duration, Instant};
+
+use super::{INTERVAL, Keeper};
 
 /// A new folder of the test, empty.
 fn place(name: &str) -> PathBuf {
@@ -24,4 +26,40 @@ fn a_keeper_says_that_the_life_said_nothing_new_from_the_length_of_its_log_alone
   assert!(!keeper.grew(), "a log of the length that the last snapshot covers holds nothing new");
   fs::write(&log, "one\ntwo\n").unwrap();
   assert!(keeper.grew(), "a log that grew since the last snapshot holds something new");
+}
+
+#[test]
+fn a_keeper_waits_longer_after_a_snapshot_that_took_long() {
+  let mut keeper = Keeper::new(place("paced").join("record.jsonl"), "build".to_owned());
+  assert!(keeper.due(false), "a life with no snapshot yet is due one");
+  assert!(!keeper.due(false), "a snapshot is not due again before the interval");
+  assert!(keeper.due(true), "a snapshot is due now when the life asks now");
+  keeper.last = Some(Instant::now() - INTERVAL);
+  keeper.spent = Duration::from_secs(2);
+  assert!(!keeper.due(false), "a snapshot that took 2 s waits 40 s before the next");
+  keeper.last = Some(Instant::now() - 2 * INTERVAL);
+  assert!(keeper.due(false));
+}
+
+#[test]
+#[ignore = "a measure, which a person runs on a large record that RECORD names"]
+fn measure_each_step_of_an_open_from_the_snapshot_of_a_record() {
+  let record = PathBuf::from(std::env::var("RECORD").unwrap());
+  let t = Instant::now();
+  let bytes = fs::read(super::path(&record)).unwrap();
+  let read = t.elapsed();
+  let hashed = (super::record(&record).unwrap(), super::log(&record));
+  let hash = t.elapsed() - read;
+  let past = crate::world::logged(&record).unwrap().unwrap_or_default();
+  let logged = t.elapsed() - read - hash;
+  let at = bytes.iter().position(|one| *one == b'\n').unwrap();
+  let sand = crate::sand::Sand::loaded(&bytes[at + 1..]).unwrap();
+  let loaded = t.elapsed() - read - hash - logged;
+  drop(sand);
+  eprintln!(
+    "snapshot {} bytes, {} entries, {} facts of the log: read {read:?}, record and log hashed {hash:?}, log read {logged:?}, session loaded {loaded:?}",
+    bytes.len(),
+    hashed.0.0,
+    past.len()
+  );
 }
