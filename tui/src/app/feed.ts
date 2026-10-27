@@ -834,7 +834,7 @@ export const feed = part({
                 : at === sections.length - 1
                   ? "last"
                   : "middle";
-          // A message of the operator holds its own blank rows, so no blank row parts a part from it.
+          // A message of the operator holds its own half rows of padding, so no blank row parts a part from it.
           const gap = section.apart && at > 0 && !section.bar && !sections[at - 1]?.bar ? space.section : 0;
           add(
             section.id,

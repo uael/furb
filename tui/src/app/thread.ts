@@ -60,21 +60,31 @@ export const thread = part({
   },
 
   /** A part of the box of a thread. A message of the operator has a line of the color of the thread at its left, which
-   * runs one blank row above it and one below it, so that it stands out of the rest. Any other part has no line, and its
-   * text starts at the column of the text of a message. A part that a blank row parts from the one above it holds that
-   * row. */
+   * starts half a row above it and ends half a row under it, as the line of a panel does, so that it stands out of the
+   * rest. Any other part has no line, and its text starts at the column of the text of a message. A part that a blank
+   * row parts from the one above it holds that row. */
   barred(box: BoxRenderable, color?: RGBA, gap = 0): BoxRenderable {
-    const part = color
-      ? this.box({
-          border: ["left"],
-          borderColor: color,
-          customBorderChars: { ...noBorder, vertical: glyph.bar },
-          paddingLeft: space.inset,
-          paddingTop: space.section,
-          paddingBottom: space.section,
-        })
-      : this.box({ paddingLeft: space.inset + 1, ...(gap ? { paddingTop: gap } : {}) });
+    if (!color) {
+      const plain = this.box({ paddingLeft: space.inset + 1, ...(gap ? { paddingTop: gap } : {}) });
+      box.add(plain);
+      return plain;
+    }
+    const cap = (side: "top" | "bottom") =>
+      this.box({
+        height: space.bar,
+        border: ["left"],
+        borderColor: color,
+        customBorderChars: { ...noBorder, vertical: side === "top" ? glyph.barTop : glyph.barBottom },
+      });
+    const part = this.box({
+      border: ["left"],
+      borderColor: color,
+      customBorderChars: { ...noBorder, vertical: glyph.bar },
+      paddingLeft: space.inset,
+    });
+    box.add(cap("top"));
     box.add(part);
+    box.add(cap("bottom"));
     return part;
   },
 
