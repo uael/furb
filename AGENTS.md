@@ -295,8 +295,9 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
   cache of `.furb/tests`, and not those of the machine. `tui/script/test.ts` deals the tests of each file into runs,
   each a process of its own that runs one test at a time, so a test counts its own time alone and no test runs
   beside one that changes the environment or the clock. Twice as many runs go at once as the machine has cores. A
-  word after `bun run test` filters the files. Each script of `bind/typescript/test/programs`, which a test runs as a
-  program, compiles before any run starts, so no compile takes the machine from a test.
+  word after `bun run test` filters the files, and a filter that matches no file fails. The last line counts the
+  passes and the fails, and `FURB_TEST_OUTPUT=1` shows all that each run wrote, a `console.log` among it. Each
+  script of `bind/typescript/test/programs`, which a test runs as a program, compiles before any run starts, so no compile takes the machine from a test.
   As root, the test of a folder that cannot be read fails, since root reads every folder.
 - `bun run demo` and `bun run tui`: the TUI on the demo session, which asks no model, or on a real life.
 - `bun run docs`: write the tables of keys and commands in `tui/README.md` again from `tui/src/keys.ts` and
