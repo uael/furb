@@ -343,7 +343,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
             if not found:
               running[rid] = act("run", id, None, rid, unquoted(word), donor)
           except Exception as e:
-            found = [f"{e}"]
+            found = [str(e)]
           if found:
             yield told(rid, "refused", findings="\n".join(found))
             refused.add(rid)
@@ -605,15 +605,11 @@ def bound(id, of="object"):
 
 def shown(text, show):
   lines = text.lines
-  return "\n".join(lines[i - 1][:1000] for i in show(lines))
+  return "\n".join(x[:1000] + f"... ({len(x)} chars)" if (x := lines[i - 1])[1000:] else x for i in show(lines))
 
 
 def unquoted(word):
-  kept = ""
-  while m := re.search(r"(?ms)^<s:(\w+)>\n?(.*?)</s:\1>$", word):
-    kept += word[: m.start()] + m[1] + " = " + repr(m[2]) + "\n" * m[0].count("\n")
-    word = word[m.end() :]
-  return kept + word
+  return re.sub(r"(?ms)^<s:(\w+)>\n?(.*?)</s:\1>$", lambda m: m[1] + " = " + repr(m[2]) + "\n" * m[0].count("\n"), word)
 
 
 def offered(roster, to, at=2):

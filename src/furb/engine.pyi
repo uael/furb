@@ -985,7 +985,7 @@ def bound(id: str, of: str = "object") -> str:
   """The statement that binds the name of an act to the act, with the type of what the act comes to, as bash1: Act[Exit] = Act('bash1'), so the gate knows what an await of it gives."""
 
 def shown(text: Text, show: Show) -> str:
-  """The lines of a text that a show picks, as they are, one on each line, each cut at its first 1000 characters, so a long line of a command or of a file does not fill the turns."""
+  """The lines of a text that a show picks, as they are, one on each line, each cut at its first 1000 characters and then marked with its length, as ... (1045 chars), so a long line of a command or of a file does not fill the turns and a cut line does not read as the end of the text."""
 
 def unquoted(word: str) -> str:
   """What a word is as python: each quote in it bound as a string.
