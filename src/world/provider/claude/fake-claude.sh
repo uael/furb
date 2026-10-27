@@ -16,7 +16,10 @@
 # holds before it reads any input, when the file odd stands beside it, it writes a line that is no JSON before it reads
 # any input, and when the file deaf stands beside it, it reads no input and lives on. When the file cost stands beside
 # it, each turn costs the dollars that it holds. It writes the MAX_THINKING_TOKENS of each process beside it too, or
-# unset.
+# unset. It writes the CLAUDE_CODE_OAUTH_TOKEN and the CLAUDE_CONFIG_DIR of each process beside it too, in token.N and
+# configdir.N, or unset. When the file limited.TOKEN stands beside it, each turn of a process whose token is TOKEN gets
+# a result that says the usage limit ends in as many seconds as the file holds, and when the file signedout.TOKEN
+# stands beside it, a result that says the account is signed out.
 here=$(dirname "$0")
 # A process that furb starts to ask for the models (FURB_CLAUDE_DISCOVER) answers control requests and no turn, and
 # leaves no trace of a process of a turn. It writes a line in discoveries for each one. When the file models stands
@@ -47,6 +50,9 @@ if [ -n "${FURB_CLAUDE_DISCOVER-}" ]; then
 fi
 printf '%s\0' "$@" > "$here/args.$$"
 printf '%s' "${MAX_THINKING_TOKENS-unset}" > "$here/thinking.$$"
+who=${CLAUDE_CODE_OAUTH_TOKEN-unset}
+printf '%s' "$who" > "$here/token.$$"
+printf '%s' "${CLAUDE_CONFIG_DIR-unset}" > "$here/configdir.$$"
 echo "$$" >> "$here/pids"
 id=none
 last=
@@ -64,6 +70,14 @@ if [ -f "$here/deaf" ]; then exec sleep 60; fi
 n=0
 while IFS= read -r line; do
   printf '%s\n' "$line" >> "$here/in"
+  if [ -f "$here/limited.$who" ]; then
+    echo "{\"type\":\"result\",\"is_error\":true,\"result\":\"Claude AI usage limit reached|$(( $(date +%s) + $(cat "$here/limited.$who") ))\"}"
+    continue
+  fi
+  if [ -f "$here/signedout.$who" ]; then
+    echo '{"type":"result","is_error":true,"result":"Invalid API key · Please run /login"}'
+    continue
+  fi
   case $line in
     *FAIL*) echo "deliberate failure" >&2; exit 2 ;;
     *WAIT*) continue ;;
