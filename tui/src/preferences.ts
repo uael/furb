@@ -18,7 +18,7 @@ export class Preferences {
   sidebar = true;
   sidebarWidth = 56;
   /** The shape of the sidebar. */
-  sidebarStyle: RailStyle = "outline";
+  sidebarStyle: RailStyle = "cards";
   /** Whether a thread that is over, and is not the last of its chain, starts folded in the feed. */
   foldThreads = true;
   /** Whether the welcome showed the check of the first run, which it shows once, and again while no model answers. */

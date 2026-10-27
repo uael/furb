@@ -151,9 +151,11 @@ export const rail = part({
     const w = this.session;
     const all = this.railThreads();
     const chosen = w.thread ? all.find((one) => one.act.id === w.thread) : undefined;
-    if (chosen) return chosen;
     const own = all.filter((one) => one.act.on === w.selected);
-    return own.findLast((one) => !one.resolved) ?? own.at(-1);
+    const found = chosen ?? own.findLast((one) => !one.resolved) ?? own.at(-1);
+    // The input sends its next message to the thread that is lit.
+    w.lit = found?.act.id;
+    return found;
   },
 
   /** The state of a thread in a word and its color. */
@@ -288,6 +290,19 @@ export const rail = part({
     const room = width - LEFT - RIGHT;
     const edge: BoxOptions = { paddingLeft: LEFT, paddingRight: RIGHT };
     if (style === "cards") {
+      // A question that waits shows on top, wherever it waits; the rest of the marks stand on the rows of the switcher.
+      if (total.asks)
+        this.railSession.add(
+          this.railSplit(
+            [
+              [`${glyph.asks} ${total.asks} `, c.warning, bold],
+              [total.asks === 1 ? "needs you" : "need you", c.text, bold],
+            ],
+            [["⌥A", c.faint]],
+            () => void this.nextAttention().catch(this.report),
+            edge,
+          ),
+        );
       this.renderSwitcher(room, edge);
       return;
     }
@@ -699,21 +714,7 @@ export const rail = part({
       const group = current;
       if (group) {
         const { shown, earlier } = sessionsOf(group);
-        const id = `ws:${group.directory}`;
-        this.itemRow(
-          this.railSpaces,
-          group,
-          {
-            lead: [[glyph.mark, c.accent], [" "]],
-            name: [group.name, c.text, bold],
-            after: true,
-          },
-          () => [[group.name, c.text, bold]],
-          () => {},
-          {},
-          cursor === id,
-        );
-        step(1, id);
+        // The switcher on top holds the workspace shown, so its folder stands here without a second row for its name.
         this.railSpaces.add(
           this.inset(
             LEFT + 2,
@@ -790,10 +791,13 @@ export const rail = part({
         folds(group, earlier);
       }
     }
-    plainRow([[" "], ["+ ", c.faint], ["Add a workspace", c.faint]], () => this.insert("/workspace "), {
-      marginTop: space.section,
-    });
-    step(1, undefined, space.section);
+    // The shape cards holds the row that adds a workspace in its switcher, and the others hold it here.
+    if (style !== "cards") {
+      plainRow([[" "], ["+ ", c.faint], ["Add a workspace", c.faint]], () => this.insert("/workspace "), {
+        marginTop: space.section,
+      });
+      step(1, undefined, space.section);
+    }
     if (found !== undefined && target !== this.railWatched) {
       const line = found;
       this.railWatched = target;

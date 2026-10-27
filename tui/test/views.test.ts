@@ -470,29 +470,13 @@ test("the keys of the footer and the palette answer the mouse, and a drag over t
     true,
   ));
 
-test("the root chain stands in the threads when it rests, and the other resting chains fold under Finished", () =>
-  composing(
-    async ({ session, frame }) => {
-      const { engine } = session;
-      const side = await engine.chain({ label: "Side", source: engine.root });
-      await engine.chain({ label: "Notes", source: engine.root });
-      await session.refresh();
-      await session.select(side);
-      const left = 140 - session.preferences.sidebarWidth;
-      const rows = (await frame()).split("\n").map((line) => line.slice(left).trim());
-      expect(rows.slice(1, 4)).toEqual(["▎○ Main", "▎○ Side", "▸ Finished  1"]);
-    },
-    { width: 140, height: 30 },
-  ));
-
-test("the sidebar says what each thread came to, a question that waits stands first with its values, which a click answers, and a click on a thread shows its chain", () =>
+test("the sidebar lists the threads, and a question that waits stands first with its values, which a click answers", () =>
   composing(
     async ({ session, frame, click }) => {
       await idle(session);
       let shown = await frame();
-      expect(shown.split("\n").filter((line) => line.includes("✓ Main"))).toContainEqual(
-        expect.stringContaining("A clear starting point"),
-      );
+      expect(shown).toContain("Threads");
+      session.preferences.sidebarStyle = "inbox";
       const question = await session.engine.prompt("bool", {
         message: "Apply the search shortcut?",
         on: session.engine.root,
@@ -502,18 +486,13 @@ test("the sidebar says what each thread came to, a question that waits stands fi
       await session.refresh();
       shown = await frame();
       const rows = shown.split("\n");
-      const needs = rows.findIndex((line) => line.includes("Needs you"));
+      const needs = rows.findIndex((line) => line.includes("needs you"));
       expect(needs).toBeGreaterThan(-1);
-      expect(rows.findIndex((line) => line.includes("Chains"))).toBeGreaterThan(needs);
-      expect(rows[needs + 2]).toContain("◆ Main");
+      expect(rows[needs + 2]).toContain("Main");
       expect(shown).toContain("Apply the search shortcut?");
       expect(shown).toContain(" 3 Other ");
       await click(" 1 yes ");
       expect(await session.engine.result(question)).toBe(true);
-      await click("Finished");
-      await click("Review notes");
-      await until(session, () => session.label === "Review notes");
-      expect(session.selected).not.toBe(session.engine.root);
     },
     { width: 140, height: 44, useMouse: true },
     true,

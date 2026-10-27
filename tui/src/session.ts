@@ -336,6 +336,11 @@ export class Session extends EventEmitter {
   /** The thread that the operator chose in the sidebar, to which the input sends each message as prompt(None, message,
    * on=thread): its model reads it at its next step, and a message to a resolved thread opens it again. */
   thread?: string;
+  /** The thread lit in the sidebar, to which the input sends a message by default, as long as the operator chose no
+   * thread and did not ask for a new one. */
+  lit?: string;
+  /** Whether the next message starts a new thread, in place of going to the thread lit. */
+  fresh = false;
   readonly preferences: Preferences;
   mode: "prompt" | "python" = "prompt";
   shape = "str";
@@ -1135,6 +1140,7 @@ export class Session extends EventEmitter {
       this.editing = undefined;
       this.held = 0;
       this.thread = undefined;
+      this.fresh = false;
       this.turns = [];
       this.answers = [];
       this.filled = undefined;
@@ -1599,7 +1605,8 @@ export class Session extends EventEmitter {
         await this.attachFiles(input);
         this.redo = [];
         const pending = this.host.pending.size > 0;
-        const thread = this.thread;
+        const thread = this.thread ?? (this.fresh || this.shape !== "str" ? undefined : this.lit);
+        this.fresh = false;
         const id = thread
           ? await this.engine.prompt("str", { message: this.withImages(input), on: thread })
           : await this.engine.prompt(this.shape, { message: this.withImages(input), on: this.selected });
@@ -1731,6 +1738,11 @@ export class Session extends EventEmitter {
         this.notice = this.preferences.foldThreads
           ? "The threads that are over fold automatically."
           : "The threads that are over stay open.";
+        break;
+      case "newthread":
+        this.fresh = true;
+        this.thread = undefined;
+        this.notice = "Your next message starts a new thread.";
         break;
       case "grant": {
         const amount = Number(argument);

@@ -70,6 +70,11 @@ export const commands = {
     "Show or hide the workspaces with the threads of the session shown and the context, or give the sidebar a shape",
   ],
   delete: ["Delete session", "", "Archive a session, or move it and its files to the workspace trash"],
+  newthread: [
+    "New thread",
+    "",
+    "Start a new thread with your next message, in place of a message to the thread lit in the sidebar",
+  ],
   autocollapse: ["Automatic fold", "", "Toggle the fold of the threads that are over"],
   extensions: [
     "Extensions",
