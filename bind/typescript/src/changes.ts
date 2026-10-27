@@ -2,6 +2,7 @@ import {
   closeSync,
   existsSync,
   fsyncSync,
+  ftruncateSync,
   mkdirSync,
   mkdtempSync,
   openSync,
@@ -11,7 +12,6 @@ import {
   rmSync,
   statSync,
   truncateSync,
-  writeFileSync,
   writeSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -55,6 +55,18 @@ function parse(line: string): FileChange | undefined {
       : undefined;
   } catch {
     return undefined;
+  }
+}
+
+/** A file that holds the data alone, written through a handle opened with the flags and flushed to the disk. */
+function writeDurably(path: string, flags: "w" | "r+", data: Buffer): void {
+  const fd = openSync(path, flags, 0o600);
+  try {
+    ftruncateSync(fd, 0);
+    writeSync(fd, data, 0, data.length, 0);
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
   }
 }
 
@@ -252,9 +264,15 @@ export class FileChanges {
     // What follows the last newline is empty, or a line that a crash cut.
     const cut = lines.pop() ?? "";
     const kept = lines.filter((line) => parse(line));
+    const data = Buffer.from(kept.map((line) => `${line}\n`).join(""));
     this.reopen(path, () => {
-      writeFileSync(`${path}.repair`, kept.map((line) => `${line}\n`).join(""), { mode: 0o600 });
-      renameSync(`${path}.repair`, path);
+      // The copy beside the journal holds the repaired journal until the journal holds it, should a crash cut the
+      // repair. The journal is written again in place, and not replaced by a rename: Windows refuses to replace a file
+      // that another program holds open, as a scanner of viruses holds a file that was just written.
+      const copy = `${path}.repair`;
+      writeDurably(copy, "w", data);
+      writeDurably(path, "r+", data);
+      rmSync(copy);
     });
     return { kept: kept.length, removed: lines.length - kept.length + (cut ? 1 : 0) };
   }

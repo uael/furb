@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { closeSync, openSync, writeSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -184,6 +185,30 @@ test("a journal open to read does not prevent its writer from repairing it", asy
   } finally {
     try {
       reader?.dispose();
+      writer?.dispose();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  }
+});
+
+test("a journal that another program holds open is repaired in place", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-journal-held-repair-"));
+  const record = join(directory, "life.jsonl");
+  const path = `${record}.changes.jsonl`;
+  let writer: FileChanges | undefined;
+  // Another program, as a scanner of viruses on Windows, holds the journal open while the writer repairs it.
+  const held = openSync(path, "w+");
+  try {
+    writeSync(held, `${change("one")}\n{ damaged }\n${change("two")}\n`);
+    writer = new FileChanges(record);
+    expect(writer.repair()).toEqual({ kept: 2, removed: 1 });
+    expect(writer.read().map((one) => one.after)).toEqual(["one", "two"]);
+    expect(await readFile(path, "utf8")).toBe(`${change("one")}\n${change("two")}\n`);
+    expect((await readdir(directory)).sort()).toEqual(["life.jsonl.changes.jsonl"]);
+  } finally {
+    try {
+      closeSync(held);
       writer?.dispose();
     } finally {
       await rm(directory, { recursive: true, force: true });
