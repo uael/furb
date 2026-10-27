@@ -590,3 +590,23 @@ def test_a_pass_of_main_keeps_its_records_for_the_next_capture(world: World) -> 
   book = world.run(2)
   assert book["records"] == {"r.jsonl": 10}
   assert any("""printf '%s' '{"r.jsonl": 10}'""" in c for c in world.commands)
+
+
+def played_on(chain: str) -> tuple[dict, dict]:
+  """Plays the word on a chain other than the root, where each chain holds a module of its own."""
+  modules: dict[str, dict] = {"chain1": {"vetoes": {}}, chain: {"vetoes": {}}}
+  ns: dict = {"__name__": "converge", "Text": Text, "Exit": Exit, "Refused": Refused, "ROOT": "chain1"}
+  ns.update(HIDDEN=None, module=lambda on="": modules[on or chain], acting=lambda: "rung1", scope=lambda name: chain)
+  exec(compile(SOURCE, str(HERE / "converge.py"), "exec"), ns)  # noqa: S102
+  return ns, modules
+
+
+def test_the_veto_of_converge_stands_in_the_module_of_the_chain_that_runs_the_conductor() -> None:
+  ns, modules = played_on("chain2")
+  assert modules["chain2"]["vetoes"]["converge"] is ns["converge_veto"]
+  assert "converge" not in modules["chain1"]["vetoes"]
+
+
+def test_converge_reads_the_round_in_the_module_of_the_chain_that_runs_the_conductor() -> None:
+  ns, modules = played_on("chain2")
+  assert ns["conductor"]() is modules["chain2"]
