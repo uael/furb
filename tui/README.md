@@ -101,8 +101,11 @@ Sessions are saved under `.furb/sessions` in the selected directory. The `.furb`
 An unfinished session opens paused and offers a resume choice. The native engine replays completed work from the
 record. A record whose replay drifts, as a record that a build of another version made, opens to read: the TUI shows
 what the record kept, runs no word again, asks no model, leaves the record and its log as they were, and refuses each command that would change the life. A
-dialog gives the build that made the record and this build, each on a line of its own, and offers to read it or to start a new life in its
-workspace, which carries the turns of the root chain of the record and the files that it wrote. While you read, the footer says "Read only" and
+dialog gives the build that made the record and this build, each on a line of its own, and offers three choices. Read it shows the record. Resume it opens
+a new session in its workspace that goes on from the turns of the root chain of the record, and asks again each prompt of a model that the record left open
+(the dialog counts them): it runs the word `inherit` of the extension compaction, which reads a record of any engine, so a life with that extension off gets
+the text instead. Start a new life from it opens a new session whose first word carries the turns of the root chain and the files that the record wrote as text,
+and asks no prompt again. While you read, the footer says "Read only" and
 offers the new life, and the composer is off. [The desktop preview](../gui/README.md) reads records in a window too.
 
 ⌃W lists the workspaces and their sessions, each with its state, save time, cost, and record size. It reads

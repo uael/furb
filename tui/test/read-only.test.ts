@@ -238,6 +238,79 @@ test("a new life from a record starts with the turns of its root chain and the f
   }
 });
 
+test("a record of an earlier engine offers a resume that names its open prompts, and gives the text where no extension runs", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-resume-"));
+  try {
+    const record = await lived(directory, "older");
+    await made(record, true);
+    // The earlier life left a prompt of a model open when it ended.
+    await appendFile(
+      record,
+      `${JSON.stringify([["prompt", "prompt90", "operator", "chain1", "str", "Finish the note.", ""], Date.now()])}\n`,
+    );
+    const open = await shown(record, directory, 120);
+    try {
+      // The prompt of the demo that its model never closed stands open in the record beside the one that was added.
+      expect(open.session.host.reading?.carries?.prompts).toBe(2);
+      expect(open.frame()).toContain("Resume it");
+      expect(open.frame()).toContain("2 open prompts");
+      const carry = await open.session.host.carry();
+      expect(carry.prompts).toBe(2);
+      // The path is the one the reader resolved, so a system that spells a folder two ways gives either spelling.
+      expect(carry.resume).toMatch(/^await inherit\(".*older\.jsonl", "chain1"\)$/);
+      const group = open.library.groupOf();
+      if (!group) throw new Error("No workspace.");
+      const fresh = await open.library.create(group, undefined, carry, true);
+      expect(fresh.session?.host.reading).toBeUndefined();
+      const kept = await readFile(fresh.path, "utf8");
+      // The demo life runs no extension, so it has no `inherit`, and the earlier work comes as text.
+      expect(kept).toContain("earlier_files");
+      expect(kept).toContain("Say hello.");
+      expect(fresh.session?.notice).toBe(
+        "The extension compaction is off, so the earlier work came as text.",
+      );
+    } finally {
+      await open.close();
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a record of an earlier engine resumes in a real life: its turns go on and its closed work is not asked again", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-resume-real-"));
+  try {
+    const record = await lived(directory, "older");
+    await made(record, true);
+    // The earlier life closed its only prompt, so the resume has no prompt to ask again.
+    await appendFile(record, `${JSON.stringify([["done", "prompt1", "chain1", "Done."], Date.now()])}\n`);
+    const library = new Workspaces(new Preferences(join(directory, "config/ui.json")), {});
+    try {
+      await library.import(record, await library.add(directory));
+      const session = library.current?.session;
+      expect(session?.host.reading?.carries?.prompts).toBe(0);
+      const carry = await session?.host.carry();
+      if (!carry) throw new Error("The record did not open.");
+      const group = library.groupOf();
+      if (!group) throw new Error("No workspace.");
+      const fresh = await library.create(group, undefined, carry, true);
+      expect(fresh.session?.host.reading).toBeUndefined();
+      expect(fresh.session?.notice).toBe("Resumed from the turns of the record.");
+      const kept = await readFile(fresh.path, "utf8");
+      // The word is a rung of the new life, and the carry answers it with the turns of the record.
+      expect(kept).toContain("await inherit(");
+      expect(kept).toContain('["done","carry1"');
+      // A record with no log keeps the replies of the root chain, which the carry hands to the new life as its turns.
+      expect(kept).toContain("The change is small");
+      expect(kept).not.toContain("earlier_files");
+    } finally {
+      await library.dispose();
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("a recorded answer keeps its cost when its tuples have the record wrapper", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-record-cost-"));
   try {

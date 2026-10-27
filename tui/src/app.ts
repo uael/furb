@@ -600,25 +600,34 @@ export class App {
     const reading = this.session.host.reading;
     if (!reading) return;
     this.session.readingTold = true;
+    const prompts = reading.carries?.prompts ?? 0;
     this.openPalette(
       sameBuild(reading) ? "This record does not replay" : "This record was made by another build",
       [
         { label: "Read it", detail: "See what it kept. No word runs again.", run: () => {} },
         {
+          label: "Resume it",
+          detail: prompts
+            ? `Go on from its turns, ask ${prompts} prompt${prompts === 1 ? "" : "s"} again`
+            : "Go on from its turns",
+          run: () => this.startFrom(true),
+        },
+        {
           label: "Start a new life from it",
-          detail: "A new session in its workspace, with the earlier work of the record",
+          detail: "A new session with its earlier work as text",
           run: () => this.startFrom(),
         },
       ],
       { note: readingNote(reading) },
     );
   }
-  /** A new life in the workspace of a record open to read, whose first word carries the earlier work of the record. */
-  startFrom(): void {
+  /** A new life in the workspace of a record open to read, whose first word carries the earlier work of the record as
+   * text, or, with a resume, resumes the record: the new life goes on from its turns and asks its open prompts again. */
+  startFrom(resume = false): void {
     const library = this.options.workspaces;
     void this.session.host
       .carry()
-      .then((carry) => library.create(library.groupOf(), undefined, carry))
+      .then((carry) => library.create(library.groupOf(), undefined, carry, resume))
       .then(() => {}, this.session.fail);
   }
 

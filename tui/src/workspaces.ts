@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { mkdir, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import { furbDirectory, saveFile, scratch, store } from "furb";
+import { enabled, furbDirectory, ROOT, saveFile, scratch, store } from "furb";
 import { openEngine } from "./bridge.ts";
 import { expandHome } from "./files.ts";
 import { type EngineOptions, roster } from "./models.ts";
@@ -438,7 +438,7 @@ export class Workspaces extends EventEmitter {
     if (session.host.pending.size) await session.host.resume();
     await session.command(command);
   }
-  async create(group = this.groupOf(), name?: string, carry?: Carry): Promise<SessionEntry> {
+  async create(group = this.groupOf(), name?: string, carry?: Carry, resume = false): Promise<SessionEntry> {
     if (!group) throw new Error("Add a workspace first.");
     const directory = furbDirectory(group.directory, "sessions");
     const path = join(
@@ -449,10 +449,18 @@ export class Workspaces extends EventEmitter {
     const entry: SessionEntry = { path, name: label, status: "opening", unread: false };
     group.sessions.unshift(entry);
     await this.load(entry, group);
-    // A life that starts from a record opens with the earlier work of that record in its first word.
+    // A life that starts from a record opens with the earlier work of that record in its first word, or resumes the
+    // record: it goes on from the turns of its root chain and asks again its open prompts.
     if (carry && entry.session) {
       const { engine } = entry.session;
-      await engine.result(await engine.rung({ word: carry.word, on: engine.root }));
+      // The resume is the word of the compaction extension, so a life that runs none carries the text instead.
+      const goes =
+        resume && enabled(await engine.transcript({ on: ROOT })).some((one) => one.name === "compaction");
+      await engine.result(await engine.rung({ word: goes ? carry.resume : carry.word, on: engine.root }));
+      if (resume)
+        entry.session.notice = goes
+          ? "Resumed from the turns of the record."
+          : "The extension compaction is off, so the earlier work came as text.";
     }
     if (entry.session) {
       entry.session.sessionName = label;
