@@ -5,7 +5,7 @@ import { clock } from "./clock.ts";
  * attempt before it failed, and the commands that end the wait. */
 export function retryLine(retry: Retry, now = clock()): string {
   const seconds = Math.max(0, Math.ceil((retry.until - now) / 1000));
-  return `Retrying in ${seconds} s, attempt ${retry.attempt} of ${retry.most}, ${retry.why}: /retry asks now, /cancel ends it`;
+  return `Retrying in ${seconds} s, attempt ${retry.attempt} of ${retry.most}, ${retry.why}: /retry or /cancel`;
 }
 
 /** A failure in plain words: a file that holds data that cannot be read says so, in place of the words of the parser
