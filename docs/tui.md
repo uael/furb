@@ -56,23 +56,31 @@ The captures of the feed show a real life: a conductor and the workers that it h
 life of furb, with 23 chains, 21 of them at work, and ladders of up to 76 rungs. `tui/fixtures/conductor.jsonl`
 holds it, with no key and no path of a home in it, and `bun run demo` opens it beside the scripted life.
 
-The sidebar says the whole life at a glance, in one place. On top, Needs you holds each question that waits for you,
-the oldest first, with its thread, its message, and a button for each value of a choice, Other among them, which a
-click answers. Under it, Chains holds the tree of the chains: each chain on one row, with a bar in a tone of its
-own, its mark, the last part of its name, and what it does now in a few words, never a raw command, as "checks of
-#364", "runs cargo test" or "waits for feed". A chain that works for a minute or more says since when, in yellow
-past fifteen minutes. A chain that failed says why, and one that finished the first line of its answer. A chain
-stands in the tree while it or a chain under it needs a look, and the others fold under Finished.
+The sidebar shows the workspaces, and the threads of the workspace where you work. Its shape cards is the default. A
+switcher on top lists each workspace on one row, the one shown lit, with the marks of what needs a look in it: ◆ for a
+question that waits, ✗ for a session that failed, ◌ for a pause, ◉ for work, and ● for a finished session that you did
+not see. When a question waits in any workspace, a line on top says how many, and ⌥A goes to the next one, in the
+session where it waits. Under the switcher stand the folder and the sessions of the workspace shown, then its threads
+as cards. A card holds the whole title of a thread, its state, the count of its messages, the time since it works, and
+its chain when it is not Main. The sidebar is wide, 56 columns by default, and it scrolls with the wheel.
 
-A click on a chain, or Enter after ⌥T, shows that chain and lists its threads in place of the tree, under a row
-"← Chains" that gives the tree back, as ← and Esc do. A thread is a prompt on the chain, with the messages that came to
-it. Its row has the color of its thread, its mark, as asks you, runs or resolved, and the first line of its message,
-and the list scrolls. A click on a thread scrolls the feed to it, and the input then sends each message to it, as
-`prompt(None, message, on=thread)`, which its model reads at its next step. A message to a resolved thread opens it
-again. Under the thread chosen, Collapse folds it in the feed to its box on one line, Resolve closes it, as
-`close(None, thread)` does, and Reply puts the keys in the input at the end of the thread. Space, r and o do the same
-after ⌥T, and the header of the thread in the feed holds Collapse and Resolve. At the foot of the sidebar, Context says how full the
-window of the chain shown is and where a grant pauses it, its tokens, and what it spent.
+A click on a workspace gives it the focus: its session that asks, else one that lives, else its newest, opens in the
+feed. A click on the arrow of a workspace that has not the focus shows its sessions without a change of focus. A click
+on a thread shows it in the feed, on its chain, and the input then sends each message to the thread that is lit, as
+`prompt(str, message, on=thread)`, which its model reads at its next step and answers. `/newthread` makes the next
+message start a thread of its own. A message to a resolved thread opens it again. Under the thread lit, Collapse folds
+it in the feed to its box on one line, Resolve closes it, as `close(None, thread)` does, and Reply puts the keys in the
+input at the end of the thread. The resolved threads fold under one row, Resolved, which a click opens. After ⌥T the
+arrows move in the sidebar, Enter opens the workspace, the session or the thread under them, → peeks at a workspace, Space
+folds, r resolves, o replies, and Esc gives the keys back to the input. At the foot of the sidebar, Context says how
+full the window of the chain shown is and where a grant pauses it, its tokens, and what it spent.
+
+`/sidebar outline` and `/sidebar inbox` give the other shapes, and the flag `FURB_SIDEBAR` does the same at the start.
+The outline lists all workspaces in one tree: the workspace shown is open, with its sessions and, under the session
+shown, its threads, one row for each, and each other workspace is one row with its marks. The inbox is the outline with
+the questions of every workspace under its top line, each with the buttons that answer it.
+
+![The sidebar](screenshots/110-sidebar-cards.png)
 
 The feed shows the threads of the chain, each as one box. A thread is a prompt: its message heads the box as markdown,
 with a line at its left in the color of the thread, which starts half a row above the message and ends half a row under
@@ -343,16 +351,14 @@ branch, Tab goes to the next chain that asks you, Space pauses or wakes a chain,
 opens the chain under the pointer in the feed and closes the panel. A click puts the pointer on a row, a second click
 opens it, a click on an arrow folds its branch, and the wheel scrolls. A branch that is all finished starts folded, and
 the finished chains of a chain, with no branch of their own, join one row, which Enter opens. ⌃B or Esc closes the
-panel. Each chain has its own feed and module. The sidebar lists in its tree the root chain, the chain on screen, and each chain that is not at rest, and the other chains
-fold under Finished. A click on a chain lists its threads, each in the color of its thread.
+panel. Each chain has its own feed and module. The sidebar holds no tree of the chains: it lists the threads of the
+workspace shown, whatever their chain.
 
 ![Chains](screenshots/15-chains.png)
 
 ![A chain that asks you](screenshots/15b-chains-question.png)
 
 ![The chains of a conductor](screenshots/15c-chains-conductor.png)
-
-![The threads of a chain](screenshots/81-chain-threads.png)
 
 ## Views of the life
 
@@ -362,7 +368,7 @@ keeps the last one. The loom and the graph stand over the feed of the selected c
 screen of main stays where it is in each view: the transcript, the changes, the palette, the dialogs, the desk, and
 the composer. Each row of a chain shows its state, its actor, its cost, and the question that it waits on.
 
-Main shows the feed of the selected chain under nothing, and the chains and their threads in the sidebar.
+Main shows the feed of the selected chain under nothing, and the workspaces and their threads in the sidebar.
 
 ![Main](screenshots/02-feed.png)
 
@@ -551,7 +557,7 @@ how other operators reach it, and when a life stays in the window.
 
 ![An open line](screenshots/29-open-line.png)
 
-![Collapsed workspace](screenshots/30-collapsed-workspace.png)
+![A workspace peeked at](screenshots/30-peeked-workspace.png)
 
 ![Hidden sidebar](screenshots/31-hidden-sidebar.png)
 

@@ -84,7 +84,7 @@ runs, and each follow-up that the queue sends, asks the actor that the chain has
 
 ## Three views of a life
 
-The TUI holds three views of the whole life side by side: main, with the chains and their threads in the sidebar, the loom of the chains in time, and the
+The TUI holds three views of the whole life side by side: main, with the workspaces and their threads in the sidebar, the loom of the chains in time, and the
 graph of the programs that run. `--view main|loom|graph` chooses one at the start, ⌥V switches it at run time,
 `/view` names one or lists the three, and the preferences keep the last one. Each view stands over the feed of the
 selected chain, and every other screen stays the same in each one. ⌥G gives the keys to the loom or the graph, and
@@ -209,7 +209,7 @@ its colors. Else it shows Ink on a dark terminal or on one that does not say its
 changes when the terminal changes. ⌃T or `/theme` chooses another. Sessions share the theme, and the TUI saves it in
 `$XDG_CONFIG_HOME/furb/ui.json`, or `~/.config/furb/ui.json`, and `%APPDATA%\furb\ui.json` on Windows.
 `FURB_CONFIG_DIR` selects another configuration directory. Tests and screenshot generation use isolated preferences.
-`sidebarWidth` in the preferences file sets the width of the sidebar, from 26 to 56 columns, and 44 by default. On a terminal narrower
+`sidebarWidth` in the preferences file sets the width of the sidebar, from 32 to 72 columns, and 56 by default. `sidebarStyle` picks its shape: cards, outline or inbox. On a terminal narrower
 than 100 columns the sidebar is hidden, and `/workspace` keeps all sessions available from the keyboard.
 
 A line of a word is 100 columns wide at most, less the room of its hint. A string of three marks over many lines
@@ -309,9 +309,10 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | ⌃⌥← | Return from a definition jump |
 | ⌥[ / ⌥] or ⌥P / ⌥N | Previous / next message of the feed |
 | ⌥V / ⌥G | Switch the view of the life: main, the loom, or the graph / move in the loom or the graph |
-| ⌥T | Move in the sidebar: the tree of the chains, and the threads of a chain |
-| ↑↓ / Enter or → / Esc or ← after ⌥T | Move / list the threads of a chain, or choose a thread / back to the tree, then to the input |
-| Space / r / o after ⌥T | Collapse or expand / resolve / reply to the thread |
+| ⌥T | Move in the sidebar: the workspaces, their sessions, and the threads of the session shown |
+| ↑↓ / Enter / → / ← or Esc after ⌥T | Move / open a workspace, a session or a thread / peek at a workspace / fold it again, or back to the input |
+| Space / r / o / a after ⌥T | Collapse or expand / resolve / reply to the thread / go to the next question |
+| ⌥A | Go to the next question that waits for you, in any workspace |
 | ↑↓←→ / Enter / Esc after ⌥G | Move, fold or zoom / zoom in / zoom out or go back |
 | [ ] / { } after ⌥G | Move the cursor in time by one / ten moments |
 | Space / x / n / b after ⌥G | Pause or wake / cancel / step / branch at the cursor the chain |
@@ -370,8 +371,9 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/export <path>` | Write the transcript and program to a new JSON file |
 | `/workspace [path]` | Choose a workspace or add a project folder |
 | `/view [main|loom|graph]` | Show the life as main, the loom, or the graph |
-| `/sidebar` | Show or hide the chains and their threads, the context, and the workspaces |
+| `/sidebar [outline|cards|inbox]` | Show or hide the workspaces with the threads of the session shown and the context, or give the sidebar a shape |
 | `/delete` | Archive a session, or move it and its files to the workspace trash |
+| `/newthread` | Start a new thread with your next message, in place of a message to the thread lit in the sidebar |
 | `/autocollapse` | Toggle the fold of the threads that are over |
 | `/extensions` | List the extensions that this life runs, with what their parts give the TUI |
 | `/serve [address]` | Give the addresses at which other operators read this life, or read and drive it, over the network |
@@ -457,7 +459,8 @@ files alone, so parallel work on the TUI does not conflict in one file.
 | `feed.ts` | The feed of the conversation: `renderContent`. |
 | `blocks.ts` | The blocks that the feed and the panels draw: cards, panels, code, Markdown, excerpts and chips. |
 | `details.ts` | The details of an act: prompts, commands, programs, and the references that open a value. |
-| `sidebar.ts` | The sidebar: the session, the usage, what waits for the operator, the chains and the threads. |
+| `rail.ts` | The sidebar: the switcher of the workspaces, the questions that wait, the sessions and the threads of the workspace shown, and the keys that move in it. |
+| `sidebar.ts` | The context of the chain shown, the threads of a chain: their fold, their reply and their resolve. |
 | `spaces.ts` | The workspaces and the sessions in the sidebar, with their menus, rename, archive and delete. |
 | `composer.ts` | The input: drafts, history, submit, and the suggestions for a command, a path or a value. |
 | `questions.ts` | The questions that wait for the operator: the pick at the desk and the dialog of a question. |
