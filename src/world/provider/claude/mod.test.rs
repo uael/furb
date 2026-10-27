@@ -494,6 +494,9 @@ fn a_result_is_the_text_of_a_reply_that_streamed_no_block_and_fails_the_turn_whe
   assert_eq!(got.choice, [AssistantContent::text("close(1)")]);
   let no = asked(&model, &[user("ERROR")], json!({})).unwrap_err();
   assert!(no.to_string().contains("the model is overloaded"), "{no}");
+  let no = asked(&model, &[user("DETAIL")], json!({})).unwrap_err();
+  let why = "Claude reported an error (subtype error_during_execution, api_error_status 401): Invalid API key; Please run /login.";
+  assert!(no.to_string().contains(why), "{no}");
 }
 
 #[test]
