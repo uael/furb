@@ -52,7 +52,9 @@ API of its own:
   what the engine holds of the ears, which a later life on the same record and build opens from with no replay.
 - `src/engine.rs` opens a life in the sandbox: it loads the engine, the sheet and the Kernel, each in a namespace of
   its own, and it carries each value between the sandbox and a host. An ear of a host is an object of the host in the
-  sandbox, which the engine steps as a generator.
+  sandbox, which the engine steps as a generator. An ear that boot is given and that raises refuses the act that it
+  heard when that act is of a kind it waits for, and starts again from a fresh ear when it can, as the Kernel, the
+  gate and each ear that `lasting` in `src/ear.rs` made do. The life tells the operator once which ear raised and why.
 - The Kernel is `src/furb/kernel.py`, one module that the sandbox loads and the python package imports, each on the
   names of its engine. The gate, `src/gate.rs`, is the type checker of monty. It reads a word on the sheet of the
   engine, `src/furb/sheet.py`, against the typeshed of the sandbox, and it runs each import of the word in a sandbox
