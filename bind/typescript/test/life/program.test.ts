@@ -168,6 +168,21 @@ test("an act whose host left its text out says the lines that it kept, and a wri
   expect(hintOf([read1, write1], new Set(), label)).toBe("4 lines  +2 -1");
 });
 
+test("a line that does not fail says nothing of an act that failed while its word went on, as a read of a file that may not stand, and a line whose acts all failed says why", () => {
+  const rung = act("rung1", "rung", "chain1", "prompt1", 2, 9);
+  const missing = act("read1", "read", "chain1", "rung1", 3, 4, {
+    words: ["a.md"],
+    value: { is: "Refused", args: ["There is no file at a.md."] },
+  });
+  const wrote = act("write1", "write", "chain1", "rung1", 5, 6, { words: [{ path: "a.md" }] });
+  const hints = (acts: ReturnType<typeof act>[], word: string) =>
+    stepLines(rung, makers([rung, ...acts]), () => word, new Set(), label).flatMap((line) =>
+      line.kind === "code" ? [line.hint] : [],
+    );
+  expect(hints([missing, wrote], 'write(read("a.md"))')).toEqual(["wrote a.md"]);
+  expect(hints([missing], 'read("a.md")')).toEqual(["There is no file at a.md"]);
+});
+
 test("an act of a verb of an extension stands on the line that calls that verb, and not on the line that defines it", () => {
   const prompt = act("prompt1", "prompt", "chain1", "operator", 1, undefined, {
     words: ["str", "Go", "opus"],

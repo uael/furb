@@ -1523,6 +1523,11 @@ export class Session extends EventEmitter {
     await this.refresh();
   }
 
+  /** The extensions that the life runs, in the order that it enabled them, each with its life word. */
+  async extensionsRun(): Promise<{ name: string; life: string }[]> {
+    return enabled(await this.engine.transcript({ on: ROOT })).map(({ name, life }) => ({ name, life }));
+  }
+
   async command(text: string): Promise<void> {
     const space = text.indexOf(" ");
     const command = text.slice(1, space < 0 ? undefined : space);
@@ -1595,7 +1600,7 @@ export class Session extends EventEmitter {
         await this.cancel(argument);
         break;
       case "extensions": {
-        const each = enabled(await this.engine.transcript({ on: ROOT })).map(({ name, life }) =>
+        const each = (await this.extensionsRun()).map(({ name, life }) =>
           life ? `${name} with ${life}` : name,
         );
         this.notice = each.length

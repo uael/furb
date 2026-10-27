@@ -356,7 +356,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/sidebar` | Show or hide the chains and their threads, the context, and the workspaces |
 | `/delete` | Archive a session, or move it and its files to the workspace trash |
 | `/autocollapse` | Toggle the fold of the threads that are over |
-| `/extensions` | List the extensions that this life runs |
+| `/extensions` | List the extensions that this life runs, with what their parts give the TUI |
 | `/serve [address]` | Give the addresses at which other operators read this life, or read and drive it, over the network |
 | `/end` | End each open life, its commands and its models, then quit |
 | `/exit` | Save every session and quit, while a life in a host of its own goes on |
@@ -417,9 +417,12 @@ the structured JSON export. `/context` sets the context ceiling.
 A life runs the extensions that the configs turn on, as [the guide of the extensions](../docs/extensions.md) says,
 and the feed of each chain shows the words that they ran on it as one line. An extension can also give the TUI a part, a module of TypeScript beside its word, which adds
 panels over the input, the hint of the line of each act of a kind, keys and commands, and which the TUI loads again live, as
-[the guide of the extensions](../docs/extensions.md#a-part-for-the-tui) says. `/extensions` lists what the life
-runs, and `/run` runs a word of one on the chain on screen, as `/run skill("pdf")`. A cancel ends one act and the work under it, and
-not what an extension started on the chain, such as the watcher of the memory.
+[the guide of the extensions](../docs/extensions.md#a-part-for-the-tui) says. A model adds a part to a life that runs
+with `extend(name, *rungs, tui=module)`, which the extension ouroboros and the skill extending teach it: the panel stands
+at once, with no restart. A part that fails shows its error in plain words in its own panel, and the TUI goes on.
+`/extensions` opens a dialog of what the life runs, each extension with what its part gives or the error that stopped it,
+and `/run` runs a word of one on the chain on screen, as `/run skill("pdf")`. A cancel ends one act and the work under
+it, and not what an extension started on the chain, such as the watcher of the memory.
 
 ## The parts of the App
 

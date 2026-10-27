@@ -90,6 +90,20 @@ export function plainError(error: unknown): string {
   return text ? `${text}${at}` : "It failed with no message.";
 }
 
+/** What a part gives, in a sentence: its components, or the error that stopped its load. */
+export function summary(part: Loaded): string {
+  if (part.error) return part.error;
+  const marks = part.marks.length;
+  const found = [
+    ...part.panels.map((one) => `panel ${one.name}`),
+    ...[...part.rows.keys()].map((kind) => `rows of ${kind}`),
+    ...(marks ? [`${marks} ${marks === 1 ? "mark" : "marks"} in the feed`] : []),
+    ...part.keys.map((one) => `key ${one.on}`),
+    ...part.commands.map((one) => `/${one.name}`),
+  ];
+  return found.length ? `Its part gives ${found.join(", ")}.` : "Its part gives nothing.";
+}
+
 /** A part with no component. */
 const bare = (name: string, file: string, error?: string): Loaded => ({
   name,

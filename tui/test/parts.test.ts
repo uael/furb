@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { demoSession } from "../src/demo.ts";
 import { loadPart, Parts, plainError } from "../src/parts.ts";
 import { composing } from "./composing.ts";
+import { idle } from "./idle.ts";
 
 const made: string[] = [];
 afterAll(() => {
@@ -224,6 +225,122 @@ test("a run of compactions into new chains, as an older compaction made them, sh
       );
     },
     { width: 120, height: 60 },
+    session,
+  );
+});
+
+/** Whether the frame stops showing a text, drawn again until it does. */
+async function hides(frame: () => Promise<string>, text: string): Promise<string> {
+  let shown = await frame();
+  for (let tries = 0; tries < 400 && shown.includes(text); tries++) {
+    await Bun.sleep(25);
+    shown = await frame();
+  }
+  expect(shown).not.toContain(text);
+  return shown;
+}
+
+test("a word that writes an extension with extend() gives the TUI its part in a life that runs, with no restart, and a config that turns the extension off takes the part away", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "furb-parts-"));
+  made.push(directory);
+  const session = await demoSession({ cwd: directory, extensions: true });
+  await composing(
+    async ({ app, frame, screen }) => {
+      expect(app.parts.loaded.map((one) => one.name)).toEqual(["compaction"]);
+      await session.command(`/run ${TODO}`);
+      const word = 'next(k for k, w in program().items() if "def todo" in w)';
+      await session.command(`/run <s:part>\n${PART}</s:part>\nextend("todo", ${word}, tui=part)`);
+      await session.command('/run todo("write the part")\ntodo("read the capture", done=True)');
+      const shown = await shows(frame, "○ write the part");
+      expect(shown).toContain("✓ read the capture");
+      expect(app.parts.loaded.map((one) => [one.name, one.error])).toEqual([
+        ["compaction", undefined],
+        ["todo", undefined],
+      ]);
+      app.composer.setText("/todos");
+      await app.submit();
+      await shows(frame, "1 of 2 items are open");
+      // The extension goes off in the config: the panel, the row, the command and the key go with it.
+      await session.command(
+        `/run write(Text(".furb/config.json", ${JSON.stringify('{"extensions": {"todo": false}}\n')}))`,
+      );
+      await hides(frame, "○ write the part");
+      expect(app.parts.loaded.map((one) => one.name)).toEqual(["compaction"]);
+      expect(app.parts.command("todos")).toBeUndefined();
+      expect(app.parts.row("todo")).toBeUndefined();
+      await screen.mockInput.typeText("+");
+      expect(app.composer.plainText).toBe("+");
+      app.composer.setText("");
+      // The config turns it on again, and the part comes back.
+      await session.command(
+        `/run write(Text(".furb/config.json", ${JSON.stringify('{"extensions": {"todo": "extensions/todo"}}\n')}))`,
+      );
+      await shows(frame, "○ write the part");
+    },
+    { width: 120, height: 44 },
+    session,
+  );
+});
+
+test("/extensions opens a dialog of the extensions that the life runs, each with what its part gives, or the error that stopped its load", async () => {
+  const { directory, file } = project();
+  const session = await demoSession({ cwd: directory });
+  await composing(
+    async ({ app, frame, screen }) => {
+      await shows(frame, "Ask");
+      app.composer.setText("/extensions");
+      await app.submit();
+      let shown = await shows(frame, "Its part gives panel Todo");
+      expect(shown).toContain("Extensions");
+      expect(shown).toContain("rows of todo, key +, /todos");
+      expect(shown).toContain("Its part gives 1 mark in the feed");
+      screen.mockInput.pressEscape();
+      await hides(frame, "Its part gives panel Todo");
+      // A part that fails to load shows its error in the dialog, and the extension still stands in it.
+      writeFileSync(file, "export default (furb) => { furb.panel(");
+      while (!app.parts.loaded.find((one) => one.name === "todo")?.error) await Bun.sleep(10);
+      app.composer.setText("/extensions");
+      await app.submit();
+      shown = await shows(frame, "tui.ts of todo");
+      expect(shown).not.toContain("Its part gives panel Todo");
+    },
+    { width: 150, height: 44 },
+    session,
+  );
+});
+
+test("the model of the demo adds a component to a life that runs: it reads the teaching, writes the extension, and its panel stands, fails and mends with no restart", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "furb-parts-"));
+  made.push(directory);
+  const session = await demoSession({ cwd: directory, extensions: true });
+  await composing(
+    async ({ app, frame }) => {
+      await session.submit(
+        "Add a component for this todo list: a panel with the items, and a line in the feed for each.",
+      );
+      await idle(session);
+      let shown = await shows(frame, "○ Draw the todo list in a panel", (now) =>
+        now.includes("✓ Read the capture"),
+      );
+      expect(shown).toContain("2 open of 3");
+      expect(app.parts.loaded.map((one) => [one.name, one.error])).toEqual([
+        ["compaction", undefined],
+        ["todo", undefined],
+      ]);
+      // A change that the model gets wrong shows its error in the panel, and the rest of the TUI goes on.
+      await session.submit("Sort the Todo panel: the open items first.");
+      await idle(session);
+      shown = await shows(frame, "evaluating 'seen.todos");
+      expect(shown).not.toContain("2 open of 3");
+      // The operator tells the model, and the panel draws again from the file that it mends.
+      await session.submit("The Todo panel shows an error. Fix it.");
+      await idle(session);
+      shown = await shows(frame, "2 open of 3", (now) => !now.includes("evaluating 'seen.todos"));
+      expect(shown.indexOf("○ Draw the todo list in a panel")).toBeLessThan(
+        shown.indexOf("✓ Read the capture"),
+      );
+    },
+    { width: 140, height: 50 },
     session,
   );
 });

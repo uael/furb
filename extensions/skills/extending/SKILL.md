@@ -80,8 +80,19 @@ A panel stands over the input and gives its lines, each a text or a list of `[te
 `muted`, `faint`, `accent`, `success`, `warning` or `danger`. A row gives the label and the details of each act of
 its kind in the feed. `furb.mark(draw)` gives marks, each `{ chain, at, title, lines }`: the feed of that chain shows
 a rule with the title and the lines under it, after the last act whose `began` is before `at`. A key acts while no dialog is open, and a command runs from the palette or as `/name`. A key or
-a command of the TUI wins. A module that fails shows its error in its panel. `extend(name, *rungs, tui=module)`
-writes the part with the word.
+a command of the TUI wins. `extend(name, *rungs, tui=module)` writes the part with the word.
+
+The TUI loads the part again by itself each time a write of the life lands in the folder of the extension, with no
+restart. A panel reads the acts of a kind, so make them with a def in the word of the extension, as `todo` above does,
+and `seen.of("todo")` gives them in the order of the record.
+
+Check a part before you say that it works. The TUI shows a part that fails, in plain words, in a panel under the name of
+its extension, and only the operator sees it. A module that has a syntax error, one that imports a value, and a
+function that throws when it runs all show there. So run `bun build --no-bundle .furb/extensions/todo/tui.ts`, which
+finds a syntax error, and read your code again for each name that `seen` and `furb` do not have. When the operator
+tells you an error, read the file again, change it with `replace`, and write it: the panel draws again at once.
+`/extensions` in the TUI lists what each part gives. To take an extension away, set it to `false` in
+`.furb/config.json`, and its part goes with it.
 
 An official extension of furb also has a contract, `notes.pyi`, a suite, `test/`, and, when it reads the disk, an ear
 of the World in the crate, `src/extension/notes.rs`. The crate carries its part, so the TUI loads it in an installed

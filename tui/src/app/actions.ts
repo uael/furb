@@ -113,6 +113,10 @@ export const actions = part({
       else await library.create(group);
       return true;
     }
+    if (name === "extensions" && !argument) {
+      await this.extensionsDialog();
+      return true;
+    }
     // A command of a part of an extension, which no command of the TUI shadows.
     const part = name ? this.parts.command(name) : undefined;
     if (part) {

@@ -154,7 +154,7 @@ function reply(turn: string, actor: string, chain: string): [thinking: string, a
 const held = new Map<(turn: Turn) => void, (part: { thinking: string }) => void>();
 
 /** A session whose models are the demo, which asks no model and answers each turn from the script above. It enables
- * no extension, so the demo shows the same on every machine. A session that the operator watches streams each turn,
+ * no extension unless the options ask, so the demo shows the same on every machine. A session that the operator watches streams each turn,
  * as a model writes it, and each of its answers costs nothing, since no model is asked. */
 function scriptedSession(options: SessionOptions, watch = false): Session {
   const { record, cwd } = options;
@@ -162,7 +162,7 @@ function scriptedSession(options: SessionOptions, watch = false): Session {
   if (!directory) throw new Error("A demo session needs a directory or a record.");
   return new Session({
     ...options,
-    extensions: false,
+    extensions: options.extensions === true,
     roster: roster({ ...options, demo: true }),
     cwd: directory,
     record: record ?? join(directory, "demo.jsonl"),

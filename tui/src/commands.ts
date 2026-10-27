@@ -66,7 +66,11 @@ export const commands = {
   ],
   delete: ["Delete session", "", "Archive a session, or move it and its files to the workspace trash"],
   autocollapse: ["Automatic fold", "", "Toggle the fold of the threads that are over"],
-  extensions: ["Extensions", "", "List the extensions that this life runs"],
+  extensions: [
+    "Extensions",
+    "",
+    "List the extensions that this life runs, with what their parts give the TUI",
+  ],
   serve: [
     "Serve to operators",
     "[address]",

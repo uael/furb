@@ -175,6 +175,13 @@ When a part fails, the TUI goes on. A module that does not load, that exports no
 shows its error in plain words in a panel under its name. A panel or a row that throws shows its error in its place,
 and a key or a command that throws shows its error in the footer.
 
+A model adds a part to a life that runs with `extend(name, *rungs, tui=module)` of `ouroboros`, which the skill
+`extending` teaches. The write lands in `.furb`, so the TUI loads the part at once. The config turns the extension on in
+the same life. A config that sets the extension to `false` takes its part away again. `/extensions` opens a dialog of
+the extensions that the life runs, each with what its part gives, or with the error that stopped its load. Only the
+operator sees an error of a part, so the skill tells the model to check its module with `bun build --no-bundle` and to
+read the error that the operator gives it.
+
 ## Permissions
 
 furb has no permissions, by design. Each act runs with the rights of the user who runs furb, and the record shows who
