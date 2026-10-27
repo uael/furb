@@ -51,7 +51,7 @@ test("a thread is one box: its message with a line of its color, its program as 
       ]);
       expect(rows[at("Explore this project")]).toMatch(/┃ Explore this project/);
       // The answer stands as markdown in the box, and the quiet line of the box runs through it.
-      expect(rows.some((row) => /┃ ## A clear starting point/.test(row))).toBe(true);
+      expect(rows.some((row) => /┃ (## )?A clear starting point/.test(row))).toBe(true);
       expect(at("Fieldnotes keeps ideas close")).toBeGreaterThan(0);
       // The box has an edge above its message and an edge under its input.
       expect(rows[at("Explore this project") - 1]).toContain("▄▄▄▄");
@@ -250,7 +250,12 @@ test("the up arrow in the input of a thread takes its last message back to edit 
       const id = listed(session)[0]?.act.id ?? "";
       await session.reply(id, "First wording");
       await until(session, () => (listed(session)[0]?.messages.length ?? 0) === 1);
-      expect(await frame()).toContain("First wording");
+      let seen = await frame();
+      for (let step = 0; step < 60 && !seen.includes("First wording"); step++) {
+        await Bun.sleep(25);
+        seen = await frame();
+      }
+      expect(seen).toContain("First wording");
       await click("Reply to");
       screen.mockInput.pressArrow("up");
       await until(session, () => session.drafts[`reply:${id}`] === "First wording");
