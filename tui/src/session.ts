@@ -911,6 +911,10 @@ export class Session extends EventEmitter {
   get activity(): ActRow[] {
     return this.indexed().work.get(this.selected) ?? [];
   }
+  /** The acts on every chain but its chains, as the index holds them, by the chain that they stand on. */
+  get activityByChain(): ReadonlyMap<string, ActRow[]> {
+    return this.indexed().work;
+  }
   /** The acts of the chain shown that are not done, but its chains, in the order of the acts: what a frame reads of
    * the work that runs, with no pass over every act of the chain. */
   get open(): ActRow[] {

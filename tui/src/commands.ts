@@ -66,8 +66,8 @@ export const commands = {
   view: ["View of the life", "[main|loom|graph]", "Show the life as main, the loom, or the graph"],
   sidebar: [
     "Toggle sidebar",
-    "",
-    "Show or hide the chains and their threads, the context, and the workspaces",
+    "[outline|cards|inbox]",
+    "Show or hide the workspaces with the threads of the session shown and the context, or give the sidebar a shape",
   ],
   delete: ["Delete session", "", "Archive a session, or move it and its files to the workspace trash"],
   autocollapse: ["Automatic fold", "", "Toggle the fold of the threads that are over"],

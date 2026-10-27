@@ -201,7 +201,7 @@ test("the command /compact of the part of compaction asks a model what the chain
       expect(shown).toContain("Compaction: the model reads on from here");
       expect(shown.indexOf("the first step")).toBeLessThan(shown.indexOf("Compaction:"));
     },
-    { width: 120, height: 60 },
+    { width: 132, height: 60 },
     session,
   );
 });
