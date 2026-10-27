@@ -155,18 +155,20 @@ impl Backoff {
 /// missing, as while an update replaces it. A failure of the request, of the turn, or of a model that the provider
 /// cannot make does not pass, and the model is not asked again.
 fn passing(no: &CompletionError) -> Option<String> {
-  let said = match no {
+  let told = match no {
     CompletionError::HttpError(no) => no.to_string(),
     CompletionError::ProviderError(why) => why.clone(),
     _ => return None,
-  }
-  .to_lowercase();
+  };
+  let said = told.to_lowercase();
   let has = |words: &[&str]| words.iter().any(|one| said.contains(one));
   let status = said
     .split(|one: char| !one.is_ascii_digit())
     .find(|one| matches!(*one, "408" | "429" | "500" | "502" | "503" | "504" | "529"));
   let why = if said.starts_with(&claude::MISSING.to_lowercase()) {
     "the program is missing".to_owned()
+  } else if said.starts_with(&claude::SWITCHED.to_lowercase()) {
+    told
   } else if has(&["connection reset", "reset by peer"]) {
     "connection reset".to_owned()
   } else if has(&["timed out", "timeout"]) || status == Some("408") {

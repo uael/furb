@@ -78,36 +78,6 @@ export const palette = part({
     this.openPalette("Commands", choices, { rich: true });
   },
 
-  /** The chains of the session, each with its state and the chain it branched from. */
-  chains(): void {
-    const w = this.session;
-    const chains = w.chains.filter((chain) => w.listed(chain.id));
-    this.openPalette(
-      "Chains",
-      chains.map((chain) => {
-        const source = chains.find((one) => one.id === chain.words[1]);
-        return {
-          label: w.labelOf(chain.id),
-          detail: [
-            source ? `branched from ${w.labelOf(source.id)}` : "a root chain",
-            chain.id === w.selected ? "current" : "",
-          ]
-            .filter(Boolean)
-            .join("   "),
-          status: this.session.chainStatus(chain.id),
-          run: () => w.select(chain.id),
-        };
-      }),
-      {
-        selected: Math.max(
-          0,
-          chains.findIndex((chain) => chain.id === w.selected),
-        ),
-        note: "Each chain has its own transcript and module. /tree shows the branches.",
-      },
-    );
-  },
-
   /** A dialog of choices, which a filter narrows: with the choice that it selects first, a note under its title, and
    * the rows of a rich choice. At a point, it is a menu as wide as its labels need, which stands under the point, or
    * over it where the rows under it cannot hold it, and leaves the screen behind it as it is. */
