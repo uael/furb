@@ -298,7 +298,7 @@ print(json.dumps(seen))
 
 
 def conductor() -> dict:
-  return module(ROOT)
+  return module()
 
 
 def tree_of(target: dict) -> str:
@@ -727,5 +727,4 @@ async def converge(target: dict, ticks: int = 0) -> dict:
       await wait(EVERY, *[a for a in ([job["act"]] if not job["asked"] else job["asked"]) if a != "none" and not over(a)])
   return book
 
-if scope(acting()) == ROOT:
-  conductor().get("vetoes", {})["converge"] = converge_veto
+conductor().get("vetoes", {})["converge"] = converge_veto
