@@ -261,11 +261,19 @@ test("the up arrow in the input of a thread takes its last message back to edit 
       await session.reply(id, "First wording");
       await until(session, () => (listed(session)[0]?.messages.length ?? 0) === 1);
       let seen = await frame();
-      for (let step = 0; step < 60 && !seen.includes("First wording"); step++) {
+      // The markdown of the answer draws over a few frames too.
+      const drawn = (text: string) =>
+        text.includes("First wording") && /\n\s*A clear starting point/.test(text);
+      for (let step = 0; step < 120 && !drawn(seen); step++) {
         await Bun.sleep(25);
         seen = await frame();
       }
       expect(seen).toContain("First wording");
+      // The answer of the thread stands before the message that came after it, so each message stands with its answer.
+      const rows = seen.split("\n");
+      const answerRow = rows.findIndex((row) => /^\s*A clear starting point/.test(row));
+      expect(answerRow).toBeGreaterThan(0);
+      expect(answerRow).toBeLessThan(rows.findIndex((row) => row.includes("First wording")));
       await click("Reply to");
       // The input has the keys once the click reached it, which a slow machine takes a few frames to do.
       for (let step = 0; step < 160 && app.replyInputs.get(id)?.focused !== true; step++) {

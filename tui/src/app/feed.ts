@@ -681,6 +681,8 @@ export const feed = part({
           if (line.kind === "writes") run.writes = line;
           else run.lines.push(line);
         }
+        const answered = valued.has(act.id) && act.words[0] !== "None";
+        let placed = false;
         for (const [index, run] of runs.entries()) {
           const writer = run.writes;
           let given = run.lines;
@@ -826,6 +828,12 @@ export const feed = part({
           }
           const next = says[index];
           if (next) {
+            // The answer of the thread stands where it came in time: before a message that came after it and opened the
+            // thread again, so each message stands with its own answer.
+            if (answered && !placed && act.ended !== undefined && next.began > act.ended) {
+              sections.push(answerOf(act, `${act.id}-answer`));
+              placed = true;
+            }
             const text = String(next.words[1] ?? "");
             sections.push({
               id: `${act.id}-say-${next.id}`,
@@ -840,8 +848,8 @@ export const feed = part({
               sections.push(answerOf(next, `${act.id}-say-${next.id}-answer`));
           }
         }
-        // What the model answered stands last.
-        if (valued.has(act.id) && act.words[0] !== "None") sections.push(answerOf(act, `${act.id}-answer`));
+        // What the model answered stands last, when no message came after it.
+        if (answered && !placed) sections.push(answerOf(act, `${act.id}-answer`));
         if (!w.host.reading) {
           const over = Boolean(thread?.resolved);
           sections.push({
