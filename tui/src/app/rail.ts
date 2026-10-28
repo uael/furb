@@ -742,7 +742,7 @@ export const rail = part({
         if (done.length) {
           const fold = `resolved:${lib.current?.path}`;
           this.railSpaces.add(
-            this.foldRow(fold, "Resolved", done.length, { ...padding, marginTop: space.section }),
+            this.foldRow(fold, " Resolved", done.length, { ...padding, marginTop: space.section }),
           );
           step(1, undefined, space.section);
           if (this.unfolded.has(fold)) for (const one of done) card(one);

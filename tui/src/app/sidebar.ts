@@ -20,7 +20,7 @@ export const sidebar = part({
     )
       return;
     this.clear(this.railUsage);
-    const inner = width - space.between * 2;
+    const inner = width - space.inset * 2;
     const add = (parts: Part[], options: TextShape = {}) => {
       const node = this.line(parts, c.muted, { truncate: true, ...options });
       this.railUsage.add(node);

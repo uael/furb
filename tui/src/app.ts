@@ -556,7 +556,7 @@ export class App {
     this.rail.add(this.railSpaces);
     // The usage of the chain stands at the foot of the sidebar, under a rule, where the list above it does not move it.
     this.railUsage = this.box({
-      paddingX: space.between,
+      paddingX: space.inset,
       border: ["top"],
       borderColor: c.border,
       customBorderChars: { ...noBorder, horizontal: glyph.rule },

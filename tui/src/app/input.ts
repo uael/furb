@@ -254,7 +254,7 @@ export const input = part({
         when: () => Boolean(this.railHandler()?.space),
         hint: ["Space", "fold"],
       },
-      { on: "a", run: () => void this.nextAttention().catch(this.report), hint: ["a", "next question"] },
+      { on: "a", run: () => void this.nextAttention().catch(this.report), hint: ["a", "question"] },
       {
         on: "r",
         run: onThread((thread) => this.resolveThread(thread)),

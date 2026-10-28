@@ -571,6 +571,8 @@ test("a session row archives a session through its remove button, which folds it
     const { screen, left, frame, row } = await sidebar(library);
     let lines = await frame();
     const fooRow = row("foo");
+    await screen.mockMouse.moveTo(left + 8, fooRow);
+    lines = await frame();
     const remove = (lines[fooRow] ?? "").lastIndexOf("×");
     expect(remove).toBeGreaterThan(left);
     await screen.mockMouse.moveTo(remove, fooRow);
@@ -604,22 +606,19 @@ test("a session row lights under the pointer with its buttons, tells its state o
     const { screen, left, row } = await sidebar(library);
     const lines = screen.captureCharFrame().split("\n");
     const fooRow = row("foo");
-    const pencil = (lines[fooRow] ?? "").lastIndexOf("✎");
-    const cross = (lines[fooRow] ?? "").lastIndexOf("×");
     const mark = left + (lines[fooRow] ?? "").slice(left).indexOf("○");
     const name = (lines[fooRow] ?? "").indexOf("foo");
-    const hidden = (x: number) => {
-      const cell = cellAt(screen.captureSpans(), x, fooRow);
-      return Boolean(cell.fg?.equals(cell.bg));
-    };
     const ground = () => cellAt(screen.captureSpans(), name - 2, fooRow).bg;
-    expect(pencil).toBeGreaterThan(name);
-    expect(cross).toBe(pencil + 2);
-    expect(hidden(pencil) && hidden(cross)).toBe(true);
+    // The buttons take no column of the row, and stand over its right end only while the pointer is on it.
+    expect(lines[fooRow] ?? "").not.toContain("✎");
     const rest = ground();
     await screen.mockMouse.moveTo(name + 1, fooRow);
     await screen.flush();
-    expect(hidden(pencil) || hidden(cross)).toBe(false);
+    const lit = screen.captureCharFrame().split("\n")[fooRow] ?? "";
+    const pencil = lit.lastIndexOf("✎");
+    const cross = lit.lastIndexOf("×");
+    expect(pencil).toBeGreaterThan(name);
+    expect(cross).toBe(pencil + 2);
     expect(ground()?.equals(rest)).toBe(false);
     // A tip stands on the row under the pointer.
     const under = () => screen.captureCharFrame().split("\n")[fooRow + 1] ?? "";
@@ -636,7 +635,7 @@ test("a session row lights under the pointer with its buttons, tells its state o
     await screen.mockMouse.moveTo(10, 10);
     await screen.flush();
     expect(ground()?.equals(rest)).toBe(true);
-    expect(hidden(pencil) && hidden(cross)).toBe(true);
+    expect(screen.captureCharFrame().split("\n")[fooRow] ?? "").not.toContain("✎");
     expect(screen.captureCharFrame()).not.toContain("Archive or remove this session");
   }));
 
@@ -673,7 +672,7 @@ test("a right click on a session row opens its menu at the pointer, and Rename t
     // Escape leaves the name as it was.
     const notesRow = row("notes");
     await screen.mockMouse.moveTo(left + 8, notesRow);
-    await screen.mockMouse.click((lines[notesRow] ?? "").lastIndexOf("✎"), notesRow);
+    await screen.mockMouse.click(((await frame())[notesRow] ?? "").lastIndexOf("✎"), notesRow);
     await frame();
     await screen.mockInput.typeText(" draft");
     screen.mockInput.pressEscape();
@@ -726,7 +725,7 @@ test("a workspace row renames its workspace in place, and its remove button take
     let lines = await frame();
     const otherRow = row("other");
     await screen.mockMouse.moveTo(left + 5, otherRow);
-    await screen.mockMouse.click((lines[otherRow] ?? "").lastIndexOf("✎"), otherRow);
+    await screen.mockMouse.click(((await frame())[otherRow] ?? "").lastIndexOf("✎"), otherRow);
     await frame();
     for (let index = 0; index < 5; index++) screen.mockInput.pressBackspace();
     await screen.mockInput.typeText("docs");
@@ -743,7 +742,7 @@ test("a workspace row renames its workspace in place, and its remove button take
     expect(listed().find((one) => one.directory === other.directory)?.name).toBe("docs");
     const projectRow = row("project");
     await screen.mockMouse.moveTo(left + 5, projectRow);
-    await screen.mockMouse.click((lines[projectRow] ?? "").lastIndexOf("×"), projectRow);
+    await screen.mockMouse.click(((await frame())[projectRow] ?? "").lastIndexOf("×"), projectRow);
     lines = await frame();
     expect(lines.join("\n")).toContain("Remove the workspace “project” from the list?");
     const remove = lines.findIndex((line) => line.includes("Remove from the list"));
@@ -763,10 +762,10 @@ test("a rename in a row ends when a dialog opens or another row is clicked, and 
     const { library, first, second } = await fooAndBar(directory, open);
     const { screen, app, left, frame, row } = await sidebar(library);
     const rename = async (name: string) => {
-      const lines = await frame();
+      await frame();
       const at = row(name);
       await screen.mockMouse.moveTo(left + 8, at);
-      await screen.mockMouse.click((lines[at] ?? "").lastIndexOf("✎"), at);
+      await screen.mockMouse.click(((await frame())[at] ?? "").lastIndexOf("✎"), at);
       await frame();
     };
     // A dialog that opens during a rename keeps the name typed so far, and takes the keys.

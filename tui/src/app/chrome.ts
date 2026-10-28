@@ -327,12 +327,6 @@ export const chrome = part({
           ],
         ),
     ];
-    const buttons = keys.map(([chord, action], index): Part[] => [
-      [index ? "   " : "", c.faint],
-      [chord, c.muted],
-      [` ${action}`, c.faint],
-    ]);
-    const hints = buttons.flat();
     const notice = w.error ? "" : w.notice;
     // The state stays in the footer, and a notice stands after it, cut at its end where the footer has no room for it
     // beside the keys.
@@ -340,6 +334,21 @@ export const chrome = part({
       [moving && !retry ? `${spin()} ` : mark, color],
       [label, moving ? c.text : c.muted],
     ];
+    // The keys that have no room beside the whole state leave the footer from the last one, so the state is never cut.
+    const shown = [...keys];
+    const buttonsOf = (list: typeof keys) =>
+      list.map(([chord, action], index): Part[] => [
+        [index ? "   " : "", c.faint],
+        [chord, c.muted],
+        [` ${action}`, c.faint],
+      ]);
+    let buttons = buttonsOf(shown);
+    const stateWidth = Bun.stringWidth(plain(state)) + space.between * 2;
+    while (shown.length && Bun.stringWidth(plain(buttons.flat())) + stateWidth > this.feedWidth) {
+      shown.pop();
+      buttons = buttonsOf(shown);
+    }
+    const hints = buttons.flat();
     const room =
       this.feedWidth - Bun.stringWidth(plain(hints)) - Bun.stringWidth(plain(state)) - space.between * 2;
     const tokens = this.tokens();
@@ -354,7 +363,7 @@ export const chrome = part({
     this.statusKey = key;
     this.status.content = styled(state);
     this.clear(this.hints);
-    for (const [index, [, , run]] of keys.entries())
+    for (const [index, [, , run]] of shown.entries())
       this.hints.add(this.line(buttons[index] ?? [], c.faint, { run }));
   },
 });

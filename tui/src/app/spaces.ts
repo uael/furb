@@ -118,8 +118,17 @@ export const spaces = part({
       ? this.line(parts.tail, c.muted, { marginLeft: space.between })
       : undefined;
     if (tail) row.add(tail);
+    // The buttons stand over the right end of the row while the pointer is on it, so that they take no column from
+    // the marks and the cost, which end where the marks of every other row of the sidebar end.
+    const buttons = this.row({
+      position: "absolute",
+      right: space.inset,
+      top: 0,
+      backgroundColor: lit,
+      visible: false,
+    });
     const button = (mark: string, act: () => void) =>
-      this.line(mark, ground, {
+      this.line(mark, c.muted, {
         marginLeft: space.inset,
         onMouseUp: this.click((event) => {
           event.stopPropagation();
@@ -128,10 +137,12 @@ export const spaces = part({
       });
     const rename = button(glyph.rename, () => this.startRename(item));
     const remove = button(glyph.remove, () => this.removeItem(item));
-    row.add(rename);
-    row.add(remove);
+    buttons.add(rename);
+    buttons.add(remove);
+    row.add(buttons);
     row.onMouseOver = (event) => {
       row.backgroundColor = lit;
+      buttons.visible = true;
       rename.fg = event.target === rename ? c.accent : c.muted;
       remove.fg = event.target === remove ? c.danger : c.muted;
       // A name that its room cuts shows whole in a tip of its own.
@@ -159,8 +170,7 @@ export const spaces = part({
     };
     row.onMouseOut = () => {
       row.backgroundColor = ground;
-      rename.fg = ground;
-      remove.fg = ground;
+      buttons.visible = false;
       this.unhover();
     };
     into.add(row);
