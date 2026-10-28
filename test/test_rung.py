@@ -635,7 +635,9 @@ async def test_a_rung_with_a_word_and_an_actor_is_a_turn_of_that_actor_that_its_
   made = engine.rung("k = 2", to="m/low", on=root)
   await settle()
   (reply,) = [a for a in said(log, "reply") if a[2] == made]
-  assert (reply[4], list(engine.peek(reply[1]))) == ("m/low", ["assistant", "k = 2", None, None])
+  turn = engine.peek(reply[1])
+  assert isinstance(turn, tuple | list)
+  assert (reply[4], list(turn)) == ("m/low", ["assistant", "k = 2", None, None])
   assert [a[2] for a in said(log, "done") if a[1] == reply[1]] == [reply[1]]
   assert [list(one[:2]) for one in engine.turns(on=root)][-2:] == [["assistant", "k = 2"], ["user", ""]]
   assert (engine.module(root)["k"], engine.peek(made)) == (2, None)
