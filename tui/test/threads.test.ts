@@ -102,6 +102,12 @@ test("a thread resolves from its card, and a message to it opens it again", () =
       await until(session, () => session.thread === id);
       const open = await frame();
       keep("chosen", open);
+      // The controls of the thread chosen stand in its card, on a last row with the bar of the card.
+      const side = open.split("\n").map((line) => line.slice(size.width - session.preferences.sidebarWidth));
+      const title = side.findIndex((line) => line.includes("Hold this thread open"));
+      const controls = side.findIndex((line) => line.includes("↳ Reply"));
+      expect(controls).toBeGreaterThan(title);
+      expect(side[controls]?.indexOf("▎")).toBe(side[title]?.indexOf("▎"));
       await railClick(use, " Resolve ");
       await until(session, () => listed(session).find((one) => one.act.id === id)?.resolved === true);
       expect(await session.engine.result(id)).toBe("resolved");

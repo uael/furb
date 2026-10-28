@@ -520,17 +520,31 @@ export const rail = part({
         this.inset(space.between, this.text("No workspaces yet. Add a project folder below.", c.muted)),
       );
 
-    // The controls under the thread shown.
-    const controls = (thread: ChainThread, indent: number) => {
+    // The controls of the thread shown, as the controls of the header of its box in the feed: a mark and a word each.
+    const links = (thread: ChainThread) => {
       const id = thread.act.id;
-      const row = this.row({ gap: 1, paddingLeft: indent, flexWrap: "wrap" });
-      const chip = (label: string, run: () => void) =>
-        row.add(this.text([[` ${label} `, c.text, 0, c.raised]], c.text, { run }));
-      chip(this.threadFolded(id) ? "Expand" : "Collapse", () => this.foldThread(id));
-      chip("Reply", () => this.replyTo(id));
-      if (!thread.resolved) chip("Resolve", () => this.resolveThread(thread));
+      const row = this.row({ gap: 3, flexWrap: "wrap" });
+      const link = (mark: string, label: string, run: () => void, tone = c.faint) =>
+        row.add(
+          this.link(
+            [
+              [`${mark} `, tone],
+              [label, c.muted],
+            ],
+            run,
+          ),
+        );
+      const folded = this.threadFolded(id);
+      link(folded ? glyph.closed : glyph.open, folded ? "Expand" : "Collapse", () => this.foldThread(id));
+      link(glyph.reply, "Reply", () => this.replyTo(id));
+      if (!thread.resolved) link("✓", "Resolve", () => this.resolveThread(thread));
       const ask = thread.asks[0];
-      if (ask) chip("Answer", () => void w.point(ask).catch(this.report));
+      if (ask) link(glyph.asks, "Answer", () => void w.point(ask).catch(this.report), c.warning);
+      return row;
+    };
+    const controls = (thread: ChainThread, indent: number) => {
+      const row = links(thread);
+      row.paddingLeft = indent;
       this.railSpaces.add(row);
       step(1);
     };
@@ -575,8 +589,9 @@ export const rail = part({
       });
       const bar: Part = [glyph.mark, threadTone(thread.act.id)];
       const box = this.hoverable(
+        // The surface of the card starts at its bar, so no color of the card stands left of it.
         this.box({
-          paddingLeft: LEFT,
+          marginLeft: LEFT,
           paddingRight: RIGHT,
           marginTop: space.section,
           backgroundColor: lit ? c.selected : c.panel,
@@ -614,9 +629,15 @@ export const rail = part({
           { truncate: true },
         ),
       );
+      // The controls of the thread shown stand in its card, on a last row with its bar.
+      if (shown) {
+        const row = this.row({});
+        row.add(this.line([bar, ["   "]], c.muted));
+        row.add(links(thread));
+        box.add(row);
+      }
       this.railSpaces.add(box);
-      step(words.length + 1, id, space.section);
-      if (shown) controls(thread, LEFT + 3);
+      step(words.length + 1 + (shown ? 1 : 0), id, space.section);
     };
 
     // The sessions of a workspace that are worth a row: the one shown and each that lives, then the newest others.

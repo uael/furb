@@ -322,6 +322,8 @@ export const glyph = {
   ring: "○",
   held: "◌",
   asks: "◆",
+  /** The mark of a reply, which names the thread that the input sends to. */
+  reply: "↳",
   notice: "◇",
   done: "✓",
   failed: "✗",
