@@ -10,10 +10,16 @@ def memory(path: str = ".", on: str = "") -> list[Text]:
   A memory question that the World refuses raises Refused in the caller.
   """
 
+async def recall(on: str = "") -> Act:
+  """The memory of a chain as turns of its model: recall asks the World a memory question for the working directory of its chain, and runs a read of the path of each text of the answer, in its order, as one rung of the default actor of the chain, so the turns show the model that reads each memory file, then each read as every read tells it.
+  recall awaits that rung, and runs no rung when the chain holds every memory file that applies.
+  recall then starts remember on its chain and gives it, so the chain keeps its memory from there, and remember tells nothing of a file that the reads hold, since the World leaves out what the chain holds.
+  The life word of the extension is await recall(), so a chain reads its memory when the life enables the extension, and a chain born later reads it at its birth, before its first prompt asks a model.
+  """
+
 def remember(on: str = "") -> Act:
   """The memory of a chain, kept: an act on the chain that tells the memory of its working directory when it is made, then the memory of the path of each text that a read on the chain gives, and the memory that changed at each stand, and that never completes.
   A cancel over it ends it, as it ends every act, and a pause over it holds it until the wake.
-  The life word of the extension is remember(), so a chain tells its memory when the life enables the extension, and a chain born later tells it at its birth, before its first prompt asks a model.
   A memory file enters a chain once, and again only when it changed, by the lines that changed, since the World leaves out what the chain holds.
   A later life tells what the record holds, since the journal answers each memory question that the record holds, and a memory file that changed since enters the chain at the stand at the tip of that life.
   """
