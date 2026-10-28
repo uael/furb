@@ -7,8 +7,10 @@
 //! streams, and the host is told what the model writes as it writes it; what the reply came to the ear says of its
 //! own accord. The ear reads the statements of the word of a reply as the model finishes them, and when one cannot be
 //! python it ends the reply there, with the word as far as that statement, which the gate refuses. The statements that
-//! the gate finds nothing against run as the model writes the rest, each new part of them as a writing of the rung,
-//! and a part that raised ends the reply with the word that ran.
+//! the gate finds nothing against run as the model writes the rest: the ear says each new part of them as a writing
+//! of the rung, a fact that the Kernel hears and runs, and a part that raised, which the Kernel says it ran with,
+//! ends the reply with the word that ran. A writing is no act that the ear awaits, since a part that prompts makes a
+//! chain ask this ear for a reply, which it takes only at a yield.
 
 pub mod catalog;
 pub mod claude;
@@ -593,10 +595,11 @@ impl Provider {
   /// backticks at its end, tells its chain so once, before its done. A
   /// done of a reply that the ear did not say ends the call of its model.
   ///
-  /// The ear gives the Kernel each part of a word that the model finished and that the gate finds nothing against, as
-  /// a writing of its rung, unless a pause holds the rung. A reply whose part ran is done with the word that ran when
-  /// the part raised, when a later statement holds a fault, and when its call fails, which is then made no more; and
-  /// with its turn when the gate finds nothing against the whole word, which holds the word that ran.
+  /// The ear says each part of a word that the model finished and that the gate finds nothing against as a writing of
+  /// its rung, unless a pause holds the rung. A reply whose part ran is done with the word that ran when the Kernel
+  /// says that the part ran with a raise, when a later statement holds a fault, and when its call fails, which is
+  /// then made no more; and with its turn when the gate finds nothing against the whole word, which holds the word
+  /// that ran.
   ///
   /// A stand ends the wait of each reply whose call waits for a retry, a usage limit among them, and asks its model
   /// again at once, on the models that stand then: so a change of the command line or of its account, or the operator
@@ -621,14 +624,12 @@ impl Provider {
         .map_or_else(|| OPERATOR.to_owned(), |model| model.at(None))
     });
     let mut images = Images::new(images);
-    hearing(&["stand", "reply", "writing"], move |mut co: Co<Replied>| async move {
+    hearing(&["stand", "reply", RAN], move |mut co: Co<Replied>| async move {
       // The ids of chains repeat in every life, so a conversation of this life is keyed by the life too.
       let life = uuid();
       let mut replies: HashMap<String, Reply> = HashMap::new();
       // The actor whose last reply on each chain the ear refused.
       let mut mute: HashMap<String, String> = HashMap::new();
-      // The reply of each writing that the ear made and whose done it has not heard.
-      let mut writings: HashMap<String, String> = HashMap::new();
       loop {
         let a = match co.next().await {
           Next::Heard(a) => a,
@@ -679,14 +680,11 @@ impl Provider {
                   };
                   let given = word.trim_start();
                   let Some((part, before)) = watch.part(given) else { continue };
-                  match writing(&mut co, &chain, &rung, part, before).await {
-                    Some(made) => {
-                      watch.gave(given, end);
-                      writings.insert(made, id.clone());
-                    }
-                    // A writing that no Kernel took is done already, so no later part of the word is given.
-                    None if watch.ran().is_none() => watch.untaken(),
-                    None => {}
+                  if writing(&mut co, &rung, part, before).await {
+                    watch.gave(given, end);
+                  } else if watch.ran().is_none() {
+                    // A word whose first part a pause held is given whole, so no later part of it is given.
+                    watch.untaken();
                   }
                   continue;
                 }
@@ -898,11 +896,12 @@ impl Provider {
           }
           // A part of a word that raised ends the word where it raised, so its reply ends with the word that ran,
           // whose run is done with that raise.
-          "done" if writings.contains_key(&about) => {
-            let Some(id) = writings.remove(&about) else { continue };
-            if a.word(0).is_none_or(|one| one.type_name() == "NoneType") {
+          RAN => {
+            if a.word(1).is_none_or(|one| one.type_name() == "NoneType") {
               continue;
             }
+            let mine = replies.iter().find(|(_, reply)| reply.rung == about);
+            let Some(id) = mine.map(|(id, _)| id.clone()) else { continue };
             let ran =
               replies.get(&id).and_then(|reply| reply.watch.as_ref()?.ran().map(str::to_owned));
             let Some(Ok(turn)) = ran.as_deref().map(cut) else { continue };
@@ -1008,32 +1007,23 @@ async fn findings(co: &mut Co<Replied>, chain: &str, word: &str) -> Vec<String> 
   found.unwrap_or_default()
 }
 
-/// A writing of the part of the word of a rung that is new, made as that rung, which the Kernel runs: its name, and
-/// nothing when a pause holds the rung, since no part of a word runs while a pause holds its chain, or when no Kernel
-/// takes it: the Kernel says what it says of a writing as that writing, and the life says the done of a writing that
-/// nothing takes as no one. The Kernel may run the part before the life gives the ear its name.
-async fn writing(
-  co: &mut Co<Replied>,
-  chain: &str,
-  rung: &str,
-  part: &str,
-  before: usize,
-) -> Option<String> {
-  let paused = co.call("paused", vec![Object::string(rung)], vec![]).await.ok()?;
-  if paused.as_ref().as_bool() != Some(false) {
-    return None;
+/// The kind of the fact that the Kernel says, as a rung, once the part of a writing of that rung is over:
+/// `("ran", rung, rung, before, raised)`, with how many characters of the word stand before the part.
+const RAN: &str = "ran";
+
+/// The part of the word of a rung that is new, said as a writing of that rung, `("writing", rung, by, part,
+/// before)`, which the Kernel hears and runs as that rung; and false when a pause holds the rung, since no part of a
+/// word runs while a pause holds its chain. The writing is a fact that the ear says, and no act that it awaits, so
+/// the ear stands at its next yield when the Kernel runs the part, and takes each reply that the part makes a chain
+/// ask, and the record keeps the writing, so a later life runs the part where this one ran it.
+async fn writing(co: &mut Co<Replied>, rung: &str, part: &str, before: usize) -> bool {
+  let paused = co.call("paused", vec![Object::string(rung)], vec![]).await;
+  if paused.ok().and_then(|one| one.as_ref().as_bool()) != Some(false) {
+    return false;
   }
-  let previous = co.call("spoken", vec![Object::string(rung)], vec![]).await.ok()?;
   let before = Object::int(i64::try_from(before).unwrap_or(i64::MAX));
-  let words = [Object::string("writing"), Object::string(chain), Object::none()];
-  let words =
-    words.into_iter().chain([Object::string(rung), Object::string(part), before]).collect();
-  let made = co.call("act", words, vec![]).await;
-  let _ = co.call("spoken", vec![previous], vec![]).await;
-  let made = made.ok()?.as_ref().as_str()?.to_owned();
-  let of = [("on", Object::string(chain)), ("of", Object::string(&made))];
-  let said = co.call("transcript", vec![], of.into()).await.ok()?;
-  said.as_ref().items().is_some_and(|items| !items.is_empty()).then_some(made)
+  say(co, Fact::says("writing", rung, [Object::string(part), before]));
+  true
 }
 
 /// A note told to a chain.
