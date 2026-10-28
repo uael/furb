@@ -39,6 +39,33 @@ export const blocks = part({
     );
   },
 
+  /** A row of a text and what stands at its right. The text keeps at least half of the row, or its own width when that
+   * is less, so that what stands beside it never squeezes it to a few columns: when the room leaves less, what
+   * stood beside it goes under it, at the right. The width of what stands beside it is the sum of the widths of the
+   * nodes that it holds, with their margins. */
+  sided(
+    options: BoxOptions,
+    text: Renderable,
+    asides: readonly (Renderable | undefined)[],
+    width: number,
+    room: number,
+    said: string,
+  ): BoxRenderable {
+    text.flexGrow = 1;
+    text.flexShrink = 1;
+    const own = Math.max(...said.split("\n").map((line) => Bun.stringWidth(line)));
+    const under = room - width < Math.min(own, Math.ceil(room / 2));
+    const row = this.box({ ...options, flexDirection: under ? "column" : "row" });
+    row.add(text);
+    const rest = asides.filter((one) => one !== undefined);
+    if (under && rest.length) {
+      const foot = this.box({ flexDirection: "row", justifyContent: "flex-end" });
+      for (const one of rest) foot.add(one);
+      row.add(foot);
+    } else for (const one of rest) row.add(one);
+    return row;
+  },
+
   /** A node that stands a number of columns in from the left, since a text leaves its own padding out when it draws. */
   inset(left: number, node: Renderable): BoxRenderable {
     const box = this.box({ paddingLeft: left, flexDirection: "row" });

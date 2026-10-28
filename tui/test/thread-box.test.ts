@@ -301,3 +301,24 @@ test("the up arrow in an empty input takes back the last message to the thread t
     { ...size, useMouse: true },
     true,
   ));
+
+test("a message keeps its words whole beside a state and controls that are wider than the room it leaves, which go under it", () =>
+  composing(
+    async ({ session, frame }) => {
+      await idle(session);
+      const shown = async () =>
+        (await frame()).split("\n").map((row) => row.slice(0, 100 - session.preferences.sidebarWidth));
+      let rows = await shown();
+      // The markdown of the message draws over a few frames.
+      for (let step = 0; step < 80 && !rows.some((row) => row.includes("Explore this project")); step++) {
+        await Bun.sleep(25);
+        rows = await shown();
+      }
+      const at = rows.findIndex((row) => row.includes("Explore this project"));
+      expect(at).toBeGreaterThan(0);
+      expect(rows[at]).toMatch(/┃ Explore this project/);
+      expect(rows.slice(at, at + 5).join("\n")).toContain("Collapse");
+    },
+    { width: 100, height: 46 },
+    true,
+  ));
