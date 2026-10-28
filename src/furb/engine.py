@@ -141,7 +141,7 @@ def close(value: object, id: str = ""):
       try:
         s = eval(shape, module(on)) or object
         assert any(
-          (type(value), value) in [(type(a), a) for a in x.__args__]
+          any(type(a) is type(value) and a == value for a in x.__args__)
           if (origin := getattr(x, "__origin__", x)) is Literal
           else isinstance(value, origin)
           for x in (s.__args__ if isinstance(s, type(int | str)) else [s])
@@ -529,15 +529,11 @@ def scope(name):
   return name * bool(a)
 
 
-def asked(id, on=""):
-  return [x[1] for x in transcript(on, id) if question(x)]
-
-
 def tell(on, path, got=None, show=HEAD):
   if (who := acting()) and tells(who):
     say(
       *told(
-        q := asked(who, on)[-1],
+        q := transcript(on, who)[-1][1],
         path=path,
         **{
           "numbers": at if (at := show(got.lines)) and at[-1] - at[0] >= len(at) else None,
@@ -569,9 +565,9 @@ def tells(id):
 
 
 def teach(on, to):
-  if (taught := offered(standing()[0], to, 3)) and (quote := "<s:doctrine>\n" + taught + "</s:doctrine>") not in [
-    n for x in transcript(on, "tell") for n in x[3]
-  ]:
+  if (taught := offered(standing()[0], to, 3)) and repr(
+    quote := "<s:doctrine>\n" + taught + "</s:doctrine>"
+  ) not in str(transcript(on, "tell")):
     say(*told(on, "doctrine", quote))
 
 
@@ -583,7 +579,7 @@ def control(kind, name, id, *words):
   if not get(id):
     raise Refused("no act " + repr(id))
   return (
-    over(id) or scope(site.get()) == scope(id) or say(*told(id, name + " by " + site.get(), value=(*words, None)[0]))
+    over(id) or scope(acting()) == scope(id) or say(*told(id, name + " by " + site.get(), value=(*words, None)[0]))
   ) and say(kind, id, *words)
 
 
@@ -640,7 +636,7 @@ def covers(a, id):
 
 
 def paused(id):
-  return next((x[0] == "pause" for x in reversed(transcript(scope(id), "pause")) if covers(x, id)), False)
+  return next((x[0] == "pause" for x in reversed(transcript(id, "pause")) if covers(x, id)), False)
 
 
 def idle(id):
