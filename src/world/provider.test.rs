@@ -66,10 +66,16 @@ fn yard(name: &str) -> PathBuf {
 
 /// A life of the real engine on a provider in a yard of its own, and the ears of the World.
 fn lived(provider: Provider) -> Engine {
+  seeing(provider, None)
+}
+
+/// A life of the real engine on a provider in a yard of its own, and the ears of the World, whose files keep each
+/// image that a read gives in a gallery.
+fn seeing(provider: Provider, gallery: Option<PathBuf>) -> Engine {
   let scratch = world::Scratch::own();
   let ears: [(&str, Box<dyn Ear>); 4] = [
     ("provider", provider.ear()),
-    ("files", world::files(scratch.clone())),
+    ("files", world::files(scratch.clone(), gallery)),
     ("bash", world::bash(scratch, &[])),
     ("time", world::time()),
   ];
@@ -716,6 +722,38 @@ fn a_turn_hands_its_images_to_a_model_that_takes_them_and_a_model_that_takes_non
     "Refused(args=('m/high answered nothing: ProviderError: m does not accept images.'))";
   assert_eq!(said(&mut engine)[1], ("done".into(), "reply1".into(), refused.into()));
   assert_eq!(blind.request_count(), 0, "the model is asked nothing");
+}
+
+#[cfg(unix)]
+#[test]
+fn the_claude_command_line_sees_each_image_that_a_prompt_names_and_each_image_that_a_word_reads() {
+  use super::claude::test::Yard;
+  use base64::{Engine as _, engine::general_purpose::STANDARD};
+  let fake = Yard::new("images");
+  let at = yard("claude-images");
+  let (named, read) = (b"\x89PNG\r\n\x1a\nnamed".as_slice(), b"\x89PNG\r\n\x1a\nread".as_slice());
+  fs::write(at.join("named.png"), named).expect("the image is written");
+  fs::write(at.join("read.png"), read).expect("the image is written");
+  let kept =
+    images::attach(&at.join("images"), &at.join("named.png")).expect("the image is attached");
+  // The first turn reads a PNG, and the claude of the test answers the second with a close.
+  let word = format!("read({:?})", at.join("read.png").display().to_string());
+  fs::write(fake.at.join("word.1"), serde_json::to_string(&word).expect("a word of json"))
+    .expect("the word is written");
+  let provider =
+    Provider::new(at.display().to_string(), fake.claude(10_000).models()).images(at.join("images"));
+  let mut engine = seeing(provider, Some(at.join("images")));
+  let root = engine.root().to_owned();
+  let message = format!("look at {}", images::reference("named.png", &kept.uri));
+  let with = verbs::Prompt { message: Some(message), on: on(&root), ..Default::default() };
+  let act = engine.prompt(Object::string("str"), with).expect("a prompt is made");
+  assert_eq!(block_on(act).map(|got| got.py_repr()).expect("an answer"), "'reply 2'");
+  let heard = fake.heard();
+  let image = |bytes: &[u8]| format!(r#""data":"{}""#, STANDARD.encode(bytes));
+  assert_eq!(heard.len(), 2, "{heard:?}");
+  assert!(heard[0].contains(&image(named)), "the image of the prompt: {}", heard[0]);
+  assert!(heard[1].contains(&image(read)), "the image that the word read: {}", heard[1]);
+  assert!(!heard[1].contains(&image(named)), "the command line hears an image once: {}", heard[1]);
 }
 
 #[test]

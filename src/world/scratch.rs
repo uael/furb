@@ -104,7 +104,12 @@ impl Scratch {
   /// put there first, or the entries of a folder, one on each line, each folder with `/` at its end. Each text and
   /// each refusal names the path under the scheme, and never as the machine names it, and a path that leaves the
   /// directory, by `..` or by a link, is refused.
-  pub(crate) fn served(&self, path: &str, content: Option<String>) -> Result<Text, Fault> {
+  pub(crate) fn served(
+    &self,
+    path: &str,
+    content: Option<String>,
+    gallery: Option<&Path>,
+  ) -> Result<Text, Fault> {
     let at = resolved(&self.0.at, path);
     let outside = || Fault::refused(format!("{SCRATCH}{path} is outside the scratch directory."));
     let under = at.strip_prefix(&self.0.at).map_err(|_| outside())?.to_path_buf();
@@ -122,7 +127,7 @@ impl Scratch {
     if under.as_os_str().is_empty() || fs::symlink_metadata(&at).is_ok_and(|one| one.is_dir()) {
       return Ok(Text::new(name, entries(&at).join("\n")));
     }
-    text(&at, name)
+    text(&at, name, gallery)
   }
 
   /// Whether a path stands in the directory as the machine finds it: the deepest part of the path that stands,

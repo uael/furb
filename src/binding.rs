@@ -324,7 +324,7 @@ pub struct Inspection {
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn files(scratch: String) -> NativeEar {
-  NativeEar::of(world::files(world::Scratch::at(scratch)))
+  NativeEar::of(world::files(world::Scratch::at(scratch), None))
 }
 
 /// The ear of commands, which runs each in a shell of this machine, with `TMPDIR` set to the scratch directory that

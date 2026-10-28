@@ -57,19 +57,19 @@ fn a_path_of_the_scheme_is_a_file_of_the_directory_and_a_folder_gives_its_entrie
  {
   let at = place("served");
   let scratch = Scratch::at(&at);
-  assert_eq!(scratch.served("", None).unwrap(), Text::new(SCRATCH, ""));
+  assert_eq!(scratch.served("", None, None).unwrap(), Text::new(SCRATCH, ""));
   assert!(!at.exists(), "a read makes no directory");
-  let wrote = scratch.served("notes/../notes/a.md", Some("one\n".to_owned())).unwrap();
+  let wrote = scratch.served("notes/../notes/a.md", Some("one\n".to_owned()), None).unwrap();
   assert_eq!(wrote, Text::new("scratch://notes/a.md", "one\n"));
-  scratch.served("plan.md", Some("two".to_owned())).unwrap();
+  scratch.served("plan.md", Some("two".to_owned()), None).unwrap();
   assert!(at.join(WHOLE).is_file(), "a write makes the directory whole");
   assert_eq!(fs::read_to_string(at.join("notes").join("a.md")).unwrap(), "one\n");
-  assert_eq!(scratch.served("plan.md", None).unwrap(), Text::new("scratch://plan.md", "two"));
-  assert_eq!(scratch.served("", None).unwrap(), Text::new(SCRATCH, "notes/\nplan.md"));
-  assert_eq!(scratch.served("notes", None).unwrap(), Text::new("scratch://notes", "a.md"));
-  let none = scratch.served("none.md", None).unwrap_err();
+  assert_eq!(scratch.served("plan.md", None, None).unwrap(), Text::new("scratch://plan.md", "two"));
+  assert_eq!(scratch.served("", None, None).unwrap(), Text::new(SCRATCH, "notes/\nplan.md"));
+  assert_eq!(scratch.served("notes", None, None).unwrap(), Text::new("scratch://notes", "a.md"));
+  let none = scratch.served("none.md", None, None).unwrap_err();
   assert_eq!(none.message(), "There is no file at scratch://none.md.");
-  let out = scratch.served("../out.md", Some("x".to_owned())).unwrap_err();
+  let out = scratch.served("../out.md", Some("x".to_owned()), None).unwrap_err();
   assert_eq!(out.message(), "scratch://../out.md is outside the scratch directory.");
   assert!(!at.parent().unwrap().join("out.md").exists());
   fs::remove_dir_all(&at).unwrap();
@@ -86,7 +86,7 @@ fn a_link_that_leads_out_of_the_directory_is_refused_and_a_listing_reads_no_link
   scratch.made().unwrap();
   std::os::unix::fs::symlink(&away, at.join("away")).unwrap();
   let refused = |path: &str, content: Option<&str>| {
-    scratch.served(path, content.map(str::to_owned)).unwrap_err().message()
+    scratch.served(path, content.map(str::to_owned), None).unwrap_err().message()
   };
   assert_eq!(
     refused("away/secret.md", None),
@@ -97,7 +97,7 @@ fn a_link_that_leads_out_of_the_directory_is_refused_and_a_listing_reads_no_link
     "scratch://away/new.md is outside the scratch directory."
   );
   assert!(!away.join("new.md").exists());
-  assert_eq!(scratch.served("", None).unwrap().content, "away");
+  assert_eq!(scratch.served("", None, None).unwrap().content, "away");
   fs::remove_dir_all(&at).unwrap();
   fs::remove_dir_all(&away).unwrap();
 }
@@ -115,7 +115,7 @@ fn a_missing_directory_takes_the_last_write_of_each_path_in_the_order_of_those_w
   ];
   Scratch::at(&at).remade(&record, &quiet);
   assert!(at.join(WHOLE).is_file());
-  assert_eq!(Scratch::at(&at).served("", None).unwrap().content, "a/\nplan.md");
+  assert_eq!(Scratch::at(&at).served("", None, None).unwrap().content, "a/\nplan.md");
   assert_eq!(fs::read_to_string(at.join("a").join("b.md")).unwrap(), "in a folder");
   assert_eq!(fs::read_to_string(at.join("plan.md")).unwrap(), "new");
   let folded = place("folded");
