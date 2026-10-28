@@ -613,7 +613,7 @@ export const rail = part({
         space: () => this.foldThread(thread.act.id),
         thread,
       });
-      const title = shortenHomes(thread.title) || thread.act.id;
+      const title = shortenHomes(this.threadTitle(thread)) || thread.act.id;
       const row = this.railSplit(
         [
           [glyph.mark, threadTone(thread.act.id)],
@@ -654,7 +654,11 @@ export const rail = part({
         lit ? c.selected : c.raised,
       );
       const shown = active === thread;
-      const words = wrapped(shortenHomes(thread.title) || thread.act.id, width - LEFT - RIGHT - 4, 2);
+      const words = wrapped(
+        shortenHomes(this.threadTitle(thread)) || thread.act.id,
+        width - LEFT - RIGHT - 4,
+        2,
+      );
       for (const [row, text] of words.entries())
         box.add(
           this.line(

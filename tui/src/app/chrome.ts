@@ -128,9 +128,8 @@ export const chrome = part({
     const prompt = w.mode === "prompt" && !w.editing && !pending && !reading;
     // A message to a thread names the thread where the chain stands otherwise, in the color of the thread.
     const target = prompt ? w.target : undefined;
-    const title = target
-      ? clip(shortenHomes(gist(this.railThreads().find((one) => one.act.id === target)?.title ?? target)), 20)
-      : "";
+    const aimed = target ? this.railThreads().find((one) => one.act.id === target) : undefined;
+    const title = target ? clip(shortenHomes(gist(aimed ? this.threadTitle(aimed) : target)), 20) : "";
     const where = target ? `to ${glyph.reply} ${title}` : `on ${w.label}`;
     // The line spans the input but its bar and its padding.
     const room = this.feedWidth - 3;

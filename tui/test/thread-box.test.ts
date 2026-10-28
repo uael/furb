@@ -112,11 +112,20 @@ test("a folded thread marks new work with a dot, and the dot goes once the threa
       const id = listed(session)[0]?.act.id ?? "";
       app.foldThread(id, true);
       const folded = async () =>
-        (await frame()).split("\n").find((row) => row.includes("Explore this project")) ?? "";
+        (await frame())
+          .split("\n")
+          .map((row) => feedOf(session, row))
+          .find((row) => row.includes("Explore this project")) ?? "";
       expect(await folded()).not.toContain("●");
       await session.reply(id, "One more thing");
       await until(session, () => (listed(session)[0]?.messages.length ?? 0) === 1);
-      expect(await folded()).toMatch(/┃ ● .*Explore this project/);
+      // The dot stands at the right of the header, before its shape, as the open thread says its state there.
+      let marked = await folded();
+      for (let step = 0; step < 160 && !marked.includes("●"); step++) {
+        await Bun.sleep(25);
+        marked = await folded();
+      }
+      expect(marked).toMatch(/┃ Explore this project.* ● /);
       app.foldThread(id, false);
       // The box draws open over a few frames on a slow machine, and the thread counts as seen once it has.
       let open = await frame();
