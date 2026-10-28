@@ -129,7 +129,7 @@ async def test_an_act_that_no_ear_takes_is_refused() -> None:
   engine.read("a.txt", on=root)
   again, _ = await relived(Sand(), plain(sand.record))
   (answered,) = [a for a in again if a[:2] == ("done", "nope1")]
-  assert answered[2] == "journal" and str(answered[3]) == "nothing takes nope"
+  assert answered[2] == "" and str(answered[3]) == "nothing takes nope"
 
 
 async def test_an_act_said_it_is_begun_and_what_the_call_gives_is_its_name() -> None:
