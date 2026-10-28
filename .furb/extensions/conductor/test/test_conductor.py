@@ -686,7 +686,7 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 
 STATE = (
   "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed fixes silent"
-  " comments measures timers noted debriefs vetoes ordered tips shifted hired paced landed heard handled ends requeued"
+  " comments measures timers noted debriefs briefed owns vetoes ordered tips shifted hired paced landed heard handled ends requeued"
   " statused secret budgeted flaky runs_read"
 ).split()
 
@@ -701,7 +701,7 @@ def test_the_round_plays_on_the_root_alone_and_pr_on_every_chain_before_it() -> 
   assert [manifest(name).get("plays", "every") for name in ("pr", "conductor", "converge")] == ["every", "root", "root"]
   order = list(json.loads((furb / "config.json").read_text(encoding="utf-8"))["extensions"])
   assert order.index("pr") < order.index("conductor")
-  assert re.findall(r"^def (\w+)", PULL.read_text(encoding="utf-8"), re.M) == ["pr_box", "pr_body", "prcheck", "pr", "shq"]
+  assert re.findall(r"^(?:async )?def (\w+)", PULL.read_text(encoding="utf-8"), re.M) == ["pr_box", "pr_body", "prcheck", "pr", "shq"]
   assert re.findall(r"^def (pr|prcheck|shq)\(", SOURCE, re.M) == []
 
 
@@ -1238,10 +1238,10 @@ def test_a_stacked_pr_whose_base_moved_names_the_old_and_the_new_head_in_its_ord
 @JQ
 async def test_pr_stops_when_where_is_missing_and_runs_no_gh(conductor: Round) -> None:
   branch(conductor)
-  got = await conductor.ns["pr"](
-    "feat(tui): Show records", "It matters.", ["It works."], CHECKS, where=str(conductor.tmp / "none")
-  )
-  assert got.code != 0
+  with pytest.raises(Refused):
+    await conductor.ns["pr"](
+      "feat(tui): Show records", "It matters.", ["It works."], CHECKS, where=str(conductor.tmp / "none")
+    )
   assert conductor.log() == ""
 
 
@@ -1460,3 +1460,128 @@ def test_each_row_of_the_reviews_ends_its_line_and_a_body_holds_no_carriage_retu
   got = asyncio.run(conductor.bash(conductor.REVIEWS))
   rows = [x for x in got.stdout.content.split("\n") if x]
   assert rows == [NOT_FOUND, "394\ti394\tuael\t0\t-\ta  b c d"]
+
+
+def evidence_repo(conductor: Round, tmp_path: Path) -> str:
+  env = conductor.env
+  git("init", "-q", "-b", "main", cwd=tmp_path, env=env)
+  (tmp_path / "test").mkdir()
+  wall = tmp_path / "test" / "test_hygiene.py"
+  wall.write_text("WALL = 6520\n", encoding="utf-8")
+  git("add", "test/test_hygiene.py", cwd=tmp_path, env=env)
+  git("commit", "-q", "-m", "base", cwd=tmp_path, env=env)
+  sha = git("rev-parse", "HEAD", cwd=tmp_path, env=env).strip()
+  wall.write_text("WALL = 6500\n", encoding="utf-8")
+  git("commit", "-q", "-am", "main sets the wall to 6500", cwd=tmp_path, env=env)
+  git("update-ref", "refs/remotes/origin/main", "HEAD", cwd=tmp_path, env=env)
+  git("reset", "-q", "--hard", sha, cwd=tmp_path, env=env)
+  return sha
+
+
+@POSIX
+@JQ
+async def test_an_order_for_a_failed_check_carries_its_failed_lines_and_the_commits_main_changed(
+  conductor: Round, tmp_path: Path
+) -> None:
+  sha = evidence_repo(conductor, tmp_path)
+  runs = json.dumps([{"databaseId": 9, "conclusion": "failure"}])
+  conductor.say(r"limit 30 --json databaseId,conclusion", runs)
+  conductor.say(r"run view 9 --log-failed", "gates\tstep\tFAILED test/test_hygiene.py::test_wall - 6520 > 6500\ngates\tstep\tnoise\n")
+  conductor.busy("p1", "k5", SONNET)
+  await conductor.mend(conductor.pr(checks=("FAILURE",), sha=sha, labels=["w:k5"]), 0.0, False)
+  order = conductor.prompts[-1][0]
+  assert "The first failed lines of its job log:\n  gates\tFAILED test/test_hygiene.py::test_wall - 6520 > 6500\n" in order
+  assert "that change a file of the failure:\n  " in order and "main sets the wall to 6500" in order
+  assert "noise" not in order
+
+
+@POSIX
+@JQ
+async def test_a_fixer_brief_for_a_failed_check_carries_the_same_lines(conductor: Round, tmp_path: Path) -> None:
+  sha = evidence_repo(conductor, tmp_path)
+  conductor.say(r"limit 30 --json databaseId,conclusion", json.dumps([{"databaseId": 9, "conclusion": "failure"}]))
+  conductor.say(r"run view 9 --log-failed", "gates\tstep\tFAILED test/test_hygiene.py::test_wall\n")
+  await conductor.mend(conductor.pr(checks=("FAILURE",), sha=sha), 0.0, False)
+  assert [key for key, _ in conductor.hired] == ["fix5"]
+  assert "FAILED test/test_hygiene.py::test_wall" in conductor.hired[0][1]
+  assert "main sets the wall to 6500" in conductor.hired[0][1]
+
+
+def test_the_ledger_of_the_tooling_keeps_one_form_of_when_and_moves_the_old_entries_once(conductor: Round) -> None:
+  import calendar
+
+  conductor.now = 1793181153.0
+  conductor.files[conductor.TOOLING] = json.dumps([{"when": "10-23", "what": "a wall", "state": "open", "count": 1}])
+  conductor.flaw("a new friction")
+  whens = [x["when"] for x in json.loads(conductor.files[conductor.TOOLING])]
+  assert whens == [str(calendar.timegm((2026, 10, 23, 0, 0, 0))), "1793181153"]
+
+
+def test_an_item_that_names_its_pr_owns_it_before_a_label_or_a_push_does(conductor: Round) -> None:
+  conductor.busy("p1", "tui-stack", OPUS)
+  one = conductor.pr(n=606, checks=("FAILURE",))
+  assert conductor.owner_of(one) == ""
+  conductor.owns["tui-stack"] = [606]
+  assert conductor.owner_of(one) == "p1"
+  assert not conductor.needs(one)
+
+
+async def flaked(conductor: Round) -> None:
+  conductor.says.clear()
+  conductor.say(r"workflows/gates\.yml/runs\?", '{"workflow_runs": []}')
+  await conductor.watch_ci()
+  conductor.says.clear()
+  url = "https://github.com/o/r/actions/runs/50"
+  flaky = [{"id": 50, "head_sha": "s1", "run_attempt": 2, "conclusion": "success", "html_url": url}]
+  job = {"id": 7, "name": "the TUI", "conclusion": "failure", "started_at": "2026-10-23T10:00:00Z", "completed_at": "2026-10-23T10:01:00Z"}
+  conductor.say(r"runs\?branch=main&status=success", '{"workflow_runs": []}')
+  conductor.say(r"runs\?per_page=30", json.dumps({"workflow_runs": flaky}))
+  conductor.say(r"runs/50/attempts/1/jobs", json.dumps({"jobs": [job]}))
+  conductor.say(r"jobs/7/logs", "2026-10-23T10:00:30.0000000Z (fail) a host test [30000.17ms]\n")
+  await conductor.watch_ci()
+
+
+@POSIX
+@JQ
+async def test_a_flake_that_a_queued_item_names_queues_no_second_item(conductor: Round) -> None:
+  conductor.queue.append(("flake-host-about", "the race of a host test", "ci"))
+  await flaked(conductor)
+  assert [key for key, _, _ in conductor.queue] == ["flake-host-about"]
+  assert any("flake-host-about" in x for x in conductor.heard)
+
+
+@POSIX
+@JQ
+async def test_a_flake_that_a_working_item_names_goes_to_its_worker_in_place_of_a_new_item(conductor: Round) -> None:
+  conductor.busy("p1", "host-about", OPUS)
+  conductor.briefed["host-about"] = "the race of a host test"
+  await flaked(conductor)
+  assert conductor.queue == []
+  assert conductor.prompts[-1][1] == "chain-host-about" and "Your item came again" in conductor.prompts[-1][0]
+
+
+def test_a_round_with_debriefs_off_asks_no_debrief_of_an_ended_worker(conductor: Round) -> None:
+  conductor.ns["DEBRIEFS"] = False
+  conductor.working["prompt1"] = "item1"
+  conductor.facts["prompt1"] = ("prompt", "prompt1", "rung1", "chain5", "tuple[int, str]", "brief", "")
+  conductor.done["prompt1"] = (12, "report")
+  conductor.tend()
+  assert conductor.heard == ["The worker item1 (prompt1) ended with PR #12, and results['prompt1'] keeps its report."]
+  assert conductor.prompts == []
+
+
+@POSIX
+async def test_pr_creates_each_label_that_it_adds_and_raises_refused_with_what_gh_said(
+  conductor: Round, tmp_path: Path
+) -> None:
+  open_pr = conductor.ns["pr"]
+  boxes = ["checked"] * 6
+  conductor.say(r"pr create", "could not add label: not found", 1)
+  with pytest.raises(Refused) as caught:
+    await open_pr("feat(x): Y", "why", ["out"], boxes, labels=["w:k", "thread:t"], where=str(tmp_path))
+  assert "not found" in str(caught.value)
+  assert "label create w:k --force" in conductor.log() and "label create thread:t --force" in conductor.log()
+  conductor.says.clear()
+  conductor.say(r"pr create", "https://github.com/o/r/pull/9\n")
+  got = await open_pr("feat(x): Y", "why", ["out"], boxes, labels=" --label w:k", where=str(tmp_path))
+  assert got.stdout.content.strip() == "https://github.com/o/r/pull/9"
