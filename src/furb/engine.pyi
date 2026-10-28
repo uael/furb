@@ -291,7 +291,7 @@ def get(about: str) -> Question:
 
 def pause(id: str) -> None:
   """A pause: while it stands, nothing it is over hears, and what is said meanwhile waits for the wake.
-  A control over an act that is not over tells a header of its own name, so a model reads what was done to its work.
+  A control from outside the chain of an act that is not over tells a header of its own name, so a model reads what another did to its work.
   pause is given the id of a pending act or the id of a chain.
   A pause stops no reply in flight: the reply returns.
   A paused chain goes quiet as its in-flight work returns.
@@ -494,7 +494,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   A prompt to an actor its roster does not hold it closes with the refusal.
   A chain that the word of a rung opens is a scope of its own: its words are on itself, though the chain fact itself stands on the chain of the rung that opened it; and when that rung is retold, the word makes the same chain, since a rung that retells another shares the acts it makes, so a word that opens a chain opens it once.
   The engine refuses a prompt to an actor outside the roster.
-  The chain holds the control it says itself, so what it closes tells the model what was done to it.
+  The chain holds the control it says itself, which tells nothing, since a control from inside a chain tells nothing to it.
   The engine binds the exception of every raise but a CancelledError in the globals of the chain, under the name raised.
   The engine binds the exception again at each raise but a CancelledError.
   A chain: its module, which is the engine itself, named for the chain, since everything the file defines is the model's to call and nothing of it is bound to one chain, and what the operator would add to it, it makes a rung of, which binds it, stands in the program and is said again in a later life, a fact said from a run being on the chain of that run, and a word that wants a chain of its own giving the name of its own as the source.
@@ -787,7 +787,7 @@ A control reaches what it is over, and whatever else the words of the control na
 A control is no act: it takes no name of its own, and the record holds it as a fact about the acts it is over.
 What a control reaches: the act it names, everything that act made, and every act of the chain it names.
 It reaches by the chain as well as by the name, since an act on a chain is not under it unless the chain made it.
-A control tells its header by a tell that its call says just before it, so a model reads what was done to its work whoever did it, and nothing else writes that header: the chain that pauses a chain at its ceiling, or closes a prompt it will not serve, says the control the one way there is to say it.
+A control from outside a chain tells its header by a tell that its call says just before it, so a model reads what another did to its work, and nothing else writes that header, so a pause of a grant at its ceiling and a close of a prompt that its chain will not serve, which come from inside it, tell none.
 A pause is over the act it names and everything under it.
 """
 type Wake = tuple[Literal["wake"], str, str]
@@ -982,10 +982,11 @@ def told(id: str, what: str = "", *notes: Note, **words: object) -> Tell:
   """
 
 def control(kind: str, name: str, id: str, *words: object) -> Fact:
-  """A control said over the act it names, after a tell of a header of its name headed with that act, which is how pause, wake, cancel and close say theirs.
+  """A control said over the act it names, after a tell of a header of its name headed with that act when it comes from outside the chain of that act, which is how pause, wake, cancel and close say theirs.
   The call gives the control as the life made it whole, so a close that named no act reads which act it is over.
   A control is said over any act of the life, and it tells its header only while the act it names is not over, so a control over an act that is over tells nothing and still reaches each act under it that is not over.
-  The header of a control names the one that said it, as #rung5 paused by operator or #chain1 paused by grant1, so a turn says who paused, woke, cancelled or closed the act.
+  The header of a control names the one that said it, as #rung5 paused by operator, or #prompt4 closed by rung9 when rung9 stands on another chain, so a turn says who paused, woke, cancelled or closed the act.
+  A control from inside the chain of the act it names, as one that a word or an ear of that chain says, tells nothing, since the chain shows already what its words and its ears did.
   """
 
 def headed(id: str, what: str = "", **words: object) -> str:

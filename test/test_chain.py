@@ -217,7 +217,7 @@ async def test_the_engine_refuses_a_prompt_to_an_actor_outside_the_roster() -> N
 
 
 async def test_the_chain_holds_the_control_it_says_itself() -> None:
-  """The chain holds the control it says itself, so what it closes tells the model what was done to it."""
+  """The chain holds the control it says itself, which tells nothing, since a control from inside a chain tells nothing to it."""
   sand, log, root = born()
   ghost = engine.prompt(int, "hi", to="ghost", on=root)
   await settle()
@@ -228,14 +228,8 @@ async def test_the_chain_holds_the_control_it_says_itself() -> None:
   step, last = steps(log, one)
   held = engine.transcript(root)
   assert [(a[1], a[2]) for a in said(held, "close")] == [(ghost, root), (step, root), (one, last)]
-  shut = [(a[1], a[2], a[3]) for a in said(held, "tell") if a[3][0].split("\n")[0].split(" ")[1:2] == ["closed"]]
-  assert shut == [
-    (ghost, root, [f"#{ghost} closed by chain1\n{ghost}_value = Refused('ghost no actor')"]),
-    (step, root, [f"#{step} closed by chain1\n{step}_value = Refused()"]),
-    (one, last, [f"#{one} closed by {last}\n{one}_value = 1"]),
-  ]
-  closed = [one for one in paragraphs(engine.turns(on=root)) if one.split("\n")[0].split(" ")[1:2] == ["closed"]]
-  assert closed == [told[0] for _, _, told in shut]
+  assert [a for a in said(held, "tell") if a[3][0].split("\n")[0].split(" ")[1:2] == ["closed"]] == []
+  assert [p for p in paragraphs(engine.turns(on=root)) if p.split("\n")[0].split(" ")[1:2] == ["closed"]] == []
 
 
 async def test_the_engine_binds_the_exception_of_every_raise_but_a_cancellederror() -> None:
@@ -362,7 +356,7 @@ async def test_the_engine_adds_the_acts_that_caused_a_kept_act_to_what_the_filte
   twin = engine.chain("twin", source=root, filter=take(command[1]))
   await settle()
   assert steps(log, one) == [step] and ack in named(engine.turns(on=root))
-  assert named(engine.turns(on=twin)) == [root, root, one, step, command[1], one, command[1], twin]
+  assert named(engine.turns(on=twin)) == [root, root, one, step, command[1], command[1], twin]
 
 
 async def test_the_globals_of_a_chain_whose_filter_is_a_take_that_is_not_inside() -> None:
@@ -424,7 +418,6 @@ async def test_a_chain_holds_whole_every_act_made_on_the_chain() -> None:
   told = [
     "#read1\nread1_path = 'a.txt'\n<s:read1_text>\none\ntwo</s:read1_text>",
     f"#bash1\nbash1_command = 'echo hi'\n{binding('bash1', 'Exit')}",
-    "#prompt1 closed by rung1\nprompt1_value = 1",
     prompted("prompt2", "None", "bash1 done", "prompt1"),
     "#bash1 exited 0\nbash1_stdout = 'ran echo hi'",
     "#rung2 advance on prompt2",
@@ -1034,14 +1027,8 @@ async def test_a_replay_makes_the_rungs_of_a_chain_again_from_its_donor() -> Non
   assert [(a[4], a[5]) for a in made] == [(bind, f"{first}_told"), ("a = 1", first), *advances, ("b = 20\nc = 30", "")]
   last = made[-1][1]
   kept = engine.program(root)
-  held = [f"{made[0][1]}_told", f"{first}_told", first, *[one for _, one in advances], f"{last}_told", last]
-  told = [
-    f"#{act} closed by rung4",
-    bind,
-    "a = 1",
-    *[one for one, _ in advances],
-    engine.unquoted(written(last, "b = 20\nc = 30", act)),
-  ]
+  held = [f"{first}_told", first, *[one for _, one in advances], f"{last}_told", last]
+  told = [bind, "a = 1", *[one for one, _ in advances], engine.unquoted(written(last, "b = 20\nc = 30", act))]
   assert list(kept) == held and list(kept.values()) == [*told, "b = 20\nc = 30"]
   assert (engine.module(root)["b"], engine.module(root)["c"]) == (20, 30)
 
@@ -1080,7 +1067,6 @@ async def test_a_write_of_a_door_gives_the_words_of_that_ladder_alone() -> None:
   program = engine.program(root)
   first, closer, made = steps(log, act)
   assert list(program.values()) == [
-    f"#{act} closed by rung3",
     fresh(root, written(laid, "mine = 1")),
     "mine = 1",
     f"{prompted(act, 'None', 'count')}\n\n#{first} advance on {act}",

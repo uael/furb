@@ -2,7 +2,7 @@
 
 from asyncio import CancelledError
 
-from conftest import COST, acts, born, heads, paragraphs, said, settle, slow, stalled
+from conftest import COST, acts, born, heads, said, settle, slow, stalled
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
@@ -77,25 +77,24 @@ async def test_it_reaches_by_the_chain_as_well_as_by_the_name() -> None:
 
 
 async def test_a_control_carries_the_header_it_tells() -> None:
-  """A control tells its header by a tell that its call says just before it, so a model reads what was done to its work whoever did it, and nothing else writes that header: the chain that pauses a chain at its ceiling, or closes a prompt it will not serve, says the control the one way there is to say it."""
+  """A control from outside a chain tells its header by a tell that its call says just before it, so a model reads what another did to its work, and nothing else writes that header, so a pause of a grant at its ceiling and a close of a prompt that its chain will not serve, which come from inside it, tell none."""
   sand, log, root = born(cost=COST)
   ghost = engine.prompt(int, "hi", to="ghost", on=root)
   await settle()
-  closed = f"#{ghost} closed by chain1\n{ghost}_value = Refused('ghost no actor')"
   shut = said(log, "close")[0]
   assert shut[:3] == ("close", ghost, root) and len(shut) == 4
   assert isinstance(shut[3], Refused) and str(shut[3]) == "ghost no actor"
-  assert log[log.index(shut) - 1] == ("tell", ghost, root, [closed])
   ceiling = engine.grant(usd=1.0, on=root)
   sand.script[root] = ["a = 1", "close(2)"]
   engine.prompt(int, "count", on=root)
   await settle()
   assert said(log, "pause") == [("pause", root, ceiling)]
-  assert log[log.index(said(log, "pause")[0]) - 1] == ("tell", root, ceiling, [f"#{root} paused by {ceiling}"])
-  assert [line for line in paragraphs(engine.turns(on=root)) if line in (closed, f"#{root} paused by {ceiling}")] == [
-    closed,
-    f"#{root} paused by {ceiling}",
-  ]
+  engine.wake(root)
+  await settle()
+  woke = said(log, "wake")[0]
+  told = ("tell", root, "operator", [f"#{root} woke by operator"])
+  assert [one for one in log[: log.index(woke)] if one[0] == "tell"][-1] == told
+  assert [one for one in said(log, "tell") if " by " in one[3][0]] == [told]
 
 
 async def test_a_pause_is_over_the_act_it_names_and_everything_under_it() -> None:

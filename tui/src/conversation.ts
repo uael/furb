@@ -32,12 +32,26 @@ export function conversation(
   const rows = { get: actOf };
   const items: Item[] = [];
   const seen = new Set<string>();
+  const answered = new Set<string>();
   let rung = from.rung;
   for (const [place, [role, python]] of turns.entries()) {
     const index = (from.at ?? 0) + place;
     if (role === "assistant") {
       if (python) items.push({ type: "python", key: `turn-${index}`, code: python, rung });
       if (rung) seen.add(rung.id);
+      // A close that the word of a rung said tells nothing on its own chain, so the answer of the prompt that the
+      // rung advanced stands after that word when the prompt ended while the rung ran.
+      const asked = rung && rows.get(rung.by);
+      if (
+        rung &&
+        asked?.kind === "prompt" &&
+        asked.done &&
+        !answered.has(asked.id) &&
+        ranUntil(rung, asked)
+      ) {
+        answered.add(asked.id);
+        items.push({ type: "result", key: `turn-${index}-answer`, act: asked, parallel: false });
+      }
       continue;
     }
     const told = paragraphs(python);
@@ -67,7 +81,10 @@ export function conversation(
         } else if (!(["raised", "refused"].includes(word) && failed(act) && seen.has(act.id))) shown();
       } else if (act?.kind === "prompt") {
         if (opens(paragraph)) items.push({ type: "prompt", key, act });
-        else if (word === "closed") items.push({ type: "result", key, act, parallel: closes > 1 });
+        else if (word === "closed" && !answered.has(act.id)) {
+          answered.add(act.id);
+          items.push({ type: "result", key, act, parallel: closes > 1 });
+        } else if (word === "closed") continue;
         else shown();
       } else if (act && ["chain", "grant"].includes(act.kind)) {
         // The inspector shows what the chain stands on, so its standing, headed by its roster, is no card of the
@@ -81,6 +98,15 @@ export function conversation(
   }
   from.rung = rung;
   return items;
+}
+
+/** Whether a prompt ended while a rung ran, as when the word of the rung closed it. */
+function ranUntil(rung: ActRow, prompt: ActRow): boolean {
+  return (
+    prompt.ended !== undefined &&
+    prompt.ended >= rung.began &&
+    (rung.ended === undefined || prompt.ended <= rung.ended)
+  );
 }
 
 /** Whether a paragraph is the open of a rung its caller wrote, which binds that word as rungN_word under a header

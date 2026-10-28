@@ -441,7 +441,7 @@ async def test_of_the_acts_its_word_made_and_read_at_once_it_tells_nothing() -> 
   assert await act == 1
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
   told = engine.turns(on=root)
-  assert told[2][1] == f"#read1\nread1_path = 'a.txt'\nread1_text = 'one'\n\n#{act} closed by rung1\n{act}_value = 1"
+  assert told[2][1] == "#read1\nread1_path = 'a.txt'\nread1_text = 'one'"
   assert of(told, step) == [f"#{step} advance on {act}"]
 
 
