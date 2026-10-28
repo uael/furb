@@ -210,8 +210,10 @@ A life that keeps its record keeps a snapshot of its state beside it, `<record>.
 and what the engine holds of its ears, with the key of the build and of the ears, and digests of the record and of
 the log that it covers. A later life on the record opens from it with no replay when it agrees with all of them,
 tells each ear the past of the life from the log, and stands again at its tip; else it replays the record, and keeps
-a new snapshot. A life writes it when it opens, at most once each thirty seconds while it does work, and when it
-ends, but not while work of the outside runs, as a command or a reply. `snapshot: false` in the opening turns it off.
+a new snapshot. A life writes it when it opens, while it does work, and when it ends: at most once each thirty
+seconds, and at most once each twenty times the time that the last one took. Work of the outside that runs, as a
+command or a reply, stays in it, and a later life from it holds that work as a replay holds the work that a record
+left: it waits for a wake. `snapshot: false` in the opening turns it off.
 A `Session` keeps one too: its observer is an ear of the outside, which a later process gives again by its name, and
 which reads by `get` each act that an ear before it took. The session saves
 `.session.json` whole with `saveFile(path, text)`, which writes `<path>.tmp` and gives it the name of the file. A
