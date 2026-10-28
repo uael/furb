@@ -361,7 +361,7 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 
 Every pull request and every push to `main` runs the gates in `.github/workflows/gates.yml`: the hooks, which
 include the gates of the crate and the type check. The suite runs on Linux, on macOS and on Windows, and the gates
-of the crate run on Windows too. The gates of the TypeScript side run on Linux, on macOS, and on Windows.
+of the crate run on Windows and on macOS too. The gates of the TypeScript side run on Linux, on macOS, and on Windows.
 
 A release is one version of every package: the crates `furb` and `furb-cli` on crates.io, the package `furb` of npm
 with the package of its engine for each system, and `furb`, `furb-monty` and `furb-cli` on PyPI.
