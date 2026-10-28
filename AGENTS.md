@@ -247,7 +247,8 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
   this clone is checked out and not made again: a local branch that lags behind origin moves up to it, a local branch
   with work that origin lacks stays as it is, and git names the worktree that holds a branch already. A new branch
   starts from `base`, `origin/main` by default, which no existing branch uses. Run it from any directory. It copies on write the build directories of the main
-  checkout into the worktree: the `target` of cargo, which maturin and napi share, with its timestamps, the
+  checkout, or of the worktree of this clone where `uv sync` built the crate whose commit stands nearest to the new one, into the worktree, since the main
+  checkout can stand far behind origin and its build with it: the `target` of cargo, which maturin and napi share, with its timestamps, the
   `node_modules` of bun, the build of the TypeScript package, and the cache of the tests of the TUI. A copy on write
   shares the blocks of each file until a build changes it, so it takes less than 1 GiB of the disk. Then cargo builds
   only the crates of the workspace again, because their path changed, and no dependency. The script does not copy
