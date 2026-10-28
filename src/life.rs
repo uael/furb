@@ -18,7 +18,9 @@ use std::{
 use crate::{
   Ear, Engine, Fault, Object, checkpoint,
   ear::{hear, hearing, lasting},
-  extension::{self, Places, compaction::compaction, memory::memory, skills::skills, web::web},
+  extension::{
+    self, Places, compaction::compaction, mcp::mcp, memory::memory, skills::skills, web::web,
+  },
   snapshot::{self, Keeper},
   world::{self, Catalog, Retries, Scratch, Writes},
 };
@@ -138,7 +140,8 @@ impl Opening {
 
   /// The record the life opens on, and the ears of the crate, in the order of boot: the provider, the extensions,
   /// each official extension, the files, the commands and time, and the store and the log of the life when the life
-  /// keeps. The ears of the web and of the compaction do work, so a life that inspects hears them silent.
+  /// keeps. The ears of the web, of the servers of MCP and of the compaction do work, so a life that inspects hears
+  /// them silent.
   ///
   /// The files and the commands share the scratch directory of the life: the one of its record when it keeps the
   /// record, and else one of its own, which goes with the life. A new record starts with an empty scratch directory,
@@ -169,6 +172,7 @@ impl Opening {
       "memory",
       "skills",
       "web",
+      "mcp",
       "compaction",
       "files",
       "bash",
@@ -225,18 +229,27 @@ impl Opening {
       false => world::log(path, &record),
     });
     let gallery = self.gallery();
+    let project = PathBuf::from(&self.directory);
     let (provider, search) = self.provider()?;
     let working = |made: Option<Box<dyn Ear>>| made.unwrap_or_else(silent);
     let config = places.config;
     // An ear that holds nothing that a fresh one lacks starts again after it raises. A fresh ear of the commands
     // reads no record, since the first one ended each command that the record left open.
     let held = config.clone();
+    let servers = extension::mcp::Settings::of(project, config.clone(), gallery.clone());
     let mut ears = vec![
       ("provider", provider),
       ("extensions", extension::extensions(extensions)),
       ("memory", lasting(memory(config.clone()), move || memory(held.clone()))),
       ("skills", lasting(skills(config.clone()), move || skills(config.clone()))),
       ("web", working(works.then(|| lasting(web(search.clone()), move || web(search.clone()))))),
+      (
+        "mcp",
+        working(works.then(|| {
+          let again = servers.clone();
+          lasting(mcp(servers), move || mcp(again.clone()))
+        })),
+      ),
       ("compaction", working(works.then(|| lasting(compaction(), compaction)))),
       (
         "files",

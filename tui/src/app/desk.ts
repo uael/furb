@@ -98,16 +98,41 @@ export const desk = part({
       acts: w.acts,
       compactions: w.host.compactions,
       of: (kind) => w.acts.filter((act) => act.kind === kind),
-      run: (word) => w.command(`/run ${word}`),
+      run: async (word) => {
+        try {
+          return await w.runWord(word);
+        } finally {
+          this.schedule();
+        }
+      },
       say: (text) => {
         w.notice = text;
         this.schedule();
       },
+      send: async (text) => {
+        await w.submit(text);
+        this.schedule();
+      },
+      draft: (text) => {
+        this.composer.setText(String(text));
+        this.composer.focus();
+        this.schedule();
+      },
+      open: async (url) => {
+        if (!/^https?:\/\/\S+$/i.test(String(url)))
+          throw new Error(
+            `A part opens only an address of http or https, and ${JSON.stringify(url)} is not one.`,
+          );
+        await this.parts.opener(String(url));
+      },
+      choose: (title, items, options) => this.partChoose(title, items, options),
+      form: (title, fields, options) => this.partForm(title, fields, options),
+      confirm: (title, text, options) => this.partConfirm(title, text, options),
     };
   },
 
-  /** The runs of a line of a part, each in the color of its tone. */
-  partLine(line: PartLine): Part[] {
+  /** The color of a tone of a part. */
+  partTone(tone: PartTone | undefined): RGBA {
     const tones: Record<PartTone, RGBA> = {
       text: c.text,
       muted: c.muted,
@@ -117,8 +142,13 @@ export const desk = part({
       warning: c.warning,
       danger: c.danger,
     };
+    return tones[tone ?? "text"] ?? c.text;
+  },
+
+  /** The runs of a line of a part, each in the color of its tone. */
+  partLine(line: PartLine): Part[] {
     if (typeof line === "string") return [[line, c.text]];
-    return line.map(([text, tone]) => [String(text), tones[tone ?? "text"] ?? c.text]);
+    return line.map(([text, tone]) => [String(text), this.partTone(tone)]);
   },
 
   /** The row that a part draws for an act of its kind, with its error as its label when it throws. */

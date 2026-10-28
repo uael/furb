@@ -71,20 +71,29 @@ pub fn attach(directory: &Path, path: &Path) -> Result<Attached, String> {
     return Err("An image must be a file of at most 20 MiB.".to_owned());
   }
   let bytes = fs::read(path).map_err(|no| no.to_string())?;
-  let (media, extension) = kind(&bytes)?;
-  let file = format!("{}.{extension}", digest(&bytes));
+  let (uri, media) = keep(directory, &bytes)?;
+  let name = path.file_name().map(|one| one.to_string_lossy().into_owned()).unwrap_or_default();
+  Ok(Attached { name, uri, media, size: bytes.len() as u64 })
+}
+
+/// An image kept in a directory of images under the digest of its bytes: its uri and its media type.
+pub fn keep(directory: &Path, bytes: &[u8]) -> Result<(String, &'static str), String> {
+  if bytes.len() as u64 > LARGEST {
+    return Err("An image must be a file of at most 20 MiB.".to_owned());
+  }
+  let (media, extension) = kind(bytes)?;
+  let file = format!("{}.{extension}", digest(bytes));
   fs::create_dir_all(directory).map_err(|no| no.to_string())?;
   let mut options = OpenOptions::new();
   options.write(true).create_new(true);
   #[cfg(unix)]
   std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
   match options.open(directory.join(&file)) {
-    Ok(mut kept) => kept.write_all(&bytes).map_err(|no| no.to_string())?,
+    Ok(mut kept) => kept.write_all(bytes).map_err(|no| no.to_string())?,
     Err(no) if no.kind() == ErrorKind::AlreadyExists => {}
     Err(no) => return Err(no.to_string()),
   }
-  let name = path.file_name().map(|one| one.to_string_lossy().into_owned()).unwrap_or_default();
-  Ok(Attached { name, uri: format!("{SCHEME}{file}"), media, size: bytes.len() as u64 })
+  Ok((format!("{SCHEME}{file}"), media))
 }
 
 /// The file of a directory of images that holds the image of a uri, and the digest its bytes have.

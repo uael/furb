@@ -1023,6 +1023,57 @@ try {
   await writeFile(join(folder, "tui.ts"), "export default (furb) => { furb.panel(");
   while (!app().parts.loaded.find((one) => one.name === "todo")?.error) await Bun.sleep(10);
   await capture("75-extension-part-error");
+  // The dialogs that a command of a part opens and awaits: a list whose selected item shows its lines, with an action
+  // on a key, and a form whose secret field shows a dot for each sign. The completion of the part follows its trigger,
+  // and its status stands in the footer.
+  await cp(resolve(import.meta.dir, "..", "fixtures", "todo", "tui.ts"), join(folder, "tui.ts"));
+  while (!app().parts.command("pick")) await Bun.sleep(10);
+  const opens = async (command: string) => {
+    app().composer.setText(command);
+    void app().submit();
+    while (!app().overlay) await Bun.sleep(10);
+  };
+  await opens("/pick");
+  test.mockInput.pressArrow("down");
+  await capture("75e-part-list");
+  app().closeOverlay();
+  await opens("/add");
+  await test.mockInput.typeText("Ship the part");
+  test.mockInput.pressTab();
+  await test.mockInput.typeText("hunter2");
+  await capture("75f-part-form");
+  app().closeOverlay();
+  app().composer.setText("");
+  await test.mockInput.typeText("Next: #sho");
+  await capture("75g-part-completion");
+  app().composer.setText("");
+  app().dispose();
+  await library.dispose();
+
+  // The part of the extension mcp on two servers, which a word of the fixtures gives as the ear of mcp gives them: the
+  // status in the footer, and the dialog of /mcp, whose selected server shows its target, its version and what it
+  // gives.
+  const served = await project("mcp");
+  const servers = join(served, ".furb", "extensions", "servers");
+  await cp(resolve(import.meta.dir, "..", "fixtures", "mcp"), servers, { recursive: true });
+  await cp(resolve(import.meta.dir, "..", "..", "extensions", "mcp", "tui.ts"), join(servers, "tui.ts"));
+  await writeFile(
+    join(served, ".furb", "config.json"),
+    '{"extensions": {"servers": "extensions/servers"}}\n',
+  );
+  await show(await demoSession({ cwd: served }));
+  const serving = (await readFile(join(servers, "servers.py"), "utf8")).replace(
+    /^from furb\.engine import .*\n+/m,
+    "",
+  );
+  await session.command(
+    `/run ${serving}\nmcp_servers()\nmcp_call("github", "create_issue", {"title": "Bug"})`,
+  );
+  await settle();
+  while (!app().parts.version) await Bun.sleep(10);
+  await opens("/mcp");
+  await capture("75h-mcp-servers");
+  app().closeOverlay();
   app().dispose();
   await library.dispose();
 

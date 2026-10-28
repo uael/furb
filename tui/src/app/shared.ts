@@ -253,6 +253,8 @@ export interface Choice {
   status?: SessionStatus;
   /** The title of the part of the list that the choice opens, which the list shows above it. */
   heading?: string;
+  /** The lines that show under the choice while it is selected, in a list that is not rich. */
+  lines?: Part[][];
 }
 
 /** A value that the first argument of a command may take: what it means, whether it is the current one, whether the

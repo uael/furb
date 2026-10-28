@@ -98,6 +98,8 @@ getrandom = "0.3"
 # The one interface of the models of the provider, which the claude command line answers too, and the clients of the
 # providers of the network, over its TLS.
 rig-core = { version = "=0.42.0", default-features = false, features = ["reqwest", "rustls"] }
+# The client of HTTP that rig brings, which the servers of MCP and their logins take as it is.
+reqwest = { version = "0.13", default-features = false }
 # The providers of the clouds, which sign a request with the credentials of the cloud: Amazon Bedrock, and Google
 # Vertex AI, whose key of an API the credentials of Google carry. The bytes of a request, which a client of HTTP
 # that leaves a header out hands on.
@@ -108,9 +110,10 @@ bytes = "1"
 # The digest that names an image of a turn, and the form a request carries it in.
 sha2 = "0.10"
 base64 = "0.22"
-# The reactor that wakes an ear when what it waits for is ready: a pipe of a command, a timer, a socket of a model.
+# The reactor that wakes an ear when what it waits for is ready: a pipe of a command, a timer, a socket of a model,
+# and the listener on 127.0.0.1 that takes back the code of a login to a server of MCP.
 # Its macros select between what an ear hears and what its work comes to.
-tokio = { version = "1", features = ["rt", "process", "io-util", "time", "sync", "macros"] }
+tokio = { version = "1", features = ["rt", "process", "io-util", "time", "sync", "macros", "net"] }
 # The futures an ear holds and selects over, and the streams of a model.
 futures = "0.3"
 # The channels between an ear and its work, which stay on the thread of the life.
@@ -144,6 +147,8 @@ win32job = "2"
 [dev-dependencies]
 # The model of rig that answers from a script, which the tests of the provider ask.
 rig-core = { version = "=0.42.0", default-features = false, features = ["test-utils"] }
+# The validator of JSON Schema, which checks that a call of a binding of MCP sends what the tool asks.
+jsonschema = { version = "0.33", default-features = false }
 
 [build-dependencies]
 napi-build = { version = "2", optional = true }

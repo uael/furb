@@ -557,7 +557,7 @@ pub(super) fn whole(held: &mut Vec<u8>, over: bool) -> String {
 }
 
 /// The command leads a process group of its own, or on Windows opens no window.
-fn grouped(command: &mut Command) {
+pub(crate) fn grouped(command: &mut Command) {
   #[cfg(unix)]
   {
     use std::os::unix::process::CommandExt;
@@ -575,7 +575,7 @@ fn grouped(command: &mut Command) {
 /// not keep the tree of its processes, a job that holds the command and every process it starts.
 ///
 /// Every process of it ends when the group goes before the command is over: at a stop, or at the end of the ear.
-struct Group {
+pub(crate) struct Group {
   #[cfg(unix)]
   leader: Option<rustix::process::Pid>,
   #[cfg(windows)]
@@ -585,7 +585,7 @@ struct Group {
 impl Group {
   /// The group of a command that just started. On Windows the job takes the command before its shell has read a
   /// word, since the shell starts slower than the job takes it, and it ends every process it holds when it closes.
-  fn of(child: &Child) -> std::io::Result<Self> {
+  pub(crate) fn of(child: &Child) -> std::io::Result<Self> {
     let gone = || std::io::Error::other("the command is over already");
     #[cfg(unix)]
     {

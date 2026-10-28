@@ -36,9 +36,11 @@ API of its own:
 - `src/extension.rs` says what an extension is and where a host finds the ones that a life runs, and holds the ear
   `extensions`, which enables each by a fact that the record keeps and plays its word as a rung on each chain, and
   `parts`, the part for the TUI of each extension, which `tui/src/parts.ts` loads live.
-  `extensions/` holds the official extensions, `memory`, `skills`, `compaction`, `ouroboros` and `web`, each a word, a
+  `extensions/` holds the official extensions, `memory`, `skills`, `compaction`, `ouroboros`, `web` and `mcp`, each a word, a
   contract and a suite, and `src/extension/` holds the ear of the World of each that has one: `compaction.rs` answers a
-  carry with the turns and the open prompts of a chain of another record, which the reader reads. `docs/extensions.md`
+  carry with the turns and the open prompts of a chain of another record, which the reader reads, and `mcp.rs` holds the
+  servers of the Model Context Protocol, with `mcp/binding.rs`, which makes the typed class of the tools of a server,
+  and `tests/mcp-corpus`, the tool lists of real servers that its suite measures. `docs/extensions.md`
   says how an extension works.
 - `src/life.rs` opens a life as every host opens one: the record, and the ears of the crate after the ears of the
   host, the provider among them, on the default actor and the roster that the host names from the catalog, or every

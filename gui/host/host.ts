@@ -162,10 +162,19 @@ export class Host {
       acts: session.acts,
       compactions,
       of: (kind) => session.acts.filter((act) => act.kind === kind),
-      run: (word) => session.command(`/run ${word}`),
+      run: (word) => session.runWord(word),
       say: (text) => {
         session.notice = text;
       },
+      send: (text) => session.submit(text),
+      // The app draws only the marks of a part, which read the life, so nothing here asks the operator.
+      draft: () => {
+        throw new Error("The app has no input that a part fills.");
+      },
+      open: (url) => parts.opener(url),
+      choose: () => Promise.reject(new Error("The app opens no dialog of a part.")),
+      form: () => Promise.reject(new Error("The app opens no dialog of a part.")),
+      confirm: () => Promise.reject(new Error("The app opens no dialog of a part.")),
     });
     const runs = (line: Line) =>
       typeof line === "string"

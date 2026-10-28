@@ -436,7 +436,9 @@ the structured JSON export. `/context` sets the context ceiling.
 
 A life runs the extensions that the configs turn on, as [the guide of the extensions](../docs/extensions.md) says,
 and the feed of each chain shows the words that they ran on it as one line. An extension can also give the TUI a part, a module of TypeScript beside its word, which adds
-panels over the input, the hint of the line of each act of a kind, keys and commands, and which the TUI loads again live, as
+panels over the input, the hint of the line of each act of a kind, keys, commands that it can give from the life,
+completions of the input after a trigger, a status in the footer, and dialogs of a list, a form or a confirm that its
+commands await, and which the TUI loads again live, as
 [the guide of the extensions](../docs/extensions.md#a-part-for-the-tui) says. A model adds a part to a life that runs
 with `extend(name, *rungs, tui=module)`, which the extension ouroboros and the skill extending teach it: the panel stands
 at once, with no restart. A part that fails shows its error in plain words in its own panel, and the TUI goes on.
@@ -460,6 +462,7 @@ files alone, so parallel work on the TUI does not conflict in one file.
 | `spaces.ts` | The workspaces and the sessions in the sidebar, with their menus, rename, archive and delete. |
 | `composer.ts` | The input: drafts, history, submit, and the suggestions for a command, a path or a value. |
 | `questions.ts` | The questions that wait for the operator: the pick at the desk and the dialog of a question. |
+| `dialogs.ts` | The dialogs that a part of an extension opens and awaits: a list, a form and a confirm. |
 | `desk.ts` | The desk over the input and the dock, which show the parts that extensions add. |
 | `chrome.ts` | The bar at the top, the line of meta data and the line of status. |
 | `welcome.ts` | The welcome screen, the check of the setup and the banner of a life that the operator watches. |
