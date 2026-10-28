@@ -20,12 +20,16 @@ use super::{Lease, Store, entry_of, failed, leased, now};
 /// A final line that a crash tore is removed, and a final line that is whole but not ended is ended, before the
 /// store keeps anything after it. Each line holds the entry and, after the fact, the time at which the store kept
 /// it, which the life never reads. The store writes each line at once, and syncs the data of the file only at a sync
-/// that follows a line.
+/// that follows a line. A line that the store fails to write whole is cut from the file before the next line.
 pub struct Lines {
   path: PathBuf,
   file: File,
   /// Whether the store wrote a line since its last sync.
   unsynced: bool,
+  /// The length of the file after the last line that the store wrote whole, once it wrote one or failed to.
+  whole: Option<u64>,
+  /// Whether a write failed after that length, so the file can hold a part of a line past it.
+  torn: bool,
   _lease: Lease,
 }
 
@@ -36,7 +40,7 @@ impl Lines {
     let lease = leased(&path)?;
     let file =
       OpenOptions::new().create(true).append(true).open(&path).map_err(|no| failed(&path, no))?;
-    Ok(Self { path, file, unsynced: false, _lease: lease })
+    Ok(Self { path, file, unsynced: false, whole: None, torn: false, _lease: lease })
   }
 }
 
@@ -49,8 +53,23 @@ impl Store for Lines {
 
   fn keep(&mut self, entry: ObjectRef<'_>) -> Result<(), Fault> {
     let line = stamped(record(entry), now());
+    let whole = match self.whole {
+      Some(whole) => whole,
+      None => self.file.metadata().map_err(|no| failed(&self.path, no))?.len(),
+    };
+    self.whole = Some(whole);
+    // A write that failed can leave a part of its line, which goes before any line after it.
+    if self.torn {
+      self.file.set_len(whole).map_err(|no| failed(&self.path, no))?;
+      self.torn = false;
+    }
     self.unsynced = true;
-    self.file.write_all(line.as_bytes()).map_err(|no| failed(&self.path, no))
+    if let Err(no) = self.file.write_all(line.as_bytes()) {
+      self.torn = true;
+      return Err(failed(&self.path, no));
+    }
+    self.whole = Some(whole + line.len() as u64);
+    Ok(())
   }
 
   fn sync(&mut self) -> Result<(), Fault> {

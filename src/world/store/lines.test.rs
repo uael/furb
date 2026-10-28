@@ -1,10 +1,11 @@
 //! The file of lines, proved where no life reaches it: the line it keeps of an entry, and the record it reads again.
 
-use std::{fs, path::PathBuf};
+use std::{fs, io::Write, path::PathBuf};
 
 use serde_json::json;
 
-use super::{heads, kept, stamped};
+use super::{Lines, heads, kept, stamped};
+use crate::world::store::Store;
 
 /// A record of its own for one test, which does not stand yet.
 fn place(name: &str) -> PathBuf {
@@ -63,4 +64,27 @@ fn the_heads_of_a_record_are_its_entries_of_some_kinds_in_order_and_no_other_lin
       "[['made', 'chain1', 'store', 'abd', 1]]",
     ]
   );
+}
+
+#[test]
+fn a_line_that_the_store_failed_to_write_whole_is_cut_before_the_next_line() {
+  let source = place("source");
+  fs::write(
+    &source,
+    "[[\"stand\",\"stand1\",\"operator\",\"chain1\"]]\n[[\"stand\",\"stand2\",\"operator\",\"chain1\"]]\n",
+  )
+  .unwrap();
+  let entries = kept(&source).unwrap();
+  let at = place("torn");
+  let mut store = Lines::open(&at).unwrap();
+  store.keep(entries[0].as_ref()).unwrap();
+  // A write that failed on a full disk left a part of its line.
+  fs::OpenOptions::new().append(true).open(&at).unwrap().write_all(b"[[\"stand\",\"sta").unwrap();
+  store.torn = true;
+  store.keep(entries[1].as_ref()).unwrap();
+  store.sync().unwrap();
+  let read = kept(&at).unwrap();
+  let shown: Vec<String> = read.iter().map(|one| one.as_ref().py_repr()).collect();
+  let want: Vec<String> = entries.iter().map(|one| one.as_ref().py_repr()).collect();
+  assert_eq!(shown, want);
 }
