@@ -157,6 +157,26 @@ export const rail = part({
     return list;
   },
 
+  /** What the rows of the threads need to be drawn again, kept while the list of the threads and the minute stand: a
+   * frame of a life with many threads then reads each thread once for each new act, and not once for each frame. */
+  threadsKey(threads: ChainThread[]): string {
+    const minute = Math.floor(clock() / 60000);
+    const kept = this.railThreadKey;
+    if (kept && kept.list === threads && kept.minute === minute) return kept.text;
+    const text = JSON.stringify(
+      threads.map((one) => [
+        one.act.id,
+        one.state,
+        one.resolved,
+        one.title,
+        one.messages.length,
+        plain(this.threadMeta(one)),
+      ]),
+    );
+    this.railThreadKey = { list: threads, minute, text };
+    return text;
+  },
+
   /** The thread that the feed shows now: the one chosen, else the last that is open on the chain shown. */
   activeThread(): ChainThread | undefined {
     const w = this.session;
@@ -481,14 +501,7 @@ export const rail = part({
           entry === lib.current ? Math.round((entry.cost ?? 0) * 100) : 0,
         ]),
       ]),
-      threads.map((one) => [
-        one.act.id,
-        one.state,
-        one.resolved,
-        one.title,
-        one.messages.length,
-        plain(this.threadMeta(one)),
-      ]),
+      this.threadsKey(threads),
       active?.act.id,
       [...this.unfolded],
       this.renaming && this.itemKey(this.renaming.item),
