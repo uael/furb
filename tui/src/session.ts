@@ -217,6 +217,7 @@ const kept = [
   "histories",
   "stashes",
   "started",
+  "changedAt",
   "took",
   "queued",
   "queueError",
@@ -245,6 +246,7 @@ const forms: Record<(typeof kept)[number] | "cost", "text" | "flag" | "number" |
   histories: "map",
   stashes: "map",
   started: "map",
+  changedAt: "map",
   took: "map",
   queued: "maps",
   queueError: "text",
@@ -396,6 +398,9 @@ export class Session extends EventEmitter {
   private readonly workspace: string;
   histories: Record<string, string[]> = {};
   started: Record<string, number> = {};
+  /** When this session saw each act change its phase, once the acts of the record it opened on were read. The record
+   * holds no time, so an act that was done before that has none. */
+  changedAt: Record<string, number> = {};
   /** How many milliseconds each act took that a life of the session ran, which a later life does not know, since the
    * record holds no time. */
   took: Record<string, number> = {};
@@ -632,6 +637,8 @@ export class Session extends EventEmitter {
             index.ids.set(act.id, act);
             placed(index, act);
             if (!act.done) this.started[act.id] ??= clock();
+            if (this.counted !== 0 && (place === undefined || phaseOf(next[place]) !== phaseOf(act)))
+              this.changedAt[act.id] = clock();
             if (act.took !== undefined) this.took[act.id] = act.took;
           }
           if (moved) this.version++;
