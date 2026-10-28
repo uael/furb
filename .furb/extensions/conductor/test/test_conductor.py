@@ -673,7 +673,7 @@ def test_the_rulings_of_the_owner_stand_in_conducting_in_his_words(conductor: Ro
 
 
 def test_a_fixer_runs_on_sonnet_high_unless_its_effort_says_otherwise(conductor: Round) -> None:
-  assert [conductor.model_of(key) for key in ("fix5", "box8", "k")] == [SONNET_HIGH, SONNET_HIGH, OPUS]
+  assert [conductor.model_of(key) for key in ("fix5", "box8", "k")] == [SONNET_HIGH, SONNET_HIGH, SONNET_HIGH]
   conductor.efforts["fix5"] = TOP
   assert conductor.model_of("fix5") == TOP
   assert conductor.model_of("fix50") == SONNET_HIGH
@@ -693,7 +693,7 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 
 STATE = (
   "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed fixes silent"
-  " comments measures timers noted debriefs briefed owns watched after parked awaited covers vetoes ordered tips shifted hired paced landed heard handled sent ends requeued"
+  " comments measures timers noted debriefs briefed owns watched after parked awaited covers kinds vetoes ordered tips shifted hired paced landed heard handled sent ends requeued"
   " statused secret budgeted flaky runs_read"
 ).split()
 
@@ -845,8 +845,8 @@ def test_a_worker_runs_only_sonnet_or_opus_at_medium_or_high(conductor: Round) -
     assert conductor.targets[-1] == model
   assert "label create w:k --force" in conductor.log()
   del conductor.efforts["k"]
-  assert conductor.models[conductor.real_hire("k", "w")] == OPUS
-  assert conductor.targets[-1] == OPUS
+  assert conductor.models[conductor.real_hire("k", "w")] == SONNET_HIGH
+  assert conductor.targets[-1] == SONNET_HIGH
   assert conductor.files["scratch://build.sh"] == conductor.BUILD_SH
 
 
@@ -881,7 +881,7 @@ def test_the_round_runs_one_on_opus_medium_three_on_sonnet_and_one_on_opus_high(
 
 def test_an_item_hires_on_its_own_room_while_a_pr_waits_for_a_fixer_that_no_room_allows(conductor: Round) -> None:
   conductor.limits["room"]["sonnet"] = 0
-  conductor.efforts["s"] = SONNET
+  conductor.efforts.update(s=SONNET, o=OPUS)
   conductor.queue[:] = [("s", "", ""), ("o", "", "")]
   conductor.prs[7] = conductor.pr(n=7, checks=("FAILURE",))
   conductor.staff()
@@ -897,7 +897,7 @@ def test_an_item_with_no_room_keeps_its_place_while_the_next_with_room_starts(co
   conductor.busy("p1", "a", OPUS)
   conductor.busy("p2", "b", OPUS)
   conductor.busy("p3", "e", TOP)
-  conductor.efforts["d"] = SONNET
+  conductor.efforts.update(c=OPUS, d=SONNET)
   conductor.queue[:] = [("c", "", ""), ("d", "", "")]
   conductor.staff()
   assert [key for key, _ in conductor.hired] == ["d"]
@@ -1880,3 +1880,21 @@ async def test_a_flake_that_a_working_item_covers_goes_to_its_worker_by_its_test
   conductor.working.clear()
   conductor.queue.append(("bench-fix", "", "ci"))
   assert conductor.taken("flake-a-host-test") == "queued"
+
+
+def test_an_item_has_a_kind_whose_model_and_brief_it_takes(conductor: Round) -> None:
+  conductor.ns["quietly"] = lambda verb, *args, **words: (
+    asyncio.run(verb(*args, **words)) if verb == conductor.bash else verb(*args, **words)
+  )
+  conductor.kinds.update(look="audit", odd="nonsense")
+  assert [conductor.kind_of(key) for key in ("look", "odd", "k", "fix5")] == ["audit", "edit", "edit", "fix"]
+  assert [conductor.model_of(key) for key in ("look", "odd", "fix5")] == [OPUS, SONNET_HIGH, SONNET_HIGH]
+  name = conductor.real_hire("look", "find the leaks", "defects")
+  assert (conductor.models[name], conductor.targets[-1], conductor.log()) == (OPUS, OPUS, "")
+  assert "scratch://audit/look.md" in conductor.prompts[-1][0] and "worktree.sh" not in conductor.prompts[-1][0]
+  assert "find the leaks" in conductor.prompts[-1][0]
+  conductor.ns["DEBRIEFS"] = False
+  conductor.done[name] = (0, "found two")
+  conductor.tend()
+  assert conductor.heard == [f"The auditor look ({name}) ended, and results[{name!r}] keeps its report."]
+  assert len(conductor.prompts) == 1
