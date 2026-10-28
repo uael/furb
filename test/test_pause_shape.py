@@ -88,7 +88,7 @@ async def test_a_control_carries_the_header_it_tells() -> None:
   sand.script[root] = ["a = 1", "close(2)"]
   engine.prompt(int, "count", on=root)
   await settle()
-  assert said(log, "pause") == [("pause", root, ceiling)]
+  assert said(log, "pause") == [("pause", root, ceiling, "ceiling")]
   engine.wake(root)
   await settle()
   woke = said(log, "wake")[0]

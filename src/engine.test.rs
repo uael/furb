@@ -425,7 +425,7 @@ fn the_world_ends_a_command_at_a_cancel_of_its_prompt_and_never_at_a_close_of_it
     thread::sleep(Duration::from_millis(5));
     let _ = lived.engine.peek("bash1", verbs::Peek::default());
   }
-  lived.engine.cancel(&cancelled).unwrap();
+  lived.engine.cancel(&cancelled, Default::default()).unwrap();
   assert_eq!(lived.settled("bash1").unwrap_err().name, "CancelledError");
   let got = block_on(
     lived
@@ -636,7 +636,7 @@ fn a_wait_that_a_wake_starts_again_says_nothing_after_a_cancel() {
   let mut second = Lived::new("hushed", &[], false).unwrap();
   let root = second.root();
   second.engine.wake(&root).unwrap();
-  second.engine.cancel("wait1").unwrap();
+  second.engine.cancel("wait1", Default::default()).unwrap();
   assert_eq!(second.settled("wait1").unwrap_err().name, "CancelledError");
   // A later wait outlives the deadline of the first.
   let later = second.engine.wait(&[], verbs::Wait { seconds: Some(0.4), on: on(&root) }).unwrap();
@@ -868,7 +868,7 @@ fn the_work_an_earlier_life_left_is_pending_until_a_wake_that_this_life_says() {
     let word = Some("await wait(600)".to_owned());
     first.engine.rung(verbs::Rung { word, on: on(&root), ..Default::default() }).unwrap();
     let apart = first.engine.chain(verbs::Chain::default()).unwrap().id().to_owned();
-    first.engine.pause(&apart).unwrap();
+    first.engine.pause(&apart, Default::default()).unwrap();
     first.engine.wait(&[], verbs::Wait { seconds: Some(600.0), on: on(&apart) }).unwrap();
     assert!(
       first.engine.pending().unwrap().is_empty(),
@@ -942,7 +942,7 @@ fn an_act_that_lives_end_while_it_runs_again_and_again_is_parked_until_a_retry()
   assert_eq!(retried.engine.parked().unwrap(), reply());
   retried.engine.retry("reply1").unwrap();
   assert_eq!(started(&mut retried), 1);
-  retried.engine.cancel("reply1").unwrap();
+  retried.engine.cancel("reply1", Default::default()).unwrap();
   assert_eq!(retried.settled("reply1").unwrap_err().name, "CancelledError");
 }
 

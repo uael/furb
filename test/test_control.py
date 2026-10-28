@@ -62,7 +62,7 @@ async def test_a_control_is_said_over_any_act_and_tells_its_header_only_while_th
   engine.cancel(second)
   await settle()
   assert isinstance(engine.peek(far), CancelledError)
-  assert said(log, "cancel")[-1] == ("cancel", second, OPERATOR)
+  assert said(log, "cancel")[-1] == ("cancel", second, OPERATOR, None)
   assert f"#{second} cancelled" not in heads(engine.turns(on=root))
 
 
