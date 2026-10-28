@@ -365,7 +365,7 @@ def debug(template: Template) -> None:
   A tell is on the scope of the act it is of, so debug takes no chain of its own.
   """
 
-def wait(seconds: float = 0.0, *acts: str, on: str = "") -> Act[str | None]:
+def wait(seconds: float = 0, *acts: str, on: str = "") -> Act[str | None]:
   """A wait: the World takes it and says it is done with nothing when its seconds have passed, and it is over then.
   A wait stands in no turns, since a wait is no work of a model.
   It tells nothing, since a wait is no work of a model.

@@ -164,7 +164,7 @@ def debug(template: Template):
     say(*told(who, "debugged", debug=text))
 
 
-def wait(seconds: float = 0.0, *acts: str, on: str = "") -> Act[str | None]:
+def wait(seconds: float = 0, *acts: str, on: str = "") -> Act[str | None]:
   def ear(id):
     while not (got := [*filter(over, acts)]):
       yield {id, *acts}
@@ -291,9 +291,9 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
             stood = module()["actor"] = standing()[2]
           last = standing()
           yield takes()
-        case ("done", about, _, value) if running.get(maker := r[2]) is False and about not in [
-          c for *_, c in transcript(id, "wants")
-        ]:
+        case ("done", about, _, value) if running.get(maker := r[2]) is False and repr(about) not in str(
+          transcript(id, "wants")
+        ):
           if scope(about) != id:
             yield "tell", maker, [headed(about, "done", value=value)]
           if not isinstance(value, CancelledError):
