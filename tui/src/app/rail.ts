@@ -147,8 +147,13 @@ export const rail = part({
       if (!acts.length) continue;
       const stamp = board.stamp(chain);
       const read = reads.get(chain);
+      // The chain shown has its threads read already, for the feed, at this version.
       const threads =
-        read && read.stamp === stamp ? read.list : chainThreads(acts, index.ids, prompts, this.promptsRead);
+        read && read.stamp === stamp
+          ? read.list
+          : chain === w.selected
+            ? this.chainThreadsBy(chain).list
+            : chainThreads(acts, index.ids, prompts, this.promptsRead);
       chains.set(chain, { stamp, list: threads });
       list.push(...threads);
     }
