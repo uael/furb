@@ -157,13 +157,15 @@ meanings. The entry of such a name here gives only its form in the engine.
 - extension: python that extends the engine from a rung: its word, which defines its names, and, for one that a host
   gives a life, its life word, which starts its work; an official one has an ear of the World that answers the
   questions that its word defines.
-- enable: the fact by which the World turns an extension on in a life, with its name, its word and its life word,
-  which the record keeps; the World says it at the tip, and when a write of the config of the project lands that
-  turns on an extension by its path, and it plays the extension as a rung on every chain there is when it hears the
-  fact, and after it on each chain at its birth, before the call that made the chain returns. The World says it again
+- enable: the fact by which the World turns an extension on in a life, with its name, its word, its life word and,
+  for an extension that plays on the root alone, root, which the record keeps; the World says it at the tip, and when
+  a write of the config of the project lands that turns on an extension by its path, and it plays the extension as a
+  rung on every chain there is where it plays when it hears the fact, and after it on each chain at its birth where
+  it plays, before the call that made the chain returns. An extension plays on every chain, or on the root alone and
+  on each chain whose source had it. The World says it again
   for an extension that the life runs when its word changed: at a stand, for the word that the host gives, and when
   a write of the life lands in the folder of an extension that a config turns on. That fact reloads the extension:
-  each chain plays the definitions of the new word alone, its imports, functions, classes, types and names in
+  each chain that has the extension plays the definitions of the new word alone, its imports, functions, classes, types and names in
   capitals, so each other name keeps its value, and the life word does not run again.
 - made: the fact by which the store names in the record the build that made it, the digest of the engine and of the
   Kernel and the version of the build, `VERSION` in `src/world/store.rs`, which the store says as it hears the root of
