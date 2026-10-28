@@ -36,6 +36,8 @@ compaction = """Compaction cuts this chain to the work that it still needs, and 
   keeps the acts of the last n replies, and await chosen() asks a model which acts to keep. together(*filters)
   applies filters in order.
 - choice() asks a model which acts the work still needs, and what the rest holds, as ids and a summary.
+- await condense() compacts this chain at once to what choice() chose, with the summary of the model, as compacted()
+  does once. The command /compact of the TUI runs it on the chain on screen.
 - compacted() wraps a chain: after an answer that reads more than SHARE of the window, it asks choice(), and at the
   next reply once that came, it compacts the chain to what the model chose. It moves, stops and pauses nothing. No
   chain is wrapped unless a word wraps it.
@@ -212,6 +214,20 @@ def compacted(on: str = "") -> Act:
           pending, chose = "", None
 
   return act("compacted", on, controlled(ear))
+
+
+async def condense(to: str = "", on: str = "") -> str:
+  here = on or scope(acting())
+  before = {fact[1] for fact in transcript(here) if question(fact)}
+  match await choice(to, here):
+    case (list() as listed, str() as summary):
+      ids = [i for i in listed if isinstance(i, str) and scope(i)]
+
+      def chose(acts: list) -> list:
+        return take(*ids, *[a[1] for a in acts if a[1] not in before])(acts)
+
+      return compact([chose, latest()], summary.strip(), here)
+  return compact(on=here)
 
 
 def carry(record: str, source: str = "chain1", on: str = "") -> Act:

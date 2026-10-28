@@ -59,3 +59,16 @@ async def test_headed_shows_a_value_as_python_shows_it_less_the_path_of_the_modu
     f"#{step} closed\n{step}_value = Deep()",
     f"#{step} closed\n{step}_value = 0.5",
   ]
+
+
+async def test_an_open_tells_no_string_that_the_word_that_made_it_holds() -> None:
+  """An open of an act that the word of a rung on its chain made tells no string that the word holds, as python writes it or as a quote, since the turn of the model shows that word, and an act that tells a text tells each of its words."""
+  _, _, root = born(
+    "<s:note>\nrun\nthem\n</s:note>\nx = bash('echo hi')\ny = bash('echo ' + 'bye')\nz = bash(note)\nread('a.txt')\nclose(1)"
+  )
+  assert await engine.prompt(int, "go", on=root) == 1
+  got = paragraphs(engine.turns(on=root))
+  assert "#bash1\nbash1: Act[Exit] = Act('bash1')" in got
+  assert "#bash2\nbash2_command = 'echo bye'\nbash2: Act[Exit] = Act('bash2')" in got
+  assert "#bash3\nbash3: Act[Exit] = Act('bash3')" in got
+  assert "#read1\nread1_path = 'a.txt'\n<s:read1_text>\none\ntwo</s:read1_text>" in got

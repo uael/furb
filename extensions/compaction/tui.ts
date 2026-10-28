@@ -12,7 +12,8 @@ function summary(seen: Seen, chain: string, at: number): string {
 
 /** The part of the extension compaction: in the feed of a chain, a rule at the place of each compaction, with its
  * summary under it, which parts what the model of the chain no longer reads from what it reads now. A run of
- * compactions into new chains shows as one feed, and its compactions count as one series. */
+ * compactions into new chains shows as one feed, and its compactions count as one series. The command /compact
+ * compacts the chain on screen at once, to what a model chooses, with its summary. */
 export default function compaction(furb: Furb): void {
   furb.mark((seen) => {
     const run = furb.life.compactedRun(seen.chain, seen.compactions);
@@ -29,4 +30,23 @@ export default function compaction(furb: Furb): void {
       return { chain, at, title: `Compaction${count}: the model ${where} from here`, lines };
     });
   });
+  furb.command(
+    "compact",
+    "Compact this chain now: a model keeps what the work still needs and sums up the rest",
+    async (argument, seen) => {
+      if (argument.trim()) return seen.say("/compact takes no argument");
+      // A life that runs no word of the extension on this chain has no condense(), and the gate would refuse the word.
+      const runs = seen.acts.some(
+        (act) =>
+          act.kind === "rung" &&
+          act.on === seen.chain &&
+          String(act.words[0] ?? "").includes("def condense("),
+      );
+      if (!runs) return seen.say("This chain has no compaction");
+      // The footer shows a short notice whole; the rule of the compaction says the rest once the model chose. The run
+      // ends only once the model chose, so the notice comes first.
+      seen.say("A model compacts this chain");
+      await seen.run("await condense()");
+    },
+  );
 }

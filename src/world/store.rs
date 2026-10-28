@@ -6,13 +6,16 @@ mod sqlite;
 
 use std::{
   cell::RefCell,
+  collections::VecDeque,
   fmt::Display,
   fs::{File, OpenOptions, TryLockError, create_dir_all},
   path::{Path, PathBuf},
   rc::Rc,
   task::{Context, Poll},
-  time::{SystemTime, UNIX_EPOCH},
+  time::{Duration, SystemTime, UNIX_EPOCH},
 };
+
+use futures::stream;
 
 use serde_json::value::RawValue;
 use sha2::{Digest, Sha256};
@@ -21,7 +24,7 @@ use monty_types::unstable::{MontyGraph, MontyNode};
 
 use crate::{
   ENGINE, KERNEL,
-  ear::{Ear, Heard, Spoken, Step, hear, hearing, say},
+  ear::{Co, Ear, Heard, Next, Spoken, Step, hearing, say},
   engine::{Life, ROOT},
   fact::Fact,
   value::{Fault, Object, ObjectRef},
@@ -42,7 +45,8 @@ pub trait Store {
   fn entries(&mut self) -> Result<Vec<Object>, Fault>;
 
   /// Keep one entry after each entry that the store kept before it. When keep returns, the entry outlives a crash of
-  /// the process.
+  /// the process. When keep fails, the record holds nothing of the entry, so a later keep of the same entry holds it
+  /// once.
   fn keep(&mut self, entry: ObjectRef<'_>) -> Result<(), Fault>;
 
   /// Make each entry that the store kept durable. When sync returns, each entry kept before it outlives a loss of
@@ -137,40 +141,120 @@ pub fn version(record: &[Object]) -> Option<i64> {
   })
 }
 
+/// How long the ear of the record waits before it tries again to write the entries that it could not write.
+const AGAIN: Duration = Duration::from_secs(5);
+
 /// The record that a store holds, and the ear that keeps in the store what the journal says to keep.
 ///
 /// A new record names the engine and the version of this build: the ear says them as it hears the root at its birth,
 /// so a later life says them again at the same place. A record of a build before the fact made names no engine, and
 /// stays so, since this engine did not make it.
+///
+/// An entry that the store cannot keep, as on a full disk, waits in memory with each entry after it, and the ear
+/// tries again in order at each keep, at the end of each run and every few seconds, until they land: no entry is lost
+/// or kept twice, and the life goes on. The ear tells the operator once when the record stops growing, with the fault,
+/// and once when it grows again.
 pub fn keeping(store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>), Fault> {
+  let mut store = Held { store, waiting: VecDeque::new(), fault: None };
+  let entries = store.store.entries()?;
   let store = Rc::new(RefCell::new(store));
-  let entries = store.borrow_mut().entries()?;
   let held = Rc::clone(&store);
   // A record whose last checkpoint has no fact made after it is new to the build that goes on from it.
   let new = entries.is_empty()
     || crate::checkpoint::last(&entries).is_some_and(|at| made(&entries[at + 1..]).is_none());
-  let kept = hearing(&["keep", "chain"], move |mut co| async move {
+  let kept = hearing(&["keep", "chain"], move |mut co: Co<()>| async move {
+    // Whether the ear told the operator that the record stopped, and whether a try waits for its time.
+    let (mut stopped, mut again) = (false, false);
     loop {
-      let a = hear(&mut co).await;
-      match a.kind() {
-        "keep" => {
-          let Some(entry) = a.word(0) else { continue };
-          held.borrow_mut().keep(entry)?;
+      match co.next().await {
+        Next::Heard(a) => match a.kind() {
+          "keep" => {
+            let Some(entry) = a.word(0) else { continue };
+            held.borrow_mut().waiting.push_back(entry.to_owned());
+          }
+          "chain" if new && a.about() == ROOT => {
+            say(&mut co, Fact::says(MADE, ROOT, [Object::string(engine()), Object::int(VERSION)]));
+            continue;
+          }
+          _ => continue,
+        },
+        Next::Worked(()) => again = false,
+      }
+      let fault = held.borrow_mut().flushed();
+      match fault {
+        Some(fault) => {
+          if !again {
+            again = true;
+            co.work(stream::once(tokio::time::sleep(AGAIN)));
+          }
+          if !stopped {
+            stopped = true;
+            let message = format!(
+              "The record of this life cannot be written: {}. The life goes on, and holds in memory each fact \
+               that the record does not hold yet. It tries again until the record takes them, in order, and tells \
+               you then. Until then, an end of the life loses them: give the disk room, and keep the life open.",
+              fault.message()
+            );
+            told(&mut co, message).await;
+          }
         }
-        "chain" if new && a.about() == ROOT => {
-          say(&mut co, Fact::says(MADE, ROOT, [Object::string(engine()), Object::int(VERSION)]));
+        None if stopped => {
+          stopped = false;
+          told(
+            &mut co,
+            "The record of this life is written again: it holds each fact that waited, in order."
+              .into(),
+          )
+          .await;
         }
-        _ => {}
+        None => {}
       }
     }
   });
   Ok((entries, Box::new(Keeping { ear: kept, store })))
 }
 
+/// A message to the operator, from the ear of the record.
+async fn told(co: &mut Co<()>, message: String) {
+  let to = [("to", Object::string("operator")), ("on", Object::string(ROOT))];
+  let _ = co.call("prompt", vec![Object::none(), Object::string(message)], to.into()).await;
+}
+
+/// A store, and the entries that it could not keep yet, in order, with the last fault of the store.
+struct Held<S> {
+  store: S,
+  waiting: VecDeque<Object>,
+  /// The fault of the last keep that failed, or of the last sync that failed, until a sync succeeds with no entry
+  /// waiting.
+  fault: Option<Fault>,
+}
+
+impl<S: Store> Held<S> {
+  /// Each entry that waits kept in order, and the fault that stops the record, if one does.
+  fn flushed(&mut self) -> Option<Fault> {
+    while let Some(entry) = self.waiting.front() {
+      if let Err(fault) = self.store.keep(entry.as_ref()) {
+        self.fault = Some(fault);
+        break;
+      }
+      self.waiting.pop_front();
+    }
+    self.fault.clone()
+  }
+
+  /// Each entry that waits kept, then each entry kept made durable, which ends the fault when it succeeds.
+  fn synced(&mut self) {
+    if self.flushed().is_some() && !self.waiting.is_empty() {
+      return;
+    }
+    self.fault = self.store.sync().err();
+  }
+}
+
 /// The ear that keeps the record, which syncs its store at the end of each run.
 struct Keeping<S> {
   ear: Box<dyn Ear>,
-  store: Rc<RefCell<S>>,
+  store: Rc<RefCell<Held<S>>>,
 }
 
 impl<S: Store> Ear for Keeping<S> {
@@ -190,8 +274,14 @@ impl<S: Store> Ear for Keeping<S> {
     self.ear.lent(heard, cx, life)
   }
 
+  /// A fault of the store ends no run: the ear holds it, tells the operator and tries again.
   fn ran(&mut self) -> Result<(), Fault> {
-    self.store.borrow_mut().sync()
+    self.store.borrow_mut().synced();
+    Ok(())
+  }
+
+  fn behind(&self) -> bool {
+    self.store.try_borrow().map_or(true, |held| held.fault.is_some())
   }
 }
 

@@ -187,7 +187,7 @@ function scriptedSession(options: SessionOptions, watch = false): Session {
           })
         : undefined;
       const slow = watch || process.env.FURB_DEMO_STREAM === "1" || last.includes("show live progress");
-      await pause(slow ? 300 : 180);
+      if (slow) await pause(300);
       const first = !messages.some((message) => (message as { role?: string }).role === "assistant");
       const [thinking, answer] = first
         ? ["I read the README and run the checks before I answer.", ""]

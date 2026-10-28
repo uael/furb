@@ -217,6 +217,10 @@ impl Ear for Lent {
   fn ran(&mut self) -> Result<(), Fault> {
     self.0.borrow_mut().as_mut().map_or(Ok(()), |ear| ear.ran())
   }
+
+  fn behind(&self) -> bool {
+    self.0.try_borrow().is_ok_and(|ear| ear.as_ref().is_some_and(|ear| ear.behind()))
+  }
 }
 
 #[cfg_attr(feature = "python", pyo3::pymethods)]
@@ -324,7 +328,7 @@ pub struct Inspection {
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn files(scratch: String) -> NativeEar {
-  NativeEar::of(world::files(world::Scratch::at(scratch)))
+  NativeEar::of(world::files(world::Scratch::at(scratch), None))
 }
 
 /// The ear of commands, which runs each in a shell of this machine, with `TMPDIR` set to the scratch directory that

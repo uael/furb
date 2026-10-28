@@ -7,7 +7,7 @@ use std::{
   sync::atomic::{AtomicU32, Ordering},
 };
 
-use super::{SCRATCH, Scratch, bash::door, here, resolved};
+use super::{SCRATCH, Scratch, bash::door, here, images, resolved};
 use crate::{
   ear::{Co, Ear, hear, hearing, say},
   fact::Fact,
@@ -22,8 +22,9 @@ use crate::{
 /// and one of `scratch://` against the scratch directory of the life, which no chain stands in. A file whose every
 /// line ends with CRLF reads with LF, and a write to it writes CRLF. A path whose first part is the name of an act
 /// of the life is a door that no ear of the engine served, and never a file, so the ear refuses it with the chain of
-/// that act. A write puts the whole text in place in one step, as `stored` says, so no reader sees a torn file.
-pub fn files(scratch: Scratch) -> Box<dyn Ear> {
+/// that act. A write puts the whole text in place in one step, as `stored` says, so no reader sees a torn file. A read
+/// of an image keeps it in the directory of the images of the life, the gallery, as `seen` says.
+pub fn files(scratch: Scratch, gallery: Option<PathBuf>) -> Box<dyn Ear> {
   hearing(&["cd", "read", "write"], move |mut co| async move {
     loop {
       let a = hear(&mut co).await;
@@ -40,7 +41,7 @@ pub fn files(scratch: Scratch) -> Box<dyn Ear> {
       }
       let answer = match a.kind() {
         "cd" => moved(&mut co, &a).await.map(Object::string),
-        _ => served(&mut co, &a, &scratch).await.map(|text| text.object()),
+        _ => served(&mut co, &a, &scratch, gallery.as_deref()).await.map(|text| text.object()),
       };
       let answer = answer.unwrap_or_else(|fault| fault.object());
       say(&mut co, Fact::says("done", a.about(), [answer]));
@@ -66,7 +67,12 @@ async fn moved(co: &mut Co, a: &Fact) -> Result<String, Fault> {
 }
 
 /// What a read or a write came to.
-async fn served(co: &mut Co, a: &Fact, scratch: &Scratch) -> Result<Text, Fault> {
+async fn served(
+  co: &mut Co,
+  a: &Fact,
+  scratch: &Scratch,
+  gallery: Option<&Path>,
+) -> Result<Text, Fault> {
   let (path, content) = match a.kind() {
     "read" => (a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default(), None),
     _ => {
@@ -77,7 +83,7 @@ async fn served(co: &mut Co, a: &Fact, scratch: &Scratch) -> Result<Text, Fault>
   };
   let path = native(&path, cfg!(windows));
   if let Some(path) = path.strip_prefix(SCRATCH) {
-    return scratch.served(path, content);
+    return scratch.served(path, content, gallery);
   }
   if path.starts_with("scratch:") {
     return Err(Fault::refused(format!(
@@ -106,7 +112,7 @@ async fn served(co: &mut Co, a: &Fact, scratch: &Scratch) -> Result<Text, Fault>
     }
     stored(&at, ended(&at, content).as_bytes()).map_err(|no| failed(&no, at.display()))?;
   }
-  read(&at)
+  text(&at, at.display().to_string(), gallery)
 }
 
 /// Writes bytes to the file at a path in one step, so a crash or a failure midway leaves the old file whole and a
@@ -215,22 +221,41 @@ pub(super) fn native(path: &str, windows: bool) -> String {
 
 /// The text at a path: a file of utf-8 of any size, since the engine bounds what a read tells.
 pub(crate) fn read(at: &Path) -> Result<Text, Fault> {
-  text(at, at.display().to_string())
+  text(at, at.display().to_string(), None)
 }
 
 /// The text at a path under a name, which the text and each refusal of it give. A file whose every line ends with
 /// CRLF gives its lines with LF, so a text holds the same lines on every machine, and a write gives them their CRLF
-/// back.
-pub(super) fn text(at: &Path, name: String) -> Result<Text, Fault> {
+/// back. A file that is no text of utf-8 and is an image gives what `seen` says.
+pub(super) fn text(at: &Path, name: String, gallery: Option<&Path>) -> Result<Text, Fault> {
   let info = fs::metadata(at).map_err(|no| failed(&no, &name))?;
   if !info.is_file() {
     return Err(Fault::refused(format!("Read needs a text file: {name}")));
   }
   let bytes = fs::read(at).map_err(|no| failed(&no, &name))?;
-  let content = String::from_utf8(bytes)
-    .map_err(|_| Fault::refused(format!("Read needs a text file in utf-8: {name}")))?;
+  let content = match String::from_utf8(bytes) {
+    Ok(content) => content,
+    Err(no) => return seen(at, &name, no.as_bytes(), gallery),
+  };
   let content = if crlf(content.as_bytes()) { content.replace("\r\n", "\n") } else { content };
   Ok(Text::new(name, content))
+}
+
+/// The text of a file that is no text of utf-8 and is an image, a PNG, a JPEG, a GIF or a WebP: the image is copied
+/// into the gallery under the digest of its bytes, and the text is one line that names it as a Markdown image,
+/// `![name](furb-image://<digest>.<extension>)`, which the provider hands the model as an image. A life with no
+/// gallery refuses it, and so does any other file that is no text of utf-8.
+fn seen(at: &Path, name: &str, bytes: &[u8], gallery: Option<&Path>) -> Result<Text, Fault> {
+  if images::kind(bytes).is_err() {
+    return Err(Fault::refused(format!("Read needs a text file in utf-8: {name}")));
+  }
+  let Some(gallery) = gallery else {
+    return Err(Fault::refused(format!(
+      "{name} is an image, and this life keeps no directory of images to show it to a model."
+    )));
+  };
+  let kept = images::attach(gallery, at).map_err(|why| Fault::refused(format!("{why} {name}")))?;
+  Ok(Text::new(name, images::reference(&kept.name, &kept.uri)))
 }
 
 /// A path that is `~` or starts with `~/`, or with `~\\` on Windows, resolved against the home of the user, as a shell

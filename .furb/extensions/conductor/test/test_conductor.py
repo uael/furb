@@ -184,6 +184,7 @@ class Round:
     name = f"worker{len(self.hired)}"
     self.ns["working"][name] = key
     self.ns["models"][name] = self.ns["model_of"](key)
+    self.facts[name] = ("prompt", name, "rung1", f"chain-{key}", "None", "", "")
     return name
 
   def busy(self, name: str, key: str, model: str) -> None:
@@ -324,8 +325,8 @@ def test_new_items_wait_while_an_open_pr_needs_a_worker(conductor: Round) -> Non
   conductor.working["prompt9"] = "fix7"
   conductor.staff()
   assert [key for key, _ in conductor.hired] == ["a", "b", "c"]
-  assert conductor.queue == [("d", "", "")]
-  assert conductor.backlog == [("e", "", ""), ("f", "", "")]
+  assert conductor.queue == [("d", "", ""), ("e", "", "")]
+  assert conductor.backlog == [("f", "", "")]
 
 
 def test_each_brief_forbids_a_window_on_this_machine(conductor: Round) -> None:
@@ -858,6 +859,20 @@ def test_the_round_runs_one_on_opus_medium_three_on_sonnet_and_one_on_opus_high(
   assert [key for key, _ in conductor.hired][6:] == ["t2"]
 
 
+def test_an_item_hires_on_its_own_room_while_a_pr_waits_for_a_fixer_that_no_room_allows(conductor: Round) -> None:
+  conductor.limits["room"]["sonnet"] = 0
+  conductor.efforts["s"] = SONNET
+  conductor.queue[:] = [("s", "", ""), ("o", "", "")]
+  conductor.prs[7] = conductor.pr(n=7, checks=("FAILURE",))
+  conductor.staff()
+  assert [key for key, _ in conductor.hired] == ["o"]
+  assert conductor.queue == [("s", "", "")]
+  assert len(conductor.prompts) == 1
+  assert conductor.prompts[0][0].startswith("#7 needs a fixer on claude-cli:sonnet/high")
+  conductor.staff()
+  assert len(conductor.prompts) == 1
+
+
 def test_an_item_with_no_room_keeps_its_place_while_the_next_with_room_starts(conductor: Round) -> None:
   conductor.busy("p1", "a", OPUS)
   conductor.busy("p2", "b", OPUS)
@@ -873,6 +888,7 @@ def test_a_fixer_goes_before_a_new_item_and_waits_for_room_on_sonnet(conductor: 
   for name, key in (("p1", "a"), ("p2", "b"), ("p3", "e")):
     conductor.busy(name, key, SONNET)
   conductor.prs[8] = conductor.pr(n=8, open=["- [ ] It is one change."], verdict="open")
+  conductor.efforts["c"] = SONNET
   conductor.queue[:] = [("c", "", "")]
   conductor.boxes(conductor.prs[8], 0.0)
   conductor.staff()

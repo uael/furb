@@ -9,6 +9,10 @@
 //! host. The key of the build is a digest of the engine that a record names, which is of the engine and the Kernel,
 //! of the sheet, of the version of the dumps of monty and of the crate, and of the names of the ears in the order of boot, since a replay on another build or on
 //! other ears could give another life.
+//!
+//! The session holds each fact that the life said and each value that its facts hold, so a snapshot weighs about as
+//! much as the record and its log together: a long life writes one of gigabytes. A life writes it only as often as
+//! [`PACE`] lets, and a snapshot that fails to land leaves no part of it on the disk.
 
 use std::{
   fs,
@@ -22,10 +26,14 @@ use sha2::{Digest, Sha256};
 use crate::{SHEET, engine::Table, sand::Sand, value::Object, wire, world};
 
 /// The version of the form of a snapshot.
-const VERSION: u64 = 1;
+const VERSION: u64 = 2;
 
-/// How long a life waits after it wrote its snapshot before it writes it again, but when it ends.
+/// How long a life waits at least after it wrote its snapshot before it writes it again, but when it ends.
 const INTERVAL: Duration = Duration::from_secs(30);
+
+/// How many times the time that the last snapshot took a life waits before it writes the next, but when it ends, so a
+/// large life spends a twentieth of its time on its snapshot at most.
+const PACE: u32 = 20;
 
 /// The head of a snapshot, as a life reads it.
 #[derive(Deserialize)]
@@ -54,6 +62,11 @@ struct Written<'a> {
 /// The snapshot of the record at a path.
 pub(crate) fn path(record: &Path) -> PathBuf {
   PathBuf::from(format!("{}.snapshot", record.display()))
+}
+
+/// Where a life writes the snapshot of the record at a path before it takes the name of the snapshot.
+fn aside(record: &Path) -> PathBuf {
+  PathBuf::from(format!("{}.tmp", path(record).display()))
 }
 
 /// The key of this build, on the ears of a life in the order of boot.
@@ -106,6 +119,8 @@ pub(crate) struct Keeper {
   record: PathBuf,
   build: String,
   last: Option<Instant>,
+  /// How long the last snapshot took to write.
+  spent: Duration,
   /// The length of the log that the last snapshot covers, so a life that said nothing since writes none.
   covered: Option<u64>,
 }
@@ -113,7 +128,7 @@ pub(crate) struct Keeper {
 impl Keeper {
   /// The keeper of the snapshot of the record at a path, for a life of a build.
   pub(crate) fn new(record: PathBuf, build: String) -> Keeper {
-    Keeper { record, build, last: None, covered: None }
+    Keeper { record, build, last: None, spent: Duration::ZERO, covered: None }
   }
 
   /// Whether the life said a fact since the last snapshot, which the length of its log says alone: a life writes its
@@ -123,9 +138,11 @@ impl Keeper {
     size.map_or(true, |size| self.covered != Some(size))
   }
 
-  /// Whether a snapshot is due: now, or when the interval passed since the last one, which starts again.
+  /// Whether a snapshot is due: now, or when the interval passed since the last one, which starts again. The interval
+  /// grows with the time that the last snapshot took.
   pub(crate) fn due(&mut self, now: bool) -> bool {
-    let due = now || self.last.is_none_or(|last| last.elapsed() >= INTERVAL);
+    let wait = INTERVAL.max(self.spent * PACE);
+    let due = now || self.last.is_none_or(|last| last.elapsed() >= wait);
     if due {
       self.last = Some(Instant::now());
     }
@@ -133,9 +150,13 @@ impl Keeper {
   }
 
   /// The snapshot written, on the record and the log as they stand now. A snapshot is written whole under another name, which then takes its name, so a crash leaves the old snapshot or
-  /// the new one. A failure writes nothing, since a snapshot is a cache.
+  /// the new one. A failure writes nothing, since a snapshot is a cache, and removes what it wrote under the other name.
   pub(crate) fn write(&mut self, table: &Table, dump: &[u8]) {
-    let _ = self.written(table, dump);
+    let start = Instant::now();
+    if self.written(table, dump).is_none() {
+      let _ = fs::remove_file(aside(&self.record));
+    }
+    self.spent = start.elapsed();
   }
 
   fn written(&mut self, table: &Table, dump: &[u8]) -> Option<()> {
@@ -145,8 +166,7 @@ impl Keeper {
     let mut bytes = serde_json::to_vec(&head).ok()?;
     bytes.push(b'\n');
     bytes.extend_from_slice(dump);
-    let (at, aside) =
-      (path(&self.record), PathBuf::from(format!("{}.tmp", path(&self.record).display())));
+    let (at, aside) = (path(&self.record), aside(&self.record));
     fs::write(&aside, &bytes).ok()?;
     fs::rename(&aside, &at).ok()?;
     self.covered = Some(log);

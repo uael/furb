@@ -20,7 +20,7 @@ async def test_a_pause_while_it_stands_nothing_it_is_over_hears() -> None:
 
 
 async def test_a_control_tells_a_header_of_its_own_name() -> None:
-  """A control over an act that is not over tells a header of its own name, so a model reads what was done to its work."""
+  """A control from outside the chain of an act that is not over tells a header of its own name, so a model reads what another did to its work."""
   _, _, root = born()
   act = engine.bash("echo hi", on=root)
   engine.pause(act)

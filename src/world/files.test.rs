@@ -2,7 +2,7 @@
 
 use std::{fs, path::PathBuf};
 
-use super::{crlf, homed, native, read, replace, stored};
+use super::{crlf, homed, native, read, replace, stored, text};
 
 #[test]
 fn a_path_that_is_a_tilde_or_starts_with_one_and_a_slash_resolves_against_the_home_of_the_user() {
@@ -28,6 +28,29 @@ fn a_read_gives_the_whole_text_of_a_file_of_any_size_and_refuses_what_is_no_file
   fs::write(at.join("large.txt"), &content).unwrap();
   assert_eq!(read(&at.join("large.txt")).unwrap().content, content);
   assert_eq!(read(&at).unwrap_err().message(), format!("Read needs a text file: {}", at.display()));
+  fs::remove_dir_all(&at).unwrap();
+}
+
+#[test]
+fn a_read_of_an_image_keeps_it_in_the_gallery_and_gives_the_markdown_image_that_names_it() {
+  let at = std::env::temp_dir().join(format!("furb-files-image-{}", std::process::id()));
+  let _ = fs::remove_dir_all(&at);
+  fs::create_dir_all(&at).unwrap();
+  fs::write(at.join("a.png"), b"\x89PNG\r\n\x1a\nthe rest").unwrap();
+  fs::write(at.join("b.bin"), b"\x89 no image").unwrap();
+  let (gallery, name) = (at.join("images"), at.join("a.png").display().to_string());
+  let got = text(&at.join("a.png"), name.clone(), Some(&gallery)).unwrap();
+  let uri = "furb-image://657177cbeacd727ffb992c7c6911fdd92593fb4f1875fe6ef7f8b4275ca1facb.png";
+  assert_eq!((got.path, got.content), (name.clone(), format!("![a.png]({uri})")));
+  let kept = fs::read(gallery.join(uri.strip_prefix("furb-image://").unwrap())).unwrap();
+  assert_eq!(kept, b"\x89PNG\r\n\x1a\nthe rest");
+  let blind = text(&at.join("a.png"), name.clone(), None).unwrap_err();
+  let said = format!(
+    "{name} is an image, and this life keeps no directory of images to show it to a model."
+  );
+  assert_eq!(blind.message(), said);
+  let binary = text(&at.join("b.bin"), "b.bin".to_owned(), Some(&gallery)).unwrap_err();
+  assert_eq!(binary.message(), "Read needs a text file in utf-8: b.bin");
   fs::remove_dir_all(&at).unwrap();
 }
 

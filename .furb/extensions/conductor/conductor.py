@@ -32,7 +32,7 @@ from furb.engine import (
 )
 
 CONDUCTING = """Conduct the work in one loop, and plan no further than the next step.
-Put each item in queue as (key, brief, thread), or in backlog to wait behind queue, then await conduct(). Each round tends the workers and the open PRs, hires a worker for each item, cap() at once, and waits every seconds or until a worker ends. It hires only when no open PR of the round needs a worker that it has not got: a failed check, a conflict or an open box, on a PR with no label paused or hold. So the fixers take the free slots first, and the round merges before it starts new work. It moves the first item of backlog to queue while queue and working hold fewer than cap() items.
+Put each item in queue as (key, brief, thread), or in backlog to wait behind queue, then await conduct(). Each round tends the workers and the open PRs, hires a worker for each item, cap() at once, and waits every seconds or until a worker ends. It hires no item of a family of model while an open PR of the round needs a worker of that family that it has not got: a failed check, a conflict or an open box, on a PR with no label paused or hold. So the fixers take the free slots of their family first, the round merges before it starts new work there, and each other family hires on its own room. It tells you once when such a PR waits for a fixer whose family has no room at all. It moves the first item of backlog to queue while queue and working hold fewer than cap() items.
 The owner rules, on 10-23: "this kind of item should be done by sonnet, not opus. You need to use Sonnet more, when it make sense. And opus/medium should be your default, not opus/high. opus/high is kinda the max, xhigh for the coordination and my rulings only. most of the time sonnet/{medium,high} and opus/high are perfect." So the default of a worker and of a debrief, which asks the model of its worker, is ACTOR, opus/medium. A fixer (fixN, boxN) runs on limits["fixer"], sonnet/high, by the ruling of the operator. A worker runs only a model of MODELS: sonnet/medium, sonnet/high, opus/medium or opus/high. hire() refuses xhigh and max, and the round starts no item that asks for one and tells you. You choose sonnet for an item where it makes sense, as efforts[key] = "claude-cli:sonnet/medium" before you queue it.
 The owner rules again, on 10-23: "From now on: 2 opus workers, 3 sonnet ones. max." The owner rules again, on 10-26: "add one opus/high worker for the most complex stuff". So limits["room"] gives the room of each family of model: the round runs at most 1 worker on opus/medium, 3 on sonnet and 1 on opus/high at once, by the ruling of the operator, and counts only the workers whose prompt is not over. limits lives in the state of the round, so a reload of the extension keeps it: you change it there, as limits["room"]["opus"] = 2, and cap() gives the sum of the room. You give opus/high only to the most complex items, as efforts[key] = "claude-cli:opus/high". An item whose model has no room keeps its place in queue while the next item whose model has room starts. A fixer goes before a new item. A worker that ended and whose PR needs a worker goes on in its own chain on HANDOVER, sonnet, with a new prompt there, when sonnet has room; else a fixer starts on limits["fixer"] when sonnet has room.
 The round runs on one chain, lead["home"]. After a compaction of your chain, await conduct() in the new chain: it names that chain, the round of the old chain ends at its next wake, and the state that the round reads is the state of the new chain, which you change there.
@@ -132,7 +132,8 @@ RECIPES = """Recipes that fixers found again and again:
 - macOS has no timeout and no flock command, and BSD sed needs sed -i '' to edit in place. Edit a file with read and write, or with python3, and bound a command with the timeout of bash.
 - A git commit runs the hooks, which take minutes: give it timeout=1800.
 - The checkout at the root can stand behind origin/main and hold no build. Read and change code only in your worktree.
-- A cause that a brief names is a hypothesis: check it in the log before you build on it."""
+- A cause that a brief names is a hypothesis: check it in the log before you build on it.
+- python script/tokens.py prints the tokens of the engine and of the doctrine against their walls in seconds, and counts no stale copy: after a change of engine.py, run cargo check first when it asks."""
 
 RULES = """Run no real life of a model. Never open a window on this machine, not even for a test: the owner works on it, and each window takes his mouse and his keyboard. Run a check of the app only on the runners of CI. Start each comment, review, issue and PR body that you write on GitHub with 🤖, since you write from the owner's account and his own words carry no mark; a title keeps its own rule. Never take off the label owner-merge: only the owner takes it off, and that is his approval to merge. The owner sleeps or is away: ask him nothing and wait for nothing of his. Take each decision yourself from the brief and the rulings, say it in your PR body, and go on. Ask the one who gave you this work on its chain only when it alone can decide: await prompt(str, question, on="{home}").""" + "\n\n" + RECIPES
 
@@ -1222,13 +1223,27 @@ def needs(pr: dict) -> bool:
   )
 
 
+def mender(pr: dict) -> str:
+  maker = next((m[2:] for m in pr["labels"] if m.startswith("w:")), "")
+  return HANDOVER if homes.get(maker) and maker not in working.values() else limits["fixer"]
+
+
 def staff() -> None:
-  if any(needs(pr) for pr in prs.values()):
-    return
+  blocked: set[str] = set()
+  for pr in [one for one in prs.values() if needs(one)]:
+    model = mender(pr)
+    mine = family(model)
+    blocked.add(mine)
+    if limits["room"].get(mine, 0) <= 0:
+      notice(
+        f"no room #{pr['n']} {pr['sha']}",
+        f"#{pr['n']} needs a fixer on {model} at {pr['sha'][:7]}, and limits['room'][{mine!r}] is"
+        f" {limits['room'].get(mine, 0)}, so no fixer starts on it. Give {mine} room, or say why it waits.",
+      )
   while backlog and len(working) + len(queue) < cap():
     queue.append(backlog.pop(0))
   for item in list(queue):
-    if can(item[0]):
+    if family(model_of(item[0])) not in blocked and can(item[0]):
       queue.remove(item)
       hire(*item)
 
