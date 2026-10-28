@@ -169,7 +169,9 @@ class Round:
   def prompt(self, shape: object, message: str = "", to: str = "", on: str = "") -> str:
     self.prompts.append((message, on))
     self.targets.append(to)
-    return f"prompt{100 + len(self.prompts)}"
+    name = f"prompt{100 + len(self.prompts)}"
+    self.facts.setdefault(name, ("prompt", name, "rung1", on, "None", message, to))
+    return name
 
   def rung(self, word: str = "", retells: str = "", to: str = "", on: str = "") -> str:
     self.rungs.append((word, on))
@@ -1694,3 +1696,36 @@ def test_the_items_held_by_the_coordinator_move_into_the_backlog_with_their_keys
   assert conductor.after == {"k3": ["k1"]} and conductor.efforts["k3"] == "claude-cli:sonnet/high"
   assert any("held_items" in x and "k3" in x for x in conductor.heard)
   assert any("k1" in x and "k3" in x for x in conductor.heard)
+
+
+def cancelled_worker(conductor: Round) -> None:
+  conductor.working["prompt1"] = "item1"
+  conductor.models["prompt1"] = SONNET
+  conductor.facts["prompt1"] = ("prompt", "prompt1", "rung1", "chain5", "tuple[int, str]", "brief", "")
+  conductor.done["prompt1"] = asyncio.CancelledError()
+
+
+def test_a_prompt_that_ended_with_cancelled_error_and_no_cancel_of_the_round_goes_on_and_tells_nobody(
+  conductor: Round,
+) -> None:
+  cancelled_worker(conductor)
+  conductor.tend()
+  assert conductor.prompts == [(conductor.RESUME, "chain5")]
+  assert conductor.targets[-1] == SONNET
+  assert list(conductor.working.values()) == ["item1"] and "prompt1" not in conductor.working
+  assert conductor.models[next(iter(conductor.working))] == SONNET
+  assert conductor.heard == [] and conductor.results == {} and conductor.ends == {}
+
+
+def test_a_prompt_with_a_cancel_over_it_ends_as_before(conductor: Round) -> None:
+  cancelled_worker(conductor)
+  conductor.ns["transcript"] = lambda on="", of="": [("cancel", "prompt1", "chain1")] if of == "cancel" else []
+  conductor.tend()
+  assert conductor.working == {} and "ended with no PR" in conductor.prompts[-1][0]
+
+
+def test_a_prompt_that_ended_cancelled_three_times_ends_as_before(conductor: Round) -> None:
+  cancelled_worker(conductor)
+  conductor.noticed.update({"resume item1 a", "resume item1 b", "resume item1 c"})
+  conductor.tend()
+  assert conductor.working == {} and "ended with no PR" in conductor.prompts[-1][0]
