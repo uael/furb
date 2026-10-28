@@ -64,7 +64,7 @@ PR_OPEN = (
 )
 
 
-def pr(
+async def pr(
   title: str,
   why: str,
   outcome: list[str],
@@ -77,21 +77,27 @@ def pr(
   number: int = 0,
   base: str = "main",
   part_of: int = 0,
-) -> Act[Exit]:
+) -> Exit:
   prcheck(title, why, outcome, breaking)
   if len(checks) != len(PR_BOXES) or not all(c.strip() and c.strip().lower() != "not:" for c in checks):
     raise Refused(f"checks needs {len(PR_BOXES)} lines, one for each box of the checklist in its order: the evidence of how you verified that box, or not: and the work that it still needs")
   body = pr_body(why, outcome, breaking or [], fixes, checks, part_of)
   name = shq(title)
   flags = "".join(f" --label {shq(x)}" for x in labels) if isinstance(labels, list) else labels
+  names = labels if isinstance(labels, list) else re.findall(r"--label '?([^'\s]+)'?", labels)
+  made = "".join(f"gh label create {shq(x)} --force >/dev/null 2>&1; " for x in names)
   rules = 'R=CLAUDE.md; [ -f AGENTS.md ] && R=AGENTS.md; sed "s/{rules}/$R/g" | '
   if number:
     command = rules + f"gh pr edit {number} --title {name} --body-file - >/dev/null && gh pr view {number} --json url --jq .url"
   else:
     opening = PR_OPEN.replace("@NAME@", name).replace("@BASE@", shq(base))
     opening = opening.replace("@ADDED@", flags.replace("--label", "--add-label")).replace("@FLAGS@", flags)
-    command = (f"cd {shq(where)} || exit 1; " if where else "") + rules + opening
-  return bash(command, stdin=body, show=span(-2, -1), timeout=180)
+    command = (f"cd {shq(where)} || exit 1; " if where else "") + made + rules + opening
+  got = await bash(command, stdin=body, show=span(-2, -1), timeout=180)
+  if got.code != 0:
+    said = " ".join((got.stderr.content + " " + got.stdout.content).split())[-500:]
+    raise Refused(f"gh did not open or edit the PR, exit {got.code}: {said}")
+  return got
 
 
 def shq(s: str) -> str:
