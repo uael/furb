@@ -50,6 +50,17 @@ const INBOX = 3;
 /** The number in the name of an act, which orders the acts as they came. */
 const numberOf = (id: string) => Number(id.replace(/\D+/g, "")) || 0;
 
+/** The number of a thread, read once: a sort over every thread of a long life would read it at each comparison. */
+const numbers = new WeakMap<ChainThread, number>();
+const numbered = (thread: ChainThread): number => {
+  let number = numbers.get(thread);
+  if (number === undefined) {
+    number = numberOf(thread.act.id);
+    numbers.set(thread, number);
+  }
+  return number;
+};
+
 export const rail = part({
   /** The shape of the sidebar: the flag FURB_SIDEBAR, else the preference. */
   get railStyle(): RailStyle {
@@ -157,9 +168,12 @@ export const rail = part({
       chains.set(chain, read && read.stamp === stamp ? read : { stamp, list: threads });
       list.push(...threads);
     }
-    list.sort((a, b) => numberOf(a.act.id) - numberOf(b.act.id));
-    this.railThreadCache = { session: w, version: w.version, owed, list, chains };
-    return list;
+    const ordered = list
+      .map((one): [number, ChainThread] => [numbered(one), one])
+      .sort((a, b) => a[0] - b[0])
+      .map(([, one]) => one);
+    this.railThreadCache = { session: w, version: w.version, owed, list: ordered, chains };
+    return ordered;
   },
 
   /** What the rows of the threads need to be drawn again, kept while the list of the threads and the minute stand: a
