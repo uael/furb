@@ -332,7 +332,13 @@ impl Opening {
     let ears = host.into_iter().chain(ears);
     let mut engine = match restore {
       // A life that goes on from a checkpoint boots on more entries than its record holds, and keeps no snapshot.
-      Some(restore) if restore.entries == record.len() && !cut => {
+      // A record that parks work replays: the park stands in front of the ears of a life that booted, which a snapshot
+      // of an earlier life lacks.
+      Some(restore)
+        if restore.entries == record.len()
+          && !cut
+          && crate::engine::looping(&record).is_empty() =>
+      {
         let opened =
           Engine::from_snapshot(&record, ears, &restore.table, restore.sand, &restore.past)
             .and_then(|mut engine| engine.verb("stand", vec![], vec![]).map(|_| engine));
@@ -345,7 +351,7 @@ impl Opening {
           (Err(fault), _) => return Err(fault),
         }
       }
-      Some(_) if !cut => {
+      Some(restore) if !cut && restore.entries != record.len() => {
         return Err(Fault::refused("the record changed while the life opened on its snapshot"));
       }
       _ => Engine::boot(record.clone(), ears)?,
