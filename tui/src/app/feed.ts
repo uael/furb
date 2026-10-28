@@ -5,6 +5,7 @@ import {
   asksOperator,
   cancelled,
   condense,
+  failed,
   gist,
   ladder,
   makers,
@@ -1330,8 +1331,12 @@ export const feed = part({
       // A paused chain says so at the end of its feed, with the reason that the last failure gave, and a button that
       // wakes it, since nothing new runs on it until then.
       if (w.paused && !w.search) {
-        const failure = w.activity.findLast((act) => act.kind === "rung" && act.run?.status === "failed")?.run
-          ?.reason;
+        // Work that the last life left holds the chain until a wake runs it again, and a word that closed its prompt
+        // ended with a cancel, which is no failure.
+        const held = [...w.host.pending.keys()];
+        const failure = held.length
+          ? `${held.join(", ")} ran when the last life ended, and runs again at a wake.`
+          : w.activity.findLast((act) => act.kind === "rung" && failed(act))?.run?.reason;
         add("paused", `paused:${failure ?? ""}:${this.theme}`, [], (box) =>
           this.banner(
             box,
