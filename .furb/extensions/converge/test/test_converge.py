@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import json
 import re
+import shlex
 import subprocess
 import sys
 from collections.abc import Callable
@@ -108,6 +109,9 @@ class World:
   def bash(self, command: str, stdin: str | None = "", timeout: float = 600, show: object = None) -> Done:
     self.commands.append(command)
     out, code = next(((o, c) for p, o, c in self.says if re.search(p, command)), ("", 0))
+    if stdin and stdin == self.ns["SHOTS"] and code == 0 and out:
+      self.files[f"{shlex.split(command)[3]}/shots.json"] = out
+      out = "wrote the list\n"
     return self.act("bash", Exit(code, Text("stdout", out), Text("stderr", "")))
 
   def read(self, path: str, show: object = None, on: str = "") -> Text:
@@ -339,7 +343,8 @@ def shoot(tmp: Path, was: dict | None, now: dict, fails: str = "", whole: bool =
     encoding="utf-8",
     check=True,
   )
-  return json.loads(got.stdout)
+  assert len(got.stdout) < 200 and "\n" not in got.stdout.strip()
+  return json.loads((out / "shots.json").read_text(encoding="utf-8"))
 
 
 def test_the_list_of_the_captures_names_each_image_by_the_digest_of_its_bytes(tmp_path: Path) -> None:
@@ -482,16 +487,18 @@ def test_a_green_pr_that_changes_a_capture_waits_for_the_judges_and_lands_on_a_c
   assert '<capture name="demo/01-welcome" change="text">\n+  1 the row of demo/01-welcome\n</capture>' in asked
 
 
-def test_a_pr_head_asks_one_judge_one_prompt_with_the_words_once_and_its_changed_captures_alone(world: World) -> None:
+def test_a_pr_head_asks_each_judge_one_prompt_for_each_batch_with_the_words_once_and_its_changed_captures_alone(
+  world: World,
+) -> None:
   converged(world)
   shots = [f"demo/{n:02d}-shot" for n in range(40)]
   world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
   world.say(r"python3 -I -", listing(changed=tuple(shots[:30]), kept=tuple(shots[30:]), kind="text"))
   veto(world)
-  [(shape, message, to, on)] = [p for p in world.prompts if p[0] is not None]
-  assert to == "claude-cli:sonnet/high"
-  assert message.count(WORDS) == 1
-  assert message.count("<capture name=") == 30 and "demo/35-shot" not in message
+  asked = [p for p in world.prompts if p[0] is not None]
+  assert [p[1].count("<capture name=") for p in asked] == [16, 14]
+  assert all(p[2] == "claude-cli:sonnet/high" and p[1].count(WORDS) == 1 for p in asked)
+  assert "demo/35-shot" not in "".join(p[1] for p in asked)
 
 
 def test_each_chain_of_a_judge_holds_a_grant_of_its_ceiling(world: World) -> None:
@@ -610,3 +617,45 @@ def test_the_veto_of_converge_stands_in_the_module_of_the_chain_that_runs_the_co
 def test_converge_reads_the_round_in_the_module_of_the_chain_that_runs_the_conductor() -> None:
   ns, modules = played_on("chain2")
   assert ns["conductor"]() is modules["chain2"]
+
+def test_the_list_of_the_captures_is_a_file_and_stdout_holds_one_short_line(tmp_path: Path) -> None:
+  rows = [f"row {n} " + "x" * 100 for n in range(3000)]
+  was = {"demo/02-feed": (b"one", grid(*rows))}
+  now = {"demo/02-feed": (b"two", grid(*[row + "y" for row in rows]))}
+  [change] = shoot(tmp_path, was, now)["changed"]
+  assert len(change["text"]) > 300000
+
+
+def test_a_list_of_the_captures_that_no_file_holds_is_the_fault_of_the_capture(world: World) -> None:
+  world.say(r"python3 -I -", "")
+  seen = asyncio.run(world.shots(str(world.tmp / "out"), "", False, ("main", "head")))
+  [[name, why, quote]] = seen["failed"]
+  assert name == "capture" and why.startswith("the list of the captures failed: ")
+
+
+def heavy(world: World, *sizes: int) -> None:
+  names = tuple(f"demo/{n:02d}-big" for n in range(len(sizes)))
+  seen = json.loads(listing(changed=names, kind="text"))
+  for one, size in zip(seen["changed"], sizes):
+    one["text"] = "x" * size
+  world.say(r"python3 -I -", json.dumps(seen))
+
+
+def test_the_prompts_of_a_pr_hold_a_bounded_number_of_characters(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  heavy(world, 90000, 90000, 90000)
+  veto(world)
+  asked = world.judged()
+  assert len(asked) == 2 and all(len(message) <= world.PROMPT for message in asked)
+  assert sum(message.count("<capture name=") for message in asked) == 3
+
+
+def test_a_capture_over_the_bound_is_cut_with_a_note(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  heavy(world, 2_000_000)
+  veto(world)
+  [asked] = world.judged()
+  assert len(asked) <= world.PROMPT
+  assert "cut: the capture holds 2000000 characters" in asked
