@@ -619,7 +619,8 @@ test("a notice cut to the room of the footer keeps one line and the mark of its 
       expect(lines[row]).toContain("F1 help");
       expect(lines.filter((line) => line.includes("and longer"))).toHaveLength(1);
       await screen.mockMouse.moveTo((lines[row] ?? "").indexOf("A notice") + 2, row);
-      expect(await frame()).toContain("to its very end");
+      // The tip stays inside the feed, so it wraps the notice at its words: the end of the notice comes on a row of the tip.
+      expect(await frame()).toContain("very end");
     },
     { width: 152, height: 40 },
   ));

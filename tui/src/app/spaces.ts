@@ -12,7 +12,7 @@ import { theme as c, glyph, spacing as space } from "../theme.ts";
 import { type Part, plain } from "../ui.ts";
 import type { SessionEntry, Workspace } from "../workspaces.ts";
 import { part } from "./part.ts";
-import { type Choice, inputColors, sessionDetail } from "./shared.ts";
+import { type Choice, inputColors, sessionDetail, wrapped } from "./shared.ts";
 
 export const spaces = part({
   /** A row of a session or a workspace, in a list of the sidebar. While the pointer is on the row, it lights, and at its
@@ -182,11 +182,14 @@ export const spaces = part({
   tip(parts: Part[], x: number, y: number): void {
     const area = this.region(x);
     const size = Math.min(area.width - 2, Math.max(25, Bun.stringWidth(plain(parts)) + space.between));
-    const rows = Math.max(1, Math.ceil(Bun.stringWidth(plain(parts)) / Math.max(1, size - space.inset * 2)));
+    // A text that wraps at its words takes a row more than its width says, so the rows leave one over. Above the pointer,
+    // the tip hangs from the row of the pointer, so it covers that row however many rows the text takes.
+    const rows =
+      wrapped(plain(parts), Math.max(1, size - space.inset * 2), Number.MAX_SAFE_INTEGER).length + 1;
     this.popup(
       {
         left: Math.max(area.left + 1, Math.min(x - size, area.left + area.width - size - 1)),
-        top: y + 1 + rows <= this.renderer.height ? y + 1 : Math.max(0, y - rows),
+        ...(y + 1 + rows <= this.renderer.height ? { top: y + 1 } : { bottom: this.renderer.height - y }),
         width: size,
         paddingX: space.inset,
       },
