@@ -100,15 +100,8 @@ ORDERED = 600.0
 ordered: dict[int, float] = globals().setdefault("ordered", {})
 tips: dict[str, str] = globals().setdefault("tips", {})
 shifted: dict[int, tuple[str, str]] = globals().setdefault("shifted", {})
-PACE = 3600.0
 hired: dict[str, float] = globals().setdefault("hired", {})
 paced: set[str] = globals().setdefault("paced", set())
-PACED = (
-  "An hour passed since you took this item, and no PR of yours is open. Land it in steps: commit now the coherent"
-  " part that serves his words, open its PR with pr(), and go on with the rest in a next PR from this chain,"
-  " each PR one change. A PR that waits for every detail lands nothing,"
-  " and each step is judged and merged on its own."
-)
 
 BUILD_SH = """d=${FURB_BUILD_SLOTS:-/tmp/furb-build-slots}
 mkdir -p "$d"
@@ -235,43 +228,6 @@ PROOF = (
 )
 
 
-def spliced(was: str, pairs: list[tuple[str, str]]) -> str:
-  spots: list[tuple[int, int, str]] = []
-  for old, new in pairs:
-    if not old or old == new or was.count(old) != 1:
-      count = was.count(old) if old else 0
-      raise Refused(
-        f"each old must occur once in the word and differ from its new, and this one occurs {count} times:"
-        f" {old[:300]!r}"
-      )
-    spots.append((was.index(old), was.index(old) + len(old), new))
-  out, end = "", 0
-  for at, stop, new in sorted(spots):
-    if at < end:
-      raise Refused(f"two olds overlap at character {at} of the word")
-    out, end = out + was[end:at] + new, stop
-  return out + was[end:]
-
-
-def changed(was: str, pairs: list[tuple[str, str]]) -> list[str]:
-  heads = r"^(?:(?:async )?def |class )(\w+)|^(\w+)(?:: [^=\n]+)? = "
-
-  def names(part: str) -> list[str]:
-    return [a or b for a, b in re.findall(heads, part, re.M)]
-
-  said: list[str] = []
-  for old, new in pairs:
-    at = was.index(old)
-    near = names(was[:at])
-    added = [x for x in names(new) if x not in names(old)]
-    after = f", after {near[-1]}" if near else ""
-    adds = f" and adds {', '.join(added)}" if added else ""
-    line = was.count("\n", 0, at) + 1
-    lines = [f"{n} line" + ("s" if n != 1 else "") for n in (len(old.splitlines()), len(new.splitlines()))]
-    said.append(f"Line {line}{after}: the pair changes {lines[0]} into {lines[1]}{adds}.")
-  return said
-
-
 def linted(out: str) -> set[str]:
   found: set[str] = set()
   for x in out.splitlines():
@@ -283,19 +239,42 @@ def linted(out: str) -> set[str]:
   return found
 
 
-async def vetted(word: str, known: set[str], base: set[str], tree: str, lint: str) -> None:
-  found = [x for x in gate(word) if re.sub(r"^line \d+: ", "", x) not in known]
-  if found:
-    raise Refused("the gate refuses the word:\n" + "\n".join(found))
-  wrote = await bash(f"cd {tree} && cat > {CONDUCTOR} && git status --porcelain", stdin=word, show=HIDDEN, timeout=60)
-  if wrote.stdout.content.strip() != f"M {CONDUCTOR}":
-    raise Refused(f"git sees more than the pairs: {wrote.stdout.content[:300]}")
-  fresh = sorted(linted((await bash(lint, show=HIDDEN, timeout=120)).stdout.content) - base)
-  if fresh:
-    raise Refused("ruff finds what it does not find in the word of origin/main:\n" + "\n".join(fresh)[:1500])
-
-
 async def patch(title: str, why: str, ask: str) -> tuple[str, str, str]:
+  def spliced(text: str, edits: list[tuple[str, str]]) -> str:
+    spots: list[tuple[int, int, str]] = []
+    for old, new in edits:
+      if not old or old == new or text.count(old) != 1:
+        count = text.count(old) if old else 0
+        raise Refused(
+          f"each old must occur once in the word and differ from its new, and this one occurs {count} times:"
+          f" {old[:300]!r}"
+        )
+      spots.append((text.index(old), text.index(old) + len(old), new))
+    out, end = "", 0
+    for at, stop, new in sorted(spots):
+      if at < end:
+        raise Refused(f"two olds overlap at character {at} of the word")
+      out, end = out + text[end:at] + new, stop
+    return out + text[end:]
+
+  def changed(text: str, edits: list[tuple[str, str]]) -> list[str]:
+    heads = r"^(?:(?:async )?def |class )(\w+)|^(\w+)(?:: [^=\n]+)? = "
+
+    def names(part: str) -> list[str]:
+      return [a or b for a, b in re.findall(heads, part, re.M)]
+
+    said: list[str] = []
+    for old, new in edits:
+      at = text.index(old)
+      near = names(text[:at])
+      added = [x for x in names(new) if x not in names(old)]
+      after = f", after {near[-1]}" if near else ""
+      adds = f" and adds {', '.join(added)}" if added else ""
+      line = text.count("\n", 0, at) + 1
+      lines = [f"{n} line" + ("s" if n != 1 else "") for n in (len(old.splitlines()), len(new.splitlines()))]
+      said.append(f"Line {line}{after}: the pair changes {lines[0]} into {lines[1]}{adds}.")
+    return said
+
   if len(title) > 70 or not re.fullmatch(PR_TITLE, title):
     raise Refused(f"the title {title!r} is not type(area): What changed, in 70 characters or fewer")
   key = "patch-" + "-".join(re.findall(r"[a-z0-9]+", title.split(":", 1)[1].lower())[:4])
@@ -327,7 +306,17 @@ async def patch(title: str, why: str, ask: str) -> tuple[str, str, str]:
       try:
         pairs = [(str(old), str(new)) for old, new in got]
         word = spliced(was, pairs)
-        await vetted(word, known, base, tree, lint)
+        found = [x for x in gate(word) if re.sub(r"^line \d+: ", "", x) not in known]
+        if found:
+          raise Refused("the gate refuses the word:\n" + "\n".join(found))
+        wrote = await bash(
+          f"cd {tree} && cat > {CONDUCTOR} && git status --porcelain", stdin=word, show=HIDDEN, timeout=60
+        )
+        if wrote.stdout.content.strip() != f"M {CONDUCTOR}":
+          raise Refused(f"git sees more than the pairs: {wrote.stdout.content[:300]}")
+        fresh = sorted(linted((await bash(lint, show=HIDDEN, timeout=120)).stdout.content) - base)
+        if fresh:
+          raise Refused("ruff finds what it does not find in the word of origin/main:\n" + "\n".join(fresh)[:1500])
       except (Refused, TypeError, ValueError) as fault:
         brief = (
           f"Fault: {fault}\nThe pairs apply to the word of origin/main again."
@@ -402,16 +391,6 @@ def can(key: str) -> bool:
   return room(model)
 
 
-def handover(key: str, text: str) -> str:
-  where = homes[key]
-  quietly(rung, f"actor = {HANDOVER!r}", on=where)
-  name = str(quietly(prompt, tuple[int, str], text, to=HANDOVER, on=where))
-  working[name] = key
-  models[name] = HANDOVER
-  hired[name] = clock()
-  return name
-
-
 VIEW = """gh pr view {n} --json state,headRefOid,mergeable --jq '[.state, .headRefOid, .mergeable] | join(" ")'"""
 
 
@@ -458,10 +437,13 @@ def assist(pr: dict, key: str, order: str, fixer: str, thread: str, brief: str) 
   if homes.get(maker) and maker not in working.values():
     if room(HANDOVER):
       noticed.update({key, key + " again", key + " fixer"})
-      handover(
-        maker,
-        f"Your work on this chain goes on, now on {HANDOVER}. {order} Close with a tuple: the number of the PR, and your report in 200 words at most.",
-      )
+      where = homes[maker]
+      quietly(rung, f"actor = {HANDOVER!r}", on=where)
+      said = f"Your work on this chain goes on, now on {HANDOVER}. {order} Close with a tuple: the number of the PR, and your report in 200 words at most."
+      name = str(quietly(prompt, tuple[int, str], said, to=HANDOVER, on=where))
+      working[name] = maker
+      models[name] = HANDOVER
+      hired[name] = clock()
       return True
   elif can(fixer):
     noticed.update({key, key + " again", key + " fixer"})
@@ -589,18 +571,19 @@ def tend() -> None:
         f"silent {where} {len(facts)}",
         f"The worker {key} on {where} has said nothing for {int(now - silent[where][1]) // 60} minutes. Look at it.",
       )
-  pace()
-
-
-def pace() -> None:
-  now = clock()
+  late = (
+    "An hour passed since you took this item, and no PR of yours is open. Land it in steps: commit now the coherent"
+    " part that serves his words, open its PR with pr(), and go on with the rest in a next PR from this chain,"
+    " each PR one change. A PR that waits for every detail lands nothing,"
+    " and each step is judged and merged on its own."
+  )
   owners = {owner_of(pr) for pr in prs.values()}
   for name in [x for x in working if not over(x) and x not in paced]:
     if name in owners:
       paced.add(name)
-    elif now - hired.get(name, now) > PACE:
+    elif now - hired.get(name, now) > 3600.0:
       paced.add(name)
-      quietly(prompt, None, PACED, on=working_at(name))
+      quietly(prompt, None, late, on=working_at(name))
 
 
 def boxes(pr: dict, now: float) -> str:
@@ -1054,19 +1037,6 @@ def news(line: str) -> None:
   quietly(bash, f"until mkdir {lock} 2>/dev/null; do sleep 1; done; trap 'rmdir {lock}' EXIT; python3 -I - {shq(repo)} {shq(digest)} {shq(line)}", stdin=NEWS_PY, show=HIDDEN, timeout=300)
 
 
-async def ops_watch() -> None:
-  repo = ops()[0]
-  if not repo:
-    return
-  got = await bash(OPS_WATCH.replace("{ops}", repo), show=HIDDEN, timeout=300)
-  rows = [p for p in (x.split("\t", 3) for x in got.stdout.content.splitlines()) if len(p) == 4 and p[1] not in comments]
-  comments.update(p[1] for p in rows)
-  fresh = [p for p in rows if p[2] == OWNER and not p[3].startswith(MARKS)]
-  if fresh and "ops" in timers:
-    quietly(prompt, None, "The owner wrote in the private repository of the decisions:\n" + "\n".join(f"ops#{p[0]} {p[3][:1500]}" for p in fresh) + merged_since())
-  timers["ops"] = clock()
-
-
 REHEAD = """[ "$(gh pr view {n} --json headRefOid --jq .headRefOid)" = {sha} ] || exit 0
 for id in $(gh run list --commit {sha} --limit 50 --json databaseId,workflowName,createdAt,conclusion --jq 'group_by(.workflowName) | map(max_by(.createdAt)) | .[] | select({which}) | .databaseId'); do gh run rerun $id{failed} >/dev/null 2>&1 && echo $id; done"""
 
@@ -1077,14 +1047,11 @@ REDLINES = r"""id=$(gh run list --branch main --workflow gates.yml --commit {sha
 UPSTREAMING = """gh pr list --repo {upstream} --label upstream-ready --state open --json number,headRefName,title,url,labels --jq '.[] | select([.labels[].name] | index("upstreamed") | not) | "\\(.number)\\t\\(.headRefName)\\t\\(.title)\\t\\(.url)"'"""
 
 
-def rehead(pr: dict, which: str, failed: str = "") -> str:
-  return (
-    REHEAD.replace("{n}", str(pr["n"])).replace("{sha}", pr["sha"]).replace("{which}", which).replace("{failed}", failed)
-  )
-
-
 async def heal(pr: dict, red: bool) -> str:
   n, sha = pr["n"], pr["sha"]
+  def rehead(which: str, only: str = "") -> str:
+    return REHEAD.replace("{n}", str(n)).replace("{sha}", sha).replace("{which}", which).replace("{failed}", only)
+
   failed = [c for c in pr["checks"] if c in FAILS]
   if pr["mergeable"] == "CONFLICTING":
     return ""
@@ -1092,7 +1059,7 @@ async def heal(pr: dict, red: bool) -> str:
     if "CANCELLED" not in pr["checks"] or f"rerun {sha}" in noticed:
       return ""
     noticed.add(f"rerun {sha}")
-    got = await bash(rehead(pr, '.conclusion == "cancelled"'), show=HIDDEN, timeout=300)
+    got = await bash(rehead('.conclusion == "cancelled"'), show=HIDDEN, timeout=300)
     ran = got.stdout.content.strip()
     return f"#{n} had a run cancelled at its head {sha[:7]}, and the round ran it again." if ran else ""
   if (
@@ -1111,7 +1078,7 @@ async def heal(pr: dict, red: bool) -> str:
   if len(failed) == 1 and f"retry {sha}" not in noticed:
     noticed.add(f"retry {sha}")
     got = await bash(
-      rehead(pr, '.conclusion == "failure" or .conclusion == "timed_out"', " --failed"), show=HIDDEN, timeout=300
+      rehead('.conclusion == "failure" or .conclusion == "timed_out"', " --failed"), show=HIDDEN, timeout=300
     )
     if got.stdout.content.strip():
       return f"#{n} failed one check alone at {sha[:7]}, and the round ran its failed jobs again."
@@ -1138,15 +1105,11 @@ def needs(pr: dict) -> bool:
   )
 
 
-def mender(pr: dict) -> str:
-  maker = next((m[2:] for m in pr["labels"] if m.startswith("w:")), "")
-  return HANDOVER if homes.get(maker) and maker not in working.values() else limits["fixer"]
-
-
 def staff() -> None:
   blocked: set[str] = set()
   for pr in [one for one in prs.values() if needs(one)]:
-    model = mender(pr)
+    maker = next((m[2:] for m in pr["labels"] if m.startswith("w:")), "")
+    model = HANDOVER if homes.get(maker) and maker not in working.values() else limits["fixer"]
     mine = family(model)
     blocked.add(mine)
     if limits["room"].get(mine, 0) <= 0:
@@ -1473,15 +1436,14 @@ Read the log of the attempt that failed: gh run view <run> --attempt <attempt> -
 MANY_SAID = "More than {n} tests failed in one attempt, so one cause, as a machine that is slow or a shared resource that waits, probably holds them all: find it first. "
 
 
-def slug(text: str, size: int = 34) -> str:
-  return "-".join(re.findall(r"[a-z0-9]+", text.lower()))[:size].strip("-")
-
-
 def taken(key: str) -> str:
   return next((w for w, k in working.items() if k == key), "") or ("queued" if any(q[0] == key for q in queue) else "")
 
 
 async def watch_ci() -> None:
+  def slug(text: str, size: int = 34) -> str:
+    return "-".join(re.findall(r"[a-z0-9]+", text.lower()))[:size].strip("-")
+
   got = await bash(f"python3 -I - {shq(json.dumps(sorted(runs_read)))}", stdin=CI_PY, show=HIDDEN, timeout=900)
   if got.code != 0 or not got.stdout.content.startswith("{"):
     notice(f"ci {int(clock() // 3600)}", "The command that measures the gates failed: " + (got.stderr.content or got.stdout.content)[-500:])
@@ -1608,7 +1570,23 @@ async def sweep(every: float) -> None:
     noted[:] = [parts[3]]
   await take_issues()
   await upstream_watch()
-  await ops_watch()
+  repo = ops()[0]
+  if repo:
+    watched = await bash(OPS_WATCH.replace("{ops}", repo), show=HIDDEN, timeout=300)
+    wrote = [
+      p for p in (x.split("\t", 3) for x in watched.stdout.content.splitlines()) if len(p) == 4 and p[1] not in comments
+    ]
+    comments.update(p[1] for p in wrote)
+    fresh = [p for p in wrote if p[2] == OWNER and not p[3].startswith(MARKS)]
+    if fresh and "ops" in timers:
+      quietly(
+        prompt,
+        None,
+        "The owner wrote in the private repository of the decisions:\n"
+        + "\n".join(f"ops#{p[0]} {p[3][:1500]}" for p in fresh)
+        + merged_since(),
+      )
+    timers["ops"] = clock()
   await mark()
   await watch_ci()
   if now - timers.get("review", now - every) >= every:
@@ -1617,14 +1595,6 @@ async def sweep(every: float) -> None:
   if now - timers.setdefault("audit", now) >= 12 * every:
     await audit(red)
     timers["audit"] = now
-
-
-def faulted(here: str, step: str, fault: Exception) -> None:
-  notice(
-    f"fault {step} {type(fault).__name__}",
-    f"The round on {here} met a fault in its step {step}: {type(fault).__name__}: {str(fault)[:1000]}. The round goes"
-    " on at the next round, and tells this kind of fault once.",
-  )
 
 
 def ended(here: str, cause: str) -> None:
@@ -1654,7 +1624,11 @@ async def conduct(every: float = 300) -> dict[str, object]:
           else:
             staff()
         except Exception as fault:
-          faulted(here, at, fault)
+          notice(
+            f"fault {at} {type(fault).__name__}",
+            f"The round on {here} met a fault in its step {at}: {type(fault).__name__}: {str(fault)[:1000]}. The round goes"
+            " on at the next round, and tells this kind of fault once.",
+          )
       if not (
         queue
         or backlog
