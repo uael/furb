@@ -163,6 +163,9 @@ export interface Furb {
 export interface Loaded {
   name: string;
   file: string;
+  /** What the disk held of the file when the part loaded, which `Parts` compares with the disk, since a watcher can
+   * miss a change. The part of an extension that the crate carries has none. */
+  stamp?: string;
   error?: string;
   panels: { name: string; draw: (seen: Seen) => readonly Line[] }[];
   rows: Map<string, (act: LiveAct, seen: Seen) => Row>;
@@ -204,9 +207,10 @@ export function summary(part: Loaded): string {
 }
 
 /** A part with no component. */
-const bare = (name: string, file: string, error?: string): Loaded => ({
+const bare = (name: string, file: string, error?: string, stamp?: string): Loaded => ({
   name,
   file,
+  ...(stamp === undefined ? {} : { stamp }),
   ...(error ? { error } : {}),
   panels: [],
   rows: new Map(),
@@ -221,6 +225,16 @@ const bare = (name: string, file: string, error?: string): Loaded => ({
 /** The text of a line, with no tone. */
 export function lineText(line: Line): string {
   return typeof line === "string" ? line : line.map(([text]) => String(text)).join("");
+}
+
+/** What the disk holds of a file now, which changes when the file does, so a change shows with no event. */
+function stamped(file: string): string {
+  try {
+    const seen = statSync(file);
+    return `${seen.mtimeMs}:${seen.size}:${seen.ino}`;
+  } catch {
+    return "";
+  }
 }
 
 /** How many modules this process imported, which makes the address of each import new. */
@@ -244,7 +258,8 @@ function carried(file: string, text: string): string {
  * imported again, and its function says its components. A module that fails to import, that exports no function as
  * its default, or whose function throws, gives a part with no component and the error. */
 export async function loadPart(name: string, file: string, text?: string): Promise<Loaded> {
-  const part = bare(name, file);
+  const stamp = text === undefined ? stamped(file) : undefined;
+  const part = bare(name, file, undefined, stamp);
   const furb: Furb = {
     life: model,
     panel: (title, draw) => void part.panels.push({ name: String(title), draw }),
@@ -277,7 +292,7 @@ export async function loadPart(name: string, file: string, text?: string): Promi
       throw new Error("Its module exports no function as its default.");
     await module.default(furb);
   } catch (error) {
-    return bare(name, file, `${basename(file)} of ${name}: ${plainError(error)}`);
+    return bare(name, file, `${basename(file)} of ${name}: ${plainError(error)}`, stamp);
   }
   return part;
 }
@@ -292,6 +307,8 @@ export class Parts {
   private timer?: ReturnType<typeof setTimeout>;
   private readonly watchers = new Map<string, FSWatcher>();
   private readonly heardWrites = new Set<string>();
+  private busy = 0;
+  private readonly poll = setInterval(() => this.verify(), 500).unref();
 
   constructor(
     readonly project: string,
@@ -302,6 +319,15 @@ export class Parts {
   /** Loads each part again, as the configs give them now, each from its file as it stands, and calls back. A later
    * load wins over one that ends after it. */
   async load(): Promise<void> {
+    this.busy++;
+    try {
+      await this.pull();
+    } finally {
+      this.busy--;
+    }
+  }
+
+  private async pull(): Promise<void> {
     const asked = ++this.asked;
     let found: Part[] = [];
     let error = "";
@@ -323,6 +349,13 @@ export class Parts {
     if (this.closed) return;
     clearTimeout(this.timer);
     this.timer = setTimeout(() => void this.load(), 30);
+  }
+
+  /** Loads the parts again when the disk holds another file than the one that a part loaded from, since a watcher can
+   * miss a change, and no later event then tells it. */
+  private verify(): void {
+    if (this.busy || this.closed) return;
+    if (this.loaded.some((one) => one.stamp !== undefined && stamped(one.file) !== one.stamp)) this.soon();
   }
 
   /** The list of writes that the parts heard last, and how many of it. */
@@ -496,6 +529,7 @@ export class Parts {
   dispose(): void {
     this.closed = true;
     clearTimeout(this.timer);
+    clearInterval(this.poll);
     for (const watcher of this.watchers.values()) watcher.close();
     this.watchers.clear();
   }

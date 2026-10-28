@@ -1355,6 +1355,10 @@ pub struct Engine {
   watchers: HashMap<String, Vec<Watcher>>,
   root: String,
   raised: Option<Fault>,
+  /// The fault that cut a run of the sandbox, when one did. monty ends the run at a fault that no code catches, as the
+  /// memory bound, with no `finally` of the frames it cuts: the bus of the engine stays busy with the ear that it
+  /// stepped, and hears no fact after it. So each later entry is refused with this fault.
+  stopped: Option<Fault>,
   /// The acts that the record showed started and not done, which the journal holds from the outside and which this
   /// life has not taken up yet, in the order of the record.
   holding: Vec<String>,
@@ -1367,16 +1371,12 @@ pub struct Engine {
 }
 
 impl Engine {
-  /// One entry into the sandbox, and then whoever watches an act that is done now is told, even when the entry
-  /// raised.
+  /// One entry into the sandbox, and then whoever watches an act that is done now is told.
   fn run<T>(
     &mut self,
     body: impl FnOnce(&mut Sand, &mut Outside) -> Result<T, Fault>,
   ) -> Result<T, Fault> {
-    let got = match self.fed(body) {
-      Ok(got) => got,
-      Err(fault) => self.told().and(Err(fault)),
-    };
+    let got = self.fed(body)?;
     let ran = self.outside.ran();
     self.kept_now(false);
     got.and_then(|got| ran.map(|()| got))
@@ -1392,17 +1392,34 @@ impl Engine {
 
   /// One entry into the sandbox: its body, then what every watched act came to, read in the same entry, since the
   /// session holds a name for each entry until the life ends. Each watcher of an act that is done is told once. The
-  /// entry fails when its run ended, and gives what its body gave otherwise.
+  /// entry fails when its run ended, which stops the life, and gives what its body gave otherwise.
   fn fed<T>(
     &mut self,
     body: impl FnOnce(&mut Sand, &mut Outside) -> Result<T, Fault>,
   ) -> Result<Result<T, Fault>, Fault> {
+    if let Some(cut) = &self.stopped {
+      return Err(Fault::refused(format!(
+        "The life stopped at {}: {}. It cut the step of an ear in the sandbox, so the life hears no fact after it. \
+         Open the life again on its record.",
+        cut.name,
+        cut.message()
+      )));
+    }
     let ids: Vec<String> = self.watchers.keys().cloned().collect();
-    let (got, outcomes) = self.sand.enter(&mut self.outside, |sand, outside| {
+    let entered = self.sand.enter(&mut self.outside, |sand, outside| {
       let got = body(sand, outside);
       let outcomes = ids.iter().map(|id| outside.outcome(sand, id)).collect::<Result<Vec<_>, _>>();
       (got, outcomes)
-    })?;
+    });
+    let (got, outcomes) = match entered {
+      Ok(both) => both,
+      Err(cut) => {
+        // No act that a watcher waits on comes to anything after the cut, so each watcher goes, unanswered.
+        self.watchers.clear();
+        self.stopped = Some(cut.clone());
+        return Err(cut);
+      }
+    };
     for (id, done) in ids.iter().zip(outcomes?) {
       let Some(value) = done else { continue };
       for mut watcher in self.watchers.remove(id).unwrap_or_default() {
@@ -1472,6 +1489,7 @@ impl Engine {
       watchers,
       root: String::new(),
       raised: None,
+      stopped: None,
       holding,
       parked,
       keeper: None,
@@ -1551,6 +1569,7 @@ impl Engine {
       watchers: HashMap::new(),
       root: table.root.clone(),
       raised: None,
+      stopped: None,
       holding,
       parked,
       keeper: None,
@@ -1574,7 +1593,11 @@ impl Engine {
     let outside = &self.outside;
     let foreign =
       outside.standing.values().any(|(name, at)| name.starts_with(EAR) && *at != At::Over);
-    if self.raised.is_some() || !outside.handed.calls.is_empty() || foreign {
+    if self.raised.is_some()
+      || self.stopped.is_some()
+      || !outside.handed.calls.is_empty()
+      || foreign
+    {
       return None;
     }
     let dump = self.sand.dump().ok()?;
@@ -1632,6 +1655,12 @@ impl Engine {
   /// or a refusal of the ears it was given.
   pub fn raised(&self) -> Option<&Fault> {
     self.raised.as_ref()
+  }
+
+  /// The fault that cut a run of the sandbox, after which the life refuses each entry, or nothing while the life goes
+  /// on. A host tells it, since the life tells it to no chain.
+  pub fn stopped(&self) -> Option<&Fault> {
+    self.stopped.as_ref()
   }
 
   /// One verb of the engine by its name, said with these words, and what it gave.

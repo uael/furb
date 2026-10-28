@@ -20,9 +20,10 @@ API of its own:
   commands in `bash.rs`, time in `time.rs`, the store of builds in `builds.rs`, which holds the program of the command line of each version
   that ran on the machine, the store of the record in `store.rs`, as a file of lines or a database
   of SQLite, each a `Store` that the suite in `store.test.rs` holds to its laws, whose ear names in the record the
-  engine that made it, the log of a life beside its record
+  engine that made it, and which gives a life each writing that an older build kept as a question as the fact that
+  the provider says now, so it replays where the life ran it, the log of a life beside its record
   in `log.rs`, the reader of a record with no life in `reader.rs`, which opens a record of any engine to read and keeps what it tells
-  in a cache beside the record, `<record>.told`, and the provider of models in `provider.rs`, which asks each model through rig and streams what it writes, and asks it again with a backoff after a failure that passes, as a lost connection or a claude command line that an update took away for a moment, and at the reset of a usage limit of the claude command line, which it tells the chain, or at once when the life stands again, as after a change of its settings or a retry that the operator asks. It runs the command line as one of the accounts that the user lists, `provider/claude/accounts.rs`, and moves the next turn to another account when one meets a usage limit or fails to sign in. It reads the statements of the word that a model streams, as the model finishes them, and ends the reply at the first that cannot be python, or at the first that the gate refuses for a fault that no later statement can mend, with the word as far as that statement, which `provider/watch.rs` holds. It gives the Kernel each new part of the word that the gate finds nothing against as a writing of its rung, which runs while the model writes the rest, and ends the reply at a part that raised; once a part ran, the turn of the reply is the word that ran, however the reply ends, and the chain is told what came after it. It drops the marks that a model writes around its word out of habit, a fence or the markup of a tool call as `<invoke>` and `<parameter>`, as each line ends, and a line of three backticks alone at the end of a word, which no line opened, and tells the chain once that it dropped them; a turn of a model goes back to it with no such mark, so it reads the finding of the gate alone. Its catalog, `provider/catalog.rs`,
+  in a cache beside the record, `<record>.told`, and the provider of models in `provider.rs`, which asks each model through rig and streams what it writes, and asks it again with a backoff after a failure that passes, as a lost connection or a claude command line that an update took away for a moment, and at the reset of a usage limit of the claude command line, which it tells the chain, or at once when the life stands again, as after a change of its settings or a retry that the operator asks. It runs the command line as one of the accounts that the user lists, `provider/claude/accounts.rs`, and moves the next turn to another account when one meets a usage limit or fails to sign in. It reads the statements of the word that a model streams, as the model finishes them, and ends the reply at the first that cannot be python, or at the first that the gate refuses for a fault that no later statement can mend, with the word as far as that statement, which `provider/watch.rs` holds. It says each new part of the word that the gate finds nothing against as a writing of its rung, a fact that the Kernel hears and runs while the model writes the rest, and ends the reply at a part that the Kernel says it ran with a raise; once a part ran, the turn of the reply is the word that ran, however the reply ends, and the chain is told what came after it. It drops the marks that a model writes around its word out of habit, a fence or the markup of a tool call as `<invoke>` and `<parameter>`, as each line ends, and a line of three backticks alone at the end of a word, which no line opened, and tells the chain once that it dropped them; a turn of a model goes back to it with no such mark, so it reads the finding of the gate alone. Its catalog, `provider/catalog.rs`,
   knows the models of every provider that pi-ai serves and those of the claude command line, which
   `provider/claude/discover.rs` asks of the program itself and keeps in the cache until the program changes or `/reload`, and it offers each
   model whose credential stands in the environment, the claude command line when it finds the program, and each
@@ -34,7 +35,8 @@ API of its own:
   `operator.rs` holds the rules by which every console reads what the operator answers, and `scratch.rs` the
   scratch directory of a life, which the files serve as `scratch://` and the commands name as `$TMPDIR`.
 - `src/extension.rs` says what an extension is and where a host finds the ones that a life runs, and holds the ear
-  `extensions`, which enables each by a fact that the record keeps and plays its word as a rung on each chain, and
+  `extensions`, which enables each by a fact that the record keeps and plays its word as a rung on each chain where
+  its manifest says it plays, every chain or the root alone, and
   `parts`, the part for the TUI of each extension, which `tui/src/parts.ts` loads live.
   `extensions/` holds the official extensions, `memory`, `skills`, `compaction`, `ouroboros`, `web` and `mcp`, each a word, a
   contract and a suite, and `src/extension/` holds the ear of the World of each that has one: `compaction.rs` answers a
@@ -58,6 +60,11 @@ API of its own:
   sandbox, which the engine steps as a generator. An ear that boot is given and that raises refuses the act that it
   heard when that act is of a kind it waits for, and starts again from a fresh ear when it can, as the Kernel, the
   gate and each ear that `lasting` in `src/ear.rs` made do. The life tells the operator once which ear raised and why.
+  A fault that no code of the sandbox catches, as the bound of the memory in `src/sand.rs` or a second excess of the
+  bound of a turn, cuts the run, and no `finally` of the frames that it cuts runs, so the bus of the engine would stay
+  busy and hear no fact after it. So the life stops there: it keeps no snapshot, refuses each later entry with that
+  fault, and gives it to a host as `stopped`. The host of the TUI tells each window that the life stopped, and its log
+  keeps why.
 - The Kernel is `src/furb/kernel.py`, one module that the sandbox loads and the python package imports, each on the
   names of its engine. The gate, `src/gate.rs`, is the type checker of monty. It reads a word on the sheet of the
   engine, `src/furb/sheet.py`, against the typeshed of the sandbox, and it runs each import of the word in a sandbox
@@ -163,6 +170,14 @@ green and incoherent is not done.
 Read the whole file and list each incoherence: a truth with two homes, a word with two meanings, a part held by the
 wrong owner. Probe each, build its reshape, and measure its size and the suite. Keep what adds coherence, then read
 the whole file again.
+
+## Questions of the owner
+
+A question of the owner about a state or a delay, as "Why is it not built yet?", "Is it fine?" or "Why is this chain
+paused?", most often points at a defect of the agent that he asks, and he wants that defect fixed durably. Read it as
+that request. Fix the state at once, find the cause in your own work, make its durable fix at once (a change of the
+instructions, of a tool or of a test, in a pull request), read the state again to verify, and only then answer, with
+the fix and its proof. An answer that only explains is not done.
 
 ## The suite
 
@@ -286,6 +301,9 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 - `python script/bench/audit.py <record> <sha256>`: the audit of a record. It checks the sha256 of the record, replays
   it in a life that only inspects it, with no model and no network, and checks that each word and each answer hashes
   as the record says. It imports furb alone, so an outsider runs it on `pip install furb`, as `docs/audit.md` says.
+- `uv run python script/bench/inert.py <record>`: the proof that a replay is inert. It replays a copy of the record
+  in a life that only inspects it, and fails when, before the tip, the life puts an act on to the World that the
+  record answers, an ear of the World says that it started an act, or the journal keeps a fact.
 - `python script/bench/loop.py make|furb|furb-own|furb-batch|claude|score <dir>`: the bench of a loop, which its
   docstring says how to run. It makes support tickets from a seed with a known label each, triages them on the same
   local server with a word of furb that asks one prompt per ticket, with a life of furb whose model writes its own

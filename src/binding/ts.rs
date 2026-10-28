@@ -320,6 +320,22 @@ impl JsEngine {
     self.raised.as_ref().map(|fault| Record(fault.object()))
   }
 
+  /// The fault that cut a run of the sandbox and stopped the life, after which each call is refused, and nothing
+  /// while the life goes on.
+  #[napi(getter, ts_return_type = "{ is: string; args: unknown[] } | null")]
+  pub fn stopped(&self) -> Option<Record> {
+    self.held.stopped().map(|fault| Record(fault.object()))
+  }
+
+  /// The listener hears once why the life stopped, as its class and its message, when a fault cut a run of its
+  /// sandbox, or at once when the life stopped already.
+  #[napi(ts_args_type = "listener: (why: string) => void")]
+  pub fn on_stop(&self, listener: Function<'_, String, ()>) -> napi::Result<()> {
+    *self.held.listener.borrow_mut() = Some(listener.create_ref()?);
+    self.held.stops();
+    Ok(())
+  }
+
   #[napi(getter)]
   pub fn disposed(&self) -> bool {
     self.held.engine.try_borrow().is_ok_and(|engine| engine.is_none())

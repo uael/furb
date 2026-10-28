@@ -1,7 +1,7 @@
 //! The extensions: what an extension is, and where a host finds the ones that a life runs.
 //!
 //! An extension stands in a folder that holds a manifest, `furb.json`, which gives its name, the file of its word,
-//! its life word and the file of its part for a TUI, and that file: a python module that imports what it uses from `furb.engine`, so an editor
+//! its life word, where it plays and the file of its part for a TUI, and that file: a python module that imports what it uses from `furb.engine`, so an editor
 //! reads it. The word is that file less those imports. The official extensions are the crate's own, which it
 //! carries in the same form.
 //!
@@ -11,8 +11,8 @@
 //!
 //! An extension enters a life as rungs, and never enters the module of the engine or the system prompt, so a chain
 //! that takes one grows at its end, and what a provider caches of it stands. The ear [`extensions`] enables each
-//! extension by a fact that the record keeps, and plays the word and the life word as a rung on each chain, and the
-//! definitions alone of a new word of an extension that the life runs, which reloads it.
+//! extension by a fact that the record keeps, and plays the word and the life word as a rung on each chain where the
+//! extension plays, and the definitions alone of a new word of an extension that the life runs, which reloads it.
 
 pub mod compaction;
 pub mod mcp;
@@ -43,6 +43,13 @@ pub const ENABLE: &str = "enable";
 
 /// The journal, which says the record again in a later life, so a done it says answers no stand of this life.
 const JOURNAL: &str = "journal";
+
+/// What the manifest gives under `plays` for an extension that plays on every chain, which is the default.
+const EVERY: &str = "every";
+
+/// What the manifest gives under `plays` for an extension that plays on the root alone, and what the fact enable
+/// carries after the life word for it.
+const ROOTED: &str = "root";
 
 /// The official extensions, each as its manifest, the file of its word, and the file of the part for a TUI that its
 /// manifest names, in the order a life runs them.
@@ -83,7 +90,9 @@ fn imports_furb(line: &str) -> bool {
   after.is_some_and(|rest| rest.is_empty() || rest.starts_with([' ', '\t', '.', ',']))
 }
 
-/// An extension: its name, its word, and its life word, which is empty when it has none.
+/// An extension: its name, its word, its life word, which is empty when it has none, and whether it plays on the root
+/// alone. An extension that plays on the root alone plays on no other chain but one whose source had it, since that
+/// chain makes the rung of its source again; any other extension plays on every chain.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "typescript", napi_derive::napi(object))]
 #[cfg_attr(feature = "python", derive(pyo3::FromPyObject, pyo3::IntoPyObject), pyo3(from_item_all))]
@@ -91,19 +100,22 @@ pub struct Extension {
   pub name: String,
   pub word: String,
   pub life: String,
+  pub root: bool,
 }
 
 impl Extension {
   /// The extension that a fact which enables one carries.
   fn of(a: &Fact) -> Option<Extension> {
     let text = |at| a.word(at).and_then(|one| one.as_str().map(str::to_owned));
-    Some(Extension { name: text(0)?, word: text(1)?, life: text(2)? })
+    let root = text(3).as_deref() == Some(ROOTED);
+    Some(Extension { name: text(0)?, word: text(1)?, life: text(2)?, root })
   }
 
   /// The saying that enables the extension, about the root.
   fn enable(&self) -> Fact {
     let words = [&self.name, &self.word, &self.life].map(|one| Object::string(one.as_str()));
-    Fact::says(ENABLE, ROOT, words)
+    let rooted = self.root.then(|| Object::string(ROOTED));
+    Fact::says(ENABLE, ROOT, words.into_iter().chain(rooted))
   }
 }
 
@@ -168,8 +180,17 @@ fn manifested<T: AsRef<str>>(
     return Err("A manifest gives a name and a word".to_owned());
   };
   let life = field(&manifest, "life")?.unwrap_or_default().to_owned();
+  let root = match field(&manifest, "plays")? {
+    None | Some(EVERY) => false,
+    Some(ROOTED) => true,
+    Some(other) => {
+      return Err(format!(
+        "The manifest plays {other:?}, and an extension plays \"{EVERY}\" or \"{ROOTED}\""
+      ));
+    }
+  };
   field(&manifest, "tui")?;
-  Ok(Extension { name: name.to_owned(), word: word(read(file)?.as_ref()), life })
+  Ok(Extension { name: name.to_owned(), word: word(read(file)?.as_ref()), life, root })
 }
 
 /// The text that a manifest gives under a key, or none when it gives none, and a refusal when it is not text.
@@ -377,8 +398,8 @@ pub fn enabled(root: &[Fact]) -> Vec<Extension> {
 /// The ear of the extensions, which says and hears the fact enable. `src/furb/AGENTS.md` says what the fact means and
 /// when a life says it, under the names enable and life word and in its laws.
 ///
-/// The fact is `("enable", "chain1", "extensions", name, word, life)`. No contract holds it, so this is the one home
-/// of its shape. The ear says it for each extension it is given that the life does not run as it is given, at each
+/// The fact is `("enable", "chain1", "extensions", name, word, life)`, with `"root"` after the life word for an
+/// extension that plays on the root alone. No contract holds it, so this is the one home of its shape. The ear says it for each extension it is given that the life does not run as it is given, at each
 /// stand that this life answers, the first of which is at the tip, and for an extension of a folder that a config
 /// turns on, when a write of the life in that folder lands. The fact of an extension that the life runs already
 /// reloads it: each chain plays the definitions of its new word alone, so each name of state keeps its value, and its
@@ -454,8 +475,10 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
         };
         if enabled[at].word != one.word {
           let word = definitions(&one.word);
-          for (chain, _) in &chains {
-            ring(&mut co, chain, &word).await?;
+          for (chain, had) in &chains {
+            if had.contains(&one.name) {
+              ring(&mut co, chain, &word).await?;
+            }
           }
         }
         enabled[at] = one;
@@ -465,7 +488,7 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
 }
 
 /// One extension played on a chain as a rung: its word then its life word, or its life word alone on a chain that
-/// has the extension already.
+/// has the extension already, and nothing on a chain other than the root that lacks an extension of the root alone.
 async fn play(
   co: &mut Co,
   one: &Extension,
@@ -473,6 +496,8 @@ async fn play(
 ) -> Result<(), Fault> {
   let word = if had.contains(&one.name) {
     one.life.clone()
+  } else if one.root && chain != ROOT {
+    return Ok(());
   } else {
     had.push(one.name.clone());
     format!("{}\n\n{}", one.word, one.life).trim_matches('\n').to_owned()

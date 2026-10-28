@@ -7,7 +7,7 @@ Each capture holds the clock of the view still at STILL, so that no spinner turn
 Each pass captures the target at the head of main, and each judge in JUDGES, blind on a chain of its own, reads against his words each capture that changed since the last pass, or each capture when his words changed or no pass judged them, and closes with the gaps that it sees. A capture that did not change keeps the gaps of the last pass. A gap counts only when it names a capture that the judge read and quotes his words exactly, and a failed capture or check is a gap of its own.
 A pass with gaps is one step: the gaps go to each worker of an owner that works, or to one item in the queue of the round, which fixes the largest gap in one PR. The next pass comes once that work ended and its PR landed.
 The target converges after CLEAN passes in a row with no gap, and stalls after STALL passes with no fewer gaps than its best before them: each tells the operator through the round, and the loop then waits for a change of his words or of main under paths.
-Before the conductor merges a PR that changes paths, it asks converge through its vetoes: once the checks of the PR are green, converge captures main where the PR forked and the head of the PR in one run, sends each judge one prompt with his words once and each capture that the PR changes, and says no until a head shows no gap. A PR that changes no capture sends nothing to a judge. The gaps go to its worker and to a comment, and a new head is judged again. converge puts no label on a PR.
+Before the conductor merges a PR that changes paths, it asks converge through its vetoes: once the checks of the PR are green, converge captures main where the PR forked and the head of the PR in one run, sends each judge his words once in each prompt, with the captures that the PR changes in prompts of BATCH captures and PROMPT characters at most, and cuts a capture over CUT characters with a note, and says no until a head shows no gap. A PR that changes no capture sends nothing to a judge. The gaps go to its worker and to a comment, and a new head is judged again. converge puts no label on a PR.
 A grant holds each chain of a judge under EACH dollars. A judge that fails, pauses or gives no answer in BOUND seconds gives no answer: its pass is inconclusive, and a head whose judges gave no answer twice is stuck, which tells the operator and keeps the veto until a new head.
 The ledger of a target, .furb/converge/<name>.json, keeps each pass, the frames and the records of the last pass, each judged head and the step that runs, so a later life goes on from it. The loop ends when it spent JOBS captures or USD dollars."""
 JUDGES = ("claude-cli:sonnet/high",)
@@ -19,6 +19,8 @@ EACH = 3.0
 BOUND = 1800.0
 LIMIT = 12
 BATCH = 16
+PROMPT = 200000
+CUT = 100000
 EVERY = 300.0
 RECORDS = 3
 HEAVIEST = 160_000_000
@@ -293,7 +295,9 @@ pins = os.path.join(out, "records.json")
 if os.path.exists(pins):
   with open(pins, encoding="utf-8") as r:
     seen["records"] = json.load(r)
-print(json.dumps(seen))
+with open(os.path.join(out, "shots.json"), "w", encoding="utf-8") as w:
+  json.dump(seen, w)
+print("wrote " + str(len(seen["changed"])) + " changed captures")
 """
 
 
@@ -414,8 +418,8 @@ async def shots(out: str, was: str, whole: bool, labels: tuple[str, str]) -> dic
   words = [out, IMAGES, cwd(), f"{out}/head", was, "1" if whole else "0", *labels]
   got = await bash("python3 -I - " + " ".join(shq(x) for x in words), stdin=SHOTS, show=HIDDEN, timeout=900)
   try:
-    seen = json.loads(got.stdout.content) if got.code == 0 else None
-  except ValueError:
+    seen = json.loads(read(f"{out}/shots.json", HIDDEN).content) if got.code == 0 else None
+  except (Refused, ValueError):
     seen = None
   if not isinstance(seen, dict):
     seen = {"failed": [["capture", f"the list of the captures failed: {got.stderr.content[-600:]}", ""]]}
@@ -424,12 +428,32 @@ async def shots(out: str, was: str, whole: bool, labels: tuple[str, str]) -> dic
   return seen
 
 
+def trimmed(text: str) -> str:
+  if len(text) <= CUT:
+    return text
+  head = text[:CUT]
+  head = head[: head.rfind("\n")] if "\n" in head else head
+  return head + f"\n     ... cut: the capture holds {len(text)} characters, and only its first part comes here"
+
+
+def batches(captures: list[str], many: int, space: int) -> list[list[str]]:
+  made: list[list[str]] = []
+  used = 0
+  for one in captures:
+    if not made or len(made[-1]) >= max(1, many) or used + len(one) > space:
+      made.append([])
+      used = 0
+    made[-1].append(one)
+    used += len(one) + 2
+  return made
+
+
 def sections(changed: list[dict]) -> list[str]:
   told = []
   for one in changed:
     name = str(one["name"])
     images = [f"![{label} {name}](furb-image://{png})" for label, png in one["images"]]
-    text = [str(one["text"])] if one["text"] else []
+    text = [trimmed(str(one["text"]))] if one["text"] else []
     told.append("\n".join([f'<capture name="{name}" change="{one["kind"]}">', *text, *images, "</capture>"]))
   return told
 
@@ -437,12 +461,13 @@ def sections(changed: list[dict]) -> list[str]:
 def judges(target: dict, brief: str, captures: list[str], label: str, batch: int) -> list[str]:
   quietly = conductor()["quietly"]
   asked = []
+  groups = batches(captures, batch, PROMPT - len(brief))
   for actor in JUDGES:
-    for at in range(0, len(captures), max(1, batch)):
+    for group in groups:
       where = str(quietly(chain, f"converge/{target['name']}/{label}"))
       quietly(rung, f"actor = {actor!r}", on=where)
       quietly(grant, EACH, on=where)
-      text = safe(brief.replace("{captures}", "\n\n".join(captures[at : at + max(1, batch)])))
+      text = safe(brief.replace("{captures}", "\n\n".join(group)))
       asked.append(str(quietly(prompt, list[tuple[str, str, str]], text, to=actor, on=where)))
   return asked
 
@@ -614,7 +639,7 @@ async def advanced(target: dict, book: dict, job: dict, words: str, head: str) -
     brief = (SCREEN if pr else JUDGE).replace("{legend}", LEGEND.replace("{was}", "main" if pr else "before"))
     brief = brief.replace("{name}", str(target["name"])).replace("{sha}", job["sha"]).replace("{n}", str(job["n"]))
     captures = sections(seen["changed"])
-    job["asked"] = judges(target, brief.replace("{words}", words), captures, job["label"], len(captures) if pr else BATCH)
+    job["asked"] = judges(target, brief.replace("{words}", words), captures, job["label"], BATCH)
     job["asked"] = job["asked"] or ["none"]
     job["at"] = clock()
   asked = [a for a in job["asked"] if a != "none"]

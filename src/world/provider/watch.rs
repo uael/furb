@@ -12,10 +12,11 @@
 //! statement with no such part that holds a fault.
 //!
 //! The statements that a model finished, and that the gate finds nothing against, run as the model writes the rest:
-//! the provider gives the Kernel each new part of the word as a writing of its rung. A statement that raised ends
-//! the word where it raised, so the reply ends there. Once a part ran, the turn of the reply is never a word other
-//! than the one that ran: it is the word as far as the parts that ran, whatever the model wrote after them that the
-//! chain would refuse, since a later life runs the word of the rung and a statement of it must run there as it ran.
+//! the provider says each new part of the word as a writing of its rung, a fact that the Kernel hears and runs. A
+//! statement that raised ends the word where it raised, which the Kernel says as the fact ran, so the reply ends
+//! there. Once a part ran, the turn of the reply is never a word other than the one that ran: it is the word as far
+//! as the parts that ran, whatever the model wrote after them that the chain would refuse, since a later life runs
+//! the word of the rung and a statement of it must run there as it ran.
 
 use ruff_python_ast::{
   Expr, Stmt,
@@ -40,7 +41,7 @@ pub(super) struct Watch {
   sent: String,
   /// Where in the text the parts given to the Kernel end: the start of a line at the left edge, or 0.
   given: usize,
-  /// Whether the word is given to the Kernel in no part, as when no Kernel takes a writing.
+  /// Whether the word is given to the Kernel in no part, as when a pause held its first part.
   whole: bool,
   /// What the model wrote after the last end of a line, which the text takes once its line ends.
   tail: String,
@@ -102,7 +103,7 @@ impl Watch {
     self.given = end;
   }
 
-  /// The word given to the Kernel in no part from now on, since no Kernel takes a part of it.
+  /// The word given to the Kernel in no part from now on, since a pause held its first part.
   pub(super) fn untaken(&mut self) {
     self.whole = true;
   }

@@ -35,8 +35,8 @@ pub(crate) const TURN: Duration = Duration::from_secs(30);
 /// The most that the sandboxes of a program may hold, in bytes: 4 GiB. The host of the TUI that holds a record of 411 MB
 /// stands at 0.7 GiB of resident memory, and the largest life seen held 1.6 GiB, so the bound stands above every legal
 /// life, and below the memory of the machines that run one. Past it, monty raises a `MemoryError` where the code
-/// stands, which no code of the sandbox catches: the entry of the host ends with it as a fault, and the process and
-/// the machine keep their memory.
+/// stands, which no code of the sandbox catches: the entry of the host ends with it as a fault, the life stops, since
+/// the frames that it cut never ran their `finally`, and the process and the machine keep their memory.
 ///
 /// The bound is of the bytes that the program asks of its allocator, which the sandbox of a program with no counting
 /// allocator does not read: there only the operations that monty checks before they allocate are bound, as a repeat

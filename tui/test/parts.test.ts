@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, type FSWatcher, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { demoSession } from "../src/demo.ts";
@@ -645,4 +645,21 @@ test("seen.run rejects with the error of a word that raises", async () => {
     { width: 120, height: 44 },
     session,
   );
+});
+
+test("a part loads again when its file changes though its watcher says nothing", async () => {
+  const { directory, file } = project();
+  const parts = new Parts(directory, () => {});
+  try {
+    await parts.load();
+    const watchers = (parts as unknown as { watchers: Map<string, FSWatcher> }).watchers;
+    for (const watcher of watchers.values()) watcher.close();
+    watchers.clear();
+    const version = parts.version;
+    writeFileSync(file, PART.replace('"Todo"', '"Todo list"'));
+    for (let tries = 0; tries < 200 && parts.version === version; tries++) await Bun.sleep(25);
+    expect(parts.loaded.find((one) => one.name === "todo")?.panels[0]?.name).toBe("Todo list");
+  } finally {
+    parts.dispose();
+  }
 });

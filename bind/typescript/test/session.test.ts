@@ -985,6 +985,19 @@ test("the activity starts the streams of a command again at each started of it, 
   });
 });
 
+test("the activity follows no writing of an older record, which holds each writing as a question", () => {
+  const activity = new Activity();
+  const hear = (fact: Fact) => {
+    const heard = activity.hear(fact);
+    while (!heard.next().done);
+  };
+  hear(["rung", "rung1", "prompt1", ROOT, "", "", "claude-cli:opus/high"]);
+  hear(["writing", "writing1", "provider", ROOT, "rung1", "x = 1\n", 0]);
+  hear(["done", "writing1", "kernel", null]);
+  expect(activity.acts.has("writing1")).toBe(false);
+  expect(activity.acts.has("rung1")).toBe(true);
+});
+
 test("the activity places each act in time by the count of facts, and keeps the answers of each chain", () => {
   const activity = new Activity();
   const hear = (fact: Fact) => {
