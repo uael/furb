@@ -990,6 +990,7 @@ def headed(id: str, what: str = "", **words: object) -> str:
   """The paragraph of an act: its header, # and the id with no space between, then what happened, and under it the binding of each word, in order.
   headed binds each value by its repr with no check, since every value that reaches it is a wire value, and the repr of a wire value is python.
   headed shows a value as python shows it, less the path of the module before the name of its class, since a chain binds a class by its name alone.
+  An open of an act that the word of a rung on its chain made tells no string that the word holds, as python writes it or as a quote, since the turn of the model shows that word, and an act that tells a text tells each of its words.
   """
 
 def bound(id: str, of: str = "object") -> str:

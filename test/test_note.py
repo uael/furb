@@ -144,7 +144,7 @@ async def test_a_statement_that_a_paragraph_shows_binds_the_name_of_an_act_in_th
   own = [a[5] for a in said(log, "run") if a[4].endswith("_told")]
   asked = "#prompt1\n<s:prompt1_message>\nrun it\nnow</s:prompt1_message>\nprompt1: Act[int] = Act('prompt1')"
   told = [
-    "#bash1\nbash1_command = 'echo hi'\nbash1: Act[Exit] = Act('bash1')",
+    "#bash1\nbash1: Act[Exit] = Act('bash1')",
     "#prompt2\nprompt2_message = 'bash1 done'\nprompt2_thread = 'prompt1'\nprompt2: Act[None] = Act('prompt2')",
     "#bash1 exited 0\nbash1_stdout = 'ran echo hi'",
     "#rung2 advance on prompt2",
@@ -166,7 +166,7 @@ async def test_a_statement_that_a_paragraph_shows_binds_the_name_of_an_act_in_th
 
 async def test_a_paragraph_binds_each_value_that_it_tells_under_a_name() -> None:
   """A paragraph binds each value that it tells under a name: the id of the act, an underscore, and the word that holds the value, as prompt2_message, bash1_command, read3_text or prompt2_value."""
-  _, _, root = born("x = bash('echo hi')\nread('a.txt')\nclose('done')", "close(None)")
+  _, _, root = born("x = bash('echo ' + 'hi')\nread('a.txt')\nclose('done')", "close(None)")
   assert await engine.prompt(str, "run it", on=root) == "done"
   await settle()
   got = paragraphs(engine.turns(on=root))
@@ -179,7 +179,7 @@ async def test_a_paragraph_binds_each_value_that_it_tells_under_a_name() -> None
 
 async def test_a_paragraph_binds_a_string_of_more_than_one_line_as_a_quote() -> None:
   """A paragraph binds a string of more than one line as a quote, and any other value as a statement of its repr."""
-  sand, _, root = born("x = bash('echo a\\necho b')\nclose('one\\ntwo')", "close(None)")
+  sand, _, root = born("x = bash('echo a' + chr(10) + 'echo b')\nclose('one\\ntwo')", "close(None)")
   assert await engine.prompt(str, "run\nthem", on=root) == "one\ntwo"
   one = engine.prompt(int, "which?", to=OPERATOR, on=root)
   engine.close(3, one)

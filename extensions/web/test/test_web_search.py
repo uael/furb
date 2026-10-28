@@ -27,9 +27,9 @@ async def test_it_puts_the_query_and_the_actor_to_the_world(tmp_path: Path) -> N
 
 
 async def test_its_open_tells_the_query_and_its_done_tells_the_lines_of_the_answer(tmp_path: Path) -> None:
-  """Its open tells the query and binds the act to Act[Text], and its done tells under the word text the lines of the answer that its show picks."""
+  """Its open tells the query, unless the word that made the act holds it, and binds the act to Act[Text], and its done tells under the word text the lines of the answer that its show picks."""
   root, _ = webbed(tmp_path, {"rust": ANSWER})
-  await engine.rung('await web_search("rust", show=span(1, 1))', on=root)
+  await engine.rung('await web_search("ru" + "st", show=span(1, 1))', on=root)
   assert of(engine.turns(on=root), "web_search") == [
     "#web_search1\nweb_search1_query = 'rust'\nweb_search1: Act[Text] = Act('web_search1')",
     "#web_search1 done\nweb_search1_text = 'Rust is fast.'",
@@ -41,6 +41,4 @@ async def test_a_search_that_the_world_refuses_completes_with_refused(tmp_path: 
   root, _ = webbed(tmp_path, {})
   with pytest.raises(Refused, match=r"No page answers tea\."):
     await engine.rung('await web_search("tea")', on=root)
-  assert of(engine.turns(on=root), "web_search") == [
-    "#web_search1\nweb_search1_query = 'tea'\nweb_search1: Act[Text] = Act('web_search1')"
-  ]
+  assert of(engine.turns(on=root), "web_search") == ["#web_search1\nweb_search1: Act[Text] = Act('web_search1')"]
