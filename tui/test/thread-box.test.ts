@@ -89,9 +89,13 @@ test("a click on Reply makes the thread the target of the input, whose line and 
       expect(shown).toContain("+ New thread");
       expect(app.composeEdges[0]?.borderColor.equals(threadTone(id))).toBe(true);
       await screen.mockInput.typeText("Look at it once more");
+      // The thread holds its model back, so that the message stays open to be seen: the model closes a message within
+      // the batch of facts that brings it, on a machine that is quick.
+      await session.command(`/pause ${id}`);
       screen.mockInput.pressEnter();
       await until(session, () => (listed(session)[0]?.messages.length ?? 0) === 1);
       expect(listed(session)[0]?.resolved).toBe(false);
+      await session.command(`/wake ${id}`);
       expect(session.target).toBe(id);
       await click("+ New thread");
       expect(session.target).toBeUndefined();
