@@ -602,7 +602,7 @@ async def started(target: dict, book: dict, sha: str, n: int = 0) -> dict:
   else:
     label = f"main{len(book['passes'])}-{sha[:12]}"
   out = f"{cwd()}/{BOOKS}/{target['name']}/{label}"
-  act = str(bash(capturing(target, pairs, out, book["records"]), show=HIDDEN, timeout=7200))
+  act = str(conductor()["quietly"](bash, capturing(target, pairs, out, book["records"]), show=HIDDEN, timeout=7200))
   return {"kind": "pr" if n else "main", "sha": sha, "n": n, "out": out, "label": label, "act": act, "pairs": pairs, "asked": []}
 
 
@@ -651,7 +651,7 @@ async def advanced(target: dict, book: dict, job: dict, words: str, head: str) -
     seen = await shots(job["out"], was, not pr, ("main", "head") if pr else ("before", "now"))
     if seen["faults"]:
       if not job.get("again"):
-        job.update(again=True, act=str(bash(capturing(target, job["pairs"], job["out"], book["records"], True), show=HIDDEN, timeout=7200)))
+        job.update(again=True, act=str(conductor()["quietly"](bash, capturing(target, job["pairs"], job["out"], book["records"], True), show=HIDDEN, timeout=7200)))
         return job
       return faulted(target, book, job, seen["faults"], words, head)
     book["jobs"] += 1
