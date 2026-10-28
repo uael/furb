@@ -9,6 +9,10 @@
 //! host. The key of the build is a digest of the engine that a record names, which is of the engine and the Kernel,
 //! of the sheet, of the version of the dumps of monty and of the crate, and of the names of the ears in the order of boot, since a replay on another build or on
 //! other ears could give another life.
+//!
+//! The session holds each fact that the life said and each value that its facts hold, so a snapshot weighs about as
+//! much as the record and its log together: a long life writes one of gigabytes. A life writes it only as often as
+//! [`PACE`] lets, and a snapshot that fails to land leaves no part of it on the disk.
 
 use std::{
   fs,
@@ -58,6 +62,11 @@ struct Written<'a> {
 /// The snapshot of the record at a path.
 pub(crate) fn path(record: &Path) -> PathBuf {
   PathBuf::from(format!("{}.snapshot", record.display()))
+}
+
+/// Where a life writes the snapshot of the record at a path before it takes the name of the snapshot.
+fn aside(record: &Path) -> PathBuf {
+  PathBuf::from(format!("{}.tmp", path(record).display()))
 }
 
 /// The key of this build, on the ears of a life in the order of boot.
@@ -141,10 +150,12 @@ impl Keeper {
   }
 
   /// The snapshot written, on the record and the log as they stand now. A snapshot is written whole under another name, which then takes its name, so a crash leaves the old snapshot or
-  /// the new one. A failure writes nothing, since a snapshot is a cache.
+  /// the new one. A failure writes nothing, since a snapshot is a cache, and removes what it wrote under the other name.
   pub(crate) fn write(&mut self, table: &Table, dump: &[u8]) {
     let start = Instant::now();
-    let _ = self.written(table, dump);
+    if self.written(table, dump).is_none() {
+      let _ = fs::remove_file(aside(&self.record));
+    }
     self.spent = start.elapsed();
   }
 
@@ -155,8 +166,7 @@ impl Keeper {
     let mut bytes = serde_json::to_vec(&head).ok()?;
     bytes.push(b'\n');
     bytes.extend_from_slice(dump);
-    let (at, aside) =
-      (path(&self.record), PathBuf::from(format!("{}.tmp", path(&self.record).display())));
+    let (at, aside) = (path(&self.record), aside(&self.record));
     fs::write(&aside, &bytes).ok()?;
     fs::rename(&aside, &at).ok()?;
     self.covered = Some(log);

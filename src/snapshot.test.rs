@@ -1,10 +1,13 @@
 //! The keeper of a snapshot: when a life asks it for one.
 
-use std::{fs, path::PathBuf};
+use std::{
+  fs,
+  path::PathBuf,
+  time::{Duration, Instant},
+};
 
-use std::time::{Duration, Instant};
-
-use super::{INTERVAL, Keeper};
+use super::{INTERVAL, Keeper, aside, path};
+use crate::engine::Table;
 
 /// A new folder of the test, empty.
 fn place(name: &str) -> PathBuf {
@@ -62,4 +65,22 @@ fn measure_each_step_of_an_open_from_the_snapshot_of_a_record() {
     hashed.0.0,
     past.len()
   );
+}
+
+#[test]
+fn a_snapshot_that_fails_to_land_leaves_no_part_of_it_on_the_disk() {
+  let record = place("aside").join("record.jsonl");
+  fs::write(&record, "[[\"stand\",\"stand1\",\"operator\",\"chain1\"]]\n").unwrap();
+  fs::write(format!("{}.log", record.display()), "{}\n").unwrap();
+  // A folder in the place of the snapshot refuses the new one.
+  fs::create_dir_all(path(&record).join("held")).unwrap();
+  let mut keeper = Keeper::new(record.clone(), "build".to_owned());
+  assert!(keeper.due(true));
+  let table: Table = serde_json::from_str(
+    r#"{"root":"chain1","ears":[],"kept":[],"opened":[],"given":"","working":[]}"#,
+  )
+  .unwrap();
+  keeper.write(&table, &[0; 4096]);
+  assert!(!aside(&record).exists(), "the part of the snapshot is removed");
+  assert!(path(&record).is_dir());
 }

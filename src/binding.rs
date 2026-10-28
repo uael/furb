@@ -217,6 +217,10 @@ impl Ear for Lent {
   fn ran(&mut self) -> Result<(), Fault> {
     self.0.borrow_mut().as_mut().map_or(Ok(()), |ear| ear.ran())
   }
+
+  fn behind(&self) -> bool {
+    self.0.try_borrow().is_ok_and(|ear| ear.as_ref().is_some_and(|ear| ear.behind()))
+  }
 }
 
 #[cfg_attr(feature = "python", pyo3::pymethods)]

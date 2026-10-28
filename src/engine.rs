@@ -523,6 +523,11 @@ impl Outside {
     self.handed.ears.values_mut().map(|ear| ear.ran()).fold(Ok(()), Result::and)
   }
 
+  /// Whether an ear of the host holds a fact that it writes beside the record and could not write yet.
+  fn behind(&self) -> bool {
+    self.handed.ears.values().any(|ear| ear.behind())
+  }
+
   /// The side of the host, on what the opening gave.
   fn new(given: Handed, opened: &Object) -> Outside {
     let got = opened.as_ref();
@@ -1602,8 +1607,12 @@ impl Engine {
 
   /// The snapshot of the life, written where its keeper says when one is due, or now, and only when the life said a
   /// fact since the last one, which is known before the sandbox dumps its session: a failure leaves the snapshot
-  /// before it, since a snapshot is a cache.
+  /// before it, since a snapshot is a cache. A life writes none while an ear is behind, since the record or its log
+  /// lacks a fact that the sandbox holds.
   fn kept_now(&mut self, now: bool) {
+    if self.outside.behind() {
+      return;
+    }
     if !self.keeper.as_mut().is_some_and(|keeper| keeper.due(now) && keeper.grew()) {
       return;
     }
