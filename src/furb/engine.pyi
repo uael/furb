@@ -460,6 +460,7 @@ def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[No
   A prompt carries the name of its shape as a word, and takes the name as well as the shape, so the journal makes it again.
   The name of a shape is the word a chain says it by, so a shape that holds a class of the engine or of the chain names it as the chain does, under no module.
   The acknowledgment carries no shape and a message that names the act and what happened to it, as prompt3 done.
+  A done whose value is None makes no acknowledgment, since it gives the model nothing to read.
   The acknowledgment is a prompt on the thread that made the rung that made the act, so the actor of that thread sees it in that thread, and a prompt on the chain when that rung answers no prompt.
   When that thread is over, the acknowledgment is on the nearest thread above it that is open, or on the thread at the top of its lineage when each is over, so a model whose task is open reads it as a message of that task and closes no prompt for it.
   A prompt on a thread is on the chain of that thread, and goes to the actor of the thread unless it names one.
@@ -568,14 +569,16 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   Before the first prompt to another actor whose roster entry holds a doctrine, and before the advance of a reply to such an actor, the chain tells its doctrine when nothing told it, and the chain never tells a doctrine that its transcript tells already, so the model reads it once, and a chain whose actor reads none and that asks no such actor tells nothing of it.
   When nothing was told on the chain since the word of the last rung that the chain did not make was ready, the chain tells that rung under the header told nothing before the advance, so the model sees that the word showed it nothing.
   The chain holds the text of each paragraph told on it, in order.
-  At the first ready of the next rung, the chain runs that text as the told rung of that rung, before its word, and holds nothing more.
+  At the advance of the next rung, before it asks the reply, or at the first ready of a rung that it does not advance, the chain runs that text as the told rung of that rung, and holds nothing more.
   Each act that a told paragraph opened and each value that it told is bound for the word of that rung, whoever wrote it.
   The gate never reads a told rung as a word, since the engine wrote it.
   The turns do not show a told rung, since the turn shows its python already.
   A told rung is no act, and the record keeps neither it nor its run.
   A later life hears the same paragraphs and runs the told rung again.
-  A told rung takes the name of the rung whose first ready runs it, with _told after it, as rung5_told.
-  A rung makes at most one told rung, at its first ready, so no two told rungs share a name.
+  A told rung takes the name of the rung whose advance or first ready runs it, with _told after it, as rung5_told.
+  A rung makes at most one told rung, at its advance or at its first ready, so no two told rungs share a name.
+  The chain advances no rung that is over, so it asks no reply for a rung that a close or a cancel ended before its advance.
+  A statement that the model of a rung writes runs after the told rung of that rung, so it reads each value that the advance of that rung bound.
   The chain takes its own act, since the engine is the one that runs it.
   The chain asks the model of a rung for its word by a reply it makes under the site of that rung, whose one word is the actor.
   When an act that a rung of the chain made on another chain is done while the word of that rung does not run and no word of the chain awaited it, the chain tells it about that rung under the header done, and binds what it came to under the word value, since its model reads no other transcript.
