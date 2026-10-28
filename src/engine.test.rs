@@ -654,6 +654,100 @@ fn a_life_syncs_its_store_at_the_end_of_each_run_and_not_after_each_entry() {
   assert!(syncs < keeps, "{syncs} syncs for {keeps} entries: {ledger:?}");
 }
 
+/// A store whose disk can be full: while it is, it refuses each entry and each sync. It writes in a ledger each entry
+/// that it keeps and each entry that it refuses.
+struct Full {
+  full: Rc<std::cell::Cell<bool>>,
+  kept: Rc<RefCell<Vec<String>>>,
+  refused: Rc<RefCell<Vec<String>>>,
+}
+
+impl world::Store for Full {
+  fn entries(&mut self) -> Result<Vec<Object>, Fault> {
+    Ok(Vec::new())
+  }
+
+  fn keep(&mut self, entry: crate::value::ObjectRef<'_>) -> Result<(), Fault> {
+    let line = crate::wire::record(entry).to_string();
+    if self.full.get() {
+      self.refused.borrow_mut().push(line);
+      return Err(Fault::refused("No space left on device (os error 28): the record"));
+    }
+    self.kept.borrow_mut().push(line);
+    Ok(())
+  }
+
+  fn sync(&mut self) -> Result<(), Fault> {
+    match self.full.get() {
+      true => Err(Fault::refused("No space left on device (os error 28): the record")),
+      false => Ok(()),
+    }
+  }
+}
+
+#[test]
+fn a_store_on_a_full_disk_loses_no_entry_keeps_none_twice_and_tells_the_operator() {
+  let full = Rc::new(std::cell::Cell::new(true));
+  let (kept, refused) = (Rc::new(RefCell::new(Vec::new())), Rc::new(RefCell::new(Vec::new())));
+  let store = Full { full: Rc::clone(&full), kept: Rc::clone(&kept), refused: Rc::clone(&refused) };
+  let (record, store) = world::keeping(store).unwrap();
+  let at = std::env::temp_dir().join(format!("furb-engine-full-{}", std::process::id()));
+  fs::create_dir_all(&at).expect("a yard of the test");
+  let words = Rc::new(RefCell::new(VecDeque::from(["close(1)".to_owned(), "close(2)".to_owned()])));
+  let scratch = world::Scratch::own();
+  let ears = [
+    ("provider", provider(at, words, Rc::default())),
+    ("files", world::files(scratch.clone(), None)),
+    ("bash", world::bash(scratch, &record)),
+    ("time", world::time()),
+    ("store", store),
+  ];
+  let mut engine = Engine::boot(record, ears).unwrap();
+  let root = engine.root().to_owned();
+  let told = |engine: &mut Engine| {
+    let facts = engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
+    let theirs = facts.iter().filter(|one| one.kind() == "prompt" && one.by() == "store");
+    theirs.map(|one| format!("{one:?}")).collect::<Vec<_>>()
+  };
+  let settle = |engine: &mut Engine| {
+    let wait = engine.wait(&[], verbs::Wait { seconds: Some(0.1), on: on(&root) }).unwrap();
+    block_on(wait).unwrap();
+  };
+  // The life goes on while the disk is full, and the operator hears it once.
+  let with = verbs::Prompt { on: on(&root), ..Default::default() };
+  let act = engine.prompt(Object::string("int"), with.clone()).unwrap();
+  assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(1));
+  settle(&mut engine);
+  assert!(kept.borrow().is_empty(), "{:?}", kept.borrow());
+  assert!(!refused.borrow().is_empty());
+  let first = told(&mut engine);
+  assert_eq!(first.len(), 1, "{first:?}");
+  assert!(first[0].contains("cannot be written: No space left on device"), "{first:?}");
+  // The disk has room again: each entry lands once, in order, and the operator hears it.
+  full.set(false);
+  let act = engine.prompt(Object::string("int"), with).unwrap();
+  assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(2));
+  settle(&mut engine);
+  let kept = kept.borrow();
+  let once: std::collections::HashSet<_> = kept.iter().collect();
+  assert_eq!(once.len(), kept.len(), "an entry was kept twice: {kept:?}");
+  let refused = refused.borrow();
+  let mut waited: Vec<&String> = Vec::new();
+  for one in refused.iter() {
+    if !waited.contains(&one) {
+      waited.push(one);
+    }
+  }
+  assert_eq!(
+    kept[..waited.len()].iter().collect::<Vec<_>>(),
+    waited,
+    "the entries that waited, in order"
+  );
+  let second = told(&mut engine);
+  assert_eq!(second.len(), 2, "{second:?}");
+  assert!(second[1].contains("is written again"), "{second:?}");
+}
+
 #[test]
 fn a_second_life_on_the_record_the_store_kept_makes_the_same_acts_again() {
   let (root, id) = {
