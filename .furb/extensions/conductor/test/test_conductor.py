@@ -96,6 +96,8 @@ class Round:
     self.targets: list[str] = []
     self.says: list[tuple[str, str, int]] = []
     self.prompts: list[tuple[str, str]] = []
+    self.cancelled: list[str] = []
+    self.paused_chains: list[str] = []
     self.hired: list[tuple[str, str]] = []
     self.files: dict[str, str] = {}
     self.facts: dict[str, tuple] = {}
@@ -130,6 +132,9 @@ class Round:
       module=lambda on="": self.modules.get(on, {}),
     )
     ns.update(chain=lambda label="", source="": f"chain-{label}", rung=self.rung)
+    ns.update(cancel=lambda name: self.cancelled.append(name))
+    ns.update(pause=lambda name: self.paused_chains.append(name), paused=lambda name: name in self.paused_chains)
+    ns.update(wake=lambda name: self.paused_chains.remove(name) if name in self.paused_chains else None)
     # The root plays pr before the conductor, which uses its names, as .furb/config.json orders them.
     exec(compile(IMPORT.sub("", PULL.read_text(encoding="utf-8")), str(PULL), "exec"), ns)  # noqa: S102
     exec(compile(IMPORT.sub("", SOURCE), str(HERE / "conductor.py"), "exec"), ns)  # noqa: S102
@@ -167,7 +172,9 @@ class Round:
   def prompt(self, shape: object, message: str = "", to: str = "", on: str = "") -> str:
     self.prompts.append((message, on))
     self.targets.append(to)
-    return f"prompt{100 + len(self.prompts)}"
+    name = f"prompt{100 + len(self.prompts)}"
+    self.facts.setdefault(name, ("prompt", name, "rung1", on, "None", message, to))
+    return name
 
   def rung(self, word: str = "", retells: str = "", to: str = "", on: str = "") -> str:
     self.rungs.append((word, on))
@@ -686,7 +693,7 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 
 STATE = (
   "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed fixes silent"
-  " comments measures timers noted debriefs vetoes ordered tips shifted hired paced landed heard handled ends requeued"
+  " comments measures timers noted debriefs briefed owns watched after parked vetoes ordered tips shifted hired paced landed heard handled ends requeued"
   " statused secret budgeted flaky runs_read"
 ).split()
 
@@ -701,7 +708,7 @@ def test_the_round_plays_on_the_root_alone_and_pr_on_every_chain_before_it() -> 
   assert [manifest(name).get("plays", "every") for name in ("pr", "conductor", "converge")] == ["every", "root", "root"]
   order = list(json.loads((furb / "config.json").read_text(encoding="utf-8"))["extensions"])
   assert order.index("pr") < order.index("conductor")
-  assert re.findall(r"^def (\w+)", PULL.read_text(encoding="utf-8"), re.M) == ["pr_box", "pr_body", "prcheck", "pr", "shq"]
+  assert re.findall(r"^(?:async )?def (\w+)", PULL.read_text(encoding="utf-8"), re.M) == ["pr_box", "pr_body", "prcheck", "pr", "shq"]
   assert re.findall(r"^def (pr|prcheck|shq)\(", SOURCE, re.M) == []
 
 
@@ -1238,10 +1245,10 @@ def test_a_stacked_pr_whose_base_moved_names_the_old_and_the_new_head_in_its_ord
 @JQ
 async def test_pr_stops_when_where_is_missing_and_runs_no_gh(conductor: Round) -> None:
   branch(conductor)
-  got = await conductor.ns["pr"](
-    "feat(tui): Show records", "It matters.", ["It works."], CHECKS, where=str(conductor.tmp / "none")
-  )
-  assert got.code != 0
+  with pytest.raises(Refused):
+    await conductor.ns["pr"](
+      "feat(tui): Show records", "It matters.", ["It works."], CHECKS, where=str(conductor.tmp / "none")
+    )
   assert conductor.log() == ""
 
 
@@ -1460,3 +1467,321 @@ def test_each_row_of_the_reviews_ends_its_line_and_a_body_holds_no_carriage_retu
   got = asyncio.run(conductor.bash(conductor.REVIEWS))
   rows = [x for x in got.stdout.content.split("\n") if x]
   assert rows == [NOT_FOUND, "394\ti394\tuael\t0\t-\ta  b c d"]
+
+
+def evidence_repo(conductor: Round, tmp_path: Path) -> str:
+  env = conductor.env
+  git("init", "-q", "-b", "main", cwd=tmp_path, env=env)
+  (tmp_path / "test").mkdir()
+  wall = tmp_path / "test" / "test_hygiene.py"
+  wall.write_text("WALL = 6520\n", encoding="utf-8")
+  git("add", "test/test_hygiene.py", cwd=tmp_path, env=env)
+  git("commit", "-q", "-m", "base", cwd=tmp_path, env=env)
+  sha = git("rev-parse", "HEAD", cwd=tmp_path, env=env).strip()
+  wall.write_text("WALL = 6500\n", encoding="utf-8")
+  git("commit", "-q", "-am", "main sets the wall to 6500", cwd=tmp_path, env=env)
+  git("update-ref", "refs/remotes/origin/main", "HEAD", cwd=tmp_path, env=env)
+  git("reset", "-q", "--hard", sha, cwd=tmp_path, env=env)
+  return sha
+
+
+@POSIX
+@JQ
+async def test_an_order_for_a_failed_check_carries_its_failed_lines_and_the_commits_main_changed(
+  conductor: Round, tmp_path: Path
+) -> None:
+  sha = evidence_repo(conductor, tmp_path)
+  runs = json.dumps([{"databaseId": 9, "conclusion": "failure"}])
+  conductor.say(r"limit 30 --json databaseId,conclusion", runs)
+  conductor.say(r"run view 9 --log-failed", "gates\tstep\tFAILED test/test_hygiene.py::test_wall - 6520 > 6500\ngates\tstep\tnoise\n")
+  conductor.busy("p1", "k5", SONNET)
+  await conductor.mend(conductor.pr(checks=("FAILURE",), sha=sha, labels=["w:k5"]), 0.0, False)
+  order = conductor.prompts[-1][0]
+  assert "The first failed lines of its job log:\n  gates\tFAILED test/test_hygiene.py::test_wall - 6520 > 6500\n" in order
+  assert "that change a file of the failure:\n  " in order and "main sets the wall to 6500" in order
+  assert "noise" not in order
+
+
+@POSIX
+@JQ
+async def test_a_fixer_brief_for_a_failed_check_carries_the_same_lines(conductor: Round, tmp_path: Path) -> None:
+  sha = evidence_repo(conductor, tmp_path)
+  conductor.say(r"limit 30 --json databaseId,conclusion", json.dumps([{"databaseId": 9, "conclusion": "failure"}]))
+  conductor.say(r"run view 9 --log-failed", "gates\tstep\tFAILED test/test_hygiene.py::test_wall\n")
+  await conductor.mend(conductor.pr(checks=("FAILURE",), sha=sha), 0.0, False)
+  assert [key for key, _ in conductor.hired] == ["fix5"]
+  assert "FAILED test/test_hygiene.py::test_wall" in conductor.hired[0][1]
+  assert "main sets the wall to 6500" in conductor.hired[0][1]
+
+
+def test_the_ledger_of_the_tooling_keeps_one_form_of_when_and_moves_the_old_entries_once(conductor: Round) -> None:
+  import calendar
+
+  conductor.now = 1793181153.0
+  conductor.files[conductor.TOOLING] = json.dumps([{"when": "10-23", "what": "a wall", "state": "open", "count": 1}])
+  conductor.flaw("a new friction")
+  whens = [x["when"] for x in json.loads(conductor.files[conductor.TOOLING])]
+  assert whens == [str(calendar.timegm((2026, 10, 23, 0, 0, 0))), "1793181153"]
+
+
+def test_an_item_that_names_its_pr_owns_it_before_a_label_or_a_push_does(conductor: Round) -> None:
+  conductor.busy("p1", "tui-stack", OPUS)
+  one = conductor.pr(n=606, checks=("FAILURE",))
+  assert conductor.owner_of(one) == ""
+  conductor.owns["tui-stack"] = [606]
+  assert conductor.owner_of(one) == "p1"
+  assert not conductor.needs(one)
+
+
+async def flaked(conductor: Round) -> None:
+  conductor.says.clear()
+  conductor.say(r"workflows/gates\.yml/runs\?", '{"workflow_runs": []}')
+  await conductor.watch_ci()
+  conductor.says.clear()
+  url = "https://github.com/o/r/actions/runs/50"
+  flaky = [{"id": 50, "head_sha": "s1", "run_attempt": 2, "conclusion": "success", "html_url": url}]
+  job = {"id": 7, "name": "the TUI", "conclusion": "failure", "started_at": "2026-10-23T10:00:00Z", "completed_at": "2026-10-23T10:01:00Z"}
+  conductor.say(r"runs\?branch=main&status=success", '{"workflow_runs": []}')
+  conductor.say(r"runs\?per_page=30", json.dumps({"workflow_runs": flaky}))
+  conductor.say(r"runs/50/attempts/1/jobs", json.dumps({"jobs": [job]}))
+  conductor.say(r"jobs/7/logs", "2026-10-23T10:00:30.0000000Z (fail) a host test [30000.17ms]\n")
+  await conductor.watch_ci()
+
+
+@POSIX
+@JQ
+async def test_a_flake_that_a_queued_item_names_queues_no_second_item(conductor: Round) -> None:
+  conductor.queue.append(("flake-host-about", "the race of a host test", "ci"))
+  await flaked(conductor)
+  assert [key for key, _, _ in conductor.queue] == ["flake-host-about"]
+  assert any("flake-host-about" in x for x in conductor.heard)
+
+
+@POSIX
+@JQ
+async def test_a_flake_that_a_working_item_names_goes_to_its_worker_in_place_of_a_new_item(conductor: Round) -> None:
+  conductor.busy("p1", "host-about", OPUS)
+  conductor.briefed["host-about"] = "the race of a host test"
+  await flaked(conductor)
+  assert conductor.queue == []
+  assert conductor.prompts[-1][1] == "chain-host-about" and "Your item came again" in conductor.prompts[-1][0]
+
+
+def test_a_round_with_debriefs_off_asks_no_debrief_of_an_ended_worker(conductor: Round) -> None:
+  conductor.ns["DEBRIEFS"] = False
+  conductor.working["prompt1"] = "item1"
+  conductor.facts["prompt1"] = ("prompt", "prompt1", "rung1", "chain5", "tuple[int, str]", "brief", "")
+  conductor.done["prompt1"] = (12, "report")
+  conductor.tend()
+  assert conductor.heard == ["The worker item1 (prompt1) ended with PR #12, and results['prompt1'] keeps its report."]
+  assert conductor.prompts == []
+
+
+@POSIX
+async def test_pr_creates_each_label_that_it_adds_and_raises_refused_with_what_gh_said(
+  conductor: Round, tmp_path: Path
+) -> None:
+  open_pr = conductor.ns["pr"]
+  boxes = ["checked"] * 6
+  conductor.say(r"pr create", "could not add label: not found", 1)
+  with pytest.raises(Refused) as caught:
+    await open_pr("feat(x): Y", "why", ["out"], boxes, labels=["w:k", "thread:t"], where=str(tmp_path))
+  assert "not found" in str(caught.value)
+  assert "label create w:k --force" in conductor.log() and "label create thread:t --force" in conductor.log()
+  conductor.says.clear()
+  conductor.say(r"pr create", "https://github.com/o/r/pull/9\n")
+  got = await open_pr("feat(x): Y", "why", ["out"], boxes, labels=" --label w:k", where=str(tmp_path))
+  assert got.stdout.content.strip() == "https://github.com/o/r/pull/9"
+
+
+def bashing(conductor: Round, *acts: tuple[str, str]) -> None:
+  conductor.busy("p1", "k1", SONNET)
+  facts = [("bash", name, "rung1", "chain-k1", command, "", 600) for name, command in acts]
+  conductor.ns["transcript"] = lambda on="", of="": [*facts] if on == "chain-k1" else []
+  for name, _ in acts:
+    conductor.files[f"{name}/stdout"] = ""
+    conductor.files[f"{name}/stderr"] = ""
+
+
+def test_a_watch_on_ci_that_runs_past_ten_minutes_is_cancelled_with_a_reason_that_keeps_the_worker_on_its_pr(
+  conductor: Round,
+) -> None:
+  bashing(conductor, ("bash7", "gh pr checks 5 --watch"))
+  conductor.tend()
+  conductor.now += 540
+  conductor.tend()
+  assert conductor.cancelled == []
+  conductor.now += 120
+  conductor.tend()
+  assert conductor.cancelled == ["bash7"]
+  said = conductor.prompts[-1]
+  assert said[1] == "chain-k1" and "wait on CI" in said[0] and "await wait(600)" in said[0]
+  assert "close only when your PR has merged" in said[0]
+  assert any("bash7" in x and "wait on CI" in x for x in conductor.heard)
+
+
+def test_a_loop_of_sleep_around_gh_counts_as_a_wait_on_ci(conductor: Round) -> None:
+  bashing(conductor, ("bash7", "while true; do gh run view 9; sleep 60; done"))
+  conductor.tend()
+  conductor.now += 700
+  conductor.tend()
+  assert conductor.cancelled == ["bash7"]
+
+
+def test_a_command_that_prints_keeps_running_whatever_its_age(conductor: Round) -> None:
+  bashing(conductor, ("bash8", "cargo test --workspace"))
+  for step in range(8):
+    conductor.files["bash8/stdout"] += "line\n"
+    conductor.tend()
+    conductor.now += 600
+  assert conductor.cancelled == [] and conductor.heard == []
+  assert not [x for x in conductor.prompts if "bash8" in x[0]]
+
+
+def test_a_silent_command_gets_one_line_at_fifteen_minutes_and_a_cancel_at_thirty(conductor: Round) -> None:
+  bashing(conductor, ("bash9", "git commit -m x"))
+  conductor.files["bash9/stdout"] = "hooks start\n"
+  conductor.tend()
+  conductor.now += 900
+  conductor.tend()
+  conductor.now += 300
+  conductor.tend()
+  lines = [x for x in conductor.heard if "bash9" in x]
+  assert len(lines) == 1 and "15 minutes" in lines[0] and "hooks start" in lines[0]
+  assert conductor.cancelled == []
+  conductor.now += 600
+  conductor.tend()
+  assert conductor.cancelled == ["bash9"]
+  assert "30 minutes" in conductor.prompts[-1][0] and "bash9" in conductor.prompts[-1][0]
+  assert conductor.watched == {"bash9": [1000.0, 12, 1000.0]}
+
+
+def test_a_pr_whose_maker_ended_gets_the_home_that_pushed_its_head(conductor: Round) -> None:
+  one = conductor.pr(n=5, head="w/k9")
+  conductor.prs[5] = one
+  pushes = [("bash", "bash3", "rung1", "chain-k9", "git push origin HEAD:refs/heads/w/k9", "", 600)]
+  chains = [("chain", "chain-k9", "rung1", "chain1", "defects/k9", "")]
+  conductor.ns["transcript"] = lambda on="", of="": chains if on == "chain1" else pushes if on == "chain-k9" else []
+  conductor.ns["quietly"] = lambda verb, *args, **words: asyncio.run(verb(*args, **words))
+  conductor.invariants()
+  assert conductor.homes == {"k9": "chain-k9"} and "w:k9" in one["labels"]
+  assert "pr edit 5 --add-label w:k9" in conductor.log()
+  assert any("#5" in x and "k9" in x for x in conductor.heard)
+
+
+def test_a_pr_that_no_chain_pushed_is_listed_once_in_the_next_notice(conductor: Round) -> None:
+  conductor.prs[5] = conductor.pr(n=5)
+  conductor.invariants()
+  conductor.invariants()
+  assert [x for x in conductor.heard if "has no home" in x] == [
+    "#5 (w/k5) has no home: no worker owns it, and no chain pushed its head."
+  ]
+
+
+def test_an_item_with_an_unmerged_after_stays_in_the_backlog_and_starts_once_it_merged(conductor: Round) -> None:
+  conductor.backlog.append(("k2", "brief", "defects"))
+  conductor.after["k2"] = ["k1"]
+  conductor.ends["k1"] = [("worker1", 7)]
+  conductor.staff()
+  assert [x[0] for x in conductor.backlog] == ["k2"] and conductor.hired == [] and conductor.queue == []
+  conductor.merged.add(7)
+  conductor.staff()
+  assert [key for key, _ in conductor.hired] == ["k2"] and conductor.backlog == []
+
+
+def test_the_items_held_by_the_coordinator_move_into_the_backlog_with_their_keys(conductor: Round) -> None:
+  item = {"key": "k3", "model": "claude-cli:sonnet/high", "after": ["k1"], "brief": "do it"}
+  conductor.ns["held_items"] = {"k3": item}
+  conductor.ns["RULING"] = "Ruling. "
+  conductor.invariants()
+  assert conductor.ns["held_items"] == {}
+  assert conductor.backlog == [("k3", "Ruling. do it", "defects")]
+  assert conductor.after == {"k3": ["k1"]} and conductor.efforts["k3"] == "claude-cli:sonnet/high"
+  assert any("held_items" in x and "k3" in x for x in conductor.heard)
+  assert any("k1" in x and "k3" in x for x in conductor.heard)
+
+
+def cancelled_worker(conductor: Round) -> None:
+  conductor.working["prompt1"] = "item1"
+  conductor.models["prompt1"] = SONNET
+  conductor.facts["prompt1"] = ("prompt", "prompt1", "rung1", "chain5", "tuple[int, str]", "brief", "")
+  conductor.done["prompt1"] = asyncio.CancelledError()
+
+
+def test_a_prompt_that_ended_with_cancelled_error_and_no_cancel_of_the_round_goes_on_and_tells_nobody(
+  conductor: Round,
+) -> None:
+  cancelled_worker(conductor)
+  conductor.tend()
+  assert conductor.prompts == [(conductor.RESUME, "chain5")]
+  assert conductor.targets[-1] == SONNET
+  assert list(conductor.working.values()) == ["item1"] and "prompt1" not in conductor.working
+  assert conductor.models[next(iter(conductor.working))] == SONNET
+  assert conductor.heard == [] and conductor.results == {} and conductor.ends == {}
+
+
+def test_a_prompt_with_a_cancel_over_it_ends_as_before(conductor: Round) -> None:
+  cancelled_worker(conductor)
+  conductor.ns["transcript"] = lambda on="", of="": [("cancel", "prompt1", "chain1")] if of == "cancel" else []
+  conductor.tend()
+  assert conductor.working == {} and "ended with no PR" in conductor.prompts[-1][0]
+
+
+def test_a_prompt_that_ended_cancelled_three_times_ends_as_before(conductor: Round) -> None:
+  cancelled_worker(conductor)
+  conductor.noticed.update({"resume item1 a", "resume item1 b", "resume item1 c"})
+  conductor.tend()
+  assert conductor.working == {} and "ended with no PR" in conductor.prompts[-1][0]
+
+
+def crowd(conductor: Round, n: int) -> dict:
+  facts = [("chain", f"chain{i}", "rung1", "chain1", f"w/k{i}", "") for i in range(2, n + 2)]
+  asks = {f"chain{i}": [("prompt", f"p{i}", "rung1", f"chain{i}", "tuple[int, str]", "b", "")] for i in range(2, n + 2)}
+  conductor.facts.update({f[1]: f for f in facts})
+  conductor.ns["transcript"] = lambda on="", of="": [] if of else facts if on == "chain1" else asks.get(on, [])
+  return asks
+
+
+def test_each_chain_with_an_open_prompt_counts_against_the_cap(conductor: Round) -> None:
+  asks = crowd(conductor, conductor.cap())
+  assert conductor.open_chains() == [f"chain{i}" for i in range(2, 7)]
+  assert not conductor.room(SONNET)
+  del asks["chain2"]
+  assert conductor.room(SONNET)
+
+
+def test_a_resume_over_the_cap_waits_for_a_slot_and_goes_on_when_one_frees(conductor: Round) -> None:
+  cancelled_worker(conductor)
+  asks = crowd(conductor, conductor.cap())
+  conductor.tend()
+  assert conductor.prompts == [] and conductor.working == {} and conductor.results == {}
+  assert list(conductor.parked) == ["chain5"] and any("waits on chain5" in x for x in conductor.heard)
+  del asks["chain2"]
+  conductor.staff()
+  assert conductor.prompts == [(conductor.RESUME, "chain5")] and conductor.parked == {}
+  assert list(conductor.working.values()) == ["item1"]
+
+
+def test_the_round_over_its_cap_pauses_the_newest_chains_and_wakes_them_in_order(conductor: Round) -> None:
+  asks = crowd(conductor, conductor.cap() + 2)
+  conductor.working["pw"] = "k8"
+  conductor.models["pw"] = SONNET
+  conductor.facts["pw"] = ("prompt", "pw", "rung1", "chain8", "tuple[int, str]", "b", "")
+  conductor.invariants()
+  assert conductor.paused_chains == ["chain7", "chain8"] and list(conductor.parked) == ["chain7", "chain8"]
+  assert conductor.prompts == [(conductor.PARKED, "chain7"), (conductor.PARKED, "chain8")]
+  assert "pw" not in conductor.working and conductor.parked["chain8"]["key"] == "k8"
+  del asks["chain2"]
+  conductor.staff()
+  assert conductor.paused_chains == ["chain8"] and list(conductor.parked) == ["chain8"]
+  del asks["chain3"]
+  conductor.staff()
+  assert conductor.paused_chains == [] and conductor.parked == {}
+  assert conductor.working == {"pw": "k8"} and conductor.models["pw"] == SONNET
+
+
+def test_the_chains_that_the_live_round_parked_move_into_the_state_of_the_round(conductor: Round) -> None:
+  conductor.ns["pk_parked"] = {"chain9": {"name": "", "key": "k9", "model": SONNET, "text": ""}}
+  conductor.invariants()
+  assert conductor.ns["pk_parked"] == {}
+  assert conductor.parked == {"chain9": {"name": "", "key": "k9", "model": SONNET, "text": ""}}

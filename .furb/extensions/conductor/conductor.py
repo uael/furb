@@ -11,6 +11,7 @@ from furb.engine import (
   Text,
   acting,
   bash,
+  cancel,
   chain,
   clock,
   close,
@@ -19,6 +20,7 @@ from furb.engine import (
   get,
   module,
   over,
+  pause,
   paused,
   peek,
   prompt,
@@ -40,6 +42,7 @@ The round runs on one chain, lead["home"]. After a compaction of your chain, awa
 A fault of one step of a round, as an empty answer of gh, ends no round: the round tells you once each kind of fault, with the fault and its step, and goes on at the next round. Each json.loads of a command reads its output only when the command succeeded. When the round ends for any cause but a new home, it tells you as a decision, with the cause and what stops.
 hire(key, brief, thread) starts a worker from the base chain of its actor in bases, at its actor in efforts or ACTOR, on a chain labeled thread/key, with the brief in custom or WORKER, and its PR carries the labels w:key and thread:thread.
 A worker does one item in a worktree of its own, runs only the tests that its change touches, opens its PR, and closes with its URL.
+A prompt of a worker that ends with CancelledError while the round made no cancel over it, as when the life restarts, goes on: the round asks it again on its chain with a new prompt, at most 3 times for an item, and tells nobody.
 The round tells you a worker that ends with no PR, with its answer, or that says nothing for 45 minutes, relays to you each question that a worker puts to the operator, and wakes a worker that paused. results keeps the answer of each worker under its prompt.
 When a worker ends, the round asks it debrief() once, and adds each friction that it gives to TOOLING, the ledger of the defects of the tooling, as flaw(what) adds a defect that you find or patch live. An entry counts each time that it comes again.
 A check counts by its newest run. A failed check heals with no worker first, once for each head sha: the round updates the branch of a PR on main that is behind main while main is green, else it reruns the failed jobs of the run whose failure is the one failed check of the PR. It reruns once, for each head sha, a run that was cancelled at the head of a PR, and a check cancelled again at that sha counts as failed.
@@ -56,6 +59,12 @@ Every twelfth round audits the work against its measure, the open items, writes 
 threads() gives the tree of the threads: the brief prompt of each worker and the prompts under it, with their state, their PRs, their queued items and each question that waits.
 debrief(name) asks the chain of a worker that ended for the frictions that it met in furb.
 Each act of the round is made through quietly(verb, ...), so its end wakes nobody: you hear only a notice, and each merge rides on the next one. Make each act that you do not await the same way.
+An item that takes a PR by its brief, and not by a label or a push, names it in owns[key] = [n, ...], so that the round sees its worker as the owner of that PR and hires no fixer on it.
+At each round a watchdog reads each open command of each worker, with no model: a wait on CI (gh pr checks --watch, gh run watch, or a loop of sleep around gh) that runs over 10 minutes is cancelled, and its reason tells the worker to stay on its PR, read the checks again after await wait(600) and close only when the PR merged. Any other command whose output did not grow for 15 minutes is a line in the next notice, and at 30 minutes it is cancelled with its reason and told to you. It ends a wait or a command, never a task.
+DEBRIEFS is on by default and lives in the state of the round: DEBRIEFS = False in a word turns off the debrief of each worker that ends, which saves tokens.
+An item waits for others with after[key] = [keys], set before you queue it: staff() hires it only once each PR that those keys ended with merged, an item of backlog whose keys merged goes to queue, and the round lists in a notice each key that no item holds. The entries of held_items in the module of the root move into backlog at each round, so a dict of your own chain is not needed.
+Method, at each notice: read the whole state, fix every thing that is off in one go, read the state again to verify, and go on until nothing is off. Only then report. Each round also checks the state in invariants(): it gives each open PR that the round tends a home, from the chain that pushed its head, wakes no chain, and lists in the next notice what code cannot fix.
+The round holds at most cap() chains that hold an open prompt with a shape, and counts the chains of workers, of sub-chains and of judges alike: room() counts them, and a resume of a worker waits for a slot. When more chains stand, the round pauses the newest overflow with a note and wakes it in order when a slot frees, and it never ends its task.
 A review blocks only on a defect that a command reproduces, or on a false sentence of a contract."""
 
 LIMITS = {"room": {"opus": 1, "sonnet": 3, "opus/high": 1}, "fixer": "claude-cli:sonnet/high"}
@@ -95,20 +104,19 @@ measures: list[int] = globals().setdefault("measures", [])
 timers: dict[str, float] = globals().setdefault("timers", {})
 noted: list[str] = globals().setdefault("noted", [])
 debriefs: dict[str, str] = globals().setdefault("debriefs", {})
+briefed: dict[str, str] = globals().setdefault("briefed", {})
+owns: dict[str, list[int]] = globals().setdefault("owns", {})
+watched: dict[str, list[float]] = globals().setdefault("watched", {})
+after: dict[str, list[str]] = globals().setdefault("after", {})
+parked: dict[str, dict] = globals().setdefault("parked", {})
+DEBRIEFS = globals().get("DEBRIEFS", True)
 vetoes: dict = globals().setdefault("vetoes", {})
 ORDERED = 600.0
 ordered: dict[int, float] = globals().setdefault("ordered", {})
 tips: dict[str, str] = globals().setdefault("tips", {})
 shifted: dict[int, tuple[str, str]] = globals().setdefault("shifted", {})
-PACE = 3600.0
 hired: dict[str, float] = globals().setdefault("hired", {})
 paced: set[str] = globals().setdefault("paced", set())
-PACED = (
-  "An hour passed since you took this item, and no PR of yours is open. Land it in steps: commit now the coherent"
-  " part that serves his words, open its PR with pr(), and go on with the rest in a next PR from this chain,"
-  " each PR one change. A PR that waits for every detail lands nothing,"
-  " and each step is judged and merged on its own."
-)
 
 BUILD_SH = """d=${FURB_BUILD_SLOTS:-/tmp/furb-build-slots}
 mkdir -p "$d"
@@ -136,13 +144,13 @@ RECIPES = """Recipes that fixers found again and again:
 - A cause that a brief names is a hypothesis: check it in the log before you build on it.
 - python script/tokens.py prints the tokens of the engine and of the doctrine against their walls in seconds, and counts no stale copy: after a change of engine.py, run cargo check first when it asks."""
 
-RULES = """Run no real life of a model. Never open a window on this machine, not even for a test: the owner works on it, and each window takes his mouse and his keyboard. Run a check of the app only on the runners of CI. Start each comment, review, issue and PR body that you write on GitHub with 🤖, since you write from the owner's account and his own words carry no mark; a title keeps its own rule. Never take off the label owner-merge: only the owner takes it off, and that is his approval to merge. The owner sleeps or is away: ask him nothing and wait for nothing of his. Take each decision yourself from the brief and the rulings, say it in your PR body, and go on. Ask the one who gave you this work on its chain only when it alone can decide: await prompt(str, question, on="{home}").""" + "\n\n" + RECIPES
+RULES = """Run no real life of a model. Never open a window on this machine, not even for a test: the owner works on it, and each window takes his mouse and his keyboard. Run a check of the app only on the runners of CI. Start each comment, review, issue and PR body that you write on GitHub with 🤖, since you write from the owner's account and his own words carry no mark; a title keeps its own rule. Never take off the label owner-merge: only the owner takes it off, and that is his approval to merge. The owner sleeps or is away: ask him nothing and wait for nothing of his. Take each decision yourself from the brief and the rulings, say it in your PR body, and go on. Ask the one who gave you this work on its chain only when it alone can decide: await prompt(str, question, on="{home}"). Never wait on CI in a bash for more than 10 minutes: not gh pr checks --watch, not gh run watch, not a loop of sleep around gh. Once your push is done, read the checks once and close with the PR and its checks as they stand, since the round tends them.""" + "\n\n" + RECIPES
 
 WORKER = """You are a worker on the repository {repo}. Do one item, and open its PR yourself.
 1. Make a worktree whose build starts warm: {repo}/script/worktree.sh {repo}-w-{key} w/{key}, then work there. Build on origin/main, and stack your branch on an open PR only when your change needs its code; say why in the body, since a stack lands one layer at a time. If that worktree stands already, work in it, rebased onto origin/main. Run each build of Rust through sh $TMPDIR/build.sh <command>, which runs three at once at most.
 2. Change it as the AGENTS.md files of the repository say.
 3. Run only the tests that your change touches.
-4. Commit with the title of the PR as its message (a commit that the item brought keeps its own message, since the merge squashes them), and push the branch. Then open the PR, or update it when it stands, with pr(), which fills the template of the owner from what you give it and checks each of its rules: await pr(title, why, outcome, checks, breaking=[], fixes=0, where=<your worktree>, labels="{labels}"). title is type(area): What changed, 70 characters or fewer: the type is feat, fix, perf, or chore for a change that no user sees, and the area is the part that owns the change (engine, crate, tui, gui, provider, ci, conductor, or an extension by its name). why is the problem and why it matters now, from your own work and not from git log. outcome is a list: what is true now that was not, each with the evidence of what you ran, and each gap that you leave. breaking lists each change that forces a caller of a door or of the contract to change code. 300 words at most, and no how, which the diff holds. prcheck(title, why, outcome, breaking) before the commit checks the title and gives the word count. checks is six lines, one for each box of the checklist of the template in its order: verify each box one by one, then give the evidence of how you verified it, or not: and the work that it still needs, which leaves that box open. A flaw that you name in outcome ticks the box about flaws. When the item says that the owner ruled several changes one PR, that ruling is the evidence of the box about one change. A pr() that breaks a rule raises Refused and says why; never write the body of a PR by hand.
+4. Commit with the title of the PR as its message (a commit that the item brought keeps its own message, since the merge squashes them), and push the branch. Then open the PR, or update it when it stands, with pr(), which fills the template of the owner from what you give it and checks each of its rules: await pr(title, why, outcome, checks, breaking=[], fixes=0, where=<your worktree>, labels="{labels}"). title is type(area): What changed, 70 characters or fewer: the type is feat, fix, perf, or chore for a change that no user sees, and the area is the part that owns the change (engine, crate, tui, gui, provider, ci, conductor, or an extension by its name). why is the problem and why it matters now, from your own work and not from git log. outcome is a list: what is true now that was not, each with the evidence of what you ran, and each gap that you leave. breaking lists each change that forces a caller of a door or of the contract to change code. 300 words at most, and no how, which the diff holds. prcheck(title, why, outcome, breaking) before the commit checks the title and gives the word count. checks is six lines, one for each box of the checklist of the template in its order: verify each box one by one, then give the evidence of how you verified it, or not: and the work that it still needs, which leaves that box open. A flaw that you name in outcome ticks the box about flaws. When the item says that the owner ruled several changes one PR, that ruling is the evidence of the box about one change. A pr() that breaks a rule, or whose gh fails, raises Refused and says why; never write the body of a PR by hand.
 5. Open your first PR within about an hour of work, as soon as one coherent part serves the item: a large item
 lands as a series of PRs, each one change, opened from this chain, and you close with the number of the last one.
 6. Keep the worktree until your PR merges, since a fix comes back to it and a new worktree builds cold: the round prunes it after the merge. When the item asks for no change, answer it in a comment that starts with 🤖 on its issue or PR. Close with a tuple: the number of your PR, or 0 when the item asked for no change, and your report in 200 words at most: what you measured, what you decided, and what is left.
@@ -153,7 +161,11 @@ The item, {key}:
 
 FIX = """You fix the open PR #{n} of the repository {repo}: it {problem} at {sha}.{base} Read it with gh pr view, gh pr checks and gh run view --log-failed. Rerun once a check that fails on one system alone. Else work in a worktree of your own at the head of its branch, since its worker may hold another one (git worktree list shows it), and fetch before each push. If the head of the PR is not {sha} any more, or the PR no longer {problem}, change nothing and close with its number and a report that says so. A PR that conflicts runs no checks, so the checks that it shows may be old. Fix it: resolve a conflict with the meaning of both sides, and for a stack read skill("gh-stack") and use gh stack sync. Run the tests that it touches, push with git push --force-with-lease=refs/heads/<branch>:<the sha that you fetched> origin HEAD:refs/heads/<branch>, wait until gh pr view --json headRefOid,mergeable shows your head (GitHub shows the old head and the old mergeable for about 20 seconds after a push), keep the worktree until the PR merges, and close with a tuple: the number of the PR, and your report in 200 words at most. """ + RULES
 
-FIXOWN = "Your open PR #{n} {problem} at {sha}. Fetch origin, rebase your branch onto its base or merge its base into it, resolve each conflict with the meaning of both sides, run the gates that the change touches, push with --force-with-lease, and keep its checks green."
+FIXOWN = "Your open PR #{n} {problem} at {sha}. Fetch origin, rebase your branch onto its base or merge its base into it, resolve each conflict with the meaning of both sides, run the gates that the change touches, push with --force-with-lease, and keep its checks green. Never wait on CI in a bash for more than 10 minutes: once you pushed, read its checks once and close with the PR and its checks as they stand, since the round tends them."
+
+RESUME = """Your task did not end: your prompt ended with CancelledError, and nobody cancelled it. Go on with the same task on this chain: fetch your branch and read your PR, run again each command that ended as interrupted, and go on from where you stood. Wait on CI only with await wait(600) between reads, never inside a bash. Close with a tuple: the number of your last PR, and your report in 200 words at most."""
+
+PARKED = """The round pauses this chain to hold its cap of chains. Your task did not end: when a slot frees, the round wakes this chain, and you go on from where you stood."""
 
 DEBRIEF = """Your work is done. As a user of furb, list each friction, defect or confusion that you met in this chain, with its evidence and what would fix it. Close with a list of str, one for each, or an empty list."""
 
@@ -235,43 +247,6 @@ PROOF = (
 )
 
 
-def spliced(was: str, pairs: list[tuple[str, str]]) -> str:
-  spots: list[tuple[int, int, str]] = []
-  for old, new in pairs:
-    if not old or old == new or was.count(old) != 1:
-      count = was.count(old) if old else 0
-      raise Refused(
-        f"each old must occur once in the word and differ from its new, and this one occurs {count} times:"
-        f" {old[:300]!r}"
-      )
-    spots.append((was.index(old), was.index(old) + len(old), new))
-  out, end = "", 0
-  for at, stop, new in sorted(spots):
-    if at < end:
-      raise Refused(f"two olds overlap at character {at} of the word")
-    out, end = out + was[end:at] + new, stop
-  return out + was[end:]
-
-
-def changed(was: str, pairs: list[tuple[str, str]]) -> list[str]:
-  heads = r"^(?:(?:async )?def |class )(\w+)|^(\w+)(?:: [^=\n]+)? = "
-
-  def names(part: str) -> list[str]:
-    return [a or b for a, b in re.findall(heads, part, re.M)]
-
-  said: list[str] = []
-  for old, new in pairs:
-    at = was.index(old)
-    near = names(was[:at])
-    added = [x for x in names(new) if x not in names(old)]
-    after = f", after {near[-1]}" if near else ""
-    adds = f" and adds {', '.join(added)}" if added else ""
-    line = was.count("\n", 0, at) + 1
-    lines = [f"{n} line" + ("s" if n != 1 else "") for n in (len(old.splitlines()), len(new.splitlines()))]
-    said.append(f"Line {line}{after}: the pair changes {lines[0]} into {lines[1]}{adds}.")
-  return said
-
-
 def linted(out: str) -> set[str]:
   found: set[str] = set()
   for x in out.splitlines():
@@ -283,19 +258,42 @@ def linted(out: str) -> set[str]:
   return found
 
 
-async def vetted(word: str, known: set[str], base: set[str], tree: str, lint: str) -> None:
-  found = [x for x in gate(word) if re.sub(r"^line \d+: ", "", x) not in known]
-  if found:
-    raise Refused("the gate refuses the word:\n" + "\n".join(found))
-  wrote = await bash(f"cd {tree} && cat > {CONDUCTOR} && git status --porcelain", stdin=word, show=HIDDEN, timeout=60)
-  if wrote.stdout.content.strip() != f"M {CONDUCTOR}":
-    raise Refused(f"git sees more than the pairs: {wrote.stdout.content[:300]}")
-  fresh = sorted(linted((await bash(lint, show=HIDDEN, timeout=120)).stdout.content) - base)
-  if fresh:
-    raise Refused("ruff finds what it does not find in the word of origin/main:\n" + "\n".join(fresh)[:1500])
-
-
 async def patch(title: str, why: str, ask: str) -> tuple[str, str, str]:
+  def spliced(text: str, edits: list[tuple[str, str]]) -> str:
+    spots: list[tuple[int, int, str]] = []
+    for old, new in edits:
+      if not old or old == new or text.count(old) != 1:
+        count = text.count(old) if old else 0
+        raise Refused(
+          f"each old must occur once in the word and differ from its new, and this one occurs {count} times:"
+          f" {old[:300]!r}"
+        )
+      spots.append((text.index(old), text.index(old) + len(old), new))
+    out, end = "", 0
+    for at, stop, new in sorted(spots):
+      if at < end:
+        raise Refused(f"two olds overlap at character {at} of the word")
+      out, end = out + text[end:at] + new, stop
+    return out + text[end:]
+
+  def changed(text: str, edits: list[tuple[str, str]]) -> list[str]:
+    heads = r"^(?:(?:async )?def |class )(\w+)|^(\w+)(?:: [^=\n]+)? = "
+
+    def names(part: str) -> list[str]:
+      return [a or b for a, b in re.findall(heads, part, re.M)]
+
+    said: list[str] = []
+    for old, new in edits:
+      at = text.index(old)
+      near = names(text[:at])
+      added = [x for x in names(new) if x not in names(old)]
+      after = f", after {near[-1]}" if near else ""
+      adds = f" and adds {', '.join(added)}" if added else ""
+      line = text.count("\n", 0, at) + 1
+      lines = [f"{n} line" + ("s" if n != 1 else "") for n in (len(old.splitlines()), len(new.splitlines()))]
+      said.append(f"Line {line}{after}: the pair changes {lines[0]} into {lines[1]}{adds}.")
+    return said
+
   if len(title) > 70 or not re.fullmatch(PR_TITLE, title):
     raise Refused(f"the title {title!r} is not type(area): What changed, in 70 characters or fewer")
   key = "patch-" + "-".join(re.findall(r"[a-z0-9]+", title.split(":", 1)[1].lower())[:4])
@@ -327,7 +325,17 @@ async def patch(title: str, why: str, ask: str) -> tuple[str, str, str]:
       try:
         pairs = [(str(old), str(new)) for old, new in got]
         word = spliced(was, pairs)
-        await vetted(word, known, base, tree, lint)
+        found = [x for x in gate(word) if re.sub(r"^line \d+: ", "", x) not in known]
+        if found:
+          raise Refused("the gate refuses the word:\n" + "\n".join(found))
+        wrote = await bash(
+          f"cd {tree} && cat > {CONDUCTOR} && git status --porcelain", stdin=word, show=HIDDEN, timeout=60
+        )
+        if wrote.stdout.content.strip() != f"M {CONDUCTOR}":
+          raise Refused(f"git sees more than the pairs: {wrote.stdout.content[:300]}")
+        fresh = sorted(linted((await bash(lint, show=HIDDEN, timeout=120)).stdout.content) - base)
+        if fresh:
+          raise Refused("ruff finds what it does not find in the word of origin/main:\n" + "\n".join(fresh)[:1500])
       except (Refused, TypeError, ValueError) as fault:
         brief = (
           f"Fault: {fault}\nThe pairs apply to the word of origin/main again."
@@ -383,12 +391,37 @@ def family(model: str) -> str:
   return name if name in limits["room"] else name.split("/")[0]
 
 
+def open_chains() -> list[str]:
+  found: list[str] = []
+  seen, todo = {ROOT}, [ROOT]
+  while todo:
+    for x in transcript(todo.pop()):
+      c = str(x[1])
+      if x[0] == "chain" and c not in seen:
+        seen.add(c)
+        todo.append(c)
+        if c not in parked and any(y[0] == "prompt" and not over(y[1]) and y[4] != "None" for y in transcript(c)):
+          found.append(c)
+  return sorted(found, key=lambda c: int(re.sub(r"\D", "", c) or 0))
+
+
 def room(model: str) -> bool:
   if model not in MODELS:
     return False
   mine = family(model)
   live = [n for n in working if not over(n) and family(models.get(n, ACTOR)) == mine]
-  return len(live) < limits["room"][mine]
+  return len(live) < limits["room"][mine] and len(open_chains()) < cap()
+
+
+def resume(key: str, where: str, model: str, text: str) -> str:
+  if not room(model):
+    parked[where] = {"name": "", "key": key, "model": model, "text": text}
+    heard.append(f"{key} waits on {where} for a free slot of the cap of {cap()} chains.")
+    return ""
+  quietly(rung, f"actor = {model!r}", on=where)
+  name = str(quietly(prompt, tuple[int, str], text, to=model, on=where))
+  working[name], models[name], hired[name] = key, model, clock()
+  return name
 
 
 def can(key: str) -> bool:
@@ -400,16 +433,6 @@ def can(key: str) -> bool:
     )
     return False
   return room(model)
-
-
-def handover(key: str, text: str) -> str:
-  where = homes[key]
-  quietly(rung, f"actor = {HANDOVER!r}", on=where)
-  name = str(quietly(prompt, tuple[int, str], text, to=HANDOVER, on=where))
-  working[name] = key
-  models[name] = HANDOVER
-  hired[name] = clock()
-  return name
 
 
 VIEW = """gh pr view {n} --json state,headRefOid,mergeable --jq '[.state, .headRefOid, .mergeable] | join(" ")'"""
@@ -458,10 +481,8 @@ def assist(pr: dict, key: str, order: str, fixer: str, thread: str, brief: str) 
   if homes.get(maker) and maker not in working.values():
     if room(HANDOVER):
       noticed.update({key, key + " again", key + " fixer"})
-      handover(
-        maker,
-        f"Your work on this chain goes on, now on {HANDOVER}. {order} Close with a tuple: the number of the PR, and your report in 200 words at most.",
-      )
+      said = f"Your work on this chain goes on, now on {HANDOVER}. {order} Close with a tuple: the number of the PR, and your report in 200 words at most."
+      resume(maker, homes[maker], HANDOVER, said)
       return True
   elif can(fixer):
     noticed.update({key, key + " again", key + " fixer"})
@@ -488,6 +509,7 @@ def hire(key: str, what: str, thread: str = "", brief: str = "") -> str:
       f"{key} asks {model}, and a worker runs only {', '.join(MODELS)}: xhigh and max stay for the coordination and the rulings of the owner"
     )
   marks = [f"w:{key}", *([f"thread:{thread}"] if thread else [])]
+  briefed[key] = custom.get(key) or what or brief
   if not brief:
     quietly(bash, "; ".join(f"gh label create {m} --force >/dev/null 2>&1" for m in marks), show=HIDDEN)
   quietly(write, Text("scratch://build.sh", BUILD_SH))
@@ -526,6 +548,9 @@ def working_at(name: str) -> str:
 
 
 def owner_of(pr: dict) -> str:
+  for name, key in working.items():
+    if pr["n"] in owns.get(key, []):
+      return name
   keys = [m[2:] for m in pr["labels"] if m.startswith("w:")] + [f"fix{pr['n']}", f"box{pr['n']}"]
   for name, key in working.items():
     if key in keys:
@@ -559,9 +584,20 @@ def tend() -> None:
   for name in [x for x in working if over(x)]:
     key = working.pop(name)
     got = peek(name)
+    if isinstance(got, CancelledError) and get(name):
+      kin, up = {name}, name
+      while (a := get(up)) and a[2] and a[2] not in kin:
+        up = a[2]
+        kin.add(up)
+      where = str(get(name)[3])
+      tries = len([k for k in noticed if k.startswith(f"resume {key} ")])
+      if tries < 3 and not [x for x in transcript(where, "cancel") if x[1] in kin]:
+        noticed.add(f"resume {key} {name}")
+        resume(key, where, models.get(name, ACTOR), RESUME)
+        continue
     results[name] = got
     ends.setdefault(key, []).append((name, got[0] if isinstance(got, tuple) and got and isinstance(got[0], int) else 0))
-    if f"debrief {name}" not in noticed and get(name):
+    if DEBRIEFS and f"debrief {name}" not in noticed and get(name):
       noticed.add(f"debrief {name}")
       debriefs[str(quietly(debrief, name))] = key
     if isinstance(got, tuple) and len(got) == 2 and isinstance(got[0], int) and got[0] > 0:
@@ -574,9 +610,63 @@ def tend() -> None:
       said = peek(asked)
       if isinstance(said, list) and said:
         flaw(*[str(one) for one in said], source=f"debrief of {key}")
+  live: set[str] = set()
+
+  def cut(act: str, home: str, why: str) -> None:
+    quietly(prompt, None, why, on=home)
+    cancel(act)
+
+  def watchdog(worker: str, item: str) -> None:
+    for home in sorted({str(get(worker)[3]), working_at(worker)}):
+      for x in transcript(home):
+        if x[0] != "bash" or over(x[1]):
+          continue
+        act, command = str(x[1]), str(x[4])
+        live.add(act)
+        try:
+          out = read(f"{act}/stdout", HIDDEN).content + read(f"{act}/stderr", HIDDEN).content
+        except Refused:
+          out = ""
+        seen = watched.setdefault(act, [now, len(out), now])
+        if len(out) != seen[1]:
+          seen[1], seen[2] = len(out), now
+        age, quiet = int((now - seen[0]) // 60), int((now - seen[2]) // 60)
+        ci = re.search(r"gh +(?:pr +checks\b.*--watch|run +watch)", command, re.S) or (
+          re.search(r"\b(?:while|until|for)\b", command)
+          and re.search(r"\bsleep\b", command)
+          and re.search(r"\bgh\b", command)
+        )
+        tail = "\n".join(out.splitlines()[-5:])[-300:]
+        if ci and now - seen[0] > 600:
+          cut(
+            act,
+            home,
+            f"The round cut your wait on CI ({command[:100]}) after {age} minutes. It ends a wait, never your task:"
+            " stay on your PR, read its checks again with gh pr checks (never --watch) after await wait(600),"
+            " and close only when your PR has merged.",
+          )
+          heard.append(f"The round cut {act} of {item} on {home}: a wait on CI of {age} minutes.")
+        elif now - seen[2] >= 1800:
+          cut(
+            act,
+            home,
+            f"The round cut your command {act} ({command[:100]}) after {quiet} minutes with no new output. It ends a"
+            " command, never your task: find what it waited for, run it again in a bound that fits, and go on.",
+          )
+          notice(
+            f"watchdog {act}",
+            f"The round cut {act} of {item} on {home} after {quiet} minutes with no output: {command[:100]!r}."
+            f" Its last output:\n{tail}",
+          )
+        elif now - seen[2] >= 900 and f"silent {act}" not in noticed:
+          noticed.add(f"silent {act}")
+          heard.append(
+            f"{act} of {item} on {home} has printed nothing for {quiet} minutes: {command[:100]!r}; its last output: {tail!r}"
+          )
+
   for name, key in working.items():
     where = working_at(name)
-    if paused(where):
+    if paused(where) and where not in parked:
       wake(where)
     facts = transcript(where)
     for x in [*facts, *(transcript(str(get(name)[3])) if where != get(name)[3] else [])]:
@@ -589,18 +679,22 @@ def tend() -> None:
         f"silent {where} {len(facts)}",
         f"The worker {key} on {where} has said nothing for {int(now - silent[where][1]) // 60} minutes. Look at it.",
       )
-  pace()
-
-
-def pace() -> None:
-  now = clock()
+    watchdog(name, key)
+  for gone in [a for a in watched if a not in live]:
+    del watched[gone]
+  late = (
+    "An hour passed since you took this item, and no PR of yours is open. Land it in steps: commit now the coherent"
+    " part that serves his words, open its PR with pr(), and go on with the rest in a next PR from this chain,"
+    " each PR one change. A PR that waits for every detail lands nothing,"
+    " and each step is judged and merged on its own."
+  )
   owners = {owner_of(pr) for pr in prs.values()}
   for name in [x for x in working if not over(x) and x not in paced]:
     if name in owners:
       paced.add(name)
-    elif now - hired.get(name, now) > PACE:
+    elif now - hired.get(name, now) > 3600.0:
       paced.add(name)
-      quietly(prompt, None, PACED, on=working_at(name))
+      quietly(prompt, None, late, on=working_at(name))
 
 
 def boxes(pr: dict, now: float) -> str:
@@ -635,6 +729,27 @@ def boxes(pr: dict, now: float) -> str:
 
 
 async def mend(pr: dict, now: float, red: bool) -> str:
+  async def evidence() -> str:
+    got = await bash(PRLINES.replace("{sha}", pr["sha"]), show=HIDDEN, timeout=300)
+    seen = [x for x in got.stdout.lines if x.strip()][:30]
+    if not seen:
+      return ""
+    said = "\nThe first failed lines of its job log:\n" + "\n".join("  " + x for x in seen) + "\n"
+    files = sorted({f for x in seen for f in re.findall(r"[\w./-]+\.(?:py|rs|tsx?|json|toml|md|ya?ml|sh)\b", x)})[:8]
+    if not files:
+      return said
+    lacks = await bash(
+      f"git fetch -q origin main refs/pull/{pr['n']}/head 2>/dev/null; git log --format='%h %s' {shq(pr['sha'])}..origin/main -- "
+      + " ".join(shq(f) for f in files)
+      + " | head -8",
+      show=HIDDEN,
+      timeout=120,
+    )
+    if lacks.code != 0 or not lacks.stdout.content.strip():
+      return said
+    held = "\n".join("  " + x for x in lacks.stdout.lines)
+    return said + "The commits of main that the branch lacks and that change a file of the failure:\n" + held + "\n"
+
   healed = await heal(pr, red)
   if healed:
     heard.append(healed)
@@ -660,7 +775,7 @@ async def mend(pr: dict, now: float, red: bool) -> str:
     return key
   if await stale(pr, pr["mergeable"] == "CONFLICTING"):
     return ""
-  note = based(pr)
+  note = based(pr) + (await evidence() if problem == "has a failed check" else "")
   order = FIXOWN.replace("{n}", str(n)).replace("{problem}", problem).replace("{sha}", sha) + note
   if owned:
     noticed.add(key + " again" if second else key)
@@ -1054,37 +1169,25 @@ def news(line: str) -> None:
   quietly(bash, f"until mkdir {lock} 2>/dev/null; do sleep 1; done; trap 'rmdir {lock}' EXIT; python3 -I - {shq(repo)} {shq(digest)} {shq(line)}", stdin=NEWS_PY, show=HIDDEN, timeout=300)
 
 
-async def ops_watch() -> None:
-  repo = ops()[0]
-  if not repo:
-    return
-  got = await bash(OPS_WATCH.replace("{ops}", repo), show=HIDDEN, timeout=300)
-  rows = [p for p in (x.split("\t", 3) for x in got.stdout.content.splitlines()) if len(p) == 4 and p[1] not in comments]
-  comments.update(p[1] for p in rows)
-  fresh = [p for p in rows if p[2] == OWNER and not p[3].startswith(MARKS)]
-  if fresh and "ops" in timers:
-    quietly(prompt, None, "The owner wrote in the private repository of the decisions:\n" + "\n".join(f"ops#{p[0]} {p[3][:1500]}" for p in fresh) + merged_since())
-  timers["ops"] = clock()
-
-
 REHEAD = """[ "$(gh pr view {n} --json headRefOid --jq .headRefOid)" = {sha} ] || exit 0
 for id in $(gh run list --commit {sha} --limit 50 --json databaseId,workflowName,createdAt,conclusion --jq 'group_by(.workflowName) | map(max_by(.createdAt)) | .[] | select({which}) | .databaseId'); do gh run rerun $id{failed} >/dev/null 2>&1 && echo $id; done"""
 
 BEHIND = """[ "$(gh api 'repos/{owner}/{repo}/compare/main...{sha}' --jq .behind_by 2>/dev/null)" -gt 0 ] 2>/dev/null && gh pr update-branch {n} >/dev/null 2>&1 && echo updated"""
 
-REDLINES = r"""id=$(gh run list --branch main --workflow gates.yml --commit {sha} --limit 1 --json databaseId --jq '.[0].databaseId'); gh run view "$id" --log-failed 2>/dev/null | grep -E 'FAILED|panicked|Error|error\[|AssertionError|\(fail\)|timed out' | cut -f1,3 | head -30 | cut -c1-300"""
+FAILLINES = r"""gh run view "$id" --log-failed 2>/dev/null | grep -E 'FAILED|panicked|Error|error\[|AssertionError|\(fail\)|timed out' | cut -f1,3 | head -30 | cut -c1-300"""
+
+REDLINES = r"""id=$(gh run list --branch main --workflow gates.yml --commit {sha} --limit 1 --json databaseId --jq '.[0].databaseId'); """ + FAILLINES
+
+PRLINES = r"""id=$(gh run list --commit {sha} --limit 30 --json databaseId,conclusion --jq '[.[] | select(.conclusion == "failure" or .conclusion == "timed_out")][0].databaseId'); [ -n "$id" ] && [ "$id" != null ] && """ + FAILLINES
 
 UPSTREAMING = """gh pr list --repo {upstream} --label upstream-ready --state open --json number,headRefName,title,url,labels --jq '.[] | select([.labels[].name] | index("upstreamed") | not) | "\\(.number)\\t\\(.headRefName)\\t\\(.title)\\t\\(.url)"'"""
 
 
-def rehead(pr: dict, which: str, failed: str = "") -> str:
-  return (
-    REHEAD.replace("{n}", str(pr["n"])).replace("{sha}", pr["sha"]).replace("{which}", which).replace("{failed}", failed)
-  )
-
-
 async def heal(pr: dict, red: bool) -> str:
   n, sha = pr["n"], pr["sha"]
+  def rehead(which: str, only: str = "") -> str:
+    return REHEAD.replace("{n}", str(n)).replace("{sha}", sha).replace("{which}", which).replace("{failed}", only)
+
   failed = [c for c in pr["checks"] if c in FAILS]
   if pr["mergeable"] == "CONFLICTING":
     return ""
@@ -1092,7 +1195,7 @@ async def heal(pr: dict, red: bool) -> str:
     if "CANCELLED" not in pr["checks"] or f"rerun {sha}" in noticed:
       return ""
     noticed.add(f"rerun {sha}")
-    got = await bash(rehead(pr, '.conclusion == "cancelled"'), show=HIDDEN, timeout=300)
+    got = await bash(rehead('.conclusion == "cancelled"'), show=HIDDEN, timeout=300)
     ran = got.stdout.content.strip()
     return f"#{n} had a run cancelled at its head {sha[:7]}, and the round ran it again." if ran else ""
   if (
@@ -1111,7 +1214,7 @@ async def heal(pr: dict, red: bool) -> str:
   if len(failed) == 1 and f"retry {sha}" not in noticed:
     noticed.add(f"retry {sha}")
     got = await bash(
-      rehead(pr, '.conclusion == "failure" or .conclusion == "timed_out"', " --failed"), show=HIDDEN, timeout=300
+      rehead('.conclusion == "failure" or .conclusion == "timed_out"', " --failed"), show=HIDDEN, timeout=300
     )
     if got.stdout.content.strip():
       return f"#{n} failed one check alone at {sha[:7]}, and the round ran its failed jobs again."
@@ -1138,15 +1241,32 @@ def needs(pr: dict) -> bool:
   )
 
 
-def mender(pr: dict) -> str:
-  maker = next((m[2:] for m in pr["labels"] if m.startswith("w:")), "")
-  return HANDOVER if homes.get(maker) and maker not in working.values() else limits["fixer"]
-
-
 def staff() -> None:
+  for c in list(parked):
+    entry = parked[c]
+    if not get(c):
+      del parked[c]
+    elif len(open_chains()) >= cap():
+      break
+    elif entry["text"]:
+      if room(entry["model"]):
+        del parked[c]
+        resume(entry["key"], c, entry["model"], entry["text"])
+    else:
+      del parked[c]
+      if paused(c):
+        wake(c)
+      if entry["name"]:
+        working[entry["name"]], models[entry["name"]], hired[entry["name"]] = entry["key"], entry["model"], clock()
+      heard.append(f"{entry['key'] or c} on {c} resumed: a slot of the cap of {cap()} chains was free.")
+
+  def met(item: str) -> bool:
+    return all(dep in ends and all(n in merged for _, n in ends[dep] if n) for dep in after.get(item, []))
+
   blocked: set[str] = set()
   for pr in [one for one in prs.values() if needs(one)]:
-    model = mender(pr)
+    maker = next((m[2:] for m in pr["labels"] if m.startswith("w:")), "")
+    model = HANDOVER if homes.get(maker) and maker not in working.values() else limits["fixer"]
     mine = family(model)
     blocked.add(mine)
     if limits["room"].get(mine, 0) <= 0:
@@ -1155,12 +1275,87 @@ def staff() -> None:
         f"#{pr['n']} needs a fixer on {model} at {pr['sha'][:7]}, and limits['room'][{mine!r}] is"
         f" {limits['room'].get(mine, 0)}, so no fixer starts on it. Give {mine} room, or say why it waits.",
       )
-  while backlog and len(working) + len(queue) < cap():
-    queue.append(backlog.pop(0))
+  for item in [one for one in backlog if one[0] in after and met(one[0])]:
+    backlog.remove(item)
+    queue.append(item)
+  while len(working) + len(queue) < cap():
+    ready = [i for i, one in enumerate(backlog) if met(one[0])]
+    if not ready:
+      break
+    queue.append(backlog.pop(ready[0]))
   for item in list(queue):
-    if family(model_of(item[0])) not in blocked and can(item[0]):
+    if met(item[0]) and family(model_of(item[0])) not in blocked and can(item[0]):
       queue.remove(item)
       hire(*item)
+
+
+def invariants() -> None:
+  old: Any = module(ROOT).get("pk_parked")
+  for c, e in list(old.items()) if isinstance(old, dict) else []:
+    del old[c]
+    parked.setdefault(c, {k: str(e.get(k, "")) for k in ("name", "key", "model", "text")})
+  held: Any = module(ROOT).get("held_items")
+  for key, item in list(held.items()) if isinstance(held, dict) else []:
+    del held[key]
+    if taken(key) or any(q[0] == key for q in [*queue, *backlog]):
+      continue
+    efforts[key] = item.get("model", ACTOR)
+    after[key] = [str(dep) for dep in item.get("after", [])]
+    ruling = str(module(ROOT).get("RULING", ""))
+    backlog.append((key, ruling + str(item["brief"]), str(item.get("thread", "defects"))))
+    heard.append(f"The item {key} moved from held_items to the backlog, after {', '.join(after[key]) or 'nothing'}.")
+  chains = {
+    **{str(x[1]): str(x[4]).split("/")[-1] for x in transcript(ROOT) if x[0] == "chain"},
+    **{where: key for key, where in homes.items()},
+  }
+  for pr in prs.values():
+    if "paused" in pr["labels"] or not pr["head"].startswith("w/") or owner_of(pr):
+      continue
+    key = next((m[2:] for m in pr["labels"] if m.startswith("w:")), "")
+    if key and homes.get(key):
+      continue
+    pushed = (
+      c
+      for c in chains
+      if any(x[0] == "bash" and "push" in str(x[4]) and pr["head"] in str(x[4]) for x in transcript(c))
+    )
+    where = next(pushed, "")
+    if not where:
+      if f"home #{pr['n']}" not in noticed:
+        noticed.add(f"home #{pr['n']}")
+        heard.append(f"#{pr['n']} ({pr['head']}) has no home: no worker owns it, and no chain pushed its head.")
+      continue
+    key = key or chains[where]
+    homes[key] = where
+    if f"w:{key}" not in pr["labels"]:
+      pr["labels"].append(f"w:{key}")
+      quietly(
+        bash,
+        f"gh label create w:{key} --force >/dev/null 2>&1; gh pr edit {pr['n']} --add-label w:{key} >/dev/null 2>&1",
+        show=HIDDEN,
+      )
+    heard.append(f"#{pr['n']} had no home; the round gave it {key} on {where}, which pushed its head.")
+  known = {q[0] for q in [*queue, *backlog]}
+  held_keys = known | set(working.values()) | set(ends) | {m[2:] for p in prs.values() for m in p["labels"] if m[:2] == "w:"}
+  for key, deps in after.items():
+    for dep in deps:
+      if key in known and dep not in held_keys and f"after {key} {dep}" not in noticed:
+        noticed.add(f"after {key} {dep}")
+        heard.append(f"The item {key} waits for {dep}, which no queue, worker, PR or end holds.")
+  for worker, item in working.items():
+    where = working_at(worker)
+    if paused(where) and f"paused {where}" not in noticed:
+      noticed.add(f"paused {where}")
+      heard.append(f"The chain {where} of {item} stays paused after the round woke it.")
+  chains = open_chains()
+  for c in chains[cap():]:
+    name = next((n for n in working if str(get(n)[3]) == c), "")
+    key = working.pop(name, "")
+    parked[c] = {"name": name, "key": key, "model": models.get(name, ""), "text": ""}
+    if not paused(c):
+      pause(c)
+    quietly(prompt, None, PARKED, on=c)
+    heard.append(f"{key or c} on {c} is paused: {len(chains)} chains stand over the cap of {cap()}.")
 
 
 async def upstream_watch() -> None:
@@ -1183,7 +1378,21 @@ def ledger() -> list[dict]:
     got = json.loads(read(TOOLING, HIDDEN).content)
   except (Refused, ValueError):
     return []
-  return [x for x in got if isinstance(x, dict)] if isinstance(got, list) else []
+  entries = [x for x in got if isinstance(x, dict)] if isinstance(got, list) else []
+
+  def day(y: int, m: int, d: int) -> int:
+    y -= m <= 2
+    doy = (153 * (m - 3 if m > 2 else m + 9) + 2) // 5 + d - 1
+    yoe = y % 400
+    return (y // 400) * 146097 + yoe * 365 + yoe // 4 - yoe // 100 + doy - 719468
+
+  for x in entries:
+    old = re.fullmatch(r"(\d\d)-(\d\d)", str(x.get("when", "")))
+    if old:
+      year = 1970 + int(clock() // 31556952)
+      at = day(year, int(old[1]), int(old[2])) * 86400
+      x["when"] = str(at if at <= clock() + 172800 else day(year - 1, int(old[1]), int(old[2])) * 86400)
+  return entries
 
 
 def flaw(*whats: str, source: str = "live", item: str = "") -> None:
@@ -1473,15 +1682,28 @@ Read the log of the attempt that failed: gh run view <run> --attempt <attempt> -
 MANY_SAID = "More than {n} tests failed in one attempt, so one cause, as a machine that is slow or a shared resource that waits, probably holds them all: find it first. "
 
 
-def slug(text: str, size: int = 34) -> str:
-  return "-".join(re.findall(r"[a-z0-9]+", text.lower()))[:size].strip("-")
-
-
 def taken(key: str) -> str:
   return next((w for w, k in working.items() if k == key), "") or ("queued" if any(q[0] == key for q in queue) else "")
 
 
 async def watch_ci() -> None:
+  def slug(text: str, size: int = 34) -> str:
+    return "-".join(re.findall(r"[a-z0-9]+", text.lower()))[:size].strip("-")
+
+  def holder(names: list[str]) -> tuple[str, str]:
+    named = [x for x in names if len(x) >= 8]
+    for k, text, _ in [*queue, *backlog]:
+      if any(x in text for x in named):
+        return k, ""
+    for worker, k in working.items():
+      if not over(worker) and any(x in briefed.get(k, "") for x in named):
+        return k, worker
+    for up in prs.values():
+      k = next((m[2:] for m in up["labels"] if m.startswith("w:")), "")
+      if k and any(x in briefed.get(k, "") for x in named):
+        return k, ""
+    return "", ""
+
   got = await bash(f"python3 -I - {shq(json.dumps(sorted(runs_read)))}", stdin=CI_PY, show=HIDDEN, timeout=900)
   if got.code != 0 or not got.stdout.content.startswith("{"):
     notice(f"ci {int(clock() // 3600)}", "The command that measures the gates failed: " + (got.stderr.content or got.stdout.content)[-500:])
@@ -1523,6 +1745,13 @@ async def watch_ci() -> None:
       continue
     if own:
       quietly(prompt, None, f"Your flake came again, at {one['url']}:\n{listed}", on=working_at(own))
+      continue
+    held, worker = holder(tests or [name])
+    if held:
+      if worker:
+        quietly(prompt, None, f"Your item came again, at {one['url']}:\n{listed}", on=working_at(worker))
+      else:
+        heard.append(f"The gates flaked at {one['url']} in {name[:120]}, and the item {held} names the same test, so the round queued no new item.")
       continue
     queue.append((key, brief, "ci"))
     heard.append(f"The gates flaked at {one['url']} in {name[:120]}: queued as the item {key}.")
@@ -1608,7 +1837,23 @@ async def sweep(every: float) -> None:
     noted[:] = [parts[3]]
   await take_issues()
   await upstream_watch()
-  await ops_watch()
+  repo = ops()[0]
+  if repo:
+    watched = await bash(OPS_WATCH.replace("{ops}", repo), show=HIDDEN, timeout=300)
+    wrote = [
+      p for p in (x.split("\t", 3) for x in watched.stdout.content.splitlines()) if len(p) == 4 and p[1] not in comments
+    ]
+    comments.update(p[1] for p in wrote)
+    fresh = [p for p in wrote if p[2] == OWNER and not p[3].startswith(MARKS)]
+    if fresh and "ops" in timers:
+      quietly(
+        prompt,
+        None,
+        "The owner wrote in the private repository of the decisions:\n"
+        + "\n".join(f"ops#{p[0]} {p[3][:1500]}" for p in fresh)
+        + merged_since(),
+      )
+    timers["ops"] = clock()
   await mark()
   await watch_ci()
   if now - timers.get("review", now - every) >= every:
@@ -1617,14 +1862,6 @@ async def sweep(every: float) -> None:
   if now - timers.setdefault("audit", now) >= 12 * every:
     await audit(red)
     timers["audit"] = now
-
-
-def faulted(here: str, step: str, fault: Exception) -> None:
-  notice(
-    f"fault {step} {type(fault).__name__}",
-    f"The round on {here} met a fault in its step {step}: {type(fault).__name__}: {str(fault)[:1000]}. The round goes"
-    " on at the next round, and tells this kind of fault once.",
-  )
 
 
 def ended(here: str, cause: str) -> None:
@@ -1645,16 +1882,22 @@ async def conduct(every: float = 300) -> dict[str, object]:
     made = "".join(f"gh label create {s} --force -c {c} -d {shq(d)} >/dev/null 2>&1; " for s, (c, d) in STATUS.items())
     await bash(made + LABELS, show=HIDDEN)
     while lead.get("home") == here:
-      for at in ("tend", "sweep", "staff"):
+      for at in ("tend", "sweep", "staff", "invariants"):
         try:
           if at == "tend":
             tend()
           elif at == "sweep":
             await sweep(every)
-          else:
+          elif at == "staff":
             staff()
+          else:
+            invariants()
         except Exception as fault:
-          faulted(here, at, fault)
+          notice(
+            f"fault {at} {type(fault).__name__}",
+            f"The round on {here} met a fault in its step {at}: {type(fault).__name__}: {str(fault)[:1000]}. The round goes"
+            " on at the next round, and tells this kind of fault once.",
+          )
       if not (
         queue
         or backlog
