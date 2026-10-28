@@ -1187,23 +1187,28 @@ async def test_the_advance_binds_each_act_that_a_word_of_the_chain_awaits() -> N
   assert f"#{first} advance on {one}" in told and f"#{second} advance on {two}\n{second}_waits = [{waited!r}]" in told
 
 
-async def test_the_chain_tells_a_doctrine_before_the_first_prompt_to_its_actor() -> None:
-  """Before the first prompt to an actor whose roster entry holds a doctrine, the chain tells that doctrine as the quote doctrine, in a paragraph headed doctrine, so the doctrine stands before the message that changes from chain to chain, and each chain that starts the same holds it in the same prefix."""
+async def test_the_chain_tells_the_doctrine_of_its_actor_before_each_standing_that_it_takes() -> None:
+  """Before the paragraph of each standing that it takes, the chain tells the doctrine of its actor, when the roster entry of that actor holds one, as the quote doctrine, in a paragraph headed doctrine, so the doctrine stands before the words that the extensions play and the message that changes from chain to chain, and each chain that starts the same holds it in the same prefix."""
   taught = [*STANDS[0], ["q", ["low", "high"], 300000, "Look first.\nThen fix."]]
+  doctrine = "doctrine\n<s:doctrine>\nLook first.\nThen fix.</s:doctrine>"
   prefixes = []
   for message in ("count", "tally"):
     _, _, root = born("close(1)", stands=[taught, "/w", "q/low"])
     one = engine.prompt(int, message, on=root)
     assert await one == 1
     told = paragraphs(engine.turns(on=root))
-    at = told.index(f"#{root} doctrine\n<s:doctrine>\nLook first.\nThen fix.</s:doctrine>")
-    assert told[at + 1] == f"#{one}\n{one}_message = {message!r}\n{one}: Act[int] = Act({one!r})"
+    at = told.index(f"#{root} {doctrine}")
+    assert told[at + 1].startswith(f"#{root} standing\n")
+    assert told.count(f"#{root} {doctrine}") == 1
     prefixes.append(told[: at + 1])
   assert prefixes[0] == prefixes[1]
+  later = engine.chain("later", on=root)
+  assert paragraphs(engine.turns(on=later))[1:3] == [f"#{later} {doctrine}", paragraphs(engine.turns(on=later))[2]]
+  assert paragraphs(engine.turns(on=later))[2].startswith(f"#{later} standing\n")
 
 
 async def test_the_chain_tells_a_doctrine_once_before_the_advance_when_no_prompt_told_it() -> None:
-  """Before the advance of a reply to such an actor, the chain tells its doctrine when no prompt told it, and the chain never tells a doctrine that its transcript tells already, so the model reads it once, and a chain that asks no such actor tells nothing of it."""
+  """Before the first prompt to another actor whose roster entry holds a doctrine, and before the advance of a reply to such an actor, the chain tells its doctrine when nothing told it, and the chain never tells a doctrine that its transcript tells already, so the model reads it once, and a chain whose actor reads none and that asks no such actor tells nothing of it."""
   taught = [*STANDS[0], ["q", ["low", "high"], 300000, "Look first.\nThen fix."]]
   _, log, root = born("a = 1", "close(2)", "close(3)", stands=[taught, "/w", "m/low"])
   await engine.rung(to="q/low", on=root)

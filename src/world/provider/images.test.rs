@@ -4,6 +4,8 @@ use std::{fs, path::PathBuf};
 
 use rig_core::message::{DocumentSourceKind, ImageMediaType, UserContent};
 
+use std::collections::HashSet;
+
 use super::{Images, attach, kind, read, reference, references};
 
 /// The first bytes of a PNG, which is all the type of an image is read by.
@@ -79,9 +81,13 @@ fn a_turn_hands_a_model_each_image_that_a_read_gives_and_no_image_that_a_text_na
   let read = format!("#read1\nread1_path = '/x/a.png'\nread1_text = '{named}'");
   let text = format!("#read2\nread2_path = '/x/a.md'\nread2_text = 'see {named}'");
   let mut images = Images::new(Some(at.clone()));
-  assert_eq!(images.named(&read).map(|seen| seen.len()), Ok(1), "a read of an image hands it");
   assert_eq!(
-    images.named(&text).map(|seen| seen.len()),
+    images.named(&read, &mut HashSet::new()).map(|seen| seen.len()),
+    Ok(2),
+    "a read of an image hands it after the text that names it"
+  );
+  assert_eq!(
+    images.named(&text, &mut HashSet::new()).map(|seen| seen.len()),
     Ok(0),
     "a text that names an image hands none"
   );
@@ -97,14 +103,23 @@ fn a_turn_hands_a_model_each_image_that_the_message_of_a_prompt_it_opens_names_o
     "#prompt1 look at {named} and {named}\nprompt1: Act[str] = Act('prompt1')\n\n#read a.txt\n# {named}\n\n#prompt2 no open"
   );
   let mut images = Images::new(Some(at.clone()));
-  let seen = images.named(&python).expect("the images of the turn");
-  let [UserContent::Image(image)] = &seen[..] else { panic!("one image: {seen:?}") };
+  let seen = images.named(&python, &mut HashSet::new()).expect("the images of the turn");
+  let [UserContent::Text(told), UserContent::Image(image)] = &seen[..] else {
+    panic!("one image after the text that names it: {seen:?}")
+  };
+  assert_eq!(told.text, named);
+  let mut given = HashSet::from([kept.uri.clone()]);
+  assert_eq!(
+    images.named(&python, &mut given).map(|seen| seen.len()),
+    Ok(0),
+    "an image that an earlier turn of the request gave comes no more"
+  );
   assert_eq!(image.media_type, Some(ImageMediaType::PNG));
   assert!(
     matches!(&image.data, DocumentSourceKind::Base64(data) if data == "iVBORw0KGgp0aGUgcmVzdA==")
   );
   assert_eq!(
-    Images::new(None).named(&python).map(|seen| seen.len()),
+    Images::new(None).named(&python, &mut HashSet::new()).map(|seen| seen.len()),
     Ok(0),
     "a life with no directory hands none"
   );
@@ -113,7 +128,7 @@ fn a_turn_hands_a_model_each_image_that_the_message_of_a_prompt_it_opens_names_o
   let system = fs::metadata(&file).expect_err("the image is gone");
   let gone = format!("The image {} did not load from {}: {system}", kept.uri, file.display());
   assert_eq!(
-    images.named(&python).map(|seen| seen.len()),
+    images.named(&python, &mut HashSet::new()).map(|seen| seen.len()),
     Err(gone),
     "an image whose file is gone fails"
   );

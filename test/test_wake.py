@@ -149,7 +149,7 @@ async def test_a_wake_makes_no_reply_twice_and_loses_none() -> None:
 
 
 async def test_a_wake_that_this_life_says_puts_every_pending_act_it_is_over_on_to_the_outside() -> None:
-  """A wake that this life says, and not one that the journal says again, puts every pending act it is over on to the outside, so the World takes each wait, prompt to the operator and reply of them and closes each command of them as interrupted, and a model reads the transcript as it grew."""
+  """A wake that this life says past the tip, and not one that the journal says again, puts every pending act it is over on to the outside, so the World takes each wait, prompt to the operator and reply of them and closes each command of them as interrupted, and a model reads the transcript as it grew."""
   sand, log, root = born(auto=False)
   command = engine.bash("sleep 9", on=root)
   waited = engine.wait(100.0, on=root)
@@ -170,6 +170,13 @@ async def test_a_wake_that_this_life_says_puts_every_pending_act_it_is_over_on_t
   assert [a[1] for a in later.calls if a[0] in TAKEN] == [command, waited, shown, pending]
   assert isinstance(engine.peek(command), Refused) and "interrupted" in str(engine.peek(command))
   assert "k = 1" in later.turns[pending][-1][1]
+  first, _, root = born(auto=False)
+  engine.bash("sleep 9", on=root)
+  await engine.rung(f"wake({root!r})", on=root)
+  engine.clock(on=root)
+  then = Sand()
+  await relived(then, plain(first.record))
+  assert [a for a in then.calls if a[0] in TAKEN] == []
 
 
 async def test_a_wake_of_a_name_of_no_act_raises_refused_that_names_it() -> None:
@@ -181,3 +188,20 @@ async def test_a_wake_of_a_name_of_no_act_raises_refused_that_names_it() -> None
     engine.wake("nothing9")
   await settle()
   assert log[before:] == []
+
+
+async def test_a_wake_that_the_journal_says_again_says_at_once_the_answers_of_the_outside_to_it() -> None:
+  """A wake that the journal says again says at once each next entry of the record that answers a pending act it is over, as the outside said them while it heard that wake, before any other fact of the life."""
+  sand, _, root = born(auto=False)
+  word = "try:\n  await bash('one')\nexcept Refused:\n  pass\nclock() if all(over(a[1]) for a in transcript(of='bash')) else chance()"
+  engine.rung(word, on=root)
+  await settle()
+  two = engine.bash("two", on=root)
+  await settle()
+  later = Sand()
+  _, over = await relived(later, plain(sand.record))
+  engine.wake(over)
+  await settle()
+  assert isinstance(engine.peek(two), Refused) and engine.peek("clock1", None) is not None
+  again, _ = await relived(Sand(), plain([*sand.record, *later.record]))
+  assert [a[1] for a in said(again, "clock")] == ["clock1"]

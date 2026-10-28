@@ -122,6 +122,20 @@ test("a function of JavaScript crosses as a filter, and what it throws is raised
   expect(() => engine.chain({ label: "fork", source: engine.root, filter: refusing })).toThrow("no lines");
 });
 
+test("a fault that cuts a run of the sandbox stops the life, which tells its listener once and refuses each call", () => {
+  const { engine } = open();
+  const heard: string[] = [];
+  engine.onStop((why) => heard.push(why));
+  expect(engine.stopped).toBeNull();
+  expect(() => engine.rung({ word: "x = 'a' * (5 << 30)", on: engine.root })).toThrow(
+    "memory limit exceeded",
+  );
+  expect(engine.stopped).toMatchObject({ is: "MemoryError" });
+  expect(heard).toEqual([expect.stringContaining("MemoryError: memory limit exceeded")]);
+  expect(() => engine.cwd({ on: engine.root })).toThrow("The life stopped at MemoryError");
+  expect(heard).toHaveLength(1);
+});
+
 test("dispose rejects pending native results and further operations", async () => {
   const { engine } = open();
   const result = engine.result(engine.root).then(

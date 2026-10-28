@@ -12,11 +12,14 @@ from contextvars import ContextVar
 from typing import NotRequired, TypedDict, Unpack, final
 
 class Extension(TypedDict):
-  """An extension: its name, its word, and its life word, which is empty when it has none."""
+  """An extension: its name, its word, its life word, which is empty when it has none, and whether it plays on the root
+  alone. An extension that plays on the root alone plays on no other chain but one whose source had it, since that
+  chain makes the rung of its source again; any other extension plays on every chain."""
 
   name: str
   word: str
   life: str
+  root: bool
 
 class Part(TypedDict):
   """The part of an extension that a TUI loads: the name of the extension, the path of its module of TypeScript, which

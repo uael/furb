@@ -35,7 +35,7 @@ APP = re.compile(r"gui/.*")
 
 
 def scope(paths: list[str]) -> dict[str, object]:
-  """The systems of the suite and of the bindings, and whether the crate on Windows and the app run."""
+  """The systems of the suite and of the bindings, and whether the crate on Windows and on macOS and the app run."""
   kinds = {"python": False, "typescript": False, "rust": False, "other": False, "app": False}
   for path in paths:
     if INERT.fullmatch(path):

@@ -483,6 +483,20 @@ def born(*script: str, **world: object) -> tuple[Sand, list[tuple], str]:
   return sand, log, root
 
 
+async def waiting(**world: object) -> tuple[Sand, list[tuple], str, Act[int], str, str]:
+  """A life whose prompt waits on the reply of its rung, which no model answers until the test does: the World, what
+  was said, the root, the prompt, the rung of the prompt and its reply."""
+  sand, log, root = born(**world)
+  act = engine.prompt(int, "count", on=root)
+  await settle()
+  return sand, log, root, act, said(log, "rung")[0][1], said(log, "reply")[0][1]
+
+
+def wrote(rung: str, part: str, before: int) -> tuple:
+  """A writing of a part of the word of a rung, said as the World says one."""
+  return world_says("writing", rung, part, before)
+
+
 async def lived() -> tuple[Sand, list[tuple], str]:
   """A life that reads a file, runs a command and returns what it came to: the World, what was said and the root."""
   sand, log, root = born(WORD, "close(None)")
