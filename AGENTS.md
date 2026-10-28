@@ -247,6 +247,10 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 - `uv run pytest -q`: the suite on both engines, with the coverage of `furb` and of `furb_monty`, which must be
   whole.
 - `uv run pytest -q test/test_hygiene.py`: the hygiene laws alone.
+- `uv run python script/tokens.py`: the cost of the minified engine and of `DOCTRINE.md` in tokens of `o200k_base`, against
+  their walls, from the code of law 5 and in seconds. It builds nothing: it counts the newest minified engine that is the
+  program of `engine.py`, from the installed `furb_monty` or a `system.py` in `target`, and when none is, it names
+  `cargo check` to make one.
 - `uv run ruff format src test script extensions` then `uv run ruff check src test script extensions`: format and
   lint. Two spaces of indentation, 120 columns.
 - `.furb` is outside ruff, even for a path that you give it: its words keep the form of the engine. Run the tests of
