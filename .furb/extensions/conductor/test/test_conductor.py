@@ -96,6 +96,7 @@ class Round:
     self.targets: list[str] = []
     self.says: list[tuple[str, str, int]] = []
     self.prompts: list[tuple[str, str]] = []
+    self.cancelled: list[str] = []
     self.hired: list[tuple[str, str]] = []
     self.files: dict[str, str] = {}
     self.facts: dict[str, tuple] = {}
@@ -130,6 +131,7 @@ class Round:
       module=lambda on="": self.modules.get(on, {}),
     )
     ns.update(chain=lambda label="", source="": f"chain-{label}", rung=self.rung)
+    ns.update(cancel=lambda name: self.cancelled.append(name))
     # The root plays pr before the conductor, which uses its names, as .furb/config.json orders them.
     exec(compile(IMPORT.sub("", PULL.read_text(encoding="utf-8")), str(PULL), "exec"), ns)  # noqa: S102
     exec(compile(IMPORT.sub("", SOURCE), str(HERE / "conductor.py"), "exec"), ns)  # noqa: S102
@@ -686,7 +688,7 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 
 STATE = (
   "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed fixes silent"
-  " comments measures timers noted debriefs briefed owns vetoes ordered tips shifted hired paced landed heard handled ends requeued"
+  " comments measures timers noted debriefs briefed owns watched vetoes ordered tips shifted hired paced landed heard handled ends requeued"
   " statused secret budgeted flaky runs_read"
 ).split()
 
@@ -1585,3 +1587,65 @@ async def test_pr_creates_each_label_that_it_adds_and_raises_refused_with_what_g
   conductor.say(r"pr create", "https://github.com/o/r/pull/9\n")
   got = await open_pr("feat(x): Y", "why", ["out"], boxes, labels=" --label w:k", where=str(tmp_path))
   assert got.stdout.content.strip() == "https://github.com/o/r/pull/9"
+
+
+def bashing(conductor: Round, *acts: tuple[str, str]) -> None:
+  conductor.busy("p1", "k1", SONNET)
+  facts = [("bash", name, "rung1", "chain-k1", command, "", 600) for name, command in acts]
+  conductor.ns["transcript"] = lambda on="", of="": [*facts] if on == "chain-k1" else []
+  for name, _ in acts:
+    conductor.files[f"{name}/stdout"] = ""
+    conductor.files[f"{name}/stderr"] = ""
+
+
+def test_a_watch_on_ci_that_runs_past_ten_minutes_is_cancelled_with_a_reason_that_keeps_the_worker_on_its_pr(
+  conductor: Round,
+) -> None:
+  bashing(conductor, ("bash7", "gh pr checks 5 --watch"))
+  conductor.tend()
+  conductor.now += 540
+  conductor.tend()
+  assert conductor.cancelled == []
+  conductor.now += 120
+  conductor.tend()
+  assert conductor.cancelled == ["bash7"]
+  said = conductor.prompts[-1]
+  assert said[1] == "chain-k1" and "wait on CI" in said[0] and "await wait(600)" in said[0]
+  assert "close only when your PR has merged" in said[0]
+  assert any("bash7" in x and "wait on CI" in x for x in conductor.heard)
+
+
+def test_a_loop_of_sleep_around_gh_counts_as_a_wait_on_ci(conductor: Round) -> None:
+  bashing(conductor, ("bash7", "while true; do gh run view 9; sleep 60; done"))
+  conductor.tend()
+  conductor.now += 700
+  conductor.tend()
+  assert conductor.cancelled == ["bash7"]
+
+
+def test_a_command_that_prints_keeps_running_whatever_its_age(conductor: Round) -> None:
+  bashing(conductor, ("bash8", "cargo test --workspace"))
+  for step in range(8):
+    conductor.files["bash8/stdout"] += "line\n"
+    conductor.tend()
+    conductor.now += 600
+  assert conductor.cancelled == [] and conductor.heard == []
+  assert not [x for x in conductor.prompts if "bash8" in x[0]]
+
+
+def test_a_silent_command_gets_one_line_at_fifteen_minutes_and_a_cancel_at_thirty(conductor: Round) -> None:
+  bashing(conductor, ("bash9", "git commit -m x"))
+  conductor.files["bash9/stdout"] = "hooks start\n"
+  conductor.tend()
+  conductor.now += 900
+  conductor.tend()
+  conductor.now += 300
+  conductor.tend()
+  lines = [x for x in conductor.heard if "bash9" in x]
+  assert len(lines) == 1 and "15 minutes" in lines[0] and "hooks start" in lines[0]
+  assert conductor.cancelled == []
+  conductor.now += 600
+  conductor.tend()
+  assert conductor.cancelled == ["bash9"]
+  assert "30 minutes" in conductor.prompts[-1][0] and "bash9" in conductor.prompts[-1][0]
+  assert conductor.watched == {"bash9": [1000.0, 12, 1000.0]}

@@ -57,6 +57,7 @@ threads() gives the tree of the threads: the brief prompt of each worker and the
 debrief(name) asks the chain of a worker that ended for the frictions that it met in furb.
 Each act of the round is made through quietly(verb, ...), so its end wakes nobody: you hear only a notice, and each merge rides on the next one. Make each act that you do not await the same way.
 An item that takes a PR by its brief, and not by a label or a push, names it in owns[key] = [n, ...], so that the round sees its worker as the owner of that PR and hires no fixer on it.
+At each round a watchdog reads each open command of each worker, with no model: a wait on CI (gh pr checks --watch, gh run watch, or a loop of sleep around gh) that runs over 10 minutes is cancelled, and its reason tells the worker to stay on its PR, read the checks again after await wait(600) and close only when the PR merged. Any other command whose output did not grow for 15 minutes is a line in the next notice, and at 30 minutes it is cancelled with its reason and told to you. It ends a wait or a command, never a task.
 DEBRIEFS is on by default and lives in the state of the round: DEBRIEFS = False in a word turns off the debrief of each worker that ends, which saves tokens.
 A review blocks only on a defect that a command reproduces, or on a false sentence of a contract."""
 
@@ -99,6 +100,7 @@ noted: list[str] = globals().setdefault("noted", [])
 debriefs: dict[str, str] = globals().setdefault("debriefs", {})
 briefed: dict[str, str] = globals().setdefault("briefed", {})
 owns: dict[str, list[int]] = globals().setdefault("owns", {})
+watched: dict[str, list[float]] = globals().setdefault("watched", {})
 DEBRIEFS = globals().get("DEBRIEFS", True)
 vetoes: dict = globals().setdefault("vetoes", {})
 ORDERED = 600.0
@@ -565,6 +567,60 @@ def tend() -> None:
       said = peek(asked)
       if isinstance(said, list) and said:
         flaw(*[str(one) for one in said], source=f"debrief of {key}")
+  live: set[str] = set()
+
+  def cut(act: str, home: str, why: str) -> None:
+    quietly(prompt, None, why, on=home)
+    cancel(act)
+
+  def watchdog(worker: str, item: str) -> None:
+    for home in sorted({str(get(worker)[3]), working_at(worker)}):
+      for x in transcript(home):
+        if x[0] != "bash" or over(x[1]):
+          continue
+        act, command = str(x[1]), str(x[4])
+        live.add(act)
+        try:
+          out = read(f"{act}/stdout", HIDDEN).content + read(f"{act}/stderr", HIDDEN).content
+        except Refused:
+          out = ""
+        seen = watched.setdefault(act, [now, len(out), now])
+        if len(out) != seen[1]:
+          seen[1], seen[2] = len(out), now
+        age, quiet = int((now - seen[0]) // 60), int((now - seen[2]) // 60)
+        ci = re.search(r"gh +(?:pr +checks\b.*--watch|run +watch)", command, re.S) or (
+          re.search(r"\b(?:while|until|for)\b", command)
+          and re.search(r"\bsleep\b", command)
+          and re.search(r"\bgh\b", command)
+        )
+        tail = "\n".join(out.splitlines()[-5:])[-300:]
+        if ci and now - seen[0] > 600:
+          cut(
+            act,
+            home,
+            f"The round cut your wait on CI ({command[:100]}) after {age} minutes. It ends a wait, never your task:"
+            " stay on your PR, read its checks again with gh pr checks (never --watch) after await wait(600),"
+            " and close only when your PR has merged.",
+          )
+          heard.append(f"The round cut {act} of {item} on {home}: a wait on CI of {age} minutes.")
+        elif now - seen[2] >= 1800:
+          cut(
+            act,
+            home,
+            f"The round cut your command {act} ({command[:100]}) after {quiet} minutes with no new output. It ends a"
+            " command, never your task: find what it waited for, run it again in a bound that fits, and go on.",
+          )
+          notice(
+            f"watchdog {act}",
+            f"The round cut {act} of {item} on {home} after {quiet} minutes with no output: {command[:100]!r}."
+            f" Its last output:\n{tail}",
+          )
+        elif now - seen[2] >= 900 and f"silent {act}" not in noticed:
+          noticed.add(f"silent {act}")
+          heard.append(
+            f"{act} of {item} on {home} has printed nothing for {quiet} minutes: {command[:100]!r}; its last output: {tail!r}"
+          )
+
   for name, key in working.items():
     where = working_at(name)
     if paused(where):
@@ -580,6 +636,9 @@ def tend() -> None:
         f"silent {where} {len(facts)}",
         f"The worker {key} on {where} has said nothing for {int(now - silent[where][1]) // 60} minutes. Look at it.",
       )
+    watchdog(name, key)
+  for gone in [a for a in watched if a not in live]:
+    del watched[gone]
   late = (
     "An hour passed since you took this item, and no PR of yours is open. Land it in steps: commit now the coherent"
     " part that serves his words, open its PR with pr(), and go on with the rest in a next PR from this chain,"
