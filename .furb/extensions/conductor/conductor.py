@@ -59,6 +59,8 @@ Each act of the round is made through quietly(verb, ...), so its end wakes nobod
 An item that takes a PR by its brief, and not by a label or a push, names it in owns[key] = [n, ...], so that the round sees its worker as the owner of that PR and hires no fixer on it.
 At each round a watchdog reads each open command of each worker, with no model: a wait on CI (gh pr checks --watch, gh run watch, or a loop of sleep around gh) that runs over 10 minutes is cancelled, and its reason tells the worker to stay on its PR, read the checks again after await wait(600) and close only when the PR merged. Any other command whose output did not grow for 15 minutes is a line in the next notice, and at 30 minutes it is cancelled with its reason and told to you. It ends a wait or a command, never a task.
 DEBRIEFS is on by default and lives in the state of the round: DEBRIEFS = False in a word turns off the debrief of each worker that ends, which saves tokens.
+An item waits for others with after[key] = [keys], set before you queue it: staff() hires it only once each PR that those keys ended with merged, an item of backlog whose keys merged goes to queue, and the round lists in a notice each key that no item holds. The entries of held_items in the module of the root move into backlog at each round, so a dict of your own chain is not needed.
+Method, at each notice: read the whole state, fix every thing that is off in one go, read the state again to verify, and go on until nothing is off. Only then report. Each round also checks the state in invariants(): it gives each open PR that the round tends a home, from the chain that pushed its head, wakes no chain, and lists in the next notice what code cannot fix.
 A review blocks only on a defect that a command reproduces, or on a false sentence of a contract."""
 
 LIMITS = {"room": {"opus": 1, "sonnet": 3, "opus/high": 1}, "fixer": "claude-cli:sonnet/high"}
@@ -101,6 +103,7 @@ debriefs: dict[str, str] = globals().setdefault("debriefs", {})
 briefed: dict[str, str] = globals().setdefault("briefed", {})
 owns: dict[str, list[int]] = globals().setdefault("owns", {})
 watched: dict[str, list[float]] = globals().setdefault("watched", {})
+after: dict[str, list[str]] = globals().setdefault("after", {})
 DEBRIEFS = globals().get("DEBRIEFS", True)
 vetoes: dict = globals().setdefault("vetoes", {})
 ORDERED = 600.0
@@ -1199,6 +1202,9 @@ def needs(pr: dict) -> bool:
 
 
 def staff() -> None:
+  def met(item: str) -> bool:
+    return all(dep in ends and all(n in merged for _, n in ends[dep] if n) for dep in after.get(item, []))
+
   blocked: set[str] = set()
   for pr in [one for one in prs.values() if needs(one)]:
     maker = next((m[2:] for m in pr["labels"] if m.startswith("w:")), "")
@@ -1211,12 +1217,74 @@ def staff() -> None:
         f"#{pr['n']} needs a fixer on {model} at {pr['sha'][:7]}, and limits['room'][{mine!r}] is"
         f" {limits['room'].get(mine, 0)}, so no fixer starts on it. Give {mine} room, or say why it waits.",
       )
-  while backlog and len(working) + len(queue) < cap():
-    queue.append(backlog.pop(0))
+  for item in [one for one in backlog if one[0] in after and met(one[0])]:
+    backlog.remove(item)
+    queue.append(item)
+  while len(working) + len(queue) < cap():
+    ready = [i for i, one in enumerate(backlog) if met(one[0])]
+    if not ready:
+      break
+    queue.append(backlog.pop(ready[0]))
   for item in list(queue):
-    if family(model_of(item[0])) not in blocked and can(item[0]):
+    if met(item[0]) and family(model_of(item[0])) not in blocked and can(item[0]):
       queue.remove(item)
       hire(*item)
+
+
+def invariants() -> None:
+  held: Any = module(ROOT).get("held_items")
+  for key, item in list(held.items()) if isinstance(held, dict) else []:
+    del held[key]
+    if taken(key) or any(q[0] == key for q in [*queue, *backlog]):
+      continue
+    efforts[key] = item.get("model", ACTOR)
+    after[key] = [str(dep) for dep in item.get("after", [])]
+    ruling = str(module(ROOT).get("RULING", ""))
+    backlog.append((key, ruling + str(item["brief"]), str(item.get("thread", "defects"))))
+    heard.append(f"The item {key} moved from held_items to the backlog, after {', '.join(after[key]) or 'nothing'}.")
+  chains = {
+    **{str(x[1]): str(x[4]).split("/")[-1] for x in transcript(ROOT) if x[0] == "chain"},
+    **{where: key for key, where in homes.items()},
+  }
+  for pr in prs.values():
+    if "paused" in pr["labels"] or not pr["head"].startswith("w/") or owner_of(pr):
+      continue
+    key = next((m[2:] for m in pr["labels"] if m.startswith("w:")), "")
+    if key and homes.get(key):
+      continue
+    pushed = (
+      c
+      for c in chains
+      if any(x[0] == "bash" and "push" in str(x[4]) and pr["head"] in str(x[4]) for x in transcript(c))
+    )
+    where = next(pushed, "")
+    if not where:
+      if f"home #{pr['n']}" not in noticed:
+        noticed.add(f"home #{pr['n']}")
+        heard.append(f"#{pr['n']} ({pr['head']}) has no home: no worker owns it, and no chain pushed its head.")
+      continue
+    key = key or chains[where]
+    homes[key] = where
+    if f"w:{key}" not in pr["labels"]:
+      pr["labels"].append(f"w:{key}")
+      quietly(
+        bash,
+        f"gh label create w:{key} --force >/dev/null 2>&1; gh pr edit {pr['n']} --add-label w:{key} >/dev/null 2>&1",
+        show=HIDDEN,
+      )
+    heard.append(f"#{pr['n']} had no home; the round gave it {key} on {where}, which pushed its head.")
+  known = {q[0] for q in [*queue, *backlog]}
+  held_keys = known | set(working.values()) | set(ends) | {m[2:] for p in prs.values() for m in p["labels"] if m[:2] == "w:"}
+  for key, deps in after.items():
+    for dep in deps:
+      if key in known and dep not in held_keys and f"after {key} {dep}" not in noticed:
+        noticed.add(f"after {key} {dep}")
+        heard.append(f"The item {key} waits for {dep}, which no queue, worker, PR or end holds.")
+  for worker, item in working.items():
+    where = working_at(worker)
+    if paused(where) and f"paused {where}" not in noticed:
+      noticed.add(f"paused {where}")
+      heard.append(f"The chain {where} of {item} stays paused after the round woke it.")
 
 
 async def upstream_watch() -> None:
@@ -1743,14 +1811,16 @@ async def conduct(every: float = 300) -> dict[str, object]:
     made = "".join(f"gh label create {s} --force -c {c} -d {shq(d)} >/dev/null 2>&1; " for s, (c, d) in STATUS.items())
     await bash(made + LABELS, show=HIDDEN)
     while lead.get("home") == here:
-      for at in ("tend", "sweep", "staff"):
+      for at in ("tend", "sweep", "staff", "invariants"):
         try:
           if at == "tend":
             tend()
           elif at == "sweep":
             await sweep(every)
-          else:
+          elif at == "staff":
             staff()
+          else:
+            invariants()
         except Exception as fault:
           notice(
             f"fault {at} {type(fault).__name__}",

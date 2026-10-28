@@ -688,7 +688,7 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 
 STATE = (
   "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed fixes silent"
-  " comments measures timers noted debriefs briefed owns watched vetoes ordered tips shifted hired paced landed heard handled ends requeued"
+  " comments measures timers noted debriefs briefed owns watched after vetoes ordered tips shifted hired paced landed heard handled ends requeued"
   " statused secret budgeted flaky runs_read"
 ).split()
 
@@ -1649,3 +1649,48 @@ def test_a_silent_command_gets_one_line_at_fifteen_minutes_and_a_cancel_at_thirt
   assert conductor.cancelled == ["bash9"]
   assert "30 minutes" in conductor.prompts[-1][0] and "bash9" in conductor.prompts[-1][0]
   assert conductor.watched == {"bash9": [1000.0, 12, 1000.0]}
+
+
+def test_a_pr_whose_maker_ended_gets_the_home_that_pushed_its_head(conductor: Round) -> None:
+  one = conductor.pr(n=5, head="w/k9")
+  conductor.prs[5] = one
+  pushes = [("bash", "bash3", "rung1", "chain-k9", "git push origin HEAD:refs/heads/w/k9", "", 600)]
+  chains = [("chain", "chain-k9", "rung1", "chain1", "defects/k9", "")]
+  conductor.ns["transcript"] = lambda on="", of="": chains if on == "chain1" else pushes if on == "chain-k9" else []
+  conductor.ns["quietly"] = lambda verb, *args, **words: asyncio.run(verb(*args, **words))
+  conductor.invariants()
+  assert conductor.homes == {"k9": "chain-k9"} and "w:k9" in one["labels"]
+  assert "pr edit 5 --add-label w:k9" in conductor.log()
+  assert any("#5" in x and "k9" in x for x in conductor.heard)
+
+
+def test_a_pr_that_no_chain_pushed_is_listed_once_in_the_next_notice(conductor: Round) -> None:
+  conductor.prs[5] = conductor.pr(n=5)
+  conductor.invariants()
+  conductor.invariants()
+  assert [x for x in conductor.heard if "has no home" in x] == [
+    "#5 (w/k5) has no home: no worker owns it, and no chain pushed its head."
+  ]
+
+
+def test_an_item_with_an_unmerged_after_stays_in_the_backlog_and_starts_once_it_merged(conductor: Round) -> None:
+  conductor.backlog.append(("k2", "brief", "defects"))
+  conductor.after["k2"] = ["k1"]
+  conductor.ends["k1"] = [("worker1", 7)]
+  conductor.staff()
+  assert [x[0] for x in conductor.backlog] == ["k2"] and conductor.hired == [] and conductor.queue == []
+  conductor.merged.add(7)
+  conductor.staff()
+  assert [key for key, _ in conductor.hired] == ["k2"] and conductor.backlog == []
+
+
+def test_the_items_held_by_the_coordinator_move_into_the_backlog_with_their_keys(conductor: Round) -> None:
+  item = {"key": "k3", "model": "claude-cli:sonnet/high", "after": ["k1"], "brief": "do it"}
+  conductor.ns["held_items"] = {"k3": item}
+  conductor.ns["RULING"] = "Ruling. "
+  conductor.invariants()
+  assert conductor.ns["held_items"] == {}
+  assert conductor.backlog == [("k3", "Ruling. do it", "defects")]
+  assert conductor.after == {"k3": ["k1"]} and conductor.efforts["k3"] == "claude-cli:sonnet/high"
+  assert any("held_items" in x and "k3" in x for x in conductor.heard)
+  assert any("k1" in x and "k3" in x for x in conductor.heard)
