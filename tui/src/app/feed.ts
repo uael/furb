@@ -566,7 +566,6 @@ export const feed = part({
               indent,
               shown: message,
               join: "only",
-              edge: tone,
             },
           );
           return;
@@ -782,7 +781,13 @@ export const feed = part({
                     });
                     block.add(
                       window.opened
-                        ? this.document(view, { maxHeight: SCROLL, flexGrow: 0, flexShrink: 1, minWidth: 0 })
+                        ? this.document(view, {
+                            // A scroll box takes all the rows that it may, so it takes the rows of its lines.
+                            height: Math.max(1, Math.min(segment.length, SCROLL)),
+                            flexGrow: 0,
+                            flexShrink: 1,
+                            minWidth: 0,
+                          })
                         : view,
                     );
                   }
@@ -863,7 +868,6 @@ export const feed = part({
             {
               indent,
               join,
-              edge: c.border,
               heading: false,
               separate: at === 0,
               open: true,

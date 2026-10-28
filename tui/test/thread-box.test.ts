@@ -188,7 +188,7 @@ test("a window of code shows seven rows: the first line or a ..., the line that 
     expect(app.rolling(code(12), "w10:2", false).opened).toBe(true);
   }));
 
-test("a click on a ... of a window of code opens it in a block that scrolls, and a click on Roll up rolls it again", async () =>
+test("a click on a ... of a window of code opens it in a block that fits its lines and scrolls past them, and a click on Roll up rolls it again", async () =>
   composing(
     async ({ session, app, screen, frame }) => {
       await session.refresh();
@@ -215,6 +215,14 @@ test("a click on a ... of a window of code opens it in a block that scrolls, and
       await screen.mockMouse.click((opened[up] ?? "").indexOf("Roll up"), up);
       await until(session, () => session.folds[key] === undefined);
       expect((await gaps()).length).toBeGreaterThan(0);
+      // A block of fewer lines than it shows before it scrolls takes their rows alone, with no blank row before Roll up.
+      for (const node of app.scroll.getChildren().filter((one) => one.id.startsWith("program-")))
+        session.folds[`window:${node.id.slice("program-".length)}`] = false;
+      app.renderContent();
+      const all = (await frame()).split("\n").map((row) => feedOf(session, row));
+      const ups = all.flatMap((row, y) => (row.includes("Roll up") ? [y] : []));
+      expect(ups.length).toBeGreaterThan(0);
+      for (const y of ups) expect((all[y - 1] ?? "").trim()).not.toBe("");
     },
     { ...size, useMouse: true },
     await recorded(),
@@ -233,6 +241,11 @@ test("the box of a thread starts where the input of the chain starts, and its re
       // The line of the box stands on one column, whatever the row.
       const bars = rows.filter((row) => row.includes("┃")).map((row) => row.indexOf("┃"));
       expect(new Set(bars).size).toBe(1);
+      // Only a message of the operator holds a line: each cap of a line stands just above its rows, and no edge of a box
+      // holds one.
+      const caps = rows.flatMap((row, y) => (row.includes("╻") ? [y] : []));
+      expect(caps.length).toBeGreaterThan(0);
+      for (const y of caps) expect(rows[y + 1] ?? "").toContain("┃");
     },
     size,
     true,
