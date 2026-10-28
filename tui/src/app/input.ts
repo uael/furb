@@ -210,8 +210,8 @@ export const input = part({
       stageKey("b", () => this.branchAtCursor(), ["b", "branch"]),
       stageKey("tab", () => this.question(), ["Tab", "answer"]),
     ]);
-    // While the keys move in the sidebar, the arrows move them, Enter opens a chain or chooses a thread, Escape goes
-    // back, and a letter acts on the thread under them.
+    // While the keys move in the sidebar, the arrows move them, Enter opens the workspace, the session or the thread
+    // under them, the right arrow peeks at a workspace, Escape goes back, and a letter acts on the thread under them.
     const onThread = (run: (thread: ChainThread) => void) => () => {
       const thread = this.railThread();
       if (thread) run(thread);
@@ -219,22 +219,30 @@ export const input = part({
     layer(() => bare() && this.railKeys, "rail", [
       { on: "up", run: () => this.moveRail(-1), hint: ["↑↓", "move"] },
       { on: "down", run: () => this.moveRail(1) },
+      { on: ["return", "enter"], run: () => this.railHandler()?.enter(), hint: ["Enter", "open"] },
       {
-        on: ["return", "enter", "right"],
-        run: () => this.enterRail(),
-        hint: ["Enter", () => (this.railChain ? "choose" : "threads")],
+        on: "right",
+        run: () => {
+          const row = this.railHandler();
+          if (row) (row.right ?? row.enter)();
+        },
       },
       {
-        on: ["escape", "left"],
-        run: () => this.leaveRail(),
-        hint: ["Esc", () => (this.railChain ? "chains" : "input")],
+        on: "left",
+        run: () => {
+          const row = this.railHandler();
+          if (row?.left) row.left();
+          else this.railSteer(false);
+        },
       },
+      { on: "escape", run: () => this.railSteer(false), hint: ["Esc", "input"] },
       {
         on: "space",
-        run: onThread((thread) => this.foldThread(thread.act.id)),
-        when: () => Boolean(this.railThread()),
-        hint: ["Space", "collapse"],
+        run: () => this.railHandler()?.space?.(),
+        when: () => Boolean(this.railHandler()?.space),
+        hint: ["Space", "fold"],
       },
+      { on: "a", run: () => void this.nextAttention().catch(this.report), hint: ["a", "question"] },
       {
         on: "r",
         run: onThread((thread) => this.resolveThread(thread)),
@@ -243,9 +251,9 @@ export const input = part({
       },
       {
         on: "o",
-        run: onThread((thread) => this.reopenThread(thread.act.id)),
-        when: () => this.railThread()?.resolved === true,
-        hint: ["o", "open again"],
+        run: onThread((thread) => this.replyTo(thread.act.id)),
+        when: () => Boolean(this.railThread()),
+        hint: ["o", "reply"],
       },
     ]);
     layer(bare, "", [
@@ -377,6 +385,20 @@ export const input = part({
     const up = key?.name === "up";
     const anywhere = key?.meta;
     const queued = this.session.queued.findLast((entry) => entry.chain === this.session.selected);
+    // Up on an empty input takes back the last message to the thread that it targets, when that message still runs or
+    // a cancel ended it: the text comes back to edit, and the message sent in its place takes its place in the box.
+    const target = this.session.target;
+    if (up && !anywhere && !this.composer.plainText && this.historyIndex < 0 && target) {
+      if (this.session.lastMessage(target)) {
+        void this.session
+          .takeBackMessage(target)
+          .then((text) => {
+            if (text !== undefined && !this.composer.plainText) this.insert(text);
+          })
+          .catch(this.report);
+        return true;
+      }
+    }
     if (up && !anywhere && !this.composer.plainText && queued && this.historyIndex < 0) {
       this.session.removeQueued(queued.id);
       this.insert(queued.text);
@@ -487,6 +509,7 @@ export const input = part({
       lifeView: () => this.switchView(),
       steer: () => this.steer(),
       rail: () => this.railSteer(),
+      nextAsk: () => void this.nextAttention().catch(this.report),
       repair: () => void this.session.repairJournal().catch(this.session.fail),
       renew: () => void this.session.renewJournal().catch(this.session.fail),
     };

@@ -710,7 +710,7 @@ fn a_turn_hands_its_images_to_a_model_that_takes_them_and_a_model_that_takes_non
   };
   assert!(matches!(
     content.iter().collect::<Vec<_>>()[..],
-    [UserContent::Text(_), UserContent::Image(_)]
+    [UserContent::Text(_), UserContent::Text(_), UserContent::Image(_)]
   ));
   let blind = streaming(&[]);
   let provider =
@@ -1642,7 +1642,7 @@ fn a_word_that_ends_with_a_line_of_three_backticks_runs_without_it_and_the_chain
     facts.iter().map(|(kind, about, _)| (kind.as_str(), about.as_str())).take(4).collect();
   assert_eq!(
     kinds,
-    [("started", "reply1"), ("writing", "writing1"), ("tell", root.as_str()), ("done", "reply1")]
+    [("started", "reply1"), ("writing", "rung1"), ("tell", root.as_str()), ("done", "reply1")]
   );
   assert!(facts[2].2.contains("the provider dropped that line"), "{}", facts[2].2);
   assert!(facts[3].2.starts_with("('assistant', 'x = 3\\ny = x', "), "{}", facts[3].2);
@@ -1832,23 +1832,25 @@ fn a_claude_command_line_at_its_usage_limit_is_asked_again_at_the_reset_and_answ
   assert_eq!(yard.heard().len(), 2, "the reply asked the command line again after the reset");
 }
 
-/// Whether a writing of this part of a word is done with nothing, which is that the part ran.
+/// Whether the Kernel says that a writing of this part of a word ran with nothing raised.
 fn wrote(engine: &mut Engine, part: &str) -> bool {
   let root = engine.root().to_owned();
   let facts = engine
     .transcript(verbs::Transcript { on: on(&root), of: None })
     .expect("the root has a transcript");
-  let holds =
-    |one: &Fact| (0..4).any(|at| one.word(at).and_then(|word| word.as_str()) == Some(part));
+  let place = |one: &Fact| (one.about().to_owned(), one.word(1).and_then(|word| word.as_int()));
   let made: Vec<_> = facts
     .iter()
-    .filter(|one| one.kind() == "writing" && holds(one))
-    .map(|one| one.about().to_owned())
+    .filter(|one| {
+      one.kind() == "writing" && one.word(0).and_then(|word| word.as_str()) == Some(part)
+    })
+    .map(place)
     .collect();
   facts.iter().any(|one| {
-    one.kind() == "done"
-      && made.iter().any(|name| name == one.about())
-      && one.word(0).is_some_and(|word| word.type_name() == "NoneType")
+    let ran = (one.about().to_owned(), one.word(0).and_then(|word| word.as_int()));
+    one.kind() == "ran"
+      && made.contains(&ran)
+      && one.word(1).is_some_and(|word| word.type_name() == "NoneType")
   })
 }
 
@@ -1921,4 +1923,46 @@ fn a_switched_account_is_a_failure_that_passes_in_its_own_words_and_no_wait_for_
   let no = CompletionError::ProviderError(said.to_owned());
   assert_eq!(passing(&no), Some(said.to_owned()));
   assert_eq!(limit(&no, &jiff::Zoned::now()), None);
+}
+
+#[test]
+fn each_image_comes_once_in_a_request_after_the_text_that_names_it_as_a_fork_gives_its_origin_again()
+ {
+  let at = yard("images-once");
+  fs::write(at.join("a.png"), b"\x89PNG\r\n\x1a\nimage").expect("the image is written");
+  let kept = images::attach(&at.join("images"), &at.join("a.png")).expect("the image is attached");
+  let named = images::reference("a.png", &kept.uri);
+  let user = |python: String| {
+    Object::tuple([Object::string("user"), Object::string(python), Object::none(), Object::none()])
+  };
+  let assistant = Object::tuple([
+    Object::string("assistant"),
+    Object::string("x = 1"),
+    Object::none(),
+    Object::none(),
+  ]);
+  // The origin opened the prompt, and the fork tells its open again in a later turn.
+  let open = format!("#prompt1 look at {named}\nprompt1: Act[str] = Act('prompt1')");
+  let turns = Object::list([user(open.clone()), assistant, user(format!("#rung2 ran\n\n{open}"))]);
+  let model = scripted(&MockCompletionModel::new([])).images();
+  let mut held = images::Images::new(Some(at.join("images")));
+  let got = messages(turns.as_ref(), &model, &mut held).expect("the messages of the turns");
+  let users: Vec<Vec<&'static str>> = got
+    .iter()
+    .filter_map(|one| match one {
+      super::Message::User { content } => Some(
+        content
+          .iter()
+          .map(|part| match part {
+            UserContent::Text(text) if text.text == named => "name",
+            UserContent::Text(_) => "text",
+            UserContent::Image(_) => "image",
+            _ => "other",
+          })
+          .collect(),
+      ),
+      _ => None,
+    })
+    .collect();
+  assert_eq!(users, [vec!["text", "name", "image"], vec!["text"]]);
 }

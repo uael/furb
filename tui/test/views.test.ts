@@ -450,7 +450,7 @@ test("the keys of the footer and the palette answer the mouse, and a drag over t
       await frame();
       // A drag over the header of a thread selects its text and leaves the thread as it was.
       const texts = (node: Renderable): TextRenderable[] => [
-        ...(node instanceof TextRenderable ? [node] : []),
+        ...("plainText" in node ? [node as TextRenderable] : []),
         ...node.getChildren().flatMap(texts),
       ];
       const card = app.scroll.getChildren().find((node) => /^prompt\d+$/.test(node.id));
@@ -470,29 +470,13 @@ test("the keys of the footer and the palette answer the mouse, and a drag over t
     true,
   ));
 
-test("the root chain stands in the threads when it rests, and the other resting chains fold under Finished", () =>
-  composing(
-    async ({ session, frame }) => {
-      const { engine } = session;
-      const side = await engine.chain({ label: "Side", source: engine.root });
-      await engine.chain({ label: "Notes", source: engine.root });
-      await session.refresh();
-      await session.select(side);
-      const left = 140 - session.preferences.sidebarWidth;
-      const rows = (await frame()).split("\n").map((line) => line.slice(left).trim());
-      expect(rows.slice(1, 4)).toEqual(["▎○ Main", "▎○ Side", "▸ Finished  1"]);
-    },
-    { width: 140, height: 30 },
-  ));
-
-test("the sidebar says what each thread came to, a question that waits stands first with its values, which a click answers, and a click on a thread shows its chain", () =>
+test("the sidebar lists the threads, and a question that waits stands first with its values, which a click answers", () =>
   composing(
     async ({ session, frame, click }) => {
       await idle(session);
       let shown = await frame();
-      expect(shown.split("\n").filter((line) => line.includes("✓ Main"))).toContainEqual(
-        expect.stringContaining("A clear starting point"),
-      );
+      expect(shown).toContain("Threads");
+      session.preferences.sidebarStyle = "inbox";
       const question = await session.engine.prompt("bool", {
         message: "Apply the search shortcut?",
         on: session.engine.root,
@@ -502,18 +486,13 @@ test("the sidebar says what each thread came to, a question that waits stands fi
       await session.refresh();
       shown = await frame();
       const rows = shown.split("\n");
-      const needs = rows.findIndex((line) => line.includes("Needs you"));
+      const needs = rows.findIndex((line) => line.includes("needs you"));
       expect(needs).toBeGreaterThan(-1);
-      expect(rows.findIndex((line) => line.includes("Chains"))).toBeGreaterThan(needs);
-      expect(rows[needs + 2]).toContain("◆ Main");
+      expect(rows[needs + 2]).toContain("Main");
       expect(shown).toContain("Apply the search shortcut?");
       expect(shown).toContain(" 3 Other ");
       await click(" 1 yes ");
       expect(await session.engine.result(question)).toBe(true);
-      await click("Finished");
-      await click("Review notes");
-      await until(session, () => session.label === "Review notes");
-      expect(session.selected).not.toBe(session.engine.root);
     },
     { width: 140, height: 44, useMouse: true },
     true,
@@ -525,20 +504,27 @@ test("a folded rung shows the first line of its word in the colors of its gramma
       await idle(session);
       await frame();
       await app.colorsDone();
-      app.render();
-      await screen.flush();
-      const line = screen.captureSpans().lines.find((one) =>
-        one.spans
-          .map((span) => span.text)
-          .join("")
-          .includes('notes = read("README.md")'),
-      );
-      const colors = new Set(
-        line?.spans
-          .filter((span) => /read|README|notes/.test(span.text))
-          .map((span) => JSON.stringify(span.fg)),
-      );
-      expect(colors.size).toBeGreaterThan(1);
+      // The parser colors the word off the main thread, and the view draws it again once it has.
+      const colored = () => {
+        const line = screen.captureSpans().lines.find((one) =>
+          one.spans
+            .map((span) => span.text)
+            .join("")
+            .includes('notes = read("README.md")'),
+        );
+        return new Set(
+          line?.spans
+            .filter((span) => /read|README|notes/.test(span.text))
+            .map((span) => JSON.stringify(span.fg)),
+        );
+      };
+      for (let step = 0; step < 80; step++) {
+        app.render();
+        await screen.flush();
+        if (colored().size > 1) break;
+        await Bun.sleep(25);
+      }
+      expect(colored().size).toBeGreaterThan(1);
     },
     { width: 140, height: 44 },
     true,

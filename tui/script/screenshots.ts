@@ -17,7 +17,6 @@ import { Preferences } from "../src/preferences.ts";
 import { Session } from "../src/session.ts";
 import { colorless, paletteOf } from "../src/theme.ts";
 import { Workspaces } from "../src/workspaces.ts";
-import { idle } from "../test/idle.ts";
 import { cells, rasterize } from "./raster.ts";
 import { click, end, find, highlighting, home, mount, watch } from "./stage.ts";
 
@@ -381,9 +380,6 @@ try {
   await capture("15b-chains-question");
   app().closeTree();
   app().closeOverlay();
-  app().openThreads(session.selected);
-  await capture("81-chain-threads");
-  app().closeThreads();
   app().help();
   await capture("16-help");
   app().closeOverlay();
@@ -540,6 +536,25 @@ try {
       entries.Research?.status === "paused",
   );
   await capture("28-workspace-tree");
+  // The sidebar in each of its shapes: with the release shown, with a session of another workspace shown, and with the
+  // keys in it.
+  const away = entries["Offline mode"];
+  for (const shape of ["outline", "cards", "inbox"] as const) {
+    process.env.FURB_SIDEBAR = shape;
+    await capture(`110-sidebar-${shape}`);
+    if (away?.session) {
+      await library.select(away);
+      session = away.session;
+      await capture(`111-sidebar-${shape}-away`);
+      await library.select(main);
+      session = main.session ?? session;
+    }
+    app().railSteer(true);
+    app().moveRail(3);
+    await capture(`112-sidebar-${shape}-keys`);
+    app().railSteer(false);
+  }
+  delete process.env.FURB_SIDEBAR;
   app().render();
   await test.flush();
   // A click on a line of a program that made an act opens it in place, with what the act gave.
@@ -548,12 +563,15 @@ try {
   if (line >= 0) await test.mockMouse.click((rows[line]?.search(/\d+ /) ?? 0) + 4, line);
   await rest();
   await capture("29-open-line");
-  library.toggle(second);
-  await capture("30-collapsed-workspace");
+  // A workspace that does not hold the focus opens to peek at its sessions, in the outline.
+  process.env.FURB_SIDEBAR = "outline";
+  app().peekWorkspace(second);
+  await capture("30-peeked-workspace");
+  app().peekWorkspace(second);
+  delete process.env.FURB_SIDEBAR;
   library.toggle();
   await capture("31-hidden-sidebar");
   library.toggle();
-  library.toggle(second);
   await app().workspacePicker();
   await capture("32-workspace-picker");
   app().closeOverlay();
@@ -577,6 +595,8 @@ try {
   app().closeOverlay();
   // The queued message is sent before the next one, so that the feed reads in the same order at each run.
   await settle();
+  // The image prompt starts a thread of its own, as the scene means, and goes to no thread that may close meanwhile.
+  session.aim();
   await session.attachImage(resolve("docs/screenshots/01-welcome.png"));
   app().composer.setText("Review the layout in this image.");
   await capture("36-image-attachment");
@@ -676,6 +696,8 @@ try {
   const stale = library.groups[1]?.sessions.find((entry) => entry.name === "Archive");
   if (!stale) throw new Error("The gallery has no Archive session.");
   await library.archive(stale);
+  process.env.FURB_SIDEBAR = "outline";
+  app().peekWorkspace(second);
   app().render();
   await test.flush();
   const [, changelogRow] = find(test, "Changelog");
@@ -691,6 +713,7 @@ try {
   await test.mockInput.typeText(" notes");
   await rest();
   await capture("50-rename-session");
+  delete process.env.FURB_SIDEBAR;
   // A life at the scale of a real one: many chains, and questions to the owner open on three of them at once, one of
   // which a conductor relays at its length. The desk over the input counts them, and says which one the input answers.
   test.mockInput.pressEscape();
@@ -812,8 +835,23 @@ try {
   await new Promise((done) => setTimeout(done, 200));
   await capture("85-thinking-tokens");
   Object.defineProperty(session.host, "streams", { configurable: true, writable: true, value: streams });
+  // A thread that the operator folded while its model worked marks the work that came since with a dot.
+  app().foldThread(thinks, true);
+  app().render();
+  await test.flush();
   await session.command(`/cancel ${thinks}`);
   await session.engine.result(thinks).catch(() => {});
+  await session.refresh();
+  await capture("88-thread-folded-news");
+  // A click on Reply makes the thread the target of the input, whose line takes the color of the thread, while a
+  // reply waits in it.
+  app().foldThread(thinks, false);
+  app().replyTo(thinks);
+  app().composer.setText("Thanks. Now check the search shortcut too.");
+  await capture("89-thread-reply");
+  app().composer.setText("");
+  // The input goes back to the thread lit, as it stood before the click.
+  session.thread = undefined;
   // A string of three marks over many lines, a quote of a word and a statement too long for its row: each shows as one
   // line of python, the strings folded to their start and an underlined ..., and the long statement opens at a click
   // into rows that cut between tokens.
@@ -870,6 +908,14 @@ try {
   // A worker of the life, whose ladders are long: the earlier rungs of a ladder fold into one line.
   await session.select(session.chains.find((chain) => session.labelOf(chain.id) === "life3/feed")?.id ?? "");
   await capture("60-long-ladder");
+  // The window of code of a thread opens in a block that scrolls.
+  const windowed = app()
+    .scroll.getChildren()
+    .filter((node) => node.id.startsWith("program-"))
+    .map((node) => `window:${node.id.slice("program-".length)}`);
+  for (const key of windowed) session.folds[key] = false;
+  await capture("101-window-open");
+  for (const key of windowed) delete session.folds[key];
   // The conductor runs one long word, under which its messages pile up, and the earlier ones fold into one line.
   await session.select(session.engine.root);
   app().render();

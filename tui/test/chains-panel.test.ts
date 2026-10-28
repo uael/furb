@@ -95,7 +95,13 @@ test("ctrl+b opens the panel of the chains over the feed, Enter opens the chain 
       screen.mockInput.pressArrow("down");
       screen.mockInput.pressEnter();
       await until(session, () => session.selected !== session.engine.root);
-      expect(await frame()).not.toContain("↑↓ move");
+      // The panel closes over a few frames on a slow machine.
+      let closed = await frame();
+      for (let step = 0; step < 160 && closed.includes("↑↓ move"); step++) {
+        await Bun.sleep(25);
+        closed = await frame();
+      }
+      expect(closed).not.toContain("↑↓ move");
       screen.mockInput.pressKey("b", { ctrl: true });
       expect(await frame()).toContain("↑↓ move");
       await pressEscape(screen);

@@ -322,6 +322,8 @@ export const glyph = {
   ring: "○",
   held: "◌",
   asks: "◆",
+  /** The mark of a reply, which names the thread that the input sends to. */
+  reply: "↳",
   notice: "◇",
   done: "✓",
   failed: "✗",
@@ -400,6 +402,10 @@ export function syntax(): SyntaxStyle {
     punctuation: { fg: theme.muted },
     diagnostic: { fg: theme.danger, bg: theme.removed, underline: true },
     fold: { fg: theme.link, underline: true },
+    // The marks at the right of a line of a program: it runs, it is awaited, it failed.
+    "mark.running": { fg: theme.accent },
+    "mark.awaits": { fg: theme.link },
+    "mark.failed": { fg: theme.danger },
     matching: { fg: theme.accent, bg: theme.selected, bold: true },
     conceal: { fg: theme.faint },
     "markup.heading": { fg: theme.text, bold: true },

@@ -100,14 +100,25 @@ jobs:
           FURB_UNCOUNTED: ${{ runner.os == 'Windows' && '*/src/furb/life.py' || '' }}
 
   crate:
-    # The hooks run the gates of the crate and of the command line on Linux. Windows has a job of its own, since a
-    # path, a line end and a process are of another form there. It builds the crate with the feature of the bindings
-    # of TypeScript too, so it runs their clippy and their tests, and Windows builds the crate for its tests once.
-    name: the crate on windows-latest
+    # The hooks run the gates of the crate and of the command line on Linux. Windows and macOS have a job of their own,
+    # since a path, a line end and a process are of another form there. It builds the crate with the feature of the
+    # bindings of TypeScript too, so it runs their clippy and their tests. On macOS it is a job of its own beside the
+    # bindings, which build the crate a third time for the package, on a runner of three cores: one job that held
+    # the clippy, the tests and the package took its three builds of the crate one after the other. Windows builds
+    # the command line too, whose processes take another form there.
+    name: the crate on ${{ matrix.os }}
     needs: scope
     if: needs.scope.outputs.crate == 'true'
-    runs-on: windows-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            crates: --workspace --features furb/typescript
+          - os: macos-latest
+            crates: --features typescript
     defaults:
       run:
         shell: bash
@@ -119,8 +130,8 @@ jobs:
         with:
           python: none
           key: typescript
-      - run: cargo clippy --workspace --all-targets --features furb/typescript -- -D warnings
-      - run: cargo test --workspace --features furb/typescript
+      - run: cargo clippy --all-targets ${{ matrix.crates }} -- -D warnings
+      - run: cargo test ${{ matrix.crates }}
 
   typescript:
     name: the bindings and the TUI on ${{ matrix.os }}
@@ -158,12 +169,8 @@ jobs:
         with:
           bun-version: "1.4.2"
       - run: bun install --frozen-lockfile
-      # The hooks check the format of the crate, and the features do not change it. On Windows the job of the crate
-      # runs these two, and on Linux the job of the speed of the TUI.
-      - if: runner.os == 'macOS'
-        run: cargo clippy --all-targets --features typescript -- -D warnings
-      - if: runner.os == 'macOS'
-        run: cargo test --features typescript
+      # The job of the crate runs the clippy and the tests of the crate with this feature on Windows and on macOS, and
+      # the job of the speed of the TUI on Linux.
       - run: bun run build
       - run: bun run docs
       - run: git diff --exit-code -- bind/typescript/index.d.cts tui/README.md

@@ -1,5 +1,6 @@
 {
   "extensions": {
+    "pr": "extensions/pr",
     "conductor": "extensions/conductor",
     "converge": "extensions/converge"
   }

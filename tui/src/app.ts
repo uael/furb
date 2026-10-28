@@ -18,7 +18,7 @@ import {
 } from "@opentui/core";
 import type { Keymap } from "@opentui/keymap";
 import { safeText, type Turn } from "furb";
-import { type Loom, type ProgramLine, wants } from "furb/life";
+import { type ChainThread, type LiveAct, type Loom, type ProgramLine, wants } from "furb/life";
 import { type ActionsPart, actions, actionsBound } from "./app/actions.ts";
 import { type BlocksPart, blocks } from "./app/blocks.ts";
 import { type ChromePart, chrome } from "./app/chrome.ts";
@@ -32,8 +32,10 @@ import { type ChainsPanel, type LoomsPart, looms } from "./app/looms.ts";
 import { type PalettePart, palette } from "./app/palette.ts";
 import { assemble, bindAll } from "./app/part.ts";
 import { type QuestionsPart, questions, questionsBound } from "./app/questions.ts";
+import { type RailHandler, type RailPart, rail } from "./app/rail.ts";
 import { type SettingsPart, settings, settingsBound } from "./app/settings.ts";
 import {
+  type ChainRead,
   type Choice,
   inputColors,
   keymapOf,
@@ -47,6 +49,7 @@ import {
 import { type SidebarPart, sidebar } from "./app/sidebar.ts";
 import { type SpacesPart, spaces, spacesBound } from "./app/spaces.ts";
 import { type StagePart, stage } from "./app/stage.ts";
+import { type ThreadPart, thread } from "./app/thread.ts";
 import { type TreePart, tree, treeBound } from "./app/tree.ts";
 import { type ValuesPart, values, valuesBound } from "./app/values.ts";
 import { type WelcomePart, welcome, welcomeBound } from "./app/welcome.ts";
@@ -69,6 +72,7 @@ import {
   spacing as space,
   syntax,
   type ThemeName,
+  threadTone,
 } from "./theme.ts";
 import { bold, type Part, styled } from "./ui.ts";
 import type { SessionEntry, Workspace, Workspaces } from "./workspaces.ts";
@@ -137,11 +141,11 @@ export class App {
   readonly railHeading: BoxRenderable;
   readonly railSpaces: ScrollBoxRenderable;
   readonly railUsage: BoxRenderable;
-  /** What the sidebar of the session drew last, which a frame that would draw the same leaves as it is. */
-  railKey = "";
   /** The program of each thread and each word of the operator, as it stood at a version of the acts and of the words
    * that its models write. */
-  programs = new Map<string, { version: number; live: string; lines: ProgramLine[] }>();
+  programs = new Map<string, { session: unknown; version: number; live: string; lines: ProgramLine[] }>();
+  /** What each thread showed when it was last seen open, which tells a folded thread that new work came. */
+  readonly seenThreads = new Map<string, { seen: string; folded: boolean }>();
   /** The rows that a model writes, by the step that it writes, which the tick draws again, each with the lines that
    * the card above it shows. */
   thinkingRows = new Map<
@@ -155,18 +159,40 @@ export class App {
       wrote: number;
     }
   >();
-  /** The chain whose threads the sidebar lists in place of the tree of the chains, once a click or Enter chose it. */
-  railChain?: string;
-  /** Whether the keys move in the sidebar, after ⌥T, and the row that they stand on: a chain in the tree, or a thread in
-   * the list of a chain. */
+  /** Whether the keys move in the sidebar, after ⌥T, and the row that they stand on: a workspace, a session, or a
+   * thread, by the id that the row gets in railOrder. */
   railKeys = false;
   railAt?: string;
-  /** The ids of the chains of the tree, in the order that the sidebar shows them, which the keys move through. */
-  railRows: string[] = [];
-  /** The first row of the list of the threads that the sidebar shows, which the wheel and the keys move. */
-  railFrom = 0;
+  /** The ids of the rows of the sidebar, in the order that it shows them, which the keys move through, and what the
+   * keys do on each. */
+  railOrder: string[] = [];
+  readonly railHandlers = new Map<string, RailHandler>();
+  /** The workspace that held the focus when the sidebar was last drawn: when it changes, the others fold again. */
+  railFocus?: string;
+  /** The row that the sidebar last scrolled to, so that the wheel scrolls free until the focus moves. */
+  railWatched?: string;
+  /** The next question that the key for the next question goes to. */
+  railNext = 0;
+  /** The threads of the session shown on every chain, read again only when its acts or its questions change. */
+  railThreadCache?: {
+    session: unknown;
+    version: number;
+    owed: string;
+    list: ChainThread[];
+    chains: Map<string, ChainRead>;
+  };
+  /** The key of the rows of the threads of the sidebar, by the list that it came from and the minute. */
+  railThreadKey?: { list: ChainThread[]; minute: number; text: string };
   /** The threads of the chain shown, read again only when the acts or the questions that wait change. */
-  threadList: ThreadList = { acts: undefined, owed: "", list: [], by: new Map(), of: new Map() };
+  threadList: ThreadList = {
+    session: undefined,
+    chain: "",
+    acts: undefined,
+    owed: "",
+    list: [],
+    by: new Map(),
+    of: new Map(),
+  };
   /** The lists of the sidebar that the operator unfolded: the finished chains, under the key finished, and the
    * archived sessions of a workspace, under its folder. */
   readonly unfolded = new Set<string>();
@@ -486,6 +512,10 @@ export class App {
           this.composer.setText("");
           return;
         }
+        // The target of the message holds from its first character until it is sent or cleared.
+        const w = this.session;
+        if (!this.composer.plainText) w.pinned = undefined;
+        else if (w.pinned === undefined) w.pinned = w.target ?? null;
         this.schedule();
         void this.highlightEditor();
         this.suggest();
@@ -526,7 +556,7 @@ export class App {
       backgroundColor: c.panel,
       overflow: "hidden",
     });
-    this.railSession = this.box({ paddingX: space.between, gap: space.stack });
+    this.railSession = this.box({ gap: space.stack });
     this.rail.add(this.railSession);
     this.railHeading = this.row({ marginTop: space.section, paddingX: space.between });
     this.rail.add(this.railHeading);
@@ -544,7 +574,7 @@ export class App {
     this.rail.add(this.railSpaces);
     // The usage of the chain stands at the foot of the sidebar, under a rule, where the list above it does not move it.
     this.railUsage = this.box({
-      paddingX: space.between,
+      paddingX: space.inset,
       border: ["top"],
       borderColor: c.border,
       customBorderChars: { ...noBorder, horizontal: glyph.rule },
@@ -896,7 +926,9 @@ export class App {
                   c.danger,
                   "No model answers yet. Fix the setup above, or watch a life, which needs none.",
                 ]
-              : ["Prompt", c.accent, "Ask anything, or type / for commands"];
+              : w.target
+                ? ["Prompt", threadTone(w.target), "Reply to the thread, or type / for commands"]
+                : ["Prompt", c.accent, "Ask anything, or type / for commands"];
     for (const edge of this.composeEdges) if (edge.borderColor !== modeColor) edge.borderColor = modeColor;
     this.composer.cursorColor = modeColor;
     this.composer.placeholder = placeholder;
@@ -961,7 +993,7 @@ export class App {
    * and their state stay, so that a frame reads none of them again. */
   doing = new Map<string, string>();
   /** What each prompt that the list of the threads read is: a message to a thread, or a thread and its title. */
-  readonly promptsRead = new Map<string, { message: string | undefined; title: string }>();
+  readonly promptsRead = new WeakMap<LiveAct, { message: string | undefined; title: string }>();
   /** The values that the first argument of a command may take, for each command whose values the TUI knows. A value
    * of a command that takes more after it completes, and a value of any other command runs the command when it is
    * chosen. */
@@ -978,25 +1010,37 @@ export class App {
     });
     this.closeTree();
     this.session.show(view);
-    if (id) this.reveal(id);
+    const head = id ? this.reveal(id) : undefined;
     this.render();
-    if (id) this.scrollAfterLayout({ card: id });
+    if (id) this.scrollAfterLayout({ card: head && !this.cards.has(id) ? head : id });
   }
   /** Open each fold of the feed that holds an act, so that a jump to it finds its card: the earlier steps of its
-   * chain, the earlier steps of each prompt and rung over it, and the rung that made it. */
-  reveal(id: string): void {
+   * chain, the earlier steps of each prompt and rung over it, and the rung that made it. An act that a thread made
+   * has no card of its own, so a jump to it opens the box of its thread and the windows of code in it, and gives the
+   * thread whose card it goes to. */
+  reveal(id: string): string | undefined {
     const w = this.session;
     const rows = new Map(w.acts.map((one) => [one.id, one]));
     let at = rows.get(id);
-    if (!at || at.on !== w.selected) return;
+    if (!at || at.on !== w.selected) return undefined;
     w.folds[`prompts:${w.selected}`] = false;
+    let head: string | undefined;
+    const threads = this.chainThreadsBy(w.selected).by;
     for (let step = 0; at && step < 64; step++) {
       const maker = rows.get(at.by);
       if (!maker || maker.on !== w.selected) break;
-      if (maker.kind === "prompt") w.folds[`rungs:${maker.id}`] = false;
+      if (maker.kind === "prompt") {
+        w.folds[`rungs:${maker.id}`] = false;
+        if (threads.has(maker.id)) head = maker.id;
+      }
       if (maker.kind === "rung") w.folds[at.kind === "prompt" ? `prompts:${maker.id}` : maker.id] = false;
       at = maker;
     }
+    if (head) {
+      w.folds[`thread:${head}`] = false;
+      w.folds[`window:${head}`] = false;
+    }
+    return head;
   }
   async back(): Promise<void> {
     const previous = this.navigation.pop();
@@ -1081,12 +1125,14 @@ export interface App
     QuestionsPart,
     DetailsPart,
     SidebarPart,
+    RailPart,
     SpacesPart,
     ActionsPart,
     PalettePart,
     SettingsPart,
     ValuesPart,
     TreePart,
+    ThreadPart,
     LoomsPart,
     InputPart {}
 assemble(
@@ -1101,12 +1147,14 @@ assemble(
   questions,
   details,
   sidebar,
+  rail,
   spaces,
   actions,
   palette,
   settings,
   values,
   tree,
+  thread,
   looms,
   input,
 );

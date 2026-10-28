@@ -100,7 +100,7 @@ test("a list of a Literal is ticked with Space and sent with Enter as a list, an
       screen.mockInput.pressEnter();
       await expect(session.engine.result(again)).rejects.toThrow("None of them.");
     },
-    { width: 120, height: 40 },
+    { width: 132, height: 40 },
   ));
 
 test("a question of a shape that is more than text says what its line is, and takes the line as a value of the shape", () =>

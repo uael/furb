@@ -312,7 +312,8 @@ def wake(id: str) -> None:
   A wake makes a prompt ask its model with the transcript as it grew.
   A wake makes no reply twice and loses none.
   A wake of a name of no act of the life raises Refused, which names it, and says nothing.
-  A wake that this life says, and not one that the journal says again, puts every pending act it is over on to the outside, so the World takes each wait, prompt to the operator and reply of them and closes each command of them as interrupted, and a model reads the transcript as it grew.
+  A wake that the journal says again says at once each next entry of the record that answers a pending act it is over, as the outside said them while it heard that wake, before any other fact of the life.
+  A wake that this life says past the tip, and not one that the journal says again, puts every pending act it is over on to the outside, so the World takes each wait, prompt to the operator and reply of them and closes each command of them as interrupted, and a model reads the transcript as it grew.
   """
 
 def cancel(id: str) -> None:
@@ -563,8 +564,8 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   Before every reply the chain tells the last paragraph of the turn, whose header says what the answer is for, as #rung5 advance on prompt1, which names the one that made the rung.
   The advance binds the share of the window that the last reply on the chain read, as rung5_share = 0.25: the tokens that reply read over the window that the roster gives its actor, to two places, and no share before a reply that read a token.
   The advance binds each act that a word of the chain awaits and that is not over, as rung5_waits = ['bash3'], and no waits when no word awaits, so the model sees which acts the words that it wrote before still wait for.
-  Before the first prompt to an actor whose roster entry holds a doctrine, the chain tells that doctrine as the quote doctrine, in a paragraph headed doctrine, so the doctrine stands before the message that changes from chain to chain, and each chain that starts the same holds it in the same prefix.
-  Before the advance of a reply to such an actor, the chain tells its doctrine when no prompt told it, and the chain never tells a doctrine that its transcript tells already, so the model reads it once, and a chain that asks no such actor tells nothing of it.
+  Before the paragraph of each standing that it takes, the chain tells the doctrine of its actor, when the roster entry of that actor holds one, as the quote doctrine, in a paragraph headed doctrine, so the doctrine stands before the words that the extensions play and the message that changes from chain to chain, and each chain that starts the same holds it in the same prefix.
+  Before the first prompt to another actor whose roster entry holds a doctrine, and before the advance of a reply to such an actor, the chain tells its doctrine when nothing told it, and the chain never tells a doctrine that its transcript tells already, so the model reads it once, and a chain whose actor reads none and that asks no such actor tells nothing of it.
   When nothing was told on the chain since the word of the last rung that the chain did not make was ready, the chain tells that rung under the header told nothing before the advance, so the model sees that the word showed it nothing.
   The chain holds the text of each paragraph told on it, in order.
   At the first ready of the next rung, the chain runs that text as the told rung of that rung, before its word, and holds nothing more.
@@ -857,17 +858,21 @@ The chain runs one word at a time.
 A word that waits for an act gives the chain to the next word, which runs while it waits, and the waiting word runs on at the done of what it awaits.
 A run whose rung is done when the Kernel begins it never begins its word, and is done with CancelledError.
 """
-type Writing = tuple[Literal["writing"], str, str, str, str, str, int]
-"""A writing is the act of running a part of the word of a rung, which the World makes as that rung while the model of the rung writes the word, and the Kernel takes.
+type Writing = tuple[Literal["writing"], str, str, str, int]
+"""A writing is the fact that holds a part of the word of a rung, which the World says while the model of the rung writes the word, and which the Kernel hears and runs.
 A writing holds the part of the word that its model finished since the writing before it, and how many characters of the word stand before that part.
 The Kernel runs the part of a writing in the globals of the chain of its rung and as that rung, so what the part binds and what it makes are the rung's own.
-A writing is done with what a statement of its part raised, and with nothing when the part ran to its end.
-The Kernel runs the writings of one rung in the order it took them, and a part that waits for an act holds the parts after it.
-A part that waits for an act makes no wants, so its rung hears the turn of its model while the part waits.
+The Kernel runs the writings of one rung in the order it heard them, and a part that waits for an act holds the parts after it.
+A part that waits for an act while its model writes makes no wants, so its rung hears the turn of its model while the part waits.
+Once the run of its rung begins, a part that waits for an act waits with a wants as that run, as a run does, so the chain asks its next prompt while the word waits.
 The run of a rung runs what the writings of that rung left of the word, and nothing when they ran the word whole.
 The run of a rung whose writing raised is done with that raise and runs no more of the word, since a word is over where it raises.
-A writing whose part follows another word than the word that ran is refused, and so is a run whose word is not the word that ran, since the Kernel runs no statement of a word twice.
-A writing of a rung that is done never begins its part, and is done with CancelledError.
+A run whose word is not the word that ran is refused, since the Kernel runs no statement of a word twice.
+"""
+type Ran = tuple[Literal["ran"], str, str, int, BaseException | None]
+"""A ran is the fact that the Kernel says as a rung once the part of a writing of that rung is over, with how many characters of the word stand before that part, and with what a statement of the part raised, or nothing when the part ran to its end.
+The ran of a writing whose part follows another word than the word that ran holds a refusal, and its part never begins, since the Kernel runs no statement of a word twice.
+The ran of a writing of a rung that is done holds CancelledError, since its part never begins.
 """
 type Wants = tuple[Literal["wants"], str, str, str, str]
 """A wants is the act that a run makes when its word waits for an act that is not done: the rung takes it, and answers it with what that act came to when the rung hears its done, so a pause over the rung holds the word."""
@@ -893,7 +898,7 @@ The journal keeps each stand and its answer, so a later life says them again at 
 At its tip, once the record is said again whole, boot stands the life again, so a change of the World reaches every chain after what it replayed.
 Every chain hears the done of every stand, and a chain whose standing that answer changes tells it there, and binds its default actor again when the actor of the standing changes, so the transcript grows at one end.
 A standing binds the default actor of the chain, under the name actor, when its actor differs from that of the standing before it, so a new roster or a new directory alone keeps the actor that a word chose.
-The chain tells each standing it takes in one paragraph headed standing, which binds its roster, its directory and its actor, as chain1_roster, chain1_cwd and chain1_actor, and its roster holds no doctrine, since a chain tells the doctrine of an actor only where it asks that actor.
+The chain tells each standing it takes in one paragraph headed standing, which binds its roster, its directory and its actor, as chain1_roster, chain1_cwd and chain1_actor, and its roster holds no doctrine, since the chain tells the doctrine of an actor in a paragraph of its own.
 The standing a chain tells is what its transcript holds of it, and the stand itself tells nothing.
 """
 type Module = tuple[Literal["module"], str, str, dict[str, object]]
@@ -1057,7 +1062,7 @@ def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:
   The record that boot is given enters nothing in the record, since the record is what boot is given.
   An act takes its name when the act opens, and the name says what made the act.
   The engine derives the transcripts, the turns, the globals and the working directories from the record.
-  A fact the journal says again is the journal's own, as is an answer it says again when an act is made again.
+  A fact the journal says again is the journal's own, as is an answer it says again when an act is made again, but a refusal of the life, which it says again under no site.
   What the module holds is not in the record.
   The root is the first act of the record.
   A later life on a kept record makes the root again and enters no second root.
@@ -1089,6 +1094,7 @@ def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:
   An act whose maker is neither an act nor an ear that boot was given is said again through its verb, with the words the record holds and the chain it names, so its ear is the verb's, a host finds it made when boot returns and makes it not again, and a show or a filter it was given is not said again, since the record holds none.
   A later life says an act whose maker is neither an act nor an ear that boot was given again only through a verb in the globals of its chain, and an act whose kind no verb binds is a drift.
   The journal says again a done that is the first answer of an act when the act is made again, and every later fact of it at the place where the record holds it, the started of each act that a wake began again among them.
+  A first answer that the record holds with no maker is a refusal of the life, that nothing took the act, so the journal says it again under no site, as the life said it, and neither keeps it again nor reads it as a drift.
   What the record shows started and not done when boot returns is pending: the journal holds it from the outside until a wake that this life says.
   """
 

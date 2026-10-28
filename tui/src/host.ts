@@ -69,6 +69,8 @@ let why = "The life was ended from another window.";
 /** Whether a signal ends the host: no window ended the life, so no window is told that one did, and each window
  * that stays reaches a new host, as it does when a kill ends the host. */
 let signalled = false;
+/** Why the life stopped, when a fault cut a run of its sandbox, which each window that attaches later hears. */
+let stopped: string | undefined;
 /** How long a host that hands its life over waits for the commands and the replies of the models that run, so that
  * each that ends in time lands in the record. Each other ends as interrupted in the life of the next host, as a
  * command that a crash cut does. */
@@ -171,6 +173,9 @@ worker.onmessage = ({ data }) => {
     return;
   }
   if (data.state || data.log || data.fault) {
+    // The log of the host keeps each fault, so a life that stopped with no window attached says why.
+    if (data.fault) console.error(`furb-host: ${data.fault}`);
+    if (data.stopped) stopped = data.fault;
     // A state holds the measures of the chains that changed and the compactions since the state before it, so the last
     // state holds them all, which a window that attaches reads first.
     if (data.state)
@@ -207,6 +212,7 @@ function heard(message: Request, send: Send, role: Role): void {
     send({ id: message.id, value: { ...about, root, seq: last?.seq ?? 0, role } satisfies Hello });
     // A window that attaches draws what the life holds, so the first state tells it that facts came.
     if (last) send({ state: { ...last, facts: Math.max(1, last.facts) } });
+    if (stopped) send({ fault: stopped });
     windows.set(send, role);
     return;
   }

@@ -1,9 +1,10 @@
 import type { BoxRenderable, RGBA, TextRenderable } from "@opentui/core";
-import { shortenHome } from "../files.ts";
+import { gist } from "furb/life";
+import { shortenHome, shortenHomes } from "../files.ts";
 import { clip, count, modelName, retryLine } from "../format.ts";
 import { readOnly } from "../reading.ts";
 import { statusLabels, views } from "../session.ts";
-import { theme as c, glyph, spacing as space, spin } from "../theme.ts";
+import { theme as c, glyph, spacing as space, spin, threadTone } from "../theme.ts";
 import { bold, type Part, plain, styled } from "../ui.ts";
 import { part } from "./part.ts";
 import { exitNotice, type Hint, rewindNotice, statusMark, viewLabels } from "./shared.ts";
@@ -125,6 +126,12 @@ export const chrome = part({
     const stash = w.stashes[w.draftKey];
     const reading = Boolean(w.host.reading);
     const prompt = w.mode === "prompt" && !w.editing && !pending && !reading;
+    // A message to a thread names the thread where the chain stands otherwise, in the color of the thread.
+    const target = prompt ? w.target : undefined;
+    const title = target
+      ? clip(shortenHomes(gist(this.railThreads().find((one) => one.act.id === target)?.title ?? target)), 20)
+      : "";
+    const where = target ? `to ${glyph.reply} ${title}` : `on ${w.label}`;
     // The line spans the input but its bar and its padding.
     const room = this.feedWidth - 3;
     if (
@@ -140,6 +147,8 @@ export const chrome = part({
         stash,
         prompt,
         reading,
+        target,
+        title,
         room,
         this.theme,
       ])
@@ -160,7 +169,8 @@ export const chrome = part({
       (edited ? Bun.stringWidth(mode) + 4 : "Prompt".length + "Python".length + 8) +
       gaps +
       (shown.chord ? 4 : 0) +
-      Bun.stringWidth(`on ${w.label}`) +
+      Bun.stringWidth(where) +
+      (target ? gaps + "+ New thread".length : 0) +
       (pending ? 2 * gaps + Bun.stringWidth(`answers ${pending.id}returns ${pending.shape}`) : 0) +
       (prompt ? gaps + Bun.stringWidth(name) : 0) +
       (shown.provider ? provider.length + 1 : 0) +
@@ -187,13 +197,24 @@ export const chrome = part({
         shown.chord ? "⌃R" : "",
         c.raised,
       );
-    button(
-      [
-        ["on ", c.faint],
-        [w.label, c.muted],
-      ],
-      () => this.chains(),
-    );
+    if (target) {
+      const tone = threadTone(target);
+      button(
+        [
+          ["to ", c.faint],
+          [`${glyph.reply} `, tone],
+          [title, tone],
+        ],
+        () => this.replyTo(target),
+      );
+    } else
+      button(
+        [
+          ["on ", c.faint],
+          [w.label, c.muted],
+        ],
+        () => this.chains(),
+      );
     if (pending) {
       gap();
       button(
@@ -253,6 +274,16 @@ export const chrome = part({
         ],
         () => this.stash(),
       );
+    }
+    // A message that goes to a thread offers the way back to a new thread, at the right end of the line, in the blue of
+    // the line of the input in a new thread.
+    if (target) {
+      if (!stash) this.meta.add(this.box({ flexGrow: 1 }));
+      else gap();
+      button([["+ New thread", c.accent]], () => {
+        w.aim();
+        this.render();
+      });
     }
   },
 
@@ -327,12 +358,6 @@ export const chrome = part({
           ],
         ),
     ];
-    const buttons = keys.map(([chord, action], index): Part[] => [
-      [index ? "   " : "", c.faint],
-      [chord, c.muted],
-      [` ${action}`, c.faint],
-    ]);
-    const hints = buttons.flat();
     const notice = w.error ? "" : w.notice;
     // The state stays in the footer, and a notice stands after it, cut at its end where the footer has no room for it
     // beside the keys.
@@ -340,6 +365,21 @@ export const chrome = part({
       [moving && !retry ? `${spin()} ` : mark, color],
       [label, moving ? c.text : c.muted],
     ];
+    // The keys that have no room beside the whole state leave the footer from the last one, so the state is never cut.
+    const shown = [...keys];
+    const buttonsOf = (list: typeof keys) =>
+      list.map(([chord, action], index): Part[] => [
+        [index ? "   " : "", c.faint],
+        [chord, c.muted],
+        [` ${action}`, c.faint],
+      ]);
+    let buttons = buttonsOf(shown);
+    const stateWidth = Bun.stringWidth(plain(state)) + space.between * 2;
+    while (shown.length && Bun.stringWidth(plain(buttons.flat())) + stateWidth > this.feedWidth) {
+      shown.pop();
+      buttons = buttonsOf(shown);
+    }
+    const hints = buttons.flat();
     const room =
       this.feedWidth - Bun.stringWidth(plain(hints)) - Bun.stringWidth(plain(state)) - space.between * 2;
     const tokens = this.tokens();
@@ -354,7 +394,7 @@ export const chrome = part({
     this.statusKey = key;
     this.status.content = styled(state);
     this.clear(this.hints);
-    for (const [index, [, , run]] of keys.entries())
+    for (const [index, [, , run]] of shown.entries())
       this.hints.add(this.line(buttons[index] ?? [], c.faint, { run }));
   },
 });
