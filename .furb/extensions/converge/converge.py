@@ -4,10 +4,10 @@ import re
 CONVERGING = """converge(target) runs one loop toward the words of the owner, and nothing else: no spec, no design, no plan.
 A target is a dict: its name; words, the numbers of the issues of the owner in the private repository of the decisions, whose bodies and comments are his ruling as they stand; paths, the files whose change it judges; capture(target, pairs, out), the command that captures it at each (part, sha) of pairs in one run, on the same records, as PNG files and the cells that the renderer drew, in out/part; checks, the commands that must pass at the last sha; owners, the keys of the items of the round whose workers own its parts; and thread, the thread of its items.
 Each capture holds the clock of the view still at STILL, so that no spinner turns and no time passes in a frame, and a capture changed when its cells changed, with each time that the view measures and each frame of its spinner read as one mark: a capture of the same code in another run did not change. A judge reads a capture that changed as the text of its frame, with a mark on each row that changed, the row that it replaced and the colors of each changed row. A judge gets an image of a capture only when its change is in its colors alone, when the capture is new, and in a pass of main.
-Each pass captures the target at the head of main, and each judge in JUDGES, blind on a chain of its own, reads against his words each capture that changed since the last pass, or each capture when his words changed or no pass judged them, and closes with the gaps that it sees. A capture that did not change keeps the gaps of the last pass. A gap counts only when it names a capture that the judge read and quotes his words exactly, and a failed capture or check is a gap of its own.
+Each pass captures the target at the head of main, and each judge in JUDGES, blind on a chain of its own, reads against his words each capture that changed since the last pass, or each capture when his words changed or no pass judged them, and closes with the gaps that it sees. A capture that did not change keeps the gaps of the last pass. A gap counts only when it names a capture that the judge read and quotes his words exactly, and a failed check of the head is a gap of its own. A step of the capture that fails is a fault of the tool and no gap: converge rebuilds the tree once and captures again, and when the step fails again it tells the operator and judges nothing, so a PR passes and a pass of main waits for a change of main under its paths or of his words.
 A pass with gaps is one step: the gaps go to each worker of an owner that works, or to one item in the queue of the round, which fixes the largest gap in one PR. The next pass comes once that work ended and its PR landed.
 The target converges after CLEAN passes in a row with no gap, and stalls after STALL passes with no fewer gaps than its best before them: each tells the operator through the round, and the loop then waits for a change of his words or of main under paths.
-Before the conductor merges a PR that changes paths, it asks converge through its vetoes: once the checks of the PR are green, converge captures main where the PR forked and the head of the PR in one run, sends each judge his words once in each prompt, with the captures that the PR changes in prompts of BATCH captures and PROMPT characters at most, and cuts a capture over CUT characters with a note, and says no until a head shows no gap. A PR that changes no capture sends nothing to a judge. The gaps go to its worker and to a comment, and a new head is judged again. converge puts no label on a PR.
+Before the conductor merges a PR that changes paths, it asks converge through its vetoes: once the checks of the PR are green, converge captures main and main with the PR merged in it in one run, so that no change of main shows as a change of the PR, sends each judge his words once in each prompt, with the captures that the PR changes in prompts of BATCH captures and PROMPT characters at most, and cuts a capture over CUT characters with a note, and says no until a head shows no gap. A PR that changes no capture sends nothing to a judge. The gaps go to its worker and to a comment, and a new head is judged again. converge puts no label on a PR.
 A grant holds each chain of a judge under EACH dollars. A judge that fails, pauses or gives no answer in BOUND seconds gives no answer: its pass is inconclusive, and a head whose judges gave no answer twice is stuck, which tells the operator and keeps the veto until a new head.
 The ledger of a target, .furb/converge/<name>.json, keeps each pass, the frames and the records of the last pass, each judged head and the step that runs, so a later life goes on from it. The loop ends when it spent JOBS captures or USD dollars."""
 JUDGES = ("claude-cli:sonnet/high",)
@@ -46,7 +46,7 @@ The captures of {name} at {sha} that changed since the last pass, or each captur
 {captures}"""
 
 SCREEN = """You judge the PR #{n} of {name} against the words of its owner, quoted below as he wrote them, and against nothing else: no spec, no plan and no taste of your own. Every single detail counts.
-Each capture below is one that the PR changes: main, where the PR forked, and the head {sha} of the PR were captured in the same run, and a capture that the PR does not change is not below. Judge only what the PR changes: a gap counts when the head shows it against his words, and a gap that main shows the same way is not a gap of this PR. Look at each change whole: each line, each color, each cut, each overlap, each empty place, and each thing that his words ask for and that the head does not show.
+Each capture below is one that the PR changes: main, and main with the PR merged in it (the head {sha} of the PR), were captured in the same run, and a capture that the PR does not change is not below. Judge only what the PR changes: a gap counts when the head shows it against his words, and a gap that main shows the same way is not a gap of this PR. Look at each change whole: each line, each color, each cut, each overlap, each empty place, and each thing that his words ask for and that the head does not show.
 {legend}
 Close with the list of the gaps that you see, each a tuple (capture, gap, quote): the name of the capture that shows it, as its tag gives it; what the head shows against his words, in one or two sentences that a worker can act on; and the words of the owner that it fails, copied exactly from below, twelve characters at least. A gap that names no capture below, or whose quote is not in his words, does not count. Close with [] only when each change serves his words.
 
@@ -74,6 +74,7 @@ The gaps:
 TUI_CAPTURE = r"""repo={repo}; tree={tree}; out={out}
 fail() { printf '%s\t%s\t%s\n' "$1" "$2" "$3" >>"$out/fails.txt"; }
 [ -d "$tree" ] || "$repo/script/worktree.sh" "$tree" converge/{name} >"$out/tree.log" 2>&1 || { fail head tree "$out/tree.log"; exit 0; }
+[ -z "$fresh" ] || rm -f "$tree/target/converge-built"
 mkdir -p "$out/records"
 python3 -I - "$repo/.furb/sessions" "$out" {records} {heaviest} >"$out/records.log" 2>&1 <<'EOF' || fail head records "$out/records.log"
 import json, os, sys
@@ -261,7 +262,7 @@ def found(root):
 
 
 nows, wases = found(now_dir), found(was_dir)
-seen = {"shots": {}, "failed": [], "notes": [], "changed": [], "kept": [], "removed": sorted(set(wases) - set(nows)), "records": {}}
+seen = {"shots": {}, "failed": [], "faults": [], "changed": [], "kept": [], "removed": sorted(set(wases) - set(nows)), "records": {}}
 for name, (png, cells) in nows.items():
   mine = seen["shots"][name] = stored(png)
   now = grid(cells)
@@ -290,7 +291,7 @@ for line in open(fails, encoding="utf-8").read().splitlines() if os.path.exists(
   part, name, log = fields if len(fields) == 3 else ["head", *fields, ""][:3]
   tail = open(log, encoding="utf-8", errors="replace").read()[-800:] if os.path.exists(log) else ""
   entry = [name, f"the step {name} of the capture failed: " + " ".join(tail.split()), ""]
-  seen["failed" if part == os.path.basename(now_dir) else "notes"].append(entry)
+  seen["failed" if part == os.path.basename(now_dir) and name.startswith("check: ") else "faults"].append(entry)
 pins = os.path.join(out, "records.json")
 if os.path.exists(pins):
   with open(pins, encoding="utf-8") as r:
@@ -359,6 +360,7 @@ def book_of(target: dict) -> dict:
     ("state", ""),
     ("since", ""),
     ("words", ""),
+    ("faulted", ""),
     ("step", None),
     ("frames", ""),
     ("records", {}),
@@ -402,7 +404,7 @@ async def moved(target: dict, since: str, head: str) -> bool:
   return got.code != 0
 
 
-def capturing(target: dict, pairs: list[tuple[str, str]], out: str, pins: dict) -> str:
+def capturing(target: dict, pairs: list[tuple[str, str]], out: str, pins: dict, fresh: bool = False) -> str:
   shq = conductor()["shq"]
   checks = [
     f"( cd {shq(tree_of(target))} && {check} ) >{shq(f'{out}/check{i}.log')} 2>&1"
@@ -410,7 +412,7 @@ def capturing(target: dict, pairs: list[tuple[str, str]], out: str, pins: dict) 
     for i, check in enumerate(target["checks"])
   ]
   pinned = f"printf '%s' {shq(json.dumps(pins))} >{shq(out + '/pins.json')}"
-  return "\n".join([f"rm -rf {shq(out)} && mkdir -p {shq(out)}", pinned, target["capture"](target, pairs, out), *checks])
+  return "\n".join([f"rm -rf {shq(out)} && mkdir -p {shq(out)}", *(["fresh=1"] if fresh else []), pinned, target["capture"](target, pairs, out), *checks])
 
 
 async def shots(out: str, was: str, whole: bool, labels: tuple[str, str]) -> dict:
@@ -422,8 +424,8 @@ async def shots(out: str, was: str, whole: bool, labels: tuple[str, str]) -> dic
   except (Refused, ValueError):
     seen = None
   if not isinstance(seen, dict):
-    seen = {"failed": [["capture", f"the list of the captures failed: {got.stderr.content[-600:]}", ""]]}
-  for key, empty in (("shots", {}), ("failed", []), ("notes", []), ("changed", []), ("kept", []), ("records", {})):
+    seen = {"faults": [["capture", f"the list of the captures failed: {got.stderr.content[-600:]}", ""]]}
+  for key, empty in (("shots", {}), ("failed", []), ("faults", []), ("changed", []), ("kept", []), ("records", {})):
     seen.setdefault(key, empty)
   return seen
 
@@ -590,18 +592,18 @@ async def started(target: dict, book: dict, sha: str, n: int = 0) -> dict:
   pairs = [("head", sha)]
   if n:
     label = f"pr{n}-{sha[:12]}"
-    got = await bash(
-      f"git fetch -q origin main refs/pull/{n}/head 2>/dev/null; git merge-base origin/main {shq(sha)} || git rev-parse origin/main",
-      show=HIDDEN,
-      timeout=300,
-    )
-    base = (got.stdout.lines or [""])[0].strip()
-    pairs = [("before", base), *pairs] if base else pairs
+    # The head is main with the PR merged in it, so a change of main shows in neither part of the pair.
+    make = "t=$(git merge-tree --write-tree origin/main " + shq(sha) + ") && git rev-parse origin/main && git commit-tree \"$t\" -p origin/main -m converge"
+    got = await bash(f"git fetch -q origin main refs/pull/{n}/head && {make}", show=HIDDEN, timeout=300)
+    made = got.stdout.lines
+    if got.code != 0 or len(made) != 2:
+      return {}
+    pairs = [("before", made[0].strip()), ("head", made[1].strip())]
   else:
     label = f"main{len(book['passes'])}-{sha[:12]}"
   out = f"{cwd()}/{BOOKS}/{target['name']}/{label}"
   act = str(bash(capturing(target, pairs, out, book["records"]), show=HIDDEN, timeout=7200))
-  return {"kind": "pr" if n else "main", "sha": sha, "n": n, "out": out, "label": label, "act": act, "asked": []}
+  return {"kind": "pr" if n else "main", "sha": sha, "n": n, "out": out, "label": label, "act": act, "pairs": pairs, "asked": []}
 
 
 async def converge_veto(pr: dict) -> bool:
@@ -613,6 +615,8 @@ async def converge_veto(pr: dict) -> bool:
       job = OPEN.get(key)
       if not job:
         job = await started(target, book, str(pr["sha"]), int(pr["n"]))
+        if not job:
+          return True
         job["words"] = await ruling(target)
       job = await advanced(target, book, job, job["words"], str(pr["sha"]))
       if job:
@@ -621,9 +625,21 @@ async def converge_veto(pr: dict) -> bool:
         OPEN.pop(key, None)
       booked(target, book)
       state = book["heads"][key]["state"]
-    if state not in ("outside", "clean"):
+    if state not in ("outside", "clean", "unjudged"):
       return True
   return False
+
+
+def faulted(target: dict, book: dict, job: dict, faults: list[list[str]], words: str, head: str) -> dict:
+  said = " ".join(why for _, why, _ in faults)[:800]
+  name, sha = target["name"], job["sha"][:7]
+  if job["kind"] == "pr":
+    book["heads"][f"{job['n']} {job['sha']}"] = {"state": "unjudged"}
+    tell_home(f"the capture of {name} for the PR #{job['n']} at {sha} failed again after converge rebuilt its tree. That is a fault of the tool and no gap, so no judge read the PR and the conductor does not hold it: {said}")
+  else:
+    book.update(state="faulted", since=head, faulted=words)
+    tell_home(f"the capture of {name} at {sha} failed again after converge rebuilt its tree. That is a fault of the tool and no gap, so no judge read it, and the pass waits for a change of main under its paths or of his words: {said}")
+  return {}
 
 
 async def advanced(target: dict, book: dict, job: dict, words: str, head: str) -> dict:
@@ -633,6 +649,11 @@ async def advanced(target: dict, book: dict, job: dict, words: str, head: str) -
       return job
     was = f"{job['out']}/before" if pr else book["frames"] if book["words"] == words else ""
     seen = await shots(job["out"], was, not pr, ("main", "head") if pr else ("before", "now"))
+    if seen["faults"]:
+      if not job.get("again"):
+        job.update(again=True, act=str(bash(capturing(target, job["pairs"], job["out"], book["records"], True), show=HIDDEN, timeout=7200)))
+        return job
+      return faulted(target, book, job, seen["faults"], words, head)
     book["jobs"] += 1
     job.update(taken=seen["shots"], failed=seen["failed"], kept=seen["kept"], records=seen["records"])
     job["shown"] = [str(one["name"]) for one in seen["changed"]]
@@ -728,7 +749,8 @@ async def converge(target: dict, ticks: int = 0) -> dict:
     tick += 1
     head = await main_head()
     words = await ruling(target)
-    if book["state"] in ("converged", "stalled") and (words != book["words"] or await moved(target, book["since"], head)):
+    said = book["faulted"] if book["state"] == "faulted" else book["words"]
+    if book["state"] in ("converged", "stalled", "faulted") and (words != said or await moved(target, book["since"], head)):
       book.update(state="", clean=0)
     if book["step"] and await settled(target, book["step"], head):
       book["step"] = None
