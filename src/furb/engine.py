@@ -679,10 +679,14 @@ def boot(record=(), **outside):
       due.pop()
     return due
 
-  def journal(a=()):
+  def journal(a=(), last=None):
     try:
       while True:
-        while owed() and (not (log or left) or (a and a[::2] == ("wake", "journal") and due[-1][1] in taken)):
+        while owed() and (
+          not (log or left)
+          or (due[-1][0] == "joined" and due.pop() and due)
+          or (a and a[::2] == ("wake", "journal") and due[-1][1] in taken)
+        ):
           match due.pop():
             case (kind, name, by, on, *words) if question((kind, name)):
               if by in outside or by in kept or (on and not get(on)):
@@ -697,6 +701,7 @@ def boot(record=(), **outside):
                   pass
             case (kind, about, _, *words) if scope(about):
               yield kind, about, *words
+        b = a
         match a := (yield):
           case (kind, about, by, *_) if (
             (q := get(about)) and by != "journal" and (by or repr(first.get(about)) != repr(a))
@@ -705,7 +710,12 @@ def boot(record=(), **outside):
               raise drift(about)
             if by not in known and by not in driven:
               about in kept or (yield "keep", "", (kept.setdefault(about, q),))
-              a is q or (yield "keep", "", (a,))
+              if a is not q:
+                b is last and kind not in ("started", "done") and (
+                  yield "keep", "", (("joined", "", "journal", kind, about),)
+                )
+                yield "keep", "", (a,)
+              last = a
             if kind == "wake" and not owed():
               for name in [x for x in taken if taken[x] and covers(a, x) and not over(x)]:
                 del taken[name]
