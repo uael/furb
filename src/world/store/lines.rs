@@ -2,7 +2,7 @@
 
 use std::{
   fs::{File, OpenOptions},
-  io::{BufRead, BufReader, ErrorKind, Write},
+  io::{BufRead, BufReader, ErrorKind, Seek, SeekFrom, Write},
   path::{Path, PathBuf},
 };
 
@@ -38,8 +38,14 @@ impl Lines {
   pub fn open(path: impl AsRef<Path>) -> Result<Self, Fault> {
     let path = path.as_ref().to_path_buf();
     let lease = leased(&path)?;
-    let file =
-      OpenOptions::new().create(true).append(true).open(&path).map_err(|no| failed(&path, no))?;
+    // Not an append handle: on Windows it cannot cut a torn line, and the lease gives one writer.
+    let mut file = OpenOptions::new()
+      .create(true)
+      .truncate(false)
+      .write(true)
+      .open(&path)
+      .map_err(|no| failed(&path, no))?;
+    file.seek(SeekFrom::End(0)).map_err(|no| failed(&path, no))?;
     Ok(Self { path, file, unsynced: false, whole: None, torn: false, _lease: lease })
   }
 }
@@ -61,6 +67,7 @@ impl Store for Lines {
     // A write that failed can leave a part of its line, which goes before any line after it.
     if self.torn {
       self.file.set_len(whole).map_err(|no| failed(&self.path, no))?;
+      self.file.seek(SeekFrom::Start(whole)).map_err(|no| failed(&self.path, no))?;
       self.torn = false;
     }
     self.unsynced = true;
