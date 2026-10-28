@@ -195,7 +195,9 @@ test("the command /compact of the part of compaction asks a model what the chain
       }
       expect(asked).toMatch(/^prompt\d+$/);
       await session.command(`/run close(([], "It read " + "the plan."), id="${asked}")`);
-      const shown = await shows(frame, "It read the plan.");
+      const shown = await shows(frame, "It read the plan.", (seen) =>
+        seen.includes("Compaction: the model reads on from here"),
+      );
       expect(shown).toContain("Compaction: the model reads on from here");
       expect(shown.indexOf("the first step")).toBeLessThan(shown.indexOf("Compaction:"));
     },
