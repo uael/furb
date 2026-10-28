@@ -638,9 +638,14 @@ export class Session extends EventEmitter {
             index.ids.set(act.id, act);
             placed(index, act);
             if (!act.done) this.started[act.id] ??= clock();
-            // Only the prompts and the steps tell when a thread changed, so the table stays as small as the threads.
-            if (phased && this.counted !== 0 && (act.kind === "prompt" || act.kind === "rung"))
-              this.changedAt[act.id] = clock();
+            // Only the prompts tell when a thread changed, so the table stays as small as the threads: a step stamps the
+            // prompt that it works for, and a message stamps the head of its thread.
+            if (phased && this.counted !== 0 && (act.kind === "prompt" || act.kind === "rung")) {
+              const now = clock();
+              const maker = act.kind === "rung" ? act.by : act.id;
+              const head = index.ids.get(maker)?.thread;
+              for (const id of [act.id, maker, head]) if (id) this.changedAt[id] = now;
+            }
             if (act.took !== undefined) this.took[act.id] = act.took;
           }
           if (moved) this.version++;

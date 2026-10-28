@@ -229,18 +229,13 @@ export const rail = part({
     return ["working", c.accent];
   },
 
-  /** When a thread last changed, as this session saw it: the latest change of its prompt, of its messages and of the
-   * acts that they made. A thread that changed before the session read the record has none. */
+  /** When a thread last changed, as this session saw it: the latest change of its prompt and of its messages, which
+   * their steps stamp too. A thread that changed before the session read the record has none. */
   threadChanged(thread: ChainThread): number | undefined {
     const seen = this.session.changedAt;
-    const made = this.session.ladderIndex.made;
-    let latest: number | undefined;
-    let level = [thread.act.id, ...thread.messages.map((one) => one.id)];
-    for (let depth = 0; level.length && depth < 4; depth++) {
-      for (const id of level) if (seen[id] !== undefined && seen[id] > (latest ?? 0)) latest = seen[id];
-      level = level.flatMap((id) => (made.get(id) ?? []).map((one) => one.id));
-    }
-    return latest;
+    const times = [thread.act.id, ...thread.messages.map((one) => one.id)].map((id) => seen[id] ?? 0);
+    const latest = Math.max(0, ...times);
+    return latest || undefined;
   },
 
   /** What a row of a thread says at its right: why it needs a look, and how long ago it last changed. */
