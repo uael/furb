@@ -1600,16 +1600,16 @@ export class Session extends EventEmitter {
   private readonly retaken = new Set<string>();
   /** The last message of the operator in a thread that still runs, or that a cancel ended, taken back: a message that
    * runs is cancelled, and its text comes back to be edited and sent again. The cancelled message leaves the box. */
-  async takeBackMessage(thread: string): Promise<string | undefined> {
+  async takeBackMessage(thread: string): Promise<void> {
     const last = this.lastMessage(thread);
-    if (!last) return undefined;
+    if (!last) return;
     this.retaken.add(last.id);
     if (!last.done) {
       this.cancels.add(last.id);
       await this.engine.cancel(last.id);
     }
     await this.refresh();
-    return String(last.words[1] ?? "");
+    this.emit("compose", String(last.words[1] ?? ""));
   }
   /** A message to a thread, from the box at the end of the thread. It goes to the thread whatever the input is
    * doing, and a message to a thread that is over opens it again. */

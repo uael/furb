@@ -285,7 +285,7 @@ test("the up arrow in an empty input takes back the last message to the thread t
       // The key goes to the handler of the input itself: a key press of the test terminal reaches it later on a slow
       // machine than the test can wait.
       expect(app.walkHistory({ name: "up" } as KeyEvent)).toBe(true);
-      await until(session, () => app.composer.plainText === "First wording");
+      await until(session, () => app.composer.plainText === "First wording", "compose");
       app.composer.setText("Second wording");
       await app.submit();
       await until(session, () => (listed(session)[0]?.messages.length ?? 0) === 2);
