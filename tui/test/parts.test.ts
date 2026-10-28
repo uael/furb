@@ -164,6 +164,46 @@ test("the part of compaction, which the crate carries, marks each compaction in 
   );
 });
 
+test("the command /compact of the part of compaction asks a model what the chain on screen keeps, compacts it with the summary, and says so", async () => {
+  const { directory } = project();
+  const session = await demoSession({ cwd: directory });
+  await composing(
+    async ({ app, frame }) => {
+      for (let tries = 0; tries < 400 && !app.parts.command("compact"); tries++) await Bun.sleep(25);
+      expect(app.parts.command("compact")?.detail).toBe(
+        "Compact this chain now: a model keeps what the work still needs and sums up the rest",
+      );
+      app.composer.setText("/compact");
+      await app.submit();
+      await shows(frame, "This chain has no compaction");
+      // The operator plays the model that chooses, so the test asks no model.
+      await session.command(`/run ${COMPACTION}\nCHOOSER = OPERATOR\nbefore = "the first step"`);
+      // The acts of the life reach the view a moment after the word ran.
+      for (let tries = 0; tries < 400 && !app.seen().acts.some((act) => act.kind === "rung"); tries++)
+        await Bun.sleep(25);
+      app.composer.setText("/compact");
+      await app.submit();
+      await shows(frame, "A model compacts this chain");
+      let asked = "";
+      for (let tries = 0; tries < 400 && !asked; tries++) {
+        await session.refresh();
+        asked =
+          session.acts.find(
+            (act) => act.kind === "prompt" && String(act.words[1] ?? "").startsWith("The chain below"),
+          )?.id ?? "";
+        if (!asked) await Bun.sleep(25);
+      }
+      expect(asked).toMatch(/^prompt\d+$/);
+      await session.command(`/run close(([], "It read " + "the plan."), id="${asked}")`);
+      const shown = await shows(frame, "It read the plan.");
+      expect(shown).toContain("Compaction: the model reads on from here");
+      expect(shown.indexOf("the first step")).toBeLessThan(shown.indexOf("Compaction:"));
+    },
+    { width: 120, height: 60 },
+    session,
+  );
+});
+
 test("a mark of a part stands at its place in the feed of its chain, and a mark that throws shows its error", async () => {
   const { file } = project(
     'export default (furb) => furb.mark((seen) => { if (seen.chain === "none") throw new Error("No marks."); return [{ chain: seen.chain, at: 2, title: "Here" }, { chain: "other", at: 1, title: "Not here" }] })\n',

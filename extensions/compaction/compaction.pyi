@@ -56,6 +56,11 @@ def compacted(on: str = "") -> Act:
   It never completes.
   """
 
+async def condense(to: str = "", on: str = "") -> str:
+  """condense() asks choice() of the chain of the caller, and at once compacts that chain to the acts that the model chose, each act said on the chain after it asked, of each path only the last read or write, and the summary of the model, and gives the chain.
+  When the model gives no tuple of a list and a str, it compacts the chain with FILTERS and no summary of the model.
+  """
+
 def carry(record: str, source: str = "chain1", on: str = "") -> Act:
   """carry(record, source) asks the World for what the chain source of the record at the path record holds, as an act of the kind carry with the words record and source, and gives the act.
   The record keeps its answer, so a later life reads it from its own record and opens no other file.
