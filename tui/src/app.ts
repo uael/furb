@@ -35,6 +35,7 @@ import { type QuestionsPart, questions, questionsBound } from "./app/questions.t
 import { type RailHandler, type RailPart, rail } from "./app/rail.ts";
 import { type SettingsPart, settings, settingsBound } from "./app/settings.ts";
 import {
+  type ChainRead,
   type Choice,
   inputColors,
   keymapOf,
@@ -176,7 +177,13 @@ export class App {
   /** The next question that the key for the next question goes to. */
   railNext = 0;
   /** The threads of the session shown on every chain, read again only when its acts or its questions change. */
-  railThreadCache?: { session: unknown; version: number; owed: string; list: ChainThread[] };
+  railThreadCache?: {
+    session: unknown;
+    version: number;
+    owed: string;
+    list: ChainThread[];
+    chains: Map<string, ChainRead>;
+  };
   /** The threads of the chain shown, read again only when the acts or the questions that wait change. */
   threadList: ThreadList = { acts: undefined, owed: "", list: [], by: new Map(), of: new Map() };
   /** The lists of the sidebar that the operator unfolded: the finished chains, under the key finished, and the

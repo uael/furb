@@ -11,7 +11,7 @@ import { theme as c, glyph, spacing as space, threadTone } from "../theme.ts";
 import { bold, type Part, plain } from "../ui.ts";
 import type { SessionEntry, Workspace } from "../workspaces.ts";
 import { part } from "./part.ts";
-import { statusMark, threadMarks, wrapped } from "./shared.ts";
+import { type ChainRead, statusMark, threadMarks, wrapped } from "./shared.ts";
 
 /** What waits in a part of the library, counted where the operator should look. */
 export interface Attention {
@@ -138,11 +138,22 @@ export const rail = part({
     const kept = this.railThreadCache;
     if (kept && kept.session === w && kept.version === w.version && kept.owed === owed) return kept.list;
     const index = w.ladderIndex;
+    const board = w.boardIndex;
     const list: ChainThread[] = [];
-    for (const acts of w.activityByChain.values())
-      if (acts.length) list.push(...chainThreads(acts, index.ids, prompts, this.promptsRead));
+    // A chain that no act touched since the last read keeps its threads, so a new act costs one chain and not all.
+    const reads = kept?.session === w && kept.owed === owed ? kept.chains : new Map<string, ChainRead>();
+    const chains = new Map<string, ChainRead>();
+    for (const [chain, acts] of w.activityByChain) {
+      if (!acts.length) continue;
+      const stamp = board.stamp(chain);
+      const read = reads.get(chain);
+      const threads =
+        read && read.stamp === stamp ? read.list : chainThreads(acts, index.ids, prompts, this.promptsRead);
+      chains.set(chain, { stamp, list: threads });
+      list.push(...threads);
+    }
     list.sort((a, b) => numberOf(a.act.id) - numberOf(b.act.id));
-    this.railThreadCache = { session: w, version: w.version, owed, list };
+    this.railThreadCache = { session: w, version: w.version, owed, list, chains };
     return list;
   },
 
