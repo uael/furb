@@ -743,3 +743,33 @@ def test_a_capture_is_made_through_quietly_so_that_its_end_wakes_nobody(world: W
   quiet = [str(args[0]) for name, args in world.quieted if name == "bash"]
   assert len(captures) >= 2 and any("fresh=1" in c for c in captures)
   assert all(c in quiet for c in captures)
+
+
+def test_a_job_of_a_pr_that_is_no_longer_open_at_its_head_is_dropped_and_its_acts_cancelled(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.slow = True
+  world.judge = lambda message, to: []
+  assert veto(world) is True
+  [stale] = world.ns["OPEN"].values()
+  asked = [a for a in stale["asked"] if a != "none"]
+  assert asked and not any(a in world.done for a in asked)
+  world.round["prs"] = {5: pr(sha="def")}
+  asyncio.run(world.converge_veto(pr(n=5, sha="def", verdict="pass")))
+  assert "5 abc" not in world.ns["OPEN"]
+  assert all(isinstance(world.done[a], Refused) for a in asked)
+
+
+def test_a_capture_whose_command_ended_interrupted_starts_again_once(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.say(r"python3 -I -", listing(kind="text"))
+  runs = lambda: [c for c in world.commands if "for pair in" in c]
+  first = world.act("bash", Refused("interrupted"))
+  world.ns["OPEN"]["5 abc"] = {"kind": "pr", "sha": "abc", "n": 5, "out": str(world.tmp / "o"), "label": "pr5", "act": first,
+                              "pairs": [("before", "sha1"), ("head", "merged1")], "asked": [], "words": WORDS}
+  assert veto(world) is True
+  assert len(runs()) == 1
+  assert world.ns["OPEN"]["5 abc"]["act"] != first
+  assert veto(world) is False
+  assert len(runs()) == 1
