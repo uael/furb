@@ -608,7 +608,11 @@ def shown(text, show):
 
 
 def unquoted(word):
-  return re.sub(r"(?ms)^<s:(\w+)>\n?(.*?)</s:\1>$", lambda m: m[1] + " = " + repr(m[2]) + "\n" * m[0].count("\n"), word)
+  for n in re.findall(r"(?m)^<s:(\w+)>", word):
+    word = re.sub(
+      f"(?ms)^<s:({n})>\\n?(.*?)</s:{n}>$", lambda m: m[1] + " = " + repr(m[2]) + "\n" * m[0].count("\n"), word
+    )
+  return word
 
 
 def offered(roster, to, at=2):
