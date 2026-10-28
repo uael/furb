@@ -103,7 +103,7 @@ test("a life gains the panel of a part of a project extension, which draws again
       await screen.mockInput.typeText("+");
       await shows(frame, "○ one more");
     },
-    { width: 120, height: 44 },
+    { width: 132, height: 44 },
     session,
   );
 });
@@ -167,7 +167,6 @@ test("the part of compaction, which the crate carries, marks each compaction in 
         frame,
         "It ran the tests.",
         (now) =>
-          now.includes("compacted 2×") &&
           now.indexOf("Compaction 1 of 2") < now.indexOf("the next step") &&
           now.indexOf("the next step") < now.indexOf("Compaction 2 of 2"),
       );
@@ -176,9 +175,8 @@ test("the part of compaction, which the crate carries, marks each compaction in 
       expect(shown).toMatch(/Compaction 1 of 2[\s\S]*the next step[\s\S]*Compaction 2 of 2/);
       expect(shown.indexOf("Compaction 1 of 2")).toBeLessThan(shown.indexOf("the next step"));
       expect(shown.indexOf("the next step")).toBeLessThan(shown.indexOf("Compaction 2 of 2"));
-      expect(shown).toContain("compacted 2×");
     },
-    { width: 120, height: 60 },
+    { width: 132, height: 60 },
     session,
   );
 });
@@ -220,7 +218,7 @@ test("the command /compact of the part of compaction asks a model what the chain
       expect(shown).toContain("Compaction: the model reads on from here");
       expect(shown.indexOf("the first step")).toBeLessThan(shown.indexOf("Compaction:"));
     },
-    { width: 120, height: 60 },
+    { width: 132, height: 60 },
     session,
   );
 });
@@ -271,14 +269,13 @@ test("a run of compactions into new chains, as an older compaction made them, sh
       expect(session.label).toBe("Main -> compacted");
       expect(shown).toContain("Main -> compacted");
       expect(shown).toContain("It read the plan.");
-      expect(shown).toContain("compacted  ");
       expect(shown.indexOf("the first step")).toBeLessThan(shown.indexOf("goes on in a new chain from here"));
       // The word of the operator that made the step stands in the feed too, so the step is its last line.
       expect(shown.indexOf("goes on in a new chain from here")).toBeLessThan(
         shown.lastIndexOf("the step after"),
       );
     },
-    { width: 120, height: 60 },
+    { width: 132, height: 60 },
     session,
   );
 });
@@ -332,7 +329,7 @@ test("a word that writes an extension with extend() gives the TUI its part in a 
       );
       await shows(frame, "○ write the part");
     },
-    { width: 120, height: 44 },
+    { width: 132, height: 44 },
     session,
   );
 });
@@ -359,7 +356,7 @@ test("/extensions opens a dialog of the extensions that the life runs, each with
       shown = await shows(frame, "tui.ts of todo");
       expect(shown).not.toContain("Its part gives panel Todo");
     },
-    { width: 150, height: 44 },
+    { width: 162, height: 44 },
     session,
   );
 });

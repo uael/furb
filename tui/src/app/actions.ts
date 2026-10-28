@@ -47,6 +47,10 @@ export const actions = part({
       await bare[name]?.();
       return true;
     }
+    if (name === "sidebar" && argument) {
+      this.setRailStyle(argument);
+      return true;
+    }
     if (name === "serve") {
       const served = await this.session.host.serve(argument);
       const copy = (address: string, what: string) => () => {

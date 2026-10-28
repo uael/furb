@@ -27,7 +27,7 @@ test("a word of the operator stands as his messages stand, as its program in a p
       await session.refresh();
       const running = await frame();
       expect(running).not.toContain("You ran");
-      expect(line(running)).toMatch(/◉ +1 await wait\(60\) +# waits 60s/);
+      expect(line(running)).toMatch(/1 await wait\(60\) +◉ # waits 60s/);
       expect(app.scroll.getChildren().some((card) => card.id === rung)).toBe(true);
       expect(line(running)).toMatch(/^ +┃ /);
       const wait = session.acts.find((act) => act.kind === "wait" && act.by === rung);
@@ -53,7 +53,7 @@ test("a word of the operator stands as his messages stand, as its program in a p
       expect(session.findings.join("\n")).toContain("line 1");
       await session.refresh();
       const rows = (await frame()).split("\n");
-      const at = rows.findIndex((row) => /✗ +1 this is invalid python !!!/.test(row));
+      const at = rows.findIndex((row) => /1 this is invalid python !!! +✗/.test(row));
       expect(at).toBeGreaterThan(0);
       expect(rows[at + 1]).toMatch(/^ +┃ +# \S/);
       record = session.host.record;

@@ -103,6 +103,7 @@ test("the owner takes back his last message and writes it again, and no other wo
   composing(
     async ({ session, app, screen, frame }) => {
       const { thread, workers } = await conductor(session);
+      await session.submit("/newthread");
       app.composer.setText("Think until I cancel.");
       await app.submit();
       const message = await sent(session, thread);
@@ -113,7 +114,12 @@ test("the owner takes back his last message and writes it again, and no other wo
         [thread, "Cancel"],
       ] as const) {
         const text = String(session.acts.find((act) => act.id === id)?.words[1]);
-        await frame();
+        // The markdown of a message draws over a few frames, and more of them on a slow machine.
+        let shown = await frame();
+        for (let step = 0; step < 200 && !shown.includes(`┃ ${text}`); step++) {
+          await Bun.sleep(25);
+          shown = await frame();
+        }
         const [column, row] = find(screen, `┃ ${text}`);
         await screen.mockMouse.click(column + 4, row, 2);
         expect(await frame()).toContain(choice);
@@ -135,5 +141,5 @@ test("the owner takes back his last message and writes it again, and no other wo
       expect(live(session, [thread, ...workers])).toBe(true);
       expect(session.acts.find((act) => act.id === message)?.done).toBe(true);
     },
-    { width: 140, height: 60, exitOnCtrlC: false },
+    { width: 152, height: 60, exitOnCtrlC: false },
   ));

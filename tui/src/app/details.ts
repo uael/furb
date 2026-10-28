@@ -295,18 +295,17 @@ export const details = part({
     };
   },
 
-  /** The last row of a thread while its model works on a step: a loader in the column of the signs, left of the number
-   * of the line that comes, and what the model thinks or writes, which the tick draws again. */
-  thinkingRow(step: string, display: number, digits: number, tone: RGBA, room: number): LineNumberRenderable {
-    const { number, parts } = this.thinkingParts(step, display, room);
-    const text = this.text(parts, c.muted, { wrapMode: "none" });
+  /** The last row of a thread while its model works on a step: the number of the line that comes, then what the model
+   * thinks or writes, which the tick draws again, and a loader at the right end of the row. */
+  thinkingRow(step: string, display: number, digits: number, room: number): LineNumberRenderable {
+    const { number, parts } = this.thinkingParts(step, display, room - 3);
+    const text = this.text(this.loading(parts), c.muted, { wrapMode: "none" });
     const view = new LineNumberRenderable(this.renderer, {
       target: text,
       paddingRight: space.inset,
-      fg: tone,
+      fg: c.faint,
       minWidth: gutterWidth(digits),
       lineNumbers: new Map([[0, number]]),
-      lineSigns: new Map([[0, { before: spin(), beforeColor: c.accent }]]),
     });
     this.thinkingRows.set(step, {
       view,
@@ -317,6 +316,12 @@ export const details = part({
       wrote: number - display,
     });
     return view;
+  },
+
+  /** The parts of a row that a model writes, with the loader after them: no sign stands between the numbers and the
+   * code. */
+  loading(parts: Part[]): Part[] {
+    return [...parts, ["  "], [spin(), c.accent]];
   },
 
   /** The rows that models write move with the tick: the loader turns, and the text follows the stream. */
@@ -359,14 +364,30 @@ export const details = part({
     took: (step: ActRow) => string,
     since: (act?: ActRow) => string,
     heads: ReadonlySet<ProgramLine>,
-    tone: RGBA = c.faint,
     digits = 1,
+    options: { more?: (line: ProgramLine) => void } = {},
   ): Renderable {
     const texts: string[] = [];
+    const ellipses: number[] = [];
     const numbers = new Map<number, number>();
     const hidden = new Set<number>();
     const colors = new Map<number, { content: RGBA; gutter: RGBA }>();
-    const signs = new Map<number, { before: string; beforeColor: RGBA }>();
+    // The mark of a line stands at the right end of its row: it runs, it is awaited, or it failed.
+    const markGroups = {
+      [glyph.running]: "mark.running",
+      [glyph.awaited]: "mark.awaits",
+      [glyph.failed]: "mark.failed",
+    };
+    const marked = (body: string, mark: string) => `${body}  ${mark}`;
+    const flag = (at: number, from: number) =>
+      fixed.push([
+        at,
+        from,
+        from + 1,
+        markGroups[(texts[at] ?? "")[from] as keyof typeof markGroups] ?? "default",
+      ]);
+    const markOf = (line: Extract<ProgramLine, { kind: "code" }>) =>
+      line.fails ? glyph.failed : line.awaited !== undefined ? glyph.awaited : line.runs ? glyph.running : "";
     const widest = Math.max(
       0,
       ...lines.map((line) => (line.kind === "code" ? Bun.stringWidth(line.text) : 0)),
@@ -386,6 +407,7 @@ export const details = part({
     );
     const column = Math.max(24, Math.min(100, widest, room - (notes ? Math.min(notes, 26) + 4 : 0)));
     const fit = (text: string, most: number) => clip(text, Math.max(4, most));
+    const lane = lines.some((line) => line.kind === "code" && markOf(line)) ? 2 : 0;
     // The line of the program that each row shows, which a click opens or folds.
     const sources: (ProgramLine | undefined)[] = [];
     // The strings that each row folds, and the rows that show the strings of a line whole, each with where it starts
@@ -418,13 +440,15 @@ export const details = part({
           ? [fit(shown.text, column)]
           : cuts.map((cut) => " ".repeat(cut.indent) + line.text.slice(cut.from, cut.to));
         const code = parts[0] ?? "";
-        const hint = note ? `# ${fit(note, room - column - 4)}` : "";
-        const at = push(
-          hint ? `${code}${" ".repeat(Math.max(0, column - Bun.stringWidth(code)))}  ${hint}` : code,
-          line.display,
-          line,
-        );
-        if (hint) comment(at, (texts[at]?.length ?? 0) - hint.length);
+        const mark = markOf(line);
+        // The mark stands in a lane of its own after the column of the code, before the comment, so that no line is
+        // longer for it.
+        const hint = note ? `# ${fit(note, room - column - 4 - lane)}` : "";
+        const left = `${code}${" ".repeat(Math.max(0, column - Bun.stringWidth(code)))}`;
+        const body = hint || mark ? `${left}  ${lane ? (mark ? `${mark} ` : "  ") : ""}${hint}` : code;
+        const at = push(body, line.display, line);
+        if (hint) fixed.push([at, body.length - hint.length, body.length, "comment"]);
+        if (mark) flag(at, left.length + 2);
         for (const more of parts.slice(1)) push(more, undefined, line);
         const folds = shown?.folds.filter((fold) => fold.at + FOLD.length <= Bun.stringWidth(code)) ?? [];
         if (folds.length) folded.set(at, { line, folds });
@@ -448,15 +472,12 @@ export const details = part({
             pieces.push([at + k, cut.indent, cut.indent + cut.to - cut.from, base + cut.from]);
         if (line.runs) {
           colors.set(at, { content: c.selected, gutter: c.selected });
-          signs.set(at, { before: glyph.running, beforeColor: c.accent });
         }
         // The line that made the act that a running line awaits is lit too, with a link to the line that awaits it.
         if (line.awaited !== undefined) {
           colors.set(at, { content: c.selected, gutter: c.selected });
-          signs.set(at, { before: glyph.awaited, beforeColor: c.link });
         }
         if (line.fails) {
-          signs.set(at, { before: glyph.failed, beforeColor: c.danger });
           for (const why of line.fails
             .split("\n")
             .filter((one) => one.trim())
@@ -465,10 +486,12 @@ export const details = part({
         }
       } else if (line.kind === "output") comment(push(`#   ${fit(line.text, room - 6)}`));
       else if (line.kind === "writes") {
-        const at = push(`# ${fit(line.text, room - 4)}`);
-        comment(at);
-        signs.set(at, { before: glyph.running, beforeColor: c.accent });
-      } else comment(push(fit(line.text, room - 2)));
+        const body = `# ${fit(line.text, room - 7)}`;
+        const at = push(marked(body, glyph.running));
+        fixed.push([at, 0, body.length, "comment"]);
+        flag(at, body.length + 2);
+      } else if (line.kind === "earlier") ellipses.push(push(line.text, undefined, line));
+      else comment(push(fit(line.text, room - 2)));
     }
     // Each fold is underlined, at its place in the text of the program.
     const starts: number[] = [];
@@ -477,6 +500,11 @@ export const details = part({
       starts.push(offset);
       offset += text.length + 1;
     }
+    // A row that stands for lines that the window leaves out is an underlined ..., which a click opens.
+    const ellipsis = (): SimpleHighlight[] =>
+      ellipses.map(
+        (row): SimpleHighlight => [starts[row] ?? 0, (starts[row] ?? 0) + (texts[row]?.length ?? 0), "fold"],
+      );
     const marks: SimpleHighlight[] = [...folded].flatMap(([row, { folds }]) =>
       folds.map(
         (fold): SimpleHighlight => [
@@ -562,21 +590,19 @@ export const details = part({
       }
       for (const [row, from, to, group] of fixed)
         out.push([(starts[row] ?? 0) + from, (starts[row] ?? 0) + to, group]);
-      return [...out, ...marks];
+      return [...out, ...marks, ...ellipsis()];
     };
     const target = this.code(texts.join("\n"), marks, hover, highlights);
-    // Each program keeps a column for the sign of a line, so the code of every program and of every row that a model
-    // writes starts at one column of the feed.
-    if (!signs.has(0)) signs.set(0, { before: " ", beforeColor: c.faint });
+    // Each row is cut to its room already, so none wraps: a row that is too long loses its end, and no mark falls under it.
+    target.wrapMode = "none";
     const view = new LineNumberRenderable(this.renderer, {
       target,
       paddingRight: space.inset,
-      fg: tone,
+      fg: c.faint,
       minWidth: gutterWidth(digits),
       lineNumbers: numbers,
       hideLineNumbers: hidden,
       lineColors: colors,
-      lineSigns: signs,
     });
     // The gutter of the numbers takes the events of the pointer over the program, so it shows the string of a fold.
     view.onMouseMove = (event) => {
@@ -589,6 +615,8 @@ export const details = part({
     view.onMouseUp = (event) => {
       const row = event.y - view.y;
       const line = sources[row];
+      if (line?.kind === "earlier" && options.more && !this.renderer.getSelection()?.getSelectedText())
+        return options.more(line);
       if (line?.kind !== "code" || this.renderer.getSelection()?.getSelectedText()) return;
       const hit = foldAt(event.x, event.y);
       if (hit) return this.openString(hit.line, hit.fold.literal);

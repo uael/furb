@@ -125,8 +125,9 @@ export const blocks = part({
       },
     });
     box.add(labelNode);
-    if (!closed) body(box);
-    else if (!rung) options.preview?.(box);
+    const into = options.join && !this.reader ? this.joined(box, options.join, options.edge) : box;
+    if (!closed) body(into);
+    else if (!rung) options.preview?.(into);
     this.placeCard(box, index);
     const card = {
       key,
@@ -155,6 +156,37 @@ export const blocks = part({
   placeCard(node: Renderable, index: number): void {
     this.scroll.add(node, index);
     this.feedOrder = undefined;
+  },
+
+  /** The surface that the cards of one thread share: a panel, whose top edge the first card draws and whose bottom
+   * edge the last one draws, so that the cards stand as one box. It gives the node that the body of the card fills. */
+  joined(box: BoxRenderable, join: "only" | "first" | "middle" | "last", color?: RGBA): BoxRenderable {
+    // The surface starts at the column where the bar of the input of the chain starts, so that the box of a thread and
+    // the box of the input stand on one line. Its edges are half rows of the surface, and an edge holds the cap of the
+    // line of a message of the operator that stands first or last in the box, in the color of that line.
+    const edge = (side: "top" | "bottom") => {
+      const half = this.box({
+        height: space.bar,
+        flexGrow: 1,
+        border: [side === "top" ? "bottom" : "top"],
+        borderColor: c.panel,
+        customBorderChars: { ...noBorder, horizontal: side === "top" ? glyph.halfTop : glyph.halfBottom },
+      });
+      if (!color) return half;
+      const cap = this.box({
+        height: space.bar,
+        border: ["left"],
+        borderColor: color,
+        customBorderChars: { ...noBorder, vertical: side === "top" ? glyph.barTop : glyph.barBottom },
+      });
+      cap.add(half);
+      return cap;
+    };
+    if (join === "only" || join === "first") box.add(edge("top"));
+    const inner = this.box({ paddingRight: space.between, backgroundColor: c.panel });
+    box.add(inner);
+    if (join === "only" || join === "last") box.add(edge("bottom"));
+    return inner;
   },
 
   /** A panel in a box: a bar of a color at its left, and half a row of the panel above and below what it holds. */
