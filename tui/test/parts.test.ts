@@ -79,7 +79,7 @@ test("a life gains the panel of a part of a project extension, which draws again
       let shown = await shows(frame, "○ write the part");
       expect(shown).toContain("✓ read the capture");
       expect(shown).toContain("1 open of 2");
-      expect(app.parts.loaded.map((one) => one.name)).toEqual(["compaction", "todo"]);
+      expect(app.parts.loaded.map((one) => one.name)).toEqual(["compaction", "mcp", "todo"]);
       // The hint of the line of each act todo says what the part draws as its row.
       await shows(frame, "to do: write the part");
       // A change of the file of the part draws again, with no restart.
@@ -133,6 +133,7 @@ test("the parts load the part of each extension that the configs give, and a con
   await parts.load();
   expect(parts.loaded.map((one) => [one.name, one.file, one.error])).toEqual([
     ["compaction", "extensions/compaction/tui.ts", undefined],
+    ["mcp", "extensions/mcp/tui.ts", undefined],
     ["todo", file, undefined],
   ]);
   expect(parts.row("todo")).toBeDefined();
@@ -299,7 +300,7 @@ test("a word that writes an extension with extend() gives the TUI its part in a 
   const session = await demoSession({ cwd: directory, extensions: true });
   await composing(
     async ({ app, frame, screen }) => {
-      expect(app.parts.loaded.map((one) => one.name)).toEqual(["compaction"]);
+      expect(app.parts.loaded.map((one) => one.name)).toEqual(["compaction", "mcp"]);
       await session.command(`/run ${TODO}`);
       const word = 'next(k for k, w in program().items() if "def todo" in w)';
       await session.command(`/run <s:part>\n${PART}</s:part>\nextend("todo", ${word}, tui=part)`);
@@ -308,6 +309,7 @@ test("a word that writes an extension with extend() gives the TUI its part in a 
       expect(shown).toContain("✓ read the capture");
       expect(app.parts.loaded.map((one) => [one.name, one.error])).toEqual([
         ["compaction", undefined],
+        ["mcp", undefined],
         ["todo", undefined],
       ]);
       app.composer.setText("/todos");
@@ -318,7 +320,7 @@ test("a word that writes an extension with extend() gives the TUI its part in a 
         `/run write(Text(".furb/config.json", ${JSON.stringify('{"extensions": {"todo": false}}\n')}))`,
       );
       await hides(frame, "○ write the part");
-      expect(app.parts.loaded.map((one) => one.name)).toEqual(["compaction"]);
+      expect(app.parts.loaded.map((one) => one.name)).toEqual(["compaction", "mcp"]);
       expect(app.parts.command("todos")).toBeUndefined();
       expect(app.parts.row("todo")).toBeUndefined();
       await screen.mockInput.typeText("+");
@@ -378,6 +380,7 @@ test("the model of the demo adds a component to a life that runs: it reads the t
       expect(shown).toContain("2 open of 3");
       expect(app.parts.loaded.map((one) => [one.name, one.error])).toEqual([
         ["compaction", undefined],
+        ["mcp", undefined],
         ["todo", undefined],
       ]);
       // A change that the model gets wrong shows its error in the panel, and the rest of the TUI goes on.
@@ -408,6 +411,8 @@ test("a part gives commands from the life, which the palette and /name read agai
       await session.command(`/run ${TODO}\ntodo("write the part")\ntodo("read the capture")`);
       await shows(frame, "Todo: 2 open");
       expect(app.parts.commands(app.seen()).map((one) => one.name)).toEqual([
+        "compact",
+        "mcp",
         "todos",
         "pick",
         "add",

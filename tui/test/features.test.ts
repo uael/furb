@@ -334,7 +334,7 @@ test("/extensions lists what a life runs, and a cancel of a word of the operator
       async ({ session, frame, click }) => {
         await session.command("/extensions");
         expect(session.notice).toBe(
-          "This life runs memory with remember(), skills with counted(), compaction, ouroboros with ouroboros(), web. Run a word of one with /run.",
+          "This life runs memory with remember(), skills with counted(), compaction, ouroboros with ouroboros(), web, mcp with mcp_index(). Run a word of one with /run.",
         );
         await session.command("/run await wait(60)");
         // The wait runs under the word, so the cancel asks first.

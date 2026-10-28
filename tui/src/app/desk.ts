@@ -40,9 +40,13 @@ export const desk = part({
     // The cards are made again only when a part draws the rows of a kind, before this load or after it.
     const rows = this.parts.loaded.some((part) => part.rows.size);
     if (rows || this.partRows) {
+      // The view stands where it was after the cards are made again, also while it waits to scroll to a place.
+      const place = this.place;
       this.clear(this.scroll);
       this.cards.clear();
       this.paneKeys.delete(this.scroll);
+      this.renderContent();
+      this.scrollAfterLayout(place);
     }
     this.partRows = rows;
     this.dockKey = "";
