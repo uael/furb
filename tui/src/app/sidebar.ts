@@ -100,12 +100,17 @@ export const sidebar = part({
 
   chainThreadsBy(chain: string): ThreadList {
     const w = this.session;
-    if (w.selected !== chain) return { acts: undefined, owed: "", list: [], by: new Map(), of: new Map() };
+    if (w.selected !== chain)
+      return { session: w, chain, acts: undefined, owed: "", list: [], by: new Map(), of: new Map() };
     const owed = [...w.host.prompts.keys()].join(" ");
-    if (this.threadList.acts !== w.version || this.threadList.owed !== owed) {
+    // A list read from another session or another chain is no list of this one, even when its version is the same.
+    const kept = this.threadList;
+    if (kept.session !== w || kept.chain !== chain || kept.acts !== w.version || kept.owed !== owed) {
       const index = w.ladderIndex;
       const list = chainThreads(index.on, index.ids, new Set(w.host.prompts.keys()), this.promptsRead);
       this.threadList = {
+        session: w,
+        chain,
         acts: w.version,
         owed,
         list,
@@ -145,20 +150,19 @@ export const sidebar = part({
     if (open) void this.session.resolve(open.id).catch(this.report);
   },
 
-  /** A thread unfolds, and the input at its end takes the keys: a message sent there goes to the thread, and opens it
-   * again when it is over. */
+  /** A thread unfolds, and the input takes the keys and sends its next messages to the thread, with the color of the
+   * thread on its line. A message to a thread that is over opens it again. */
   replyTo(id: string): void {
     const w = this.session;
     if (w.host.reading) return;
     w.folds[`thread:${id}`] = false;
     w.save();
+    w.aim(id);
     this.railAt = id;
     this.railKeys = false;
-    this.replyFocus = id;
     this.renderContent();
     this.scrollAfterLayout({ card: `${id}-reply` });
-    const input = this.replyInputs.get(id);
-    if (input && !input.isDestroyed) input.focus();
+    this.composer.focus();
     this.render();
   },
 

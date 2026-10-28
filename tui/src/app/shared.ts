@@ -70,6 +70,9 @@ export const chainMarks: Record<RowState, [() => string, () => RGBA]> = {
  * it failed, it is resolved, or it runs. */
 /** The threads of the chain shown: in order, each by its id, and the thread of each message, by the id of the message. */
 export type ThreadList = {
+  /** The session, the chain and the version of its acts that the list was read from, which a new list replaces. */
+  session: unknown;
+  chain: string;
   acts: unknown;
   owed: string;
   list: ChainThread[];

@@ -1,9 +1,10 @@
 import type { BoxRenderable, RGBA, TextRenderable } from "@opentui/core";
-import { shortenHome } from "../files.ts";
+import { gist } from "furb/life";
+import { shortenHome, shortenHomes } from "../files.ts";
 import { clip, count, modelName, retryLine } from "../format.ts";
 import { readOnly } from "../reading.ts";
 import { statusLabels, views } from "../session.ts";
-import { theme as c, glyph, spacing as space, spin } from "../theme.ts";
+import { theme as c, glyph, spacing as space, spin, threadTone } from "../theme.ts";
 import { bold, type Part, plain, styled } from "../ui.ts";
 import { part } from "./part.ts";
 import { exitNotice, type Hint, rewindNotice, statusMark, viewLabels } from "./shared.ts";
@@ -125,6 +126,12 @@ export const chrome = part({
     const stash = w.stashes[w.draftKey];
     const reading = Boolean(w.host.reading);
     const prompt = w.mode === "prompt" && !w.editing && !pending && !reading;
+    // A message to a thread names the thread where the chain stands otherwise, in the color of the thread.
+    const target = prompt ? w.target : undefined;
+    const title = target
+      ? clip(shortenHomes(gist(this.railThreads().find((one) => one.act.id === target)?.title ?? target)), 20)
+      : "";
+    const where = target ? `to ${glyph.reply} ${title}` : `on ${w.label}`;
     // The line spans the input but its bar and its padding.
     const room = this.feedWidth - 3;
     if (
@@ -140,6 +147,8 @@ export const chrome = part({
         stash,
         prompt,
         reading,
+        target,
+        title,
         room,
         this.theme,
       ])
@@ -160,7 +169,8 @@ export const chrome = part({
       (edited ? Bun.stringWidth(mode) + 4 : "Prompt".length + "Python".length + 8) +
       gaps +
       (shown.chord ? 4 : 0) +
-      Bun.stringWidth(`on ${w.label}`) +
+      Bun.stringWidth(where) +
+      (target ? gaps + "+ New thread".length : 0) +
       (pending ? 2 * gaps + Bun.stringWidth(`answers ${pending.id}returns ${pending.shape}`) : 0) +
       (prompt ? gaps + Bun.stringWidth(name) : 0) +
       (shown.provider ? provider.length + 1 : 0) +
@@ -187,13 +197,24 @@ export const chrome = part({
         shown.chord ? "⌃R" : "",
         c.raised,
       );
-    button(
-      [
-        ["on ", c.faint],
-        [w.label, c.muted],
-      ],
-      () => this.chains(),
-    );
+    if (target) {
+      const tone = threadTone(target);
+      button(
+        [
+          ["to ", c.faint],
+          [`${glyph.reply} `, tone],
+          [title, tone],
+        ],
+        () => this.replyTo(target),
+      );
+    } else
+      button(
+        [
+          ["on ", c.faint],
+          [w.label, c.muted],
+        ],
+        () => this.chains(),
+      );
     if (pending) {
       gap();
       button(
@@ -253,6 +274,16 @@ export const chrome = part({
         ],
         () => this.stash(),
       );
+    }
+    // A message that goes to a thread offers the way back to a new thread, at the right end of the line, in the blue of
+    // the line of the input in a new thread.
+    if (target) {
+      if (!stash) this.meta.add(this.box({ flexGrow: 1 }));
+      else gap();
+      button([["+ New thread", c.accent]], () => {
+        w.aim();
+        this.render();
+      });
     }
   },
 

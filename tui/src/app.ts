@@ -18,7 +18,7 @@ import {
 } from "@opentui/core";
 import type { Keymap } from "@opentui/keymap";
 import { safeText, type Turn } from "furb";
-import { type ChainThread, type Loom, type ProgramLine, wants } from "furb/life";
+import { type ChainThread, type LiveAct, type Loom, type ProgramLine, wants } from "furb/life";
 import { type ActionsPart, actions, actionsBound } from "./app/actions.ts";
 import { type BlocksPart, blocks } from "./app/blocks.ts";
 import { type ChromePart, chrome } from "./app/chrome.ts";
@@ -72,6 +72,7 @@ import {
   spacing as space,
   syntax,
   type ThemeName,
+  threadTone,
 } from "./theme.ts";
 import { bold, type Part, styled } from "./ui.ts";
 import type { SessionEntry, Workspace, Workspaces } from "./workspaces.ts";
@@ -142,13 +143,9 @@ export class App {
   readonly railUsage: BoxRenderable;
   /** The program of each thread and each word of the operator, as it stood at a version of the acts and of the words
    * that its models write. */
-  programs = new Map<string, { version: number; live: string; lines: ProgramLine[] }>();
+  programs = new Map<string, { session: unknown; version: number; live: string; lines: ProgramLine[] }>();
   /** What each thread showed when it was last seen open, which tells a folded thread that new work came. */
   readonly seenThreads = new Map<string, { seen: string; folded: boolean }>();
-  /** The thread whose input at the end has the keys, which Escape gives back to the input of the chain. */
-  replyFocus?: string;
-  /** The input at the end of each thread that the feed shows, by the thread. */
-  readonly replyInputs = new Map<string, InputRenderable>();
   /** The rows that a model writes, by the step that it writes, which the tick draws again, each with the lines that
    * the card above it shows. */
   thinkingRows = new Map<
@@ -187,7 +184,15 @@ export class App {
   /** The key of the rows of the threads of the sidebar, by the list that it came from and the minute. */
   railThreadKey?: { list: ChainThread[]; minute: number; text: string };
   /** The threads of the chain shown, read again only when the acts or the questions that wait change. */
-  threadList: ThreadList = { acts: undefined, owed: "", list: [], by: new Map(), of: new Map() };
+  threadList: ThreadList = {
+    session: undefined,
+    chain: "",
+    acts: undefined,
+    owed: "",
+    list: [],
+    by: new Map(),
+    of: new Map(),
+  };
   /** The lists of the sidebar that the operator unfolded: the finished chains, under the key finished, and the
    * archived sessions of a workspace, under its folder. */
   readonly unfolded = new Set<string>();
@@ -507,6 +512,10 @@ export class App {
           this.composer.setText("");
           return;
         }
+        // The target of the message holds from its first character until it is sent or cleared.
+        const w = this.session;
+        if (!this.composer.plainText) w.pinned = undefined;
+        else if (w.pinned === undefined) w.pinned = w.target ?? null;
         this.schedule();
         void this.highlightEditor();
         this.suggest();
@@ -917,7 +926,9 @@ export class App {
                   c.danger,
                   "No model answers yet. Fix the setup above, or watch a life, which needs none.",
                 ]
-              : ["Prompt", c.accent, "Ask anything, or type / for commands"];
+              : w.target
+                ? ["Prompt", threadTone(w.target), "Reply to the thread, or type / for commands"]
+                : ["Prompt", c.accent, "Ask anything, or type / for commands"];
     for (const edge of this.composeEdges) if (edge.borderColor !== modeColor) edge.borderColor = modeColor;
     this.composer.cursorColor = modeColor;
     this.composer.placeholder = placeholder;
@@ -982,7 +993,7 @@ export class App {
    * and their state stay, so that a frame reads none of them again. */
   doing = new Map<string, string>();
   /** What each prompt that the list of the threads read is: a message to a thread, or a thread and its title. */
-  readonly promptsRead = new Map<string, { message: string | undefined; title: string }>();
+  readonly promptsRead = new WeakMap<LiveAct, { message: string | undefined; title: string }>();
   /** The values that the first argument of a command may take, for each command whose values the TUI knows. A value
    * of a command that takes more after it completes, and a value of any other command runs the command when it is
    * chosen. */

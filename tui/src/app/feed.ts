@@ -273,7 +273,8 @@ export const feed = part({
         ids
           .map((id) =>
             [
-              id,
+              // An act of another branch can take the same id, so the place of the act in its record names it too.
+              `${id}@${index?.ids.get(id)?.began ?? ""}`,
               ...madeBy(id)
                 .filter((one) => one.kind === "rung")
                 .map(stepOf),
@@ -282,10 +283,11 @@ export const feed = part({
           .join("|");
       const programFor = (key: string, live: string, make: () => ProgramLine[]): ProgramLine[] => {
         const known = this.programs.get(key);
-        if (!then && known?.version !== -1 && known?.live === live) return known.lines;
+        if (!then && known?.version !== -1 && known?.session === w && known?.live === live)
+          return known.lines;
         const made = make();
         if (this.programs.size > 2000) this.programs.clear();
-        this.programs.set(key, { version: then ? -1 : w.version, live, lines: made });
+        this.programs.set(key, { session: w, version: then ? -1 : w.version, live, lines: made });
         return made;
       };
       // What a step took and cost once it is done, and how long the line that waits has waited.
@@ -683,6 +685,9 @@ export const feed = part({
         }
         const answered = valued.has(act.id) && act.words[0] !== "None";
         let placed = false;
+        // The answer of a message stands after the code that its model ran to answer it, which the next run of the
+        // program holds.
+        let waiting: Section | undefined;
         for (const [index, run] of runs.entries()) {
           const writer = run.writes;
           let given = run.lines;
@@ -826,6 +831,8 @@ export const feed = part({
                 });
             }
           }
+          if (waiting) sections.push(waiting);
+          waiting = undefined;
           const next = says[index];
           if (next) {
             // The answer of the thread stands where it came in time: before a message that came after it and opened the
@@ -842,21 +849,22 @@ export const feed = part({
               bar: tone,
               body: (box) => box.add(said(text)),
             });
-            // A message of a shape that asks an answer stands with its answer, so that a thread holds pairs of a
-            // message and its answer.
+            // A message of a shape that asks an answer stands with its answer, after the code that answered it, so that
+            // a thread holds pairs of a message and its answer.
             if (next.done && next.words[0] !== "None" && !cancelled(next))
-              sections.push(answerOf(next, `${act.id}-say-${next.id}-answer`));
+              waiting = answerOf(next, `${act.id}-say-${next.id}-answer`);
           }
         }
+        if (waiting) sections.push(waiting);
         // What the model answered stands last, when no message came after it.
         if (answered && !placed) sections.push(answerOf(act, `${act.id}-answer`));
         if (!w.host.reading) {
           const over = Boolean(thread?.resolved);
           sections.push({
             id: `${act.id}-reply`,
-            key: `reply\n${over}\n${this.feedWidth}\n${this.theme}`,
+            key: `reply\n${over}\n${w.target === act.id}\n${this.feedWidth}\n${this.theme}`,
             apart: true,
-            body: (box) => this.replyBox(box, act.id, over),
+            body: (box) => this.replyRow(box, act.id, over, tone),
           });
         }
         for (const [at, section] of sections.entries()) {

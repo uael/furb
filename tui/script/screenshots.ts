@@ -595,6 +595,8 @@ try {
   app().closeOverlay();
   // The queued message is sent before the next one, so that the feed reads in the same order at each run.
   await settle();
+  // The image prompt starts a thread of its own, as the scene means, and goes to no thread that may close meanwhile.
+  session.aim();
   await session.attachImage(resolve("docs/screenshots/01-welcome.png"));
   app().composer.setText("Review the layout in this image.");
   await capture("36-image-attachment");
@@ -841,14 +843,15 @@ try {
   await session.engine.result(thinks).catch(() => {});
   await session.refresh();
   await capture("88-thread-folded-news");
-  // The thread opens, and its input waits for a reply at its end, in place of a button that opens it again.
+  // A click on Reply makes the thread the target of the input, whose line takes the color of the thread, while a
+  // reply waits in it.
   app().foldThread(thinks, false);
-  session.drafts[`reply:${thinks}`] = "Thanks. Now check the search shortcut too.";
   app().replyTo(thinks);
+  app().composer.setText("Thanks. Now check the search shortcut too.");
   await capture("89-thread-reply");
-  app().replyFocus = undefined;
-  app().composer.focus();
-  delete session.drafts[`reply:${thinks}`];
+  app().composer.setText("");
+  // The input goes back to the thread lit, as it stood before the click.
+  session.thread = undefined;
   // A string of three marks over many lines, a quote of a word and a statement too long for its row: each shows as one
   // line of python, the strings folded to their start and an underlined ..., and the long statement opens at a click
   // into rows that cut between tokens.

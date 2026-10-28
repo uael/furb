@@ -213,10 +213,10 @@ export const rail = part({
     const all = this.railThreads();
     const chosen = w.thread ? all.find((one) => one.act.id === w.thread) : undefined;
     const own = all.filter((one) => one.act.on === w.selected);
-    const found = chosen ?? own.findLast((one) => !one.resolved) ?? own.at(-1);
-    // The input sends its next message to the thread that is lit.
-    w.lit = found?.act.id;
-    return found;
+    const open = chosen ?? own.findLast((one) => !one.resolved);
+    // The input sends its next message to the thread chosen, else to the open thread lit, else to a new thread.
+    w.lit = open?.act.id;
+    return open ?? own.at(-1);
   },
 
   /** The state of a thread in a word and its color. */
@@ -265,7 +265,7 @@ export const rail = part({
     void (async () => {
       const head = w.runOf(thread.act.on).at(-1) ?? thread.act.on;
       if (head !== w.selected) await w.select(thread.act.on);
-      w.thread = id;
+      w.aim(id);
       if (this.threadFolded(id)) {
         w.folds[`thread:${id}`] = false;
         w.save();

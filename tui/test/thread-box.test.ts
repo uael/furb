@@ -1,10 +1,12 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
+import type { KeyEvent } from "@opentui/core";
 import type { ProgramLine } from "furb/life";
 import { chainThreads } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { openEngine } from "../src/bridge.ts";
 import { Session } from "../src/session.ts";
+import { threadTone } from "../src/theme.ts";
 import { composing } from "./composing.ts";
 import { idle } from "./idle.ts";
 
@@ -62,7 +64,7 @@ test("a thread is one box: its message with a line of its color, its program as 
       expect(rows[at("Explore this project") + 1]).toMatch(/^\s*╹\s*$/);
       expect(rows[at("Explore this project") + 2]).not.toContain("┃");
       // The box has an edge under its input.
-      expect(rows[at("Reply to open this thread again") + 1]).toContain("▀▀▀▀");
+      expect(rows[at("Reply to open it again") + 1]).toContain("▀▀▀▀");
       expect(rows.join("\n")).not.toContain("Open again");
       expect(rows.join("\n")).toContain("▾ Collapse");
     },
@@ -70,33 +72,34 @@ test("a thread is one box: its message with a line of its color, its program as 
     true,
   ));
 
-test("an input at the end of a thread sends its text to the thread and opens it again, and Escape gives the keys back to the input of the chain", () =>
+test("a click on Reply makes the thread the target of the input, whose line and meta line take its color and its name, a message then goes to the thread and opens it again, and + New thread sends the next one to a new thread", () =>
   composing(
     async ({ session, app, screen, click, frame }) => {
       await idle(session);
       const id = listed(session)[0]?.act.id ?? "";
       expect(listed(session)[0]?.resolved).toBe(true);
-      await click("Reply to open this thread again");
-      expect(app.replyFocus).toBe(id);
-      expect(app.composer.focused).toBe(false);
+      // A thread that is over is no target until a click asks for it.
+      expect(session.target).toBeUndefined();
+      await click("Reply to open it again");
+      expect(session.target).toBe(id);
+      expect(app.composer.focused).toBe(true);
+      const shown = await frame();
+      expect(shown).toContain("↳ Replying here");
+      expect(shown).toContain("to ↳ Explore this");
+      expect(shown).toContain("+ New thread");
+      expect(app.composeEdges[0]?.borderColor.equals(threadTone(id))).toBe(true);
       await screen.mockInput.typeText("Look at it once more");
-      await frame();
-      expect(session.drafts[`reply:${id}`]).toBe("Look at it once more");
-      expect(await frame()).toContain("Look at it once more");
+      // The thread holds its model back, so that the message stays open to be seen: the model closes a message within
+      // the batch of facts that brings it, on a machine that is quick.
+      await session.command(`/pause ${id}`);
       screen.mockInput.pressEnter();
       await until(session, () => (listed(session)[0]?.messages.length ?? 0) === 1);
-      expect(session.drafts[`reply:${id}`]).toBeUndefined();
-      expect(app.replyFocus).toBeUndefined();
-      expect(app.composer.focused).toBe(true);
-      await click("Reply to");
-      expect(app.replyFocus).toBe(id);
-      screen.mockInput.pressEscape();
-      for (let step = 0; step < 40 && app.replyFocus; step++) {
-        await Bun.sleep(25);
-        await frame();
-      }
-      expect(app.replyFocus).toBeUndefined();
-      expect(app.composer.focused).toBe(true);
+      expect(listed(session)[0]?.resolved).toBe(false);
+      await session.command(`/wake ${id}`);
+      expect(session.target).toBe(id);
+      await click("+ New thread");
+      expect(session.target).toBeUndefined();
+      expect(await frame()).not.toContain("+ New thread");
     },
     { ...size, useMouse: true },
     true,
@@ -117,11 +120,11 @@ test("a folded thread marks new work with a dot, and the dot goes once the threa
       app.foldThread(id, false);
       // The box draws open over a few frames on a slow machine, and the thread counts as seen once it has.
       let open = await frame();
-      for (let step = 0; step < 160 && !open.includes("Reply to"); step++) {
+      for (let step = 0; step < 160 && !open.includes("↳ Reply"); step++) {
         await Bun.sleep(25);
         open = await frame();
       }
-      expect(open).toContain("Reply to");
+      expect(open).toContain("↳ Reply");
       app.foldThread(id, true);
       let row = await folded();
       for (let step = 0; step < 160 && row.includes("●"); step++) {
@@ -227,16 +230,16 @@ test("a click on a ... of a window of code opens it in a block that fits its lin
     await recorded(),
   ));
 
-test("the box of a thread starts where the input of the chain starts, and its reply starts where the text of that input starts", () =>
+test("the box of a thread starts where the input of the chain starts, and the word of its Reply starts where the text of that input starts", () =>
   composing(
     async ({ session, frame }) => {
       await idle(session);
       const rows = (await frame()).split("\n").map((row) => feedOf(session, row));
       const ask = rows.find((row) => row.includes("Ask anything")) ?? "";
-      const reply = rows.find((row) => row.includes("Reply to")) ?? "";
+      const reply = rows.find((row) => row.includes("↳ Reply")) ?? "";
       expect(ask).not.toBe("");
       expect(reply).not.toBe("");
-      expect(reply.indexOf("Reply to")).toBe(ask.indexOf("Ask anything"));
+      expect(reply.indexOf("Reply")).toBe(ask.indexOf("Ask anything"));
       // The line of the box stands on one column, whatever the row.
       const bars = rows.filter((row) => row.includes("┃")).map((row) => row.indexOf("┃"));
       expect(new Set(bars).size).toBe(1);
@@ -250,9 +253,9 @@ test("the box of a thread starts where the input of the chain starts, and its re
     true,
   ));
 
-test("the up arrow in the input of a thread takes its last message back to edit it, and the message that replaces it takes its place in the box", () =>
+test("the up arrow in an empty input takes back the last message to the thread that it targets, to edit it, and the message that replaces it takes its place in the box", () =>
   composing(
-    async ({ session, app, screen, click, frame }) => {
+    async ({ session, app, frame }) => {
       await idle(session);
       const id = listed(session)[0]?.act.id ?? "";
       // A pause holds the message open, as a model that works on it does. A model that answers at once leaves
@@ -274,25 +277,14 @@ test("the up arrow in the input of a thread takes its last message back to edit 
       const answerRow = rows.findIndex((row) => /^\s*A clear starting point/.test(row));
       expect(answerRow).toBeGreaterThan(0);
       expect(answerRow).toBeLessThan(rows.findIndex((row) => row.includes("First wording")));
-      await click("Reply to");
-      // The input has the keys once the click reached it, which a slow machine takes a few frames to do.
-      for (let step = 0; step < 160 && app.replyInputs.get(id)?.focused !== true; step++) {
-        await Bun.sleep(25);
-        await frame();
-      }
-      expect(app.replyInputs.get(id)?.focused).toBe(true);
+      app.replyTo(id);
+      expect(session.target).toBe(id);
       // The key goes to the handler of the input itself: a key press of the test terminal reaches it later on a slow
       // machine than the test can wait.
-      const field = app.replyInputs.get(id);
-      if (!field) throw new Error("The thread has no input.");
-      field.onKeyDown?.({ name: "up", preventDefault() {} } as unknown as Parameters<
-        NonNullable<typeof field.onKeyDown>
-      >[0]);
-      await until(session, () => session.drafts[`reply:${id}`] === "First wording");
-      const input = app.replyInputs.get(id);
-      if (!input) throw new Error("The thread has no input.");
-      input.value = "Second wording";
-      screen.mockInput.pressEnter();
+      expect(app.walkHistory({ name: "up" } as KeyEvent)).toBe(true);
+      await until(session, () => app.composer.plainText === "First wording");
+      app.composer.setText("Second wording");
+      await app.submit();
       await until(session, () => (listed(session)[0]?.messages.length ?? 0) === 2);
       let shown = await frame();
       for (

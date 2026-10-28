@@ -341,6 +341,23 @@ export class Session extends EventEmitter {
   lit?: string;
   /** Whether the next message starts a new thread, in place of going to the thread lit. */
   fresh = false;
+  /** The target of the input as it stood when the operator typed the first character of his message, or null for a new
+   * thread. It holds until he sends or clears the message, so a thread that opens while he writes takes nothing that
+   * he wrote for another. */
+  pinned?: string | null;
+  /** The thread that the input sends its next message to: the thread that the operator chose, else the open thread lit,
+   * unless he asked for a new thread. Python, and a prompt of another shape than str, start no message of a thread. */
+  get target(): string | undefined {
+    if (this.mode !== "prompt" || this.editing || this.operatorPrompt) return undefined;
+    if (this.pinned !== undefined) return this.pinned ?? undefined;
+    return this.thread ?? (this.fresh || this.shape !== "str" ? undefined : this.lit);
+  }
+  /** The input sends its next message to the thread named, or starts a new thread when none is named. */
+  aim(thread?: string): void {
+    this.thread = thread;
+    this.fresh = !thread;
+    this.pinned = undefined;
+  }
   readonly preferences: Preferences;
   mode: "prompt" | "python" = "prompt";
   shape = "str";
@@ -1545,12 +1562,10 @@ export class Session extends EventEmitter {
     this.track(choice.rung);
   }
 
-  /** The messages that the operator took back from the box of a thread, which the box does not offer again. */
-  private readonly retaken = new Set<string>();
-  /** The last message of the operator in a thread that still runs, or that a cancel ended, taken back: a message that
-   * runs is cancelled, and its text comes back to be edited and sent again. The cancelled message leaves the box. */
-  async takeBackMessage(thread: string): Promise<string | undefined> {
-    const last = this.acts.findLast(
+  /** The last message of the operator in a thread that the input can take back: one that still runs, or that a cancel
+   * ended, and that he did not take back yet. */
+  lastMessage(thread: string): ActRow | undefined {
+    return this.acts.findLast(
       (act) =>
         act.thread === thread &&
         act.kind === "prompt" &&
@@ -1558,6 +1573,13 @@ export class Session extends EventEmitter {
         !this.retaken.has(act.id) &&
         (!act.done || cancelled(act)),
     );
+  }
+  /** The messages that the operator took back from the box of a thread, which the box does not offer again. */
+  private readonly retaken = new Set<string>();
+  /** The last message of the operator in a thread that still runs, or that a cancel ended, taken back: a message that
+   * runs is cancelled, and its text comes back to be edited and sent again. The cancelled message leaves the box. */
+  async takeBackMessage(thread: string): Promise<string | undefined> {
+    const last = this.lastMessage(thread);
     if (!last) return undefined;
     this.retaken.add(last.id);
     if (!last.done) {
@@ -1605,8 +1627,9 @@ export class Session extends EventEmitter {
         await this.attachFiles(input);
         this.redo = [];
         const pending = this.host.pending.size > 0;
-        const thread = this.thread ?? (this.fresh || this.shape !== "str" ? undefined : this.lit);
+        const thread = this.target;
         this.fresh = false;
+        this.pinned = undefined;
         const id = thread
           ? await this.engine.prompt("str", { message: this.withImages(input), on: thread })
           : await this.engine.prompt(this.shape, { message: this.withImages(input), on: this.selected });
@@ -1740,8 +1763,7 @@ export class Session extends EventEmitter {
           : "The threads that are over stay open.";
         break;
       case "newthread":
-        this.fresh = true;
-        this.thread = undefined;
+        this.aim();
         this.notice = "Your next message starts a new thread.";
         break;
       case "grant": {
