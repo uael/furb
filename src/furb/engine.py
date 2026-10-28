@@ -693,10 +693,10 @@ def boot(record=(), **outside):
       due.pop()
     return due
 
-  def journal():
+  def journal(a=()):
     try:
       while True:
-        while owed() and not (log or left):
+        while owed() and (not (log or left) or (a and a[::2] == ("wake", "journal") and due[-1][1] in taken)):
           match due.pop():
             case (kind, name, by, on, *words) if question((kind, name)):
               if by in outside or by in kept or (on and not get(on)):

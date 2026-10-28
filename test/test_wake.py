@@ -188,3 +188,20 @@ async def test_a_wake_of_a_name_of_no_act_raises_refused_that_names_it() -> None
     engine.wake("nothing9")
   await settle()
   assert log[before:] == []
+
+
+async def test_a_wake_that_the_journal_says_again_says_at_once_the_answers_of_the_outside_to_it() -> None:
+  """A wake that the journal says again says at once each next entry of the record that answers a pending act it is over, as the outside said them while it heard that wake, before any other fact of the life."""
+  sand, _, root = born(auto=False)
+  word = "try:\n  await bash('one')\nexcept Refused:\n  pass\nclock() if all(over(a[1]) for a in transcript(of='bash')) else chance()"
+  engine.rung(word, on=root)
+  await settle()
+  two = engine.bash("two", on=root)
+  await settle()
+  later = Sand()
+  _, over = await relived(later, plain(sand.record))
+  engine.wake(over)
+  await settle()
+  assert isinstance(engine.peek(two), Refused) and engine.peek("clock1", None) is not None
+  again, _ = await relived(Sand(), plain([*sand.record, *later.record]))
+  assert [a[1] for a in said(again, "clock")] == ["clock1"]

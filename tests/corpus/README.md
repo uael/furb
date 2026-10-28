@@ -32,3 +32,8 @@ where the life said it, so the Kernel runs the part there.
 `refused.jsonl` holds a reply of the root that nothing took, which the life refused with no maker, `nothing takes
 reply`, so the root paused, and a reply of a second chain after it. The journal says that refusal again under no
 site, as the life said it, so the root pauses again and the second chain asks the next reply, as in the life.
+
+`wake.jsonl` holds two commands that a life left running, and a later life that wakes the root, so the World closes
+both as interrupted at once, in its hearing of that wake. The word that awaited the first command reads the clock
+when both are over, and chance when only its own is. The journal says those answers again at once at the wake, as
+the World said them, so the word reads the clock again, as in the life.
