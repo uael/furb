@@ -482,11 +482,11 @@ def assist(pr: dict, key: str, order: str, fixer: str, thread: str, brief: str) 
     if room(HANDOVER):
       noticed.update({key, key + " again", key + " fixer"})
       said = f"Your work on this chain goes on, now on {HANDOVER}. {order} Close with a tuple: the number of the PR, and your report in 200 words at most."
-      resume(maker, homes[maker], HANDOVER, said)
+      sent[f"{pr['n']} {pr['sha']}"] = resume(maker, homes[maker], HANDOVER, said)
       return True
   elif can(fixer):
     noticed.update({key, key + " again", key + " fixer"})
-    hire(fixer, "", thread, brief)
+    sent[f"{pr['n']} {pr['sha']}"] = hire(fixer, "", thread, brief)
     return True
   return False
 
@@ -1050,6 +1050,7 @@ Title: {title}
 Read the issue whole with its comments first: gh issue view {n} --comments. Do what it asks. When it asks for a change, open the PR with Fixes #{n} in its body, so that the merge closes the issue. When it asks a question or a decision and no change, answer it in a comment on the issue, and close with that answer."""
 
 handled: set[str] = globals().setdefault("handled", set())
+sent: dict[str, str] = globals().setdefault("sent", {})
 ends: dict[str, list[tuple[str, int]]] = globals().setdefault("ends", {})
 requeued: set[str] = globals().setdefault("requeued", set())
 AGAIN = """Workers did parts of this issue before, and it is still open. Their PRs: {prs}. Read each with gh pr view, find what the issue still lacks on origin/main, and do the next part. Give pr() fixes={n} only when your change finishes the issue; else leave fixes at 0, so that the merge leaves the issue open for a next part."""
@@ -1232,13 +1233,22 @@ def verdict(pr: dict) -> str:
   return "pending"
 
 
-def needs(pr: dict) -> bool:
+def gave_up(pr: dict) -> bool:
+  name = sent.get(f"{pr['n']} {pr['sha']}", "")
+  return bool(name) and over(name)
+
+
+def lacks(pr: dict) -> bool:
   return (
     pr["head"].startswith("w/")
     and not {"paused", "hold"} & set(pr["labels"])
     and (pr["verdict"] in ("fail", "open") or pr["mergeable"] == "CONFLICTING")
     and not owner_of(pr)
   )
+
+
+def needs(pr: dict) -> bool:
+  return lacks(pr) and not gave_up(pr)
 
 
 def staff() -> None:
@@ -1264,6 +1274,13 @@ def staff() -> None:
     return all(dep in ends and all(n in merged for _, n in ends[dep] if n) for dep in after.get(item, []))
 
   blocked: set[str] = set()
+  for pr in [one for one in prs.values() if lacks(one) and gave_up(one)]:
+    name = sent[f"{pr['n']} {pr['sha']}"]
+    notice(
+      f"gave up #{pr['n']} {pr['sha']}",
+      f"The worker sent for #{pr['n']} at {pr['sha'][:7]} ended ({name}) and the head did not move, so the PR no longer"
+      f" blocks its family. Its end:\n\n{str(peek(name))[:1500]}",
+    )
   for pr in [one for one in prs.values() if needs(one)]:
     maker = next((m[2:] for m in pr["labels"] if m.startswith("w:")), "")
     model = HANDOVER if homes.get(maker) and maker not in working.values() else limits["fixer"]
