@@ -802,5 +802,5 @@ test("each line of a word says what its acts did as a quiet hint: a read its lin
       expect(shown).toMatch(/ 2 write\(read\("notes\.md"\).*# 2 lines {2}\+2 -1/);
       expect(shown).toMatch(/ 3 await bash\("true"\) +# exit 0/);
     },
-    { width: 120, height: 40 },
+    { width: 160, height: 40 },
   ));
