@@ -5,7 +5,7 @@ import { createConnection, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openEngine } from "../src/bridge.ts";
-import { type About, hostPlace, listening, reachOf } from "../src/hosting.ts";
+import { type About, aboutOf, hostPlace, listening, reachOf } from "../src/hosting.ts";
 
 /** The moment a condition holds, read again every 50 ms. */
 async function eventually(ready: () => boolean | Promise<boolean>, what: string): Promise<void> {
@@ -32,9 +32,10 @@ async function demoLife(use: (record: string, directory: string) => Promise<void
   try {
     await use(record, directory);
   } finally {
-    // A host that a failed test left ends here, with its life.
-    if (place && existsSync(place.about)) {
-      const { pid } = JSON.parse(readFileSync(place.about, "utf8")) as About;
+    // A host that a failed test left ends here, with its life. A host that ends removes its file as this reads it,
+    // so the file reads once, and a file that went names no host.
+    const pid = place && aboutOf(place)?.pid;
+    if (pid) {
       if (alive(pid)) process.kill(pid, "SIGTERM");
       await eventually(() => !alive(pid), "the host to end").catch(() => process.kill(pid, "SIGKILL"));
     }
