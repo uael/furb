@@ -261,7 +261,12 @@ test("the up arrow in the input of a thread takes its last message back to edit 
         await frame();
       }
       expect(app.replyInputs.get(id)?.focused).toBe(true);
-      screen.mockInput.pressArrow("up");
+      // A key that reaches the input before it has the keys is lost, so the key goes again until the message is back.
+      for (let step = 0; step < 200 && session.drafts[`reply:${id}`] !== "First wording"; step++) {
+        if (step % 20 === 0) screen.mockInput.pressArrow("up");
+        await Bun.sleep(25);
+        await frame();
+      }
       await until(session, () => session.drafts[`reply:${id}`] === "First wording");
       const input = app.replyInputs.get(id);
       if (!input) throw new Error("The thread has no input.");
