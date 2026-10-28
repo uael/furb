@@ -279,7 +279,8 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 - `cargo run -p furb-cli -- <words>`, or `uv run furb <words>`: the command line, as `furb --help` says.
 - `uv run pre-commit run --all-files`: every gate the commit hook runs. A `git commit` runs the hooks, `cargo test`
   among them, and takes minutes: give it a timeout of 3600 s in `bash`, and chain the push after it with `&&`, so a
-  commit that fails stops the push. The hook of the links runs only for a README or a manifest, and reads git alone.
+  commit that fails stops the push. The hook `cargo test` runs only when a file that the crate or its tests read changed, and the gates run every hook on
+  every file. The hook of the links runs only for a README or a manifest, and reads git alone.
   The hook `stray` refuses a `*.rej`, `*.orig` or `*-E` file.
 - `uv run python script/smoke.py`: one real life on the default actor: claude-cli:opus/high through the claude command
   line on PATH, or the one `FURB_CLAUDE_BIN` names, and with no claude the first model of the network or of the local
