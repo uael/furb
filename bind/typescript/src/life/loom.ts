@@ -1,7 +1,7 @@
-import { unmarked } from "../types.js";
 import { cancelled, failed, type LiveAct, type Measure, WORK } from "./acts.js";
 import { gist } from "./asks.js";
 import { valueText } from "./ladder.js";
+import { unmarked } from "./marks.js";
 
 /** What a row of the loom does now: it asks the operator, it failed, it works, a pause holds it, its prompts are
  * all closed, or it rests. */

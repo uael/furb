@@ -1,6 +1,6 @@
-import { unmarked } from "../types.js";
 import { type Exit, failed, type LiveAct } from "./acts.js";
 import { actState, tailOf, valueText } from "./ladder.js";
+import { unmarked } from "./marks.js";
 import { reason } from "./plain.js";
 import { placed } from "./source.js";
 

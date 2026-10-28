@@ -1,6 +1,6 @@
-import { unmarked } from "../types.js";
 import type { Exit, LiveAct } from "./acts.js";
 import { type ActState, actState, valueText } from "./ladder.js";
+import { unmarked } from "./marks.js";
 
 /** One line of the source of a chain.
  *
