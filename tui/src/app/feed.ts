@@ -273,7 +273,8 @@ export const feed = part({
         ids
           .map((id) =>
             [
-              id,
+              // An act of another branch can take the same id, so the place of the act in its record names it too.
+              `${id}@${index?.ids.get(id)?.began ?? ""}`,
               ...madeBy(id)
                 .filter((one) => one.kind === "rung")
                 .map(stepOf),
@@ -282,10 +283,11 @@ export const feed = part({
           .join("|");
       const programFor = (key: string, live: string, make: () => ProgramLine[]): ProgramLine[] => {
         const known = this.programs.get(key);
-        if (!then && known?.version !== -1 && known?.live === live) return known.lines;
+        if (!then && known?.version !== -1 && known?.session === w && known?.live === live)
+          return known.lines;
         const made = make();
         if (this.programs.size > 2000) this.programs.clear();
-        this.programs.set(key, { version: then ? -1 : w.version, live, lines: made });
+        this.programs.set(key, { session: w, version: then ? -1 : w.version, live, lines: made });
         return made;
       };
       // What a step took and cost once it is done, and how long the line that waits has waited.

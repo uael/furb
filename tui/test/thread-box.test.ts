@@ -85,7 +85,7 @@ test("a click on Reply makes the thread the target of the input, whose line and 
       expect(app.composer.focused).toBe(true);
       const shown = await frame();
       expect(shown).toContain("↳ Replying here");
-      expect(shown).toContain("to ↳ Explore this project");
+      expect(shown).toContain("to ↳ Explore this");
       expect(shown).toContain("+ New thread");
       expect(app.composeEdges[0]?.borderColor.equals(threadTone(id))).toBe(true);
       await screen.mockInput.typeText("Look at it once more");

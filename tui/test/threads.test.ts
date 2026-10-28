@@ -408,3 +408,25 @@ test("a line that opens wraps at tokens within its column, and each row keeps th
     { ...size, useMouse: true },
     true,
   ));
+
+test("the list of the threads of the chain shown is read again for another chain or another session, even when the version of its acts is the same", () =>
+  composing(
+    async ({ session, app }) => {
+      await idle(session);
+      const root = session.engine.root;
+      await session.engine.pause(root);
+      const other = await session.engine.chain({ label: "other" });
+      await session.engine.pause(other);
+      const there = await session.engine.prompt("str", { message: "A thread of the other chain", on: other });
+      await session.refresh();
+      const version = session.version;
+      expect(app.chainThreadsBy(root).list.some((one) => one.act.id === there)).toBe(false);
+      await session.select(other);
+      // The list of the other chain holds its thread, whatever the version of the acts.
+      const listed = app.chainThreadsBy(other).list.map((one) => one.act.id);
+      expect(listed).toContain(there);
+      if (session.version === version) expect(app.threadList.chain).toBe(other);
+    },
+    size,
+    true,
+  ));

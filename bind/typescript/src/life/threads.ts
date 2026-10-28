@@ -201,12 +201,14 @@ export interface ChainThread {
 
 /** The threads of one chain, in the order they began: each prompt to a model on the chain that is no message of
  * another thread. It asks the operator while a question waits in it. The acts on the chain and the index of every act
- * of a host spare a pass over every act, and what a host keeps of each prompt it read spares a read of it again. */
+ * of a host spare a pass over every act, and what a host keeps of each prompt it read spares a read of it again. What
+ * it keeps belongs to the act itself, so an act that changed, an act of another session and an act of another branch,
+ * each a new object, are read again, and no prompt keeps what another prompt of the same id was. */
 export function chainThreads(
   on: readonly LiveAct[],
   rows: ReadonlyMap<string, LiveAct>,
   owed: ReadonlySet<string>,
-  known: Map<string, { message: string | undefined; title: string }> = new Map(),
+  known: WeakMap<LiveAct, { message: string | undefined; title: string }> = new WeakMap(),
 ): ChainThread[] {
   const out = new Map<string, ChainThread>();
   const later: [LiveAct, string][] = [];
@@ -219,7 +221,7 @@ export function chainThreads(
       continue;
     }
     // What a prompt is stays as it was said, so a host that keeps it reads each prompt once.
-    let seen = known.get(act.id);
+    let seen = known.get(act);
     if (!seen) {
       const message = messageOf(act, rows);
       seen = {
@@ -231,7 +233,7 @@ export function chainThreads(
                 .find((line) => line.trim()) ?? "")
             : "",
       };
-      known.set(act.id, seen);
+      known.set(act, seen);
     }
     if (seen.message !== undefined) {
       if (seen.message) later.push([act, seen.message]);
