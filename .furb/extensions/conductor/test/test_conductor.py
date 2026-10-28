@@ -14,6 +14,7 @@ import pytest
 
 HERE = Path(__file__).resolve().parent.parent
 SOURCE = (HERE / "conductor.py").read_text(encoding="utf-8")
+PULL = HERE.parent / "pr" / "pr.py"
 IMPORT = re.compile(r"^from furb\.engine import \(.*?\)\n", re.S | re.M)
 POSIX = pytest.mark.skipif(sys.platform == "win32", reason="the round runs its commands in sh")
 JQ = pytest.mark.skipif(not shutil.which("jq"), reason="the stub of gh applies --jq with jq")
@@ -129,6 +130,8 @@ class Round:
       module=lambda on="": self.modules.get(on, {}),
     )
     ns.update(chain=lambda label="", source="": f"chain-{label}", rung=self.rung)
+    # The root plays pr before the conductor, which uses its names, as .furb/config.json orders them.
+    exec(compile(IMPORT.sub("", PULL.read_text(encoding="utf-8")), str(PULL), "exec"), ns)  # noqa: S102
     exec(compile(IMPORT.sub("", SOURCE), str(HERE / "conductor.py"), "exec"), ns)  # noqa: S102
     self.real_hire = ns["hire"]
     ns.update(quietly=lambda verb, *args, **words: verb(*args, **words), hire=self.hire)
@@ -690,6 +693,16 @@ STATE = (
 
 def play(conductor: Round) -> None:
   exec(compile(IMPORT.sub("", SOURCE), str(HERE / "conductor.py"), "exec"), conductor.ns)  # noqa: S102
+
+
+def test_the_round_plays_on_the_root_alone_and_pr_on_every_chain_before_it() -> None:
+  furb = HERE.parent.parent
+  manifest = lambda name: json.loads((furb / "extensions" / name / "furb.json").read_text(encoding="utf-8"))
+  assert [manifest(name).get("plays", "every") for name in ("pr", "conductor", "converge")] == ["every", "root", "root"]
+  order = list(json.loads((furb / "config.json").read_text(encoding="utf-8"))["extensions"])
+  assert order.index("pr") < order.index("conductor")
+  assert re.findall(r"^def (\w+)", PULL.read_text(encoding="utf-8"), re.M) == ["pr_box", "pr_body", "prcheck", "pr", "shq"]
+  assert re.findall(r"^def (pr|prcheck|shq)\(", SOURCE, re.M) == []
 
 
 def test_each_name_of_the_state_binds_its_default_only_when_the_module_lacks_it() -> None:
