@@ -286,9 +286,10 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
             stood = module()["actor"] = standing()[2]
           last = standing()
           yield takes()
-        case ("done", about, _, value) if running.get(maker := r[2]) is False and repr(about) not in str(
-          transcript(id, "wants")
-        ):
+        case ("done", about, _, value) if running.get(maker := r[2]) in (
+          False,
+          isinstance(value, Exception) and r[0] != "reply" and "",
+        ) and repr(about) not in str(transcript(id, "wants")):
           scope(about) != id and (yield "tell", maker, [headed(about, "done", value=value)])
           isinstance(value, CancelledError) or (unseen := (about + " done", maker))
         case ("done", _, by, Refused() as why) if (
@@ -321,7 +322,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
             ),
           )
         case ("rung", rid, _, _, "", *_):
-          waiting[rid] = 0
+          waiting[rid] = running[rid] = ""
         case ("tell", *_, notes):
           heard.append("\n".join(notes))
         case ("ready", rid, _, word):
