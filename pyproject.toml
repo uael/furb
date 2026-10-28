@@ -155,7 +155,9 @@ unresolved-import = "ignore"
 testpaths = ["test", "extensions", ".furb/extensions"]
 pythonpath = [".", "test"]
 # The suite runs on every core: a test opens a life of its own and leaves nothing behind, so the tests are independent.
-addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib", "-n", "auto", "--cov=furb", "--cov=furb_monty", "--cov-report=term-missing"]
+# A worker that is idle takes the tests that another worker has not started, so no core waits on a run of slow tests
+# at the end: on 3 cores this ran the suite in 88 s and 92 s, against 107 s and 102 s when each worker kept its share.
+addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib", "-n", "auto", "--dist", "worksteal", "--cov=furb", "--cov=furb_monty", "--cov-report=term-missing"]
 xfail_strict = true
 timeout = 30
 timeout_method = "thread"

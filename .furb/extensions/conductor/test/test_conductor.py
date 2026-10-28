@@ -1802,3 +1802,50 @@ def test_the_chains_that_the_live_round_parked_move_into_the_state_of_the_round(
   conductor.invariants()
   assert conductor.ns["pk_parked"] == {}
   assert conductor.parked == {"chain9": {"name": "", "key": "k9", "model": SONNET, "text": ""}}
+
+
+def build_slots(tmp_path: Path, pid: int) -> dict[str, str]:
+  script = tmp_path / "build.sh"
+  script.write_text(SOURCE_BUILD(), encoding="utf-8")
+  slots = tmp_path / "slots"
+  for i in (1, 2, 3):
+    (slots / str(i)).mkdir(parents=True)
+    (slots / str(i) / "pid").write_text(str(pid), encoding="utf-8")
+    (slots / str(i) / "since").write_text(str(int(time.time()) - 90), encoding="utf-8")
+  return {**os.environ, "FURB_BUILD_SLOTS": str(slots), "FURB_BUILD_NOTE": "1", "SCRIPT": str(script)}
+
+
+def SOURCE_BUILD() -> str:
+  start = SOURCE.index('BUILD_SH = """') + len('BUILD_SH = """')
+  return SOURCE[start : SOURCE.index('"""', start)]
+
+
+@POSIX
+def test_build_sh_says_who_holds_the_slots_while_it_waits(tmp_path: Path) -> None:
+  holder = subprocess.Popen(["sleep", "30"])
+  out = tmp_path / "out.txt"
+  try:
+    env = build_slots(tmp_path, holder.pid)
+    with out.open("w", encoding="utf-8") as f:
+      waiting = subprocess.Popen(["sh", env["SCRIPT"], "echo", "ran"], env=env, stdout=f, stderr=subprocess.STDOUT)
+      time.sleep(3.5)
+      waiting.terminate()
+      waiting.wait()
+  finally:
+    holder.kill()
+    holder.wait()
+  said = out.read_text(encoding="utf-8")
+  assert "waited" in said
+  assert f"slot 1: pid {holder.pid}, held " in said
+  assert "sleep 30" in said
+  assert "ran" not in said.replace("waited", "")
+
+
+@POSIX
+def test_build_sh_frees_a_slot_whose_pid_is_gone(tmp_path: Path) -> None:
+  gone = subprocess.Popen(["true"])
+  gone.wait()
+  env = build_slots(tmp_path, gone.pid)
+  got = subprocess.run(["sh", env["SCRIPT"], "echo", "ran"], env=env, capture_output=True, text=True, timeout=20)
+  assert got.returncode == 0
+  assert got.stdout.strip() == "ran"
