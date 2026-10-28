@@ -379,6 +379,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/reopen` | Reach the life again after it ended in another window or its host was lost, in a host of this machine |
 | `/stop` | End by force the process that holds this life, when the end of the life does not reach it |
 | `/exit` | Save every session and quit, while a life in a host of its own goes on |
+| `/compact` | Compact this chain now: a model keeps what the work still needs and sums up the rest (the extension compaction) |
 
 <!-- commands:end -->
 

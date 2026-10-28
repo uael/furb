@@ -29,7 +29,8 @@ Six extensions come with furb, and each life runs them unless a config turns the
   `reground()` each file that it kept a read or write of, and shows only what changed. `latest()` keeps the last read
   or write of each path, `quiet()` drops the commands, `recent(n)` keeps the acts of the last `n` replies,
   `await chosen()` asks a model which acts to keep, and `together(*filters)` joins filters. `choice()` asks a model,
-  on a chain of its own, which acts the work still needs and what the rest holds. `compacted()` watches one chain:
+  on a chain of its own, which acts the work still needs and what the rest holds, and `await condense()` asks it and
+  compacts the chain at once to what the model chose, with its summary. `compacted()` watches one chain:
   after an answer that fills more than `SHARE`, 0.6, of the window of its model, it asks `choice()`, and at the next
   reply after the answer, it compacts the chain to what the model chose, with its summary. It moves, stops and pauses
   nothing, so a loop such as `while True: await conduct()` goes on with its state, and the workers that a conductor
@@ -43,7 +44,9 @@ Six extensions come with furb, and each life runs them unless a config turns the
   asks for it, so the extension has no life word. A project changes
   the defaults in an extension of its own whose word rebinds `SHARE`, `FILTERS`, `CHOOSER`, `LISTED` or `BRIEF`.
   Its part for the TUI marks each compaction in the feed of the chain: a rule at its place, with its summary under
-  it, which parts what the model no longer reads from what it reads now. The board of the chains says how many
+  it, which parts what the model no longer reads from what it reads now. Its command `/compact` runs
+  `await condense()` on the chain on screen: the footer says that a model compacts the chain, and the rule shows the
+  summary once the model chose. The board of the chains says how many
   times a chain compacted. A chain that an older compaction made, which went on in a new chain whose first word
   restores its source, shows with that source as one chain, named `Main -> compacted`, with one feed.
 - **`ouroboros`** teaches a model to extend furb. Its life word, `ouroboros()`, tells each chain once the three ways
