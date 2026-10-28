@@ -67,18 +67,42 @@ async def test_the_kernel_runs_the_writings_of_one_rung_in_the_order_it_heard_th
   assert [a[3] for a in said(log, "ran")] == [0, len(first)]
 
 
-async def test_a_part_that_waits_for_an_act_makes_no_wants() -> None:
-  """A part that waits for an act makes no wants, so its rung hears the turn of its model while the part waits."""
+async def test_a_part_that_waits_for_an_act_while_its_model_writes_makes_no_wants() -> None:
+  """A part that waits for an act while its model writes makes no wants, so its rung hears the turn of its model while the part waits."""
   sand, log, _, act, rung, reply = await waiting(auto=False)
   first = "x = await bash('slow')\n"
   wrote(rung, first, 0)
   await settle()
+  assert said(log, "wants") == [] and said(log, "ran") == []
   answered(reply, first + "close(3)")
   await settle()
-  assert said(log, "wants") == [] and said(log, "ran") == []
   assert rung in [a[4] for a in said(log, "run")]
   sand.exits(said(log, "bash")[0][1], 1)
   assert await act == 3
+
+
+async def test_once_the_run_of_its_rung_begins_a_part_that_waits_for_an_act_waits_with_a_wants_as_that_run() -> None:
+  """Once the run of its rung begins, a part that waits for an act waits with a wants as that run, as a run does, so the chain asks its next prompt while the word waits."""
+  sand, log, root, act, rung, reply = await waiting(auto=False)
+  loop = "for i in range(3):\n  await wait(0)\n  await bash(f'step {i}')\n"
+  wrote(rung, loop, 0)
+  await settle()
+  answered(reply, loop + "close(3)")
+  await settle()
+  (run,) = [a[1] for a in said(log, "run") if a[4] == rung]
+  later = engine.prompt(int, "again", on=root)
+  for i in range(3):
+    await settle()
+    command = said(log, "bash")[-1]
+    assert command[4] == f"step {i}"
+    assert [a[2] for a in said(log, "wants") if a[4] == command[1]] == [run]
+    step = [a[1] for a in said(log, "rung") if a[2] == later]
+    assert [a[1] for a in said(log, "reply") if a[2] in step] != []
+    sand.exits(command[1], 0)
+  assert await act == 3
+  (asked,) = [a[1] for a in said(log, "reply") if a[2] in step]
+  answered(asked, "close(4)")
+  assert await later == 4
 
 
 async def test_the_run_of_a_rung_runs_what_the_writings_of_that_rung_left_of_the_word() -> None:

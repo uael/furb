@@ -862,7 +862,8 @@ type Writing = tuple[Literal["writing"], str, str, str, int]
 A writing holds the part of the word that its model finished since the writing before it, and how many characters of the word stand before that part.
 The Kernel runs the part of a writing in the globals of the chain of its rung and as that rung, so what the part binds and what it makes are the rung's own.
 The Kernel runs the writings of one rung in the order it heard them, and a part that waits for an act holds the parts after it.
-A part that waits for an act makes no wants, so its rung hears the turn of its model while the part waits.
+A part that waits for an act while its model writes makes no wants, so its rung hears the turn of its model while the part waits.
+Once the run of its rung begins, a part that waits for an act waits with a wants as that run, as a run does, so the chain asks its next prompt while the word waits.
 The run of a rung runs what the writings of that rung left of the word, and nothing when they ran the word whole.
 The run of a rung whose writing raised is done with that raise and runs no more of the word, since a word is over where it raises.
 A run whose word is not the word that ran is refused, since the Kernel runs no statement of a word twice.
