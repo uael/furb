@@ -178,16 +178,14 @@ export const spaces = part({
   },
 
   /** A tip that stands under the pointer and ends at its left, or above it where the rows under it cannot hold it,
-   * inside the screen. It never covers the row of the pointer, or the pointer would leave the text that shows it. */
+   * inside the region of the pointer. It never covers the row of the pointer, or the pointer would leave the text that shows it. */
   tip(parts: Part[], x: number, y: number): void {
-    const size = Math.min(
-      this.renderer.width - 2,
-      Math.max(25, Bun.stringWidth(plain(parts)) + space.between),
-    );
+    const area = this.region(x);
+    const size = Math.min(area.width - 2, Math.max(25, Bun.stringWidth(plain(parts)) + space.between));
     const rows = Math.max(1, Math.ceil(Bun.stringWidth(plain(parts)) / Math.max(1, size - space.inset * 2)));
     this.popup(
       {
-        left: Math.max(1, Math.min(x - size, this.renderer.width - size - 1)),
+        left: Math.max(area.left + 1, Math.min(x - size, area.left + area.width - size - 1)),
         top: y + 1 + rows <= this.renderer.height ? y + 1 : Math.max(0, y - rows),
         width: size,
         paddingX: space.inset,

@@ -572,6 +572,8 @@ try {
   library.toggle();
   await capture("31-hidden-sidebar");
   library.toggle();
+  app().render();
+  await test.flush();
   await app().workspacePicker();
   await capture("32-workspace-picker");
   app().closeOverlay();
@@ -708,7 +710,8 @@ try {
   const [researchAt, researchRow] = find(test, "Research");
   await test.mockMouse.click(researchAt + 2, researchRow, 2);
   await capture("49-session-menu");
-  await click(test, "Rename", researchAt);
+  // The menu covers the whole sidebar, so its labels start left of the row that opened it.
+  await click(test, "Rename", Math.floor(test.renderer.width / 2));
   await test.flush();
   await test.mockInput.typeText(" notes");
   await rest();

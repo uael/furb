@@ -374,6 +374,31 @@ test("the palette lists as many choices as its rows hold, with the selected one 
     { width: 120, height: 30 },
   ));
 
+test("a dialog covers the feed whole and a menu at the sidebar covers the sidebar whole, so that no edge cuts a word", () =>
+  composing(
+    async ({ app, screen, session }) => {
+      const panel = () => {
+        const found = (node: Renderable): Renderable | undefined =>
+          node.id === "palette" ? node : node.getChildren().map(found).find(Boolean);
+        const node = found(screen.renderer.root);
+        if (!node) throw new Error("No palette.");
+        return { left: node.x, right: node.x + node.width };
+      };
+      const side = session.preferences.sidebarWidth;
+      const width = screen.renderer.width;
+      app.palette();
+      await screen.flush();
+      await screen.flush();
+      expect(panel()).toEqual({ left: 0, right: width - side });
+      app.closeOverlay();
+      app.openPalette("Menu", [{ label: "Open", detail: "", run() {} }], { at: { x: width - 5, y: 5 } });
+      await screen.flush();
+      await screen.flush();
+      expect(panel()).toEqual({ left: width - side, right: width });
+    },
+    { width: 120, height: 30 },
+  ));
+
 test("the feed left at its end opens at its end, and one left above its end opens where it was", () =>
   composing(
     async (context) => {

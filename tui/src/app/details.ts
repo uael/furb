@@ -769,10 +769,11 @@ export const details = part({
 
   /** A card under the pointer, which a press opens. */
   hoverCard(x: number, y: number, rows: number, open: () => void, ...nodes: Renderable[]): void {
-    const width = Math.min(58, this.renderer.width - 4);
+    const area = this.region(x);
+    const width = Math.min(58, area.width - 4);
     this.popup(
       {
-        left: Math.max(1, Math.min(x, this.renderer.width - width - 1)),
+        left: Math.max(area.left + 1, Math.min(x, area.left + area.width - width - 1)),
         top: Math.max(1, Math.min(y + 1, this.renderer.height - rows)),
         width,
         maxHeight: rows,

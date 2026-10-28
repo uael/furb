@@ -98,27 +98,10 @@ export const palette = part({
     this.paletteStart = 0;
     this.composer.blur();
     this.unhover();
-    // The dialog is as wide as its longest label and detail need, from 80 columns to 110. It stands over the middle
-    // of the feed when the feed holds it, so that it cuts no word of the sidebar, and over the middle of the screen
-    // when it is wider, so that it cuts none of its own.
-    const widest = (pick: (choice: Choice) => string) =>
-      Math.max(0, ...choices.map((choice) => Bun.stringWidth(pick(choice))));
-    const wanted = Math.max(
-      80,
-      Math.min(110, widest((choice) => choice.label) + widest((choice) => choice.detail) + 10),
-    );
-    const column = this.feedWidth + space.gutter * 2;
-    const stage = column - 4 >= wanted ? column : this.renderer.width;
-    // A menu holds its title with the key that closes it, and each label after the pointer of the list.
-    const menu = Math.min(
-      this.renderer.width - 2,
-      space.inset * 2 +
-        Math.max(
-          Bun.stringWidth(label) + space.between * 2 + 3,
-          widest((choice) => choice.label) + 2 + space.between,
-        ),
-    );
-    this.paletteWidth = at ? menu : Math.min(stage - 4, wanted);
+    // A dialog or a menu takes the whole width of its region: the feed, or the sidebar for a menu at a point in it. It
+    // covers whole rows of that region and leaves the region beside it as it is, so no edge of it cuts a word.
+    const stage = this.region(at?.x);
+    this.paletteWidth = stage.width;
     const width = this.paletteWidth;
     // The rows of a menu: its inset, its title with the space under it, and its choices.
     const rows = space.inset * 2 + space.bar + space.section + choices.length;
@@ -141,9 +124,7 @@ export const palette = part({
     this.overlay = this.box({
       id: "palette",
       position: "absolute",
-      left: at
-        ? Math.max(1, Math.min(at.x, this.renderer.width - width - 1))
-        : Math.floor((stage - width) / 2),
+      left: stage.left,
       top: at
         ? at.y + 1 + rows <= this.renderer.height
           ? at.y + 1

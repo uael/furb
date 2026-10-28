@@ -39,6 +39,14 @@ export const blocks = part({
     );
   },
 
+  /** The region of the screen that a dialog or a menu covers, whole: the sidebar for a point in it, else the feed with
+   * its gutters. An overlay never crosses the edge of its region, so it cuts no word of the region beside it. */
+  region(x = 0): { left: number; width: number } {
+    const side = this.rail.visible ? this.session.preferences.sidebarWidth : 0;
+    const edge = this.renderer.width - side;
+    return side && x >= edge ? { left: edge, width: side } : { left: 0, width: edge };
+  },
+
   /** A node that stands a number of columns in from the left, since a text leaves its own padding out when it draws. */
   inset(left: number, node: Renderable): BoxRenderable {
     const box = this.box({ paddingLeft: left, flexDirection: "row" });
