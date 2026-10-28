@@ -252,6 +252,7 @@ def gate(word: str, on: str = "") -> list[str]:
   """Whether the word of a rung may run: the gate reads it after the program of its chain, and it finds nothing when the word may run.
   The word of a rung runs only if the gate accepts the word, or if the chain wrote it.
   The gate checks the word of a rung against the rungs before it in record order.
+  The gate reads the word after the parts that the writings of a rung with no run hold too, so a rung that a word makes while its model writes it is read after what that word ran.
   A response that is not python is a finding like any other.
   Each finding names the line of the word it is found on, and quotes that line, cut to 80 characters, so a model reads what the gate read.
   A word that is not python and that holds a fence of markdown, the markup of a tool call or a sentence of prose finds that a reply is python and quotes only, with no fence, no markup and no prose, so nothing of this word ran: delete each such line.
@@ -472,6 +473,7 @@ def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[No
   A cancelled result is no orphan.
   The response of an acknowledgment is no orphan.
   When an act that a rung of the chain made is done while the word of that rung does not run, no word of the chain awaited it, no reply has shown it, no rung of the chain waits for a reply or ends the step of a prompt that is open, and no word of the chain is running, the chain prompts nothing, so that the model sees it, though after a word that the operator or an outside ear gave it waits for the next fact on the chain.
+  The chain prompts nothing too for a failure of an act that a rung of the chain made before the run of that rung, as while its model writes its word, but for a cancel, so an error asks the model again even after that word closed its prompt.
   A pause stands over the close that answers a prompt too, so what a word gave waits for the wake.
   A prompt tells its message and its binding where it is made, as every act tells its open, whether a model or the operator answers it.
   """
@@ -971,7 +973,6 @@ def tell(on: str, path: str, got: object = None, show: Show = HEAD) -> None:
   The question that tell names is the last question on its chain that the run made.
   A text is told by the lines that its show picks, under the word text, and any other answer under the word value.
   When the lines that a show picks of a text are not one run, the tell binds their numbers too, under the word numbers, before the text, so a model can place each line.
-  When the show of a read picks no line of a text, the tell binds the number of its lines, under the word lines, so a model knows where the text ends, or that it holds none.
   """
 
 def tells(id: str) -> bool:

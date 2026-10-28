@@ -51,6 +51,7 @@ class World:
     self.tmp = tmp
     self.says: list[tuple[str, str, int]] = []
     self.commands: list[str] = []
+    self.quieted: list[tuple[str, tuple]] = []
     self.files: dict[str, str] = {}
     self.done: dict[str, object] = {}
     self.facts: dict[str, tuple] = {}
@@ -64,7 +65,7 @@ class World:
     self.pausing = False
     self.now = 1000.0
     self.round = {
-      "quietly": lambda verb, *args, **words: verb(*args, **words),
+      "quietly": self.quietly,
       "shq": lambda s: "'" + s.replace("'", "'\\''") + "'",
       "ops": lambda: ("uael/furb-ops", "13"),
       "queue": [],
@@ -80,7 +81,7 @@ class World:
     self.say(r"rev-parse origin/main", "sha1\n")
     self.say(r"gh issue view", WORDS + "\n")
     self.say(r"python3 -I -", listing())
-    self.say(r"merge-base", "base1\n")
+    self.say(r"commit-tree", "sha1\nmerged1\n")
     ns: dict = {"__name__": "converge", "Text": Text, "Exit": Exit, "Refused": Refused, "ROOT": "chain1"}
     ns.update(HIDDEN=None, module=lambda on="": self.round, cwd=lambda: str(tmp), read=self.read, write=self.write)
     ns.update(bash=self.bash, prompt=self.prompt, chain=self.chain, rung=self.rung, grant=self.grant, wait=self.wait)
@@ -91,6 +92,10 @@ class World:
     exec(compile(SOURCE, str(HERE / "converge.py"), "exec"), ns)  # noqa: S102
     self.ns = ns
     self.target = {**ns["TUI"], "capture": lambda target, pairs, out: f"echo capture {pairs}"}
+
+  def quietly(self, verb: Callable[..., object], *args: object, **words: object) -> object:
+    self.quieted.append((getattr(verb, "__name__", ""), args))
+    return verb(*args, **words)
 
   def __getattr__(self, name: str) -> object:
     return self.ns[name]
@@ -172,7 +177,7 @@ def listing(changed: tuple = ("demo/01-welcome",), kept: tuple = (), kind: str =
   shots = {name: "d1.png" for name in (*changed, *kept)}
   images = [["now", "d1.png"]] if kind == "new" else []
   told = [{"name": name, "kind": kind, "text": f"+  1 the row of {name}", "images": images} for name in changed]
-  seen = {"shots": shots, "failed": [], "notes": [], "changed": told, "kept": list(kept), "records": {}}
+  seen = {"shots": shots, "failed": [], "faults": [], "changed": told, "kept": list(kept), "records": {}}
   return json.dumps({**seen, **more}) + "\n"
 
 
@@ -290,10 +295,10 @@ def test_the_budget_ends_the_loop(world: World) -> None:
   assert world.told() == ["converge: tui spent its budget: 1 captures and 0.00 dollars."]
 
 
-def test_a_failed_capture_is_a_gap_of_its_own(world: World) -> None:
-  world.say(r"python3 -I -", listing(failed=[["demo", "the step demo of the capture failed: screen 07 never came", ""]]))
+def test_a_failed_check_of_the_head_is_a_gap_of_its_own(world: World) -> None:
+  world.say(r"python3 -I -", listing(failed=[["check: bun run check", "the step check: bun run check of the capture failed: type error", ""]]))
   book = world.run(1)
-  assert book["passes"][0]["gaps"] == [["demo", "the step demo of the capture failed: screen 07 never came", ""]]
+  assert book["passes"][0]["gaps"] == [["check: bun run check", "the step check: bun run check of the capture failed: type error", ""]]
 
 
 def test_the_words_of_the_owner_are_his_issues_whole(world: World) -> None:
@@ -429,14 +434,18 @@ def test_a_capture_of_a_pass_of_main_that_changed_comes_with_its_image(tmp_path:
   assert change["images"] == [["head", hashlib.sha256(b"two").hexdigest() + ".png"]]
 
 
-def test_a_failed_step_of_the_head_is_a_gap_and_one_of_main_is_a_note(tmp_path: Path) -> None:
+def test_a_failed_step_of_the_capture_is_a_fault_and_only_a_failed_check_is_a_gap(tmp_path: Path) -> None:
   out = tmp_path / "out"
   out.mkdir()
   (out / "build.log").write_text("cargo\nfailed here\n", encoding="utf-8")
-  fails = f"head\tbuild\t{out / 'build.log'}\nbefore\tdemo\t{out / 'none.log'}\n"
+  none = out / "none.log"
+  fails = f"head\tbuild\t{out / 'build.log'}\nbefore\tdemo\t{none}\nhead\tcheck: bun run check\t{none}\n"
   seen = shoot(tmp_path, {}, {}, fails)
-  assert seen["failed"] == [["build", "the step build of the capture failed: cargo failed here", ""]]
-  assert seen["notes"] == [["demo", "the step demo of the capture failed: ", ""]]
+  assert seen["faults"] == [
+    ["build", "the step build of the capture failed: cargo failed here", ""],
+    ["demo", "the step demo of the capture failed: ", ""],
+  ]
+  assert seen["failed"] == [["check: bun run check", "the step check: bun run check of the capture failed: ", ""]]
 
 
 def test_a_message_to_a_model_has_no_blank_line_that_a_header_follows(world: World) -> None:
@@ -482,7 +491,7 @@ def test_a_green_pr_that_changes_a_capture_waits_for_the_judges_and_lands_on_a_c
   assert veto(world) is False
   assert world.book()["heads"]["5 abc"] == {"state": "clean", "gaps": []}
   assert not any(c.startswith("gh pr edit") for c in world.commands)
-  assert any("for pair in 'before:base1' 'head:abc'; do" in c for c in world.commands)
+  assert any("for pair in 'before:sha1' 'head:merged1'; do" in c for c in world.commands)
   [asked] = world.judged()
   assert '<capture name="demo/01-welcome" change="text">\n+  1 the row of demo/01-welcome\n</capture>' in asked
 
@@ -629,7 +638,7 @@ def test_the_list_of_the_captures_is_a_file_and_stdout_holds_one_short_line(tmp_
 def test_a_list_of_the_captures_that_no_file_holds_is_the_fault_of_the_capture(world: World) -> None:
   world.say(r"python3 -I -", "")
   seen = asyncio.run(world.shots(str(world.tmp / "out"), "", False, ("main", "head")))
-  [[name, why, quote]] = seen["failed"]
+  [[name, why, quote]] = seen["faults"]
   assert name == "capture" and why.startswith("the list of the captures failed: ")
 
 
@@ -659,3 +668,108 @@ def test_a_capture_over_the_bound_is_cut_with_a_note(world: World) -> None:
   [asked] = world.judged()
   assert len(asked) <= world.PROMPT
   assert "cut: the capture holds 2000000 characters" in asked
+
+
+def faulty() -> str:
+  return listing(kind="text", faults=[["demo", "the step demo of the capture failed: Cannot find package furb", ""]])
+
+
+def test_the_head_of_a_pr_is_main_with_the_pr_merged_in_it(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.say(r"python3 -I -", listing(kind="text"))
+  veto(world)
+  [made] = [c for c in world.commands if "commit-tree" in c]
+  assert "git merge-tree --write-tree origin/main 'abc'" in made and "merge-base" not in made
+  assert any("for pair in 'before:sha1' 'head:merged1'; do" in c for c in world.commands)
+
+
+def test_a_pr_that_does_not_merge_into_main_keeps_the_veto_and_judges_nothing(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.say(r"commit-tree", "", 1)
+  assert veto(world) is True
+  assert world.judged() == []
+
+
+def test_a_step_of_the_capture_that_fails_runs_again_on_a_rebuilt_tree(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.say(r"python3 -I -", faulty())
+  plain = world.ns["bash"]
+
+  def again(command: str, *args: object, **words: object) -> Done:
+    if "fresh=1" in command:
+      world.say(r"python3 -I -", listing(kind="text"))
+    return plain(command, *args, **words)
+
+  world.ns["bash"] = again
+  assert [veto(world), veto(world)] == [True, False]
+  assert len([c for c in world.commands if "fresh=1" in c]) == 1
+  assert len(world.judged()) == 1 and world.told() == []
+
+
+def test_a_step_that_fails_again_is_a_fault_of_the_tool_and_the_pr_passes(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.say(r"python3 -I -", faulty())
+  assert [veto(world), veto(world)] == [True, False]
+  assert world.book()["heads"]["5 abc"] == {"state": "unjudged"}
+  assert world.judged() == []
+  [said] = world.told()
+  assert "a fault of the tool and no gap" in said and "Cannot find package furb" in said
+
+
+def test_a_pass_of_main_whose_capture_fails_again_waits_for_a_change(world: World) -> None:
+  world.say(r"python3 -I -", faulty())
+  book = world.run(2)
+  assert book["state"] == "faulted" and book["passes"] == []
+  assert world.judged() == [] and len(world.told()) == 1
+
+
+def test_a_second_capture_removes_the_mark_of_the_build_so_the_tree_builds_again(world: World) -> None:
+  assert '[ -z "$fresh" ] || rm -f "$tree/target/converge-built"' in world.tui_capture(world.ns["TUI"], [], "/out")
+  assert "\nfresh=1\n" in world.capturing(world.target, [("head", "sha1")], "/out", {}, True)
+  assert "fresh=1" not in world.capturing(world.target, [("head", "sha1")], "/out", {})
+
+
+def test_a_capture_is_made_through_quietly_so_that_its_end_wakes_nobody(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.say(r"python3 -I -", faulty())
+  veto(world)
+  veto(world)
+  captures = [c for c in world.commands if c.startswith("rm -rf")]
+  quiet = [str(args[0]) for name, args in world.quieted if name == "bash"]
+  assert len(captures) >= 2 and any("fresh=1" in c for c in captures)
+  assert all(c in quiet for c in captures)
+
+
+def test_a_job_of_a_pr_that_is_no_longer_open_at_its_head_is_dropped_and_its_acts_cancelled(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.slow = True
+  world.judge = lambda message, to: []
+  assert veto(world) is True
+  [stale] = world.ns["OPEN"].values()
+  asked = [a for a in stale["asked"] if a != "none"]
+  assert asked and not any(a in world.done for a in asked)
+  world.round["prs"] = {5: pr(sha="def")}
+  asyncio.run(world.converge_veto(pr(n=5, sha="def", verdict="pass")))
+  assert "5 abc" not in world.ns["OPEN"]
+  assert all(isinstance(world.done[a], Refused) for a in asked)
+
+
+def test_a_capture_whose_command_ended_interrupted_starts_again_once(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.say(r"python3 -I -", listing(kind="text"))
+  runs = lambda: [c for c in world.commands if "for pair in" in c]
+  first = world.act("bash", Refused("interrupted"))
+  world.ns["OPEN"]["5 abc"] = {"kind": "pr", "sha": "abc", "n": 5, "out": str(world.tmp / "o"), "label": "pr5", "act": first,
+                              "pairs": [("before", "sha1"), ("head", "merged1")], "asked": [], "words": WORDS}
+  assert veto(world) is True
+  assert len(runs()) == 1
+  assert world.ns["OPEN"]["5 abc"]["act"] != first
+  assert veto(world) is False
+  assert len(runs()) == 1
