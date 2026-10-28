@@ -190,7 +190,7 @@ fn a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it() {
   let off = r#"{"extensions": {"memory": false, "skills": false, "compaction": false, "ouroboros": false, "web": false}}"#;
   fs::write(yard.at.join(".furb/config.json"), off).expect("a config of the project");
   assert_eq!(printed(yard.kept(&["run", "k = 3"]), ""), "None\n");
-  assert_eq!(printed(yard.kept(&["run", "close(k + 1)"]), ""), "4\n");
+  assert_eq!(printed(yard.kept(&["run", "debug(t\"{k=}\")\nclose(k + 1)"]), ""), "4\n");
   let kinds: Vec<String> = fs::read_to_string(yard.record())
     .expect("the record")
     .lines()
@@ -210,7 +210,7 @@ fn a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it() {
   turns.arg(yard.record()).arg("--cwd").arg(&elsewhere);
   let said = printed(turns, "");
   assert!(
-    said.contains("#rung2 closed by rung2\nrung2_value = 4"),
+    said.contains("#rung2 debugged\nrung2_debug = 'k=3'"),
     "the turns of a record run every word again: {said}"
   );
   assert!(!said.contains("remember()"), "an inspection enables no extension: {said}");

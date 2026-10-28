@@ -613,7 +613,10 @@ def rewritten(tests: Path, app: Path, logs: Path, syn: str) -> None:
   """
   swaps = {"/app": str(app), "/tests": str(tests), "/logs": str(logs)}
   swaps |= {where: str(home(where)) for where in REPORTERS}
-  for name in ("test.sh", "grader.py"):
+  frames = ["test.sh", "grader.py"]
+  if (tests / "_furb_verify.sh").is_file():
+    frames.append("_furb_verify.sh")
+  for name in frames:
     said = tests / name
     said.write_text(ROOTS.sub(lambda m: swaps[m[1]], said.read_text(encoding="utf-8")), encoding="utf-8")
   told = json.loads((tests / "config.json").read_text(encoding="utf-8"))
@@ -622,6 +625,30 @@ def rewritten(tests: Path, app: Path, logs: Path, syn: str) -> None:
   if isinstance(reports, list):
     told["grade"]["reports"] = [str(logs) + r[len("/logs") :] if r.startswith("/logs") else r for r in reports]
   (tests / "config.json").write_text(json.dumps(told, indent=1), encoding="utf-8")
+
+
+def case_frame(task: Path, tests: Path, cases: Path, *, reference: bool) -> str:
+  """The verifier with the reference names of its pytest cases, when this task uses pytest."""
+  with (task / "task.toml").open("rb") as file:
+    language = tomllib.load(file).get("metadata", {}).get("language")
+  frame = "test.sh"
+  if language == "python" and (reference or cases.is_file()):
+    shutil.copy(ROOT / "script/pytest_ids.py", tests / "_furb_pytest_ids.py")
+    if not reference:
+      shutil.copy(cases, tests / "_furb_reference_cases.json")
+    mode_name = "capture" if reference else "apply"
+    case_path = "/logs/artifacts/cases.json" if reference else "/tests/_furb_reference_cases.json"
+    frame = "_furb_verify.sh"
+    (tests / frame).write_text(
+      # A project's runner can replace PYTHONPATH, so the hook lives in this grade's interpreter.
+      'python3 -c \'import shutil, sysconfig; shutil.copy("/tests/_furb_pytest_ids.py", sysconfig.get_path("purelib"))\'\n'
+      'export PYTHONPATH="/tests${PYTHONPATH:+:$PYTHONPATH}"\n'
+      'export PYTEST_PLUGINS="_furb_pytest_ids${PYTEST_PLUGINS:+,$PYTEST_PLUGINS}"\n'
+      f"export FURB_PYTEST_CASE_MODE={mode_name}\nexport FURB_PYTEST_CASES={case_path}\n"
+      "exec bash /tests/test.sh\n",
+      encoding="utf-8",
+    )
+  return frame
 
 
 def graded(task: Path, base: Path, syn: str, patch: Path, out: Path) -> Mapping[str, object]:
@@ -635,10 +662,13 @@ def graded(task: Path, base: Path, syn: str, patch: Path, out: Path) -> Mapping[
   shutil.copy(patch, logs / "artifacts" / "model.patch")
   tests = vroot / "tests"
   shutil.copytree(task / "tests", tests)
+  cases = base.parent / ".validate" / "cases.json"
+  reference = out.parent == cases.parent
+  frame = case_frame(task, tests, cases, reference=reference)
   if how == "docker":
     # The image the task pins is the pristine verifier: the tests and the logs alone are mounted into it.
     pinned = image(task)
-    ran(["docker", "run", "--rm", "-v", f"{tests}:/tests:ro", "-v", f"{logs}:/logs", pinned, "bash", "/tests/test.sh"])
+    ran(["docker", "run", "--rm", "-v", f"{tests}:/tests:ro", "-v", f"{logs}:/logs", pinned, "bash", f"/tests/{frame}"])
   else:
     app = vroot / "app"
     pristine(base, syn, app)
@@ -648,15 +678,16 @@ def graded(task: Path, base: Path, syn: str, patch: Path, out: Path) -> Mapping[
     if node:
       env["PATH"] = os.pathsep.join([node, env["PATH"]])
     if how == "unshare":
-      bind = (
-        "mount --bind $1 /app && mount --bind $2 /tests && mount --bind $3 /logs && cd /app && exec bash /tests/test.sh"
-      )
+      bind = f"mount --bind $1 /app && mount --bind $2 /tests && mount --bind $3 /logs && cd /app && exec bash /tests/{frame}"
       ran(["unshare", "-m", "bash", "-c", bind, "_", str(app), str(tests), str(logs)], env=env)
     else:
-      ran(["bash", str(tests / "test.sh")], where=app, env=env)
+      ran(["bash", str(tests / frame)], where=app, env=env)
   said = logs / "verifier" / "reward.json"
   reward: Mapping[str, object] = json.loads(said.read_text(encoding="utf-8")) if said.is_file() else {"reward": None}
   out.write_text(json.dumps(reward, indent=2) + "\n", encoding="utf-8")
+  collected = logs / "artifacts/cases.json"
+  if reference and reward.get("reward") == 1 and collected.is_file():
+    shutil.copy(collected, cases)
   # The log and the reports beside a reward are the ones of that grade, so those of an earlier grade go first: a
   # move onto a directory that stands puts the new one inside it, and the move after that fails.
   for held in ("run.log", "reports"):

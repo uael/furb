@@ -82,3 +82,7 @@ async def test_a_word_unquotes_in_a_time_that_grows_with_its_length_alone() -> N
   assert await laid is None
   sand.script[root] = [f"close(len({laid}_debug))"]
   assert await engine.prompt(int, "count", on=root) == 800000
+  many = "".join(f"<s:q{n}>\n{'y </s:q' * 2000}\n</s:q{n}>\n" for n in range(100))
+  assert len(many) > 1_000_000
+  assert await engine.rung(many + "k = len(q99)", on=root) is None
+  assert engine.module(root)["k"] == 14001

@@ -8,7 +8,7 @@ from furb.engine import OPERATOR
 
 
 async def test_a_control_said_over_the_act_it_names_with_a_header_of_its_name() -> None:
-  """A control said over the act it names, after a tell of a header of its name headed with that act, which is how pause, wake, cancel and close say theirs."""
+  """A control said over the act it names, after a tell of a header of its name headed with that act when it comes from outside the chain of that act, which is how pause, wake, cancel and close say theirs."""
   _, log, _, act = slow()
   await settle()
   engine.control("pause", "paused", act)
@@ -67,10 +67,12 @@ async def test_a_control_is_said_over_any_act_and_tells_its_header_only_while_th
 
 
 async def test_the_header_of_a_control_names_the_one_that_said_it() -> None:
-  """The header of a control names the one that said it, as #rung5 paused by operator or #chain1 paused by grant1, so a turn says who paused, woke, cancelled or closed the act."""
+  """The header of a control names the one that said it, as #rung5 paused by operator, or #prompt4 closed by rung9 when rung9 stands on another chain, so a turn says who paused, woke, cancelled or closed the act."""
   _, log, root = born(auto=False)
   first = engine.bash("slow", on=root)
-  word = engine.rung(f"pause({first!r})\nwake({first!r})\ncancel({first!r})", on=root)
+  await engine.rung("lane = chain('far')", on=root)
+  lane = engine.module(root)["lane"]
+  word = engine.rung(f"pause({first!r})\nwake({first!r})\ncancel({first!r})", on=lane)
   await word
   other = engine.bash("slow", on=root)
   engine.pause(other)
@@ -86,3 +88,18 @@ async def test_the_header_of_a_control_names_the_one_that_said_it() -> None:
     f"#{other} woke by {OPERATOR}",
     f"#{other} cancelled by {OPERATOR}",
   ]
+
+
+async def test_a_control_from_inside_the_chain_of_the_act_it_names_tells_nothing() -> None:
+  """A control from inside the chain of the act it names, as one that a word or an ear of that chain says, tells nothing, since the chain shows already what its words and its ears did."""
+  _, log, root = born("close(7)", auto=False)
+  first = engine.bash("slow", on=root)
+  word = engine.rung(f"pause({first!r})\nwake({first!r})\ncancel({first!r})", on=root)
+  await word
+  act = engine.prompt(int, "count", on=root)
+  assert await act == 7
+  await settle()
+  controls = [(a[0], a[1], a[2]) for a in log if a[0] in ("pause", "wake", "cancel") and a[1] == first]
+  assert controls == [("pause", first, word), ("wake", first, word), ("cancel", first, word)]
+  assert [a[1] for a in said(log, "close")] == [act]
+  assert [a for a in said(log, "tell") if a[1] in (first, act) and " by " in a[3][0]] == []

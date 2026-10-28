@@ -140,7 +140,7 @@ async def test_a_read_answered_with_what_is_no_text_gives_that_value() -> None:
   """A read answered with what is no text gives that value, and tells it as python shows it."""
   _, _, root = born(NUMS + "close(read('nums://a'))\n")
   assert await engine.prompt(list, "a door of my own", on=root) == [1, 2]
-  assert of(engine.turns(on=root), "read") == ["#read1\nread1_path = 'nums://a'\nread1_value = [1, 2]"]
+  assert of(engine.turns(on=root), "read") == ["#read1\nread1_value = [1, 2]"]
 
 
 async def test_a_read_from_inside_an_act_that_would_tell_more_than_largest_bytes_of_its_text_raises_refused() -> None:

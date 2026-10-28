@@ -77,4 +77,4 @@ async def test_the_python_of_a_turn() -> None:
   got = engine.turns(on=root)
   assert got[1][1] == "<s:hi>\nhi\n</s:hi>\na = hi"
   assert got[2][1] == "#rung1 told nothing\n\n#rung2 advance on prompt1\nrung2_share = 0.02"
-  assert got[4][1] == "#prompt1 closed by rung2\nprompt1_value = 1"
+  assert got[4][1] == ""

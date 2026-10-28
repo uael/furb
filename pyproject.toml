@@ -67,6 +67,10 @@ extend-exclude = [".furb"]
 # A path given on the command line, as a hook or a worker gives it, keeps the exclude.
 force-exclude = true
 
+[tool.ruff.per-file-target-version]
+# The verifier images use Python versions older than this repository.
+"script/pytest_ids.py" = "py38"
+
 [tool.ruff.lint]
 select = [
   "A", "ANN", "ARG", "B", "C4", "E", "EM", "ERA", "F", "FBT", "I", "N", "PERF", "PGH", "PL", "PT", "PTH", "RET", "RUF",
