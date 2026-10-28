@@ -279,6 +279,10 @@ impl<S: Store> Ear for Keeping<S> {
     self.store.borrow_mut().synced();
     Ok(())
   }
+
+  fn behind(&self) -> bool {
+    self.store.try_borrow().map_or(true, |held| held.fault.is_some())
+  }
 }
 
 /// Whether the record at a path is a database of SQLite, which its name says.

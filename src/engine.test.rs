@@ -749,6 +749,42 @@ fn a_store_on_a_full_disk_loses_no_entry_keeps_none_twice_and_tells_the_operator
 }
 
 #[test]
+fn a_life_writes_no_snapshot_while_its_store_is_behind_the_sandbox() {
+  let full = Rc::new(std::cell::Cell::new(true));
+  let (kept, refused) = (Rc::new(RefCell::new(Vec::new())), Rc::new(RefCell::new(Vec::new())));
+  let store = Full { full: Rc::clone(&full), kept, refused };
+  let (record, store) = world::keeping(store).unwrap();
+  let at = std::env::temp_dir().join(format!("furb-engine-behind-{}", std::process::id()));
+  let _ = fs::remove_dir_all(&at);
+  fs::create_dir_all(&at).expect("a yard of the test");
+  let path = at.join("record.jsonl");
+  fs::write(&path, "").unwrap();
+  fs::write(format!("{}.log", path.display()), "{}\n").unwrap();
+  let words = Rc::new(RefCell::new(VecDeque::from(["close(1)".to_owned(), "close(2)".to_owned()])));
+  let scratch = world::Scratch::own();
+  let ears = [
+    ("provider", provider(at.clone(), words, Rc::default())),
+    ("files", world::files(scratch.clone(), None)),
+    ("bash", world::bash(scratch, &record)),
+    ("time", world::time()),
+    ("store", store),
+  ];
+  let mut engine = Engine::boot(record, ears).unwrap();
+  let root = engine.root().to_owned();
+  let with = verbs::Prompt { on: on(&root), ..Default::default() };
+  let act = engine.prompt(Object::string("int"), with.clone()).unwrap();
+  assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(1));
+  engine.keep(crate::snapshot::Keeper::new(path.clone(), "build".to_owned()));
+  let snapshot = crate::snapshot::path(&path);
+  assert!(!snapshot.exists(), "a snapshot ran ahead of its record");
+  full.set(false);
+  let act = engine.prompt(Object::string("int"), with).unwrap();
+  assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(2));
+  drop(engine);
+  assert!(snapshot.exists(), "the life wrote its snapshot once its record held each fact");
+}
+
+#[test]
 fn a_second_life_on_the_record_the_store_kept_makes_the_same_acts_again() {
   let (root, id) = {
     let mut first = Lived::new("again", &["close(len(read('a.txt').lines))"], true).unwrap();

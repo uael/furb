@@ -9,8 +9,9 @@
 //! other line is one fact, as JSON reads a value of the sandbox, but for the line `["keep", "", n]`, which says that
 //! the record keeps its entry `n`, counted from 1, there. An act that no fact showed before, since an ear of the
 //! engine took it, stands on the line before the first fact about it. The fact of a module stands with no words,
-//! since a module is no plain value and differs from one life to the next. The ear writes no fsync of the log, and a
-//! log that it cannot write it removes, so no reader takes a log that lacks a fact.
+//! since a module is no plain value and differs from one life to the next. The ear writes no fsync of the log. A line
+//! that it cannot write, as on a full disk, waits in memory with each line after it, and the ear writes them in order
+//! at its next line, after it cut what the failed write left, so the log lacks no fact once the disk has room.
 //!
 //! A later life makes again no act of its record that an ear of the outside made, unless that ear makes it again, and
 //! says no fact about one that it does not make. So when the life keeps its first entry, the log writes each entry of
@@ -18,16 +19,20 @@
 //! its record.
 
 use std::{
+  cell::Cell,
   collections::HashSet,
   fs::{File, OpenOptions},
-  io::{BufRead, BufReader, Write},
+  io::{BufRead, BufReader, Seek, SeekFrom, Write},
   path::{Path, PathBuf},
+  rc::Rc,
+  task::{Context, Poll},
 };
 
 use serde_json::Value;
 
 use crate::{
-  ear::{Co, Ear, ear, hear},
+  ear::{Co, Ear, Heard, Spoken, Step, ear, hear},
+  engine::Life,
   fact::{Fact, named},
   value::{Fault, Object},
   wire::{outward, parsed},
@@ -51,7 +56,8 @@ pub(crate) fn continued(record: impl AsRef<Path>, entries: usize) -> Box<dyn Ear
 
 /// The ear that writes a log.
 fn heard(mut log: Log) -> Box<dyn Ear> {
-  ear(move |mut co| async move {
+  let behind = Rc::clone(&log.behind);
+  let ear = ear(move |mut co| async move {
     loop {
       let a = hear(&mut co).await;
       match a.kind() {
@@ -59,7 +65,36 @@ fn heard(mut log: Log) -> Box<dyn Ear> {
         _ => log.heard(&mut co, &a).await,
       }
     }
-  })
+  });
+  Box::new(Logging { ear, behind })
+}
+
+/// The ear that writes a log, which says when lines of the log wait.
+struct Logging {
+  ear: Box<dyn Ear>,
+  behind: Rc<Cell<bool>>,
+}
+
+impl Ear for Logging {
+  fn resume(&mut self, heard: Heard, cx: &mut Context<'_>) -> Step {
+    self.ear.resume(heard, cx)
+  }
+
+  fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Spoken> {
+    self.ear.poll(cx)
+  }
+
+  fn answered(&mut self, got: Result<Object, Fault>) {
+    self.ear.answered(got);
+  }
+
+  fn lent(&mut self, heard: Heard, cx: &mut Context<'_>, life: Life) -> (Step, Life) {
+    self.ear.lent(heard, cx, life)
+  }
+
+  fn behind(&self) -> bool {
+    self.behind.get()
+  }
 }
 
 /// The log file, and what the ear knows of it.
@@ -75,6 +110,14 @@ struct Log {
   /// The entries of the record about each act that an ear of the outside made, by the name of that act, in the order
   /// of the record, which the log writes when the life keeps its first entry and no line shows that act.
   owed: Vec<(String, Value)>,
+  /// The lines that the ear could not write yet, in order.
+  waiting: String,
+  /// The length of the file after the last lines that the ear wrote whole.
+  whole: u64,
+  /// Whether a write failed after that length, so the file can hold a part of a line past it.
+  torn: bool,
+  /// Whether lines wait, which the ear tells the life.
+  behind: Rc<Cell<bool>>,
 }
 
 /// Whether a name is the name of an act, as `bash3`, and not the name of an ear.
@@ -110,8 +153,18 @@ impl Log {
     let fresh = PathBuf::from(format!("{}.log.new", record.display()));
     let file = OpenOptions::new().create(true).write(true).truncate(true).open(&fresh).ok();
     let entries = held.len();
-    let mut log =
-      Log { path, file, fresh: Some(fresh), entries, seen: HashSet::new(), owed: owed(held) };
+    let mut log = Log {
+      path,
+      file,
+      fresh: Some(fresh),
+      entries,
+      seen: HashSet::new(),
+      owed: owed(held),
+      waiting: String::new(),
+      whole: 0,
+      torn: false,
+      behind: Rc::default(),
+    };
     log.line(&serde_json::json!({ "entries": entries }));
     log
   }
@@ -127,7 +180,19 @@ impl Log {
       seen.extend(about.filter(|one| !one.is_empty()));
     }
     let file = OpenOptions::new().append(true).open(&path).ok();
-    Log { path, file, fresh: None, entries, seen, owed: Vec::new() }
+    let whole = file.as_ref().and_then(|one| one.metadata().ok()).map_or(0, |one| one.len());
+    Log {
+      path,
+      file,
+      fresh: None,
+      entries,
+      seen,
+      owed: Vec::new(),
+      waiting: String::new(),
+      whole,
+      torn: false,
+      behind: Rc::default(),
+    }
   }
 
   /// A fact that the ear heard, after the act it is about when no line shows that act yet.
@@ -181,13 +246,31 @@ impl Log {
     self.line(&serde_json::json!(["keep", "", self.entries]));
   }
 
-  /// One line, or the end of the log when the ear cannot write it.
+  /// One line, written after each line that waits, or waiting with them when the ear cannot write it.
   fn line(&mut self, value: &Value) {
-    let Some(file) = self.file.as_mut() else { return };
-    if file.write_all(format!("{value}\n").as_bytes()).is_err() {
-      self.file = None;
-      let _ = std::fs::remove_file(self.fresh.as_ref().unwrap_or(&self.path));
+    if self.file.is_none() {
+      return;
     }
+    self.waiting.push_str(&format!("{value}\n"));
+    let failed = self.flushed().is_err();
+    self.behind.set(failed);
+  }
+
+  /// Each line that waits, written in order after what a failed write left is cut.
+  fn flushed(&mut self) -> std::io::Result<()> {
+    let Some(file) = self.file.as_mut() else { return Ok(()) };
+    if self.torn {
+      file.set_len(self.whole)?;
+      file.seek(SeekFrom::Start(self.whole))?;
+      self.torn = false;
+    }
+    if let Err(no) = file.write_all(self.waiting.as_bytes()) {
+      self.torn = true;
+      return Err(no);
+    }
+    self.whole += self.waiting.len() as u64;
+    self.waiting.clear();
+    Ok(())
   }
 }
 
