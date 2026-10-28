@@ -173,7 +173,7 @@ export class App {
   railWatched?: string;
   /** The next question that the key for the next question goes to. */
   railNext = 0;
-  /** The threads of the session shown on every chain, read again only when its acts or its questions change. */
+  /** The threads of the session shown on every chain, read again only when its prompts or its questions change. */
   railThreadCache?: {
     session: unknown;
     version: number;
