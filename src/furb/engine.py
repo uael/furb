@@ -580,13 +580,18 @@ def control(kind, name, id, *words):
 
 def headed(id, what="", **words):
   text = f"#{id} {what}".rstrip()
+  held = "" if what or "text" in words else program(id).get(get(id)[2], "")
   for word, value in words.items():
     name = id + "_" + word
-    if isinstance(value, str) and "\n" in value:
-      while "</s:" + name + ">\n" in value + "\n":
-        name += "_"
-      text += f"\n<s:{name}>\n{value}</s:{name}>"
-    elif value not in (None, ""):
+    if isinstance(value, str):
+      if repr(value)[1:-1] in held:
+        continue
+      if "\n" in value:
+        while "</s:" + name + ">\n" in value + "\n":
+          name += "_"
+        text += f"\n<s:{name}>\n{value}</s:{name}>"
+        continue
+    if value is not None:
       text += f"\n{name} = " + re.sub(r"^[\w.]+\.(?=[A-Z]\w*\()", "", repr(value))
   return text
 

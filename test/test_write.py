@@ -95,7 +95,7 @@ async def test_the_engine_tells_of_a_write_of_a_text_only_the_lines_that_differ(
   assert of(engine.turns(on=root), "write") == ["#write1\nwrite1_path = 'b.txt'\nwrite1_text = 'END'"]
   _, _, two = born(KEPT)
   assert await engine.prompt(int, "a door of my own", on=two) == 7
-  assert of(engine.turns(on=two), "write") == ["#write1\nwrite1_path = 'nums://a'\nwrite1_value = 7"]
+  assert of(engine.turns(on=two), "write") == ["#write1\nwrite1_value = 7"]
 
 
 async def test_a_write_takes_no_show() -> None:

@@ -417,7 +417,7 @@ async def test_a_chain_holds_whole_every_act_made_on_the_chain() -> None:
   own = [a[1] for a in held if a[0] == "rung" and a[2] == root]
   told = [
     "#read1\nread1_path = 'a.txt'\n<s:read1_text>\none\ntwo</s:read1_text>",
-    f"#bash1\nbash1_command = 'echo hi'\n{binding('bash1', 'Exit')}",
+    f"#bash1\n{binding('bash1', 'Exit')}",
     prompted("prompt2", "None", "bash1 done", "prompt1"),
     "#bash1 exited 0\nbash1_stdout = 'ran echo hi'",
     "#rung2 advance on prompt2",
