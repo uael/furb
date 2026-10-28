@@ -318,7 +318,7 @@ pub(crate) fn left(record: &[Object]) -> Vec<String> {
 /// The acts that the entries of a record park, each by its name and its kind, in the order of the record: an act of
 /// a kind that [`PARKS`] names, which the record shows started in [`CRASHES`] lives or more and not done. The outside
 /// says an act started once in each life that takes it, and the journal keeps each such started.
-fn looping(record: &[Object]) -> Vec<(String, String)> {
+pub(crate) fn looping(record: &[Object]) -> Vec<(String, String)> {
   let facts: Vec<Fact> =
     record.iter().filter_map(|one| entry(&one.as_ref(), 0).and_then(Fact::of)).collect();
   let done: HashSet<&str> = facts.iter().filter(|a| a.kind() == "done").map(Fact::about).collect();
