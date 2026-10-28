@@ -78,7 +78,11 @@ export type ThreadList = {
 };
 
 /** The threads of one chain, as they stood when the chain had that stamp, which counts the acts placed on it. */
-export type ChainRead = { stamp: number; list: ChainThread[] };
+export type ChainRead = {
+  stamp: number;
+  list: ChainThread[];
+  key?: { minute: number; text: string };
+};
 
 export const threadMarks = (thread: ChainThread): [string, RGBA] =>
   thread.state === "asks"

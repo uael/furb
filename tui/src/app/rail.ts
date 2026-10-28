@@ -154,7 +154,7 @@ export const rail = part({
           : chain === w.selected
             ? this.chainThreadsBy(chain).list
             : chainThreads(acts, index.ids, prompts, this.promptsRead);
-      chains.set(chain, { stamp, list: threads });
+      chains.set(chain, read && read.stamp === stamp ? read : { stamp, list: threads });
       list.push(...threads);
     }
     list.sort((a, b) => numberOf(a.act.id) - numberOf(b.act.id));
@@ -168,16 +168,27 @@ export const rail = part({
     const minute = Math.floor(clock() / 60000);
     const kept = this.railThreadKey;
     if (kept && kept.list === threads && kept.minute === minute) return kept.text;
-    const text = JSON.stringify(
-      threads.map((one) => [
-        one.act.id,
-        one.state,
-        one.resolved,
-        one.title,
-        one.messages.length,
-        plain(this.threadMeta(one)),
-      ]),
-    );
+    // Each chain keeps its part of the key while no act lands on it, so a new act reads the threads of one chain.
+    const parts = this.railThreadCache?.chains.values() ?? [{ stamp: 0, list: threads } as ChainRead];
+    const text = [...parts]
+      .map((part) => {
+        if (part.key?.minute !== minute)
+          part.key = {
+            minute,
+            text: JSON.stringify(
+              part.list.map((one) => [
+                one.act.id,
+                one.state,
+                one.resolved,
+                one.title,
+                one.messages.length,
+                plain(this.threadMeta(one)),
+              ]),
+            ),
+          };
+        return part.key.text;
+      })
+      .join("");
     this.railThreadKey = { list: threads, minute, text };
     return text;
   },
