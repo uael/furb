@@ -693,7 +693,7 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 
 STATE = (
   "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed fixes silent"
-  " comments measures timers noted debriefs briefed owns watched after parked vetoes ordered tips shifted hired paced landed heard handled ends requeued"
+  " comments measures timers noted debriefs briefed owns watched after parked vetoes ordered tips shifted hired paced landed heard handled sent ends requeued"
   " statused secret budgeted flaky runs_read"
 ).split()
 
@@ -917,6 +917,23 @@ def test_a_fixer_goes_before_a_new_item_and_waits_for_room_on_sonnet(conductor: 
   conductor.boxes(conductor.prs[8], 0.0)
   assert [key for key, _ in conductor.hired] == ["box8"]
   assert conductor.models["worker1"] == SONNET_HIGH
+
+
+def test_a_pr_whose_fixer_ended_with_its_head_unmoved_stops_blocking_its_family(conductor: Round) -> None:
+  pr = conductor.pr(n=8, open=["- [ ] It is one change."], verdict="open")
+  conductor.prs[8] = pr
+  conductor.efforts["c"] = SONNET
+  conductor.boxes(pr, 0.0)
+  assert [key for key, _ in conductor.hired] == ["box8"]
+  fixer = next(name for name, key in conductor.working.items() if key == "box8")
+  conductor.done[fixer] = (0, "nothing to fix")
+  conductor.tend()
+  conductor.queue[:] = [("c", "", "")]
+  conductor.staff()
+  assert [key for key, _ in conductor.hired] == ["box8", "c"]
+  assert sum("ended" in m and "#8" in m for m, _ in conductor.prompts) == 1
+  conductor.staff()
+  assert sum("ended" in m and "#8" in m for m, _ in conductor.prompts) == 1
 
 
 def test_an_ended_worker_goes_on_in_its_own_chain_on_sonnet(conductor: Round) -> None:
