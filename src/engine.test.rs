@@ -697,7 +697,7 @@ fn a_store_on_a_full_disk_loses_no_entry_keeps_none_twice_and_tells_the_operator
   let scratch = world::Scratch::own();
   let ears = [
     ("provider", provider(at, words, Rc::default())),
-    ("files", world::files(scratch.clone())),
+    ("files", world::files(scratch.clone(), None)),
     ("bash", world::bash(scratch, &record)),
     ("time", world::time()),
     ("store", store),
