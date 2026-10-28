@@ -55,8 +55,10 @@ class Running:
   waits holds the statements after it. It keeps the word of each rung as far as it ran it, so a run runs what the
   writings of its rung left, and what a part raised, which is the raise of the word: the run of the rung is done
   with it. When the part of a writing is over, the Kernel says that it ran, as its rung, with what it raised. A part
-  that waits for an act makes no wants, since its rung waits for the turn of its model, and goes on at the done of
-  that act.
+  that waits for an act while its model writes makes no wants, since its rung waits for the turn of its model, and
+  goes on at the done of that act. Once the run of its rung stands in the line, the part waits as that run, with a
+  wants, as the run itself does: the turn of the model is over, and the chain counts a run that makes no wants as a
+  word that runs, so it would ask no other prompt while the part waits.
   """
 
   def __init__(self, names: Names) -> None:
@@ -141,18 +143,25 @@ class Running:
           return self.ended(run, None)
         except BaseException as raised:
           return self.ended(run, raised)
-        if peek(got, ...) is ... and self.of(run)[0] != "run":
-          # The rung of a part waits for the turn of its model, which a wants would keep it from hearing, so the
-          # part waits for its act with no wants, and goes on at the done of that act.
-          self.awaits.setdefault(got, []).append(run)
-          return None
         if peek(got, ...) is ...:
-          with self.site.set(run):
-            wants = verb(self.names, "act")("wants", "", None, got)
-          assert isinstance(wants, str)
-          self.waits[wants] = run
+          if not self.wants(run, got):
+            # The rung of a part waits for the turn of its model, which a wants would keep it from hearing, so the
+            # part waits for its act with no wants, and goes on at the done of that act.
+            self.awaits.setdefault(got, []).append(run)
           return None
         given = peek(got)
+
+  def wants(self, job: str, made: str) -> bool:
+    """A wants for the act that a job waits for, made as the run of its rung, once that run stands in the line of
+    the rung; or nothing, while the model of the rung writes and no run of it stands."""
+    run = next((x for x in self.line.get(self.of(job)[2], []) if x not in self.parts), "")
+    if not run:
+      return False
+    with self.site.set(run):
+      wants = verb(self.names, "act")("wants", "", None, made)
+    assert isinstance(wants, str)
+    self.waits[wants] = job
+    return True
 
   def refusal(self, got: object) -> BaseException:
     made = verb(self.names, "Refused")(f"a rung awaits an act, and {got!r} is none")
@@ -167,12 +176,18 @@ class Running:
 
   def begin(self, run: str) -> None:
     """A job taken, put in the line of its rung: it runs when the jobs of that rung before it are over. The job of a
-    rung that is done already is done with CancelledError, since its word never begins."""
+    rung that is done already is done with CancelledError, since its word never begins. Once a run stands in the
+    line, each part of its rung that waits for an act with no wants waits with a wants as that run."""
     rung = self.of(run)[2]
     self.taken.discard(run)
     if verb(self.names, "peek")(rung, ...) is not ...:
       return self.ended(run, self.cancelled())
     self.line.setdefault(rung, []).append(run)
+    for made, ones in list(self.awaits.items()):
+      for one in [x for x in ones if self.of(x)[2] == rung and self.wants(x, made)]:
+        ones.remove(one)
+      if not ones:
+        del self.awaits[made]
     return self.drives(rung)
 
   def drives(self, rung: str) -> None:
