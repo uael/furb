@@ -103,6 +103,7 @@ test("the owner takes back his last message and writes it again, and no other wo
   composing(
     async ({ session, app, screen, frame }) => {
       const { thread, workers } = await conductor(session);
+      await session.submit("/newthread");
       app.composer.setText("Think until I cancel.");
       await app.submit();
       const message = await sent(session, thread);
@@ -140,5 +141,5 @@ test("the owner takes back his last message and writes it again, and no other wo
       expect(live(session, [thread, ...workers])).toBe(true);
       expect(session.acts.find((act) => act.id === message)?.done).toBe(true);
     },
-    { width: 140, height: 60, exitOnCtrlC: false },
+    { width: 152, height: 60, exitOnCtrlC: false },
   ));

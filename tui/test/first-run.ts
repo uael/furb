@@ -9,8 +9,8 @@ import { openEngine } from "../src/bridge.ts";
 import { demoLibrary } from "../src/demo.ts";
 import { Session } from "../src/session.ts";
 
-const [directory = ".", size = "120x44"] = process.argv.slice(2);
-const [width = 120, height = 44] = size.split("x").map(Number);
+const [directory = ".", size = "132x44"] = process.argv.slice(2);
+const [width = 132, height = 44] = size.split("x").map(Number);
 const opened = await openEngine({ cwd: directory, record: join(directory, "session.jsonl") });
 const session = new Session(opened.engine, opened.host, true);
 await session.refresh();

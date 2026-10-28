@@ -230,14 +230,23 @@ export const keys = [
   },
   {
     chord: "⌥T",
-    action: "Move in the sidebar: the tree of the chains, and the threads of a chain",
+    action: "Move in the sidebar: the workspaces, their sessions, and the threads of the session shown",
     bindings: [{ on: ["meta+t"], run: "rail", chord: "⌥T" }],
   },
   {
-    chord: "↑↓ / Enter or → / Esc or ← after ⌥T",
-    action: "Move / list the threads of a chain, or choose a thread / back to the tree, then to the input",
+    chord: "↑↓ / Enter / → / ← or Esc after ⌥T",
+    action:
+      "Move / open a workspace, a session or a thread / peek at a workspace / fold it again, or back to the input",
   },
-  { chord: "Space / r / o after ⌥T", action: "Collapse or expand / resolve / reply to the thread" },
+  {
+    chord: "Space / r / o / a after ⌥T",
+    action: "Collapse or expand / resolve / reply to the thread / go to the next question",
+  },
+  {
+    chord: "⌥A",
+    action: "Go to the next question that waits for you, in any workspace",
+    bindings: [{ on: ["meta+a"], run: "nextAsk", chord: "⌥A" }],
+  },
   { chord: "↑↓←→ / Enter / Esc after ⌥G", action: "Move, fold or zoom / zoom in / zoom out or go back" },
   { chord: "[ ] / { } after ⌥G", action: "Move the cursor in time by one / ten moments" },
   {
