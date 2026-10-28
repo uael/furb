@@ -65,13 +65,15 @@ pub fn store(path: impl AsRef<Path>) -> Result<(Vec<Object>, Box<dyn Ear>), Faul
   }
 }
 
-/// What the store kept at a path, read with no lease and changed in nothing, as a later life would open on it.
+/// What the store kept at a path, read with no lease and changed in nothing on the disk, as a later life would open
+/// on it.
 pub fn kept(path: impl AsRef<Path>) -> Result<Vec<Object>, Fault> {
   let path = path.as_ref();
-  match database(path) {
+  let held = match database(path) {
     true => sqlite::kept(path),
     false => lines::kept(path),
-  }
+  };
+  Ok(held?.into_iter().map(streamed).collect())
 }
 
 /// Each entry that the store kept at a path, in order, read with no lease and changed in nothing, one at a time, so
@@ -141,6 +143,32 @@ pub fn version(record: &[Object]) -> Option<i64> {
   })
 }
 
+/// The kind of the fact by which a provider says a part of the word of a rung that its model finished.
+const WRITING: &str = "writing";
+
+/// An entry as this build reads it. A build before the writing was a fact kept each writing as a question,
+/// `("writing", writingN, by, chain, rung, part, before)`, which the provider made as its model wrote. A later life
+/// asks no model again, so no ear makes that question again, and the journal only keeps its name: the Kernel runs no
+/// part where the life ran it, and the replay drifts. The entry of such a question is read as the writing that a
+/// provider says now, `("writing", rung, by, part, before)`, which the journal says again where the life said it.
+fn streamed(entry: Object) -> Object {
+  let fact = entry.as_ref().items().and_then(|held| Fact::of(*held.first()?));
+  let Some(fact) = fact.filter(|one| one.kind() == WRITING && one.question()) else {
+    return entry;
+  };
+  let (Some(rung), Some(part), Some(before)) = (fact.word(1), fact.word(2), fact.word(3)) else {
+    return entry;
+  };
+  let said = [
+    Object::string(WRITING),
+    rung.to_owned(),
+    Object::string(fact.by()),
+    part.to_owned(),
+    before.to_owned(),
+  ];
+  Object::list([Object::list(said)])
+}
+
 /// How long the ear of the record waits before it tries again to write the entries that it could not write.
 const AGAIN: Duration = Duration::from_secs(5);
 
@@ -156,7 +184,7 @@ const AGAIN: Duration = Duration::from_secs(5);
 /// and once when it grows again.
 pub fn keeping(store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>), Fault> {
   let mut store = Held { store, waiting: VecDeque::new(), fault: None };
-  let entries = store.store.entries()?;
+  let entries: Vec<Object> = store.store.entries()?.into_iter().map(streamed).collect();
   let store = Rc::new(RefCell::new(store));
   let held = Rc::clone(&store);
   // A record whose last checkpoint has no fact made after it is new to the build that goes on from it.

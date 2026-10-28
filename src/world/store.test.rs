@@ -172,3 +172,19 @@ fn a_row_of_the_database_that_holds_no_fact_is_refused_with_its_number() {
     format!("Refused: Invalid record entry at row 4 in {}.", path.display())
   );
 }
+
+#[test]
+fn a_writing_that_a_record_of_an_older_build_holds_as_a_question_is_read_as_the_writing_fact() {
+  let older = place("writing-older", "record.jsonl");
+  let newer = place("writing-newer", "record.jsonl");
+  for (path, entry) in [
+    (&older, r#"[["writing","writing1","provider","chain1","rung2","x = 1\n",6]]"#),
+    (&newer, r#"[["writing","rung2","provider","x = 1\n",6]]"#),
+  ] {
+    let mut one = Lines::open(path).unwrap();
+    one.keep(parsed(entry).unwrap().as_ref()).unwrap();
+  }
+  assert_eq!(shown(&kept(&older).unwrap()), shown(&kept(&newer).unwrap()));
+  let (record, _ear) = store(&older).unwrap();
+  assert_eq!(shown(&record), shown(&kept(&newer).unwrap()));
+}
