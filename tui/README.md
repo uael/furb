@@ -380,6 +380,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/stop` | End by force the process that holds this life, when the end of the life does not reach it |
 | `/exit` | Save every session and quit, while a life in a host of its own goes on |
 | `/compact` | Compact this chain now: a model keeps what the work still needs and sums up the rest (the extension compaction) |
+| `/mcp` | Manage the MCP servers: state, tools, resources, prompts, login (the extension mcp) |
 
 <!-- commands:end -->
 

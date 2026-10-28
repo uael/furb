@@ -202,6 +202,12 @@ def mcped(
   return sand, root, heard
 
 
+async def given(root: str, **names: object) -> None:
+  """Binds names in the module of a chain before a word that uses them, so that the word does not hold their text
+  and the open of an act tells it: a tell leaves out a text that the word of its act already shows."""
+  await engine.rung("\n".join(f"{name} = {value!r}" for name, value in names.items()), on=root)
+
+
 def server(name: str, **words: object) -> dict:
   """A server as the World answers mcp_servers: connected, with no tools, resources, templates, prompts or binding,
   which the words change."""
