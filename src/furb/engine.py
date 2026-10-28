@@ -720,7 +720,7 @@ def boot(record=(), **outside):
                 yield "keep", "", (kept.setdefault(about, q),)
               if a is not q:
                 yield "keep", "", (a,)
-            if kind == "wake":
+            if kind == "wake" and not owed():
               for name in [x for x in taken if taken[x] and covers(a, x) and not over(x)]:
                 del taken[name]
                 offers(known[name])
