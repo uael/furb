@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   appendFile,
+  link,
   mkdtemp,
   readdir,
   readFile,
@@ -433,24 +434,40 @@ test("the guard gives back a record that a life wrote beside before its replay d
   }
 });
 
-test("a record whose preservation guard cannot be made refuses before replay", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "furb-record-guard-failed-"));
+test("the guard frees the hold that a killed host left, so the record opens again", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-stale-held-"));
   try {
-    const record = await lived(directory, "drifts");
-    await drifting(record);
-    await writeFile(`${record}.log.held`, "This file belongs to another operation.\n");
-    const before = await folder(record);
-    let opened: Awaited<ReturnType<typeof openEngine>> | undefined;
-    let failure: unknown;
-    try {
-      opened = await openEngine({ cwd: directory, record, demo: true });
-    } catch (error) {
-      failure = error;
-    } finally {
-      await opened?.host.dispose();
-    }
-    expect(String(failure)).toMatch(/EEXIST|already exists/i);
-    expectKept(await folder(record), before);
+    // The host died after the link and before `keep`: the life wrote a log again, on another inode.
+    const replaced = join(directory, "replaced.jsonl");
+    await writeFile(replaced, "one\n");
+    await writeFile(`${replaced}.log`, "the log as it was, whole\n");
+    await link(`${replaced}.log`, `${replaced}.log.held`);
+    await rm(`${replaced}.log`);
+    await writeFile(`${replaced}.log`, "partial\n");
+    guard(replaced).keep();
+    expect(await readFile(`${replaced}.log`, "utf8")).toBe("the log as it was, whole\n");
+    expect((await readdir(directory)).sort()).toEqual(["replaced.jsonl", "replaced.jsonl.log"]);
+
+    // The host died after the life wrote on in place: the log and the hold are one file.
+    const same = join(directory, "same.jsonl");
+    await writeFile(same, "one\n");
+    await writeFile(`${same}.log`, "written in place\n");
+    await link(`${same}.log`, `${same}.log.held`);
+    guard(same).keep();
+    expect(await readFile(`${same}.log`, "utf8")).toBe("written in place\n");
+    expect((await readdir(directory)).sort()).toEqual([
+      "replaced.jsonl",
+      "replaced.jsonl.log",
+      "same.jsonl",
+      "same.jsonl.log",
+    ]);
+
+    // The open that goes on gives back its own change as before.
+    const again = guard(replaced);
+    await writeFile(`${replaced}.log.new`, "fresh\n");
+    await rename(`${replaced}.log.new`, `${replaced}.log`);
+    again.undo();
+    expect(await readFile(`${replaced}.log`, "utf8")).toBe("the log as it was, whole\n");
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
