@@ -299,6 +299,9 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 - `python script/bench/audit.py <record> <sha256>`: the audit of a record. It checks the sha256 of the record, replays
   it in a life that only inspects it, with no model and no network, and checks that each word and each answer hashes
   as the record says. It imports furb alone, so an outsider runs it on `pip install furb`, as `docs/audit.md` says.
+- `uv run python script/bench/inert.py <record>`: the proof that a replay is inert. It replays a copy of the record
+  in a life that only inspects it, and fails when, before the tip, the life puts an act on to the World that the
+  record answers, an ear of the World says that it started an act, or the journal keeps a fact.
 - `python script/bench/loop.py make|furb|furb-own|furb-batch|claude|score <dir>`: the bench of a loop, which its
   docstring says how to run. It makes support tickets from a seed with a known label each, triages them on the same
   local server with a word of furb that asks one prompt per ticket, with a life of furb whose model writes its own
