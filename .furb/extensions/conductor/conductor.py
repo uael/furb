@@ -11,6 +11,7 @@ from furb.engine import (
   Text,
   acting,
   bash,
+  cancel,
   chain,
   clock,
   close,
@@ -19,6 +20,7 @@ from furb.engine import (
   get,
   module,
   over,
+  pause,
   paused,
   peek,
   prompt,
@@ -62,6 +64,7 @@ At each round a watchdog reads each open command of each worker, with no model: 
 DEBRIEFS is on by default and lives in the state of the round: DEBRIEFS = False in a word turns off the debrief of each worker that ends, which saves tokens.
 An item waits for others with after[key] = [keys], set before you queue it: staff() hires it only once each PR that those keys ended with merged, an item of backlog whose keys merged goes to queue, and the round lists in a notice each key that no item holds. The entries of held_items in the module of the root move into backlog at each round, so a dict of your own chain is not needed.
 Method, at each notice: read the whole state, fix every thing that is off in one go, read the state again to verify, and go on until nothing is off. Only then report. Each round also checks the state in invariants(): it gives each open PR that the round tends a home, from the chain that pushed its head, wakes no chain, and lists in the next notice what code cannot fix.
+The round holds at most cap() chains that hold an open prompt with a shape, and counts the chains of workers, of sub-chains and of judges alike: room() counts them, and a resume of a worker waits for a slot. When more chains stand, the round pauses the newest overflow with a note and wakes it in order when a slot frees, and it never ends its task.
 A review blocks only on a defect that a command reproduces, or on a false sentence of a contract."""
 
 LIMITS = {"room": {"opus": 1, "sonnet": 3, "opus/high": 1}, "fixer": "claude-cli:sonnet/high"}
@@ -105,6 +108,7 @@ briefed: dict[str, str] = globals().setdefault("briefed", {})
 owns: dict[str, list[int]] = globals().setdefault("owns", {})
 watched: dict[str, list[float]] = globals().setdefault("watched", {})
 after: dict[str, list[str]] = globals().setdefault("after", {})
+parked: dict[str, dict] = globals().setdefault("parked", {})
 DEBRIEFS = globals().get("DEBRIEFS", True)
 vetoes: dict = globals().setdefault("vetoes", {})
 ORDERED = 600.0
@@ -160,6 +164,8 @@ FIX = """You fix the open PR #{n} of the repository {repo}: it {problem} at {sha
 FIXOWN = "Your open PR #{n} {problem} at {sha}. Fetch origin, rebase your branch onto its base or merge its base into it, resolve each conflict with the meaning of both sides, run the gates that the change touches, push with --force-with-lease, and keep its checks green. Never wait on CI in a bash for more than 10 minutes: once you pushed, read its checks once and close with the PR and its checks as they stand, since the round tends them."
 
 RESUME = """Your task did not end: your prompt ended with CancelledError, and nobody cancelled it. Go on with the same task on this chain: fetch your branch and read your PR, run again each command that ended as interrupted, and go on from where you stood. Wait on CI only with await wait(600) between reads, never inside a bash. Close with a tuple: the number of your last PR, and your report in 200 words at most."""
+
+PARKED = """The round pauses this chain to hold its cap of chains. Your task did not end: when a slot frees, the round wakes this chain, and you go on from where you stood."""
 
 DEBRIEF = """Your work is done. As a user of furb, list each friction, defect or confusion that you met in this chain, with its evidence and what would fix it. Close with a list of str, one for each, or an empty list."""
 
@@ -385,12 +391,37 @@ def family(model: str) -> str:
   return name if name in limits["room"] else name.split("/")[0]
 
 
+def open_chains() -> list[str]:
+  found: list[str] = []
+  seen, todo = {ROOT}, [ROOT]
+  while todo:
+    for x in transcript(todo.pop()):
+      c = str(x[1])
+      if x[0] == "chain" and c not in seen:
+        seen.add(c)
+        todo.append(c)
+        if c not in parked and any(y[0] == "prompt" and not over(y[1]) and y[4] != "None" for y in transcript(c)):
+          found.append(c)
+  return sorted(found, key=lambda c: int(re.sub(r"\D", "", c) or 0))
+
+
 def room(model: str) -> bool:
   if model not in MODELS:
     return False
   mine = family(model)
   live = [n for n in working if not over(n) and family(models.get(n, ACTOR)) == mine]
-  return len(live) < limits["room"][mine]
+  return len(live) < limits["room"][mine] and len(open_chains()) < cap()
+
+
+def resume(key: str, where: str, model: str, text: str) -> str:
+  if not room(model):
+    parked[where] = {"name": "", "key": key, "model": model, "text": text}
+    heard.append(f"{key} waits on {where} for a free slot of the cap of {cap()} chains.")
+    return ""
+  quietly(rung, f"actor = {model!r}", on=where)
+  name = str(quietly(prompt, tuple[int, str], text, to=model, on=where))
+  working[name], models[name], hired[name] = key, model, clock()
+  return name
 
 
 def can(key: str) -> bool:
@@ -450,13 +481,8 @@ def assist(pr: dict, key: str, order: str, fixer: str, thread: str, brief: str) 
   if homes.get(maker) and maker not in working.values():
     if room(HANDOVER):
       noticed.update({key, key + " again", key + " fixer"})
-      where = homes[maker]
-      quietly(rung, f"actor = {HANDOVER!r}", on=where)
       said = f"Your work on this chain goes on, now on {HANDOVER}. {order} Close with a tuple: the number of the PR, and your report in 200 words at most."
-      name = str(quietly(prompt, tuple[int, str], said, to=HANDOVER, on=where))
-      working[name] = maker
-      models[name] = HANDOVER
-      hired[name] = clock()
+      resume(maker, homes[maker], HANDOVER, said)
       return True
   elif can(fixer):
     noticed.update({key, key + " again", key + " fixer"})
@@ -567,9 +593,7 @@ def tend() -> None:
       tries = len([k for k in noticed if k.startswith(f"resume {key} ")])
       if tries < 3 and not [x for x in transcript(where, "cancel") if x[1] in kin]:
         noticed.add(f"resume {key} {name}")
-        model = models.get(name, ACTOR)
-        fresh = str(quietly(prompt, tuple[int, str], RESUME, to=model, on=where))
-        working[fresh], models[fresh], hired[fresh] = key, model, clock()
+        resume(key, where, models.get(name, ACTOR), RESUME)
         continue
     results[name] = got
     ends.setdefault(key, []).append((name, got[0] if isinstance(got, tuple) and got and isinstance(got[0], int) else 0))
@@ -642,7 +666,7 @@ def tend() -> None:
 
   for name, key in working.items():
     where = working_at(name)
-    if paused(where):
+    if paused(where) and where not in parked:
       wake(where)
     facts = transcript(where)
     for x in [*facts, *(transcript(str(get(name)[3])) if where != get(name)[3] else [])]:
@@ -1218,6 +1242,24 @@ def needs(pr: dict) -> bool:
 
 
 def staff() -> None:
+  for c in list(parked):
+    entry = parked[c]
+    if not get(c):
+      del parked[c]
+    elif len(open_chains()) >= cap():
+      break
+    elif entry["text"]:
+      if room(entry["model"]):
+        del parked[c]
+        resume(entry["key"], c, entry["model"], entry["text"])
+    else:
+      del parked[c]
+      if paused(c):
+        wake(c)
+      if entry["name"]:
+        working[entry["name"]], models[entry["name"]], hired[entry["name"]] = entry["key"], entry["model"], clock()
+      heard.append(f"{entry['key'] or c} on {c} resumed: a slot of the cap of {cap()} chains was free.")
+
   def met(item: str) -> bool:
     return all(dep in ends and all(n in merged for _, n in ends[dep] if n) for dep in after.get(item, []))
 
@@ -1248,6 +1290,10 @@ def staff() -> None:
 
 
 def invariants() -> None:
+  old: Any = module(ROOT).get("pk_parked")
+  for c, e in list(old.items()) if isinstance(old, dict) else []:
+    del old[c]
+    parked.setdefault(c, {k: str(e.get(k, "")) for k in ("name", "key", "model", "text")})
   held: Any = module(ROOT).get("held_items")
   for key, item in list(held.items()) if isinstance(held, dict) else []:
     del held[key]
@@ -1301,6 +1347,15 @@ def invariants() -> None:
     if paused(where) and f"paused {where}" not in noticed:
       noticed.add(f"paused {where}")
       heard.append(f"The chain {where} of {item} stays paused after the round woke it.")
+  chains = open_chains()
+  for c in chains[cap():]:
+    name = next((n for n in working if str(get(n)[3]) == c), "")
+    key = working.pop(name, "")
+    parked[c] = {"name": name, "key": key, "model": models.get(name, ""), "text": ""}
+    if not paused(c):
+      pause(c)
+    quietly(prompt, None, PARKED, on=c)
+    heard.append(f"{key or c} on {c} is paused: {len(chains)} chains stand over the cap of {cap()}.")
 
 
 async def upstream_watch() -> None:

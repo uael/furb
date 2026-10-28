@@ -97,6 +97,7 @@ class Round:
     self.says: list[tuple[str, str, int]] = []
     self.prompts: list[tuple[str, str]] = []
     self.cancelled: list[str] = []
+    self.paused_chains: list[str] = []
     self.hired: list[tuple[str, str]] = []
     self.files: dict[str, str] = {}
     self.facts: dict[str, tuple] = {}
@@ -132,6 +133,8 @@ class Round:
     )
     ns.update(chain=lambda label="", source="": f"chain-{label}", rung=self.rung)
     ns.update(cancel=lambda name: self.cancelled.append(name))
+    ns.update(pause=lambda name: self.paused_chains.append(name), paused=lambda name: name in self.paused_chains)
+    ns.update(wake=lambda name: self.paused_chains.remove(name) if name in self.paused_chains else None)
     # The root plays pr before the conductor, which uses its names, as .furb/config.json orders them.
     exec(compile(IMPORT.sub("", PULL.read_text(encoding="utf-8")), str(PULL), "exec"), ns)  # noqa: S102
     exec(compile(IMPORT.sub("", SOURCE), str(HERE / "conductor.py"), "exec"), ns)  # noqa: S102
@@ -690,7 +693,7 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 
 STATE = (
   "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed fixes silent"
-  " comments measures timers noted debriefs briefed owns watched after vetoes ordered tips shifted hired paced landed heard handled ends requeued"
+  " comments measures timers noted debriefs briefed owns watched after parked vetoes ordered tips shifted hired paced landed heard handled ends requeued"
   " statused secret budgeted flaky runs_read"
 ).split()
 
@@ -1729,3 +1732,56 @@ def test_a_prompt_that_ended_cancelled_three_times_ends_as_before(conductor: Rou
   conductor.noticed.update({"resume item1 a", "resume item1 b", "resume item1 c"})
   conductor.tend()
   assert conductor.working == {} and "ended with no PR" in conductor.prompts[-1][0]
+
+
+def crowd(conductor: Round, n: int) -> dict:
+  facts = [("chain", f"chain{i}", "rung1", "chain1", f"w/k{i}", "") for i in range(2, n + 2)]
+  asks = {f"chain{i}": [("prompt", f"p{i}", "rung1", f"chain{i}", "tuple[int, str]", "b", "")] for i in range(2, n + 2)}
+  conductor.facts.update({f[1]: f for f in facts})
+  conductor.ns["transcript"] = lambda on="", of="": [] if of else facts if on == "chain1" else asks.get(on, [])
+  return asks
+
+
+def test_each_chain_with_an_open_prompt_counts_against_the_cap(conductor: Round) -> None:
+  asks = crowd(conductor, conductor.cap())
+  assert conductor.open_chains() == [f"chain{i}" for i in range(2, 7)]
+  assert not conductor.room(SONNET)
+  del asks["chain2"]
+  assert conductor.room(SONNET)
+
+
+def test_a_resume_over_the_cap_waits_for_a_slot_and_goes_on_when_one_frees(conductor: Round) -> None:
+  cancelled_worker(conductor)
+  asks = crowd(conductor, conductor.cap())
+  conductor.tend()
+  assert conductor.prompts == [] and conductor.working == {} and conductor.results == {}
+  assert list(conductor.parked) == ["chain5"] and any("waits on chain5" in x for x in conductor.heard)
+  del asks["chain2"]
+  conductor.staff()
+  assert conductor.prompts == [(conductor.RESUME, "chain5")] and conductor.parked == {}
+  assert list(conductor.working.values()) == ["item1"]
+
+
+def test_the_round_over_its_cap_pauses_the_newest_chains_and_wakes_them_in_order(conductor: Round) -> None:
+  asks = crowd(conductor, conductor.cap() + 2)
+  conductor.working["pw"] = "k8"
+  conductor.models["pw"] = SONNET
+  conductor.facts["pw"] = ("prompt", "pw", "rung1", "chain8", "tuple[int, str]", "b", "")
+  conductor.invariants()
+  assert conductor.paused_chains == ["chain7", "chain8"] and list(conductor.parked) == ["chain7", "chain8"]
+  assert conductor.prompts == [(conductor.PARKED, "chain7"), (conductor.PARKED, "chain8")]
+  assert "pw" not in conductor.working and conductor.parked["chain8"]["key"] == "k8"
+  del asks["chain2"]
+  conductor.staff()
+  assert conductor.paused_chains == ["chain8"] and list(conductor.parked) == ["chain8"]
+  del asks["chain3"]
+  conductor.staff()
+  assert conductor.paused_chains == [] and conductor.parked == {}
+  assert conductor.working == {"pw": "k8"} and conductor.models["pw"] == SONNET
+
+
+def test_the_chains_that_the_live_round_parked_move_into_the_state_of_the_round(conductor: Round) -> None:
+  conductor.ns["pk_parked"] = {"chain9": {"name": "", "key": "k9", "model": SONNET, "text": ""}}
+  conductor.invariants()
+  assert conductor.ns["pk_parked"] == {}
+  assert conductor.parked == {"chain9": {"name": "", "key": "k9", "model": SONNET, "text": ""}}
