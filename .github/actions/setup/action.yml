@@ -37,10 +37,23 @@ runs:
         version: ${{ env.UV_VERSION }}
         enable-cache: true
         cache-python: ${{ runner.os != 'Windows' }}
-    # The rust of rust-toolchain.toml. The cache is the step after it, so that its key holds this rust alone.
-    - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
-      with:
-        cache: false
+    # The rust of rust-toolchain.toml, with the variables of cargo that actions-rust-lang/setup-rust-toolchain v2.0.0
+    # set, at the same values, so the key of the cache stays the same. That action installed a bash of brew on each
+    # macOS job before its own scripts, in 12 s to 47 s, and these steps run in the bash of the system. The cache is
+    # the step after them, so that its key holds this rust alone.
+    - run: |
+        set_default() { if [ -z "$(printenv "$1")" ]; then echo "$1=$2" >> "$GITHUB_ENV"; fi; }
+        set_default CARGO_INCREMENTAL 0
+        set_default CARGO_PROFILE_DEV_DEBUG 0
+        set_default CARGO_TERM_COLOR always
+        set_default RUST_BACKTRACE short
+        set_default CARGO_BUILD_WARNINGS deny
+        set_default CARGO_UNSTABLE_SPARSE_REGISTRY true
+        set_default CARGO_REGISTRIES_CRATES_IO_PROTOCOL sparse
+        echo "::add-matcher::${{ github.action_path }}/rust.json"
+        rustup show active-toolchain || rustup toolchain install
+        rustc --version --verbose
+      shell: bash
     # The key of the cache holds a hash of each rust that rustup lists, and the image of a runner has a rust of its own,
     # which no build uses. Two images of one runner have each another rust, so the jobs of one key saved two caches,
     # which took the store of the repository past its 10 GB. The step removes each rust but the one of
