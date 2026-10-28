@@ -365,7 +365,7 @@ def debug(template: Template) -> None:
   A tell is on the scope of the act it is of, so debug takes no chain of its own.
   """
 
-def wait(seconds: float = 0.0, *acts: str, on: str = "") -> Act[str | None]:
+def wait(seconds: float = 0, *acts: str, on: str = "") -> Act[str | None]:
   """A wait: the World takes it and says it is done with nothing when its seconds have passed, and it is over then.
   A wait stands in no turns, since a wait is no work of a model.
   It tells nothing, since a wait is no work of a model.
@@ -959,9 +959,6 @@ def filled(about: str) -> float:
 
 def over(id: str) -> bool:
   """Whether an act is over: its done stands, so the life holds its outcome under its name, and a name of no act is never over."""
-
-def asked(id: str, on: str = "") -> list[str]:
-  """The names of the questions that an act asked on a chain, in the order that it asked them."""
 
 def tell(on: str, path: str, got: object = None, show: Show = HEAD) -> None:
   """What a question answered now that shows a text or changes a state tells of itself: a paragraph headed with the name of the question, which binds its path and what it was answered, said by the run that asked it about that question, and nothing at all outside a run; one that only reads a value tells nothing, since the word that asked it holds the value, which it debugs to see.
