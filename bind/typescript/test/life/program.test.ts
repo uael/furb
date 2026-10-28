@@ -5,6 +5,7 @@ import {
   foldStrings,
   hintOf,
   joinedLines,
+  layout,
   literals,
   stepLines,
   threadProgram,
@@ -335,5 +336,49 @@ test("a quote that ran stands in its word as one binding, and the blank lines th
     ["code", "print(brief)", 5],
     ["code", "", 6],
     ["code", "x = 1", 7],
+  ]);
+});
+
+test("a line too wide for one row lays out as ruff format lays it out, and its rows hold the line whole", () => {
+  const def = 'def imported(record: str, source: str = "chain1", label: str = "", on: str = "") -> str:';
+  expect(layout(def, 100).map((row) => row.text)).toEqual([def]);
+  expect(layout(def, 60).map((row) => row.text)).toEqual([
+    "def imported(",
+    "  record: str,",
+    '  source: str = "chain1",',
+    '  label: str = "",',
+    '  on: str = ""',
+    ") -> str:",
+  ]);
+  const call = 'extend("todo", next(k for k, w in program().items() if w.startswith("def todo")), tui=part)';
+  expect(layout(call, 60).map((row) => row.text)).toEqual([
+    "extend(",
+    '  "todo",',
+    "  next(",
+    "    k",
+    "    for k, w in program().items()",
+    '    if w.startswith("def todo")',
+    "  ),",
+    "  tui=part",
+    ")",
+  ]);
+  // Each part of a row names where it starts in the line, so the colors come from the statement whole.
+  for (const row of layout(call, 60))
+    for (const [from, to, at] of row.parts)
+      expect(row.text.slice(from, to)).toBe(call.slice(at, at + to - from));
+});
+
+test("a line that a layout folds keeps each fold in its row, and a string that the operator opened stays whole", () => {
+  const line = 'x = f("a long string that runs on and on past its room", "short")';
+  const [row] = layout(line, 40, new Set());
+  expect(row?.text).toBe('x = f("a long string that...", "short")');
+  expect(row?.folds).toEqual([
+    { literal: 0, at: 25, whole: "a long string that runs on and on past its room" },
+  ]);
+  expect(layout(line, 56, new Set([0])).map((one) => one.text)).toEqual([
+    "x = f(",
+    '  "a long string that runs on and on past its room",',
+    '  "short"',
+    ")",
   ]);
 });

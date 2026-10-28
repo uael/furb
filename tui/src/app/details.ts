@@ -15,16 +15,16 @@ import {
 } from "@opentui/core";
 import { actorParts, display, safeText, TIMEOUT } from "furb";
 import {
+  type CodeRow,
   cancelled,
   type Exit,
   FOLD,
   type Fold,
   failed,
-  foldStrings,
+  layout,
   literals,
   type ProgramLine,
   tailOf,
-  wrap,
   writing,
 } from "furb/life";
 import { clock } from "../clock.ts";
@@ -413,7 +413,7 @@ export const details = part({
     // The strings that each row folds, and the rows that show the strings of a line whole, each with where it starts
     // in the text of its line.
     const folded = new Map<number, { line: Extract<ProgramLine, { kind: "code" }>; folds: Fold[] }>();
-    const whole = new Map<number, number>();
+    const whole = new Map<number, CodeRow["parts"]>();
     // The colors come from each statement whole, so a line cut to its room or a folded string changes no color: the
     // program as it ran, each part of a row with where it starts in that program, and the rows that only comment.
     let program = "";
@@ -431,45 +431,30 @@ export const details = part({
     for (const line of lines) {
       if (line.kind === "code") {
         const note = noteOf(line);
-        // An open line, and a line whose strings the operator opened, show the whole text, cut at the column into
-        // rows of their own. Another line folds its longest strings until it fits.
-        const shown =
-          this.lineOpen(line) || this.openStrings(line).size ? undefined : foldStrings(line.text, column);
-        const cuts = shown ? [] : wrap(line.text, column);
-        const parts = shown
-          ? [fit(shown.text, column)]
-          : cuts.map((cut) => " ".repeat(cut.indent) + line.text.slice(cut.from, cut.to));
-        const code = parts[0] ?? "";
+        // An open line shows its whole text. Another line folds its longest strings, but those that the operator
+        // opened, until it fits one row, and a line that still does not fit lays out in rows as ruff format would.
+        // The code takes 100 columns at most, and its hint counts in them as a comment does in ruff format: a line
+        // that fits beside the column of the hints stands in it, and a longer one takes the room that its hint leaves.
+        const width = Math.min(100, Math.max(column, room - lane - (note ? Bun.stringWidth(note) + 6 : 0)));
+        const rows = layout(line.text, width, this.lineOpen(line) ? undefined : this.openStrings(line));
+        const code = rows[0]?.text ?? "";
         const mark = markOf(line);
-        // The mark stands in a lane of its own after the column of the code, before the comment, so that no line is
-        // longer for it.
-        const hint = note ? `# ${fit(note, room - column - 4 - lane)}` : "";
+        // The mark stands in a lane of its own after the code, before the comment, so that no line is longer for it.
+        const hint = note ? `# ${fit(note, room - Math.max(column, Bun.stringWidth(code)) - 4 - lane)}` : "";
         const left = `${code}${" ".repeat(Math.max(0, column - Bun.stringWidth(code)))}`;
         const body = hint || mark ? `${left}  ${lane ? (mark ? `${mark} ` : "  ") : ""}${hint}` : code;
         const at = push(body, line.display, line);
         if (hint) fixed.push([at, body.length - hint.length, body.length, "comment"]);
         if (mark) flag(at, left.length + 2);
-        for (const more of parts.slice(1)) push(more, undefined, line);
-        const folds = shown?.folds.filter((fold) => fold.at + FOLD.length <= Bun.stringWidth(code)) ?? [];
-        if (folds.length) folded.set(at, { line, folds });
-        if (!shown) for (const [k, cut] of cuts.entries()) whole.set(at + k, cut.from - cut.indent);
+        for (const row of rows.slice(1)) push(row.text, undefined, line);
         const base = program.length;
         program += `${line.text}\n`;
-        if (shown) {
-          const found = shown.folds.length ? literals(line.text) : [];
-          let from = 0;
-          let source = base;
-          for (const fold of shown.folds) {
-            if (fold.at >= code.length) break;
-            pieces.push([at, from, fold.at, source]);
-            fixed.push([at, fold.at, Math.min(fold.at + FOLD.length, code.length), "string"]);
-            from = fold.at + FOLD.length;
-            source = base + (found[fold.literal]?.end ?? 0);
-          }
-          if (from < code.length) pieces.push([at, from, code.length, source]);
-        } else
-          for (const [k, cut] of cuts.entries())
-            pieces.push([at + k, cut.indent, cut.indent + cut.to - cut.from, base + cut.from]);
+        for (const [k, row] of rows.entries()) {
+          if (row.folds.length) folded.set(at + k, { line, folds: row.folds });
+          for (const fold of row.folds) fixed.push([at + k, fold.at, fold.at + FOLD.length, "string"]);
+          for (const [from, to, source] of row.parts) pieces.push([at + k, from, to, base + source]);
+          whole.set(at + k, row.parts);
+        }
         if (line.runs) {
           colors.set(at, { content: c.selected, gutter: c.selected });
         }
@@ -621,9 +606,11 @@ export const details = part({
       const hit = foldAt(event.x, event.y);
       if (hit) return this.openString(hit.line, hit.fold.literal);
       const open = this.openStrings(line);
-      const index = (whole.get(row) ?? -1) + event.x - target.x;
+      const x = event.x - target.x;
+      const part = whole.get(row)?.find(([from, to]) => x >= from && x < to);
+      const index = part ? part[2] + x - part[0] : -1;
       const literal = literals(line.text).findIndex(
-        (one, k) => open.has(k) && whole.has(row) && index >= one.start - 1 && index <= one.end,
+        (one, k) => open.has(k) && part && index >= one.start - 1 && index <= one.end,
       );
       if (literal >= 0) return this.openString(line, literal);
       if (line.acts.length || Bun.stringWidth(line.text) > column) this.openLine(line);

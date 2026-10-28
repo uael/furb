@@ -485,6 +485,154 @@ export function wrap(line: string, width: number): Piece[] {
   }
 }
 
+/** A row of a line of python that a layout gives: its text; each part of the line that it shows, as where the part
+ * starts and ends in the row and where it starts in the line; and the strings that it folds, each where its fold
+ * stands in the row. */
+export type CodeRow = { text: string; parts: [from: number, to: number, at: number][]; folds: Fold[] };
+
+/** How far the rows inside a pair of brackets stand past the row that opens it, as in the words of furb. */
+const STEP = 2;
+
+/** The delimiters at which the body of a pair of brackets splits when it does not fit one row, the loosest first, as
+ * ruff format splits it: after a comma, and before an operator of a condition, a boolean, a comparison or a sum. The
+ * keywords of a comprehension come before a comma, so a target of two names stays on its row. */
+const DELIMITERS = [
+  [","],
+  [" if ", " else "],
+  [" or ", " and "],
+  [" not in ", " is not ", " in ", " is ", " == ", " != ", " <= ", " >= ", " < ", " > "],
+  [" | ", " ^ ", " & ", " << ", " >> ", " + ", " - ", " * ", " / ", " // ", " % ", " @ "],
+];
+
+/** A line of python laid out in rows of a width at most, as ruff format lays it out. The line first folds its longest
+ * strings until it fits one row, but each string that open names; with no open, no string folds. A line that still
+ * does not fit splits at the last pair of brackets whose opening and closing rows fit: its body stands on the rows
+ * between them, one step deeper, on one row when it fits, else at its loosest delimiters, one part on each row, and
+ * each part splits in the same way. A part with no brackets that does not fit wraps between its tokens. The rows add
+ * and drop no character: together they hold the line, less the spaces at each cut, and each fold. */
+export function layout(line: string, width: number, open?: ReadonlySet<number>): CodeRow[] {
+  const { text, folds } = open ? foldStrings(line, width, open) : { text: line, folds: [] as Fold[] };
+  const found = literals(line);
+  // Where each character of the text stands in the line, or -1 for the marks of a fold.
+  const source: number[] = [];
+  let next = 0;
+  for (const fold of folds) {
+    while (source.length < fold.at) source.push(next++);
+    for (let k = 0; k < FOLD.length; k++) source.push(-1);
+    next = found[fold.literal]?.end ?? next;
+  }
+  while (source.length < text.length) source.push(next++);
+  // Whether each character is code, and not a part of a string or of a comment.
+  const code = Array.from(text, () => true);
+  for (const one of literals(text))
+    for (let k = Math.max(0, one.start - 1); k <= Math.min(text.length - 1, one.end); k++) code[k] = false;
+  const comment = [...text].findIndex((char, k) => char === "#" && code[k]);
+  if (comment >= 0) code.fill(false, comment);
+  const trim = (a: number, b: number): [number, number] => {
+    while (a < b && text[a] === " ") a++;
+    while (b > a && text[b - 1] === " ") b--;
+    return [a, b];
+  };
+  const fits = (a: number, b: number, indent: number) => indent + b - a <= width;
+  // The pairs of brackets of a part that no other pair of the part holds.
+  const pairs = (a: number, b: number) => {
+    const out: [number, number][] = [];
+    const opened: number[] = [];
+    for (let k = a; k < b; k++) {
+      const char = text[k] ?? " ";
+      if (!code[k]) continue;
+      if ("([{".includes(char)) opened.push(k);
+      else if (")]}".includes(char) && opened.length) {
+        const start = opened.pop() ?? k;
+        if (!opened.length) out.push([start, k]);
+      }
+    }
+    return out;
+  };
+  // Where a body cuts: after each of its loosest delimiters, or before it, at the depth of the body.
+  const cutsOf = (a: number, b: number): number[] => {
+    const top = new Set<number>();
+    let depth = 0;
+    for (let k = a; k < b; k++) {
+      const char = text[k] ?? " ";
+      if (!code[k]) continue;
+      if ("([{".includes(char)) depth++;
+      else if (")]}".includes(char)) depth = Math.max(0, depth - 1);
+      else if (depth === 0) top.add(k);
+    }
+    const at = (word: string) =>
+      [...top].filter((k) => text.startsWith(word, k) && [...word].every((_, j) => top.has(k + j)));
+    const loops = [...at(" for "), ...at(" async for ")].sort((x, y) => x - y);
+    if (loops.length) {
+      const first = loops[0] ?? 0;
+      return [...loops, ...at(" if ").filter((k) => k > first)]
+        .filter((k) => !text.startsWith(" for ", k - 6))
+        .sort((x, y) => x - y)
+        .map((k) => k + 1);
+    }
+    for (const words of DELIMITERS) {
+      const cuts = new Set(
+        words.flatMap((word) =>
+          at(word)
+            .filter((k) => word !== " in " || !text.startsWith(" not", k - 4))
+            .filter((k) => word !== " is " || !text.startsWith(" is not ", k))
+            .map((k) => k + 1),
+        ),
+      );
+      if (cuts.size) return [...cuts].sort((x, y) => x - y);
+    }
+    return [];
+  };
+  const tokens = (a: number, b: number, indent: number): Piece[] =>
+    wrap(text.slice(a, b), Math.max(8, width - indent)).map((piece) => ({
+      from: a + piece.from,
+      to: a + piece.to,
+      indent: indent + piece.indent,
+    }));
+  const lay = (start: number, end: number, indent: number): Piece[] => {
+    const [a, b] = trim(start, end);
+    if (a >= b) return [];
+    if (fits(a, b, indent)) return [{ from: a, to: b, indent }];
+    const held = pairs(a, b)
+      .filter(([o, c]) => {
+        const [x, y] = trim(o + 1, c);
+        return x < y;
+      })
+      .reverse();
+    const pair = held.find(([o, c]) => fits(a, o + 1, indent) && fits(...trim(c, b), indent)) ?? held[0];
+    if (!pair) return tokens(a, b, indent);
+    const [o, c] = pair;
+    const [x, y] = trim(o + 1, c);
+    const inner = indent + STEP;
+    const cuts = fits(x, y, inner) ? [] : cutsOf(x, y);
+    const bounds = [x, ...cuts, y];
+    const body = cuts.length
+      ? bounds.slice(1).flatMap((to, k) => lay(bounds[k] ?? x, to, inner))
+      : lay(x, y, inner);
+    return [...lay(a, o + 1, indent), ...body, ...lay(c, b, indent)];
+  };
+  const lead = text.match(/^ */)?.[0].length ?? 0;
+  const pieces = lay(0, text.length, lead);
+  if (!pieces.length) return [{ text, parts: text ? [[0, text.length, 0]] : [], folds: [] }];
+  return pieces.map(({ from, to, indent }) => {
+    const parts: CodeRow["parts"] = [];
+    for (let k = from; k < to; k++) {
+      const at = source[k] ?? -1;
+      const last = parts.at(-1);
+      if (at < 0) continue;
+      if (last && last[1] === indent + k - from && (source[k - 1] ?? -2) === at - 1) last[1]++;
+      else parts.push([indent + k - from, indent + k - from + 1, at]);
+    }
+    return {
+      text: " ".repeat(indent) + text.slice(from, to),
+      parts,
+      folds: folds
+        .filter((fold) => fold.at >= from && fold.at < to)
+        .map((fold) => ({ ...fold, at: indent + fold.at - from })),
+    };
+  });
+}
+
 /** The start of a string that a fold keeps, less an escape that its end would cut. */
 function uncut(part: string): string {
   if ((part.match(/\\*$/)?.[0].length ?? 0) % 2 === 1) return part.slice(0, -1);
