@@ -385,6 +385,10 @@ def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
   The header that tells the word of a rung names the maker of that rung, as #rungN by operator, so a turn says who made a word that it did not ask for.
   A rung with no word tells nothing where it is made, since the chain tells it as the last line of the turn it asks for it with.
   A rung with no word and no actor takes the default actor of its chain when it is made, and writes it into its actor word, so its reply and its ledger read the one actor.
+  A rung with a word and an actor is a turn of that actor that its caller wrote: it answers its own reply to that actor with the turn ("assistant", word, None, None) before it says its word ready, so the turns show the word as the turn of that actor, the rung runs it as its step, and no World asks a model for it.
+  Such a rung tells no header of its word, since its turn shows the word.
+  Its turn holds no usage, so a grant counts no cost of it and no share of the window.
+  A later life makes that reply again in the ear of the rung, with its name and its turn, so the record replays it with no drift.
   The raised paragraph binds the exception as rungN_raised, as python shows it, which says its type and its message.
   A word that raises a CancelledError tells cancelled and no raised header, since a cancel is no fault of the word.
   A rung that retells another rung names its acts under that one, so it makes the same acts and shares them.
