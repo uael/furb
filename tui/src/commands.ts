@@ -11,6 +11,11 @@ export const commands = {
     "Save a provider in the project settings and use it now",
   ],
   reload: ["Reload settings", "", "Read provider settings again and update the standing of this life"],
+  retry: [
+    "Retry now",
+    "",
+    "Ask again at once each model that waits to retry, as at a usage limit, on the provider settings of now",
+  ],
   effort: ["Choose effort", "[level]", "Set the reasoning effort of the selected model"],
   shape: ["Response shape", "[type]", "Choose the result type of the next prompt"],
   theme: ["Color theme", "[name]", "Change the palette of every surface, or follow the terminal"],
@@ -77,6 +82,16 @@ export const commands = {
     "Give the addresses at which other operators read this life, or read and drive it, over the network",
   ],
   end: ["End the lives", "", "End each open life, its commands and its models, then quit"],
+  reopen: [
+    "Open the life again",
+    "",
+    "Reach the life again after it ended in another window or its host was lost, in a host of this machine",
+  ],
+  stop: [
+    "Stop the host",
+    "",
+    "End by force the process that holds this life, when the end of the life does not reach it",
+  ],
   exit: ["Exit", "", "Save every session and quit, while a life in a host of its own goes on"],
 } as const;
 /** Each slash command with its name, and as it is typed with its arguments. */

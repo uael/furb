@@ -199,7 +199,9 @@ test("the footer counts down the wait of a call of a model that the provider mak
       stream();
       session.host.on("change", stream);
       try {
-        expect(await frame()).toContain("Retrying in 4 s, attempt 2 of 10, connection reset");
+        expect(await frame()).toContain(
+          "Retrying in 4 s, attempt 2 of 10, connection reset: /retry or /cancel",
+        );
         setSystemTime(new Date(start + 1000));
         expect(await frame()).toContain("Retrying in 3 s, attempt 2 of 10, connection reset");
       } finally {
@@ -208,6 +210,27 @@ test("the footer counts down the wait of a call of a model that the provider mak
       }
     },
     { width: 152, height: 40 },
+  ));
+
+test("a window whose life ended says so in plain words, and offers to open the life again and to stop its host", () =>
+  composing(
+    async ({ session, frame }) => {
+      session.host.local = true;
+      session.host.lost = "The life was ended from another window.";
+      session.host.emit("change");
+      let shown = await frame();
+      for (let tries = 0; tries < 40 && !shown.includes("Stop the host"); tries++) {
+        await Bun.sleep(50);
+        shown = await frame();
+      }
+      expect(shown).toContain("The life is not open in this window");
+      expect(shown).toContain("The life was ended from another window.");
+      expect(shown).toContain("Open the life again");
+      expect(shown).toContain("Stop the host");
+      expect(shown).not.toContain("view could not load");
+    },
+    { width: 152, height: 40 },
+    true,
   ));
 
 test("a word of the operator that the gate refused says in one more line what to do", () =>

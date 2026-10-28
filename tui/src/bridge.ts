@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { closeSync, openSync, readFileSync } from "node:fs";
+import { closeSync, openSync, readFileSync, rmSync } from "node:fs";
 import { createConnection, type Socket } from "node:net";
 import { dirname, resolve } from "node:path";
 import {
@@ -17,16 +17,27 @@ import {
 } from "furb";
 import type { Compaction, Measure } from "furb/life";
 import {
+  aboutOf,
   buildOf,
   framed,
   type Hello,
   hostPlace,
+  isHost,
+  OWNED,
   type Place,
   PROTOCOL,
+  RIVAL,
   type Role,
   reachOf,
   type Served,
+  stopProcess,
 } from "./hosting.ts";
+
+/** The reason of a link that a window ended by its own hand, which is no loss of the life. */
+const DISPOSED = "The session is disposed.";
+/** Why a window that stopped its host holds no life. */
+const STOPPED = "The host of the life was stopped from this window.";
+
 import type { EngineOptions } from "./models.ts";
 import type { ProviderChoice } from "./providers.ts";
 import { type Carry, isRecorded, type Reading } from "./reading.ts";
@@ -182,6 +193,15 @@ export class HostView extends EventEmitter implements Plain {
   sees = (actor: string) => this.ask<boolean>("library", "sees", actor);
   /** What this window does in the life, as the hello of its host gave it: a window that reads changes nothing. */
   role: Role = "write";
+  /** Why this window holds no life now, in plain words, and nothing while the life is open. */
+  lost = "";
+  /** Whether the life runs in a host of this machine, which this window can stop and open again. */
+  local = false;
+  /** The window reaches the life again: the host of the record that answers, or a host that it starts, and the view
+   * reads the life from the start. */
+  reopen = () => this.ask<void>("host", "reopen");
+  /** The end of the host of this life by force, for a host that does not answer the end of the life. */
+  stop = () => this.ask<void>("host", "stop");
   /** The addresses at which other operators reach the life over the network, to read or to write. The first serve
    * opens the door of the host at the address that it is given, host:port or a port, on 127.0.0.1 and a free port by
    * default, and each later one gives the same addresses. */
@@ -252,7 +272,7 @@ type Message = {
 export class Link {
   closed = false;
   /** Why the link ended, which each later request fails with. */
-  private why = "The session is disposed.";
+  private why = DISPOSED;
   readonly host: HostView;
   private sequence = 0;
   private readonly waiting = new Map<number, { resolve(value: unknown): void; reject(error: Error): void }>();
@@ -340,6 +360,15 @@ export class Link {
     this.closed = true;
     this.why = why;
     this.drop(why);
+    if (why === DISPOSED) return;
+    this.host.lost = why;
+    this.host.emit("change");
+  }
+  /** The link takes requests again, as the window reaches a host again. */
+  revive(): void {
+    this.closed = false;
+    this.why = DISPOSED;
+    this.host.lost = "";
   }
   /** The engine of the life, as a proxy whose methods are requests. */
   engine(root: string): Engine {
@@ -370,7 +399,9 @@ export async function openEngine(
   }
   const place =
     options.host && options.record && !isRecorded(options.record) ? hostPlace(options.record) : undefined;
-  return place ? attach(options, () => reach(options, place), "", true, made) : inWindow(options, made);
+  return place
+    ? attach(options, (stopped) => reach(options, place, stopped), "", true, made)
+    : inWindow(options, made);
 }
 
 /** A life that opens in the background: its engine and its host stand at once, so a session can draw its view before
@@ -404,9 +435,15 @@ async function inWindow(
   made?: (link: Link) => void,
 ): Promise<{ engine: Engine; host: HostView }> {
   const worker = new Worker(new URL("worker.ts", import.meta.url).href, { type: "module" });
-  const link = new Link((target) =>
+  const link = new Link((target, method) =>
     target === "host"
-      ? Promise.reject(new Error("This life runs in its window, so no other operator reaches it."))
+      ? Promise.reject(
+          new Error(
+            method === "stop" || method === "reopen"
+              ? "This life runs in its window, so it has no host to stop or to open again."
+              : "This life runs in its window, so no other operator reaches it.",
+          ),
+        )
       : undefined,
   );
   made?.(link);
@@ -455,13 +492,33 @@ function connect(path: string): Promise<Socket | undefined> {
   });
 }
 
-/** A connection to the host of a life: the host that answers at its place, or a host that the window starts as a
- * process of its own, detached from the window, which it waits for. A host that ends before it listens says why, as
- * on a record whose lease another process holds: unless another window started a host meanwhile, the window then
- * fails with that reason. */
-async function reach(options: EngineOptions, place: Place): Promise<Socket> {
-  const found = await connect(place.socket);
-  if (found) return found;
+/** How long a window waits for a sign of a host before it starts one again: a host that ends frees the lease at its
+ * end, so a lease that no host of furb holds is held by another program or is about to go. */
+const QUIET = 1000;
+
+/** The socket of a host that another window started, or that is about to end, while its process runs: a host that
+ * opens a long record takes minutes, so the wait has no end while the process lives. Nothing when no host lives for
+ * the time of QUIET. */
+async function waiting(place: Place, stopped: () => boolean): Promise<Socket | undefined> {
+  let seen = Date.now();
+  for (;;) {
+    const socket = await connect(place.socket);
+    if (socket) return socket;
+    if (stopped()) throw new Error(STOPPED);
+    const about = aboutOf(place);
+    if (about && isHost(about.pid)) seen = Date.now();
+    else if (Date.now() - seen > QUIET) return undefined;
+    await Bun.sleep(250);
+  }
+}
+
+/** A host that this window starts as a process of its own, detached from the window: its socket once it listens, or
+ * why it ended before. A window that stops its host while the host starts ends it. */
+async function launch(
+  options: EngineOptions,
+  place: Place,
+  stopped: () => boolean,
+): Promise<Socket | string> {
   const log = openSync(place.log, "a", 0o600);
   const child = spawn(
     process.execPath,
@@ -480,6 +537,10 @@ async function reach(options: EngineOptions, place: Place): Promise<Socket> {
   for (;;) {
     const socket = await connect(place.socket);
     if (socket) return socket;
+    if (stopped()) {
+      if (child.pid) await stopProcess(child.pid, graceOf());
+      throw new Error(STOPPED);
+    }
     if (ended !== undefined) {
       const again = await connect(place.socket);
       if (again) return again;
@@ -487,13 +548,41 @@ async function reach(options: EngineOptions, place: Place): Promise<Socket> {
       try {
         failed = JSON.parse(readFileSync(place.failed, "utf8"));
       } catch {}
-      throw new Error(
-        failed.pid === child.pid && failed.error
-          ? failed.error
-          : `The host of the life ended with ${ended} before it listened: ${place.log} says why.`,
-      );
+      return failed.pid === child.pid && failed.error
+        ? failed.error
+        : `The host of the life ended with ${ended} before it listened: ${place.log} says why.`;
     }
     await Bun.sleep(20);
+  }
+}
+
+/** How long a host that a window stops has to end the life before the window kills it, in milliseconds. */
+const graceOf = () => Number(process.env.FURB_HOST_GRACE ?? 12000);
+/** How long a host has to answer the end of the life before the window stops it, in milliseconds. */
+const endingOf = () => Number(process.env.FURB_HOST_ENDING ?? 15000);
+
+/** A connection to the host of a life: the host that answers at its place, or a host that the window starts as a
+ * process of its own, detached from the window, which it waits for. A host that ends before it listens says why. A
+ * host that finds the life owned waits for that owner while it runs: the host of another window that opens a long
+ * record, or one that ends. A lease that no host of furb holds fails with the words to end that program. */
+async function reach(
+  options: EngineOptions,
+  place: Place,
+  stopped: () => boolean = () => false,
+): Promise<Socket> {
+  for (let tries = 1; ; tries++) {
+    const found = await connect(place.socket);
+    if (found) return found;
+    if (stopped()) throw new Error(STOPPED);
+    const got = await launch(options, place, stopped);
+    if (typeof got !== "string") return got;
+    if (!got.includes(RIVAL) && !got.includes(OWNED)) throw new Error(got);
+    const host = await waiting(place, stopped);
+    if (host) return host;
+    if (tries >= 3)
+      throw new Error(
+        "Another program holds the life, and it is no host that this window can reach. End that program, then open the life again.",
+      );
   }
 }
 
@@ -509,18 +598,25 @@ const TAKEOVER = 60000;
  * on the same record. */
 async function attach(
   options: EngineOptions,
-  reachHost: () => Promise<Socket>,
+  reachHost: (stopped: () => boolean) => Promise<Socket>,
   key = "",
   takes = false,
   made?: (link: Link) => void,
 ): Promise<{ engine: Engine; host: HostView }> {
   let socket: Socket | undefined;
+  /** Whether this window stopped its host, which ends each reach of it. */
+  let stopping = false;
+  const place = takes && options.record ? hostPlace(options.record) : undefined;
   const link: Link = new Link((target, method) => {
+    if (target === "host" && (method === "stop" || method === "reopen"))
+      return method === "stop" ? stop() : reopen();
+    if (target === "session" && method === "end" && place) return ending();
     if (target !== "session" || method !== "dispose") return undefined;
-    link.end("The session is disposed.");
+    link.end(DISPOSED);
     socket?.end();
     return Promise.resolve();
   });
+  link.host.local = Boolean(place);
   made?.(link);
   const lost = "The host of the life ended before it answered.";
   const mine = buildOf().catch((error: unknown) => `unknown: ${error}`);
@@ -528,7 +624,7 @@ async function attach(
   let reaching: Promise<void> | undefined;
   const hello = async (): Promise<Hello> => {
     for (let took = false; ; took = true) {
-      const held = await reachHost();
+      const held = await reachHost(() => stopping);
       socket = held;
       // The record of a host on the network stands on another machine, or is the record of another operator, so the
       // window keeps its view at its own record.
@@ -584,6 +680,7 @@ async function attach(
       try {
         const next = await hello();
         if (next.pid !== first?.pid || next.started !== first?.started) link.host.emit("reset");
+        first = next;
         return;
       } catch (error) {
         if (error instanceof Error && error.message === lost && tries < 5 && !link.closed) continue;
@@ -592,6 +689,45 @@ async function attach(
         return;
       }
     }
+  };
+  /** The end of the host by force: the window lets the life go, ends the process of the host, and removes what the
+   * host left. The window does this when the host does not answer, and no end of the life reaches it. */
+  const stop = async (): Promise<void> => {
+    if (!place) throw new Error("This window reaches no host of this machine, so it cannot stop one.");
+    stopping = true;
+    const pid = aboutOf(place)?.pid ?? first?.pid;
+    link.end(STOPPED);
+    socket?.destroy();
+    if (pid && isHost(pid)) await stopProcess(pid, graceOf());
+    rmSync(place.socket, { force: true });
+    rmSync(place.about, { force: true });
+  };
+  /** The end of the life, which waits for the host a bounded time: a host that does not answer is stopped. */
+  const ending = async (): Promise<void> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const answered = link.request("session", "end", [], true).then(
+      () => true,
+      () => true,
+    );
+    const late = new Promise<boolean>((resolve) => {
+      timer = setTimeout(() => resolve(false), endingOf());
+    });
+    const done = await Promise.race([answered, late]);
+    clearTimeout(timer);
+    if (!done) await stop();
+  };
+  /** The life reached again, whatever ended the link: a host that answers, or a host that the window starts. */
+  const reopen = async (): Promise<void> => {
+    if (!place)
+      throw new Error("This window reaches no host of this machine, so it cannot open the life again.");
+    stopping = false;
+    const old = socket;
+    socket = undefined;
+    link.send = undefined;
+    old?.destroy();
+    link.revive();
+    await again();
+    if (!link.closed) link.host.emit("reset");
   };
   try {
     first = await hello();
