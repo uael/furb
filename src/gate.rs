@@ -14,8 +14,17 @@
 //! binds, which the sheet names, is refused too. A value of another type for a name that a rung of the program
 //! declares, which a def, a class, an import or a name with a type does, names that rung, as the sheet names it, so a
 //! model reads where the type of the name comes from. The errors alone count, since a warning refuses no word.
+//!
+//! The checker infers a file again whole when its text changes, and the program grows by a word at each reading, so
+//! the gate lays each run of words of the program out as a module of its own, which the checker reads once, and only
+//! the words after the last full module stand with the word: a reading costs about the new words, and not the whole
+//! program, which held a life still for minutes on a program of hours.
 
-use std::cell::RefCell;
+use std::{
+  cell::RefCell,
+  collections::{HashMap, HashSet},
+  rc::Rc,
+};
 
 use monty_type_checking::{SourceFile, TypeChecker};
 use monty_types::{NamedValues, TypeCheckingConfig, TypeCheckingFormat};
@@ -68,9 +77,15 @@ const ASSIGN: &str = "error[invalid-assignment]";
 thread_local! {
   /// The one checker of this thread, which every life of the thread and the Kernel of a python host read with,
   /// and nothing before its first reading. It holds one reading of the typeshed and one of the engine, which cost
-  /// once, so a reading of a sheet costs the program and the word alone, in every life after the first as in the
-  /// first.
-  static CHECKER: RefCell<Option<TypeChecker>> = const { RefCell::new(None) };
+  /// once, and one of each module of a program, so a reading of a sheet costs the words after the last module and
+  /// the word alone, in every life after the first as in the first.
+  static CHECKER: RefCell<Option<Held>> = const { RefCell::new(None) };
+}
+
+/// The checker of a thread, and the path of each module of a program that it read.
+struct Held {
+  checker: TypeChecker,
+  read: HashSet<String>,
 }
 
 /// What the gate found on a sheet, in the order of its lines: each error of the checker by the line it stands on,
@@ -80,29 +95,69 @@ thread_local! {
 /// a name that a rung of the program declares names that rung. Each is read on the sheet with each literal that
 /// holds more than `DEEP` brackets cut, which the checker could not read in time.
 pub fn checked(sheet: &str) -> Result<Vec<(usize, String)>, Fault> {
-  let sheet = &shallowed(sheet);
-  let mut found = declared(sheet, typed(sheet)?);
-  found.extend(unrun(sheet));
-  found.extend(unawaited(sheet));
-  found.extend(told(sheet));
+  let lines: Vec<&str> = sheet.split_inclusive('\n').collect();
+  let shaped = program_lines(&lines).and_then(|(first, tail)| {
+    let short = shallowed(&shortened(&lines, first, tail));
+    laid(&lines, first, tail, &short).map(|laid| (short, laid))
+  });
+  let Some((short, laid)) = shaped else {
+    // A sheet that is not laid out as `furb.sheet` writes it is read whole.
+    let sheet = &shallowed(sheet);
+    let (text, stands) = rebound(sheet);
+    let mut found = declared(sheet, typed(&[], &text, &stands)?, None);
+    found.extend(unrun(sheet));
+    found.extend(unawaited(sheet));
+    found.extend(told(sheet));
+    found.sort_by_key(|(line, _)| *line);
+    return Ok(found);
+  };
+  let mut found =
+    declared(&short, typed(&laid.modules, &laid.main, &laid.lines)?, Some(&laid.declares));
+  found.extend(unrun(&short));
+  found.extend(unawaited(&short));
+  found.extend(told(&short));
   found.sort_by_key(|(line, _)| *line);
   Ok(found)
 }
 
-/// What the checker found on a sheet. A checker that could not read the sheet has said nothing of the word, which
-/// is not a finding, so it is a fault of the gate.
-fn typed(sheet: &str) -> Result<Vec<(usize, String)>, Fault> {
-  let (sheet, stands) = rebound(sheet);
+/// What the checker found on a text that stands on modules, each by the line of the sheet that its line stands for.
+/// The checker reads each module that it did not read before, then the text. A checker that could not read them has
+/// said nothing of the word, which is not a finding, so it is a fault of the gate.
+fn typed(
+  modules: &[(String, Rc<str>)],
+  text: &str,
+  stands: &[usize],
+) -> Result<Vec<(usize, String)>, Fault> {
   let config = TypeCheckingConfig { format: TypeCheckingFormat::Concise, color: false };
   let path = format!("{MODULE}/__init__.py");
   let engine = SourceFile::new(ENGINE, &path);
   CHECKER.with_borrow_mut(|held| {
+    if held.as_ref().is_some_and(|one| one.read.len() > MODULES) {
+      *held = None;
+    }
     // The checker writes again every file it is given and reads again all that hangs on it, so the engine is
     // given to a new checker alone.
-    let given = held.is_none().then_some(&engine);
-    let checker = held.get_or_insert_with(TypeChecker::default);
-    match checker.run(&SourceFile::new(&sheet, SHEET), given, config) {
-      Ok(found) => Ok(
+    let mut given = held.is_none().then_some(&engine);
+    let one =
+      held.get_or_insert_with(|| Held { checker: TypeChecker::default(), read: HashSet::new() });
+    let mut failed = None;
+    for (path, module) in modules {
+      if one.read.contains(path) {
+        continue;
+      }
+      match one.checker.run(&SourceFile::new(module, path), given.take(), config) {
+        Ok(_) => {
+          one.read.insert(path.clone());
+        }
+        Err(why) => {
+          failed = Some(why);
+          break;
+        }
+      }
+    }
+    let got = match failed {
+      Some(why) => Err(why),
+      None => one.checker.run(&SourceFile::new(text, SHEET), given, config).map(|found| {
         found
           .map(|said| {
             let found = said.to_string().lines().filter_map(read).collect::<Vec<_>>();
@@ -111,15 +166,416 @@ fn typed(sheet: &str) -> Result<Vec<(usize, String)>, Fault> {
               .map(|(line, why)| (stands.get(line - 1).copied().unwrap_or(line), why))
               .collect()
           })
-          .unwrap_or_default(),
-      ),
-      Err(why) => {
-        // A checker that failed may not hold the engine, so the next reading makes a new one and gives it again.
-        *held = None;
-        Err(Fault::refused(format!("the gate could not read the sheet: {why}")))
+          .unwrap_or_default()
+      }),
+    };
+    got.map_err(|why| {
+      // A checker that failed may not hold the engine, so the next reading makes a new one and gives it again.
+      *held = None;
+      Fault::refused(format!("the gate could not read the sheet: {why}"))
+    })
+  })
+}
+
+/// The words of the program that one module of the checker holds. A module holds the words of a run of `CHUNK`
+/// words and stays the same while the program grows, so the checker infers each word of the program once, and a
+/// reading costs the words after the last full module and the word.
+const CHUNK: usize = 64;
+
+/// The most modules that the checker holds before it starts again, so the modules of programs that changed or that
+/// a life no longer reads do not grow without end.
+const MODULES: usize = 4096;
+
+/// The sheet laid out as the checker reads it: the modules of the program, each by its path and its text, the text
+/// of the sheet that stands on them, the line of the given sheet that each of its lines stands for, and the place
+/// in the program of the word that declares each name last.
+struct Laid {
+  modules: Vec<(String, Rc<str>)>,
+  main: String,
+  lines: Vec<usize>,
+  declares: HashMap<String, usize>,
+}
+
+/// What the program binds after its full modules: the module that bound each name last, each name that a word
+/// declares and the place of the word that declares it last, each name that a word binds, and the modules.
+#[derive(Clone, Default)]
+struct Laying {
+  source: HashMap<String, String>,
+  declared: HashMap<String, usize>,
+  bound: HashSet<String>,
+  modules: Vec<(String, Rc<str>)>,
+}
+
+/// The most states of a program after a full module that the gate keeps, before it lays each program out again.
+const STATES: usize = 4096;
+
+thread_local! {
+  /// The state of a program after each of its full modules, by a digest of the words before it, so a reading lays
+  /// out only the words after the last full module.
+  static STATES_HELD: RefCell<HashMap<u64, Rc<Laying>>> = RefCell::new(HashMap::new());
+}
+
+/// The sheet laid out as modules, so the checker infers each word of the program once.
+///
+/// The checker reads a module whose text it read before from its cache, and the sheet writes the whole program in one
+/// function, which it infers again whole at each reading. So each run of `CHUNK` words of the program stands at the
+/// top of a module of its own, with the names of the engine in a module under them all, and only the words after the
+/// last full module stand with the word, in the function of the sheet, which the word stands in as it stands in the
+/// short sheet. A module binds each name that its words name and that a module before it bound, from the last module
+/// that bound it, so each name keeps the type that the words before gave it: a name that a word declares, with a def,
+/// a class, an import or a type, is imported, which keeps its declaration, and any other name is bound to the
+/// attribute of that module, which a later value of another type may bind again. Each module is named by a digest
+/// of its text, so two chains share no module that differs.
+fn laid(lines: &[&str], first: usize, tail: usize, short: &str) -> Option<Laid> {
+  use std::hash::{Hash, Hasher};
+  let (mut base, mut unbound) = (format!("import {MODULE}\n"), String::new());
+  for line in &lines[2..first] {
+    if line.starts_with(&format!("  {WORDS} = ")) || line.starts_with(&format!("  {ACTS} = ")) {
+      continue;
+    }
+    if line.ends_with(": object\n") && !line.contains(" = ") {
+      unbound.push_str(line);
+    } else {
+      base.push_str(line.strip_prefix("  ").unwrap_or(line));
+    }
+  }
+  let mut units: Vec<(usize, usize)> = vec![];
+  let mut at = first;
+  while at < tail {
+    let close = (at + 2..tail).find(|one| lines[*one] == "  except BaseException:\n")?;
+    units.push((at, close + 1));
+    at = close + 2;
+  }
+  let digest = |seed: u64, part: &[&str]| {
+    let mut hasher = std::hash::DefaultHasher::new();
+    seed.hash(&mut hasher);
+    part.hash(&mut hasher);
+    hasher.finish()
+  };
+  let full = units.len() / CHUNK * CHUNK;
+  // The digest of the program before each full module, from the last one whose state the gate holds.
+  let mut key = digest(0, &[base.as_str()]);
+  let mut keys = vec![key];
+  for chunk in units[..full].chunks(CHUNK) {
+    key = digest(key, &lines[chunk[0].0..=chunk[chunk.len() - 1].1]);
+    keys.push(key);
+  }
+  let held = STATES_HELD.with_borrow(|held| {
+    (0..keys.len()).rev().find_map(|at| held.get(&keys[at]).map(|one| (at, one.clone())))
+  });
+  let (done, mut state) = match held {
+    Some((at, one)) => (at, (*one).clone()),
+    None => {
+      let parsed = parse_module(&base).ok()?;
+      let name = module_name(&base);
+      let mut state = Laying {
+        modules: vec![(format!("{name}.py"), Rc::from(base.as_str()))],
+        ..Laying::default()
+      };
+      for stmt in &parsed.syntax().body {
+        for one in binds(stmt) {
+          state.bound.insert(one.to_owned());
+          state.source.insert(one.to_owned(), name.clone());
+          // A name that the sheet declares, which no word of the program declares.
+          if matches!(stmt, Stmt::AnnAssign(_)) {
+            state.declared.insert(one.to_owned(), usize::MAX);
+          }
+        }
+      }
+      remember(keys[0], &state);
+      (0, state)
+    }
+  };
+  for (at, chunk) in units[..full].chunks(CHUNK).enumerate().skip(done) {
+    let mut module = String::new();
+    let mut named: Vec<String> = vec![];
+    let mut binders: Vec<String> = vec![];
+    let mut declares: Vec<(String, usize)> = vec![];
+    for (place, (from, to)) in chunk.iter().enumerate() {
+      let (text, unit) = rebinding_unit(&lines[*from..=*to], &mut state.bound);
+      module.push_str(&text);
+      named.extend(unit.named.iter().cloned());
+      binders.extend(unit.names.iter().chain(&unit.inner).cloned());
+      declares.extend(unit.declares.iter().map(|one| (one.clone(), at * CHUNK + place)));
+    }
+    let named: Vec<&str> = named.iter().map(String::as_str).collect();
+    let (seeds, imports) = seeded(&named, &state.source, &state.declared, "");
+    let module = imports + &seeds + &module;
+    let name = module_name(&module);
+    for one in binders {
+      state.source.insert(one, name.clone());
+    }
+    state.declared.extend(declares);
+    state.modules.push((format!("{name}.py"), Rc::from(module.as_str())));
+    remember(keys[at + 1], &state);
+  }
+  let shorts: Vec<&str> = short.split_inclusive('\n').collect();
+  let word: String = shorts[tail.min(shorts.len())..]
+    .iter()
+    .map(|line| line.strip_prefix("  ").unwrap_or(line))
+    .collect();
+  let parsed = parse_unchecked(&word, ParseOptions::from(Mode::Module));
+  let mut named: Vec<String> = parsed
+    .syntax()
+    .as_module()
+    .map_or(vec![], |one| Names::of(&one.body).0.into_iter().map(str::to_owned).collect());
+  let mut rest = String::new();
+  let mut stands: Vec<usize> = vec![];
+  for (place, (from, to)) in units.iter().enumerate().skip(full) {
+    let (text, unit) = rebinding_unit(&lines[*from..=*to], &mut state.bound);
+    named.extend(unit.named.iter().cloned());
+    for one in &unit.declares {
+      state.declared.insert(one.clone(), place);
+    }
+    let added = text.lines().count() - (to - from + 1);
+    for (at, line) in text.split_inclusive('\n').enumerate() {
+      rest.push_str("  ");
+      rest.push_str(line);
+      stands.push(if at < added { from + 1 } else { from + 1 + at - added });
+    }
+  }
+  for (at, line) in shorts.iter().enumerate().skip(tail) {
+    rest.push_str(line);
+    stands.push(at + 1);
+  }
+  let named: Vec<&str> = named.iter().map(String::as_str).collect();
+  let (seeds, imports) = seeded(&named, &state.source, &state.declared, "  ");
+  let header = format!("{imports}async def __body():\n{unbound}{seeds}");
+  let mut lines_of = vec![1; header.matches('\n').count()];
+  lines_of.extend(stands);
+  Some(Laid {
+    modules: state.modules,
+    main: header + &rest,
+    lines: lines_of,
+    declares: state.declared,
+  })
+}
+
+/// The state of a program after a full module, kept by the digest of the words before it.
+fn remember(key: u64, state: &Laying) {
+  STATES_HELD.with_borrow_mut(|held| {
+    if held.len() >= STATES {
+      held.clear();
+    }
+    held.insert(key, Rc::new(state.clone()));
+  });
+}
+
+/// The text of one word of the program at the top of a module, after the line that rebinds the names that it binds
+/// again, and what the gate read of it. Each name that it binds is bound after it.
+fn rebinding_unit(lines: &[&str], bound: &mut HashSet<String>) -> (String, Rc<Unit>) {
+  let unit = read_unit(lines);
+  let names: Vec<&str> = unit.names.iter().map(String::as_str).collect();
+  let inner: Vec<&str> = unit.inner.iter().map(String::as_str).collect();
+  let added = rebinding(&names, &inner, |name| bound.contains(name))
+    .map_or(String::new(), |line| format!("{line}\n"));
+  bound.extend(unit.names.iter().chain(&unit.inner).cloned());
+  (added + &unit.text, unit)
+}
+
+/// The sheet with each word of the program cut, which keeps its lines, for the readings of the word alone: an empty
+/// try of a word stands at the end of the lines of the program, so the word still stands after a try of a word.
+fn shortened(lines: &[&str], first: usize, tail: usize) -> String {
+  let mut text = lines[..first].concat();
+  text.extend(std::iter::repeat_n('\n', tail - first - 4));
+  text.push_str("  try:\n    acting()\n  except BaseException:\n    pass\n");
+  text.push_str(&lines[tail..].concat());
+  text
+}
+
+/// The line where the program of a sheet starts and the line where the word starts, as `furb.sheet` lays them: each
+/// word of the program in a try that calls `acting()` first and passes on `BaseException`, one for each name of
+/// `WORDS`, or one empty try when the program holds no word.
+fn program_lines(lines: &[&str]) -> Option<(usize, usize)> {
+  let opens =
+    |at: usize| lines.get(at) == Some(&"  try:\n") && lines.get(at + 1) == Some(&"    acting()\n");
+  let first = (2..lines.len()).find(|at| opens(*at))?;
+  let words = lines[2..first]
+    .iter()
+    .find(|line| line.starts_with(&format!("  {WORDS} = ")))
+    .and_then(|line| parse_module(&line[2..]).ok())
+    .map_or(0, |parsed| strings(&parsed.syntax().body, WORDS).len());
+  let mut at = first;
+  for _ in 0..words.max(1) {
+    if !opens(at) {
+      return None;
+    }
+    at = (at + 2..lines.len()).find(|one| {
+      lines[*one] == "  except BaseException:\n" && lines.get(one + 1) == Some(&"    pass\n")
+    })?
+      + 2;
+  }
+  Some((first, at))
+}
+
+/// What the gate reads of one word of the program, in its try: its text at the top of a module, the names that the
+/// statements at its top bind, the names that a statement beneath them binds, the names that it declares, and each
+/// name that it names.
+struct Unit {
+  text: String,
+  names: Vec<String>,
+  inner: Vec<String>,
+  declares: Vec<String>,
+  named: Vec<String>,
+}
+
+/// The most words of the program that the gate keeps what it read of, before it reads each again.
+const UNITS: usize = 200_000;
+
+thread_local! {
+  /// What the gate read of each word of the program, by a digest of its lines, so a reading parses only the words
+  /// that it did not read before.
+  static UNITS_READ: RefCell<HashMap<u64, Rc<Unit>>> = RefCell::new(HashMap::new());
+}
+
+/// What the gate reads of the lines of one word of the program, in its try, from what it read before when it can.
+fn read_unit(lines: &[&str]) -> Rc<Unit> {
+  use std::hash::{Hash, Hasher};
+  let mut hasher = std::hash::DefaultHasher::new();
+  lines.hash(&mut hasher);
+  let key = hasher.finish();
+  if let Some(held) = UNITS_READ.with_borrow(|held| held.get(&key).cloned()) {
+    return held;
+  }
+  let text = shallowed(
+    &lines.iter().map(|line| line.strip_prefix("  ").unwrap_or(line)).collect::<String>(),
+  );
+  let parsed = parse_unchecked(&text, ParseOptions::from(Mode::Module));
+  let body = parsed.syntax().as_module().map_or(&[][..], |one| one.body.as_slice());
+  let tried = body.iter().find_map(|stmt| match stmt {
+    Stmt::Try(one) => Some(one.body.as_slice()),
+    _ => None,
+  });
+  let owned = |names: Vec<&str>| names.into_iter().map(str::to_owned).collect::<Vec<_>>();
+  let (names, inner, declares) = tried.map_or((vec![], vec![], vec![]), |inside| {
+    let mut nested = Nested(vec![]);
+    nested.visit_body(inside);
+    (owned(inside.iter().flat_map(binds).collect()), owned(nested.0), owned(Declared::of(inside)))
+  });
+  let named = owned(Names::of(body).0);
+  let unit = Rc::new(Unit { text: text.clone(), names, inner, declares, named });
+  UNITS_READ.with_borrow_mut(|held| {
+    if held.len() >= UNITS {
+      held.clear();
+    }
+    held.insert(key, unit.clone());
+  });
+  unit
+}
+
+/// The lines that bind each name that statements name from the module that bound it last, at an indent, and the
+/// imports of those modules. A name that a statement before declared is imported, so it keeps its declaration.
+fn seeded(
+  names: &[&str],
+  source: &HashMap<String, String>,
+  declared: &HashMap<String, usize>,
+  indent: &str,
+) -> (String, String) {
+  let mut seeds = String::new();
+  let mut modules: Vec<&str> = vec![];
+  let mut sorted: Vec<&str> = unique(names.iter().copied());
+  sorted.sort_unstable();
+  for name in sorted {
+    let Some(module) = source.get(name) else { continue };
+    if declared.contains_key(name) {
+      seeds.push_str(&format!("{indent}from {module} import {name}\n"));
+    } else {
+      seeds.push_str(&format!("{indent}{name} = {module}.{name}\n"));
+      if !modules.contains(&module.as_str()) {
+        modules.push(module);
       }
     }
-  })
+  }
+  modules.sort_unstable();
+  (seeds, modules.iter().map(|module| format!("import {module}\n")).collect())
+}
+
+/// The name of the module of a text, a digest of it, which python can import.
+fn module_name(text: &str) -> String {
+  use std::hash::{Hash, Hasher};
+  let mut hasher = std::hash::DefaultHasher::new();
+  text.hash(&mut hasher);
+  format!("__w{:016x}", hasher.finish())
+}
+
+/// Each name that statements name, at any depth: each name that an expression reads, binds or deletes, a def, a class,
+/// an import, a capture of a pattern and the name of an except.
+struct Names<'a>(Vec<&'a str>);
+
+impl<'a> Names<'a> {
+  fn of(body: &'a [Stmt]) -> Self {
+    let mut names = Names(vec![]);
+    names.visit_body(body);
+    names
+  }
+}
+
+impl<'a> Visitor<'a> for Names<'a> {
+  fn visit_stmt(&mut self, stmt: &'a Stmt) {
+    match stmt {
+      Stmt::FunctionDef(one) => self.0.push(one.name.as_str()),
+      Stmt::ClassDef(one) => self.0.push(one.name.as_str()),
+      Stmt::Import(_) | Stmt::ImportFrom(_) => self.0.extend(binds(stmt)),
+      Stmt::Global(one) => self.0.extend(one.names.iter().map(|name| name.as_str())),
+      Stmt::Nonlocal(one) => self.0.extend(one.names.iter().map(|name| name.as_str())),
+      _ => {}
+    }
+    visitor::walk_stmt(self, stmt);
+  }
+
+  fn visit_expr(&mut self, expr: &'a Expr) {
+    if let Expr::Name(one) = expr {
+      self.0.push(one.id.as_str());
+    }
+    visitor::walk_expr(self, expr);
+  }
+
+  fn visit_pattern(&mut self, pattern: &'a Pattern) {
+    let name = match pattern {
+      Pattern::MatchAs(one) => one.name.as_ref(),
+      Pattern::MatchStar(one) => one.name.as_ref(),
+      Pattern::MatchMapping(one) => one.rest.as_ref(),
+      _ => None,
+    };
+    self.0.extend(name.map(|name| name.as_str()));
+    visitor::walk_pattern(self, pattern);
+  }
+
+  fn visit_except_handler(&mut self, handler: &'a ExceptHandler) {
+    let ExceptHandler::ExceptHandler(one) = handler;
+    self.0.extend(one.name.iter().map(|name| name.as_str()));
+    visitor::walk_except_handler(self, handler);
+  }
+}
+
+/// Each name that statements declare in their scope, at any depth but in a def or a class: a def, a class, an import,
+/// a type alias and a name with a type.
+struct Declared<'a>(Vec<&'a str>);
+
+impl<'a> Declared<'a> {
+  fn of(body: &'a [Stmt]) -> Vec<&'a str> {
+    let mut declared = Declared(vec![]);
+    for stmt in body {
+      declared.visit_stmt(stmt);
+    }
+    declared.0
+  }
+}
+
+impl<'a> StatementVisitor<'a> for Declared<'a> {
+  fn visit_stmt(&mut self, stmt: &'a Stmt) {
+    match stmt {
+      Stmt::FunctionDef(_)
+      | Stmt::ClassDef(_)
+      | Stmt::Import(_)
+      | Stmt::ImportFrom(_)
+      | Stmt::TypeAlias(_) => {
+        self.0.extend(binds(stmt));
+      }
+      Stmt::AnnAssign(one) => self.0.extend(named(&one.target)),
+      _ => walk_stmt(self, stmt),
+    }
+  }
 }
 
 /// The sheet with each literal of a list, a tuple, a set or a dict that holds more than `DEEP` brackets, one in
@@ -224,44 +680,114 @@ fn valued(token: TokenKind) -> bool {
 /// checker reads each through the except as unbound or as the word bound it, which is the type of its last binding
 /// and a warning at most. A try of a word is the one that `furb.sheet` writes, which calls `acting()` first and
 /// passes on any exception, and the sheet holds the program in the one async function it defines.
+///
+/// A name that only a nested statement of a word binds, as the target of a loop or a name bound under an if, keeps
+/// each binding before it, and the checker reads each of them again at each use of the name. A name that every word
+/// binds in a loop then costs the checker a time of the square of the words. So before the try of such a word, each
+/// such name that a statement before it bound is bound to itself, which gives it the same type, as one binding.
 fn rebound(sheet: &str) -> (String, Vec<usize>) {
   let lines: Vec<&str> = sheet.split_inclusive('\n').collect();
-  let mut deleted: Vec<(usize, String)> = vec![];
-  if let Ok(parsed) = parse_module(sheet) {
-    let body = bodied(parsed.syntax());
-    let mut bound: Vec<&str> = vec![];
-    for stmt in body.into_iter().flatten() {
-      let names: Vec<&str> = match stmt {
-        Stmt::Try(one) if worded(one) => one.body.iter().flat_map(binds).collect(),
-        other => binds(other),
-      };
-      if matches!(stmt, Stmt::Try(one) if worded(one)) {
-        let mut again: Vec<&str> = vec![];
-        for name in names.iter().filter(|name| bound.contains(name)) {
-          if !again.contains(name) {
-            again.push(name);
-          }
-        }
-        if !again.is_empty() {
-          let line = sheet[..stmt.start().to_usize()].matches('\n').count();
-          let indent: String = lines[line].chars().take_while(|one| *one == ' ').collect();
-          deleted.push((line, format!("{indent}del {}\n", again.join(", "))));
-        }
-      }
-      bound.extend(names);
-    }
-  }
+  let inserted = rebinds(sheet);
   let (mut text, mut stands) = (String::with_capacity(sheet.len()), vec![]);
-  let mut deletes = deleted.into_iter().peekable();
+  let mut inserts = inserted.into_iter().peekable();
   for (at, line) in lines.iter().enumerate() {
-    if let Some((_, del)) = deletes.next_if(|(before, _)| *before == at) {
-      text.push_str(&del);
+    if let Some((_, added)) = inserts.next_if(|(before, _)| *before == at) {
+      text.push_str(&added);
       stands.push(at + 1);
     }
     text.push_str(line);
     stands.push(at + 1);
   }
   (text, stands)
+}
+
+/// The lines that `rebound` inserts, each by the line of the sheet that it stands before.
+fn rebinds(sheet: &str) -> Vec<(usize, String)> {
+  let lines: Vec<&str> = sheet.split_inclusive('\n').collect();
+  let mut inserted: Vec<(usize, String)> = vec![];
+  if let Ok(parsed) = parse_module(sheet) {
+    let body = bodied(parsed.syntax());
+    let mut bound: HashSet<&str> = HashSet::new();
+    for stmt in body.into_iter().flatten() {
+      let (names, inner): (Vec<&str>, Vec<&str>) = match stmt {
+        Stmt::Try(one) if worded(one) => {
+          let mut nested = Nested(vec![]);
+          nested.visit_body(&one.body);
+          (one.body.iter().flat_map(binds).collect(), nested.0)
+        }
+        other => (binds(other), vec![]),
+      };
+      if matches!(stmt, Stmt::Try(one) if worded(one))
+        && let Some(added) = rebinding(&names, &inner, |name| bound.contains(name))
+      {
+        let line = sheet[..stmt.start().to_usize()].matches('\n').count();
+        let indent: String = lines[line].chars().take_while(|one| *one == ' ').collect();
+        inserted.push((line, format!("{indent}{added}\n")));
+      }
+      bound.extend(names);
+      bound.extend(inner);
+    }
+  }
+  inserted
+}
+
+/// The statement that stands before the try of a word: it deletes each name that the statements at the top of the word
+/// bind and that a statement before it bound, and binds to itself each other name that a statement of the word binds
+/// and that a statement before it bound. Nothing when no such name is.
+fn rebinding(names: &[&str], inner: &[&str], bound: impl Fn(&str) -> bool) -> Option<String> {
+  let again = unique(names.iter().copied().filter(|name| bound(name)));
+  let kept = unique(inner.iter().copied().filter(|name| bound(name) && !names.contains(name)));
+  let mut parts: Vec<String> = vec![];
+  if !again.is_empty() {
+    parts.push(format!("del {}", again.join(", ")));
+  }
+  parts.extend(kept.iter().map(|name| format!("{name} = {name}")));
+  (!parts.is_empty()).then(|| parts.join("; "))
+}
+
+/// The names, in the order they first stand, with each once.
+fn unique<'a>(names: impl Iterator<Item = &'a str>) -> Vec<&'a str> {
+  let mut seen: HashSet<&str> = HashSet::new();
+  names.filter(|name| seen.insert(name)).collect()
+}
+
+/// The names that a statement and the statements beneath it bind in its scope: each target, a def, a class, an import
+/// and each capture of a pattern, but none in a def, a class, a lambda or a comprehension, which bind in a scope of
+/// their own, and not the name of an except, which python deletes at the end of the except.
+struct Nested<'a>(Vec<&'a str>);
+
+impl<'a> Visitor<'a> for Nested<'a> {
+  fn visit_stmt(&mut self, stmt: &'a Stmt) {
+    match stmt {
+      Stmt::FunctionDef(_) | Stmt::ClassDef(_) | Stmt::Import(_) | Stmt::ImportFrom(_) => {
+        self.0.extend(binds(stmt));
+      }
+      _ => visitor::walk_stmt(self, stmt),
+    }
+  }
+
+  fn visit_expr(&mut self, expr: &'a Expr) {
+    match expr {
+      Expr::Name(one) if matches!(one.ctx, ExprContext::Store) => self.0.push(one.id.as_str()),
+      Expr::Lambda(_)
+      | Expr::ListComp(_)
+      | Expr::SetComp(_)
+      | Expr::DictComp(_)
+      | Expr::Generator(_) => {}
+      _ => visitor::walk_expr(self, expr),
+    }
+  }
+
+  fn visit_pattern(&mut self, pattern: &'a Pattern) {
+    let name = match pattern {
+      Pattern::MatchAs(one) => one.name.as_ref(),
+      Pattern::MatchStar(one) => one.name.as_ref(),
+      Pattern::MatchMapping(one) => one.rest.as_ref(),
+      _ => None,
+    };
+    self.0.extend(name.map(|name| name.as_str()));
+    visitor::walk_pattern(self, pattern);
+  }
 }
 
 /// The body of the one async function of the sheet, which holds the program and the word.
@@ -314,15 +840,24 @@ fn word_of(body: &[Stmt]) -> &[Stmt] {
 /// the rung that declared the name last, of the names that the sheet binds as `WORDS`, and says to give the value
 /// another name. A name that the word binds in a def, a class, a lambda or a comprehension is its own, and names no
 /// rung.
-fn declared(sheet: &str, found: Vec<(usize, String)>) -> Vec<(usize, String)> {
+fn declared(
+  sheet: &str,
+  found: Vec<(usize, String)>,
+  program: Option<&HashMap<String, usize>>,
+) -> Vec<(usize, String)> {
   if !found.iter().any(|(_, why)| why.starts_with(ASSIGN)) {
     return found;
   }
   let Ok(parsed) = parse_module(sheet) else { return found };
   let Some(body) = bodied(parsed.syntax()) else { return found };
   let rungs = strings(body, WORDS);
-  let mut declares: Vec<(&str, Option<&str>)> = vec![];
-  let tries = body.iter().filter_map(|stmt| match stmt {
+  let mut declares: Vec<(&str, Option<&str>)> = program
+    .map(|held| {
+      let words = held.iter().filter(|(_, at)| **at != usize::MAX);
+      words.map(|(name, at)| (name.as_str(), rungs.get(*at).copied())).collect()
+    })
+    .unwrap_or_default();
+  let tries = body.iter().filter(|_| program.is_none()).filter_map(|stmt| match stmt {
     Stmt::Try(one) if worded(one) => Some(one),
     _ => None,
   });
@@ -887,6 +1422,80 @@ mod tests {
     assert_eq!(said(&[&program], "x = a[3][0]\ny = b['j'][1]\nz: int = len(c[5])"), vec![]);
     let found = said(&[&program], "w: str = len(c)");
     assert_eq!(found.len(), 1, "{found:?}");
+  }
+
+  /// A word of the program of a life of many hours, which binds the same names in a loop and under an if, as a model
+  /// writes a word again and again.
+  fn looped(n: usize) -> String {
+    format!(
+      "for one in read('a{n}').lines:\n  if one.startswith('x'):\n    got = bash(one)\n    pr = {{'labels': [one], 'n': ['{n}']}}\nlabel = pr['labels'][0] if pr else ''\ndebug(t'{{label=}} {{got=}} {{one=}}')"
+    )
+  }
+
+  #[test]
+  fn a_name_that_each_word_binds_in_a_loop_stalls_no_word() {
+    let program: Vec<String> = (0..800).map(looped).collect();
+    let program: Vec<&str> = program.iter().map(String::as_str).collect();
+    let (text, _) = sheet(&program, "close(one + label)");
+    let start = std::time::Instant::now();
+    let got = found(&text);
+    let took = start.elapsed();
+    assert_eq!(got, vec![]);
+    assert!(took.as_secs() < 3, "{took:?}");
+  }
+
+  #[test]
+  fn a_name_that_a_nested_statement_binds_again_in_each_word_keeps_each_type() {
+    let program = [
+      "x = 1",
+      "for x in ['a']:\n  pass",
+      "if chance() > 0.5:\n  x = b'a'",
+      "for x in [1.5]:\n  pass",
+    ];
+    let found = said(&program, "y: None = x");
+    assert_eq!(found.len(), 1, "{found:?}");
+    for kind in ["1", "\"a\"", "b\"a\"", "float"] {
+      assert!(found[0].1.contains(kind), "{found:?}");
+    }
+  }
+
+  #[test]
+  fn a_name_keeps_its_type_and_its_declaration_across_the_modules_of_the_program() {
+    let mut program = vec![
+      "x = 1".to_owned(),
+      "def pr() -> int:\n  return 1".to_owned(),
+      "merged: set[int] = set()".to_owned(),
+    ];
+    program.extend((0..2 * CHUNK).map(|n| format!("k = {n}")));
+    program.push("for x in ['a']:\n  pass".to_owned());
+    let program: Vec<&str> = program.iter().map(String::as_str).collect();
+    let found = said(&program, "y: None = x\npr = 'a'\nz: None = merged\nw: None = k");
+    let lines: Vec<usize> = found.iter().map(|(line, _)| *line).collect();
+    assert_eq!(lines, vec![1, 2, 3, 4], "{found:?}");
+    assert!(found[0].1.contains("Literal[1, \"a\"]"), "{found:?}");
+    assert!(
+      found[1].1.ends_with(
+        "the word of rung2 declares `pr` with that type, so give this value another name"
+      ),
+      "{found:?}"
+    );
+    assert!(found[2].1.contains("set[int]"), "{found:?}");
+    assert!(found[3].1.contains(&format!("Literal[{}]", 2 * CHUNK - 1)), "{found:?}");
+  }
+
+  #[test]
+  fn a_gate_after_one_more_word_reads_the_words_after_the_last_module_alone() {
+    let program: Vec<String> = (0..2000).map(looped).collect();
+    let program: Vec<&str> = program.iter().map(String::as_str).collect();
+    let (text, _) = sheet(&program[..1999], "close(one + label)");
+    let start = std::time::Instant::now();
+    found(&text);
+    let cold = start.elapsed();
+    let (text, _) = sheet(&program, "close(one + label)");
+    let start = std::time::Instant::now();
+    found(&text);
+    let warm = start.elapsed();
+    assert!(warm * 4 < cold, "cold {cold:?}, warm {warm:?}");
   }
 
   #[test]

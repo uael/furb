@@ -332,6 +332,8 @@ pub struct Held {
   drives: FunctionRef<(), ()>,
   /// What keeps JavaScript alive while it awaits a result, which only an ear that waits may give.
   alive: RefCell<Option<Waking<false>>>,
+  /// The function of JavaScript that hears why the life stopped, which hears it once.
+  pub listener: RefCell<Option<FunctionRef<String, ()>>>,
 }
 
 impl Held {
@@ -354,6 +356,7 @@ impl Held {
       wakes: Arc::new(Wakes(wakes)),
       drives: drive.create_ref()?,
       alive: RefCell::default(),
+      listener: RefCell::default(),
     });
     let _ = slot.set(Rc::downgrade(&held));
     held.drive();
@@ -381,9 +384,14 @@ impl Held {
             one.deferred.resolve(Box::new(move |_| Ok(value)));
           }
         },
-        Some(None) => {
-          one.deferred.reject(napi::Error::from_reason("CancelledError: the engine was disposed"));
-        }
+        Some(None) => match self.stopped() {
+          Some(fault) => one.deferred.reject(fault.into()),
+          None => {
+            one
+              .deferred
+              .reject(napi::Error::from_reason("CancelledError: the engine was disposed"));
+          }
+        },
       }
     }
     let awaited = !self.pending.borrow().is_empty();
@@ -414,7 +422,27 @@ impl Held {
     let got = call(engine);
     drop(held);
     self.kept();
+    if got.is_err() {
+      self.stops();
+    }
     Ok(got?)
+  }
+
+  /// The fault that stopped the life, when one did.
+  pub fn stopped(&self) -> Option<Fault> {
+    self.engine.try_borrow().ok()?.as_ref()?.stopped().cloned()
+  }
+
+  /// The listener of JavaScript hears why the life stopped, once, when it stopped: no call of the engine tells it
+  /// when the fault came while the engine was driven.
+  pub fn stops(&self) {
+    let Some(fault) = self.stopped() else { return };
+    let listener = self.listener.borrow_mut().take();
+    if let Some(listener) = listener
+      && let Ok(heard) = listener.borrow_back(&self.env)
+    {
+      let _ = heard.call(format!("{}: {}", fault.name, fault.message()));
+    }
   }
 
   /// What an act comes to, as a promise of JavaScript.
