@@ -1,8 +1,8 @@
-import { type BoxRenderable, InputRenderable, InputRenderableEvents, type RGBA } from "@opentui/core";
+import type { BoxRenderable, RGBA } from "@opentui/core";
 import type { ProgramLine } from "furb/life";
 import { theme as c, glyph, spacing as space } from "../theme.ts";
 import { part } from "./part.ts";
-import { inputColors, noBorder } from "./shared.ts";
+import { noBorder } from "./shared.ts";
 
 /** How many rows a window of code shows until a click opens it: the first, the five after it, and the last. */
 export const WINDOW = 7;
@@ -101,60 +101,24 @@ export const thread = part({
     return known.seen !== seen;
   },
 
-  /** The input at the end of a thread: a message sent here goes to the thread, and opens it again when it is over. */
-  replyBox(box: BoxRenderable, id: string, over: boolean): void {
-    const w = this.session;
-    const draft = `reply:${id}`;
-    const input = new InputRenderable(this.renderer, {
-      flexGrow: 1,
-      flexShrink: 1,
-      value: w.drafts[draft] ?? "",
-      placeholder: over ? "Reply to open this thread again" : "Reply to this thread",
-      ...inputColors(c.panel),
-    });
-    this.replyInputs.set(id, input);
-    input.on(InputRenderableEvents.INPUT, (value: string) => {
-      if (value) w.drafts[draft] = value;
-      else delete w.drafts[draft];
-    });
-    input.on(InputRenderableEvents.ENTER, () => {
-      const text = input.value;
-      if (!text.trim()) return;
-      input.value = "";
-      delete w.drafts[draft];
-      this.replyFocus = undefined;
-      this.composer.focus();
-      w.reply(id, text).catch((error) => {
-        w.drafts[draft] = text;
-        this.report(error);
-      });
-    });
-    input.on("focused", () => {
-      this.replyFocus = id;
-    });
-    input.on("blurred", () =>
-      queueMicrotask(() => {
-        if (!input.isDestroyed && this.replyFocus === id) this.replyFocus = undefined;
-      }),
+  /** The row at the end of a thread, a button that makes the thread the target of the input: the input then sends its
+   * messages to it, and a message to a thread that is over opens it again. While the thread is the target, the row
+   * says so in the color of the thread, the color of the line of the input. */
+  replyRow(box: BoxRenderable, id: string, over: boolean, tone: RGBA): void {
+    const aimed = this.session.target === id;
+    const label = aimed ? "Replying here" : over ? "Reply to open it again" : "Reply";
+    // The mark stands in the column of the line of a message, so the word starts where the text of the input starts.
+    const row = this.row({ backgroundColor: c.panel, marginLeft: -(space.inset + 1) });
+    row.add(
+      this.link(
+        [
+          [`${glyph.reply} `, aimed ? tone : c.faint],
+          [label, aimed ? tone : c.muted],
+        ],
+        () => this.replyTo(id),
+      ),
     );
-    // The input starts where the text of the box starts, with the line of the thread at its left.
-    input.onKeyDown = (key) => {
-      if (key.name !== "up" || input.value) return;
-      key.preventDefault();
-      void w
-        .takeBackMessage(id)
-        .then((text) => {
-          if (text === undefined || input.isDestroyed) return;
-          input.value = text;
-          input.cursorOffset = text.length;
-          w.drafts[draft] = text;
-        })
-        .catch(this.report);
-    };
-    const row = this.row({ backgroundColor: c.panel, onMouseDown: () => input.focus() });
-    row.add(input);
     box.add(row);
-    if (this.replyFocus === id) queueMicrotask(() => !input.isDestroyed && input.focus());
   },
 });
 

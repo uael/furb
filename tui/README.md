@@ -373,7 +373,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/view [main|loom|graph]` | Show the life as main, the loom, or the graph |
 | `/sidebar [outline|cards|inbox]` | Show or hide the workspaces with the threads of the session shown and the context, or give the sidebar a shape |
 | `/delete` | Archive a session, or move it and its files to the workspace trash |
-| `/newthread` | Start a new thread with your next message, in place of a message to the thread lit in the sidebar |
+| `/newthread` | Start a new thread with your next message, in place of a message to the thread that the input targets, as `+ New thread` does |
 | `/autocollapse` | Toggle the fold of the threads that are over |
 | `/extensions` | List the extensions that this life runs, with what their parts give the TUI |
 | `/serve [address]` | Give the addresses at which other operators read this life, or read and drive it, over the network |

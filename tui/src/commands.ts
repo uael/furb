@@ -73,7 +73,7 @@ export const commands = {
   newthread: [
     "New thread",
     "",
-    "Start a new thread with your next message, in place of a message to the thread lit in the sidebar",
+    "Start a new thread with your next message, in place of a message to the thread that the input targets, as `+ New thread` does",
   ],
   autocollapse: ["Automatic fold", "", "Toggle the fold of the threads that are over"],
   extensions: [

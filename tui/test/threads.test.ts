@@ -111,7 +111,8 @@ test("a thread resolves from its card, and a message to it opens it again", () =
       await railClick(use, " Resolve ");
       await until(session, () => listed(session).find((one) => one.act.id === id)?.resolved === true);
       expect(await session.engine.result(id)).toBe("resolved");
-      expect(await frame()).toContain("Reply to open this thread again");
+      // The thread chosen stays the target of the input, which opens it again with its next message.
+      expect(await frame()).toContain("↳ Replying here");
       await session.submit("Look at it once more");
       await until(session, () => listed(session).find((one) => one.act.id === id)?.resolved === false);
       keep("reopened", await frame());
@@ -138,12 +139,15 @@ test("a question that waits shows on top of the sidebar and as a mark on its wor
       expect(rows.some((line) => line.includes("1 needs you"))).toBe(true);
       expect(rows.filter((line) => line.includes("◆ 1")).length).toBeGreaterThan(0);
       expect(listed(session).some((one) => one.act.id === question)).toBe(false);
-      // The input sends its message to the thread that the sidebar lights, unless the operator asks for a new thread.
-      const lit = use.app.activeThread()?.act.id;
+      // The input sends its message to the open thread that the sidebar lights, unless the operator asks for a new thread,
+      // and a thread that is over is no target until he chooses it.
+      const lit = use.app.activeThread();
       expect(lit).toBeDefined();
-      expect(session.lit).toBe(lit);
+      expect(session.lit).toBe(lit && !lit.resolved ? lit.act.id : undefined);
+      expect(session.target).toBe(session.lit);
       await session.submit("/newthread");
       expect(session.fresh).toBe(true);
+      expect(session.target).toBeUndefined();
     },
     size,
     true,

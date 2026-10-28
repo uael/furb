@@ -854,9 +854,9 @@ export const feed = part({
           const over = Boolean(thread?.resolved);
           sections.push({
             id: `${act.id}-reply`,
-            key: `reply\n${over}\n${this.feedWidth}\n${this.theme}`,
+            key: `reply\n${over}\n${w.target === act.id}\n${this.feedWidth}\n${this.theme}`,
             apart: true,
-            body: (box) => this.replyBox(box, act.id, over),
+            body: (box) => this.replyRow(box, act.id, over, tone),
           });
         }
         for (const [at, section] of sections.entries()) {

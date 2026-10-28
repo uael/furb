@@ -58,18 +58,6 @@ export const input = part({
         },
       },
     ]);
-    // While the input at the end of a thread has the keys, Escape gives them back to the input of the chain.
-    layer(() => Boolean(this.replyFocus) && !this.overlay, "reply", [
-      {
-        on: "escape",
-        run: () => {
-          this.replyFocus = undefined;
-          this.composer.focus();
-          this.render();
-        },
-        hint: ["Esc", "input"],
-      },
-    ]);
     // While a question of a choice is aimed, its list takes the arrows, Enter and the numbers, and Escape gives the
     // list back the keys that Other gave the input.
     const choosing = () => bare() && !this.tree && Boolean(this.picking());
@@ -397,6 +385,20 @@ export const input = part({
     const up = key?.name === "up";
     const anywhere = key?.meta;
     const queued = this.session.queued.findLast((entry) => entry.chain === this.session.selected);
+    // Up on an empty input takes back the last message to the thread that it targets, when that message still runs or
+    // a cancel ended it: the text comes back to edit, and the message sent in its place takes its place in the box.
+    const target = this.session.target;
+    if (up && !anywhere && !this.composer.plainText && this.historyIndex < 0 && target) {
+      if (this.session.lastMessage(target)) {
+        void this.session
+          .takeBackMessage(target)
+          .then((text) => {
+            if (text !== undefined && !this.composer.plainText) this.insert(text);
+          })
+          .catch(this.report);
+        return true;
+      }
+    }
     if (up && !anywhere && !this.composer.plainText && queued && this.historyIndex < 0) {
       this.session.removeQueued(queued.id);
       this.insert(queued.text);

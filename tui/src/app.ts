@@ -72,6 +72,7 @@ import {
   spacing as space,
   syntax,
   type ThemeName,
+  threadTone,
 } from "./theme.ts";
 import { bold, type Part, styled } from "./ui.ts";
 import type { SessionEntry, Workspace, Workspaces } from "./workspaces.ts";
@@ -145,10 +146,6 @@ export class App {
   programs = new Map<string, { version: number; live: string; lines: ProgramLine[] }>();
   /** What each thread showed when it was last seen open, which tells a folded thread that new work came. */
   readonly seenThreads = new Map<string, { seen: string; folded: boolean }>();
-  /** The thread whose input at the end has the keys, which Escape gives back to the input of the chain. */
-  replyFocus?: string;
-  /** The input at the end of each thread that the feed shows, by the thread. */
-  readonly replyInputs = new Map<string, InputRenderable>();
   /** The rows that a model writes, by the step that it writes, which the tick draws again, each with the lines that
    * the card above it shows. */
   thinkingRows = new Map<
@@ -507,6 +504,10 @@ export class App {
           this.composer.setText("");
           return;
         }
+        // The target of the message holds from its first character until it is sent or cleared.
+        const w = this.session;
+        if (!this.composer.plainText) w.pinned = undefined;
+        else if (w.pinned === undefined) w.pinned = w.target ?? null;
         this.schedule();
         void this.highlightEditor();
         this.suggest();
@@ -917,7 +918,9 @@ export class App {
                   c.danger,
                   "No model answers yet. Fix the setup above, or watch a life, which needs none.",
                 ]
-              : ["Prompt", c.accent, "Ask anything, or type / for commands"];
+              : w.target
+                ? ["Prompt", threadTone(w.target), "Reply to the thread, or type / for commands"]
+                : ["Prompt", c.accent, "Ask anything, or type / for commands"];
     for (const edge of this.composeEdges) if (edge.borderColor !== modeColor) edge.borderColor = modeColor;
     this.composer.cursorColor = modeColor;
     this.composer.placeholder = placeholder;

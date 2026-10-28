@@ -66,11 +66,10 @@ its chain when it is not Main. The sidebar is wide, 56 columns by default, and i
 
 A click on a workspace gives it the focus: its session that asks, else one that lives, else its newest, opens in the
 feed. A click on the arrow of a workspace that has not the focus shows its sessions without a change of focus. A click
-on a thread shows it in the feed, on its chain, and the input then sends each message to the thread that is lit, as
-`prompt(str, message, on=thread)`, which its model reads at its next step and answers. `/newthread` makes the next
-message start a thread of its own. A message to a resolved thread opens it again. Under the thread lit, Collapse folds
-it in the feed to its box on one line, Resolve closes it, as `close(None, thread)` does, and Reply puts the keys in the
-input at the end of the thread. The resolved threads fold under one row, Resolved, which a click opens. After ⌥T the
+on a thread shows it in the feed, on its chain, and the input then sends each message to it, as
+`prompt(str, message, on=thread)`, which its model reads at its next step and answers. A message to a resolved thread
+opens it again. Under the thread lit, Collapse folds it in the feed to its box on one line, Resolve closes it, as
+`close(None, thread)` does, and Reply makes it the target of the input, as Reply at the end of its box does. The resolved threads fold under one row, Resolved, which a click opens. After ⌥T the
 arrows move in the sidebar, Enter opens the workspace, the session or the thread under them, → peeks at a workspace, Space
 folds, r resolves, o replies, and Esc gives the keys back to the input. At the foot of the sidebar, Context says how
 full the window of the chain shown is and where a grant pauses it, its tokens, and what it spent.
@@ -89,8 +88,14 @@ and their text starts where the text of a message starts, as it starts in the in
 its answer, its state and its controls. Each message that came to the thread later stands in the box the same way, and
 the answer of the model stands as markdown with no line of color. The words of its steps stand in the same box as code, with no
 surface of their own, as one Python program, line by line, with the number of each line in the gutter, in a quiet color.
-At the end of an open thread an
-input takes your reply, and a reply to a thread that is over opens it again. The numbers go on from one step to the
+The input of the chain is the only input. By default it sends each message to the open thread lit, else it starts a
+new thread. `↳ Reply` at the end of a box makes that thread its target, and a reply to a thread that is over opens it
+again. While the input sends to a thread, its line takes the color of the thread, its meta line says `to ↳` and the
+name of the thread, and the box of the thread ends with `↳ Replying here` in its color. `+ New thread`, at the right
+end of the meta line, and `/newthread`, make the next message start a thread of its own. The target holds from the first
+character that you type until you send or clear the message, so a thread that opens meanwhile takes nothing that you
+wrote for another. ↑ in an empty input takes back your last message to the thread, while it runs or once a cancel ended
+it, to edit it and send it again in its place. The numbers go on from one step to the
 next, so a thread counts the lines of its program from its first step to its last, also past the steps that a fold keeps
 out. No step and no act takes a row of its own. Each line ends with a quiet hint of what its acts came to: a read the
 count of its lines, a write the lines that it added and removed, a command its exit and the count of the lines that it
