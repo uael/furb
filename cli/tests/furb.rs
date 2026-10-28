@@ -364,20 +364,20 @@ fn a_life_runs_the_extensions_that_its_record_enables_and_those_that_the_configs
   fs::create_dir_all(skill.parent().expect("a folder")).expect("the folder of a skill");
   fs::write(&skill, "---\nname: brew\ndescription: Make tea.\n---\n").expect("a skill");
   fs::write(yard.at.join("CLAUDE.md"), "Use two spaces.\n").expect("a memory file");
-  let every = "memory: remember()\nskills: counted()\ncompaction\nouroboros: ouroboros()\nweb\nmcp: mcp_index()\n";
+  let every = "memory: await recall()\nskills: await listed()\ncompaction\nouroboros: ouroboros()\nweb\nmcp: mcp_index()\n";
   assert_eq!(printed(yard.furb(&["extensions"]), ""), every, "the official extensions are on");
   let path = printed(yard.kept(&["run", "close(skill('brew').path)"]), "");
   assert_eq!(path, format!("{:?}\n", skill.display().to_string()).replace('"', "'"));
   let mut turns = yard.furb(&["turns", "--record"]);
   turns.arg(yard.record());
   let said = printed(turns, "");
-  assert!(said.contains("\nmemory1_text = 'Use two spaces.'"), "{said}");
+  assert!(said.contains("\nread1_text = 'Use two spaces.'"), "{said}");
   fs::create_dir_all(yard.at.join(".furb")).expect("the folder of the project");
   fs::write(yard.at.join(".furb/config.json"), r#"{"extensions": {"memory": false}}"#)
     .expect("a config of the project");
   assert_eq!(
     printed(yard.furb(&["extensions"]), ""),
-    "skills: counted()\ncompaction\nouroboros: ouroboros()\nweb\nmcp: mcp_index()\n"
+    "skills: await listed()\ncompaction\nouroboros: ouroboros()\nweb\nmcp: mcp_index()\n"
   );
   assert_eq!(printed(yard.kept(&["extensions"]), ""), every, "a life runs what its record enables");
 }
@@ -648,7 +648,9 @@ fn a_prompt_of_the_client_is_answered_by_a_model_and_its_done_is_sent() {
   assert_eq!(peeked, json!({"done": true, "value": 3}));
   let turns = client.data("3", json!({"type": "turns"}));
   let turns = turns["turns"].as_array().expect("the turns");
-  assert_eq!((&turns[1][0], &turns[1][1]), (&json!("assistant"), &json!(COUNT)));
+  let said: Vec<_> =
+    turns.iter().filter(|one| one[0] == "assistant").map(|one| one[1].clone()).collect();
+  assert_eq!(said, [json!("read('skills://')"), json!(COUNT)]);
   let facts = client.data("4", json!({"type": "transcript", "on": "chain1"}));
   assert!(facts["facts"].as_array().expect("the facts").contains(&fact["fact"]), "{facts}");
   assert!(client.ended());
@@ -797,7 +799,7 @@ fn a_word_of_the_client_runs_as_a_rung_and_a_pause_holds_a_chain_until_its_wake(
   assert_eq!(
     client.data("1", json!({"type": "rung", "word": "k = 1\nclose(k + 1)"})),
     json!({"act": "rung7"}),
-    "the six rungs of the extensions come first"
+    "the six rungs of the extensions and the turn of skills come first"
   );
   assert_eq!(client.done("rung7")["value"], 2);
   client.data("2", json!({"type": "pause", "act": "chain1"}));
@@ -908,7 +910,7 @@ fn the_state_names_the_work_that_an_earlier_life_left_pending() {
   assert!(client.ended());
   let mut later = Client::new(&yard);
   let state = later.data("1", json!({"type": "state"}));
-  // The rungs of the official extensions come first, and the rung of the client made the wait.
+  // The rungs of the official extensions and the turn of skills come first, and the rung of the client made the wait.
   assert_eq!(state["pending"], json!([["rung7", "rung"], ["wait1", "wait"]]));
   later.data("2", json!({"type": "cancel", "act": "wait1"}));
   let state = later.data("3", json!({"type": "state"}));
@@ -920,7 +922,7 @@ fn the_state_names_the_work_that_an_earlier_life_left_pending() {
 fn the_state_names_the_work_that_a_crash_loop_parked_and_a_retry_runs_it_again() {
   let yard = Yard::new("rpc-parked");
   let started = |one: &Value| {
-    one["type"] == "fact" && one["fact"][0] == "started" && one["fact"][1] == "reply1"
+    one["type"] == "fact" && one["fact"][0] == "started" && one["fact"][1] == "reply2"
   };
   let mut client = Client::new(&yard);
   // The fake claude gives no answer to a turn that holds WAIT, so the reply runs until the life ends.
@@ -939,9 +941,9 @@ fn the_state_names_the_work_that_a_crash_loop_parked_and_a_retry_runs_it_again()
   }
   let mut parked = Client::new(&yard);
   let state = parked.data("1", json!({"type": "state"}));
-  assert_eq!((&state["pending"], &state["parked"]), (&json!([]), &json!([["reply1", "reply"]])));
+  assert_eq!((&state["pending"], &state["parked"]), (&json!([]), &json!([["reply2", "reply"]])));
   parked.data("2", json!({"type": "wake", "act": "chain1"}));
-  parked.data("3", json!({"type": "retry", "act": "reply1"}));
+  parked.data("3", json!({"type": "retry", "act": "reply2"}));
   parked.until(started);
   let state = parked.data("4", json!({"type": "state"}));
   assert_eq!(state["parked"], json!([]), "a retry runs the act again");
