@@ -244,6 +244,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
     def takes():
+      teach(id, stood)
       return told(id, "standing", roster=[x[:3] for x in last[0]], cwd=last[1], actor=module().get("actor"))
 
     def replay(of="", words=""):

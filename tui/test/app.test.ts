@@ -665,12 +665,15 @@ test("an act that no word made stands as a lit line of python in a panel, which 
 
 test("a name inside a transcript tag opens the same live inspector as Python code", () =>
   composing(
-    async ({ session, screen, frame }) => {
+    async ({ session, app, screen, frame }) => {
       await session.engine.result(
         await session.engine.rung({ word: "answer = 17", on: session.engine.root }),
       );
       await session.refresh();
       session.show("transcript");
+      await frame();
+      // The transcript opens at its top, where the doctrine of the actor of the chain stands.
+      app.scroll.scrollTo(app.scroll.scrollHeight);
       const lines = (await frame()).split("\n");
       const row = lines.findIndex((line) => line.includes("answer = 17"));
       expect(row).toBeGreaterThanOrEqual(0);

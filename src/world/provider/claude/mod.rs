@@ -395,6 +395,7 @@ impl Claude {
         at
       }
     };
+    held.store = accounts.store(Some(at)).map(Path::to_path_buf);
     let program = self.program.under(at);
     let got = held.turn(&messages, spend, &program, self.stall, self.gone, deltas).await;
     got.map_err(|no| self.switched(at, no))
@@ -632,6 +633,15 @@ fn swept(held: &mut HashMap<String, Slot>) {
   }
 }
 
+/// The directory that each process runs in: a folder of furb, where the command line finds the memory of no project,
+/// and keeps the conversations of furb under one name.
+fn home() -> Result<PathBuf, CompletionError> {
+  let folder = env::temp_dir().join("furb-claude");
+  std::fs::create_dir_all(&folder)
+    .and_then(|()| std::fs::canonicalize(&folder))
+    .map_err(|no| failed(format!("{} was not made: {no}", folder.display())))
+}
+
 /// The file that holds a system prompt, which the command line reads by `--system-prompt-file`, so the command line
 /// of a process stays short and `ps` shows it whole. The file stands in the temporary directory under the digest of
 /// the prompt, so every process of one prompt reads the one file, and a new file lands whole by a rename.
@@ -661,6 +671,9 @@ struct Conversation {
   account: Option<usize>,
   /// Whether a process of this conversation stood, so the next resumes it.
   resumed: bool,
+  /// The config dir of the account of this conversation, none for the default one: the command line keeps its
+  /// conversations there, and a first process finds there the turns that it resumes.
+  store: Option<PathBuf>,
   /// The messages the command line heard, as their meaning alone, the reply of the last turn among them.
   chain: Vec<String>,
   /// The last message the command line heard while no reply follows it: the message of a turn that came to no
@@ -684,6 +697,7 @@ impl Conversation {
       account: None,
       parent: None,
       resumed: false,
+      store: None,
       chain: Vec::new(),
       asked: None,
       requested: Vec::new(),
@@ -691,6 +705,59 @@ impl Conversation {
       process: None,
       used: Instant::now(),
     }
+  }
+
+  /// Write the turns before the last message as a conversation of the command line under the id of this one, with the
+  /// role of each, which the first process of this one resumes. It says whether it wrote a turn.
+  fn seed(&mut self, past: &[Message]) -> Result<bool, CompletionError> {
+    let at = home()?;
+    let store = match (&self.store, env::var_os("CLAUDE_CONFIG_DIR")) {
+      (Some(dir), _) => dir.clone(),
+      (None, Some(dir)) => PathBuf::from(dir),
+      (None, None) => env::home_dir()
+        .ok_or_else(|| failed("no home holds the config dir of claude"))?
+        .join(".claude"),
+    };
+    let cwd = at.to_string_lossy();
+    let name: String =
+      cwd.chars().map(|one| if one.is_ascii_alphanumeric() { one } else { '-' }).collect();
+    let now = jiff::Timestamp::now().to_string();
+    let mut lines = String::new();
+    let mut parent = Value::Null;
+    for message in past {
+      let (kind, blocks): (&str, Vec<Value>) = match message {
+        Message::System { .. } => continue,
+        Message::User { content } => ("user", content.iter().map(said).collect::<Result<_, _>>()?),
+        Message::Assistant { content, .. } => {
+          let blocks = content.iter().filter_map(|one| match one {
+            AssistantContent::Text(text) => Some(json!({"type": "text", "text": text.text})),
+            _ => None,
+          });
+          ("assistant", blocks.collect())
+        }
+      };
+      if blocks.is_empty() {
+        continue;
+      }
+      let id = uuid();
+      let message = json!({"role": kind, "content": blocks});
+      let entry = json!({"type": kind, "uuid": id, "parentUuid": parent, "sessionId": self.id, "cwd": cwd,
+        "isSidechain": false, "userType": "external", "timestamp": now, "message": message});
+      lines.push_str(&format!("{entry}\n"));
+      parent = json!(id);
+    }
+    if lines.is_empty() {
+      return Ok(false);
+    }
+    let folder = store.join("projects").join(name);
+    let file = folder.join(format!("{}.jsonl", self.id));
+    let part = folder.join(format!("{}.part", uuid()));
+    std::fs::create_dir_all(&folder)
+      .and_then(|()| std::fs::write(&part, lines))
+      .and_then(|()| std::fs::rename(&part, &file))
+      .map_err(|no| failed(format!("{} was not written: {no}", file.display())))?;
+    self.resumed = true;
+    Ok(true)
   }
 
   /// One turn at what it spends: the messages that the command line has not heard, written as one line, and the reply it
@@ -734,9 +801,10 @@ impl Conversation {
       (Some(_), Some(one)) if !anew => std::slice::from_ref(one),
       (Some(at), None) if !anew => &messages[if again { last } else { at }..],
       _ => {
-        let account = self.account;
+        let (account, store) = (self.account, self.store.take());
         *self = Conversation::new(&self.name, &self.system);
         self.account = account;
+        self.store = store;
         messages
       }
     };
@@ -773,6 +841,7 @@ impl Conversation {
     command.args(["--verbose", "--include-partial-messages", "--model", &self.name]);
     let prompt = prompt_file(&self.system)?;
     command.arg("--system-prompt-file").arg(&prompt).args(["--setting-sources", ""]);
+    command.current_dir(home()?);
     // A completion needs no tool: no tool of the command line, no server of another, and no command of its own.
     command.args(["--strict-mcp-config", "--tools", "", "--disable-slash-commands"]);
     match (&self.parent, self.resumed) {
@@ -789,6 +858,11 @@ impl Conversation {
     // The command line serves completions alone, so its skills and its traffic of no use go.
     command.env("CLAUDE_CODE_DISABLE_BUNDLED_SKILLS", "1");
     command.env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1");
+    // Else the command line adds to a message of the user the memory of the project and of the user, and the file of
+    // each @path that the message holds, as the results of a tool.
+    command.env("CLAUDE_CODE_DISABLE_AUTO_MEMORY", "1");
+    command.env("CLAUDE_CODE_DISABLE_FILE_MENTIONS", "1");
+    command.env("CLAUDE_CODE_DISABLE_ATTACHMENTS", "1");
     command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
     // A program that a process holds open to write it is busy, as a new program is for a moment while a fork of
     // another thread holds it, so it starts at a later try.
@@ -1041,9 +1115,17 @@ impl Flight<'_> {
     gone: Duration,
     deltas: Option<&Deltas>,
   ) -> Result<CompletionResponse, CompletionError> {
-    let line = input(delta)?;
     let held = &mut *self.conversation;
     let before = held.resumed;
+    // The command line takes no turn of the model on its input: it drops one, or reads it as text of the user. So a
+    // first process resumes the turns before the last message from a conversation that furb writes.
+    let delta = match delta.split_last() {
+      Some((last, past)) if !held.resumed && held.parent.is_none() && held.seed(past)? => {
+        std::slice::from_ref(last)
+      }
+      _ => delta,
+    };
+    let line = input(delta)?;
     // A process spends what it started at, so a turn at another effort or another most of thought ends it.
     if held.process.as_mut().is_some_and(|one| one.spend != spend || !one.stands()) {
       held.process = None;
