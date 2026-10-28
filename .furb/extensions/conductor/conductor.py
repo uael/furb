@@ -132,7 +132,8 @@ RECIPES = """Recipes that fixers found again and again:
 - macOS has no timeout and no flock command, and BSD sed needs sed -i '' to edit in place. Edit a file with read and write, or with python3, and bound a command with the timeout of bash.
 - A git commit runs the hooks, which take minutes: give it timeout=1800.
 - The checkout at the root can stand behind origin/main and hold no build. Read and change code only in your worktree.
-- A cause that a brief names is a hypothesis: check it in the log before you build on it."""
+- A cause that a brief names is a hypothesis: check it in the log before you build on it.
+- python script/tokens.py prints the tokens of the engine and of the doctrine against their walls in seconds, and counts no stale copy: after a change of engine.py, run cargo check first when it asks."""
 
 RULES = """Run no real life of a model. Never open a window on this machine, not even for a test: the owner works on it, and each window takes his mouse and his keyboard. Run a check of the app only on the runners of CI. Start each comment, review, issue and PR body that you write on GitHub with 🤖, since you write from the owner's account and his own words carry no mark; a title keeps its own rule. Never take off the label owner-merge: only the owner takes it off, and that is his approval to merge. The owner sleeps or is away: ask him nothing and wait for nothing of his. Take each decision yourself from the brief and the rulings, say it in your PR body, and go on. Ask the one who gave you this work on its chain only when it alone can decide: await prompt(str, question, on="{home}").""" + "\n\n" + RECIPES
 
