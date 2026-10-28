@@ -631,13 +631,15 @@ export class Session extends EventEmitter {
           let moved = false;
           for (const act of acts) {
             const place = index.at.get(act.id);
-            moved ||= place === undefined || phaseOf(next[place]) !== phaseOf(act);
+            const phased = place === undefined || phaseOf(next[place]) !== phaseOf(act);
+            moved ||= phased;
             if (place !== undefined) next[place] = act;
             else index.at.set(act.id, next.push(act) - 1);
             index.ids.set(act.id, act);
             placed(index, act);
             if (!act.done) this.started[act.id] ??= clock();
-            if (this.counted !== 0 && (place === undefined || phaseOf(next[place]) !== phaseOf(act)))
+            // Only the prompts and the steps tell when a thread changed, so the table stays as small as the threads.
+            if (phased && this.counted !== 0 && (act.kind === "prompt" || act.kind === "rung"))
               this.changedAt[act.id] = clock();
             if (act.took !== undefined) this.took[act.id] = act.took;
           }
