@@ -401,11 +401,39 @@ fn a_turn_given_again_grown_that_comes_to_no_reply_again_begins_a_new_conversati
   assert_eq!(pids.len(), 3);
   let first = after(&yard.args(&pids[0]), "--session-id");
   assert_eq!(after(&yard.args(&pids[1]), "--resume"), first, "the grown message goes once");
-  let anew = after(&yard.args(&pids[2]), "--session-id");
+  let anew = after(&yard.args(&pids[2]), "--resume");
   assert!(anew.is_some() && anew != first, "the next time, a new conversation begins");
   let heard = yard.heard();
   assert!(heard[2].contains("third FAIL") && !heard[2].contains("second"), "{}", heard[2]);
-  assert!(heard[3].contains("first") && heard[3].contains("fourth"), "{}", heard[3]);
+  assert!(heard[3].contains("fourth") && !heard[3].contains("first"), "{}", heard[3]);
+}
+
+#[test]
+fn a_new_conversation_resumes_the_turns_before_its_last_message_from_a_conversation_that_holds_the_role_of_each()
+ {
+  let yard = Yard::new("seeded");
+  let dir = yard.at.join("dir");
+  let accounts = vec![Account { name: "a".to_owned(), source: Source::ConfigDir(dir.clone()) }];
+  let model = yard.claude_as(accounts, Switch::Failover).completion_model("sonnet");
+  let said = Message::assistant("read(\"x\")");
+  asked(&model, &[user("first"), said, user("second")], json!({"session": "chain"})).unwrap();
+  let id =
+    after(&yard.args(&yard.pids()[0]), "--resume").expect("the process resumes a conversation");
+  let heard = yard.heard();
+  assert!(heard[0].contains("second") && !heard[0].contains("first"), "{}", heard[0]);
+  assert!(!heard[0].contains("earlier turn"), "{}", heard[0]);
+  let projects: Vec<_> = fs::read_dir(dir.join("projects")).unwrap().flatten().collect();
+  let file = projects[0].path().join(format!("{id}.jsonl"));
+  let entries: Vec<Value> = fs::read_to_string(&file)
+    .unwrap()
+    .lines()
+    .map(|one| serde_json::from_str(one).unwrap())
+    .collect();
+  let roles: Vec<_> =
+    entries.iter().map(|one| one["message"]["role"].as_str().unwrap_or_default()).collect();
+  assert_eq!(roles, ["user", "assistant"]);
+  assert_eq!(entries[1]["message"]["content"][0]["text"], "read(\"x\")");
+  assert_eq!(entries[1]["parentUuid"], entries[0]["uuid"]);
 }
 
 #[test]

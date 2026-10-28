@@ -563,8 +563,8 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   Before every reply the chain tells the last paragraph of the turn, whose header says what the answer is for, as #rung5 advance on prompt1, which names the one that made the rung.
   The advance binds the share of the window that the last reply on the chain read, as rung5_share = 0.25: the tokens that reply read over the window that the roster gives its actor, to two places, and no share before a reply that read a token.
   The advance binds each act that a word of the chain awaits and that is not over, as rung5_waits = ['bash3'], and no waits when no word awaits, so the model sees which acts the words that it wrote before still wait for.
-  Before the first prompt to an actor whose roster entry holds a doctrine, the chain tells that doctrine as the quote doctrine, in a paragraph headed doctrine, so the doctrine stands before the message that changes from chain to chain, and each chain that starts the same holds it in the same prefix.
-  Before the advance of a reply to such an actor, the chain tells its doctrine when no prompt told it, and the chain never tells a doctrine that its transcript tells already, so the model reads it once, and a chain that asks no such actor tells nothing of it.
+  Before the paragraph of each standing that it takes, the chain tells the doctrine of its actor, when the roster entry of that actor holds one, as the quote doctrine, in a paragraph headed doctrine, so the doctrine stands before the words that the extensions play and the message that changes from chain to chain, and each chain that starts the same holds it in the same prefix.
+  Before the first prompt to another actor whose roster entry holds a doctrine, and before the advance of a reply to such an actor, the chain tells its doctrine when nothing told it, and the chain never tells a doctrine that its transcript tells already, so the model reads it once, and a chain whose actor reads none and that asks no such actor tells nothing of it.
   When nothing was told on the chain since the word of the last rung that the chain did not make was ready, the chain tells that rung under the header told nothing before the advance, so the model sees that the word showed it nothing.
   The chain holds the text of each paragraph told on it, in order.
   At the first ready of the next rung, the chain runs that text as the told rung of that rung, before its word, and holds nothing more.
@@ -896,7 +896,7 @@ The journal keeps each stand and its answer, so a later life says them again at 
 At its tip, once the record is said again whole, boot stands the life again, so a change of the World reaches every chain after what it replayed.
 Every chain hears the done of every stand, and a chain whose standing that answer changes tells it there, and binds its default actor again when the actor of the standing changes, so the transcript grows at one end.
 A standing binds the default actor of the chain, under the name actor, when its actor differs from that of the standing before it, so a new roster or a new directory alone keeps the actor that a word chose.
-The chain tells each standing it takes in one paragraph headed standing, which binds its roster, its directory and its actor, as chain1_roster, chain1_cwd and chain1_actor, and its roster holds no doctrine, since a chain tells the doctrine of an actor only where it asks that actor.
+The chain tells each standing it takes in one paragraph headed standing, which binds its roster, its directory and its actor, as chain1_roster, chain1_cwd and chain1_actor, and its roster holds no doctrine, since the chain tells the doctrine of an actor in a paragraph of its own.
 The standing a chain tells is what its transcript holds of it, and the stand itself tells nothing.
 """
 type Module = tuple[Literal["module"], str, str, dict[str, object]]
