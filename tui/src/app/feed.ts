@@ -1332,11 +1332,14 @@ export const feed = part({
       // wakes it, since nothing new runs on it until then.
       if (w.paused && !w.search) {
         // Work that the last life left holds the chain until a wake runs it again, and a word that closed its prompt
-        // ended with a cancel, which is no failure.
+        // ended with a cancel, which is no failure. That note is no fault, so it takes a muted tone, and it says what
+        // the ids mean before it lists them, since the clip of a narrow feed cuts the end of the line.
         const held = [...w.host.pending.keys()];
-        const failure = held.length
-          ? `${held.join(", ")} ran when the last life ended, and runs again at a wake.`
-          : w.activity.findLast((act) => act.kind === "rung" && failed(act))?.run?.reason;
+        const acts = held.length === 1 ? "1 act" : `${held.length} acts`;
+        const note = held.length
+          ? `${acts} ran when the last life ended, and run again at a wake: ${held.join(", ")}`
+          : undefined;
+        const failure = note ?? w.activity.findLast((act) => act.kind === "rung" && failed(act))?.run?.reason;
         add("paused", `paused:${failure ?? ""}:${this.theme}`, [], (box) =>
           this.banner(
             box,
@@ -1348,7 +1351,10 @@ export const feed = part({
             ],
             failure
               ? this.whole(
-                  this.text(clip(shortenHomes(failure).split("\n")[0] ?? "", this.feedWidth - 8), c.danger),
+                  this.text(
+                    clip(shortenHomes(failure).split("\n")[0] ?? "", this.feedWidth - 8),
+                    note ? c.muted : c.danger,
+                  ),
                   () => shortenHomes(failure),
                 )
               : undefined,
