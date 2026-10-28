@@ -788,3 +788,13 @@ async def test_a_prompt_to_a_model_takes_its_own_act() -> None:
   shown = engine.prompt(int, "how many?", to=OPERATOR, on=root)
   await settle()
   assert [(a[1], a[2]) for a in said(log, "started") if a[1] == shown] == [(shown, WORLD)]
+
+
+async def test_the_chain_acknowledges_no_done_that_a_word_of_the_chain_caused_with_a_close() -> None:
+  """The chain acknowledges no done that a word of the chain caused with a close, since the model that wrote that close knows it already, and it acknowledges a done that the chain itself caused, as the close of a rung that it refused."""
+  _, log, root = born("close(7)")
+  await engine.rung("p = prompt(int, 'seven')", on=root)
+  await settle()
+  (asked,) = [a[1] for a in said(log, "prompt") if a[5] == "seven"]
+  assert engine.peek(asked) == 7
+  assert [a[5] for a in said(log, "prompt") if a[5] == f"{asked} done"] == []

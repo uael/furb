@@ -473,6 +473,7 @@ def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[No
   The turns of the chain hold the result of the command that the acknowledgment names.
   A cancelled result is no orphan.
   The response of an acknowledgment is no orphan.
+  The chain acknowledges no done that a word of the chain caused with a close, since the model that wrote that close knows it already, and it acknowledges a done that the chain itself caused, as the close of a rung that it refused.
   When an act that a rung of the chain made is done while the word of that rung does not run, no word of the chain awaited it, no reply has shown it, no rung of the chain waits for a reply or ends the step of a prompt that is open, and no word of the chain is running, the chain prompts nothing, so that the model sees it, though after a word that the operator or an outside ear gave it waits for the next fact on the chain.
   The chain prompts nothing too for a failure of an act that a rung of the chain made before the run of that rung, as while its model writes its word, but for a cancel, so an error asks the model again even after that word closed its prompt.
   A pause stands over the close that answers a prompt too, so what a word gave waits for the wake.
