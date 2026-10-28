@@ -31,14 +31,15 @@ OWN = ("journal", "kernel", "gate", "")
 """OWN names the sayers that are no ear of the World: the journal, the Kernel, the gate, and the life itself."""
 
 
-def spy(last: tuple, seen: dict[str, list]) -> Generator[None, tuple | None]:
+def spy(last: tuple, seen: dict[str, list], *, made: bool) -> Generator[None, tuple | None]:
   """An ear of the outside that notes each act put on to it, each start that an ear of the World says and each keep,
-  until it hears the last entry of the record again."""
+  until it hears the last entry of the record again, or, when that entry is an act or its first answer, which the
+  journal says by no fact, until that act is made again."""
   while True:
     a = yield
     if not a or seen["tip"]:
       continue
-    if a[:2] == last:
+    if a[:2] == last[:2] or (made and engine.scope(last[1])):
       seen["tip"].append(a)
     elif a[0] == "keep":
       seen["kept"].append(a)
@@ -55,11 +56,17 @@ async def replayed(record: Path, directory: Path) -> dict[str, list]:
   )
   ears = dict(pairs)
   held = entries(stored)
+  last = held[-1][0]
   seen: dict[str, list] = {"tip": [], "kept": [], "put": []}
   try:
     engine.boot(
       held,
-      spy=spy(tuple(held[-1][0][:2]), seen),
+      spy=spy(
+        last,
+        seen,
+        made=engine.question(last)
+        or next(f for (f,) in held if f[1] == last[1] and f[0] in ("started", "done")) is last,
+      ),
       kernel=kernel(vars(python)),
       gate=sheet.gating(vars(python), furb_monty.gate),
       **ears,
@@ -86,6 +93,9 @@ def main() -> int:
     except Exception as no:
       say(f"the replay stops before the tip: {type(no).__name__}: {str(no)[:600]}")
       return 2
+  if not seen["tip"]:
+    say("the replay never heard the last entry of the record again")
+    return 2
   say(f"the replay reached the tip, {seen['tip'][0][:2]}")
   say(f"acts put on to the outside before the tip: {len(seen['put'])}")
   for a in seen["put"][:25]:

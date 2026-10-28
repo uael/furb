@@ -712,7 +712,9 @@ def boot(record=(), **outside):
             case (kind, about, _, *words) if scope(about):
               yield kind, about, *words
         match a := (yield):
-          case (kind, about, by, *_) if (q := get(about)) and by != "journal":
+          case (kind, about, by, *_) if (
+            (q := get(about)) and by != "journal" and (by or repr(first.get(about)) != repr(a))
+          ):
             if not by and (owed() or about in first):
               raise drift(about)
             if by not in known and by not in driven:
@@ -763,7 +765,7 @@ def boot(record=(), **outside):
         if kept.get(name, a) == a:
           if name not in taken and (f := first.get(name)):
             if f[0] == "done":
-              with site.set("journal"):
+              with site.set(f[2] and "journal"):
                 say("done", name, f[3])
             else:
               taken[name] = True

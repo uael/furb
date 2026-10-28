@@ -28,3 +28,7 @@ question, `("writing", writingN, by, chain, rung, part, before)`. No later life 
 asks no model again, so the part ran only at the run of its rung, too late: a rung that the part cancelled in the life
 asked its model in the replay. The store reads each such question as the writing fact, which the journal says again
 where the life said it, so the Kernel runs the part there.
+
+`refused.jsonl` holds a reply of the root that nothing took, which the life refused with no maker, `nothing takes
+reply`, so the root paused, and a reply of a second chain after it. The journal says that refusal again under no
+site, as the life said it, so the root pauses again and the second chain asks the next reply, as in the life.
