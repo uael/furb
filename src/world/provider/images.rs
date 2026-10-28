@@ -4,7 +4,7 @@
 //! of a user turn gives, as an image of rig, and reads it once while its file stays the same.
 
 use std::{
-  collections::HashMap,
+  collections::{HashMap, HashSet},
   fs::{self, OpenOptions},
   io::{ErrorKind, Write},
   path::{Path, PathBuf},
@@ -171,13 +171,19 @@ impl Images {
     Images { directory, held: HashMap::new() }
   }
 
-  /// The images that the prompts a user turn opens name, and the images that its reads give, each once, as images of
-  /// rig; and none when the life has no directory of images. A prompt tells its message in its open, and a read of an
-  /// image tells its text as that image alone, so an image that anything else names, as a text file that a read
-  /// shows, is no image of the turn.
-  pub(super) fn named(&mut self, python: &str) -> Result<Vec<UserContent>, String> {
+  /// The images that the prompts a user turn opens name, and the images that its reads give, as images of rig, each
+  /// after a text that names it as the turn names it, so a model knows which image is which; and none when the life
+  /// has no directory of images. A prompt tells its message in its open, and a read of an image tells its text as
+  /// that image alone, so an image that anything else names, as a text file that a read shows, is no image of the
+  /// turn. An image comes once in a request: an image that an earlier turn of it gave, as the turns of the origin of
+  /// a fork, is not given again, since the model reads it there under its name.
+  pub(super) fn named(
+    &mut self,
+    python: &str,
+    given: &mut HashSet<String>,
+  ) -> Result<Vec<UserContent>, String> {
     let Some(directory) = self.directory.clone() else { return Ok(Vec::new()) };
-    let mut uris: Vec<String> = Vec::new();
+    let mut uris: Vec<Named> = Vec::new();
     for paragraph in paragraphs(python) {
       let name = paragraph.strip_prefix('#').and_then(|rest| rest.split([' ', '\n']).next());
       let name = name.unwrap_or_default();
@@ -188,12 +194,17 @@ impl Images {
         continue;
       }
       for one in references(&paragraph) {
-        if (opens || alone(&paragraph, name, &one)) && !uris.contains(&one.uri) {
-          uris.push(one.uri);
+        if (opens || alone(&paragraph, name, &one)) && given.insert(one.uri.clone()) {
+          uris.push(one);
         }
       }
     }
-    uris.iter().map(|uri| self.image(&directory, uri)).collect()
+    let mut content = Vec::new();
+    for one in uris {
+      content.push(UserContent::text(one.text));
+      content.push(self.image(&directory, &one.uri)?);
+    }
+    Ok(content)
   }
 
   /// The content of the image of a uri: the one read before while its file stays the same, or read now.

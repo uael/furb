@@ -1125,8 +1125,8 @@ fn thinks((model, mut asked): (Model, Asked), thinking: Thinking) -> (Model, Ask
 }
 
 /// The turns of a chain as messages of rig. The engine phrases every turn as python and the provider renders
-/// nothing: a user turn goes as its python and the images that the prompts it opens name, and one that holds
-/// nothing goes not at all; an assistant turn goes as the blocks its provider gave, less its thought for a model that
+/// nothing: a user turn goes as its python and the images that the prompts it opens name, each after the text that
+/// names it and once in the request, and one that holds nothing goes not at all; an assistant turn goes as the blocks its provider gave, less its thought for a model that
 /// forgets it, or as its python when a provider of another kind gave them. A model that takes no image refuses a turn
 /// that names one.
 fn messages(
@@ -1137,6 +1137,8 @@ fn messages(
   let mut messages = Vec::new();
   // Whether the last turn of the model held nothing but marks, so the next user turn joins the one before it.
   let mut joins = false;
+  // The images that an earlier turn gave, which no later turn gives again.
+  let mut given = HashSet::new();
   for turn in turns.items().unwrap_or_default() {
     let Some(role) = entry(&turn, 0).and_then(|one| one.as_str()) else { continue };
     let python = entry(&turn, 1).and_then(|one| one.as_str()).unwrap_or_default();
@@ -1161,7 +1163,7 @@ fn messages(
     if python.is_empty() {
       continue;
     }
-    let seen = images.named(python).map_err(CompletionError::ProviderError)?;
+    let seen = images.named(python, &mut given).map_err(CompletionError::ProviderError)?;
     if !seen.is_empty() && !model.images {
       return Err(CompletionError::ProviderError(format!(
         "{} does not accept images.",

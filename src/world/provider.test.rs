@@ -710,7 +710,7 @@ fn a_turn_hands_its_images_to_a_model_that_takes_them_and_a_model_that_takes_non
   };
   assert!(matches!(
     content.iter().collect::<Vec<_>>()[..],
-    [UserContent::Text(_), UserContent::Image(_)]
+    [UserContent::Text(_), UserContent::Text(_), UserContent::Image(_)]
   ));
   let blind = streaming(&[]);
   let provider =
@@ -1921,4 +1921,46 @@ fn a_switched_account_is_a_failure_that_passes_in_its_own_words_and_no_wait_for_
   let no = CompletionError::ProviderError(said.to_owned());
   assert_eq!(passing(&no), Some(said.to_owned()));
   assert_eq!(limit(&no, &jiff::Zoned::now()), None);
+}
+
+#[test]
+fn each_image_comes_once_in_a_request_after_the_text_that_names_it_as_a_fork_gives_its_origin_again()
+ {
+  let at = yard("images-once");
+  fs::write(at.join("a.png"), b"\x89PNG\r\n\x1a\nimage").expect("the image is written");
+  let kept = images::attach(&at.join("images"), &at.join("a.png")).expect("the image is attached");
+  let named = images::reference("a.png", &kept.uri);
+  let user = |python: String| {
+    Object::tuple([Object::string("user"), Object::string(python), Object::none(), Object::none()])
+  };
+  let assistant = Object::tuple([
+    Object::string("assistant"),
+    Object::string("x = 1"),
+    Object::none(),
+    Object::none(),
+  ]);
+  // The origin opened the prompt, and the fork tells its open again in a later turn.
+  let open = format!("#prompt1 look at {named}\nprompt1: Act[str] = Act('prompt1')");
+  let turns = Object::list([user(open.clone()), assistant, user(format!("#rung2 ran\n\n{open}"))]);
+  let model = scripted(&MockCompletionModel::new([])).images();
+  let mut held = images::Images::new(Some(at.join("images")));
+  let got = messages(turns.as_ref(), &model, &mut held).expect("the messages of the turns");
+  let users: Vec<Vec<&'static str>> = got
+    .iter()
+    .filter_map(|one| match one {
+      super::Message::User { content } => Some(
+        content
+          .iter()
+          .map(|part| match part {
+            UserContent::Text(text) if text.text == named => "name",
+            UserContent::Text(_) => "text",
+            UserContent::Image(_) => "image",
+            _ => "other",
+          })
+          .collect(),
+      ),
+      _ => None,
+    })
+    .collect();
+  assert_eq!(users, [vec!["text", "name", "image"], vec!["text"]]);
 }
