@@ -119,18 +119,32 @@ hired: dict[str, float] = globals().setdefault("hired", {})
 paced: set[str] = globals().setdefault("paced", set())
 
 BUILD_SH = """d=${FURB_BUILD_SLOTS:-/tmp/furb-build-slots}
+note=${FURB_BUILD_NOTE:-60}
 mkdir -p "$d"
+start=$(date +%s)
+last=$start
 while :; do
   for i in 1 2 3; do
     if [ -f "$d/$i/pid" ] && ! kill -0 "$(cat "$d/$i/pid")" 2>/dev/null; then rm -rf "$d/$i"; fi
     if mkdir "$d/$i" 2>/dev/null; then
       echo $$ > "$d/$i/pid"
+      date +%s > "$d/$i/since"
       trap 'rm -rf "$d/$i"' EXIT
       trap 'exit 130' INT TERM
       "$@"
       exit $?
     fi
   done
+  now=$(date +%s)
+  if [ $((now - last)) -ge "$note" ]; then
+    last=$now
+    echo "build.sh: waited $((now - start)) s for a slot; the slots are held by:"
+    for i in 1 2 3; do
+      p=$(cat "$d/$i/pid" 2>/dev/null) || continue
+      s=$(cat "$d/$i/since" 2>/dev/null) || s=$now
+      echo "  slot $i: pid $p, held $((now - s)) s: $(ps -o command= -p "$p" 2>/dev/null | cut -c1-200)"
+    done
+  fi
   sleep 2
 done
 """
