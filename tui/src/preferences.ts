@@ -12,11 +12,19 @@ export type RailStyle = (typeof railStyles)[number];
 export const isRailStyle = (value: unknown): value is RailStyle =>
   typeof value === "string" && (railStyles as readonly string[]).includes(value);
 
+/** The form of the file of the preferences. A file with no version came from a build that saved the width of its sidebar
+ * with each save, so the width that it holds is the default of that build and no choice of the person. */
+const VERSION = 2;
+
 export class Preferences {
   /** The theme that every session shows: one by its name, or the one that follows the terminal. */
   theme: ThemeChoice = "terminal";
   sidebar = true;
   sidebarWidth = 56;
+  /** The width of the sidebar that the person wrote in the file, which the file keeps. */
+  private chosenWidth?: number;
+  /** Whether the preferences came from a file of an earlier form, which the next save writes in this form. */
+  private earlier = false;
   /** The shape of the sidebar. */
   sidebarStyle: RailStyle = "cards";
   /** Whether a thread that is over, and is not the last of its chain, starts folded in the feed. */
@@ -38,6 +46,7 @@ export class Preferences {
       const saved = JSON.parse(readFileSync(path, "utf8")) as {
         theme?: string;
         sidebar?: boolean;
+        version?: number;
         sidebarWidth?: number;
         sidebarStyle?: string;
         foldThreads?: boolean;
@@ -56,14 +65,18 @@ export class Preferences {
       if (typeof fold === "boolean") this.foldThreads = fold;
       if (typeof saved?.setupSeen === "boolean") this.setupSeen = saved.setupSeen;
       if (isLifeView(saved?.view)) this.view = saved.view;
-      if (typeof saved?.sidebarWidth === "number")
-        this.sidebarWidth = Math.max(32, Math.min(72, saved.sidebarWidth));
+      this.earlier = Boolean(saved) && saved?.version !== VERSION;
+      if (saved?.version === VERSION && typeof saved.sidebarWidth === "number") {
+        this.chosenWidth = Math.max(32, Math.min(72, saved.sidebarWidth));
+        this.sidebarWidth = this.chosenWidth;
+      }
       if (isRailStyle(saved?.sidebarStyle)) this.sidebarStyle = saved.sidebarStyle;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT")
         this.notice = `Could not read preferences at ${path}. Using the theme of the terminal for this run. The file is unchanged. Click to dismiss.`;
     }
-    this.saved = this.serialize(this.theme);
+    // A file of an earlier form is written again at the next save, even when no preference changed.
+    if (!this.earlier) this.saved = this.serialize(this.theme);
   }
   /** Whether the view holds still, as reduced motion asks, and as the mode of a screen reader asks too. */
   get still(): boolean {
@@ -71,9 +84,10 @@ export class Preferences {
   }
   private serialize(theme: ThemeChoice): string {
     return JSON.stringify({
+      version: VERSION,
       theme,
       sidebar: this.sidebar,
-      sidebarWidth: this.sidebarWidth,
+      ...(this.chosenWidth === undefined ? {} : { sidebarWidth: this.chosenWidth }),
       sidebarStyle: this.sidebarStyle,
       foldThreads: this.foldThreads,
       setupSeen: this.setupSeen,

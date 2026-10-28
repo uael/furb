@@ -209,7 +209,7 @@ its colors. Else it shows Ink on a dark terminal or on one that does not say its
 changes when the terminal changes. ⌃T or `/theme` chooses another. Sessions share the theme, and the TUI saves it in
 `$XDG_CONFIG_HOME/furb/ui.json`, or `~/.config/furb/ui.json`, and `%APPDATA%\furb\ui.json` on Windows.
 `FURB_CONFIG_DIR` selects another configuration directory. Tests and screenshot generation use isolated preferences.
-`sidebarWidth` in the preferences file sets the width of the sidebar, from 32 to 72 columns, and 56 by default. `sidebarStyle` picks its shape: cards, outline or inbox. On a terminal narrower
+`sidebarWidth` in the preferences file sets the width of the sidebar, from 32 to 72 columns, and 56 by default. A file with no `version` comes from an earlier build, which saved its own default width with each save, so the TUI takes no width from it. `sidebarStyle` picks its shape: cards, outline or inbox. On a terminal narrower
 than 100 columns the sidebar is hidden, and `/workspace` keeps all sessions available from the keyboard.
 
 A line of a word is 100 columns wide at most, less the room of its hint. A string of three marks over many lines
