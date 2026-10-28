@@ -8,8 +8,10 @@ A word answers by a close and never by a return: a body of a module takes no ret
 python and the gate says so.
 
 A word runs in parts when the World says the statements of it that its model finished, each as a writing of its
-rung, before the model wrote the rest. The Kernel runs the parts of a word in their order, and the run of the rung
-then runs what the parts left of the word, so a statement of a word runs once, wherever the word came from.
+rung, before the model wrote the rest. A writing is a fact and no act: the World says it and awaits nothing, so it
+stands at a yield while the part runs and takes each reply that the part makes a chain ask. The Kernel runs the parts
+of a word in their order, says that each ran, with what it raised, and the run of the rung then runs what the parts
+left of the word, so a statement of a word runs once, wherever the word came from.
 """
 
 from ast import PyCF_ALLOW_TOP_LEVEL_AWAIT
@@ -46,11 +48,13 @@ class Running:
   done, it makes a wants as the run, and carries the word forward at the done of that wants. It says the run done,
   as the run, with what the word gave.
 
-  A writing is a part of the word of a rung, which the World says as the model of the rung writes it, and the Kernel
-  takes and runs as it takes and runs a run. The jobs of one rung stand in a line, and the Kernel runs the job at
-  the head of that line, so the statements of a word run in their order and a statement that waits holds the
-  statements after it. It keeps the word of each rung as far as it ran it, so a run runs what the writings of its
-  rung left, and what a part raised, which is the raise of the word: the run of the rung is done with it. A part
+  A writing is a fact that holds a part of the word of a rung, which the World says as the model of the rung writes
+  it, and the Kernel runs that part from when it hears the writing, as it runs a run. A job is a run, or the part of
+  a writing, which is no act and so has a name of the Kernel alone. The jobs of one rung stand in a line, and the
+  Kernel runs the job at the head of that line, so the statements of a word run in their order and a statement that
+  waits holds the statements after it. It keeps the word of each rung as far as it ran it, so a run runs what the
+  writings of its rung left, and what a part raised, which is the raise of the word: the run of the rung is done
+  with it. When the part of a writing is over, the Kernel says that it ran, as its rung, with what it raised. A part
   that waits for an act makes no wants, since its rung waits for the turn of its model, and goes on at the done of
   that act.
   """
@@ -70,12 +74,26 @@ class Running:
     self.broke: dict[str, BaseException] = {}
     self.driving: set[str] = set()
     self.awaits: dict[str, list[str]] = {}
+    self.parts: dict[str, tuple[str, str, int]] = {}
+    self.heard = 0
 
-  def of(self, run: str) -> tuple:
-    """The run, as the life holds it: its chain, its rung and its word, among its words."""
-    got = verb(self.names, "get")(run)
+  def of(self, job: str) -> tuple[str, str, str, str, int]:
+    """The job, as the life holds it: its kind, its chain, its rung, its word, and how many characters of the word
+    of its rung stand before that word, which no run counts, since a run carries the word whole."""
+    if job in self.parts:
+      rung, part, before = self.parts[job]
+      return "writing", str(verb(self.names, "scope")(rung)), rung, part, before
+    got = verb(self.names, "get")(job)
     assert isinstance(got, tuple)
-    return got
+    kind, _, _, chain, rung, word, *_ = got
+    return str(kind), str(chain), str(rung), str(word), 0
+
+  def wrote(self, rung: str, part: str, before: int) -> str:
+    """A writing heard, as a job of its rung, under a name of the Kernel that no act takes."""
+    self.heard += 1
+    job = f"{rung} part {self.heard}"
+    self.parts[job] = (rung, part, before)
+    return job
 
   def took(self, run: str) -> None:
     """The run, taken as that run, which is what the Kernel says of it first."""
@@ -84,12 +102,11 @@ class Running:
     self.taken.add(run)
 
   def ended(self, run: str, got: BaseException | None) -> None:
-    """The word, or the part of it that a writing holds, is over, and the job is done with what the word gave, as
-    that job: its frame and the wants it waits on are dropped, so no done that comes later carries a word that is
-    gone. What a part raised is the raise of the word, which the run of its rung is done with, and the job after it
-    in the line of its rung runs."""
-    kind, _, _, _, rung, *_ = self.of(run)
-    rung = str(rung)
+    """The word, or the part of it that a writing holds, is over: a run is done with what the word gave, as that
+    run, and the rung says that the part of a writing ran, with what it raised. The frame of the job and the wants it
+    waits on are dropped, so no done that comes later carries a word that is gone. What a part raised is the raise of
+    the word, which the run of its rung is done with, and the job after it in the line of its rung runs."""
+    kind, _, rung, _, before = self.of(run)
     self.frames.pop(run, None)
     self.waits = {wants: one for wants, one in self.waits.items() if one != run}
     self.awaits = {made: kept for made, ones in self.awaits.items() if (kept := [x for x in ones if x != run])}
@@ -98,17 +115,21 @@ class Running:
     line = self.line.get(rung) or []
     if run in line:
       line.remove(run)
-    with self.site.set(run):
-      verb(self.names, "say")("done", run, got)
     if kind == "run":
+      with self.site.set(run):
+        verb(self.names, "say")("done", run, got)
       self.line.pop(rung, None)
       self.broke.pop(rung, None)
+    else:
+      del self.parts[run]
+      with self.site.set(rung):
+        verb(self.names, "say")("ran", rung, before, got)
     self.drives(rung)
 
   def carry(self, run: str, given: object) -> None:
     """The word stepped as its rung with what it waited for, and stepped again while what it waits for is done."""
     peek = verb(self.names, "peek")
-    with self.site.set(str(self.of(run)[4])):
+    with self.site.set(self.of(run)[2]):
       while True:
         try:
           frame = self.frames[run]
@@ -147,7 +168,7 @@ class Running:
   def begin(self, run: str) -> None:
     """A job taken, put in the line of its rung: it runs when the jobs of that rung before it are over. The job of a
     rung that is done already is done with CancelledError, since its word never begins."""
-    rung = str(self.of(run)[4])
+    rung = self.of(run)[2]
     self.taken.discard(run)
     if verb(self.names, "peek")(rung, ...) is not ...:
       return self.ended(run, self.cancelled())
@@ -170,8 +191,8 @@ class Running:
     the globals of its chain, and a job that holds no such statement is over at once. A job of a word that a part of
     it raised in is done with that raise, since a word is over where it raises. A job whose part follows another
     word than the one that ran is refused, since the Kernel runs no statement twice."""
-    _, _, _, chain, rung, *_ = self.of(run)
-    rung, held = str(rung), self.ran.get(str(rung), "")
+    _, chain, rung, _, _ = self.of(run)
+    held = self.ran.get(rung, "")
     part = self.broke.get(rung) or self.part(run, held)
     if isinstance(part, BaseException):
       return self.ended(run, part)
@@ -194,11 +215,10 @@ class Running:
   def part(self, run: str, held: str) -> str | BaseException:
     """What a job runs of the word of its rung, given what ran of it: what a run holds past what ran, and the part of
     a writing that follows what ran; or the refusal of a job that does not follow it."""
-    kind, _, _, _, rung, word, *rest = self.of(run)
-    whole = str(word)
+    kind, _, rung, whole, before = self.of(run)
     if kind != "run":
-      ok = rest[0] == len(held)
-      return whole if ok else self.refusing(f"{run} follows {rest[0]} characters of {rung}, and {len(held)} ran")
+      ok = before == len(held)
+      return whole if ok else self.refusing(f"a part of {rung} follows {before} characters of it, and {len(held)} ran")
     if whole.startswith(held):
       return whole[len(held) :]
     # A turn ends with no blank at its end, so the word may hold what ran less the blank lines after it.
@@ -215,21 +235,23 @@ class Running:
   def dropped(self, control: tuple) -> None:
     """Every run whose rung a control is over, dropped: the frame of a word that is mid step is never closed."""
     covers = verb(self.names, "covers")
-    for one in [x for x in self.frames if covers(control, self.of(x)[4])]:
+    for one in [x for x in self.frames if covers(control, self.of(x)[2])]:
       if not getattr(self.frames[one], "cr_running", False):
         self.frames[one].close()
         self.ended(one, self.cancelled())
 
 
 def kernel(names: Names) -> Ear:
-  """The Kernel: it takes each run and each writing, begins its word when it hears that it took it, and carries the
-  word at the done of each wants it made."""
+  """The Kernel: it takes each run and begins its word when it hears that it took it, runs the part of each writing
+  of a rung that the life holds when it hears the writing, and carries the word at the done of each wants it made."""
   held, heard = Running(names), {"run", "writing", "wants", "cancel", "close"}
   while True:
     match (yield heard | set(held.awaits)):
-      case ("run" | "writing", run, *_):
+      case ("run", run, *_):
         # This Kernel runs every word, retold or not, so it reads no donor off the run.
         held.took(run)
+      case ("writing", str(rung), _, str(part), int(before)) if verb(names, "get")(rung):
+        held.begin(held.wrote(rung, part, before))
       case ("started", run, *_) if run in held.taken:
         held.begin(run)
       case ("done", made, _, value) if made in held.awaits:

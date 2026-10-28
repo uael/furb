@@ -21,6 +21,11 @@ use std::{
 };
 
 use futures::{FutureExt, stream};
+use rig_core::{
+  completion::Usage,
+  streaming::StreamFinal,
+  test_utils::{MockCompletionModel, MockStreamEvent},
+};
 use unsync::oneshot;
 
 use crate::{
@@ -1453,4 +1458,158 @@ fn the_gate_answers_a_word_that_it_fails_on_with_a_refusal_and_reads_the_next_wo
     .verb("gate", vec![Object::string("x = 1")], vec![("on", Object::string(&root))])
     .unwrap();
   assert_eq!(next.py_repr(), "[]");
+}
+
+#[test]
+fn a_statement_that_a_model_streams_and_that_prompts_another_chain_has_its_reply_taken_by_the_same_provider()
+ {
+  let at = std::env::temp_dir().join(format!("furb-engine-streamed-{}", std::process::id()));
+  let _ = fs::remove_dir_all(&at);
+  fs::create_dir_all(&at).expect("a yard of the test");
+  let turn = |text: &str| {
+    [
+      MockStreamEvent::text(text),
+      MockStreamEvent::FinalResponse(StreamFinal::new("mock", Usage::new())),
+    ]
+  };
+  // The first statement runs as the model writes the rest, and it makes a second chain ask the same provider.
+  let first = "p = prompt(int, 'n', on=chain('two'))\nx = await p\nclose(x + 1)";
+  let life = |model: MockCompletionModel| {
+    let (record, store) = world::store(at.join("record.jsonl")).expect("the store opens");
+    let models = vec![world::Model::new("m", 200_000, model)];
+    let provider = world::Provider::new(at.display().to_string(), models);
+    let scratch = world::Scratch::own();
+    let ears: [(&str, Box<dyn Ear>); 4] = [
+      ("provider", provider.ear()),
+      ("files", world::files(scratch.clone(), None)),
+      ("bash", world::bash(scratch, &record)),
+      ("store", store),
+    ];
+    Engine::boot(record, ears).expect("the life opens")
+  };
+  let mut engine = life(MockCompletionModel::from_stream_turns([turn(first), turn("close(2)")]));
+  let root = engine.root().to_owned();
+  let with =
+    verbs::Prompt { message: Some("count".to_owned()), on: on(&root), ..Default::default() };
+  let id = engine.prompt(Object::string("int"), with).expect("a prompt is made").id().to_owned();
+  let waker = Waker::from(Arc::new(Parked(thread::current())));
+  let end = Instant::now() + Duration::from_secs(10);
+  let answered = |engine: &mut Engine| {
+    engine.peek(&id, verbs::Peek::default()).is_ok_and(|one| one.as_ref().as_int() == Some(3))
+  };
+  while !answered(&mut engine) && Instant::now() < end {
+    engine.pump(&waker).expect("the engine is driven");
+    thread::park_timeout(Duration::from_millis(20));
+  }
+  let mut facts =
+    engine.transcript(verbs::Transcript { on: on(&root), of: None }).expect("a transcript");
+  let chains: Vec<String> = facts
+    .iter()
+    .filter(|one| one.kind() == "chain" && one.question())
+    .map(|one| one.about().to_owned())
+    .collect();
+  for chain in &chains {
+    facts.extend(
+      engine.transcript(verbs::Transcript { on: on(chain), of: None }).expect("a transcript"),
+    );
+  }
+  let replies: Vec<String> = facts
+    .iter()
+    .filter(|one| one.kind() == "reply" && one.question())
+    .map(|one| one.about().to_owned())
+    .collect();
+  for reply in &replies {
+    let owned: Vec<&str> = facts
+      .iter()
+      .filter(|one| one.about() == reply && matches!(one.kind(), "started" | "done"))
+      .map(Fact::kind)
+      .collect();
+    assert_eq!(owned, ["started", "done"], "the provider takes {reply} before it is done");
+  }
+  assert_eq!(replies.len(), 2, "{replies:?}");
+  assert!(
+    answered(&mut engine),
+    "the word that ran in parts closes with what the second chain gave"
+  );
+  drop(engine);
+  // The record keeps each writing, so a later life runs each part where this one ran it, with no drift, and asks
+  // the model nothing again.
+  let mut second = life(MockCompletionModel::from_stream_turns(Vec::<[MockStreamEvent; 2]>::new()));
+  second.pump(&waker).expect("the engine is driven");
+  assert!(second.raised().is_none(), "{:?}", second.raised());
+  assert!(answered(&mut second), "the later life holds what the prompt came to");
+}
+
+/// An ear that takes each wait, and ends the wait of the operator by a work of two things that are ready at once: at
+/// the first it notes the wait, and at the second it calls a verb and says the wait done.
+fn teller() -> Box<dyn Ear> {
+  ear(move |mut co: Co<(u8, String, String)>| async move {
+    loop {
+      match co.next().await {
+        Next::Heard(a) if a.kind() == "wait" && a.question() => {
+          say(&mut co, Fact::says("started", a.about(), []));
+          if a.by() != "operator" {
+            say(&mut co, done(a.about(), Object::none()));
+            continue;
+          }
+          let (about, on) = (a.about().to_owned(), a.on().to_owned());
+          co.work(stream::iter([(1, about.clone(), on.clone()), (2, about, on)]));
+        }
+        Next::Heard(_) => {}
+        Next::Worked((1, about, on)) => {
+          say(&mut co, Fact::says("note", &on, [Object::string(about)]))
+        }
+        Next::Worked((_, about, on)) => {
+          let _ = co.call("get", vec![Object::string(on)], vec![]).await;
+          say(&mut co, done(&about, Object::none()));
+        }
+      }
+    }
+  })
+}
+
+/// An ear that makes a wait on the chain of each note that it hears, which the ear `teller` takes.
+fn noter() -> Box<dyn Ear> {
+  ear(move |mut co| async move {
+    loop {
+      let a = hear(&mut co).await;
+      if a.kind() == "note" {
+        let on = vec![("on", Object::string(a.about()))];
+        let _ = co.call("wait", vec![Object::float(3.0)], on).await;
+      }
+    }
+  })
+}
+
+#[test]
+fn what_an_ear_says_of_its_own_accord_lands_while_it_stands_at_a_yield_and_takes_each_act_that_it_makes()
+ {
+  // The note lands before teller calls the verb of its second thing, so teller takes the wait that the note makes.
+  let at = std::env::temp_dir().join(format!("furb-engine-yield-{}", std::process::id()));
+  let ears = [
+    ("provider", provider(at, Rc::default(), Rc::default())),
+    ("teller", teller()),
+    ("noter", noter()),
+  ];
+  let mut engine = Engine::boot(Vec::<Object>::new(), ears).unwrap();
+  let root = engine.root().to_owned();
+  let act = engine.wait(&[], verbs::Wait { seconds: Some(1.0), on: on(&root) }).unwrap();
+  block_on(act).unwrap();
+  let facts = engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
+  let made: Vec<String> = facts
+    .iter()
+    .filter(|one| one.kind() == "wait" && one.question() && one.by() == "noter")
+    .map(|one| one.about().to_owned())
+    .collect();
+  assert_eq!(made.len(), 1, "the note makes one wait");
+  let owned: Vec<(&str, &str)> = facts
+    .iter()
+    .filter(|one| one.about() == made[0] && matches!(one.kind(), "started" | "done"))
+    .map(|one| (one.kind(), one.by()))
+    .collect();
+  assert_eq!(
+    owned,
+    [("started", "teller"), ("done", "teller")],
+    "teller takes the wait that its note made"
+  );
 }

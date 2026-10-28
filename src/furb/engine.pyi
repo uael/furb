@@ -857,17 +857,20 @@ The chain runs one word at a time.
 A word that waits for an act gives the chain to the next word, which runs while it waits, and the waiting word runs on at the done of what it awaits.
 A run whose rung is done when the Kernel begins it never begins its word, and is done with CancelledError.
 """
-type Writing = tuple[Literal["writing"], str, str, str, str, str, int]
-"""A writing is the act of running a part of the word of a rung, which the World makes as that rung while the model of the rung writes the word, and the Kernel takes.
+type Writing = tuple[Literal["writing"], str, str, str, int]
+"""A writing is the fact that holds a part of the word of a rung, which the World says while the model of the rung writes the word, and which the Kernel hears and runs.
 A writing holds the part of the word that its model finished since the writing before it, and how many characters of the word stand before that part.
 The Kernel runs the part of a writing in the globals of the chain of its rung and as that rung, so what the part binds and what it makes are the rung's own.
-A writing is done with what a statement of its part raised, and with nothing when the part ran to its end.
-The Kernel runs the writings of one rung in the order it took them, and a part that waits for an act holds the parts after it.
+The Kernel runs the writings of one rung in the order it heard them, and a part that waits for an act holds the parts after it.
 A part that waits for an act makes no wants, so its rung hears the turn of its model while the part waits.
 The run of a rung runs what the writings of that rung left of the word, and nothing when they ran the word whole.
 The run of a rung whose writing raised is done with that raise and runs no more of the word, since a word is over where it raises.
-A writing whose part follows another word than the word that ran is refused, and so is a run whose word is not the word that ran, since the Kernel runs no statement of a word twice.
-A writing of a rung that is done never begins its part, and is done with CancelledError.
+A run whose word is not the word that ran is refused, since the Kernel runs no statement of a word twice.
+"""
+type Ran = tuple[Literal["ran"], str, str, int, BaseException | None]
+"""A ran is the fact that the Kernel says as a rung once the part of a writing of that rung is over, with how many characters of the word stand before that part, and with what a statement of the part raised, or nothing when the part ran to its end.
+The ran of a writing whose part follows another word than the word that ran holds a refusal, and its part never begins, since the Kernel runs no statement of a word twice.
+The ran of a writing of a rung that is done holds CancelledError, since its part never begins.
 """
 type Wants = tuple[Literal["wants"], str, str, str, str]
 """A wants is the act that a run makes when its word waits for an act that is not done: the rung takes it, and answers it with what that act came to when the rung hears its done, so a pause over the rung holds the word."""

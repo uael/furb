@@ -1642,7 +1642,7 @@ fn a_word_that_ends_with_a_line_of_three_backticks_runs_without_it_and_the_chain
     facts.iter().map(|(kind, about, _)| (kind.as_str(), about.as_str())).take(4).collect();
   assert_eq!(
     kinds,
-    [("started", "reply1"), ("writing", "writing1"), ("tell", root.as_str()), ("done", "reply1")]
+    [("started", "reply1"), ("writing", "rung1"), ("tell", root.as_str()), ("done", "reply1")]
   );
   assert!(facts[2].2.contains("the provider dropped that line"), "{}", facts[2].2);
   assert!(facts[3].2.starts_with("('assistant', 'x = 3\\ny = x', "), "{}", facts[3].2);
@@ -1832,23 +1832,25 @@ fn a_claude_command_line_at_its_usage_limit_is_asked_again_at_the_reset_and_answ
   assert_eq!(yard.heard().len(), 2, "the reply asked the command line again after the reset");
 }
 
-/// Whether a writing of this part of a word is done with nothing, which is that the part ran.
+/// Whether the Kernel says that a writing of this part of a word ran with nothing raised.
 fn wrote(engine: &mut Engine, part: &str) -> bool {
   let root = engine.root().to_owned();
   let facts = engine
     .transcript(verbs::Transcript { on: on(&root), of: None })
     .expect("the root has a transcript");
-  let holds =
-    |one: &Fact| (0..4).any(|at| one.word(at).and_then(|word| word.as_str()) == Some(part));
+  let place = |one: &Fact| (one.about().to_owned(), one.word(1).and_then(|word| word.as_int()));
   let made: Vec<_> = facts
     .iter()
-    .filter(|one| one.kind() == "writing" && holds(one))
-    .map(|one| one.about().to_owned())
+    .filter(|one| {
+      one.kind() == "writing" && one.word(0).and_then(|word| word.as_str()) == Some(part)
+    })
+    .map(place)
     .collect();
   facts.iter().any(|one| {
-    one.kind() == "done"
-      && made.iter().any(|name| name == one.about())
-      && one.word(0).is_some_and(|word| word.type_name() == "NoneType")
+    let ran = (one.about().to_owned(), one.word(0).and_then(|word| word.as_int()));
+    one.kind() == "ran"
+      && made.contains(&ran)
+      && one.word(1).is_some_and(|word| word.type_name() == "NoneType")
   })
 }
 
