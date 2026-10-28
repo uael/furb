@@ -90,7 +90,8 @@ pub struct Opening {
   /// How many seconds a turn of the claude command line may go with no progress.
   #[cfg_attr(feature = "python", pyo3(default))]
   pub stall: Option<f64>,
-  /// The directory of the images that a turn names.
+  /// The directory of the images that a turn names, where a read of an image keeps it; when unsaid, the folder
+  /// `<record>.images` beside the record that the life keeps, and none for a life that keeps no record.
   #[cfg_attr(feature = "python", pyo3(default))]
   pub images: Option<String>,
   /// A function of the host that answers each request in place of the models.
@@ -149,6 +150,15 @@ impl Opening {
   /// Whether the life keeps what it says to its record.
   fn keeps(&self) -> bool {
     self.keeps != Some(false) && self.works() && self.record.is_some()
+  }
+
+  /// The directory of the images: the one that the host names, or else the one beside the record that the life keeps.
+  fn gallery(&self) -> Option<PathBuf> {
+    match (&self.images, &self.record) {
+      (Some(images), _) => Some(PathBuf::from(images)),
+      (None, Some(record)) if self.keeps() => Some(PathBuf::from(format!("{record}.images"))),
+      _ => None,
+    }
   }
 
   /// The names of the ears of the crate, in the order of boot.
@@ -214,6 +224,7 @@ impl Opening {
       true => world::continued(path, record.len()),
       false => world::log(path, &record),
     });
+    let gallery = self.gallery();
     let (provider, search) = self.provider()?;
     let working = |made: Option<Box<dyn Ear>>| made.unwrap_or_else(silent);
     let config = places.config;
@@ -229,11 +240,12 @@ impl Opening {
       ("compaction", working(works.then(|| lasting(compaction(), compaction)))),
       (
         "files",
-        working(
-          scratch
-            .clone()
-            .map(|one| lasting(world::files(one.clone()), move || world::files(one.clone()))),
-        ),
+        working(scratch.clone().map(|one| {
+          let again = gallery.clone();
+          lasting(world::files(one.clone(), gallery.clone()), move || {
+            world::files(one.clone(), again.clone())
+          })
+        })),
       ),
       (
         "bash",
@@ -253,6 +265,7 @@ impl Opening {
   /// each of them, which the ear of the web asks.
   fn provider(self) -> Result<(Box<dyn Ear>, world::Search), Fault> {
     let works = self.works();
+    let gallery = self.gallery();
     let stall = self.stall.and_then(|seconds| Duration::try_from_secs_f64(seconds).ok());
     let claude = self.claude.map(PathBuf::from);
     let config = self.config.map(PathBuf::from);
@@ -282,8 +295,8 @@ impl Opening {
         fresh.provider(directory.clone(), offered.as_deref(), actor, answer.clone())?;
       Ok(candidate.into_settings())
     }));
-    if let Some(images) = self.images {
-      provider = provider.images(images);
+    if let Some(gallery) = gallery {
+      provider = provider.images(gallery);
     }
     if let Some(stream) = self.stream {
       provider = provider.writes(stream.0);
@@ -319,7 +332,13 @@ impl Opening {
     let ears = host.into_iter().chain(ears);
     let mut engine = match restore {
       // A life that goes on from a checkpoint boots on more entries than its record holds, and keeps no snapshot.
-      Some(restore) if restore.entries == record.len() && !cut => {
+      // A record that parks work replays: the park stands in front of the ears of a life that booted, which a snapshot
+      // of an earlier life lacks.
+      Some(restore)
+        if restore.entries == record.len()
+          && !cut
+          && crate::engine::looping(&record).is_empty() =>
+      {
         let opened =
           Engine::from_snapshot(&record, ears, &restore.table, restore.sand, &restore.past)
             .and_then(|mut engine| engine.verb("stand", vec![], vec![]).map(|_| engine));
@@ -332,7 +351,7 @@ impl Opening {
           (Err(fault), _) => return Err(fault),
         }
       }
-      Some(_) if !cut => {
+      Some(restore) if !cut && restore.entries != record.len() => {
         return Err(Fault::refused("the record changed while the life opened on its snapshot"));
       }
       _ => Engine::boot(record.clone(), ears)?,

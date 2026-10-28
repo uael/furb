@@ -130,7 +130,7 @@ impl Lived {
     let scratch = world::Scratch::own();
     let ears = [
       ("provider", provider(at.clone(), words, Rc::clone(&read))),
-      ("files", world::files(scratch.clone())),
+      ("files", world::files(scratch.clone(), None)),
       ("bash", world::bash(scratch, &record)),
       ("time", world::time()),
       ("store", store),
@@ -637,7 +637,7 @@ fn a_life_syncs_its_store_at_the_end_of_each_run_and_not_after_each_entry() {
   let scratch = world::Scratch::own();
   let ears = [
     ("provider", provider(at, words, Rc::default())),
-    ("files", world::files(scratch.clone())),
+    ("files", world::files(scratch.clone(), None)),
     ("bash", world::bash(scratch, &record)),
     ("time", world::time()),
     ("store", store),

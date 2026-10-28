@@ -1,7 +1,7 @@
 //! The images of a turn. A host attaches an image to a message as a file of a directory of images, named by the
 //! digest of its bytes, and the message names it as a Markdown image, `![name](furb-image://<digest>.<extension>)`.
-//! The provider hands a model each image that the message of a prompt of a user turn names, as an image of rig, and
-//! reads it once while its file stays the same.
+//! The provider hands a model each image that the message of a prompt of a user turn names, and each image that a read
+//! of a user turn gives, as an image of rig, and reads it once while its file stays the same.
 
 use std::{
   collections::HashMap,
@@ -171,9 +171,10 @@ impl Images {
     Images { directory, held: HashMap::new() }
   }
 
-  /// The images that the prompts a user turn opens name, each once, as images of rig; and none when the life has
-  /// no directory of images. A prompt tells its message in its open, and an image that anything else names is no
-  /// image of the turn.
+  /// The images that the prompts a user turn opens name, and the images that its reads give, each once, as images of
+  /// rig; and none when the life has no directory of images. A prompt tells its message in its open, and a read of an
+  /// image tells its text as that image alone, so an image that anything else names, as a text file that a read
+  /// shows, is no image of the turn.
   pub(super) fn named(&mut self, python: &str) -> Result<Vec<UserContent>, String> {
     let Some(directory) = self.directory.clone() else { return Ok(Vec::new()) };
     let mut uris: Vec<String> = Vec::new();
@@ -182,11 +183,12 @@ impl Images {
       let name = name.unwrap_or_default();
       let opens = crate::fact::named(name, "prompt")
         && paragraph.lines().last().is_some_and(|last| last.starts_with(&format!("{name}: Act[")));
-      if !opens {
+      let reads = crate::fact::named(name, "read");
+      if !opens && !reads {
         continue;
       }
       for one in references(&paragraph) {
-        if !uris.contains(&one.uri) {
+        if (opens || alone(&paragraph, name, &one)) && !uris.contains(&one.uri) {
           uris.push(one.uri);
         }
       }
@@ -213,6 +215,16 @@ impl Images {
     self.held.insert(path, (stamp, content.clone()));
     Ok(content)
   }
+}
+
+/// Whether the paragraph of a read tells the text of the read as this image alone, as a read of an image gives it.
+fn alone(paragraph: &str, name: &str, one: &Named) -> bool {
+  let told = format!("{name}_text = ");
+  paragraph.lines().any(|line| {
+    line.strip_prefix(&told).is_some_and(|value| {
+      value.len() == one.text.len() + 2 && value.get(1..value.len() - 1) == Some(one.text.as_str())
+    })
+  })
 }
 
 /// The paragraphs of the python of a user turn, in order: a blank line that a header follows ends one, since a word

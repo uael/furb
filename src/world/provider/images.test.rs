@@ -71,6 +71,23 @@ fn an_image_is_read_only_while_its_bytes_have_the_digest_it_is_named_by() {
 }
 
 #[test]
+fn a_turn_hands_a_model_each_image_that_a_read_gives_and_no_image_that_a_text_names() {
+  let at = yard("reads");
+  fs::write(at.join("a.png"), PNG).expect("the image is written");
+  let kept = attach(&at, &at.join("a.png")).expect("the image is attached");
+  let named = reference("a.png", &kept.uri);
+  let read = format!("#read1\nread1_path = '/x/a.png'\nread1_text = '{named}'");
+  let text = format!("#read2\nread2_path = '/x/a.md'\nread2_text = 'see {named}'");
+  let mut images = Images::new(Some(at.clone()));
+  assert_eq!(images.named(&read).map(|seen| seen.len()), Ok(1), "a read of an image hands it");
+  assert_eq!(
+    images.named(&text).map(|seen| seen.len()),
+    Ok(0),
+    "a text that names an image hands none"
+  );
+}
+
+#[test]
 fn a_turn_hands_a_model_each_image_that_the_message_of_a_prompt_it_opens_names_once() {
   let at = yard("turn");
   fs::write(at.join("a.png"), PNG).expect("the image is written");

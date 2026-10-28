@@ -400,7 +400,8 @@ that runs commands; configure the editor to wait until the file is saved and clo
 `/image path` attaches a PNG, JPEG, GIF, or WebP file. ⌃V or bare `/image` pastes an image through macOS
 AppKit, Windows PowerShell, Wayland `wl-paste`, or X11 `xclip`. Attachments have a limit of 20 MiB each and are
 copied beside the record. The provider of the session sends them to a model that takes images, with their
-references kept in the prompt.
+references kept in the prompt. A word that reads a PNG, JPEG, GIF, or WebP file copies it there too, and the model
+sees it as an image.
 Click the attachment row to open or remove an image from the draft.
 `/model` and `/effort` open separate pickers. The model picker lists the models of the session, then every
 model that the catalog of the crate offers. `/model name` takes `provider:model` or the model's id alone, by the

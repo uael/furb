@@ -15,7 +15,8 @@ API of its own:
 
 - `src/lib.rs` says what the crate gives: `Engine`, whose methods are the verbs of the contract, which `build.rs`
   makes from the contract, and `Ear`, the one trait of an ear, which a host writes as a generator of rust with `ear`.
-- `src/world/` holds the ears of the World that the crate writes, one file each: the files in `files.rs`, the
+- `src/world/` holds the ears of the World that the crate writes, one file each: the files in `files.rs`, which give a read of an
+  image as the Markdown image that names its copy in the directory of the images of the life, so a model sees it, the
   commands in `bash.rs`, time in `time.rs`, the store of builds in `builds.rs`, which holds the program of the command line of each version
   that ran on the machine, the store of the record in `store.rs`, as a file of lines or a database
   of SQLite, each a `Store` that the suite in `store.test.rs` holds to its laws, whose ear names in the record the
@@ -326,6 +327,7 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
   the same code draw the same captures, and `FURB_STILL_CLOCK`, a time in milliseconds, sets another time.
   `FURB_GALLERY_ONLY=<pattern>` writes only the captures whose names match, and ends with an error when none match.
   `FURB_GALLERY_TEXT=<folder>` writes the text of each capture too, which a model that cannot see an image reads.
+  A model sees a capture as an image when its word reads the PNG, as `read("docs/screenshots/x.png")`.
   A run ends with the line `Wrote N captures to <folder>.`. A push to `main` that
   changes a path that a capture reads runs `.github/workflows/gallery.yml`, which draws both again on a runner of CI
   and keeps one pull request open on the branch `w/gallery` with the files that changed. So a change of a screen

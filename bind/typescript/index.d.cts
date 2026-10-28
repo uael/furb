@@ -431,7 +431,10 @@ export interface Opening {
   claude?: string
   /** How many seconds a turn of the claude command line may go with no progress. */
   stall?: number
-  /** The directory of the images that a turn names. */
+  /**
+   * The directory of the images that a turn names, where a read of an image keeps it; when unsaid, the folder
+   * `<record>.images` beside the record that the life keeps, and none for a life that keeps no record.
+   */
   images?: string
   /** A function of the host that answers each request in place of the models. */
   answer?: (request: { actor: string; chain: string; messages: unknown[]; settings: Record<string, unknown> }, write: (delta: { text?: string; thinking?: string }) => void) => Promise<unknown>
