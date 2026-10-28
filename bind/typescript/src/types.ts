@@ -135,12 +135,24 @@ export function isQuestion(kind: string, id: string): boolean {
 export function questionKind(id: string): string | undefined {
   return id.match(/^(\w+?)\d+$/)?.[1];
 }
+/** The usage of an answer: the tokens that it read, the tokens that it wrote, the tokens read from and written to the
+ * cache, and its dollars. A float that the life marked, as 0.0, is the number it stands for, and a part that no record
+ * gave, or that is no finite number, counts as nothing, so that no sum of usages is ever NaN. */
+export function usageOf(usage: readonly unknown[]): [number, number, number, number, number] {
+  const part = (index: number) => {
+    const one = Number(unmarked(usage[index]));
+    return Number.isFinite(one) ? one : 0;
+  };
+  return [part(0), part(1), part(2), part(3), part(4)];
+}
 /** A map as JavaScript holds it again: a map the life marked as its pairs, since it holds the key `is`, whose keys
  * are all strings becomes that map, and its entries are read the same way. */
 export function unmarked(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(unmarked);
   if (!value || typeof value !== "object") return value;
   const held = value as Record<string, unknown>;
+  if (held.is === "float" && Array.isArray(held.args))
+    return Number(String(held.args[0]).replace(/^(-?)inf$/, "$1Infinity"));
   const pairs = held.is === "dict" && Array.isArray(held.args) ? held.args[0] : undefined;
   if (Array.isArray(pairs) && pairs.every((pair) => Array.isArray(pair) && typeof pair[0] === "string"))
     return Object.fromEntries(pairs.map(([key, one]) => [key, unmarked(one)]));

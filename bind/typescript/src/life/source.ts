@@ -1,3 +1,4 @@
+import { unmarked } from "../types.js";
 import type { Exit, LiveAct } from "./acts.js";
 import { type ActState, actState, valueText } from "./ladder.js";
 
@@ -150,6 +151,6 @@ export function outcome(act: LiveAct, label: (chain: string) => string): string 
   if (act.kind === "chain") return label(act.id);
   if (act.kind === "wait") return act.done ? `first ${valueText(act.value)}` : `${act.words[0] ?? ""}s`;
   if (act.kind === "cd") return valueText(act.value) || String(act.words[0] ?? "");
-  if (act.kind === "grant") return `$${act.words[0] ?? ""}`;
+  if (act.kind === "grant") return `$${unmarked(act.words[0]) ?? ""}`;
   return "";
 }

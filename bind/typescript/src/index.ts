@@ -28,4 +28,6 @@ export {
   questionKind,
   safeText,
   standingOf,
+  unmarked,
+  usageOf,
 } from "./types.js";

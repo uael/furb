@@ -13,7 +13,7 @@ import {
   type TextChunk,
   TextRenderable,
 } from "@opentui/core";
-import { actorParts, display, safeText, TIMEOUT } from "furb";
+import { actorParts, display, safeText, TIMEOUT, unmarked } from "furb";
 import {
   cancelled,
   type Exit,
@@ -81,7 +81,7 @@ export const details = part({
     if (act.kind === "prompt") return String(act.words[1] ?? "");
     if (act.kind === "rung")
       return String(this.session.program[act.id] || act.word || this.toldWord(act.id) || act.words[0] || "");
-    if (act.kind === "wait") return seconds(Number(act.words[0]));
+    if (act.kind === "wait") return seconds(Number(unmarked(act.words[0])));
     if (act.kind === "write") {
       // A write names the path of the Text that it writes, which a read gave whole, so the path drops the directory of
       // the chain.
@@ -91,8 +91,8 @@ export const details = part({
     }
     if (act.kind === "grant")
       return [
-        act.words[0] === null ? "" : `${dollars(Number(act.words[0]))} ceiling`,
-        act.words[1] === null ? "" : share(Number(act.words[1])),
+        act.words[0] === null ? "" : `${dollars(Number(unmarked(act.words[0])))} ceiling`,
+        act.words[1] === null ? "" : share(Number(unmarked(act.words[1]))),
       ]
         .filter(Boolean)
         .join("  ");
