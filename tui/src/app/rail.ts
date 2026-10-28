@@ -147,7 +147,8 @@ export const rail = part({
     const prompts = new Set(w.host.prompts.keys());
     const owed = [...prompts].join(" ");
     const kept = this.railThreadCache;
-    if (kept && kept.session === w && kept.version === w.promptsVersion && kept.owed === owed) return kept.list;
+    if (kept && kept.session === w && kept.version === w.promptsVersion && kept.owed === owed)
+      return kept.list;
     const index = w.ladderIndex;
     const list: ChainThread[] = [];
     // A chain that no act touched since the last read keeps its threads, so a new act costs one chain and not all.
