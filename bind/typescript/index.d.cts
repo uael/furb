@@ -215,11 +215,16 @@ export declare function enabled(root: unknown[][]): Array<Extension>
  */
 export declare const ENGINE: string
 
-/** An extension: its name, its word, and its life word, which is empty when it has none. */
+/**
+ * An extension: its name, its word, its life word, which is empty when it has none, and whether it plays on the root
+ * alone. An extension that plays on the root alone plays on no other chain but one whose source had it, since that
+ * chain makes the rung of its source again; any other extension plays on every chain.
+ */
 export interface Extension {
   name: string
   word: string
   life: string
+  root: boolean
 }
 
 /**

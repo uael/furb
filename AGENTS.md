@@ -34,7 +34,8 @@ API of its own:
   `operator.rs` holds the rules by which every console reads what the operator answers, and `scratch.rs` the
   scratch directory of a life, which the files serve as `scratch://` and the commands name as `$TMPDIR`.
 - `src/extension.rs` says what an extension is and where a host finds the ones that a life runs, and holds the ear
-  `extensions`, which enables each by a fact that the record keeps and plays its word as a rung on each chain, and
+  `extensions`, which enables each by a fact that the record keeps and plays its word as a rung on each chain where
+  its manifest says it plays, every chain or the root alone, and
   `parts`, the part for the TUI of each extension, which `tui/src/parts.ts` loads live.
   `extensions/` holds the official extensions, `memory`, `skills`, `compaction`, `ouroboros` and `web`, each a word, a
   contract and a suite, and `src/extension/` holds the ear of the World of each that has one: `compaction.rs` answers a
