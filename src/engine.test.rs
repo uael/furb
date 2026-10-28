@@ -1613,3 +1613,29 @@ fn what_an_ear_says_of_its_own_accord_lands_while_it_stands_at_a_yield_and_takes
     "teller takes the wait that its note made"
   );
 }
+
+#[test]
+fn a_fault_that_cuts_a_run_stops_the_life_which_refuses_each_later_entry_and_keeps_no_snapshot() {
+  let mut lived = Lived::new("stopped", &["x = 'a' * (5 << 30)", "close(8)"], true).unwrap();
+  let root = lived.root();
+  let with = verbs::Prompt { on: on(&root), ..Default::default() };
+  let cut =
+    lived.engine.prompt(Object::string("int"), with).expect_err("the memory bound cuts the run");
+  assert_eq!(cut.name, "MemoryError");
+  assert_eq!(lived.engine.stopped().map(|fault| fault.name.as_str()), Some("MemoryError"));
+  assert!(
+    lived.engine.snapshot().is_none(),
+    "a life that stopped keeps no snapshot of its sandbox"
+  );
+  let with = verbs::Prompt { on: on(&root), ..Default::default() };
+  let no =
+    lived.engine.prompt(Object::string("int"), with).expect_err("a life that stopped makes no act");
+  assert_eq!(no.name, "Refused");
+  assert!(
+    no.message().starts_with("The life stopped at MemoryError: memory limit exceeded"),
+    "{no}"
+  );
+  let view = lived.engine.word("len(transcript(ROOT))", vec![]).expect_err("nor reads one");
+  assert_eq!(view.message(), no.message());
+  assert_eq!(lived.read.borrow().len(), 1, "the model was asked once");
+}

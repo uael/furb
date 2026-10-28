@@ -58,6 +58,11 @@ API of its own:
   sandbox, which the engine steps as a generator. An ear that boot is given and that raises refuses the act that it
   heard when that act is of a kind it waits for, and starts again from a fresh ear when it can, as the Kernel, the
   gate and each ear that `lasting` in `src/ear.rs` made do. The life tells the operator once which ear raised and why.
+  A fault that no code of the sandbox catches, as the bound of the memory in `src/sand.rs` or a second excess of the
+  bound of a turn, cuts the run, and no `finally` of the frames that it cuts runs, so the bus of the engine would stay
+  busy and hear no fact after it. So the life stops there: it keeps no snapshot, refuses each later entry with that
+  fault, and gives it to a host as `stopped`. The host of the TUI tells each window that the life stopped, and its log
+  keeps why.
 - The Kernel is `src/furb/kernel.py`, one module that the sandbox loads and the python package imports, each on the
   names of its engine. The gate, `src/gate.rs`, is the type checker of monty. It reads a word on the sheet of the
   engine, `src/furb/sheet.py`, against the typeshed of the sandbox, and it runs each import of the word in a sandbox
