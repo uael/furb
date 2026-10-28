@@ -679,7 +679,19 @@ def controlled(ear, lasting=False):
 def boot(record=(), **outside):
   global say, act, drive, get, peek, transcript
   get_running_loop()
-  made, known, done, held, log, alive, born, busy, left, waits = Counter(), {}, {}, {}, [], {}, {}, set(), [], {}
+  made, known, done, held, log, alive, born, busy, left, waits, unheard = (
+    Counter(),
+    {},
+    {},
+    {},
+    [],
+    {},
+    {},
+    [],
+    [],
+    {},
+    [],
+  )
   first, driven, taken = {e[1]: e for (e,) in record[::-1] if e[0] in ("started", "done")}, set(), {}
   due = [e for (e,) in record[::-1] if first.get(e[1]) is not e]
   kept = {e[1]: e for (e,) in record if question(e)}
@@ -724,7 +736,7 @@ def boot(record=(), **outside):
             if kind == "wake":
               for name in [x for x in taken if taken[x] and covers(a, x) and not over(x)]:
                 del taken[name]
-                offers(known[name])
+                offers(known[name], [*outside])
     finally:
       for pile in log, left, due, first, kept:
         pile.clear()
@@ -752,7 +764,7 @@ def boot(record=(), **outside):
     if known.setdefault(name, a) is a:
       holds(scope(on), [a])
       log.append((a, heard := [*outside]))
-      busy.add(id(a))
+      busy.append(id(a))
       try:
         for n, g in ears(a):
           if not (ear or n in heard or n == "journal" or n in busy or name in taken):
@@ -761,26 +773,28 @@ def boot(record=(), **outside):
         if ear:
           heard.append(name)
           drive(ear(name), name)
-        if kept.get(name, a) == a:
-          if name not in taken and (f := first.get(name)):
-            if f[0] == "done":
-              with site.set("journal"):
-                say("done", name, f[3])
-            else:
-              taken[name] = True
-          if kind in ("run", "chain") or not owed():
-            offers(a)
-        if name not in taken:
-          with site.set(""):
-            say("done", name, Refused("nothing takes " + kind))
+        if kept.get(name, a) == a and name not in taken and (f := first.get(name)):
+          if f[0] == "done":
+            with site.set("journal"):
+              say("done", name, f[3])
+          else:
+            taken[name] = True
+        offers(a, [*outside] * (kept.get(name, a) == a and (kind in ("run", "chain") or not owed()))) or refuses(a)
       finally:
-        busy.discard(id(a))
+        busy.remove(id(a))
       dispatch()
     return Act(name)
 
-  def offers(a):
-    for n, g in outside.items():
-      (a[1] in taken and a[0] != "chain") or hears(n, g, a)
+  def offers(a, names):
+    outer = [x for x in busy if x in outside][:-1]
+    while names and (a[1] not in taken or a[0] == "chain") and names[0] not in outer:
+      hears(n := names.pop(0), outside[n], a)
+    return names and a[1] not in taken and [unheard.append((a, names))]
+
+  def refuses(a):
+    if a[1] not in taken:
+      with site.set(""):
+        say("done", a[1], Refused("nothing takes " + a[0]))
 
   def ears(a):
     q = get(a[1]) or a[:1] * 4
@@ -797,7 +811,9 @@ def boot(record=(), **outside):
 
   def dispatch():
     while not busy:
-      if left:
+      if unheard:
+        offers(*(e := unheard.pop(0))) or refuses(e[0])
+      elif left:
         hears(*left.pop(0))
       elif log:
         a, heard = log.pop(0)
@@ -812,12 +828,12 @@ def boot(record=(), **outside):
     if name in busy or alive.get(name) is not g:
       return
     with site.set(name):
-      busy.add(name)
+      busy.append(name)
       try:
         waits[name] = w = lives(g, a)
         w is False and alive.pop(name)
       finally:
-        busy.discard(name)
+        busy.remove(name)
 
   def drive(g, name):
     if name in alive:

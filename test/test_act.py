@@ -104,6 +104,37 @@ async def test_it_is_then_put_to_the_ears_of_the_outside_in_turn_until_one_takes
   assert ("started", made, made) in log and [a for a in after if a[1] == made][:1] == [engine.get(made)]
 
 
+async def test_an_ear_of_the_outside_that_is_busy_under_another_hears_it_once_it_is_done_speaking() -> None:
+  """An ear of the outside that is busy under another ear of the outside, as the World is while the Kernel runs a word that the World said, hears the act once it is done speaking, with the ears after it, and the act is refused only when none of them took it."""
+  log: list[tuple] = []
+  made: list[str] = []
+  roots: list[str] = []
+
+  def streaming() -> Generator[tuple | None, tuple]:
+    while True:
+      match a := (yield):
+        case ("go", *_):
+          engine.act("poke", roots[0], None)
+        case ("note", about, *_) if engine.get(about) == a:
+          yield "started", about
+
+  def poking() -> Generator[tuple | None, tuple]:
+    while True:
+      match a := (yield):
+        case ("poke", about, *_) if engine.get(about) == a:
+          made.append(engine.act("note", roots[0], None))
+          yield "done", about, None
+
+  sand = Sand()
+  root = engine.boot((), **kernel(), probe=watched(log), streamer=streaming(), poker=poking(), world=sand.hears())
+  roots.append(root)
+  engine.say("go", root)
+  (note,) = made
+  assert engine.peek(note, ...) is ... and ("started", note, "streamer") in log
+  lone = engine.act("lone", root, None)
+  assert isinstance(engine.peek(lone), Refused)
+
+
 async def test_to_take_an_act_is_to_say_a_started_or_a_done_about_it() -> None:
   """To take an act is to say a started or a done about it: a done settles it now, and a started says that its done comes later."""
   _, log, root = born(files={"/w/a.txt": "one\n"}, auto=False)
