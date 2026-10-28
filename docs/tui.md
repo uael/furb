@@ -75,8 +75,9 @@ after ⌥T, and the header of the thread in the feed holds Collapse and Resolve.
 window of the chain shown is and where a grant pauses it, its tokens, and what it spent.
 
 The feed shows the threads of the chain, each as one box. A thread is a prompt: its message heads the box as markdown,
-with a line at its left that runs down the whole box: it takes the color of the thread at each of your messages, and a
-quiet color elsewhere. At the right of the message stands who sent it and to which model when you did not, the type of
+with a line at its left in the color of the thread, which starts half a row above the message and ends half a row under
+it, as the line of a panel does, so it adds no row. Only your messages have it: the code and the answers have no line,
+and their text starts where the text of a message starts, as it starts in the input. At the right of the message stands who sent it and to which model when you did not, the type of
 its answer, its state and its controls. Each message that came to the thread later stands in the box the same way, and
 the answer of the model stands as markdown with no line of color. The words of its steps stand in the same box as code, with no
 surface of their own, as one Python program, line by line, with the number of each line in the gutter, in a quiet color.
@@ -94,7 +95,8 @@ message that you send to the thread, and each notice of the chain, stands as a c
 of the thread works on a step, each line of its word that it finished stands above as Python in its colors, and the last
 row of the thread is the line that comes: a loader after it, and the line that the model still writes, else the last
 line that it thinks, as a comment, or `# thinking` while it shows no thought, whose letters a light crosses. The answer
-of the thread stands in a panel of the color of the thread, with the model that gave it and its effort at its right. A
+of the thread stands under its program, with the model that gave it and its effort at its right. A thread that you fold
+stands as one line, with the line of its color half a row above and under it. A
 word that you run stands as your messages stand, as its program in a panel of its own color, and so does an act that no
 word made, as a command that `/bash` starts: one line of Python that binds the act to its name, as `bash3 = bash("make
 docs")`.

@@ -236,6 +236,9 @@ export interface BlockOptions {
   /** A card that is a part of the box of a thread: the cards of one thread share a panel, and the first and the last
    * of them draw its edges. */
   join?: "only" | "first" | "middle" | "last";
+  /** The color of the line of a message of the operator that stands first or last in the box of a thread, whose cap
+   * the edge of the box holds. */
+  edge?: RGBA;
 }
 
 export interface Choice {

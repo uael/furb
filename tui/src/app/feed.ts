@@ -428,7 +428,7 @@ export const feed = part({
             {
               indent,
               same: [key],
-              ...(framed ? { group: "user", heading: false, open: true } : {}),
+              ...(framed ? { group: "user", heading: false, open: true, separate: true } : {}),
               ...(shown !== undefined && !at ? { shown } : {}),
             },
           );
@@ -556,16 +556,18 @@ export const feed = part({
                 );
               const controls = this.threadControls(act);
               if (controls) row.add(controls);
-              this.barred(box, tone).add(row);
+              this.barred(box, tone, 0, { top: false, bottom: false }).add(row);
             },
             {
               act,
               group: "user",
               heading: false,
+              separate: true,
               open: true,
               indent,
               shown: message,
               join: "only",
+              edge: tone,
             },
           );
           return;
@@ -864,10 +866,14 @@ export const feed = part({
             section.id,
             `${section.key}\n${join}\n${gap}\n${Boolean(section.bar)}`,
             section.label ?? [],
-            (box) => section.body(this.barred(box, section.bar, gap)),
+            (box) =>
+              section.body(
+                this.barred(box, section.bar, gap, { top: at > 0, bottom: at < sections.length - 1 }),
+              ),
             {
               indent,
               join,
+              ...(section.bar ? { edge: section.bar } : {}),
               heading: false,
               separate: at === 0,
               open: true,
@@ -1166,7 +1172,7 @@ export const feed = part({
               if (meta) row.add(this.text(meta, c.faint, { marginLeft: space.between, run: toggle }));
               this.panel(box, tone).add(row);
             },
-            { group: "user", heading: false, open: true, act, indent, shown: message },
+            { group: "user", heading: false, separate: true, open: true, act, indent, shown: message },
           );
         } else if (asksOperator(act)) {
           const message = String(act.words[1] ?? "");
