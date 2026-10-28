@@ -24,7 +24,9 @@ The word stands on a sheet of its own::
     <the word>
 
 Every line of it is there for a reason. The gate gives the checker the engine once, as the module MODULE, which
-the sheet alone imports, so a reading costs the program and the word and not the engine. The body is async, so a
+the sheet alone imports, so a reading costs the program and the word and not the engine. The gate of the crate lays
+the words of the program out in modules of its own, which its checker reads once, so a reading costs the words
+that it did not read before and the word. The body is async, so a
 word may await at its top level. ty gives every module names that a chain in the sandbox does not hold, UNBOUND,
 so the body declares each of them and never binds it: ty refuses a word that reads it, as the sandbox does, on
 every engine. The module of a chain holds every name of the engine, an import of the engine among them, so the
