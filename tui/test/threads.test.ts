@@ -116,7 +116,7 @@ test("a thread resolves from its row, and a message to it opens it again", () =>
       await railClick(use, " Resolve ");
       await until(session, () => listed(session).find((one) => one.act.id === id)?.resolved === true);
       expect(await session.engine.result(id)).toBe("resolved");
-      expect(await frame()).toContain(" Open again ");
+      expect(await frame()).toContain("Reply to open this thread again");
       await session.submit("Look at it once more");
       await until(session, () => listed(session).find((one) => one.act.id === id)?.resolved === false);
       keep("reopened", await frame());

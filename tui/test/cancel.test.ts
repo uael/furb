@@ -113,7 +113,12 @@ test("the owner takes back his last message and writes it again, and no other wo
         [thread, "Cancel"],
       ] as const) {
         const text = String(session.acts.find((act) => act.id === id)?.words[1]);
-        await frame();
+        // The markdown of a message draws over a few frames, and more of them on a slow machine.
+        let shown = await frame();
+        for (let step = 0; step < 200 && !shown.includes(`┃ ${text}`); step++) {
+          await Bun.sleep(25);
+          shown = await frame();
+        }
         const [column, row] = find(screen, `┃ ${text}`);
         await screen.mockMouse.click(column + 4, row, 2);
         expect(await frame()).toContain(choice);

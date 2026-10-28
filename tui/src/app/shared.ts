@@ -95,7 +95,7 @@ export const PROGRAM_STEPS = 6;
 
 /** The width of the numbers of a program, with the space after them: room for two digits at least, so the code of
  * each thread of under a hundred lines starts at one column. */
-export const gutterWidth = (digits: number) => Math.max(2, digits) + space.inset + 1;
+export const gutterWidth = (digits: number) => Math.max(2, digits) + space.inset;
 
 /** A row that a model writes as the tick compares it: its number, and its text with the color of each part. */
 export const saidOf = (number: number, parts: readonly Part[]) =>
@@ -233,6 +233,12 @@ export interface BlockOptions {
   indent?: number;
   /** A card that no fold of the feed closes, since its body folds itself, as the panel of a message does. */
   open?: boolean;
+  /** A card that is a part of the box of a thread: the cards of one thread share a panel, and the first and the last
+   * of them draw its edges. */
+  join?: "only" | "first" | "middle" | "last";
+  /** The color of the line of a message of the operator that stands first or last in the box of a thread, whose cap
+   * the edge of the box holds. */
+  edge?: RGBA;
 }
 
 export interface Choice {

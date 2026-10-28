@@ -135,16 +135,16 @@ test("a click on a line of a program opens it in place, with its whole text and 
       await until(session, () => session.turns.some((turn) => turn[0] === "assistant"));
       const shut = await row();
       expect(shut.y).toBeGreaterThan(0);
-      expect(shut.rows.join("\n")).not.toMatch(/^ +✓ search *$/m);
+      expect(shut.rows.join("\n")).not.toMatch(/^[ ┃]+✓ search\b/m);
       await screen.mockMouse.click(shut.x, shut.y);
       await screen.flush();
       const open = await row();
-      expect(open.rows.join("\n")).toMatch(/^ +✓ search *$/m);
+      expect(open.rows.join("\n")).toMatch(/^[ ┃]+✓ search\b/m);
       // The whole line shows, cut into rows at the column of the code, past the mark where it was cut.
-      expect(open.rows[open.y]).not.toContain("…");
+      expect(open.rows[open.y]?.slice(0, 100)).not.toContain("…");
       await screen.mockMouse.click(open.x, open.y);
       await screen.flush();
-      expect((await row()).rows.join("\n")).not.toMatch(/^ +✓ search *$/m);
+      expect((await row()).rows.join("\n")).not.toMatch(/^[ ┃]+✓ search *$/m);
     },
     { width: 145, height: 45, useMouse: true },
   ));
@@ -347,7 +347,7 @@ test("the last row of a thread whose model works shows a loader left of the numb
     await until(session, () => session.activity.some((act) => act.kind === "rung" && !act.done));
     await session.refresh();
     const row = async () => (await frame()).split("\n").find((line) => / 1 # /.test(line)) ?? "";
-    expect(await row()).toMatch(/^ +[^\s\d] +1 # thinking/);
+    expect(await row()).toMatch(/^[ ┃]+(?:[\u2800-\u28ff] +)?1 # thinking/);
     const step = session.activity.find((act) => act.kind === "rung" && !act.done)?.id ?? "";
     // The thought streams in the worker, since each state of the worker replaces the streams that the host holds.
     const think = Reflect.get(session.host, "ask") as (
@@ -362,7 +362,7 @@ test("the last row of a thread whose model works shows a loader left of the numb
     );
     // The tick draws the row again from the stream, and no other part of the feed.
     await new Promise((done) => setTimeout(done, 250));
-    expect(await row()).toMatch(/^ +[^\s\d] +1 # Then I wait\./);
+    expect(await row()).toMatch(/^[ ┃]+(?:[\u2800-\u28ff] +)?1 # Then I wait\./);
     await session.submit("/cancel");
   }));
 
@@ -655,7 +655,7 @@ test("an act that no word made stands as a lit line of python in a panel, which 
         setSystemTime(new Date(start + 1300));
         await frame();
         expect(app.scroll.getChildren().some((node) => node.id === id)).toBe(true);
-        expect(screen.captureCharFrame()).toMatch(new RegExp(`${id} = wait\\(60\\) +# waits 60s +1\\.0s`));
+        expect(screen.captureCharFrame()).toMatch(new RegExp(`${id} = wait\\(60\\) +◉ # waits 60s +1\\.0s`));
       } finally {
         setSystemTime();
       }

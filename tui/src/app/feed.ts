@@ -1,5 +1,5 @@
 import { type BoxRenderable, DiffRenderable, type RGBA } from "@opentui/core";
-import { display } from "furb";
+import { display, imageReferences } from "furb";
 import {
   actLines,
   asksOperator,
@@ -26,6 +26,7 @@ import { bold, italic, type Part, plain } from "../ui.ts";
 import { branchMessages, branchStart, branchTakes, earlierSteps } from "../watching.ts";
 import { part } from "./part.ts";
 import { type BlockOptions, MESSAGE_ROWS, PROGRAM_STEPS, spell, threadMarks, viewLabels } from "./shared.ts";
+import { SCROLL } from "./thread.ts";
 
 export const feed = part({
   renderContent(): void {
@@ -287,6 +288,21 @@ export const feed = part({
         this.programs.set(key, { version: then ? -1 : w.version, live, lines: made });
         return made;
       };
+      // What a step took and cost once it is done, and how long the line that waits has waited.
+      const took = (step: ActRow) =>
+        step.kind !== "rung" || !step.done
+          ? ""
+          : [
+              w.took[step.id] === undefined ? "" : spell(w.took[step.id] ?? 0),
+              step.cost ? dollars(step.cost) : "",
+            ]
+              .filter(Boolean)
+              .join(" ");
+      const since = (act?: ActRow) => {
+        const began = act && w.started[act.id];
+        const ms = began ? clock() - began : 0;
+        return ms >= 1000 ? spell(Math.floor(ms / 1000) * 1000) : "";
+      };
       const programCard = (
         id: string,
         given: readonly ProgramLine[],
@@ -327,9 +343,7 @@ export const feed = part({
               (box) => {
                 // The row stands in the column of the program above it.
                 const row = this.box({ paddingLeft: space.between });
-                row.add(
-                  this.thinkingRow(line.step.id, line.display, digits, tone, this.feedWidth - indent - 12),
-                );
+                row.add(this.thinkingRow(line.step.id, line.display, digits, this.feedWidth - indent - 13));
                 box.add(row);
               },
               { indent },
@@ -348,20 +362,6 @@ export const feed = part({
         // The notes that came before the first step shown fold with the earlier steps.
         const from = earlier ? 1 : hide ? all.findIndex((line) => line.step === steps[hide]) : 0;
         const program = from ? all.slice(from) : all;
-        const took = (step: ActRow) =>
-          step.kind !== "rung" || !step.done
-            ? ""
-            : [
-                w.took[step.id] === undefined ? "" : spell(w.took[step.id] ?? 0),
-                step.cost ? dollars(step.cost) : "",
-              ]
-                .filter(Boolean)
-                .join(" ");
-        const since = (act?: ActRow) => {
-          const began = act && w.started[act.id];
-          const ms = began ? clock() - began : 0;
-          return ms >= 1000 ? spell(Math.floor(ms / 1000) * 1000) : "";
-        };
         // A program that a panel frames, as a word of the operator, leaves the room of the bar and the inset of the panel.
         const room = this.feedWidth - indent - 8 - (framed ? space.between + space.inset : 0);
         // A click on a line opens it in place: its whole text, and under it what each act of the line gave. The
@@ -423,12 +423,12 @@ export const feed = part({
                     },
                   ),
                 );
-              box.add(this.programView(segment, room, took, since, heads, tone, digits));
+              box.add(this.programView(segment, room, took, since, heads, digits));
             },
             {
               indent,
               same: [key],
-              ...(framed ? { group: "user", heading: false, open: true } : {}),
+              ...(framed ? { group: "user", heading: false, open: true, separate: true } : {}),
               ...(shown !== undefined && !at ? { shown } : {}),
             },
           );
@@ -470,33 +470,428 @@ export const feed = part({
           }
         return out;
       };
+      const markBody = (mark: PartMark) => (box: BoxRenderable) => {
+        box.add(
+          this.line(
+            [
+              [`${glyph.rule.repeat(2)} `, c.border],
+              [mark.title, c.muted],
+              [
+                ` ${glyph.rule.repeat(Math.max(0, this.feedWidth - Bun.stringWidth(mark.title) - 8))}`,
+                c.border,
+              ],
+            ],
+            c.muted,
+          ),
+        );
+        for (const one of mark.lines ?? [])
+          box.add(this.inset(space.between * 2, this.text(this.partLine(one), c.muted)));
+      };
       const showMark = (mark: PartMark) => {
         const said = JSON.stringify(mark.lines ?? []);
-        add(
-          `mark-${mark.chain}-${mark.at}`,
-          `${mark.title}\n${said}`,
-          [],
-          (box) => {
-            box.add(
-              this.line(
-                [
-                  [`${glyph.rule.repeat(2)} `, c.border],
-                  [mark.title, c.muted],
-                  [
-                    ` ${glyph.rule.repeat(Math.max(0, this.feedWidth - Bun.stringWidth(mark.title) - 8))}`,
-                    c.border,
-                  ],
-                ],
-                c.muted,
-              ),
-            );
-            for (const one of mark.lines ?? [])
-              box.add(this.inset(space.between * 2, this.text(this.partLine(one), c.muted)));
-          },
-          { same: [mark.title, said] },
-        );
+        add(`mark-${mark.chain}-${mark.at}`, `${mark.title}\n${said}`, [], markBody(mark), {
+          same: [mark.title, said],
+        });
+      };
+      // The answers of the threads that the feed shows, which stand in the box of their thread.
+      const valued = new Set(lines.filter((one) => one.type === "value").map((one) => one.act.id));
+      type Section = {
+        id: string;
+        key: string;
+        label?: Part[];
+        body: (box: BoxRenderable) => void;
+        /** A section that a blank row parts from the one above it. */
+        apart?: boolean;
+        /** The color of the line at its left: the color of the thread for a message of the operator. */
+        bar?: RGBA;
+        same?: readonly unknown[];
+        act?: ActRow;
+        shown?: string;
       };
       let collapsed = -1;
+      // A thread is one box: the message of the operator with a line of the color of the thread at its left, the
+      // program of the thread as windows of code, what the model answered, and an input at its end. The sections of
+      // the box are cards of their own that share a panel, so a change of the thread makes again only the one that
+      // changed, and the input keeps its text. A thread that the operator folded stands as one line.
+      const threadBox = (act: ActRow, depth: number, indent: number) => {
+        const message = String(act.words[1] ?? "");
+        const user = w.isUserPrompt(act);
+        const thread = threadsOwn.by.get(act.id);
+        const tone = threadTone(act.id);
+        const made = madeBy(act.id);
+        const seen = `${made.length}:${made.filter((one) => one.done).length}:${thread?.messages.length ?? 0}:${thread?.state}`;
+        if (thread && this.threadFolded(act.id)) {
+          collapsed = depth;
+          const news = this.unread(act.id, seen, true);
+          const [mark, color] = threadMarks(thread);
+          const steps = made.length + thread.messages.length;
+          const ended = thread.state === "cancelled" || thread.state === "failed" ? thread.state : "";
+          const meta = [steps ? `${steps} ${steps === 1 ? "step" : "steps"}` : "", ended]
+            .filter(Boolean)
+            .join("  ");
+          // The controls of the thread take about 30 columns at the right of its line.
+          const room = this.feedWidth - indent - 32 - Bun.stringWidth(meta);
+          add(
+            act.id,
+            `folded\n${message}\n${mark}\n${meta}\n${news}\n${this.feedWidth}\n${this.theme}`,
+            [],
+            (box) => {
+              const row = this.box({ flexDirection: "row" });
+              const text = this.link(
+                [
+                  [news ? `${glyph.dot} ` : "", c.accent],
+                  [`${mark} `, color],
+                  [clip(shortenHomes(gist(message)), room), c.muted],
+                ],
+                () => this.foldThread(act.id, false),
+              );
+              text.flexGrow = 1;
+              text.flexShrink = 1;
+              row.add(text);
+              if (meta)
+                row.add(
+                  this.text(meta, thread.state === "failed" ? c.danger : c.faint, {
+                    marginLeft: space.between,
+                  }),
+                );
+              const controls = this.threadControls(act);
+              if (controls) row.add(controls);
+              this.barred(box, tone, 0, { top: false, bottom: false }).add(row);
+            },
+            {
+              act,
+              group: "user",
+              heading: false,
+              separate: true,
+              open: true,
+              indent,
+              shown: message,
+              join: "only",
+              edge: tone,
+            },
+          );
+          return;
+        }
+        this.unread(act.id, seen, false);
+        const parts = [act, ...(thread?.messages ?? [])];
+        const program = programFor(act.id, liveOf(parts.map((one) => one.id)), () =>
+          threadProgram(parts, madeMap(), word, owed, named),
+        );
+        const sections: Section[] = [];
+        // A message to the thread shows as its sender wrote it, with each image that it attached named by a mark.
+        const said = (text: string) =>
+          imageReferences(text).length ? this.message(text) : this.markdown(text, c.text, c.background);
+        const sent = user ? "" : this.sender(act);
+        // A message that asks no answer, as a message that a rung adds to a thread, names no type.
+        const state = this.promptState(act).filter(([text]) => text !== "None");
+        // A long message shows its first rows until a click opens it, so that a brief of a page leaves the feed
+        // readable at a glance.
+        const [shortened, rest] =
+          w.folds[`message:${act.id}`] === false ? [message, 0] : this.firstRows(message, MESSAGE_ROWS);
+        sections.push({
+          id: act.id,
+          label: user ? [["You", tone]] : [[sent, c.faint]],
+          key: `${message}\n${sent}\n${plain(state)}\n${rest}\n${thread?.resolved}\n${this.feedWidth}\n${this.theme}`,
+          ...(user ? { bar: tone } : {}),
+          act,
+          shown: message,
+          body: (box) => {
+            // A right click on a message opens its menu, as on the heading of any other act.
+            const row = this.box({
+              flexDirection: "row",
+              onMouseDown: (event) => {
+                if (event.button === 2)
+                  this.actActions(this.session.acts.find((one) => one.id === act.id) ?? act);
+              },
+            });
+            const text = user ? said(shortened) : this.markdown(shortened, c.text, c.background);
+            text.flexGrow = 1;
+            text.flexShrink = 1;
+            row.add(text);
+            row.add(
+              this.text([...(sent ? [[`${sent}  `, c.faint] as Part] : []), ...state], c.faint, {
+                marginLeft: space.between,
+              }),
+            );
+            const controls = this.threadControls(act);
+            if (controls) row.add(controls);
+            box.add(row);
+            if (rest)
+              box.add(
+                this.link(
+                  [
+                    [`${glyph.closed} `, c.faint],
+                    [`${rest} more ${rest === 1 ? "line" : "lines"}`, c.muted],
+                  ],
+                  () => {
+                    w.folds[`message:${act.id}`] = false;
+                    w.save();
+                    this.renderContent();
+                  },
+                ),
+              );
+          },
+        });
+        // What a model answered stands as markdown with no line of color, since it is no message of the operator.
+        const answerOf = (target: ActRow, id: string): Section => {
+          const value =
+            typeof target.value === "boolean" ? (target.value ? "yes" : "no") : display(target.value);
+          const model = String(target.words[2] || act.words[2] || "");
+          return {
+            id,
+            key: `${value}\n${model}\n${this.feedWidth}\n${this.theme}`,
+            apart: true,
+            body: (box) => {
+              const { name, effort } = this.model(model);
+              const row = this.box({ flexDirection: "row" });
+              // A column, and not a row, holds the answer, so that its paragraphs wrap at the width of the feed.
+              const answer = this.box({ flexGrow: 1, flexShrink: 1 });
+              answer.add(this.markdown(value, c.prose, c.background));
+              row.add(answer);
+              row.add(
+                this.text(
+                  [
+                    [name, c.muted],
+                    [effort && effort !== "off" ? `  ${effort}` : "", c.faint],
+                  ],
+                  c.faint,
+                  { marginLeft: space.between },
+                ),
+              );
+              box.add(row);
+            },
+          };
+        };
+        // The program parts at each message of the operator that came to the thread: the code before it, the message,
+        // and the code after.
+        const runs: { lines: ProgramLine[]; writes?: Extract<ProgramLine, { kind: "writes" }> }[] = [
+          { lines: [] },
+        ];
+        const says: ActRow[] = [];
+        for (const line of program) {
+          if (line.kind === "note" && line.step.kind === "prompt" && line.step.by === "operator") {
+            // A message that the operator took back leaves the box, and the message that replaces it stands in its place.
+            if (cancelled(line.step)) continue;
+            says.push(line.step as ActRow);
+            runs.push({ lines: [] });
+            continue;
+          }
+          const run = runs[runs.length - 1];
+          if (!run) continue;
+          if (line.kind === "writes") run.writes = line;
+          else run.lines.push(line);
+        }
+        const answered = valued.has(act.id) && act.words[0] !== "None";
+        let placed = false;
+        for (const [index, run] of runs.entries()) {
+          const writer = run.writes;
+          let given = run.lines;
+          let wrote = 0;
+          if (writer) {
+            // The lines that the model finished stand in the window as lines of the thread, numbered as they come.
+            const { lines: done } = writing(w.host.streams.get(writer.step.id));
+            const finished = done ? done.split("\n") : [];
+            wrote = finished.length;
+            given = [
+              ...given,
+              ...finished.map(
+                (text, at): ProgramLine => ({
+                  kind: "code",
+                  step: writer.step,
+                  number: at + 1,
+                  display: writer.display + at,
+                  text,
+                  acts: [],
+                  runs: false,
+                  hint: "",
+                }),
+              ),
+            ];
+          }
+          if (given.length || writer) {
+            const where = `${act.id}:${index}`;
+            const window = this.rolling(given, where, Boolean(writer));
+            // The numbers of a thread stand in one column: its widest number sets the gutter.
+            const digits = String(
+              given.reduce(
+                (most, line) => ("display" in line ? Math.max(most, line.display) : most),
+                writer ? writer.display + wrote : 1,
+              ),
+            ).length;
+            // The panel of the thread and its line take 5 columns, and the numbers about 5.
+            const room = this.feedWidth - indent - 13;
+            // A click on a line opens it in place: its whole text, and under it what each act of the line gave. The
+            // window parts at each open line, so that the cards of its acts stand under it.
+            const segments: ProgramLine[][] = [[]];
+            const cuts = new Map<number, PartMark[]>();
+            let stepped: ActRow | undefined;
+            for (const line of window.lines) {
+              if (line.kind === "code" && line.step !== stepped) {
+                stepped = line.step as ActRow;
+                const marked = due(line.step.began, line.step.on);
+                if (marked.length) {
+                  if (segments.at(-1)?.length) segments.push([]);
+                  cuts.set(segments.length - 1, [...(cuts.get(segments.length - 1) ?? []), ...marked]);
+                }
+              }
+              segments.at(-1)?.push(line);
+              if (this.lineOpen(line)) segments.push([]);
+            }
+            // The time and the cost of a step stand on its first line alone.
+            const heads = new Set<ProgramLine>();
+            let before: ActRow | undefined;
+            for (const line of window.lines)
+              if (line.kind === "code" && line.step !== before) {
+                heads.add(line);
+                before = line.step as ActRow;
+              }
+            for (const [at, segment] of segments.entries()) {
+              for (const mark of cuts.get(at) ?? []) {
+                const markLines = JSON.stringify(mark.lines ?? []);
+                sections.push({
+                  id: `mark-${mark.chain}-${mark.at}`,
+                  key: `${mark.title}\n${markLines}`,
+                  same: [mark.title, markLines],
+                  apart: true,
+                  body: markBody(mark),
+                });
+              }
+              const thinks = Boolean(writer) && at === segments.length - 1;
+              if (!segment.length && !thinks) continue;
+              const key = [
+                window.opened,
+                room,
+                digits,
+                writer && thinks ? writer.display + wrote : "",
+                ...segment.map((line) =>
+                  line.kind === "code"
+                    ? `${line.text}|${this.lineHint(line)}|${line.runs ? since(line.awaits?.act ?? line.acts.at(-1)) : ""}|${line.awaited ?? ""}|${line.fails ?? ""}|${took(line.step)}|${this.lineOpen(line)}|${[...this.openStrings(line)]}`
+                    : `${line.kind}|${line.text}`,
+                ),
+              ].join("\n");
+              sections.push({
+                id: index || at ? `program-${act.id}-${index}-${at}` : `program-${act.id}`,
+                key,
+                // A blank row parts the code from the message above it, as the edge of the box parts the message from
+                // the top of the box.
+                apart: at === 0,
+                body: (box) => {
+                  // The code stands on the one surface of the thread, as a code block of the markdown does but with no
+                  // surface of its own, and the numbers of its lines stand at its left.
+                  const block = this.box({});
+                  if (segment.length) {
+                    const view = this.programView(segment, room, took, since, heads, digits, {
+                      more: () => this.openWindow(where),
+                    });
+                    block.add(
+                      window.opened
+                        ? this.document(view, {
+                            // A scroll box takes all the rows that it may, so it takes the rows of its lines.
+                            height: Math.max(1, Math.min(segment.length, SCROLL)),
+                            flexGrow: 0,
+                            flexShrink: 1,
+                            minWidth: 0,
+                          })
+                        : view,
+                    );
+                  }
+                  if (thinks && writer)
+                    block.add(this.thinkingRow(writer.step.id, writer.display, digits, room));
+                  box.add(block);
+                  if (window.opened && at === segments.length - 1)
+                    box.add(
+                      this.inset(
+                        space.inset,
+                        this.link(
+                          [
+                            [`${glyph.open} `, c.faint],
+                            ["Roll up", c.muted],
+                          ],
+                          () => this.openWindow(where),
+                        ),
+                      ),
+                    );
+                },
+              });
+              const open = segment.at(-1);
+              if (open?.kind === "code" && this.lineOpen(open) && open.acts.length)
+                sections.push({
+                  id: `${act.id}-opened-${index}-${at}`,
+                  key: `${open.acts.map((one) => `${one.id}:${one.done}:${(one as ActRow).output ?? ""}`).join(" ")}${this.theme}`,
+                  body: (box) => {
+                    const inner = this.box({ paddingLeft: space.between * 2, gap: space.stack });
+                    for (const one of open.acts) this.actDetails(inner, one as ActRow);
+                    box.add(inner);
+                  },
+                });
+            }
+          }
+          const next = says[index];
+          if (next) {
+            // The answer of the thread stands where it came in time: before a message that came after it and opened the
+            // thread again, so each message stands with its own answer.
+            if (answered && !placed && act.ended !== undefined && next.began > act.ended) {
+              sections.push(answerOf(act, `${act.id}-answer`));
+              placed = true;
+            }
+            const text = String(next.words[1] ?? "");
+            sections.push({
+              id: `${act.id}-say-${next.id}`,
+              key: `${text}\n${this.feedWidth}\n${this.theme}`,
+              apart: true,
+              bar: tone,
+              body: (box) => box.add(said(text)),
+            });
+            // A message of a shape that asks an answer stands with its answer, so that a thread holds pairs of a
+            // message and its answer.
+            if (next.done && next.words[0] !== "None" && !cancelled(next))
+              sections.push(answerOf(next, `${act.id}-say-${next.id}-answer`));
+          }
+        }
+        // What the model answered stands last, when no message came after it.
+        if (answered && !placed) sections.push(answerOf(act, `${act.id}-answer`));
+        if (!w.host.reading) {
+          const over = Boolean(thread?.resolved);
+          sections.push({
+            id: `${act.id}-reply`,
+            key: `reply\n${over}\n${this.feedWidth}\n${this.theme}`,
+            apart: true,
+            body: (box) => this.replyBox(box, act.id, over),
+          });
+        }
+        for (const [at, section] of sections.entries()) {
+          const join =
+            sections.length === 1
+              ? "only"
+              : at === 0
+                ? "first"
+                : at === sections.length - 1
+                  ? "last"
+                  : "middle";
+          // A message of the operator holds its own half rows of padding, so no blank row parts a part from it.
+          const gap = section.apart && at > 0 && !section.bar && !sections[at - 1]?.bar ? space.section : 0;
+          add(
+            section.id,
+            `${section.key}\n${join}\n${gap}\n${Boolean(section.bar)}`,
+            section.label ?? [],
+            (box) =>
+              section.body(
+                this.barred(box, section.bar, gap, { top: at > 0, bottom: at < sections.length - 1 }),
+              ),
+            {
+              indent,
+              join,
+              ...(section.bar ? { edge: section.bar } : {}),
+              heading: false,
+              separate: at === 0,
+              open: true,
+              same: [...(section.same ?? [section.key]), join, gap, Boolean(section.bar)],
+              ...(section.act ? { act: section.act } : {}),
+              ...(section.shown !== undefined ? { shown: section.shown } : {}),
+            },
+          );
+        }
+      };
       for (const line of lines) {
         if (collapsed >= 0 && line.depth > collapsed) continue;
         collapsed = -1;
@@ -509,6 +904,8 @@ export const feed = part({
         )
           continue;
         if (line.type === "prompt" && threadsOwn.of.has(line.act.id)) continue;
+        // The answer of a thread stands in its box.
+        if (line.type === "value" && threadsOwn.by.has(line.act.id)) continue;
         // Only a line that the feed shows places a mark: a step under a step stands folded, whenever it began.
         if (placing(line)) for (const mark of due(line.act.began, (line.act as ActRow).on)) showMark(mark);
         const depth = line.depth;
@@ -783,7 +1180,7 @@ export const feed = part({
               if (meta) row.add(this.text(meta, c.faint, { marginLeft: space.between, run: toggle }));
               this.panel(box, tone).add(row);
             },
-            { group: "user", heading: false, open: true, act, indent, shown: message },
+            { group: "user", heading: false, separate: true, open: true, act, indent, shown: message },
           );
         } else if (asksOperator(act)) {
           const message = String(act.words[1] ?? "");
@@ -824,132 +1221,7 @@ export const feed = part({
             },
             { group: "question", act, shown: message },
           );
-        } else {
-          const message = String(act.words[1] ?? "");
-          const user = w.isUserPrompt(act);
-          // Each thread carries its color on its header and on the mark at its left.
-          // A message of a thread takes the color of its thread, and hides with it.
-          const own = this.chainThreadsBy(w.selected);
-          const thread = own.by.get(act.id);
-          const host = thread ?? own.of.get(act.id);
-          const tone = threadTone(host?.act.id ?? act.id);
-          if (host && this.threadFolded(host.act.id)) {
-            collapsed = depth;
-            if (!thread) continue;
-            // A folded thread stands as a message of the operator stands: a panel of its color, here on one line.
-            const [mark, color] = threadMarks(thread);
-            const steps = (madeBy(act.id).length || 0) + (thread.messages.length ?? 0);
-            const ended = thread.state === "cancelled" || thread.state === "failed" ? thread.state : "";
-            const meta = [steps ? `${steps} ${steps === 1 ? "step" : "steps"}` : "", ended]
-              .filter(Boolean)
-              .join("  ");
-            // The controls of the thread take about 30 columns at the right of its line.
-            const room = this.feedWidth - indent - 32 - Bun.stringWidth(meta);
-            add(
-              act.id,
-              `folded\n${message}\n${mark}\n${meta}\n${this.feedWidth}\n${this.theme}`,
-              [],
-              (box) => {
-                const row = this.box({ flexDirection: "row" });
-                const text = this.link(
-                  [
-                    [`${mark} `, color],
-                    [clip(shortenHomes(gist(message)), room), c.muted],
-                  ],
-                  () => this.foldThread(act.id, false),
-                );
-                text.flexGrow = 1;
-                text.flexShrink = 1;
-                row.add(text);
-                if (meta)
-                  row.add(
-                    this.text(meta, thread.state === "failed" ? c.danger : c.faint, {
-                      marginLeft: space.between,
-                    }),
-                  );
-                const controls = this.threadControls(act);
-                if (controls) row.add(controls);
-                this.panel(box, tone).add(row);
-              },
-              { act, group: "user", heading: false, open: true, indent, shown: message },
-            );
-            continue;
-          }
-          // Each thread opens on a panel of its color, as a message of the operator does: its message, then at its
-          // right who sent it to which model when the operator did not, the type of the answer, its state, and its
-          // controls.
-          const sent = user ? "" : this.sender(act);
-          // A message that asks no answer, as a message that a rung adds to a thread, names no type.
-          const state = this.promptState(act).filter(([text]) => text !== "None");
-          // A long message shows its first rows until a click opens it, so that a brief of a page leaves the feed
-          // readable at a glance.
-          const [shortened, rest] =
-            w.folds[`message:${act.id}`] === false ? [message, 0] : this.firstRows(message, MESSAGE_ROWS);
-          add(
-            act.id,
-            `${message}\n${sent}\n${plain(state)}\n${rest}\n${thread?.resolved}\n${this.feedWidth}\n${this.theme}`,
-            // The label stays hidden: the panel says who sent the message.
-            user ? [["You", tone]] : [[sent, c.faint]],
-            (box) => {
-              // A message shows as its sender wrote it, with each image it attached named by a mark that opens it.
-              // A right click on a message opens its menu, as on the heading of any other act.
-              const row = this.box({
-                flexDirection: "row",
-                onMouseDown: (event) => {
-                  if (event.button === 2)
-                    this.actActions(this.session.acts.find((one) => one.id === act.id) ?? act);
-                },
-              });
-              // The operator's own words show as he typed them, and the words of a model as the markdown it wrote.
-              const text = user ? this.message(shortened) : this.markdown(shortened, c.text, c.background);
-              text.flexGrow = 1;
-              text.flexShrink = 1;
-              row.add(text);
-              row.add(
-                this.text([...(sent ? [[`${sent}  `, c.faint] as Part] : []), ...state], c.faint, {
-                  marginLeft: space.between,
-                }),
-              );
-              const controls = this.threadControls(act);
-              if (controls) row.add(controls);
-              this.panel(box, tone).add(row);
-              if (rest)
-                box.add(
-                  this.inset(
-                    space.between,
-                    this.link(
-                      [
-                        [`${glyph.closed} `, c.faint],
-                        [`${rest} more ${rest === 1 ? "line" : "lines"}`, c.muted],
-                      ],
-                      () => {
-                        w.folds[`message:${act.id}`] = false;
-                        w.save();
-                        this.renderContent();
-                      },
-                    ),
-                  ),
-                );
-            },
-            { group: user ? "user" : "sent", act, heading: false, open: true, indent, shown: message },
-          );
-          const parts = [act, ...(thread?.messages ?? [])];
-          programCard(
-            act.id,
-            programFor(act.id, `${w.folds[`steps:${act.id}`]}|${liveOf(parts.map((one) => one.id))}`, () =>
-              threadProgram(
-                parts,
-                madeMap(),
-                word,
-                owed,
-                named,
-                undefined,
-                w.folds[`steps:${act.id}`] === false ? undefined : PROGRAM_STEPS,
-              ),
-            ),
-            indent,
-          );
-        }
+        } else threadBox(act, depth, indent);
       }
       for (const mark of pending.splice(0)) showMark(mark);
       // A paused chain says so at the end of its feed, with the reason that the last failure gave, and a button that

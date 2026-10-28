@@ -69,31 +69,37 @@ A click on a chain, or Enter after ⌥T, shows that chain and lists its threads 
 it. Its row has the color of its thread, its mark, as asks you, runs or resolved, and the first line of its message,
 and the list scrolls. A click on a thread scrolls the feed to it, and the input then sends each message to it, as
 `prompt(None, message, on=thread)`, which its model reads at its next step. A message to a resolved thread opens it
-again. Under the thread chosen, Collapse folds it in the feed to its panel on one line, and Resolve closes it, as
-`close(None, thread)` does, or Open again takes the message that opens it. Space, r and o do the same after ⌥T, and
-the header of the thread in the feed holds the same controls. At the foot of the sidebar, Context says how full the
+again. Under the thread chosen, Collapse folds it in the feed to its box on one line, Resolve closes it, as
+`close(None, thread)` does, and Reply puts the keys in the input at the end of the thread. Space, r and o do the same
+after ⌥T, and the header of the thread in the feed holds Collapse and Resolve. At the foot of the sidebar, Context says how full the
 window of the chain shown is and where a grant pauses it, its tokens, and what it spent.
 
-The feed shows the threads of the chain, each in its color. A thread is a prompt: its message heads it in a panel of
-its color, as each of your messages stands, with at its right who sent it and to which model when you did not, the
-type of its answer, its state and its controls. Under it the words of its steps stand as one Python program, line by
-line, with the number of each line in the gutter, in the color of the thread. The numbers go on from one step to the
-next, so a thread counts the lines of its program from its first step to its last, also past the steps that a fold
-keeps out. No step and no act takes a row of its own. Each line ends with a quiet hint of what its acts came to: a read
-the count of its lines, a write the lines that it added and removed, a command its exit and the count of the lines
-that it printed, a question its answer or what it waits for, and a loop its count, as x6. The first line of each
-step says how long the step ran and what the answers of its model cost. The time is known for the work that the TUI
-saw run, since the record holds no time. The line that runs is lit, with a mark in the gutter and, after a second,
-its time, and the last lines that its command prints stream under it. A line that the gate refused has a red cross in
-the gutter, and the reason stands under it as a comment. A message that you send to the thread, and each notice of
-the chain, stands as a comment among the steps. While the model of the thread works on a step, each line of its word
-that it finished stands above as Python in its colors, and the last row of the thread is the line that comes: a loader
-left of its number, and the line that the model still writes, else the last line that it thinks, as a comment, or
-`# thinking` while it shows no thought, whose letters a light crosses. The answer of the thread stands in a panel of
-the color of the thread, with the model that gave it and its effort at its right. A word that you run stands as your
-messages stand, as its program in a panel of its own color, and so does an act that no word made, as a command that
-`/bash` starts: one line of Python
-that binds the act to its name, as `bash3 = bash("make docs")`.
+The feed shows the threads of the chain, each as one box. A thread is a prompt: its message heads the box as markdown,
+with a line at its left in the color of the thread, which starts half a row above the message and ends half a row under
+it, as the line of a panel does, so it adds no row. Only your messages have it: the code and the answers have no line,
+and their text starts where the text of a message starts, as it starts in the input. At the right of the message stands who sent it and to which model when you did not, the type of
+its answer, its state and its controls. Each message that came to the thread later stands in the box the same way, and
+the answer of the model stands as markdown with no line of color. The words of its steps stand in the same box as code, with no
+surface of their own, as one Python program, line by line, with the number of each line in the gutter, in a quiet color.
+At the end of an open thread an
+input takes your reply, and a reply to a thread that is over opens it again. The numbers go on from one step to the
+next, so a thread counts the lines of its program from its first step to its last, also past the steps that a fold keeps
+out. No step and no act takes a row of its own. Each line ends with a quiet hint of what its acts came to: a read the
+count of its lines, a write the lines that it added and removed, a command its exit and the count of the lines that it
+printed, a question its answer or what it waits for, and a loop its count, as x6. The first line of each step says how
+long the step ran and what the answers of its model cost. The time is known for the work that the TUI saw run, since the
+record holds no time. The line that runs is lit, with a mark in the gutter and, after a second, its time, and the last
+lines that its command prints stream under it. A line that the gate refused has a red cross at its end, and the reason
+stands under it as a comment. The line that runs has a mark at its end too, and the line that it awaits has an arrow. A
+message that you send to the thread, and each notice of the chain, stands as a comment among the steps. While the model
+of the thread works on a step, each line of its word that it finished stands above as Python in its colors, and the last
+row of the thread is the line that comes: a loader after it, and the line that the model still writes, else the last
+line that it thinks, as a comment, or `# thinking` while it shows no thought, whose letters a light crosses. The answer
+of the thread stands under its program, with the model that gave it and its effort at its right. A thread that you fold
+stands as one line, with the line of its color half a row above and under it. A
+word that you run stands as your messages stand, as its program in a panel of its own color, and so does an act that no
+word made, as a command that `/bash` starts: one line of Python that binds the act to its name, as `bash3 = bash("make
+docs")`.
 
 ![The last row of a thread while its model works](screenshots/84-thinking-row.png)
 
@@ -132,15 +138,19 @@ blocks no word: the word that awaits it goes on at once, and no row of the feed 
 ![The quiet row of the extensions](screenshots/100-quiet-feed.png)
 
 Collapse on the header
-of a thread, or ⌥D, which lists the threads, folds the thread to its panel on one line, which says its state, the
-first line of its message and the count of its steps, and Expand, or a click on that line, opens it again. A resolved thread that is
+of a thread, or ⌥D, which lists the threads, folds the thread to its box on one line, which says its state, the
+first line of its message and the count of its steps, and Expand, or a click on that line, opens it again. A dot
+before a folded thread says that work came to it since you folded it, and the mark of a question says that it asks
+you. A resolved thread that is
 not the last of its chain starts folded, and `/autocollapse` turns that fold off, and on again. A right click on a
 name inspects it.
 
-A long thread stays short. The program of a thread shows its last six steps, and one line in place of the earlier
-ones, as "# 35 earlier steps", and the feed shows one line in place of its earlier threads, as "28 earlier
-messages". A click on the line shows them. A long message shows its first rows, with a line that shows the rest. A
-jump to an act opens each fold over it. The sidebar and the feed come from the model of a life that `furb/life`
+A long thread stays short. The block of code of a thread is a window of seven rows. Its first row is the number 1,
+or a ... once the window rolled, the line that runs stands second to last, and the last row is a ... while more lines
+come, or the row where the model writes. A click on a ... opens the lines in a block that scrolls, up to four
+hundred, and Roll up closes it. The feed shows one line in place of its earlier threads, as "28 earlier messages". A
+click on the line shows them. A long message shows its first rows, with a line that shows the rest. A jump to an act
+opens each fold over it. The sidebar and the feed come from the model of a life that `furb/life`
 gives, so each host shows the same life. Under the chains, the sidebar shows the workspaces, each with the session
 shown, each session that works, asks or failed, and its newest sessions up to three, and the older ones fold under
 Earlier.

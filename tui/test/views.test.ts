@@ -450,7 +450,7 @@ test("the keys of the footer and the palette answer the mouse, and a drag over t
       await frame();
       // A drag over the header of a thread selects its text and leaves the thread as it was.
       const texts = (node: Renderable): TextRenderable[] => [
-        ...(node instanceof TextRenderable ? [node] : []),
+        ...("plainText" in node ? [node as TextRenderable] : []),
         ...node.getChildren().flatMap(texts),
       ];
       const card = app.scroll.getChildren().find((node) => /^prompt\d+$/.test(node.id));
@@ -525,20 +525,27 @@ test("a folded rung shows the first line of its word in the colors of its gramma
       await idle(session);
       await frame();
       await app.colorsDone();
-      app.render();
-      await screen.flush();
-      const line = screen.captureSpans().lines.find((one) =>
-        one.spans
-          .map((span) => span.text)
-          .join("")
-          .includes('notes = read("README.md")'),
-      );
-      const colors = new Set(
-        line?.spans
-          .filter((span) => /read|README|notes/.test(span.text))
-          .map((span) => JSON.stringify(span.fg)),
-      );
-      expect(colors.size).toBeGreaterThan(1);
+      // The parser colors the word off the main thread, and the view draws it again once it has.
+      const colored = () => {
+        const line = screen.captureSpans().lines.find((one) =>
+          one.spans
+            .map((span) => span.text)
+            .join("")
+            .includes('notes = read("README.md")'),
+        );
+        return new Set(
+          line?.spans
+            .filter((span) => /read|README|notes/.test(span.text))
+            .map((span) => JSON.stringify(span.fg)),
+        );
+      };
+      for (let step = 0; step < 80; step++) {
+        app.render();
+        await screen.flush();
+        if (colored().size > 1) break;
+        await Bun.sleep(25);
+      }
+      expect(colored().size).toBeGreaterThan(1);
     },
     { width: 140, height: 44 },
     true,

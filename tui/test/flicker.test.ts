@@ -90,7 +90,7 @@ test("the row that a model writes takes the next number in the frame that shows 
   const numbers: number[] = [];
   for (const frame of frames) {
     const lines = frame.frame.split("\n");
-    const row = lines.findIndex((line) => /^\s*[\u2800-\u28ff]\s+\d+ /.test(line));
+    const row = lines.findIndex((line) => /^[\s┃]*[\u2800-\u28ff]\s+\d+ /.test(line));
     if (row < 0) continue;
     const number = Number(/(\d+) /.exec(lines[row] ?? "")?.[1]);
     numbers.push(number);

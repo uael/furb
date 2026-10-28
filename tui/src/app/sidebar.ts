@@ -450,8 +450,8 @@ export const sidebar = part({
       const chip = (label: string, run: () => void) =>
         controls.add(this.text([[` ${label} `, c.text, 0, c.raised]], c.text, { run }));
       chip(folded ? "Expand" : "Collapse", () => this.foldThread(id));
-      if (one.resolved) chip("Open again", () => this.reopenThread(id));
-      else chip("Resolve", () => this.resolveThread(one));
+      chip("Reply", () => this.replyTo(id));
+      if (!one.resolved) chip("Resolve", () => this.resolveThread(one));
       const ask = one.asks[0];
       if (ask) chip("Answer", () => void w.point(ask).catch(this.report));
       this.railSession.add(controls);
@@ -522,15 +522,20 @@ export const sidebar = part({
     if (open) void this.session.resolve(open.id).catch(this.report);
   },
 
-  /** A thread opens again: the input takes the message that goes to it. */
-  reopenThread(id: string): void {
+  /** A thread unfolds, and the input at its end takes the keys: a message sent there goes to the thread, and opens it
+   * again when it is over. */
+  replyTo(id: string): void {
     const w = this.session;
     if (w.host.reading) return;
-    w.thread = id;
+    w.folds[`thread:${id}`] = false;
+    w.save();
     this.railAt = id;
-    w.notice = `Your next message goes to ${id} and opens it again.`;
-    if (this.railKeys) this.railSteer(false);
-    else this.composer.focus();
+    this.railKeys = false;
+    this.replyFocus = id;
+    this.renderContent();
+    this.scrollAfterLayout({ card: `${id}-reply` });
+    const input = this.replyInputs.get(id);
+    if (input && !input.isDestroyed) input.focus();
     this.render();
   },
 
@@ -601,17 +606,7 @@ export const sidebar = part({
         () => this.foldThread(id, !folded),
       ),
     );
-    if (thread?.resolved)
-      row.add(
-        this.link(
-          [
-            [`${glyph.ring} `, c.faint],
-            ["Open again", c.faint],
-          ],
-          () => this.reopenThread(id),
-        ),
-      );
-    else if (thread)
+    if (!thread.resolved)
       row.add(
         this.link(
           [
