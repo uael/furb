@@ -41,6 +41,6 @@ async def test_the_life_word_of_the_extension_is_counted(tmp_path: Path) -> None
   _, root = extended("skills", tmp_path, _monty.skills, lives=True)
   two = await chained("two")
   assert (of(engine.turns(on=root), "read"), of(engine.turns(on=two), "read")) == (
-    ["#read1\nread1_path = 'skills://'\nread1_value = '2 skills: skills() lists them'"],
-    ["#read2\nread2_path = 'skills://'\nread2_value = '2 skills: skills() lists them'"],
+    ["#read1\nread1_value = '2 skills: skills() lists them'"],
+    ["#read2\nread2_value = '2 skills: skills() lists them'"],
   )

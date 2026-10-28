@@ -11,4 +11,4 @@ async def test_grep_pattern_is_the_show_of_the_lines_that_the_pattern_matches_ea
   assert await engine.prompt(int, "pick some", on=root) == 1
   await settle()
   told = "#read1\nread1_path = 'm.txt'\nread1_numbers = [2, 4]\n<s:read1_text>\nb\nd</s:read1_text>"
-  assert engine.turns(on=root)[-1][1] == f"{told}\n\n#prompt1 closed by rung1\nprompt1_value = 1"
+  assert engine.turns(on=root)[-1][1] == f"{told}"

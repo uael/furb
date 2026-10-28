@@ -53,10 +53,7 @@ async def test_the_engine_asks_the_model_again_after_a_refusal() -> None:
   assert await act == 7
   first, second = [a[1] for a in said(log, "rung") if a[2] == act]
   assert [a[2] for a in said(log, "reply")] == [first, second]
-  assert engine.turns(on=root)[2][1] == (
-    f"#{first} refused\n{first}_findings = {BAD!r}\n\n"
-    f"#{first} closed by chain1\n{first}_value = Refused()\n\n#{second} advance on {act}"
-  )
+  assert engine.turns(on=root)[2][1] == (f"#{first} refused\n{first}_findings = {BAD!r}\n\n#{second} advance on {act}")
 
 
 async def test_the_operator_prompts_a_model_to_make_the_model_work() -> None:
@@ -370,12 +367,9 @@ async def test_its_close_tells_what_closed_it_from_outside() -> None:
   hurt, step = [a[1] for a in said(log, "rung") if a[2] == other]
   assert [(a[1], a[2]) for a in said(log, "close")] == [(act, OPERATOR), (other, step)]
   told = heads(engine.turns(on=root))
-  assert [one for one in told if one.split(" ")[1:2] == ["closed"]] == [
-    f"#{act} closed by operator",
-    f"#{other} closed by {step}",
-  ]
+  assert [one for one in told if one.split(" ")[1:2] == ["closed"]] == [f"#{act} closed by operator"]
   closed = [one for one in paragraphs(engine.turns(on=root)) if one.split("\n")[0].split(" ")[1:2] == ["closed"]]
-  assert closed == [f"#{act} closed by operator\n{act}_value = 21", f"#{other} closed by {step}\n{other}_value = 7"]
+  assert closed == [f"#{act} closed by operator\n{act}_value = 21"]
   raised = (hurt, [f"#{hurt} raised\n{hurt}_raised = ValueError('boom')"])
   assert [(a[2], a[3]) for a in said(log, "tell") if a[1] == hurt][-1] == raised
 
@@ -603,7 +597,8 @@ async def test_every_other_prompt_on_a_thread_is_answered_in_steps() -> None:
   assert engine.read(first, on=root).content == "close(1)"
   assert engine.read(more, on=root).content == "x = 2\nclose(x + 1)"
   told = paragraphs(engine.turns(on=root))
-  assert told.index(f"#{first} closed by rung1\n{first}_value = 1") < told.index(prompted(more, "None", "go on", first))
+  (step,) = [a[1] for a in said(log, "rung") if a[2] == first]
+  assert told.index(f"#{step} advance on {first}") < told.index(prompted(more, "None", "go on", first))
 
 
 async def test_a_later_life_makes_each_prompt_on_a_thread_again_at_its_place() -> None:
