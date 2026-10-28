@@ -10,6 +10,7 @@ from conftest import (
   WORLD,
   Dead,
   Sand,
+  World,
   acts,
   born,
   chained,
@@ -184,7 +185,7 @@ async def test_the_engine_derives_the_transcripts_the_turns_the_globals_and_the_
 
 
 async def test_a_fact_the_journal_says_again_is_the_journals_own() -> None:
-  """A fact the journal says again is the journal's own, as is an answer it says again when an act is made again."""
+  """A fact the journal says again is the journal's own, as is an answer it says again when an act is made again, but a refusal of the life, which it says again under no site."""
   sand, _, _ = await lived()
   again, _ = await relived(Sand(), list(sand.record))
   kept = [(e[0][0], e[0][1], *e[0][3:]) for e in sand.record if e[0][:2] in (("out", "bash1"), ("done", "bash1"))]
@@ -196,6 +197,10 @@ async def test_a_fact_the_journal_says_again_is_the_journals_own() -> None:
     ("done", "gate1", "journal"),
     ("done", "read1", "journal"),
   ]
+  refused, _, root = born()
+  await engine.rung("nope = act('nope', '', None)", on=root)
+  later, _ = await relived(Sand(), list(refused.record))
+  assert [a[2] for a in later if a[:2] == ("done", "nope1")] == [""]
 
 
 async def test_what_the_module_holds_is_not_in_the_record() -> None:
@@ -704,3 +709,36 @@ async def test_what_the_record_shows_started_and_not_done_when_boot_returns_is_p
   await settle()
   assert [a[1] for a in second.calls if a[0] in ("bash", "reply")][:2] == [pending[1], "bash2"]
   assert [(a[1], a[2]) for a in said(heard, "bash")] == [("bash1", OPERATOR), ("bash2", pending[2])]
+
+
+class Deaf(Sand):
+  """A World in memory that takes no reply, so the life refuses each one, as it refuses an act that nothing takes."""
+
+  def hear(self, a: tuple) -> World:
+    """What the World in memory does with a fact, but a reply, which it lets pass."""
+    if a[0] == "reply":
+      return
+    yield from super().hear(a)
+
+
+async def test_a_first_answer_that_the_record_holds_with_no_maker_is_a_refusal_of_the_life() -> None:
+  """A first answer that the record holds with no maker is a refusal of the life, that nothing took the act, so the journal says it again under no site, as the life said it, and neither keeps it again nor reads it as a drift."""
+  first = Deaf()
+  log, root = life(first)
+  engine.prompt(str, "first", on=root)
+  await settle()
+  two = engine.chain("two")
+  engine.prompt(str, "second", on=two)
+  await settle()
+  refusals = [e for (e,) in first.record if e[0] == "done" and e[1].startswith("reply")]
+  assert [(e[1], e[2], repr(e[3])) for e in refusals] == [
+    ("reply1", "", "Refused('nothing takes reply')"),
+    ("reply2", "", "Refused('nothing takes reply')"),
+  ]
+  assert [a[1:4] for a in said(log, "reply")] == [("reply1", "rung1", root), ("reply2", "rung2", two)]
+  later = Deaf()
+  again, _ = await relived(later, list(first.record))
+  assert [a[1:4] for a in said(again, "reply")] == [("reply1", "rung1", root), ("reply2", "rung2", two)]
+  assert [(a[1], a[2]) for a in said(again, "done") if a[1].startswith("reply")] == [("reply1", ""), ("reply2", "")]
+  assert [e for (e,) in later.record if e[1].startswith("reply")] == []
+  assert engine.paused(root)

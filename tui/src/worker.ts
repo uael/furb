@@ -321,7 +321,10 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     session = opened;
     snapshots = new Snapshots(engine, opened);
     opened.on("fault", (error) =>
-      self.postMessage({ fault: error instanceof Error ? error.message : String(error) }),
+      self.postMessage({
+        fault: error instanceof Error ? error.message : String(error),
+        stopped: error instanceof Error && error.name === "Stopped",
+      }),
     );
     opened.on("log", (line: string) => self.postMessage({ log: line }));
     opened.on("change", () => {

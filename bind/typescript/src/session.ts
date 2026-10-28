@@ -68,7 +68,8 @@ interface Saved {
 /** One session: an engine, and the ears it hears by. The World is ears: the provider of models, and the files, the
  * commands, time, the store of the record and the extensions, which the crate opens every life on, and the console,
  * which this package writes. The activity keeps every act for the host, and the changes keep every write. A fault
- * event tells what the life refused when the console said what an act came to. */
+ * event tells what the life refused when the console said what an act came to, and that the life stopped, as an error
+ * named Stopped, when a fault cut a run of its sandbox. */
 export class Session extends EventEmitter {
   readonly directory: string;
   /** The path of the record, when the session keeps one. */
@@ -171,6 +172,14 @@ export class Session extends EventEmitter {
         log: (line) => this.emit("log", line),
       });
       this.engine = this.console.engine = engine;
+      // A fault that cuts a run of the sandbox stops the life, and no fact tells it, since no ear hears a fact after it.
+      engine.onStop((why) => {
+        const stop = new Error(
+          `The life stopped at ${why}. It hears no fact after it: open it again on its record.`,
+        );
+        stop.name = "Stopped";
+        this.emit("fault", stop);
+      });
       // The observer heard the entries that the life kept as it opened, after the record it opened on.
       this.entries = [...(engine.record as Entry[]), ...this.entries];
       this.opened = engine.record.length;

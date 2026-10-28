@@ -88,6 +88,29 @@ await host.dispose();
 );
 
 test.skipIf(process.platform === "win32")(
+  "a life that a fault stops tells the window that is attached, and the log of the host keeps why",
+  () =>
+    demoLife(async (record, directory) => {
+      const place = hostPlace(record);
+      if (!place) throw new Error("No socket serves here.");
+      const { engine, host } = await openEngine({ demo: true, host: true, cwd: directory, record });
+      const faults: string[] = [];
+      host.on("fault", (error: Error) => faults.push(error.message));
+      const cut = await Promise.resolve()
+        .then(() => engine.rung({ word: "x = 'a' * (5 << 30)", on: engine.root }))
+        .then(
+          () => "",
+          (error: Error) => error.message,
+        );
+      expect(cut).toContain("memory limit exceeded");
+      await eventually(() => faults.length > 0, "the window to hear that the life stopped");
+      expect(faults[0]).toStartWith("The life stopped at MemoryError: memory limit exceeded");
+      expect(readFileSync(place.log, "utf8")).toContain(`furb-host: ${faults[0]}`);
+      await host.end();
+    }),
+);
+
+test.skipIf(process.platform === "win32")(
   "two windows attach to one host, and the end of the life in one tells the other",
   () =>
     demoLife(async (record, directory) => {

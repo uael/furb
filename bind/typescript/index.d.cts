@@ -36,6 +36,16 @@ export declare class Engine {
   get root(): string
   /** What boot raised, and nothing when it raised nothing. After a drift the life goes on, with nothing kept. */
   get raised(): { is: string; args: unknown[] } | null
+  /**
+   * The fault that cut a run of the sandbox and stopped the life, after which each call is refused, and nothing
+   * while the life goes on.
+   */
+  get stopped(): { is: string; args: unknown[] } | null
+  /**
+   * The listener hears once why the life stopped, as its class and its message, when a fault cut a run of its
+   * sandbox, or at once when the life stopped already.
+   */
+  onStop(listener: (why: string) => void): void
   get disposed(): boolean
   /**
    * Who speaks in the life, and who speaks from now on when a name is given: the site of the contract, which the work
@@ -215,11 +225,16 @@ export declare function enabled(root: unknown[][]): Array<Extension>
  */
 export declare const ENGINE: string
 
-/** An extension: its name, its word, and its life word, which is empty when it has none. */
+/**
+ * An extension: its name, its word, its life word, which is empty when it has none, and whether it plays on the root
+ * alone. An extension that plays on the root alone plays on no other chain but one whose source had it, since that
+ * chain makes the rung of its source again; any other extension plays on every chain.
+ */
 export interface Extension {
   name: string
   word: string
   life: string
+  root: boolean
 }
 
 /**

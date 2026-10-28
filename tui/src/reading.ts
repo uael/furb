@@ -109,6 +109,15 @@ export function readingNote(reading: Reading): string[] {
 export function guard(record: string): { undo(): void; keep(): void } {
   const folder = dirname(record);
   const name = basename(record);
+  const log = `${record}.log`;
+  const held = `${record}.log.held`;
+  // A host that was killed in the middle of an open leaves its hold behind: the same rule that `undo` uses frees it,
+  // so the next open goes on. A log is derived from its record and each life writes it again, so the log that goes
+  // back is the one that the cut open found, and nothing of the record is lost.
+  if (existsSync(log) && existsSync(held)) {
+    if (statSync(log).ino === statSync(held).ino) rmSync(held);
+    else renameSync(held, log);
+  }
   const siblings = () => readdirSync(folder).filter((one) => one === name || one.startsWith(`${name}.`));
   const before = new Map(
     siblings().map((one) => {
@@ -116,8 +125,6 @@ export function guard(record: string): { undo(): void; keep(): void } {
       return [one, { size: info.size, atime: info.atimeMs, mtime: info.mtimeMs }] as const;
     }),
   );
-  const log = `${record}.log`;
-  const held = `${record}.log.held`;
   const logged = before.has(`${name}.log`);
   if (logged) linkSync(log, held);
   const size = before.get(`${name}.log`)?.size ?? 0;

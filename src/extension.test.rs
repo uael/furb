@@ -38,7 +38,12 @@ fn config(file: &Path, text: &str) {
 }
 
 fn note(word: &str) -> Extension {
-  Extension { name: "note".to_owned(), word: word.to_owned(), life: "note()".to_owned() }
+  Extension {
+    name: "note".to_owned(),
+    word: word.to_owned(),
+    life: "note()".to_owned(),
+    root: false,
+  }
 }
 
 #[test]
@@ -341,7 +346,12 @@ fn a_chain_takes_each_extension_at_its_birth_and_a_later_life_plays_the_same_run
     ];
     assert_eq!(played(&mut engine, &["chain1", "chain2", "chain3"]), expected);
   }
-  let other = Extension { name: "other".to_owned(), word: "o = 1".to_owned(), life: String::new() };
+  let other = Extension {
+    name: "other".to_owned(),
+    word: "o = 1".to_owned(),
+    life: String::new(),
+    root: false,
+  };
   let mut engine = lived(&at, vec![note(NOTE), other]);
   let expected = [
     rung("rung1", "chain1", &full),
@@ -370,6 +380,72 @@ fn the_definitions_of_a_word_are_its_imports_its_functions_its_classes_its_types
      return read(\"note.txt\", on=on)\n\nclass Note:\n  x = 1\n\ntype Pair = tuple[int, int]"
   );
   assert_eq!(definitions("def broken(:"), "def broken(:", "a word that does not parse stays whole");
+}
+
+#[test]
+fn a_manifest_says_whether_its_extension_plays_on_every_chain_or_on_the_root_alone() {
+  let at = place("plays");
+  let manifest = |plays: &str| {
+    format!(r#"{{"name": "note", "word": "note.py", "life": "note()", "plays": {plays}}}"#)
+  };
+  folder(&at.join("every"), &manifest(r#""every""#), "x = 1\n");
+  assert_eq!(load("note", &at.join("every")).unwrap(), note("x = 1"));
+  folder(&at.join("root"), &manifest(r#""root""#), "x = 1\n");
+  assert_eq!(load("note", &at.join("root")).unwrap(), Extension { root: true, ..note("x = 1") });
+  let refused = |root: &str| load("note", &at.join(root)).unwrap_err().message();
+  let file = |root: &str| at.join(root).join("furb.json").display().to_string();
+  folder(&at.join("some"), &manifest(r#""some""#), "x = 1\n");
+  assert_eq!(
+    refused("some"),
+    format!(
+      r#"The manifest plays "some", and an extension plays "every" or "root": {}"#,
+      file("some")
+    )
+  );
+  folder(&at.join("one"), &manifest("1"), "x = 1\n");
+  assert_eq!(refused("one"), format!("The plays of the manifest is no text: {}", file("one")));
+}
+
+#[test]
+fn an_extension_of_the_root_alone_plays_on_the_root_and_on_a_chain_whose_source_had_it() {
+  let at = place("rooted");
+  let first = format!("{NOTE}\n\nseen = ['first']");
+  let full = format!("{first}\n\nnote()");
+  let rooted = |word: &str| Extension { root: true, ..note(word) };
+  let chains = ["chain1", "chain2", "chain3"];
+  {
+    let mut engine = lived(&at, vec![rooted(&first)]);
+    engine.chain(verbs::Chain { label: Some("two".to_owned()), ..Default::default() }).unwrap();
+    let from = verbs::Chain { source: Some("chain1".to_owned()), ..Default::default() };
+    engine.chain(from).unwrap();
+    let expected = [rung("rung1", "chain1", &full), rung("rung4", "chain3", "note()")];
+    assert_eq!(played(&mut engine, &chains), expected, "a chain with no source takes nothing");
+  }
+  let kept = world::kept(at.join("record.jsonl")).unwrap();
+  let mut facts =
+    kept.iter().map(|one| Fact::of(crate::value::entry(&one.as_ref(), 0).unwrap()).unwrap());
+  let enable = facts.rfind(|one| one.kind() == "enable").unwrap();
+  assert_eq!(
+    enable.word(3).and_then(|one| one.as_str()),
+    Some("root"),
+    "the fact carries root last"
+  );
+  let newer = "def note(on=\"\"):\n  return read(\"other.txt\", on=on)";
+  let mut engine = lived(&at, vec![rooted(newer)]);
+  let expected = [
+    ("chain1".to_owned(), full.clone()),
+    ("chain1".to_owned(), newer.to_owned()),
+    ("chain3".to_owned(), "note()".to_owned()),
+    ("chain3".to_owned(), newer.to_owned()),
+  ];
+  assert_eq!(
+    words(&mut engine, &chains),
+    expected,
+    "a reload plays on each chain that has it alone"
+  );
+  let root =
+    engine.transcript(verbs::Transcript { on: Some("chain1".to_owned()), of: None }).unwrap();
+  assert_eq!(enabled(&root), [rooted(newer)]);
 }
 
 /// The chain and the word of each rung that the ear of the extensions made on these chains, in order.

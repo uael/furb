@@ -1,7 +1,7 @@
 # Extensions
 
 An extension adds to what a model can do in furb. It is Python, as a word of a model is: a life runs the word of each
-extension on each chain, before any other word, so the functions that it defines are there for the model, and the
+extension on each chain where it plays, before any other word, so the functions that it defines are there for the model, and the
 model reads the extension in its turns as it reads its own work.
 
 An extension never goes into the system prompt. So a chain that takes one only grows at its end, and what a provider
@@ -102,7 +102,7 @@ is a folder.
 The manifest is a JSON map:
 
 ```json
-{ "name": "notes", "word": "notes.py", "life": "notes()", "tui": "tui.ts" }
+{ "name": "notes", "word": "notes.py", "life": "notes()", "plays": "every", "tui": "tui.ts" }
 ```
 
 - `name` is the name of the extension: a lower case letter, then lower case letters, digits and `-`. It must be the
@@ -113,6 +113,11 @@ The manifest is a JSON map:
   model, which holds no law.
 - `life` is the life word, a line of Python that starts the work of the extension, such as `remember()`. It can be
   absent.
+- `plays` says where the extension plays: `"every"`, on every chain, which is the default, or `"root"`, on the root
+  chain alone. A chain with a source keeps what its source played, so a chain that goes on from the root has an
+  extension of the root, and a new chain with no source has none. Give `"root"` to an extension whose names only the
+  work of the root needs, as a loop that conducts workers: each other chain then reads none of its words, and a model
+  there is free to bind each name that it defines.
 - `tui` is the file of the [part for the TUI](#a-part-for-the-tui). It can be absent.
 
 A word reaches the machine only through the acts that furb has already: a read, a write, a command, a wait, the

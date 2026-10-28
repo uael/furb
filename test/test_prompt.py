@@ -22,7 +22,9 @@ from conftest import (
   relived,
   said,
   settle,
+  waiting,
   written,
+  wrote,
 )
 from furb import engine
 from furb.engine import OPERATOR, Act, Exit, Refused, Text
@@ -698,6 +700,20 @@ async def test_when_an_act_a_rung_of_the_chain_made_is_done_the_chain_prompts_no
   assert [one[5] for one in said(log, "prompt")] == shown
   sand.exits(said(log, "bash")[2][1], 0)
   assert (await asking) == 0
+
+
+async def test_the_chain_prompts_nothing_too_for_a_failure_of_an_act_made_before_the_run_of_its_rung() -> None:
+  """The chain prompts nothing too for a failure of an act that a rung of the chain made before the run of that rung, as while its model writes its word, but for a cancel, so an error asks the model again even after that word closed its prompt."""
+  _, log, _, act, rung, _ = await waiting()
+  wrote(rung, "rung('BAD')\n", 0)
+  await settle()
+  (bad,) = [a[1] for a in said(log, "rung") if a[2] == rung]
+  assert isinstance(engine.peek(bad), Refused)
+  assert [one[5] for one in said(log, "prompt")] == ["count"]
+  wrote(rung, "close(1)\n", 12)
+  assert await act == 1
+  await settle()
+  assert [one[5] for one in said(log, "prompt")] == ["count", f"{bad} done"]
 
 
 async def test_a_pause_stands_over_the_close_that_answers_a_prompt_too() -> None:

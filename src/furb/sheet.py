@@ -24,7 +24,9 @@ The word stands on a sheet of its own::
     <the word>
 
 Every line of it is there for a reason. The gate gives the checker the engine once, as the module MODULE, which
-the sheet alone imports, so a reading costs the program and the word and not the engine. The body is async, so a
+the sheet alone imports, so a reading costs the program and the word and not the engine. The gate of the crate lays
+the words of the program out in modules of its own, which its checker reads once, so a reading costs the words
+that it did not read before and the word. The body is async, so a
 word may await at its top level. ty gives every module names that a chain in the sandbox does not hold, UNBOUND,
 so the body declares each of them and never binds it: ty refuses a word that reads it, as the sandbox does, on
 every engine. The module of a chain holds every name of the engine, an import of the engine among them, so the
@@ -213,7 +215,8 @@ def gate(
 
 def against(engine: dict[str, object], checked: Checked, on: str, word: str) -> list[str]:
   """What the gate finds against a word on the sheet of the engine whose names it is given, after the program of its
-  chain as it stands now, each word under the name of its rung, with the names of the acts of the chain. It makes no
+  chain as it stands now and the parts that the writings of a rung with no run hold, each word under the name of its
+  rung, with the names of the acts of the chain. It makes no
   fact, so a host may read it while a model still writes the word."""
   program, question, transcript = engine["program"], engine["question"], engine["transcript"]
   assert callable(program)
@@ -222,7 +225,13 @@ def against(engine: dict[str, object], checked: Checked, on: str, word: str) -> 
   words, facts = program(on), transcript(on)
   assert isinstance(words, dict)
   assert isinstance(facts, list)
-  return gate(engine, words, word, checked, [str(x[1]) for x in facts if question(x)])
+  written: dict[str, str] = {}
+  for x in facts:
+    if x[0] == "module":
+      written = {}
+    elif x[0] == "writing" and x[1] not in words:
+      written[str(x[1])] = written.get(str(x[1]), "") + str(x[3])
+  return gate(engine, {**words, **written}, word, checked, [str(x[1]) for x in facts if question(x)])
 
 
 def gating(engine: dict[str, object], checked: Checked) -> Ear:

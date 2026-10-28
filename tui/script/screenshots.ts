@@ -726,6 +726,11 @@ try {
   await session.select(session.engine.root);
   await rest();
   await capture("52-many-questions");
+  // The question that a thread asks and the notice that it gives stand in its box, in time, with the rest of its work.
+  await session.select(session.chains.find((chain) => session.labelOf(chain.id) === "w/storage")?.id ?? "");
+  await capture("102-thread-question");
+  await session.select(session.engine.root);
+  await rest();
   app().question();
   await capture("53-question-dialog");
   // Tab goes to the next question, and shows its chain under the dialog.

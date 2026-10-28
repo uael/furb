@@ -21,3 +21,19 @@ few.
 `work.jsonl` is the life that `make_the_corpus` runs, on a model that answers from a script. Its root writes, reads,
 runs a command, waits, reads the clock and chance, and asks a chain of its own. A second life on the record takes
 one prompt more, so the record holds two openings. Each official extension runs on it.
+
+`writing.jsonl` is the head of a life of 10-28, cut to 33 entries and to the acts that make it drift. A build
+before the writing was a fact made it, and its record holds each part of a word that ran as its model wrote it as a
+question, `("writing", writingN, by, chain, rung, part, before)`. No later life makes that question again, since it
+asks no model again, so the part ran only at the run of its rung, too late: a rung that the part cancelled in the life
+asked its model in the replay. The store reads each such question as the writing fact, which the journal says again
+where the life said it, so the Kernel runs the part there.
+
+`refused.jsonl` holds a reply of the root that nothing took, which the life refused with no maker, `nothing takes
+reply`, so the root paused, and a reply of a second chain after it. The journal says that refusal again under no
+site, as the life said it, so the root pauses again and the second chain asks the next reply, as in the life.
+
+`wake.jsonl` holds two commands that a life left running, and a later life that wakes the root, so the World closes
+both as interrupted at once, in its hearing of that wake. The word that awaited the first command reads the clock
+when both are over, and chance when only its own is. The journal says those answers again at once at the wake, as
+the World said them, so the word reads the clock again, as in the life.
