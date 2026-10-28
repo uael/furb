@@ -582,7 +582,9 @@ def told(id, what="", *notes, **words):
 def control(kind, name, id, *words):
   if not get(id):
     raise Refused("no act " + repr(id))
-  return (over(id) or say(*told(id, name + " by " + site.get(), value=(*words, None)[0]))) and say(kind, id, *words)
+  return (
+    over(id) or scope(site.get()) == scope(id) or say(*told(id, name + " by " + site.get(), value=(*words, None)[0]))
+  ) and say(kind, id, *words)
 
 
 def headed(id, what="", **words):

@@ -21,10 +21,7 @@ async def test_a_show_is_any_callable_of_that_shape() -> None:
   assert callable(span(1, 2)) and callable(grep("^t")) and callable(differs(["one"]))
   _, _, root = born(ODD)
   assert await engine.prompt(int, "show the odd lines", on=root) == 1
-  assert (
-    engine.turns(on=root)[-1][1]
-    == "#read1\nread1_path = 'a.txt'\nread1_text = 'one'\n\n#prompt1 closed by rung1\nprompt1_value = 1"
-  )
+  assert engine.turns(on=root)[-1][1] == "#read1\nread1_path = 'a.txt'\nread1_text = 'one'"
 
 
 async def test_a_show_is_no_word_of_a_fact() -> None:

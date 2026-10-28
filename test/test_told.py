@@ -36,7 +36,6 @@ async def test_a_closed_paragraph_binds_what_the_act_came_to_under_the_word_valu
     f"#{act} closed by operator\n{act}_value = 21",
     f"#{other} closed by operator\n{other}_value = 'k'",
     f"#{lines} closed by operator\n<s:{lines}_value>\none\ntwo</s:{lines}_value>",
-    f"#{step} closed by {step}\n{step}_value = 5",
   ]
 
 

@@ -65,10 +65,7 @@ async def test_one_thing_a_tell_says() -> None:
   read = [a[3] for a in said(log, "tell") if a[3][0].startswith("#read1")]
   assert read == [["#read1\nread1_path = 'n.txt'\nread1_text = 'one'"]]
   opened = [a[3] for a in said(log, "tell") if a[1] == "prompt1"]
-  assert opened == [
-    ["#prompt1\nprompt1_message = 'read it'", "prompt1: Act[int] = Act('prompt1')"],
-    ["#prompt1 closed by rung1\nprompt1_value = 1"],
-  ]
+  assert opened == [["#prompt1\nprompt1_message = 'read it'", "prompt1: Act[int] = Act('prompt1')"]]
   assert all(isinstance(note, str) for a in said(log, "tell") for note in a[3])
 
 
@@ -88,14 +85,7 @@ async def test_the_first_line_of_a_paragraph_is_its_header() -> None:
   assert await engine.prompt(int, "run it", on=root) == 0
   await settle()
   got = heads(engine.turns(on=root))
-  assert got[2:8] == [
-    "#prompt1",
-    "#rung1 advance on prompt1",
-    "#bash1",
-    "#read1",
-    "#bash1 exited 0",
-    "#prompt1 closed by rung1",
-  ]
+  assert got[2:8] == ["#prompt1", "#rung1 advance on prompt1", "#bash1", "#read1", "#bash1 exited 0"]
   assert [head for head in got if head[1:2] in ("", " ") or "hi" in head or "a.txt" in head] == []
 
 
@@ -121,13 +111,7 @@ async def test_the_header_of_a_paragraph_names_the_act_it_is_of_by_its_id() -> N
   assert await engine.prompt(int, "read it", on=root) == 1
   await settle()
   engine.pause("bash1")
-  assert heads(engine.turns(on=root))[4:] == [
-    "#bash1",
-    "#read1",
-    "#cd1",
-    "#prompt1 closed by rung1",
-    "#bash1 paused by operator",
-  ]
+  assert heads(engine.turns(on=root))[4:] == ["#bash1", "#read1", "#cd1", "#bash1 paused by operator"]
 
 
 async def test_the_headers_of_the_file() -> None:
@@ -146,6 +130,9 @@ async def test_the_headers_of_the_file() -> None:
   step = engine.rung("k = 1", on=root)
   assert await step is None
   await settle()
+  asked = engine.prompt(int, "how many?", to=OPERATOR, on=root)
+  engine.close(1, asked)
+  await settle()
   assert {spoken(head) for head in headers(engine.turns(on=root))} == EVENTS | {"open"}
 
 
@@ -158,7 +145,6 @@ async def test_a_statement_that_a_paragraph_shows_binds_the_name_of_an_act_in_th
   asked = "#prompt1\n<s:prompt1_message>\nrun it\nnow</s:prompt1_message>\nprompt1: Act[int] = Act('prompt1')"
   told = [
     "#bash1\nbash1_command = 'echo hi'\nbash1: Act[Exit] = Act('bash1')",
-    "#prompt1 closed by rung1\nprompt1_value = 1",
     "#prompt2\nprompt2_message = 'bash1 done'\nprompt2_thread = 'prompt1'\nprompt2: Act[None] = Act('prompt2')",
     "#bash1 exited 0\nbash1_stdout = 'ran echo hi'",
     "#rung2 advance on prompt2",
@@ -166,7 +152,7 @@ async def test_a_statement_that_a_paragraph_shows_binds_the_name_of_an_act_in_th
   words = ["\n\n".join([opened(root, "root"), takes(root), asked, "#rung1 advance on prompt1"]), "\n\n".join(told)]
   assert own == [engine.unquoted(word) for word in words]
   shown = "\n\n".join(paragraphs(engine.turns(on=root)))
-  assert shown == "\n\n".join([*words, "#prompt2 closed by rung2\nprompt2_value = 0"])
+  assert shown == "\n\n".join(words)
   assert engine.module(root)["bash1"] == "bash1"
   assert engine.module(root)["prompt1_message"] == "run it\nnow"
   _, _, fixed = born(
@@ -187,28 +173,26 @@ async def test_a_paragraph_binds_each_value_that_it_tells_under_a_name() -> None
   assert "#prompt1\nprompt1_message = 'run it'\nprompt1: Act[str] = Act('prompt1')" in got
   assert "#bash1\nbash1_command = 'echo hi'\nbash1: Act[Exit] = Act('bash1')" in got
   assert "#read1\nread1_path = 'a.txt'\n<s:read1_text>\none\ntwo</s:read1_text>" in got
-  assert "#prompt1 closed by rung1\nprompt1_value = 'done'" in got
-  bound = [engine.module(root)[name] for name in ("prompt1_message", "bash1_command", "read1_text", "prompt1_value")]
-  assert bound == ["run it", "echo hi", "one\ntwo", "done"]
+  bound = [engine.module(root)[name] for name in ("prompt1_message", "bash1_command", "read1_text")]
+  assert bound == ["run it", "echo hi", "one\ntwo"]
 
 
 async def test_a_paragraph_binds_a_string_of_more_than_one_line_as_a_quote() -> None:
   """A paragraph binds a string of more than one line as a quote, and any other value as a statement of its repr."""
   sand, _, root = born("x = bash('echo a\\necho b')\nclose('one\\ntwo')", "close(None)")
   assert await engine.prompt(str, "run\nthem", on=root) == "one\ntwo"
-  sand.script[root] = ["close([1, 'b', Refused('no')])", "close(None)"]
-  one = engine.prompt(list, "which?", on=root)
-  assert (await one)[:2] == [1, "b"]
+  one = engine.prompt(int, "which?", to=OPERATOR, on=root)
+  engine.close(3, one)
+  assert await one == 3
   sand.script[root] = ["close(1)"]
   assert await engine.prompt(int, "then bind it", on=root) == 1
   got = paragraphs(engine.turns(on=root))
   assert "#prompt1\n<s:prompt1_message>\nrun\nthem</s:prompt1_message>\nprompt1: Act[str] = Act('prompt1')" in got
   assert "#bash1\n<s:bash1_command>\necho a\necho b</s:bash1_command>\nbash1: Act[Exit] = Act('bash1')" in got
-  assert "#prompt1 closed by rung1\n<s:prompt1_value>\none\ntwo</s:prompt1_value>" in got
-  assert f"#{one} closed by rung3\n{one}_value = [1, 'b', Refused('no')]" in got
-  bound = [engine.module(root)[name] for name in ("prompt1_message", "bash1_command", "prompt1_value")]
-  assert bound == ["run\nthem", "echo a\necho b", "one\ntwo"]
-  assert engine.module(root)[f"{one}_value"][:2] == [1, "b"]
+  assert f"#{one} closed by operator\n{one}_value = 3" in got
+  bound = [engine.module(root)[name] for name in ("prompt1_message", "bash1_command")]
+  assert bound == ["run\nthem", "echo a\necho b"]
+  assert engine.module(root)[f"{one}_value"] == 3
 
 
 async def test_a_value_that_is_none_or_an_empty_string_is_not_told() -> None:

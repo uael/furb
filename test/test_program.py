@@ -16,7 +16,7 @@ async def test_program_gives_the_program_of_a_chain() -> None:
   await settle()
   first, refused, last = [a[1] for a in said(log, "rung") if a[2] == one]
   program = engine.program(root)
-  findings = f"#{refused} refused\n{refused}_findings = {faulted('b = BAD')!r}\n\n#{refused} closed by chain1\n{refused}_value = Refused()"
+  findings = f"#{refused} refused\n{refused}_findings = {faulted('b = BAD')!r}"
   assert list(program.items()) == [
     (f"{mine}_told", fresh(root, written(mine, "mine = 1"))),
     (mine, "mine = 1"),
@@ -32,9 +32,7 @@ async def test_program_gives_the_program_of_a_chain() -> None:
   engine.write(Text(asked, "k = 1"), on=root)
   await settle()
   (made,) = [a[1] for a in said(log, "rung") if a[2] == asked]
-  held = (
-    f"#{one} closed by rung4\n{one}_value = 3\n\n{prompted(asked, 'int', 'edit')}\n\n{written(made, 'k = 1', asked)}"
-  )
+  held = f"{prompted(asked, 'int', 'edit')}\n\n{written(made, 'k = 1', asked)}"
   assert list(engine.program(root).items()) == [*program.items(), (f"{made}_told", held), (made, "k = 1")]
   engine.write(Text(asked, ""), on=root)
   await settle()

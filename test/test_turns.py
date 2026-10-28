@@ -58,7 +58,7 @@ async def test_the_turn_a_model_was_answered_with_closes_the_turn_of_the_operato
   assert (
     got[1] == engine.peek(said(log, "reply")[0][1]) == ("assistant", word, (0, 0, 0, 0, 0.0), [f"signed {len(word)}"])
   )
-  assert got[2][1] == "#read1\nread1_path = 'n.txt'\nread1_text = 'two'\n\n#prompt1 closed by rung1\nprompt1_value = 1"
+  assert got[2][1] == "#read1\nread1_path = 'n.txt'\nread1_text = 'two'"
 
 
 async def test_turns_reads_the_transcript_of_the_chain_and_asks_nothing() -> None:
@@ -84,7 +84,7 @@ async def test_a_user_turn_packs_one_paragraph_for_each_thing_told_since_the_las
   assert await engine.prompt(int, "count", on=root) == 1
   engine.say("tell", root, [f"#{root} one"])
   engine.say("tell", root, [f"#{root} two"])
-  told = ["#prompt1 closed by rung2\nprompt1_value = 1", f"#{root} one", f"#{root} two"]
+  told = [f"#{root} one", f"#{root} two"]
   assert engine.turns(on=root)[-1] == ("user", "\n\n".join(told), None, None)
 
 
