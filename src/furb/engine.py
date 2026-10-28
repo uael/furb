@@ -40,11 +40,11 @@ def differs(old: list[str]) -> Show:
 HEAD, TAIL, HIDDEN = span(1, 2000), span(-250, -1), span(0, 0)
 
 
-def take(*ids: str, inside: bool = True) -> Filter:
+def take(*ids: str, inside=True) -> Filter:
   return lambda facts: [a for a in facts if any(under(a[1], one) for one in ids) == inside]
 
 
-def read(path: str, show: Show = HEAD, on: str = "") -> Text:
+def read(path: str, show: Show = HEAD, on="") -> Text:
   got = ask("read", on, path)
   if acting() and isinstance(got, Text) and (size := len(shown(got, show).encode())) > LARGEST:
     raise Refused(f"{path} shows {size} bytes, over {LARGEST}")
@@ -52,13 +52,13 @@ def read(path: str, show: Show = HEAD, on: str = "") -> Text:
   return got
 
 
-def write(text: Text, on: str = "") -> Text:
+def write(text: Text, on="") -> Text:
   got = ask("write", on, Text(text.path, text.content))
   tell(on, text.path, got, differs(text.lines))
   return got
 
 
-def turns(on: str = "") -> list[tuple]:
+def turns(on="") -> list[tuple]:
   folded, user, sent = [], [], []
   for it in transcript(on):
     match it:
@@ -73,11 +73,11 @@ def turns(on: str = "") -> list[tuple]:
   return [*folded, ("user", "\n\n".join(sent + user), None, None)]
 
 
-def module(on: str = "") -> dict:
+def module(on="") -> dict:
   return next((x[3] for x in reversed(transcript(on, "module"))), {})
 
 
-def program(on: str = "") -> dict[str, str]:
+def program(on="") -> dict[str, str]:
   words = {}
   for x in transcript(on):
     match x:
@@ -96,25 +96,25 @@ def stand(on: str = ROOT) -> list:
   return ask("stand", on)
 
 
-def clock(on: str = "") -> float:
+def clock(on="") -> float:
   return ask("clock", on)
 
 
-def chance(on: str = "") -> float:
+def chance(on="") -> float:
   return ask("chance", on)
 
 
-def gate(word: str, on: str = "") -> list[str]:
+def gate(word: str, on="") -> list[str]:
   return ask("gate", on, unquoted(word))
 
 
-def cd(path: str, on: str = "") -> str:
+def cd(path: str, on="") -> str:
   path = ask("cd", on, path)
   tell(on, path)
   return path
 
 
-def cwd(on: str = "") -> str:
+def cwd(on="") -> str:
   return answer("cd", on, "") or standing()[1]
 
 
@@ -130,7 +130,7 @@ def cancel(id: str):
   control("cancel", "cancelled", id)
 
 
-def close(value: object, id: str = ""):
+def close(value: object, id=""):
   match get(who := acting()):
     case ("rung", _, by, _, _, retells, *_):
       if retells:
@@ -164,7 +164,7 @@ def debug(template: Template):
     say(*told(who, "debugged", debug=text))
 
 
-def wait(seconds: float = 0, *acts: str, on: str = "") -> Act[str | None]:
+def wait(seconds: float = 0, *acts: str, on="") -> Act[str | None]:
   def ear(id):
     while not (got := [*filter(over, acts)]):
       yield {id, *acts}
@@ -173,7 +173,7 @@ def wait(seconds: float = 0, *acts: str, on: str = "") -> Act[str | None]:
   return act("wait", on, controlled(ear), seconds, *acts)
 
 
-def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
+def rung(word="", retells="", to="", on="") -> Act:
   def ear(id):
     yield "started", id
     mine = {retells, scope(id)}
@@ -209,7 +209,7 @@ def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
   return act("rung", on, controlled(ear), word, retells, to)
 
 
-def prompt[T](shape: type[T] | object, message: str = "", to: str = "", on: str = "") -> Act[T]:
+def prompt[T](shape: type[T] | object, message="", to="", on="") -> Act[T]:
   named = (
     shape if isinstance(shape, str) else re.sub(r"""<class '|'>|('[^']*'|"[^"]*")|[\w.:/]*\.""", r"\1", repr(shape))
   )
@@ -233,7 +233,7 @@ def prompt[T](shape: type[T] | object, message: str = "", to: str = "", on: str 
   return act("prompt", on, controlled(ear), named, message, to)
 
 
-def chain(label: str = "", source: str = "", filter: Filter | None = None, on: str = "") -> Act[Never]:
+def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never]:
   if scope(source) != source:
     raise Refused("no chain " + source)
 
@@ -383,7 +383,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   return act("chain", on, ear, label, source)
 
 
-def grant(usd: float | None = None, share: float | None = None, on: str = "") -> Act[None]:
+def grant(usd: float | None = None, share: float | None = None, on="") -> Act[None]:
   def ear(id):
     here = scope(id)
     if not ((usd or share) and (usd or 0) >= 0 <= (share or 0) <= 1):
@@ -406,12 +406,7 @@ def grant(usd: float | None = None, share: float | None = None, on: str = "") ->
 
 
 def bash(
-  command: str,
-  stdin: str | None = "",
-  timeout: float = TIMEOUT,
-  show: Show = TAIL,
-  show_err: Show | None = None,
-  on: str = "",
+  command: str, stdin: str | None = "", timeout: float = TIMEOUT, show: Show = TAIL, show_err: Show | None = None, on=""
 ) -> Act[Exit]:
   def ear(id):
     yield told(id, "", bound(id, "Exit"), command="" if show is HIDDEN else command)
@@ -450,13 +445,13 @@ class Text:
     now[lo - 1 : hi] = [text and text.removesuffix("\n") + "\n"]
     return self.replace(self.content, "".join(now))
 
-  def replace(self, old: str, new: str, count: int = -1) -> Text:
+  def replace(self, old: str, new: str, count=-1) -> Text:
     if old not in self.content:
       raise Refused(self.path + " no " + repr(old))
     (made := Text(self.path, self.content.replace(old, new, count))).before = self
     return made
 
-  def undo(self, n: int = 1) -> Text:
+  def undo(self, n=1) -> Text:
     made = self
     for _ in range(n):
       made = made.before or made

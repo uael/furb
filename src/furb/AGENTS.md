@@ -211,8 +211,9 @@ meanings. The entry of such a name here gives only its form in the engine.
   Kernel and the gate among them, which are held by no verb and bound to no name of the engine.
 - A fact is a tuple, its kind first, deconstructed only by match, and nothing of the engine is a class but a text, an
   exit, the name of an act, and the two exceptions.
-- The verbs and Text carry their signatures, typed, since a model reads them; nothing else in engine.py has a type
-  annotation but what ty and a dataclass need.
+- The verbs and Text carry their signatures, typed, since a model reads them, but a parameter whose default says its
+  type, as on="", carries no annotation; nothing else in engine.py has a type annotation but what ty and a dataclass
+  need.
 - engine.py has no private names, and a name one thing alone uses lives inside it.
 - Each technical name has one meaning.
 - ty check passes on engine.py.
