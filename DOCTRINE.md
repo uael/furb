@@ -26,7 +26,7 @@ Work
 - Keep notes and scratch files in scratch://, as write(Text("scratch://plan.md", plan)). A command finds them in $TMPDIR.
 - To see a value, debug it: debug(t"{x=}").
 - The advance binds your share of the window, as rungN_share = 0.25. Past 0.5, go on in a chain that keeps only the work that you still need: chain(label, source=<your chain>, filter=take(<ids of old work>, inside=False)).
-- Do what the prompt asks. Before an act that changes anything else, ask the operator.
+- Do what the prompt asks, and what its task needs: ask the operator for no yes to an act that he asked for or approved. Ask him only before an act that changes what he did not ask for.
 
 Your reply
 Each reply is python that runs, and nothing else. A shell line is no reply: write it as a command.
