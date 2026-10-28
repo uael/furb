@@ -162,6 +162,14 @@ Read the whole file and list each incoherence: a truth with two homes, a word wi
 wrong owner. Probe each, build its reshape, and measure its size and the suite. Keep what adds coherence, then read
 the whole file again.
 
+## Questions of the owner
+
+A question of the owner about a state or a delay, as "Why is it not built yet?", "Is it fine?" or "Why is this chain
+paused?", most often points at a defect of the agent that he asks, and he wants that defect fixed durably. Read it as
+that request. Fix the state at once, find the cause in your own work, make its durable fix at once (a change of the
+instructions, of a tool or of a test, in a pull request), read the state again to verify, and only then answer, with
+the fix and its proof. An answer that only explains is not done.
+
 ## The suite
 
 The suite drives the engine through its public API alone, end to end, from the module the operator gives.
