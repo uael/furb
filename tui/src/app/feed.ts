@@ -683,6 +683,9 @@ export const feed = part({
         }
         const answered = valued.has(act.id) && act.words[0] !== "None";
         let placed = false;
+        // The answer of a message stands after the code that its model ran to answer it, which the next run of the
+        // program holds.
+        let waiting: Section | undefined;
         for (const [index, run] of runs.entries()) {
           const writer = run.writes;
           let given = run.lines;
@@ -826,6 +829,8 @@ export const feed = part({
                 });
             }
           }
+          if (waiting) sections.push(waiting);
+          waiting = undefined;
           const next = says[index];
           if (next) {
             // The answer of the thread stands where it came in time: before a message that came after it and opened the
@@ -842,12 +847,13 @@ export const feed = part({
               bar: tone,
               body: (box) => box.add(said(text)),
             });
-            // A message of a shape that asks an answer stands with its answer, so that a thread holds pairs of a
-            // message and its answer.
+            // A message of a shape that asks an answer stands with its answer, after the code that answered it, so that
+            // a thread holds pairs of a message and its answer.
             if (next.done && next.words[0] !== "None" && !cancelled(next))
-              sections.push(answerOf(next, `${act.id}-say-${next.id}-answer`));
+              waiting = answerOf(next, `${act.id}-say-${next.id}-answer`);
           }
         }
+        if (waiting) sections.push(waiting);
         // What the model answered stands last, when no message came after it.
         if (answered && !placed) sections.push(answerOf(act, `${act.id}-answer`));
         if (!w.host.reading) {
