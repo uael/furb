@@ -103,6 +103,7 @@ class Round:
     self.files: dict[str, str] = {}
     self.facts: dict[str, tuple] = {}
     self.done: dict[str, object] = {}
+    self.said: list[tuple] = []
     self.words: dict[str, str] = {}
     folder = tmp / "bin"
     folder.mkdir()
@@ -135,7 +136,7 @@ class Round:
     )
     ns.update(chain=lambda label="", source="": f"chain-{label}", rung=self.rung)
     ns.update(program=lambda on="": self.words)
-    ns.update(cancel=lambda name: self.cancelled.append(name))
+    ns.update(cancel=lambda name: self.cancelled.append(name), say=lambda *fact: self.said.append(fact))
     ns.update(pause=lambda name: self.paused_chains.append(name), paused=lambda name: name in self.paused_chains)
     ns.update(wake=lambda name: self.paused_chains.remove(name) if name in self.paused_chains else None)
     # The root plays pr before the conductor, which uses its names, as .furb/config.json orders them.
@@ -2595,3 +2596,88 @@ def test_the_texts_of_an_order_say_how_to_read_a_rerun_a_lagging_branch_and_a_mo
   assert "Read the failed log before any rerun" in conductor.FIX
   assert "git merge --ff-only origin/<your branch>" in conductor.FIXOWN
   assert "a file that your hunks change is gone from main" in conductor.FIX
+
+
+def owner_chain(conductor: Round, *acts: tuple, asked: bool = False, by: str = "operator") -> None:
+  facts = [("prompt", "prompt955", by, "chain212", "None", "Are you there?", "")]
+  if asked:
+    facts.append(("reply", "reply9", "prompt955", "chain212", ""))
+  chains = {"chain1": [("chain", "chain212", "rung1", "chain1", "crafted", "")], "chain212": [*facts, *acts]}
+  conductor.ns["transcript"] = lambda on="", of="": [*chains.get(on, [])]
+
+
+WAIT = ("wait", "wait890", "rung7", "chain212", 1800.0)
+RUN = ("run", "run18859", "rung1", "chain212", "rung7", "await prompt955", "")
+
+
+def test_a_wait_that_holds_a_chain_while_a_prompt_of_the_owner_is_unasked_is_cancelled_after_two_minutes(
+  conductor: Round,
+) -> None:
+  owner_chain(conductor, WAIT)
+  conductor.tend()
+  conductor.now += conductor.HELD - 1
+  conductor.tend()
+  assert (conductor.cancelled, conductor.prompts) == ([], [])
+  conductor.now += 1
+  conductor.tend()
+  assert conductor.cancelled == ["wait890"]
+  told, on = conductor.prompts[-1]
+  assert on == "chain212" and "wait890" in told and "prompt955" in told
+  assert "await nothing over 60 s" in told and "peek at the next advance" in told
+  assert len(conductor.prompts) == 1
+  assert conductor.heard == [
+    "The round cut wait890 on chain212: it held the chain while the prompt prompt955 of the owner waited unasked."
+  ]
+  conductor.done["wait890"] = conductor.CancelledError()
+  conductor.tend()
+  assert conductor.cancelled == ["wait890"] and conductor.watched == {}
+
+
+def test_a_prompt_that_was_asked_or_that_the_owner_did_not_make_cuts_nothing(conductor: Round) -> None:
+  for kwargs in ({"asked": True}, {"by": "rung1"}):
+    owner_chain(conductor, WAIT, RUN, **kwargs)
+    conductor.tend()
+    conductor.now += 600
+    conductor.tend()
+  owner_chain(conductor, WAIT)
+  conductor.done["prompt955"] = "answered"
+  conductor.tend()
+  conductor.now += 600
+  conductor.tend()
+  assert (conductor.cancelled, conductor.prompts, conductor.heard, conductor.said) == ([], [], [], [])
+
+
+def test_a_run_that_holds_the_chain_is_ended_with_cancelled_error_when_the_cancel_leaves_it_open(
+  conductor: Round,
+) -> None:
+  owner_chain(conductor, RUN)
+  conductor.tend()
+  conductor.now += conductor.HELD
+  conductor.tend()
+  assert conductor.cancelled == ["run18859"]
+  assert len(conductor.said) == 1 and conductor.said[0][:2] == ("done", "run18859")
+  assert isinstance(conductor.said[0][2], conductor.CancelledError)
+  assert any("run18859" in x and "chain212" in x for x in conductor.heard)
+
+
+def test_a_cancel_that_ends_the_run_needs_no_done_and_a_wait_goes_before_a_run(conductor: Round) -> None:
+  conductor.ns["cancel"] = lambda name: (conductor.cancelled.append(name), conductor.done.update({name: 1}))
+  owner_chain(conductor, RUN, WAIT)
+  conductor.tend()
+  conductor.now += conductor.HELD
+  conductor.tend()
+  assert conductor.cancelled == ["wait890"] and conductor.said == []
+  conductor.done.pop("run18859", None)
+  conductor.tend()
+  conductor.now += conductor.HELD
+  conductor.tend()
+  assert conductor.cancelled == ["wait890", "run18859"] and conductor.said == []
+
+
+def test_the_chain_of_the_round_itself_is_left_alone(conductor: Round) -> None:
+  owner_chain(conductor, WAIT)
+  conductor.lead["home"] = "chain212"
+  conductor.tend()
+  conductor.now += 600
+  conductor.tend()
+  assert (conductor.cancelled, conductor.prompts) == ([], [])
