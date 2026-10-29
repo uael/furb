@@ -95,7 +95,8 @@ class World:
     ns.update(paused=lambda name: self.pausing, clock=lambda: self.now, cancel=self.cancel)
     exec(compile(SOURCE, str(HERE / "converge.py"), "exec"), ns)  # noqa: S102
     self.ns = ns
-    self.target = {**ns["TUI"], "capture": lambda target, pairs, out: f"echo capture in {target.get('slot', 1)} {pairs}"}
+    ns["fake_capture"] = lambda target, pairs, out: f"echo capture in {target.get('slot', 1)} {pairs}"
+    self.target = {**ns["TUI"], "capture": "fake_capture"}
 
   def quietly(self, verb: Callable[..., object], *args: object, **words: object) -> object:
     self.quieted.append((getattr(verb, "__name__", ""), args))
@@ -1029,6 +1030,15 @@ def test_a_holder_that_shows_a_gap_no_more_lets_it_go_and_a_pass_of_main_frees_t
   assert book["ledger"] == {}
 
 
+def test_a_target_that_a_loop_holds_runs_the_capture_and_the_differ_that_a_reload_defined(world: World) -> None:
+  held = world.ns["TUI"]
+  assert (held["capture"], held["differ"]) == ("tui_capture", "tui_differ")
+  world.ns["tui_capture"] = lambda target, pairs, out: "reloaded capture"
+  world.ns["tui_differ"] = lambda target, out, was, whole, labels: ("reloaded differ", "")
+  assert "reloaded capture" in world.capturing(held, [("head", "sha1")], "/out", {})
+  assert world.does(held, "differ")(held, "/out", "", True, ("a", "b")) == ("reloaded differ", "")
+
+
 def test_the_tui_registers_itself_as_a_target_once_even_when_its_word_plays_again(world: World) -> None:
   assert [one["name"] for one in world.ns["TARGETS"]] == ["tui"]
   exec(compile(SOURCE, "converge.py", "exec"), world.ns)  # noqa: S102
@@ -1043,11 +1053,13 @@ def test_the_core_converges_a_target_with_a_plain_text_differ_and_the_words_of_t
     "checks": (),
     "owners": (),
     "thread": "docs",
-    "capture": lambda target, pairs, out: f"echo capture {pairs}",
-    "differ": lambda target, out, was, whole, labels: (f"python3 -I - {out}", "print('diff')"),
+    "capture": "plain_capture",
+    "differ": "plain_differ",
     "legend": "A capture is a page of text.",
     "look": "each sentence",
   }
+  world.ns["plain_capture"] = lambda target, pairs, out: f"echo capture {pairs}"
+  world.ns["plain_differ"] = lambda target, out, was, whole, labels: (f"python3 -I - {out}", "print('diff')")
   world.target = plain
   world.say(r"python3 -I -", listing(changed=("docs/intro",), kind="text"))
   world.judge = lambda message, to: gap("docs/intro")
