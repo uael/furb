@@ -16,9 +16,8 @@ def skill(name: str, show: Show = HEAD, on: str = "") -> Text:
   A skill of a name that no skill has raises Refused in the caller.
   """
 
-def counted(on: str = "") -> int:
-  """How many skills a chain knows, which it tells in one line, so a reply reads the count and not the list.
-  counted reads the path skills:// on its chain with the show HIDDEN, so the list stands in no turns.
-  counted tells the read under the word value, as one line with the count of the skills and the word skills() that lists them, and gives the count.
-  The life word of the extension is counted(), so a chain tells the count of its skills when the life enables the extension, and a chain born later tells it at its birth.
+async def listed(on: str = "") -> None:
+  """The skills of a chain as a turn of its model: listed runs read('skills://') on its chain as a rung of the default actor of the chain, so the turns show the model that reads the list of its skills, then that read as every read tells it.
+  listed awaits that rung, so the rung that runs listed ends once the list stands in the turns, and the chain acknowledges nothing of it.
+  The life word of the extension is await listed(), so a chain reads its skills when the life enables the extension, and a chain born later reads them at its birth.
   """

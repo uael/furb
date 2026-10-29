@@ -176,14 +176,16 @@ def rung(word="", retells="", to="", on="") -> Act:
     yield "started", id
     mine = {retells, scope(id)}
     if word:
-      if tells(id):
+      if to:
+        act("reply", "", lambda r: (yield "done", r, ("assistant", word, None, None)), to)
+      elif tells(id):
         yield told(id, "by " + get(id)[2], word=word)
       while not over(retells) and get(retells) if retells else paused(get(id)[2]):
         yield mine
       yield "ready", id, word
     while True:
       match (yield mine):
-        case ("done", about, _, value) if question(("reply", about)) and get(about)[2] == id:
+        case ("done", about, _, value) if question(("reply", about)) and get(about)[2] == id and not word:
           yield ("done", id, value) if isinstance(value, BaseException) else ("ready", id, value[1])
         case ("wants", about, by, _, call) if get(by)[4] == id:
           yield "started", about

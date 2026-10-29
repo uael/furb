@@ -15,12 +15,13 @@ Six extensions come with furb, and each life runs them unless a config turns the
   `CLAUDE.md` when it has no `AGENTS.md`. When a chain starts, it reads the memory of the user, in the config
   directory, then the memory of each folder from the root down to the working directory. Each time the chain reads a
   file in a folder below, it reads the memory of each folder on the way. A memory file comes whole the first time,
-  and again only when it changed. `memory(path)` tells the memory of one path, and `remember()`, its life word, does
-  all of this as the chain works.
+  and again only when it changed. Its life word, `await recall()`, gives the first memory
+  to the model as a turn of its own, a read of each file, and then `remember()` does the rest as the chain works.
+  `memory(path)` tells the memory of one path.
 - **`skills`** gives a chain the skills that it can read. `skills()` lists each skill that it finds in `.furb/skills`,
   `.agents/skills` and `.claude/skills` of the working directory and of each folder above it, then in `skills` of the config
-  directory. `skill(name)` reads the `SKILL.md` of one skill. Its life word, `counted()`, says in one line how many
-  skills the chain has. It carries one skill of its own, `extending`, which shows a model how to extend furb, with an
+  directory. `skill(name)` reads the `SKILL.md` of one skill. Its life word, `await listed()`, gives the list to the
+  model as a turn of its own: the model reads `skills://`, and the chain shows that read. It carries one skill of its own, `extending`, which shows a model how to extend furb, with an
   example for each way. A skill named `extending` in a folder takes its place.
 - **`compaction`** cuts a chain to the work that it still needs, and the chain goes on under its name, since a
   compaction in furb is a prefix said on the chain, which takes the place of its transcript. `supersede(keep)` says

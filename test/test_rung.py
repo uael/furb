@@ -24,6 +24,7 @@ from conftest import (
   of,
   opened,
   paragraphs,
+  plain,
   prompted,
   ran,
   relived,
@@ -625,3 +626,53 @@ async def test_a_rung_that_retells_says_its_word_ready_only_once_the_rung_that_i
   assert engine.peek(slow) is None and engine.peek(copy) is None
   assert (engine.module(root)["y"], engine.module(root)["a"]) == (5, 2)
   assert [a[1] for a in said(log, "prompt")] == [asked, act]
+
+
+async def test_a_rung_with_a_word_and_an_actor_is_a_turn_of_that_actor_that_its_caller_wrote() -> None:
+  """A rung with a word and an actor is a turn of that actor that its caller wrote: it answers its own reply to that actor with the turn ("assistant", word, None, None) before it says its word ready, so the turns show the word as the turn of that actor, the rung runs it as its step, and no World asks a model for it."""
+  _, log, root = born("close(1)")
+  assert await engine.prompt(int, "go", on=root) == 1
+  made = engine.rung("k = 2", to="m/low", on=root)
+  await settle()
+  (reply,) = [a for a in said(log, "reply") if a[2] == made]
+  turn = engine.peek(reply[1])
+  assert isinstance(turn, tuple | list)
+  assert (reply[4], list(turn)) == ("m/low", ["assistant", "k = 2", None, None])
+  assert [a[2] for a in said(log, "done") if a[1] == reply[1]] == [reply[1]]
+  assert [list(one[:2]) for one in engine.turns(on=root)][-2:] == [["assistant", "k = 2"], ["user", ""]]
+  assert (engine.module(root)["k"], engine.peek(made)) == (2, None)
+
+
+async def test_such_a_rung_tells_no_header_of_its_word() -> None:
+  """Such a rung tells no header of its word, since its turn shows the word."""
+  _, _, root = born("close(1)")
+  assert await engine.prompt(int, "go", on=root) == 1
+  made = engine.rung("k = 2", to="m/low", on=root)
+  plain_rung = engine.rung("j = 3", on=root)
+  await settle()
+  told = heads(engine.turns(on=root))
+  assert (f"#{made} by operator" in told, f"#{plain_rung} by operator" in told) == (False, True)
+
+
+async def test_its_turn_holds_no_usage_so_a_grant_counts_no_cost_of_it() -> None:
+  """Its turn holds no usage, so a grant counts no cost of it and no share of the window."""
+  _, log, root = born("close(1)")
+  assert await engine.prompt(int, "go", on=root) == 1
+  engine.grant(usd=10.0, on=root)
+  made = engine.rung("k = 2", to="m/low", on=root)
+  await settle()
+  (reply,) = [a for a in said(log, "reply") if a[2] == made]
+  ledgers = [one for one in of(engine.turns(on=root), "grant") if one.startswith("#grant1 ledger")]
+  assert (engine.filled(reply[1]), ledgers) == (None, [])
+
+
+async def test_a_later_life_makes_that_reply_again_in_the_ear_of_the_rung() -> None:
+  """A later life makes that reply again in the ear of the rung, with its name and its turn, so the record replays it with no drift."""
+  sand, log, root = born("close(1)")
+  assert await engine.prompt(int, "go", on=root) == 1
+  engine.rung("k = 2", to="m/low", on=root)
+  await settle()
+  before = engine.turns(on=root)
+  again, root = await relived(Sand(stands=STANDS), plain(sand.record))
+  assert engine.turns(on=root) == before
+  assert [a[1:4] for a in again if a[0] == "reply"] == [a[1:4] for a in log if a[0] == "reply"]

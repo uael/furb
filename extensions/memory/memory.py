@@ -7,7 +7,9 @@ from furb.engine import (
   controlled,
   differs,
   get,
+  module,
   question,
+  rung,
   scope,
   span,
   tell,
@@ -47,6 +49,14 @@ def memory(path: str = ".", on: str = "") -> list[Text]:
       show = span(1, -1)
     tell(on, one.path, one, show)
   return got
+
+
+async def recall(on: str = "") -> Act:
+  got = ask("memory", on, ".")
+  assert isinstance(got, list)
+  if got:
+    await rung("\n".join(f"read({one.path!r})" for one in got), to=str(module(on).get("actor") or ""), on=on)
+  return remember(on)
 
 
 def remember(on: str = "") -> Act:
