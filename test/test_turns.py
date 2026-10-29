@@ -34,6 +34,7 @@ async def test_the_turns_of_what_a_chain_has_heard() -> None:
   assert {a[0] for a in held if a[0] not in CARRY} == {
     "close",
     "stand",
+    "clock",
     "rung",
     "gate",
     "ready",

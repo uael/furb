@@ -258,7 +258,7 @@ test("an ear that throws ends alone, the life goes on, and an ear of the crate h
     for (;;) {
       const fact = (yield null) as Fact | undefined;
       if (fact?.[0] === "stand") yield ["done", fact[1], [[["operator", [], 200000]], "/tmp", "operator"]];
-      if (fact?.[0] === "clock") throw { is: "Refused", args: ["no clock here"] };
+      if (fact?.[0] === "clock" && fact[2] === "operator") throw { is: "Refused", args: ["no clock here"] };
     }
   }
   const once = time();
