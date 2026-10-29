@@ -726,6 +726,11 @@ try {
   await session.select(session.engine.root);
   await rest();
   await capture("52-many-questions");
+  // The question that a thread asks and the notice that it gives stand in its box, in time, with the rest of its work.
+  await session.select(session.chains.find((chain) => session.labelOf(chain.id) === "w/storage")?.id ?? "");
+  await capture("102-thread-question");
+  await session.select(session.engine.root);
+  await rest();
   app().question();
   await capture("53-question-dialog");
   // Tab goes to the next question, and shows its chain under the dialog.
@@ -766,6 +771,12 @@ try {
         .length === 2,
   );
   const thread = session.activity.find((act) => session.isUserPrompt(act))?.id ?? "";
+  // The sidebar lights the open thread when it draws, and the input sends to the thread lit: a draw before the message
+  // makes it go to that thread, where with no draw it would start a thread of its own on some runs.
+  app().render();
+  await test.flush();
+  if (session.target !== thread)
+    throw new Error(`The input aims at ${session.target}, not at the thread ${thread}.`);
   await session.submit("Think until I cancel.");
   await until(session, () => {
     const last = session.lastOwn;

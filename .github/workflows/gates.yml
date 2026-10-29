@@ -93,6 +93,22 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
+      # The test of the walls counts tokens with a vocabulary that tiktoken downloads at its first use. A download that
+      # stalls past the 30 seconds of a test ends the worker of the suite, which reports a crash and no cause, so the
+      # vocabulary comes here, where a stall is bounded, and the suite reads it from disk.
+      - run: echo "TIKTOKEN_CACHE_DIR=$RUNNER_TEMP/tiktoken" >> "$GITHUB_ENV"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/tiktoken
+          key: tiktoken-o200k_base
+      - run: |
+          for try in 1 2 3; do
+            uv run python -c "import socket, tiktoken; socket.setdefaulttimeout(60); tiktoken.get_encoding('o200k_base')" && exit 0
+          done
+          exit 1
+        timeout-minutes: 5
+        env:
+          UV_NO_SYNC: "1"
       # The run syncs nothing, so it does not build the program furb that the setup leaves out.
       - run: uv run pytest -q
         env:

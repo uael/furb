@@ -68,6 +68,7 @@ print(moved)`;
 
 const ask = `# The old notes live in memory only, and a first start has nothing to load. A file that exists already may hold notes
 # that the owner wrote by hand, so I ask before the first start touches it.
+prompt(None, "The file holds 14 lines, and the app reads it whole at start, so a line that is not JSON stops the start.", to=OPERATOR)
 tries = 0
 keep = None
 while keep is None and tries < 2:

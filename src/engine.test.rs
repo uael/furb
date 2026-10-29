@@ -443,6 +443,39 @@ fn the_world_ends_a_command_at_a_cancel_of_its_prompt_and_never_at_a_close_of_it
   assert_eq!(dones, 1, "the World said no second done of the command a control ended");
 }
 
+#[cfg(unix)]
+#[test]
+fn a_cancel_of_a_command_ends_the_process_that_it_started_and_not_only_its_shell() {
+  let pid = std::env::temp_dir().join(format!("furb-cancel-{}.pid", std::process::id()));
+  let _ = std::fs::remove_file(&pid);
+  let word = format!("await bash('sleep 30 & echo $! > {}; wait')", pid.display());
+  let mut lived = Lived::new("slay", &[word.as_str()], true).unwrap();
+  let root = lived.root();
+  let cancelled = lived
+    .engine
+    .prompt(Object::string("int"), verbs::Prompt { on: on(&root), ..Default::default() })
+    .unwrap()
+    .id()
+    .to_owned();
+  let started = Instant::now();
+  while std::fs::read_to_string(&pid).map_or(true, |text| text.trim().is_empty()) {
+    assert!(started.elapsed() < Duration::from_secs(20), "the command never started its process");
+    thread::sleep(Duration::from_millis(10));
+    let _ = lived.engine.peek("bash1", verbs::Peek::default());
+  }
+  let sleeper = std::fs::read_to_string(&pid).unwrap().trim().to_owned();
+  lived.engine.cancel(&cancelled).unwrap();
+  assert_eq!(lived.settled("bash1").unwrap_err().name, "CancelledError");
+  let alive =
+    || std::process::Command::new("kill").args(["-0", &sleeper]).output().unwrap().status.success();
+  let waited = Instant::now();
+  while alive() && waited.elapsed() < Duration::from_secs(10) {
+    thread::sleep(Duration::from_millis(20));
+  }
+  let _ = std::fs::remove_file(&pid);
+  assert!(!alive(), "the process {sleeper} of the cancelled command still runs");
+}
+
 #[test]
 fn a_wait_is_done_when_its_time_is_up_and_it_says_when_it_is_due() {
   let mut lived = Lived::new("waits", &[], true).unwrap();

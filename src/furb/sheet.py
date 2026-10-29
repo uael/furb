@@ -55,6 +55,7 @@ before the sheet is written. This module runs where the engine runs, so it asks 
 word of a rung does not.
 """
 
+import re
 from ast import PyCF_ALLOW_TOP_LEVEL_AWAIT
 from collections.abc import Callable, Generator, Mapping, Sequence
 
@@ -131,17 +132,11 @@ def swallowed(lines: list[str]) -> list[tuple[int, str, int]]:
   found: list[tuple[int, str, int]] = []
   for n, one in enumerate(lines, 1):
     name, equals, rest = one.partition(" = ")
-    if not (equals and name.isidentifier() and rest[:1] in ("'", '"') and rest[1:][-1:] == rest[:1]):
+    if not (equals and name.isidentifier() and re.fullmatch(r"""'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*\"""", rest)):
       continue
-    text, at = [""], 1
-    while at < len(rest) - 1:
-      step = rest[at : at + 2] if rest[at] == "\\" else rest[at]
-      if step == "\\n":
-        text.append("")
-      else:
-        text[-1] += step
-      at += len(step)
-    found += [(n + 1 + k, name, n) for k, x in enumerate(text) if x.strip() == f"<s:{name}>"]
+    # monty has no literal_eval, and the match above holds the line to one string literal, so eval runs no code.
+    text = eval(rest, {"__builtins__": {}})  # noqa: S307
+    found += [(n + 1 + k, name, n) for k, x in enumerate(text.split("\n")) if x.strip() == f"<s:{name}>"]
   return found
 
 

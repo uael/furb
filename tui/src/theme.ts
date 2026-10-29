@@ -127,7 +127,7 @@ export const palettes = {
     text: "#243329",
     prose: "#324237",
     muted: "#56685a",
-    faint: "#86938a",
+    faint: "#79877d",
     accent: "#3c673c",
     secondary: "#7a4fb0",
     success: "#246e68",
@@ -179,7 +179,7 @@ export const palettes = {
     text: "#ecebe6",
     prose: "#cfcdc5",
     muted: "#9a978e",
-    faint: "#6b6963",
+    faint: "#7a7871",
     accent: "#d4835f",
     secondary: "#a9a4cc",
     success: "#93b58c",
@@ -205,7 +205,7 @@ export const palettes = {
     text: "#1f1e1c",
     prose: "#3d3b36",
     muted: "#6e6b63",
-    faint: "#a29e94",
+    faint: "#8b887e",
     accent: "#b85a3c",
     secondary: "#6b5fa8",
     success: "#4f7a4a",
@@ -257,6 +257,21 @@ function dark(hex: string): boolean {
   const channel = (at: number) => Number.parseInt(hex.slice(1 + at * 2, 3 + at * 2), 16) / 255;
   return 0.2126 * channel(0) + 0.7152 * channel(1) + 0.0722 * channel(2) < 0.5;
 }
+/** The least contrast of a placeholder against the ground of an input, which a theme keeps on each ground. */
+export const placeholderContrast = 3;
+/** The luminance of a color of six hex digits, as WCAG defines it. */
+function luminance(hex: string): number {
+  const channel = (at: number) => {
+    const value = Number.parseInt(hex.slice(1 + at * 2, 3 + at * 2), 16) / 255;
+    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(0) + 0.7152 * channel(1) + 0.0722 * channel(2);
+}
+/** The contrast of two colors of six hex digits, from 1 to 21. */
+export function contrast(a: string, b: string): number {
+  const lights = [luminance(a), luminance(b)];
+  return (Math.max(...lights) + 0.05) / (Math.min(...lights) + 0.05);
+}
 /** The palette of the terminal: its own background, the surfaces and the tones of the text between its background and
  * its foreground, a step softer than the foreground, and the colors of each meaning from the theme of its mode. The
  * colors of the terminal are those it says, as #rrggbb, or nothing when it says none. */
@@ -265,6 +280,16 @@ export function terminalPalette(foreground: string | null, background: string | 
   if (!foreground || !background || !hex.test(foreground) || !hex.test(background)) return undefined;
   const base = palettes[dark(background) ? "ink" : "day"];
   const toward = (share: number) => blend(background, foreground, share);
+  const surfaces = [background, toward(0.035), toward(0.065)];
+  // The faint tone goes from its usual share toward the foreground until a placeholder reads on each surface.
+  let faint = foreground;
+  for (let share = 0.44; share < 1; share += 0.02) {
+    const tone = toward(share);
+    if (surfaces.every((surface) => contrast(tone, surface) >= placeholderContrast)) {
+      faint = tone;
+      break;
+    }
+  }
   return {
     ...base,
     background,
@@ -275,7 +300,7 @@ export function terminalPalette(foreground: string | null, background: string | 
     text: toward(0.84),
     prose: toward(0.8),
     muted: toward(0.56),
-    faint: toward(0.44),
+    faint,
     added: blend(background, base.success, 0.16),
     removed: blend(background, base.danger, 0.16),
     backdrop: `${background}b0`,

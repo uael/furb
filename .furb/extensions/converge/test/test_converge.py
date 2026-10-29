@@ -51,6 +51,7 @@ class World:
     self.tmp = tmp
     self.says: list[tuple[str, str, int]] = []
     self.commands: list[str] = []
+    self.quieted: list[tuple[str, tuple]] = []
     self.files: dict[str, str] = {}
     self.done: dict[str, object] = {}
     self.facts: dict[str, tuple] = {}
@@ -62,9 +63,10 @@ class World:
     self.pending: list[tuple[str, object]] = []
     self.slow = False
     self.pausing = False
+    self.limit = False
     self.now = 1000.0
     self.round = {
-      "quietly": lambda verb, *args, **words: verb(*args, **words),
+      "quietly": self.quietly,
       "shq": lambda s: "'" + s.replace("'", "'\\''") + "'",
       "ops": lambda: ("uael/furb-ops", "13"),
       "queue": [],
@@ -77,6 +79,9 @@ class World:
       "working_at": lambda name: f"at-{name}",
       "vetoes": {},
     }
+    self.round["taken"] = lambda key: next((w for w, k in self.round["working"].items() if k == key), "") or (
+      "queued" if any(q[0] == key for q in self.round["queue"]) else ""
+    )
     self.say(r"rev-parse origin/main", "sha1\n")
     self.say(r"gh issue view", WORDS + "\n")
     self.say(r"python3 -I -", listing())
@@ -86,11 +91,15 @@ class World:
     ns.update(bash=self.bash, prompt=self.prompt, chain=self.chain, rung=self.rung, grant=self.grant, wait=self.wait)
     ns.update(over=lambda name: name in self.done, peek=lambda name, waiting=None: self.done.get(name, waiting))
     ns.update(acting=lambda: "rung1", scope=lambda name: "chain1")
-    ns.update(get=self.facts.get, transcript=lambda on="", of="": [])
+    ns.update(get=self.facts.get, transcript=self.transcribe)
     ns.update(paused=lambda name: self.pausing, clock=lambda: self.now, cancel=self.cancel)
     exec(compile(SOURCE, str(HERE / "converge.py"), "exec"), ns)  # noqa: S102
     self.ns = ns
     self.target = {**ns["TUI"], "capture": lambda target, pairs, out: f"echo capture {pairs}"}
+
+  def quietly(self, verb: Callable[..., object], *args: object, **words: object) -> object:
+    self.quieted.append((getattr(verb, "__name__", ""), args))
+    return verb(*args, **words)
 
   def __getattr__(self, name: str) -> object:
     return self.ns[name]
@@ -149,6 +158,10 @@ class World:
     self.waits.append([a for a in acts if a in self.done])
     self.waited()
     return self.act("wait", None)
+
+  def transcribe(self, on: str = "", of: str = "") -> list[tuple]:
+    note = f"#{on} waits on claude-cli:sonnet/high: usage limit until 2026-10-29 17:10 (Europe/Paris)"
+    return [("tell", on, "", [note])] if self.limit else []
 
   def told(self) -> list[str]:
     return [message for shape, message, to, on in self.prompts if shape is None and on == "chain1"]
@@ -558,15 +571,15 @@ def test_judges_that_give_no_list_twice_keep_the_veto_and_tell_the_operator_once
   assert len(world.told()) == 1
 
 
-def test_a_judge_whose_chain_pauses_gives_no_answer_and_its_head_goes_stuck(world: World) -> None:
+def test_a_judge_whose_chain_pauses_is_cut_and_its_pass_counts_as_no_try(world: World) -> None:
   converged(world)
   world.slow, world.pausing = True, True
   world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
   world.say(r"python3 -I -", listing(kind="text"))
   assert [veto(world) for _ in range(3)] == [True, True, True]
-  assert world.book()["heads"]["5 abc"] == {"state": "stuck", "tries": 2}
+  assert world.book()["heads"]["5 abc"] == {"state": "held", "tries": 0}
   assert world.pending == []
-  assert len(world.told()) == 1 and "gave no answer twice" in world.told()[0]
+  assert world.told() == []
 
 
 def test_a_judge_that_passes_its_bound_gives_no_answer(world: World) -> None:
@@ -578,8 +591,38 @@ def test_a_judge_that_passes_its_bound_gives_no_answer(world: World) -> None:
   assert world.book()["heads"]["5 abc"] == {"state": "held"}
   world.now += world.ns["BOUND"]
   assert veto(world) is True
-  assert world.book()["heads"]["5 abc"] == {"state": "held", "tries": 1}
+  assert world.book()["heads"]["5 abc"] == {"state": "held", "tries": 0}
   assert world.pending == []
+
+
+def test_a_judge_whose_chain_waits_on_a_usage_limit_is_neither_cut_nor_counted(world: World) -> None:
+  converged(world)
+  world.slow, world.pausing, world.limit = True, True, True
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.say(r"python3 -I -", listing(kind="text"))
+  for _ in range(3):
+    assert veto(world) is True
+    world.now += world.ns["BOUND"] * 3
+  assert len(world.pending) == 1
+  assert world.book()["heads"]["5 abc"] == {"state": "held"}
+
+
+def test_the_bound_of_a_judge_starts_again_when_its_usage_limit_ends(world: World) -> None:
+  converged(world)
+  world.slow, world.limit = True, True
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.say(r"python3 -I -", listing(kind="text"))
+  assert veto(world) is True
+  world.now += world.ns["BOUND"] * 2
+  assert veto(world) is True
+  world.limit = False
+  world.now += world.ns["BOUND"] - 1
+  assert veto(world) is True
+  assert len(world.pending) == 1
+  world.now += 1
+  assert veto(world) is True
+  assert world.pending == []
+  assert world.book()["heads"]["5 abc"] == {"state": "held", "tries": 0}
 
 
 def test_a_capture_of_main_that_did_not_change_keeps_the_gaps_of_the_last_pass(world: World) -> None:
@@ -726,3 +769,102 @@ def test_a_second_capture_removes_the_mark_of_the_build_so_the_tree_builds_again
   assert '[ -z "$fresh" ] || rm -f "$tree/target/converge-built"' in world.tui_capture(world.ns["TUI"], [], "/out")
   assert "\nfresh=1\n" in world.capturing(world.target, [("head", "sha1")], "/out", {}, True)
   assert "fresh=1" not in world.capturing(world.target, [("head", "sha1")], "/out", {})
+
+
+def test_a_capture_is_made_through_quietly_so_that_its_end_wakes_nobody(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.say(r"python3 -I -", faulty())
+  veto(world)
+  veto(world)
+  captures = [c for c in world.commands if c.startswith("rm -rf")]
+  quiet = [str(args[0]) for name, args in world.quieted if name == "bash"]
+  assert len(captures) >= 2 and any("fresh=1" in c for c in captures)
+  assert all(c in quiet for c in captures)
+
+
+def test_a_job_of_a_pr_that_is_no_longer_open_at_its_head_is_dropped_and_its_acts_cancelled(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.slow = True
+  world.judge = lambda message, to: []
+  assert veto(world) is True
+  [stale] = world.ns["OPEN"].values()
+  asked = [a for a in stale["asked"] if a != "none"]
+  assert asked and not any(a in world.done for a in asked)
+  world.round["prs"] = {5: pr(sha="def")}
+  asyncio.run(world.converge_veto(pr(n=5, sha="def", verdict="pass")))
+  assert "5 abc" not in world.ns["OPEN"]
+  assert all(isinstance(world.done[a], Refused) for a in asked)
+
+
+def test_a_capture_whose_command_ended_interrupted_starts_again_once(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.say(r"python3 -I -", listing(kind="text"))
+  runs = lambda: [c for c in world.commands if "for pair in" in c]
+  first = world.act("bash", Refused("interrupted"))
+  world.ns["OPEN"]["5 abc"] = {"kind": "pr", "sha": "abc", "n": 5, "out": str(world.tmp / "o"), "label": "pr5", "act": first,
+                              "pairs": [("before", "sha1"), ("head", "merged1")], "asked": [], "words": WORDS}
+  assert veto(world) is True
+  assert len(runs()) == 1
+  assert world.ns["OPEN"]["5 abc"]["act"] != first
+  assert veto(world) is False
+  assert len(runs()) == 1
+
+
+def hold(world: World, key: str, n: int, sha: str, where: str = "OPEN") -> str:
+  open_act = world.act("bash", None)
+  del world.done[open_act]
+  job = {"kind": "pr", "sha": sha, "n": n, "target": "tui", "act": open_act, "asked": [], "pairs": [], "out": "o", "label": f"pr{n}"}
+  if where == "OPEN":
+    world.ns["OPEN"][key] = job
+  else:
+    world.ns["MAIN"]["tui"] = job
+  return open_act
+
+
+def test_a_capture_starts_only_when_no_other_capture_of_the_target_holds_an_open_command(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.say(r"python3 -I -", listing(kind="text"))
+  open_act = hold(world, "4 xyz", 4, "xyz")
+  world.round["prs"] = {4: pr(4, "xyz"), 5: pr()}
+  runs = lambda: [c for c in world.commands if "for pair in" in c]
+  assert veto(world) is True and runs() == []
+  world.done[open_act] = Exit(0, Text("stdout", ""), Text("stderr", ""))
+  assert veto(world) is False and len(runs()) == 1
+
+
+def test_a_pass_of_main_holds_the_tree_against_the_capture_of_a_pr(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  hold(world, "", 0, "sha1", "MAIN")
+  assert veto(world) is True
+  assert not [c for c in world.commands if "for pair in" in c]
+
+
+def test_a_busy_lock_is_no_fault_of_the_tool_and_the_pr_keeps_its_veto_with_no_retry_and_no_notice(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  busy = listing(kind="text", faults=[["demo", "the step demo failed: waits for /tmp/furb-gallery.lock held by a run", ""]])
+  world.say(r"python3 -I -", busy)
+  assert veto(world) is True
+  assert world.book()["heads"]["5 abc"]["state"] == "held"
+  assert "5 abc" not in world.ns["OPEN"]
+  assert len([c for c in world.commands if "for pair in" in c]) == 1
+  assert world.told() == [] and world.judged() == []
+
+
+def test_a_pass_of_main_that_finds_a_busy_lock_waits_and_tells_nothing(world: World) -> None:
+  world.say(r"python3 -I -", listing(kind="text", faults=[["demo", "waits for /tmp/furb-gallery.lock", ""]]))
+  book = world.run(1)
+  assert book["state"] == "" and book["passes"] == [] and world.told() == []
+
+
+def test_a_job_that_starts_its_command_again_ends_the_old_command_first(world: World) -> None:
+  open_act = hold(world, "5 abc", 5, "abc")
+  job = world.ns["OPEN"]["5 abc"]
+  job.update(pairs=[("before", "sha1"), ("head", "merged1")], out=str(world.tmp / "o"))
+  fresh = world.launched(world.target, {"records": {}}, job, True)
+  assert isinstance(world.done[open_act], Refused) and fresh != open_act
