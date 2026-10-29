@@ -46,7 +46,7 @@ A prompt of a worker that ends with CancelledError while the round made no cance
 The round tells you a worker that ends with no PR, with its answer, or that says nothing for 45 minutes, relays to you each question that a worker puts to the operator, and wakes a worker that paused. results keeps the answer of each worker under its prompt.
 When a worker ends, the round asks it debrief() once, and adds each friction that it gives to TOOLING, the ledger of the defects of the tooling, as flaw(what) adds a defect that you find or patch live. An entry counts each time that it comes again. settle_flaw(part, pr) closes each open entry that holds part with the PR that fixed it, once you checked on main that the PR did; the audit lists the open entries alone, and an entry that comes again opens again.
 A check counts by its newest run, and the round acts on a failed check only once no check of the PR runs. A failed check heals with no worker first, once for each head sha: the round reruns the failed jobs of the run whose failure is the one failed check of the PR, which costs the runners of CI the least, else it updates the branch of a PR on main that is behind main while main is green, at most once in UPDATED seconds for a PR, since a PR that still fails after an update fails on its own. It gives a PR on main whose head has no run of the gates one, once for each head sha: it updates the branch of the PR while main is green, else it reruns the workflows at the head. It reruns once, for each head sha, a run that was cancelled at the head of a PR, and a check cancelled again at that sha counts as failed.
-Then the round sends a conflict or a failed check at a new head to the worker that owns the PR, again after 30 minutes, and to a fixer after an hour, or at once when no worker owns it. Just before it sends an order or hires a fixer, the round reads the PR again, and drops the order when the head moved or the conflict is gone; it sends a PR no second order within 10 minutes of the first, and it names in an order the base of a stacked PR with the head that the base had before. While a fixer owns a PR, the round neither updates its branch nor merges it, and it tells a worker that owns a branch when it updates or rebases it, or when a fixer starts on it. A mergeable that gh gives as UNKNOWN is probed with git merge-tree, and the round rebases a child of a PR whose head was force-pushed onto the new head of its parent.
+Then the round sends a conflict or a failed check at a new head to the worker that owns the PR, and to a fixer when its head did not move in OWNED seconds, 15 minutes, or at once when no worker owns it. Just before it sends an order or hires a fixer, the round reads the PR again, and drops the order when the head moved or the conflict is gone; it sends a PR no second order within 10 minutes of the first, and it names in an order the base of a stacked PR with the head that the base had before. While a fixer owns a PR, the round neither updates its branch nor merges it, and it tells a worker that owns a branch when it updates or rebases it, or when a fixer starts on it. A mergeable that gh gives as UNKNOWN is probed with git merge-tree, and the round rebases a child of a PR whose head was force-pushed onto the new head of its parent.
 The round merges each green PR into main from the lowest number when git merges it with main clean and no file that a gate sums (SERIAL: the engine under its wall of tokens, the budgets) changed both in it and on main since its branch forked, after it moves the PRs that stack on it onto main and rebases each there with git rebase --onto from the head that it held of the PR that merged, in a scratch worktree, and pushes it with --force-with-lease (a rebase that conflicts is left to the fixer); else it updates the branch, and only when main is green.
 The label paused takes a PR out of the round. A draft, the label hold, a review that waits for its fix, and the label owner-merge, until the owner takes it off as his approval, keep a PR from a merge.
 A notice wakes you only for a decision, with the context that it needs: each event that needs none, as a worker that ends with a PR, a heal, a merge or a PR made outside the round, is one line in the next notice. The round tells you when main is red, with the lines that failed, when a PR fails to merge, with what gh said, or when a PR on main with no draft, no hold, no worker and no check that runs has no change for 45 minutes, with its checks, and each comment or issue of the owner in the private repository of the decisions, which PRIVATE names beside this word and git does not hold. await decide(title, text) opens a decision there as an issue, and news(line) adds a line at the top of its digest issue.
@@ -122,6 +122,7 @@ areas: dict[str, list[str]] = globals().setdefault("areas", {})
 DEBRIEFS = globals().get("DEBRIEFS", True)
 vetoes: dict = globals().setdefault("vetoes", {})
 ORDERED = 600.0
+OWNED = 900.0
 ordered: dict[int, float] = globals().setdefault("ordered", {})
 tips: dict[str, str] = globals().setdefault("tips", {})
 shifted: dict[int, tuple[str, str]] = globals().setdefault("shifted", {})
@@ -871,9 +872,10 @@ async def mend(pr: dict, now: float, red: bool) -> str:
   key = f"#{n} {sha} {problem}"
   since = fixes.setdefault(key, now)
   own = owner_of(pr)
-  owned = bool(own) and now - since < 3600
-  second = owned and key in noticed and now - since >= 1800 and key + " again" not in noticed
-  if (owned and not second and key in noticed) or (not owned and key + " fixer" in noticed):
+  # The worker that owns the PR has OWNED seconds to move its head, then a fixer takes the PR: on 10-29 an owner
+  # busy with another task left a conflict of #657 for an hour.
+  owned = bool(own) and now - since < OWNED
+  if (owned and key in noticed) or (not owned and key + " fixer" in noticed):
     return key
   if n in ordered and now - ordered[n] < ORDERED:
     return key
@@ -882,8 +884,8 @@ async def mend(pr: dict, now: float, red: bool) -> str:
   note = based(pr) + (await evidence() if problem == "has a failed check" else "")
   order = FIXOWN.replace("{n}", str(n)).replace("{problem}", problem).replace("{sha}", sha) + note
   if owned:
-    noticed.add(key + " again" if second else key)
-    quietly(prompt, None, ("Second notice, 30 minutes later: " if second else "") + order, on=working_at(own))
+    noticed.add(key)
+    quietly(prompt, None, order + f" A fixer takes the PR if its head does not move in {int(OWNED // 60)} minutes.", on=working_at(own))
     ordered[n] = now
   else:
     thread = next((m[7:] for m in pr["labels"] if m.startswith("thread:")), "")

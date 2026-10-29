@@ -1293,6 +1293,19 @@ async def test_a_fixer_that_starts_on_a_pr_with_a_live_worker_tells_that_worker(
   assert conductor.prompts[-1][0].startswith("A fixer starts on your PR #5. Leave its branch alone")
 
 
+
+@POSIX
+@JQ
+async def test_a_conflict_whose_owner_does_not_move_its_head_in_fifteen_minutes_goes_to_a_fixer(conductor: Round) -> None:
+  conductor.busy("p1", "k5", SONNET)
+  pr = conductor.pr(labels=["w:k5"], mergeable="CONFLICTING")
+  await conductor.mend(pr, 0.0, False)
+  assert len(conductor.prompts) == 1 and "15 minutes" in conductor.prompts[0][0]
+  await conductor.mend(pr, 800.0, False)
+  assert conductor.hired == []
+  await conductor.mend(pr, 1000.0, False)
+  assert [key for key, _ in conductor.hired] == ["fix5"]
+
 def test_the_brief_of_a_fixer_says_how_to_share_a_branch_and_to_wait_for_github(conductor: Round) -> None:
   for words in ("the workspace that the end of this brief names", "If the head of the PR is not {sha} any more", "headRefOid,mergeable", "20 seconds"):
     assert words in conductor.FIX
