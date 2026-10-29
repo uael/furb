@@ -1,7 +1,7 @@
 [project]
 name = "furb"
 # uv_build takes no version from another file, so this is the version of the workspace of Cargo.toml, written again.
-version = "0.3.0"
+version = "0.3.1"
 description = "The core of an AI harness, in one python file."
 readme = "README.md"
 requires-python = ">=3.14"
@@ -18,9 +18,9 @@ classifiers = [
 dependencies = [
     # The Kernel gates a word through the gate of the crate, so the package stands on the extension, at its own
     # version: both carry the engine, and a release is the two together.
-    "furb-monty==0.3.0", # x-release-please-version
+    "furb-monty==0.3.1", # x-release-please-version
     # The command furb is a program of rust, which the wheel of furb-cli puts on the PATH of the environment.
-    "furb-cli==0.3.0", # x-release-please-version
+    "furb-cli==0.3.1", # x-release-please-version
 ]
 
 [project.urls]

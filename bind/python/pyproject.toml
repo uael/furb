@@ -18,7 +18,7 @@ classifiers = [
   "Typing :: Typed",
 ]
 # The package of the engine, at its own version: both carry the engine, and a release is the two together.
-dependencies = ["furb==0.3.0"] # x-release-please-version
+dependencies = ["furb==0.3.1"] # x-release-please-version
 
 [project.urls]
 Source = "https://github.com/uael/furb"
