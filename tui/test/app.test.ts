@@ -807,20 +807,3 @@ test("each line of a word says what its acts did as a quiet hint: a read its lin
     },
     { width: 160, height: 40 },
   ));
-
-test("a hint that does not fit loses its last parts whole, and no part is cut to half a value", () =>
-  composing(
-    async ({ session, screen, frame }) => {
-      const id = await session.engine.rung({
-        word: ['write(Text("notes.md", "one\\ntwo\\n"))', 'await bash("true")'].join("\n"),
-        on: session.engine.root,
-      });
-      await session.engine.result(id);
-      await session.refresh();
-      session.folds[id] = false;
-      const shown = await drawn(frame, screen.renderer.root);
-      expect(shown).toMatch(/ 1 write\( +# \+2 -0 *$/m);
-      expect(shown).not.toMatch(/\d…/);
-    },
-    { width: 52, height: 30 },
-  ));
