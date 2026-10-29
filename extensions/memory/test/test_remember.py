@@ -3,7 +3,7 @@
 from asyncio import CancelledError
 from pathlib import Path
 
-from conftest import heads, plain, settle
+from conftest import plain, settle
 from extensions.conftest import extended, memorized, noted, recalled
 from furb import engine
 from furb_monty import _monty
@@ -50,25 +50,11 @@ async def test_a_cancel_over_it_ends_it_and_a_pause_over_it_holds_it_until_the_w
   assert len(recalled(root, tmp_path)) == 1
 
 
-async def test_the_life_word_of_the_extension_is_remember(tmp_path: Path) -> None:
-  """The life word of the extension is remember(), so a chain tells its memory when the life enables the extension, and a chain born later tells it at its birth, before its first prompt asks a model."""
-  top = noted(tmp_path / "work", "one\n")
-  _, root = extended("memory", tmp_path, _monty.memory, lives=True)
-  two = engine.chain("two")
-  engine.prompt(None, "go", on=two)
-  await settle()
-  assert (recalled(root, tmp_path), recalled(two, tmp_path)) == (
-    [memorized("memory1", top, "one\n")],
-    [memorized("memory2", top, "one\n")],
-  )
-  said = heads(engine.turns(on=two))
-  assert said.index("#memory2") < said.index("#prompt1")
-
-
 async def test_a_memory_file_enters_a_chain_once_and_again_only_when_it_changed(tmp_path: Path) -> None:
   """A memory file enters a chain once, and again only when it changed, by the lines that changed, since the World leaves out what the chain holds."""
   top = noted(tmp_path / "work", "one\ntwo\n")
-  _, root = extended("memory", tmp_path, _monty.memory, lives=True)
+  _, root = extended("memory", tmp_path, _monty.memory)
+  await engine.rung("remember()", on=root)
   engine.stand()
   await engine.rung("memory()", on=root)
   top.write_text("one\nthree\n", encoding="utf-8", newline="")
@@ -82,10 +68,11 @@ async def test_a_memory_file_enters_a_chain_once_and_again_only_when_it_changed(
 async def test_a_later_life_tells_what_the_record_holds(tmp_path: Path) -> None:
   """A later life tells what the record holds, since the journal answers each memory question that the record holds, and a memory file that changed since enters the chain at the stand at the tip of that life."""
   top = noted(tmp_path / "work", "one\ntwo\n")
-  sand, root = extended("memory", tmp_path, _monty.memory, lives=True)
+  sand, root = extended("memory", tmp_path, _monty.memory)
+  await engine.rung("remember()", on=root)
   first = recalled(root, tmp_path)
   top.write_text("one\nthree\n", encoding="utf-8", newline="")
-  _, root = extended("memory", tmp_path, _monty.memory, lives=True, record=plain(sand.record))
+  _, root = extended("memory", tmp_path, _monty.memory, record=plain(sand.record))
   await settle()
   assert recalled(root, tmp_path) == [*first, f"#memory2\nmemory2_path = {str(top)!r}\nmemory2_text = 'three'"]
   assert first == [memorized("memory1", top, "one\ntwo\n")]

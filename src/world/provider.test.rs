@@ -1968,6 +1968,31 @@ fn each_image_comes_once_in_a_request_after_the_text_that_names_it_as_a_fork_giv
 }
 
 #[test]
+fn a_turn_of_a_model_with_no_usage_and_no_blocks_goes_as_its_python_in_the_role_of_the_model() {
+  let turn = |role: &str, text: &str| {
+    Object::tuple([Object::string(role), Object::string(text), Object::none(), Object::none()])
+  };
+  let turns = Object::list([
+    turn("user", "#chain1"),
+    turn("assistant", "read('skills://')"),
+    turn("user", "#read1"),
+  ]);
+  let model = scripted(&MockCompletionModel::new([]));
+  let got = messages(turns.as_ref(), &model, &mut images::Images::new(None)).unwrap();
+  let said: Vec<Value> = got
+    .iter()
+    .map(|one| match one {
+      super::Message::User { content } => json!(["user", format!("{content:?}")]),
+      super::Message::Assistant { content, .. } => json!(["assistant", format!("{content:?}")]),
+      super::Message::System { .. } => json!(["system"]),
+    })
+    .collect();
+  let roles: Vec<_> = said.iter().map(|one| one[0].as_str().unwrap_or_default()).collect();
+  assert_eq!(roles, ["user", "assistant", "user"], "{said:?}");
+  assert!(said[1][1].as_str().unwrap_or_default().contains("read('skills://')"), "{said:?}");
+}
+
+#[test]
 fn a_turn_of_the_model_that_the_gate_refused_goes_on_the_user_side_quoted_under_its_finding() {
   let turn = |role: &str, text: &str| {
     Object::tuple([Object::string(role), Object::string(text), Object::none(), Object::none()])
