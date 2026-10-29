@@ -527,23 +527,3 @@ test("a line that failed says its reason once, under it, and not again beside it
     size,
     false,
   ));
-
-test("the loader of the row that a model writes stands in its own column of the gutter, parted from the number, which stands in the column of the numbers above it", () =>
-  composing(
-    async ({ session, frame }) => {
-      const thinks = await session.engine.prompt("str", {
-        message: "Think until I cancel.",
-        on: session.selected,
-      });
-      await until(session, () =>
-        session.acts.some((act) => act.kind === "rung" && act.by === thinks && !act.done),
-      );
-      await session.refresh();
-      const rows = (await frame()).split("\n");
-      const row = rows.find((one) => one.includes("# thinking")) ?? "";
-      expect(row).toMatch(/\S \d+ # thinking/);
-      expect(row).not.toMatch(/\S\d+ # thinking/);
-    },
-    size,
-    false,
-  ));

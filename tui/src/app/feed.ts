@@ -340,11 +340,9 @@ export const feed = part({
         }: { tone?: RGBA; frame?: boolean; first?: string; shown?: string } = {},
       ) => {
         // The numbers of a thread stand in one column: its widest number sets the gutter of each part of its program.
-        // A row that a model writes draws its loader in the first column of the gutter, and a blank column parts it from the
-        // numbers, even from a number as wide as the widest one.
-        const digits =
-          String(given.reduce((most, line) => ("display" in line ? Math.max(most, line.display) : most), 1))
-            .length + (given.some((line) => line.kind === "writes") ? 2 : 0);
+        const digits = String(
+          given.reduce((most, line) => ("display" in line ? Math.max(most, line.display) : most), 1),
+        ).length;
         // What a model writes changes at each token, so its row stands in a card of its own under the program, which
         // the tick draws again, and the program stays as it was drawn.
         const all = given.filter((line) => line.kind !== "writes");
@@ -818,13 +816,12 @@ export const feed = part({
             const where = `${act.id}:${index}`;
             const window = this.rolling(given, where, Boolean(writer));
             // The numbers of a thread stand in one column: its widest number sets the gutter.
-            const digits =
-              String(
-                given.reduce(
-                  (most, line) => ("display" in line ? Math.max(most, line.display) : most),
-                  writer ? writer.display + wrote : 1,
-                ),
-              ).length + (writer ? 2 : 0);
+            const digits = String(
+              given.reduce(
+                (most, line) => ("display" in line ? Math.max(most, line.display) : most),
+                writer ? writer.display + wrote : 1,
+              ),
+            ).length;
             // The panel of the thread and its line take 5 columns, and the numbers about 5.
             const room = this.feedWidth - indent - 13;
             // A click on a line opens it in place: its whole text, and under it what each act of the line gave. The
@@ -890,19 +887,17 @@ export const feed = part({
                     const view = this.programView(segment, room, took, since, heads, digits, {
                       more: () => this.openWindow(where),
                     });
-                    // The window scrolls by the wheel and the keys with no bar: the bar of a scroll box in the scroll box of
-                    // the feed draws where the box stood before the feed scrolled, over the rows beside it.
-                    const scrolled = window.opened
-                      ? this.document(view, {
-                          // A scroll box takes all the rows that it may, so it takes the rows of its lines.
-                          height: Math.max(1, Math.min(segment.length, SCROLL)),
-                          flexGrow: 0,
-                          flexShrink: 1,
-                          minWidth: 0,
-                        })
-                      : undefined;
-                    if (scrolled) scrolled.verticalScrollBar.visible = false;
-                    block.add(scrolled ?? view);
+                    block.add(
+                      window.opened
+                        ? this.document(view, {
+                            // A scroll box takes all the rows that it may, so it takes the rows of its lines.
+                            height: Math.max(1, Math.min(segment.length, SCROLL)),
+                            flexGrow: 0,
+                            flexShrink: 1,
+                            minWidth: 0,
+                          })
+                        : view,
+                    );
                   }
                   if (thinks && writer)
                     block.add(this.thinkingRow(writer.step.id, writer.display, digits, room));
