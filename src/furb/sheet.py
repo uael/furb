@@ -236,11 +236,4 @@ def gating(engine: dict[str, object], checked: Checked) -> Ear:
   while True:
     match (yield gates):
       case ("gate", qid, _, on, word):
-        try:
-          found: object = against(engine, checked, on, word)
-        except Exception as fault:
-          # A gate that fails on one word answers it, so the ear lives on to read the next word.
-          refused = engine["Refused"]
-          assert callable(refused)
-          found = refused(f"the gate failed on the word: {type(fault).__name__}: {fault}")
-        yield "done", qid, found
+        yield "done", qid, against(engine, checked, on, word)

@@ -28,11 +28,6 @@ import { part } from "./part.ts";
 import { type BlockOptions, MESSAGE_ROWS, PROGRAM_STEPS, spell, threadMarks, viewLabels } from "./shared.ts";
 import { SCROLL } from "./thread.ts";
 
-/** The columns that the controls of a thread take beside its first message: a fold and a resolve or a reopen. */
-const CONTROLS = 26;
-/** The columns that the frame of a message takes from the feed: its bar and its padding on each side. */
-const FRAME = 6;
-
 export const feed = part({
   /** What a question that the input answers says under it: the list of its values takes the arrows and the numbers,
    * and a field takes the words of the shape. */
@@ -615,35 +610,25 @@ export const feed = part({
           shown: message,
           body: (box) => {
             // A right click on a message opens its menu, as on the heading of any other act.
-            const row = this.box({
-              flexDirection: "row",
-              onMouseDown: (event) => {
-                if (event.button === 2)
-                  this.actActions(this.session.acts.find((one) => one.id === act.id) ?? act);
-              },
-            });
             const text = user ? said(shortened) : this.markdown(shortened, c.text, c.background);
-            text.flexGrow = 1;
-            text.flexShrink = 1;
-            const meta: Part[] = [...(sent ? [[`${sent}  `, c.faint] as Part] : []), ...state];
+            const beside: Part[] = [...(sent ? [[`${sent}  `, c.faint] as Part] : []), ...state];
             const controls = this.threadControls(act);
-            // The sender, the type and the controls stand beside the text when each line of it fits there, else on a row
-            // of their own above it, so that a long message wraps at the whole width and never in a narrow column.
-            const aside = Bun.stringWidth(plain(meta)) + space.between + (controls ? CONTROLS : 0);
-            const widest = Math.max(0, ...shortened.split("\n").map((line) => Bun.stringWidth(line)));
-            if (widest > this.feedWidth - indent - FRAME - aside) {
-              const head = this.box({ flexDirection: "row", justifyContent: "flex-end" });
-              head.add(this.text(meta, c.faint));
-              if (controls) head.add(controls);
-              box.add(head);
-              row.add(text);
-              box.add(row);
-            } else {
-              row.add(text);
-              row.add(this.text(meta, c.faint, { marginLeft: space.between }));
-              if (controls) row.add(controls);
-              box.add(row);
-            }
+            const row = this.sided(
+              {
+                onMouseDown: (event) => {
+                  if (event.button === 2)
+                    this.actActions(this.session.acts.find((one) => one.id === act.id) ?? act);
+                },
+              },
+              text,
+              [this.text(beside, c.faint, { marginLeft: space.between }), controls],
+              Bun.stringWidth(plain(beside)) +
+                space.between +
+                (controls ? this.threadControlsWidth(controls) : 0),
+              this.feedWidth - indent - 8,
+              shortened,
+            );
+            box.add(row);
             if (rest)
               box.add(
                 this.link(

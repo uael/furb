@@ -204,9 +204,9 @@ test("what a model writes streams into the session under its rung until its repl
   try {
     const engine = session.open();
     const prompt = engine.prompt("int", { message: "count", on: engine.root });
-    // The rungs of the five official extensions come first.
-    await until(session, () => session.streams.get("rung6")?.text === "close(3)");
-    expect(session.streams.get("rung6")).toEqual({
+    // The rungs of the six official extensions come first.
+    await until(session, () => session.streams.get("rung7")?.text === "close(3)");
+    expect(session.streams.get("rung7")).toEqual({
       chain: engine.root,
       text: "close(3)",
       thinking: "counting",
@@ -729,9 +729,9 @@ test("record inspection reports pending work when its replay starts or feeds a c
   await first.dispose();
   try {
     expect((await inspectRecord(record)).pending.map(([id]) => id)).toEqual([
-      "rung6",
-      "bash1",
       "rung7",
+      "bash1",
+      "rung8",
       "bash2",
     ]);
   } finally {
@@ -843,16 +843,16 @@ test("an operator answers a prompt of a list, a dict, a tuple or a union of the 
   }
 });
 
-test("a session with no model puts to the operator every prompt that names no actor, the acknowledgment among them", async () => {
+test("a session with no model puts to the operator every prompt that names no actor, a notice among them", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-operator-alone-"));
-  const { promise: acknowledgment, resolve: acknowledged } = Promise.withResolvers<string>();
+  const { promise: notice, resolve: noticed } = Promise.withResolvers<string>();
   // The first example of the README, whose callback answers for the operator.
   const session = boot({
     cwd,
     record: join(cwd, "work.jsonl"),
     roster: [],
     operator: async ({ shape, message }) => {
-      if (shape === "None") acknowledged(message);
+      if (shape === "None") noticed(message);
       return shape === "str" ? `You asked: ${message}` : null;
     },
   });
@@ -862,8 +862,8 @@ test("a session with no model puts to the operator every prompt that names no ac
     expect(await engine.prompt("str", { message: "What is this project?", on })).toBe(
       "You asked: What is this project?",
     );
-    engine.rung({ word: 'b = bash("true")', on });
-    expect(await acknowledgment).toBe("bash1 done");
+    engine.rung({ word: 'prompt(None, "The notes are ready.")', on });
+    expect(await notice).toBe("The notes are ready.");
   } finally {
     await session.dispose();
     await rm(cwd, { recursive: true });
@@ -942,7 +942,7 @@ test("a session enables the extensions of the configs, and a later session on it
   const first = new Session({ cwd, record, config });
   try {
     first.open();
-    expect(running(first)).toEqual(["memory", "skills", "compaction", "ouroboros", "web"]);
+    expect(running(first)).toEqual(["memory", "skills", "compaction", "ouroboros", "web", "mcp"]);
     const told = first.engine?.turns({ on: "chain1" }).at(-1)?.[1] ?? "";
     expect(told).toContain(
       `#memory1\nmemory1_path = '${join(cwd, "CLAUDE.md").replaceAll("\\", "\\\\")}'\nmemory1_text = 'Use two spaces.'`,
@@ -956,7 +956,7 @@ test("a session enables the extensions of the configs, and a later session on it
     later.open();
     fresh.open();
     expect([running(later), running(fresh)]).toEqual([
-      ["memory", "skills", "compaction", "ouroboros", "web"],
+      ["memory", "skills", "compaction", "ouroboros", "web", "mcp"],
       [],
     ]);
   } finally {

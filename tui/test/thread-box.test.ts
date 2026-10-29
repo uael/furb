@@ -58,12 +58,9 @@ test("a thread is one box: its message with a line of its color, its program as 
       expect(rows[at("Fieldnotes keeps ideas close")]?.indexOf("Fieldnotes")).toBe(
         rows[at("Explore this project")]?.indexOf("Explore"),
       );
-      // A message that a line beside its controls would narrow takes the whole width, with its type and its controls on
-      // a row of their own above it.
-      expect(rows[at("Explore this project") - 1]).toMatch(/^\s*┃\s+str {2}▾ Collapse\s*$/);
       // The line of the message starts half a row above it, in the top edge of the box, and ends half a row under it, in
       // the row that parts it from the code, as the line of a panel does, so the line adds no row of its own.
-      expect(rows[at("Explore this project") - 2]).toMatch(/^\s*╻▄{4,}\s*$/);
+      expect(rows[at("Explore this project") - 1]).toMatch(/^\s*╻▄{4,}\s*$/);
       expect(rows[at("Explore this project") + 1]).toMatch(/^\s*╹\s*$/);
       expect(rows[at("Explore this project") + 2]).not.toContain("┃");
       // The box has an edge under its input.
@@ -288,7 +285,7 @@ test("the up arrow in an empty input takes back the last message to the thread t
       // The key goes to the handler of the input itself: a key press of the test terminal reaches it later on a slow
       // machine than the test can wait.
       expect(app.walkHistory({ name: "up" } as KeyEvent)).toBe(true);
-      await until(session, () => app.composer.plainText === "First wording");
+      await until(session, () => app.composer.plainText === "First wording", "compose");
       app.composer.setText("Second wording");
       await app.submit();
       await until(session, () => (listed(session)[0]?.messages.length ?? 0) === 2);
@@ -305,5 +302,26 @@ test("the up arrow in an empty input takes back the last message to the thread t
       expect(shown).toContain("Second wording");
     },
     { ...size, useMouse: true },
+    true,
+  ));
+
+test("a message keeps its words whole beside a state and controls that are wider than the room it leaves, which go under it", () =>
+  composing(
+    async ({ session, frame }) => {
+      await idle(session);
+      const shown = async () =>
+        (await frame()).split("\n").map((row) => row.slice(0, 100 - session.preferences.sidebarWidth));
+      let rows = await shown();
+      // The markdown of the message draws over a few frames.
+      for (let step = 0; step < 80 && !rows.some((row) => row.includes("Explore this project")); step++) {
+        await Bun.sleep(25);
+        rows = await shown();
+      }
+      const at = rows.findIndex((row) => row.includes("Explore this project"));
+      expect(at).toBeGreaterThan(0);
+      expect(rows[at]).toMatch(/┃ Explore this project/);
+      expect(rows.slice(at, at + 5).join("\n")).toContain("Collapse");
+    },
+    { width: 100, height: 46 },
     true,
   ));

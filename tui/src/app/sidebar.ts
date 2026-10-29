@@ -1,4 +1,4 @@
-import type { BoxOptions, BoxRenderable, Renderable } from "@opentui/core";
+import type { BoxOptions, BoxRenderable, Renderable, TextRenderable } from "@opentui/core";
 import { unmarked } from "furb";
 import { type ChainThread, chainThreads } from "furb/life";
 import { count, dollars } from "../format.ts";
@@ -212,6 +212,12 @@ export const sidebar = part({
         ),
       );
     return row;
+  },
+
+  /** The columns that the controls of a thread take: the words of its links, the gaps between them, and its margin. */
+  threadControlsWidth(controls: BoxRenderable): number {
+    const links = controls.getChildren().map((one) => Bun.stringWidth((one as TextRenderable).plainText));
+    return links.reduce((sum, one) => sum + one, 0) + 3 * Math.max(0, links.length - 1) + space.between;
   },
 
   /** A row of the sidebar, whose click runs, which spans the sidebar so that the pointer and the selection show from

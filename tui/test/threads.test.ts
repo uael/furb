@@ -1,8 +1,9 @@
-import { expect, test } from "bun:test";
+import { expect, setSystemTime, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { RGBA } from "@opentui/core";
 import { chainThreads } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
+import { clock } from "../src/clock.ts";
 import { glyph, palettes } from "../src/theme.ts";
 import { type Composing, cellAt, composing } from "./composing.ts";
 import { idle } from "./idle.ts";
@@ -430,6 +431,24 @@ test("the list of the threads of the chain shown is read again for another chain
     size,
     true,
   ));
+
+test("a row of a thread says how long ago the thread last changed, as the session saw it", () =>
+  composing(
+    async ({ session, frame }) => {
+      await idle(session);
+      // The demo ran in the session, so every act changed just now.
+      expect(rail(session, await frame()).join("\n")).not.toContain("ago");
+      setSystemTime(new Date(Date.now() + 5 * 60_000));
+      try {
+        expect(rail(session, await frame()).join("\n")).toContain("5m ago");
+      } finally {
+        setSystemTime();
+      }
+    },
+    size,
+    true,
+  ));
+
 test("an act that is no prompt leaves the list of the threads of the chain shown as it was, and a prompt reads it again", () =>
   composing(
     async ({ session, app }) => {

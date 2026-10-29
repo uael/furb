@@ -1464,6 +1464,23 @@ fn an_ear_that_cannot_start_again_tells_the_operator_why_it_ended() {
 }
 
 #[test]
+fn a_gate_that_raises_refuses_the_word_and_a_fresh_gate_reads_the_next_word() {
+  let (mut engine, root) = probed("raising-gate", vec![]);
+  // A name of the engine that is no str breaks the sheet of every word, as a fault of the readying does.
+  engine.word("globals().update({1: 0})", vec![]).unwrap();
+  let no = engine
+    .verb("gate", vec![Object::string("close(1)")], vec![("on", Object::string(&root))])
+    .unwrap_err();
+  assert_eq!(no.name, "Refused");
+  assert!(no.message().contains("The ear gate raised AttributeError"), "{no}");
+  engine.word("globals().pop(1)", vec![]).unwrap();
+  let found = engine
+    .verb("gate", vec![Object::string("close(1)")], vec![("on", Object::string(&root))])
+    .unwrap();
+  assert_eq!(found.py_repr(), "[]");
+}
+
+#[test]
 fn the_gate_refuses_a_word_that_monty_cannot_compile_and_reads_the_next_word() {
   let (mut engine, root) = probed("gate", vec![]);
   let word =
