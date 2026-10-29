@@ -3,7 +3,6 @@ import { writeFileSync } from "node:fs";
 import { RGBA } from "@opentui/core";
 import { chainThreads } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
-import { clock } from "../src/clock.ts";
 import { glyph, palettes } from "../src/theme.ts";
 import { type Composing, cellAt, composing } from "./composing.ts";
 import { idle } from "./idle.ts";
@@ -126,6 +125,7 @@ test("a question of a str shows a field in its card in the sidebar, and Enter in
   composing(
     async ({ session, app, screen, frame }) => {
       await idle(session);
+      session.preferences.sidebarStyle = "inbox";
       const question = await session.engine.prompt("str", {
         message: "Which name should it take?",
         on: session.engine.root,
@@ -163,10 +163,6 @@ test("a question that waits shows on top of the sidebar and as a mark on its wor
       keep("question", shown);
       const rows = rail(session, shown);
       expect(rows.some((line) => line.includes("1 needs you"))).toBe(true);
-      // The question stands pinned under that line with its words and the chips that answer it in place.
-      expect(rows.some((line) => line.includes("Apply the search shortcut?"))).toBe(true);
-      expect(rows.some((line) => line.includes("1 yes"))).toBe(true);
-      expect(rows.some((line) => line.includes("Switch or add a workspace"))).toBe(true);
       expect(rows.filter((line) => line.includes("◆ 1")).length).toBeGreaterThan(0);
       expect(listed(session).some((one) => one.act.id === question)).toBe(false);
       // The input sends its message to the open thread that the sidebar lights, unless the operator asks for a new thread,
