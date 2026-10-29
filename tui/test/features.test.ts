@@ -355,6 +355,39 @@ test("/extensions lists what a life runs, and a cancel of a word of the operator
   }
 });
 
+test("the words of the extensions stand as code: a comment that names their ear, then the call that ends each word, with no ids of acts", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-ear-code-"));
+  try {
+    await writeFile(join(directory, "a.txt"), "one");
+    const opened = await openEngine({ cwd: directory, record: join(directory, "session.jsonl") });
+    await composing(
+      async ({ session, frame }) => {
+        await session.command("/run x = 1");
+        await until(session, () =>
+          session.activity.some((act) => act.kind === "rung" && act.by === "operator" && act.done),
+        );
+        await session.refresh();
+        let rows = (await frame()).split("\n");
+        for (let step = 0; step < 80 && !rows.some((row) => /# extensions/.test(row)); step++) {
+          await Bun.sleep(25);
+          rows = (await frame()).split("\n");
+        }
+        const at = rows.findIndex((row) => /# extensions/.test(row));
+        expect(at).toBeGreaterThanOrEqual(0);
+        const shown = rows.slice(at, at + 4).join("\n");
+        expect(shown).toMatch(/ 1 remember\(\)/);
+        expect(shown).toMatch(/ 2 counted\(\)/);
+        expect(shown).toMatch(/ 3 ouroboros\(\)/);
+        expect(rows.join("\n")).not.toMatch(/rung\d+…\d+|remember1|ouroboros1/);
+      },
+      { width: 140, height: 42 },
+      new Session(opened.engine, opened.host, true),
+    );
+  } finally {
+    await remove(directory);
+  }
+});
+
 test("an act that ended and told nothing shows nothing in the feed, as a question of memory that found no file", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-untold-"));
   try {

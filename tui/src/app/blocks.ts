@@ -39,6 +39,14 @@ export const blocks = part({
     );
   },
 
+  /** The region of the screen that a dialog or a menu covers, whole: the sidebar for a point in it, else the feed with
+   * its gutters. An overlay never crosses the edge of its region, so it cuts no word of the region beside it. */
+  region(x = 0): { left: number; width: number } {
+    const side = this.sidebarShown ? this.session.preferences.sidebarWidth : 0;
+    const edge = this.renderer.width - side;
+    return side && x >= edge ? { left: edge, width: side } : { left: 0, width: edge };
+  },
+
   /** A row of a text and what stands at its right. The text keeps at least half of the row, or its own width when that
    * is less, so that what stands beside it never squeezes it to a few columns: when the room leaves less, what
    * stood beside it goes under it, at the right. The width of what stands beside it is the sum of the widths of the

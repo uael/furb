@@ -6,13 +6,14 @@ import {
   cancelled,
   condense,
   gist,
+  hintOf,
   ladder,
   makers,
   type ProgramLine,
   stepLines,
   thread,
   threadProgram,
-  wants,
+  type wants,
   writing,
 } from "furb/life";
 import { clock } from "../clock.ts";
@@ -29,6 +30,17 @@ import { type BlockOptions, MESSAGE_ROWS, PROGRAM_STEPS, spell, threadMarks, vie
 import { SCROLL } from "./thread.ts";
 
 export const feed = part({
+  /** What a question that the input answers says under it: the list of its values takes the arrows and the numbers,
+   * and a field takes the words of the shape. */
+  answeredBelow(ask: Parameters<typeof wants>[0]): Part[] {
+    if (ask.choices.length) return [["The list below answers this question", c.muted]];
+    return [
+      [`The input below answers this question, as ${ask.shape}, or `, c.muted],
+      ["⌃A", c.text],
+      [" opens each in turn", c.muted],
+    ];
+  },
+
   renderContent(): void {
     const w = this.session;
     const view = this.tree ? "tree" : `${w.selected}:${w.view}`;
@@ -516,70 +528,54 @@ export const feed = part({
       // the box are cards of their own that share a panel, so a change of the thread makes again only the one that
       // changed, and the input keeps its text. A thread that the operator folded stands as one line.
       const threadBox = (act: ActRow, depth: number, indent: number) => {
-        const message = String(act.words[1] ?? "");
+        const message = this.spoken(act);
         const user = w.isUserPrompt(act);
         const thread = threadsOwn.by.get(act.id);
         const tone = threadTone(act.id);
         const made = madeBy(act.id);
         const seen = `${made.length}:${made.filter((one) => one.done).length}:${thread?.messages.length ?? 0}:${thread?.asked.length ?? 0}:${thread?.state}`;
-        if (thread && this.threadFolded(act.id)) {
-          collapsed = depth;
-          const news = this.unread(act.id, seen, true);
-          const [mark, color] = threadMarks(thread);
-          const steps = made.length + thread.messages.length;
-          const ended = thread.state === "cancelled" || thread.state === "failed" ? thread.state : "";
-          const meta = [steps ? `${steps} ${steps === 1 ? "step" : "steps"}` : "", ended]
-            .filter(Boolean)
-            .join("  ");
-          // The controls of the thread take about 30 columns at the right of its line.
-          const room = this.feedWidth - indent - 32 - Bun.stringWidth(meta);
-          add(
-            act.id,
-            `folded\n${message}\n${mark}\n${meta}\n${news}\n${this.feedWidth}\n${this.theme}`,
-            [],
-            (box) => {
-              const row = this.box({ flexDirection: "row" });
-              const text = this.link(
-                [
-                  [news ? `${glyph.dot} ` : "", c.accent],
-                  [`${mark} `, color],
-                  [clip(shortenHomes(gist(message)), room), c.muted],
-                ],
-                () => this.foldThread(act.id, false),
-              );
-              text.flexGrow = 1;
-              text.flexShrink = 1;
-              row.add(text);
-              if (meta)
-                row.add(
-                  this.text(meta, thread.state === "failed" ? c.danger : c.faint, {
-                    marginLeft: space.between,
-                  }),
-                );
-              const controls = this.threadControls(act);
-              if (controls) row.add(controls);
-              this.barred(box, tone, 0, { top: false, bottom: false }).add(row);
-            },
-            {
-              act,
-              group: "user",
-              heading: false,
-              separate: true,
-              open: true,
-              indent,
-              shown: message,
-              join: "only",
-              edge: tone,
-            },
-          );
-          return;
-        }
-        this.unread(act.id, seen, false);
-        const parts = [act, ...(thread?.messages ?? [])];
-        const program = programFor(act.id, liveOf(parts.map((one) => one.id)), () =>
-          threadProgram(parts, madeMap(), word, owed, named),
-        );
+        const folded = Boolean(thread && this.threadFolded(act.id));
+        if (folded) collapsed = depth;
+        const news = this.unread(act.id, seen, folded);
+        const steps = made.length + (thread?.messages.length ?? 0);
+        // A folded thread keeps its header alone, drawn as the open thread draws it, with how many steps it holds.
+        // Its state stands beside its shape, as the open thread says it.
+        const meta = folded && steps ? `${steps} ${steps === 1 ? "step" : "steps"}` : "";
         const sections: Section[] = [];
+        const emit = () => {
+          for (const [at, section] of sections.entries()) {
+            const join =
+              sections.length === 1
+                ? "only"
+                : at === 0
+                  ? "first"
+                  : at === sections.length - 1
+                    ? "last"
+                    : "middle";
+            // A message of the operator holds its own half rows of padding, so no blank row parts a part from it.
+            const gap = section.apart && at > 0 && !section.bar && !sections[at - 1]?.bar ? space.section : 0;
+            add(
+              section.id,
+              `${section.key}\n${join}\n${gap}\n${Boolean(section.bar)}`,
+              section.label ?? [],
+              (box) =>
+                section.body(
+                  this.barred(box, section.bar, gap, { top: at > 0, bottom: at < sections.length - 1 }),
+                ),
+              {
+                indent,
+                join,
+                ...(section.bar ? { edge: section.bar } : {}),
+                heading: false,
+                separate: at === 0,
+                open: true,
+                same: [...(section.same ?? [section.key]), join, gap, Boolean(section.bar)],
+                ...(section.act ? { act: section.act } : {}),
+                ...(section.shown !== undefined ? { shown: section.shown } : {}),
+              },
+            );
+          }
+        };
         // A message to the thread shows as its sender wrote it, with each image that it attached named by a mark.
         const said = (text: string) =>
           imageReferences(text).length ? this.message(text) : this.markdown(text, c.text, c.background);
@@ -593,14 +589,39 @@ export const feed = part({
         sections.push({
           id: act.id,
           label: user ? [["You", tone]] : [[sent, c.faint]],
-          key: `${message}\n${sent}\n${plain(state)}\n${rest}\n${thread?.resolved}\n${this.feedWidth}\n${this.theme}`,
-          ...(user ? { bar: tone } : {}),
+          key: `${message}\n${sent}\n${plain(state)}\n${rest}\n${thread?.resolved}\n${meta}\n${news}\n${folded}\n${this.feedWidth}\n${this.theme}`,
+          ...(user || folded ? { bar: tone } : {}),
           act,
           shown: message,
           body: (box) => {
             // A right click on a message opens its menu, as on the heading of any other act.
-            const text = user ? said(shortened) : this.markdown(shortened, c.text, c.background);
-            const beside: Part[] = [...(sent ? [[`${sent}  `, c.faint] as Part] : []), ...state];
+            const beside: Part[] = [
+              ...(news ? [[`${glyph.dot} `, c.accent] as Part] : []),
+              ...(sent ? [[`${sent}  `, c.faint] as Part] : []),
+              ...state,
+              ...(meta ? [[`  ${meta}`, c.faint] as Part] : []),
+            ];
+            // A folded thread stands as one line: the mark of its state, then the start of its message, which the room
+            // cuts, so that it never wraps beside its state and its controls.
+            const [mark, markColor] = thread ? threadMarks(thread) : ["", c.faint];
+            const text =
+              folded && thread
+                ? this.link(
+                    [
+                      [`${mark} `, markColor],
+                      [
+                        clip(
+                          shortenHomes(gist(message)),
+                          Math.max(8, this.feedWidth - indent - 32 - Bun.stringWidth(plain(beside))),
+                        ),
+                        c.muted,
+                      ],
+                    ],
+                    () => this.foldThread(act.id, false),
+                  )
+                : user
+                  ? said(shortened)
+                  : this.markdown(shortened, c.text, c.background);
             const controls = this.threadControls(act);
             const row = this.sided(
               {
@@ -615,10 +636,10 @@ export const feed = part({
                 space.between +
                 (controls ? this.threadControlsWidth(controls) : 0),
               this.feedWidth - indent - 8,
-              shortened,
+              folded ? "" : shortened,
             );
             box.add(row);
-            if (rest)
+            if (rest && !folded)
               box.add(
                 this.link(
                   [
@@ -634,6 +655,11 @@ export const feed = part({
               );
           },
         });
+        if (folded) return emit();
+        const parts = [act, ...(thread?.messages ?? [])];
+        const program = programFor(act.id, liveOf(parts.map((one) => one.id)), () =>
+          threadProgram(parts, madeMap(), word, owed, named),
+        );
         // What a model answered stands as markdown with no line of color, since it is no message of the operator.
         const answerOf = (target: ActRow, id: string): Section => {
           const value =
@@ -738,15 +764,7 @@ export const feed = part({
                 box.add(
                   this.text(
                     aimed
-                      ? [
-                          ["The input below answers this question", c.muted],
-                          [
-                            pending.choices.length ? ` with ${wants(pending)}` : `, as ${pending.shape}`,
-                            c.muted,
-                          ],
-                          [", or press ", c.faint],
-                          ["⌃A", c.muted],
-                        ]
+                      ? this.answeredBelow(pending)
                       : [["Click here to answer this question in the input below", c.muted]],
                     c.muted,
                     {
@@ -960,38 +978,7 @@ export const feed = part({
             body: (box) => this.replyRow(box, act.id, over, tone),
           });
         }
-        for (const [at, section] of sections.entries()) {
-          const join =
-            sections.length === 1
-              ? "only"
-              : at === 0
-                ? "first"
-                : at === sections.length - 1
-                  ? "last"
-                  : "middle";
-          // A message of the operator holds its own half rows of padding, so no blank row parts a part from it.
-          const gap = section.apart && at > 0 && !section.bar && !sections[at - 1]?.bar ? space.section : 0;
-          add(
-            section.id,
-            `${section.key}\n${join}\n${gap}\n${Boolean(section.bar)}`,
-            section.label ?? [],
-            (box) =>
-              section.body(
-                this.barred(box, section.bar, gap, { top: at > 0, bottom: at < sections.length - 1 }),
-              ),
-            {
-              indent,
-              join,
-              ...(section.bar ? { edge: section.bar } : {}),
-              heading: false,
-              separate: at === 0,
-              open: true,
-              same: [...(section.same ?? [section.key]), join, gap, Boolean(section.bar)],
-              ...(section.act ? { act: section.act } : {}),
-              ...(section.shown !== undefined ? { shown: section.shown } : {}),
-            },
-          );
-        }
+        emit();
       };
       for (const line of lines) {
         if (collapsed >= 0 && line.depth > collapsed) continue;
@@ -1184,25 +1171,47 @@ export const feed = part({
             },
           );
         } else if (line.type === "ear") {
-          // The rungs that an ear wrote, as the words of the extensions, stand on one quiet row.
-          const ids = line.rungs.map((rung) => rung.id);
-          const span =
-            ids.length > 1 ? `${ids[0]}…${(ids.at(-1) ?? "").replace(/^\D+/, "")}` : (ids[0] ?? "");
-          add(
-            `ear-${act.id}`,
-            `${span}:${line.state}:${line.acts.map((chip) => chip.label + chip.state).join(" ")}:${this.theme}`,
-            [
-              [
-                `${line.state === "done" ? glyph.ring : glyph.dot} `,
-                line.state === "failed" ? c.danger : c.faint,
-              ],
-              [act.by, c.muted],
-              [`  ${span}`, c.faint],
-              ...this.chipParts(line.acts, this.feedWidth - indent - Bun.stringWidth(act.by + span) - 8),
-            ],
-            () => {},
-            { heading: true, indent, shown: `${act.by} ${span}` },
+          // The rungs that an ear wrote, as the words of the extensions, stand as code: a comment that names the ear,
+          // then the last statement of each word that calls what the word defined, with what its acts came to. A word
+          // that only defines shows no line.
+          const ear = act;
+          const earLines = programFor(
+            `ear:${act.id}`,
+            `${line.state}:${line.acts.map((chip) => chip.label + chip.state).join(" ")}`,
+            () => {
+              const out: ProgramLine[] = [{ kind: "note", step: ear, text: `# ${ear.by}` }];
+              for (const rung of line.rungs) {
+                const source = this.subject(rung).trimEnd().split("\n");
+                const last = source.at(-1) ?? "";
+                if (!/^[A-Za-z_][\w.]*\(/.test(last)) continue;
+                const acts = [...madeBy(rung.id)];
+                out.push({
+                  kind: "code",
+                  step: rung,
+                  number: source.length,
+                  display: out.length,
+                  text: last,
+                  acts,
+                  runs: acts.some((one) => !one.done),
+                  hint: hintOf(acts, owed, named),
+                });
+              }
+              // A word that only defines has no line to show, so the note stands alone, with the rungs and what they made.
+              if (out.length === 1) {
+                const ids = line.rungs.map((rung) => rung.id);
+                const span =
+                  ids.length > 1 ? `${ids[0]}…${(ids.at(-1) ?? "").replace(/^\D+/, "")}` : (ids[0] ?? "");
+                const made = line.acts.map((chip) => chip.label).join(" ");
+                out[0] = { kind: "note", step: ear, text: `# ${ear.by} ${span}  ${made}`.trimEnd() };
+              }
+              return out;
+            },
           );
+          // An ear with no rung shows nothing.
+          if (line.rungs.length)
+            programCard(act.id, earLines, indent, {
+              shown: `${act.by} ${line.rungs.map((rung) => rung.id).join(" ")}`,
+            });
         } else if (line.type === "more") {
           // The earlier prompts of a long thread, or the earlier rungs of a long ladder, stand as one line until a click
           // opens them.
@@ -1309,12 +1318,7 @@ export const feed = part({
                     space.between,
                     this.text(
                       aimed
-                        ? [
-                            ["The input below answers this question", c.muted],
-                            [ask.choices.length ? ` with ${wants(ask)}` : `, as ${ask.shape}`, c.muted],
-                            [", or press ", c.faint],
-                            ["⌃A", c.muted],
-                          ]
+                        ? this.answeredBelow(ask)
                         : [["Click here to answer this question in the input below", c.muted]],
                       c.muted,
                       { run: () => (aimed ? this.question(ask) : void w.point(ask.id).catch(this.report)) },

@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 HERE = Path(__file__).resolve().parent.parent
-SOURCE = (HERE / "converge.py").read_text(encoding="utf-8")
+SOURCE = (HERE / "converge.py").read_text(encoding="utf-8") + "\n\n" + (HERE.parent / "converge-tui" / "tui.py").read_text(encoding="utf-8")
 WORDS = "## #17 I4. The TUI converges\n\n> I want the TUI to be perfect so it need to be the result of a convergence"
 QUOTE = "I want the TUI to be perfect"
 
@@ -95,7 +95,8 @@ class World:
     ns.update(paused=lambda name: self.pausing, clock=lambda: self.now, cancel=self.cancel)
     exec(compile(SOURCE, str(HERE / "converge.py"), "exec"), ns)  # noqa: S102
     self.ns = ns
-    self.target = {**ns["TUI"], "capture": lambda target, pairs, out: f"echo capture in {target.get('slot', 1)} {pairs}"}
+    ns["fake_capture"] = lambda target, pairs, out: f"echo capture in {target.get('slot', 1)} {pairs}"
+    self.target = {**ns["TUI"], "capture": "fake_capture"}
 
   def quietly(self, verb: Callable[..., object], *args: object, **words: object) -> object:
     self.quieted.append((getattr(verb, "__name__", ""), args))
@@ -118,7 +119,7 @@ class World:
   def bash(self, command: str, stdin: str | None = "", timeout: float = 600, show: object = None) -> Done:
     self.commands.append(command)
     out, code = next(((o, c) for p, o, c in self.says if re.search(p, command)), ("", 0))
-    if stdin and stdin == self.ns["SHOTS"] and code == 0 and out:
+    if stdin and command.startswith("python3 -I - ") and code == 0 and out:
       self.files[f"{shlex.split(command)[3]}/shots.json"] = out
       out = "wrote the list\n"
     return self.act("bash", Exit(code, Text("stdout", out), Text("stderr", "")))
@@ -301,6 +302,16 @@ def test_the_budget_ends_the_loop(world: World) -> None:
   book = world.run(10)
   assert book["state"] == "spent"
   assert world.told() == ["converge: tui spent its budget: 1 captures and 0.00 dollars."]
+
+
+def test_a_later_run_starts_with_the_whole_budget(world: World) -> None:
+  world.ns["JOBS"] = 1
+  world.judge = lambda message, to: gap()
+  world.waited = lambda: world.round["queue"].clear()
+  assert world.run(10)["state"] == "spent"
+  book = world.run(10)
+  assert book["state"] == "spent"
+  assert book["jobs"] == 2
 
 
 def test_a_failed_check_of_the_head_is_a_gap_of_its_own(world: World) -> None:
@@ -489,8 +500,8 @@ def veto(world: World) -> bool:
   return asyncio.run(world.converge_veto(pr(verdict="pass")))
 
 
-def test_the_conductor_is_given_the_veto_of_converge(world: World) -> None:
-  assert world.round["vetoes"]["converge"] is world.ns["converge_veto"]
+def test_the_conductor_is_given_no_veto_of_converge(world: World) -> None:
+  assert "converge" not in world.round["vetoes"]
 
 
 def test_a_green_pr_that_changes_a_capture_waits_for_the_judges_and_lands_on_a_clean_head(world: World) -> None:
@@ -656,9 +667,9 @@ def played_on(chain: str) -> tuple[dict, dict]:
   return ns, modules
 
 
-def test_the_veto_of_converge_stands_in_the_module_of_the_chain_that_runs_the_conductor() -> None:
+def test_converge_puts_no_veto_in_the_module_of_the_chain_that_runs_the_conductor() -> None:
   ns, modules = played_on("chain2")
-  assert modules["chain2"]["vetoes"]["converge"] is ns["converge_veto"]
+  assert "converge" not in modules["chain2"].get("vetoes", {})
   assert "converge" not in modules["chain1"]["vetoes"]
 
 
@@ -676,7 +687,7 @@ def test_the_list_of_the_captures_is_a_file_and_stdout_holds_one_short_line(tmp_
 
 def test_a_list_of_the_captures_that_no_file_holds_is_the_fault_of_the_capture(world: World) -> None:
   world.say(r"python3 -I -", "")
-  seen = asyncio.run(world.shots(str(world.tmp / "out"), "", False, ("main", "head")))
+  seen = asyncio.run(world.shots(world.target, str(world.tmp / "out"), "", False, ("main", "head")))
   [[name, why, quote]] = seen["faults"]
   assert name == "capture" and why.startswith("the list of the captures failed: ")
 
@@ -981,3 +992,83 @@ def test_a_head_that_only_merged_main_keeps_the_verdict_of_the_same_change(world
   assert asyncio.run(world.converge_veto(pr(sha="def", verdict="pass"))) is False
   assert world.ns["LIVE"]["tui"]["heads"]["5 def"]["carried"] is True
   assert len(world.judged()) == 1
+
+
+def test_one_gap_that_two_prs_show_is_ordered_once_and_told_to_the_one_that_holds_it(world: World) -> None:
+  converged(world)
+  world.judge = lambda message, to: gap()
+  world.say(r"gh pr view [56] --json files", "tui/src/app.ts\n")
+  world.say(r"python3 -I -", listing(kind="text"))
+  world.round["prs"].update({5: pr(5, "abc", "pass"), 6: pr(6, "def", "pass")})
+  assert asyncio.run(world.converge_veto(world.round["prs"][5])) is True
+  assert asyncio.run(world.converge_veto(world.round["prs"][6])) is False
+  [item] = world.round["queue"]
+  assert item[0].startswith("converge-pr5-") and "the PR #6" in item[1]
+  assert item[1].count("The feed shows bright white text.") == 2
+  [comment] = [c for c in world.commands if c.startswith("gh pr comment")]
+  assert comment.startswith("gh pr comment 5")
+  assert world.book()["heads"]["6 def"]["state"] == "clean" and world.book()["heads"]["6 def"]["gaps"] == []
+  [entry] = world.book()["ledger"].values()
+  assert entry["holder"] == "5" and entry["also"] == ["6"]
+
+
+def test_a_holder_that_shows_a_gap_no_more_lets_it_go_and_a_pass_of_main_frees_the_gap_of_a_pr_that_ended(
+  world: World,
+) -> None:
+  book = {"ledger": {}, "step": None}
+  c = world.round
+  c["prs"].update({5: pr(5), 6: pr(6)})
+  assert world.claim(book, c, "5", gap()) == (gap(), {})
+  mine, others = world.claim(book, c, "6", gap())
+  assert mine == [] and list(others) == ["5"]
+  assert world.claim(book, c, "5", [])[0] == [] and book["ledger"] == {}
+  world.claim(book, c, "5", gap())
+  del c["prs"][5]
+  assert world.claim(book, c, "main", gap(), main=True)[0] == gap()
+  assert [e["holder"] for e in book["ledger"].values()] == ["main"]
+  world.claim(book, c, "main", [], main=True)
+  assert book["ledger"] == {}
+
+
+def test_a_target_that_a_loop_holds_runs_the_capture_and_the_differ_that_a_reload_defined(world: World) -> None:
+  held = world.ns["TUI"]
+  assert (held["capture"], held["differ"]) == ("tui_capture", "tui_differ")
+  world.ns["tui_capture"] = lambda target, pairs, out: "reloaded capture"
+  world.ns["tui_differ"] = lambda target, out, was, whole, labels: ("reloaded differ", "")
+  assert "reloaded capture" in world.capturing(held, [("head", "sha1")], "/out", {})
+  assert world.does(held, "differ")(held, "/out", "", True, ("a", "b")) == ("reloaded differ", "")
+
+
+def test_the_tui_registers_itself_as_a_target_once_even_when_its_word_plays_again(world: World) -> None:
+  assert [one["name"] for one in world.ns["TARGETS"]] == ["tui"]
+  exec(compile(SOURCE, "converge.py", "exec"), world.ns)  # noqa: S102
+  assert [one["name"] for one in world.ns["TARGETS"]] == ["tui"]
+
+
+def test_the_core_converges_a_target_with_a_plain_text_differ_and_the_words_of_that_target(world: World) -> None:
+  plain = {
+    "name": "docs",
+    "words": (17,),
+    "paths": ("docs/",),
+    "checks": (),
+    "owners": (),
+    "thread": "docs",
+    "capture": "plain_capture",
+    "differ": "plain_differ",
+    "legend": "A capture is a page of text.",
+    "look": "each sentence",
+  }
+  world.ns["plain_capture"] = lambda target, pairs, out: f"echo capture {pairs}"
+  world.ns["plain_differ"] = lambda target, out, was, whole, labels: (f"python3 -I - {out}", "print('diff')")
+  world.target = plain
+  world.say(r"python3 -I -", listing(changed=("docs/intro",), kind="text"))
+  world.judge = lambda message, to: gap("docs/intro")
+  book = world.run(1)
+  [asked] = world.judged()
+  assert "A capture is a page of text. before is the last pass" in asked
+  assert "look at each capture whole: each sentence, and each thing" in asked
+  assert "each color" not in asked and "terminal" not in asked
+  assert [p["gaps"] for p in book["passes"]] == [[["docs/intro", "The feed shows bright white text.", QUOTE]]]
+  [item] = world.round["queue"]
+  assert item[0].startswith("converge-docs-") and item[2] == "docs"
+  assert json.loads(world.files[".furb/converge/docs.json"])["passes"][0]["judged"] == 1

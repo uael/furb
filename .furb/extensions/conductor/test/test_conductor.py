@@ -326,6 +326,39 @@ async def test_a_lone_failure_reruns_its_failed_jobs_once_before_a_fixer(conduct
   assert [key for key, _ in conductor.hired] == ["fix5"]
 
 
+@POSIX
+@JQ
+async def test_a_pr_on_main_with_no_run_of_the_gates_at_its_head_gets_one_once(conductor: Round) -> None:
+  conductor.say(r"compare/main\.\.\.abc", '{"behind_by": 3}')
+  title = conductor.pr(checks=("SUCCESS",), idle=10)
+  assert await conductor.heal(title, False) == "#5 had no run of the gates at abc, so the round updated its branch."
+  assert conductor.log().count("update-branch") == 1
+  assert await conductor.heal(title, False) == ""
+  assert conductor.log().count("update-branch") == 1
+
+
+@POSIX
+@JQ
+async def test_a_pr_with_no_run_of_the_gates_under_a_red_main_reruns_the_workflows_at_its_head(conductor: Round) -> None:
+  conductor.say(r"pr view 5 --json headRefOid", '{"headRefOid": "abc"}')
+  conductor.say(r"run list --commit abc", json.dumps([run(7, "titles", "10:00", "success")]))
+  got = await conductor.heal(conductor.pr(checks=("SUCCESS",), idle=10), True)
+  assert got == "#5 had no run of the gates at abc, and the round ran its workflows again."
+  assert "update-branch" not in conductor.log()
+  assert "run rerun 7\n" in conductor.log()
+
+
+@POSIX
+@JQ
+async def test_a_pr_with_a_run_of_the_gates_or_a_fresh_push_or_a_stack_base_gets_none(conductor: Round) -> None:
+  conductor.say(r"compare/main\.\.\.abc", '{"behind_by": 3}')
+  gated = conductor.pr(checks=("SUCCESS",), names=["the hooks"], idle=10)
+  assert await conductor.heal(gated, False) == ""
+  assert await conductor.heal(conductor.pr(checks=("SUCCESS",), idle=1), False) == ""
+  assert await conductor.heal(conductor.pr(checks=("SUCCESS",), idle=10, base="w/k4"), False) == ""
+  assert "update-branch" not in conductor.log()
+
+
 def test_new_items_wait_while_an_open_pr_needs_a_worker(conductor: Round) -> None:
   conductor.efforts.update({key: SONNET for key in "abcdef"})
   conductor.queue[:] = [("a", "", ""), ("b", "", "")]
@@ -1561,6 +1594,19 @@ def test_the_ledger_of_the_tooling_keeps_one_form_of_when_and_moves_the_old_entr
   assert whens == [str(calendar.timegm((2026, 10, 23, 0, 0, 0))), "1793181153"]
 
 
+def test_a_flaw_that_a_merged_pr_fixed_is_closed_with_that_pr_and_opens_again_when_it_comes_again(
+  conductor: Round,
+) -> None:
+  conductor.flaw("The PATH of the World lacks /opt/homebrew/bin", "A second friction")
+  assert conductor.settle_flaw("path of the world", 707) == 1
+  assert conductor.settle_flaw("path of the world", 707) == 0
+  held = {x["what"]: x for x in json.loads(conductor.files[conductor.TOOLING])}
+  assert (held["The PATH of the World lacks /opt/homebrew/bin"]["state"], held["The PATH of the World lacks /opt/homebrew/bin"]["closed_by"]) == ("closed", "#707")
+  assert held["A second friction"]["state"] == "open" and "closed_by" not in held["A second friction"]
+  conductor.flaw("The PATH of the World lacks /opt/homebrew/bin")
+  assert json.loads(conductor.files[conductor.TOOLING])[0]["state"] == "open"
+
+
 def test_an_item_that_names_its_pr_owns_it_before_a_label_or_a_push_does(conductor: Round) -> None:
   conductor.busy("p1", "tui-stack", OPUS)
   one = conductor.pr(n=606, checks=("FAILURE",))
@@ -2163,3 +2209,12 @@ async def test_the_bottom_of_a_stack_waits_while_a_layer_above_runs_its_checks(c
   two(conductor, top=("IN_PROGRESS",))
   await conductor.land(conductor.prs[7], False)
   assert "merge" not in conductor.log()
+
+
+async def test_a_red_pr_whose_checks_still_run_blocks_no_family(conductor: Round) -> None:
+  pr = {"n": 9, "sha": "a" * 40, "head": "w/red", "base": "main", "labels": [], "verdict": "fail", "mergeable": "MERGEABLE", "checks": ["FAILURE", "QUEUED"]}
+  assert not conductor.needs(pr)
+  pr["checks"] = ["FAILURE", "SUCCESS"]
+  assert conductor.needs(pr)
+  pr["checks"] = ["FAILURE", "FAILURE", "QUEUED"]
+  assert conductor.needs(pr)

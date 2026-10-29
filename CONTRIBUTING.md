@@ -167,7 +167,7 @@ It ends with an error when no capture matches, and otherwise with the line `Wrot
 With `FURB_GALLERY_TEXT` set to a folder, it also writes there the text of each capture, which you read when you
 cannot see an image. With `FURB_GALLERY_CELLS` set to a folder, it writes there the cells of each capture as JSON.
 The clock of the view stands still by default, so that two runs of the same code draw the same captures, and
-`FURB_STILL_CLOCK` set to a time in milliseconds sets another time. The extension converge uses the cells and the
+`FURB_STILL_CLOCK` set to a time in milliseconds sets another time. The extension converge-tui uses the cells and the
 clock to compare the captures of a pull request with those of main.
 
 ### The desktop preview
