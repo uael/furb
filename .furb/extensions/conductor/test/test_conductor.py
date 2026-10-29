@@ -2059,3 +2059,13 @@ def test_the_triage_folds_like_items_into_the_earlier_one_before_a_hire(conducto
   assert conductor.covering == {"converge-pr1": ["converge-pr2"]}
   assert conductor.heard == ["The triage folded the item converge-pr2 into converge-pr1, which it is like."]
   assert conductor.taken("converge-pr2") == "worker1"
+
+
+@POSIX
+@JQ
+async def test_a_child_in_a_linked_gh_stack_is_left_to_gh_stack_when_its_parent_moves(conductor: Round) -> None:
+  two(conductor)
+  conductor.noticed.add("linked 7 8")
+  conductor.shifted[8] = ("old", "new")
+  assert await conductor.restack_forced() == set()
+  assert "rebase" not in conductor.log()

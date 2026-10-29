@@ -965,6 +965,8 @@ async def restack_forced() -> set[int]:
       shifted.pop(n, None)
       continue
     key = f"restack {n} {new}"
+    if n in {int(x) for k in noticed if k.startswith("linked ") for x in k.split()[1:]}:
+      continue
     if key in noticed or fixing(kid) or {"paused", "hold"} & set(kid["labels"]) or not kid["head"].startswith("w/"):
       continue
     noticed.add(key)
