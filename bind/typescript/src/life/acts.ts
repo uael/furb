@@ -10,11 +10,9 @@ export interface RunState {
   /** Whether the gate refused the word, so that the reason holds its findings, one for each line. */
   refused?: boolean;
 }
-/** What a pause carries: the act that said it, the reply whose error made a chain pause itself, and the cause that it
- * gave, as the fact pause holds it. */
+/** What a pause carries, as the fact pause holds it: who said it, and the cause that it gave. */
 export interface PauseCause {
   by: string;
-  act?: string;
   why?: unknown;
 }
 export interface LiveAct {
@@ -109,10 +107,10 @@ export function errorOf(value: unknown): { is: string; message: string } | undef
   };
 }
 
-/** The words of the cause of a pause: who paused, which act it was, and the error or the reason that it gave. Whether
+/** The words of the cause of a pause: who paused, and the error or the reason that it gave. Whether
  * the cause is an error says which tone it takes. */
 export function pauseSaid(cause: PauseCause): { text: string; error: boolean } {
-  const who = cause.by === "operator" ? "the operator" : (cause.act ?? cause.by);
+  const who = cause.by === "operator" ? "the operator" : cause.by;
   const error = errorOf(cause.why);
   const why = error
     ? `${error.is}: ${error.message}`
