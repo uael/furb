@@ -10,7 +10,7 @@ use crate::{
   ear::{Ear, hear, hearing, say},
   fact::Fact,
   value::{Fault, Object},
-  world::{Retold, here, resolved, retold},
+  world::{Retold, files, here, retold},
 };
 
 /// The name that each fact that a carry gives is about: a reply and a number, as the turns of a chain read a reply,
@@ -18,7 +18,7 @@ use crate::{
 pub const CARRIED: &str = "reply0";
 
 /// The ear of the compaction: it answers a carry of a record and of a chain, at a path that the chain of the carry
-/// resolves, with a dict: `record`, the path; `entries`, the count of its entries; `digest`, the sha256 of its last
+/// resolves, with a dict: `record`, the path, with `~` for the home of the user; `entries`, the count of its entries; `digest`, the sha256 of its last
 /// entry; `logged`, whether its log gave the facts; `turns`, each tell and each reply of the chain with its done, as
 /// its model read them after the last prefix said on it; and `prompts`, each open prompt of a model on that chain, as
 /// `(name, shape, message, to)`. Each carried fact is about [`CARRIED`] and said by the carry, so a fork keeps the
@@ -35,19 +35,26 @@ pub fn compaction() -> Box<dyn Ear> {
       let word =
         |at: usize| a.word(at).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
       let (about, record, chain) = (a.about().to_owned(), word(1), word(2));
-      let path = resolved(&here(&mut co, a.on()).await?, &record);
-      let got = carry(&path, &chain, &about, a.on());
+      let got = match files::placed(&here(&mut co, a.on()).await?, &record) {
+        Ok(path) => carry(&path, &chain, &about, a.on()),
+        Err(no) => Err(no),
+      };
       say(&mut co, Fact::says("done", &about, [got.unwrap_or_else(|no| no.object())]));
     }
   })
 }
 
+/// A path of a record as the World writes it for a model.
+fn shown(path: &Path) -> String {
+  files::tilded(path, std::env::home_dir().as_deref())
+}
+
 /// What a carry under the name about, asked on a chain on, gives of a chain of the record at a path.
 pub(crate) fn carry(path: &Path, chain: &str, about: &str, on: &str) -> Result<Object, Fault> {
   if !path.is_file() {
-    return Err(Fault::refused(format!("No record at {}.", path.display())));
+    return Err(Fault::refused(format!("No record at {}.", shown(path))));
   }
-  let failed = |no: Fault| Fault::refused(format!("{}: {}", path.display(), no.message()));
+  let failed = |no: Fault| Fault::refused(format!("{}: {}", shown(path), no.message()));
   let told = retold(path).map_err(failed)?;
   let mut fold = Held::new(chain);
   told.each(&mut |one| fold.hear(one)).map_err(failed)?;
@@ -63,9 +70,9 @@ fn carried(
   about: &str,
   on: &str,
 ) -> Result<Object, Fault> {
-  let (held, done) = fold.ended().ok_or_else(|| {
-    Fault::refused(format!("the record {} holds no chain {chain}", path.display()))
-  })?;
+  let (held, done) = fold
+    .ended()
+    .ok_or_else(|| Fault::refused(format!("the record {} holds no chain {chain}", shown(path))))?;
   let replies: HashSet<&str> =
     held.iter().filter(|one| one.question() && one.kind() == "reply").map(Fact::about).collect();
   let text = |one: &str| Object::string(one);
@@ -102,7 +109,7 @@ fn carried(
     .filter(open)
     .map(|one| Object::tuple([text(one.about()), word(one, 1), word(one, 2), word(one, 3)]));
   Ok(Object::dict([
-    (text("record"), text(&path.display().to_string())),
+    (text("record"), text(&shown(path))),
     (text("entries"), Object::int(i64::try_from(told.entries).unwrap_or(i64::MAX))),
     (text("digest"), told.last.as_deref().map_or_else(Object::none, text)),
     (text("logged"), Object::bool(told.logged)),

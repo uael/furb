@@ -28,7 +28,7 @@ import pytest
 
 import furb
 import furb_monty.engine
-from conftest import OPERATOR, STANDS, Dead, Py, Sand, life, settle, swapped
+from conftest import OPERATOR, STANDS, Dead, Py, Sand, life, settle, swapped, tilded
 from furb import engine
 from furb.engine import TIMEOUT, Refused
 from furb_monty import _monty
@@ -335,7 +335,7 @@ async def test_the_engine_of_this_interpreter_steps_an_ear_of_the_crate_as_a_gen
     one.dispose()
   kept = [fact for (fact,) in _monty.kept(path)]
   assert [fact[3] for fact in kept if fact[:2] == ["done", "read1"]] == [
-    furb.python.Text(str(tmp_path / "a.txt"), "one\n")
+    furb.python.Text(tilded(tmp_path / "a.txt"), "one\n")
   ]
 
 

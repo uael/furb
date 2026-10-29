@@ -1041,7 +1041,7 @@ fn written(id: &str, tells: &mpsc::UnboundedSender<Replied>) -> Told {
 }
 
 /// What the chains stand on: the models and the operator, the directory, the default actor, and the path of the
-/// doctrine that a chain reads, which [`catalog::doctrine`] gives.
+/// doctrine that a chain reads, which [`catalog::doctrine`] gives, each path as [`super::files::tilded`] writes it.
 fn standing(models: &[Model], directory: &str, actor: &str) -> Object {
   let offered = models.iter().map(|model| {
     let efforts = model.efforts.iter().map(|(effort, _)| Object::string(effort));
@@ -1051,10 +1051,11 @@ fn standing(models: &[Model], directory: &str, actor: &str) -> Object {
   // The operator answers in person, with no effort, and reads the window of the engine.
   let operator = Object::list([Object::string(OPERATOR), Object::list([]), Object::int(WINDOW)]);
   let roster = Object::list(offered.chain([operator]));
-  let doctrine =
-    catalog::doctrine(Path::new(directory)).map(|one| Object::string(one.display().to_string()));
+  let home = std::env::home_dir();
+  let shown = |one: &Path| Object::string(super::files::tilded(one, home.as_deref()));
+  let doctrine = catalog::doctrine(Path::new(directory)).map(|one| shown(&one));
   Object::list(
-    [roster, Object::string(directory), Object::string(actor)].into_iter().chain(doctrine),
+    [roster, shown(Path::new(directory)), Object::string(actor)].into_iter().chain(doctrine),
   )
 }
 

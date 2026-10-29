@@ -2,7 +2,7 @@
 
 use std::{fs, path::PathBuf};
 
-use super::{crlf, homed, native, read, replace, stored, text};
+use super::{crlf, homed, native, placed, read, replace, stored, text, tilded};
 
 #[test]
 fn a_path_that_is_a_tilde_or_starts_with_one_and_a_slash_resolves_against_the_home_of_the_user() {
@@ -20,6 +20,44 @@ fn a_path_that_is_a_tilde_or_starts_with_one_and_a_slash_resolves_against_the_ho
 }
 
 #[test]
+fn a_path_under_the_home_of_the_user_is_written_with_a_tilde_in_place_of_the_home() {
+  let home = PathBuf::from("/h");
+  let at = |path: &str| tilded(&PathBuf::from(path), Some(&home));
+  let slash = std::path::MAIN_SEPARATOR;
+  assert_eq!(at("/h"), "~");
+  assert_eq!(at("/h/a.txt"), format!("~{slash}a.txt"));
+  assert_eq!(at("/h/x/a.txt"), format!("~{slash}{}", PathBuf::from("x/a.txt").display()));
+  assert_eq!(
+    at("/ha/a.txt"),
+    "/ha/a.txt",
+    "a folder whose name only starts with the home is no folder of it"
+  );
+  assert_eq!(at("/w/a.txt"), "/w/a.txt");
+  assert_eq!(tilded(&PathBuf::from("/h/a.txt"), None), "/h/a.txt");
+  assert_eq!(
+    tilded(&PathBuf::from("/a.txt"), Some(&PathBuf::from("/"))),
+    "/a.txt",
+    "a home at the root holds no tilde"
+  );
+  let back = homed(&at("/h/x/a.txt"), Some(home.clone())).map(Result::unwrap);
+  assert_eq!(
+    back,
+    Some(home.join("x").join("a.txt")),
+    "a path that it writes is read back as the same place"
+  );
+}
+
+#[test]
+fn a_path_that_a_chain_names_is_placed_against_the_home_or_else_against_its_directory() {
+  let here = PathBuf::from("/w");
+  assert_eq!(placed(&here, "a/../b.txt").unwrap(), here.join("b.txt"));
+  assert_eq!(placed(&here, "/x/b.txt").unwrap(), PathBuf::from("/x/b.txt"));
+  if let Some(home) = std::env::home_dir() {
+    assert_eq!(placed(&here, "~/b.txt").unwrap(), home.join("b.txt"));
+  }
+}
+
+#[test]
 fn a_read_gives_the_whole_text_of_a_file_of_any_size_and_refuses_what_is_no_file() {
   let at = std::env::temp_dir().join(format!("furb-files-large-{}", std::process::id()));
   let _ = fs::remove_dir_all(&at);
@@ -27,7 +65,8 @@ fn a_read_gives_the_whole_text_of_a_file_of_any_size_and_refuses_what_is_no_file
   let content = "x".repeat(1_000_000) + "\n";
   fs::write(at.join("large.txt"), &content).unwrap();
   assert_eq!(read(&at.join("large.txt")).unwrap().content, content);
-  assert_eq!(read(&at).unwrap_err().message(), format!("Read needs a text file: {}", at.display()));
+  let shown = tilded(&at, std::env::home_dir().as_deref());
+  assert_eq!(read(&at).unwrap_err().message(), format!("Read needs a text file: {shown}"));
   fs::remove_dir_all(&at).unwrap();
 }
 

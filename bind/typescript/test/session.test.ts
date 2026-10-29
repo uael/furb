@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { appendFile, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { join, sep } from "node:path";
 import { FileChanges } from "../src/changes.ts";
 import {
   Activity,
@@ -1021,6 +1021,12 @@ test("a session opens a record in a directory that does not stand yet, and keeps
   }
 });
 
+/** A path as the World writes it for a model: `~` in place of the home of the user when it stands under the home. */
+function tilded(path: string): string {
+  const home = homedir();
+  return path === home ? "~" : path.startsWith(home + sep) ? `~${path.slice(home.length)}` : path;
+}
+
 test("a session enables the extensions of the configs, and a later session on its record runs them whatever it says", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-extensions-"));
   const record = join(cwd, "life.jsonl");
@@ -1036,13 +1042,13 @@ test("a session enables the extensions of the configs, and a later session on it
     // The life words of the setup read each memory file, after the reads of the doctrine and of the files of the
     // extensions, and the user turn after them shows what each read gave.
     const read = (first.engine?.transcript({ on: ROOT }) ?? []).find(
-      (fact) => fact[0] === "read" && fact[4] === join(cwd, "CLAUDE.md"),
+      (fact) => fact[0] === "read" && fact[4] === tilded(join(cwd, "CLAUDE.md")),
     )?.[1];
     expect(read).toBe("read8");
     const turns = (first.engine?.turns({ on: "chain1" }) ?? []).map((turn) => String(turn[1]));
     expect(turns.at(-2)).toBe("await recall()\nawait listed()\nmcp_index()");
     expect(turns.at(-1)).toContain(
-      `#${read}\n${read}_path = '${join(cwd, "CLAUDE.md").replaceAll("\\", "\\\\")}'\n${read}_text = 'Use two spaces.'`,
+      `#${read}\n${read}_path = '${tilded(join(cwd, "CLAUDE.md")).replaceAll("\\", "\\\\")}'\n${read}_text = 'Use two spaces.'`,
     );
   } finally {
     await first.dispose();

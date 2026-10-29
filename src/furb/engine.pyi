@@ -286,7 +286,8 @@ def cd(path: str, on: str = "") -> str:
 def cwd(on: str = "") -> str:
   """The working directory of a chain is the directory that the closest cd back in its transcript came to.
   The working directory of a chain is the directory of the standing it stands on while no cd stands in its transcript, so a later standing moves no chain that a cd moved.
-  The World resolves the path of a read, a write and a command against the working directory of the chain, which it reads, and the path of a read or a write that is ~ or starts with ~/, or with ~\\ on Windows, against the home of the user, and one of scratch:// against the scratch directory.
+  The World resolves the path of a read, a write and a command against the working directory of the chain, which it reads, and the path of a cd, a read or a write that is ~ or starts with ~/, or with ~\\ on Windows, against the home of the user, and one of scratch:// against the scratch directory.
+  The World writes each path under the home of the user with ~ in place of the home, as ~/a.txt, in each text, each cd and each standing that it gives, and every other path as it stands, so a path that a model reads names no home.
   cwd gives the working directory that the paths of the chain resolve against.
   cwd reads the transcript of the chain and asks nothing, so no act is made and the journal keeps nothing.
   """

@@ -7,6 +7,7 @@ import { type Compaction, type Measure, measureOf } from "furb/life";
 import type { HostState } from "./bridge.ts";
 import { scripts } from "./demo/index.ts";
 import { scripted, transcriptOf } from "./demo/script.ts";
+import { expandHome } from "./files.ts";
 import { type EngineOptions, roster } from "./models.ts";
 import { changeProvider } from "./providers.ts";
 import { queueDispatches, queueHash } from "./queue.ts";
@@ -474,7 +475,11 @@ async function answer(data: { target: string; method: string; args: unknown[] })
   if (data.target === "library" && data.method === "look") {
     if (!engine || !session) throw new Error("The session is not open.");
     // The host reads the path where the chain stands, as the files would, and no act is made, so nothing is kept.
-    const path = resolve(session.directory, engine.cwd({ on: String(data.args[1]) }), String(data.args[0]));
+    const path = resolve(
+      session.directory,
+      expandHome(engine.cwd({ on: String(data.args[1]) })),
+      expandHome(String(data.args[0])),
+    );
     try {
       return { path, content: readFileSync(path, "utf8") };
     } catch {
@@ -512,7 +517,11 @@ function read(data: { target: string; method: string; args: unknown[] }): unknow
   if (data.target === "library" && data.method === "branch") return branchChanges(open.directory);
   if (data.target === "library" && data.method === "act") return open.act(String(data.args[0]));
   if (data.target === "library" && data.method === "look") {
-    const path = resolve(open.directory, open.cwd({ on: String(data.args[1]) }), String(data.args[0]));
+    const path = resolve(
+      open.directory,
+      expandHome(open.cwd({ on: String(data.args[1]) })),
+      expandHome(String(data.args[0])),
+    );
     try {
       return { path, content: readFileSync(path, "utf8") };
     } catch {

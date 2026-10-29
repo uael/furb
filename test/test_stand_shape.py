@@ -58,7 +58,7 @@ async def test_a_change_of_the_world_between_two_lives_enters_the_transcript_of_
 
 async def test_the_world_answers_a_stand_with_the_roster_the_directory_and_the_actor() -> None:
   """The World answers a stand with the roster, the directory, the actor and the path of the doctrine."""
-  doctrine = "/h/.furb/DOCTRINE.md"
+  doctrine = "/w/.furb/DOCTRINE.md"
   sand, log, _ = born(stands=[*STANDS, doctrine], files={doctrine: "Look first.\n"})
   asked = said(log, "stand")[0]
   answered = next(a for a in said(log, "done") if a[1] == asked[1])
@@ -154,7 +154,7 @@ async def test_the_chain_tells_each_standing_it_takes_in_one_paragraph_headed_st
     "#chain1 standing\nchain1_roster = [['operator', [], 200000], ['o', ['low'], 200000]]\n"
     "chain1_cwd = '/z'\nchain1_actor = 'o/low'"
   )
-  doctrine = "/h/.furb/DOCTRINE.md"
+  doctrine = "/w/.furb/DOCTRINE.md"
   _, _, root = born(stands=[[*STANDS[0], ["q", ["low"], 300000]], "/w", "q/low", doctrine])
   await engine.rung("k = 1", to="q/low", on=root)
   await settle()

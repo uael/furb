@@ -1919,7 +1919,7 @@ PRUNE_PY = """import hashlib, json, os, shutil, subprocess, sys, time
 
 spec = json.load(open(sys.argv[1], encoding='utf-8'))
 scratch = os.path.realpath(sys.argv[2])
-root = os.path.realpath(spec['root'])
+root = os.path.realpath(os.path.expanduser(spec['root']))
 keys, text, tmp = set(spec['keys']), spec['text'], spec['tmp']
 now, day, stamp = time.time(), time.strftime('%Y-%m-%d'), time.strftime('%H%M%S')
 old = now - 2 * 86400

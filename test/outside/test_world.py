@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from conftest import tilded
 from furb import engine
 from furb.engine import OPERATOR, Refused
 from furb.world import Answer, answered, kept
@@ -30,7 +31,7 @@ async def test_the_world_stands_a_life_on_the_provider_of_the_crate_and_its_mode
   assert await engine.prompt(int, "count", on=root) == 3
   roster, directory, actor, *_ = engine.standing()
   assert [entry[0] for entry in roster] == ["claude-cli:opus", OPERATOR]
-  assert (directory, actor) == (str(yard), "claude-cli:opus/xhigh")
+  assert (directory, actor) == (tilded(yard), "claude-cli:opus/xhigh")
   assert [one[0] for one in live.calls] == ["stand", "reply"]
   (request,) = seen
   assert (request["actor"], request["chain"], request["settings"]["effort"]) == ("claude-cli:opus/xhigh", root, "xhigh")

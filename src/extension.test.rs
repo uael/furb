@@ -49,7 +49,10 @@ fn note(word: &str) -> Extension {
 
 /// The extension that a folder loads, with the file of its word in that folder.
 fn filed(one: Extension, root: &Path) -> Extension {
-  Extension { file: root.join("note.py").display().to_string(), ..one }
+  Extension {
+    file: crate::world::files::tilded(&root.join("note.py"), std::env::home_dir().as_deref()),
+    ..one
+  }
 }
 
 #[test]

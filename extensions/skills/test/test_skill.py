@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from conftest import of
-from extensions.conftest import extended, skilled
+from extensions.conftest import extended, skilled, tilded
 from furb import engine
 from furb.engine import Refused, Text
 from furb_monty import _monty
@@ -20,7 +20,7 @@ def brewed(tmp_path: Path) -> tuple[str, Path]:
 async def test_a_skill_read_into_a_chain(tmp_path: Path) -> None:
   """A skill read into a chain: the SKILL.md file of the skill of that name, which the chain tells as a read."""
   root, path = brewed(tmp_path)
-  assert await engine.rung('close(skill("brew"))', on=root) == Text(str(path), path.read_text(encoding="utf-8"))
+  assert await engine.rung('close(skill("brew"))', on=root) == Text(tilded(path), path.read_text(encoding="utf-8"))
 
 
 async def test_skill_reads_the_path_skills_and_the_name_with_its_show(tmp_path: Path) -> None:
@@ -36,7 +36,7 @@ async def test_the_world_answers_it_with_the_text_of_the_skill_md_file(tmp_path:
   await engine.rung(f'skill("brew")\nread({str(path)!r})', on=root)
   one, two = of(engine.turns(on=root), "read")
   assert one.split("\n", 2)[2].replace("read1_", "read2_") == two.split("\n", 2)[2]
-  assert await engine.rung('close(skill("brew").path)', on=root) == str(path)
+  assert await engine.rung('close(skill("brew").path)', on=root) == tilded(path)
   carried = Path(__file__).parent.parent / "extending" / "SKILL.md"
   got = await engine.rung('close(skill("extending"))', on=root)
   assert got == Text("skills://extending", carried.read_text(encoding="utf-8"))

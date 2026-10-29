@@ -60,6 +60,16 @@ type Kernel = Generator[tuple | set[str] | None, tuple]
 WORLD = "world"
 """WORLD is the name that the World of the suite is heard by, and that it says its facts by."""
 
+
+def tilded(path: Path | str) -> str:
+  """A path of the machine as the World of the crate writes it: ~ in place of the home of the user when it is the home
+  or stands under it, and the path as it stands otherwise."""
+  home, at = Path.home(), Path(path)
+  if home.parent == home or not at.is_relative_to(home):
+    return str(at)
+  return "~" if at == home else "~" + os.sep + str(at.relative_to(home))
+
+
 STANDS: list = [[[OPERATOR, [], 200000], ["m", ["low", "high"], 400000], ["n", ["low"], 200000]], "/w", "m/low"]
 """A standing of three actors, a directory and a default actor, which a World of the suite stands on."""
 
@@ -150,7 +160,8 @@ class Sand:
   holds each command it runs: whether its stderr flows into its stdout, which it writes into its stdout then, and
   its two streams as they came. `gone`
   names the directories that are not there, which a cd into is refused; every other directory is there. `home` is
-  the home of its user, which a read or a write of a path that is ~ or starts with ~/ resolves against. `timers`
+  the home of its user, which a cd, a read or a write of a path that is ~ or starts with ~/ resolves against, and which
+  each path that it gives under the home names as ~. `timers`
   holds the timer of each wait that it took, which a done of that wait stops. `cut` holds each command that the record
   of its life shows started and not done, which a crash cut, by its name, so it runs it no more. `loop` is the loop of the life it
   hears.
@@ -228,9 +239,19 @@ class Sand:
     engine.close(Refused(f"{command!r} was interrupted: the life that ran it ended before it did"), about)
 
   def placed(self, on: str, path: str) -> str:
-    """The path of a read or a write: one that is ~ or starts with ~/ hangs off the home of the user, and any other
-    resolves against the working directory of the chain."""
-    return self.home + path[1:] if path == "~" or path.startswith("~/") else resolved(engine.cwd(on=on), path)
+    """The path of a cd, a read or a write: one that is ~ or starts with ~/ hangs off the home of the user, and any
+    other resolves against the working directory of the chain, which hangs off the home when it starts with ~."""
+    homed = lambda one: self.home + one[1:] if one == "~" or one.startswith("~/") else one  # noqa: E731
+    return homed(path) if homed(path) != path else resolved(homed(engine.cwd(on=on)), path)
+
+  def shown(self, path: str) -> str:
+    """A path as the World gives it: ~ in place of the home of the user when it is the home or stands under it."""
+    return "~" + path[len(self.home) :] if path == self.home or path.startswith(self.home + "/") else path
+
+  def standing(self) -> list | Refused:
+    """What the World answers a stand with: what the chains stand on, each path as it gives a path, or the refusal."""
+    s = self.stands
+    return s if isinstance(s, Refused) else [s[0], *map(self.shown, s[1:2]), *s[2:3], *map(self.shown, s[3:])]
 
   def hear(self, a: tuple) -> World:
     """What the World does with one fact: it takes a command, a wait, a prompt to the operator and a reply, answers
@@ -262,12 +283,12 @@ class Sand:
         if shape not in ("bool", "int", "float", "str"):
           engine.close(None if shape == "None" else Refused(f"the operator answers no {shape}"), about)
       case ("stand", qid, *_):
-        yield "done", qid, self.stands
+        yield "done", qid, self.standing()
       case ("cd", qid, _, on, path):
-        full = resolved(engine.cwd(on=on), path)
-        yield "done", qid, Refused(f"No directory at {full}.") if full in self.gone else full
+        full = self.placed(on, path)
+        yield "done", qid, Refused(f"No directory at {self.shown(full)}.") if full in self.gone else self.shown(full)
       case ("read", qid, _, on, path) if (full := self.placed(on, path)) in self.files:
-        yield "done", qid, Text(full, self.files[full])
+        yield "done", qid, Text(self.shown(full), self.files[full])
       case ("write", qid, _, _, Text(path=path, content=content) as took) if (
         re.fullmatch(r"bash\d+/std(in|out|err)", path) and engine.get(path.split("/")[0]) is not None
       ):
@@ -276,7 +297,7 @@ class Sand:
         "://" not in path and engine.get(path.split("/")[0]) is None
       ):
         self.files[full := self.placed(on, path)] = content
-        yield "done", qid, Text(full, content)
+        yield "done", qid, Text(self.shown(full), content)
       case ("reply", about, _, on, _):
         yield "started", about
         self.turns[about] = engine.turns(on=on)

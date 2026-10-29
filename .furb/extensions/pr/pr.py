@@ -167,4 +167,5 @@ async def checked(number: int, where: str = "", bound: float = 540.0, every: flo
 
 
 def shq(s: str) -> str:
-  return "'" + s.replace("'", "'\\''") + "'"
+  home = "~" if s == "~" else "~/" if s.startswith("~/") else ""
+  return home + ("'" + s[len(home) :].replace("'", "'\\''") + "'" if s != "~" else "")

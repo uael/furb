@@ -164,7 +164,13 @@ fn the_files_serve_a_read_and_a_write_of_the_real_engine() {
   let root = lived.root();
   let got =
     lived.engine.write(&Text::new("a.txt", "one\ntwo\n"), verbs::Write { on: on(&root) }).unwrap();
-  assert_eq!(got, Text::new(lived.at.join("a.txt").display().to_string(), "one\ntwo\n"));
+  assert_eq!(
+    got,
+    Text::new(
+      crate::world::files::tilded(&lived.at.join("a.txt"), std::env::home_dir().as_deref()),
+      "one\ntwo\n"
+    )
+  );
   let got =
     lived.engine.read("a.txt", verbs::Read { on: on(&root), ..Default::default() }).unwrap();
   assert_eq!(got.content, "one\ntwo\n");
@@ -385,12 +391,13 @@ fn a_cd_comes_to_the_directory_that_stands_there_and_a_cd_where_none_stands_is_r
   let root = lived.root();
   let into = lived.at.join("into");
   fs::create_dir_all(&into).expect("a directory of the test");
+  let shown = crate::world::files::tilded(&into, std::env::home_dir().as_deref());
   let into = into.display().to_string();
-  assert_eq!(lived.engine.cd(&into, verbs::Cd { on: on(&root) }).unwrap(), into);
+  assert_eq!(lived.engine.cd(&into, verbs::Cd { on: on(&root) }).unwrap(), shown);
   let no = lived.engine.cd("nowhere", verbs::Cd { on: on(&root) }).unwrap_err();
   assert_eq!(no.name, "Refused");
   assert!(no.message().contains("There is no directory at"), "{no}");
-  assert_eq!(lived.engine.cwd(verbs::Cwd { on: on(&root) }).unwrap(), into);
+  assert_eq!(lived.engine.cwd(verbs::Cwd { on: on(&root) }).unwrap(), shown);
 }
 
 #[test]

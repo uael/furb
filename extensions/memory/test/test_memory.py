@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from conftest import STANDS, Dead, life
-from extensions.conftest import extended, memorized, noted, recalled
+from extensions.conftest import extended, memorized, noted, recalled, tilded
 from furb import engine
 from furb.engine import Refused, Text
 from furb_monty import _monty
@@ -20,7 +20,7 @@ async def test_the_memory_of_a_path_told_to_its_chain(tmp_path: Path) -> None:
   assert recalled(root, tmp_path) == [memorized("memory1", top, text)]
   top.write_text(text.replace("\n5\n", "\nfive\n"), encoding="utf-8", newline="")
   await engine.rung("memory()", on=root)
-  assert recalled(root, tmp_path)[1:] == [f"#memory2\nmemory2_path = {str(top)!r}\nmemory2_text = 'five'"]
+  assert recalled(root, tmp_path)[1:] == [f"#memory2\nmemory2_path = {tilded(top)!r}\nmemory2_text = 'five'"]
 
 
 async def test_memory_asks_the_world_a_memory_question_and_tells_each_text(tmp_path: Path) -> None:
@@ -38,7 +38,7 @@ async def test_memory_gives_the_texts_of_the_answer(tmp_path: Path) -> None:
   _, root = extended("memory", tmp_path, _monty.memory)
   got = await engine.rung("close(memory())", on=root)
   assert isinstance(got, list)
-  assert [one for one in got if one.path.startswith(str(tmp_path))] == [Text(str(top), "one\n")]
+  assert [one for one in got if one.path.startswith(tilded(tmp_path))] == [Text(tilded(top), "one\n")]
   assert await engine.rung("close(memory())", on=root) == []
 
 
@@ -60,4 +60,4 @@ async def test_a_text_that_shares_most_lines_with_a_text_at_another_path_is_told
   _, root = extended("memory", tmp_path, _monty.memory)
   await engine.rung(f"read({str(other)!r}, HIDDEN)", on=root)
   await engine.rung("memory()", on=root)
-  assert recalled(root, tmp_path) == [f"#memory1\nmemory1_path = {str(top)!r}\nmemory1_text = 'five'"]
+  assert recalled(root, tmp_path) == [f"#memory1\nmemory1_path = {tilded(top)!r}\nmemory1_text = 'five'"]
