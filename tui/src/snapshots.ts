@@ -100,7 +100,7 @@ export type Views = Pick<Engine, "root" | "standing" | "program" | "turns" | "cw
 };
 /** What a snapshot reads of a session: the facts, the activity and the entries of its life, and, of a life that runs,
  * the changes of its files and the facts that it says as it says them. */
-export type Lived = Pick<Session, "facts" | "activity" | "entries" | "isPaused" | "pending"> &
+export type Lived = Pick<Session, "facts" | "activity" | "entries" | "isPaused" | "pauseOf" | "pending"> &
   Partial<Pick<Session, "on">> & { changes?: Pick<Session["changes"], "length" | "readable"> };
 
 /** Views belong to changes of the life, not to frames or refresh requests. */
@@ -263,6 +263,7 @@ export class Snapshots {
       acts: acts.map((act) => row(act, this.lines.get(act.id), this.took.get(act.id))),
       count,
       paused: this.session.isPaused(selected) || this.session.pending.size > 0,
+      cause: this.session.pauseOf(selected) ?? null,
       dispatched: this.dispatched,
       ...(given?.roster === view.roster ? {} : { roster: view.roster }),
       ...(program ? { program } : {}),

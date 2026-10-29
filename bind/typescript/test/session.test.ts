@@ -17,7 +17,7 @@ import {
   Session,
   type Turn,
 } from "../src/index.ts";
-import { compactedRun } from "../src/life/acts.ts";
+import { compactedRun, pauseSaid } from "../src/life/acts.ts";
 import { alive, printPid, remove } from "./processes.ts";
 import { until } from "./until.ts";
 
@@ -506,6 +506,45 @@ test("a function of the host that throws answers nothing, and two in a row pause
     expect(reasons).toContain("Refused: claude-cli:sonnet/high answered nothing: ProviderError: unavailable");
   } finally {
     await broken.dispose();
+  }
+});
+
+test("a chain that its provider paused names the provider and its error as the cause of the pause, until a wake", async () => {
+  const broken = boot({
+    ...modeled,
+    answer: async () => {
+      throw new Error("unavailable");
+    },
+  });
+  try {
+    const root = broken.engine.root;
+    broken.engine.prompt("str", { message: "try", on: root });
+    await until(broken, () => broken.facts.some((fact) => fact[0] === "pause"));
+    const cause = broken.pauseOf(root);
+    expect(cause).toMatchObject({ by: "provider" });
+    expect(String(cause?.why)).toContain("unavailable");
+    broken.engine.wake(root);
+    expect(broken.pauseOf(root)).toBeUndefined();
+  } finally {
+    await broken.dispose();
+  }
+});
+
+test("a pause of the operator names the operator and the reason that it gave", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-pause-cause-"));
+  const life = boot({ ...modeled, record: join(cwd, "life.jsonl") });
+  try {
+    const root = life.engine.root;
+    life.engine.pause(root, { why: "wait for the owner" });
+    expect(life.pauseOf(root)).toEqual({ by: "operator", why: "wait for the owner" });
+    const cause = life.pauseOf(root);
+    expect(cause && pauseSaid(cause)).toEqual({ text: "the operator: wait for the owner", error: false });
+    life.engine.wake(root);
+    life.engine.pause(root);
+    expect(life.pauseOf(root)).toEqual({ by: "operator" });
+  } finally {
+    await life.dispose();
+    await rm(cwd, { recursive: true, force: true });
   }
 });
 

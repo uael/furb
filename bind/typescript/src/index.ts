@@ -4,7 +4,7 @@ export { DamagedJournal, type FileChange, FileChanges, type Repaired } from "./c
 export { Console, type ConsoleOptions } from "./console.js";
 export { type Call, call, driving, type Ear, type Saying, speaking } from "./ears.js";
 export { Chain, Life, type LifeAct, type LifeOptions, open, Question, Thread } from "./framework.js";
-export { type LiveAct, type RunState, WORK } from "./life/acts.js";
+export { type LiveAct, type PauseCause, type RunState, WORK } from "./life/acts.js";
 export { furbDirectory, saveFile } from "./project.js";
 export {
   type Answer,

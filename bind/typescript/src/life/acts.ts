@@ -10,6 +10,11 @@ export interface RunState {
   /** Whether the gate refused the word, so that the reason holds its findings, one for each line. */
   refused?: boolean;
 }
+/** What a pause carries, as the fact pause holds it: who said it, and the cause that it gave. */
+export interface PauseCause {
+  by: string;
+  why?: unknown;
+}
 export interface LiveAct {
   id: string;
   kind: string;
@@ -25,6 +30,8 @@ export interface LiveAct {
   value: unknown;
   /** Whether a pause stands over the act while it lives. */
   paused: boolean;
+  /** The cause of the pause that stands over the act, while one does. */
+  pause?: PauseCause;
   /** Whether the act had no end when the record ended, in a record open to read, where nothing runs to end it. */
   unfinished?: boolean;
   run?: RunState;
@@ -88,6 +95,31 @@ export function failed(act: LiveAct): boolean {
   return Boolean(
     value && typeof value === "object" && "is" in value && "args" in value && value.is !== "CancelledError",
   );
+}
+
+/** The error that a value is, once the engine gave it as a value of python: its class and its message. */
+export function errorOf(value: unknown): { is: string; message: string } | undefined {
+  if (!value || typeof value !== "object" || !("is" in value) || !("args" in value)) return undefined;
+  const args = (value as { args: unknown }).args;
+  return {
+    is: String((value as { is: unknown }).is),
+    message: Array.isArray(args) ? args.map(String).join(" ") : "",
+  };
+}
+
+/** The words of the cause of a pause: who paused, and the error or the reason that it gave. Whether
+ * the cause is an error says which tone it takes. */
+export function pauseSaid(cause: PauseCause): { text: string; error: boolean } {
+  const who = cause.by === "operator" ? "the operator" : cause.by;
+  const error = errorOf(cause.why);
+  const why = error
+    ? `${error.is}: ${error.message}`
+    : typeof cause.why === "string"
+      ? cause.why
+      : cause.why == null
+        ? ""
+        : JSON.stringify(cause.why);
+  return { text: why ? `${who}: ${why}` : `${who} paused it`, error: error !== undefined };
 }
 
 /** Whether an act was cancelled: a rung whose run ended with a cancel, or an act done with a cancel. A cancel is what

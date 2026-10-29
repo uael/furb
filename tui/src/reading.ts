@@ -26,6 +26,7 @@ import {
   type Turn,
   WORK,
 } from "furb";
+import type { PauseCause } from "furb/life";
 import { row } from "./snapshots.ts";
 
 /** Why a record opens to read: the engine and the version of the build that made it, as the record names them, the
@@ -579,6 +580,11 @@ export class Reader {
 
   isPaused(id: string): boolean {
     return this.activity.acts.get(id)?.paused ?? false;
+  }
+
+  pauseOf(id: string): PauseCause | undefined {
+    const act = this.activity.acts.get(id);
+    return act?.paused ? act.pause : undefined;
   }
 
   dispose(): void {

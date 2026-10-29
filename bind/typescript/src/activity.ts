@@ -1,5 +1,5 @@
 import { type Call, call, isFault } from "./ears.js";
-import { type Compaction, type LiveAct, WORK } from "./life/acts.js";
+import { type Compaction, type LiveAct, type PauseCause, WORK } from "./life/acts.js";
 import { bound, display, type Fact, isQuestion, usageOf } from "./types.js";
 
 /** One answer of a model on a chain: its place in time, the actor whose reply it answered, and its usage, which is
@@ -157,12 +157,17 @@ export class Activity {
       this.compactions.push({ chain: id, by, at });
     } else if (kind === "pause" || kind === "wake") {
       const paused = kind === "pause";
+      const cause: PauseCause | undefined = paused
+        ? { by, ...(fact[3] === null || fact[3] === undefined ? {} : { why: fact[3] }) }
+        : undefined;
       this.controls.delete(id);
       this.controls.set(id, fact);
       for (const name of [...this.open]) {
         const row = this.acts.get(name);
         if (row && row.paused !== paused && (yield* covers(fact, row.id))) {
           row.paused = paused;
+          if (cause) row.pause = cause;
+          else delete row.pause;
           this.mark(row);
         }
       }
