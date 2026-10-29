@@ -572,7 +572,7 @@ def hire(key: str, what: str, thread: str = "", brief: str = "") -> str:
 def placed(key: str, text: str) -> tuple[str, str]:
   if kind_of(key) == "audit":
     return text, ""
-  held = {s for n, s in slots.items() if n in working and not over(n)}
+  held = {s for n, s in slots.items() if (n in working and not over(n)) or n == "coordinator"}
   slot = next(f"w{i}" for i in range(1, cap() + len(held) + 2) if f"w{i}" not in held)
   text = text.replace("{workspace}", WORKSPACE).replace("{repo}", cwd()).replace("{slot}", slot)
   return text, slot
@@ -1637,7 +1637,7 @@ for block in run('git', 'worktree', 'list', '--porcelain')[1].split(chr(10) * 2)
     continue
   touched = [line[3:].split(' -> ')[-1].strip('"') for line in listed.splitlines() if len(line) > 3]
   files = [os.path.join(path, x) for x in touched]
-  if max([age(path), *(age(x) for x in files if os.path.lexists(x))]) >= old:
+  if not pushed and max([age(path), *(age(x) for x in files if os.path.lexists(x))]) >= old:
     continue
   if run('git', 'status', '--porcelain', cwd=path)[1].strip():
     run('git', 'add', '-A', cwd=path)

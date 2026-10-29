@@ -503,11 +503,8 @@ def test_the_prune_removes_what_the_work_left_and_keeps_its_work(conductor: Roun
     )
   assert got.stdout.startswith("The prune removed the worktrees ")
   assert "; 1 remote branch, listed in .furb/trashed.tsv; 1 scratch directory; 1 folder of " in got.stdout
-  assert sorted(p.name for p in tmp_path.glob("furb-w-*")) == ["furb-w-busy", "furb-w-fresh"]
-  assert git("for-each-ref", "--format=%(refname:short)", "refs/heads/w", cwd=root, env=env).split() == [
-    "w/busy",
-    "w/fresh",
-  ]
+  assert sorted(p.name for p in tmp_path.glob("furb-w-*")) == ["furb-w-busy"]
+  assert git("for-each-ref", "--format=%(refname:short)", "refs/heads/w", cwd=root, env=env).split() == ["w/busy"]
   kept = sorted((root / ".furb" / "archive").glob("*/*"))
   assert [re.sub(r"-\d{6}\.", ".", p.name) for p in kept] == ["merged.bundle", "merged.patch"]
   assert "notes.txt" in kept[1].read_text(encoding="utf-8")
@@ -1953,3 +1950,10 @@ def test_a_worker_takes_a_free_workspace_at_its_hire_and_gives_it_back_when_it_e
   assert first not in conductor.slots
   conductor.real_hire("k3", "three", "gui")
   assert f"{repo}-w1," in conductor.prompts[-1][0]
+
+
+def test_no_worker_gets_the_workspace_of_the_coordinator(conductor: Round) -> None:
+  conductor.slots["coordinator"] = "w1"
+  text, slot = conductor.placed("k", "{workspace}")
+  assert slot == "w2"
+  assert "-w2" in text
