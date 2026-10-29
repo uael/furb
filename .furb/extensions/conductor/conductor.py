@@ -46,7 +46,7 @@ A prompt of a worker that ends with CancelledError while the round made no cance
 The round tells you a worker that ends with no PR, with its answer, or that says nothing for 45 minutes, relays to you each question that a worker puts to the operator, and wakes a worker that paused. results keeps the answer of each worker under its prompt.
 When a worker ends, the round asks it debrief() once, and adds each friction that it gives to TOOLING, the ledger of the defects of the tooling, as flaw(what) adds a defect that you find or patch live. An entry counts each time that it comes again. settle_flaw(part, pr) closes each open entry that holds part with the PR that fixed it, once you checked on main that the PR did; the audit lists the open entries alone, and an entry that comes again opens again.
 A check counts by its newest run, and the round acts on a failed check once no check of the PR runs, or at once when two failed. A failed check heals with no worker first, once for each head sha: the round reruns the failed jobs of the run whose failure is the one failed check of the PR, which costs the runners of CI the least, else it updates the branch of a PR on main that is behind main while main is green, at most once in UPDATED seconds for a PR, since a PR that still fails after an update fails on its own. It gives a PR on main whose head has no run of the gates one, once for each head sha: it updates the branch of the PR while main is green, else it reruns the workflows at the head. It reruns once, for each head sha, a run that was cancelled at the head of a PR, and a check cancelled again at that sha counts as failed.
-Each sweep puts each open PR of the round in one state of a table: green, running (its checks run, or one failed check waits for the end of its run), red (two failed checks, or one once no check runs, or an open box), conflicting, main (while main is red, each line of its failed checks fails on main too), stacked, or owner (it waits on the owner). A red or conflicting PR that holds no label paused or hold, and is not a draft whose maker lives, has one worker assigned at its head, in assigned[n] with the time of the assignment. A PR in trouble with no live assignee gets one in that sweep: its maker, the live worker of its label w:key or of owns, once for each head; else a fixer. A maker whose head did not move in OWNED seconds, 15 minutes, gives the PR to a fixer. A fixer that ends with no new head is replaced at once, twice at most for a head. A sweep that ends with a PR in trouble and no assignee tells you once, as a defect of the round, with its cause. A PR in the state main gets no order, no handover and no fixer, since no change of it can fix what main fails: the notice of a red main names such PRs, and once main is green the round updates their branches. A draft whose worker ended is tended as any PR in trouble, and only its merge waits. Just before it gives an order or hires a fixer, the round reads the PR again and gives none when the head moved or the conflict is gone, and it names in an order the base of a stacked PR with the head that the base had before. While a fixer is assigned to a PR, the round neither updates its branch nor merges it, and it tells the maker when it updates or rebases the branch, or when a fixer starts on it. The round closes a PR that changes no file. A mergeable that gh gives as UNKNOWN is probed with git merge-tree. The round rebases a child of a PR whose head was force-pushed onto the new head of its parent, and a child whose parent merged outside the round onto main, from the fork point when the child holds no head of the parent that the round saw.
+Each sweep puts each open PR of the round in one state of a table: green, running (its checks run, or one failed check waits for the end of its run), red (two failed checks, or one once no check runs, or an open box), conflicting, main (while main is red, each line of its failed checks fails on main too), stacked, or owner (it waits on the owner). A red or conflicting PR that holds no label paused or hold, and is not a draft whose maker lives, has one worker assigned at its head, in assigned[n] with the time of the assignment. A PR in trouble with no live assignee gets one in that sweep: its maker, the live worker of its label w:key or of owns, once for each head; else a fixer. A maker whose head did not move in OWNED seconds, 15 minutes, gives the PR to a fixer. A fixer that ends with no new head is replaced at once, twice at most for a head. A sweep that ends with a PR in trouble and no assignee tells you once, as a defect of the round, with its cause. A PR in the state main gets no order, no handover and no fixer, since no change of it can fix what main fails: the notice of a red main names such PRs, and once main is green the round updates their branches. A draft whose worker ended is tended as any PR in trouble, and only its merge waits. The order and the brief of a fixer are built from a fresh read at the moment of the order: the failed checks by name with their first failed lines, the commits of main that changed a file of the PR (with the files that they delete or move), and for a stacked PR the merge ref of its checks and the rebase command that fits the base now (a plain rebase when the base only advanced, rebase --onto from the commit that the branch shares with the old base when it was rewritten), with the commits that the base gained. A conflict of w/gallery gets no order for GALLERY_WAIT seconds, since the gallery workflow builds the branch again from main. Just before it gives an order or hires a fixer, the round reads the PR again and gives none when the head moved or the conflict is gone, and it names in an order the base of a stacked PR with the head that the base had before. While a fixer is assigned to a PR, the round neither updates its branch nor merges it, and it tells the maker when it updates or rebases the branch, or when a fixer starts on it. The round closes a PR that changes no file. A mergeable that gh gives as UNKNOWN is probed with git merge-tree. The round rebases a child of a PR whose head was force-pushed onto the new head of its parent, and a child whose parent merged outside the round onto main, from the fork point when the child holds no head of the parent that the round saw.
 The round merges each green PR into main from the lowest number when git merges it with main clean and no file that a gate sums (SERIAL: the engine under its wall of tokens, the budgets) changed both in it and on main since its branch forked, after it moves the PRs that stack on it onto main and rebases each there with git rebase --onto from the head that it held of the PR that merged, in a scratch worktree, and pushes it with --force-with-lease (a rebase that conflicts is left to the fixer); else it updates the branch, and only when main is green.
 The label paused takes a PR out of the round. A draft, the label hold, a review that waits for its fix, and the label owner-merge, until the owner takes it off as his approval, keep a PR from a merge.
 A notice wakes you only for a decision, with the context that it needs: each event that needs none, as a worker that ends with a PR, a heal, a merge or a PR made outside the round, is one line in the next notice. The round tells you when main is red, with the lines that failed, when a PR fails to merge, with what gh said, or when a PR on main with no draft, no hold, no worker and no check that runs has no change for 45 minutes, with its checks, and each comment or issue of the owner in the private repository of the decisions, which PRIVATE names beside this word and git does not hold. await decide(title, text) opens a decision there as an issue, and news(line) adds a line at the top of its digest issue.
@@ -123,6 +123,8 @@ areas: dict[str, list[str]] = globals().setdefault("areas", {})
 DEBRIEFS = globals().get("DEBRIEFS", True)
 vetoes: dict = globals().setdefault("vetoes", {})
 OWNED = 900.0
+GALLERY = "w/gallery"
+GALLERY_WAIT = 6 * 3600.0
 tips: dict[str, str] = globals().setdefault("tips", {})
 shifted: dict[int, tuple[str, str]] = globals().setdefault("shifted", {})
 parents: dict[int, str] = globals().setdefault("parents", {})
@@ -198,9 +200,9 @@ AUDIT = """You are an auditor on the repository {repo}. Do one item: read the co
 The item, {key}:
 {what}"""
 
-FIX = """You fix the open PR #{n} of the repository {repo}: it {problem} at {sha}.{base} Read it with gh pr view, gh pr checks and gh run view --log-failed. Rerun once a check that fails on one system alone. Else work at the head of its branch in the workspace that the end of this brief names, and fetch before each push. If the head of the PR is not {sha} any more, or the PR no longer {problem}, change nothing and close with its number and a report that says so. A PR that conflicts runs no checks, so the checks that it shows may be old. Fix it: resolve a conflict with the meaning of both sides, and for a stack read skill("gh-stack") and use gh stack sync. Run the tests that it touches, push with git push --force-with-lease=refs/heads/<branch>:<the sha that you fetched> origin HEAD:refs/heads/<branch>, wait until gh pr view --json headRefOid,mergeable shows your head (GitHub shows the old head and the old mergeable for about 20 seconds after a push), keep the worktree until the PR merges, and close with a tuple: the number of the PR, and your report in 200 words at most. """ + RULES
+FIX = """You fix the open PR #{n} of the repository {repo}: it {problem} at {sha}.{base} Read it with gh pr view, gh pr checks and gh run view --log-failed. Read the failed log before any rerun, since a rerun of a whole system job takes 5 to 6 minutes: rerun once only a check whose log shows a fault of the machine and not of a test. Else work at the head of its branch in the workspace that the end of this brief names, and fetch before each push. If the head of the PR is not {sha} any more, or the PR no longer {problem}, change nothing and close with its number and a report that says so. A PR that conflicts runs no checks, so the checks that it shows may be old. When the commits of main that this brief names show a revert, a deleted file or a moved file, and a file that your hunks change is gone from main, take the file of main and apply your change again in its new place. Fix it: resolve a conflict with the meaning of both sides, and for a stack read skill("gh-stack") and use gh stack sync. Run the tests that it touches, push with git push --force-with-lease=refs/heads/<branch>:<the sha that you fetched> origin HEAD:refs/heads/<branch>, wait until gh pr view --json headRefOid,mergeable shows your head (GitHub shows the old head and the old mergeable for about 20 seconds after a push), keep the worktree until the PR merges, and close with a tuple: the number of the PR, and your report in 200 words at most. """ + RULES
 
-FIXOWN = "Your open PR #{n} {problem} at {sha}. Fetch origin, rebase your branch onto its base or merge its base into it, resolve each conflict with the meaning of both sides, run the gates that the change touches, push with --force-with-lease, and keep its checks green. Never wait on CI in a bash for more than 10 minutes: once you pushed, read its checks once and close with the PR and its checks as they stand, since the round tends them."
+FIXOWN = "Your open PR #{n} {problem} at {sha}. Fetch origin, run git merge --ff-only origin/<your branch> when your local branch lags behind its remote, rebase your branch onto its base or merge its base into it, resolve each conflict with the meaning of both sides, run the gates that the change touches, push with --force-with-lease, and keep its checks green. Never wait on CI in a bash for more than 10 minutes: once you pushed, read its checks once and close with the PR and its checks as they stand, since the round tends them."
 
 RESUME = """Your task did not end: your prompt ended with CancelledError, and nobody cancelled it. Go on with the same task on this chain: fetch your branch and read your PR, run again each command that ended as interrupted, and go on from where you stood. Wait on CI only with await wait(600) between reads, never inside a bash. Close with a tuple: the number of your last PR, and your report in 200 words at most."""
 
@@ -516,6 +518,81 @@ def based(pr: dict) -> str:
     old, new = shifted[pr["n"]]
     said += f", whose head changed from {old} to {new}: git rebase --onto origin/{pr['base']} {old} {pr['head']} puts the PR on it"
   return said + "."
+
+
+# The order of a fixer reads git when it is given, since the head of a base moves between two orders.
+REBASED = """git fetch -q origin "+refs/heads/$base:refs/remotes/origin/$base" "+refs/heads/$head:refs/remotes/origin/$head" || exit 1
+git cat-file -e "$old^{commit}" 2>/dev/null || exit 1
+if git merge-base --is-ancestor "$old" "origin/$base"; then
+  echo plain
+  git merge-base "origin/$head" "origin/$base" || exit 1
+  git rev-list --count "origin/$base..origin/$head" || exit 1
+  git log --format='%h %s' "$old..origin/$base" | head -5
+else
+  c=$(git merge-base "origin/$head" "$old") || exit 1
+  echo onto
+  echo "$c"
+  git rev-list --count "$c..origin/$head" || exit 1
+fi"""
+
+CHANGED = """git fetch -q origin main "refs/pull/$n/head" || exit 1
+cut=$(git merge-base origin/main "$sha") || exit 1
+[ -n "$(git diff --name-only "$cut" "$sha")" ] || exit 0
+git diff --name-only -z "$cut" "$sha" | xargs -0 git log --format='C%x09%h%x09%s' --name-status "$cut..origin/main" -- | head -80"""
+
+
+async def based_now(pr: dict) -> str:
+  said = based(pr)
+  if not said:
+    return ""
+  n, base, head = pr["n"], pr["base"], pr["head"]
+  ref = f" Its checks run on refs/pull/{n}/merge, the merge of its head into {base}: fetch that ref to see what they saw."
+  if n not in shifted:
+    return said + ref
+  old, new = shifted[n]
+  setup = f"base={shq(base)} head={shq(head)} old={shq(old)}\n"
+  got = await bash(setup + REBASED, show=HIDDEN, timeout=120)
+  if got.code != 0 or len(got.stdout.lines) < 3:
+    return said + ref
+  how, cut, count, *gained = got.stdout.lines
+  commits = f"{count} commit" + ("" if count == "1" else "s")
+  if how == "plain":
+    move = f"git rebase origin/{base} puts its {commits} on a base that only advanced"
+  else:
+    move = f"the base was rewritten and the branch stands on {cut[:12]} of it: git rebase --onto origin/{base} {cut} {head} replays its {commits}"
+  lost = "\nThe base gained:\n" + "\n".join("  " + x for x in gained) + "\n" if gained else ""
+  return f" Its base is {base}, whose head changed from {old} to {new}: {move}.{ref}{lost}"
+
+
+async def main_changes(pr: dict) -> str:
+  got = await bash(f"n={pr['n']} sha={shq(pr['sha'])}\n" + CHANGED, show=HIDDEN, timeout=120)
+  if got.code != 0:
+    return ""
+  commits: list[list] = []
+  for line in got.stdout.lines:
+    parts = line.split("\t")
+    if parts[0] == "C" and len(parts) >= 3:
+      commits.append([f"{parts[1]} {parts[2]}", [], [], 0])
+    elif commits and len(parts) >= 2:
+      if parts[0] == "D":
+        commits[-1][1].append(parts[1])
+      elif parts[0].startswith("R") and len(parts) >= 3:
+        commits[-1][2].append(f"{parts[1]} to {parts[2]}")
+      commits[-1][3] += 1
+  if not commits:
+    return ""
+  commits.sort(key=lambda c: not (c[1] or c[2] or " Revert" in " " + c[0].split(" ", 1)[-1]))
+  rows = []
+  for title, gone, moved, files in commits[:8]:
+    rows.append(
+      f"  {title} ({files} of your files)"
+      + (f"; it deletes {', '.join(gone[:4])}" if gone else "")
+      + (f"; it moves {', '.join(moved[:4])}" if moved else "")
+    )
+  return (
+    "\nThe commits of main since the fork that changed a file of this PR (a revert, a deleted file or a moved file"
+    " means that your hunks belong in another place):\n" + "\n".join(rows) + "\n"
+  )
 
 
 async def stale(pr: dict, conflict: bool = False) -> bool:
@@ -914,6 +991,14 @@ async def mend(pr: dict, now: float, red: bool) -> str:
   held = assigned.get(n) or {}
   if state not in TROUBLE or not tended(pr) or spent(pr):
     return state
+  if state == "conflicting" and pr["head"] == GALLERY:
+    # The gallery workflow builds this branch again from main, and a hand merge of its binary files means nothing.
+    since = timers.setdefault(f"gallery {n} {sha}", now)
+    if now - since < GALLERY_WAIT:
+      if f"gallery {n} {sha}" not in noticed:
+        noticed.add(f"gallery {n} {sha}")
+        heard.append(f"#{n} ({GALLERY}) conflicts, and the gallery workflow builds it again from main, so the round orders no fixer.")
+      return "running"
   if assignee(pr) and (held["fixer"] or now - held["at"] < OWNED):
     return state
   if await stale(pr, state == "conflicting"):
@@ -938,7 +1023,7 @@ async def mend(pr: dict, now: float, red: bool) -> str:
     )
   else:
     problem = "conflicts with its base" if state == "conflicting" else "has a failed check"
-    note = based(pr) + (await evidence(pr) if state == "red" else "")
+    note = await based_now(pr) + (await evidence(pr) if state == "red" else await main_changes(pr))
     order = FIXOWN.replace("{n}", str(n)).replace("{problem}", problem).replace("{sha}", sha) + note
     key = f"fix{n}"
     brief = FIX.replace("{n}", str(n)).replace("{problem}", problem).replace("{sha}", sha).replace("{base}", note)
@@ -986,10 +1071,12 @@ async def on_main(pr: dict) -> bool:
 
 
 async def evidence(pr: dict) -> str:
+  failed = ", ".join(f"{a} {b}" for a, b in zip(pr["names"], pr["checks"]) if b in FAILS)
+  head = f"\nIts failed checks: {failed}." if failed else ""
   seen = await failed_lines(pr)
   if not seen:
-    return ""
-  said = "\nThe first failed lines of its job log:\n" + "\n".join("  " + x for x in seen) + "\n"
+    return head + "\n" if head else ""
+  said = head + "\nThe first failed lines of its job log:\n" + "\n".join("  " + x for x in seen) + "\n"
   files = sorted({f for x in seen for f in re.findall(r"[\w./-]+\.(?:py|rs|tsx?|json|toml|md|ya?ml|sh)\b", x)})[:8]
   if not files:
     return said
