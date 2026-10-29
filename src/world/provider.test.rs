@@ -1966,3 +1966,32 @@ fn each_image_comes_once_in_a_request_after_the_text_that_names_it_as_a_fork_giv
     .collect();
   assert_eq!(users, [vec!["text", "name", "image"], vec!["text"]]);
 }
+
+#[test]
+fn a_turn_of_the_model_that_the_gate_refused_goes_on_the_user_side_quoted_under_its_finding() {
+  let turn = |role: &str, text: &str| {
+    Object::tuple([Object::string(role), Object::string(text), Object::none(), Object::none()])
+  };
+  let finding = "#rung2 refused\nrung2_findings = 'line 1: BAD is not defined'";
+  let turns = Object::list([
+    turn("user", "ask"),
+    turn("assistant", "x = BAD"),
+    turn("user", &format!("{finding}\n\n#rung3 advance on prompt1")),
+    turn("assistant", "close(1)"),
+  ]);
+  let model = scripted(&MockCompletionModel::new([]));
+  let got = messages(turns.as_ref(), &model, &mut images::Images::new(None)).unwrap();
+  let said: Vec<Value> = got
+    .iter()
+    .map(|one| match one {
+      super::Message::User { content } => json!(["user", format!("{content:?}")]),
+      super::Message::Assistant { content, .. } => json!(["assistant", format!("{content:?}")]),
+      super::Message::System { .. } => json!(["system"]),
+    })
+    .collect();
+  assert_eq!(said.len(), 2, "the refused word is no turn of the model: {said:?}");
+  let text = said[0][1].as_str().unwrap_or_default();
+  let quoted = "ask\\n\\n#rung2 refused\\nrung2_findings = 'line 1: BAD is not defined'\\n<s:rung2_word>\\nx = BAD\\n</s:rung2_word>\\n\\n#rung3 advance";
+  assert!(text.contains(quoted), "{said:?}");
+  assert_eq!(said[1][0], "assistant");
+}
