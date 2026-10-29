@@ -66,7 +66,7 @@ An item waits for others with after[key] = [keys], set before you queue it: staf
 Method, at each notice: read the whole state, fix every thing that is off in one go, read the state again to verify, and go on until nothing is off. Only then report. Each round also checks the state in invariants(): it gives each open PR that the round tends a home, from the chain that pushed its head, wakes no chain, and lists in the next notice what code cannot fix.
 A PR waits on a decision of the owner while awaited[decision] names one of its labels, or its number as #N, and the decision is an act that is not over, as the prompt that asked him: a failed check of that PR gets no order, no handover and no fixer, a conflict of it still does, and the round names the decision once. When the act ends, the round drops it and tends the PR again.
 The round holds at most cap() chains that hold an open prompt with a shape, and counts the chains of workers, of sub-chains and of judges alike: room() counts them, and a resume of a worker waits for a slot. When more chains stand, the round pauses the newest overflow with a note and wakes it in order when a slot frees, and it never ends its task.
-The owner rules, on 10-29: "we should use more gh stacks in conductor, because they can be merged at once (all PRs of stack as once)". So a PR on main at the bottom of a stack whose layers are all green, free of hold, paused and owner-merge, and passed by the vetoes, merges with its whole stack at once through gh stack merge; a stack that gh stack does not hold lands one layer at a time, and the round tells it once. Each sweep links each chain of stacked PRs on GitHub with gh stack link, once for each chain, so that it shows as one stack. GitHub gives no priority to a queued run, so each sweep cancels each queued run of the gates that can serve no merge: a run of a closed PR, of an old head, of a draft, a held or a conflicting PR, and it defers a run of a layer above a layer that is not green, which it runs again once that layer is green and fewer than THROTTLE runs wait. It never touches a run of main or of a PR that can merge.
+The owner rules, on 10-29: "we should use more gh stacks in conductor, because they can be merged at once (all PRs of stack as once)". So a PR on main at the bottom of a stack whose layers are all green, free of hold, paused and owner-merge, and passed by the vetoes, merges with its whole stack at once through gh stack merge, and while a layer above it still runs its checks, the bottom waits rather than merge alone; a stack with a red layer merges its green layers below it at once; a stack that gh stack does not hold lands one layer at a time, and the round tells it once. Each sweep links each chain of stacked PRs on GitHub with gh stack link, once for each chain, so that it shows as one stack. GitHub gives no priority to a queued run, so each sweep cancels each queued run of the gates that can serve no merge: a run of a closed PR, of an old head, of a draft, a held or a conflicting PR, and it defers a run of a layer above a layer that is not green, which it runs again once that layer is green and fewer than THROTTLE runs wait. It never touches a run of main or of a PR that can merge.
 A review blocks only on a defect that a command reproduces, or on a false sentence of a contract."""
 
 LIMITS = {"room": {"opus": 1, "sonnet": 3, "opus/high": 1}, "fixer": "claude-cli:sonnet/high"}
@@ -989,31 +989,39 @@ async def restack_forced() -> set[int]:
 SERIAL = re.compile(r"^(src/engine\.(py|pyi|rs)|\.github/budgets\.json)$")
 
 
-async def whole(layers: list[dict]) -> bool:
+async def whole(layers: list[dict]) -> str:
   """A green stack merges at once, all its PRs in one atomic merge of gh stack, by the ruling of the owner on 10-29."""
-  for up in layers[1:]:
-    if up["verdict"] != "pass" or up["draft"] or fixing(up) or {"hold", "paused", "owner-merge"} & set(up["labels"]):
-      return False
-    for veto in list(vetoes.values()):
-      if await veto(up):
-        return False
-  names = " <- ".join("#" + str(up["n"]) for up in layers)
+  ready: list[dict] = []
+  for up in layers:
+    calm = up["verdict"] == "pass" and not up["draft"] and not fixing(up)
+    if not calm or {"hold", "paused", "owner-merge"} & set(up["labels"]):
+      break
+    if any([await veto(up) for veto in list(vetoes.values())]):
+      break
+    ready.append(up)
+  rest = layers[len(ready) :]
+  if rest and not any(up["verdict"] == "fail" for up in rest) and any(c in RUNNING for up in rest for c in up["checks"]):
+    # A layer above still runs its checks: the stack waits to merge whole, and its bottom does not merge alone.
+    return "wait"
+  if len(ready) < 2:
+    return ""
+  names = " <- ".join("#" + str(up["n"]) for up in ready)
   got = await bash(
-    f"out=$(gh stack merge {layers[-1]['n']} --yes --squash 2>&1); echo \"$out\" | tail -4;"
-    + "".join(f" gh pr view {up['n']} --json state --jq .state;" for up in layers),
+    f"out=$(gh stack merge {ready[-1]['n']} --yes --squash 2>&1); echo \"$out\" | tail -4;"
+    + "".join(f" gh pr view {up['n']} --json state --jq .state;" for up in ready),
     show=HIDDEN,
     timeout=600,
   )
-  if got.stdout.lines[-len(layers) :] == ["MERGED"] * len(layers):
-    for up in layers:
+  if got.stdout.lines[-len(ready) :] == ["MERGED"] * len(ready):
+    for up in ready:
       merged.add(up["n"])
       landed.append(up["n"])
     heard.append(f"The stack {names} merged whole.")
-    return True
+    return "merged"
   noticed.add(f"no stack {layers[0]['head']}")
-  said = " ".join(got.stdout.lines[: -len(layers)])[-300:] or "nothing"
+  said = " ".join(got.stdout.lines[: -len(ready)])[-300:] or "nothing"
   heard.append(f"The stack {names} did not merge whole, so it lands one layer at a time; gh stack said: {said}")
-  return False
+  return ""
 
 
 async def land(pr: dict, red: bool) -> None:
