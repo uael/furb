@@ -6,6 +6,7 @@ write your own.
 
 | Extension | What it gives a chain |
 | --- | --- |
+| [`catchup`](catchup) | What changed in the files that the chain read or wrote, told at each stand. |
 | [`memory`](memory) | The `AGENTS.md` or `CLAUDE.md` files of the project that apply to the files that the chain reads. |
 | [`skills`](skills) | The skills of the project and of the user, which `skills()` lists and `skill(name)` reads. |
 | [`compaction`](compaction) | `compact()` and `compacted()`, which go on in a new chain that keeps less of the old one. |

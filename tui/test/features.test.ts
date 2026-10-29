@@ -334,7 +334,7 @@ test("/extensions lists what a life runs, and a cancel of a word of the operator
       async ({ session, frame, click }) => {
         await session.command("/extensions");
         expect(session.notice).toBe(
-          "This life runs memory with await recall(), skills with await listed(), compaction, ouroboros, web, mcp with mcp_index(). Run a word of one with /run.",
+          "This life runs catchup with catchup(), memory with await recall(), skills with await listed(), compaction, ouroboros, web, mcp with mcp_index(). Run a word of one with /run.",
         );
         await session.command("/run await wait(60)");
         // The wait runs under the word, so the cancel asks first.
@@ -373,12 +373,12 @@ test("the words of the extensions stand as code: a comment that names their ear,
         expect(setup.map((act) => act.word)).toEqual([
           // A path of Windows stands with its separators doubled, as python shows a backslash.
           expect.stringMatching(/^read\('.*[/\\]DOCTRINE\.md'\)$/),
-          ...["memory", "skills", "compaction", "ouroboros", "web", "mcp"].map((name) =>
+          ...["catchup", "memory", "skills", "compaction", "ouroboros", "web", "mcp"].map((name) =>
             expect.stringMatching(
               new RegExp(`^read\\('.*[/\\\\]+extensions[/\\\\]+${name}[/\\\\]+${name}\\.py'\\)$`),
             ),
           ),
-          "await recall()\nawait listed()\nmcp_index()",
+          "catchup()\nawait recall()\nawait listed()\nmcp_index()",
         ]);
         let rows = (await frame()).split("\n");
         for (let step = 0; step < 80 && !rows.some((row) => /earlier steps/.test(row)); step++) {
@@ -386,18 +386,23 @@ test("the words of the extensions stand as code: a comment that names their ear,
           rows = (await frame()).split("\n");
         }
         // The card of the ear holds more steps than a card shows, so its first steps and its comment fold.
-        await click("2 earlier steps");
+        await click("3 earlier steps");
         for (let step = 0; step < 80 && !rows.some((row) => /# extensions/.test(row)); step++) {
           await Bun.sleep(25);
           rows = (await frame()).split("\n");
         }
         const at = rows.findIndex((row) => /# extensions/.test(row));
         expect(at).toBeGreaterThanOrEqual(0);
-        const shown = rows.slice(at + 1, at + 11).map((row) => row.trim().replace(/\s{2,}.*$/, ""));
-        expect(shown.slice(0, 7).map((row) => /^\d+ read\('/.test(row))).toEqual(Array(7).fill(true));
+        const shown = rows.slice(at + 1, at + 13).map((row) => row.trim().replace(/\s{2,}.*$/, ""));
+        expect(shown.slice(0, 8).map((row) => /^\d+ read\('/.test(row))).toEqual(Array(8).fill(true));
         // The life words stand as the calls that end their one word, each on its line.
-        expect(shown.slice(7)).toEqual(["8 await recall()", "9 await listed()", "10 mcp_index()"]);
-        expect(rows.join("\n")).not.toMatch(/rung\d+…\d+|remember1|ouroboros1/);
+        expect(shown.slice(8)).toEqual([
+          "9 catchup()",
+          "10 await recall()",
+          "11 await listed()",
+          "12 mcp_index()",
+        ]);
+        expect(rows.join("\n")).not.toMatch(/rung\d+…\d+|remember1|ouroboros1|catchup1/);
       },
       { width: 140, height: 42 },
       new Session(opened.engine, opened.host, true),

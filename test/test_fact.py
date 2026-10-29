@@ -29,7 +29,6 @@ async def test_everything_that_the_engine_the_world_the_kernel_and_the_operator_
   assert {name: one[0] for name, one in acts(log).items()} == {
     "chain1": "chain",
     "stand1": "stand",
-    "clock1": "clock",
     "prompt1": "prompt",
     "rung1": "rung",
     "reply1": "reply",

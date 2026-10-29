@@ -318,7 +318,7 @@ async def test_the_transcript_of_a_chain_is_the_facts_on_it_in_the_order_it_hear
   await settle()
   held = engine.transcript(root)
   assert all(on(a) == root for a in held)
-  assert ids(held) == ["stand1", "clock1", one, *steps(log, one), "run1", "reply1", "gate1", "run2"]
+  assert ids(held) == ["stand1", one, *steps(log, one), "run1", "reply1", "gate1", "run2"]
   facts, log = lasting(held), lasting(log)
   heard = [log.index(a) for a in facts if not engine.question(a)]
   assert heard == sorted(heard) and [a for a in facts if a not in log] == []
@@ -410,7 +410,7 @@ async def test_a_chain_holds_whole_every_act_made_on_the_chain() -> None:
   held = engine.transcript(root)
   mine = [a for a in held if engine.question(a)]
   assert [a for a in acts(log).values() if a[3] == root and a not in mine] == []
-  kinds = ["stand", "clock", "prompt", "rung", "run", "reply", "gate", "run", "read", "bash", "merged"]
+  kinds = ["stand", "prompt", "rung", "run", "reply", "gate", "run", "read", "bash", "merged"]
   assert [a[0] for a in mine] == kinds
   engine.write(Text(act, ""), on=root)
   await settle()
@@ -964,7 +964,7 @@ async def test_every_done_it_holds_answers_a_question_it_holds() -> None:
   held = engine.transcript(root)
   names = {a[1] for a in held if engine.question(a)}
   assert [a[1] for a in held if a[0] == "done" and a[1] not in names] == []
-  assert [a[1] for a in held if engine.question(a) and a[2] == root] == ["clock1", "run1", "gate1", "run2"]
+  assert [a[1] for a in held if engine.question(a) and a[2] == root] == ["run1", "gate1", "run2"]
   assert [a[1] for a in held if a[0] == "done" and a[1] in ("run1", "gate1", "run2")] == ["run1", "gate1", "run2"]
 
 

@@ -144,13 +144,13 @@ async def test_the_chain_answers_a_write_of_the_door_of_one_of_its_prompts_with_
   await settle()
   assert engine.module(root)["k"] == 21
   assert [a[4] for a in said(log, "rung")] == ["k = 21"]
-  assert got == Text(act, "k = 21") and [a[0] for a in sand.calls] == ["stand", "clock", "prompt"]
+  assert got == Text(act, "k = 21") and [a[0] for a in sand.calls] == ["stand", "prompt"]
   again = engine.write(Text(act, "k = 22"), on=root)
   await settle()
   assert again == Text(act, "k = 22") and engine.read(act, on=root) == Text(act, "k = 22")
   bound = fresh(root, prompted(act, "int", "count"), written(said(log, "rung")[0][1], "k = 21", act))
   assert [a[4] for a in said(log, "rung")] == ["k = 21", bound, "k = 22"] and engine.module(root)["k"] == 22
-  assert [a[0] for a in sand.calls] == ["stand", "clock", "prompt"]
+  assert [a[0] for a in sand.calls] == ["stand", "prompt"]
 
 
 async def test_a_write_of_a_door_that_a_rung_of_that_ladder_says_leaves_the_word_of_that_rung_out() -> None:

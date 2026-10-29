@@ -103,7 +103,7 @@ fn the_configs_turn_on_each_extension_they_give_a_folder_the_project_after_the_u
   let names = |got: Vec<Extension>| got.into_iter().map(|one| one.name).collect::<Vec<_>>();
   assert_eq!(
     names(configured(&places, &project).unwrap()),
-    ["memory", "skills", "compaction", "ouroboros", "web", "mcp"],
+    ["catchup", "memory", "skills", "compaction", "ouroboros", "web", "mcp"],
     "the official ones are on"
   );
   folder(&at.join("home").join("tilde"), r#"{"name": "tilde", "word": "note.py"}"#, "t = 1");
@@ -115,7 +115,7 @@ fn the_configs_turn_on_each_extension_they_give_a_folder_the_project_after_the_u
   );
   assert_eq!(
     names(configured(&places, &project).unwrap()),
-    ["memory", "compaction", "ouroboros", "web", "mcp", "tilde", "near"]
+    ["catchup", "memory", "compaction", "ouroboros", "web", "mcp", "tilde", "near"]
   );
   config(
     &project.join(".furb").join("config.json"),
@@ -123,7 +123,7 @@ fn the_configs_turn_on_each_extension_they_give_a_folder_the_project_after_the_u
   );
   assert_eq!(
     names(configured(&places, &project).unwrap()),
-    ["memory", "skills", "compaction", "ouroboros", "web", "mcp", "tilde", "far"],
+    ["catchup", "memory", "skills", "compaction", "ouroboros", "web", "mcp", "tilde", "far"],
     "each stands where a config first names it, after the official ones"
   );
 }
@@ -139,7 +139,7 @@ fn a_config_that_is_not_of_the_form_is_refused_with_its_path() {
   };
   let refused = |text: &str| read(text).unwrap_err().message();
   let shown = file.display();
-  assert_eq!(read(r#"{"theme": "dark"}"#).unwrap().len(), 6, "a config may name no extension");
+  assert_eq!(read(r#"{"theme": "dark"}"#).unwrap().len(), 7, "a config may name no extension");
   assert_eq!(refused("[]"), format!("A config is a map, whose extensions is a map: {shown}"));
   assert_eq!(
     refused(r#"{"extensions": []}"#),
@@ -327,12 +327,10 @@ fn a_life_enables_at_its_tip_each_extension_it_is_given_and_plays_its_word_then_
     ("made", "store"),
     ("stand", "operator"),
     ("done", "stand"),
-    ("clock", "chain1"),
-    ("done", ""),
     ("enable", "extensions"),
   ];
-  assert_eq!(facts[..7], expected.map(|(kind, by)| (kind.to_owned(), by.to_owned())));
-  let enable = Fact::of(crate::value::entry(&kept[6].as_ref(), 0).unwrap()).unwrap();
+  assert_eq!(facts[..5], expected.map(|(kind, by)| (kind.to_owned(), by.to_owned())));
+  let enable = Fact::of(crate::value::entry(&kept[4].as_ref(), 0).unwrap()).unwrap();
   let words: Vec<_> = (0..3).map(|at| enable.word(at).and_then(|one| one.as_str())).collect();
   assert_eq!(
     (enable.about(), words),
@@ -340,7 +338,7 @@ fn a_life_enables_at_its_tip_each_extension_it_is_given_and_plays_its_word_then_
     "the fact is about the root, and carries the name, the word and the life word"
   );
   assert_eq!(
-    facts[7],
+    facts[5],
     ("rung".to_owned(), "extensions".to_owned()),
     "the rung stands after the fact"
   );

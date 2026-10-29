@@ -59,7 +59,12 @@ const ROOTED: &str = "root";
 
 /// The official extensions, each as its manifest, the file of its word, and the file of the part for a TUI that its
 /// manifest names, in the order a life runs them.
-const OFFICIAL: [(&str, &str, Option<&str>); 6] = [
+const OFFICIAL: [(&str, &str, Option<&str>); 7] = [
+  (
+    include_str!("../extensions/catchup/furb.json"),
+    include_str!("../extensions/catchup/catchup.py"),
+    None,
+  ),
   (
     include_str!("../extensions/memory/furb.json"),
     include_str!("../extensions/memory/memory.py"),

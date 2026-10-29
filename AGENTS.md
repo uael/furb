@@ -39,7 +39,7 @@ API of its own:
   its manifest says it plays, every chain or the root alone, or, on a new record, plays the setup of the root, the
   read of the doctrine and of the file of each extension, whose word it runs with no rung, then their life words, and
   `parts`, the part for the TUI of each extension, which `tui/src/parts.ts` loads live.
-  `extensions/` holds the official extensions, `memory`, `skills`, `compaction`, `ouroboros`, `web` and `mcp`, each a word, a
+  `extensions/` holds the official extensions, `catchup`, `memory`, `skills`, `compaction`, `ouroboros`, `web` and `mcp`, each a word, a
   contract and a suite, and `src/extension/` holds the ear of the World of each that has one: `compaction.rs` answers a
   carry with the turns and the open prompts of a chain of another record, which the reader reads, and `mcp.rs` holds the
   servers of the Model Context Protocol, with `mcp/binding.rs`, which makes the typed class of the tools of a server,
@@ -216,7 +216,7 @@ is the folder `test` beside it.
 2. Every test carries a sentence of the contract.
 3. Every definition has a file of its own and at least one sentence. Two definitions never share a file.
 4. The module docstring of each contract is empty.
-5. `engine.py`, minified with its program kept as it is, costs fewer than 7180 tokens of `o200k_base`, the
+5. `engine.py`, minified with its program kept as it is, costs fewer than 7000 tokens of `o200k_base`, the
    tokenizer of OpenAI, and the doctrine of furb, `DOCTRINE.md`, costs at most 2000. The test counts with `o200k_base`
    because it is local and the same on each machine: the tokenizer of Claude is not public, and only the network
    counts with it. The wall is a proxy for the cost to Claude, which reads about 1.5 tokens for each token of

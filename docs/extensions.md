@@ -9,8 +9,12 @@ caches of the chain stays valid.
 
 ## The official extensions
 
-Six extensions come with furb, and each life runs them unless a config turns them off.
+Seven extensions come with furb, and each life runs them unless a config turns them off.
 
+- **`catchup`** keeps a chain up to date with the machine. At each stand, as when a later life opens on a record, it
+  reads again each file that the chain read or wrote, and tells the chain in one paragraph headed caught up the lines
+  that changed, and the hours since the life before when they are more than one. Its life word is `catchup()`. A
+  chain where nothing changed hears nothing.
 - **`memory`** tells a chain the memory files of its project. The memory of a folder is its `AGENTS.md`, or its
   `CLAUDE.md` when it has no `AGENTS.md`. When a chain starts, it reads the memory of the user, in the config
   directory, then the memory of each folder from the root down to the working directory. Each time the chain reads a

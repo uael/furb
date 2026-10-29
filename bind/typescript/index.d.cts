@@ -192,12 +192,6 @@ export declare function attachImage(directory: string, path: string): ImageAttac
  */
 export declare function bash(scratch: string, record: Array<any>): NativeEar
 
-/** BUDGET is the number of bytes of the paragraph of a catch-up past which the paragraph gives the paths alone. */
-export declare const BUDGET: number
-
-/** CAP is the number of lines that differ in a file past which a catch-up tells the path of the file with that number alone. */
-export declare const CAP: number
-
 /**
  * Read, start, refresh or cancel ChatGPT sign-in for codex. The default action reads its state.
  * The config directory is the user config directory when unsaid. A start returns before the browser completes.

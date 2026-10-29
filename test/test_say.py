@@ -57,7 +57,7 @@ async def test_a_fact_reaches_the_world_the_kernel_and_the_journal_only_through_
   """A fact reaches the World, the Kernel and the journal only through the bus."""
   sand, log, root = born("close(read('a.txt').content)")
   assert await engine.prompt(str, "read it", on=root) == "one\ntwo\n"
-  assert [a[0] for a in sand.calls] == ["stand", "clock", "reply", "read"]
+  assert [a[0] for a in sand.calls] == ["stand", "reply", "read"]
   assert findings(log) == [[]]
   told = fresh(root, prompted("prompt1", "str", "read it"), "#rung1 advance on prompt1")
   assert ran(log) == [told, "close(read('a.txt').content)"]
@@ -124,7 +124,7 @@ async def test_every_generator_the_acts_first_then_those_of_the_engine_then_thos
   _, over = await relived(dead, plain(sand.record))
   text = engine.module(over)["t"]
   assert isinstance(text, Text) and text.content == "one\ntwo\n"
-  assert said(dead.calls, "read") == [("read", "read4", root, root, "/w/a.txt")]
+  assert said(dead.calls, "read") == []
 
 
 async def test_every_generator_hears_every_fact_it_has_not_heard_in_order_until_none_is_left() -> None:

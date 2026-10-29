@@ -1,10 +1,11 @@
 """The conftest of the suites of the extensions: the hooks and the fixtures of the harness of the engine, which reach
 the suite of each extension only through a conftest above it, and the helpers that only those suites need."""
 
+import ast
 import asyncio
 import sys
 import tempfile
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
 
@@ -17,7 +18,9 @@ from conftest import (  # noqa: F401
   engine_of,
   life,
   of,
+  paragraphs,
   pytest_generate_tests,
+  settle,
   sown,
   tilded,
   world_says,
@@ -81,15 +84,18 @@ def extended(  # noqa: PLR0913
   record: Sequence[tuple] = (),
   sand: Sand | None = None,
   doctrine: str = "",
+  also: Sequence[str] = (),
 ) -> tuple[Sand, str]:
   """A life on a record, whose chains stand in the folder work of a directory, which enables at its tip the official
   extension of that name, with its life word when it lives: it hears the ear of the extension when it has one, whose
   config directory of the user is the folder config of the directory, and the files of the machine after the World
   of the suite, or after the World it is given. A standing that names a doctrine, which the folder holds as
-  DOCTRINE.md with that text, sets up the root as a new record of this build does. It gives the World and the root."""
+  DOCTRINE.md with that text, sets up the root as a new record of this build does. Before it, the life enables each
+  official extension that also names, with its life word. It gives the World and the root."""
   one = next(x for x in _monty.official() if x["name"] == name)
   (at / "work").mkdir(exist_ok=True)
-  given = _monty.extensions([one if lives else {**one, "life": ""}])
+  before = [x for x in _monty.official() if x["name"] in also]
+  given = _monty.extensions([*before, one if lives else {**one, "life": ""}])
   taught = []
   if doctrine:
     (path := at / "DOCTRINE.md").write_text(doctrine, encoding="utf-8", newline="")
@@ -97,6 +103,44 @@ def extended(  # noqa: PLR0913
   sand = replace(sand or sown(), stands=[STANDS[0], str(at / "work"), STANDS[2], *taught])
   files = _monty.files(str(at / "scratch"))
   return sand, life(sand, record, extensions=given, **({name: ear(str(at / "config"))} if ear else {}), files=files)[1]
+
+
+CATCHUP = next(x for x in _monty.official() if x["name"] == "catchup")
+"""CATCHUP is the official extension catchup, with its life word."""
+
+
+def number(extension: Mapping[str, object], name: str) -> int:
+  """The number that the word of an extension binds to a name in capitals, as each chain binds it."""
+  word = extension["word"]
+  assert isinstance(word, str)
+  got = next(
+    ast.literal_eval(one.value)
+    for one in ast.parse(word).body
+    if isinstance(one, ast.Assign) and [ast.unparse(x) for x in one.targets] == [name]
+  )
+  assert isinstance(got, int)
+  return got
+
+
+async def catching(sand: Sand, record: Sequence[tuple] = ()) -> tuple[list[tuple], str]:
+  """A life on a World of the suite and a record, which runs the extension catchup with its life word, once the loop
+  gave it room to play the extension on the root: what was said in the life, and the root."""
+  log, root = life(sand, record, extensions=_monty.extensions([CATCHUP]))
+  await settle(300)
+  return log, root
+
+
+async def caught_up(**world: object) -> tuple[Sand, list[tuple], str]:
+  """A life on the World of the suite, which a test changes by keyword, that runs the extension catchup: the World,
+  what was said in the life, and the root."""
+  sand = sown(**world)
+  log, root = await catching(sand)
+  return sand, log, root
+
+
+def caught(got: Sequence[tuple], chain: str) -> list[str]:
+  """Each paragraph headed caught up that the turns of a chain hold, in order."""
+  return [one for one in paragraphs(got) if one.startswith(f"#{chain} caught up")]
 
 
 def noted(folder: Path, text: str, name: str = "AGENTS.md") -> Path:

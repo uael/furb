@@ -57,14 +57,17 @@ fn kinds(record: &[Object]) -> Vec<String> {
 fn a_life_enables_what_the_configs_turn_on_and_a_later_life_runs_what_its_record_enables() {
   let at = place("configs");
   let (mut first, _) = opening(&at, true).boot::<String>([]).unwrap();
-  assert_eq!(names(&mut first), ["memory", "skills", "compaction", "ouroboros", "web", "mcp"]);
+  assert_eq!(
+    names(&mut first),
+    ["catchup", "memory", "skills", "compaction", "ouroboros", "web", "mcp"]
+  );
   drop(first);
   fs::create_dir_all(at.join("config")).unwrap();
   fs::write(at.join("config").join("config.json"), r#"{"extensions": {"skills": false}}"#).unwrap();
   let (mut later, record) = opening(&at, true).boot::<String>([]).unwrap();
   assert_eq!(
     names(&mut later),
-    ["memory", "skills", "compaction", "ouroboros", "web", "mcp"],
+    ["catchup", "memory", "skills", "compaction", "ouroboros", "web", "mcp"],
     "the record wins over the configs"
   );
   drop(later);
@@ -74,7 +77,7 @@ fn a_life_enables_what_the_configs_turn_on_and_a_later_life_runs_what_its_record
   let (mut fresh, _) = Opening { record: fresh, ..opening(&at, true) }.boot::<String>([]).unwrap();
   assert_eq!(
     names(&mut fresh),
-    ["memory", "compaction", "ouroboros", "web", "mcp"],
+    ["catchup", "memory", "compaction", "ouroboros", "web", "mcp"],
     "a life on a new record enables what the configs turn on"
   );
 }
@@ -799,7 +802,7 @@ fn a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_promp
   let at = place("checkpoint");
   let ran = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0)\nclose(f'round {rounds}')";
   let mut first = scripted(&at, &[ran]).boot::<String>([]).unwrap().0;
-  let word = "work = chain('work')\nran = await bash('echo one')\nqueue = [ran]\nCAP = 6\ndef f():\n  return CAP\n\
+  let word = "work = chain('work')\nran = await bash('echo one')\nqueue = [ran]\nSIZE = 6\ndef f():\n  return SIZE\n\
               waiting = prompt(str, 'Wait.', on=work)\nawait wait(0.3)\nclose(str(waiting))";
   let waiting = closed(&mut first, word).as_ref().as_str().unwrap().to_owned();
   drop(first);

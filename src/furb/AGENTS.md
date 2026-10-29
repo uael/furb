@@ -26,7 +26,7 @@ meanings. The entry of such a name here gives only its form in the engine.
   the tip of a later life.
 - tip: the point of a later life where the journal has said the record again whole, at which boot stands the life
   again, and after which the life goes on past it.
-- catch-up: what a chain does at each stand: it reads again, with a hidden show, each file that a read or a write on
+- catch-up: what the official extension catchup does on each chain at each stand: it reads again, with a hidden show, each file that a read or a write on
   it gave, and tells in one paragraph headed caught up the lines that changed and the hours since the reading of the
   clock of the root before, or nothing when nothing changed.
 - default actor: the actor a prompt goes to when the prompt leaves the actor unsaid, bound as `actor` in the chain.
