@@ -7,7 +7,7 @@ Each capture holds the clock of the view still at STILL, so that no spinner turn
 Each pass captures the target at the head of main, and each judge in JUDGES, blind on a chain of its own, reads against his words each capture that changed since the last pass, or each capture when his words changed or no pass judged them, and closes with the gaps that it sees. A capture that did not change keeps the gaps of the last pass. A gap counts only when it names a capture that the judge read and quotes his words exactly, and a failed check of the head is a gap of its own. A step of the capture that fails is a fault of the tool and no gap: converge rebuilds the tree once and captures again, and when the step fails again it tells the operator and judges nothing, so a PR passes and a pass of main waits for a change of main under its paths or of his words.
 A pass with gaps is one step: the gaps go to each worker of an owner that works, or to one item in the queue of the round, which fixes the largest gap in one PR. The next pass comes once that work ended and its PR landed.
 The target converges after CLEAN passes in a row with no gap, and stalls after STALL passes with no fewer gaps than its best before them: each tells the operator through the round, and the loop then waits for a change of his words or of main under paths.
-Before the conductor merges a PR that changes paths, it asks converge through its vetoes: once the checks of the PR are green, converge captures main and main with the PR merged in it in one run, so that no change of main shows as a change of the PR, sends each judge his words once in each prompt, with the captures that the PR changes in prompts of BATCH captures and PROMPT characters at most, and cuts a capture over CUT characters with a note, and says no until a head shows no gap. A PR that changes no capture sends nothing to a judge. The green PRs that wait for the judges ride one train, TRAIN at most: converge captures main and main with each of them merged in it, in one run, and a train with no gap clears each of its PRs at once, while a train with a gap, a fault or no answer sends each of its PRs to be judged alone. The gaps go to its worker and to a comment, and a new head is judged again. converge puts no label on a PR.
+Before the conductor merges a PR that changes paths, it asks converge through its vetoes: once the checks of the PR are green, converge captures main and main with the PR merged in it in one run, so that no change of main shows as a change of the PR, sends each judge his words once in each prompt, with the captures that the PR changes in prompts of BATCH captures and PROMPT characters at most, and cuts a capture over CUT characters with a note, and says no until a head shows no gap. A PR that changes no capture sends nothing to a judge. The green PRs that wait for the judges ride one train, TRAIN at most: converge captures main and main with each of them merged in it, in one run, and a train with no gap clears each of its PRs at once, a train with a gap splits in two halves, each a train of its own, down to a PR alone, so the PRs with no gap clear in few captures, and a train with a fault or no answer sends each of its PRs to be judged alone. The gaps go to its worker and to a comment, and a new head is judged again. converge puts no label on a PR.
 A grant holds each chain of a judge under EACH dollars. A judge whose chain waits on a usage limit is neither cut nor counted, and its BOUND starts again when the limit ends. A judge that fails, or that the round cuts at BOUND or by a pause, gives no answer: its pass is inconclusive. A pass whose judges the round cut all counts as no try, and a head whose judges failed to answer twice is stuck, which tells the operator and keeps the veto until a new head.
 The ledger of a target, .furb/converge/<name>.json, keeps each pass, the frames and the records of the last pass, each judged head and the step that runs, so a later life goes on from it. The loop ends when it spent JOBS captures or USD dollars."""
 JUDGES = ("claude-cli:sonnet/high",)
@@ -668,10 +668,22 @@ TRAIN = 6
 
 
 def solo(book: dict, job: dict) -> dict:
-  """A train that found a gap, or a fault, or no answer, sends each of its PRs to be judged alone."""
+  """A train that met a fault or no answer sends each of its PRs to be judged alone."""
   for key in job["batch"]:
     book["heads"][key] = {**book["heads"].get(key, {}), "state": "held", "solo": True}
     OPEN.pop(key, None)
+  return {}
+
+
+def halve(book: dict, job: dict) -> dict:
+  """A train that found a gap splits in two halves, each a train of its own, down to a PR alone."""
+  keys = job["batch"]
+  middle = (len(keys) + 1) // 2
+  for part in (keys[:middle], keys[middle:]):
+    for key in part:
+      head = {k: v for k, v in book["heads"].get(key, {}).items() if k not in ("half", "solo")}
+      book["heads"][key] = {**head, "state": "held", **({"half": part} if len(part) > 1 else {"solo": True})}
+      OPEN.pop(key, None)
   return {}
 
 
@@ -699,8 +711,9 @@ async def trained(target: dict, book: dict, pr: dict) -> dict:
       continue
     if await classified(target, book, one) == "held" and not book["heads"][key].get("solo"):
       keys.append(key)
-  keys = keys[:TRAIN]
   mine = f"{pr['n']} {pr['sha']}"
+  half = book["heads"][mine].get("half")
+  keys = [k for k in keys if k in half] if half else [k for k in keys if not book["heads"][k].get("half")][:TRAIN]
   if mine not in keys or len(keys) < 2:
     return {}
   shq = c["shq"]
@@ -833,7 +846,7 @@ async def advanced(target: dict, book: dict, job: dict, words: str, head: str) -
         )
     return {}
   if job.get("batch"):
-    return solo(book, job) if [*job["failed"], *found] else cleared(book, job)
+    return halve(book, job) if [*job["failed"], *found] else cleared(book, job)
   if pr:
     await screened(target, book, job, [*job["failed"], *found], words)
     return {}
