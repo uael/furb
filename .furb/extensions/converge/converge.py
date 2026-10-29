@@ -1059,7 +1059,10 @@ async def converge(target: dict, ticks: int = 0) -> dict:
       job = await advanced(target, book, job, words, head)
       if job is was:
         break
-    MAIN.pop(target["name"], None) if not job else MAIN.__setitem__(target["name"], job)
+    if job:
+      MAIN[target["name"]] = job
+    else:
+      MAIN.pop(target["name"], None)
     booked(target, book)
     if book["state"] == "spent" and not job:
       return book
