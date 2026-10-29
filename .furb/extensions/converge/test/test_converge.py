@@ -66,6 +66,7 @@ class World:
     self.made = 0
     self.waits: list[list[str]] = []
     self.pending: list[tuple[str, object]] = []
+    self.debugs: list[str] = []
     self.slow = False
     self.pausing = False
     self.limit = False
@@ -96,6 +97,7 @@ class World:
     ns.update(bash=self.bash, prompt=self.prompt, chain=self.chain, rung=self.rung, grant=self.grant, wait=self.wait)
     ns.update(over=lambda name: name in self.done, peek=lambda name, waiting=None: self.done.get(name, waiting))
     ns.update(acting=lambda: "rung1", scope=lambda name: "chain1")
+    ns.update(debug=lambda t: self.debugs.append("".join(x if isinstance(x, str) else str(x.value) for x in t)))
     ns.update(get=self.facts.get, transcript=self.transcribe)
     ns.update(paused=lambda name: self.pausing, clock=lambda: self.now, cancel=self.cancel)
     exec(compile(SOURCE, str(HERE / "converge.py"), "exec"), ns)  # noqa: S102
@@ -1077,3 +1079,43 @@ def test_the_core_converges_a_target_with_a_plain_text_differ_and_the_words_of_t
   [item] = world.round["queue"]
   assert item[0].startswith("converge-docs-") and item[2] == "docs"
   assert json.loads(world.files[".furb/converge/docs.json"])["passes"][0]["judged"] == 1
+
+
+def test_a_pass_tells_one_debug_line_with_its_gaps_and_its_best(world: World) -> None:
+  world.judge = lambda message, to: gap()
+  world.run(1)
+  assert world.debugs == ["tui pass 1 at sha1: 1 gaps, best 1, PR none"]
+
+
+def stall(world: World) -> None:
+  world.judge = lambda message, to: [["demo/01-welcome", "The text of tui/src/feed.ts is cut.", QUOTE]]
+  world.waited = lambda: world.round["queue"].clear()
+  world.run(6)
+  assert world.book()["state"] == "stalled" and len(world.told()) == 1
+
+
+def test_a_stalled_target_waits_for_a_change_under_the_paths_that_its_gaps_name_and_tells_the_stall_once(world: World) -> None:
+  stall(world)
+  passes = len(world.book()["passes"])
+  assert world.book()["named"] == ["tui/src/feed.ts"]
+  world.say(r"rev-parse origin/main", "sha2\n")
+  world.run(1)
+  assert len(world.book()["passes"]) == passes and world.book()["state"] == "stalled"
+  world.say(r"git diff --quiet", "", 1)
+  world.run(1)
+  assert len(world.book()["passes"]) == passes + 1
+  assert len(world.told()) == 1
+
+
+def test_a_stalled_target_whose_gaps_name_no_path_waits_for_a_change_of_the_words(world: World) -> None:
+  world.judge = lambda message, to: gap()
+  world.waited = lambda: world.round["queue"].clear()
+  world.run(6)
+  passes = len(world.book()["passes"])
+  world.say(r"rev-parse origin/main", "sha2\n")
+  world.say(r"git diff --quiet", "", 1)
+  world.run(1)
+  assert len(world.book()["passes"]) == passes
+  world.say(r"gh issue view", WORDS + " A new word.\n")
+  world.run(1)
+  assert len(world.book()["passes"]) == passes + 1

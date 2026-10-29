@@ -11,6 +11,7 @@ from furb.engine import (
   chain,
   clock,
   cwd,
+  debug,
   get,
   grant,
   module,
@@ -155,13 +156,18 @@ async def main_head() -> str:
   return got.stdout.content.strip() if got.code == 0 else ""
 
 
-async def moved(target: dict, since: str, head: str) -> bool:
+def named(target: dict, gaps: list[list[str]]) -> list[str]:
+  found = {m for g in gaps for m in re.findall(r"[\w.-]+(?:/[\w.-]+)+", f"{g[0]} {g[1]}") if m.startswith(tuple(target["paths"]))}
+  return sorted(found)
+
+
+async def moved(target: dict, since: str, head: str, only: list[str] | None = None) -> bool:
   if not since or not head:
     return bool(head)
-  if since == head:
+  if since == head or only == []:
     return False
   shq = conductor()["shq"]
-  paths = " ".join(shq(p) for p in target["paths"])
+  paths = " ".join(shq(p) for p in (target["paths"] if only is None else only))
   got = await bash(f"git diff --quiet {shq(since)} {shq(head)} -- {paths}", show=HIDDEN, timeout=120)
   return got.code != 0
 
@@ -732,6 +738,8 @@ async def advanced(target: dict, book: dict, job: dict, words: str, head: str) -
     book["records"] = job["records"]
   book["words"] = words
   counts = [len(p["gaps"]) for p in book["passes"] if "gaps" in p and not p.get("n")]
+  label, best = target["name"], min(counts)
+  debug(t"{label} pass {len(counts)} at {job['sha'][:7]}: {len(gaps)} gaps, best {best}, PR none")
   mine, others = claim(book, conductor(), "main", gaps, main=True)
   told_holders(conductor(), book, others, "main", job["sha"], job["taken"])
   if gaps:
@@ -742,12 +750,14 @@ async def advanced(target: dict, book: dict, job: dict, words: str, head: str) -
       else {"held": sorted(others), "sha": job["sha"]}
     )
     if stalled(counts):
-      book.update(state="stalled", since=head)
-      tell_home(
-        f"{target['name']} stalled: its last {STALL} passes found {counts[-STALL:]} gaps against the words of the"
-        f" owner, no fewer than its best before them. His words or the measure must change, and only he changes his"
-        f" words. Its ledger is {BOOKS}/{target['name']}.json, and its last gaps are:\n{listed(gaps, {})[:3000]}"
-      )
+      book.update(state="stalled", since=head, named=named(target, gaps))
+      if book.get("toldbest") != min(counts):
+        book["toldbest"] = min(counts)
+        tell_home(
+          f"{target['name']} stalled: its last {STALL} passes found {counts[-STALL:]} gaps against the words of the"
+          f" owner, no fewer than its best before them. His words or the measure must change, and only he changes his"
+          f" words. Its ledger is {BOOKS}/{target['name']}.json, and its last gaps are:\n{listed(gaps, {})[:3000]}"
+        )
   else:
     book["clean"] += 1
     if book["clean"] >= CLEAN:
@@ -762,6 +772,8 @@ async def advanced(target: dict, book: dict, job: dict, words: str, head: str) -
 async def screened(target: dict, book: dict, job: dict, gaps: list[list[str]], words: str) -> None:
   c, n, sha = conductor(), job["n"], job["sha"]
   gaps, others = claim(book, c, str(n), gaps)
+  label = target["name"]
+  debug(t"{label} PR #{n} at {sha[:7]}: {len(gaps)} gaps")
   told_holders(c, book, others, str(n), sha, job["taken"])
   book["heads"][f"{n} {sha}"] = {**book["heads"].get(f"{n} {sha}", {}), "state": "gaps" if gaps else "clean", "gaps": gaps}
   if not gaps:
@@ -797,7 +809,9 @@ async def converge(target: dict, ticks: int = 0) -> dict:
     head = await main_head()
     words = await ruling(target)
     said = book["faulted"] if book["state"] == "faulted" else book["words"]
-    if book["state"] in ("converged", "stalled", "faulted") and (words != said or await moved(target, book["since"], head)):
+    if book["state"] in ("converged", "stalled", "faulted") and (
+      words != said or await moved(target, book["since"], head, book.get("named") if book["state"] == "stalled" else None)
+    ):
       book.update(state="", clean=0)
     if book["step"] and await settled(target, book["step"], head):
       book["step"] = None
