@@ -368,7 +368,7 @@ test("the last row of a thread whose model works shows a loader left of the numb
     );
     // The tick draws the row again from the stream, and no other part of the feed.
     await new Promise((done) => setTimeout(done, 250));
-    expect(await row()).toMatch(/^[ ┃]+[\u2800-\u28ff]1 +# Then I wait\. +[^\u2800-\u28ff ]/);
+    expect(await row()).toMatch(/^[ ┃]+[\u2800-\u28ff] 1 +# Then I wait\. +[^\u2800-\u28ff ]/);
     await session.submit("/cancel");
   }));
 
