@@ -843,16 +843,16 @@ test("an operator answers a prompt of a list, a dict, a tuple or a union of the 
   }
 });
 
-test("a session with no model puts to the operator every prompt that names no actor, the acknowledgment among them", async () => {
+test("a session with no model puts to the operator every prompt that names no actor, a notice among them", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-operator-alone-"));
-  const { promise: acknowledgment, resolve: acknowledged } = Promise.withResolvers<string>();
+  const { promise: notice, resolve: noticed } = Promise.withResolvers<string>();
   // The first example of the README, whose callback answers for the operator.
   const session = boot({
     cwd,
     record: join(cwd, "work.jsonl"),
     roster: [],
     operator: async ({ shape, message }) => {
-      if (shape === "None") acknowledged(message);
+      if (shape === "None") noticed(message);
       return shape === "str" ? `You asked: ${message}` : null;
     },
   });
@@ -862,8 +862,8 @@ test("a session with no model puts to the operator every prompt that names no ac
     expect(await engine.prompt("str", { message: "What is this project?", on })).toBe(
       "You asked: What is this project?",
     );
-    engine.rung({ word: 'b = bash("true")', on });
-    expect(await acknowledgment).toBe("bash1 done");
+    engine.rung({ word: 'prompt(None, "The notes are ready.")', on });
+    expect(await notice).toBe("The notes are ready.");
   } finally {
     await session.dispose();
     await rm(cwd, { recursive: true });
