@@ -564,9 +564,10 @@ async def settled(target: dict, step: dict, head: str) -> bool:
   c = conductor()
   if step.get("routed"):
     return all(over(w) for w in step["routed"]) or await moved(target, step["sha"], head)
-  if any(item[0] == step["key"] for item in c["queue"]):
+  own = c["taken"](step["key"])
+  if own == "queued":
     return False
-  step["worker"] = step["worker"] or next((w for w, key in c["working"].items() if key == step["key"]), "")
+  step["worker"] = step["worker"] or own
   if not step["worker"]:
     return True
   if step["worker"] in c["working"]:
