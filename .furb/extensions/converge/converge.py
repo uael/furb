@@ -10,7 +10,8 @@ The target converges after CLEAN passes in a row with no gap, and stalls after S
 The owner rules, on 10-29: "TUI PR merge as soon as ready, defects from the converge loop is then run only once and the defects are addressed as follow up." So converge gives the conductor no veto: a PR merges on its checks alone. converge_veto still judges a PR when a word asks it, as main and main with the PR merged in it, in one run, with trains that split in halves. converge(target, 1) runs one pass of main after the merges, and its gaps go to follow-up items. converge puts no label on a PR.
 A grant holds each chain of a judge under EACH dollars. A judge whose chain waits on a usage limit is neither cut nor counted, and its BOUND starts again when the limit ends. A judge that fails, or that the round cuts at BOUND or by a pause, gives no answer: its pass is inconclusive. A pass whose judges the round cut all counts as no try, and a head whose judges failed to answer twice is stuck, which tells the operator and keeps the veto until a new head.
 A target keeps CAPTURES trees, <tree>-1 to <tree>-N, each with a home of the gallery of its own under FURB_GALLERY_ROOT, so its captures run at once, each in a tree where no other capture runs, at most as many as the free slots of the cap of chains of the round, and one at least. A pass of main runs in the first tree alone, so its frames and those of the pass before it read the same paths.
-The ledger of a target, .furb/converge/<name>.json, keeps each pass, the frames and the records of the last pass, each judged head and the step that runs, so a later life goes on from it. The loop ends when it spent JOBS captures or USD dollars."""
+A gap is held once. The ledger of a target keeps each open gap, keyed by its capture and the words of the owner that it quotes, for the PR or the pass of main that showed it first. A head that shows a gap that the ledger holds for another live PR, or that a pass of main shows, has no such gap: converge tells the one worker or item that holds it, once for each PR, orders no second one, and judges the head on its own gaps alone. A gap leaves the ledger when its holder shows it no more, and the gap of a PR that ended leaves it once a pass of main no longer shows it.
+The ledger of a target, .furb/converge/<name>.json, keeps each pass, the open gaps, the frames and the records of the last pass, each judged head and the step that runs, so a later life goes on from it. The loop ends when it spent JOBS captures or USD dollars."""
 JUDGES = ("claude-cli:sonnet/high",)
 CLEAN = 2
 STALL = 3
@@ -372,6 +373,7 @@ def book_of(target: dict) -> dict:
     ("since", ""),
     ("words", ""),
     ("faulted", ""),
+    ("ledger", {}),
     ("step", None),
     ("frames", ""),
     ("records", {}),
@@ -571,8 +573,92 @@ def stepped(target: dict, book: dict, gaps: list[list[str]], taken: dict[str, st
   return {"key": key, "sha": sha, "worker": "", "pr": 0}
 
 
+def keyed(shot: str, quote: str) -> str:
+  return f"{shot} | {plain(quote)}"
+
+
+def live(c: dict, holder: str) -> bool:
+  return holder == "main" or (holder.isdigit() and int(holder) in c["prs"])
+
+
+def claim(book: dict, c: dict, holder: str, gaps: list[list[str]], main: bool = False) -> tuple[list[list[str]], dict]:
+  """The ledger of the target holds each open gap once, for the PR or the pass of main that showed it first.
+
+  A gap that another live holder holds is no gap of this holder: it comes back in the second value, by holder.
+  A holder that shows a gap no more lets it go, and a pass of main lets go of the gaps of a PR that ended.
+  """
+  ledger, mine, others, seen = book["ledger"], [], {}, set()
+  for one in gaps:
+    shot, text, quote = one
+    if not quote:
+      mine.append(one)
+      continue
+    key = keyed(shot, quote)
+    if key in seen:
+      continue
+    seen.add(key)
+    was = ledger.get(key)
+    if was and was["holder"] != holder and live(c, was["holder"]):
+      others.setdefault(was["holder"], []).append((one, key))
+      continue
+    also = was["also"] if was and was["holder"] == holder else []
+    ledger[key] = {"shot": shot, "gap": text, "quote": quote, "holder": holder, "also": also}
+    mine.append(one)
+  for key, was in [*ledger.items()]:
+    if key not in seen and (was["holder"] == holder or (main and not live(c, was["holder"]))):
+      del ledger[key]
+  return mine, others
+
+
+def deliver(c: dict, book: dict, holder: str, text: str) -> None:
+  """Tell the one worker or item that holds a gap."""
+  if holder == "main":
+    step = book["step"] or {}
+    owners = [w for w in step.get("routed", []) if not over(w)]
+    for w in owners:
+      c["quietly"](prompt, None, text, on=c["working_at"](w))
+    if owners:
+      return
+    key = step.get("key", "")
+  else:
+    held = c["prs"].get(int(holder))
+    own = c["owner_of"](held) if held else ""
+    if own:
+      c["quietly"](prompt, None, text, on=c["working_at"](own))
+      return
+    start = f"converge-pr{holder}-"
+    key = next((k for k, *_ in c["queue"] if k.startswith(start)), "") or next(
+      (k for k in c["working"].values() if k.startswith(start)), ""
+    )
+  worker = c["taken"](key) if key else ""
+  if worker == "queued":
+    c["queue"][:] = [(k, t + "\n\n" + text if k == key else t, th) for k, t, th in c["queue"]]
+  elif worker:
+    c["quietly"](prompt, None, text, on=c["working_at"](worker))
+
+
+def told_holders(c: dict, book: dict, others: dict, who: str, sha: str, taken: dict[str, str]) -> None:
+  """A gap that a holder has already goes to that holder, once for each PR or pass that shows it again."""
+  for holder, items in others.items():
+    fresh = [(one, key) for one, key in items if who not in book["ledger"][key]["also"]]
+    if not fresh:
+      continue
+    for _, key in fresh:
+      book["ledger"][key]["also"].append(who)
+    shown = "the pass of main" if who == "main" else f"the PR #{who}"
+    text = safe(
+      f"converge found {len(fresh)} gap(s) that your work holds again in {shown} at {sha[:7]}. It orders no second"
+      f" worker or item for them, and it judges {shown} on its own gaps alone. Fix them in your work, and each one"
+      f" is served:\n\n{listed([one for one, _ in fresh], taken)}"
+    )
+    deliver(c, book, holder, text)
+
+
 async def settled(target: dict, step: dict, head: str) -> bool:
   c = conductor()
+  if step.get("held"):
+    gone = all(not (h.isdigit() and int(h) in c["prs"]) for h in step["held"])
+    return gone or await moved(target, step["sha"], head)
   if step.get("routed"):
     return all(over(w) for w in step["routed"]) or await moved(target, step["sha"], head)
   own = c["taken"](step["key"])
@@ -892,9 +978,15 @@ async def advanced(target: dict, book: dict, job: dict, words: str, head: str) -
     book["records"] = job["records"]
   book["words"] = words
   counts = [len(p["gaps"]) for p in book["passes"] if "gaps" in p and not p.get("n")]
+  mine, others = claim(book, conductor(), "main", gaps, main=True)
+  told_holders(conductor(), book, others, "main", job["sha"], job["taken"])
   if gaps:
     book["clean"] = 0
-    book["step"] = stepped(target, book, gaps, job["taken"], job["sha"], words)
+    book["step"] = (
+      stepped(target, book, mine, job["taken"], job["sha"], words)
+      if mine
+      else {"held": sorted(others), "sha": job["sha"]}
+    )
     if stalled(counts):
       book.update(state="stalled", since=head)
       tell_home(
@@ -915,6 +1007,8 @@ async def advanced(target: dict, book: dict, job: dict, words: str, head: str) -
 
 async def screened(target: dict, book: dict, job: dict, gaps: list[list[str]], words: str) -> None:
   c, n, sha = conductor(), job["n"], job["sha"]
+  gaps, others = claim(book, c, str(n), gaps)
+  told_holders(c, book, others, str(n), sha, job["taken"])
   book["heads"][f"{n} {sha}"] = {**book["heads"].get(f"{n} {sha}", {}), "state": "gaps" if gaps else "clean", "gaps": gaps}
   if not gaps:
     return

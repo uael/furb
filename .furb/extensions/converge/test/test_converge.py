@@ -981,3 +981,39 @@ def test_a_head_that_only_merged_main_keeps_the_verdict_of_the_same_change(world
   assert asyncio.run(world.converge_veto(pr(sha="def", verdict="pass"))) is False
   assert world.ns["LIVE"]["tui"]["heads"]["5 def"]["carried"] is True
   assert len(world.judged()) == 1
+
+
+def test_one_gap_that_two_prs_show_is_ordered_once_and_told_to_the_one_that_holds_it(world: World) -> None:
+  converged(world)
+  world.judge = lambda message, to: gap()
+  world.say(r"gh pr view [56] --json files", "tui/src/app.ts\n")
+  world.say(r"python3 -I -", listing(kind="text"))
+  world.round["prs"].update({5: pr(5, "abc", "pass"), 6: pr(6, "def", "pass")})
+  assert asyncio.run(world.converge_veto(world.round["prs"][5])) is True
+  assert asyncio.run(world.converge_veto(world.round["prs"][6])) is False
+  [item] = world.round["queue"]
+  assert item[0].startswith("converge-pr5-") and "the PR #6" in item[1]
+  assert item[1].count("The feed shows bright white text.") == 2
+  [comment] = [c for c in world.commands if c.startswith("gh pr comment")]
+  assert comment.startswith("gh pr comment 5")
+  assert world.book()["heads"]["6 def"]["state"] == "clean" and world.book()["heads"]["6 def"]["gaps"] == []
+  [entry] = world.book()["ledger"].values()
+  assert entry["holder"] == "5" and entry["also"] == ["6"]
+
+
+def test_a_holder_that_shows_a_gap_no_more_lets_it_go_and_a_pass_of_main_frees_the_gap_of_a_pr_that_ended(
+  world: World,
+) -> None:
+  book = {"ledger": {}, "step": None}
+  c = world.round
+  c["prs"].update({5: pr(5), 6: pr(6)})
+  assert world.claim(book, c, "5", gap()) == (gap(), {})
+  mine, others = world.claim(book, c, "6", gap())
+  assert mine == [] and list(others) == ["5"]
+  assert world.claim(book, c, "5", [])[0] == [] and book["ledger"] == {}
+  world.claim(book, c, "5", gap())
+  del c["prs"][5]
+  assert world.claim(book, c, "main", gap(), main=True)[0] == gap()
+  assert [e["holder"] for e in book["ledger"].values()] == ["main"]
+  world.claim(book, c, "main", [], main=True)
+  assert book["ledger"] == {}
