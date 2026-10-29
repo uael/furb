@@ -1,3 +1,4 @@
+import ast
 import asyncio
 import hashlib
 import json
@@ -692,9 +693,32 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 
 STATE = (
   "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed fixes silent"
-  " comments measures timers noted debriefs briefed owns watched after parked awaited covers kinds pool slots areas vetoes ordered tips shifted hired paced landed heard handled sent ends requeued"
+  " comments measures timers noted debriefs briefed owns watched after parked awaited covering kinds pool slots areas vetoes ordered tips shifted hired paced landed heard handled sent ends requeued"
   " statused secret budgeted flaky runs_read"
 ).split()
+
+
+def test_no_name_of_the_state_of_the_round_or_of_converge_is_a_name_of_the_engine() -> None:
+  furb = HERE.parents[2]
+  tree = ast.parse((furb / "src" / "furb" / "engine.py").read_text(encoding="utf-8"))
+  engine: set[str] = set()
+  for node in tree.body:
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+      engine.add(node.name)
+    elif isinstance(node, ast.Assign):
+      engine |= {x.id for x in node.targets if isinstance(x, ast.Name)}
+    elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+      engine.add(node.target.id)
+    elif isinstance(node, ast.TypeAlias):
+      engine.add(node.name.id)
+    elif isinstance(node, (ast.Import, ast.ImportFrom)):
+      engine |= {(x.asname or x.name).split(".")[0] for x in node.names}
+  bound = set()
+  for word in ("conductor/conductor.py", "converge/converge.py"):
+    text = (furb / ".furb" / "extensions" / word).read_text(encoding="utf-8")
+    bound |= set(re.findall(r'globals\(\)\.setdefault\("(\w+)"', text))
+  assert "queue" in bound
+  assert sorted(bound & engine) == []
 
 
 def play(conductor: Round) -> None:
@@ -1870,11 +1894,11 @@ async def test_a_failed_check_that_waits_on_a_decision_of_the_owner_gets_no_orde
 @JQ
 async def test_a_flake_that_a_working_item_covers_goes_to_its_worker_by_its_test_or_its_key(conductor: Round) -> None:
   conductor.busy("p1", "bench-fix", OPUS)
-  conductor.covers["bench-fix"] = ["a host test", "budget-the-tui"]
+  conductor.covering["bench-fix"] = ["a host test", "budget-the-tui"]
   await flaked(conductor)
   assert conductor.queue == []
   assert conductor.prompts[-1][1] == "chain-bench-fix" and "came again" in conductor.prompts[-1][0]
-  conductor.covers["bench-fix"] = ["flake-a-host-test"]
+  conductor.covering["bench-fix"] = ["flake-a-host-test"]
   assert (conductor.taken("flake-a-host-test"), conductor.taken("budget-the-tui"), conductor.taken("bench-fix")) == ("p1", "", "p1")
   conductor.working.clear()
   conductor.queue.append(("bench-fix", "", "ci"))
@@ -1953,3 +1977,22 @@ def test_a_worker_takes_a_free_workspace_at_its_hire_and_gives_it_back_when_it_e
   assert first not in conductor.slots
   conductor.real_hire("k3", "three", "gui")
   assert f"{repo}-w1," in conductor.prompts[-1][0]
+
+
+def test_the_triage_folds_like_items_into_the_earlier_one_before_a_hire(conductor: Round) -> None:
+  words = "\n".join(f"The owner wants the line {i} of the feed to keep its color when it scrolls." for i in range(6))
+  conductor.queue[:] = [
+    ("converge-pr1", f"The open PR #1.\n{words}\nGap: the first row is cut off at column eighty of the screen.", "tui"),
+    ("other", "Fix the flake of the TUI in the bench of a new act, which fails one run in ten.", "tui"),
+    ("converge-pr2", f"The open PR #2.\n{words}\nGap: the second row has the wrong tone in the dark theme.", "tui"),
+    ("converge-pr3", f"The open PR #3.\n{words}\nGap: a third row.", "gui"),
+  ]
+  conductor.triage()
+  folded = conductor.queue[0][1]
+  assert folded.startswith(conductor.TRIAGED) and folded.count("line 3 of the feed") == 1
+  assert "## The item converge-pr2, folded in by the triage\nThe open PR #2.\nGap: the second row" in folded
+  conductor.staff()
+  assert [key for key, _ in conductor.hired] == ["converge-pr1", "other", "converge-pr3"]
+  assert conductor.covers == {"converge-pr1": ["converge-pr2"]}
+  assert conductor.heard == ["The triage folded the item converge-pr2 into converge-pr1, which it is like."]
+  assert conductor.taken("converge-pr2") == "worker1"
