@@ -122,8 +122,8 @@ unsync = "0.2"
 jiff = "0.2"
 # A page of the web, which the extension web reads, as Markdown.
 htmd = "0.5"
-pyo3 = { version = "0.29.2", features = ["generate-import-lib", "multiple-pymethods"], optional = true }
-napi = { version = "3", default-features = false, features = ["napi6", "serde-json", "dyn-symbols"], optional = true }
+pyo3 = { version = "0.29.2", features = ["generate-import-lib", "indexmap", "multiple-pymethods"], optional = true }
+napi = { version = "3", default-features = false, features = ["napi6", "serde-json", "dyn-symbols", "object_indexmap"], optional = true }
 napi-derive = { version = "3", optional = true }
 # No line of furb names salsa. The ruff crates 0.0.9 build on salsa 0.28.2 alone, and salsa 0.28.5 breaks them, so a
 # crate that takes furb with no lock of ours builds only when furb pins salsa and its macros of rules.

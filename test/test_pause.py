@@ -2,7 +2,7 @@
 
 import pytest
 
-from conftest import born, chained, heads, hushed, paragraphs, ran, said, settle, slow, stalled, world_says
+from conftest import born, chained, heads, hushed, paragraphs, said, settle, slow, stalled, world_says
 from furb import engine
 from furb.engine import Refused
 
@@ -62,7 +62,7 @@ async def test_a_paused_chain_goes_quiet_as_its_in_flight_work_returns() -> None
   quiet = len(log)
   await settle()
   assert len(log) == quiet and len(said(log, "reply")) == 1
-  assert ran(log) == []
+  assert [one[4] for one in said(log, "run")] == [said(log, "rung")[0][1] + "_told"]
   assert engine.peek(act, ...) is ...
 
 
