@@ -1953,3 +1953,22 @@ def test_a_worker_takes_a_free_workspace_at_its_hire_and_gives_it_back_when_it_e
   assert first not in conductor.slots
   conductor.real_hire("k3", "three", "gui")
   assert f"{repo}-w1," in conductor.prompts[-1][0]
+
+
+def test_the_triage_folds_like_items_into_the_earlier_one_before_a_hire(conductor: Round) -> None:
+  words = "\n".join(f"The owner wants the line {i} of the feed to keep its color when it scrolls." for i in range(6))
+  conductor.queue[:] = [
+    ("converge-pr1", f"The open PR #1.\n{words}\nGap: the first row is cut off at column eighty of the screen.", "tui"),
+    ("other", "Fix the flake of the TUI in the bench of a new act, which fails one run in ten.", "tui"),
+    ("converge-pr2", f"The open PR #2.\n{words}\nGap: the second row has the wrong tone in the dark theme.", "tui"),
+    ("converge-pr3", f"The open PR #3.\n{words}\nGap: a third row.", "gui"),
+  ]
+  conductor.triage()
+  folded = conductor.queue[0][1]
+  assert folded.startswith(conductor.TRIAGED) and folded.count("line 3 of the feed") == 1
+  assert "## The item converge-pr2, folded in by the triage\nThe open PR #2.\nGap: the second row" in folded
+  conductor.staff()
+  assert [key for key, _ in conductor.hired] == ["converge-pr1", "other", "converge-pr3"]
+  assert conductor.covers == {"converge-pr1": ["converge-pr2"]}
+  assert conductor.heard == ["The triage folded the item converge-pr2 into converge-pr1, which it is like."]
+  assert conductor.taken("converge-pr2") == "worker1"
