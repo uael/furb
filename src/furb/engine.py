@@ -147,7 +147,7 @@ def close(value: object, id=""):
           for x in (s.__args__ if isinstance(s, type(int | str)) else [s])
         )
       except Exception:
-        raise Refused(f"{value!r} not {shape}") from None
+        raise Refused(repr(value) + " not " + shape) from None
   control("close", "closed", id, value)
   if under(who, id):
     raise CancelledError()
@@ -234,15 +234,15 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
     raise Refused("no chain " + source)
 
   def ear(id):
-    rungs = {x: w for x, w in program(source).items() if over(x) or not get(x)}
+    ladder = {x: w for x, w in program(source).items() if over(x) or not get(x)}
     refused, running, waiting, last, heard = set(), {}, {}, standing(), []
-    asking = unseen = ran = reply = note = to = ""
+    asking = news = ran = reply = note = to = ""
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
     def bind(whose):
       w = "\n\n".join(heard)
       heard.clear()
-      return w and act("run", id, None, n := whose + "_told", unquoted(rungs.setdefault(n, w)), "")
+      return w and act("run", id, None, n := whose + "_told", unquoted(ladder.setdefault(n, w)), "")
 
     def takes():
       teach(id, stood)
@@ -250,17 +250,17 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
 
     def replay(of="", words=""):
       fresh = not of
-      for whose, said in [*rungs.items()]:
+      for whose, said in [*ladder.items()]:
         if under(whose, of):
           if (words + "\n").startswith(said + "\n"):
             words = words[len(said) + 1 :]
           else:
             fresh |= whose not in refused
-            del rungs[whose]
+            del ladder[whose]
             cancel(whose)
       if fresh:
         yield "module", id, {**globals(), "__name__": id, "actor": stood}
-        for whose, said in rungs.items():
+        for whose, said in ladder.items():
           whose in refused or rung(said, whose)
       if words:
         with site.set(of):
@@ -294,10 +294,12 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
         case ("done", about, _, value) if running.get(maker := r[2]) in (
           False,
           isinstance(value, Exception) and r[0] != "reply" and "",
-        ) and repr(about) not in str(transcript(id, "wants")):
+        ) and repr(about) not in str(
+          transcript(id, "wants") + [x[1] for x in transcript(id, "close") if scope(x[2]) == id != x[2]]
+        ):
           scope(about) != id and (yield "tell", maker, [headed(about, "done", value=value)])
           value is None or isinstance(value, CancelledError) or (
-            unseen := (about + " done", maker, isinstance(value, Exception))
+            news := (about + " done", maker, isinstance(value, Exception))
           )
         case ("done", _, by, Refused() as why) if (
           r[0] == "reply"
@@ -306,16 +308,16 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
           and (maker := (get(p := get(r[2])[2]) or a)[2]) in running
         ):
           yield "tell", maker, [headed(p, "paused", why=why)]
-          running[maker] or (unseen := (p + " paused", maker, 0))
+          running[maker] or (news := (p + " paused", maker, 0))
       if scope(a[1]) != id:
         continue
       if a[0] in ("ready", "done"):
         waiting.pop(a[1], None)
       match a:
         case ("read", about, by, _, path) if prompted(path) and scope(path) == id:
-          yield "done", about, Text(path, "\n".join(w for x, w in rungs.items() if x != by and under(x, path)))
+          yield "done", about, Text(path, "\n".join(w for x, w in ladder.items() if x != by and under(x, path)))
         case ("write", about, by, _, Text(path, content) as text) if prompted(path) and scope(path) == id:
-          under(by, path) and rungs.pop(by, None)
+          under(by, path) and ladder.pop(by, None)
           yield from replay(path, content.rstrip("\n"))
           yield "done", about, text
         case ("read", about, *_, path) if (door := re.fullmatch(r"(bash\d+)/(stdout|stderr)", path)) and get(door[1]):
@@ -340,9 +342,8 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
         case ("ready", rid, _, word):
           try:
             rid == asking or bind(rid)
-            ran = tells(rid) and (rid, len(heard))
-            rungs[(donor := r[5]) or rid] = word
-            found = ran and gate(word)
+            ladder[(donor := r[5]) or rid] = word
+            found = (ran := tells(rid) and (rid, len(heard))) and gate(word)
             if not found:
               running[rid] = act("run", id, None, rid, unquoted(word), donor)
           except Refused as e:
@@ -373,11 +374,11 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
             share=filled(reply) or None,
             waits=[c for *_, c in transcript(id, "wants") if not over(c)] or None,
           )
-          unseen = ""
-      if unseen and not waiting and (r[2] in running or over(r[2]) or a[0] == "tell"):
-        ours = get(unseen[1])[2]
-        prompted(ours) and (unseen[2] or not over(ours)) and prompt(None, unseen[0], on=ours)
-        unseen = ""
+          news = ""
+      if news and not waiting and (r[2] in running or over(r[2]) or a[0] == "tell"):
+        ours = get(news[1])[2]
+        prompted(ours) and (news[2] or not over(ours)) and prompt(None, news[0], on=ours)
+        news = ""
 
   return act("chain", on, ear, label, source)
 
@@ -486,7 +487,7 @@ class Act[T = object](str):
         yield
       (f.set_exception if isinstance(got := peek(self), BaseException) else f.set_result)(got)
 
-    drive(g := waits(), f"{self} waits {id(g)}")
+    drive(g := waits(), self + " waits " + str(id(g)))
     try:
       return (yield from f)
     finally:
@@ -599,17 +600,17 @@ def shown(text, show):
 
 
 def unquoted(word):
-  made, at, shut = [], 0, set()
+  made, at, stray = [], 0, set()
   for o in re.finditer(r"(?m)^<s:(\w+)>\n?", word):
-    if o.start() >= at and o[1] not in shut:
-      if m := re.compile(f"(?m)</s:{o[1]}>$").search(word, o.end()):
+    if o.start() >= at and o[1] not in stray:
+      if m := re.compile("(?m)</s:" + o[1] + ">$").search(word, o.end()):
         made += [
           word[at : o.start()],
-          f"{o[1]} = {word[o.end() : m.start()]!r}" + "\n" * word.count("\n", o.start(), m.end()),
+          o[1] + " = " + repr(word[o.end() : m.start()]) + "\n" * word.count("\n", o.start(), m.end()),
         ]
         at = m.end()
       else:
-        shut.add(o[1])
+        stray.add(o[1])
   return "".join(made) + word[at:]
 
 
@@ -797,7 +798,7 @@ def boot(record=(), **outside):
     k = {a[0], *q[:4], scope(q[2]), scope(q[3])}
     return sorted(
       (x for x in alive.items() if k & (waits.get(x[0]) or k) or a[0] in ("pause", "wake", "cancel", "close")),
-      key=lambda pair: (pair[0] not in known, pair[0] in outside),
+      key=lambda x: (x[0] not in known, x[0] in outside),
     )
 
   def holds(on, facts):
