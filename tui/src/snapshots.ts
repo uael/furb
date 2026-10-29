@@ -13,6 +13,7 @@ import {
 import type { Exit } from "furb/life";
 import type { Roster, Snapshot, Usage } from "./bridge.ts";
 import { clock } from "./clock.ts";
+import { expandHome } from "./files.ts";
 import { lineCounts } from "./format.ts";
 import { queueDispatches } from "./queue.ts";
 import type { ActRow } from "./session.ts";
@@ -227,7 +228,7 @@ export class Snapshots {
       view.worded = { whole: true, words: view.program };
     }
     view.turns ??= this.engine.turns({ on: selected });
-    view.directory ??= this.engine.cwd({ on: selected });
+    view.directory ??= expandHome(this.engine.cwd({ on: selected }));
     view.actor ??= String(this.engine.inspect("actor", selected).value ?? "");
     if (this.entries !== this.session.entries.length) {
       this.entries = this.session.entries.length;

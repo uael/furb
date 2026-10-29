@@ -18,7 +18,7 @@ async def test_what_a_chain_stands_on() -> None:
   assert [a[4] for a in said(log, "reply")] == ["m/low"]
   assert engine.module(root)["actor"] == "m/low"
   assert engine.standing() == STANDS
-  doctrine = "/h/.furb/DOCTRINE.md"
+  doctrine = "/w/.furb/DOCTRINE.md"
   born(stands=[*STANDS, doctrine], files={doctrine: "Look first.\n"})
   assert engine.standing() == [*STANDS, doctrine]
 

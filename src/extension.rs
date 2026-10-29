@@ -36,6 +36,7 @@ use crate::{
   engine::ROOT,
   fact::{Fact, named},
   value::{Fault, Object, Text, entry},
+  world::files,
 };
 
 /// The kind of the fact that enables an extension in a life, which [`extensions`] says and reads.
@@ -96,9 +97,10 @@ fn imports_furb(line: &str) -> bool {
 }
 
 /// An extension: its name, its word, its life word, which is empty when it has none, whether it plays on the root
-/// alone, and the path of the file of its word, which each chain reads as a turn of its setup, and which is empty
-/// when no file stands for the word. An extension that plays on the root alone plays on no other chain but one whose
-/// source had it, since that chain makes the rung of its source again; any other extension plays on every chain.
+/// alone, and the path of the file of its word, with `~` for the home of the user as the World writes a path for a
+/// model, which each chain reads as a turn of its setup, and which is empty when no file stands for the word. An
+/// extension that plays on the root alone plays on no other chain but one whose source had it, since that chain makes
+/// the rung of its source again; any other extension plays on every chain.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "typescript", napi_derive::napi(object))]
 #[cfg_attr(feature = "python", derive(pyo3::FromPyObject, pyo3::IntoPyObject), pyo3(from_item_all))]
@@ -176,7 +178,7 @@ pub fn official() -> Vec<Extension> {
 fn copy(name: &str, file: &str, text: &str, dev: Option<&Path>, home: Option<&Path>) -> String {
   let at = Path::new("extensions").join(name).join(file);
   if let Some(dev) = dev.map(|one| one.join(&at)).filter(|one| one.is_file()) {
-    return dev.display().to_string();
+    return files::tilded(&dev, home);
   }
   let Some(official) = home.map(|one| one.join(".furb").join(&at)) else { return String::new() };
   if fs::read_to_string(&official).ok().as_deref() != Some(text)
@@ -186,7 +188,7 @@ fn copy(name: &str, file: &str, text: &str, dev: Option<&Path>, home: Option<&Pa
   {
     return String::new();
   }
-  official.display().to_string()
+  files::tilded(&official, home)
 }
 
 /// The extension in a folder, under the name that its config gives it: its manifest, whose name must be that
@@ -197,7 +199,7 @@ pub fn load(name: &str, root: &Path) -> Result<Extension, Fault> {
   let text = fs::read_to_string(&file).map_err(|no| refused(no.to_string()))?;
   let read = |word: &str| fs::read_to_string(root.join(word)).map_err(|no| format!("{word}: {no}"));
   let mut one = manifested(&text, read).map_err(refused)?;
-  one.file = root.join(&one.file).display().to_string();
+  one.file = files::tilded(&root.join(&one.file), std::env::home_dir().as_deref());
   let lawful = name.starts_with(|one: char| one.is_ascii_lowercase())
     && name.chars().all(|one| one.is_ascii_lowercase() || one.is_ascii_digit() || one == '-');
   if !lawful || one.name != name {
@@ -588,14 +590,14 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
         // runs and that a config turns on reloads it when its word changed.
         "done" if named(a.about(), "write") && a.by() != JOURNAL => {
           let Some(text) = a.word(0).and_then(Text::of) else { continue };
-          let file = PathBuf::from(&text.path);
+          let Ok(file) = files::placed(Path::new(""), &text.path) else { continue };
           let config = file.ends_with(Path::new(".furb").join("config.json"));
           if !config && !file.parent().is_some_and(|one| one.join("furb.json").is_file()) {
             continue;
           }
           let got = co.call("standing", vec![], vec![]).await?;
-          let Some(project) =
-            entry(&got.as_ref(), 1).and_then(|one| one.as_str().map(PathBuf::from))
+          let Some(Ok(project)) = entry(&got.as_ref(), 1)
+            .and_then(|one| one.as_str().map(|one| files::placed(Path::new(""), one)))
           else {
             continue;
           };

@@ -19,7 +19,8 @@ meanings. The entry of such a name here gives only its form in the engine.
 - window: the context size of a model in tokens, as its roster entry says.
 - share: the part of a window that one model response used.
 - standing: what the chains stand on, which the World answers a stand with: the roster, the directory, the default
-  actor and the path of the doctrine; its one home is the transcript of the root, where the done of the last stand holds it, and a chain tells
+  actor and the path of the doctrine, each path with `~` in place of the home of the user, as every path that the World
+  writes for a model; its one home is the transcript of the root, where the done of the last stand holds it, and a chain tells
   each standing it takes in one paragraph headed standing, which binds the roster, the directory and the actor.
 - stand: the act that asks the World for the standing, which boot makes on the root as a life opens and again at
   the tip of a later life.

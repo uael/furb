@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import WORLD, acts, born, machine, paragraphs, said, settle
+from conftest import WORLD, acts, born, machine, paragraphs, said, settle, tilded
 from furb import engine
 from furb.engine import Refused
 
@@ -72,4 +72,4 @@ async def test_a_cd_to_a_path_of_scratch_is_refused(tmp_path: Path) -> None:
     engine.cd("scratch://notes", on=root)
   where = engine.cwd(on=root)
   live.end()
-  assert where == str(tmp_path)
+  assert where == tilded(tmp_path)

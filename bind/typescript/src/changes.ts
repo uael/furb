@@ -14,10 +14,17 @@ import {
   truncateSync,
   writeSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { dirname, join, resolve, sep } from "node:path";
 import { call, type Ear } from "./ears.js";
 import { type Fact, isQuestion } from "./types.js";
+
+/** A path that the World writes with `~` for the home of the user, as a path of the machine. */
+function homed(path: string): string {
+  return path === "~" || path.startsWith("~/") || path.startsWith(`~${sep}`)
+    ? join(homedir(), path.slice(1))
+    : path;
+}
 
 export interface FileChange {
   path: string;
@@ -171,7 +178,7 @@ export class FileChanges {
         const text = words[1] as { path?: unknown } | undefined;
         if (typeof text?.path !== "string" || text.path.includes("://")) continue;
         const here = String(yield call("cwd", [], { on: words[0] }));
-        const path = resolve(directory, here, text.path);
+        const path = resolve(directory, homed(here), homed(text.path));
         let old = "";
         let made = false;
         try {

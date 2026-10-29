@@ -11,7 +11,10 @@ use crate::{
   ear::{Co, Ear, hear, hearing, say},
   fact::{Fact, named},
   value::{Fault, Object, ObjectRef, Text},
-  world::{files::read, here, resolved},
+  world::{
+    files::{placed, read},
+    here,
+  },
 };
 
 /// The files that hold the memory of a folder: the first of them that the folder holds.
@@ -51,7 +54,11 @@ pub fn memory(config: PathBuf) -> Box<dyn Ear> {
           }
           let here = here(&mut co, &on).await?;
           // A path of a scheme adds no folder of its own.
-          let target = if path.contains("://") { here.clone() } else { resolved(&here, &path) };
+          let target = if path.contains("://") {
+            here.clone()
+          } else {
+            placed(&here, &path).unwrap_or(here.clone())
+          };
           let chain = held.get(&on);
           let mut told: Vec<Text> = Vec::new();
           for one in

@@ -367,7 +367,13 @@ fn a_life_runs_the_extensions_that_its_record_enables_and_those_that_the_configs
   let every = "memory: await recall()\nskills: await listed()\ncompaction\nouroboros\nweb\nmcp: mcp_index()\n";
   assert_eq!(printed(yard.furb(&["extensions"]), ""), every, "the official extensions are on");
   let path = printed(yard.kept(&["run", "close(skill('brew').path)"]), "");
-  assert_eq!(path, format!("{:?}\n", skill.display().to_string()).replace('"', "'"));
+  // The World writes a path under the home of the user with ~ in place of the home.
+  let home = std::env::home_dir().filter(|home| home.parent().is_some());
+  let shown = match home.as_deref().and_then(|home| skill.strip_prefix(home).ok()) {
+    Some(rest) => format!("~{}{}", std::path::MAIN_SEPARATOR, rest.display()),
+    None => skill.display().to_string(),
+  };
+  assert_eq!(path, format!("{shown:?}\n").replace('"', "'"));
   let mut turns = yard.furb(&["turns", "--record"]);
   turns.arg(yard.record());
   let said = printed(turns, "");

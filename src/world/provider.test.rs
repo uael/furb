@@ -156,7 +156,9 @@ fn the_provider_answers_a_stand_with_its_roster_its_directory_its_default_actor_
   let standing = engine.standing().expect("the life stands");
   let doctrine = super::catalog::doctrine(&at).expect("a doctrine stands");
   // The default actor is the first model, at the level of an actor that names none. Python shows each backslash of a path of Windows twice.
-  let shown = |one: &Path| one.display().to_string().replace('\\', "\\\\");
+  let shown = |one: &Path| {
+    super::super::files::tilded(one, std::env::home_dir().as_deref()).replace('\\', "\\\\")
+  };
   let expected = format!(
     "[[['m', ['low', 'high'], 1000], ['operator', [], 200000]], '{}', 'm/high', '{}']",
     shown(&at),

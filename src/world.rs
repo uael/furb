@@ -57,7 +57,8 @@ use crate::{
 };
 
 /// The directory a chain stands in, which a path of it resolves against: where the chain went last, resolved against
-/// the directory the life stands on.
+/// the directory the life stands on, each read as a path of the machine where it names the home of the user with `~`,
+/// as the World writes it.
 pub(crate) async fn here<W: 'static>(co: &mut Co<W>, on: &str) -> Result<PathBuf, Fault> {
   let on = vec![("on", Object::string(on))];
   let cwd = co.call("cwd", vec![], on).await?;
@@ -67,7 +68,7 @@ pub(crate) async fn here<W: 'static>(co: &mut Co<W>, on: &str) -> Result<PathBuf
     .items()
     .and_then(|held| held.get(1).and_then(|one| one.as_str().map(str::to_owned)));
   let cwd = cwd.as_ref().as_str().map(str::to_owned).unwrap_or_default();
-  Ok(resolved(Path::new(&directory.unwrap_or_default()), &cwd))
+  files::placed(&files::placed(Path::new(""), &directory.unwrap_or_default())?, &cwd)
 }
 
 /// A path resolved against a directory, as a path of the machine: the directory with the path after it, or the path

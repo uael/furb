@@ -17,12 +17,13 @@ use crate::{
 /// The ear of the files: it answers a cd with the directory that the path names, a read with the text at the path
 /// and a write with the text as it stands after, but a write of a door of a command, which the ear of the commands
 /// answers, each resolved against the working directory of the chain, or with
-/// the refusal. The path of a read or a write that is `~` or starts with `~/`, or with `~\\` on Windows, resolves
+/// the refusal. The path of a cd, a read or a write that is `~` or starts with `~/`, or with `~\\` on Windows, resolves
 /// against the home of the user,
 /// and one of `scratch://` against the scratch directory of the life, which no chain stands in. A file whose every
 /// line ends with CRLF reads with LF, and a write to it writes CRLF. A path whose first part is the name of an act
 /// of the life is a door that no ear of the engine served, and never a file, so the ear refuses it with the chain of
-/// that act. A write puts the whole text in place in one step, as `stored` says, so no reader sees a torn file. A read
+/// that act. The path of each text, of each refusal and of each cd that it gives is as [`tilded`] writes it. A write
+/// puts the whole text in place in one step, as `stored` says, so no reader sees a torn file. A read
 /// of an image keeps it in the directory of the images of the life, the gallery, as `seen` says.
 pub fn files(scratch: Scratch, gallery: Option<PathBuf>) -> Box<dyn Ear> {
   hearing(&["cd", "read", "write"], move |mut co| async move {
@@ -49,8 +50,8 @@ pub fn files(scratch: Scratch, gallery: Option<PathBuf>) -> Box<dyn Ear> {
   })
 }
 
-/// The directory a cd came to: its path resolved against the working directory of the chain, when a directory
-/// stands there.
+/// The directory a cd came to: its path placed against the working directory of the chain, when a directory stands
+/// there, as [`tilded`] writes it.
 async fn moved(co: &mut Co, a: &Fact) -> Result<String, Fault> {
   let path = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
   let path = native(&path, cfg!(windows));
@@ -59,11 +60,12 @@ async fn moved(co: &mut Co, a: &Fact) -> Result<String, Fault> {
       "A chain cannot stand in {path}, since {SCRATCH} has no path to stand in."
     )));
   }
-  let at = resolved(&here(co, a.on()).await?, &path);
+  let at = placed(&here(co, a.on()).await?, &path)?;
+  let shown = tilded(&at, std::env::home_dir().as_deref());
   if !at.is_dir() {
-    return Err(Fault::refused(format!("There is no directory at {}.", at.display())));
+    return Err(Fault::refused(format!("There is no directory at {shown}.")));
   }
-  Ok(at.display().to_string())
+  Ok(shown)
 }
 
 /// What a read or a write came to.
@@ -102,17 +104,14 @@ async fn served(
       a.kind()
     )));
   }
-  let at = match homed(&path, std::env::home_dir()) {
-    Some(at) => at?,
-    None => resolved(&here(co, a.on()).await?, &path),
-  };
+  let at = placed(&here(co, a.on()).await?, &path)?;
   if let Some(content) = content {
     if let Some(parent) = at.parent() {
       fs::create_dir_all(parent).map_err(|no| failed(&no, at.display()))?;
     }
     stored(&at, ended(&at, content).as_bytes()).map_err(|no| failed(&no, at.display()))?;
   }
-  text(&at, at.display().to_string(), gallery)
+  text(&at, tilded(&at, std::env::home_dir().as_deref()), gallery)
 }
 
 /// Writes bytes to the file at a path in one step, so a crash or a failure midway leaves the old file whole and a
@@ -221,7 +220,7 @@ pub(super) fn native(path: &str, windows: bool) -> String {
 
 /// The text at a path: a file of utf-8 of any size, since the engine bounds what a read tells.
 pub(crate) fn read(at: &Path) -> Result<Text, Fault> {
-  text(at, at.display().to_string(), None)
+  text(at, tilded(at, std::env::home_dir().as_deref()), None)
 }
 
 /// The text at a path under a name, which the text and each refusal of it give. A file whose every line ends with
@@ -261,11 +260,29 @@ fn seen(at: &Path, name: &str, bytes: &[u8], gallery: Option<&Path>) -> Result<T
 /// A path that is `~` or starts with `~/`, or with `~\\` on Windows, resolved against the home of the user, as a shell
 /// reads it, or the refusal when the user has no home; and nothing for any other path, which resolves against the
 /// working directory.
-fn homed(path: &str, home: Option<PathBuf>) -> Option<Result<PathBuf, Fault>> {
+pub(crate) fn homed(path: &str, home: Option<PathBuf>) -> Option<Result<PathBuf, Fault>> {
   let slash = |one: char| one == '/' || cfg!(windows) && one == '\\';
   let rest = path.strip_prefix('~').filter(|rest| rest.is_empty() || rest.starts_with(slash))?;
   let refused = || Fault::refused(format!("There is no home of the user for {path}."));
   Some(home.map(|home| resolved(&home, rest.trim_start_matches(slash))).ok_or_else(refused))
+}
+
+/// A path as the World writes it for a model, the reverse of [`homed`]: `~` in place of the home of the user when the
+/// path is the home or stands under it, as `~/a.txt`, and the path as it stands otherwise, or when the home is the
+/// root of the disk, under which every path stands.
+pub(crate) fn tilded(path: &Path, home: Option<&Path>) -> String {
+  let home = home.filter(|home| home.parent().is_some());
+  match home.and_then(|home| path.strip_prefix(home).ok()) {
+    Some(rest) if rest.as_os_str().is_empty() => "~".to_owned(),
+    Some(rest) => format!("~{}{}", std::path::MAIN_SEPARATOR, rest.display()),
+    None => path.display().to_string(),
+  }
+}
+
+/// The place of a path of the machine that a chain names: against the home of the user, as [`homed`] says, or else
+/// against the directory.
+pub(crate) fn placed(directory: &Path, path: &str) -> Result<PathBuf, Fault> {
+  homed(path, std::env::home_dir()).unwrap_or_else(|| Ok(resolved(directory, path)))
 }
 
 /// What the machine refused at a path, under its name, in plain words, which the model and the operator both read.

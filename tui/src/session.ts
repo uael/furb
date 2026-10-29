@@ -1324,7 +1324,7 @@ export class Session extends EventEmitter {
     this.notice = "Follow-up removed.";
   }
   private async attachFiles(text: string, chain = this.selected): Promise<void> {
-    const directory = resolve(this.host.directory, await this.engine.cwd({ on: chain }));
+    const directory = resolve(this.host.directory, expandHome(await this.engine.cwd({ on: chain })));
     for (const path of await fileReferences(text, directory))
       await this.engine.result(await this.engine.rung({ word: `read(${JSON.stringify(path)})`, on: chain }));
   }
