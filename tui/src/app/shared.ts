@@ -109,10 +109,6 @@ export const PROGRAM_STEPS = 6;
  * each thread of under a hundred lines starts at one column. */
 export const gutterWidth = (digits: number) => Math.max(2, digits) + space.inset;
 
-/** The columns that a line of prose takes at most: a rule, a question and a message stop here, however wide the screen is,
- * and the code and the hints beside it take the room that is left. */
-export const MEASURE = 100;
-
 /** A row that a model writes as the tick compares it: its number, and its text with the color of each part. */
 export const saidOf = (number: number, parts: readonly Part[]) =>
   `${number}:${parts.map(([text, fg]) => `${text}\u0000${fg ? `${fg.r},${fg.g},${fg.b}` : ""}`).join("\u0001")}`;
