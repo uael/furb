@@ -147,16 +147,16 @@ export const rail = part({
     const prompts = new Set(w.host.prompts.keys());
     const owed = [...prompts].join(" ");
     const kept = this.railThreadCache;
-    if (kept && kept.session === w && kept.version === w.version && kept.owed === owed) return kept.list;
+    if (kept && kept.session === w && kept.version === w.promptsVersion && kept.owed === owed)
+      return kept.list;
     const index = w.ladderIndex;
-    const board = w.boardIndex;
     const list: ChainThread[] = [];
     // A chain that no act touched since the last read keeps its threads, so a new act costs one chain and not all.
     const reads = kept?.session === w && kept.owed === owed ? kept.chains : new Map<string, ChainRead>();
     const chains = new Map<string, ChainRead>();
     for (const [chain, acts] of w.activityByChain) {
       if (!acts.length) continue;
-      const stamp = board.stamp(chain);
+      const stamp = w.threadStamp(chain);
       const read = reads.get(chain);
       // The chain shown has its threads read already, for the feed, at this version.
       const threads =
@@ -172,7 +172,7 @@ export const rail = part({
       .map((one): [number, ChainThread] => [numbered(one), one])
       .sort((a, b) => a[0] - b[0])
       .map(([, one]) => one);
-    this.railThreadCache = { session: w, version: w.version, owed, list: ordered, chains };
+    this.railThreadCache = { session: w, version: w.promptsVersion, owed, list: ordered, chains };
     return ordered;
   },
 
@@ -214,8 +214,12 @@ export const rail = part({
     const chosen = w.thread ? all.find((one) => one.act.id === w.thread) : undefined;
     const own = all.filter((one) => one.act.on === w.selected);
     const open = chosen ?? own.findLast((one) => !one.resolved);
-    // The input sends its next message to the thread chosen, else to the open thread lit, else to a new thread.
-    w.lit = open?.act.id;
+    // The input sends its next message to the thread chosen, else to the open thread lit, else to a new thread. The
+    // feed and the input drew before this part found which thread is lit, so a change draws them again.
+    if (w.lit !== open?.act.id) {
+      w.lit = open?.act.id;
+      this.schedule();
+    }
     return open ?? own.at(-1);
   },
 
