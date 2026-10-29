@@ -16,10 +16,10 @@ pub mod py;
 #[cfg(feature = "typescript")]
 pub mod ts;
 
+use indexmap::IndexMap;
 use std::{
   any::Any,
   cell::RefCell,
-  collections::HashMap,
   mem::ManuallyDrop,
   ops::{Deref, DerefMut},
   rc::{Rc, Weak},
@@ -728,7 +728,7 @@ pub fn image_type(data: &[u8]) -> Result<ImageType, Fault> {
 /// The words of a call that a host gave, by position and by name, as the engine takes them.
 fn words(
   args: Option<Vec<Value>>,
-  kwargs: &Option<HashMap<String, Value>>,
+  kwargs: &Option<IndexMap<String, Value>>,
 ) -> (Vec<Object>, Vec<(&str, Object)>) {
   let args = args.unwrap_or_default().into_iter().map(|one| one.0).collect();
   (args, kwargs.iter().flatten().map(|(key, one)| (key.as_str(), one.0.clone())).collect())

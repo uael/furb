@@ -6,7 +6,8 @@
 //! crate writes, each a [`NativeEar`], in the order the engine offers them a question.
 mod host;
 
-use std::{collections::HashMap, rc::Rc, sync::Arc};
+use indexmap::IndexMap;
+use std::{rc::Rc, sync::Arc};
 
 use napi::{
   Env, JsValue, Status,
@@ -357,7 +358,7 @@ impl JsEngine {
     &self,
     name: String,
     args: Option<Vec<Value>>,
-    kwargs: Option<HashMap<String, Value>>,
+    kwargs: Option<IndexMap<String, Value>>,
   ) -> napi::Result<Value> {
     let (args, kwargs) = words(args, &kwargs);
     self.said(&name, args, kwargs).map(Value)
@@ -372,7 +373,7 @@ impl JsEngine {
     &self,
     n: i64,
     args: Option<Vec<Value>>,
-    kwargs: Option<HashMap<String, Value>>,
+    kwargs: Option<IndexMap<String, Value>>,
   ) -> napi::Result<Value> {
     let (args, kwargs) = words(args, &kwargs);
     self.held.call(|engine| engine.made(n, args, kwargs)).map(Value)
@@ -427,7 +428,7 @@ impl JsEngine {
     key: String,
     kind: String,
     args: Option<Vec<Value>>,
-    kwargs: Option<HashMap<String, Value>>,
+    kwargs: Option<IndexMap<String, Value>>,
   ) -> napi::Result<JsAct> {
     let (args, kwargs) = words(args, &kwargs);
     let id = self.held.call(|engine| engine.keyed(&key, &kind, args, kwargs))?;
