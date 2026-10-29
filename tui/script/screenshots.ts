@@ -766,6 +766,8 @@ try {
         .length === 2,
   );
   const thread = session.activity.find((act) => session.isUserPrompt(act))?.id ?? "";
+  // The message opens a thread of its own. The thread lit depends on a draw, so a script cannot count on it.
+  session.aim();
   await session.submit("Think until I cancel.");
   await until(session, () => {
     const last = session.lastOwn;
