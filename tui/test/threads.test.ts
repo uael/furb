@@ -474,3 +474,18 @@ test("an act that is no prompt leaves the list of the threads of the chain shown
     size,
     true,
   ));
+
+test("a welcome that is taller than the screen starts at its top, with the logo, and not at its end", () =>
+  composing(
+    async ({ session, frame }) => {
+      await idle(session);
+      const shown = await frame();
+      expect(shown).toContain("▀▀██▀▀");
+      expect(shown).toContain("The model answers in Python.");
+      // The logo stands above its line, and the keys at the end of the welcome are the part that the screen cuts.
+      expect(shown.indexOf("▀▀██▀▀")).toBeLessThan(shown.indexOf("The model answers in Python."));
+      expect(shown).not.toContain("@ files");
+    },
+    { width: 100, height: 16 },
+    false,
+  ));
