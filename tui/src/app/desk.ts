@@ -15,20 +15,22 @@ import { theme as c, glyph, spacing as space } from "../theme.ts";
 import { bold, type Part } from "../ui.ts";
 import { part } from "./part.ts";
 
-/** The places of the acts of each kind in the list of the acts, which stay while the version of the acts stays, so a
- * component that reads the acts of a kind at each frame does not scan a long life. */
-const kindIndex = new WeakMap<object, { version: number; size: number; by: Map<string, number[]> }>();
-function kindsOf(acts: readonly { kind: string }[], version: number): Map<string, number[]> {
-  const held = kindIndex.get(acts);
-  if (held && held.version === version && held.size === acts.length) return held.by;
-  const by = new Map<string, number[]>();
-  acts.forEach((act, at) => {
-    const list = by.get(act.kind);
-    if (list) list.push(at);
-    else by.set(act.kind, [at]);
-  });
-  kindIndex.set(acts, { version, size: acts.length, by });
-  return by;
+/** The places of the acts of each kind in the list of the acts. A place keeps its kind and the list only grows, so a
+ * new act adds its place alone, and a component that reads the acts of a kind at each frame scans no long life. */
+const kindIndex = new WeakMap<object, { size: number; by: Map<string, number[]> }>();
+function kindsOf(acts: readonly { kind: string }[]): Map<string, number[]> {
+  let held = kindIndex.get(acts);
+  if (!held || held.size > acts.length) {
+    held = { size: 0, by: new Map() };
+    kindIndex.set(acts, held);
+  }
+  for (; held.size < acts.length; held.size++) {
+    const kind = (acts[held.size] as { kind: string }).kind;
+    const list = held.by.get(kind);
+    if (list) list.push(held.size);
+    else held.by.set(kind, [held.size]);
+  }
+  return held.by;
 }
 
 export const desk = part({
@@ -118,7 +120,7 @@ export const desk = part({
       acts: w.acts,
       compactions: w.host.compactions,
       of: (kind) =>
-        kindsOf(w.acts, w.version)
+        kindsOf(w.acts)
           .get(kind)
           ?.map((at) => w.acts[at] as ActRow) ?? [],
       run: async (word) => {
