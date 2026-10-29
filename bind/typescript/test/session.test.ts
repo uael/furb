@@ -17,7 +17,7 @@ import {
   Session,
   type Turn,
 } from "../src/index.ts";
-import { compactedRun, errorOf, pauseSaid } from "../src/life/acts.ts";
+import { compactedRun, pauseSaid } from "../src/life/acts.ts";
 import { alive, printPid, remove } from "./processes.ts";
 import { until } from "./until.ts";
 
@@ -522,7 +522,7 @@ test("a chain that its provider paused names the provider and its error as the c
     await until(broken, () => broken.facts.some((fact) => fact[0] === "pause"));
     const cause = broken.pauseOf(root);
     expect(cause).toMatchObject({ by: "provider" });
-    expect(errorOf(cause?.why)?.message).toContain("unavailable");
+    expect(String(cause?.why)).toContain("unavailable");
     broken.engine.wake(root);
     expect(broken.pauseOf(root)).toBeUndefined();
   } finally {
