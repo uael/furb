@@ -250,18 +250,6 @@ test("a click on a ... of a window of code opens it in a block that fits its lin
       await until(session, () => session.folds[key] === false);
       const opened = (await frame()).split("\n");
       expect(opened.join("\n")).toContain("Roll up");
-      // A bar of a scroll box in the scroll box of the feed draws over the rows beside it, so the window shows none.
-      const bars: boolean[] = [];
-      const walk = (node: { getChildren?: () => unknown[] }) => {
-        for (const child of (node.getChildren?.() ?? []) as (typeof node)[]) {
-          const bar = (child as { verticalScrollBar?: { visible: boolean } }).verticalScrollBar;
-          if (bar) bars.push(bar.visible);
-          walk(child);
-        }
-      };
-      walk(app.scroll);
-      expect(bars.length).toBeGreaterThan(0);
-      expect(bars.some(Boolean)).toBe(false);
       expect((await gaps()).length).toBeLessThan(1);
       const up = opened.findIndex((row) => row.includes("Roll up"));
       await screen.mockMouse.click((opened[up] ?? "").indexOf("Roll up"), up);

@@ -48,6 +48,8 @@ export interface Waiting {
 
 const LEFT = space.inset;
 const RIGHT = space.inset;
+/** How many workspaces the switcher of the cards shows at once. */
+const SWITCHER = 8;
 /** How many questions the inbox of the sidebar holds before it counts the rest. */
 const INBOX = 3;
 
@@ -357,7 +359,7 @@ export const rail = part({
       width,
       style,
       total,
-      style !== "outline"
+      style === "inbox"
         ? waiting.map(({ entry, ask }) => [entry.path, ask.id, ask.label, ask.message, ask.choices])
         : 0,
       style === "cards"
@@ -388,17 +390,6 @@ export const rail = part({
             edge,
           ),
         );
-      for (const one of waiting.slice(0, INBOX)) this.renderInboxItem(one, room);
-      if (waiting.length > INBOX)
-        this.railSession.add(
-          this.railSplit(
-            [[`${waiting.length - INBOX} more`, c.faint]],
-            [["⌥A", c.faint]],
-            () => void this.nextAttention().catch(this.report),
-            edge,
-          ),
-        );
-      if (waiting.length) this.railSession.add(this.box({ height: space.section }));
       this.renderSwitcher(room, edge);
       return;
     }
@@ -438,7 +429,7 @@ export const rail = part({
     const lib = this.options.workspaces;
     const { group, entry, ask } = one;
     const mine = entry === lib.current;
-    const label = entry.session?.labelOf(ask.chain) ?? ask.label;
+    const label = (entry.session?.labelOf(ask.chain) ?? ask.label).split("/").at(-1) ?? "";
     const where = mine ? [] : [[`${group.name} › ${entry.name}`, c.faint] as Part];
     const edge: BoxOptions = { paddingLeft: LEFT, paddingRight: RIGHT, marginTop: space.section };
     this.railSession.add(
@@ -511,14 +502,13 @@ export const rail = part({
     heading.add(this.text("⌃W", c.faint, { run: () => void this.workspacePicker() }));
     this.railSession.add(heading);
     const groups = lib.groups;
-    const needing = (group: Workspace) => {
-      const a = this.attentionOf(group.sessions);
-      return a.asks + a.failed + a.held > 0;
-    };
-    // The workspace shown and each one that needs a look stand here; the others stand behind the picker, since a row
-    // for each of them would push the threads down.
-    const shown = groups.filter((group) => group === current || needing(group));
-    for (const group of shown) {
+    const at = current ? Math.max(0, groups.indexOf(current)) : 0;
+    const from = Math.max(0, Math.min(groups.length - SWITCHER, at - Math.floor(SWITCHER / 2)));
+    if (from > 0)
+      this.railSession.add(
+        this.railSplit([[`↑ ${from} more`, c.faint]], [], () => this.workspacePicker(), edge),
+      );
+    for (const group of groups.slice(from, from + SWITCHER)) {
       const mine = group === current;
       const attention = this.attentionOf(group.sessions);
       const id = `ws:${group.directory}`;
@@ -533,15 +523,23 @@ export const rail = part({
       );
       this.railSession.add(row);
     }
-    const hidden = groups.length - shown.length;
+    if (groups.length > from + SWITCHER)
+      this.railSession.add(
+        this.railSplit(
+          [[`↓ ${groups.length - from - SWITCHER} more`, c.faint]],
+          [],
+          () => this.workspacePicker(),
+          edge,
+        ),
+      );
     this.railSession.add(
       this.railSplit(
         [
-          [hidden ? `${hidden} more · ` : "", c.faint],
-          ["Switch or add a workspace", c.faint],
+          ["+ ", c.faint],
+          ["Add a workspace", c.faint],
         ],
         [],
-        () => void this.workspacePicker(),
+        () => this.insert("/workspace "),
         edge,
       ),
     );
@@ -760,11 +758,9 @@ export const rail = part({
       const kept = group.sessions.filter((entry) => !entry.archived);
       const live = (entry: SessionEntry) =>
         lib.current === entry ||
-        (style === "cards"
-          ? askCount(entry) > 0
-          : ["working", "opening", "blocked", "paused", "error", "done"].includes(entry.status));
+        ["working", "opening", "blocked", "paused", "error", "done"].includes(entry.status);
       const resting = kept.filter((entry) => !live(entry));
-      const room = style === "cards" ? 0 : Math.max(0, 3 - (kept.length - resting.length));
+      const room = Math.max(0, 3 - (kept.length - resting.length));
       const shown = new Set([...kept.filter(live), ...resting.slice(0, room)]);
       return {
         shown: kept.filter((entry) => shown.has(entry)),

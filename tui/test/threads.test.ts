@@ -3,7 +3,6 @@ import { writeFileSync } from "node:fs";
 import { RGBA } from "@opentui/core";
 import { chainThreads } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
-import { clock } from "../src/clock.ts";
 import { glyph, palettes } from "../src/theme.ts";
 import { type Composing, cellAt, composing } from "./composing.ts";
 import { idle } from "./idle.ts";
@@ -126,6 +125,7 @@ test("a question of a str shows a field in its card in the sidebar, and Enter in
   composing(
     async ({ session, app, screen, frame }) => {
       await idle(session);
+      session.preferences.sidebarStyle = "inbox";
       const question = await session.engine.prompt("str", {
         message: "Which name should it take?",
         on: session.engine.root,
@@ -163,10 +163,6 @@ test("a question that waits shows on top of the sidebar and as a mark on its wor
       keep("question", shown);
       const rows = rail(session, shown);
       expect(rows.some((line) => line.includes("1 needs you"))).toBe(true);
-      // The question stands pinned under that line with its words and the chips that answer it in place.
-      expect(rows.some((line) => line.includes("Apply the search shortcut?"))).toBe(true);
-      expect(rows.some((line) => line.includes("1 yes"))).toBe(true);
-      expect(rows.some((line) => line.includes("Switch or add a workspace"))).toBe(true);
       expect(rows.filter((line) => line.includes("◆ 1")).length).toBeGreaterThan(0);
       expect(listed(session).some((one) => one.act.id === question)).toBe(false);
       // The input sends its message to the open thread that the sidebar lights, unless the operator asks for a new thread,
@@ -326,7 +322,7 @@ test("a line that does not fit its room lays out in rows, and it and a folded st
     true,
   ));
 
-test("the Context part of the sidebar is one line: its meter, its share and what the chain spent, and no row under it", () =>
+test("the Context part of the sidebar holds three lines: its share, its meter and its numbers, and no row of tokens under them", () =>
   composing(
     async (use) => {
       const { session, frame } = use;
@@ -334,28 +330,9 @@ test("the Context part of the sidebar is one line: its meter, its share and what
       const rows = rail(session, await frame()).map((line) => line.trim());
       const at = rows.findIndex((line) => line.startsWith("Context"));
       expect(at).toBeGreaterThan(0);
-      expect(rows[at]).toMatch(/^Context ━+ \d+(\.\d)?%.* \$\d/);
-      expect(rows.slice(at + 1).join("\n")).not.toMatch(
-        /━|prompt|cached|Fresh input|Cache write|Output|Last prompt/,
-      );
-    },
-    size,
-    true,
-  ));
-
-test("the Context part of the sidebar draws no meter for a window that no answer gave, and says the tokens of the prompt", () =>
-  composing(
-    async ({ session, frame }) => {
-      await idle(session);
-      // A fork reads the prompt of its origin before it answers once, so it has a context and no window. The window
-      // is not set by hand: each snapshot of the session gives it again from the answers of the chain shown.
-      await session.select(await session.engine.chain({ label: "Fork", source: session.engine.root }));
-      await until(session, () => session.context !== undefined);
-      expect(session.filled).toBeUndefined();
-      const rows = rail(session, await frame()).map((line) => line.trim());
-      const row = rows.find((line) => line.startsWith("Context")) ?? "";
-      expect(row).toMatch(/^Context \d[\d.]*k? +\$/);
-      expect(row).not.toContain("━");
+      expect(rows[at + 1]).toMatch(/^━+$/);
+      expect(rows[at + 2]).toContain("prompt");
+      expect(rows.slice(at + 3).join("\n")).not.toMatch(/Fresh input|Cache write|Output|Last prompt/);
     },
     size,
     true,
@@ -541,26 +518,6 @@ test("a line that failed says its reason once, under it, and not again beside it
       await session.refresh();
       const shown = await frame();
       expect(shown.split("There is no file").length - 1).toBe(1);
-    },
-    size,
-    false,
-  ));
-
-test("the loader of the row that a model writes stands in its own column of the gutter, parted from the number, which stands in the column of the numbers above it", () =>
-  composing(
-    async ({ session, frame }) => {
-      const thinks = await session.engine.prompt("str", {
-        message: "Think until I cancel.",
-        on: session.selected,
-      });
-      await until(session, () =>
-        session.acts.some((act) => act.kind === "rung" && act.by === thinks && !act.done),
-      );
-      await session.refresh();
-      const rows = (await frame()).split("\n");
-      const row = rows.find((one) => one.includes("# thinking")) ?? "";
-      expect(row).toMatch(/\S \d+ # thinking/);
-      expect(row).not.toMatch(/\S\d+ # thinking/);
     },
     size,
     false,

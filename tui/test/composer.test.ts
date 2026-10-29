@@ -4,6 +4,7 @@ import { setRendererCapabilities } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import { removeDemoDirectories } from "../src/demo.ts";
 import { emojis } from "../src/emoji.ts";
+import { count } from "../src/format.ts";
 import { palettes } from "../src/theme.ts";
 import { cellAt, composing, drawn } from "./composing.ts";
 import { idle } from "./idle.ts";
@@ -517,8 +518,8 @@ test("the usage counts each token once, and the context share shows from the fir
     const shown = await frame();
     expect(shown).toContain("0%");
     expect(shown).toContain("━");
-    // The numbers of the answers stand in the hover of the row, and the row holds the share and the spent dollars.
-    expect(shown.split("\n").find((line) => line.includes("Context"))).toContain("$");
+    const numbers = shown.split("\n").find((line) => line.includes("3.2k prompt"));
+    expect(numbers).toContain(`${count(2800 * answers)} cached`);
     expect(shown).not.toContain("Fresh input");
   }));
 
@@ -537,7 +538,7 @@ test("the usage of a fork counts the answers of the fork alone, and not those of
     expect(session.turns.filter((turn) => turn[0] === "assistant").length).toBe(answered);
     expect(session.spend).toEqual({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, dollars: 0 });
     const shown = await frame();
-    expect(shown.split("\n").find((line) => line.includes("Context"))).toContain("3.2k");
+    expect(shown).toContain("3.2k prompt");
     expect(shown).not.toContain("cached");
   }));
 
