@@ -599,16 +599,18 @@ def shown(text, show):
 
 
 def unquoted(word):
-  made, at, stray = "", 0, set()
+  made, at, stray = [], 0, set()
   for o in re.finditer(r"(?m)^<s:(\w+)>\n?", word):
     if o.start() >= at and o[1] not in stray:
       if m := re.compile("(?m)</s:" + o[1] + ">$").search(word, o.end()):
-        made += word[at : o.start()] + o[1] + " = " + repr(word[o.end() : m.start()])
-        made += "\n" * word.count("\n", o.start(), m.end())
+        made += [
+          word[at : o.start()],
+          o[1] + " = " + repr(word[o.end() : m.start()]) + "\n" * word.count("\n", o.start(), m.end()),
+        ]
         at = m.end()
       else:
         stray.add(o[1])
-  return made + word[at:]
+  return "".join(made) + word[at:]
 
 
 def offered(roster, to, at=2):
