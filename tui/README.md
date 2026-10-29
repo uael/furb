@@ -282,23 +282,23 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | Enter | Send a message, or run Python input |
 | ⇧Enter or ⌃J | Insert a new line |
 | ⌥Enter | Queue this message after current work |
-| ↑ / ↓ | Previous / next sent input, from the first or the last line |
+| ↑ / ↓ | Previous / next sent input, on the first / last line |
 | ↑ in an empty input | Take the last queued message back to edit it |
-| → / ⌃F | At the end of the input, take the grey rest of the line that the history suggests |
-| ⌥→ / ⌥F | At the end of the input, take the next word of that grey rest |
+| → / ⌃F | At the end, take the grey rest of the suggestion |
+| ⌥→ / ⌥F | At the end, take the next word of the suggestion |
 | ⌃S | Put the input aside, or bring it back |
-| Esc twice | Rewind: go back to an earlier point of the chain, with its files or not |
+| Esc twice | Rewind to an earlier point, with its files or not |
 | ⌃1-3 or ⌥1-3 | Feed / transcript / changes view |
 | ⌃Tab / ⇧⌃Tab | Next / previous chain |
 | ⌃P | Search all actions |
 | ⌃B / ⌃N | Chains / create a chain |
 | ⌃M or ⌥M | Choose a model |
 | ⇧Tab / ⌃T | Choose an effort / a theme |
-| ⌃W / ⌃\\ | Workspaces and sessions / show or hide the sidebar, which takes the place of the feed on a narrow terminal |
+| ⌃W / ⌃\\ | Workspaces and sessions / show or hide the sidebar |
 | ⌥D / ⌥E | Fold or expand details / external editor |
 | ⌃V | Paste a clipboard image |
 | @ or ! | Find a project file, or run a shell command |
-| ↑, ↓, Tab, Enter after /, @ or : | Choose a slash command, its value, a project file, or an emoji as it is typed |
+| ↑, ↓, Tab, Enter after /, @ or : | Choose a command, a value, a file or an emoji |
 | ⌃F / PageUp / PageDown | Filter the current view / scroll |
 | ⌃R / ⌃Space | Python input / complete a name |
 | ⌃L / ⌃A | Edit a prompt program / answer the questions that wait |

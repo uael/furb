@@ -37,13 +37,13 @@ export const keys = [
     action: "Queue this message after current work",
     bindings: [{ on: ["meta+return", "meta+enter"], run: "queue", command: "queue" }],
   },
-  { chord: "↑ / ↓", action: "Previous / next sent input, from the first or the last line" },
+  { chord: "↑ / ↓", action: "Previous / next sent input, on the first / last line" },
   { chord: "↑ in an empty input", action: "Take the last queued message back to edit it" },
   {
     chord: "→ / ⌃F",
-    action: "At the end of the input, take the grey rest of the line that the history suggests",
+    action: "At the end, take the grey rest of the suggestion",
   },
-  { chord: "⌥→ / ⌥F", action: "At the end of the input, take the next word of that grey rest" },
+  { chord: "⌥→ / ⌥F", action: "At the end, take the next word of the suggestion" },
   {
     chord: "⌃S",
     action: "Put the input aside, or bring it back",
@@ -61,7 +61,7 @@ export const keys = [
   },
   {
     chord: "Esc twice",
-    action: "Rewind: go back to an earlier point of the chain, with its files or not",
+    action: "Rewind to an earlier point, with its files or not",
     bindings: [{ chord: "Esc Esc", command: "rewind" }],
   },
   {
@@ -113,8 +113,7 @@ export const keys = [
   },
   {
     chord: "⌃W / ⌃\\",
-    action:
-      "Workspaces and sessions / show or hide the sidebar, which takes the place of the feed on a narrow terminal",
+    action: "Workspaces and sessions / show or hide the sidebar",
     bindings: [
       { on: ["ctrl+w", "ctrl+o"], run: "workspaces", chord: "⌃W", command: "workspace" },
       { on: ["ctrl+\\"], run: "sidebar", chord: "⌃\\", command: "sidebar" },
@@ -143,7 +142,7 @@ export const keys = [
   },
   {
     chord: "↑, ↓, Tab, Enter after /, @ or :",
-    action: "Choose a slash command, its value, a project file, or an emoji as it is typed",
+    action: "Choose a command, a value, a file or an emoji",
   },
   {
     chord: "⌃F / PageUp / PageDown",
