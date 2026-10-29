@@ -21,16 +21,16 @@ async def test_what_a_question_answered_now_that_shows_a_text_or_changes_a_state
   assert told == [
     ("read1", ["#read1\nread1_path = 'a.txt'\n<s:read1_text>\none\ntwo</s:read1_text>"]),
     ("cd1", ["#cd1"]),
-    (step, [f"#{step} debugged\n{step}_debug = '1001.0'"]),
+    (step, [f"#{step} debugged\n{step}_debug = '1002.0'"]),
   ]
   assert "#cd1\n\n#bash1" in engine.turns(on=root)[-1][1]
   assert [one for one in named(engine.turns(on=root)) if one in ("clock", "chance", "gate")] == []
   seen = engine.module(root)["seen"]
-  assert isinstance(seen, list) and seen[2:] == [1001.0, 2 / 7, [], "/x"]
+  assert isinstance(seen, list) and seen[2:] == [1002.0, 3 / 7, [], "/x"]
   was = engine.turns(on=root)
   assert engine.cd("/w", on=root) == "/w"
   assert engine.read("a.txt", on=root) == Text("/w/a.txt", "one\ntwo\n")
-  assert engine.clock(on=root) == 1003.0
+  assert engine.clock(on=root) == 1004.0
   assert engine.turns(on=root) == was
 
 
@@ -41,9 +41,9 @@ async def test_a_question_is_put_to_the_ears_of_the_engine_before_those_of_the_o
   assert engine.turns(on=root) != []
   act = engine.prompt(int, "count", to=OPERATOR, on=root)
   assert engine.read(act, on=root) == Text(act, "")
-  assert [a[0] for a in sand.calls] == ["stand", "prompt"]
+  assert [a[0] for a in sand.calls] == ["stand", "clock", "prompt"]
   assert engine.read("a.txt", on=root) == Text("/w/a.txt", "one\ntwo\n")
-  assert [a[0] for a in sand.calls] == ["stand", "prompt", "read"]
+  assert [a[0] for a in sand.calls] == ["stand", "clock", "prompt", "read"]
 
 
 async def test_the_question_that_tell_names_is_the_last_question_on_its_chain_that_the_run_made() -> None:

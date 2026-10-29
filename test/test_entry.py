@@ -37,7 +37,7 @@ async def test_the_world_keeps_each_entry_as_the_journal_says_it_plain_or_not() 
   later = sown()
   _, over = await relived(later, kept)
   assert over == root and engine.peek(said(log, "prompt")[0][1]) == 2
-  assert [one[0] for one in later.calls] == ["stand"]
+  assert [one[0] for one in later.calls] == ["stand", "clock", "read"]
 
 
 async def test_the_record_is_a_sequence_of_entries_about_acts() -> None:
@@ -45,6 +45,7 @@ async def test_the_record_is_a_sequence_of_entries_about_acts() -> None:
   sand, log, _ = await lived()
   assert all(isinstance(e, tuple) for e in sand.record)
   assert all(e[0][1] in acts(log) for e in sand.record)
-  kinds = ["chain", "stand", "done", "prompt", "reply", "started", "done", "gate", "done", "read", "done"]
+  kinds = ["chain", "stand", "done", "clock", "done", "prompt", "reply", "started", "done", "gate", "done", "read"]
+  kinds += ["done"]
   kinds += ["bash", "started", "merged", "out", "done"]
   assert [e[0][0] for e in sand.record] == kinds
