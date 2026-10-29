@@ -610,24 +610,24 @@ export const feed = part({
           shown: message,
           body: (box) => {
             // A right click on a message opens its menu, as on the heading of any other act.
-            const row = this.box({
-              flexDirection: "row",
-              onMouseDown: (event) => {
-                if (event.button === 2)
-                  this.actActions(this.session.acts.find((one) => one.id === act.id) ?? act);
-              },
-            });
             const text = user ? said(shortened) : this.markdown(shortened, c.text, c.background);
-            text.flexGrow = 1;
-            text.flexShrink = 1;
-            row.add(text);
-            row.add(
-              this.text([...(sent ? [[`${sent}  `, c.faint] as Part] : []), ...state], c.faint, {
-                marginLeft: space.between,
-              }),
-            );
+            const beside: Part[] = [...(sent ? [[`${sent}  `, c.faint] as Part] : []), ...state];
             const controls = this.threadControls(act);
-            if (controls) row.add(controls);
+            const row = this.sided(
+              {
+                onMouseDown: (event) => {
+                  if (event.button === 2)
+                    this.actActions(this.session.acts.find((one) => one.id === act.id) ?? act);
+                },
+              },
+              text,
+              [this.text(beside, c.faint, { marginLeft: space.between }), controls],
+              Bun.stringWidth(plain(beside)) +
+                space.between +
+                (controls ? this.threadControlsWidth(controls) : 0),
+              this.feedWidth - indent - 8,
+              shortened,
+            );
             box.add(row);
             if (rest)
               box.add(

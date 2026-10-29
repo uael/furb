@@ -29,6 +29,7 @@ use std::{
   path::{Component, Path, PathBuf},
 };
 
+pub(crate) use bash::{Group, grouped};
 pub use bash::{bash, program, shell};
 pub use builds::{build, shelve, stored};
 pub use files::files;

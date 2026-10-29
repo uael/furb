@@ -368,6 +368,11 @@ export const chrome = part({
       [moving && !retry ? `${spin()} ` : mark, color],
       [label, moving ? c.text : c.muted],
     ];
+    // The status of each part that is not empty stands at the end of the state, after a notice.
+    const statuses = (this.parts?.status(this.seen()) ?? []).flatMap((line): Part[] => [
+      ["   ", c.text],
+      ...this.partLine(line),
+    ]);
     // The keys that have no room beside the whole state leave the footer from the last one, so the state is never cut.
     const shown = [...keys];
     const buttonsOf = (list: typeof keys) =>
@@ -377,21 +382,28 @@ export const chrome = part({
         [` ${action}`, c.faint],
       ]);
     let buttons = buttonsOf(shown);
-    const stateWidth = Bun.stringWidth(plain(state)) + space.between * 2;
+    const stateWidth = Bun.stringWidth(plain(state)) + Bun.stringWidth(plain(statuses)) + space.between * 2;
     while (shown.length && Bun.stringWidth(plain(buttons.flat())) + stateWidth > this.feedWidth) {
       shown.pop();
       buttons = buttonsOf(shown);
     }
     const hints = buttons.flat();
     const room =
-      this.feedWidth - Bun.stringWidth(plain(hints)) - Bun.stringWidth(plain(state)) - space.between * 2;
+      this.feedWidth -
+      Bun.stringWidth(plain(hints)) -
+      Bun.stringWidth(plain(state)) -
+      Bun.stringWidth(plain(statuses)) -
+      space.between * 2;
     const tokens = this.tokens();
-    this.statusWhole = [plain(state), notice, tokens && `Tokens: ${tokens}.`].filter(Boolean).join("   ");
+    this.statusWhole = [plain(state), notice, plain(statuses).trim(), tokens && `Tokens: ${tokens}.`]
+      .filter(Boolean)
+      .join("   ");
     if (notice && room >= 8)
       state.push(
         ["   ", c.text],
         [clip(notice, room - 3), [exitNotice, rewindNotice].includes(notice) ? c.warning : c.text],
       );
+    state.push(...statuses);
     const key = JSON.stringify([plain(state), plain(hints), color, this.theme]);
     if (key === this.statusKey) return;
     this.statusKey = key;

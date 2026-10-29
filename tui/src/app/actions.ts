@@ -124,7 +124,7 @@ export const actions = part({
       return true;
     }
     // A command of a part of an extension, which no command of the TUI shadows.
-    const part = name ? this.parts.command(name) : undefined;
+    const part = name ? this.parts.command(name, this.seen()) : undefined;
     if (part) {
       this.partRun(() => part.run(argument, this.seen()));
       return true;

@@ -32,7 +32,7 @@ test("Other of a choice opens a field for the words of the operator, and the val
       const typing = await frame();
       expect(app.composer.visible).toBe(true);
       expect(typing).toContain("❯ 4  Other  in your own words");
-      expect(app.composer.placeholder).toBe(
+      expect(app.composer.hint).toBe(
         "Your own words in place of vitepress, mkdocs or plain. Esc goes back to the values.",
       );
       expect(typing).toContain("Esc back to the values");
@@ -110,8 +110,8 @@ test("a question of a shape that is more than text says what its line is, and ta
       const names = await asked(context, "list[str]", "Name the files.");
       const shown = await frame();
       expect(shown).toContain("Enter sends the input to");
-      expect(shown).toContain('a JSON list of text, as ["a", "b"]');
-      expect(app.composer.placeholder).toContain(`Your answer to ${names}, as list[str]: a JSON list`);
+      expect(shown).toContain('text, as ["a", "b"]');
+      expect(app.composer.hint).toContain(`Your answer to ${names}, as list[str]: a JSON list`);
       // A line that is no list of text is refused, and the question stays open.
       app.composer.setText("a, b");
       await app.submit();
@@ -126,7 +126,7 @@ test("a question of a shape that is more than text says what its line is, and ta
       expect(await session.engine.result(names)).toEqual(["a.rs", "b.rs"]);
       const count = await asked(context, "int | None", "How many retries?");
       await frame();
-      expect(app.composer.placeholder).toBe(
+      expect(app.composer.hint).toBe(
         `Your answer to ${count}, as int | None: a whole number, or no word for nothing`,
       );
       app.composer.setText("3");

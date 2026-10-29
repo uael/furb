@@ -683,6 +683,21 @@ TUI goes on.
 
 ![The error of a part](screenshots/75-extension-part-error.png)
 
+A part can also open a dialog and wait for its answer: a list to choose from, with actions on an item by key, a form
+whose secret field shows dots, and a confirm. It can complete a word of the input after a sign, as `@`, and show a
+status in the footer.
+
+![A list of a part](screenshots/75e-part-list.png)
+
+![A form of a part](screenshots/75f-part-form.png)
+
+![The completion of a part](screenshots/75g-part-completion.png)
+
+The extension `mcp` shows the servers of the Model Context Protocol in such a list with `/mcp`, each with its state,
+its scope and its tools, and the keys that reconnect, enable, disable, approve, log in or log out a server.
+
+![The servers of MCP](screenshots/75h-mcp-servers.png)
+
 A model can add a part to a life that runs. The operator asks for a component, here a panel for a todo list. The model
 reads the guide of the skill `extending`, makes the acts of its kind with a def, and writes an extension with
 `extend`. The panel stands over the input at once, and the feed shows a line for each act. Nothing restarts.

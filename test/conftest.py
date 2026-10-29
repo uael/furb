@@ -71,7 +71,7 @@ COST = (80000, 0, 0, 0, 1.5)
 
 WORD = "t = read('a.txt')\nx = bash('echo hi')\nk = len(t.lines)\nclose(k)"
 """A word of a rung that reads a file, starts a command and gives back how many lines the file holds, before the
-command is done, so the chain acknowledges the command."""
+command is done."""
 
 
 def faulted(line: str) -> str:
@@ -500,10 +500,25 @@ def wrote(rung: str, part: str, before: int) -> tuple:
 
 async def lived() -> tuple[Sand, list[tuple], str]:
   """A life that reads a file, runs a command and returns what it came to: the World, what was said and the root."""
-  sand, log, root = born(WORD, "close(None)")
+  sand, log, root = born(WORD)
   assert await engine.prompt(int, "read and run", on=root) == 2
   await settle()
   return sand, log, root
+
+
+async def acknowledged() -> tuple[Sand, list[tuple], str, str]:
+  """A life whose task starts a command, then waits for a second one, so the chain acknowledges the end of the first
+  on the task, which is open: the World, what was said, the root and the task."""
+  sand, log, root = born("x = bash('slow')\nawait bash('slow')", "close(3)", auto=False)
+  task = engine.prompt(int, "task", on=root)
+  await settle()
+  first, second = (one[1] for one in said(log, "bash"))
+  sand.exits(first, 0)
+  await settle()
+  sand.exits(second, 0)
+  assert await task == 3
+  await settle()
+  return sand, log, root, task
 
 
 def slow() -> tuple[Sand, list[tuple], str, Act[Exit]]:
