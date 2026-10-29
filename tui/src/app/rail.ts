@@ -1,17 +1,23 @@
 import { basename } from "node:path";
-import type { BoxOptions, BoxRenderable, RGBA } from "@opentui/core";
+import {
+  type BoxOptions,
+  type BoxRenderable,
+  InputRenderable,
+  InputRenderableEvents,
+  type RGBA,
+} from "@opentui/core";
 import { type Ask, type ChainThread, chainThreads, gist } from "furb/life";
 import { checkoutOf } from "../checkout.ts";
 import { clock } from "../clock.ts";
 import { shortenHome, shortenHomes } from "../files.ts";
 import { clip, dollars, recordLabel } from "../format.ts";
 import { isRailStyle, type RailStyle } from "../preferences.ts";
-import { statusLabels } from "../session.ts";
+import { type Session, statusLabels } from "../session.ts";
 import { theme as c, glyph, spacing as space, threadTone } from "../theme.ts";
 import { bold, type Part, plain } from "../ui.ts";
 import type { SessionEntry, Workspace } from "../workspaces.ts";
 import { part } from "./part.ts";
-import { type ChainRead, statusMark, threadMarks, wrapped } from "./shared.ts";
+import { type ChainRead, inputColors, statusMark, threadMarks, wrapped } from "./shared.ts";
 
 /** What waits in a part of the library, counted where the operator should look. */
 export interface Attention {
@@ -463,8 +469,36 @@ export const rail = part({
         this.choice = { id: ask.id, at: ask.choices.length, other: true, ticked: [] };
         void session.point(ask.id).catch(this.report);
       });
+    } else if (ask.shape === "str") {
+      this.railSession.add(this.railField(ask, session));
+      return;
     } else chip(`Answer as ${ask.shape}`, () => void session.point(ask.id).catch(this.report));
     this.railSession.add(controls);
+  },
+
+  /** The field of the card of a question of a str: the operator types the answer there, and Enter sends it. What was
+   * typed stays when the sidebar draws again. */
+  railField(ask: Ask, session: Session): BoxRenderable {
+    const row = this.row({ paddingLeft: LEFT + 2, paddingRight: RIGHT, height: space.bar });
+    const holder = this.box({ flexGrow: 1, height: space.bar });
+    const input = new InputRenderable(this.renderer, {
+      id: `rail-answer-${ask.id}`,
+      width: "100%",
+      value: this.railDraft.get(ask.id) ?? "",
+      placeholder: "Type the answer, Enter sends it",
+      ...inputColors(c.raised),
+    });
+    input.on(InputRenderableEvents.INPUT, (value: string) => this.railDraft.set(ask.id, value));
+    input.on(InputRenderableEvents.ENTER, () => {
+      const text = input.value;
+      if (!text.trim()) return;
+      this.railDraft.delete(ask.id);
+      this.composer.focus();
+      void session.answer(ask, text).catch(this.report);
+    });
+    holder.add(input);
+    row.add(holder);
+    return row;
   },
 
   /** The switcher of the shape cards: one row for each workspace, the one shown lit, each with what needs a look in it.

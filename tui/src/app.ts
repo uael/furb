@@ -144,6 +144,9 @@ export class App {
   /** The row at the top of the sidebar that says how to go back to the feed: a narrow terminal shows the sidebar in
    * place of the feed, which the screen holds. */
   readonly railBack: BoxRenderable;
+  /** What the operator typed in the field of the card of a question, by the id of the question, which the sidebar keeps
+   * when it draws again. */
+  readonly railDraft = new Map<string, string>();
   readonly screen: BoxRenderable;
   /** Whether the sidebar takes a narrow terminal whole, and the chain and the session that it opened on. */
   drawer = false;
