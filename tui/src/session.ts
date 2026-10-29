@@ -4,7 +4,6 @@ import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { FileChange, ImageAttachment, LiveAct, SetupInfo, Turn } from "furb";
-import type { PauseCause } from "furb/life";
 import {
   actorParts,
   decodeRecord,
@@ -18,6 +17,7 @@ import {
   shapes,
   WORK,
 } from "furb";
+import type { PauseCause } from "furb/life";
 import {
   type ActIndex,
   type Ask,
