@@ -693,7 +693,7 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 
 STATE = (
   "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed fixes silent"
-  " comments measures timers noted debriefs briefed owns watched after parked awaited vetoes ordered tips shifted hired paced landed heard handled sent ends requeued"
+  " comments measures timers noted debriefs briefed owns watched after parked awaited covers vetoes ordered tips shifted hired paced landed heard handled sent ends requeued"
   " statused secret budgeted flaky runs_read"
 ).split()
 
@@ -1865,3 +1865,18 @@ async def test_a_failed_check_that_waits_on_a_decision_of_the_owner_gets_no_orde
   conductor.invariants()
   assert conductor.awaited == {} and conductor.needs(pr)
   assert "The decision prompt9 of the owner ended, so the round tends w:wall, #6 again." in conductor.heard
+
+
+@POSIX
+@JQ
+async def test_a_flake_that_a_working_item_covers_goes_to_its_worker_by_its_test_or_its_key(conductor: Round) -> None:
+  conductor.busy("p1", "bench-fix", OPUS)
+  conductor.covers["bench-fix"] = ["a host test", "budget-the-tui"]
+  await flaked(conductor)
+  assert conductor.queue == []
+  assert conductor.prompts[-1][1] == "chain-bench-fix" and "came again" in conductor.prompts[-1][0]
+  conductor.covers["bench-fix"] = ["flake-a-host-test"]
+  assert (conductor.taken("flake-a-host-test"), conductor.taken("budget-the-tui"), conductor.taken("bench-fix")) == ("p1", "", "p1")
+  conductor.working.clear()
+  conductor.queue.append(("bench-fix", "", "ci"))
+  assert conductor.taken("flake-a-host-test") == "queued"
