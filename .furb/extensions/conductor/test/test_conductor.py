@@ -143,12 +143,18 @@ class Round:
     exec(compile(IMPORT.sub("", PULL.read_text(encoding="utf-8")), str(PULL), "exec"), ns)  # noqa: S102
     exec(compile(IMPORT.sub("", SOURCE), str(HERE / "conductor.py"), "exec"), ns)  # noqa: S102
     self.real_hire = ns["hire"]
-    ns.update(quietly=lambda verb, *args, **words: verb(*args, **words), hire=self.hire)
+    ns.update(quietly=self.quietly, hire=self.hire)
     self.ns = ns
     self.modules[chain] = ns
 
   def __getattr__(self, name: str) -> object:
     return self.ns[name]
+
+  def quietly(self, verb: object, *args: object, **words: object) -> object:
+    got = verb(*args, **words)
+    if asyncio.iscoroutine(got) and verb == self.bash:
+      got.close()
+    return got
 
   def say(self, pattern: str, out: str, code: int = 0) -> None:
     self.says.append((pattern, out, code))
@@ -2771,3 +2777,25 @@ def test_threads_reads_each_transcript_once_and_fits_300_chains(conductor: Round
   assert len(calls) == 301 == len(set(calls))
   assert out.count(" working prompt") == 300
   assert "  PR https://github.com/o/r/pull/7 unseen" in out
+
+
+def test_the_round_writes_the_new_chain_into_the_holder_file_of_the_workspace_it_gives(conductor: Round) -> None:
+  conductor.ns["quietly"] = lambda verb, *args, **words: (
+    asyncio.run(verb(*args, **words)) if verb == conductor.bash else verb(*args, **words)
+  )
+  folder = Path(f"{conductor.tmp}-w1")
+  subprocess.run(["git", "init", "-q", str(folder)], check=True, env=conductor.env)
+  holder = Path(subprocess.run(["git", "-C", str(folder), "rev-parse", "--absolute-git-dir"], check=True, capture_output=True, text=True, env=conductor.env).stdout.strip()) / "furb-holder"
+  holder.write_text("chain273\n", encoding="utf-8")
+  _, slot = conductor.placed("k", "{workspace}", "chain-tui/k")
+  assert slot == "w1"
+  assert holder.read_text(encoding="utf-8") == "chain-tui/k\n"
+  conductor.busy("x", "k", "claude-cli:sonnet/medium")
+  conductor.slots["x"] = "w1"
+  _, other = conductor.placed("k2", "{workspace}", "chain-tui/k2")
+  assert other == "w2" and not Path(f"{conductor.tmp}-w2").exists()
+
+
+def test_a_workspace_says_that_a_holder_with_no_live_prompt_of_a_worker_is_stale() -> None:
+  source = SOURCE
+  assert "A holder that names a chain with no live prompt of a worker" in source
