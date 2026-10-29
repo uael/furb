@@ -233,6 +233,9 @@ meanings. The entry of such a name here gives only its form in the engine.
   words it refuses, and of the done of an act that one of its rungs made on another chain, or of the pause of the
   chain of such a prompt.
 - A drift is a hard error.
+- A change that makes room under the wall and rewrites the code of a fix names that fix, and shows that the test
+  of the fix fails on the old form of its cause, since a test that does not hold the failure lets a later change undo
+  the fix.
 - The engine owns the order of every run, and nothing of a model runs on the loop of the outside.
 - A chain with a source reads the transcript of its origin as it stands, where the record is what a later life should
   make it from.

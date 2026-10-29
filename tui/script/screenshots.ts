@@ -771,6 +771,12 @@ try {
         .length === 2,
   );
   const thread = session.activity.find((act) => session.isUserPrompt(act))?.id ?? "";
+  // The sidebar lights the open thread when it draws, and the input sends to the thread lit: a draw before the message
+  // makes it go to that thread, where with no draw it would start a thread of its own on some runs.
+  app().render();
+  await test.flush();
+  if (session.target !== thread)
+    throw new Error(`The input aims at ${session.target}, not at the thread ${thread}.`);
   await session.submit("Think until I cancel.");
   await until(session, () => {
     const last = session.lastOwn;
