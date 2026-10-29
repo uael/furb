@@ -10,6 +10,8 @@ WINDOW = 200000
 OPERATOR = "operator"
 TIMEOUT = 600.0
 LARGEST = 524288
+CAP = 40
+BUDGET = 4096
 ROOT = "chain1"
 site = ContextVar("site", default=OPERATOR)
 raised = None
@@ -282,11 +284,41 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
     while True:
       r = get((a := (yield {id, "stand", "reply"}))[1]) or a
       match a:
-        case ("done", *_) if r[0] == "stand" and standing() != last:
-          if standing()[2:] != last[2:]:
-            stood = module()["actor"] = standing()[2]
-          last = standing()
-          yield takes()
+        case ("done", *_) if r[0] == "stand":
+          if standing() != last:
+            if standing()[2:] != last[2:]:
+              stood = module()["actor"] = standing()[2]
+            last = standing()
+            yield takes()
+          id == ROOT and act("clock", id, None)
+          seen = {}
+          for fact in transcript(id)[::-1]:
+            if (
+              fact[0] in ("read", "write") and (path := getattr(was := peek(fact[1]), "path", str(fact[4]))) not in seen
+            ):
+              seen[path] = 0
+              if isinstance(was, Text) and "://" not in path and not get(path.split("/")[0]):
+                try:
+                  now = read(path, HIDDEN, id).lines
+                  d = {i: now[i - 1] for i in differs(was.lines)(now)} | dict.fromkeys(
+                    range(len(now) + 1, len(was.lines) + 1)
+                  )
+                  seen[path] = (len(d) > CAP and len(d)) or d
+                except Refused:
+                  seen[path] = "gone"
+          h = [v for x in transcript(ROOT, "clock") if isinstance(v := peek(x[1]), float)][-2:] or [0]
+          h = (h[-1] - h[0]) / 3600
+          fit = len(seen := {k: v for k, v in seen.items() if v})
+          while (
+            len(
+              (caught := headed(id, "caught up", hours=(h > 1 and round(h, 1)) or None, changed=seen or None)).encode()
+            )
+            > BUDGET
+          ):
+            seen = [*seen][:fit]
+            fit -= 1
+          if "\n" in caught:
+            yield "tell", id, [caught]
         case ("done", about, _, value) if running.get(maker := r[2]) in (
           False,
           isinstance(value, Exception) and r[0] != "reply" and "",

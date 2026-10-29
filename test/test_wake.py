@@ -196,6 +196,7 @@ async def test_a_wake_that_the_journal_says_again_says_at_once_the_answers_of_th
   _, over = await relived(later, plain(sand.record))
   engine.wake(over)
   await settle()
-  assert isinstance(engine.peek(two), Refused) and engine.peek("clock1", None) is not None
+  clocked = [a[1] for a in said([e for (e,) in later.record], "clock") if a[2] != root]
+  assert isinstance(engine.peek(two), Refused) and len(clocked) == 1 and engine.peek(clocked[0], None) is not None
   again, _ = await relived(Sand(), plain([*sand.record, *later.record]))
-  assert [a[1] for a in said(again, "clock")] == ["clock1"]
+  assert [a[1] for a in said(again, "clock") if a[2] != root] == clocked

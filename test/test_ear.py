@@ -70,8 +70,8 @@ async def test_the_world_hears_every_fact(tmp_path: Path) -> None:
   """The World, the ears of the outside that serve the machine, one or many, hears every fact that it waits for, every act that no ear before it took, and every chain at its birth: it answers a stand, a clock, a chance, a cd, a read and a write of a path nobody of the engine serves, resolved against the working directory of the chain, or against the scratch directory for a path of scratch://; it takes a command, asks it whether it is merged, answers a write of its doors and feeds it what a write of its stdin gives, and ends it at its timeout and at a cancel; it takes a wait and a prompt to the operator, which it shows; and it takes a reply, which it answers with the turn of the model."""
   sand, log, root = born(files={"/w/a.txt": "one\n"}, auto=False)
   assert engine.cwd(on=root) == "/w"
-  assert engine.clock(on=root) == 1001.0
-  assert engine.chance(on=root) == 2 / 7
+  assert engine.clock(on=root) == 1002.0
+  assert engine.chance(on=root) == 3 / 7
   assert engine.read("a.txt", on=root) == Text("/w/a.txt", "one\n")
   assert engine.write(Text("b.txt", "two\n"), on=root) == Text("/w/b.txt", "two\n")
   fed = engine.bash("forever", stdin=None, on=root)
@@ -126,7 +126,11 @@ async def test_the_facts_that_the_world_says_of_its_own_are_for_the_acts_that_co
   own = [a for a in log if a[2] == WORLD and a[0] in ("out", "done") and a not in world.now]
   assert [(a[0], a[1]) for a in own] == [("done", asked), ("out", command), ("done", command)]
   assert {a[1] for a in own} <= {a[1] for a in world.now if a[0] == "started"}
-  assert [(a[0], a[1]) for a in world.now if a[0] == "done"] == [("done", "stand1"), ("done", "read1")]
+  assert [(a[0], a[1]) for a in world.now if a[0] == "done"] == [
+    ("done", "stand1"),
+    ("done", "clock1"),
+    ("done", "read1"),
+  ]
 
 
 async def test_an_ear_speaks_by_yielding_a_saying_and_the_work_it_began_speaks_later_by_say() -> None:
@@ -137,7 +141,7 @@ async def test_an_ear_speaks_by_yielding_a_saying_and_the_work_it_began_speaks_l
   await settle()
   _, standing, *_ = said(log, "stand")[0]
   facts = [(a[0], a[1]) for a in log if a[2] == WORLD and engine.get(a[1]) != a]
-  assert facts == [("done", standing), ("started", act), ("out", act), ("done", act)]
+  assert facts == [("done", standing), ("done", "clock1"), ("started", act), ("out", act), ("done", act)]
 
 
 def note(kept: list[tuple]) -> Generator[tuple | None, tuple]:
@@ -160,7 +164,7 @@ async def test_an_ear_is_any_generator_of_that_shape() -> None:
   assert await engine.prompt(int, "work", on=root) == 1
   assert engine.read("note://one", on=root) == Text("note://one", "kept")
   assert engine.read("a.txt", on=root) == Text("/w/a.txt", "one\ntwo\n")
-  assert [a[0] for a in sand.calls] == ["stand", "reply", "read", "read"]
+  assert [a[0] for a in sand.calls] == ["stand", "clock", "reply", "read", "read"]
   runs = [a[1] for a in kept if a[0] == "started" and engine.question(("run", a[1]))]
   told = fresh(root, prompted("prompt1", "int", "work"), "#rung1 advance on prompt1")
   assert [engine.get(run)[5] for run in runs] == [told, "close(1)"]

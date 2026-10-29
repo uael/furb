@@ -294,8 +294,13 @@ fn goes_on(at: &Path, extensions: bool) {
   let (restored, replayed) = (heads(&record, one), heads(&again, one));
   assert_eq!(restored, replayed, "both lives go on with the same facts");
   let facts = world::logged(&record).unwrap().unwrap();
-  let told =
-    facts[one..].iter().filter(|one| one.as_ref().py_repr().contains("the memory")).count();
+  // The catch-up of a stand reads each file again, so only a tell counts as what a chain is told.
+  let told = facts[one..]
+    .iter()
+    .filter(|one| {
+      one.as_ref().py_repr().starts_with("['tell'") && one.as_ref().py_repr().contains("the memory")
+    })
+    .count();
   let first =
     facts[..one].iter().filter(|one| one.as_ref().py_repr().contains("the memory")).count();
   assert!(!extensions || first > 0, "the first life told the memory");
@@ -399,10 +404,13 @@ fn a_life_whose_outside_works_keeps_a_snapshot_and_a_later_life_holds_that_work_
     assert!(engine.pending().unwrap().is_empty(), "the wake put that work to the outside again");
   }
   drop((restored, replayed));
-  // The life from the snapshot stands again at its tip, and each ear hears the wake in its own order.
+  // The life from the snapshot stands again at its tip, where the root reads the clock, and each ear hears the wake
+  // in its own order.
   let acts = |record: &Path| {
     let mut facts = heads(record, one);
-    facts.retain(|one| !one.contains("'stand") && !one.starts_with("['tell', 'chain1'"));
+    facts.retain(|one| {
+      !one.contains("'stand") && !one.contains("'clock") && !one.starts_with("['tell', 'chain1'")
+    });
     facts.sort();
     facts
   };

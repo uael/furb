@@ -128,11 +128,15 @@ def checkpoint(define, floor):
     entries.append(act if c == ROOT else ("chain", c, OPERATOR, act[3] if act[3] in live else "", act[4], ""))
     reserved["chain"] = _number(c)
   stands = [x for x in transcript(ROOT, "stand") if question(x) and over(x[1])]
+  clocks = [v for x in transcript(ROOT, "clock") if isinstance(v := peek(x[1]), float)]
   for x in stands[-1:]:
     take("stand", _number(x[1]) - 1)
-    entries += [x, ("done", x[1], "store", peek(x[1]))]
-    reserved["stand"] = _number(x[1])
-  verbs = ("prompt", "bash", "read", "write", "wait", "cd", "clock", "chance")
+    take("clock", counts.get("clock", 0))
+    n = reserved.get("clock", 0) + 1
+    entries += [x, ("done", x[1], "store", peek(x[1])), ("clock", f"clock{n}", ROOT, ROOT)]
+    entries.append(("done", f"clock{n}", "store", clocks[-1] if clocks else __import__("time").time()))
+    reserved["stand"], reserved["clock"] = _number(x[1]), n
+  verbs = ("prompt", "bash", "read", "write", "wait", "cd", "chance")
   carried = sorted((one for one in named if get(one)[0] in verbs), key=lambda one: (get(one)[0], _number(one)))
   paused = sorted({scope(one) for one in carried if get(one)[0] == "prompt"}, key=_number)
   entries += [("pause", c, OPERATOR) for c in paused]

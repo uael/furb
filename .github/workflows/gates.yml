@@ -283,3 +283,9 @@ jobs:
         env:
           CARGO_TARGET_DIR: ${{ github.workspace }}/gui/src-tauri/target
         run: FURB_CLI="$GITHUB_WORKSPACE/target/$CARGO_BUILD_TARGET/debug/furb" cargo test --features tauri/custom-protocol -- --test-threads 1
+      # A check that does not end leaves its processes and the logs of the system, which say where WebKit stopped.
+      - if: failure()
+        run: |
+          ps -axo pid,etime,command | grep -E 'furb|WebContent|WebKit|bun' | grep -v grep || true
+          ls -t ~/Library/Logs/DiagnosticReports | head -20 || true
+          log show --last 25m --style compact --predicate 'process == "furb-gui" OR process CONTAINS "WebContent" OR process == "launchservicesd"' | tail -150 || true

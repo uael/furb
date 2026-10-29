@@ -293,7 +293,15 @@ fn a_chain_that_a_word_makes_takes_each_extension_before_what_the_word_says_on_i
   let places = |all: &[Vec<(String, String, String)>; 2]| {
     all.clone().map(|facts| facts.into_iter().map(|one| (one.0, one.1)).collect::<Vec<_>>())
   };
-  assert_eq!(places(&again), places(&first), "a later life plays the same rungs at the same place");
+  let lived = places(&first);
+  let mut again = places(&again);
+  for (one, was) in again.iter_mut().zip(&lived) {
+    one.truncate(was.len());
+  }
+  assert_eq!(
+    again, lived,
+    "a later life plays the same rungs at the same place, then catches up at its tip"
+  );
 }
 
 #[test]
@@ -310,10 +318,12 @@ fn a_life_enables_at_its_tip_each_extension_it_is_given_and_plays_its_word_then_
     ("made", "store"),
     ("stand", "operator"),
     ("done", "stand"),
+    ("clock", "chain1"),
+    ("done", ""),
     ("enable", "extensions"),
   ];
-  assert_eq!(facts[..5], expected.map(|(kind, by)| (kind.to_owned(), by.to_owned())));
-  let enable = Fact::of(crate::value::entry(&kept[4].as_ref(), 0).unwrap()).unwrap();
+  assert_eq!(facts[..7], expected.map(|(kind, by)| (kind.to_owned(), by.to_owned())));
+  let enable = Fact::of(crate::value::entry(&kept[6].as_ref(), 0).unwrap()).unwrap();
   let words: Vec<_> = (0..3).map(|at| enable.word(at).and_then(|one| one.as_str())).collect();
   assert_eq!(
     (enable.about(), words),
@@ -321,7 +331,7 @@ fn a_life_enables_at_its_tip_each_extension_it_is_given_and_plays_its_word_then_
     "the fact is about the root, and carries the name, the word and the life word"
   );
   assert_eq!(
-    facts[5],
+    facts[7],
     ("rung".to_owned(), "extensions".to_owned()),
     "the rung stands after the fact"
   );

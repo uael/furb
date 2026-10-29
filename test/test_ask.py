@@ -20,16 +20,16 @@ def boom() -> Generator[tuple | None, tuple]:
 async def test_the_way_to_put_a_question_that_is_answered_now() -> None:
   """The way to put a question that is answered now: it makes the act, and gives back what the act came to."""
   _, _, root = born()
-  assert engine.ask("clock", root) == 1001.0
-  assert engine.get("clock1") == ("clock", "clock1", OPERATOR, root)
-  assert engine.peek("clock1") == 1001.0
+  assert engine.ask("clock", root) == 1002.0
+  assert engine.get("clock2") == ("clock", "clock2", OPERATOR, root)
+  assert engine.peek("clock2") == 1002.0
 
 
 async def test_it_is_no_entry_of_the_bus() -> None:
   """It is no entry of the bus: it makes the act through act and reads what it came to through peek."""
   _, log, root = born()
   made = len(acts(log))
-  assert engine.ask("chance", root) == 1 / 7
+  assert engine.ask("chance", root) == 2 / 7
   assert len(acts(log)) == made + 1 and said(log, "ask") == []
   assert [a[1] for a in said(log, "done") if a[1].startswith("chance")] == ["chance1"]
 

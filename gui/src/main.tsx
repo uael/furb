@@ -9,7 +9,13 @@ const faces = [
   '600 13px "Atkinson Hyperlegible Next"',
   '400 13px "Atkinson Hyperlegible Mono"',
 ];
-await Promise.all(faces.map((face) => document.fonts.load(face))).catch(() => undefined);
+// A load that stays pending would hold the first render for ever, and the page would never ask the core for its host,
+// so the wait ends after a bound.
+const FACES_WAIT = 3000;
+await Promise.race([
+  Promise.all(faces.map((face) => document.fonts.load(face))).catch(() => undefined),
+  new Promise((done) => setTimeout(done, FACES_WAIT)),
+]);
 
 const root = document.getElementById("root");
 if (root) {
