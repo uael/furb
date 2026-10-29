@@ -1008,7 +1008,7 @@ def shown(text: Text, show: Show) -> str:
 def unquoted(word: str) -> str:
   """What a word is as python: each quote in it bound as a string.
   A quote is a string a word writes between two marks, <s:name> at the start of a line and </s:name> at the end of a line, name being any python name, so nothing in it needs an escape.
-  The open mark is looked for line by line from the top, and its close mark from the open mark down, so a quote may hold the marks of a quote of another name.
+  The open mark is looked for line by line from the top, its close mark from the open mark down, and the next open mark after that close mark, so the text of a quote holds the marks of any quote as text.
   The value of a quote is the text between its marks, less a line break just after the open mark.
   A quote becomes its name bound to its value as python writes it, on the line of the open mark, and each other line of the quote becomes an empty line, so every line after it keeps its number.
   An open mark that has no close mark stays as it is, and the gate reads it as the python it is not.

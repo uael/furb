@@ -1,6 +1,9 @@
 """unquoted, what a word is as python."""
 
-from conftest import born, ran, said
+import re
+import time
+
+from conftest import QUOTES, born, ran, said
 from furb import engine
 
 
@@ -8,6 +11,8 @@ async def test_what_a_word_is_as_python() -> None:
   """What a word is as python: each quote in it bound as a string."""
   assert engine.unquoted("<s:hi>\nhello\n</s:hi>\nx = hi") == "hi = 'hello\\n'\n\n\nx = hi"
   assert engine.unquoted("x = 1") == "x = 1"
+  for row in QUOTES:
+    assert engine.unquoted(row["word"]) == row["python"], row["word"]
   _, _, root = born()
   assert await engine.rung("<s:hi>\nhello\n</s:hi>\nx = hi", on=root) is None
   assert engine.module(root)["x"] == "hello\n"
@@ -25,12 +30,18 @@ async def test_a_quote_is_a_string_a_word_writes_between_two_marks() -> None:
   assert engine.module(root)["k"] == f"{text}\n"
 
 
-async def test_the_open_mark_is_looked_for_from_the_top_and_its_close_mark_from_the_open_mark_down() -> None:
-  """The open mark is looked for line by line from the top, and its close mark from the open mark down, so a quote may hold the marks of a quote of another name."""
+async def test_the_open_mark_is_looked_for_from_the_top_its_close_mark_down_and_the_next_after_that_close_mark() -> (
+  None
+):
+  """The open mark is looked for line by line from the top, its close mark from the open mark down, and the next open mark after that close mark, so the text of a quote holds the marks of any quote as text."""
   word = "<s:a>\n<s:b>\nin\n</s:b>\n</s:a>\n<s:b>two</s:b>"
   assert engine.unquoted(word) == "a = '<s:b>\\nin\\n</s:b>\\n'\n\n\n\n\nb = 'two'"
   assert engine.unquoted("<s:a>\na</s:a>\nb</s:a>") == "a = 'a'\n\nb</s:a>"
   assert engine.unquoted("<s:a>\nx</s:a>\n<s:a>\ny</s:a>") == "a = 'x'\n\na = 'y'\n"
+  inner = "<s:b>\nbefore\n<s:a>\ninner\n</s:a>\nafter\n</s:b>"
+  told = "b = 'before\\n<s:a>\\ninner\\n</s:a>\\nafter\\n'" + "\n" * 6
+  assert engine.unquoted(f"<s:a>\nX\n</s:a>\n{inner}") == "a = 'X\\n'\n\n\n" + told
+  assert engine.unquoted(f"{inner}\n<s:a>\nX\n</s:a>") == told + "\na = 'X\\n'\n\n"
 
 
 async def test_the_value_of_a_quote_is_the_text_between_its_marks() -> None:
@@ -53,6 +64,8 @@ async def test_an_open_mark_that_has_no_close_mark_stays_as_it_is() -> None:
   """An open mark that has no close mark stays as it is, and the gate reads it as the python it is not."""
   word = "<s:hi>\nhello"
   assert engine.unquoted(word) == word
+  for row in QUOTES:
+    assert bool(re.search(r"(?m)^<s:\w+>", engine.unquoted(row["word"]))) == row["open"], row["word"]
   _, _, root = born()
   found = engine.gate(word, on=root)
   assert len(found) == 1 and found[0].startswith("line 1: ")
@@ -82,6 +95,10 @@ async def test_a_word_unquotes_in_a_time_that_grows_with_its_length_alone() -> N
   assert await laid is None
   sand.script[root] = [f"close(len({laid}_debug))"]
   assert await engine.prompt(int, "count", on=root) == 800000
+  repeated = "".join(f"<s:q{n % 50}>\n{'y' * 1000}\n</s:q{n % 50}>\n" for n in range(5000))
+  start = time.monotonic()
+  assert engine.unquoted(repeated) == "".join(f"q{n % 50} = {'y' * 1000 + chr(10)!r}\n\n\n" for n in range(5000))
+  assert time.monotonic() - start < 1
   many = "".join(f"<s:q{n}>\n{'y </s:q' * 2000}\n</s:q{n}>\n" for n in range(100))
   assert len(many) > 1_000_000
   assert await engine.rung(many + "k = len(q99)", on=root) is None
