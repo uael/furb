@@ -1732,7 +1732,7 @@ def test_a_loop_of_sleep_around_gh_counts_as_a_wait_on_ci(conductor: Round) -> N
 
 def test_a_command_that_prints_keeps_running_whatever_its_age(conductor: Round) -> None:
   bashing(conductor, ("bash8", "cargo test --workspace"))
-  for step in range(8):
+  for _step in range(8):
     conductor.files["bash8/stdout"] += "line\n"
     conductor.tend()
     conductor.now += 600

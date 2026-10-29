@@ -1,6 +1,30 @@
 import json
 import re
 
+from furb.engine import (
+  HIDDEN,
+  ROOT,
+  Refused,
+  Text,
+  bash,
+  cancel,
+  chain,
+  clock,
+  cwd,
+  get,
+  grant,
+  module,
+  over,
+  paused,
+  peek,
+  prompt,
+  read,
+  rung,
+  transcript,
+  wait,
+  write,
+)
+
 CONVERGING = """converge(target) runs one loop toward the words of the owner, and nothing else: no spec, no design, no plan.
 A target is a dict: its name; words, the numbers of the issues of the owner in the private repository of the decisions, whose bodies and comments are his ruling as they stand; paths, the files whose change it judges; capture(target, pairs, out), the command that captures it at each (part, sha) of pairs in one run, on the same records, as artifacts that the renderer of the target drew, in out/part; differ(target, out, was, whole, labels), the command and the stdin that turn the artifacts of out/head and of was into out/shots.json, the captures that changed with the text and the images that a judge reads; legend and look, the words that tell a judge how to read a capture; busy, a pattern of the faults that mean a busy tree and no fault of the tool; checks, the commands that must pass at the last sha; owners, the keys of the items of the round whose workers own its parts; and thread, the thread of its items.
 A capture changed when the differ of the target says that it changed: a capture of the same code in another run did not change. A judge reads a capture that changed as the text that the differ gives it, and gets an image of a capture only when the differ gives one.
@@ -258,7 +282,7 @@ def cost_of(asked: list[str]) -> float:
 def limited(where: str) -> bool:
   waiting = False
   for x in transcript(where):
-    if x[0] == "tell" and len(x) > 3 and any("waits on" in str(n) and "usage limit" in str(n) for n in x[3]):
+    if x[0] == "tell" and len(x) > 3 and isinstance(x[3], list) and any("waits on" in str(n) and "usage limit" in str(n) for n in x[3]):
       waiting = True
     elif x[0] == "done" and (get(x[1]) or ("",))[0] == "reply":
       waiting = False

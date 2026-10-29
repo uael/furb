@@ -1,5 +1,6 @@
+import re
+
 from furb.engine import (
-  Act,
   Exit,
   Refused,
   bash,
