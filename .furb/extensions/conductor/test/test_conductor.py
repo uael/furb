@@ -2163,3 +2163,10 @@ async def test_the_bottom_of_a_stack_waits_while_a_layer_above_runs_its_checks(c
   two(conductor, top=("IN_PROGRESS",))
   await conductor.land(conductor.prs[7], False)
   assert "merge" not in conductor.log()
+
+
+async def test_a_red_pr_whose_checks_still_run_blocks_no_family(conductor: Round) -> None:
+  pr = {"n": 9, "sha": "a" * 40, "head": "w/red", "base": "main", "labels": [], "verdict": "fail", "mergeable": "MERGEABLE", "checks": ["FAILURE", "QUEUED"]}
+  assert not conductor.needs(pr)
+  pr["checks"] = ["FAILURE", "SUCCESS"]
+  assert conductor.needs(pr)
