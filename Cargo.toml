@@ -31,7 +31,7 @@ exclude = ["gui/src-tauri"]
 
 # The one version of furb: each crate takes it, and maturin gives it to the wheel of each crate.
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 
 [lib]
 name = "furb"
