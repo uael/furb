@@ -308,14 +308,15 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
                   seen[path] = "gone"
           h = [v for x in transcript(ROOT, "clock") if isinstance(v := peek(x[1]), float)][-2:] or [0]
           h = (h[-1] - h[0]) / 3600
-          seen = {k: v for k, v in seen.items() if v}
+          fit = len(seen := {k: v for k, v in seen.items() if v})
           while (
             len(
               (caught := headed(id, "caught up", hours=(h > 1 and round(h, 1)) or None, changed=seen or None)).encode()
             )
             > BUDGET
           ):
-            seen = [*seen][: (isinstance(seen, list) and -1) or None]
+            seen = [*seen][:fit]
+            fit -= 1
           if "\n" in caught:
             yield "tell", id, [caught]
         case ("done", about, _, value) if running.get(maker := r[2]) in (
