@@ -8,7 +8,7 @@ use std::{
 };
 
 use super::{
-  Extension, Part, Places, configured, definitions, enabled, extensions, load, parts, word,
+  Extension, Part, Places, configured, definitions, enabled, extensions, load, parts, reloads, word,
 };
 use crate::{
   Ear, Engine, Fact, Object,
@@ -471,7 +471,7 @@ fn a_later_life_given_a_new_word_reloads_it_and_each_chain_plays_its_definitions
   fs::write(at.join("note.txt"), "noted\n").unwrap();
   let first = format!("{NOTE}\n\nseen = ['first']");
   let newer = "seen = []\n\ndef note(on=\"\"):\n  return read(\"other.txt\", on=on)\n\nLIMIT = 2";
-  let defined = "def note(on=\"\"):\n  return read(\"other.txt\", on=on)\n\nLIMIT = 2";
+  let defined = "seen = globals().setdefault(\"seen\", [])\n\ndef note(on=\"\"):\n  return read(\"other.txt\", on=on)\n\nLIMIT = 2";
   let full = format!("{first}\n\nnote()");
   {
     let mut engine = lived(&at, vec![note(&first)]);
@@ -505,6 +505,48 @@ fn a_later_life_given_a_new_word_reloads_it_and_each_chain_plays_its_definitions
   let root =
     engine.transcript(verbs::Transcript { on: Some("chain1".to_owned()), of: None }).unwrap();
   assert_eq!(enabled(&root), [note(newer)], "the life runs the word that it enabled last");
+}
+
+#[test]
+fn the_reloads_of_a_word_are_its_definitions_and_each_name_of_state_that_it_assigns_by_setdefault()
+{
+  let word = "import json\n\nseen = []\nLIMIT = 2\nnames: dict = globals().setdefault(\"names\", {})\nmixed_Case = 5\nleft, right = 1, 2\nLATER: int\n\ndef note():\n  return 1\n\nnote()\nif LIMIT:\n  other = 1";
+  assert_eq!(
+    reloads(word),
+    "import json\n\nseen = globals().setdefault(\"seen\", [])\n\nLIMIT = 2\n\nnames: dict = globals().setdefault(\"names\", {})\n\nmixed_Case = globals().setdefault(\"mixed_Case\", 5)\n\ndef note():\n  return 1"
+  );
+  assert_eq!(reloads("def broken(:"), "def broken(:", "a word that does not parse stays whole");
+}
+
+#[test]
+fn a_reload_plays_a_new_function_and_a_new_name_of_state_and_keeps_the_state_that_a_chain_holds() {
+  let at = place("fresh");
+  fs::write(at.join("note.txt"), "noted\n").unwrap();
+  let first = format!("{NOTE}\n\nseen = ['first']");
+  let newer = "seen = []\nfresh: dict = {'made': 1}\nTRAIN = 3\n\ndef trained():\n  return TRAIN";
+  let defined = "seen = globals().setdefault(\"seen\", [])\n\nfresh: dict = globals().setdefault(\"fresh\", {'made': 1})\n\nTRAIN = 3\n\ndef trained():\n  return TRAIN";
+  let full = format!("{first}\n\nnote()");
+  {
+    let mut engine = lived(&at, vec![note(&first)]);
+    engine.chain(verbs::Chain { label: Some("two".to_owned()), ..Default::default() }).unwrap();
+  }
+  let expected = [
+    ("chain1".to_owned(), full.clone()),
+    ("chain1".to_owned(), defined.to_owned()),
+    ("chain2".to_owned(), full.clone()),
+    ("chain2".to_owned(), defined.to_owned()),
+  ];
+  let mut engine = lived(&at, vec![note(newer)]);
+  assert_eq!(words(&mut engine, &["chain1", "chain2"]), expected);
+  for chain in ["chain1", "chain2"] {
+    let word = Some("write(Text('seen.txt', repr((seen, fresh, trained()))))".to_owned());
+    engine.rung(verbs::Rung { word, on: Some(chain.to_owned()), ..Default::default() }).unwrap();
+    assert_eq!(
+      fs::read_to_string(at.join("seen.txt")).unwrap(),
+      "(['first'], {'made': 1}, 3)",
+      "a new function and a new name of state play, and the state that the chain holds stays"
+    );
+  }
 }
 
 #[test]

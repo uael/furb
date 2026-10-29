@@ -23,7 +23,9 @@
  * the frames that it draws with nothing to show, when the 95th percentile of the frames takes a pace or more, or
  * longer than a frame at the target rate, or when a new fact of a kind costs in the long life more than 2 ms, and its
  * pairs cost in the long life more than twice what they cost in the short life. FURB_BENCH_JSON names a file that
- * takes one line of the measures of each run, and FURB_BENCH_FACTS sets about how many facts the long life holds. */
+ * takes one line of the measures of each run, and FURB_BENCH_FACTS sets about how many facts the long life holds.
+ * A local bench takes a lock that serializes the benches of all worktrees, prints the load average, and refuses when
+ * the load is over the number of cores: tui/script/quiet.ts says how, and CI is the place of a trusted measure. */
 import {
   appendFileSync,
   closeSync,
@@ -43,6 +45,7 @@ import type { HostState } from "../src/bridge.ts";
 import { demoLibrary, demoSession } from "../src/demo.ts";
 import { Preferences } from "../src/preferences.ts";
 import { fps } from "../src/theme.ts";
+import { load, settle } from "./quiet.ts";
 
 /** About how many facts the long life holds, as many copies of the fixture as make them, and the copies of the short
  * life, a tenth of it. */
@@ -157,6 +160,9 @@ function percentile(values: readonly number[], share: number): number {
   return sorted[Math.min(sorted.length - 1, Math.floor(share * sorted.length))] ?? 0;
 }
 
+// A local bench waits for the lock of the other benches of the machine, and refuses under a load over the cores.
+const release = await settle();
+const loaded = load();
 const root = await mkdtemp(join(tmpdir(), "furb-bench-"));
 const preferences = new Preferences(join(root, "ui.json"));
 const add = (record: string, ...added: unknown[][]) =>
@@ -467,6 +473,8 @@ const grown = (kind: Kind) => (after[kind] < FLOOR ? {} : { under: GROWTH });
 const fullest = rounds.reduce((best, one) => (one.rate / one.empty > best.rate / best.empty ? one : best));
 /** Each measure, its unit, and its budget: a value that it must stay under, or the least that it must reach. */
 const rows: [string, number, string, { under?: number; least?: number }][] = [
+  ["load average at the start", loaded, "load", {}],
+  ["load average at the end", load(), "load", {}],
   ["pace of the machine", unit, "ms", {}],
   ["first frame, cold", cold.first, "ms", {}],
   ["first frame, warm", first, "ms", { under: FIRST * unit }],
@@ -517,4 +525,5 @@ if (process.env.FURB_BENCH_JSON)
     process.env.FURB_BENCH_JSON,
     `${JSON.stringify(Object.fromEntries(rows.map(([name, value]) => [name, Number(value.toFixed(2))])))}\n`,
   );
+release();
 if (over) process.exitCode = 1;

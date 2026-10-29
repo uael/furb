@@ -168,8 +168,9 @@ meanings. The entry of such a name here gives only its form in the engine.
   on each chain whose source had it. The World says it again
   for an extension that the life runs when its word changed: at a stand, for the word that the host gives, and when
   a write of the life lands in the folder of an extension that a config turns on. That fact reloads the extension:
-  each chain that has the extension plays the definitions of the new word alone, its imports, functions, classes, types and names in
-  capitals, so each other name keeps its value, and the life word does not run again.
+  each chain that has the extension plays the definitions of the new word, its imports, functions, classes, types and names in
+  capitals, and each name of state that it assigns, as `name = globals().setdefault("name", value)`, so a new name takes
+  its value, each name that the chain holds keeps its value, and the life word does not run again.
 - made: the fact by which the store names in the record the build that made it, the digest of the engine and of the
   Kernel and the version of the build, `VERSION` in `src/world/store.rs`, which the store says as it hears the root of
   a new record at its birth. A life on a record that names another version is refused before any replay, since a
