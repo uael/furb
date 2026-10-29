@@ -246,10 +246,10 @@ fn a_second_refusal_in_a_row_of_an_actor_on_a_chain_pauses_the_chain_before_its_
       "tell",
       root.as_str(),
       format!(
-        "[\"#{root} paused by provider\\n{root}_value = Refused('m/high answered nothing: ProviderError: boom again')\"]"
+        "[\"#{root} paused by provider\\n{root}_value = 'm/high answered nothing: ProviderError: boom again'\"]"
       ),
     ),
-    ("pause", root.as_str(), refused("boom again")),
+    ("pause", root.as_str(), "'m/high answered nothing: ProviderError: boom again'".into()),
     ("done", "reply2", refused("boom again")),
   ];
   let expected: Vec<_> =

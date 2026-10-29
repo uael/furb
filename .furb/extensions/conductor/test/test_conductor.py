@@ -326,6 +326,39 @@ async def test_a_lone_failure_reruns_its_failed_jobs_once_before_a_fixer(conduct
   assert [key for key, _ in conductor.hired] == ["fix5"]
 
 
+@POSIX
+@JQ
+async def test_a_pr_on_main_with_no_run_of_the_gates_at_its_head_gets_one_once(conductor: Round) -> None:
+  conductor.say(r"compare/main\.\.\.abc", '{"behind_by": 3}')
+  title = conductor.pr(checks=("SUCCESS",), idle=10)
+  assert await conductor.heal(title, False) == "#5 had no run of the gates at abc, so the round updated its branch."
+  assert conductor.log().count("update-branch") == 1
+  assert await conductor.heal(title, False) == ""
+  assert conductor.log().count("update-branch") == 1
+
+
+@POSIX
+@JQ
+async def test_a_pr_with_no_run_of_the_gates_under_a_red_main_reruns_the_workflows_at_its_head(conductor: Round) -> None:
+  conductor.say(r"pr view 5 --json headRefOid", '{"headRefOid": "abc"}')
+  conductor.say(r"run list --commit abc", json.dumps([run(7, "titles", "10:00", "success")]))
+  got = await conductor.heal(conductor.pr(checks=("SUCCESS",), idle=10), True)
+  assert got == "#5 had no run of the gates at abc, and the round ran its workflows again."
+  assert "update-branch" not in conductor.log()
+  assert "run rerun 7\n" in conductor.log()
+
+
+@POSIX
+@JQ
+async def test_a_pr_with_a_run_of_the_gates_or_a_fresh_push_or_a_stack_base_gets_none(conductor: Round) -> None:
+  conductor.say(r"compare/main\.\.\.abc", '{"behind_by": 3}')
+  gated = conductor.pr(checks=("SUCCESS",), names=["the hooks"], idle=10)
+  assert await conductor.heal(gated, False) == ""
+  assert await conductor.heal(conductor.pr(checks=("SUCCESS",), idle=1), False) == ""
+  assert await conductor.heal(conductor.pr(checks=("SUCCESS",), idle=10, base="w/k4"), False) == ""
+  assert "update-branch" not in conductor.log()
+
+
 def test_new_items_wait_while_an_open_pr_needs_a_worker(conductor: Round) -> None:
   conductor.efforts.update({key: SONNET for key in "abcdef"})
   conductor.queue[:] = [("a", "", ""), ("b", "", "")]

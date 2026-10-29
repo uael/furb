@@ -811,10 +811,10 @@ impl Provider {
               );
             }
             let got = got.map_err(|no| format!("{} answered nothing: {no}", reply.actor));
-            // The pause carries the refusal that the reply ends with, so the chain is told why by the pause itself.
             if let (Err(why), true) = (&got, reply.again) {
-              let cause = Fault::refused(why.clone()).object();
-              let _ = co.call("pause", vec![Object::string(&reply.chain), cause], vec![]).await;
+              let _ = co
+                .call("pause", vec![Object::string(&reply.chain), Object::string(why)], vec![])
+                .await;
             }
             let got = got.map_err(Fault::refused).unwrap_or_else(|fault| fault.object());
             say(&mut co, Fact::says("done", &id, [got]));
