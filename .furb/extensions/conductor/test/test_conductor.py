@@ -2503,3 +2503,95 @@ async def test_a_red_draft_whose_worker_ended_goes_to_its_maker_or_a_fixer_and_t
   await conductor.sweep(300)
   told = [message for message, _ in conductor.prompts]
   assert any(m.startswith("#8 is conflicting at sha8 and no worker acts on it, a defect of the round:") for m in told)
+
+
+@POSIX
+@JQ
+async def test_the_order_of_a_stacked_pr_reads_git_for_the_rebase_that_fits_the_base_now(
+  conductor: Round, tmp_path: Path
+) -> None:
+  stacked(conductor, tmp_path)
+  old, new = push_parent(conductor, tmp_path, False)
+  said = await conductor.based_now(conductor.prs[8])
+  gained = git("rev-parse", "--short", new, cwd=tmp_path, env=conductor.env).strip()
+  assert f"whose head changed from {old} to {new}: git rebase origin/w/parent puts its 1 commit on a base that only advanced." in said
+  assert "Its checks run on refs/pull/8/merge, the merge of its head into w/parent" in said
+  assert said.endswith(f"The base gained:\n  {gained} parent2\n")
+  assert await conductor.based_now(conductor.pr(n=9)) == ""
+
+
+@POSIX
+@JQ
+async def test_the_order_of_a_stacked_pr_whose_base_was_rewritten_names_the_commit_that_it_shares_with_the_old_base(
+  conductor: Round, tmp_path: Path
+) -> None:
+  stacked(conductor, tmp_path)
+  old, _ = push_parent(conductor, tmp_path, True)
+  said = await conductor.based_now(conductor.prs[8])
+  assert f"git rebase --onto origin/w/parent {old} w/kid replays its 1 commit." in said
+  assert "The base gained" not in said
+
+
+def conflict_repo(conductor: Round, tmp_path: Path) -> str:
+  env, origin = conductor.env, tmp_path / "origin.git"
+  git("init", "-q", "--bare", str(origin), cwd=tmp_path, env=env)
+  git("init", "-q", "-b", "main", cwd=tmp_path, env=env)
+  git("remote", "add", "origin", str(origin), cwd=tmp_path, env=env)
+  (tmp_path / "app.ts").write_text("a\n", encoding="utf-8")
+  (tmp_path / "other.txt").write_text("o\n", encoding="utf-8")
+  git("add", ".", cwd=tmp_path, env=env)
+  git("commit", "-q", "-m", "base", cwd=tmp_path, env=env)
+  git("push", "-q", "origin", "main", cwd=tmp_path, env=env)
+  git("checkout", "-q", "-b", "w/k5", cwd=tmp_path, env=env)
+  (tmp_path / "app.ts").write_text("a edited\n", encoding="utf-8")
+  git("commit", "-q", "-am", "edit app", cwd=tmp_path, env=env)
+  sha = git("rev-parse", "HEAD", cwd=tmp_path, env=env).strip()
+  git("push", "-q", "origin", "HEAD:refs/pull/5/head", cwd=tmp_path, env=env)
+  git("checkout", "-q", "main", cwd=tmp_path, env=env)
+  git("rm", "-q", "app.ts", cwd=tmp_path, env=env)
+  git("commit", "-q", "-m", "Split app.ts", cwd=tmp_path, env=env)
+  (tmp_path / "other.txt").write_text("o2\n", encoding="utf-8")
+  git("commit", "-q", "-am", "Touch other", cwd=tmp_path, env=env)
+  git("push", "-q", "origin", "main", cwd=tmp_path, env=env)
+  return sha
+
+
+@POSIX
+@JQ
+async def test_an_order_for_a_conflict_names_the_commits_of_main_on_its_files_and_the_files_that_they_delete(
+  conductor: Round, tmp_path: Path
+) -> None:
+  sha = conflict_repo(conductor, tmp_path)
+  await conductor.mend(conductor.pr(mergeable="CONFLICTING", sha=sha), 0.0, False)
+  brief = conductor.hired[0][1]
+  assert "The commits of main since the fork that changed a file of this PR" in brief
+  assert "Split app.ts (1 of your files); it deletes app.ts" in brief
+  assert "Touch other" not in brief
+  assert "take the file of main and apply your change again in its new place" in brief
+
+
+@POSIX
+@JQ
+async def test_an_order_for_a_failed_check_names_each_failed_check(conductor: Round) -> None:
+  pr = conductor.pr(checks=("FAILURE", "FAILURE", "SUCCESS"), names=["the hooks", "the scope", "the title"])
+  await conductor.mend(pr, 0.0, False)
+  assert "Its failed checks: the hooks FAILURE, the scope FAILURE." in conductor.hired[0][1]
+
+
+@POSIX
+@JQ
+async def test_a_conflict_of_the_gallery_branch_gets_no_order_until_the_wait_ends(conductor: Round) -> None:
+  pr = conductor.pr(head="w/gallery", mergeable="CONFLICTING")
+  assert await conductor.mend(pr, 1000.0, False) == "running"
+  assert await conductor.mend(pr, 1000.0 + conductor.GALLERY_WAIT - 1, False) == "running"
+  assert conductor.hired == [] and conductor.heard == [
+    "#5 (w/gallery) conflicts, and the gallery workflow builds it again from main, so the round orders no fixer."
+  ]
+  assert await conductor.mend(pr, 1000.0 + conductor.GALLERY_WAIT, False) == "conflicting"
+  assert [key for key, _ in conductor.hired] == ["fix5"]
+
+
+def test_the_texts_of_an_order_say_how_to_read_a_rerun_a_lagging_branch_and_a_moved_file(conductor: Round) -> None:
+  assert "Read the failed log before any rerun" in conductor.FIX
+  assert "git merge --ff-only origin/<your branch>" in conductor.FIXOWN
+  assert "a file that your hunks change is gone from main" in conductor.FIX
