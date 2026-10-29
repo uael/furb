@@ -32,16 +32,18 @@ test("a thread is one box: its message with a line of its color, its program as 
     async ({ session, app, frame }) => {
       await idle(session);
       let rows = (await frame()).split("\n").map((row) => feedOf(session, row));
+      // A row of the program quotes the answer, so the text of the answer is the one that no call of close holds.
+      const answered = (row: string) =>
+        row.includes("Fieldnotes keeps ideas close") && !row.includes("close(");
       // The markdown of the box draws over a few frames.
-      for (
-        let step = 0;
-        step < 80 && !rows.some((row) => row.includes("Fieldnotes keeps ideas close"));
-        step++
-      ) {
+      for (let step = 0; step < 80 && !rows.some(answered); step++) {
         await Bun.sleep(25);
         rows = (await frame()).split("\n").map((row) => feedOf(session, row));
       }
-      const at = (text: string) => rows.findIndex((row) => row.includes(text));
+      const at = (text: string) =>
+        rows.findIndex(
+          (row) => row.includes(text) && (text !== "Fieldnotes keeps ideas close" || answered(row)),
+        );
       // The sections of the box are cards that share one panel, in the order of the box.
       const ids = app.scroll.getChildren().map((node) => node.id);
       const head = ids.find((id) => /^prompt\d+$/.test(id)) ?? "";
@@ -112,14 +114,23 @@ test("a folded thread marks new work with a dot, and the dot goes once the threa
       const id = listed(session)[0]?.act.id ?? "";
       app.foldThread(id, true);
       const folded = async () =>
-        (await frame()).split("\n").find((row) => row.includes("Explore this project")) ?? "";
+        (await frame())
+          .split("\n")
+          .map((row) => feedOf(session, row))
+          .find((row) => row.includes("Explore this project")) ?? "";
       expect(await folded()).not.toContain("●");
       await session.reply(id, "One more thing");
       await until(session, () => (listed(session)[0]?.messages.length ?? 0) === 1);
       // The model works the message after it lands. Work that ends after the thread folds again is new work, which
       // marks the thread again, so the thread opens only once the work ends.
       await idle(session);
-      expect(await folded()).toMatch(/┃ ● .*Explore this project/);
+      // The dot stands at the right of the header, before its shape, as the open thread says its state there.
+      let marked = await folded();
+      for (let step = 0; step < 160 && !marked.includes("●"); step++) {
+        await Bun.sleep(25);
+        marked = await folded();
+      }
+      expect(marked).toMatch(/┃ ✓ Explore this project.* ● /);
       app.foldThread(id, false);
       // The box draws open over a few frames on a slow machine, and the thread counts as seen once it has.
       let open = await frame();
@@ -208,7 +219,9 @@ test("a click on a ... of a window of code opens it in a block that fits its lin
       };
       const first = (await gaps())[0];
       if (!first) throw new Error("No window is rolled.");
-      const card = app.scroll.getChildren().find((node) => node.id.startsWith("program-"));
+      // The words of the extensions stand as a card of their own above, so the window is the card at the row of the gap.
+      const cards = app.scroll.getChildren().filter((node) => node.id.startsWith("program-"));
+      const card = cards.findLast((node) => node.y <= first.y) ?? cards[0];
       const key = `window:${card?.id.slice("program-".length)}:0`;
       expect(session.folds[key]).toBeUndefined();
       await screen.mockMouse.click(first.x, first.y);
@@ -285,7 +298,7 @@ test("the up arrow in an empty input takes back the last message to the thread t
       // The key goes to the handler of the input itself: a key press of the test terminal reaches it later on a slow
       // machine than the test can wait.
       expect(app.walkHistory({ name: "up" } as KeyEvent)).toBe(true);
-      await until(session, () => app.composer.plainText === "First wording");
+      await until(session, () => app.composer.plainText === "First wording", "compose");
       app.composer.setText("Second wording");
       await app.submit();
       await until(session, () => (listed(session)[0]?.messages.length ?? 0) === 2);
@@ -302,5 +315,26 @@ test("the up arrow in an empty input takes back the last message to the thread t
       expect(shown).toContain("Second wording");
     },
     { ...size, useMouse: true },
+    true,
+  ));
+
+test("a message keeps its words whole beside a state and controls that are wider than the room it leaves, which go under it", () =>
+  composing(
+    async ({ session, frame }) => {
+      await idle(session);
+      const shown = async () =>
+        (await frame()).split("\n").map((row) => row.slice(0, 100 - session.preferences.sidebarWidth));
+      let rows = await shown();
+      // The markdown of the message draws over a few frames.
+      for (let step = 0; step < 80 && !rows.some((row) => row.includes("Explore this project")); step++) {
+        await Bun.sleep(25);
+        rows = await shown();
+      }
+      const at = rows.findIndex((row) => row.includes("Explore this project"));
+      expect(at).toBeGreaterThan(0);
+      expect(rows[at]).toMatch(/┃ Explore this project/);
+      expect(rows.slice(at, at + 5).join("\n")).toContain("Collapse");
+    },
+    { width: 100, height: 46 },
     true,
   ));

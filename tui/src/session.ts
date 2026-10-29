@@ -223,6 +223,7 @@ const kept = [
   "histories",
   "stashes",
   "started",
+  "changedAt",
   "took",
   "queued",
   "queueError",
@@ -251,6 +252,7 @@ const forms: Record<(typeof kept)[number] | "cost", "text" | "flag" | "number" |
   histories: "map",
   stashes: "map",
   started: "map",
+  changedAt: "map",
   took: "map",
   queued: "maps",
   queueError: "text",
@@ -403,6 +405,9 @@ export class Session extends EventEmitter {
   private readonly workspace: string;
   histories: Record<string, string[]> = {};
   started: Record<string, number> = {};
+  /** When this session saw each act change its phase, once the acts of the record it opened on were read. The record
+   * holds no time, so an act that was done before that has none. */
+  changedAt: Record<string, number> = {};
   /** How many milliseconds each act took that a life of the session ran, which a later life does not know, since the
    * record holds no time. */
   took: Record<string, number> = {};
@@ -633,12 +638,21 @@ export class Session extends EventEmitter {
           let moved = false;
           for (const act of acts) {
             const place = index.at.get(act.id);
-            moved ||= place === undefined || phaseOf(next[place]) !== phaseOf(act);
+            const phased = place === undefined || phaseOf(next[place]) !== phaseOf(act);
+            moved ||= phased;
             if (place !== undefined) next[place] = act;
             else index.at.set(act.id, next.push(act) - 1);
             index.ids.set(act.id, act);
             placed(index, act);
             if (!act.done) this.started[act.id] ??= clock();
+            // Only the prompts tell when a thread changed, so the table stays as small as the threads: a step stamps the
+            // prompt that it works for, and a message stamps the head of its thread.
+            if (phased && this.counted !== 0 && (act.kind === "prompt" || act.kind === "rung")) {
+              const now = clock();
+              const maker = act.kind === "rung" ? act.by : act.id;
+              const head = index.ids.get(maker)?.thread;
+              for (const id of [act.id, maker, head]) if (id) this.changedAt[id] = now;
+            }
             if (act.took !== undefined) this.took[act.id] = act.took;
           }
           if (moved) this.version++;
@@ -1602,16 +1616,16 @@ export class Session extends EventEmitter {
   private readonly retaken = new Set<string>();
   /** The last message of the operator in a thread that still runs, or that a cancel ended, taken back: a message that
    * runs is cancelled, and its text comes back to be edited and sent again. The cancelled message leaves the box. */
-  async takeBackMessage(thread: string): Promise<string | undefined> {
+  async takeBackMessage(thread: string): Promise<void> {
     const last = this.lastMessage(thread);
-    if (!last) return undefined;
+    if (!last) return;
     this.retaken.add(last.id);
     if (!last.done) {
       this.cancels.add(last.id);
       await this.engine.cancel(last.id);
     }
     await this.refresh();
-    return String(last.words[1] ?? "");
+    this.emit("compose", String(last.words[1] ?? ""));
   }
   /** A message to a thread, from the box at the end of the thread. It goes to the thread whatever the input is
    * doing, and a message to a thread that is over opens it again. */

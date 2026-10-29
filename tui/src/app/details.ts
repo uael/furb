@@ -4,6 +4,7 @@ import {
   type LineNumberOptions,
   LineNumberRenderable,
   type MouseEvent,
+  parseColor,
   type Renderable,
   type RGBA,
   type ScrollBoxOptions,
@@ -15,16 +16,16 @@ import {
 } from "@opentui/core";
 import { actorParts, display, safeText, TIMEOUT, unmarked } from "furb";
 import {
+  type CodeRow,
   cancelled,
   type Exit,
   FOLD,
   type Fold,
   failed,
-  foldStrings,
+  layout,
   literals,
   type ProgramLine,
   tailOf,
-  wrap,
   writing,
 } from "furb/life";
 import { clock } from "../clock.ts";
@@ -126,12 +127,36 @@ export const details = part({
     return { name: modelName(model).id, effort };
   },
 
-  /** Who sent a prompt that is not a message of the operator, and to which model: a chain tells its model that an
-   * act it waits on is done, and a rung asks a model a question. */
+  /** Who sent a prompt that is not a message of the operator, and to which model: the model alone for a chain, which
+   * tells its model that an act it waits on is done, and the rung and the model for a rung that asks a question. */
   sender(act: ActRow): string {
     const model = this.model(String(act.words[2] ?? "")).name;
     const maker = this.session.actOf(act.by);
-    return maker?.kind === "chain" ? `the chain told ${model}` : `${act.by} asked ${model}`;
+    return maker?.kind === "chain" ? model : `${act.by} asked ${model}`;
+  },
+
+  /** The message of a prompt as a reader reads it. The chain tells a model that an act is done or paused with the id
+   * of the act, which reads as the last statement of the code of that act, in a fence of code unless it is plain. */
+  spoken(act: ActRow, plain = false): string {
+    const message = String(act.words[1] ?? "");
+    if (this.session.actOf(act.by)?.kind !== "chain") return message;
+    const told = message.match(/^([a-z_]+\d+) (done|paused)$/);
+    const about = told ? this.session.actOf(told[1] ?? "") : undefined;
+    if (!told || !about) return message;
+    // The last statement of a word is where it ended, and a long line keeps its start alone.
+    const last = this.subject(about)
+      .trimEnd()
+      .split("\n")
+      .findLast((one) => one.trim() && !/^<\/?s:\w+>/.test(one));
+    const code = clip(last?.trim() || about.id, 60);
+    const fence = plain ? "" : code.includes("`") ? "``" : "`";
+    return `${fence}${code}${fence} ${told[2] === "done" ? "is done" : "paused"}`;
+  },
+
+  /** The title of a thread as the feed reads its message. */
+  threadTitle(thread: { act: ActRow; title: string }): string {
+    const spoken = this.spoken(thread.act, true);
+    return spoken === String(thread.act.words[1] ?? "") ? thread.title : spoken;
   },
 
   /** A word of Python in a card: its numbered lines, the reason it failed, and what to do after a refusal of the
@@ -295,20 +320,24 @@ export const details = part({
     };
   },
 
-  /** The last row of a thread while its model works on a step: the number of the line that comes, then what the model
-   * thinks or writes, which the tick draws again, and a loader at the right end of the row. */
+  /** The last row of a thread while its model works on a step: a loader, the number of the line that comes, then what
+   * the model thinks or writes, which the tick draws again. */
   thinkingRow(step: string, display: number, digits: number, room: number): LineNumberRenderable {
-    const { number, parts } = this.thinkingParts(step, display, room - 3);
-    const text = this.text(this.loading(parts), c.muted, { wrapMode: "none" });
+    const { number, parts } = this.thinkingParts(step, display, room);
+    const text = this.text(parts, c.muted, { wrapMode: "none" });
     const view = new LineNumberRenderable(this.renderer, {
       target: text,
       paddingRight: space.inset,
       fg: c.faint,
       minWidth: gutterWidth(digits),
       lineNumbers: new Map([[0, number]]),
+      // A sign of the gutter widens the gutter by its width, which moves the number and the code of this row off the
+      // columns of the rows above it: the loader takes the first column of the gutter, which no number reaches.
+      renderAfter(buffer) {
+        buffer.drawText(spin(), this.x, this.y, parseColor(c.accent));
+      },
     });
-    // The tick turns the loader, and the first frame draws it too, before any tick.
-    view.setLineSign(0, { before: spin(), beforeColor: c.accent });
+    // The loader is drawn by each frame, the first one too, so no tick is needed before it shows.
     this.thinkingRows.set(step, {
       view,
       text,
@@ -320,12 +349,6 @@ export const details = part({
     return view;
   },
 
-  /** The parts of a row that a model writes, with the loader after them: no sign stands between the numbers and the
-   * code. */
-  loading(parts: Part[]): Part[] {
-    return [...parts, ["  "], [spin(), c.accent]];
-  },
-
   /** The rows that models write move with the tick: the loader turns, and the text follows the stream. */
   tickThinking(): void {
     for (const [step, row] of this.thinkingRows) {
@@ -333,7 +356,7 @@ export const details = part({
         this.thinkingRows.delete(step);
         continue;
       }
-      row.view.setLineSign(0, { before: spin(), beforeColor: c.accent });
+      row.view.requestRender();
       this.followThinking(step);
     }
   },
@@ -415,7 +438,7 @@ export const details = part({
     // The strings that each row folds, and the rows that show the strings of a line whole, each with where it starts
     // in the text of its line.
     const folded = new Map<number, { line: Extract<ProgramLine, { kind: "code" }>; folds: Fold[] }>();
-    const whole = new Map<number, number>();
+    const whole = new Map<number, CodeRow["parts"]>();
     // The colors come from each statement whole, so a line cut to its room or a folded string changes no color: the
     // program as it ran, each part of a row with where it starts in that program, and the rows that only comment.
     let program = "";
@@ -433,45 +456,30 @@ export const details = part({
     for (const line of lines) {
       if (line.kind === "code") {
         const note = noteOf(line);
-        // An open line, and a line whose strings the operator opened, show the whole text, cut at the column into
-        // rows of their own. Another line folds its longest strings until it fits.
-        const shown =
-          this.lineOpen(line) || this.openStrings(line).size ? undefined : foldStrings(line.text, column);
-        const cuts = shown ? [] : wrap(line.text, column);
-        const parts = shown
-          ? [fit(shown.text, column)]
-          : cuts.map((cut) => " ".repeat(cut.indent) + line.text.slice(cut.from, cut.to));
-        const code = parts[0] ?? "";
+        // An open line shows its whole text. Another line folds its longest strings, but those that the operator
+        // opened, until it fits one row, and a line that still does not fit lays out in rows as ruff format would.
+        // The code takes 100 columns at most, and its hint counts in them as a comment does in ruff format: a line
+        // that fits beside the column of the hints stands in it, and a longer one takes the room that its hint leaves.
+        const width = Math.min(100, Math.max(column, room - lane - (note ? Bun.stringWidth(note) + 6 : 0)));
+        const rows = layout(line.text, width, this.lineOpen(line) ? undefined : this.openStrings(line));
+        const code = rows[0]?.text ?? "";
         const mark = markOf(line);
-        // The mark stands in a lane of its own after the column of the code, before the comment, so that no line is
-        // longer for it.
-        const hint = note ? `# ${fit(note, room - column - 4 - lane)}` : "";
+        // The mark stands in a lane of its own after the code, before the comment, so that no line is longer for it.
+        const hint = note ? `# ${fit(note, room - Math.max(column, Bun.stringWidth(code)) - 4 - lane)}` : "";
         const left = `${code}${" ".repeat(Math.max(0, column - Bun.stringWidth(code)))}`;
         const body = hint || mark ? `${left}  ${lane ? (mark ? `${mark} ` : "  ") : ""}${hint}` : code;
         const at = push(body, line.display, line);
         if (hint) fixed.push([at, body.length - hint.length, body.length, "comment"]);
         if (mark) flag(at, left.length + 2);
-        for (const more of parts.slice(1)) push(more, undefined, line);
-        const folds = shown?.folds.filter((fold) => fold.at + FOLD.length <= Bun.stringWidth(code)) ?? [];
-        if (folds.length) folded.set(at, { line, folds });
-        if (!shown) for (const [k, cut] of cuts.entries()) whole.set(at + k, cut.from - cut.indent);
+        for (const row of rows.slice(1)) push(row.text, undefined, line);
         const base = program.length;
         program += `${line.text}\n`;
-        if (shown) {
-          const found = shown.folds.length ? literals(line.text) : [];
-          let from = 0;
-          let source = base;
-          for (const fold of shown.folds) {
-            if (fold.at >= code.length) break;
-            pieces.push([at, from, fold.at, source]);
-            fixed.push([at, fold.at, Math.min(fold.at + FOLD.length, code.length), "string"]);
-            from = fold.at + FOLD.length;
-            source = base + (found[fold.literal]?.end ?? 0);
-          }
-          if (from < code.length) pieces.push([at, from, code.length, source]);
-        } else
-          for (const [k, cut] of cuts.entries())
-            pieces.push([at + k, cut.indent, cut.indent + cut.to - cut.from, base + cut.from]);
+        for (const [k, row] of rows.entries()) {
+          if (row.folds.length) folded.set(at + k, { line, folds: row.folds });
+          for (const fold of row.folds) fixed.push([at + k, fold.at, fold.at + FOLD.length, "string"]);
+          for (const [from, to, source] of row.parts) pieces.push([at + k, from, to, base + source]);
+          whole.set(at + k, row.parts);
+        }
         if (line.runs) {
           colors.set(at, { content: c.selected, gutter: c.selected });
         }
@@ -623,9 +631,11 @@ export const details = part({
       const hit = foldAt(event.x, event.y);
       if (hit) return this.openString(hit.line, hit.fold.literal);
       const open = this.openStrings(line);
-      const index = (whole.get(row) ?? -1) + event.x - target.x;
+      const x = event.x - target.x;
+      const part = whole.get(row)?.find(([from, to]) => x >= from && x < to);
+      const index = part ? part[2] + x - part[0] : -1;
       const literal = literals(line.text).findIndex(
-        (one, k) => open.has(k) && whole.has(row) && index >= one.start - 1 && index <= one.end,
+        (one, k) => open.has(k) && part && index >= one.start - 1 && index <= one.end,
       );
       if (literal >= 0) return this.openString(line, literal);
       if (line.acts.length || Bun.stringWidth(line.text) > column) this.openLine(line);
@@ -771,10 +781,11 @@ export const details = part({
 
   /** A card under the pointer, which a press opens. */
   hoverCard(x: number, y: number, rows: number, open: () => void, ...nodes: Renderable[]): void {
-    const width = Math.min(58, this.renderer.width - 4);
+    const area = this.region(x);
+    const width = Math.min(58, area.width - 4);
     this.popup(
       {
-        left: Math.max(1, Math.min(x, this.renderer.width - width - 1)),
+        left: Math.max(area.left + 1, Math.min(x, area.left + area.width - width - 1)),
         top: Math.max(1, Math.min(y + 1, this.renderer.height - rows)),
         width,
         maxHeight: rows,

@@ -212,11 +212,13 @@ changes when the terminal changes. ⌃T or `/theme` chooses another. Sessions sh
 `sidebarWidth` in the preferences file sets the width of the sidebar, from 32 to 72 columns, and 56 by default. A file with no `version` comes from an earlier build, which saved its own default width with each save, so the TUI takes no width from it. `sidebarStyle` picks its shape: cards, outline or inbox. On a terminal narrower
 than 100 columns the sidebar is hidden, and `/workspace` keeps all sessions available from the keyboard.
 
-A line of a word is 100 columns wide at most, less the room of its hint. A string of three marks over many lines
-shows as one string with its escapes, and so does a quote of a word, `<s:name>`, as the binding that it makes. A string
-too long for its line shows its start and an underlined `...`. A click on a line opens it in rows that cut between
-tokens, never inside one. The colors come from the complete statement, so a cut line and a folded string keep the
-colors of the whole.
+A line of a word is 100 columns wide at most, and its hint counts in them as a comment does in ruff format. A string of
+three marks over many lines shows as one string with its escapes, and so does a quote of a word, `<s:name>`, as the
+binding that it makes. A line too long for its row first folds its longest strings, each to its start and an underlined
+`...`, and a line that still does not fit lays out in rows as ruff format lays it out: it opens its last pair of
+brackets, and the body stands one step deeper, on one row when it fits, else one part on each row, cut after a comma or
+before an operator. A click on a line shows it with no fold, laid out the same way. No row loses a character, and the
+colors come from the complete statement, so a row and a folded string keep the colors of the whole.
 
 The TUI serves each person who uses it:
 

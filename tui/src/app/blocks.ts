@@ -39,6 +39,41 @@ export const blocks = part({
     );
   },
 
+  /** The region of the screen that a dialog or a menu covers, whole: the sidebar for a point in it, else the feed with
+   * its gutters. An overlay never crosses the edge of its region, so it cuts no word of the region beside it. */
+  region(x = 0): { left: number; width: number } {
+    const side = this.sidebarShown ? this.session.preferences.sidebarWidth : 0;
+    const edge = this.renderer.width - side;
+    return side && x >= edge ? { left: edge, width: side } : { left: 0, width: edge };
+  },
+
+  /** A row of a text and what stands at its right. The text keeps at least half of the row, or its own width when that
+   * is less, so that what stands beside it never squeezes it to a few columns: when the room leaves less, what
+   * stood beside it goes under it, at the right. The width of what stands beside it is the sum of the widths of the
+   * nodes that it holds, with their margins. */
+  sided(
+    options: BoxOptions,
+    text: Renderable,
+    asides: readonly (Renderable | undefined)[],
+    width: number,
+    room: number,
+    said: string,
+  ): BoxRenderable {
+    text.flexGrow = 1;
+    text.flexShrink = 1;
+    const own = Math.max(...said.split("\n").map((line) => Bun.stringWidth(line)));
+    const under = room - width < Math.min(own, Math.ceil(room / 2));
+    const row = this.box({ ...options, flexDirection: under ? "column" : "row" });
+    row.add(text);
+    const rest = asides.filter((one) => one !== undefined);
+    if (under && rest.length) {
+      const foot = this.box({ flexDirection: "row", justifyContent: "flex-end" });
+      for (const one of rest) foot.add(one);
+      row.add(foot);
+    } else for (const one of rest) row.add(one);
+    return row;
+  },
+
   /** Whether the sidebar shows, from the preferences and the screen. The node of the rail follows it at the next
    * render, so a read of the node between a change and that render sees the old state. */
   get sidebarShown(): boolean {

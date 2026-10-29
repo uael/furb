@@ -86,6 +86,19 @@ export function elapsed(milliseconds: number): string {
   return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
 }
 
+const RECORD = /^(\d{4})-(\d\d)-(\d\d)T(\d\d)-(\d\d)-(\d\d)\.\d+Z-[0-9a-f]+$/;
+
+/** What a person reads for a record from its name, which starts with the time that it was made: "Oct 28, 07:45", in
+ * the time of the machine. A name of another form stays as it is. */
+export function recordLabel(name: string): string {
+  const parts = RECORD.exec(name)?.slice(1).map(Number);
+  if (!parts) return name;
+  const [year = 0, month = 1, day = 1, hour = 0, minute = 0, second = 0] = parts;
+  const when = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+  const date = when.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return `${date}, ${String(when.getHours()).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")}`;
+}
+
 /** How long ago a time was, in the largest unit that says it, and the date past a week. */
 export function ago(time: number, now = clock()): string {
   const minutes = Math.floor((now - time) / 60_000);

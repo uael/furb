@@ -1561,6 +1561,19 @@ def test_the_ledger_of_the_tooling_keeps_one_form_of_when_and_moves_the_old_entr
   assert whens == [str(calendar.timegm((2026, 10, 23, 0, 0, 0))), "1793181153"]
 
 
+def test_a_flaw_that_a_merged_pr_fixed_is_closed_with_that_pr_and_opens_again_when_it_comes_again(
+  conductor: Round,
+) -> None:
+  conductor.flaw("The PATH of the World lacks /opt/homebrew/bin", "A second friction")
+  assert conductor.settle_flaw("path of the world", 707) == 1
+  assert conductor.settle_flaw("path of the world", 707) == 0
+  held = {x["what"]: x for x in json.loads(conductor.files[conductor.TOOLING])}
+  assert (held["The PATH of the World lacks /opt/homebrew/bin"]["state"], held["The PATH of the World lacks /opt/homebrew/bin"]["closed_by"]) == ("closed", "#707")
+  assert held["A second friction"]["state"] == "open" and "closed_by" not in held["A second friction"]
+  conductor.flaw("The PATH of the World lacks /opt/homebrew/bin")
+  assert json.loads(conductor.files[conductor.TOOLING])[0]["state"] == "open"
+
+
 def test_an_item_that_names_its_pr_owns_it_before_a_label_or_a_push_does(conductor: Round) -> None:
   conductor.busy("p1", "tui-stack", OPUS)
   one = conductor.pr(n=606, checks=("FAILURE",))
@@ -2155,3 +2168,20 @@ async def test_a_failure_waits_for_the_end_of_its_run_before_a_rerun_an_update_o
   await conductor.mend(conductor.pr(checks=("FAILURE", running)), 0.0, False)
   assert "rerun" not in conductor.log() and "update-branch" not in conductor.log()
   assert conductor.hired == []
+
+
+@POSIX
+@JQ
+async def test_the_bottom_of_a_stack_waits_while_a_layer_above_runs_its_checks(conductor: Round) -> None:
+  two(conductor, top=("IN_PROGRESS",))
+  await conductor.land(conductor.prs[7], False)
+  assert "merge" not in conductor.log()
+
+
+async def test_a_red_pr_whose_checks_still_run_blocks_no_family(conductor: Round) -> None:
+  pr = {"n": 9, "sha": "a" * 40, "head": "w/red", "base": "main", "labels": [], "verdict": "fail", "mergeable": "MERGEABLE", "checks": ["FAILURE", "QUEUED"]}
+  assert not conductor.needs(pr)
+  pr["checks"] = ["FAILURE", "SUCCESS"]
+  assert conductor.needs(pr)
+  pr["checks"] = ["FAILURE", "FAILURE", "QUEUED"]
+  assert conductor.needs(pr)

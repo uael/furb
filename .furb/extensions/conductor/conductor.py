@@ -37,14 +37,14 @@ CONDUCTING = """Conduct the work in one loop, and plan no further than the next 
 Put each item in queue as (key, brief, thread), or in backlog to wait behind queue, then await conduct(). Each round tends the workers and the open PRs, hires a worker for each item, cap() at once, and waits every seconds or until a worker ends. It hires no item of a family of model while an open PR of the round needs a worker of that family that it has not got: a failed check, a conflict or an open box, on a PR with no label paused or hold. So the fixers take the free slots of their family first, the round merges before it starts new work there, and each other family hires on its own room. It tells you once when such a PR waits for a fixer whose family has no room at all. It moves the first item of backlog to queue while queue and working hold fewer than cap() items.
 When you find a defect, a wrong state or a gap in your own work, or the owner points at one, fix the state at once, then make its durable fix at once: a PR, through patch() for the word of the conductor, or an item at the head of the queue. Never keep it as a note for later, and never fix it only with a live patch. When a message of the owner asks whether a state is right, that is a sign that it is not: read the whole state, list each thing that is off, fix all of them in one go, read the state again to verify it, and do this again until nothing is off. Only then report, with what you verified.
 The owner rules, on 10-23: "this kind of item should be done by sonnet, not opus. You need to use Sonnet more, when it make sense. And opus/medium should be your default, not opus/high. opus/high is kinda the max, xhigh for the coordination and my rulings only. most of the time sonnet/{medium,high} and opus/high are perfect." So a debrief asks the model of its worker, and a worker runs efforts[key], or the model of its kind. An item has a kind, kinds[key], by the ruling of the owner on 10-28 on dedicated audit and edit workers: audit reads and writes a register in scratch, with no worktree and no PR, on ACTOR, opus/medium, with the brief AUDIT; edit makes a worktree and a PR, on EDITOR, sonnet/high, with the brief WORKER; fix mends one red PR on limits["fixer"]. An item with no kind is a fix when its key is fixN or boxN, else an edit. An auditor that ends with 0 and its report is a line in the next notice. A fixer (fixN, boxN) runs on limits["fixer"], sonnet/high, by the ruling of the operator. A worker runs only a model of MODELS: sonnet/medium, sonnet/high, opus/medium or opus/high. hire() refuses xhigh and max, and the round starts no item that asks for one and tells you. You choose sonnet for an item where it makes sense, as efforts[key] = "claude-cli:sonnet/medium" before you queue it.
-The owner rules again, on 10-23: "From now on: 2 opus workers, 3 sonnet ones. max." The owner rules again, on 10-26: "add one opus/high worker for the most complex stuff". So limits["room"] gives the room of each family of model: the round runs at most 1 worker on opus/medium, 3 on sonnet and 1 on opus/high at once, by the ruling of the operator, and counts only the workers whose prompt is not over. limits lives in the state of the round, so a reload of the extension keeps it: you change it there, as limits["room"]["opus"] = 2, and cap() gives the sum of the room. You give opus/high only to the most complex items, as efforts[key] = "claude-cli:opus/high". An item whose model has no room keeps its place in queue while the next item whose model has room starts. A fixer goes before a new item. A worker that ended and whose PR needs a worker goes on in its own chain on HANDOVER, sonnet, with a new prompt there, when sonnet has room; else a fixer starts on limits["fixer"] when sonnet has room.
+The owner rules again, on 10-23: "From now on: 2 opus workers, 3 sonnet ones. max." The owner rules again, on 10-26: "add one opus/high worker for the most complex stuff". So limits["room"] gives the room of each family of model: the round runs at most 1 worker on opus/medium, 3 on sonnet and 1 on opus/high at once, by the ruling of the operator, and counts only the workers whose prompt is not over. limits lives in the state of the round, so a reload of the extension keeps it: you change it there, as limits["room"]["opus"] = 2, and cap() gives the sum of the room. You give opus/high only to the most complex items, as efforts[key] = "claude-cli:opus/high". An item whose model has no room keeps its place in queue while the next item whose model has room starts. A fixer goes before a new item, and a PR whose checks still run blocks no family, since no fixer starts on it before they end, unless two of its checks failed already. A worker that ended and whose PR needs a worker goes on in its own chain on HANDOVER, sonnet, with a new prompt there, when sonnet has room; else a fixer starts on limits["fixer"] when sonnet has room.
 The round runs on one chain, lead["home"]. After a compaction of your chain, await conduct() in the new chain: it names that chain, the round of the old chain ends at its next wake, and the state that the round reads is the state of the new chain, which you change there.
 A fault of one step of a round, as an empty answer of gh, ends no round: the round tells you once each kind of fault, with the fault and its step, and goes on at the next round. Each json.loads of a command reads its output only when the command succeeded. When the round ends for any cause but a new home, it tells you as a decision, with the cause and what stops.
 hire(key, brief, thread) gives the item to an idle worker of the pool, by the ideas of the owner on 10-28, when one fits: a worker that ended stays in pool under its chain, with its model, its thread and the top folders of the files of its PR, and it takes an item of the same model whose thread is its own, or whose areas[key] names one of its folders, while its last reply filled under half of its window. Else hire starts a worker on a new chain that forks the base chain of its kind and model, bases["kind model"], which the round makes once and which reads AGENTS.md, so the provider serves that prefix from its cache. It starts the worker at model_of(key), on a chain labeled thread/key, with the brief in custom or the brief of its kind, and the PR of an edit carries the labels w:key and thread:thread.
 A worker does one item in a workspace {repo}-wN, which the round gives at its hire to it alone and again to a later worker once it ends, and which it leaves clean with its branch pushed, runs only the tests that its change touches, opens its PR, and closes with its URL.
 A prompt of a worker that ends with CancelledError while the round made no cancel over it, as when the life restarts, goes on: the round asks it again on its chain with a new prompt, at most 3 times for an item, and tells nobody.
 The round tells you a worker that ends with no PR, with its answer, or that says nothing for 45 minutes, relays to you each question that a worker puts to the operator, and wakes a worker that paused. results keeps the answer of each worker under its prompt.
-When a worker ends, the round asks it debrief() once, and adds each friction that it gives to TOOLING, the ledger of the defects of the tooling, as flaw(what) adds a defect that you find or patch live. An entry counts each time that it comes again.
+When a worker ends, the round asks it debrief() once, and adds each friction that it gives to TOOLING, the ledger of the defects of the tooling, as flaw(what) adds a defect that you find or patch live. An entry counts each time that it comes again. settle_flaw(part, pr) closes each open entry that holds part with the PR that fixed it, once you checked on main that the PR did; the audit lists the open entries alone, and an entry that comes again opens again.
 A check counts by its newest run, and the round acts on a failed check only once no check of the PR runs. A failed check heals with no worker first, once for each head sha: the round reruns the failed jobs of the run whose failure is the one failed check of the PR, which costs the runners of CI the least, else it updates the branch of a PR on main that is behind main while main is green, at most once in UPDATED seconds for a PR, since a PR that still fails after an update fails on its own. It reruns once, for each head sha, a run that was cancelled at the head of a PR, and a check cancelled again at that sha counts as failed.
 Then the round sends a conflict or a failed check at a new head to the worker that owns the PR, again after 30 minutes, and to a fixer after an hour, or at once when no worker owns it. Just before it sends an order or hires a fixer, the round reads the PR again, and drops the order when the head moved or the conflict is gone; it sends a PR no second order within 10 minutes of the first, and it names in an order the base of a stacked PR with the head that the base had before. While a fixer owns a PR, the round neither updates its branch nor merges it, and it tells a worker that owns a branch when it updates or rebases it, or when a fixer starts on it. A mergeable that gh gives as UNKNOWN is probed with git merge-tree, and the round rebases a child of a PR whose head was force-pushed onto the new head of its parent.
 The round merges each green PR into main from the lowest number when git merges it with main clean and no file that a gate sums (SERIAL: the engine under its wall of tokens, the budgets) changed both in it and on main since its branch forked, after it moves the PRs that stack on it onto main and rebases each there with git rebase --onto from the head that it held of the PR that merged, in a scratch worktree, and pushes it with --force-with-lease (a rebase that conflicts is left to the fixer); else it updates the branch, and only when main is green.
@@ -66,7 +66,7 @@ An item waits for others with after[key] = [keys], set before you queue it: staf
 Method, at each notice: read the whole state, fix every thing that is off in one go, read the state again to verify, and go on until nothing is off. Only then report. Each round also checks the state in invariants(): it gives each open PR that the round tends a home, from the chain that pushed its head, wakes no chain, and lists in the next notice what code cannot fix.
 A PR waits on a decision of the owner while awaited[decision] names one of its labels, or its number as #N, and the decision is an act that is not over, as the prompt that asked him: a failed check of that PR gets no order, no handover and no fixer, a conflict of it still does, and the round names the decision once. When the act ends, the round drops it and tends the PR again.
 The round holds at most cap() chains that hold an open prompt with a shape, and counts the chains of workers, of sub-chains and of judges alike: room() counts them, and a resume of a worker waits for a slot. When more chains stand, the round pauses the newest overflow with a note and wakes it in order when a slot frees, and it never ends its task.
-The owner rules, on 10-29: "we should use more gh stacks in conductor, because they can be merged at once (all PRs of stack as once)". So a PR on main at the bottom of a stack whose layers are all green, free of hold, paused and owner-merge, and passed by the vetoes, merges with its whole stack at once through gh stack merge; a stack that gh stack does not hold lands one layer at a time, and the round tells it once. Each sweep links each chain of stacked PRs on GitHub with gh stack link, once for each chain, so that it shows as one stack. GitHub gives no priority to a queued run, so each sweep cancels each queued run of the gates that can serve no merge: a run of a closed PR, of an old head, of a draft, a held or a conflicting PR, and it defers a run of a layer above a layer that is not green, which it runs again once that layer is green and fewer than THROTTLE runs wait. It never touches a run of main or of a PR that can merge.
+The owner rules, on 10-29: "we should use more gh stacks in conductor, because they can be merged at once (all PRs of stack as once)". So a PR on main at the bottom of a stack whose layers are all green, free of hold, paused and owner-merge, and passed by the vetoes, merges with its whole stack at once through gh stack merge, and while a layer above it still runs its checks, the bottom waits rather than merge alone; a stack with a red layer merges its green layers below it at once; a stack that gh stack does not hold lands one layer at a time, and the round tells it once. Each sweep links each chain of stacked PRs on GitHub with gh stack link, once for each chain, so that it shows as one stack. GitHub gives no priority to a queued run, so each sweep cancels each queued run of the gates that can serve no merge: a run of a closed PR, of an old head, of a draft, a held or a conflicting PR, and it defers a run of a layer above a layer that is not green, which it runs again once that layer is green and fewer than THROTTLE runs wait. It never touches a run of main or of a PR that can merge.
 A review blocks only on a defect that a command reproduces, or on a false sentence of a contract."""
 
 LIMITS = {"room": {"opus": 1, "sonnet": 3, "opus/high": 1}, "fixer": "claude-cli:sonnet/high"}
@@ -841,7 +841,7 @@ async def mend(pr: dict, now: float, red: bool) -> str:
     held = "\n".join("  " + x for x in lacks.stdout.lines)
     return said + "The commits of main that the branch lacks and that change a file of the failure:\n" + held + "\n"
 
-  if any(c in RUNNING for c in pr["checks"]):
+  if ripening(pr):
     # GitHub reruns no job of a run that still runs, and a check that fails beside one that runs may be a flake that
     # the rerun heals, so a failure waits for the end of its run before a rerun, an update or a fixer.
     return ""
@@ -989,31 +989,39 @@ async def restack_forced() -> set[int]:
 SERIAL = re.compile(r"^(src/engine\.(py|pyi|rs)|\.github/budgets\.json)$")
 
 
-async def whole(layers: list[dict]) -> bool:
+async def whole(layers: list[dict]) -> str:
   """A green stack merges at once, all its PRs in one atomic merge of gh stack, by the ruling of the owner on 10-29."""
-  for up in layers[1:]:
-    if up["verdict"] != "pass" or up["draft"] or fixing(up) or {"hold", "paused", "owner-merge"} & set(up["labels"]):
-      return False
-    for veto in list(vetoes.values()):
-      if await veto(up):
-        return False
-  names = " <- ".join("#" + str(up["n"]) for up in layers)
+  ready: list[dict] = []
+  for up in layers:
+    calm = up["verdict"] == "pass" and not up["draft"] and not fixing(up)
+    if not calm or {"hold", "paused", "owner-merge"} & set(up["labels"]):
+      break
+    if any([await veto(up) for veto in list(vetoes.values())]):
+      break
+    ready.append(up)
+  rest = layers[len(ready) :]
+  if rest and not any(up["verdict"] == "fail" for up in rest) and any(c in RUNNING for up in rest for c in up["checks"]):
+    # A layer above still runs its checks: the stack waits to merge whole, and its bottom does not merge alone.
+    return "wait"
+  if len(ready) < 2:
+    return ""
+  names = " <- ".join("#" + str(up["n"]) for up in ready)
   got = await bash(
-    f"out=$(gh stack merge {layers[-1]['n']} --yes --squash 2>&1); echo \"$out\" | tail -4;"
-    + "".join(f" gh pr view {up['n']} --json state --jq .state;" for up in layers),
+    f"out=$(gh stack merge {ready[-1]['n']} --yes --squash 2>&1); echo \"$out\" | tail -4;"
+    + "".join(f" gh pr view {up['n']} --json state --jq .state;" for up in ready),
     show=HIDDEN,
     timeout=600,
   )
-  if got.stdout.lines[-len(layers) :] == ["MERGED"] * len(layers):
-    for up in layers:
+  if got.stdout.lines[-len(ready) :] == ["MERGED"] * len(ready):
+    for up in ready:
       merged.add(up["n"])
       landed.append(up["n"])
     heard.append(f"The stack {names} merged whole.")
-    return True
+    return "merged"
   noticed.add(f"no stack {layers[0]['head']}")
-  said = " ".join(got.stdout.lines[: -len(layers)])[-300:] or "nothing"
+  said = " ".join(got.stdout.lines[: -len(ready)])[-300:] or "nothing"
   heard.append(f"The stack {names} did not merge whole, so it lands one layer at a time; gh stack said: {said}")
-  return False
+  return ""
 
 
 async def land(pr: dict, red: bool) -> None:
@@ -1400,8 +1408,15 @@ def lacks(pr: dict) -> bool:
   )
 
 
+def ripening(pr: dict) -> bool:
+  # A lone failed check may be a flake that a rerun heals once its run ends; two failures are none, and a job that
+  # waits for a runner must not hold their fixer.
+  return any(c in RUNNING for c in pr["checks"]) and sum(c == "FAILURE" for c in pr["checks"]) < 2
+
+
 def needs(pr: dict) -> bool:
-  return lacks(pr) and not gave_up(pr)
+  # mend() starts no fixer while a check still runs, so such a PR must not block the hires of its family meanwhile.
+  return lacks(pr) and not gave_up(pr) and not ripening(pr)
 
 
 def waits_on(pr: dict) -> str:
@@ -1622,6 +1637,18 @@ def flaw(*whats: str, source: str = "live", item: str = "") -> None:
         {"when": str(int(clock())), "source": source, "what": what[:600], "state": "open", "item": item, "count": 1}
       )
   quietly(write, Text(TOOLING, json.dumps(entries, indent=1) + "\n"))
+
+
+def settle_flaw(part: str, pr: int) -> int:
+  entries = ledger()
+  hit = [
+    x for x in entries if x.get("state") == "open" and part.lower() in " ".join(str(x.get("what", "")).lower().split())
+  ]
+  for x in hit:
+    x["state"], x["closed_by"] = "closed", f"#{pr}"
+  if hit:
+    quietly(write, Text(TOOLING, json.dumps(entries, indent=1) + "\n"))
+  return len(hit)
 
 
 PRUNE_PY = """import hashlib, json, os, shutil, subprocess, sys, time

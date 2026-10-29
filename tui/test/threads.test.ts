@@ -1,8 +1,9 @@
-import { expect, test } from "bun:test";
+import { expect, setSystemTime, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { RGBA } from "@opentui/core";
 import { chainThreads } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
+import { clock } from "../src/clock.ts";
 import { glyph, palettes } from "../src/theme.ts";
 import { type Composing, cellAt, composing } from "./composing.ts";
 import { idle } from "./idle.ts";
@@ -255,7 +256,7 @@ test("a line that awaits a command lights the line that made it, names it, and s
     true,
   ));
 
-test("a line cut to its room and a folded string keep the colors of their whole statement", () =>
+test("a line that does not fit its room lays out in rows, and it and a folded string keep the colors of their whole statement", () =>
   composing(
     async ({ session, screen, frame }) => {
       const names = Array.from({ length: 16 }, (_, k) => `"n${k}xyz"`).join(", ");
@@ -272,17 +273,20 @@ test("a line cut to its room and a folded string keep the colors of their whole 
       const cut = rows.findIndex((row) => row.includes("names = ["));
       const fold = rows.findIndex((row) => row.includes('brief = "word'));
       const def = rows.findIndex((row) => row.includes("def shout"));
-      expect(rows[cut]).toContain("…");
-      expect(rows[cut]).not.toContain("]");
+      // The names stand on the rows under the opening, one step deeper, and none is cut.
+      const first = rows.findIndex((row) => row.includes('"n0xyz"'));
+      expect(first).toBeGreaterThan(cut);
+      expect(rows[cut]).not.toContain("n0xyz");
+      expect(rows.some((row) => row.includes('"n15xyz"'))).toBe(true);
       expect(rows[fold]).toContain('..."');
       const palette = palettes.ink;
       const fg = (x: number, y: number) => cellAt(screen.captureSpans(), x, y).fg;
       const keyword = RGBA.fromHex(palette.syntaxKeyword);
       const x = (rows[def] ?? "").indexOf("def");
       await until(screen.renderer, () => Boolean(fg(x, def)?.equals(keyword)), "frame");
-      expect(fg((rows[cut] ?? "").indexOf("n0xyz"), cut)?.equals(RGBA.fromHex(palette.syntaxString))).toBe(
-        true,
-      );
+      expect(
+        fg((rows[first] ?? "").indexOf("n0xyz"), first)?.equals(RGBA.fromHex(palette.syntaxString)),
+      ).toBe(true);
       // The closing mark of the folded string, after its underlined ..., is a string.
       expect(
         fg((rows[fold] ?? "").indexOf('..."') + 3, fold)?.equals(RGBA.fromHex(palette.syntaxString)),
@@ -377,22 +381,19 @@ test("a quote of a word shows as the string that it binds: its name, an equal si
     true,
   ));
 
-test("a line that opens wraps at tokens within its column, and each row keeps the colors of its whole statement", () =>
+test("a line that does not fit lays out in rows at its brackets, and each row keeps the colors of its whole statement", () =>
   composing(
     async ({ session, screen, frame }) => {
       const names = Array.from({ length: 24 }, (_, k) => `"n${k}xyz"`).join(", ");
       const rung = await session.engine.rung({ word: `names = [${names}]`, on: session.engine.root });
       await session.engine.result(rung);
       await session.refresh();
-      const shut = (await frame()).split("\n");
-      const y = shut.findIndex((row) => row.includes("names = ["));
-      expect(shut[y]).toContain("…");
-      await screen.mockMouse.click((shut[y] ?? "").indexOf("names"), y);
-      await until(session, () => session.folds[`line:${rung}:1`] === false);
       const opened = await frame();
       keep("wrapped", opened);
       const rows = opened.split("\n");
+      const y = rows.findIndex((row) => row.includes("names = ["));
       expect(rows[y]).toContain("names = [");
+      expect(rows[y]).not.toContain("…");
       // Every name is whole on some row, and no row cuts one.
       for (let k = 0; k < 24; k++) expect(opened).toContain(`"n${k}xyz"`);
       expect(opened).not.toMatch(/"n\d+(?!\d|xyz)/);
@@ -405,7 +406,7 @@ test("a line that opens wraps at tokens within its column, and each row keeps th
       const at = (rows[last] ?? "").indexOf('"n23xyz"') + 2;
       await until(screen.renderer, () => Boolean(fg(at, last)?.equals(string)), "frame");
     },
-    { ...size, useMouse: true },
+    size,
     true,
   ));
 
@@ -430,6 +431,24 @@ test("the list of the threads of the chain shown is read again for another chain
     size,
     true,
   ));
+
+test("a row of a thread says how long ago the thread last changed, as the session saw it", () =>
+  composing(
+    async ({ session, frame }) => {
+      await idle(session);
+      // The demo ran in the session, so every act changed just now.
+      expect(rail(session, await frame()).join("\n")).not.toContain("ago");
+      setSystemTime(new Date(Date.now() + 5 * 60_000));
+      try {
+        expect(rail(session, await frame()).join("\n")).toContain("5m ago");
+      } finally {
+        setSystemTime();
+      }
+    },
+    size,
+    true,
+  ));
+
 test("an act that is no prompt leaves the list of the threads of the chain shown as it was, and a prompt reads it again", () =>
   composing(
     async ({ session, app }) => {

@@ -4,7 +4,7 @@ import { type Ask, type ChainThread, chainThreads, gist } from "furb/life";
 import { checkoutOf } from "../checkout.ts";
 import { clock } from "../clock.ts";
 import { shortenHome, shortenHomes } from "../files.ts";
-import { clip, dollars } from "../format.ts";
+import { clip, dollars, recordLabel } from "../format.ts";
 import { isRailStyle, type RailStyle } from "../preferences.ts";
 import { statusLabels } from "../session.ts";
 import { theme as c, glyph, spacing as space, threadTone } from "../theme.ts";
@@ -235,13 +235,27 @@ export const rail = part({
     return ["working", c.accent];
   },
 
-  /** What a row of a thread says at its right: why it needs a look, else how long it has worked. */
+  /** When a thread last changed, as this session saw it: the latest change of its prompt and of its messages, which
+   * their steps stamp too. A thread that changed before the session read the record has none. */
+  threadChanged(thread: ChainThread): number | undefined {
+    const seen = this.session.changedAt;
+    const times = [thread.act.id, ...thread.messages.map((one) => one.id)].map((id) => seen[id] ?? 0);
+    const latest = Math.max(0, ...times);
+    return latest || undefined;
+  },
+
+  /** What a row of a thread says at its right: why it needs a look, and how long ago it last changed. */
   threadMeta(thread: ChainThread): Part[] {
-    if (thread.state !== "running" && thread.state !== "done") return [this.stateWord(thread)];
-    if (thread.resolved) return [];
-    const began = this.session.started[thread.act.id];
-    const minutes = began === undefined ? 0 : Math.floor((clock() - began) / 60000);
-    return minutes < 1 ? [] : [[minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h`, c.faint]];
+    const live = thread.state === "running" || thread.state === "done";
+    const at = this.threadChanged(thread);
+    const minutes = at === undefined ? 0 : Math.floor((clock() - at) / 60000);
+    const age =
+      minutes < 60
+        ? `${minutes}m`
+        : minutes < 60 * 24
+          ? `${Math.floor(minutes / 60)}h`
+          : `${Math.floor(minutes / 60 / 24)}d`;
+    return [...(live ? [] : [this.stateWord(thread)]), ...(minutes < 1 ? [] : [[age, c.faint] as Part])];
   },
 
   /** A row of the sidebar in two parts, its head, which the room cuts and a hover shows whole, and its tail, which
@@ -619,7 +633,7 @@ export const rail = part({
         space: () => this.foldThread(thread.act.id),
         thread,
       });
-      const title = shortenHomes(thread.title) || thread.act.id;
+      const title = shortenHomes(this.threadTitle(thread)) || thread.act.id;
       const row = this.railSplit(
         [
           [glyph.mark, threadTone(thread.act.id)],
@@ -660,7 +674,11 @@ export const rail = part({
         lit ? c.selected : c.raised,
       );
       const shown = active === thread;
-      const words = wrapped(shortenHomes(thread.title) || thread.act.id, width - LEFT - RIGHT - 4, 2);
+      const words = wrapped(
+        shortenHomes(this.threadTitle(thread)) || thread.act.id,
+        width - LEFT - RIGHT - 4,
+        2,
+      );
       for (const [row, text] of words.entries())
         box.add(
           this.line(
@@ -677,9 +695,10 @@ export const rail = part({
       const state = this.stateWord(thread);
       const chain = thread.act.on === w.engine.root ? "" : (w.labelOf(thread.act.on).split("/").at(-1) ?? "");
       const since = plain(this.threadMeta(thread).filter((one) => one[0] !== state[0]));
+      const age = since && `${since} ago`;
       const notes = [
         thread.messages.length ? `${thread.messages.length + 1} msgs` : "",
-        since,
+        age,
         chain ? `in ${chain}` : "",
       ].filter(Boolean);
       box.add(
@@ -720,7 +739,11 @@ export const rail = part({
       const id = `se:${entry.path}`;
       order(id, { enter: () => void lib.select(entry).catch(this.report) });
       const checkout = checkoutOf(entry.path, group.directory);
-      const label = checkout === group.directory ? entry.name : `${entry.name}  ${basename(checkout)}`;
+      // A session that bears the name of its workspace, as one that was never renamed, and a record that bears its
+      // file name, each read as the time that the record was made.
+      const named = entry.name === basename(group.directory) ? basename(entry.path, ".jsonl") : entry.name;
+      const label =
+        checkout === group.directory ? recordLabel(named) : `${recordLabel(named)}  ${basename(checkout)}`;
       const asks = askCount(entry);
       const tail: Part[] = mine
         ? [[dollars(entry.cost ?? 0), c.faint]]
