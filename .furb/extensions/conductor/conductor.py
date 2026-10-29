@@ -66,7 +66,7 @@ An item waits for others with after[key] = [keys], set before you queue it: staf
 Method, at each notice: read the whole state, fix every thing that is off in one go, read the state again to verify, and go on until nothing is off. Only then report. Each round also checks the state in invariants(): it gives each open PR that the round tends a home, from the chain that pushed its head, wakes no chain, and lists in the next notice what code cannot fix.
 A PR waits on a decision of the owner while awaited[decision] names one of its labels, or its number as #N, and the decision is an act that is not over, as the prompt that asked him: a failed check of that PR gets no order, no handover and no fixer, a conflict of it still does, and the round names the decision once. When the act ends, the round drops it and tends the PR again.
 The round holds at most cap() chains that hold an open prompt with a shape, and counts the chains of workers, of sub-chains and of judges alike: room() counts them, and a resume of a worker waits for a slot. When more chains stand, the round pauses the newest overflow with a note and wakes it in order when a slot frees, and it never ends its task.
-The owner rules, on 10-29: "we should use more gh stacks in conductor, because they can be merged at once (all PRs of stack as once)". So a PR on main at the bottom of a stack whose layers are all green, free of hold, paused and owner-merge, and passed by the vetoes, merges with its whole stack at once through gh stack merge; a stack that gh stack does not hold lands one layer at a time, and the round tells it once.
+The owner rules, on 10-29: "we should use more gh stacks in conductor, because they can be merged at once (all PRs of stack as once)". So a PR on main at the bottom of a stack whose layers are all green, free of hold, paused and owner-merge, and passed by the vetoes, merges with its whole stack at once through gh stack merge; a stack that gh stack does not hold lands one layer at a time, and the round tells it once. Each sweep links each chain of stacked PRs on GitHub with gh stack link, once for each chain, so that it shows as one stack.
 A review blocks only on a defect that a command reproduces, or on a false sentence of a contract."""
 
 LIMITS = {"room": {"opus": 1, "sonnet": 3, "opus/high": 1}, "fixer": "claude-cli:sonnet/high"}
@@ -171,7 +171,7 @@ RECIPES = """Recipes that fixers found again and again:
 RULES = """Run no real life of a model. Never open a window on this machine, not even for a test: the owner works on it, and each window takes his mouse and his keyboard. Run a check of the app only on the runners of CI. Start each comment, review, issue and PR body that you write on GitHub with 🤖, since you write from the owner's account and his own words carry no mark; a title keeps its own rule. Never take off the label owner-merge: only the owner takes it off, and that is his approval to merge. The owner sleeps or is away: ask him nothing and wait for nothing of his. Take each decision yourself from the brief and the rulings, say it in your PR body, and go on. Ask the one who gave you this work on its chain only when it alone can decide: await prompt(str, question, on="{home}"). Never wait on CI in a bash for more than 10 minutes: not gh pr checks --watch, not gh run watch, not a loop of sleep around gh. Once your push is done, read the checks once and close with the PR and its checks as they stand, since the round tends them.""" + "\n\n" + RECIPES
 
 WORKER = """You are a worker on the repository {repo}. Do one item, and open its PR yourself.
-1. Your branch is w/{key}. {workspace} Build on origin/main, and stack your branch on an open PR only when your change needs its code, and say why in the body. Make a stack with gh stack, and run skill("gh-stack") in a word of your own before you make or touch one: the round merges a green gh stack whole, all its PRs at once. Run each build of Rust through sh $TMPDIR/build.sh <command>, which runs three at once at most.
+1. Your branch is w/{key}. {workspace} Build on origin/main, and stack your branch on an open PR only when your change needs its code, and say why in the body. Make a stack with gh stack, and run skill("gh-stack") in a word of your own before you make or touch one. Link its PRs on GitHub with gh stack submit --auto or gh stack link: the round merges a green gh stack whole, all its PRs at once. Run each build of Rust through sh $TMPDIR/build.sh <command>, which runs three at once at most.
 2. Change it as the AGENTS.md files of the repository say.
 3. Run only the tests that your change touches.
 4. Commit with the title of the PR as its message (a commit that the item brought keeps its own message, since the merge squashes them), and push the branch. Then open the PR, or update it when it stands, with pr(), which fills the template of the owner from what you give it and checks each of its rules: await pr(title, why, outcome, checks, breaking=[], fixes=0, where=<your worktree>, labels="{labels}"). title is type(area): What changed, 70 characters or fewer: the type is feat, fix, perf, or chore for a change that no user sees, and the area is the part that owns the change (engine, crate, tui, gui, provider, ci, conductor, or an extension by its name). why is the problem and why it matters now, from your own work and not from git log. outcome is a list: what is true now that was not, each with the evidence of what you ran, and each gap that you leave. breaking lists each change that forces a caller of a door or of the contract to change code. 300 words at most, and no how, which the diff holds. prcheck(title, why, outcome, breaking) before the commit checks the title and gives the word count. checks is six lines, one for each box of the checklist of the template in its order: verify each box one by one, then give the evidence of how you verified it, or not: and the work that it still needs, which leaves that box open. A flaw that you name in outcome ticks the box about flaws. When the item says that the owner ruled several changes one PR, that ruling is the evidence of the box about one change. A pr() that breaks a rule, or whose gh fails, raises Refused and says why; never write the body of a PR by hand.
@@ -1936,6 +1936,25 @@ async def watch_ci() -> None:
     heard.append(f"The gates flaked at {one['url']} in {name[:120]}: queued as the item {key}.")
 
 
+async def linking() -> None:
+  """Each chain of stacked PRs of the round is one gh stack on GitHub, so it shows linked and merges whole."""
+  for pr in sorted(prs.values(), key=lambda p: p["n"]):
+    if pr["base"] != "main" or not pr["head"].startswith("w/"):
+      continue
+    layers = [pr]
+    while len(ups := [up for up in prs.values() if up["base"] == layers[-1]["head"]]) == 1:
+      layers.append(ups[0])
+    numbers = " ".join(str(up["n"]) for up in layers)
+    if len(layers) < 2 or f"linked {numbers}" in noticed:
+      continue
+    noticed.add(f"linked {numbers}")
+    got = await bash(f"gh stack link {numbers} 2>&1", show=HIDDEN, timeout=120)
+    said = " ".join(got.stdout.content.split())[-200:]
+    names = " <- ".join("#" + str(up["n"]) for up in layers)
+    linked = got.code == 0 and "✗" not in got.stdout.content
+    heard.append(f"The stack {names} " + ("is linked on GitHub." if linked else f"was not linked: {said}"))
+
+
 async def sweep(every: float) -> None:
   got = await bash(PRS, show=HIDDEN, timeout=300)
   bits = re.split(r"\n--- (\d+)\n", got.stdout.content)
@@ -1967,6 +1986,7 @@ async def sweep(every: float) -> None:
     if one["mergeable"] == "UNKNOWN":
       await probe(one)
   restacked = await restack_forced()
+  await linking()
   main = json.loads(parts[2])
   red = "failure" in main["runs"]
   if red and f"red {main['sha']}" not in noticed:

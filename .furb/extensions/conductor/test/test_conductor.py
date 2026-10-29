@@ -2005,3 +2005,14 @@ async def test_a_stack_that_gh_stack_does_not_hold_lands_one_layer_at_a_time_and
   assert "pr merge 7 --squash" in conductor.log()
   assert "no stack w/a" in conductor.noticed
   assert any("did not merge whole" in line for line in conductor.heard)
+
+
+@POSIX
+@JQ
+async def test_each_chain_of_stacked_prs_is_linked_as_one_gh_stack_once(conductor: Round) -> None:
+  two(conductor)
+  conductor.say(r"stack link", "Created stack with 2 PRs")
+  await conductor.linking()
+  await conductor.linking()
+  assert conductor.log().count("stack link 7 8") == 1
+  assert conductor.heard == ["The stack #7 <- #8 is linked on GitHub."]
