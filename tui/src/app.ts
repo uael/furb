@@ -13,7 +13,6 @@ import {
   type Renderable,
   ScrollBoxRenderable,
   type SimpleHighlight,
-  TextareaRenderable,
   TextRenderable,
 } from "@opentui/core";
 import type { Keymap } from "@opentui/keymap";
@@ -506,7 +505,6 @@ export class App {
       id: "composer",
       flexGrow: 1,
       minHeight: 1,
-      placeholder: "What would you like to build?",
       ...inputColors(c.panel),
       keyBindings: [
         { name: "return", action: "submit" },
@@ -542,6 +540,8 @@ export class App {
     this.composeBox.add(this.pickBox);
     this.composeBox.add(this.composer);
     this.composer.tint = () => c.faint;
+    // The rows of the hint depend on the width that the layout gives the area, which the area knows after it.
+    this.composer.onHintRows = () => this.schedule();
     this.meta = this.row({ overflow: "hidden", flexGrow: 1 });
     // The line under the text holds the switch of the mode and where the input goes, a row of space under the text.
     const metaLine = this.row({ marginTop: space.section });
@@ -939,13 +939,18 @@ export class App {
                 : ["Prompt", c.accent, "Ask anything, or type / for commands"];
     for (const edge of this.composeEdges) if (edge.borderColor !== modeColor) edge.borderColor = modeColor;
     this.composer.cursorColor = modeColor;
-    this.composer.placeholder = placeholder;
+    this.composer.hint = placeholder;
     this.renderPick(choosing);
     // The box holds the values of a choice, or the lines of the text, up to six, then a row of space and the line
     // under the text. While Other takes the words of the operator, it holds both.
     const typed = Math.min(
       6,
-      Math.max(space.bar, this.composer.lineCount, this.composer.lineInfo.lineSources.length),
+      Math.max(
+        space.bar,
+        this.composer.lineCount,
+        this.composer.lineInfo.lineSources.length,
+        this.composer.hintRows(this.composer.width || this.feedWidth - space.inset * 2 - space.bar).length,
+      ),
     );
     const listed = choosing ? this.rows(choosing).length + 1 : 0;
     this.composeBox.height =

@@ -349,8 +349,11 @@ test("the last row of a thread whose model works shows a loader left of the numb
     await app.submit();
     await until(session, () => session.activity.some((act) => act.kind === "rung" && !act.done));
     await session.refresh();
-    const row = async () => (await frame()).split("\n").find((line) => / 1 # /.test(line)) ?? "";
-    expect(await row()).toMatch(/^[ ┃]+[\u2800-\u28ff] +1 # thinking/);
+    const row = async () =>
+      (await frame()).split("\n").find((line) => /1 +# (?:thinking|Then)/.test(line)) ?? "";
+    // The loader takes the first column of the gutter, so the number and the text keep the columns of the rows above,
+    // and no second loader follows the text.
+    expect(await row()).toMatch(/^[ ┃]+[\u2800-\u28ff]1 +# thinking +[^\u2800-\u28ff ]/);
     const step = session.activity.find((act) => act.kind === "rung" && !act.done)?.id ?? "";
     // The thought streams in the worker, since each state of the worker replaces the streams that the host holds.
     const think = Reflect.get(session.host, "ask") as (
@@ -365,7 +368,7 @@ test("the last row of a thread whose model works shows a loader left of the numb
     );
     // The tick draws the row again from the stream, and no other part of the feed.
     await new Promise((done) => setTimeout(done, 250));
-    expect(await row()).toMatch(/^[ ┃]+[\u2800-\u28ff] +1 # Then I wait\./);
+    expect(await row()).toMatch(/^[ ┃]+[\u2800-\u28ff]1 +# Then I wait\. +[^\u2800-\u28ff ]/);
     await session.submit("/cancel");
   }));
 
@@ -802,5 +805,5 @@ test("each line of a word says what its acts did as a quiet hint: a read its lin
       expect(shown).toMatch(/ 2 write\(read\("notes\.md"\).*# 2 lines {2}\+2 -1/);
       expect(shown).toMatch(/ 3 await bash\("true"\) +# exit 0/);
     },
-    { width: 120, height: 40 },
+    { width: 160, height: 40 },
   ));

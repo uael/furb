@@ -4,6 +4,7 @@ import {
   type LineNumberOptions,
   LineNumberRenderable,
   type MouseEvent,
+  parseColor,
   type Renderable,
   type RGBA,
   type ScrollBoxOptions,
@@ -15,16 +16,16 @@ import {
 } from "@opentui/core";
 import { actorParts, display, safeText, TIMEOUT, unmarked } from "furb";
 import {
+  type CodeRow,
   cancelled,
   type Exit,
   FOLD,
   type Fold,
   failed,
-  foldStrings,
+  layout,
   literals,
   type ProgramLine,
   tailOf,
-  wrap,
   writing,
 } from "furb/life";
 import { clock } from "../clock.ts";
@@ -295,20 +296,24 @@ export const details = part({
     };
   },
 
-  /** The last row of a thread while its model works on a step: the number of the line that comes, then what the model
-   * thinks or writes, which the tick draws again, and a loader at the right end of the row. */
+  /** The last row of a thread while its model works on a step: a loader, the number of the line that comes, then what
+   * the model thinks or writes, which the tick draws again. */
   thinkingRow(step: string, display: number, digits: number, room: number): LineNumberRenderable {
-    const { number, parts } = this.thinkingParts(step, display, room - 3);
-    const text = this.text(this.loading(parts), c.muted, { wrapMode: "none" });
+    const { number, parts } = this.thinkingParts(step, display, room);
+    const text = this.text(parts, c.muted, { wrapMode: "none" });
     const view = new LineNumberRenderable(this.renderer, {
       target: text,
       paddingRight: space.inset,
       fg: c.faint,
       minWidth: gutterWidth(digits),
       lineNumbers: new Map([[0, number]]),
+      // A sign of the gutter widens the gutter by its width, which moves the number and the code of this row off the
+      // columns of the rows above it: the loader takes the first column of the gutter, which no number reaches.
+      renderAfter(buffer) {
+        buffer.drawText(spin(), this.x, this.y, parseColor(c.accent));
+      },
     });
-    // The tick turns the loader, and the first frame draws it too, before any tick.
-    view.setLineSign(0, { before: spin(), beforeColor: c.accent });
+    // The loader is drawn by each frame, the first one too, so no tick is needed before it shows.
     this.thinkingRows.set(step, {
       view,
       text,
@@ -320,12 +325,6 @@ export const details = part({
     return view;
   },
 
-  /** The parts of a row that a model writes, with the loader after them: no sign stands between the numbers and the
-   * code. */
-  loading(parts: Part[]): Part[] {
-    return [...parts, ["  "], [spin(), c.accent]];
-  },
-
   /** The rows that models write move with the tick: the loader turns, and the text follows the stream. */
   tickThinking(): void {
     for (const [step, row] of this.thinkingRows) {
@@ -333,7 +332,7 @@ export const details = part({
         this.thinkingRows.delete(step);
         continue;
       }
-      row.view.setLineSign(0, { before: spin(), beforeColor: c.accent });
+      row.view.requestRender();
       this.followThinking(step);
     }
   },
@@ -415,7 +414,7 @@ export const details = part({
     // The strings that each row folds, and the rows that show the strings of a line whole, each with where it starts
     // in the text of its line.
     const folded = new Map<number, { line: Extract<ProgramLine, { kind: "code" }>; folds: Fold[] }>();
-    const whole = new Map<number, number>();
+    const whole = new Map<number, CodeRow["parts"]>();
     // The colors come from each statement whole, so a line cut to its room or a folded string changes no color: the
     // program as it ran, each part of a row with where it starts in that program, and the rows that only comment.
     let program = "";
@@ -433,45 +432,30 @@ export const details = part({
     for (const line of lines) {
       if (line.kind === "code") {
         const note = noteOf(line);
-        // An open line, and a line whose strings the operator opened, show the whole text, cut at the column into
-        // rows of their own. Another line folds its longest strings until it fits.
-        const shown =
-          this.lineOpen(line) || this.openStrings(line).size ? undefined : foldStrings(line.text, column);
-        const cuts = shown ? [] : wrap(line.text, column);
-        const parts = shown
-          ? [fit(shown.text, column)]
-          : cuts.map((cut) => " ".repeat(cut.indent) + line.text.slice(cut.from, cut.to));
-        const code = parts[0] ?? "";
+        // An open line shows its whole text. Another line folds its longest strings, but those that the operator
+        // opened, until it fits one row, and a line that still does not fit lays out in rows as ruff format would.
+        // The code takes 100 columns at most, and its hint counts in them as a comment does in ruff format: a line
+        // that fits beside the column of the hints stands in it, and a longer one takes the room that its hint leaves.
+        const width = Math.min(100, Math.max(column, room - lane - (note ? Bun.stringWidth(note) + 6 : 0)));
+        const rows = layout(line.text, width, this.lineOpen(line) ? undefined : this.openStrings(line));
+        const code = rows[0]?.text ?? "";
         const mark = markOf(line);
-        // The mark stands in a lane of its own after the column of the code, before the comment, so that no line is
-        // longer for it.
-        const hint = note ? `# ${fit(note, room - column - 4 - lane)}` : "";
+        // The mark stands in a lane of its own after the code, before the comment, so that no line is longer for it.
+        const hint = note ? `# ${fit(note, room - Math.max(column, Bun.stringWidth(code)) - 4 - lane)}` : "";
         const left = `${code}${" ".repeat(Math.max(0, column - Bun.stringWidth(code)))}`;
         const body = hint || mark ? `${left}  ${lane ? (mark ? `${mark} ` : "  ") : ""}${hint}` : code;
         const at = push(body, line.display, line);
         if (hint) fixed.push([at, body.length - hint.length, body.length, "comment"]);
         if (mark) flag(at, left.length + 2);
-        for (const more of parts.slice(1)) push(more, undefined, line);
-        const folds = shown?.folds.filter((fold) => fold.at + FOLD.length <= Bun.stringWidth(code)) ?? [];
-        if (folds.length) folded.set(at, { line, folds });
-        if (!shown) for (const [k, cut] of cuts.entries()) whole.set(at + k, cut.from - cut.indent);
+        for (const row of rows.slice(1)) push(row.text, undefined, line);
         const base = program.length;
         program += `${line.text}\n`;
-        if (shown) {
-          const found = shown.folds.length ? literals(line.text) : [];
-          let from = 0;
-          let source = base;
-          for (const fold of shown.folds) {
-            if (fold.at >= code.length) break;
-            pieces.push([at, from, fold.at, source]);
-            fixed.push([at, fold.at, Math.min(fold.at + FOLD.length, code.length), "string"]);
-            from = fold.at + FOLD.length;
-            source = base + (found[fold.literal]?.end ?? 0);
-          }
-          if (from < code.length) pieces.push([at, from, code.length, source]);
-        } else
-          for (const [k, cut] of cuts.entries())
-            pieces.push([at + k, cut.indent, cut.indent + cut.to - cut.from, base + cut.from]);
+        for (const [k, row] of rows.entries()) {
+          if (row.folds.length) folded.set(at + k, { line, folds: row.folds });
+          for (const fold of row.folds) fixed.push([at + k, fold.at, fold.at + FOLD.length, "string"]);
+          for (const [from, to, source] of row.parts) pieces.push([at + k, from, to, base + source]);
+          whole.set(at + k, row.parts);
+        }
         if (line.runs) {
           colors.set(at, { content: c.selected, gutter: c.selected });
         }
@@ -623,9 +607,11 @@ export const details = part({
       const hit = foldAt(event.x, event.y);
       if (hit) return this.openString(hit.line, hit.fold.literal);
       const open = this.openStrings(line);
-      const index = (whole.get(row) ?? -1) + event.x - target.x;
+      const x = event.x - target.x;
+      const part = whole.get(row)?.find(([from, to]) => x >= from && x < to);
+      const index = part ? part[2] + x - part[0] : -1;
       const literal = literals(line.text).findIndex(
-        (one, k) => open.has(k) && whole.has(row) && index >= one.start - 1 && index <= one.end,
+        (one, k) => open.has(k) && part && index >= one.start - 1 && index <= one.end,
       );
       if (literal >= 0) return this.openString(line, literal);
       if (line.acts.length || Bun.stringWidth(line.text) > column) this.openLine(line);
