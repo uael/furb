@@ -5,7 +5,7 @@ import ast
 import asyncio
 import sys
 import tempfile
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
 
@@ -109,13 +109,17 @@ CATCHUP = next(x for x in _monty.official() if x["name"] == "catchup")
 """CATCHUP is the official extension catchup, with its life word."""
 
 
-def constant(extension: dict, name: str) -> object:
-  """The value that the word of an extension binds to a name in capitals, as each chain binds it."""
-  return next(
+def number(extension: Mapping[str, object], name: str) -> int:
+  """The number that the word of an extension binds to a name in capitals, as each chain binds it."""
+  word = extension["word"]
+  assert isinstance(word, str)
+  got = next(
     ast.literal_eval(one.value)
-    for one in ast.parse(extension["word"]).body
+    for one in ast.parse(word).body
     if isinstance(one, ast.Assign) and [ast.unparse(x) for x in one.targets] == [name]
   )
+  assert isinstance(got, int)
+  return got
 
 
 async def catching(sand: Sand, record: Sequence[tuple] = ()) -> tuple[list[tuple], str]:

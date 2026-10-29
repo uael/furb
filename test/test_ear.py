@@ -126,10 +126,7 @@ async def test_the_facts_that_the_world_says_of_its_own_are_for_the_acts_that_co
   own = [a for a in log if a[2] == WORLD and a[0] in ("out", "done") and a not in world.now]
   assert [(a[0], a[1]) for a in own] == [("done", asked), ("out", command), ("done", command)]
   assert {a[1] for a in own} <= {a[1] for a in world.now if a[0] == "started"}
-  assert [(a[0], a[1]) for a in world.now if a[0] == "done"] == [
-    ("done", "stand1"),
-    ("done", "read1"),
-  ]
+  assert [(a[0], a[1]) for a in world.now if a[0] == "done"] == [("done", "stand1"), ("done", "read1")]
 
 
 async def test_an_ear_speaks_by_yielding_a_saying_and_the_work_it_began_speaks_later_by_say() -> None:

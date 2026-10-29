@@ -1,12 +1,12 @@
 """catchup, the catch-up of a chain."""
 
 from conftest import LATER, Sand, chained, paragraphs, plain, said, settle, sown, takes
-from extensions.conftest import CATCHUP, catching, caught, caught_up, constant
+from extensions.conftest import CATCHUP, catching, caught, caught_up, number
 from furb import engine
 from furb.engine import Text
 
-CAP = constant(CATCHUP, "CAP")
-BUDGET = constant(CATCHUP, "BUDGET")
+CAP = number(CATCHUP, "CAP")
+BUDGET = number(CATCHUP, "BUDGET")
 
 
 async def test_the_life_word_of_the_extension_is_catchup() -> None:

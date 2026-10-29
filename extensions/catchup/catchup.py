@@ -39,7 +39,7 @@ def catchup(on: str = "") -> Act:
             if path in seen:
               continue
             seen[path] = None
-            if isinstance(was, Text) and "://" not in path and not get(path.split("/")[0]):
+            if isinstance(was, Text) and "://" not in path and get(path.split("/")[0]) is None:
               try:
                 now = read(path, HIDDEN, here).lines
               except Refused:

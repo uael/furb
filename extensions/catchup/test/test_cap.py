@@ -1,10 +1,10 @@
 """CAP, the lines that differ past which a catch-up tells their count."""
 
 from conftest import paragraphs
-from extensions.conftest import CATCHUP, caught_up, constant
+from extensions.conftest import CATCHUP, caught_up, number
 from furb import engine
 
-CAP = constant(CATCHUP, "CAP")
+CAP = number(CATCHUP, "CAP")
 
 
 async def test_cap_is_the_number_of_lines_that_differ_in_a_file_past_which_a_catch_up_tells_its_count() -> None:
