@@ -691,7 +691,7 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 STATE = (
   "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed fixes silent"
   " comments measures timers noted debriefs briefed owns watched after parked awaited covering kinds pool slots areas vetoes ordered tips shifted hired paced landed heard handled sent ends requeued"
-  " statused secret budgeted flaky runs_read deferred"
+  " statused secret updated budgeted flaky runs_read deferred"
 ).split()
 
 
@@ -2118,3 +2118,30 @@ def test_a_render_of_the_gallery_runs_no_check_and_passes(conductor: Round) -> N
   gallery = conductor.pr(n=703, head="w/gallery")
   assert gallery["verdict"] == "pass"
   assert conductor.pr(n=7, checks=("SUCCESS",), names=["the title"])["verdict"] == "pending"
+
+
+@POSIX
+@JQ
+async def test_a_pr_that_still_fails_after_an_update_gets_no_second_update_soon(conductor: Round) -> None:
+  conductor.say(r"compare/main\.\.\.", '{"behind_by": 3}')
+  assert "behind main" in await conductor.heal(conductor.pr(checks=("FAILURE", "FAILURE")), False)
+  assert await conductor.heal(conductor.pr(sha="def", checks=("FAILURE", "FAILURE")), False) == ""
+  assert conductor.log().count("update-branch") == 1
+  conductor.now += 6 * 3600
+  assert "behind main" in await conductor.heal(conductor.pr(sha="ghi", checks=("FAILURE", "FAILURE")), False)
+  assert conductor.log().count("update-branch") == 2
+
+
+@POSIX
+@JQ
+async def test_a_run_that_the_round_defers_makes_no_red_and_heal_does_not_run_it_again(conductor: Round) -> None:
+  two(conductor, top=())
+  conductor.prs[7]["verdict"] = "pending"
+  runs = [{"databaseId": 1, "headBranch": "w/b", "headSha": "abc", "event": "pull_request"}]
+  conductor.say(r"run list --workflow gates.yml --status queued", json.dumps(runs))
+  await conductor.throttle()
+  assert "rerun abc" not in conductor.noticed
+  cancelled = conductor.pr(n=8, head="w/b", base="w/a", checks=("CANCELLED",), names=["the hooks"])
+  assert cancelled["verdict"] == "pending"
+  assert await conductor.heal(cancelled, False) == ""
+  assert "rerun" not in conductor.log().replace("run list", "")
