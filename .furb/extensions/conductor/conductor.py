@@ -54,7 +54,7 @@ Each round queues each open issue that the owner opened, or that he assigned to 
 Each round tells you once each fork PR of UPSTREAM that holds the label upstream-ready and not upstreamed: by the ruling of the owner, you then open its PR on pydantic/monty with the body that he reviewed, and put the label upstreamed on the fork PR.
 Each round sends each new comment of the owner on a PR or on his issue to the worker that owns it, puts the label hold on that PR, and tells you only the comments that no worker owns. A text on GitHub counts only when the owner wrote it with no 🤖 at its start, or when he put a 👍 on it; each worker starts what it writes there with 🤖.
 Each round sets one status label on each open PR and on each issue of the owner that it took: s:queued, s:working, s:checks, s:red, s:boxes, s:held, s:conflict, s:stacked, s:ready, or s:owner (green, waits for the owner).
-Each round reads the gates: when the median time of a job in its last five green runs on main passes its budget in .github/budgets.json, which script/budgets.py sets from measures, it queues an item budget-<job>, once until five new runs measure the job; and when the gates fail, then pass on the same commit, it puts each test that failed in the ledger of the flakes, flaky, and at once queues an item flake-<test>, or tells the worker that holds that item. An item names in covers[key] the tests, the measures and the keys of the items of flakes or budgets that it covers, as covers["tui-bench-new-act"] = ["flake-bench-a-new-act-growth"]: taken() gives its worker for each of them, so a flake or a budget that it covers goes to that worker and queues no item.
+Before it hires, each round folds into one item each queued item that is like an earlier one, by the ruling of the owner on 10-29: the same thread, kind and model, and the same PR or a brief whose long lines are half the same. The earlier item keeps its key and its place, takes the lines of the later one that it lacks, and covers its key, so a flake, an order or a step of converge for it goes to its worker. Each round reads the gates: when the median time of a job in its last five green runs on main passes its budget in .github/budgets.json, which script/budgets.py sets from measures, it queues an item budget-<job>, once until five new runs measure the job; and when the gates fail, then pass on the same commit, it puts each test that failed in the ledger of the flakes, flaky, and at once queues an item flake-<test>, or tells the worker that holds that item. An item names in covers[key] the tests, the measures and the keys of the items of flakes or budgets that it covers, as covers["tui-bench-new-act"] = ["flake-bench-a-new-act-growth"]: taken() gives its worker for each of them, so a flake or a budget that it covers goes to that worker and queues no item.
 Every twelfth round audits the work against its measure, the open items, writes its line in the digest, and tells you the open entries of TOOLING, the most repeated first: turn the worst into the next item. The audit prunes what the work left behind, and loses no work: a worktree of the round whose item is not in working, queue or backlog and whose branch merged, closed, or holds nothing that main lacks, or whose work is all committed and pushed, with its local branch, once its changes that are not committed are a patch and its commits that only this machine holds are a bundle, in the folder of the day in ARCHIVE; a remote branch whose PR closed at its head and that no item names, written first to TRASHED; a scratch directory of a life that no process and no item uses, older than 2 days; and a folder /tmp/furb-* older than 2 days. It tells you what went and the room that df saw freed.
 threads() gives the tree of the threads: the brief prompt of each worker and the prompts under it, with their state, their PRs, their queued items and each question that waits.
 debrief(name) asks the chain of a worker that ended for the frictions that it met in furb.
@@ -114,7 +114,7 @@ watched: dict[str, list[float]] = globals().setdefault("watched", {})
 after: dict[str, list[str]] = globals().setdefault("after", {})
 parked: dict[str, dict] = globals().setdefault("parked", {})
 awaited: dict[str, list[str]] = globals().setdefault("awaited", {})
-covers: dict[str, list[str]] = globals().setdefault("covers", {})
+covering: dict[str, list[str]] = globals().setdefault("covering", {})
 kinds: dict[str, str] = globals().setdefault("kinds", {})
 pool: dict[str, dict] = globals().setdefault("pool", {})
 slots: dict[str, str] = globals().setdefault("slots", {})
@@ -1394,6 +1394,35 @@ def waits_on(pr: dict) -> str:
   return next((d for d, held in awaited.items() if get(d) and not over(d) and marks & set(held)), "")
 
 
+TRIAGED = "The round folded similar items into this one item, by the ruling of the owner on 10-29: fewer items, and fewer but bigger PRs. Do them in as few PRs as the change allows, each PR one change. covers names the folded keys, so their flakes, orders and steps come to you."
+
+
+def triage() -> None:
+  def lines(text: str) -> set[str]:
+    return {x.strip() for x in text.splitlines() if len(x.strip()) >= 40}
+
+  def alike(a: tuple, b: tuple) -> bool:
+    if a[2] != b[2] or kind_of(a[0]) != kind_of(b[0]) or model_of(a[0]) != model_of(b[0]):
+      return False
+    if after.get(a[0]) or after.get(b[0]) or taken(a[0]) not in ("", "queued") or taken(b[0]) not in ("", "queued"):
+      return False
+    near = set(re.findall(r"#(\d+)", a[1])) & set(re.findall(r"#(\d+)", b[1]))
+    la, lb = lines(a[1]), lines(b[1])
+    return bool(near) or bool(la and lb and len(la & lb) * 2 >= min(len(la), len(lb)))
+
+  for b in list(queue):
+    a = next((one for one in queue if one is not b and queue.index(one) < queue.index(b) and alike(one, b)), None)
+    if not a:
+      continue
+    shared = lines(a[1])
+    own = "\n".join(x for x in b[1].splitlines() if x.strip() not in shared)
+    text = a[1] if a[1].startswith(TRIAGED) else TRIAGED + "\n\n" + a[1]
+    queue[queue.index(a)] = (a[0], text + f"\n\n## The item {b[0]}, folded in by the triage\n" + own.strip(), a[2])
+    queue.remove(b)
+    covering.setdefault(a[0], []).extend([b[0], *covering.pop(b[0], [])])
+    heard.append(f"The triage folded the item {b[0]} into {a[0]}, which it is like.")
+
+
 def staff() -> None:
   for c in list(parked):
     entry = parked[c]
@@ -1443,6 +1472,7 @@ def staff() -> None:
     if not ready:
       break
     queue.append(backlog.pop(ready[0]))
+  triage()
   for item in list(queue):
     if met(item[0]) and family(model_of(item[0])) not in blocked and can(item[0]):
       queue.remove(item)
@@ -1851,7 +1881,7 @@ MANY_SAID = "More than {n} tests failed in one attempt, so one cause, as a machi
 
 
 def coverer(*names: str) -> str:
-  return next((k for k, held in covers.items() if set(names) & set(held)), "")
+  return next((k for k, held in covering.items() if set(names) & set(held)), "")
 
 
 def taken(key: str) -> str:

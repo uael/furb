@@ -742,3 +742,61 @@ async def test_a_first_answer_that_the_record_holds_with_no_maker_is_a_refusal_o
   assert [(a[1], a[2]) for a in said(again, "done") if a[1].startswith("reply")] == [("reply1", ""), ("reply2", "")]
   assert [e for (e,) in later.record if e[1].startswith("reply")] == []
   assert engine.paused(root)
+
+
+def speaker(*, first: bool, burst: bool) -> Generator[tuple | None, tuple]:
+  """An ear of the outside that says two notes on the chain of the go of the operator, in one hearing for a burst, or
+  else the second once the rung of the first is done; in a later life it says nothing, since the record holds them."""
+  a = yield
+  while True:
+    if first and a[0] == "tell" and a[2] == OPERATOR and a[3] == ["#go"]:
+      yield "note", a[1], "a"
+      if burst:
+        yield "note", a[1], "b"
+    elif first and not burst and a[0] == "done" and (engine.get(a[1]) or ())[:1] == ("rung",):
+      if engine.get(a[1])[2] == "player":
+        first = False
+        yield "note", engine.get(a[1])[3], "b"
+    a = yield
+
+
+def player() -> Generator[tuple | None, tuple]:
+  """An ear of the outside that plays a rung for each note that it hears, as the extensions play their words."""
+  words = {"a": "await rung('c = 3')", "b": "d = 4"}
+  a = yield
+  while True:
+    if a[0] == "note":
+      engine.rung(words[a[3]], on=a[1])
+    a = yield
+
+
+async def bursts(*, burst: bool) -> tuple[list, list, list]:
+  """The record of a life whose outside says two notes, the rungs of it, and the rungs of a later life on it."""
+  sand = Sand()
+  log, root = life(sand, (), speaker=speaker(first=True, burst=burst), player=player())
+  engine.say("tell", root, ["#go"])
+  await settle(300)
+  record = plain(sand.record)
+  again, _ = life(Sand(), record, speaker=speaker(first=False, burst=burst), player=player())
+  await settle(300)
+  return [one for (one,) in record], said(log, "rung"), said(again, "rung")
+
+
+async def test_the_journal_keeps_a_joined_mark_before_a_fact_that_it_keeps_right_after_the_fact_it_kept_last() -> None:
+  """The journal keeps a joined mark, ("joined", "", "journal", kind, act), which names the kind and the act of the fact that it joins, before a fact that it keeps right after the fact it kept last, with no other fact heard between them, since one ear said both while it heard one fact, and a later life says that fact again at once after the one before it, so the ears hear that burst in one burst again, as the first life did."""
+  record, first, again = await bursts(burst=True)
+  notes = [at for at, one in enumerate(record) if one[0] == "note"]
+  assert [record[at - 1] for at in notes][1] == ("joined", "", "journal", "note", record[notes[1]][1])
+  assert record[notes[0] - 1][0] == "tell"
+  assert [a[1:5] for a in again] == [a[1:5] for a in first]
+  assert [a[1] for a in first] == ["rung1", "rung2", "rung3"]
+  assert [a[2] for a in first] == ["player", "player", "rung1"]
+
+
+async def test_a_fact_that_the_journal_keeps_after_a_fact_that_it_does_not_keep_holds_no_mark() -> None:
+  """A fact that the journal keeps after a fact that it does not keep holds no mark, so a later life says it again only once every fact said before it has been heard, after the reaction that came between them, as the first life did."""
+  record, first, again = await bursts(burst=False)
+  notes = [at for at, one in enumerate(record) if one[0] == "note"]
+  assert [record[at - 1][0] == "joined" for at in notes] == [False, False]
+  assert [a[1:5] for a in again] == [a[1:5] for a in first]
+  assert [a[2] for a in first] == ["player", "rung1", "player"]
