@@ -1059,7 +1059,7 @@ def test_the_core_converges_a_target_with_a_plain_text_differ_and_the_words_of_t
     "look": "each sentence",
   }
   world.ns["plain_capture"] = lambda target, pairs, out: f"echo capture {pairs}"
-  world.ns["plain_differ"] = lambda target, out, was, whole, labels: (f"python3 -I - {out}", "print('diff')")
+  world.ns["plain_differ"] = lambda target, out, was, whole, labels: (f"python3 -I - {shlex.quote(out)}", "print('diff')")
   world.target = plain
   world.say(r"python3 -I -", listing(changed=("docs/intro",), kind="text"))
   world.judge = lambda message, to: gap("docs/intro")
