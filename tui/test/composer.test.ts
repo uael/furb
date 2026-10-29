@@ -683,10 +683,11 @@ test("a cancelled message keeps its place in the feed, and its cancel reads as a
     expect(lines[first]).toMatch(/┃ Think until I\b.*⊘ cancelled {2}1 step {2}▸ Expand/);
     expect(lines[first]).not.toMatch(/rung\d|\bstr\b/);
     expect(lines[first]).not.toContain("✗");
-    expect(first).toBeLessThan(lines.findIndex((line) => line.includes("A second message.")));
+    // The sidebar lists the thread of that message as well, so the message of the feed is the one in its block.
+    expect(first).toBeLessThan(lines.findIndex((line) => line.includes("┃ A second message.")));
     expect(lines.filter((line) => line.includes(" cancelled") && line.includes("⊘"))).toHaveLength(1);
     // A message that its answer closed says no state, only the type of its answer.
-    expect(lines.find((line) => line.includes("A second message."))).toMatch(
+    expect(lines.find((line) => line.includes("┃ A second message."))).toMatch(
       /┃ A second message\.\s+str\s+▾ Collapse/,
     );
   }));
