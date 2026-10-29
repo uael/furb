@@ -90,18 +90,19 @@ def _lives():
   opened = [one for one in opened if one not in dropped]
   live = {ROOT} | {scope(one) for one in opened}
   values, lost, named = {}, {}, set(opened)
-  for c in sorted(live, key=_number):
-    here = module(c)
-    values[c], lost[c] = [], []
-    for name, value in here.items():
-      if name.startswith("__") or callable(value) or globals().get(name, here) is value:
-        continue
-      if _plain(value):
-        values[c].append((name, _shown(value)))
-        _named(value, named)
-      else:
-        lost[c].append(name)
-  live |= {get(one)[1] if get(one)[0] == "chain" else scope(one) for one in named}
+  while live - values.keys():
+    for c in sorted(live - values.keys(), key=_number):
+      here = module(c)
+      values[c], lost[c] = [], []
+      for name, value in here.items():
+        if name.startswith("__") or callable(value) or globals().get(name, here) is value:
+          continue
+        if _plain(value):
+          values[c].append((name, _shown(value)))
+          _named(value, named)
+        else:
+          lost[c].append(name)
+    live |= {get(one)[1] if get(one)[0] == "chain" else scope(one) for one in named}
   live = sorted(live, key=_number)
   return asked, live, named, values, lost, [x for x in resumed if scope(x[1]) in live]
 

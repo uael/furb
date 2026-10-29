@@ -847,6 +847,25 @@ fn a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_promp
 }
 
 #[test]
+fn a_chain_that_only_a_value_names_goes_on_from_a_checkpoint_with_its_own_module() {
+  let at = place("checkpoint-named");
+  let mut first = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  closed(&mut first, "kids = [chain('kid')]\nawait rung('n = 5', on=kids[0])\nclose(None)");
+  drop(first);
+  let (mut inspected, kept) =
+    Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap();
+  let written = crate::checkpoint::written(&mut inspected, &kept).unwrap();
+  drop(inspected);
+  crate::checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
+  let mut later = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  assert_eq!(
+    closed(&mut later, "close([kids, module(kids[0]).get('n')])").as_ref().py_repr(),
+    "[['chain2'], 5]",
+    "the checkpoint carries a chain that a value of a module names, with the values of its own module"
+  );
+}
+
+#[test]
 fn a_word_that_ran_at_a_checkpoint_runs_again_and_asks_again_the_prompt_that_it_awaited() {
   let at = place("checkpoint-asked");
   let work = "got = await prompt(str, 'Ask.', on=chain('asked'))\nclose(got)";
