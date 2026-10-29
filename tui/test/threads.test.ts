@@ -122,6 +122,31 @@ test("a thread resolves from its card, and a message to it opens it again", () =
     true,
   ));
 
+test("a question of a str shows a field in its card in the sidebar, and Enter in it answers the question", () =>
+  composing(
+    async ({ session, app, screen, frame }) => {
+      await idle(session);
+      const question = await session.engine.prompt("str", {
+        message: "Which name should it take?",
+        on: session.engine.root,
+        to: "operator",
+      });
+      await until(session.host, () => session.host.prompts.has(question));
+      await session.refresh();
+      const shown = await frame();
+      expect(shown).toContain("Type the answer");
+      expect(shown).not.toContain("Answer as str");
+      const field = app.railSession.findDescendantById(`rail-answer-${question}`);
+      expect(field).toBeDefined();
+      field?.focus();
+      screen.mockInput.typeText("fieldnotes");
+      screen.mockInput.pressEnter();
+      expect(await session.engine.result(question)).toBe("fieldnotes");
+    },
+    { width: 140, height: 44 },
+    true,
+  ));
+
 test("a question that waits shows on top of the sidebar and as a mark on its workspace and its session, and the input goes to the thread that is lit", () =>
   composing(
     async (use) => {
