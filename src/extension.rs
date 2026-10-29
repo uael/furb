@@ -15,6 +15,7 @@
 //! extension plays, and the definitions alone of a new word of an extension that the life runs, which reloads it.
 
 pub mod compaction;
+pub mod mcp;
 pub mod memory;
 pub mod skills;
 pub mod web;
@@ -52,7 +53,7 @@ const ROOTED: &str = "root";
 
 /// The official extensions, each as its manifest, the file of its word, and the file of the part for a TUI that its
 /// manifest names, in the order a life runs them.
-const OFFICIAL: [(&str, &str, Option<&str>); 5] = [
+const OFFICIAL: [(&str, &str, Option<&str>); 6] = [
   (
     include_str!("../extensions/memory/furb.json"),
     include_str!("../extensions/memory/memory.py"),
@@ -74,6 +75,11 @@ const OFFICIAL: [(&str, &str, Option<&str>); 5] = [
     None,
   ),
   (include_str!("../extensions/web/furb.json"), include_str!("../extensions/web/web.py"), None),
+  (
+    include_str!("../extensions/mcp/furb.json"),
+    include_str!("../extensions/mcp/mcp.py"),
+    Some(include_str!("../extensions/mcp/tui.ts")),
+  ),
 ];
 
 /// Whether a line imports furb or a module of it, as `from furb import`, `from furb.engine import` or `import

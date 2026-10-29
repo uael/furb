@@ -187,7 +187,9 @@ export const composer = part({
 
   /** The token the cursor ends: a `/command` that opens the input, or an `@path` or a `:shortcode` that starts a word
    * of a prompt. */
-  token(): { kind: "/" | "@" | ":" | "value"; text: string; command?: string } | undefined {
+  token():
+    | { kind: "/" | "@" | ":" | "value" | "trigger"; text: string; command?: string; trigger?: string }
+    | undefined {
     const before = this.beforeCursor();
     const slash = before.match(/^\/([\w-]*)$/);
     if (slash) return { kind: "/", text: slash[1] ?? "" };
@@ -201,6 +203,14 @@ export const composer = part({
     const colon = before.match(/(?:^|\s):([\w+-]*)$/);
     if (colon && this.session.mode === "prompt" && !this.session.editing)
       return { kind: ":", text: colon[1] ?? "" };
+    // A trigger of a part starts a word of a prompt, as `@` does.
+    if (this.session.mode === "prompt" && !this.session.editing)
+      for (const trigger of this.parts.triggers()) {
+        if (trigger === "@") continue;
+        const sign = trigger.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const hit = before.match(new RegExp(`(?:^|\\s)${sign}([^\\s"']*)$`, "u"));
+        if (hit) return { kind: "trigger", text: hit[1] ?? "", trigger };
+      }
     return undefined;
   },
 
@@ -208,7 +218,10 @@ export const composer = part({
   complete(suggestion: Suggestion): void {
     const token = this.token();
     if (token)
-      this.replaceBefore(token.kind === "value" ? token.text : `${token.kind}${token.text}`, suggestion.text);
+      this.replaceBefore(
+        token.kind === "value" ? token.text : `${token.trigger ?? token.kind}${token.text}`,
+        suggestion.text,
+      );
   },
 
   /** The paths of the project, which the suggestions read, as a pick of them gives them: none until the read of the
@@ -336,7 +349,8 @@ export const composer = part({
       return;
     }
     const token = this.token();
-    const key = token ? `${token.kind}${token.text}` : "";
+    const key = token ? `${token.trigger ?? token.kind}${token.text}` : "";
+    this.suggestionError = "";
     const started = key === "@" && this.lastToken !== "@";
     // A new filter chooses anew from its first suggestion, and a move of the cursor keeps the choice.
     if (key !== this.lastToken) this.suggestionIndex = 0;
@@ -352,15 +366,32 @@ export const composer = part({
       this.suggestions = slashes
         .filter(({ name }) => name.startsWith(token.text))
         .sort((one, other) => Number(other.name === token.text) - Number(one.name === token.text))
-        .map(({ name, argument, detail, usage }) => ({
-          label: usage,
-          detail,
-          text: `/${name} `,
-          submit: () => {
-            this.composer.setText("");
-            this.command(name, argument)();
-          },
-        }));
+        .map(
+          ({ name, argument, detail, usage }): Suggestion => ({
+            label: usage,
+            detail,
+            text: `/${name} `,
+            submit: () => {
+              this.composer.setText("");
+              this.command(name, argument)();
+            },
+          }),
+        )
+        .concat(
+          // The commands of the parts, as the life gives them now, follow the commands of the TUI.
+          this.parts
+            .commands(this.seen())
+            .filter((one) => !one.error && one.name.startsWith(token.text))
+            .map((one) => ({
+              label: `/${one.name}`,
+              detail: `${one.detail} (${one.part})`,
+              text: `/${one.name} `,
+              submit: () => {
+                this.composer.setText("");
+                this.action(`/${one.name}`);
+              },
+            })),
+        );
     } else if (token.kind === "value") {
       const command = token.command ?? "";
       const wanted = token.text.toLowerCase();
@@ -394,18 +425,29 @@ export const composer = part({
           detail: description,
           text: emoji,
         }));
+    } else if (token.kind === "trigger") {
+      const given = this.parts.completions(token.trigger ?? "", token.text, this.seen());
+      this.suggestionError = given.errors.join(" ");
+      this.suggestions = given.items
+        .slice(0, 50)
+        .map(({ label, detail, text }) => ({ label, detail: detail ?? "", text }));
     } else {
       const wanted = token.text.toLowerCase();
-      this.suggestions = this.paths(
-        (paths) => paths.filter((path) => path.toLowerCase().includes(wanted)),
-        started,
-      )
-        .slice(0, 50)
-        .map(({ value: path }) => ({
-          label: `@${path}`,
-          detail: "",
-          text: `@${/\s/.test(path) ? JSON.stringify(path) : path} `,
-        }));
+      // The completions of the parts after @ come before the files of the project.
+      const given = this.parts.completions("@", token.text, this.seen());
+      this.suggestionError = given.errors.join(" ");
+      const theirs = given.items.map(({ label, detail, text }) => ({ label, detail: detail ?? "", text }));
+      this.suggestions = theirs
+        .concat(
+          this.paths((paths) => paths.filter((path) => path.toLowerCase().includes(wanted)), started)
+            .slice(0, 50)
+            .map(({ value: path }) => ({
+              label: `@${path}`,
+              detail: "",
+              text: `@${/\s/.test(path) ? JSON.stringify(path) : path} `,
+            })),
+        )
+        .slice(0, 50);
     }
     this.suggestionIndex = Math.min(this.suggestionIndex, Math.max(0, this.suggestions.length - 1));
     this.renderSuggestions();
@@ -416,20 +458,25 @@ export const composer = part({
     const shown = token ? this.suggestions : [];
     const files = this.session.files;
     // An emoji list that matches nothing closes.
+    const failed = token && (token.kind === "@" || token.kind === "trigger") ? this.suggestionError : "";
     const state =
       !token || token.kind === ":"
         ? ""
-        : (token.kind === "@" || pathCommands.has(token.command ?? "")) && files?.error
-          ? files.error
-          : (token.kind === "@" || pathCommands.has(token.command ?? "")) && !files?.paths
-            ? "Finding project files..."
-            : shown.length
-              ? ""
-              : token.kind === "/"
-                ? "No command starts with that name."
-                : token.kind === "value"
-                  ? "No known value matches. Enter sends what is typed."
-                  : "No project file matches.";
+        : failed
+          ? failed
+          : (token.kind === "@" || pathCommands.has(token.command ?? "")) && files?.error
+            ? files.error
+            : (token.kind === "@" || pathCommands.has(token.command ?? "")) && !files?.paths
+              ? "Finding project files..."
+              : shown.length
+                ? ""
+                : token.kind === "/"
+                  ? "No command starts with that name."
+                  : token.kind === "value"
+                    ? "No known value matches. Enter sends what is typed."
+                    : token.kind === "trigger"
+                      ? "Nothing matches."
+                      : "No project file matches.";
     if (
       !this.paneChanged(this.suggestionBox, [
         this.theme,
@@ -442,7 +489,9 @@ export const composer = part({
     this.clear(this.suggestionBox);
     this.suggestionBox.visible = Boolean(state || shown.length);
     if (state)
-      this.suggestionBox.add(this.inset(space.between, this.line(state, files?.error ? c.danger : c.muted)));
+      this.suggestionBox.add(
+        this.inset(space.between, this.line(state, failed || files?.error ? c.danger : c.muted)),
+      );
     const rows = 8;
     const first = Math.max(0, Math.min(this.suggestionIndex - rows + 1, shown.length - rows));
     const visible = shown.slice(first, first + rows);
@@ -469,8 +518,10 @@ export const composer = part({
       });
       row.add(this.text(selected ? `${glyph.pointer} ` : "  ", c.accent));
       row.add(
+        // The label keeps a gap before its detail, even when the column cuts it.
         this.text(one.label, selected ? c.accent : c.text, {
-          width: one.detail ? column : undefined,
+          width: one.detail ? column - space.between : undefined,
+          marginRight: one.detail ? space.between : 0,
           truncate: true,
           attributes: selected ? bold : 0,
         }),

@@ -116,6 +116,9 @@ test("a folded thread marks new work with a dot, and the dot goes once the threa
       expect(await folded()).not.toContain("●");
       await session.reply(id, "One more thing");
       await until(session, () => (listed(session)[0]?.messages.length ?? 0) === 1);
+      // The model works the message after it lands. Work that ends after the thread folds again is new work, which
+      // marks the thread again, so the thread opens only once the work ends.
+      await idle(session);
       expect(await folded()).toMatch(/┃ ● .*Explore this project/);
       app.foldThread(id, false);
       // The box draws open over a few frames on a slow machine, and the thread counts as seen once it has.
@@ -282,7 +285,7 @@ test("the up arrow in an empty input takes back the last message to the thread t
       // The key goes to the handler of the input itself: a key press of the test terminal reaches it later on a slow
       // machine than the test can wait.
       expect(app.walkHistory({ name: "up" } as KeyEvent)).toBe(true);
-      await until(session, () => app.composer.plainText === "First wording");
+      await until(session, () => app.composer.plainText === "First wording", "compose");
       app.composer.setText("Second wording");
       await app.submit();
       await until(session, () => (listed(session)[0]?.messages.length ?? 0) === 2);
@@ -299,5 +302,26 @@ test("the up arrow in an empty input takes back the last message to the thread t
       expect(shown).toContain("Second wording");
     },
     { ...size, useMouse: true },
+    true,
+  ));
+
+test("a message keeps its words whole beside a state and controls that are wider than the room it leaves, which go under it", () =>
+  composing(
+    async ({ session, frame }) => {
+      await idle(session);
+      const shown = async () =>
+        (await frame()).split("\n").map((row) => row.slice(0, 100 - session.preferences.sidebarWidth));
+      let rows = await shown();
+      // The markdown of the message draws over a few frames.
+      for (let step = 0; step < 80 && !rows.some((row) => row.includes("Explore this project")); step++) {
+        await Bun.sleep(25);
+        rows = await shown();
+      }
+      const at = rows.findIndex((row) => row.includes("Explore this project"));
+      expect(at).toBeGreaterThan(0);
+      expect(rows[at]).toMatch(/┃ Explore this project/);
+      expect(rows.slice(at, at + 5).join("\n")).toContain("Collapse");
+    },
+    { width: 100, height: 46 },
     true,
   ));

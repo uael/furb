@@ -13,7 +13,6 @@ import {
   type Renderable,
   ScrollBoxRenderable,
   type SimpleHighlight,
-  TextareaRenderable,
   TextRenderable,
 } from "@opentui/core";
 import type { Keymap } from "@opentui/keymap";
@@ -25,6 +24,7 @@ import { type ChromePart, chrome } from "./app/chrome.ts";
 import { type ComposerPart, composer, composerBound } from "./app/composer.ts";
 import { type DeskPart, desk, deskBound } from "./app/desk.ts";
 import { type DetailsPart, details } from "./app/details.ts";
+import { type DialogsPart, dialogs } from "./app/dialogs.ts";
 import { type FeedPart, feed } from "./app/feed.ts";
 import { GhostTextarea } from "./app/ghost.ts";
 import { type InputPart, input, inputBound } from "./app/input.ts";
@@ -173,7 +173,7 @@ export class App {
   railWatched?: string;
   /** The next question that the key for the next question goes to. */
   railNext = 0;
-  /** The threads of the session shown on every chain, read again only when its acts or its questions change. */
+  /** The threads of the session shown on every chain, read again only when its prompts or its questions change. */
   railThreadCache?: {
     session: unknown;
     version: number;
@@ -182,7 +182,7 @@ export class App {
     chains: Map<string, ChainRead>;
   };
   /** The key of the rows of the threads of the sidebar, by the list that it came from and the minute. */
-  railThreadKey?: { list: ChainThread[]; minute: number; text: string };
+  railThreadKey?: { list: ChainThread[]; minute: number; parts: string[]; count: number; text: string };
   /** The threads of the chain shown, read again only when the acts or the questions that wait change. */
   threadList: ThreadList = {
     session: undefined,
@@ -322,6 +322,12 @@ export class App {
   /** The first choice that the list shows, and whether each choice takes rows for its command and its detail. */
   paletteStart = 0;
   rich = false;
+  /** The errors of the completions of the parts for the token of the input, which its list shows. */
+  suggestionError = "";
+  /** What takes away the keys of the actions of the dialog that is open. */
+  paletteKeysOff?: () => void;
+  /** What a dialog that a part awaits does when it closes with no choice, as Escape closes it. */
+  overlayClosed?: () => void;
   redraw?: ReturnType<typeof setTimeout>;
   lastView = "";
   /** Whether this run is the first one, whose welcome shows the check of the setup. */
@@ -499,7 +505,6 @@ export class App {
       id: "composer",
       flexGrow: 1,
       minHeight: 1,
-      placeholder: "What would you like to build?",
       ...inputColors(c.panel),
       keyBindings: [
         { name: "return", action: "submit" },
@@ -535,6 +540,8 @@ export class App {
     this.composeBox.add(this.pickBox);
     this.composeBox.add(this.composer);
     this.composer.tint = () => c.faint;
+    // The rows of the hint depend on the width that the layout gives the area, which the area knows after it.
+    this.composer.onHintRows = () => this.schedule();
     this.meta = this.row({ overflow: "hidden", flexGrow: 1 });
     // The line under the text holds the switch of the mode and where the input goes, a row of space under the text.
     const metaLine = this.row({ marginTop: space.section });
@@ -836,7 +843,7 @@ export class App {
     if (this.draftKey !== this.composeKey()) this.showDraft(this.composeKey());
     this.orphans();
     // The mode of a screen reader shows one column of text, and no sidebar beside it.
-    this.rail.visible = w.preferences.sidebar && !this.reader && this.renderer.width >= 100;
+    this.rail.visible = this.sidebarShown;
     this.rail.width = w.preferences.sidebarWidth;
     this.renderTop();
     const pending = w.operatorPrompt;
@@ -932,13 +939,18 @@ export class App {
                 : ["Prompt", c.accent, "Ask anything, or type / for commands"];
     for (const edge of this.composeEdges) if (edge.borderColor !== modeColor) edge.borderColor = modeColor;
     this.composer.cursorColor = modeColor;
-    this.composer.placeholder = placeholder;
+    this.composer.hint = placeholder;
     this.renderPick(choosing);
     // The box holds the values of a choice, or the lines of the text, up to six, then a row of space and the line
     // under the text. While Other takes the words of the operator, it holds both.
     const typed = Math.min(
       6,
-      Math.max(space.bar, this.composer.lineCount, this.composer.lineInfo.lineSources.length),
+      Math.max(
+        space.bar,
+        this.composer.lineCount,
+        this.composer.lineInfo.lineSources.length,
+        this.composer.hintRows(this.composer.width || this.feedWidth - space.inset * 2 - space.bar).length,
+      ),
     );
     const listed = choosing ? this.rows(choosing).length + 1 : 0;
     this.composeBox.height =
@@ -1123,6 +1135,7 @@ export interface App
     WelcomePart,
     StagePart,
     DeskPart,
+    DialogsPart,
     QuestionsPart,
     DetailsPart,
     SidebarPart,
@@ -1145,6 +1158,7 @@ assemble(
   welcome,
   stage,
   desk,
+  dialogs,
   questions,
   details,
   sidebar,

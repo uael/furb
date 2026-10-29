@@ -82,7 +82,7 @@ export type ThreadList = {
   asked: Map<string, ChainThread>;
 };
 
-/** The threads of one chain, as they stood when the chain had that stamp, which counts the acts placed on it. */
+/** The threads of one chain, as they stood when the chain had that stamp, which counts the prompts placed on it. */
 export type ChainRead = {
   stamp: number;
   list: ChainThread[];
@@ -271,6 +271,8 @@ export interface Choice {
   status?: SessionStatus;
   /** The title of the part of the list that the choice opens, which the list shows above it. */
   heading?: string;
+  /** The lines that show under the choice while it is selected, in a list that is not rich. */
+  lines?: Part[][];
 }
 
 /** A value that the first argument of a command may take: what it means, whether it is the current one, whether the

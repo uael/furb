@@ -1116,9 +1116,11 @@ fn thinks((model, mut asked): (Model, Asked), thinking: Thinking) -> (Model, Ask
 
 /// The turns of a chain as messages of rig. The engine phrases every turn as python and the provider renders
 /// nothing: a user turn goes as its python and the images that the prompts it opens name, each after the text that
-/// names it and once in the request, and one that holds nothing goes not at all; an assistant turn goes as the blocks its provider gave, less its thought for a model that
-/// forgets it, or as its python when a provider of another kind gave them. A model that takes no image refuses a turn
-/// that names one.
+/// names it and once in the request, and one that holds nothing goes not at all; an assistant turn goes as the blocks
+/// its provider gave, less its thought for a model that forgets it, or as its python when a provider of another kind
+/// gave them. A turn of the model whose word the gate refused goes on the user side, as a quote under the finding of
+/// its rung, so the model reads it as a word that the chain refused and never as one that it would write again. A
+/// model that takes no image refuses a turn that names one.
 fn messages(
   turns: ObjectRef<'_>,
   model: &Model,
@@ -1129,11 +1131,22 @@ fn messages(
   let mut joins = false;
   // The images that an earlier turn gave, which no later turn gives again.
   let mut given = HashSet::new();
-  for turn in turns.items().unwrap_or_default() {
-    let Some(role) = entry(&turn, 0).and_then(|one| one.as_str()) else { continue };
-    let python = entry(&turn, 1).and_then(|one| one.as_str()).unwrap_or_default();
+  // The word of the turn of the model that the gate refused, which the next user turn holds under its finding.
+  let mut quoted: Option<(String, usize)> = None;
+  let all = turns.items().unwrap_or_default();
+  for (at, turn) in all.iter().enumerate() {
+    let Some(role) = entry(turn, 0).and_then(|one| one.as_str()) else { continue };
+    let python = entry(turn, 1).and_then(|one| one.as_str()).unwrap_or_default();
     if role == "assistant" {
-      let blocks = entry(&turn, 3)
+      let next = all.get(at + 1).and_then(|one| entry(one, 1)?.as_str().map(str::to_owned));
+      if let Some(place) = next.as_deref().and_then(refusal) {
+        // The quote holds the word less the marks of a fence or of a tool call, which the model would write again.
+        let word = watch::bare(python).unwrap_or_else(|| python.to_owned());
+        quoted = (!word.trim().is_empty()).then_some((word, place));
+        joins = true;
+        continue;
+      }
+      let blocks = entry(turn, 3)
         .and_then(|one| serde_json::from_value::<Vec<AssistantContent>>(wire::record(one)).ok())
         .map(|mut blocks| {
           if model.forgets {
@@ -1150,6 +1163,8 @@ fn messages(
       }
       continue;
     }
+    let held = quoted.take().map(|(word, place)| refused(python, place, &word));
+    let python = held.as_deref().unwrap_or(python);
     if python.is_empty() {
       continue;
     }
@@ -1172,6 +1187,44 @@ fn messages(
     messages.push(Message::User { content: content.collect() });
   }
   Ok(messages)
+}
+
+/// Where the finding of a refused rung ends in a user turn that holds one, `#rungN refused` at the start of a
+/// paragraph with its findings after it: the end of the line of its findings, or of the quote that holds them.
+fn refusal(python: &str) -> Option<usize> {
+  let mut from = 0;
+  let head = loop {
+    let at = from + python[from..].find(" refused\n")?;
+    let start = python[..at].rfind('\n').map_or(0, |one| one + 1);
+    let name = python[start..at].strip_prefix('#').unwrap_or_default();
+    if crate::fact::named(name, "rung") && (start == 0 || python[..start].ends_with("\n\n")) {
+      break (name, at + " refused\n".len());
+    }
+    from = at + 1;
+  };
+  let (name, body) = head;
+  let rest = &python[body..];
+  let line = |from: usize| rest[from..].find('\n').map_or(rest.len(), |one| from + one);
+  let end = if rest.starts_with(&format!("{name}_findings = ")) {
+    line(0)
+  } else {
+    let tag = rest.strip_prefix("<s:")?.split_once('>')?.0;
+    line(rest.find(&format!("</s:{tag}>"))?)
+  };
+  Some(body + end)
+}
+
+/// A user turn with the word that the gate refused quoted under the finding that ends at this place, under the name
+/// `rungN_word` that a rung tells its word by, so the model reads it as the word of that rung.
+fn refused(python: &str, place: usize, word: &str) -> String {
+  let start = python[..place].rfind("\n\n").map_or(0, |one| one + 2);
+  let rung = python[start + 1..].split(' ').next().unwrap_or_default();
+  let mut name = format!("{rung}_word");
+  while format!("{word}\n").contains(&format!("</s:{name}>\n")) {
+    name.push('_');
+  }
+  let word = word.trim_end_matches('\n');
+  format!("{}\n<s:{name}>\n{word}\n</s:{name}>{}", &python[..place], &python[place..])
 }
 
 /// The blocks of a turn of a model less the marks of a fence or of a tool call in each text, which [`watch::bare`]
