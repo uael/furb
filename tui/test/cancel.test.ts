@@ -143,3 +143,24 @@ test("the owner takes back his last message and writes it again, and no other wo
     },
     { width: 152, height: 60, exitOnCtrlC: false },
   ));
+
+test("a right click on a later message of a thread offers to take it back", () =>
+  composing(
+    async ({ session, app, screen, frame }) => {
+      const { thread } = await conductor(session);
+      session.aim(thread);
+      app.composer.setText("Think until I cancel.");
+      await app.submit();
+      await until(session, () => session.lastOwn?.words[1] === "Think until I cancel.");
+      await session.refresh();
+      let shown = await frame();
+      for (let step = 0; step < 200 && !shown.includes("┃ Think until I cancel."); step++) {
+        await Bun.sleep(25);
+        shown = await frame();
+      }
+      const [column, row] = find(screen, "┃ Think until I cancel.");
+      await screen.mockMouse.click(column + 4, row, 2);
+      expect(await frame()).toContain("Take back");
+    },
+    { width: 152, height: 60, exitOnCtrlC: false },
+  ));

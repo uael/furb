@@ -503,11 +503,10 @@ def test_the_prune_removes_what_the_work_left_and_keeps_its_work(conductor: Roun
     )
   assert got.stdout.startswith("The prune removed the worktrees ")
   assert "; 1 remote branch, listed in .furb/trashed.tsv; 1 scratch directory; 1 folder of " in got.stdout
-  assert sorted(p.name for p in tmp_path.glob("furb-w-*")) == ["furb-w-busy", "furb-w-fresh", "furb-w-open"]
+  assert sorted(p.name for p in tmp_path.glob("furb-w-*")) == ["furb-w-busy", "furb-w-fresh"]
   assert git("for-each-ref", "--format=%(refname:short)", "refs/heads/w", cwd=root, env=env).split() == [
     "w/busy",
     "w/fresh",
-    "w/open",
   ]
   kept = sorted((root / ".furb" / "archive").glob("*/*"))
   assert [re.sub(r"-\d{6}\.", ".", p.name) for p in kept] == ["merged.bundle", "merged.patch"]
@@ -673,7 +672,7 @@ def test_the_rulings_of_the_owner_stand_in_conducting_in_his_words(conductor: Ro
 
 
 def test_a_fixer_runs_on_sonnet_high_unless_its_effort_says_otherwise(conductor: Round) -> None:
-  assert [conductor.model_of(key) for key in ("fix5", "box8", "k")] == [SONNET_HIGH, SONNET_HIGH, OPUS]
+  assert [conductor.model_of(key) for key in ("fix5", "box8", "k")] == [SONNET_HIGH, SONNET_HIGH, SONNET_HIGH]
   conductor.efforts["fix5"] = TOP
   assert conductor.model_of("fix5") == TOP
   assert conductor.model_of("fix50") == SONNET_HIGH
@@ -693,7 +692,7 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 
 STATE = (
   "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed fixes silent"
-  " comments measures timers noted debriefs briefed owns watched after parked vetoes ordered tips shifted hired paced landed heard handled sent ends requeued"
+  " comments measures timers noted debriefs briefed owns watched after parked awaited covers kinds pool slots areas vetoes ordered tips shifted hired paced landed heard handled sent ends requeued"
   " statused secret budgeted flaky runs_read"
 ).split()
 
@@ -845,8 +844,8 @@ def test_a_worker_runs_only_sonnet_or_opus_at_medium_or_high(conductor: Round) -
     assert conductor.targets[-1] == model
   assert "label create w:k --force" in conductor.log()
   del conductor.efforts["k"]
-  assert conductor.models[conductor.real_hire("k", "w")] == OPUS
-  assert conductor.targets[-1] == OPUS
+  assert conductor.models[conductor.real_hire("k", "w")] == SONNET_HIGH
+  assert conductor.targets[-1] == SONNET_HIGH
   assert conductor.files["scratch://build.sh"] == conductor.BUILD_SH
 
 
@@ -881,7 +880,7 @@ def test_the_round_runs_one_on_opus_medium_three_on_sonnet_and_one_on_opus_high(
 
 def test_an_item_hires_on_its_own_room_while_a_pr_waits_for_a_fixer_that_no_room_allows(conductor: Round) -> None:
   conductor.limits["room"]["sonnet"] = 0
-  conductor.efforts["s"] = SONNET
+  conductor.efforts.update(s=SONNET, o=OPUS)
   conductor.queue[:] = [("s", "", ""), ("o", "", "")]
   conductor.prs[7] = conductor.pr(n=7, checks=("FAILURE",))
   conductor.staff()
@@ -897,7 +896,7 @@ def test_an_item_with_no_room_keeps_its_place_while_the_next_with_room_starts(co
   conductor.busy("p1", "a", OPUS)
   conductor.busy("p2", "b", OPUS)
   conductor.busy("p3", "e", TOP)
-  conductor.efforts["d"] = SONNET
+  conductor.efforts.update(c=OPUS, d=SONNET)
   conductor.queue[:] = [("c", "", ""), ("d", "", "")]
   conductor.staff()
   assert [key for key, _ in conductor.hired] == ["d"]
@@ -1241,7 +1240,7 @@ async def test_a_fixer_that_starts_on_a_pr_with_a_live_worker_tells_that_worker(
 
 
 def test_the_brief_of_a_fixer_says_how_to_share_a_branch_and_to_wait_for_github(conductor: Round) -> None:
-  for words in ("git worktree list", "If the head of the PR is not {sha} any more", "headRefOid,mergeable", "20 seconds"):
+  for words in ("the workspace that the end of this brief names", "If the head of the PR is not {sha} any more", "headRefOid,mergeable", "20 seconds"):
     assert words in conductor.FIX
 
 
@@ -1368,7 +1367,7 @@ def test_each_brief_holds_the_recipes_that_fixers_found(conductor: Round) -> Non
   for word in ("credential.helper", "actions/jobs", "sed -i ''", "timeout=1800", "hypothesis"):
     assert word in conductor.WORKER
     assert word in conductor.FIX
-  assert "Keep the worktree until your PR merges" in conductor.WORKER
+  assert "{workspace}" in conductor.WORKER and "Leave the workspace clean" in conductor.WORKSPACE
 
 
 @POSIX
@@ -1849,3 +1848,108 @@ def test_build_sh_frees_a_slot_whose_pid_is_gone(tmp_path: Path) -> None:
   got = subprocess.run(["sh", env["SCRIPT"], "echo", "ran"], env=env, capture_output=True, text=True, timeout=20)
   assert got.returncode == 0
   assert got.stdout.strip() == "ran"
+
+
+async def test_a_failed_check_that_waits_on_a_decision_of_the_owner_gets_no_order_until_it_ends(conductor: Round) -> None:
+  conductor.facts["prompt9"] = ("prompt", "prompt9", "rung1", "chain1", "str", "the wall?", "operator")
+  conductor.awaited["prompt9"] = ["w:wall", "#6"]
+  pr, other = conductor.pr(5, ("FAILURE",), labels=["w:wall"]), conductor.pr(6, ("FAILURE",))
+  conductor.prs.update({5: pr, 6: other})
+  assert await conductor.mend(pr, 1000.0, False) == ""
+  assert await conductor.mend(other, 1000.0, False) == ""
+  assert (conductor.needs(pr), conductor.needs(other), conductor.hired, conductor.prompts) == (False, False, [], [])
+  assert len(conductor.heard) == 1 and "prompt9" in conductor.heard[0] and "w:wall, #6" in conductor.heard[0]
+  assert conductor.needs(conductor.pr(5, ("FAILURE",), labels=["w:wall"], mergeable="CONFLICTING"))
+  conductor.done["prompt9"] = "ruled"
+  conductor.invariants()
+  assert conductor.awaited == {} and conductor.needs(pr)
+  assert "The decision prompt9 of the owner ended, so the round tends w:wall, #6 again." in conductor.heard
+
+
+@POSIX
+@JQ
+async def test_a_flake_that_a_working_item_covers_goes_to_its_worker_by_its_test_or_its_key(conductor: Round) -> None:
+  conductor.busy("p1", "bench-fix", OPUS)
+  conductor.covers["bench-fix"] = ["a host test", "budget-the-tui"]
+  await flaked(conductor)
+  assert conductor.queue == []
+  assert conductor.prompts[-1][1] == "chain-bench-fix" and "came again" in conductor.prompts[-1][0]
+  conductor.covers["bench-fix"] = ["flake-a-host-test"]
+  assert (conductor.taken("flake-a-host-test"), conductor.taken("budget-the-tui"), conductor.taken("bench-fix")) == ("p1", "", "p1")
+  conductor.working.clear()
+  conductor.queue.append(("bench-fix", "", "ci"))
+  assert conductor.taken("flake-a-host-test") == "queued"
+
+
+def test_an_item_has_a_kind_whose_model_and_brief_it_takes(conductor: Round) -> None:
+  conductor.ns["quietly"] = lambda verb, *args, **words: (
+    asyncio.run(verb(*args, **words)) if verb == conductor.bash else verb(*args, **words)
+  )
+  conductor.kinds.update(look="audit", odd="nonsense")
+  assert [conductor.kind_of(key) for key in ("look", "odd", "k", "fix5")] == ["audit", "edit", "edit", "fix"]
+  assert [conductor.model_of(key) for key in ("look", "odd", "fix5")] == [OPUS, SONNET_HIGH, SONNET_HIGH]
+  name = conductor.real_hire("look", "find the leaks", "defects")
+  assert (conductor.models[name], conductor.targets[-1], conductor.log()) == (OPUS, OPUS, "")
+  assert "scratch://audit/look.md" in conductor.prompts[-1][0] and "worktree.sh" not in conductor.prompts[-1][0]
+  assert "find the leaks" in conductor.prompts[-1][0]
+  conductor.ns["DEBRIEFS"] = False
+  conductor.done[name] = (0, "found two")
+  conductor.tend()
+  assert conductor.heard == [f"The auditor look ({name}) ended, and results[{name!r}] keeps its report."]
+  assert len(conductor.prompts) == 1
+
+
+def test_an_ended_worker_takes_the_next_item_of_its_area_until_half_of_its_window_and_a_hire_forks_the_base(
+  conductor: Round,
+) -> None:
+  made: list[tuple[str, str]] = []
+  conductor.ns["chain"] = lambda label="", source="": (made.append((label, source)), f"chain-{label}")[1]
+  conductor.ns["quietly"] = lambda verb, *args, **words: (
+    asyncio.run(verb(*args, **words)) if verb == conductor.bash else verb(*args, **words)
+  )
+  share = {"reply1": 0.3}
+  conductor.ns["filled"] = share.get
+  conductor.ns["transcript"] = lambda on="", of="": [("reply", "reply1", "", on)] if of == "reply" else []
+  conductor.facts["chain-tui/a"] = ("chain", "chain-tui/a", "rung1", "chain1", "tui/a", "")
+  conductor.facts["p1"] = ("prompt", "p1", "rung1", "chain-tui/a", "tuple[int, str]", "", "")
+  conductor.working["p1"], conductor.models["p1"] = "a", SONNET_HIGH
+  conductor.done["p1"] = (12, "done")
+  conductor.ns["DEBRIEFS"] = False
+  conductor.tend()
+  assert conductor.pool == {"chain-tui/a": {"key": "a", "model": SONNET_HIGH, "thread": "tui", "pr": 12, "folders": None}}
+  conductor.real_hire("b", "more", "tui")
+  assert made == [] and conductor.homes["b"] == "chain-tui/a" and conductor.pool == {}
+  assert "b goes on chain-tui/a, the chain of a, which worked on the same area." in conductor.heard
+  conductor.pool["chain-tui/a"] = {"key": "b", "model": SONNET_HIGH, "thread": "tui", "pr": 13, "folders": ["tui"]}
+  share["reply1"] = 0.6
+  conductor.real_hire("c", "other", "tui")
+  conductor.real_hire("d", "more", "gui")
+  assert made == [("base/edit/sonnet/high", ""), ("tui/c", "chain-base/edit/sonnet/high"), ("gui/d", "chain-base/edit/sonnet/high")]
+  assert conductor.bases == {f"edit {SONNET_HIGH}": "chain-base/edit/sonnet/high"}
+  assert [on for word, on in conductor.rungs if "AGENTS.md" in word and "read(" in word] == ["chain-base/edit/sonnet/high"]
+  share["reply1"] = 0.2
+  conductor.areas["e"] = ["tui"]
+  conductor.real_hire("e", "near", "ci")
+  assert conductor.homes["e"] == "chain-tui/a"
+
+
+def test_a_worker_takes_a_free_workspace_at_its_hire_and_gives_it_back_when_it_ends(conductor: Round) -> None:
+  conductor.ns["quietly"] = lambda verb, *args, **words: (
+    asyncio.run(verb(*args, **words)) if verb == conductor.bash else verb(*args, **words)
+  )
+  repo = str(conductor.tmp)
+  first = conductor.real_hire("k1", "one", "tui")
+  assert f"Work in the workspace {repo}-w1," in conductor.prompts[-1][0] and "{workspace}" not in conductor.prompts[-1][0]
+  assert "-w-k1" not in conductor.prompts[-1][0]
+  conductor.real_hire("fix5", "", "", conductor.FIX)
+  assert conductor.prompts[-1][0].endswith(conductor.WORKSPACE.replace("{repo}", repo).replace("{slot}", "w2"))
+  conductor.kinds["look"] = "audit"
+  conductor.real_hire("look", "read")
+  assert "workspace" not in conductor.prompts[-1][0]
+  assert sorted(conductor.slots.values()) == ["w1", "w2"]
+  conductor.ns["DEBRIEFS"] = False
+  conductor.done[first] = (9, "done")
+  conductor.tend()
+  assert first not in conductor.slots
+  conductor.real_hire("k3", "three", "gui")
+  assert f"{repo}-w1," in conductor.prompts[-1][0]
