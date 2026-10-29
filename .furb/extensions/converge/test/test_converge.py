@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 HERE = Path(__file__).resolve().parent.parent
-SOURCE = (HERE / "converge.py").read_text(encoding="utf-8")
+SOURCE = (HERE / "converge.py").read_text(encoding="utf-8") + "\n\n" + (HERE.parent / "converge-tui" / "tui.py").read_text(encoding="utf-8")
 WORDS = "## #17 I4. The TUI converges\n\n> I want the TUI to be perfect so it need to be the result of a convergence"
 QUOTE = "I want the TUI to be perfect"
 
@@ -118,7 +118,7 @@ class World:
   def bash(self, command: str, stdin: str | None = "", timeout: float = 600, show: object = None) -> Done:
     self.commands.append(command)
     out, code = next(((o, c) for p, o, c in self.says if re.search(p, command)), ("", 0))
-    if stdin and stdin == self.ns["SHOTS"] and code == 0 and out:
+    if stdin and command.startswith("python3 -I - ") and code == 0 and out:
       self.files[f"{shlex.split(command)[3]}/shots.json"] = out
       out = "wrote the list\n"
     return self.act("bash", Exit(code, Text("stdout", out), Text("stderr", "")))
@@ -686,7 +686,7 @@ def test_the_list_of_the_captures_is_a_file_and_stdout_holds_one_short_line(tmp_
 
 def test_a_list_of_the_captures_that_no_file_holds_is_the_fault_of_the_capture(world: World) -> None:
   world.say(r"python3 -I -", "")
-  seen = asyncio.run(world.shots(str(world.tmp / "out"), "", False, ("main", "head")))
+  seen = asyncio.run(world.shots(world.target, str(world.tmp / "out"), "", False, ("main", "head")))
   [[name, why, quote]] = seen["faults"]
   assert name == "capture" and why.startswith("the list of the captures failed: ")
 
@@ -1027,3 +1027,36 @@ def test_a_holder_that_shows_a_gap_no_more_lets_it_go_and_a_pass_of_main_frees_t
   assert [e["holder"] for e in book["ledger"].values()] == ["main"]
   world.claim(book, c, "main", [], main=True)
   assert book["ledger"] == {}
+
+
+def test_the_tui_registers_itself_as_a_target_once_even_when_its_word_plays_again(world: World) -> None:
+  assert [one["name"] for one in world.ns["TARGETS"]] == ["tui"]
+  exec(compile(SOURCE, "converge.py", "exec"), world.ns)  # noqa: S102
+  assert [one["name"] for one in world.ns["TARGETS"]] == ["tui"]
+
+
+def test_the_core_converges_a_target_with_a_plain_text_differ_and_the_words_of_that_target(world: World) -> None:
+  plain = {
+    "name": "docs",
+    "words": (17,),
+    "paths": ("docs/",),
+    "checks": (),
+    "owners": (),
+    "thread": "docs",
+    "capture": lambda target, pairs, out: f"echo capture {pairs}",
+    "differ": lambda target, out, was, whole, labels: (f"python3 -I - {out}", "print('diff')"),
+    "legend": "A capture is a page of text.",
+    "look": "each sentence",
+  }
+  world.target = plain
+  world.say(r"python3 -I -", listing(changed=("docs/intro",), kind="text"))
+  world.judge = lambda message, to: gap("docs/intro")
+  book = world.run(1)
+  [asked] = world.judged()
+  assert "A capture is a page of text. before is the last pass" in asked
+  assert "look at each capture whole: each sentence, and each thing" in asked
+  assert "each color" not in asked and "terminal" not in asked
+  assert [p["gaps"] for p in book["passes"]] == [[["docs/intro", "The feed shows bright white text.", QUOTE]]]
+  [item] = world.round["queue"]
+  assert item[0].startswith("converge-docs-") and item[2] == "docs"
+  assert json.loads(world.files[".furb/converge/docs.json"])["passes"][0]["judged"] == 1
