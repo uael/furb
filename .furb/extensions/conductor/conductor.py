@@ -45,7 +45,7 @@ A worker does one item in a workspace {repo}-wN, which the round gives at its hi
 A prompt of a worker that ends with CancelledError while the round made no cancel over it, as when the life restarts, goes on: the round asks it again on its chain with a new prompt, at most 3 times for an item, and tells nobody.
 The round tells you a worker that ends with no PR, with its answer, or that says nothing for 45 minutes, relays to you each question that a worker puts to the operator, and wakes a worker that paused. results keeps the answer of each worker under its prompt.
 When a worker ends, the round asks it debrief() once, and adds each friction that it gives to TOOLING, the ledger of the defects of the tooling, as flaw(what) adds a defect that you find or patch live. An entry counts each time that it comes again.
-A check counts by its newest run. A failed check heals with no worker first, once for each head sha: the round reruns the failed jobs of the run whose failure is the one failed check of the PR, which costs the runners of CI the least, else it updates the branch of a PR on main that is behind main while main is green. It reruns once, for each head sha, a run that was cancelled at the head of a PR, and a check cancelled again at that sha counts as failed.
+A check counts by its newest run. A failed check heals with no worker first, once for each head sha: the round reruns the failed jobs of the run whose failure is the one failed check of the PR, which costs the runners of CI the least, else it updates the branch of a PR on main that is behind main while main is green, at most once in UPDATED seconds for a PR, since a PR that still fails after an update fails on its own. It reruns once, for each head sha, a run that was cancelled at the head of a PR, and a check cancelled again at that sha counts as failed.
 Then the round sends a conflict or a failed check at a new head to the worker that owns the PR, again after 30 minutes, and to a fixer after an hour, or at once when no worker owns it. Just before it sends an order or hires a fixer, the round reads the PR again, and drops the order when the head moved or the conflict is gone; it sends a PR no second order within 10 minutes of the first, and it names in an order the base of a stacked PR with the head that the base had before. While a fixer owns a PR, the round neither updates its branch nor merges it, and it tells a worker that owns a branch when it updates or rebases it, or when a fixer starts on it. A mergeable that gh gives as UNKNOWN is probed with git merge-tree, and the round rebases a child of a PR whose head was force-pushed onto the new head of its parent.
 The round merges each green PR into main from the lowest number when git merges it with main clean and no file that a gate sums (SERIAL: the engine under its wall of tokens, the budgets) changed both in it and on main since its branch forked, after it moves the PRs that stack on it onto main and rebases each there with git rebase --onto from the head that it held of the PR that merged, in a scratch worktree, and pushes it with --force-with-lease (a rebase that conflicts is left to the fixer); else it updates the branch, and only when main is green.
 The label paused takes a PR out of the round. A draft, the label hold, a review that waits for its fix, and the label owner-merge, until the owner takes it off as his approval, keep a PR from a merge.
@@ -1321,6 +1321,13 @@ PRLINES = r"""id=$(gh run list --commit {sha} --limit 30 --json databaseId,concl
 UPSTREAMING = """gh pr list --repo {upstream} --label upstream-ready --state open --json number,headRefName,title,url,labels --jq '.[] | select([.labels[].name] | index("upstreamed") | not) | "\\(.number)\\t\\(.headRefName)\\t\\(.title)\\t\\(.url)"'"""
 
 
+# A PR whose update with main still fails holds a failure of its own: a second update in a short time only spends
+# the runners again, since the update itself makes the new head that fails.
+updated: dict[int, float] = globals().setdefault("updated", {})
+
+UPDATED = 6 * 3600.0
+
+
 async def heal(pr: dict, red: bool) -> str:
   n, sha = pr["n"], pr["sha"]
   def rehead(which: str, only: str = "") -> str:
@@ -1350,8 +1357,10 @@ async def heal(pr: dict, red: bool) -> str:
     and not {"hold", "paused"} & set(pr["labels"])
     and not fixing(pr)
     and f"heal update {sha}" not in noticed
+    and (n not in updated or clock() - updated[n] >= UPDATED)
   ):
     noticed.add(f"heal update {sha}")
+    updated[n] = clock()
     got = await bash(BEHIND.replace("{sha}", sha).replace("{n}", str(n)), show=HIDDEN, timeout=180)
     if "updated" in got.stdout.content:
       warn(pr, f"The round updated the branch of your PR #{n} with main.")
