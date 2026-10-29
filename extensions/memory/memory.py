@@ -1,4 +1,23 @@
-from furb.engine import Act, Text, act, ask, controlled, differs, get, question, scope, span, tell, tells, transcript
+from furb.engine import (
+  Act,
+  Show,
+  Text,
+  act,
+  ask,
+  controlled,
+  differs,
+  get,
+  question,
+  scope,
+  span,
+  tell,
+  tells,
+  transcript,
+)
+
+
+def lacking(known: set[str]) -> Show:
+  return lambda lines: [i for i, line in enumerate(lines, 1) if line not in known]
 
 
 def memory(path: str = ".", on: str = "") -> list[Text]:
@@ -17,7 +36,16 @@ def memory(path: str = ".", on: str = "") -> list[Text]:
   got = ask("memory", on, path)
   assert isinstance(got, list)
   for one in got:
-    tell(on, one.path, one, differs(was[one.path]) if one.path in was else span(1, -1))
+    mine = set(one.lines)
+    near = max(was.values(), key=lambda held: len(set(held) & mine), default=[]) if one.path not in was else []
+    kept = set(near)
+    if one.path in was:
+      show = differs(was[one.path])
+    elif mine and 2 * len(kept & mine) > len(mine):
+      show = lacking(kept)
+    else:
+      show = span(1, -1)
+    tell(on, one.path, one, show)
   return got
 
 

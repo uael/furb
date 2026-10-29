@@ -192,6 +192,7 @@ export class App {
     list: [],
     by: new Map(),
     of: new Map(),
+    asked: new Map(),
   };
   /** The lists of the sidebar that the operator unfolded: the finished chains, under the key finished, and the
    * archived sessions of a workspace, under its folder. */

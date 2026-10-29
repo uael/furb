@@ -101,7 +101,16 @@ export const sidebar = part({
   chainThreadsBy(chain: string): ThreadList {
     const w = this.session;
     if (w.selected !== chain)
-      return { session: w, chain, acts: undefined, owed: "", list: [], by: new Map(), of: new Map() };
+      return {
+        session: w,
+        chain,
+        acts: undefined,
+        owed: "",
+        list: [],
+        by: new Map(),
+        of: new Map(),
+        asked: new Map(),
+      };
     const owed = [...w.host.prompts.keys()].join(" ");
     // A list read from another session or another chain is no list of this one, even when its version is the same.
     const kept = this.threadList;
@@ -123,6 +132,7 @@ export const sidebar = part({
         of: new Map(
           list.flatMap((one) => one.messages.map((message): [string, ChainThread] => [message.id, one])),
         ),
+        asked: new Map(list.flatMap((one) => one.asked.map((ask): [string, ChainThread] => [ask.id, one]))),
       };
     }
     return this.threadList;
