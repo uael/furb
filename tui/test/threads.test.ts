@@ -322,7 +322,11 @@ test("the Context part of the sidebar draws no meter for a window that no answer
   composing(
     async ({ session, frame }) => {
       await idle(session);
-      session.filled = undefined;
+      // A fork reads the prompt of its origin before it answers once, so it has a context and no window. The window
+      // is not set by hand: each snapshot of the session gives it again from the answers of the chain shown.
+      await session.select(await session.engine.chain({ label: "Fork", source: session.engine.root }));
+      await until(session, () => session.context !== undefined);
+      expect(session.filled).toBeUndefined();
       const rows = rail(session, await frame()).map((line) => line.trim());
       const row = rows.find((line) => line.startsWith("Context")) ?? "";
       expect(row).toMatch(/^Context \d[\d.]*k? +\$/);
