@@ -15,6 +15,22 @@ import { theme as c, glyph, spacing as space } from "../theme.ts";
 import { bold, type Part } from "../ui.ts";
 import { part } from "./part.ts";
 
+/** The places of the acts of each kind in the list of the acts, which stay while the version of the acts stays, so a
+ * component that reads the acts of a kind at each frame does not scan a long life. */
+const kindIndex = new WeakMap<object, { version: number; size: number; by: Map<string, number[]> }>();
+function kindsOf(acts: readonly { kind: string }[], version: number): Map<string, number[]> {
+  const held = kindIndex.get(acts);
+  if (held && held.version === version && held.size === acts.length) return held.by;
+  const by = new Map<string, number[]>();
+  acts.forEach((act, at) => {
+    const list = by.get(act.kind);
+    if (list) list.push(at);
+    else by.set(act.kind, [at]);
+  });
+  kindIndex.set(acts, { version, size: acts.length, by });
+  return by;
+}
+
 export const desk = part({
   partsChanged(): void {
     this.partsLoaded++;
@@ -101,7 +117,10 @@ export const desk = part({
       chain: w.selected,
       acts: w.acts,
       compactions: w.host.compactions,
-      of: (kind) => w.acts.filter((act) => act.kind === kind),
+      of: (kind) =>
+        kindsOf(w.acts, w.version)
+          .get(kind)
+          ?.map((at) => w.acts[at] as ActRow) ?? [],
       run: async (word) => {
         try {
           return await w.runWord(word);
