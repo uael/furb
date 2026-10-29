@@ -1337,7 +1337,7 @@ async def heal(pr: dict, red: bool) -> str:
   if pr["mergeable"] == "CONFLICTING":
     return ""
   if not failed:
-    if "CANCELLED" not in pr["checks"] or f"rerun {sha}" in noticed:
+    if "CANCELLED" not in pr["checks"] or f"rerun {sha}" in noticed or f"{n} {sha}" in deferred.values():
       return ""
     noticed.add(f"rerun {sha}")
     got = await bash(rehead('.conclusion == "cancelled"'), show=HIDDEN, timeout=300)
@@ -2034,7 +2034,8 @@ async def throttle() -> None:
       deferred[str(run["databaseId"])] = f"{pr['n']} {pr['sha']}"
     if why:
       cut.append((run, why))
-      noticed.add(f"rerun {run['headSha']}")
+      if str(run["databaseId"]) not in deferred:
+        noticed.add(f"rerun {run['headSha']}")
   if cut:
     await bash("; ".join(f"gh run cancel {run['databaseId']} >/dev/null 2>&1" for run, _ in cut), show=HIDDEN, timeout=120)
     said = ", ".join(f"#{(heads.get(run['headBranch']) or {}).get('n', run['headBranch'])} ({why})" for run, why in cut)

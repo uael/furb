@@ -2130,3 +2130,18 @@ async def test_a_pr_that_still_fails_after_an_update_gets_no_second_update_soon(
   conductor.now += 6 * 3600
   assert "behind main" in await conductor.heal(conductor.pr(sha="ghi", checks=("FAILURE", "FAILURE")), False)
   assert conductor.log().count("update-branch") == 2
+
+
+@POSIX
+@JQ
+async def test_a_run_that_the_round_defers_makes_no_red_and_heal_does_not_run_it_again(conductor: Round) -> None:
+  two(conductor, top=())
+  conductor.prs[7]["verdict"] = "pending"
+  runs = [{"databaseId": 1, "headBranch": "w/b", "headSha": "abc", "event": "pull_request"}]
+  conductor.say(r"run list --workflow gates.yml --status queued", json.dumps(runs))
+  await conductor.throttle()
+  assert "rerun abc" not in conductor.noticed
+  cancelled = conductor.pr(n=8, head="w/b", base="w/a", checks=("CANCELLED",), names=["the hooks"])
+  assert cancelled["verdict"] == "pending"
+  assert await conductor.heal(cancelled, False) == ""
+  assert "rerun" not in conductor.log().replace("run list", "")
