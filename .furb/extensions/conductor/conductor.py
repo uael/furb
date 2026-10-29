@@ -64,6 +64,7 @@ At each round a watchdog reads each open command of each worker, with no model: 
 DEBRIEFS is on by default and lives in the state of the round: DEBRIEFS = False in a word turns off the debrief of each worker that ends, which saves tokens.
 An item waits for others with after[key] = [keys], set before you queue it: staff() hires it only once each PR that those keys ended with merged, an item of backlog whose keys merged goes to queue, and the round lists in a notice each key that no item holds. The entries of held_items in the module of the root move into backlog at each round, so a dict of your own chain is not needed.
 Method, at each notice: read the whole state, fix every thing that is off in one go, read the state again to verify, and go on until nothing is off. Only then report. Each round also checks the state in invariants(): it gives each open PR that the round tends a home, from the chain that pushed its head, wakes no chain, and lists in the next notice what code cannot fix.
+A PR waits on a decision of the owner while awaited[decision] names one of its labels, or its number as #N, and the decision is an act that is not over, as the prompt that asked him: a failed check of that PR gets no order, no handover and no fixer, a conflict of it still does, and the round names the decision once. When the act ends, the round drops it and tends the PR again.
 The round holds at most cap() chains that hold an open prompt with a shape, and counts the chains of workers, of sub-chains and of judges alike: room() counts them, and a resume of a worker waits for a slot. When more chains stand, the round pauses the newest overflow with a note and wakes it in order when a slot frees, and it never ends its task.
 A review blocks only on a defect that a command reproduces, or on a false sentence of a contract."""
 
@@ -109,6 +110,7 @@ owns: dict[str, list[int]] = globals().setdefault("owns", {})
 watched: dict[str, list[float]] = globals().setdefault("watched", {})
 after: dict[str, list[str]] = globals().setdefault("after", {})
 parked: dict[str, dict] = globals().setdefault("parked", {})
+awaited: dict[str, list[str]] = globals().setdefault("awaited", {})
 DEBRIEFS = globals().get("DEBRIEFS", True)
 vetoes: dict = globals().setdefault("vetoes", {})
 ORDERED = 600.0
@@ -764,6 +766,15 @@ async def mend(pr: dict, now: float, red: bool) -> str:
     held = "\n".join("  " + x for x in lacks.stdout.lines)
     return said + "The commits of main that the branch lacks and that change a file of the failure:\n" + held + "\n"
 
+  decision = waits_on(pr)
+  if decision:
+    if f"awaits {decision}" not in noticed:
+      noticed.add(f"awaits {decision}")
+      heard.append(
+        f"#{pr['n']} waits on the decision {decision} of the owner, which holds {', '.join(awaited[decision])}: the"
+        " round gives no order, no handover and no fixer for a failed check of them until the decision ends."
+      )
+    return ""
   healed = await heal(pr, red)
   if healed:
     heard.append(healed)
@@ -1258,11 +1269,19 @@ def lacks(pr: dict) -> bool:
     and not {"paused", "hold"} & set(pr["labels"])
     and (pr["verdict"] in ("fail", "open") or pr["mergeable"] == "CONFLICTING")
     and not owner_of(pr)
+    and not waits_on(pr)
   )
 
 
 def needs(pr: dict) -> bool:
   return lacks(pr) and not gave_up(pr)
+
+
+def waits_on(pr: dict) -> str:
+  if pr["mergeable"] == "CONFLICTING":
+    return ""
+  marks = {*pr["labels"], f"#{pr['n']}"}
+  return next((d for d, held in awaited.items() if get(d) and not over(d) and marks & set(held)), "")
 
 
 def staff() -> None:
@@ -1321,6 +1340,10 @@ def staff() -> None:
 
 
 def invariants() -> None:
+  for decision in [d for d in awaited if over(d) or not get(d)]:
+    held = ", ".join(awaited.pop(decision))
+    said = "ended" if get(decision) else "names no act"
+    heard.append(f"The decision {decision} of the owner {said}, so the round tends {held} again.")
   old: Any = module(ROOT).get("pk_parked")
   for c, e in list(old.items()) if isinstance(old, dict) else []:
     del old[c]

@@ -693,7 +693,7 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 
 STATE = (
   "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed fixes silent"
-  " comments measures timers noted debriefs briefed owns watched after parked vetoes ordered tips shifted hired paced landed heard handled sent ends requeued"
+  " comments measures timers noted debriefs briefed owns watched after parked awaited vetoes ordered tips shifted hired paced landed heard handled sent ends requeued"
   " statused secret budgeted flaky runs_read"
 ).split()
 
@@ -1849,3 +1849,19 @@ def test_build_sh_frees_a_slot_whose_pid_is_gone(tmp_path: Path) -> None:
   got = subprocess.run(["sh", env["SCRIPT"], "echo", "ran"], env=env, capture_output=True, text=True, timeout=20)
   assert got.returncode == 0
   assert got.stdout.strip() == "ran"
+
+
+async def test_a_failed_check_that_waits_on_a_decision_of_the_owner_gets_no_order_until_it_ends(conductor: Round) -> None:
+  conductor.facts["prompt9"] = ("prompt", "prompt9", "rung1", "chain1", "str", "the wall?", "operator")
+  conductor.awaited["prompt9"] = ["w:wall", "#6"]
+  pr, other = conductor.pr(5, ("FAILURE",), labels=["w:wall"]), conductor.pr(6, ("FAILURE",))
+  conductor.prs.update({5: pr, 6: other})
+  assert await conductor.mend(pr, 1000.0, False) == ""
+  assert await conductor.mend(other, 1000.0, False) == ""
+  assert (conductor.needs(pr), conductor.needs(other), conductor.hired, conductor.prompts) == (False, False, [], [])
+  assert len(conductor.heard) == 1 and "prompt9" in conductor.heard[0] and "w:wall, #6" in conductor.heard[0]
+  assert conductor.needs(conductor.pr(5, ("FAILURE",), labels=["w:wall"], mergeable="CONFLICTING"))
+  conductor.done["prompt9"] = "ruled"
+  conductor.invariants()
+  assert conductor.awaited == {} and conductor.needs(pr)
+  assert "The decision prompt9 of the owner ended, so the round tends w:wall, #6 again." in conductor.heard
