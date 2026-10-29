@@ -51,6 +51,7 @@ class World:
     self.tmp = tmp
     self.says: list[tuple[str, str, int]] = []
     self.commands: list[str] = []
+    self.quieted: list[tuple[str, tuple]] = []
     self.files: dict[str, str] = {}
     self.done: dict[str, object] = {}
     self.facts: dict[str, tuple] = {}
@@ -64,7 +65,7 @@ class World:
     self.pausing = False
     self.now = 1000.0
     self.round = {
-      "quietly": lambda verb, *args, **words: verb(*args, **words),
+      "quietly": self.quietly,
       "shq": lambda s: "'" + s.replace("'", "'\\''") + "'",
       "ops": lambda: ("uael/furb-ops", "13"),
       "queue": [],
@@ -91,6 +92,10 @@ class World:
     exec(compile(SOURCE, str(HERE / "converge.py"), "exec"), ns)  # noqa: S102
     self.ns = ns
     self.target = {**ns["TUI"], "capture": lambda target, pairs, out: f"echo capture {pairs}"}
+
+  def quietly(self, verb: Callable[..., object], *args: object, **words: object) -> object:
+    self.quieted.append((getattr(verb, "__name__", ""), args))
+    return verb(*args, **words)
 
   def __getattr__(self, name: str) -> object:
     return self.ns[name]
@@ -726,3 +731,45 @@ def test_a_second_capture_removes_the_mark_of_the_build_so_the_tree_builds_again
   assert '[ -z "$fresh" ] || rm -f "$tree/target/converge-built"' in world.tui_capture(world.ns["TUI"], [], "/out")
   assert "\nfresh=1\n" in world.capturing(world.target, [("head", "sha1")], "/out", {}, True)
   assert "fresh=1" not in world.capturing(world.target, [("head", "sha1")], "/out", {})
+
+
+def test_a_capture_is_made_through_quietly_so_that_its_end_wakes_nobody(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.say(r"python3 -I -", faulty())
+  veto(world)
+  veto(world)
+  captures = [c for c in world.commands if c.startswith("rm -rf")]
+  quiet = [str(args[0]) for name, args in world.quieted if name == "bash"]
+  assert len(captures) >= 2 and any("fresh=1" in c for c in captures)
+  assert all(c in quiet for c in captures)
+
+
+def test_a_job_of_a_pr_that_is_no_longer_open_at_its_head_is_dropped_and_its_acts_cancelled(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.slow = True
+  world.judge = lambda message, to: []
+  assert veto(world) is True
+  [stale] = world.ns["OPEN"].values()
+  asked = [a for a in stale["asked"] if a != "none"]
+  assert asked and not any(a in world.done for a in asked)
+  world.round["prs"] = {5: pr(sha="def")}
+  asyncio.run(world.converge_veto(pr(n=5, sha="def", verdict="pass")))
+  assert "5 abc" not in world.ns["OPEN"]
+  assert all(isinstance(world.done[a], Refused) for a in asked)
+
+
+def test_a_capture_whose_command_ended_interrupted_starts_again_once(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.say(r"python3 -I -", listing(kind="text"))
+  runs = lambda: [c for c in world.commands if "for pair in" in c]
+  first = world.act("bash", Refused("interrupted"))
+  world.ns["OPEN"]["5 abc"] = {"kind": "pr", "sha": "abc", "n": 5, "out": str(world.tmp / "o"), "label": "pr5", "act": first,
+                              "pairs": [("before", "sha1"), ("head", "merged1")], "asked": [], "words": WORDS}
+  assert veto(world) is True
+  assert len(runs()) == 1
+  assert world.ns["OPEN"]["5 abc"]["act"] != first
+  assert veto(world) is False
+  assert len(runs()) == 1

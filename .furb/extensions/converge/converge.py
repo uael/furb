@@ -602,12 +602,21 @@ async def started(target: dict, book: dict, sha: str, n: int = 0) -> dict:
   else:
     label = f"main{len(book['passes'])}-{sha[:12]}"
   out = f"{cwd()}/{BOOKS}/{target['name']}/{label}"
-  act = str(bash(capturing(target, pairs, out, book["records"]), show=HIDDEN, timeout=7200))
+  act = str(conductor()["quietly"](bash, capturing(target, pairs, out, book["records"]), show=HIDDEN, timeout=7200))
   return {"kind": "pr" if n else "main", "sha": sha, "n": n, "out": out, "label": label, "act": act, "pairs": pairs, "asked": []}
+
+
+def dropped(live: set[str]) -> None:
+  for key in [k for k in OPEN if k not in live]:
+    job = OPEN.pop(key)
+    for one in [job["act"], *job["asked"]]:
+      if one != "none" and not over(one):
+        cancel(one)
 
 
 async def converge_veto(pr: dict) -> bool:
   key = f"{pr['n']} {pr['sha']}"
+  dropped({key, *[f"{n} {one['sha']}" for n, one in conductor()["prs"].items()]})
   for target in TARGETS:
     book = shared(target)
     state = await classified(target, book, pr)
@@ -647,11 +656,14 @@ async def advanced(target: dict, book: dict, job: dict, words: str, head: str) -
   if not job["asked"]:
     if not over(job["act"]):
       return job
+    if not job.get("resumed") and isinstance(peek(job["act"]), Refused):
+      job.update(resumed=True, act=str(conductor()["quietly"](bash, capturing(target, job["pairs"], job["out"], book["records"]), show=HIDDEN, timeout=7200)))
+      return job
     was = f"{job['out']}/before" if pr else book["frames"] if book["words"] == words else ""
     seen = await shots(job["out"], was, not pr, ("main", "head") if pr else ("before", "now"))
     if seen["faults"]:
       if not job.get("again"):
-        job.update(again=True, act=str(bash(capturing(target, job["pairs"], job["out"], book["records"], True), show=HIDDEN, timeout=7200)))
+        job.update(again=True, act=str(conductor()["quietly"](bash, capturing(target, job["pairs"], job["out"], book["records"], True), show=HIDDEN, timeout=7200)))
         return job
       return faulted(target, book, job, seen["faults"], words, head)
     book["jobs"] += 1

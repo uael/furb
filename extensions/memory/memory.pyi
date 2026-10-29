@@ -4,6 +4,7 @@ from furb.engine import Act, Text
 
 def memory(path: str = ".", on: str = "") -> list[Text]:
   """The memory of a path, told to its chain: each memory file that applies to the path and whose content the chain does not hold, told whole when the chain holds no text at its path, and else by the lines that differ from the text the chain holds there, as differs picks them, so the chain holds the whole file.
+  A text whose lines a text that the chain holds at another path shares for the most part, as a checkout and its worktree hold one file, is told by the lines that the chain does not hold, so the chain holds the whole file.
   memory asks the World a memory question on its chain with the path, and tells each text of the answer in its order, in a paragraph headed with the name of the question, which binds the path of the text and the text, by the lines that the first sentence says.
   memory gives the texts of the answer, and an empty list when the chain holds every memory file that applies.
   A memory question that the World refuses raises Refused in the caller.
