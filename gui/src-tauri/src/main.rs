@@ -20,13 +20,13 @@ use std::{
   path::PathBuf,
   process::{Child, ChildStdin},
   sync::{
-    Condvar, Mutex,
+    Condvar, Mutex, OnceLock,
     atomic::{AtomicBool, Ordering},
   },
-  time::Duration,
+  time::{Duration, Instant},
 };
 
-use tauri::Manager;
+use tauri::{Manager, webview::PageLoadEvent};
 
 /// The host as the core holds it: the address of its socket once it said it, or why it did not start, and its
 /// process, whose stdin the core holds open while the app runs.
@@ -43,6 +43,17 @@ static CHECK: AtomicBool = AtomicBool::new(false);
 
 /// Whether the window of a check drew the whole life, after which only the end of its stdin ends the app.
 static DREW: AtomicBool = AtomicBool::new(false);
+
+/// When the core of a check started, from which each step of the check says when it came.
+static STARTED: OnceLock<Instant> = OnceLock::new();
+
+/// A step of a check, with the seconds since the core started, so a check that does not end says where it stopped.
+fn note(step: &str) {
+  if CHECK.load(Ordering::Relaxed) {
+    let seconds = STARTED.get_or_init(Instant::now).elapsed().as_secs_f32();
+    eprintln!("furb-gui: {seconds:.1}s {step}");
+  }
+}
 
 /// The process of the web content of a web view, which a check prints, so a test measures that process alone.
 #[cfg(target_os = "macos")]
@@ -62,6 +73,7 @@ fn content(webview: &tauri::Webview) {
 /// web content runs then, and a check prints its process.
 #[tauri::command(async)]
 fn host(webview: tauri::Webview, held: tauri::State<'_, Held>) -> Result<String, String> {
+  note("the page asks for the host");
   #[cfg(target_os = "macos")]
   if CHECK.load(Ordering::Relaxed) {
     content(&webview);
@@ -132,6 +144,7 @@ fn main() {
   let words = match asked(&words, &scratch) {
     Ok((check, words)) => {
       CHECK.store(check, Ordering::Relaxed);
+      note("the core starts");
       words
     }
     Err(why) => {
@@ -151,6 +164,7 @@ fn main() {
           }
         });
       }
+      note("the app is set up");
       app.manage(Held::default());
       // A window that starts hidden stands for a window behind others, where WebKit draws no frame, which a test of
       // the check holds.
@@ -173,12 +187,19 @@ fn main() {
         if let Err(why) = &started {
           eprintln!("furb-gui: {why}");
         }
+        note(if started.is_ok() { "the host said its address" } else { "the host did not start" });
         if let Ok(mut address) = held.address.lock() {
           *address = Some(started);
           held.said.notify_all();
         }
       });
       Ok(())
+    })
+    .on_page_load(|_, payload| {
+      note(match payload.event() {
+        PageLoadEvent::Started => "the page starts to load",
+        PageLoadEvent::Finished => "the page finished to load",
+      });
     })
     .invoke_handler(tauri::generate_handler![host, drew])
     .build(tauri::generate_context!())
