@@ -2410,15 +2410,23 @@ def test_the_parts_of_a_word_are_its_top_level_definitions(conductor: Round) -> 
   }
 
 
-def test_a_reload_runs_each_definition_that_the_module_lacks_or_that_changed_and_gives_their_names(
+def loaded(conductor: Round, *given: tuple, after: tuple = ()) -> None:
+  # Each given run is (name, word, end): end is None for a run that ended with no fault, an exception, or "open".
+  facts = [("run", name, "rung0", "chain1", f"rung{i}", word, "") for i, (name, word, _) in enumerate(given, 1)]
+  conductor.ns["transcript"] = lambda on="", of="": [*facts, *after]
+  conductor.done.clear()
+  conductor.done.update({name: end for name, _, end in given if end != "open"})
+
+
+def test_a_reload_runs_each_definition_that_the_module_lacks_or_that_changed_and_gives_the_rung_and_the_names(
   conductor: Round,
 ) -> None:
   # A short definition that a brief quoted earlier is no live definition, and a name that the module lacks is run.
   del conductor.ns["TROUBLE"], conductor.ns["parents"]
   exec(LIVE_WORD.replace("BRIEF", "BRIEF_"), conductor.ns)  # noqa: S102
-  conductor.words["rung1"] = LIVE_WORD
+  loaded(conductor, ("run1", LIVE_WORD, None))
   conductor.files["ext.py"] = NEW_FILE
-  assert conductor.reload("ext.py") == ["TROUBLE", "parents", "table"]
+  assert conductor.reload("ext.py") == ("rung1", ["TROUBLE", "parents", "table"])
   word, where = conductor.rungs[-1]
   assert where == "chain1" and word == "\n\n".join(
     [
@@ -2428,9 +2436,41 @@ def test_a_reload_runs_each_definition_that_the_module_lacks_or_that_changed_and
     ]
   )
   exec(word, conductor.ns)  # noqa: S102
-  conductor.words["rung2"] = word
-  assert conductor.reload("ext.py") == []
+  loaded(conductor, ("run1", LIVE_WORD, None), ("run2", word, None))
+  assert conductor.reload("ext.py") == ("", [])
   assert conductor.TROUBLE == ("red", "conflicting")
+
+
+def test_reload_starts_its_load_through_quietly_so_that_no_end_of_the_caller_cancels_it(conductor: Round) -> None:
+  made: list[object] = []
+  inner = conductor.ns["quietly"]
+  conductor.ns["quietly"] = lambda verb, *args, **words: (made.append(verb), inner(verb, *args, **words))[1]
+  loaded(conductor)
+  conductor.files["ext.py"] = NEW_FILE
+  conductor.ns["tended"] = None
+  got, names = conductor.reload("ext.py")
+  assert made == [conductor.ns["rung"]] and got == "rung1" and "tended" in names
+  assert [on for _, on in conductor.rungs] == ["chain1"] and 'return "new"' in conductor.rungs[0][0]
+
+
+def test_a_load_that_was_cancelled_or_failed_or_still_runs_counts_for_nothing_and_loads_again(conductor: Round) -> None:
+  exec(NEW_FILE, conductor.ns)  # noqa: S102
+  conductor.files["ext.py"] = NEW_FILE
+  names = ["TROUBLE", "parents", "tended", "table"]
+  loaded(conductor, ("run1", NEW_FILE, None))
+  assert conductor.reload("ext.py") == ("", [])
+  for end in (conductor.CancelledError(), ValueError("boom"), "open"):
+    loaded(conductor, ("run1", NEW_FILE, end))
+    assert conductor.reload("ext.py")[1] == names
+  loaded(conductor, ("run1", NEW_FILE, None), after=(("module", "module1", "rung0", {}),))
+  assert conductor.reload("ext.py")[1] == names
+  loaded(conductor, ("run1", NEW_FILE, conductor.CancelledError()), ("run2", NEW_FILE, None))
+  assert conductor.reload("ext.py") == ("", [])
+
+
+def test_conducting_says_that_a_load_is_done_only_when_its_rung_is_over_with_no_fault(conductor: Round) -> None:
+  for words in ("gives (rung, names)", "The load is done only when that rung is over and peek(rung) is no exception"):
+    assert words in conductor.CONDUCTING
 
 
 def failing(conductor: Round, main: str) -> None:
