@@ -1,5 +1,14 @@
 import { afterAll, expect, test } from "bun:test";
-import { cpSync, type FSWatcher, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  type FSWatcher,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { demoSession } from "../src/demo.ts";
@@ -106,6 +115,18 @@ test("a life gains the panel of a part of a project extension, which draws again
     { width: 132, height: 44 },
     session,
   );
+});
+
+test("a part loads from a file in a folder that a link names, and so does each file that the folder gets after the first", async () => {
+  const folder = mkdtempSync(join(tmpdir(), "furb-parts-"));
+  const link = `${folder}-link`;
+  made.push(folder, link);
+  symlinkSync(folder, link);
+  for (const name of ["one", "two", "three"]) {
+    const file = join(link, `${name}.ts`);
+    writeFileSync(file, "export default function () {}\n");
+    expect((await loadPart(name, file)).error).toBeUndefined();
+  }
 });
 
 test("a part that exports no function, that throws, or that takes a name of the TUI loads with its error and no component", async () => {

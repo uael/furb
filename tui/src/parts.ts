@@ -9,7 +9,7 @@
  * opens the dialogs that it awaits. A part imports no value of furb: it takes all that it needs from what the TUI gives it, so
  * it loads in any project. A module that fails to load, and a component that throws, show the error in plain words in
  * the panel of the part, and the TUI goes on. */
-import { type FSWatcher, mkdirSync, statSync, watch, writeFileSync } from "node:fs";
+import { type FSWatcher, mkdirSync, realpathSync, statSync, watch, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { parts as configured, type LiveAct, type Part } from "furb";
@@ -286,8 +286,10 @@ export async function loadPart(name: string, file: string, text?: string): Promi
   try {
     const from = text === undefined ? file : carried(file, text);
     statSync(from);
+    // Bun keeps the files of a folder that it reached through a link as it listed them, so it finds no file that the
+    // folder gets later, as in the folder for temporary files of macOS: it imports the module by its real address.
     // A new address imports the module again, since Bun keeps each module that it imported by its address.
-    const module: { default?: unknown } = await import(`${from}?furb=${++imported}`);
+    const module: { default?: unknown } = await import(`${realpathSync(from)}?furb=${++imported}`);
     if (typeof module.default !== "function")
       throw new Error("Its module exports no function as its default.");
     await module.default(furb);
