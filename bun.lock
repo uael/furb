@@ -17,13 +17,13 @@
     },
     "bind/typescript": {
       "name": "furb",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "optionalDependencies": {
-        "furb-darwin-arm64": "0.3.0",
-        "furb-darwin-x64": "0.3.0",
-        "furb-linux-arm64-gnu": "0.3.0",
-        "furb-linux-x64-gnu": "0.3.0",
-        "furb-win32-x64-msvc": "0.3.0",
+        "furb-darwin-arm64": "0.3.1",
+        "furb-darwin-x64": "0.3.1",
+        "furb-linux-arm64-gnu": "0.3.1",
+        "furb-linux-x64-gnu": "0.3.1",
+        "furb-win32-x64-msvc": "0.3.1",
       },
     },
     "docs/examples": {
