@@ -4,7 +4,7 @@ import pytest
 
 from conftest import born, chained, heads, hushed, paragraphs, said, settle, slow, stalled, world_says
 from furb import engine
-from furb.engine import Refused
+from furb.engine import OPERATOR, Refused
 
 
 async def test_a_pause_while_it_stands_nothing_it_is_over_hears() -> None:
@@ -136,3 +136,13 @@ async def test_a_pause_of_a_name_of_no_act_raises_refused_that_names_it() -> Non
     engine.pause("nothing9")
   await settle()
   assert log[before:] == []
+
+
+async def test_a_pause_carries_its_cause() -> None:
+  """A pause carries its cause, None when none is given, as a close carries its value, so a pause from outside the chain of its act tells that cause under the word value."""
+  _, log, root = born(auto=False)
+  one = engine.bash("one", on=root)
+  engine.pause(one, "wait for the owner")
+  await settle()
+  assert said(log, "pause") == [("pause", one, OPERATOR, "wait for the owner")]
+  assert f"#{one} paused by operator\n{one}_value = 'wait for the owner'" in paragraphs(engine.turns(on=root))

@@ -235,6 +235,13 @@ python that the crate carries, and the extensions. So a change of `src/furb/engi
 `uv run`, after a build of a few seconds, and a short command can take minutes. To run with no sync, which builds
 nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 
+Set the timeout of each command, and the bound of each wait, to about twice the time that the step should take,
+never a round 600 or 900 seconds in case: a ceiling that is too large hides a hang for as long. Make a step that can
+take minutes print its progress, so that a hang shows at once. The owner ruled this on 10-29.
+
+Make a small change, run the checks that it touches, and compare a check that fails with the base before the change:
+fix what your change broke, and report what was broken before.
+
 - `uv sync`: install the environment, which builds the crate with its `python` feature into the package
   `furb-monty`, and the command line into the package `furb-cli`, and builds them again after a change that their
   `cache-keys` name. `uv sync --reinstall-package furb-monty --reinstall-package furb-cli` builds them again in any
@@ -345,7 +352,8 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
   budgets are set again, and `FURB_BENCH_FACTS` sets the size of the long life.
 - `bun run screenshots` and `bun run animation`: capture `docs/screenshots/` and `docs/furb.gif` again from the
   real renderer. Run both after a change that a screen shows, and read each capture. One run of each at a time holds
-  its home in `/tmp`, and a second run waits until the first ends. A screen that does not come in three minutes ends
+  its home in `/tmp`, and a second run waits until the first ends. `FURB_GALLERY_ROOT` names another folder for the
+  home and its lock, so that runs with two roots run at once. A screen that does not come in three minutes ends
   the run with an error that names the screen, and a run never waits past thirty minutes. A run that waits says how
   long the run that holds the home has held it. The clock of the view stands still by default, so that two runs of
   the same code draw the same captures, and `FURB_STILL_CLOCK`, a time in milliseconds, sets another time.

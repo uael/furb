@@ -102,9 +102,10 @@ async def test_a_word_that_the_interpreter_cannot_compile_leaves_the_gate_to_the
     swapped(furb.python)
 
 
-def test_a_gate_that_fails_answers_a_refusal_and_takes_the_next_gate() -> None:
-  """A fault of the checker is no finding of the word, so the ear of the gate answers that gate with a refusal that
-  says the fault, and it lives on to take the next gate."""
+def test_a_fault_of_the_checker_raises_out_of_the_ear_of_the_gate() -> None:
+  """A fault of the checker is no finding of the word, so the ear of the gate raises it: on monty, __lasting of the
+  crate refuses that gate and starts a fresh gate, and the engine of this interpreter, which runs the suite and the
+  rigs, has no such guard, so the fault surfaces."""
 
   def checked(_: str) -> list[tuple[int, str]]:
     raise RuntimeError("the checker broke")
@@ -117,10 +118,8 @@ def test_a_gate_that_fails_answers_a_refusal_and_takes_the_next_gate() -> None:
   }
   ear = sheet.gating(names, checked)
   assert next(ear) == {"gate"}
-  got = ear.send(("gate", "gate1", "chain1", "chain1", "x = 1"))
-  assert isinstance(got, tuple) and got[:2] == ("done", "gate1")
-  assert isinstance(got[2], Refused) and "RuntimeError: the checker broke" in str(got[2])
-  assert ear.send(None) == {"gate"}
+  with pytest.raises(RuntimeError, match="the checker broke"):
+    ear.send(("gate", "gate1", "chain1", "chain1", "x = 1"))
 
 
 @pytest.mark.parametrize("which", [furb.python, furb_monty.engine], ids=["python", "monty"])

@@ -7,8 +7,9 @@ Each capture holds the clock of the view still at STILL, so that no spinner turn
 Each pass captures the target at the head of main, and each judge in JUDGES, blind on a chain of its own, reads against his words each capture that changed since the last pass, or each capture when his words changed or no pass judged them, and closes with the gaps that it sees. A capture that did not change keeps the gaps of the last pass. A gap counts only when it names a capture that the judge read and quotes his words exactly, and a failed check of the head is a gap of its own. A step of the capture that fails is a fault of the tool and no gap: converge rebuilds the tree once and captures again, and when the step fails again it tells the operator and judges nothing, so a PR passes and a pass of main waits for a change of main under its paths or of his words.
 A pass with gaps is one step: the gaps go to each worker of an owner that works, or to one item in the queue of the round, which fixes the largest gap in one PR. The next pass comes once that work ended and its PR landed.
 The target converges after CLEAN passes in a row with no gap, and stalls after STALL passes with no fewer gaps than its best before them: each tells the operator through the round, and the loop then waits for a change of his words or of main under paths.
-Before the conductor merges a PR that changes paths, it asks converge through its vetoes: once the checks of the PR are green, converge captures main and main with the PR merged in it in one run, so that no change of main shows as a change of the PR, sends each judge his words once in each prompt, with the captures that the PR changes in prompts of BATCH captures and PROMPT characters at most, and cuts a capture over CUT characters with a note, and says no until a head shows no gap. A PR that changes no capture sends nothing to a judge. The gaps go to its worker and to a comment, and a new head is judged again. converge puts no label on a PR.
+Before the conductor merges a PR that changes paths, it asks converge through its vetoes: once the checks of the PR are green, converge captures main and main with the PR merged in it in one run, so that no change of main shows as a change of the PR, sends each judge his words once in each prompt, with the captures that the PR changes in prompts of BATCH captures and PROMPT characters at most, and cuts a capture over CUT characters with a note, and says no until a head shows no gap. A PR that changes no capture sends nothing to a judge. The green PRs that wait for the judges ride one train, TRAIN at most: converge captures main and main with each of them merged in it, in one run, and a train with no gap clears each of its PRs at once, a train with a gap splits in two halves, each a train of its own, down to a PR alone, so the PRs with no gap clear in few captures, and a train with a fault or no answer sends each of its PRs to be judged alone. The gaps go to its worker and to a comment, and a new head is judged again. converge puts no label on a PR.
 A grant holds each chain of a judge under EACH dollars. A judge whose chain waits on a usage limit is neither cut nor counted, and its BOUND starts again when the limit ends. A judge that fails, or that the round cuts at BOUND or by a pause, gives no answer: its pass is inconclusive. A pass whose judges the round cut all counts as no try, and a head whose judges failed to answer twice is stuck, which tells the operator and keeps the veto until a new head.
+A target keeps CAPTURES trees, <tree>-1 to <tree>-N, each with a home of the gallery of its own under FURB_GALLERY_ROOT, so its captures run at once, each in a tree where no other capture runs, at most as many as the free slots of the cap of chains of the round, and one at least. A pass of main runs in the first tree alone, so its frames and those of the pass before it read the same paths.
 The ledger of a target, .furb/converge/<name>.json, keeps each pass, the frames and the records of the last pass, each judged head and the step that runs, so a later life goes on from it. The loop ends when it spent JOBS captures or USD dollars."""
 JUDGES = ("claude-cli:sonnet/high",)
 CLEAN = 2
@@ -29,6 +30,7 @@ BOOKS = ".furb/converge"
 IMAGES = ""
 CAPTURER = ""
 HOME = ROOT
+CAPTURES = 3
 
 LEGEND = """Each capture stands in a capture tag, under its name, and its change says why it is here. Its text is the frame that the renderer drew, one numbered line for each row of the screen, less the runs of rows that did not change, which it names. A row marked + changed: under it, the line {was} gives what {was} showed in the columns that changed, and colors gives the colors of those columns now. A row marked ~ changed in its colors alone, which it gives for both. A row marked - is a row of {was} that is gone, and a row marked + with no line {was} under it is new, with the colors of its whole row. A color is a key and its columns, and styles names each key: its foreground, its background and its attributes. A capture whose change is the same as the change of another capture names that capture. An image shows a capture as a terminal draws it, when the capture comes with one."""
 
@@ -71,9 +73,9 @@ The gaps:
 
 {gaps}"""
 
-TUI_CAPTURE = r"""repo={repo}; tree={tree}; out={out}
+TUI_CAPTURE = r"""repo={repo}; tree={tree}; out={out}; export FURB_GALLERY_ROOT={gallery}
 fail() { printf '%s\t%s\t%s\n' "$1" "$2" "$3" >>"$out/fails.txt"; }
-[ -d "$tree" ] || "$repo/script/worktree.sh" "$tree" converge/{name} >"$out/tree.log" 2>&1 || { fail head tree "$out/tree.log"; exit 0; }
+[ -d "$tree" ] || "$repo/script/worktree.sh" "$tree" converge/{branch} >"$out/tree.log" 2>&1 || { fail head tree "$out/tree.log"; exit 0; }
 [ -z "$fresh" ] || rm -f "$tree/target/converge-built"
 mkdir -p "$out/records"
 python3 -I - "$repo/.furb/sessions" "$out" {records} {heaviest} >"$out/records.log" 2>&1 <<'EOF' || fail head records "$out/records.log"
@@ -307,7 +309,14 @@ def conductor() -> dict:
 
 
 def tree_of(target: dict) -> str:
-  return str(target.get("tree") or f"{cwd()}-converge-{target['name']}")
+  """Each tree of a target holds the slot of its capture, so the captures of one target run in CAPTURES trees at once."""
+  base = str(target.get("tree") or f"{cwd()}-converge-{target['name']}")
+  return f"{base}-{int(target.get('slot', 1))}"
+
+
+def gallery_of(target: dict) -> str:
+  """The root of the homes of a run of the gallery in a tree, so that a run in another tree holds no lock of it."""
+  return f"/tmp/furb-converge-{target['name']}-{int(target.get('slot', 1))}"
 
 
 def tui_capture(target: dict, pairs: list[tuple[str, str]], out: str) -> str:
@@ -315,6 +324,8 @@ def tui_capture(target: dict, pairs: list[tuple[str, str]], out: str) -> str:
   given = {
     "{repo}": shq(cwd()),
     "{tree}": shq(tree_of(target)),
+    "{gallery}": shq(gallery_of(target)),
+    "{branch}": f"{target['name']}-{int(target.get('slot', 1))}",
     "{out}": shq(out),
     "{pairs}": " ".join(shq(f"{part}:{sha}") for part, sha in pairs),
     "{name}": str(target["name"]),
@@ -584,12 +595,27 @@ MAIN: dict[str, dict] = {}
 BUSY = re.compile(r"furb-gallery\.lock|holds the home|lock held|is busy", re.I)
 
 
-def holding(target: dict) -> bool:
-  """A target has one tree, so a capture of it runs only while no other capture of it holds an open command."""
+def holding(target: dict) -> set[int]:
+  """The slot of each tree of a target where a capture holds an open command."""
   jobs = [*OPEN.values(), *MAIN.values()]
-  return any(
-    j.get("target") == target["name"] and j.get("act") and not j["asked"] and not over(j["act"]) for j in jobs
-  )
+  return {
+    int(j.get("slot", 1))
+    for j in jobs
+    if j.get("target") == target["name"] and j.get("act") and not j["asked"] and not over(j["act"])
+  }
+
+
+def vacant(target: dict, slot: int = 0) -> int:
+  """A tree of a target with no open capture, or 0: the slot alone when it names one, and the captures that run stay
+  under CAPTURES and under the free slots of the cap of chains of the round, since each capture asks its judges on
+  chains of their own, but one capture runs always."""
+  held, c = holding(target), conductor()
+  most = CAPTURES
+  if callable(c.get("cap")) and callable(c.get("open_chains")):
+    most = min(CAPTURES, max(1, int(c["cap"]()) - len(c["open_chains"]())))
+  if len(held) >= most:
+    return 0
+  return next((one for one in ([slot] if slot else range(1, CAPTURES + 1)) if one not in held), 0)
 
 
 def launched(target: dict, book: dict, job: dict, fresh: bool = False) -> str:
@@ -597,7 +623,8 @@ def launched(target: dict, book: dict, job: dict, fresh: bool = False) -> str:
   old = job.get("act", "none")
   if old != "none" and not over(old):
     cancel(old)
-  command = capturing(target, job["pairs"], job["out"], book["records"], True) if fresh else capturing(target, job["pairs"], job["out"], book["records"])
+  where = {**target, "slot": int(job.get("slot", 1))}
+  command = capturing(where, job["pairs"], job["out"], book["records"], fresh)
   return str(conductor()["quietly"](bash, command, show=HIDDEN, timeout=7200))
 
 
@@ -613,12 +640,28 @@ async def classified(target: dict, book: dict, pr: dict) -> str:
     got = await bash(f"gh pr view {pr['n']} --json files --jq '.files[].path'", show=HIDDEN, timeout=120)
     if got.code != 0:
       return "held"
-    book["heads"][key] = {"state": "held" if any(f.startswith(tuple(target["paths"])) for f in got.stdout.lines) else "outside"}
+    if not any(f.startswith(tuple(target["paths"])) for f in got.stdout.lines):
+      book["heads"][key] = {"state": "outside"}
+      return "outside"
+    # A head that only merged main into its branch makes the same change, so it keeps the verdict of that change.
+    same = await bash(
+      f"git fetch -q origin main refs/pull/{pr['n']}/head && git diff origin/main...{pr['sha']} | git patch-id --stable",
+      show=HIDDEN,
+      timeout=120,
+    )
+    patch = (same.stdout.content.split() or [""])[0] if same.code == 0 else ""
+    was = next(
+      (v for k, v in book["heads"].items() if patch and k.split()[0] == str(pr["n"]) and v.get("patch") == patch and v.get("state") in ("clean", "gaps")),
+      None,
+    )
+    book["heads"][key] = {**was, "carried": True} if was else {"state": "held", **({"patch": patch} if patch else {})}
   return book["heads"][key]["state"]
 
 
 async def started(target: dict, book: dict, sha: str, n: int = 0) -> dict:
-  if holding(target):
+  # A pass of main runs in the first tree alone, so its frames and those of the pass before it share their paths.
+  want = 0 if n else 1
+  if not vacant(target, want):
     return {}
   shq = conductor()["shq"]
   pairs = [("head", sha)]
@@ -633,19 +676,106 @@ async def started(target: dict, book: dict, sha: str, n: int = 0) -> dict:
     pairs = [("before", made[0].strip()), ("head", made[1].strip())]
   else:
     label = f"main{len(book['passes'])}-{sha[:12]}"
-  if holding(target):
+  slot = vacant(target, want)
+  if not slot:
     return {}
   out = f"{cwd()}/{BOOKS}/{target['name']}/{label}"
-  act = str(conductor()["quietly"](bash, capturing(target, pairs, out, book["records"]), show=HIDDEN, timeout=7200))
-  return {"kind": "pr" if n else "main", "sha": sha, "n": n, "out": out, "label": label, "act": act, "pairs": pairs, "asked": [], "target": target["name"]}
+  where = {**target, "slot": slot}
+  act = str(conductor()["quietly"](bash, capturing(where, pairs, out, book["records"]), show=HIDDEN, timeout=7200))
+  return {"kind": "pr" if n else "main", "sha": sha, "n": n, "out": out, "label": label, "act": act, "pairs": pairs, "asked": [], "target": target["name"], "slot": slot}
 
 
 def dropped(live: set[str]) -> None:
   for key in [k for k in OPEN if k not in live]:
     job = OPEN.pop(key)
+    if any(k in OPEN for k in job.get("batch", [])):
+      continue
     for one in [job["act"], *job["asked"]]:
       if one != "none" and not over(one):
         cancel(one)
+
+
+TRAIN = 6
+
+
+def solo(book: dict, job: dict) -> dict:
+  """A train that met a fault or no answer sends each of its PRs to be judged alone."""
+  for key in job["batch"]:
+    book["heads"][key] = {**book["heads"].get(key, {}), "state": "held", "solo": True}
+    OPEN.pop(key, None)
+  return {}
+
+
+def halve(book: dict, job: dict) -> dict:
+  """A train that found a gap splits in two halves, each a train of its own, down to a PR alone."""
+  keys = job["batch"]
+  middle = (len(keys) + 1) // 2
+  for part in (keys[:middle], keys[middle:]):
+    for key in part:
+      head = {k: v for k, v in book["heads"].get(key, {}).items() if k not in ("half", "solo")}
+      book["heads"][key] = {**head, "state": "held", **({"half": part} if len(part) > 1 else {"solo": True})}
+      OPEN.pop(key, None)
+  return {}
+
+
+def cleared(book: dict, job: dict) -> dict:
+  for key in job["batch"]:
+    book["heads"][key] = {**book["heads"].get(key, {}), "state": "clean", "gaps": [], "train": job["label"]}
+    OPEN.pop(key, None)
+  return {}
+
+
+def released(job: dict) -> dict:
+  for key in job["batch"]:
+    OPEN.pop(key, None)
+  return {}
+
+
+async def trained(target: dict, book: dict, pr: dict) -> dict:
+  """The green PRs that wait for the judges ride one capture: main, and main with each of them merged in it."""
+  c = conductor()
+  keys: list[str] = []
+  for one in sorted(c["prs"].values(), key=lambda p: p["n"]):
+    key = f"{one['n']} {one['sha']}"
+    calm = one.get("verdict") == "pass" and one.get("base", "main") == "main" and not one.get("draft")
+    if not calm or {"hold", "paused", "owner-merge"} & set(one.get("labels", [])) or key in OPEN:
+      continue
+    if await classified(target, book, one) == "held" and not book["heads"][key].get("solo"):
+      keys.append(key)
+  mine = f"{pr['n']} {pr['sha']}"
+  half = book["heads"][mine].get("half")
+  keys = [k for k in keys if k in half] if half else [k for k in keys if not book["heads"][k].get("half")][:TRAIN]
+  if mine not in keys or len(keys) < 2:
+    return {}
+  shq = c["shq"]
+  steps = "".join(
+    f" && {{ t=$(git merge-tree --write-tree $cur {shq(k.split()[1])} 2>/dev/null)"
+    f" && cur=$(git commit-tree $t -p $cur -p {shq(k.split()[1])} -m converge) && echo in {k.split()[0]}"
+    f" || echo out {k.split()[0]}; }}"
+    for k in keys
+  )
+  pulls = " ".join(f"refs/pull/{k.split()[0]}/head" for k in keys)
+  got = await bash(
+    f"git fetch -q origin main {pulls} && cur=$(git rev-parse origin/main) && echo $cur{steps} && echo $cur",
+    show=HIDDEN,
+    timeout=300,
+  )
+  lines = [x.strip() for x in got.stdout.lines if x.strip()]
+  ins = {x.split()[1] for x in lines if x.startswith("in ")}
+  members = [k for k in keys if k.split()[0] in ins]
+  slot = vacant(target)
+  if got.code != 0 or len(lines) < 2 or mine not in members or len(members) < 2 or not slot:
+    return {}
+  base, sha = lines[0], lines[-1]
+  nums = [k.split()[0] for k in members]
+  label = f"train{'-'.join(nums)}-{sha[:12]}"
+  out = f"{cwd()}/{BOOKS}/{target['name']}/{label}"
+  pairs = [("before", base), ("head", sha)]
+  act = str(c["quietly"](bash, capturing({**target, "slot": slot}, pairs, out, book["records"]), show=HIDDEN, timeout=7200))
+  return {
+    "kind": "pr", "sha": sha, "n": ", #".join(nums), "out": out, "label": label, "act": act, "pairs": pairs,
+    "asked": [], "target": target["name"], "batch": members, "slot": slot,
+  }
 
 
 async def converge_veto(pr: dict) -> bool:
@@ -657,17 +787,18 @@ async def converge_veto(pr: dict) -> bool:
     if state == "held" and key in book["heads"]:
       job = OPEN.get(key)
       if not job:
-        if holding(target):
+        if not vacant(target):
           return True
-        job = await started(target, book, str(pr["sha"]), int(pr["n"]))
+        job = await trained(target, book, pr) or await started(target, book, str(pr["sha"]), int(pr["n"]))
         if not job:
           return True
         job["words"] = await ruling(target)
       job = await advanced(target, book, job, job["words"], str(pr["sha"]))
-      if job:
-        OPEN[key] = job
-      else:
-        OPEN.pop(key, None)
+      for one in (job or {}).get("batch", [key]):
+        if job:
+          OPEN[one] = job
+        else:
+          OPEN.pop(one, None)
       booked(target, book)
       state = book["heads"][key]["state"]
     if state not in ("outside", "clean", "unjudged"):
@@ -699,6 +830,8 @@ async def advanced(target: dict, book: dict, job: dict, words: str, head: str) -
     seen = await shots(job["out"], was, not pr, ("main", "head") if pr else ("before", "now"))
     if seen["faults"] and BUSY.search(" ".join(why for _, why, _ in seen["faults"])):
       # A busy tree or lock is no fault of the tool: the job ends, and its turn comes again.
+      if job.get("batch"):
+        return released(job)
       if pr:
         book["heads"][f"{job['n']} {job['sha']}"] = {"state": "held"}
       return {}
@@ -706,7 +839,7 @@ async def advanced(target: dict, book: dict, job: dict, words: str, head: str) -
       if not job.get("again"):
         job.update(again=True, act=launched(target, book, job, True))
         return job
-      return faulted(target, book, job, seen["faults"], words, head)
+      return solo(book, job) if job.get("batch") else faulted(target, book, job, seen["faults"], words, head)
     book["jobs"] += 1
     job.update(taken=seen["shots"], failed=seen["failed"], kept=seen["kept"], records=seen["records"])
     job["shown"] = [str(one["name"]) for one in seen["changed"]]
@@ -730,6 +863,8 @@ async def advanced(target: dict, book: dict, job: dict, words: str, head: str) -
     return job
   found, broken = gaps_of(asked, words, set(job["shown"]))
   book["spent"] += cost_of(asked)
+  if broken and job.get("batch"):
+    return solo(book, job)
   if broken:
     book["passes"].append({"sha": job["sha"], "n": job["n"], "inconclusive": broken})
     if pr:
@@ -742,6 +877,8 @@ async def advanced(target: dict, book: dict, job: dict, words: str, head: str) -
           f" merge it until a new head: {'; '.join(broken)[:600]}"
         )
     return {}
+  if job.get("batch"):
+    return halve(book, job) if [*job["failed"], *found] else cleared(book, job)
   if pr:
     await screened(target, book, job, [*job["failed"], *found], words)
     return {}
@@ -778,7 +915,7 @@ async def advanced(target: dict, book: dict, job: dict, words: str, head: str) -
 
 async def screened(target: dict, book: dict, job: dict, gaps: list[list[str]], words: str) -> None:
   c, n, sha = conductor(), job["n"], job["sha"]
-  book["heads"][f"{n} {sha}"] = {"state": "gaps" if gaps else "clean", "gaps": gaps}
+  book["heads"][f"{n} {sha}"] = {**book["heads"].get(f"{n} {sha}", {}), "state": "gaps" if gaps else "clean", "gaps": gaps}
   if not gaps:
     return
   body = (

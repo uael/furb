@@ -448,3 +448,24 @@ test("a row of a thread says how long ago the thread last changed, as the sessio
     size,
     true,
   ));
+
+test("an act that is no prompt leaves the list of the threads of the chain shown as it was, and a prompt reads it again", () =>
+  composing(
+    async ({ session, app }) => {
+      await idle(session);
+      const root = session.engine.root;
+      const before = app.chainThreadsBy(root).list;
+      const version = session.version;
+      await session.engine.result(await session.engine.rung({ word: "step = 1", on: root }));
+      await session.refresh();
+      // The act came, and the threads read it not.
+      expect(session.version).toBeGreaterThan(version);
+      expect(app.chainThreadsBy(root).list).toBe(before);
+      const there = await session.engine.prompt("str", { message: "A new thread", on: root });
+      await session.refresh();
+      expect(app.chainThreadsBy(root).list).not.toBe(before);
+      expect(app.chainThreadsBy(root).list.some((one) => one.act.id === there)).toBe(true);
+    },
+    size,
+    true,
+  ));

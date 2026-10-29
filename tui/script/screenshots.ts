@@ -275,6 +275,10 @@ try {
   await until(session.host, () => session.host.prompts.has(files));
   await session.refresh();
   await session.point(files);
+  // The input takes the words of a question once it drew that question: words typed before stay with the chain, and
+  // a later question would show them.
+  app().render();
+  await test.flush();
   await test.mockInput.typeText('["README.md", "docs/tui.md"]');
   await capture("96-list-question");
   app().composer.setText("");

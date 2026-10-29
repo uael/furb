@@ -289,8 +289,8 @@ async def test_a_red_main_updates_no_branch(conductor: Round) -> None:
 @JQ
 async def test_a_green_pr_behind_main_updates_its_branch_though_heal_updated_it_at_that_head(conductor: Round) -> None:
   conductor.say(r"compare/main\.\.\.abc", '{"behind_by": 3}')
-  conductor.say(r"compare/abc\.\.\.main", '{"files": [{"filename": "b.py"}]}')
-  conductor.say(r"pr view 5 --json files", '{"files": [{"path": "b.py"}]}')
+  conductor.say(r"compare/abc\.\.\.main", '{"files": [{"filename": "src/engine.py"}]}')
+  conductor.say(r"pr view 5 --json files", '{"files": [{"path": "src/engine.py"}]}')
   await conductor.mend(conductor.pr(checks=("FAILURE", "FAILURE")), 0.0, False)
   assert conductor.log().count("update-branch") == 1
   green = conductor.pr(checks=("SUCCESS",), names=["the hooks"])
@@ -504,11 +504,8 @@ def test_the_prune_removes_what_the_work_left_and_keeps_its_work(conductor: Roun
     )
   assert got.stdout.startswith("The prune removed the worktrees ")
   assert "; 1 remote branch, listed in .furb/trashed.tsv; 1 scratch directory; 1 folder of " in got.stdout
-  assert sorted(p.name for p in tmp_path.glob("furb-w-*")) == ["furb-w-busy", "furb-w-fresh"]
-  assert git("for-each-ref", "--format=%(refname:short)", "refs/heads/w", cwd=root, env=env).split() == [
-    "w/busy",
-    "w/fresh",
-  ]
+  assert sorted(p.name for p in tmp_path.glob("furb-w-*")) == ["furb-w-busy"]
+  assert git("for-each-ref", "--format=%(refname:short)", "refs/heads/w", cwd=root, env=env).split() == ["w/busy"]
   kept = sorted((root / ".furb" / "archive").glob("*/*"))
   assert [re.sub(r"-\d{6}\.", ".", p.name) for p in kept] == ["merged.bundle", "merged.patch"]
   assert "notes.txt" in kept[1].read_text(encoding="utf-8")
@@ -694,7 +691,7 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 STATE = (
   "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed fixes silent"
   " comments measures timers noted debriefs briefed owns watched after parked awaited covering kinds pool slots areas vetoes ordered tips shifted hired paced landed heard handled sent ends requeued"
-  " statused secret budgeted flaky runs_read"
+  " statused secret updated budgeted flaky runs_read deferred"
 ).split()
 
 
@@ -1979,6 +1976,74 @@ def test_a_worker_takes_a_free_workspace_at_its_hire_and_gives_it_back_when_it_e
   assert f"{repo}-w1," in conductor.prompts[-1][0]
 
 
+@POSIX
+@JQ
+async def test_a_green_pr_whose_files_moved_on_main_merges_with_no_update_when_no_gate_sums_them(conductor: Round) -> None:
+  conductor.say(r"compare/abc\.\.\.main", '{"files": [{"filename": "tui/src/app.ts"}]}')
+  conductor.say(r"pr view 5 --json files", '{"files": [{"path": "tui/src/app.ts"}]}')
+  conductor.say(r"pr view 5 --json state", '{"state": "MERGED"}')
+  await conductor.land(conductor.pr(checks=("SUCCESS",), names=["the hooks"]), False)
+  assert "update-branch" not in conductor.log()
+  assert "pr merge 5 --squash" in conductor.log()
+  assert 5 in conductor.merged
+
+
+def two(conductor: Round, top: tuple = ("SUCCESS",)) -> None:
+  conductor.prs[7] = conductor.pr(n=7, head="w/a", checks=("SUCCESS",), names=["the hooks"])
+  conductor.prs[8] = conductor.pr(n=8, head="w/b", base="w/a", checks=top, names=["the hooks"])
+
+
+@POSIX
+@JQ
+async def test_a_green_stack_merges_whole_at_once_through_gh_stack(conductor: Round) -> None:
+  two(conductor)
+  conductor.say(r"pr view [78] --json state", '{"state": "MERGED"}')
+  await conductor.land(conductor.prs[7], False)
+  assert "stack merge 8 --yes --squash" in conductor.log()
+  assert "pr merge" not in conductor.log()
+  assert {7, 8} <= conductor.merged
+  assert conductor.heard == ["The stack #7 <- #8 merged whole."]
+
+
+@POSIX
+@JQ
+async def test_a_stack_with_a_red_layer_does_not_merge_whole(conductor: Round) -> None:
+  two(conductor, top=("FAILURE",))
+  conductor.say(r"pr view 7 --json state", '{"state": "MERGED"}')
+  await conductor.land(conductor.prs[7], False)
+  assert "stack merge" not in conductor.log()
+  assert "pr merge 7 --squash" in conductor.log()
+
+
+@POSIX
+@JQ
+async def test_a_stack_that_gh_stack_does_not_hold_lands_one_layer_at_a_time_and_is_told_once(conductor: Round) -> None:
+  two(conductor)
+  conductor.say(r"pr view 8 --json state", '{"state": "OPEN"}')
+  conductor.say(r"pr view 7 --json state", '{"state": "MERGED"}')
+  await conductor.land(conductor.prs[7], False)
+  assert conductor.log().count("stack merge 8") == 1
+  assert "pr merge 7 --squash" in conductor.log()
+  assert "no stack w/a" in conductor.noticed
+  assert any("did not merge whole" in line for line in conductor.heard)
+
+
+@POSIX
+@JQ
+async def test_each_chain_of_stacked_prs_is_linked_as_one_gh_stack_once(conductor: Round) -> None:
+  two(conductor)
+  conductor.say(r"stack link", "Created stack with 2 PRs")
+  await conductor.linking()
+  await conductor.linking()
+  assert conductor.log().count("stack link 7 8") == 1
+  assert conductor.heard == ["The stack #7 <- #8 is linked on GitHub."]
+def test_no_worker_gets_the_workspace_of_the_coordinator(conductor: Round) -> None:
+  conductor.slots["coordinator"] = "w1"
+  text, slot = conductor.placed("k", "{workspace}")
+  assert slot == "w2"
+  assert "-w2" in text
+
+
 def test_the_triage_folds_like_items_into_the_earlier_one_before_a_hire(conductor: Round) -> None:
   words = "\n".join(f"The owner wants the line {i} of the feed to keep its color when it scrolls." for i in range(6))
   conductor.queue[:] = [
@@ -1996,3 +2061,97 @@ def test_the_triage_folds_like_items_into_the_earlier_one_before_a_hire(conducto
   assert conductor.covering == {"converge-pr1": ["converge-pr2"]}
   assert conductor.heard == ["The triage folded the item converge-pr2 into converge-pr1, which it is like."]
   assert conductor.taken("converge-pr2") == "worker1"
+
+
+@POSIX
+@JQ
+async def test_a_child_in_a_linked_gh_stack_is_left_to_gh_stack_when_its_parent_moves(conductor: Round) -> None:
+  two(conductor)
+  conductor.noticed.add("linked 7 8")
+  conductor.shifted[8] = ("old", "new")
+  assert await conductor.restack_forced() == set()
+  assert "rebase" not in conductor.log()
+
+
+@POSIX
+@JQ
+async def test_a_lone_failure_behind_a_green_main_reruns_its_failed_jobs_before_it_updates_the_branch(
+  conductor: Round,
+) -> None:
+  conductor.say(r"compare/main\.\.\.abc", '{"behind_by": 3}')
+  conductor.say(r"pr view 5 --json headRefOid", '{"headRefOid": "abc"}')
+  conductor.say(r"run list --commit abc", json.dumps([run(1, "gates", "10:00", "failure")]))
+  await conductor.mend(conductor.pr(checks=("FAILURE", "SUCCESS")), 0.0, False)
+  assert "run rerun 1 --failed\n" in conductor.log()
+  assert "update-branch" not in conductor.log()
+  await conductor.mend(conductor.pr(checks=("FAILURE", "SUCCESS")), 0.0, False)
+  assert "pr update-branch 5\n" in conductor.log()
+
+
+@POSIX
+@JQ
+async def test_queued_runs_that_can_serve_no_merge_are_cancelled_and_a_run_above_a_red_layer_waits(conductor: Round) -> None:
+  two(conductor, top=())
+  conductor.prs[7]["verdict"] = "fail"
+  conductor.prs[9] = conductor.pr(n=9, head="w/c", sha="new", mergeable="CONFLICTING")
+  conductor.prs[10] = conductor.pr(n=10, head="w/d", sha="d1")
+  runs = [
+    {"databaseId": 1, "headBranch": "w/b", "headSha": "abc", "event": "pull_request"},
+    {"databaseId": 2, "headBranch": "w/c", "headSha": "old", "event": "pull_request"},
+    {"databaseId": 3, "headBranch": "w/gone", "headSha": "x", "event": "pull_request"},
+    {"databaseId": 4, "headBranch": "w/d", "headSha": "d1", "event": "pull_request"},
+    {"databaseId": 5, "headBranch": "main", "headSha": "m", "event": "push"},
+  ]
+  conductor.say(r"run list --workflow gates.yml --status queued", json.dumps(runs))
+  await conductor.throttle()
+  assert [x for x in conductor.log().splitlines() if x.startswith("run cancel")] == ["run cancel 1", "run cancel 2", "run cancel 3"]
+  assert conductor.deferred == {"1": "8 abc"}
+  conductor.prs[7]["verdict"] = "pass"
+  conductor.says.clear()
+  conductor.say(r"run list --workflow gates.yml --status queued", "[]")
+  await conductor.throttle()
+  assert "run rerun 1" in conductor.log()
+  assert conductor.deferred == {}
+
+
+def test_a_render_of_the_gallery_runs_no_check_and_passes(conductor: Round) -> None:
+  gallery = conductor.pr(n=703, head="w/gallery")
+  assert gallery["verdict"] == "pass"
+  assert conductor.pr(n=7, checks=("SUCCESS",), names=["the title"])["verdict"] == "pending"
+
+
+@POSIX
+@JQ
+async def test_a_pr_that_still_fails_after_an_update_gets_no_second_update_soon(conductor: Round) -> None:
+  conductor.say(r"compare/main\.\.\.", '{"behind_by": 3}')
+  assert "behind main" in await conductor.heal(conductor.pr(checks=("FAILURE", "FAILURE")), False)
+  assert await conductor.heal(conductor.pr(sha="def", checks=("FAILURE", "FAILURE")), False) == ""
+  assert conductor.log().count("update-branch") == 1
+  conductor.now += 6 * 3600
+  assert "behind main" in await conductor.heal(conductor.pr(sha="ghi", checks=("FAILURE", "FAILURE")), False)
+  assert conductor.log().count("update-branch") == 2
+
+
+@POSIX
+@JQ
+async def test_a_run_that_the_round_defers_makes_no_red_and_heal_does_not_run_it_again(conductor: Round) -> None:
+  two(conductor, top=())
+  conductor.prs[7]["verdict"] = "pending"
+  runs = [{"databaseId": 1, "headBranch": "w/b", "headSha": "abc", "event": "pull_request"}]
+  conductor.say(r"run list --workflow gates.yml --status queued", json.dumps(runs))
+  await conductor.throttle()
+  assert "rerun abc" not in conductor.noticed
+  cancelled = conductor.pr(n=8, head="w/b", base="w/a", checks=("CANCELLED",), names=["the hooks"])
+  assert cancelled["verdict"] == "pending"
+  assert await conductor.heal(cancelled, False) == ""
+  assert "rerun" not in conductor.log().replace("run list", "")
+
+
+@POSIX
+@JQ
+async def test_a_failure_waits_for_the_end_of_its_run_before_a_rerun_an_update_or_a_fixer(conductor: Round) -> None:
+  conductor.say(r"compare/main\.\.\.abc", '{"behind_by": 3}')
+  running = conductor.RUNNING[0]
+  await conductor.mend(conductor.pr(checks=("FAILURE", running)), 0.0, False)
+  assert "rerun" not in conductor.log() and "update-branch" not in conductor.log()
+  assert conductor.hired == []

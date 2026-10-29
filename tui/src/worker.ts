@@ -194,7 +194,7 @@ function scriptedSession(options: SessionOptions, watch = false): Session {
         : reply(last, actor, JSON.stringify(messages));
       // A message that asks for an answer in a fence gets one, as a model sometimes writes it, which the gate refuses,
       // and the model answers again once it reads the refusal.
-      const fenced = !first && last.includes("an answer in a fence");
+      const fenced = !first && last.includes("an answer in a fence") && !last.includes("refused");
       // A message that says to ask first gets a question to the operator and no close, so the model answers again
       // once the operator has answered.
       const asks = !first && last.includes("Ask me first");
