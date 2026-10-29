@@ -899,3 +899,15 @@ def test_a_train_with_a_gap_sends_each_of_its_prs_to_be_judged_alone(world: Worl
   assert veto(world) is True
   assert world.book()["heads"]["5 abc"]["state"] == "gaps"
   assert len(world.judged()) == 2
+
+
+def test_a_head_that_only_merged_main_keeps_the_verdict_of_the_same_change(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.say(r"patch-id", "p1 abc\n")
+  world.say(r"python3 -I -", listing(kind="text"))
+  assert veto(world) is False
+  assert world.book()["heads"]["5 abc"]["patch"] == "p1"
+  assert asyncio.run(world.converge_veto(pr(sha="def", verdict="pass"))) is False
+  assert world.ns["LIVE"]["tui"]["heads"]["5 def"]["carried"] is True
+  assert len(world.judged()) == 1

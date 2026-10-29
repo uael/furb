@@ -55,6 +55,7 @@ def scope(paths: list[str]) -> dict[str, object]:
     "ts_os": EVERY if every or kinds["typescript"] else LINUX,
     "crate": every,
     "gui": every or kinds["app"],
+    "code": any(kinds.values()),
   }
 
 

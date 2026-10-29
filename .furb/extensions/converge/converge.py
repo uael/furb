@@ -613,7 +613,21 @@ async def classified(target: dict, book: dict, pr: dict) -> str:
     got = await bash(f"gh pr view {pr['n']} --json files --jq '.files[].path'", show=HIDDEN, timeout=120)
     if got.code != 0:
       return "held"
-    book["heads"][key] = {"state": "held" if any(f.startswith(tuple(target["paths"])) for f in got.stdout.lines) else "outside"}
+    if not any(f.startswith(tuple(target["paths"])) for f in got.stdout.lines):
+      book["heads"][key] = {"state": "outside"}
+      return "outside"
+    # A head that only merged main into its branch makes the same change, so it keeps the verdict of that change.
+    same = await bash(
+      f"git fetch -q origin main refs/pull/{pr['n']}/head && git diff origin/main...{pr['sha']} | git patch-id --stable",
+      show=HIDDEN,
+      timeout=120,
+    )
+    patch = (same.stdout.content.split() or [""])[0] if same.code == 0 else ""
+    was = next(
+      (v for k, v in book["heads"].items() if patch and k.split()[0] == str(pr["n"]) and v.get("patch") == patch and v.get("state") in ("clean", "gaps")),
+      None,
+    )
+    book["heads"][key] = {**was, "carried": True} if was else {"state": "held", **({"patch": patch} if patch else {})}
   return book["heads"][key]["state"]
 
 
@@ -656,14 +670,14 @@ TRAIN = 6
 def solo(book: dict, job: dict) -> dict:
   """A train that found a gap, or a fault, or no answer, sends each of its PRs to be judged alone."""
   for key in job["batch"]:
-    book["heads"][key] = {"state": "held", "solo": True}
+    book["heads"][key] = {**book["heads"].get(key, {}), "state": "held", "solo": True}
     OPEN.pop(key, None)
   return {}
 
 
 def cleared(book: dict, job: dict) -> dict:
   for key in job["batch"]:
-    book["heads"][key] = {"state": "clean", "gaps": [], "train": job["label"]}
+    book["heads"][key] = {**book["heads"].get(key, {}), "state": "clean", "gaps": [], "train": job["label"]}
     OPEN.pop(key, None)
   return {}
 
@@ -856,7 +870,7 @@ async def advanced(target: dict, book: dict, job: dict, words: str, head: str) -
 
 async def screened(target: dict, book: dict, job: dict, gaps: list[list[str]], words: str) -> None:
   c, n, sha = conductor(), job["n"], job["sha"]
-  book["heads"][f"{n} {sha}"] = {"state": "gaps" if gaps else "clean", "gaps": gaps}
+  book["heads"][f"{n} {sha}"] = {**book["heads"].get(f"{n} {sha}", {}), "state": "gaps" if gaps else "clean", "gaps": gaps}
   if not gaps:
     return
   body = (
