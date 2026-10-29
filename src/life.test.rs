@@ -611,6 +611,35 @@ fn scripted(at: &Path, words: &[&str]) -> Opening {
   }
 }
 
+#[cfg(unix)]
+#[test]
+fn the_boot_of_a_life_asks_the_claude_command_line_its_models_once_and_a_later_stand_again() {
+  let at = place("discovery");
+  let bin = at.join("claude");
+  let fake = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/world/provider/claude/fake-claude.sh");
+  // A program written now has a stamp of its own, so no discovery of an earlier run in the cache of furb answers it.
+  fs::write(&bin, fs::read(fake).unwrap()).unwrap();
+  fs::set_permissions(&bin, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+  fs::write(at.join("models"), "nova 100 low\n").unwrap();
+  let asked = || fs::read_to_string(at.join("discoveries")).unwrap_or_default().lines().count();
+  let (mut engine, _) = Opening {
+    claude: Some(bin.display().to_string()),
+    roster: Some(vec!["claude-cli:nova".to_owned()]),
+    extensions: Some(false),
+    snapshot: Some(false),
+    ..opening(&at, true)
+  }
+  .boot::<String>([])
+  .unwrap();
+  assert_eq!(
+    asked(),
+    1,
+    "the opening asked the models, and the stand of the boot holds what it found"
+  );
+  engine.stand(verbs::Stand::default()).unwrap();
+  assert_eq!(asked(), 2, "a later stand asks the command line again");
+}
+
 #[test]
 fn a_stand_reloads_provider_settings_and_a_refused_reload_keeps_the_life() {
   let at = place("provider-settings");
