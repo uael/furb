@@ -1184,8 +1184,7 @@ export const feed = part({
           );
         } else if (line.type === "ear") {
           // The rungs that an ear wrote, as the words of the extensions, stand as code: a comment that names the ear,
-          // then the last statement of each word that calls what the word defined, with what its acts came to. A word
-          // that only defines shows no line.
+          // then the calls that end each word, with what its acts came to. A word that only defines shows no line.
           const ear = act;
           const earLines = programFor(
             `ear:${act.id}`,
@@ -1194,19 +1193,22 @@ export const feed = part({
               const out: ProgramLine[] = [{ kind: "note", step: ear, text: `# ${ear.by}` }];
               for (const rung of line.rungs) {
                 const source = this.subject(rung).trimEnd().split("\n");
-                const last = source.at(-1) ?? "";
-                if (!/^(await )?[A-Za-z_][\w.]*\(/.test(last)) continue;
+                // The calls that end the word, as the life words of the setup, which one word holds, each on a line.
+                let first = source.length;
+                while (first > 0 && /^(await )?[A-Za-z_][\w.]*\(/.test(source[first - 1] ?? "")) first--;
+                if (first === source.length) continue;
                 const acts = [...madeBy(rung.id)];
-                out.push({
-                  kind: "code",
-                  step: rung,
-                  number: source.length,
-                  display: out.length,
-                  text: last,
-                  acts,
-                  runs: acts.some((one) => !one.done),
-                  hint: hintOf(acts, owed, named),
-                });
+                for (let at = first; at < source.length; at++)
+                  out.push({
+                    kind: "code",
+                    step: rung,
+                    number: at + 1,
+                    display: out.length,
+                    text: source[at] ?? "",
+                    acts: at === source.length - 1 ? acts : [],
+                    runs: at === source.length - 1 && acts.some((one) => !one.done),
+                    hint: at === source.length - 1 ? hintOf(acts, owed, named) : "",
+                  });
               }
               // A word that only defines has no line to show, so the note stands alone, with the rungs and what they made.
               if (out.length === 1) {

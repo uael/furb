@@ -15,7 +15,7 @@ use super::{
       test::{dropping, fake},
     },
   },
-  Catalog, SNAPSHOT, clamp, parsed,
+  Catalog, DOCTRINE, SNAPSHOT, clamp, doctrine_in, parsed,
 };
 use crate::ear::reactor;
 
@@ -804,4 +804,45 @@ fn invalid_claude_accounts_are_refused_before_they_start_a_process() {
     assert!(no.contains("claude-cli"), "{no}");
   }
   fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn the_doctrine_of_a_project_comes_first_then_the_checkout_of_dev_mode_then_the_official_copy_in_the_home()
+ {
+  let at = std::env::temp_dir().join(format!("furb-doctrine-{}", std::process::id()));
+  let _ = std::fs::remove_dir_all(&at);
+  let (project, checkout, home) = (at.join("project"), at.join("checkout"), at.join("home"));
+  for one in [&project, &checkout, &home] {
+    std::fs::create_dir_all(one).unwrap();
+  }
+  let official = home.join(".furb").join("DOCTRINE.md");
+  assert_eq!(doctrine_in(&project, None, Some(&home)), Some(official.clone()), "the official copy");
+  assert_eq!(
+    std::fs::read_to_string(&official).unwrap(),
+    DOCTRINE,
+    "furb writes it from the doctrine it carries"
+  );
+  std::fs::write(&official, "an older doctrine").unwrap();
+  doctrine_in(&project, None, Some(&home));
+  assert_eq!(
+    std::fs::read_to_string(&official).unwrap(),
+    DOCTRINE,
+    "a copy that holds another text is written again"
+  );
+  assert_eq!(doctrine_in(&project, None, None), None, "no home holds no official copy");
+  std::fs::write(checkout.join("DOCTRINE.md"), "the checkout").unwrap();
+  assert_eq!(
+    doctrine_in(&project, Some(&checkout), Some(&home)),
+    Some(checkout.join("DOCTRINE.md")),
+    "dev mode"
+  );
+  std::fs::create_dir_all(project.join(".furb")).unwrap();
+  std::fs::write(project.join(".furb").join("DOCTRINE.md"), "the project").unwrap();
+  let local = project.join(".furb").join("DOCTRINE.md");
+  assert_eq!(
+    doctrine_in(&project, Some(&checkout), Some(&home)),
+    Some(local),
+    "a doctrine of the project prevails"
+  );
+  let _ = std::fs::remove_dir_all(&at);
 }

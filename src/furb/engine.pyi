@@ -396,6 +396,7 @@ def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
   A rung with no word and no actor takes the default actor of its chain when it is made, and writes it into its actor word, so its reply and its ledger read the one actor.
   A rung with a word and an actor is a turn of that actor that its caller wrote: it answers its own reply to that actor with the turn ("assistant", word, None, None) before it says its word ready, so the turns show the word as the turn of that actor, the rung runs it as its step, and no World asks a model for it.
   Such a rung tells no header of its word, since its turn shows the word.
+  A rung with a word waits to run it while the first rung with a word and an actor that is open on its chain is neither itself nor one of its makers, so the turns of the words that their callers wrote stand in the order that their rungs were made, each after what the one before it told, a word that no such rung makes runs after them, and such a rung that one of them makes takes its turn within the turn of its maker.
   Its turn holds no usage, so a grant counts no cost of it and no share of the window.
   A later life makes that reply again in the ear of the rung, with its name and its turn, so the record replays it with no drift.
   The raised paragraph binds the exception as rungN_raised, as python shows it, which says its type and its message.
@@ -490,7 +491,7 @@ def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[No
   The chain acknowledges too a failure of an act that a rung of the chain made before the run of that rung, as while its model writes its word, and a failure of an act but for a cancel opens that thread again when it is over, so an error asks the model again even after that word closed its prompt.
   The chain acknowledges no done that a word of the chain caused with a close, since the model that wrote that close knows it already, and it acknowledges a done that the chain itself caused, as the close of a rung that it refused.
   A pause stands over the close that answers a prompt too, so what a word gave waits for the wake.
-  A prompt tells its message and its binding where it is made, as every act tells its open, whether a model or the operator answers it.
+  A prompt tells its message and its binding where it is made, as every act tells its open, whether a model or the operator answers it, and a prompt to a model tells them once no rung with a word and an actor is open on its chain, so its message comes after the turns that their callers wrote, as the setup of a chain.
   """
 
 @overload
@@ -531,7 +532,12 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   A chain holds every fact on it, and an act on another chain is that chain's.
   A prompt that a step of another chain made reads nothing of that chain.
   The word of a rung rebinds the default actor like any name, and so does an answer of a stand that changes the actor of the standing, and the last binding in record order wins.
-  The transcript of the root begins with the open of the root and then the standing.
+  The transcript of the root begins with the open of the root and then the standing, when its standing names no doctrine.
+  When its first standing names a doctrine, the root tells the bare paragraph chain() at once, and tells its open and its standing once no rung with a word and an actor is open on it at the done of a rung on it, so its first turns are the setup that the World plays on it, and the turn after the last of them holds what that one told, then the open, then the standing.
+  The chain runs no paragraph chain() as python, since that paragraph tells no call.
+  A chain with no source holds first the setup of the root, each fact of the root from its paragraph chain() up to its open, so every such chain holds the turns of the setup with the same names, and its own open and its standing come after them.
+  A chain with no source runs again each word of the setup that it holds, as a chain with a source runs the rungs of its origin, so the words of the extensions bind their names in its module and the setup tells nothing again.
+  A chain with a source holds whole the setup that its origin holds, whatever its filter, and its filter applies only to what came after that setup.
   The transcript then holds the prompt of the operator, and the replies of the model, each with its turn.
   The engine reads its own names through the globals of the chain.
   The engine uses a rebound name from the next use on.
@@ -581,8 +587,6 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   Before every reply the chain tells the last paragraph of the turn, whose header says what the answer is for, as #rung5 advance on prompt1, which names the one that made the rung.
   The advance binds the share of the window that the last reply on the chain read, as rung5_share = 0.25: the tokens that reply read over the window that the roster gives its actor, to two places, and no share before a reply that read a token.
   The advance binds each act that a word of the chain awaits and that is not over, as rung5_waits = ['bash3'], and no waits when no word awaits, so the model sees which acts the words that it wrote before still wait for.
-  Before the paragraph of each standing that it takes, the chain tells the doctrine of its actor, when the roster entry of that actor holds one, as the quote doctrine, in a paragraph headed doctrine, so the doctrine stands before the words that the extensions play and the message that changes from chain to chain, and each chain that starts the same holds it in the same prefix.
-  Before the first prompt to another actor whose roster entry holds a doctrine, and before the advance of a reply to such an actor, the chain tells its doctrine when nothing told it, and the chain never tells a doctrine that its transcript tells already, so the model reads it once, and a chain whose actor reads none and that asks no such actor tells nothing of it.
   When nothing was told on the chain since the word of the last rung that the chain did not make was ready, the chain tells that rung under the header told nothing before the advance, so the model sees that the word showed it nothing.
   The chain holds the text of each paragraph told on it, in order.
   At the advance of the next rung, before it asks the reply, or at the first ready of a rung that it does not advance, the chain runs that text as the told rung of that rung, and holds nothing more.
@@ -770,13 +774,13 @@ The engine sends the response to the provider again whole.
 The python of an assistant turn is the word the model wrote, quotes and all, and the python of a user turn is the paragraphs told since the reply before it, and nothing else.
 """
 type Actor = list[str | list[str] | int]
-"""An actor the World offers: the name of a model, the efforts it takes, the window it reads, and the doctrine it reads, which the entry of a model that reads none leaves unsaid.
+"""An actor the World offers: the name of a model, the efforts it takes and the window it reads.
 The window that a roster entry leaves unsaid is the window that the file names.
 What a prompt names is one of these names and one effort of that range.
 An actor takes an effort of its own, and any actor takes the effort that is not named.
 """
 type Standing = list[list[Actor] | str]
-"""What a chain stands on: the actors the World offers, the directory the chain starts in, and the actor a prompt goes to when it names none.
+"""What a chain stands on: the actors the World offers, the directory the chain starts in, the actor a prompt goes to when it names none, and the path of the doctrine, which the World reads in the first turn of the setup of the root, and which a World that gives no doctrine leaves unsaid.
 The roster, the directory and the actor that a model reads are in the transcript of its chain.
 A standing holds no source: the engine is one file the model imports, and a record replays only on an engine that makes each of its acts again, and else drifts.
 """
@@ -910,14 +914,14 @@ type Chance = tuple[Literal["chance"], str, str, str]
 type Stand = tuple[Literal["stand"], str, str, str]
 """A stand is the question of what the chains stand on, which boot asks the World on the root at the tip of every life, and whose answer binds the actor and the directory of every chain from its place on.
 A change of the World between two lives enters the transcript of a chain.
-The World answers a stand with the roster, the directory and the actor.
+The World answers a stand with the roster, the directory, the actor and the path of the doctrine.
 A model asked on any chain of a later life finds the new roster in the transcript of its chain.
 The World answers it with a done at once, so the life stands on that answer before boot returns.
 The journal keeps each stand and its answer, so a later life says them again at their places and replays every chain on what it stood on there.
 At its tip, once the record is said again whole, boot stands the life again, so a change of the World reaches every chain after what it replayed.
 Every chain hears the done of every stand, and a chain whose standing that answer changes tells it there, and binds its default actor again when the actor of the standing changes, so the transcript grows at one end.
 A standing binds the default actor of the chain, under the name actor, when its actor differs from that of the standing before it, so a new roster or a new directory alone keeps the actor that a word chose.
-The chain tells each standing it takes in one paragraph headed standing, which binds its roster, its directory and its actor, as chain1_roster, chain1_cwd and chain1_actor, and its roster holds no doctrine, since the chain tells the doctrine of an actor in a paragraph of its own.
+The chain tells each standing it takes in one paragraph headed standing, which binds its roster, its directory and its actor, as chain1_roster, chain1_cwd and chain1_actor, each entry of its roster as its name, its efforts and its window, and no path of the doctrine, which the World gives the chain to read in a turn of its own.
 The standing a chain tells is what its transcript holds of it, and the stand itself tells nothing.
 At each stand the root reads the clock once it told the standing that the stand gives it, so the record holds a reading of the clock at the tip of every life.
 At each stand every chain catches up: it reads again, with a hidden show, the path of each text that the last read or write of that path on the chain gave, but a path of a scheme and a door, and it tells what changed in one paragraph headed caught up.
@@ -1002,6 +1006,9 @@ def tell(on: str, path: str, got: object = None, show: Show = HEAD) -> None:
 def tells(id: str) -> bool:
   """Whether an act tells: a rung that its chain made tells nothing, neither its word nor what its word does, since what it would tell stands told already."""
 
+def crafted(id: str) -> list[str]:
+  """The rungs with a word and an actor that are open on the chain of an act, by their names, in the order that they were made, which a rung with a word, a prompt to a model and the open of the root wait for."""
+
 def told(id: str, what: str = "", *notes: Note, **words: object) -> Tell:
   """The open of an act tells the id and what the act says of itself, and no actor and no arguments as such.
   A closed paragraph binds what the act came to under the word value.
@@ -1040,8 +1047,8 @@ def unquoted(word: str) -> str:
   The engine unquotes a word before the gate reads it and before the Kernel runs it, and the door of a ladder and the turns keep the quotes as the word wrote them.
   """
 
-def offered(roster: list[Actor], to: str, at: int = 2) -> int | str | None:
-  """The slot that at names of the roster entry of an actor, its window when at is unsaid and its doctrine at 3, the empty string for a slot that the entry leaves unsaid, and nothing at all when the roster holds no such actor, or when that one takes no such effort."""
+def offered(roster: list[Actor], to: str) -> int | None:
+  """The window of the roster entry of an actor, and nothing at all when the roster holds no such actor, or when that one takes no such effort."""
 
 def covers(a: Fact, id: str) -> bool:
   """Whether a control is over an act: over the act it names and everything under it, and over every act on the chain it names; a close is over the act it names, each rung that act made and each reply that asks for the word of one of those, where a cancel is over everything under it.

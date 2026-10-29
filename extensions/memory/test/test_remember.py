@@ -10,7 +10,7 @@ from furb_monty import _monty
 
 
 async def test_the_memory_of_a_chain_kept(tmp_path: Path) -> None:
-  """The memory of a chain, kept: an act on the chain that tells the memory of its working directory when it is made, then the memory of the path of each text that a read on the chain gives, and the memory that changed at each stand, and that never completes."""
+  """The memory of a chain, kept: an act on the chain that tells the memory of its working directory when it is made, then the memory of the path of each text that a read made on the chain after it gives, and the memory that changed at each stand, and that never completes."""
   top = noted(tmp_path / "work", "one\n")
   sub = noted(tmp_path / "work" / "sub", "two\n")
   (tmp_path / "work" / "sub" / "a.txt").write_text("a\n", encoding="utf-8", newline="")
@@ -48,6 +48,22 @@ async def test_a_cancel_over_it_ends_it_and_a_pause_over_it_holds_it_until_the_w
   await engine.rung('read("deep/a.txt")', on=root)
   assert isinstance(engine.peek(watcher), CancelledError)
   assert len(recalled(root, tmp_path)) == 1
+
+
+async def test_remember_asks_nothing_of_a_read_made_before_it(tmp_path: Path) -> None:
+  """remember asks nothing of a read made before it, whose done a later life can say before or after the birth of remember, so a life and its replay ask the same memory questions."""
+  noted(tmp_path / "work" / "sub", "two\n")
+  (tmp_path / "work" / "sub" / "a.txt").write_text("a\n", encoding="utf-8", newline="")
+  _, root = extended("memory", tmp_path, _monty.memory)
+  watcher = await engine.rung('read("sub/a.txt")\nclose(remember())', on=root)
+  assert isinstance(watcher, str)
+  await settle()
+  assert [a[4] for a in engine.transcript(on=root) if a[0] == "memory"] == ["."]
+  await engine.rung('read("sub/a.txt")', on=root)
+  assert [a[4] for a in engine.transcript(on=root) if a[0] == "memory"] == [
+    ".",
+    str(tmp_path / "work" / "sub" / "a.txt"),
+  ]
 
 
 async def test_a_memory_file_enters_a_chain_once_and_again_only_when_it_changed(tmp_path: Path) -> None:

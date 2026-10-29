@@ -90,7 +90,7 @@ fn until(chain: &str, text: &str) -> String {
 const PROBE: &str = "(c,) = [x[1] for x in transcript('chain1', 'chain') if x[4] == 'old']\n(k,) = [x[1] for x in \
                      transcript(c) if x[0] == 'carry']\ngot = peek(k)\nassert isinstance(got, dict)\nclose([got['entries'], got['digest'], \
                      got['logged'], got['prompts'], [x for x in transcript(c) if x[2] == k], \
-                     [t[1] for t in turns(on=c) if t[0] == 'assistant'][:4]])";
+                     [t[1] for t in turns(on=c) if t[0] == 'assistant'][-4:]])";
 
 #[test]
 fn a_carry_gives_the_turns_and_the_open_prompts_of_a_chain_and_a_later_life_reads_it_from_its_own_record()
@@ -113,7 +113,7 @@ fn a_carry_gives_the_turns_and_the_open_prompts_of_a_chain_and_a_later_life_read
   let open = open.as_ref().py_repr();
   let start = format!("[{}, '{digest}', True, [({open}, 'str', 'Later.', '')], [", record.len());
   assert!(got.starts_with(&start), "{got}");
-  let words = "[\"read('skills://')\", \"close('hi')\", 'await wait(3600)', \"close('later')\"]]";
+  let words = "['await recall()\\nawait listed()\\nmcp_index()', \"close('hi')\", 'await wait(3600)', \"close('later')\"]]";
   assert!(got.ends_with(words), "the chain reads the carried turns, then its own: {got}");
   assert!(got.contains("('reply', 'reply0', 'carry1', "), "each carried reply is reply0: {got}");
   let word =

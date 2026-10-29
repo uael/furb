@@ -15,13 +15,13 @@ Six extensions come with furb, and each life runs them unless a config turns the
   `CLAUDE.md` when it has no `AGENTS.md`. When a chain starts, it reads the memory of the user, in the config
   directory, then the memory of each folder from the root down to the working directory. Each time the chain reads a
   file in a folder below, it reads the memory of each folder on the way. A memory file comes whole the first time,
-  and again only when it changed. Its life word, `await recall()`, gives the first memory
-  to the model as a turn of its own, a read of each file, and then `remember()` does the rest as the chain works.
+  and again only when it changed. Its life word, `await recall()`, reads each memory file in the setup of the
+  root, which every new chain holds, and then `remember()` does the rest as the chain works.
   `memory(path)` tells the memory of one path.
 - **`skills`** gives a chain the skills that it can read. `skills()` lists each skill that it finds in `.furb/skills`,
   `.agents/skills` and `.claude/skills` of the working directory and of each folder above it, then in `skills` of the config
-  directory. `skill(name)` reads the `SKILL.md` of one skill. Its life word, `await listed()`, gives the list to the
-  model as a turn of its own: the model reads `skills://`, and the chain shows that read. It carries one skill of its own, `extending`, which shows a model how to extend furb, with an
+  directory. `skill(name)` reads the `SKILL.md` of one skill. Its life word, `await listed()`, reads `skills://` in the
+  setup of the root, which every new chain holds. It carries one skill of its own, `extending`, which shows a model how to extend furb, with an
   example for each way. A skill named `extending` in a folder takes its place.
 - **`compaction`** cuts a chain to the work that it still needs, and the chain goes on under its name, since a
   compaction in furb is a prefix said on the chain, which takes the place of its transcript. `supersede(keep)` says
@@ -50,8 +50,8 @@ Six extensions come with furb, and each life runs them unless a config turns the
   summary once the model chose. The board of the chains says how many
   times a chain compacted. A chain that an older compaction made, which went on in a new chain whose first word
   restores its source, shows with that source as one chain, named `Main -> compacted`, with one feed.
-- **`ouroboros`** teaches a model to extend furb. Its life word, `ouroboros()`, tells each chain once the three ways
-  to extend furb and when to take each: a def in a word, which lives with its chain; `extend(name, *rungs)`, which
+- **`ouroboros`** teaches a model to extend furb. Its file holds the lore, which every chain reads in the setup, so
+  it has no life word. The lore says the three ways to extend furb and when to take each: a def in a word, which lives with its chain; `extend(name, *rungs)`, which
   writes the words of those rungs as an extension of the project and turns it on, so every later chain runs it; and
   an official extension, which lives in furb. `extend(name, *rungs, tui=module)` also writes a
   [part for the TUI](#a-part-for-the-tui). `enabled()` gives the extensions that the life runs.

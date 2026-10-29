@@ -497,9 +497,13 @@ test("the usage counts each token once, and the context share shows from the fir
   composing(async ({ session, frame }) => {
     // Each answer of the demo reads a prompt of 3240 tokens, 2800 of them from the cache, and writes 184.
     await session.submit("Explore this project.");
-    await until(session, () => session.turns.some((turn) => turn[0] === "assistant"));
+    // The setup of the root holds assistant turns that furb wrote, which no model answered and which hold no usage, so
+    // the answer of the model is the assistant turn that holds its usage.
+    await until(session, () => session.turns.some((turn) => turn[0] === "assistant" && turn[2] !== null));
     await session.refresh();
-    const answers = session.turns.filter((turn) => turn[0] === "assistant").length;
+    // The read of the doctrine is an assistant turn that the World wrote, and no model answered it, so it holds no usage.
+    const answers = session.turns.filter((turn) => turn[0] === "assistant" && turn[2] !== null).length;
+    expect(answers).toBe(1);
     expect(session.spend).toEqual({
       input: 440 * answers,
       output: 184 * answers,
@@ -521,7 +525,10 @@ test("the usage counts each token once, and the context share shows from the fir
 test("the usage of a fork counts the answers of the fork alone, and not those of its origin", () =>
   composing(async ({ session, frame }) => {
     await session.submit("Explore this project.");
-    await until(session, () => session.turns.some((turn) => turn[0] === "assistant"));
+    // The setup of the root holds assistant turns that furb wrote, which no model answered and which hold no usage, so
+    // the answer of the model is the assistant turn that holds its usage.
+    await until(session, () => session.turns.some((turn) => turn[0] === "assistant" && turn[2] !== null));
+    await session.refresh();
     const origin = session.selected;
     const answered = session.turns.filter((turn) => turn[0] === "assistant").length;
     await session.submit("/fork");

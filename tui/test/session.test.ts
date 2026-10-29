@@ -210,7 +210,13 @@ test("a follow-up that the operator removes while an earlier one is sent is not 
     expect(session.acts.filter((act) => session.isUserPrompt(act)).map((act) => act.words[1])).toEqual([
       "First follow-up on main",
     ]);
-    expect(session.acts.filter((act) => act.on === other && act.kind === "rung")).toEqual([]);
+    // The other chain holds only the rung that runs again the read of the doctrine, the word of the setup of the
+    // root that its prefix holds.
+    const setup = session.acts.find((act) => act.kind === "rung" && act.by === "extensions");
+    expect(setup?.word).toMatch(/^read\('.*DOCTRINE\.md'\)$/);
+    expect(
+      session.acts.filter((act) => act.on === other && act.kind === "rung").map((act) => [act.by, act.words]),
+    ).toEqual([[other, [setup?.word, setup?.id, ""]]]);
   } finally {
     session.host.sendQueued = send;
     await session.dispose();

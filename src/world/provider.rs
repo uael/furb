@@ -24,7 +24,7 @@ mod watch;
 
 use std::{
   collections::{HashMap, HashSet},
-  path::PathBuf,
+  path::{Path, PathBuf},
   sync::{Arc, PoisonError, RwLock},
   time::Duration,
 };
@@ -1040,19 +1040,22 @@ fn written(id: &str, tells: &mpsc::UnboundedSender<Replied>) -> Told {
   })
 }
 
-/// What the chains stand on: the models and the operator, the directory, and the default actor. The entry of each
-/// model holds its doctrine after its window.
+/// What the chains stand on: the models and the operator, the directory, the default actor, and the path of the
+/// doctrine that a chain reads, which [`catalog::doctrine`] gives.
 fn standing(models: &[Model], directory: &str, actor: &str) -> Object {
   let offered = models.iter().map(|model| {
     let efforts = model.efforts.iter().map(|(effort, _)| Object::string(effort));
     let window = i64::try_from(model.window).unwrap_or(i64::MAX);
-    let entry = [Object::string(&model.name), Object::list(efforts), Object::int(window)];
-    Object::list(entry.into_iter().chain([Object::string(catalog::DOCTRINE)]))
+    Object::list([Object::string(&model.name), Object::list(efforts), Object::int(window)])
   });
   // The operator answers in person, with no effort, and reads the window of the engine.
   let operator = Object::list([Object::string(OPERATOR), Object::list([]), Object::int(WINDOW)]);
   let roster = Object::list(offered.chain([operator]));
-  Object::list([roster, Object::string(directory), Object::string(actor)])
+  let doctrine =
+    catalog::doctrine(Path::new(directory)).map(|one| Object::string(one.display().to_string()));
+  Object::list(
+    [roster, Object::string(directory), Object::string(actor)].into_iter().chain(doctrine),
+  )
 }
 
 /// The model an actor names, and what a reply asks it: the engine as the system prompt, the turns of the chain,
@@ -1177,16 +1180,33 @@ fn messages(
     }
     if std::mem::take(&mut joins)
       && let Some(Message::User { content }) = messages.last_mut()
-      && let Some(UserContent::Text(was)) = content.first_mut()
+      && let Some(UserContent::Text(was)) =
+        content.iter_mut().rev().find(|one| matches!(one, UserContent::Text(_)))
     {
       was.text = format!("{}\n\n{python}", was.text);
       content.extend(seen);
       continue;
     }
-    let content = [UserContent::Text(Text::new(python))].into_iter().chain(seen);
+    // The open of a chain after the setup that it holds goes as a block of its own, so the setup that every chain
+    // with no source shares ends a block, which a provider can keep in its cache.
+    let texts = match banner(python) {
+      Some(at) => vec![&python[..at - 2], &python[at..]],
+      None => vec![python],
+    };
+    let content = texts.into_iter().map(|one| UserContent::Text(Text::new(one))).chain(seen);
     messages.push(Message::User { content: content.collect() });
   }
   Ok(messages)
+}
+
+/// Where the open of a chain starts in a user turn, as `#chain3` alone on the line that starts a paragraph after
+/// another, which the setup of the chain stands before.
+pub(crate) fn banner(python: &str) -> Option<usize> {
+  python.match_indices("\n\n#chain").map(|(at, _)| at + 2).find(|&at| {
+    let rest = &python[at + "#chain".len()..];
+    let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
+    digits > 0 && rest[digits..].starts_with('\n')
+  })
 }
 
 /// Where the finding of a refused rung ends in a user turn that holds one, `#rungN refused` at the start of a

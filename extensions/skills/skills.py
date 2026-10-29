@@ -1,4 +1,4 @@
-from furb.engine import HEAD, Show, Text, module, read, rung
+from furb.engine import HEAD, Show, Text, read
 
 
 def skills(on: str = "") -> Text:
@@ -10,4 +10,4 @@ def skill(name: str, show: Show = HEAD, on: str = "") -> Text:
 
 
 async def listed(on: str = "") -> None:
-  await rung("read('skills://')", to=str(module(on).get("actor") or ""), on=on)
+  skills(on)

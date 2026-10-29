@@ -28,15 +28,20 @@ async def test_the_world_stands_a_life_on_the_provider_of_the_crate_and_its_mode
   live.actor = "opus/xhigh"
   root = life(live)
   assert await engine.prompt(int, "count", on=root) == 3
-  roster, directory, actor = engine.standing()
+  roster, directory, actor, *_ = engine.standing()
   assert [entry[0] for entry in roster] == ["claude-cli:opus", OPERATOR]
   assert (directory, actor) == (str(yard), "claude-cli:opus/xhigh")
   assert [one[0] for one in live.calls] == ["stand", "reply"]
   (request,) = seen
   assert (request["actor"], request["chain"], request["settings"]["effort"]) == ("claude-cli:opus/xhigh", root, "xhigh")
-  assert [message["role"] for message in request["messages"]] == ["user"]
+  assert [message["role"] for message in request["messages"]] == ["user", "assistant", "user"]
+  assert request["messages"][1]["content"][0]["text"].startswith("read(") and "DOCTRINE.md" in str(
+    request["messages"][1]
+  )
   opened = "\n\n#prompt1\nprompt1_message = 'count'\nprompt1: Act[int] = Act('prompt1')\n\n"
-  assert opened in request["messages"][0]["content"][0]["text"]
+  first, last = request["messages"][2]["content"]
+  assert first["text"].startswith("#read1\n") and last["text"].startswith(f"#{root}\n")
+  assert opened in last["text"]
 
 
 async def test_the_world_hands_the_provider_a_stream_that_hears_what_a_model_writes(yard: Path) -> None:
@@ -47,7 +52,8 @@ async def test_the_world_hands_the_provider_a_stream_that_hears_what_a_model_wri
   live.stream = lambda *said: heard.append(said)
   root = life(live)
   assert await engine.prompt(int, "count", on=root) == 3
-  assert heard == [("rung1", root, "a part", "")]
+  (step,) = [a[1] for a in engine.transcript(root) if a[0] == "rung" and a[2] == "prompt1"]
+  assert heard == [(step, root, "a part", "")]
 
 
 def test_the_world_refuses_a_model_that_the_catalog_knows_no_model_by(yard: Path) -> None:

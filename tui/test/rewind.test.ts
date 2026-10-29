@@ -28,10 +28,11 @@ async function shortcut(session: Session): Promise<{ point: string; readme: stri
   return { point, readme, path };
 }
 
-test("a branch at rung1 of the demo with its files gives back the README as it was", () =>
+test("a branch at rung2 of the demo with its files gives back the README as it was", () =>
   withDemo(async (session) => {
     const { point, readme, path } = await shortcut(session);
-    expect(point).toBe("rung1");
+    // rung1 is the read of the doctrine, which the World plays on the chain before the first message.
+    expect(point).toBe("rung2");
     const found = await session.filesAt(point);
     expect(found.files.map((change) => change.path)).toEqual([path]);
     const source = session.selected;

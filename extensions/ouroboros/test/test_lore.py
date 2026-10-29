@@ -17,5 +17,6 @@ LORE = next(
 
 async def test_lore_is_the_doctrine_of_the_extension(tmp_path: Path) -> None:
   """LORE is the doctrine of the extension, which teaches the three ways to extend furb and when to take each, and which holds no law."""
-  _, root = extended("ouroboros", tmp_path, lives=True)
+  _, root = extended("ouroboros", tmp_path)
+  await engine.rung("ouroboros()", on=root)
   assert of(engine.turns(on=root), "ouroboros") == [f"#ouroboros1\n<s:ouroboros1_lore>\n{LORE}</s:ouroboros1_lore>"]

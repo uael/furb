@@ -44,6 +44,11 @@ pub const ENABLE: &str = "enable";
 /// The journal, which says the record again in a later life, so a done it says answers no stand of this life.
 const JOURNAL: &str = "journal";
 
+/// The kind of the fact by which the ear teaches the doctrine to a chain that lives when a stand of this life lands,
+/// `("teach", chain, "extensions", actor, path)`, which the record keeps, so a later life reads the doctrine again
+/// where the journal says the fact. A chain born later reads it at its birth, from the standing alone.
+const TEACH: &str = "teach";
+
 /// What the manifest gives under `plays` for an extension that plays on every chain, which is the default.
 const EVERY: &str = "every";
 
@@ -90,9 +95,10 @@ fn imports_furb(line: &str) -> bool {
   after.is_some_and(|rest| rest.is_empty() || rest.starts_with([' ', '\t', '.', ',']))
 }
 
-/// An extension: its name, its word, its life word, which is empty when it has none, and whether it plays on the root
-/// alone. An extension that plays on the root alone plays on no other chain but one whose source had it, since that
-/// chain makes the rung of its source again; any other extension plays on every chain.
+/// An extension: its name, its word, its life word, which is empty when it has none, whether it plays on the root
+/// alone, and the path of the file of its word, which each chain reads as a turn of its setup, and which is empty
+/// when no file stands for the word. An extension that plays on the root alone plays on no other chain but one whose
+/// source had it, since that chain makes the rung of its source again; any other extension plays on every chain.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "typescript", napi_derive::napi(object))]
 #[cfg_attr(feature = "python", derive(pyo3::FromPyObject, pyo3::IntoPyObject), pyo3(from_item_all))]
@@ -101,6 +107,7 @@ pub struct Extension {
   pub word: String,
   pub life: String,
   pub root: bool,
+  pub file: String,
 }
 
 impl Extension {
@@ -108,14 +115,17 @@ impl Extension {
   fn of(a: &Fact) -> Option<Extension> {
     let text = |at| a.word(at).and_then(|one| one.as_str().map(str::to_owned));
     let root = text(3).as_deref() == Some(ROOTED);
-    Some(Extension { name: text(0)?, word: text(1)?, life: text(2)?, root })
+    let file = text(4).unwrap_or_default();
+    Some(Extension { name: text(0)?, word: text(1)?, life: text(2)?, root, file })
   }
 
-  /// The saying that enables the extension, about the root.
+  /// The saying that enables the extension, about the root: its name, its word, its life word, whether it plays on the
+  /// root alone, and the file of its word. An enable of a build before the file holds no file.
   fn enable(&self) -> Fact {
-    let words = [&self.name, &self.word, &self.life].map(|one| Object::string(one.as_str()));
-    let rooted = self.root.then(|| Object::string(ROOTED));
-    Fact::says(ENABLE, ROOT, words.into_iter().chain(rooted))
+    let rooted = if self.root { ROOTED } else { "" };
+    let words =
+      [self.name.as_str(), self.word.as_str(), self.life.as_str(), rooted, self.file.as_str()];
+    Fact::says(ENABLE, ROOT, words.map(Object::string))
   }
 }
 
@@ -143,13 +153,40 @@ impl Places {
   }
 }
 
-/// The official extensions, in the order a life runs them.
+/// The official extensions, in the order a life runs them, each with the file of its word: in dev mode the file of the
+/// checkout of git that this furb was built from, else the official copy, `.furb/extensions/<name>/<file>` in the
+/// home, which it writes from the text that it carries when that copy differs, as the doctrine does.
 pub fn official() -> Vec<Extension> {
   let whole = "an official extension is whole";
+  let checkout = Path::new(env!("CARGO_MANIFEST_DIR"));
+  let dev = checkout.join(".git").exists().then_some(checkout);
+  let home = std::env::home_dir();
   OFFICIAL
     .iter()
-    .map(|(manifest, word, _)| manifested(manifest, |_| Ok(word)).expect(whole))
+    .map(|(manifest, word, _)| {
+      let mut one = manifested(manifest, |_| Ok(word)).expect(whole);
+      one.file = copy(&one.name, &one.file, word, dev, home.as_deref());
+      one
+    })
     .collect()
+}
+
+/// The path of the file of the word of an official extension, from the checkout of dev mode and the home, as
+/// [`official`] gives it, or nothing when neither holds it and the home takes no copy.
+fn copy(name: &str, file: &str, text: &str, dev: Option<&Path>, home: Option<&Path>) -> String {
+  let at = Path::new("extensions").join(name).join(file);
+  if let Some(dev) = dev.map(|one| one.join(&at)).filter(|one| one.is_file()) {
+    return dev.display().to_string();
+  }
+  let Some(official) = home.map(|one| one.join(".furb").join(&at)) else { return String::new() };
+  if fs::read_to_string(&official).ok().as_deref() != Some(text)
+    && official
+      .parent()
+      .is_none_or(|one| fs::create_dir_all(one).is_err() || fs::write(&official, text).is_err())
+  {
+    return String::new();
+  }
+  official.display().to_string()
 }
 
 /// The extension in a folder, under the name that its config gives it: its manifest, whose name must be that
@@ -159,7 +196,8 @@ pub fn load(name: &str, root: &Path) -> Result<Extension, Fault> {
   let refused = |why: String| Fault::refused(format!("{why}: {}", file.display()));
   let text = fs::read_to_string(&file).map_err(|no| refused(no.to_string()))?;
   let read = |word: &str| fs::read_to_string(root.join(word)).map_err(|no| format!("{word}: {no}"));
-  let one = manifested(&text, read).map_err(refused)?;
+  let mut one = manifested(&text, read).map_err(refused)?;
+  one.file = root.join(&one.file).display().to_string();
   let lawful = name.starts_with(|one: char| one.is_ascii_lowercase())
     && name.chars().all(|one| one.is_ascii_lowercase() || one.is_ascii_digit() || one == '-');
   if !lawful || one.name != name {
@@ -190,7 +228,8 @@ fn manifested<T: AsRef<str>>(
     }
   };
   field(&manifest, "tui")?;
-  Ok(Extension { name: name.to_owned(), word: word(read(file)?.as_ref()), life, root })
+  let word = word(read(file)?.as_ref());
+  Ok(Extension { name: name.to_owned(), word, life, root, file: file.to_owned() })
 }
 
 /// The text that a manifest gives under a key, or none when it gives none, and a refusal when it is not text.
@@ -211,6 +250,11 @@ pub fn configured(places: &Places, project: &Path) -> Result<Vec<Extension>, Fau
   let on = turned_on(places, project)?.into_iter();
   on.map(|(name, path)| match path {
     Some(root) => load(&name, &root),
+    // A copy of an official extension in the folder of the extensions of the project prevails over the one that furb
+    // carries, for its word and for the file that a chain reads.
+    None if project.join(".furb").join("extensions").join(&name).join("furb.json").is_file() => {
+      load(&name, &project.join(".furb").join("extensions").join(&name))
+    }
     None => {
       Ok(official.iter().find(|one| one.name == name).cloned().expect("an official extension"))
     }
@@ -448,20 +492,31 @@ pub fn enabled(root: &[Fact]) -> Vec<Extension> {
 /// state that it holds keeps its value, and its life word does not run again. The ear plays the rungs from the fact alone, so a later life plays the same rungs
 /// where the journal says the fact again.
 pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
-  hearing(&["chain", "stand", "write", ENABLE], move |mut co| async move {
+  hearing(&["chain", "stand", "rung", "write", ENABLE, TEACH], move |mut co| async move {
     // What the life enabled, in order, and each chain in the order of its birth, with the extensions it has.
     let (mut enabled, mut chains) = (Vec::<Extension>::new(), Vec::<(String, Vec<String>)>::new());
+    // The setup of the root: the actor and the doctrine that the fact teach names with the enables still to hear
+    // before it plays, whether the root took it, and its last rung with its actor, at whose done the extensions of
+    // the root alone play.
+    let (mut teach, mut taught) = (None::<(String, String, i64)>, false);
+    let mut last = None::<(String, String)>;
     loop {
       let a = hear(&mut co).await;
       let runs_name = |name: &str| enabled.iter().any(|two| two.name == name);
       let runs = |one: &Extension| runs_name(&one.name);
       let new: Vec<Extension> = match a.kind() {
         // The ear hears a chain at its birth, before the call that made it returns, and the chain has what its
-        // origin had, which it made again.
+        // origin had, which it made again. A chain with no source in a life whose root took its setup forks that
+        // setup, which holds each extension of every chain, so the ear plays nothing on it.
         "chain" if a.question() => {
           let source = a.word(2).and_then(|one| one.as_str().map(str::to_owned));
           let had =
             chains.iter().find(|one| Some(&one.0) == source.as_ref()).map(|one| one.1.clone());
+          if taught {
+            let every = enabled.iter().filter(|one| !one.root).map(|one| one.name.clone());
+            chains.push((a.about().to_owned(), had.unwrap_or_else(|| every.collect())));
+            continue;
+          }
           chains.push((a.about().to_owned(), had.unwrap_or_default()));
           let born = chains.len() - 1;
           for one in &enabled {
@@ -469,8 +524,62 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
           }
           continue;
         }
+        // The first stand that this life answers sets up the root of a new record when the standing names a
+        // doctrine: the ear says the fact teach, with the count of the enables that follow it, then each enable, and
+        // it plays the setup once it heard them, as the journal of a later life says them again.
         "done" if named(a.about(), "stand") && a.by() != JOURNAL => {
-          given.iter().filter(|one| !enabled.contains(one)).cloned().collect()
+          let new: Vec<Extension> =
+            given.iter().filter(|one| !enabled.contains(one)).cloned().collect();
+          if !taught
+            && teach.is_none()
+            && let Some((actor, path)) = doctrine(&mut co).await?
+            && bare(&mut co).await?
+          {
+            let count = Object::int(i64::try_from(new.len()).unwrap_or(i64::MAX));
+            say(
+              &mut co,
+              Fact::says(TEACH, ROOT, [Object::string(&actor), Object::string(&path), count]),
+            );
+            for one in &new {
+              say(&mut co, one.enable());
+            }
+            continue;
+          }
+          new
+        }
+        TEACH => {
+          let text = |at| a.word(at).and_then(|one| one.as_str().map(str::to_owned));
+          let count = a.word(2).and_then(|one| one.as_int()).unwrap_or(0);
+          if let (Some(actor), Some(path)) = (text(0), text(1)) {
+            teach = Some((actor, path, count));
+          }
+          if count > 0 {
+            continue;
+          }
+          Vec::new()
+        }
+        ENABLE if teach.is_some() => {
+          if let Some(one) = Extension::of(&a) {
+            match enabled.iter().position(|two| two.name == one.name) {
+              Some(at) => enabled[at] = one,
+              None => enabled.push(one),
+            }
+          }
+          if let Some(left) = teach.as_mut().map(|one| &mut one.2) {
+            *left -= 1;
+            if *left > 0 {
+              continue;
+            }
+          }
+          Vec::new()
+        }
+        "done" if last.as_ref().is_some_and(|one| one.0 == a.about()) => {
+          let Some((_, actor)) = last.take() else { continue };
+          for one in enabled.iter().filter(|one| one.root) {
+            loaded(&mut co, one, ROOT, &actor).await?;
+          }
+          lives(&mut co, enabled.iter().filter(|one| one.root), &actor).await?;
+          continue;
         }
         // A write of the config of the project that lands turns on each extension that it gives by its path and
         // that the life does not run, as the configs do at the tip.
@@ -504,6 +613,17 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
         ENABLE => Extension::of(&a).filter(|one| !enabled.contains(one)).into_iter().collect(),
         _ => continue,
       };
+      // The setup of the root plays once the fact teach and each enable after it were heard.
+      if let Some((actor, path, 0)) = teach.take() {
+        let made = setup(&mut co, &enabled, &actor, &path).await?;
+        last = made.map(|rung| (rung, actor));
+        taught = true;
+        let every = enabled.iter().filter(|one| !one.root).map(|one| one.name.clone()).collect();
+        if let Some(root) = chains.iter_mut().find(|one| one.0 == ROOT) {
+          root.1 = every;
+        }
+        continue;
+      }
       // Each enable is said before any rung plays, so the journal of a later life says them again as one burst and
       // the rungs play in the order of the first life.
       if a.kind() != ENABLE {
@@ -549,6 +669,91 @@ async fn play(
     format!("{}\n\n{}", one.word, one.life).trim_matches('\n').to_owned()
   };
   ring(co, chain, &word).await
+}
+
+/// The setup of the root, as turns of its default actor whose words furb writes: the read of the doctrine, the read
+/// of the file of each extension of every chain, in the order of the life, then the life word of each that has one.
+/// It gives the last rung that it made.
+async fn setup(
+  co: &mut Co,
+  enabled: &[Extension],
+  actor: &str,
+  path: &str,
+) -> Result<Option<String>, Fault> {
+  let mut last = written(co, ROOT, &reading(path), actor).await?;
+  for one in enabled.iter().filter(|one| !one.root) {
+    last = loaded(co, one, ROOT, actor).await?.or(last);
+  }
+  Ok(lives(co, enabled.iter().filter(|one| !one.root), actor).await?.or(last))
+}
+
+/// The word of an extension on a chain as a turn of an actor: the read of its file, whose word the ear runs in the
+/// module of the chain with no rung, as the run `<rung>_word`, so the chain shows the read alone and holds the
+/// definitions of the word. An extension whose word has no file plays its word as a rung.
+async fn loaded(
+  co: &mut Co,
+  one: &Extension,
+  chain: &str,
+  actor: &str,
+) -> Result<Option<String>, Fault> {
+  if one.file.is_empty() {
+    ring(co, chain, &one.word).await?;
+    return Ok(None);
+  }
+  let made = written(co, chain, &reading(&one.file), actor).await?;
+  if let Some(rung) = &made {
+    let words = ["run", chain].map(Object::string).into_iter().chain([Object::none()]);
+    let words =
+      words.chain([format!("{rung}_word"), one.word.clone(), String::new()].map(Object::string));
+    co.call("act", words.collect(), vec![]).await?;
+  }
+  Ok(made)
+}
+
+/// The life words of extensions on the root as one turn of an actor, so the turn after it holds what each told, and
+/// no turn is empty while one of them tells. It gives the rung that it made, and none when no life word is given.
+async fn lives(
+  co: &mut Co,
+  given: impl Iterator<Item = &Extension>,
+  actor: &str,
+) -> Result<Option<String>, Fault> {
+  let words: Vec<&str> = given.map(|one| one.life.as_str()).filter(|one| !one.is_empty()).collect();
+  if words.is_empty() {
+    return Ok(None);
+  }
+  written(co, ROOT, &words.join("\n"), actor).await
+}
+
+/// The word of a read of a path, as python writes it.
+fn reading(path: &str) -> String {
+  format!("read({})", Object::string(path).py_repr())
+}
+
+/// A turn of an actor on a chain whose word furb writes: a rung of that word and that actor, by its name.
+async fn written(
+  co: &mut Co,
+  chain: &str,
+  word: &str,
+  actor: &str,
+) -> Result<Option<String>, Fault> {
+  let words = vec![("to", Object::string(actor)), ("on", Object::string(chain))];
+  let made = co.call("rung", vec![Object::string(word)], words).await?;
+  Ok(made.as_ref().as_str().map(str::to_owned))
+}
+
+/// The default actor and the path of the doctrine that the standing names, or none while it names no doctrine, as in a
+/// record of a build before the doctrine was read.
+async fn doctrine(co: &mut Co) -> Result<Option<(String, String)>, Fault> {
+  let got = co.call("standing", vec![], vec![]).await?;
+  let text = |at| entry(&got.as_ref(), at).and_then(|one| one.as_str().map(str::to_owned));
+  Ok(text(2).zip(text(3)))
+}
+
+/// Whether the root holds no reply, as the root of a new record, since a root that a checkpoint carries holds the
+/// replies that read what it needs.
+async fn bare(co: &mut Co) -> Result<bool, Fault> {
+  let of = [ROOT, "reply"].map(Object::string).to_vec();
+  Ok(entry(&co.call("transcript", of, vec![]).await?.as_ref(), 0).is_none())
 }
 
 /// A word played on a chain as a rung, unless it is empty.

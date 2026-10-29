@@ -6,7 +6,7 @@ use std::{
   future::Future,
   io::{BufRead, BufReader, Read, Write},
   net::TcpListener,
-  path::PathBuf,
+  path::{Path, PathBuf},
   pin::pin,
   sync::{
     Arc, Mutex,
@@ -151,28 +151,28 @@ fn within(engine: &mut Engine, time: Duration, holds: impl Fn(&mut Engine) -> bo
 }
 
 #[test]
-fn the_provider_answers_a_stand_with_its_roster_its_directory_and_its_default_actor() {
+fn the_provider_answers_a_stand_with_its_roster_its_directory_its_default_actor_and_its_doctrine() {
   let (mut engine, at) = life("stand", vec![scripted(&MockCompletionModel::new([]))]);
   let standing = engine.standing().expect("the life stands");
+  let doctrine = super::catalog::doctrine(&at).expect("a doctrine stands");
   // The default actor is the first model, at the level of an actor that names none. Python shows each backslash of a path of Windows twice.
+  let shown = |one: &Path| one.display().to_string().replace('\\', "\\\\");
   let expected = format!(
-    "[[['m', ['low', 'high'], 1000, {}], ['operator', [], 200000]], '{}', 'm/high']",
-    Object::string(super::catalog::DOCTRINE).py_repr(),
-    at.display().to_string().replace('\\', "\\\\")
+    "[[['m', ['low', 'high'], 1000], ['operator', [], 200000]], '{}', 'm/high', '{}']",
+    shown(&at),
+    shown(&doctrine)
   );
   assert_eq!(standing.py_repr(), expected);
 }
 
 #[test]
-fn the_entry_of_each_model_holds_its_doctrine_after_its_window() {
+fn the_entry_of_each_model_ends_at_its_window() {
   let qwen = Model::new("local:qwen3", 1000, MockCompletionModel::new([]));
   let (mut engine, _) = life("doctrine", vec![qwen, scripted(&MockCompletionModel::new([]))]);
   let standing = engine.standing().expect("the life stands");
-  let taught = Object::string(super::catalog::DOCTRINE).py_repr();
-  let expected = format!(
-    "[[['local:qwen3', [], 1000, {taught}], ['m', ['low', 'high'], 1000, {taught}], ['operator', [], 200000]]"
-  );
-  assert!(standing.py_repr().starts_with(&expected), "{}", standing.py_repr());
+  let expected =
+    "[[['local:qwen3', [], 1000], ['m', ['low', 'high'], 1000], ['operator', [], 200000]]";
+  assert!(standing.py_repr().starts_with(expected), "{}", standing.py_repr());
 }
 
 #[test]
@@ -1990,6 +1990,33 @@ fn a_turn_of_a_model_with_no_usage_and_no_blocks_goes_as_its_python_in_the_role_
   let roles: Vec<_> = said.iter().map(|one| one[0].as_str().unwrap_or_default()).collect();
   assert_eq!(roles, ["user", "assistant", "user"], "{said:?}");
   assert!(said[1][1].as_str().unwrap_or_default().contains("read('skills://')"), "{said:?}");
+}
+
+#[test]
+fn the_open_of_a_chain_after_its_setup_goes_as_a_block_of_its_own() {
+  let turn = |role: &str, text: &str| {
+    Object::tuple([Object::string(role), Object::string(text), Object::none(), Object::none()])
+  };
+  let opened =
+    "#chain2\nchain2_label = 'two'\nchain2: Act[object] = Act('chain2')\n\n#chain2 standing";
+  let turns = Object::list([
+    turn("user", "chain()"),
+    turn("assistant", "read('a.txt')"),
+    turn("user", &format!("#read1\nread1_path = 'a.txt'\n\n{opened}")),
+  ]);
+  let model = scripted(&MockCompletionModel::new([]));
+  let got = messages(turns.as_ref(), &model, &mut images::Images::new(None)).unwrap();
+  let Some(super::Message::User { content }) = got.last() else { panic!("a user turn: {got:?}") };
+  let texts: Vec<String> = content
+    .iter()
+    .filter_map(|one| match one {
+      super::UserContent::Text(text) => Some(text.text.clone()),
+      _ => None,
+    })
+    .collect();
+  assert_eq!(texts, ["#read1\nread1_path = 'a.txt'".to_owned(), opened.to_owned()]);
+  let Some(super::Message::User { content }) = got.first() else { panic!("a user turn: {got:?}") };
+  assert_eq!(content.len(), 1, "a turn with no open after a paragraph goes whole");
 }
 
 #[test]

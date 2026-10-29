@@ -13,9 +13,10 @@ test("a record whose fact drifts opens to read, with what it kept, and a dialog 
   const record = join(directory, "drifts.jsonl");
   try {
     const first = await openEngine({ cwd: directory, record, demo: true });
-    await first.engine.result(
-      await first.engine.rung({ word: 'await bash("echo hi")', on: first.engine.root }),
-    );
+    const ran = await first.engine.rung({ word: 'await bash("echo hi")', on: first.engine.root });
+    await first.engine.result(ran);
+    // The read of the doctrine is the first rung of the chain, so the rung of the command comes after it.
+    expect(ran).toBe("rung2");
     await first.host.dispose();
     // The record keeps the command with a word that this engine does not make, as an earlier engine kept it.
     const kept = await readFile(record, "utf8");
@@ -35,7 +36,7 @@ test("a record whose fact drifts opens to read, with what it kept, and a dialog 
       expect(await readFile(`${record}.log`, "utf8")).toBe(log);
       const bash = session.acts.find((act) => act.id === "bash1");
       expect(bash?.done).toBe(true);
-      expect(session.acts.find((act) => act.id === "rung1")?.by).toBe("operator");
+      expect(session.acts.find((act) => act.id === ran)?.by).toBe("operator");
       expect(await session.engine.bash("ls").catch((error: Error) => error.message)).toBe(
         "This record is open to read, so nothing runs on it. Start a new life from it to go on.",
       );

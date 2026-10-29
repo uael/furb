@@ -654,6 +654,31 @@ async def test_such_a_rung_tells_no_header_of_its_word() -> None:
   assert (f"#{made} by operator" in told, f"#{plain_rung} by operator" in told) == (False, True)
 
 
+async def test_a_rung_with_a_word_waits_to_run_it_while_the_first_such_rung_is_neither_itself_nor_its_maker() -> None:
+  """A rung with a word waits to run it while the first rung with a word and an actor that is open on its chain is neither itself nor one of its makers, so the turns of the words that their callers wrote stand in the order that their rungs were made, each after what the one before it told, a word that no such rung makes runs after them, and such a rung that one of them makes takes its turn within the turn of its maker."""
+  _, log, root = born("close(1)")
+  assert await engine.prompt(int, "go", on=root) == 1
+  engine.pause(root)
+  first = engine.rung("t = read('a.txt')", to="m/low", on=root)
+  plain = engine.rung("j = 3", on=root)
+  second = engine.rung("await rung('n = 4', to='m/low')\nk = 2", to="m/low", on=root)
+  engine.wake(root)
+  await settle()
+  (inner,) = [a[1] for a in said(log, "rung") if a[2] == second]
+  replies = {a[2]: log.index(a) for a in said(log, "reply")}
+  over = {a[1]: log.index(a) for a in said(log, "done")}
+  ready = next(log.index(a) for a in said(log, "ready") if a[1] == plain)
+  assert replies[first] < over[first] < replies[second] < replies[inner] < over[inner] < over[second] < ready
+  last = engine.turns(on=root)[-6:]
+  assert [list(one[:2]) for one in last[::2]] == [
+    ["assistant", "t = read('a.txt')"],
+    ["assistant", "await rung('n = 4', to='m/low')\nk = 2"],
+    ["assistant", "n = 4"],
+  ]
+  assert paragraphs(last[1:2])[0] == "#read1\nread1_path = 'a.txt'\n<s:read1_text>\none\ntwo</s:read1_text>"
+  assert [engine.module(root)[name] for name in ("k", "n", "j")] == [2, 4, 3]
+
+
 async def test_its_turn_holds_no_usage_so_a_grant_counts_no_cost_of_it() -> None:
   """Its turn holds no usage, so a grant counts no cost of it and no share of the window."""
   _, log, root = born("close(1)")
