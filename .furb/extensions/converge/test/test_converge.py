@@ -808,3 +808,60 @@ def test_a_capture_whose_command_ended_interrupted_starts_again_once(world: Worl
   assert world.ns["OPEN"]["5 abc"]["act"] != first
   assert veto(world) is False
   assert len(runs()) == 1
+
+
+def hold(world: World, key: str, n: int, sha: str, where: str = "OPEN") -> str:
+  open_act = world.act("bash", None)
+  del world.done[open_act]
+  job = {"kind": "pr", "sha": sha, "n": n, "target": "tui", "act": open_act, "asked": [], "pairs": [], "out": "o", "label": f"pr{n}"}
+  if where == "OPEN":
+    world.ns["OPEN"][key] = job
+  else:
+    world.ns["MAIN"]["tui"] = job
+  return open_act
+
+
+def test_a_capture_starts_only_when_no_other_capture_of_the_target_holds_an_open_command(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.say(r"python3 -I -", listing(kind="text"))
+  open_act = hold(world, "4 xyz", 4, "xyz")
+  world.round["prs"] = {4: pr(4, "xyz"), 5: pr()}
+  runs = lambda: [c for c in world.commands if "for pair in" in c]
+  assert veto(world) is True and runs() == []
+  world.done[open_act] = Exit(0, Text("stdout", ""), Text("stderr", ""))
+  assert veto(world) is False and len(runs()) == 1
+
+
+def test_a_pass_of_main_holds_the_tree_against_the_capture_of_a_pr(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  hold(world, "", 0, "sha1", "MAIN")
+  assert veto(world) is True
+  assert not [c for c in world.commands if "for pair in" in c]
+
+
+def test_a_busy_lock_is_no_fault_of_the_tool_and_the_pr_keeps_its_veto_with_no_retry_and_no_notice(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  busy = listing(kind="text", faults=[["demo", "the step demo failed: waits for /tmp/furb-gallery.lock held by a run", ""]])
+  world.say(r"python3 -I -", busy)
+  assert veto(world) is True
+  assert world.book()["heads"]["5 abc"]["state"] == "held"
+  assert "5 abc" not in world.ns["OPEN"]
+  assert len([c for c in world.commands if "for pair in" in c]) == 1
+  assert world.told() == [] and world.judged() == []
+
+
+def test_a_pass_of_main_that_finds_a_busy_lock_waits_and_tells_nothing(world: World) -> None:
+  world.say(r"python3 -I -", listing(kind="text", faults=[["demo", "waits for /tmp/furb-gallery.lock", ""]]))
+  book = world.run(1)
+  assert book["state"] == "" and book["passes"] == [] and world.told() == []
+
+
+def test_a_job_that_starts_its_command_again_ends_the_old_command_first(world: World) -> None:
+  open_act = hold(world, "5 abc", 5, "abc")
+  job = world.ns["OPEN"]["5 abc"]
+  job.update(pairs=[("before", "sha1"), ("head", "merged1")], out=str(world.tmp / "o"))
+  fresh = world.launched(world.target, {"records": {}}, job, True)
+  assert isinstance(world.done[open_act], Refused) and fresh != open_act

@@ -579,6 +579,25 @@ async def settled(target: dict, step: dict, head: str) -> bool:
 TARGETS = [TUI]
 LIVE: dict[str, dict] = {}
 OPEN: dict[str, dict] = {}
+MAIN: dict[str, dict] = {}
+BUSY = re.compile(r"furb-gallery\.lock|holds the home|lock held|is busy", re.I)
+
+
+def holding(target: dict) -> bool:
+  """A target has one tree, so a capture of it runs only while no other capture of it holds an open command."""
+  jobs = [*OPEN.values(), *MAIN.values()]
+  return any(
+    j.get("target") == target["name"] and j.get("act") and not j["asked"] and not over(j["act"]) for j in jobs
+  )
+
+
+def launched(target: dict, book: dict, job: dict, fresh: bool = False) -> str:
+  """The command of a capture ends the old command of the job first, and a cancel of it kills its process group."""
+  old = job.get("act", "none")
+  if old != "none" and not over(old):
+    cancel(old)
+  command = capturing(target, job["pairs"], job["out"], book["records"], True) if fresh else capturing(target, job["pairs"], job["out"], book["records"])
+  return str(conductor()["quietly"](bash, command, show=HIDDEN, timeout=7200))
 
 
 def shared(target: dict) -> dict:
@@ -598,6 +617,8 @@ async def classified(target: dict, book: dict, pr: dict) -> str:
 
 
 async def started(target: dict, book: dict, sha: str, n: int = 0) -> dict:
+  if holding(target):
+    return {}
   shq = conductor()["shq"]
   pairs = [("head", sha)]
   if n:
@@ -611,9 +632,11 @@ async def started(target: dict, book: dict, sha: str, n: int = 0) -> dict:
     pairs = [("before", made[0].strip()), ("head", made[1].strip())]
   else:
     label = f"main{len(book['passes'])}-{sha[:12]}"
+  if holding(target):
+    return {}
   out = f"{cwd()}/{BOOKS}/{target['name']}/{label}"
   act = str(conductor()["quietly"](bash, capturing(target, pairs, out, book["records"]), show=HIDDEN, timeout=7200))
-  return {"kind": "pr" if n else "main", "sha": sha, "n": n, "out": out, "label": label, "act": act, "pairs": pairs, "asked": []}
+  return {"kind": "pr" if n else "main", "sha": sha, "n": n, "out": out, "label": label, "act": act, "pairs": pairs, "asked": [], "target": target["name"]}
 
 
 def dropped(live: set[str]) -> None:
@@ -633,6 +656,8 @@ async def converge_veto(pr: dict) -> bool:
     if state == "held" and key in book["heads"]:
       job = OPEN.get(key)
       if not job:
+        if holding(target):
+          return True
         job = await started(target, book, str(pr["sha"]), int(pr["n"]))
         if not job:
           return True
@@ -667,13 +692,18 @@ async def advanced(target: dict, book: dict, job: dict, words: str, head: str) -
     if not over(job["act"]):
       return job
     if not job.get("resumed") and isinstance(peek(job["act"]), Refused):
-      job.update(resumed=True, act=str(conductor()["quietly"](bash, capturing(target, job["pairs"], job["out"], book["records"]), show=HIDDEN, timeout=7200)))
+      job.update(resumed=True, act=launched(target, book, job))
       return job
     was = f"{job['out']}/before" if pr else book["frames"] if book["words"] == words else ""
     seen = await shots(job["out"], was, not pr, ("main", "head") if pr else ("before", "now"))
+    if seen["faults"] and BUSY.search(" ".join(why for _, why, _ in seen["faults"])):
+      # A busy tree or lock is no fault of the tool: the job ends, and its turn comes again.
+      if pr:
+        book["heads"][f"{job['n']} {job['sha']}"] = {"state": "held"}
+      return {}
     if seen["faults"]:
       if not job.get("again"):
-        job.update(again=True, act=str(conductor()["quietly"](bash, capturing(target, job["pairs"], job["out"], book["records"], True), show=HIDDEN, timeout=7200)))
+        job.update(again=True, act=launched(target, book, job, True))
         return job
       return faulted(target, book, job, seen["faults"], words, head)
     book["jobs"] += 1
@@ -787,11 +817,13 @@ async def converge(target: dict, ticks: int = 0) -> dict:
     if not job and book["state"] != "spent" and head:
       if not book["state"] and not book["step"]:
         job = await started(target, book, head)
+        MAIN[target["name"]] = job
     while job:
       was = job
       job = await advanced(target, book, job, words, head)
       if job is was:
         break
+    MAIN.pop(target["name"], None) if not job else MAIN.__setitem__(target["name"], job)
     booked(target, book)
     if book["state"] == "spent" and not job:
       return book
