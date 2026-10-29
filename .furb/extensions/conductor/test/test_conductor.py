@@ -2183,3 +2183,5 @@ async def test_a_red_pr_whose_checks_still_run_blocks_no_family(conductor: Round
   assert not conductor.needs(pr)
   pr["checks"] = ["FAILURE", "SUCCESS"]
   assert conductor.needs(pr)
+  pr["checks"] = ["FAILURE", "FAILURE", "QUEUED"]
+  assert conductor.needs(pr)
