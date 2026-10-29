@@ -573,11 +573,11 @@ def control(kind, name, id, *words):
 
 def headed(id, what="", **words):
   text = f"#{id} {what}".rstrip()
-  held = "" if what or "text" in words else program(id).get(get(id)[2], "")
+  held = "" if what or "text" in words else next((x[5] for x in transcript(id, "run") if get(id)[2] in x[4::2]), "")
   for word, value in words.items():
     name = id + "_" + word
     if isinstance(value, str):
-      if repr(value)[1:-1] in held:
+      if not value or any(q + repr(value)[1:-1] + q in held for q in "'\""):
         continue
       if "\n" in value:
         while "</s:" + name + ">\n" in value + "\n":
