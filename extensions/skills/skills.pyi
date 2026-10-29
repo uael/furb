@@ -17,7 +17,6 @@ def skill(name: str, show: Show = HEAD, on: str = "") -> Text:
   """
 
 async def listed(on: str = "") -> None:
-  """The skills of a chain as a turn of its model: listed runs read('skills://') on its chain as a rung of the default actor of the chain, so the turns show the model that reads the list of its skills, then that read as every read tells it.
-  listed awaits that rung, so the rung that runs listed ends once the list stands in the turns, and the chain acknowledges nothing of it.
-  The life word of the extension is await listed(), so a chain reads its skills when the life enables the extension, and a chain born later reads them at its birth.
+  """The skills of a chain, read where its word runs: listed runs skills() on its chain, so the turn after the word that runs it shows the list of the skills of the chain as every read tells it.
+  The life word of the extension is await listed(), so the setup of the root reads the skills in the turn of the life words of the extensions, and each chain with no source holds that read in its setup.
   """

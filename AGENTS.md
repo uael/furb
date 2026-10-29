@@ -4,8 +4,8 @@ The engine is `src/furb/engine.py`, one file. It depends only on the python inte
 that boot is given, each a generator under a name: the ears of the World, the Kernel and the gate among them. It is
 derived from the contract, `src/furb/engine.pyi`, and the suite in `test/` proves it. `src/furb/AGENTS.md` holds the
 technical names of the engine and the laws that no test can hold. `DOCTRINE.md` is the doctrine of furb, which says
-how a model works in furb: every model reads it once on each chain, in a paragraph that the chain tells just before
-its first prompt to that model.
+how a model works in furb: the setup of a life reads it in the first turn of the root, a read of the file that the
+standing names, and each chain with no source holds that read, as `src/furb/AGENTS.md` says under doctrine and setup.
 `script/AGENTS.md` says how to run the DeepSWE rig. Claude Code reads each `AGENTS.md` through a
 `CLAUDE.md` beside it that holds only `@AGENTS.md`, and the skills of `.agents/skills` through `.claude/skills`, a
 link to that folder.
@@ -36,7 +36,8 @@ API of its own:
   scratch directory of a life, which the files serve as `scratch://` and the commands name as `$TMPDIR`.
 - `src/extension.rs` says what an extension is and where a host finds the ones that a life runs, and holds the ear
   `extensions`, which enables each by a fact that the record keeps and plays its word as a rung on each chain where
-  its manifest says it plays, every chain or the root alone, and
+  its manifest says it plays, every chain or the root alone, or, on a new record, plays the setup of the root, the
+  read of the doctrine and of the file of each extension, whose word it runs with no rung, then their life words, and
   `parts`, the part for the TUI of each extension, which `tui/src/parts.ts` loads live.
   `extensions/` holds the official extensions, `memory`, `skills`, `compaction`, `ouroboros`, `web` and `mcp`, each a word, a
   contract and a suite, and `src/extension/` holds the ear of the World of each that has one: `compaction.rs` answers a
@@ -215,7 +216,7 @@ is the folder `test` beside it.
 2. Every test carries a sentence of the contract.
 3. Every definition has a file of its own and at least one sentence. Two definitions never share a file.
 4. The module docstring of each contract is empty.
-5. `engine.py`, minified with its program kept as it is, costs fewer than 7060 tokens of `o200k_base`, the
+5. `engine.py`, minified with its program kept as it is, costs fewer than 7180 tokens of `o200k_base`, the
    tokenizer of OpenAI, and the doctrine of furb, `DOCTRINE.md`, costs at most 2000. The test counts with `o200k_base`
    because it is local and the same on each machine: the tokenizer of Claude is not public, and only the network
    counts with it. The wall is a proxy for the cost to Claude, which reads about 1.5 tokens for each token of

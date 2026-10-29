@@ -216,9 +216,13 @@ test("the command /compact of the part of compaction asks a model what the chain
       await shows(frame, "This chain has no compaction");
       // The operator plays the model that chooses, so the test asks no model.
       await session.command(`/run ${COMPACTION}\nCHOOSER = OPERATOR\nbefore = "the first step"`);
-      // The acts of the life reach the view a moment after the word ran.
-      for (let tries = 0; tries < 400 && !app.seen().acts.some((act) => act.kind === "rung"); tries++)
-        await Bun.sleep(25);
+      // The acts of the life reach the view a moment after the word ran. The read of the doctrine is a rung of the chain
+      // already, so the view waits for the rung that defines condense().
+      const defines = () =>
+        app
+          .seen()
+          .acts.some((act) => act.kind === "rung" && String(act.words[0] ?? "").includes("def condense("));
+      for (let tries = 0; tries < 400 && !defines(); tries++) await Bun.sleep(25);
       // The footer cuts a notice to its room once the question of the model opens, and a slow machine opens it before
       // the first frame, so the test reads the notice where the session says it.
       const said: string[] = [];

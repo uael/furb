@@ -176,6 +176,8 @@ def rung(word="", retells="", to="", on="") -> Act:
     yield "started", id
     mine = {retells, scope(id)}
     if word:
+      while (c := crafted(id)) and c[0] not in lineage(id):
+        yield
       if to:
         act("reply", "", lambda r: (yield "done", r, ("assistant", word, None, None)), to)
       elif tells(id):
@@ -220,7 +222,8 @@ def prompt[T](shape: type[T] | object, message="", to="", on="") -> Act[T]:
   def ear(id):
     if asks:
       yield "started", id
-      teach(scope(id), who)
+      while crafted(id):
+        yield
     yield told(id, "", bound(id, named), message=message, thread=thread)
     while not says:
       asks and not (paused(id) or any(id in x[2:4] and not over(x[1]) for x in transcript(id, "rung"))) and rung(to=to)
@@ -235,7 +238,9 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
     raise Refused("no chain " + source)
 
   def ear(id):
-    ladder = {x: w for x, w in program(source).items() if over(x) or not get(x)}
+    t = transcript(source or ROOT)
+    h = [x[0] == "tell" and x[3][0][:6] for x in t] + ["chain(", "#chain"]
+    hi = h.index("#chain", lo := h.index("chain("))
     refused, running, waiting, last, heard = set(), {}, {}, standing(), []
     asking = news = ran = reply = note = to = ""
     stood = module(source or get(id)[3]).get("actor", last and last[2])
@@ -246,8 +251,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
       return w and act("run", id, None, n := whose + "_told", unquoted(ladder.setdefault(n, w)), "")
 
     def takes():
-      teach(id, stood)
-      return told(id, "standing", roster=[x[:3] for x in last[0]], cwd=last[1], actor=module().get("actor"))
+      return told(id, "standing", roster=last[0], cwd=last[1], actor=module()["actor"])
 
     def replay(of="", words=""):
       fresh = not of
@@ -267,16 +271,23 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
         with site.set(of):
           rung(words)
 
-    if source:
-      theirs = transcript(source)
-      kin = {source, *[n for one in (filter or list)([x for x in theirs if question(x)]) for n in lineage(one[1])]}
+    if source or t[lo:hi]:
+      kin = {source, *[n for one in (filter or list)([x for x in t if question(x)]) for n in lineage(one[1])]}
       yield (
         "prefix",
         id,
-        [it for it in theirs if not (b := get(it[1])) or (b[2] if b[0] == "reply" else it[1]) in kin],
+        [
+          it
+          for n, it in enumerate(t)
+          if lo <= n < hi or (source and (not (b := get(it[1])) or (b[2] if b[0] == "reply" else it[1]) in kin))
+        ],
       )
+    ladder = {x: w for x, w in program(source or id).items() if over(x) or not get(x)}
     yield "started", id
-    yield told(id, "", bound(id), label=label, source=source)
+    top = told(id, "", bound(id), label=label, source=source)
+    if last:
+      yield top
+      top = ""
     yield from replay()
     last and not source and (yield takes())
     while True:
@@ -284,10 +295,15 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
       match a:
         case ("done", *_) if r[0] == "stand":
           if standing() != last:
-            if standing()[2:] != last[2:]:
-              stood = module()["actor"] = standing()[2]
-            last = standing()
-            yield takes()
+            was, last = last, standing()
+            if last[2:3] != was[2:3]:
+              stood = module()["actor"] = last[2]
+            if was or not last[3:]:
+              was or (yield top)
+              top = ""
+              yield takes()
+            else:
+              yield "tell", id, ["chain()"]
           id == ROOT and act("clock", id, None)
           seen = {}
           for fact in transcript(id)[::-1]:
@@ -356,9 +372,13 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
               Text(path, "".join(x[3] for x in transcript(door[1], "out") if x[1::3] == door.groups())),
             ),
           )
+        case ("done", *_) if top and r[0] == "rung" and not crafted(id):
+          yield top
+          top = ""
+          yield takes()
         case ("rung", rid, _, _, "", *_):
           waiting[rid] = running[rid] = ""
-        case ("tell", *_, notes):
+        case ("tell", *_, notes) if notes != ["chain()"]:
           heard.append("\n".join(notes))
           if a is note:
             note = bind(asking)
@@ -393,7 +413,6 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
         else:
           if ran and len(heard) == ran[1]:
             yield told(ran[0], "told nothing")
-          teach(id, to)
           note = yield told(
             asking,
             "advance on " + maker,
@@ -584,10 +603,8 @@ def tells(id):
   return get(id)[2] != scope(id)
 
 
-def teach(on, to):
-  (taught := offered(standing()[0], to, 3)) and repr(quote := "<s:doctrine>\n" + taught + "</s:doctrine>") not in str(
-    transcript(on, "tell")
-  ) and say(*told(on, "doctrine", quote))
+def crafted(id):
+  return [x[1] for x in transcript(id, "rung") if all(x[4::2]) and not over(x[1])]
 
 
 def told(id, what="", *notes, **words):
@@ -643,8 +660,8 @@ def unquoted(word):
   return "".join(made) + word[at:]
 
 
-def offered(roster, to, at=2):
-  return next(((*x, "")[at] for x in roster if to in (x[0], *[x[0] + "/" + e for e in x[1]])), None)
+def offered(roster, to):
+  return next((x[2] for x in roster if to in (x[0], *[x[0] + "/" + e for e in x[1]])), None)
 
 
 def covers(a, id):

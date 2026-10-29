@@ -18,5 +18,5 @@ def extend(name: str, *rungs: str, tui: str = "") -> Text:
 
 def ouroboros(on: str = "") -> Act:
   """The doctrine of a chain, told: an act on the chain that tells LORE when the chain holds no tell of an ouroboros act, and that is done with nothing at once, so a chain with a source that holds the doctrine of its origin reads it once.
-  The life word of the extension is ouroboros(), so a chain reads the doctrine at its birth, before its first prompt asks a model.
+  The extension has no life word, since the setup of the root reads the file of the extension, which holds LORE, so each chain with no source reads the doctrine once, in its setup, and the chain tells no act of it.
   """

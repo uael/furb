@@ -64,7 +64,7 @@ contract needs a request of the owner.
 | `src/furb/engine.pyi` | The contract: the typed surface of the engine, and the laws of each definition. Only the owner changes it. |
 | `src/furb/engine.py` | The engine, one file, which is the system prompt of a model. |
 | `src/furb/AGENTS.md` | The technical names of the engine, and the laws that no test can hold. |
-| `DOCTRINE.md` | The doctrine of furb, which each model reads once on each chain. |
+| `DOCTRINE.md` | The doctrine of furb, which each chain reads in the first turn of its model. |
 | `src/furb/__init__.py` | The switch: `FURB_ENGINE` picks the engine that `from furb import engine` gives. |
 | `src/engine.rs`, `src/sand.rs` | One life of `engine.py` in the sandbox of monty, how each value crosses, and the verbs that a host says. |
 | `src/snapshot.rs` | The snapshot of a life beside its record: the state that a later life on the same record, build and ears opens from with no replay, which it checks against the record. |

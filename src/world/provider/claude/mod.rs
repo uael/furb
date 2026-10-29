@@ -690,6 +690,8 @@ struct Conversation {
   again: bool,
   process: Option<Process>,
   used: Instant,
+  /// Whether a block of this conversation holds the mark of the cache that ends the setup of its chain.
+  marked: bool,
 }
 
 impl Conversation {
@@ -708,6 +710,7 @@ impl Conversation {
       again: false,
       process: None,
       used: Instant::now(),
+      marked: false,
     }
   }
 
@@ -739,7 +742,11 @@ impl Conversation {
     for message in past {
       let (kind, blocks): (&str, Vec<Value>) = match message {
         Message::System { .. } => continue,
-        Message::User { content } => ("user", content.iter().map(said).collect::<Result<_, _>>()?),
+        Message::User { content } => {
+          let mut blocks: Vec<Value> = content.iter().map(said).collect::<Result<_, _>>()?;
+          cached(&mut blocks, &mut self.marked);
+          ("user", blocks)
+        }
         Message::Assistant { content, .. } => {
           let blocks = content.iter().filter_map(|one| match one {
             AssistantContent::Text(text) => Some(json!({"type": "text", "text": text.text})),
@@ -1156,7 +1163,7 @@ impl Flight<'_> {
       }
       _ => delta,
     };
-    let line = input(delta)?;
+    let line = input(delta, &mut held.marked)?;
     // A process spends what it started at, so a turn at another effort or another most of thought ends it.
     if held.process.as_mut().is_some_and(|one| one.spend != spend || !one.stands()) {
       held.process = None;
@@ -1497,7 +1504,7 @@ impl Reply<'_> {
 
 /// The one line of input that holds every message the command line has not heard: an earlier turn framed as such,
 /// and the last message of the user as itself.
-fn input(messages: &[Message]) -> Result<String, CompletionError> {
+fn input(messages: &[Message], marked: &mut bool) -> Result<String, CompletionError> {
   let mut content = Vec::new();
   for (at, message) in messages.iter().enumerate() {
     let (you, blocks): (bool, Vec<Value>) = match message {
@@ -1521,6 +1528,7 @@ fn input(messages: &[Message]) -> Result<String, CompletionError> {
   if content.is_empty() {
     return Err(failed("There is no new message for Claude."));
   }
+  cached(&mut content, marked);
   let line = json!({"type": "user", "message": {"role": "user", "content": content}});
   Ok(format!("{line}\n"))
 }
@@ -1541,6 +1549,22 @@ fn gained(heard: &Message, now: &Message) -> Option<Message> {
   let text = (!text.is_empty()).then(|| UserContent::text(text));
   let content: Vec<UserContent> = text.into_iter().chain(blocks.iter().cloned()).collect();
   (!content.is_empty()).then_some(Message::User { content })
+}
+
+/// The blocks of a message with the block before the first open of a chain in a conversation marked for the cache, so
+/// the setup that every chain with no source shares ends an entry of the cache, which the first turn of every later
+/// chain reads. The mark lives an hour, as the marks of the command line do, since a mark of an hour must come before
+/// one of minutes, and a conversation marks one block at most, as the command line takes four marks in all.
+fn cached(blocks: &mut [Value], marked: &mut bool) {
+  let opens = |one: &Value| {
+    one["text"]
+      .as_str()
+      .is_some_and(|text| crate::world::provider::banner(&format!("\n\n{text}")) == Some(2))
+  };
+  if let Some(at) = (1..blocks.len()).find(|&at| !*marked && opens(&blocks[at])) {
+    blocks[at - 1]["cache_control"] = json!({"type": "ephemeral", "ttl": "1h"});
+    *marked = true;
+  }
 }
 
 /// One block of a message of the user, as the input of the command line holds it.

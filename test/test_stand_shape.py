@@ -57,12 +57,13 @@ async def test_a_change_of_the_world_between_two_lives_enters_the_transcript_of_
 
 
 async def test_the_world_answers_a_stand_with_the_roster_the_directory_and_the_actor() -> None:
-  """The World answers a stand with the roster, the directory and the actor."""
-  sand, log, _ = born()
+  """The World answers a stand with the roster, the directory, the actor and the path of the doctrine."""
+  doctrine = "/h/.furb/DOCTRINE.md"
+  sand, log, _ = born(stands=[*STANDS, doctrine], files={doctrine: "Look first.\n"})
   asked = said(log, "stand")[0]
   answered = next(a for a in said(log, "done") if a[1] == asked[1])
-  assert answered[2] == WORLD and answered[3] == STANDS
-  assert answered[3] == [STANDS[0], "/w", "m/low"]
+  assert answered[2] == WORLD and answered[3] == [*STANDS, doctrine]
+  assert answered[3] == [STANDS[0], "/w", "m/low", doctrine]
   assert said(sand.calls, "stand") == [asked]
 
 
@@ -135,7 +136,7 @@ async def test_a_standing_binds_the_default_actor_of_the_chain_when_its_actor_di
 
 
 async def test_the_chain_tells_each_standing_it_takes_in_one_paragraph_headed_standing() -> None:
-  """The chain tells each standing it takes in one paragraph headed standing, which binds its roster, its directory and its actor, as chain1_roster, chain1_cwd and chain1_actor, and its roster holds no doctrine, since the chain tells the doctrine of an actor in a paragraph of its own."""
+  """The chain tells each standing it takes in one paragraph headed standing, which binds its roster, its directory and its actor, as chain1_roster, chain1_cwd and chain1_actor, each entry of its roster as its name, its efforts and its window, and no path of the doctrine, which the World gives the chain to read in a turn of its own."""
   sand, log, root = born()
   answered = next(a[3] for a in said(log, "done") if a[1] == said(log, "stand")[0][1])
   assert answered == STANDS
@@ -153,9 +154,11 @@ async def test_the_chain_tells_each_standing_it_takes_in_one_paragraph_headed_st
     "#chain1 standing\nchain1_roster = [['operator', [], 200000], ['o', ['low'], 200000]]\n"
     "chain1_cwd = '/z'\nchain1_actor = 'o/low'"
   )
-  _, _, root = born(stands=[[*STANDS[0], ["q", ["low"], 300000, "Look first."]], "/w", "q/low"])
-  assert paragraphs(engine.turns(on=root))[1] == "#chain1 doctrine\n<s:doctrine>\nLook first.</s:doctrine>"
-  assert paragraphs(engine.turns(on=root))[2] == (
+  doctrine = "/h/.furb/DOCTRINE.md"
+  _, _, root = born(stands=[[*STANDS[0], ["q", ["low"], 300000]], "/w", "q/low", doctrine])
+  await engine.rung("k = 1", to="q/low", on=root)
+  await settle()
+  assert paragraphs(engine.turns(on=root))[-1] == (
     "#chain1 standing\n"
     "chain1_roster = [['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000], ['q', ['low'], 300000]]\n"
     "chain1_cwd = '/w'\n"

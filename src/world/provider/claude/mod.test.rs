@@ -22,7 +22,7 @@ use rig_core::{
 };
 use serde_json::{Value, json};
 
-use super::{Account, Claude, Completion, Source, Switch};
+use super::{Account, Claude, Completion, Source, Switch, cached};
 use crate::ear::reactor;
 
 /// The fake command line, which the tests of the command line of furb run too.
@@ -963,4 +963,21 @@ fn the_command_line_is_signed_in_when_any_of_its_accounts_is() {
   };
   assert!(claude(&["a", "b"]).signed());
   assert!(!claude(&["a"]).signed());
+}
+
+#[test]
+fn the_block_before_the_first_open_of_a_chain_in_a_conversation_is_marked_for_the_cache_once() {
+  let text = |one: &str| json!({"type": "text", "text": one});
+  let mut blocks = vec![
+    text("#read1"),
+    text("#chain2\nchain2: Act[object]"),
+    text("#chain3\nchain3: Act[object]"),
+  ];
+  let mut marked = false;
+  cached(&mut blocks, &mut marked);
+  assert_eq!(blocks[0]["cache_control"], json!({"type": "ephemeral", "ttl": "1h"}));
+  assert_eq!((blocks[1].get("cache_control"), marked), (None, true));
+  let mut later = vec![text("#read9"), text("#chain4\nchain4: Act[object]")];
+  cached(&mut later, &mut marked);
+  assert_eq!(later[0].get("cache_control"), None, "a conversation marks one block at most");
 }

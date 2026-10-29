@@ -334,7 +334,7 @@ test("/extensions lists what a life runs, and a cancel of a word of the operator
       async ({ session, frame, click }) => {
         await session.command("/extensions");
         expect(session.notice).toBe(
-          "This life runs memory with await recall(), skills with await listed(), compaction, ouroboros with ouroboros(), web, mcp with mcp_index(). Run a word of one with /run.",
+          "This life runs memory with await recall(), skills with await listed(), compaction, ouroboros, web, mcp with mcp_index(). Run a word of one with /run.",
         );
         await session.command("/run await wait(60)");
         // The wait runs under the word, so the cancel asks first.
@@ -361,23 +361,42 @@ test("the words of the extensions stand as code: a comment that names their ear,
     await writeFile(join(directory, "a.txt"), "one");
     const opened = await openEngine({ cwd: directory, record: join(directory, "session.jsonl") });
     await composing(
-      async ({ session, frame }) => {
+      async ({ session, frame, click }) => {
         await session.command("/run x = 1");
         await until(session, () =>
           session.activity.some((act) => act.kind === "rung" && act.by === "operator" && act.done),
         );
         await session.refresh();
+        // The setup of the root is the turns of the default actor that the ear extensions wrote: the read of the
+        // doctrine, the read of the file of each extension in the order of the life, then the life words in one word.
+        const setup = session.activity.filter((act) => act.kind === "rung" && act.by === "extensions");
+        expect(setup.map((act) => act.word)).toEqual([
+          // A path of Windows stands with its separators doubled, as python shows a backslash.
+          expect.stringMatching(/^read\('.*[/\\]DOCTRINE\.md'\)$/),
+          ...["memory", "skills", "compaction", "ouroboros", "web", "mcp"].map((name) =>
+            expect.stringMatching(
+              new RegExp(`^read\\('.*[/\\\\]+extensions[/\\\\]+${name}[/\\\\]+${name}\\.py'\\)$`),
+            ),
+          ),
+          "await recall()\nawait listed()\nmcp_index()",
+        ]);
         let rows = (await frame()).split("\n");
+        for (let step = 0; step < 80 && !rows.some((row) => /earlier steps/.test(row)); step++) {
+          await Bun.sleep(25);
+          rows = (await frame()).split("\n");
+        }
+        // The card of the ear holds more steps than a card shows, so its first steps and its comment fold.
+        await click("2 earlier steps");
         for (let step = 0; step < 80 && !rows.some((row) => /# extensions/.test(row)); step++) {
           await Bun.sleep(25);
           rows = (await frame()).split("\n");
         }
         const at = rows.findIndex((row) => /# extensions/.test(row));
         expect(at).toBeGreaterThanOrEqual(0);
-        const shown = rows.slice(at, at + 4).join("\n");
-        expect(shown).toMatch(/ 1 await recall\(\)/);
-        expect(shown).toMatch(/ 2 await listed\(\)/);
-        expect(shown).toMatch(/ 3 ouroboros\(\)/);
+        const shown = rows.slice(at + 1, at + 11).map((row) => row.trim().replace(/\s{2,}.*$/, ""));
+        expect(shown.slice(0, 7).map((row) => /^\d+ read\('/.test(row))).toEqual(Array(7).fill(true));
+        // The life words stand as the calls that end their one word, each on its line.
+        expect(shown.slice(7)).toEqual(["8 await recall()", "9 await listed()", "10 mcp_index()"]);
         expect(rows.join("\n")).not.toMatch(/rung\d+…\d+|remember1|ouroboros1/);
       },
       { width: 140, height: 42 },

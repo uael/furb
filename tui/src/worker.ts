@@ -6,7 +6,7 @@ import { Act, actorParts, codexAuth, ENGINE, model, models, retold, Session, set
 import { type Compaction, type Measure, measureOf } from "furb/life";
 import type { HostState } from "./bridge.ts";
 import { scripts } from "./demo/index.ts";
-import { scripted } from "./demo/script.ts";
+import { scripted, transcriptOf } from "./demo/script.ts";
 import { type EngineOptions, roster } from "./models.ts";
 import { changeProvider } from "./providers.ts";
 import { queueDispatches, queueHash } from "./queue.ts";
@@ -188,7 +188,9 @@ function scriptedSession(options: SessionOptions, watch = false): Session {
         : undefined;
       const slow = watch || process.env.FURB_DEMO_STREAM === "1" || last.includes("show live progress");
       if (slow) await pause(300);
-      const first = !messages.some((message) => (message as { role?: string }).role === "assistant");
+      // The first answer of the model is the turn of the first advance: a turn that its caller wrote, as the read of
+      // the doctrine that the World plays on each chain, is an assistant message that the model did not write.
+      const first = (transcriptOf(messages).match(/#rung\d+ advance on /g) ?? []).length <= 1;
       const [thinking, answer] = first
         ? ["I read the README and run the checks before I answer.", ""]
         : reply(last, actor, JSON.stringify(messages));

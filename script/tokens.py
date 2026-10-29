@@ -21,8 +21,8 @@ ROOT = Path(__file__).resolve().parents[1]
 ENGINE = ROOT / "src" / "furb" / "engine.py"
 # What the engine may cost the model that reads it, counted with o200k_base as law 5 says: a wall, and a shape that
 # will not fit under it is a shape not found yet. Seven thousand and sixty, by the owner's word, for the engine,
-# and two thousand for the doctrine of furb, which every model reads in the user turn of its first reply.
-BUDGET = 7_060
+# and two thousand for the doctrine of furb, which every chain reads in a turn of its setup.
+BUDGET = 7_180
 DOCTRINE = 2_000
 QUOTE = (ROOT / "DOCTRINE.md").read_text(encoding="utf-8")
 

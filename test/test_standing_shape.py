@@ -10,13 +10,17 @@ ROSTER = STANDS[0]
 
 
 async def test_what_a_chain_stands_on() -> None:
-  """What a chain stands on: the actors the World offers, the directory the chain starts in, and the actor a prompt goes to when it names none."""
+  """What a chain stands on: the actors the World offers, the directory the chain starts in, the actor a prompt goes to when it names none, and the path of the doctrine, which the World reads in the first turn of the setup of the root, and which a World that gives no doctrine leaves unsaid."""
   _, log, root = born("close(1)")
   assert await engine.prompt(int, "count", on=root) == 1
   assert engine.module(root)[f"{root}_roster"] == ROSTER
   assert engine.cwd(on=root) == "/w"
   assert [a[4] for a in said(log, "reply")] == ["m/low"]
   assert engine.module(root)["actor"] == "m/low"
+  assert engine.standing() == STANDS
+  doctrine = "/h/.furb/DOCTRINE.md"
+  born(stands=[*STANDS, doctrine], files={doctrine: "Look first.\n"})
+  assert engine.standing() == [*STANDS, doctrine]
 
 
 async def test_the_roster_the_directory_and_the_actor_that_a_model_reads_are_in_the_transcript() -> None:

@@ -204,9 +204,17 @@ test("what a model writes streams into the session under its rung until its repl
   try {
     const engine = session.open();
     const prompt = engine.prompt("int", { message: "count", on: engine.root });
-    // The rungs of the six official extensions come first, and the rung of the turn that reads the skills.
-    await until(session, () => session.streams.get("rung8")?.text === "close(3)");
-    expect(session.streams.get("rung8")).toEqual({
+    // The rung that answers the prompt comes after the eight rungs of the setup of the root, so it is found as the
+    // rung that the prompt made.
+    const answering = () =>
+      [...session.activity.acts.values()].find((act) => act.kind === "rung" && act.by === prompt.id)?.id ??
+      "";
+    /** A turn of the request, of a role, which holds one text. */
+    const turn = (role: string, text: unknown) =>
+      expect.objectContaining({ role, content: [{ type: "text", text }] });
+    await until(session, () => session.streams.get(answering())?.text === "close(3)");
+    expect(answering()).toBe("rung9");
+    expect(session.streams.get(answering())).toEqual({
       chain: engine.root,
       text: "close(3)",
       thinking: "counting",
@@ -215,11 +223,47 @@ test("what a model writes streams into the session under its rung until its repl
       {
         actor: "claude-cli:sonnet/high",
         chain: engine.root,
-        // The setup of the chain, the turn of the model that reads the skills, and what that turn showed.
+        // The setup of the root as turns of the default actor whose words furb writes: the bare paragraph chain(), the
+        // read of the doctrine, the read of the file of each official extension, then the life words in one turn,
+        // whose user turn holds what they read, the banner and the standing of the root, then the prompt.
         messages: [
-          expect.objectContaining({ role: "user" }),
-          expect.objectContaining({ role: "assistant" }),
-          expect.objectContaining({ role: "user" }),
+          turn("user", "chain()"),
+          // A path of Windows stands with its separators doubled, as python shows a backslash.
+          turn("assistant", expect.stringMatching(/^read\('.*[/\\]DOCTRINE\.md'\)$/)),
+          turn("user", expect.stringMatching(/^#read1\nread1_path = '.*[/\\]DOCTRINE\.md'\n/)),
+          ...["memory", "skills", "compaction", "ouroboros", "web", "mcp"].flatMap((name, at) => [
+            turn(
+              "assistant",
+              expect.stringMatching(
+                new RegExp(`^read\\('.*[/\\\\]+extensions[/\\\\]+${name}[/\\\\]+${name}\\.py'\\)$`),
+              ),
+            ),
+            turn(
+              "user",
+              expect.stringMatching(
+                new RegExp(`^#read${at + 2}\\nread${at + 2}_path = '.*[/\\\\]${name}\\.py'\\n`),
+              ),
+            ),
+          ]),
+          turn("assistant", "await recall()\nawait listed()\nmcp_index()"),
+          // The open of the root goes as a block of its own after the setup, which ends the block before it.
+          expect.objectContaining({
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: expect.stringMatching(
+                  /^#read8\nread8_path = 'skills:\/\/'\n(<s:read8_text>\n[\s\S]*<\/s:read8_text>|read8_text = '.*')$/,
+                ),
+              },
+              {
+                type: "text",
+                text: expect.stringMatching(
+                  /^#chain1\nchain1_label = 'root'\n[\s\S]*\n#chain1 standing\n[\s\S]*\n#prompt1\nprompt1_message = 'count'\nprompt1: Act\[int\] = Act\('prompt1'\)\n\n#rung9 advance on prompt1$/,
+                ),
+              },
+            ],
+          }),
         ],
         settings: {
           effort: "high",
@@ -764,18 +808,20 @@ test("record inspection reports pending work when its replay starts or feeds a c
   const first = new Session({ cwd, record });
   const engine = first.open();
   const on = engine.root;
-  engine.rung({ word: 'await bash("exec sleep 30")', on });
-  engine.rung({
+  const sleeps = engine.rung({ word: 'await bash("exec sleep 30")', on }).id;
+  const feeds = engine.rung({
     word: 'c = bash("head -c 6; exec sleep 30", stdin=None)\nwrite(Text(c + "/stdin", "hello\\n"))\nawait c',
     on,
-  });
+  }).id;
   await until(first, () => printed(first, "bash2") === "hello\n");
   await first.dispose();
   try {
+    // The read of the doctrine and the rungs of the six official extensions come before the two rungs.
+    expect([sleeps, feeds]).toEqual(["rung9", "rung10"]);
     expect((await inspectRecord(record)).pending.map(([id]) => id)).toEqual([
-      "rung8",
+      sleeps,
       "bash1",
-      "rung9",
+      feeds,
       "bash2",
     ]);
   } finally {
@@ -987,10 +1033,16 @@ test("a session enables the extensions of the configs, and a later session on it
   try {
     first.open();
     expect(running(first)).toEqual(["memory", "skills", "compaction", "ouroboros", "web", "mcp"]);
-    // The model reads each memory file by a turn of its own, and the turns after it show what the read gave.
-    const told = (first.engine?.turns({ on: "chain1" }) ?? []).map((turn) => String(turn[1])).join("\n\n");
-    expect(told).toContain(
-      `#read1\nread1_path = '${join(cwd, "CLAUDE.md").replaceAll("\\", "\\\\")}'\nread1_text = 'Use two spaces.'`,
+    // The life words of the setup read each memory file, after the reads of the doctrine and of the files of the
+    // extensions, and the user turn after them shows what each read gave.
+    const read = (first.engine?.transcript({ on: ROOT }) ?? []).find(
+      (fact) => fact[0] === "read" && fact[4] === join(cwd, "CLAUDE.md"),
+    )?.[1];
+    expect(read).toBe("read8");
+    const turns = (first.engine?.turns({ on: "chain1" }) ?? []).map((turn) => String(turn[1]));
+    expect(turns.at(-2)).toBe("await recall()\nawait listed()\nmcp_index()");
+    expect(turns.at(-1)).toContain(
+      `#${read}\n${read}_path = '${join(cwd, "CLAUDE.md").replaceAll("\\", "\\\\")}'\n${read}_text = 'Use two spaces.'`,
     );
   } finally {
     await first.dispose();

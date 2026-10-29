@@ -1563,13 +1563,19 @@ fn a_statement_that_a_model_streams_and_that_prompts_another_chain_has_its_reply
       engine.transcript(verbs::Transcript { on: on(chain), of: None }).expect("a transcript"),
     );
   }
-  let replies: Vec<String> = facts
-    .iter()
-    .filter(|one| one.kind() == "reply" && one.question())
-    .map(|one| one.about().to_owned())
-    .collect();
-  for reply in &replies {
-    let owned: Vec<&str> = facts
+  // A chain with no source holds the setup of the root, so a reply of the setup stands in more than one transcript,
+  // and each reply is read on its own chain.
+  let mut replies: Vec<(String, String)> = Vec::new();
+  for one in facts.iter().filter(|one| one.kind() == "reply" && one.question()) {
+    let reply = (one.about().to_owned(), one.on().to_owned());
+    if !replies.contains(&reply) {
+      replies.push(reply);
+    }
+  }
+  for (reply, chain) in &replies {
+    let held =
+      engine.transcript(verbs::Transcript { on: on(chain), of: None }).expect("a transcript");
+    let owned: Vec<&str> = held
       .iter()
       .filter(|one| one.about() == reply && matches!(one.kind(), "started" | "done"))
       .map(Fact::kind)

@@ -256,5 +256,7 @@ that `FURB_CLAUDE_STALL` gives.
 
 ## The doctrine
 
-Each model reads [`DOCTRINE.md`](../DOCTRINE.md) once on each chain, in the message that asks it for its first word.
+Each chain reads [`DOCTRINE.md`](../DOCTRINE.md) in the first turn of its model, as a read of a file: `.furb/DOCTRINE.md`
+of the project when it holds one, the `DOCTRINE.md` of the checkout in dev mode, else `~/.furb/DOCTRINE.md`, which
+furb writes from the doctrine that it carries.
 It tells the model how to work in furb: that its answer is Python, which verbs it has, and how to give its answer.

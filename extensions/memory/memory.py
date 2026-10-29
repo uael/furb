@@ -7,9 +7,8 @@ from furb.engine import (
   controlled,
   differs,
   get,
-  module,
   question,
-  rung,
+  read,
   scope,
   span,
   tell,
@@ -54,19 +53,20 @@ def memory(path: str = ".", on: str = "") -> list[Text]:
 async def recall(on: str = "") -> Act:
   got = ask("memory", on, ".")
   assert isinstance(got, list)
-  if got:
-    await rung("\n".join(f"read({one.path!r})" for one in got), to=str(module(on).get("actor") or ""), on=on)
+  for one in got:
+    read(one.path, on=on)
   return remember(on)
 
 
 def remember(on: str = "") -> Act:
   def ear(id):
     yield "started", id
+    before = {x[1] for x in transcript(on, "read")}
     memory(on=on)
     while True:
       match (yield {id, "read", "stand"}):
         case ("done", about, _, Text(path)) if (
-          question(("read", about)) and scope(about) == scope(id) and "://" not in path
+          question(("read", about)) and scope(about) == scope(id) and "://" not in path and about not in before
         ):
           memory(path, on)
         case ("done", about, *_) if question(("stand", about)):

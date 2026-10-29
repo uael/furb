@@ -730,7 +730,7 @@ async def test_the_name_of_a_shape_is_the_word_a_chain_says_it_by() -> None:
 
 
 async def test_a_prompt_tells_its_message_and_its_binding_where_it_is_made() -> None:
-  """A prompt tells its message and its binding where it is made, as every act tells its open, whether a model or the operator answers it."""
+  """A prompt tells its message and its binding where it is made, as every act tells its open, whether a model or the operator answers it, and a prompt to a model tells them once no rung with a word and an actor is open on its chain, so its message comes after the turns that their callers wrote, as the setup of a chain."""
   _, log, root = born("a = 1", "close(2)", "close(3)")
   first = engine.prompt(int, "count\nto three", on=root)
   second = engine.prompt(int, "count again", on=root)
@@ -752,6 +752,15 @@ async def test_a_prompt_tells_its_message_and_its_binding_where_it_is_made() -> 
     [f"#{act}\n<s:{act}_message>\nhow many?\nsay one</s:{act}_message>", f"{act}: Act[int] = Act({act!r})"],
   )
   assert [a for a in said(log, "tell") if a[1] == act] == [log[made + 1]] and len(said(log, "reply")) == 3
+  setup = engine.rung("await wait(60)", to="m/low", on=root)
+  after = engine.prompt(int, "after the setup", on=root)
+  await settle()
+  assert [a for a in said(log, "tell") if a[1] == after] == []
+  engine.cancel(setup)
+  await settle()
+  (message,) = [a for a in said(log, "tell") if a[1] == after]
+  assert log.index(message) > next(log.index(a) for a in said(log, "done") if a[1] == setup)
+  engine.cancel(after)
 
 
 async def test_a_prompt_to_a_model_takes_its_own_act() -> None:

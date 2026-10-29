@@ -43,7 +43,13 @@ fn note(word: &str) -> Extension {
     word: word.to_owned(),
     life: "note()".to_owned(),
     root: false,
+    file: String::new(),
   }
+}
+
+/// The extension that a folder loads, with the file of its word in that folder.
+fn filed(one: Extension, root: &Path) -> Extension {
+  Extension { file: root.join("note.py").display().to_string(), ..one }
 }
 
 #[test]
@@ -63,7 +69,7 @@ fn the_word_of_a_file_is_the_file_less_its_imports_of_furb_and_its_runs_of_empty
 fn a_folder_loads_under_the_name_its_manifest_gives_with_the_word_of_its_file() {
   let at = place("load");
   folder(&at.join("good"), r#"{"name": "note", "word": "note.py", "life": "note()"}"#, "x = 1\n");
-  assert_eq!(load("note", &at.join("good")).unwrap(), note("x = 1"));
+  assert_eq!(load("note", &at.join("good")).unwrap(), filed(note("x = 1"), &at.join("good")));
   folder(&at.join("bare"), r#"{"name": "note", "word": "note.py"}"#, "x = 1\n");
   assert_eq!(load("note", &at.join("bare")).unwrap().life, "");
   let refused = |root: &str, name: &str| load(name, &at.join(root)).unwrap_err().message();
@@ -158,7 +164,7 @@ fn a_manifest_names_the_part_of_an_extension_for_a_tui_as_text() {
   folder(&at.join("good"), r#"{"name": "note", "word": "note.py", "tui": "tui.ts"}"#, "x = 1\n");
   assert_eq!(
     load("note", &at.join("good")).unwrap(),
-    Extension { life: String::new(), ..note("x = 1") }
+    filed(Extension { life: String::new(), ..note("x = 1") }, &at.join("good"))
   );
   folder(&at.join("bad"), r#"{"name": "note", "word": "note.py", "tui": 1}"#, "x = 1\n");
   let manifest = at.join("bad").join("furb.json").display().to_string();
@@ -369,6 +375,7 @@ fn a_chain_takes_each_extension_at_its_birth_and_a_later_life_plays_the_same_run
     word: "o = 1".to_owned(),
     life: String::new(),
     root: false,
+    file: String::new(),
   };
   let mut engine = lived(&at, vec![note(NOTE), other]);
   let expected = [
@@ -407,9 +414,12 @@ fn a_manifest_says_whether_its_extension_plays_on_every_chain_or_on_the_root_alo
     format!(r#"{{"name": "note", "word": "note.py", "life": "note()", "plays": {plays}}}"#)
   };
   folder(&at.join("every"), &manifest(r#""every""#), "x = 1\n");
-  assert_eq!(load("note", &at.join("every")).unwrap(), note("x = 1"));
+  assert_eq!(load("note", &at.join("every")).unwrap(), filed(note("x = 1"), &at.join("every")));
   folder(&at.join("root"), &manifest(r#""root""#), "x = 1\n");
-  assert_eq!(load("note", &at.join("root")).unwrap(), Extension { root: true, ..note("x = 1") });
+  assert_eq!(
+    load("note", &at.join("root")).unwrap(),
+    filed(Extension { root: true, ..note("x = 1") }, &at.join("root"))
+  );
   let refused = |root: &str| load("note", &at.join(root)).unwrap_err().message();
   let file = |root: &str| at.join(root).join("furb.json").display().to_string();
   folder(&at.join("some"), &manifest(r#""some""#), "x = 1\n");

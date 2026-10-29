@@ -15,12 +15,11 @@ meanings. The entry of such a name here gives only its form in the engine.
 - provider: the service that runs a model.
 - actor: the operator, or a model at an effort, named model/effort; it answers prompts and makes acts.
 - effort: one of the levels of reasoning the World offers, ordered from least to most.
-- roster: the actors the World offers, each as its name, its efforts, its window and, for a model that reads one,
-  its doctrine.
+- roster: the actors the World offers, each as its name, its efforts and its window.
 - window: the context size of a model in tokens, as its roster entry says.
 - share: the part of a window that one model response used.
-- standing: what the chains stand on, which the World answers a stand with: the roster, the directory and the default
-  actor; its one home is the transcript of the root, where the done of the last stand holds it, and a chain tells
+- standing: what the chains stand on, which the World answers a stand with: the roster, the directory, the default
+  actor and the path of the doctrine; its one home is the transcript of the root, where the done of the last stand holds it, and a chain tells
   each standing it takes in one paragraph headed standing, which binds the roster, the directory and the actor.
 - stand: the act that asks the World for the standing, which boot makes on the root as a life opens and again at
   the tip of a later life.
@@ -139,9 +138,23 @@ meanings. The entry of such a name here gives only its form in the engine.
   differs make the shows of the file.
 - quote: a string between two marks, <s:name> and </s:name>, which binds its name when it runs; a word writes one,
   and the transcript tells each string of more than one line as one.
-- doctrine: prose that says how a model works in furb, and holds no law: `DOCTRINE.md` at the root, which the World
-  gives in the roster entry of each model, and which a chain tells in a paragraph headed doctrine, before its first
-  prompt to that model, or before the advance of its first reply to it when no prompt told it.
+- doctrine: prose that says how a model works in furb, and holds no law: `DOCTRINE.md` at the root. The standing names
+  the file that a chain reads: `.furb/DOCTRINE.md` of the directory when it holds one, the `DOCTRINE.md` of the checkout
+  of git that furb was built from in dev mode, else the official copy, `~/.furb/DOCTRINE.md`, which furb writes from
+  the doctrine that it carries. The World reads it in the first turn of the setup of the root.
+- crafted rung: a rung with a word and an actor, a turn of that actor that its caller wrote; the crafted rungs of a
+  chain take their turns one at a time, in the order they were made, a rung that one of them makes takes its turn
+  within the turn of its maker, and every other word of the chain and every prompt to a model wait until none is open.
+- setup: the turns that the World plays on the root of a new record at its first stand, after the bare turn
+  `chain()`, as crafted rungs of the default actor: the read of the doctrine, the read of the file of each extension
+  of every chain in the order of the life, whose word the World runs in the module of the root with no rung, as the
+  run `<rung>_word`, then one turn of their life words. The root tells its open and its standing after them, in the
+  same turn, and then the extensions of the root alone play the same way. Each chain with no source holds the setup of
+  the root as its prefix, with the same names, and runs its words again, so every chain shares one prefix, which the
+  provider ends with a block that it marks for the cache. The fact teach, `("teach", "chain1", "extensions", actor,
+  doctrine, count)`, which the World says before the count of enables that the setup plays and the record keeps,
+  plays the setup again where a later life says it. A record whose standing names no doctrine has no setup, and its
+  extensions play as rungs, as before.
 - template: a python template string, each interpolation of which carries an expression and its value.
 - debug: the verb that tells the interpolations of a template, a tell and no act.
 - control: a pause, a wake, a cancel or a close; a close is a cancel with a value, and a cancel a close with
@@ -192,7 +205,8 @@ meanings. The entry of such a name here gives only its form in the engine.
   that a value names keeps its name and its answer, each chain with an open prompt opens paused, and its prompt asks
   its model again at a wake. A name of the module whose value the record cannot hold is lost, and the chain is told.
 - life word: the python of an extension that its rung runs after its word, and that the World plays alone on a chain
-  whose origin had the extension, since that chain made the rung of its origin again.
+  whose origin had the extension, since that chain made the rung of its origin again. In a setup, the life words of
+  the extensions run as one turn of the default actor, after the reads of their files.
 
 ## Laws no test holds
 

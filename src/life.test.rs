@@ -171,9 +171,12 @@ fn a_life_that_keeps_a_record_writes_the_log_of_every_fact_beside_it_and_a_later
   let shown =
     |facts: Vec<Object>| facts.iter().map(|one| one.as_ref().py_repr()).collect::<Vec<_>>();
   let first = shown(world::logged(&record).unwrap().expect("the log agrees with the record"));
-  let rung =
-    first.iter().position(|one| one.starts_with("['rung', 'rung1', 'operator', 'chain1', 'x = 1"));
-  let run = first.iter().position(|one| one.starts_with("['run', 'run1', "));
+  let rung = first.iter().position(|one| one.contains("'operator', 'chain1', 'x = 1"));
+  let named =
+    rung.and_then(|at| first[at].split("'").nth(3).map(str::to_owned)).unwrap_or_default();
+  let run = first
+    .iter()
+    .position(|one| one.starts_with("['run', ") && one.contains(&format!(", '{named}', 'x = 1")));
   assert!(
     rung.is_some_and(|rung| run.is_some_and(|run| rung < run)),
     "the log holds the rung and its run"

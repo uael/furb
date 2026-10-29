@@ -29,7 +29,7 @@ pub use update::{Source, Status, status, updated};
 use std::{
   collections::{HashMap, HashSet},
   env, fs,
-  path::PathBuf,
+  path::{Path, PathBuf},
   sync::{Arc, OnceLock},
   time::Duration,
 };
@@ -55,8 +55,35 @@ pub const LEVELS: [&str; 7] = ["off", "minimal", "low", "medium", "high", "xhigh
 pub const LEVEL: &str = "high";
 
 /// The doctrine of furb, which says how a model works in furb and holds no law: `DOCTRINE.md` at the root of the
-/// repository. Every model reads it, once on each chain, in the paragraph that asks it for its first word.
+/// repository. A chain reads it as a file, in the first turn of its actor, at the path that [`doctrine`] gives.
 pub const DOCTRINE: &str = include_str!("../../../DOCTRINE.md");
+
+/// The path of the doctrine that a chain in a directory reads: `.furb/DOCTRINE.md` of that directory when it holds
+/// one, as a doctrine of the project; else, in dev mode, the `DOCTRINE.md` of the checkout of git that this furb was
+/// built from; else the official copy, `.furb/DOCTRINE.md` in the home, which it writes from [`DOCTRINE`] when that
+/// file holds another text. It gives none when no home stands or the official copy cannot be written.
+pub fn doctrine(directory: &Path) -> Option<PathBuf> {
+  let checkout = Path::new(env!("CARGO_MANIFEST_DIR"));
+  let dev = checkout.join(".git").exists().then_some(checkout);
+  doctrine_in(directory, dev, env::home_dir().as_deref())
+}
+
+/// The path that [`doctrine`] gives, from the directory, the checkout of dev mode and the home.
+fn doctrine_in(directory: &Path, checkout: Option<&Path>, home: Option<&Path>) -> Option<PathBuf> {
+  let project = directory.join(".furb").join("DOCTRINE.md");
+  if project.is_file() {
+    return Some(project);
+  }
+  if let Some(dev) = checkout.map(|one| one.join("DOCTRINE.md")).filter(|one| one.is_file()) {
+    return Some(dev);
+  }
+  let official = home?.join(".furb").join("DOCTRINE.md");
+  if fs::read_to_string(&official).ok().as_deref() != Some(DOCTRINE) {
+    fs::create_dir_all(official.parent()?).ok()?;
+    fs::write(&official, DOCTRINE).ok()?;
+  }
+  Some(official)
+}
 
 /// The snapshot of the catalog that the crate carries.
 const SNAPSHOT: &str = include_str!("catalog.json");
