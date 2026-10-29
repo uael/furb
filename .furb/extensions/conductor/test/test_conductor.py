@@ -2071,3 +2071,18 @@ async def test_a_child_in_a_linked_gh_stack_is_left_to_gh_stack_when_its_parent_
   conductor.shifted[8] = ("old", "new")
   assert await conductor.restack_forced() == set()
   assert "rebase" not in conductor.log()
+
+
+@POSIX
+@JQ
+async def test_a_lone_failure_behind_a_green_main_reruns_its_failed_jobs_before_it_updates_the_branch(
+  conductor: Round,
+) -> None:
+  conductor.say(r"compare/main\.\.\.abc", '{"behind_by": 3}')
+  conductor.say(r"pr view 5 --json headRefOid", '{"headRefOid": "abc"}')
+  conductor.say(r"run list --commit abc", json.dumps([run(1, "gates", "10:00", "failure")]))
+  await conductor.mend(conductor.pr(checks=("FAILURE", "SUCCESS")), 0.0, False)
+  assert "run rerun 1 --failed\n" in conductor.log()
+  assert "update-branch" not in conductor.log()
+  await conductor.mend(conductor.pr(checks=("FAILURE", "SUCCESS")), 0.0, False)
+  assert "pr update-branch 5\n" in conductor.log()

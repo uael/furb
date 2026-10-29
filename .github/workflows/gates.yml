@@ -12,7 +12,7 @@ on:
 # can save: a cancel on main made the bindings on Windows build their dependencies again on each run, in 12 minutes.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
