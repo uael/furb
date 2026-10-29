@@ -141,6 +141,13 @@ export class App {
   readonly railHeading: BoxRenderable;
   readonly railSpaces: ScrollBoxRenderable;
   readonly railUsage: BoxRenderable;
+  /** The row at the top of the sidebar that says how to go back to the feed: a narrow terminal shows the sidebar in
+   * place of the feed, which the screen holds. */
+  readonly railBack: BoxRenderable;
+  readonly screen: BoxRenderable;
+  /** Whether the sidebar takes a narrow terminal whole, and the chain and the session that it opened on. */
+  drawer = false;
+  drawerOn = "";
   /** The program of each thread and each word of the operator, as it stood at a version of the acts and of the words
    * that its models write. */
   programs = new Map<string, { session: unknown; version: number; live: string; lines: ProgramLine[] }>();
@@ -395,6 +402,7 @@ export class App {
       gap: space.stack,
     });
     this.root.add(center);
+    this.screen = center;
     // The top line says where the operator is at its left, and holds the toggle of the views at its right.
     const top = this.row({ gap: space.between });
     this.headline = this.row({ flexGrow: 1, flexShrink: 1, minWidth: 0, overflow: "hidden" });
@@ -564,6 +572,18 @@ export class App {
       backgroundColor: c.panel,
       overflow: "hidden",
     });
+    this.railBack = this.row({ paddingX: space.between, visible: false });
+    this.railBack.add(
+      this.link(
+        [
+          [`${glyph.back} `, c.faint],
+          ["Back to the feed", c.muted],
+          ["   ⌃\\", c.faint],
+        ],
+        () => this.toggleSidebar(),
+      ),
+    );
+    this.rail.add(this.railBack);
     this.railSession = this.box({ gap: space.stack });
     this.rail.add(this.railSession);
     this.railHeading = this.row({ marginTop: space.section, paddingX: space.between });
@@ -843,8 +863,13 @@ export class App {
     if (this.draftKey !== this.composeKey()) this.showDraft(this.composeKey());
     this.orphans();
     // The mode of a screen reader shows one column of text, and no sidebar beside it.
+    // A narrow terminal shows the sidebar whole until the key is pressed again, or the chain or the session changes.
+    if (this.drawer && (this.renderer.width >= 100 || this.drawerOn !== this.drawerState()))
+      this.drawer = false;
     this.rail.visible = this.sidebarShown;
-    this.rail.width = w.preferences.sidebarWidth;
+    this.rail.width = this.sideWidth || w.preferences.sidebarWidth;
+    this.screen.visible = !this.drawerOpen;
+    this.railBack.visible = this.drawerOpen;
     this.renderTop();
     const pending = w.operatorPrompt;
     const images = w.images[w.selected] ?? [];

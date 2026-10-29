@@ -294,7 +294,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | ⌃B / ⌃N | Chains / create a chain |
 | ⌃M or ⌥M | Choose a model |
 | ⇧Tab / ⌃T | Choose an effort / a theme |
-| ⌃W / ⌃\\ | Workspaces and sessions / show or hide the sidebar |
+| ⌃W / ⌃\\ | Workspaces and sessions / show or hide the sidebar, which takes the place of the feed on a narrow terminal |
 | ⌥D / ⌥E | Fold or expand details / external editor |
 | ⌃V | Paste a clipboard image |
 | @ or ! | Find a project file, or run a shell command |

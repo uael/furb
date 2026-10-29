@@ -35,14 +35,16 @@ export const blocks = part({
    * laid out. */
   get feedWidth(): number {
     return (
-      this.renderer.width - (this.sidebarShown ? this.session.preferences.sidebarWidth : 0) - space.gutter * 2
+      this.renderer.width -
+      (this.sidebarShown && !this.drawerOpen ? this.session.preferences.sidebarWidth : 0) -
+      space.gutter * 2
     );
   },
 
   /** The region of the screen that a dialog or a menu covers, whole: the sidebar for a point in it, else the feed with
    * its gutters. An overlay never crosses the edge of its region, so it cuts no word of the region beside it. */
   region(x = 0): { left: number; width: number } {
-    const side = this.sidebarShown ? this.session.preferences.sidebarWidth : 0;
+    const side = this.sideWidth;
     const edge = this.renderer.width - side;
     return side && x >= edge ? { left: edge, width: side } : { left: 0, width: edge };
   },
@@ -77,7 +79,37 @@ export const blocks = part({
   /** Whether the sidebar shows, from the preferences and the screen. The node of the rail follows it at the next
    * render, so a read of the node between a change and that render sees the old state. */
   get sidebarShown(): boolean {
-    return this.session.preferences.sidebar && !this.reader && this.renderer.width >= 100;
+    if (this.reader) return false;
+    return this.renderer.width >= 100 ? this.session.preferences.sidebar : this.drawer;
+  },
+
+  /** Whether the sidebar takes the place of the feed, as it does on a narrow terminal where the key shows it. */
+  get drawerOpen(): boolean {
+    return this.sidebarShown && this.renderer.width < 100;
+  },
+
+  /** The columns of the sidebar: the width that its preference gives, or the whole screen where it takes the place of the
+   * feed. */
+  get sideWidth(): number {
+    if (!this.sidebarShown) return 0;
+    return this.drawerOpen ? this.renderer.width : this.session.preferences.sidebarWidth;
+  },
+
+  /** What the sidebar shows the operator on: the chain and the session that it opened on, which leave it when they change. */
+  drawerState(): string {
+    return `${this.session.selected}|${this.options.workspaces.current?.path}`;
+  },
+
+  /** The key of the sidebar. On a terminal wide enough it shows or hides the column at the right, which the preferences
+   * keep; on a narrow one it shows the sidebar in place of the feed, or the feed again. */
+  toggleSidebar(): void {
+    if (this.reader || this.renderer.width >= 100) {
+      this.options.workspaces.toggle();
+      return;
+    }
+    this.drawer = !this.drawer;
+    this.drawerOn = this.drawerState();
+    this.render();
   },
 
   /** A node that stands a number of columns in from the left, since a text leaves its own padding out when it draws. */

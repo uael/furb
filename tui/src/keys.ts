@@ -113,7 +113,8 @@ export const keys = [
   },
   {
     chord: "⌃W / ⌃\\",
-    action: "Workspaces and sessions / show or hide the sidebar",
+    action:
+      "Workspaces and sessions / show or hide the sidebar, which takes the place of the feed on a narrow terminal",
     bindings: [
       { on: ["ctrl+w", "ctrl+o"], run: "workspaces", chord: "⌃W", command: "workspace" },
       { on: ["ctrl+\\"], run: "sidebar", chord: "⌃\\", command: "sidebar" },

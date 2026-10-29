@@ -364,6 +364,7 @@ export const glyph = {
   branch: "└",
   meter: "━",
   rule: "─",
+  back: "‹",
   chip: "■",
   mark: "▎",
   rename: "✎",

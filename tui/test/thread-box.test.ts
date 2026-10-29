@@ -90,6 +90,28 @@ test("the cards of prose keep the measure of a line, 100 columns, on a wide scre
     true,
   ));
 
+test("a terminal narrower than 100 columns shows the sidebar in place of the feed with its key, and the feed again with the same key", () =>
+  composing(
+    async ({ session, app, frame }) => {
+      await idle(session);
+      let text = await frame();
+      expect(text).toContain("⌃\\ sidebar");
+      expect(text).not.toContain("Back to the feed");
+      app.toggleSidebar();
+      text = await frame();
+      expect(text).toContain("Back to the feed");
+      expect(text).toContain("Threads");
+      expect(text).not.toContain("commands");
+      expect(app.screen.visible).toBe(false);
+      app.toggleSidebar();
+      text = await frame();
+      expect(text).not.toContain("Back to the feed");
+      expect(app.screen.visible).toBe(true);
+    },
+    { width: 80, height: 30 },
+    true,
+  ));
+
 test("a click on Reply makes the thread the target of the input, whose line and meta line take its color and its name, a message then goes to the thread and opens it again, and + New thread sends the next one to a new thread", () =>
   composing(
     async ({ session, app, screen, click, frame }) => {
