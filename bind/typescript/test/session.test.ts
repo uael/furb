@@ -228,27 +228,40 @@ test("what a model writes streams into the session under its rung until its repl
         // whose user turn holds what they read, the banner and the standing of the root, then the prompt.
         messages: [
           turn("user", "chain()"),
-          turn("assistant", expect.stringMatching(/^read\('.*\/DOCTRINE\.md'\)$/)),
-          turn("user", expect.stringMatching(/^#read1\nread1_path = '.*\/DOCTRINE\.md'\n/)),
+          // A path of Windows stands with its separators doubled, as python shows a backslash.
+          turn("assistant", expect.stringMatching(/^read\('.*[/\\]DOCTRINE\.md'\)$/)),
+          turn("user", expect.stringMatching(/^#read1\nread1_path = '.*[/\\]DOCTRINE\.md'\n/)),
           ...["memory", "skills", "compaction", "ouroboros", "web", "mcp"].flatMap((name, at) => [
             turn(
               "assistant",
-              expect.stringMatching(new RegExp(`^read\\('.*/extensions/${name}/${name}\\.py'\\)$`)),
+              expect.stringMatching(
+                new RegExp(`^read\\('.*[/\\\\]+extensions[/\\\\]+${name}[/\\\\]+${name}\\.py'\\)$`),
+              ),
             ),
             turn(
               "user",
               expect.stringMatching(
-                new RegExp(`^#read${at + 2}\\nread${at + 2}_path = '.*/${name}\\.py'\\n`),
+                new RegExp(`^#read${at + 2}\\nread${at + 2}_path = '.*[/\\\\]${name}\\.py'\\n`),
               ),
             ),
           ]),
           turn("assistant", "await recall()\nawait listed()\nmcp_index()"),
-          turn(
-            "user",
-            expect.stringMatching(
-              /^#read8\nread8_path = 'skills:\/\/'\n[\s\S]*\n#chain1\nchain1_label = 'root'\n[\s\S]*\n#chain1 standing\n[\s\S]*\n#prompt1\nprompt1_message = 'count'\nprompt1: Act\[int\] = Act\('prompt1'\)\n\n#rung9 advance on prompt1$/,
-            ),
-          ),
+          // The open of the root goes as a block of its own after the setup, which ends the block before it.
+          expect.objectContaining({
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: expect.stringMatching(/^#read8\nread8_path = 'skills:\/\/'\n[\s\S]*<\/s:read8_text>$/),
+              },
+              {
+                type: "text",
+                text: expect.stringMatching(
+                  /^#chain1\nchain1_label = 'root'\n[\s\S]*\n#chain1 standing\n[\s\S]*\n#prompt1\nprompt1_message = 'count'\nprompt1: Act\[int\] = Act\('prompt1'\)\n\n#rung9 advance on prompt1$/,
+                ),
+              },
+            ],
+          }),
         ],
         settings: {
           effort: "high",

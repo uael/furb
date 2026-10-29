@@ -371,9 +371,12 @@ test("the words of the extensions stand as code: a comment that names their ear,
         // doctrine, the read of the file of each extension in the order of the life, then the life words in one word.
         const setup = session.activity.filter((act) => act.kind === "rung" && act.by === "extensions");
         expect(setup.map((act) => act.word)).toEqual([
-          expect.stringMatching(/^read\('.*\/DOCTRINE\.md'\)$/),
+          // A path of Windows stands with its separators doubled, as python shows a backslash.
+          expect.stringMatching(/^read\('.*[/\\]DOCTRINE\.md'\)$/),
           ...["memory", "skills", "compaction", "ouroboros", "web", "mcp"].map((name) =>
-            expect.stringMatching(new RegExp(`^read\\('.*/extensions/${name}/${name}\\.py'\\)$`)),
+            expect.stringMatching(
+              new RegExp(`^read\\('.*[/\\\\]+extensions[/\\\\]+${name}[/\\\\]+${name}\\.py'\\)$`),
+            ),
           ),
           "await recall()\nawait listed()\nmcp_index()",
         ]);
