@@ -386,7 +386,7 @@ with the package of its engine for each system, and `furb`, `furb-monty` and `fu
 `release-please-config.json` names each file that holds the version, and `.github/workflows/release.yml` keeps the
 pull request of the next release open on main, with `CHANGELOG.md`. A merge of that pull request tags the release,
 and `.github/workflows/publish.yml` publishes it from the tag, once it proved each package from its built artifacts
-in a clean environment. The merge of any other pull request publishes nothing. While the version stands below 1.0.0, a breaking change raises the minor version, as `bump-minor-pre-major` says, so only the owner takes furb to 1.0.0. crates.io takes no crate that
+in a clean environment. The merge of any other pull request publishes nothing. A fix or a feat raises the patch version, and a breaking change raises the minor version, as `bump-patch-for-minor-pre-major` and `bump-minor-pre-major` say while the version stands below 1.0.0. Only the owner raises the major version: `gh workflow run release.yml -f version=1.0.0` gives that version to the next release. From 1.0.0, release-please raises the minor version for a feat and the major version for a breaking change, so these rules change before that release. Each day, the job `daily` of `release.yml` merges the pull request of the next release when its gates and the gates of main passed. crates.io takes no crate that
 stands on git, and `furb` stands on the fork of monty by git: the job of crates.io publishes `furb` and `furb-cli`
 only when no dependency of either stands on git, which is when monty stands on crates.io with what furb needs, and
 until then it says why it skips.
