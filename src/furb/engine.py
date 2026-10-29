@@ -1,11 +1,10 @@
 import re
 from asyncio import CancelledError, get_running_loop
 from collections import Counter
-from collections.abc import Callable, Generator
 from contextvars import ContextVar
 from dataclasses import dataclass
 from string.templatelib import Template
-from typing import Any, Literal, Never
+from typing import Any, Callable, Generator, Literal, Never  # noqa: UP035
 
 WINDOW = 200000
 OPERATOR = "operator"
@@ -270,12 +269,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
 
     if source:
       theirs = transcript(source)
-      kin = {source}
-      for one in (filter or list)([x for x in theirs if question(x)]):
-        name = one[1]
-        while name not in kin and (b := get(name)):
-          kin.add(name)
-          name = b[2]
+      kin = {source, *[n for one in (filter or list)([x for x in theirs if question(x)]) for n in lineage(one[1])]}
       yield (
         "prefix",
         id,
@@ -502,10 +496,14 @@ class Refused(Exception): ...
 class Drift(Exception): ...
 
 
+def lineage(name):
+  yield name
+  while a := get(name):
+    yield (name := a[2])
+
+
 def under(name, of):
-  while name != of and (a := get(name)):
-    name = a[2]
-  return name == of != ""
+  return of != "" and of in lineage(name)
 
 
 def acting():
@@ -569,9 +567,8 @@ def told(id, what="", *notes, **words):
 def control(kind, name, id, *words):
   if not get(id):
     raise Refused("no act " + repr(id))
-  return (
-    over(id) or scope(acting()) == scope(id) or say(*told(id, name + " by " + site.get(), value=(*words, None)[0]))
-  ) and say(kind, id, *words)
+  over(id) or scope(acting()) == scope(id) or say(*told(id, name + " by " + site.get(), value=(*words, None)[0]))
+  return say(kind, id, *words)
 
 
 def headed(id, what="", **words):
@@ -632,10 +629,7 @@ def covers(a, id):
     if question(("reply", id)):
       id = get(id)[2]
     return on(id) or (question(("rung", id)) and on(get(id)[2]))
-  up = id
-  while not on(up) and (x := get(up)):
-    up = x[2]
-  return on(up) or scope(id) == of
+  return any(map(on, lineage(id))) or scope(id) == of
 
 
 def paused(id):
@@ -797,7 +791,7 @@ def boot(record=(), **outside):
 
   def ears(a):
     q = get(a[1]) or a[:1] * 4
-    k = {a[0], *q[:4], scope(q[2]), scope(q[3])}
+    k = {a[0], *q[:4], *map(scope, q[2:4])}
     return sorted(
       (x for x in alive.items() if k & (waits.get(x[0]) or k) or a[0] in ("pause", "wake", "cancel", "close")),
       key=lambda x: (x[0] not in known, x[0] in outside),
