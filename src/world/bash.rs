@@ -3,14 +3,16 @@
 
 use std::{
   collections::{HashMap, HashSet},
-  env, future,
-  io::ErrorKind,
+  env,
+  ffi::{OsStr, OsString},
+  future,
+  io::{ErrorKind, Read},
   ops::{Deref, DerefMut},
   path::{Path, PathBuf},
   pin::pin,
   process::{Command, Stdio},
   sync::OnceLock,
-  time::Duration,
+  time::{Duration, Instant},
 };
 
 use futures::{
@@ -45,6 +47,56 @@ pub fn shell() -> &'static Path {
     git_sh(&folders, env::var_os("ProgramFiles").map(PathBuf::from))
       .unwrap_or_else(|| PathBuf::from("sh"))
   })
+}
+
+/// The PATH that the login shell of the user sets, read once for the process, or none on Windows, with no `SHELL`, or
+/// when that shell fails to give one. A life started from a desktop or a service has the short PATH of its parent, which
+/// lacks the folders that the profile of the user adds, as `/opt/homebrew/bin`.
+fn login_path() -> Option<&'static OsString> {
+  static FOUND: OnceLock<Option<OsString>> = OnceLock::new();
+  FOUND
+    .get_or_init(
+      || if cfg!(windows) { None } else { asked_path(Path::new(&env::var_os("SHELL")?)) },
+    )
+    .as_ref()
+}
+
+/// What the login shell `shell` says its PATH is, between two marks that a profile which writes to its output cannot
+/// forge by accident, or none when it fails, gives no path, or runs past five seconds.
+fn asked_path(shell: &Path) -> Option<OsString> {
+  let mut child = Command::new(shell)
+    .args(["-l", "-c", "printf '<furb-path>%s</furb-path>' \"$PATH\""])
+    .stdin(Stdio::null())
+    .stdout(Stdio::piped())
+    .stderr(Stdio::null())
+    .spawn()
+    .ok()?;
+  let end = Instant::now() + Duration::from_secs(5);
+  let status = loop {
+    if let Some(status) = child.try_wait().ok()? {
+      break status;
+    }
+    if Instant::now() >= end {
+      let _ = child.kill();
+      let _ = child.wait();
+      return None;
+    }
+    std::thread::sleep(Duration::from_millis(10));
+  };
+  let mut said = String::new();
+  child.stdout.take()?.read_to_string(&mut said).ok()?;
+  let path = said.split_once("<furb-path>")?.1.split_once("</furb-path>")?.0;
+  (status.success() && !path.is_empty()).then(|| OsString::from(path))
+}
+
+/// The folders of `login` in order, then those of `current` that it lacks.
+fn merged_path(login: &OsStr, current: &OsStr) -> OsString {
+  let mut seen = HashSet::new();
+  let kept: Vec<PathBuf> = env::split_paths(login)
+    .chain(env::split_paths(current))
+    .filter(|one| seen.insert(one.clone()))
+    .collect();
+  env::join_paths(kept).unwrap_or_else(|_| current.to_owned())
 }
 
 /// The sh of Git for Windows: the `sh` in these folders, else the one of the Git whose `git` stands in them, in a
@@ -95,7 +147,8 @@ fn runs(path: &Path) -> bool {
 /// the first bytes as they come and then a line that says the rest is cut, and its exit gives the first bytes, a line that
 /// counts the bytes cut, and the last bytes.
 ///
-/// A command runs with `TMPDIR` set to the scratch directory of the life, and `TMP` and `TEMP` too on Windows, which
+/// A command runs with the PATH of the login shell of the user, read once, ahead of the PATH of the process, so it finds
+/// the programs that the profile of the user adds. A command runs with `TMPDIR` set to the scratch directory of the life, and `TMP` and `TEMP` too on Windows, which
 /// the ear makes first, so a command finds there the files of `scratch://`. A command ends with every process it started, which its group holds. A
 /// command that a control ended first, which the engine says done, is ended so and says nothing more.
 pub fn bash(scratch: Scratch, record: &[Object]) -> Box<dyn Ear> {
@@ -282,6 +335,9 @@ async fn begun(co: &mut Co<Said>, a: &Fact, scratch: &Scratch) -> Result<Begun, 
     .stderr(Stdio::piped());
   let tmp = scratch.made()?;
   command.env("TMPDIR", tmp);
+  if let Some(login) = login_path() {
+    command.env("PATH", merged_path(login, &env::var_os("PATH").unwrap_or_default()));
+  }
   if cfg!(windows) {
     command.env("TMP", tmp).env("TEMP", tmp);
   }
