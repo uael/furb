@@ -301,7 +301,7 @@ test("a line that does not fit its room lays out in rows, and it and a folded st
     true,
   ));
 
-test("the Context part of the sidebar holds three lines: its share, its meter and its numbers, and no row of tokens under them", () =>
+test("the Context part of the sidebar is one line: its meter, its share and what the chain spent, and no row under it", () =>
   composing(
     async (use) => {
       const { session, frame } = use;
@@ -309,9 +309,10 @@ test("the Context part of the sidebar holds three lines: its share, its meter an
       const rows = rail(session, await frame()).map((line) => line.trim());
       const at = rows.findIndex((line) => line.startsWith("Context"));
       expect(at).toBeGreaterThan(0);
-      expect(rows[at + 1]).toMatch(/^━+$/);
-      expect(rows[at + 2]).toContain("prompt");
-      expect(rows.slice(at + 3).join("\n")).not.toMatch(/Fresh input|Cache write|Output|Last prompt/);
+      expect(rows[at]).toMatch(/^Context ━+ \d+(\.\d)?%.* \$\d/);
+      expect(rows.slice(at + 1).join("\n")).not.toMatch(
+        /━|prompt|cached|Fresh input|Cache write|Output|Last prompt/,
+      );
     },
     size,
     true,
