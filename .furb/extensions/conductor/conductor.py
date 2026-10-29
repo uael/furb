@@ -30,6 +30,7 @@ from furb.engine import (
   prompt,
   read,
   rung,
+  say,
   scope,
   transcript,
   wait,
@@ -64,7 +65,7 @@ threads() gives the tree of the threads: the brief prompt of each worker and the
 debrief(name) asks the chain of a worker that ended for the frictions that it met in furb.
 Each act of the round is made through quietly(verb, ...), so its end wakes nobody: you hear only a notice, and each merge rides on the next one. Make each act that you do not await the same way.
 An item that takes a PR by its brief, and not by a label or a push, names it in owns[key] = [n, ...], so that the round sees its worker as the maker of that PR: the maker gets the order first, and a fixer takes the PR after OWNED seconds.
-At each round a watchdog reads each open command of each worker, with no model: a wait on CI (gh pr checks --watch, gh run watch, or a loop of sleep around gh) that runs over 10 minutes is cancelled, and its reason tells the worker to stay on its PR, read the checks again after await wait(600) and close only when the PR merged. Any other command whose output did not grow for 15 minutes is a line in the next notice, and at 30 minutes it is cancelled with its reason and told to you. It ends a wait or a command, never a task.
+At each round a watchdog reads each open command of each worker, with no model: a wait on CI (gh pr checks --watch, gh run watch, or a loop of sleep around gh) that runs over 10 minutes is cancelled, and its reason tells the worker to stay on its PR, read the checks again after await wait(600) and close only when the PR merged. Any other command whose output did not grow for 15 minutes is a line in the next notice, and at 30 minutes it is cancelled with its reason and told to you. It ends a wait or a command, never a task. It also reads every chain of the life, not the workers alone: when a wait or a run of a word has held a chain for HELD seconds while a prompt of the operator on it is not over and no reply of a rung of it was said, the round cancels that wait (else that run, and says done with CancelledError when the cancel left it open), tells the chain once to await nothing over 60 s and to peek at the next advance, and names the chain in the next notice. It leaves the home of the round alone.
 DEBRIEFS is on by default and lives in the state of the round: DEBRIEFS = False in a word turns off the debrief of each worker that ends, which saves tokens.
 An item waits for others with after[key] = [keys], set before you queue it: staff() hires it only once each PR that those keys ended with merged, an item of backlog whose keys merged goes to queue, and the round lists in a notice each key that no item holds. The entries of held_items in the module of the root move into backlog at each round, so a dict of your own chain is not needed.
 Method, at each notice: read the whole state, fix every thing that is off in one go, read the state again to verify, and go on until nothing is off. Only then report. Each round also checks the state in invariants(): it gives each open PR that the round tends a home, from the chain that pushed its head, wakes no chain, and lists in the next notice what code cannot fix.
@@ -127,6 +128,7 @@ areas: dict[str, list[str]] = globals().setdefault("areas", {})
 DEBRIEFS = globals().get("DEBRIEFS", True)
 vetoes: dict = globals().setdefault("vetoes", {})
 OWNED = 900.0
+HELD = 120.0
 GALLERY = "w/gallery"
 GALLERY_WAIT = 6 * 3600.0
 tips: dict[str, str] = globals().setdefault("tips", {})
@@ -882,6 +884,51 @@ def tend() -> None:
             f"{act} of {item} on {home} has printed nothing for {quiet} minutes: {command[:100]!r}; its last output: {tail!r}"
           )
 
+  def held_chains() -> None:
+    # A word that awaits holds its chain, so a prompt of the owner on it is never asked. The round cannot tell the
+    # wait that it makes itself in conduct() from another, so it leaves the home of the round alone.
+    chains, todo = {ROOT}, [ROOT]
+    while todo:
+      for x in transcript(todo.pop()):
+        if x[0] == "chain" and str(x[1]) not in chains:
+          chains.add(str(x[1]))
+          todo.append(str(x[1]))
+    for home in sorted(chains - {lead.get("home", "")}):
+      facts = transcript(home)
+      # A prompt makes its rung at once, before the chain asks it: it is asked when a reply is said by a rung of it.
+      replied = {y[2] for y in facts if y[0] == "reply"}
+      asked = {y[2] for y in facts if y[0] == "rung" and y[1] in replied}
+      unasked = [
+        str(y[1]) for y in facts if y[0] == "prompt" and y[2] == OPERATOR and not over(y[1]) and y[1] not in asked
+      ]
+      holding = [x for x in facts if x[0] in ("wait", "run") and not over(x[1])]
+      if not (unasked and holding):
+        continue
+      held = []
+      for x in holding:
+        live.add(f"held {x[1]}")
+        if now - watched.setdefault(f"held {x[1]}", [now, 0, now])[0] >= HELD:
+          held.append(x)
+      cuts = [str(x[1]) for x in held if x[0] == "wait"] or [str(x[1]) for x in held if x[0] == "run"]
+      if not cuts:
+        continue
+      quietly(
+        prompt,
+        None,
+        f"The round cut {', '.join(cuts)}, which held this chain for {int(HELD // 60)} minutes while a prompt of the"
+        f" owner ({', '.join(unasked)}) waited and was never asked. A word that awaits holds the chain: await nothing"
+        " over 60 s, end your word, and peek at the next advance.",
+        on=home,
+      )
+      for cut_act in cuts:
+        cancel(cut_act)
+        if not over(cut_act):
+          say("done", cut_act, CancelledError())
+      heard.append(
+        f"The round cut {', '.join(cuts)} on {home}: it held the chain while the prompt {', '.join(unasked)} of the"
+        " owner waited unasked."
+      )
+
   for name, key in working.items():
     where = working_at(name)
     if paused(where) and where not in parked:
@@ -898,6 +945,7 @@ def tend() -> None:
         f"The worker {key} on {where} has said nothing for {int(now - silent[where][1]) // 60} minutes. Look at it.",
       )
     watchdog(name, key)
+  held_chains()
   for gone in [a for a in watched if a not in live]:
     del watched[gone]
   late = (
