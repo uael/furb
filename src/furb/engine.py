@@ -296,7 +296,9 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
           isinstance(value, Exception) and r[0] != "reply" and "",
         ) and repr(about) not in str(transcript(id, "wants")):
           scope(about) != id and (yield "tell", maker, [headed(about, "done", value=value)])
-          value is None or isinstance(value, CancelledError) or (unseen := (about + " done", maker))
+          value is None or isinstance(value, CancelledError) or (
+            unseen := (about + " done", maker, isinstance(value, Exception))
+          )
         case ("done", _, by, Refused() as why) if (
           r[0] == "reply"
           and r[3] != id
@@ -304,7 +306,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
           and (maker := (get(p := get(r[2])[2]) or a)[2]) in running
         ):
           yield "tell", maker, [headed(p, "paused", why=why)]
-          running[maker] or (unseen := (p + " paused", maker))
+          running[maker] or (unseen := (p + " paused", maker, 0))
       if scope(a[1]) != id:
         continue
       if a[0] in ("ready", "done"):
@@ -374,9 +376,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
           unseen = ""
       if unseen and not waiting and (r[2] in running or over(r[2]) or a[0] == "tell"):
         ours = get(unseen[1])[2]
-        while over(ours) and prompted(up := get(ours)[3]):
-          ours = up
-        prompt(None, unseen[0], on=ours * prompted(ours))
+        prompted(ours) and (unseen[2] or not over(ours)) and prompt(None, unseen[0], on=ours)
         unseen = ""
 
   return act("chain", on, ear, label, source)
