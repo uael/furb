@@ -489,8 +489,8 @@ def veto(world: World) -> bool:
   return asyncio.run(world.converge_veto(pr(verdict="pass")))
 
 
-def test_the_conductor_is_given_the_veto_of_converge(world: World) -> None:
-  assert world.round["vetoes"]["converge"] is world.ns["converge_veto"]
+def test_the_conductor_is_given_no_veto_of_converge(world: World) -> None:
+  assert "converge" not in world.round["vetoes"]
 
 
 def test_a_green_pr_that_changes_a_capture_waits_for_the_judges_and_lands_on_a_clean_head(world: World) -> None:
@@ -656,9 +656,9 @@ def played_on(chain: str) -> tuple[dict, dict]:
   return ns, modules
 
 
-def test_the_veto_of_converge_stands_in_the_module_of_the_chain_that_runs_the_conductor() -> None:
+def test_converge_puts_no_veto_in_the_module_of_the_chain_that_runs_the_conductor() -> None:
   ns, modules = played_on("chain2")
-  assert modules["chain2"]["vetoes"]["converge"] is ns["converge_veto"]
+  assert "converge" not in modules["chain2"].get("vetoes", {})
   assert "converge" not in modules["chain1"]["vetoes"]
 
 
