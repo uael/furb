@@ -1815,7 +1815,8 @@ def test_a_prompt_that_ended_with_cancelled_error_and_no_cancel_of_the_round_goe
 ) -> None:
   cancelled_worker(conductor)
   conductor.tend()
-  assert conductor.prompts == [(conductor.RESUME, "chain5")]
+  [(told, on)] = conductor.prompts
+  assert told.startswith(conductor.RESUME + "\n\nWork in the workspace ") and on == "chain5"
   assert conductor.targets[-1] == SONNET
   assert list(conductor.working.values()) == ["item1"] and "prompt1" not in conductor.working
   assert conductor.models[next(iter(conductor.working))] == SONNET
@@ -1860,7 +1861,8 @@ def test_a_resume_over_the_cap_waits_for_a_slot_and_goes_on_when_one_frees(condu
   assert list(conductor.parked) == ["chain5"] and any("waits on chain5" in x for x in conductor.heard)
   del asks["chain2"]
   conductor.staff()
-  assert conductor.prompts == [(conductor.RESUME, "chain5")] and conductor.parked == {}
+  [(told, on)] = conductor.prompts
+  assert told.startswith(conductor.RESUME + "\n\nWork in the workspace ") and on == "chain5" and conductor.parked == {}
   assert list(conductor.working.values()) == ["item1"]
 
 
@@ -2028,11 +2030,13 @@ def test_a_worker_takes_a_free_workspace_at_its_hire_and_gives_it_back_when_it_e
   assert f"Work in the workspace {repo}-w1," in conductor.prompts[-1][0] and "{workspace}" not in conductor.prompts[-1][0]
   assert "-w-k1" not in conductor.prompts[-1][0]
   conductor.real_hire("fix5", "", "", conductor.FIX)
-  assert conductor.prompts[-1][0].endswith(conductor.WORKSPACE.replace("{repo}", repo).replace("{slot}", "w2"))
+  assert conductor.prompts[-1][0].endswith(
+    conductor.WORKSPACE.replace("{repo}", repo).replace("{slot}", "w2").replace("{chain}", "chain-w/fix5")
+  )
   conductor.kinds["look"] = "audit"
   conductor.real_hire("look", "read")
   assert "workspace" not in conductor.prompts[-1][0]
-  assert sorted(conductor.slots.values()) == ["w1", "w2"]
+  assert sorted(set(conductor.slots.values())) == ["w1", "w2"]
   conductor.ns["DEBRIEFS"] = False
   conductor.done[first] = (9, "done")
   conductor.tend()
@@ -2102,6 +2106,51 @@ async def test_each_chain_of_stacked_prs_is_linked_as_one_gh_stack_once(conducto
   await conductor.linking()
   assert conductor.log().count("stack link 7 8") == 1
   assert conductor.heard == ["The stack #7 <- #8 is linked on GitHub."]
+def seated(conductor: Round) -> tuple[str, str, str]:
+  conductor.ns["quietly"] = lambda verb, *args, **words: (
+    asyncio.run(verb(*args, **words)) if verb == conductor.bash else verb(*args, **words)
+  )
+  conductor.ns["DEBRIEFS"] = False
+  first, second = conductor.real_hire("k1", "one", "tui"), conductor.real_hire("k2", "two", "gui")
+  conductor.done.update({first: (1, "done"), second: (2, "done")})
+  conductor.tend()
+  return str(conductor.tmp), first, second
+
+
+def test_a_chain_goes_on_in_the_workspace_that_it_held_last_when_no_live_worker_holds_it(conductor: Round) -> None:
+  repo, first, second = seated(conductor)
+  assert conductor.slots == {"chain-tui/k1": "w1", "chain-gui/k2": "w2"}
+  again = conductor.resume("k2", "chain-gui/k2", conductor.models[second], "Go on.")
+  assert conductor.prompts[-1][0].startswith("Go on.\n\nWork in the workspace " + repo + "-w2,")
+  assert "earlier workspace" not in conductor.prompts[-1][0]
+  assert conductor.slots[again] == conductor.slots["chain-gui/k2"] == "w2"
+
+
+def test_a_chain_whose_workspace_went_to_a_live_worker_gets_a_new_one_and_is_told_to_leave_the_old_one(
+  conductor: Round,
+) -> None:
+  repo, first, _ = seated(conductor)
+  conductor.real_hire("k3", "three", "ci")
+  assert f"workspace {repo}-w1," in conductor.prompts[-1][0]
+  again = conductor.resume("k1", "chain-tui/k1", conductor.models[first], "Go on.")
+  told = conductor.prompts[-1][0]
+  assert f"Work in the workspace {repo}-w2," in told and told.endswith(
+    f"Your earlier workspace {repo}-w1 now belongs to another worker: touch nothing in it and run no command there."
+  )
+  assert conductor.slots[again] == conductor.slots["chain-tui/k1"] == "w2"
+  assert conductor.slots["chain-tui/k1"] != "w1"
+
+
+def test_a_workspace_tells_its_worker_to_write_its_chain_in_the_holder_file_and_to_read_it_before_a_command(
+  conductor: Round,
+) -> None:
+  repo, *_ = seated(conductor)
+  told = conductor.prompts[0][0]
+  write_it = f'echo chain-tui/k1 > "$(git -C {repo}-w1 rev-parse --absolute-git-dir)/furb-holder"'
+  assert write_it in told and "{chain}" not in told
+  assert "Before your first command of each prompt in a workspace, read that file: if it names another chain than chain-tui/k1" in told
+
+
 def test_no_worker_gets_the_workspace_of_the_coordinator(conductor: Round) -> None:
   conductor.slots["coordinator"] = "w1"
   text, slot = conductor.placed("k", "{workspace}")

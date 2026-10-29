@@ -41,7 +41,7 @@ The owner rules again, on 10-23: "From now on: 2 opus workers, 3 sonnet ones. ma
 The round runs on one chain, lead["home"]. After a compaction of your chain, await conduct() in the new chain: it names that chain, the round of the old chain ends at its next wake, and the state that the round reads is the state of the new chain, which you change there.
 A fault of one step of a round, as an empty answer of gh, ends no round: the round tells you once each kind of fault, with the fault and its step, and goes on at the next round. Each json.loads of a command reads its output only when the command succeeded. When the round ends for any cause but a new home, it tells you as a decision, with the cause and what stops.
 hire(key, brief, thread) gives the item to an idle worker of the pool, by the ideas of the owner on 10-28, when one fits: a worker that ended stays in pool under its chain, with its model, its thread and the top folders of the files of its PR, and it takes an item of the same model whose thread is its own, or whose areas[key] names one of its folders, while its last reply filled under half of its window. Else hire starts a worker on a new chain that forks the base chain of its kind and model, bases["kind model"], which the round makes once and which reads AGENTS.md, so the provider serves that prefix from its cache. It starts the worker at model_of(key), on a chain labeled thread/key, with the brief in custom or the brief of its kind, and the PR of an edit carries the labels w:key and thread:thread.
-A worker does one item in a workspace {repo}-wN, which the round gives at its hire to it alone and again to a later worker once it ends, and which it leaves clean with its branch pushed, runs only the tests that its change touches, opens its PR, and closes with its URL.
+A worker does one item in a workspace {repo}-wN, which the round gives at its hire to it alone and again to a later worker once it ends, and which it leaves clean with its branch pushed (a chain goes on in the workspace that it held last when no live worker holds it, else it gets a new one and its brief says that the old one now belongs to another worker, and the file furb-holder in the git dir of a workspace names its chain, which each worker reads before its first command of a prompt there), runs only the tests that its change touches, opens its PR, and closes with its URL.
 A prompt of a worker that ends with CancelledError while the round made no cancel over it, as when the life restarts, goes on: the round asks it again on its chain with a new prompt, at most 3 times for an item, and tells nobody.
 The round tells you a worker that ends with no PR, with its answer, or that says nothing for 45 minutes, relays to you each question that a worker puts to the operator, and wakes a worker that paused. results keeps the answer of each worker under its prompt.
 When a worker ends, the round asks it debrief() once, and adds each friction that it gives to TOOLING, the ledger of the defects of the tooling, as flaw(what) adds a defect that you find or patch live. An entry counts each time that it comes again. settle_flaw(part, pr) closes each open entry that holds part with the PR that fixed it, once you checked on main that the PR did; the audit lists the open entries alone, and an entry that comes again opens again.
@@ -188,7 +188,9 @@ lands as a gh stack of PRs, each layer one change, opened from this chain, and y
 The item, {key}:
 {what}"""
 
-WORKSPACE = """Work in the workspace {repo}-{slot}, one of the workspaces w1, w2 and on that the round gives again from item to item, so that each build starts warm. If it does not stand, make it: {repo}/script/worktree.sh {repo}-{slot} <your branch>. If it stands, it holds the branch of an earlier item: run git status there, commit what no commit holds as a WIP commit on that branch and push it, then git fetch origin and git switch -C <your branch> onto origin/<your branch> when that branch is on origin, else onto origin/main. Leave the workspace clean when you close, each change committed and pushed, since your branch is on origin and the round gives the workspace to the next item."""
+WORKSPACE = """Work in the workspace {repo}-{slot}, one of the workspaces w1, w2 and on that the round gives again from item to item, so that each build starts warm. If it does not stand, make it: {repo}/script/worktree.sh {repo}-{slot} <your branch>. If it stands, it holds the branch of an earlier item: run git status there, commit what no commit holds as a WIP commit on that branch and push it, then git fetch origin and git switch -C <your branch> onto origin/<your branch> when that branch is on origin, else onto origin/main. Leave the workspace clean when you close, each change committed and pushed, since your branch is on origin and the round gives the workspace to the next item. The git dir of a workspace holds a file furb-holder that names the chain that holds it. Once the workspace stands, write your chain there: echo {chain} > "$(git -C {repo}-{slot} rev-parse --absolute-git-dir)/furb-holder". Before your first command of each prompt in a workspace, read that file: if it names another chain than {chain}, run nothing in that workspace, since the round gave it to another worker, and use the workspace that your brief names."""
+
+MOVED = "Your earlier workspace {repo}-{moved} now belongs to another worker: touch nothing in it and run no command there."
 
 AUDIT = """You are an auditor on the repository {repo}. Do one item: read the code, the records and the logs that it names, find each fact that it asks for, and write each in a register, scratch://audit/{key}.md ($TMPDIR/audit/{key}.md), with its evidence: the file and the line, or the command and the lines that it printed. Check each claim of the item in the code, since it is a claim. Change no file of the repository, make no worktree, push nothing and open no PR. Read a file with grep(pattern) or span(lo, hi), never whole when a part serves. Close with a tuple: 0, and your report in 200 words at most: the path of the register, what you found, and what is left.
 """ + RULES + """
@@ -461,11 +463,13 @@ def resume(key: str, where: str, model: str, text: str) -> str:
     heard.append(f"{key} waits on {where} for a free slot of the cap of {cap()} chains.")
     return ""
   quietly(rung, f"actor = {model!r}", on=where)
-  text, slot = placed(key, text)
+  if kind_of(key) != "audit" and "{workspace}" not in text:
+    text += "\n\n{workspace}"
+  text, slot = placed(key, text, where)
   name = str(quietly(prompt, tuple[int, str], text, to=model, on=where))
   working[name], models[name], hired[name] = key, model, clock()
   if slot:
-    slots[name] = slot
+    slots[name] = slots[where] = slot
   return name
 
 
@@ -550,24 +554,28 @@ def hire(key: str, what: str, thread: str = "", brief: str = "") -> str:
   quietly(rung, f"actor = {model!r}", on=where)
   if kind_of(key) != "audit" and "{workspace}" not in text:
     text += "\n\n{workspace}"
-  text, slot = placed(key, text)
+  text, slot = placed(key, text, where)
   name = str(quietly(prompt, tuple[int, str], text, to=model, on=where))
   working[name] = key
   models[name] = model
   hired[name] = clock()
   homes[key] = where
   if slot:
-    slots[name] = slot
+    slots[name] = slots[where] = slot
   return name
 
 
-def placed(key: str, text: str) -> tuple[str, str]:
+def placed(key: str, text: str, where: str = "") -> tuple[str, str]:
   if kind_of(key) == "audit":
     return text, ""
   held = {s for n, s in slots.items() if (n in working and not over(n)) or n == "coordinator"}
-  slot = next(f"w{i}" for i in range(1, cap() + len(held) + 2) if f"w{i}" not in held)
-  text = text.replace("{workspace}", WORKSPACE).replace("{repo}", cwd()).replace("{slot}", slot)
-  return text, slot
+  # A chain goes on in the workspace that it held last: its history names that path in its commands.
+  last = slots.get(where, "")
+  free = next(f"w{i}" for i in range(1, cap() + len(held) + 2) if f"w{i}" not in held)
+  slot = last if last and last not in held else free
+  moved = " " + MOVED.replace("{moved}", last) if last and last != slot else ""
+  text = text.replace("{workspace}", WORKSPACE + moved).replace("{repo}", cwd()).replace("{slot}", slot)
+  return text.replace("{chain}", where), slot
 
 
 def base_of(kind: str, model: str) -> str:
@@ -703,7 +711,7 @@ def tend() -> None:
       relays[orig] = ""
   for name in [x for x in working if over(x)]:
     key = working.pop(name)
-    slot = slots.pop(name, "")
+    slots.pop(name, "")
     got = peek(name)
     if isinstance(got, CancelledError) and get(name):
       kin, up = {name}, name
@@ -714,9 +722,7 @@ def tend() -> None:
       tries = len([k for k in noticed if k.startswith(f"resume {key} ")])
       if tries < 3 and not [x for x in transcript(where, "cancel") if x[1] in kin]:
         noticed.add(f"resume {key} {name}")
-        again = resume(key, where, models.get(name, ACTOR), RESUME)
-        if again and slot:
-          slots[again] = slot
+        resume(key, where, models.get(name, ACTOR), RESUME)
         continue
     results[name] = got
     if get(name):
