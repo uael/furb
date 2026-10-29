@@ -46,7 +46,9 @@ export const feed = part({
     const w = this.session;
     const view = this.tree ? "tree" : `${w.selected}:${w.view}`;
     this.treeBar.visible = Boolean(this.tree);
+    let opened = false;
     if (this.lastView !== view) {
+      opened = true;
       if (this.lastView && this.lastView !== "tree") w.scrolls[this.lastView] = this.place;
       this.clear(this.scroll);
       this.cards.clear();
@@ -207,6 +209,7 @@ export const feed = part({
       );
     // A chain that holds no act of the operator or of a model shows the welcome, so that the steps of the extensions,
     // which each chain runs as it starts, do not hide it.
+    const welcomed = this.welcoming && !opened;
     this.welcoming =
       w.view === "feed" &&
       !w.search &&
@@ -222,7 +225,14 @@ export const feed = part({
         this.welcome(box, height),
       );
       items++;
+      // The welcome is read from its top, so a screen that is lower than it shows its logo first and not its end.
+      if (!welcomed) {
+        this.scroll.stickyScroll = false;
+        this.scrollNow(0);
+        this.scrollAfterLayout(0);
+      }
     } else if (w.view === "feed") {
+      if (welcomed) this.scroll.stickyScroll = !this.tree;
       // The feed shows the acts as they stood at the moment that the operator moved to, or as they stand now.
       const shown = w.at(w.acts);
       // The acts of now are found by the index of the session, and those of a moment of the past by a map of their own.
