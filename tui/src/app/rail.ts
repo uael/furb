@@ -177,34 +177,36 @@ export const rail = part({
   },
 
   /** What the rows of the threads need to be drawn again, kept while the list of the threads and the minute stand: a
-   * frame of a life with many threads then reads each thread once for each new act, and not once for each frame. */
+   * frame of a life with many threads then reads each thread once for each new act, and not once for each frame. The
+   * key is a short count that changes when the text of a chain changes, since the text of every thread of a long life
+   * holds hundreds of KB, which the key of the sidebar would copy and compare at each new act. */
   threadsKey(threads: ChainThread[]): string {
     const minute = Math.floor(clock() / 60000);
     const kept = this.railThreadKey;
     if (kept && kept.list === threads && kept.minute === minute) return kept.text;
     // Each chain keeps its part of the key while no act lands on it, so a new act reads the threads of one chain.
-    const parts = this.railThreadCache?.chains.values() ?? [{ stamp: 0, list: threads } as ChainRead];
-    const text = [...parts]
-      .map((part) => {
-        if (part.key?.minute !== minute)
-          part.key = {
-            minute,
-            text: JSON.stringify(
-              part.list.map((one) => [
-                one.act.id,
-                one.state,
-                one.resolved,
-                one.title,
-                one.messages.length,
-                plain(this.threadMeta(one)),
-              ]),
-            ),
-          };
-        return part.key.text;
-      })
-      .join("");
-    this.railThreadKey = { list: threads, minute, text };
-    return text;
+    const reads = this.railThreadCache?.chains.values() ?? [{ stamp: 0, list: threads } as ChainRead];
+    const texts = [...reads].map((part) => {
+      if (part.key?.minute !== minute)
+        part.key = {
+          minute,
+          text: JSON.stringify(
+            part.list.map((one) => [
+              one.act.id,
+              one.state,
+              one.resolved,
+              one.title,
+              one.messages.length,
+              plain(this.threadMeta(one)),
+            ]),
+          ),
+        };
+      return part.key.text;
+    });
+    const same = kept?.parts.length === texts.length && texts.every((one, at) => one === kept.parts[at]);
+    const count = same && kept ? kept.count : (kept?.count ?? 0) + 1;
+    this.railThreadKey = { list: threads, minute, parts: texts, count, text: `threads ${count}` };
+    return `threads ${count}`;
   },
 
   /** The thread that the feed shows now: the one chosen, else the last that is open on the chain shown. */

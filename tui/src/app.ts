@@ -182,7 +182,7 @@ export class App {
     chains: Map<string, ChainRead>;
   };
   /** The key of the rows of the threads of the sidebar, by the list that it came from and the minute. */
-  railThreadKey?: { list: ChainThread[]; minute: number; text: string };
+  railThreadKey?: { list: ChainThread[]; minute: number; parts: string[]; count: number; text: string };
   /** The threads of the chain shown, read again only when the acts or the questions that wait change. */
   threadList: ThreadList = {
     session: undefined,
