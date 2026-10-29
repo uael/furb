@@ -290,10 +290,11 @@ def get(about: str) -> Question:
   A name of no act of the life gives nothing, since the life holds nothing under it.
   """
 
-def pause(id: str) -> None:
+def pause(id: str, why: object = None) -> None:
   """A pause: while it stands, nothing it is over hears, and what is said meanwhile waits for the wake.
   A control from outside the chain of an act that is not over tells a header of its own name, so a model reads what another did to its work.
   pause is given the id of a pending act or the id of a chain.
+  A pause carries its cause, None when none is given, as a close carries its value, so a pause from outside the chain of its act tells that cause under the word value.
   A pause stops no reply in flight: the reply returns.
   A paused chain goes quiet as its in-flight work returns.
   A kind a pause stops: it starts its ear, and while a pause over it stands the ear hears nothing, and at the wake it hears the wake and then everything that was said meanwhile, in order.
@@ -317,11 +318,11 @@ def wake(id: str) -> None:
   A wake that this life says past the tip, and not one that the journal says again, puts every pending act it is over on to the outside, so the World takes each wait, prompt to the operator and reply of them and closes each command of them as interrupted, and a model reads the transcript as it grew.
   """
 
-def cancel(id: str) -> None:
+def cancel(id: str, why: object = None) -> None:
   """A cancel of that prompt reaches the acts that its rungs made on the chain with a source.
   A cancel is over the act it names and everything that act made, and each of them is done with CancelledError.
-  cancel is given the id of an act, and says a cancel over it.
-  A cancelled act completes with CancelledError.
+  cancel is given the id of an act and a cause, None when none is given, and says a cancel over it that carries that cause.
+  A cancelled act completes with CancelledError, which carries the cause of the cancel when it has one.
   A cancelled prompt raises CancelledError to whoever awaits it.
   A cancel touches nothing else on the chain.
   The awaiter of a cancelled command raises CancelledError in its step.
@@ -590,7 +591,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
 def grant(usd: float | None = None, share: float | None = None, on: str = "") -> Act[None]:
   """A ceiling on a chain, in dollars, in the share of the window that one answer fills, or both: it holds the ledger of the chain from the moment it is made, the dollars of the answers since then and the share of the window the last one filled, and it tells the dollars of that ledger at each answer of a model, since the advance binds the share before the next reply, so no turn a reply has sent grows a line after it.
   grant on a chain puts a ceiling on it: dollars, a share of the window, or both.
-  The engine enters a pause on the chain when a response carries the ledger to its ceiling.
+  The engine enters a pause on the chain when a response carries the ledger to its ceiling, whose cause is ceiling.
   The word of the response that crossed the ceiling runs.
   No reply follows the response that carried the ledger to the ceiling, until a wake.
   The model continues after a later grant and a wake.
@@ -786,7 +787,7 @@ type Tell = tuple[Literal["tell"], str, str, list[Note]]
 What an act tells is the telling of its chain, so the journal keeps none of it, and a later life tells it again.
 A tell is the one fact that carries notes, which the turns are folded from: a control tells its header by a tell.
 """
-type Pause = tuple[Literal["pause"], str, str]
+type Pause = tuple[Literal["pause"], str, str, object]
 """While a pause stands, nothing that the pause is over hears, and what is said meanwhile waits for the wake.
 A control is a fact over an act: over that act, over everything that act made, and over everything on a chain when the control names a chain.
 A control reaches what it is over, and whatever else the words of the control name.
@@ -800,12 +801,12 @@ type Wake = tuple[Literal["wake"], str, str]
 """A wake ends the pause over the same act, and what waited is heard.
 A wake is over the act it names and everything under it.
 """
-type Cancel = tuple[Literal["cancel"], str, str]
+type Cancel = tuple[Literal["cancel"], str, str, object]
 """A cancel ends everything it is over: each of them is done with CancelledError, and none of them says anything of its own again.
 A cancel reaches to any depth, and on whatever chain.
 """
 type Close = tuple[Literal["close"], str, str, object]
-"""A close is a cancel that carries what the act it names is done with, and it is a kind of its own, since a tuple has no slot that may be empty.
+"""A close is a cancel that carries what the act it names is done with, and it is a kind of its own, since the word of a cancel is its cause, which the act raises as a CancelledError, where the word of a close is what the act comes to.
 A close is over the act it names, the words running under it and the replies that ask for those words, where a cancel is over everything under it.
 """
 type Started = tuple[Literal["started"], str, str]
@@ -823,7 +824,7 @@ The model reads the turns of the chain at each step.
 A reply carries the rung it asks for as its maker, the chain that asks as the chain it is on, and the actor as its one word, and nothing else.
 A reply is on the chain that asks, so the World keys its facts and its cache by chain.
 A reply the World cannot answer is the World's to refuse: it pauses the chain first when it wants a wake, and is done with the refusal, which the rung comes to and the prompt asks again after.
-The life refuses a reply that no ear owns, and the chain that asks then pauses itself, since that fault stands until a wake.
+The life refuses a reply that no ear owns, and the chain that asks then pauses itself with that refusal as its cause, since that fault stands until a wake.
 A reply ends as a wait does, so a cancel or a close over it ends it with a CancelledError.
 The World reads the turns of the chain whole when it takes a reply, folded again for that reply, and the journal keeps the answer and no turns.
 The World answers a reply with a done whose value is the turn of the model, which stands as the turn it is, with its usage and the blocks of the provider.

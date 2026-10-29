@@ -1094,7 +1094,7 @@ async def test_a_write_of_a_door_cancels_each_rung_that_it_drops() -> None:
   assert [a[2] for a in said(log, "reply")] == [old, writer]
   assert [type(engine.peek(one)).__name__ for one in (old, asked, writer)] == ["CancelledError"] * 3
   assert [a[4] for a in said(log, "rung") if a[1] in (old, new)] == ["", 'close("new")']
-  assert said(log, "cancel") == [("cancel", old, root)]
+  assert said(log, "cancel") == [("cancel", old, root, None)]
   later = engine.prompt(None, "more", to=OPERATOR, on=root)
   engine.write(Text(later, "b = bash('slow')"), on=root)
   await settle()
@@ -1104,7 +1104,7 @@ async def test_a_write_of_a_door_cancels_each_rung_that_it_drops() -> None:
   engine.write(Text(later, "c = 1"), on=root)
   await settle()
   assert isinstance(engine.peek(command), CancelledError)
-  assert said(log, "cancel")[-1] == ("cancel", ended, root)
+  assert said(log, "cancel")[-1] == ("cancel", ended, root, None)
 
 
 async def test_a_write_of_a_door_that_drops_no_rung_that_ran_keeps_the_module() -> None:
