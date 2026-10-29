@@ -3,9 +3,9 @@
 //! comes out as the instance of `furb.python` it is, an exception as the one object it is for the life, a generator
 //! of python goes in as an ear, and a function as one the sandbox calls back.
 
+use indexmap::IndexMap;
 use std::{
   cell::{OnceCell, RefCell},
-  collections::HashMap,
   sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
@@ -372,7 +372,7 @@ impl PyLife {
     &mut self,
     verb: &str,
     args: Option<Vec<Value>>,
-    kwargs: Option<HashMap<String, Value>>,
+    kwargs: Option<IndexMap<String, Value>>,
   ) -> Result<Value, Fault> {
     let refused = || Fault::refused(format!("{verb} is called after the life went back"));
     let life = self.life.as_mut().ok_or_else(refused)?;
@@ -731,7 +731,7 @@ impl PyEngine {
     &self,
     name: &str,
     args: Option<Vec<Value>>,
-    kwargs: Option<HashMap<String, Value>>,
+    kwargs: Option<IndexMap<String, Value>>,
   ) -> Result<Value, Fault> {
     let (args, kwargs) = words(args, &kwargs);
     self.said(name, args, kwargs).map(Value)
@@ -743,7 +743,7 @@ impl PyEngine {
     &self,
     n: i64,
     args: Option<Vec<Value>>,
-    kwargs: Option<HashMap<String, Value>>,
+    kwargs: Option<IndexMap<String, Value>>,
   ) -> Result<Value, Fault> {
     let (args, kwargs) = words(args, &kwargs);
     self.call(|engine| engine.made(n, args, kwargs)).map(Value)
@@ -778,7 +778,7 @@ impl PyEngine {
     key: &str,
     kind: &str,
     args: Option<Vec<Value>>,
-    kwargs: Option<HashMap<String, Value>>,
+    kwargs: Option<IndexMap<String, Value>>,
   ) -> Result<String, Fault> {
     let (args, kwargs) = words(args, &kwargs);
     self.call(|engine| engine.keyed(key, kind, args, kwargs))

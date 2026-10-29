@@ -2,7 +2,7 @@
 // of itself. It loads no module that loads OpenTUI, since the host draws nothing.
 
 import { deserialize, serialize } from "bun:jsc";
-import { chmodSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import type { Socket } from "node:net";
 import { hostname, tmpdir, userInfo } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -220,12 +220,29 @@ export const RIVAL = "Another host of this life runs";
 /** What the lease of a record says when a process that is no host holds it. */
 export const OWNED = "Another process owns";
 
-/** What the host at a place said of itself, or nothing when it said none or the file does not read. */
+/** What the host at a place said of itself, or nothing when it said none, when the file is gone, or when it holds no
+ * whole JSON of a host. It reads the file once and looks at nothing before: a host that ends removes the file at any
+ * moment, so a look before the read is a race. */
 export function aboutOf(place: Place): About | undefined {
   try {
-    return JSON.parse(readFileSync(place.about, "utf8")) as About;
+    const said: unknown = JSON.parse(readFileSync(place.about, "utf8"));
+    return typeof said === "object" && said !== null && typeof (said as About).pid === "number"
+      ? (said as About)
+      : undefined;
   } catch {
     return undefined;
+  }
+}
+
+/** The host says of itself in the file at its place, whole or not at all: a reader never sees a part of it. */
+export function tellAbout(place: Place, about: About): void {
+  const temporary = `${place.about}.${process.pid}.tmp`;
+  try {
+    writeFileSync(temporary, `${JSON.stringify(about)}\n`, { mode: 0o600 });
+    renameSync(temporary, place.about);
+  } catch (error) {
+    rmSync(temporary, { force: true });
+    throw error;
   }
 }
 

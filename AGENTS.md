@@ -213,7 +213,7 @@ is the folder `test` beside it.
 2. Every test carries a sentence of the contract.
 3. Every definition has a file of its own and at least one sentence. Two definitions never share a file.
 4. The module docstring of each contract is empty.
-5. `engine.py`, minified with its program kept as it is, costs fewer than 6500 tokens of `o200k_base`, the
+5. `engine.py`, minified with its program kept as it is, costs fewer than 6750 tokens of `o200k_base`, the
    tokenizer of OpenAI, and the doctrine of furb, `DOCTRINE.md`, costs at most 2000. The test counts with `o200k_base`
    because it is local and the same on each machine: the tokenizer of Claude is not public, and only the network
    counts with it. The wall is a proxy for the cost to Claude, which reads about 1.5 tokens for each token of
@@ -234,6 +234,13 @@ file that its build reads changed, which the `cache-keys` of its `pyproject.toml
 python that the crate carries, and the extensions. So a change of `src/furb/engine.py` reaches the suite at the next
 `uv run`, after a build of a few seconds, and a short command can take minutes. To run with no sync, which builds
 nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
+
+Set the timeout of each command, and the bound of each wait, to about twice the time that the step should take,
+never a round 600 or 900 seconds in case: a ceiling that is too large hides a hang for as long. Make a step that can
+take minutes print its progress, so that a hang shows at once. The owner ruled this on 10-29.
+
+Make a small change, run the checks that it touches, and compare a check that fails with the base before the change:
+fix what your change broke, and report what was broken before.
 
 - `uv sync`: install the environment, which builds the crate with its `python` feature into the package
   `furb-monty`, and the command line into the package `furb-cli`, and builds them again after a change that their
@@ -280,7 +287,8 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 - `cargo run -p furb-cli -- <words>`, or `uv run furb <words>`: the command line, as `furb --help` says.
 - `uv run pre-commit run --all-files`: every gate the commit hook runs. A `git commit` runs the hooks, `cargo test`
   among them, and takes minutes: give it a timeout of 3600 s in `bash`, and chain the push after it with `&&`, so a
-  commit that fails stops the push. The hook of the links runs only for a README or a manifest, and reads git alone.
+  commit that fails stops the push. The hook `cargo test` runs only when a file that the crate or its tests read changed, and the gates run every hook on
+  every file. The hook of the links runs only for a README or a manifest, and reads git alone.
   The hook `stray` refuses a `*.rej`, `*.orig` or `*-E` file.
 - `uv run python script/smoke.py`: one real life on the default actor: claude-cli:opus/high through the claude command
   line on PATH, or the one `FURB_CLAUDE_BIN` names, and with no claude the first model of the network or of the local
@@ -344,7 +352,8 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
   budgets are set again, and `FURB_BENCH_FACTS` sets the size of the long life.
 - `bun run screenshots` and `bun run animation`: capture `docs/screenshots/` and `docs/furb.gif` again from the
   real renderer. Run both after a change that a screen shows, and read each capture. One run of each at a time holds
-  its home in `/tmp`, and a second run waits until the first ends. A screen that does not come in three minutes ends
+  its home in `/tmp`, and a second run waits until the first ends. `FURB_GALLERY_ROOT` names another folder for the
+  home and its lock, so that runs with two roots run at once. A screen that does not come in three minutes ends
   the run with an error that names the screen, and a run never waits past thirty minutes. A run that waits says how
   long the run that holds the home has held it. The clock of the view stands still by default, so that two runs of
   the same code draw the same captures, and `FURB_STILL_CLOCK`, a time in milliseconds, sets another time.

@@ -392,7 +392,8 @@ impl Reader<'_> {
         self.end(about, value);
       }
       "cancel" if !self.done.contains(about) => {
-        self.end(about, Fault::new("CancelledError", vec![]).object());
+        let why = fact.word(0).map(|one| one.to_owned()).filter(|one| *one != Object::none());
+        self.end(about, Fault::new("CancelledError", why.into_iter().collect()).object());
       }
       _ => {}
     }

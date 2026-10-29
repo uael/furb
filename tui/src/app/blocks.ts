@@ -35,16 +35,22 @@ export const blocks = part({
    * laid out. */
   get feedWidth(): number {
     return (
-      this.renderer.width - (this.rail.visible ? this.session.preferences.sidebarWidth : 0) - space.gutter * 2
+      this.renderer.width - (this.sidebarShown ? this.session.preferences.sidebarWidth : 0) - space.gutter * 2
     );
   },
 
   /** The region of the screen that a dialog or a menu covers, whole: the sidebar for a point in it, else the feed with
    * its gutters. An overlay never crosses the edge of its region, so it cuts no word of the region beside it. */
   region(x = 0): { left: number; width: number } {
-    const side = this.rail.visible ? this.session.preferences.sidebarWidth : 0;
+    const side = this.sidebarShown ? this.session.preferences.sidebarWidth : 0;
     const edge = this.renderer.width - side;
     return side && x >= edge ? { left: edge, width: side } : { left: 0, width: edge };
+  },
+
+  /** Whether the sidebar shows, from the preferences and the screen. The node of the rail follows it at the next
+   * render, so a read of the node between a change and that render sees the old state. */
+  get sidebarShown(): boolean {
+    return this.session.preferences.sidebar && !this.reader && this.renderer.width >= 100;
   },
 
   /** A node that stands a number of columns in from the left, since a text leaves its own padding out when it draws. */

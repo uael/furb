@@ -225,8 +225,9 @@ breaking changes."
 
 When the word of an extension that the life runs changes, by a write of the life or by a change of its file that
 the host sees, the ear `extensions` says the fact `enable` again with the new word. Each chain plays the definitions
-of the new word at its next step. So a function, a class and a constant in capitals take their new value, and a
-name of state, as `queue` or `working`, keeps its value. The record keeps the fact at its place, so a later life
+of the new word at its next step, with each name of state that it assigns bound only when the module lacks it. So a
+function, a class and a constant in capitals take their new value, a new name of state takes its first value, and a
+name of state that the module holds, as `queue` or `working`, keeps its value. The record keeps the fact at its place, so a later life
 plays the same change at the same place.
 
 ### 3.5 A host of its own
@@ -494,6 +495,7 @@ under no prompt of the operator, which the conductor does in PR 6.
 - A version is a build, kept in a store, and a gate on a corpus of records keeps the versions few. The text of the
   engine in the record goes, since it does not hold monty and the ears of rust.
 - A chain of another record is carried by an act whose answer the record keeps, so no replay reads another file.
-- A reload rebinds the definitions and the names in capitals, and keeps each other name, so a reload keeps the state.
+- A reload rebinds the definitions and the names in capitals, binds each other name that the module lacks, and keeps
+  each other name that it holds, so a reload keeps the state.
 - The word of the conductor wraps the chain of the orchestrator, and the engine wraps no chain.
-- The engine stays under the wall of 6500 (R3). PR 6 and PR 7 each fit it, or go back to the owner with the cost.
+- The engine stays under the wall of 6750 (R3). PR 6 and PR 7 each fit it, or go back to the owner with the cost.

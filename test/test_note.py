@@ -5,7 +5,7 @@ from collections.abc import Sequence
 
 from conftest import born, faulted, heads, opened, paragraphs, said, settle, takes, world_says
 from furb import engine
-from furb.engine import OPERATOR, Act, span
+from furb.engine import OPERATOR, span
 
 EVERY = (
   "x = bash('echo hi')\n"
@@ -138,21 +138,19 @@ async def test_the_headers_of_the_file() -> None:
 
 async def test_a_statement_that_a_paragraph_shows_binds_the_name_of_an_act_in_the_chain() -> None:
   """A statement or a quote that a paragraph shows binds its name in the chain, and a comment binds nothing."""
-  _, log, root = born("x = bash('echo hi')\nclose(1)", "close((await bash1).code)")
-  assert await engine.prompt(int, "run it\nnow", on=root) == 1
-  assert await Act("prompt2") == 0
+  sand, log, root = born("x = bash('echo hi')", "close((await bash1).code)", auto=False)
+  asking = engine.prompt(int, "run it\nnow", on=root)
+  while "rung2" not in [a[4] for a in said(log, "run")]:
+    await settle()
+  sand.exits("bash1", 0)
+  assert await asking == 0
   own = [a[5] for a in said(log, "run") if a[4].endswith("_told")]
   asked = "#prompt1\n<s:prompt1_message>\nrun it\nnow</s:prompt1_message>\nprompt1: Act[int] = Act('prompt1')"
-  told = [
-    "#bash1\nbash1: Act[Exit] = Act('bash1')",
-    "#prompt2\nprompt2_message = 'bash1 done'\nprompt2_thread = 'prompt1'\nprompt2: Act[None] = Act('prompt2')",
-    "#bash1 exited 0\nbash1_stdout = 'ran echo hi'",
-    "#rung2 advance on prompt2",
-  ]
+  told = ["#bash1\nbash1: Act[Exit] = Act('bash1')", "#rung2 advance on prompt1"]
   words = ["\n\n".join([opened(root, "root"), takes(root), asked, "#rung1 advance on prompt1"]), "\n\n".join(told)]
   assert own == [engine.unquoted(word) for word in words]
   shown = "\n\n".join(paragraphs(engine.turns(on=root)))
-  assert shown == "\n\n".join(words)
+  assert shown == "\n\n".join([*words, "#bash1 exited 0"])
   assert engine.module(root)["bash1"] == "bash1"
   assert engine.module(root)["prompt1_message"] == "run it\nnow"
   _, _, fixed = born(
@@ -166,7 +164,7 @@ async def test_a_statement_that_a_paragraph_shows_binds_the_name_of_an_act_in_th
 
 async def test_a_paragraph_binds_each_value_that_it_tells_under_a_name() -> None:
   """A paragraph binds each value that it tells under a name: the id of the act, an underscore, and the word that holds the value, as prompt2_message, bash1_command, read3_text or prompt2_value."""
-  _, _, root = born("x = bash('echo ' + 'hi')\nread('a.txt')\nclose('done')", "close(None)")
+  _, _, root = born("x = bash('echo ' + 'hi')\nread('a.txt')", "close('done')")
   assert await engine.prompt(str, "run it", on=root) == "done"
   await settle()
   got = paragraphs(engine.turns(on=root))

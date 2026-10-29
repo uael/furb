@@ -11,6 +11,7 @@ import { openEngine } from "../src/bridge.ts";
 import { seedDemoFiles } from "../src/demo.ts";
 import { Preferences } from "../src/preferences.ts";
 import { Session, savedView, statusLabels } from "../src/session.ts";
+import { spacing } from "../src/theme.ts";
 import { type SessionEntry, Workspaces } from "../src/workspaces.ts";
 import { cellAt } from "./composing.ts";
 
@@ -887,4 +888,14 @@ test("the sidebar shows a checkout with its two worktrees as one workspace, and 
     expect(text).toMatch(/fix\s+wt-a/);
     expect(text).toMatch(/review\s+wt-b/);
     expect(text).toMatch(/main work(?!\s+wt-)/);
+  }));
+
+test("the feed has its width when the sidebar hides, before the next render draws the view", () =>
+  withLibrary(async ({ directory, open, sidebar }) => {
+    const { library } = await fooAndBar(directory, open);
+    const { screen, app } = await sidebar(library);
+    await screen.flush();
+    expect(app().feedWidth).toBe(152 - library.preferences.sidebarWidth - spacing.gutter * 2);
+    library.toggle();
+    expect(app().feedWidth).toBe(152 - spacing.gutter * 2);
   }));

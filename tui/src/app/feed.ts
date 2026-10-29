@@ -930,7 +930,17 @@ export const feed = part({
               key: `${text}\n${this.feedWidth}\n${this.theme}`,
               apart: true,
               bar: tone,
-              body: (box) => box.add(said(text)),
+              body: (box) => {
+                // A right click on a later message opens its menu too, as on the first message of the thread.
+                const row = this.box({
+                  onMouseDown: (event) => {
+                    if (event.button === 2)
+                      this.actActions(this.session.acts.find((one) => one.id === next.id) ?? next);
+                  },
+                });
+                row.add(said(text));
+                box.add(row);
+              },
             });
             // A message of a shape that asks an answer stands with its answer, after the code that answered it, so that
             // a thread holds pairs of a message and its answer.
