@@ -2601,7 +2601,10 @@ def test_the_texts_of_an_order_say_how_to_read_a_rerun_a_lagging_branch_and_a_mo
 def owner_chain(conductor: Round, *acts: tuple, asked: bool = False, by: str = "operator") -> None:
   facts = [("prompt", "prompt955", by, "chain212", "None", "Are you there?", "")]
   if asked:
-    facts.append(("reply", "reply9", "prompt955", "chain212", ""))
+    facts += [
+      ("rung", "rung11789", "prompt955", "chain212", "", "", ""),
+      ("reply", "reply9", "rung11789", "chain212", ""),
+    ]
   chains = {"chain1": [("chain", "chain212", "rung1", "chain1", "crafted", "")], "chain212": [*facts, *acts]}
   conductor.ns["transcript"] = lambda on="", of="": [*chains.get(on, [])]
 
@@ -2631,6 +2634,14 @@ def test_a_wait_that_holds_a_chain_while_a_prompt_of_the_owner_is_unasked_is_can
   conductor.done["wait890"] = conductor.CancelledError()
   conductor.tend()
   assert conductor.cancelled == ["wait890"] and conductor.watched == {}
+
+
+def test_a_long_wait_on_a_chain_that_works_on_the_prompt_of_the_owner_is_left_alone(conductor: Round) -> None:
+  owner_chain(conductor, WAIT, asked=True)
+  for _ in range(4):
+    conductor.tend()
+    conductor.now += 600
+  assert (conductor.cancelled, conductor.prompts, conductor.heard, conductor.said) == ([], [], [], [])
 
 
 def test_a_prompt_that_was_asked_or_that_the_owner_did_not_make_cuts_nothing(conductor: Round) -> None:
