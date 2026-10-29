@@ -422,16 +422,16 @@ export const details = part({
       const hint = this.lineHint(line);
       return line.fails && plainReason(line.fails).includes(hint.replace(/…$/, "")) ? "" : hint;
     };
-    const noteOf = (line: Extract<ProgramLine, { kind: "code" }>) =>
-      shortenHomes(
-        [
-          hintOf(line),
-          line.runs ? since(line.awaits?.act ?? line.acts.at(-1)) : "",
-          heads.has(line) ? took(line.step) : "",
-        ]
-          .filter(Boolean)
-          .join("  "),
-      );
+    const noteParts = (line: Extract<ProgramLine, { kind: "code" }>) =>
+      // The acts of a line, its time and its cost are parts: two spaces stand between them.
+      [
+        ...hintOf(line).split("  "),
+        line.runs ? since(line.awaits?.act ?? line.acts.at(-1)) : "",
+        heads.has(line) ? took(line.step) : "",
+      ]
+        .filter(Boolean)
+        .map(shortenHomes);
+    const noteOf = (line: Extract<ProgramLine, { kind: "code" }>) => noteParts(line).join("  ");
     // The code takes the room that its hints leave, and the hints take 30 columns at most: a longer hint is cut.
     const notes = Math.max(
       0,
@@ -439,6 +439,14 @@ export const details = part({
     );
     const column = Math.max(24, Math.min(100, widest, room - (notes ? Math.min(notes, 26) + 4 : 0)));
     const fit = (text: string, most: number) => clip(text, Math.max(4, most));
+    // A hint that does not fit loses its last parts whole: a time or a cost is never cut to half a value.
+    const noted = (parts: string[], most: number) => {
+      for (let count = parts.length; count > 0; count--) {
+        const said = parts.slice(0, count).join("  ");
+        if (Bun.stringWidth(said) <= Math.max(4, most)) return said;
+      }
+      return fit(parts[0] ?? "", most);
+    };
     const lane = lines.some((line) => line.kind === "code" && markOf(line)) ? 2 : 0;
     // The line of the program that each row shows, which a click opens or folds.
     const sources: (ProgramLine | undefined)[] = [];
@@ -472,7 +480,9 @@ export const details = part({
         const code = rows[0]?.text ?? "";
         const mark = markOf(line);
         // The mark stands in a lane of its own after the code, before the comment, so that no line is longer for it.
-        const hint = note ? `# ${fit(note, room - Math.max(column, Bun.stringWidth(code)) - 4 - lane)}` : "";
+        const hint = note
+          ? `# ${noted(noteParts(line), room - Math.max(column, Bun.stringWidth(code)) - 4 - lane)}`
+          : "";
         const left = `${code}${" ".repeat(Math.max(0, column - Bun.stringWidth(code)))}`;
         const body = hint || mark ? `${left}  ${lane ? (mark ? `${mark} ` : "  ") : ""}${hint}` : code;
         const at = push(body, line.display, line);
