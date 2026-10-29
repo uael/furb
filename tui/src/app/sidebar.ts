@@ -51,8 +51,7 @@ export const sidebar = part({
     const forms = known && size ? [`${share} of ${size}`, share] : [shares[0]?.[0] ?? ""];
     const meterRoom = (said: string) => inner - Bun.stringWidth(name + said + spent) - 4;
     const said = forms.find((one) => meterRoom(one) >= 6) ?? forms.at(-1) ?? "";
-    // A window that no answer gave is unknown, so no meter stands for it: an empty meter would say that nothing is used.
-    const cells = known ? Math.max(0, Math.min(16, meterRoom(said))) : 0;
+    const cells = Math.max(0, Math.min(16, meterRoom(said)));
     const used = Math.min(cells, Math.max(part > 0 ? 1 : 0, Math.round(part * cells)));
     const mark = ceiling === undefined ? -1 : Math.min(cells - 1, Math.round(ceiling * cells));
     const tone = part >= 0.9 ? c.danger : part >= 0.7 ? c.warning : c.accent;
