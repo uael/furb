@@ -37,7 +37,7 @@ export const actions = part({
       editor: () => this.editDraft(),
       files: this.filesPicker,
       new: () => library.create(),
-      sidebar: () => library.toggle(),
+      sidebar: () => this.toggleSidebar(),
       workspace: this.workspacePicker,
       watch: this.watch,
       repair: () => this.session.repairJournal(),

@@ -346,6 +346,10 @@ export const chrome = part({
       });
     const group = offered[0]?.hint[2];
     const keys: readonly Offer[] = [
+      // A terminal too narrow for the column of the sidebar shows it in place of the feed, which this key does.
+      ...(this.renderer.width < 100 && !this.reader
+        ? ([["⌃\\", "sidebar", () => this.toggleSidebar()]] as readonly Offer[])
+        : []),
       ...(w.host.reading ? ([["/new", "Start a new life", () => this.startFrom()]] as readonly Offer[]) : []),
       ...(group === "" && w.paused
         ? ([["/wake", "wake the chain", () => this.action("/wake")]] as const)
