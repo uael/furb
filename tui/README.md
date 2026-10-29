@@ -84,7 +84,7 @@ runs, and each follow-up that the queue sends, asks the actor that the chain has
 
 ## Three views of a life
 
-The TUI holds three views of the whole life side by side: main, with the workspaces and their threads in the sidebar, the loom of the chains in time, and the
+The TUI holds three views of the whole life side by side: main, with the threads in the sidebar, the loom of the chains in time, and the
 graph of the programs that run. `--view main|loom|graph` chooses one at the start, ⌥V switches it at run time,
 `/view` names one or lists the three, and the preferences keep the last one. Each view stands over the feed of the
 selected chain, and every other screen stays the same in each one. ⌥G gives the keys to the loom or the graph, and
@@ -464,7 +464,7 @@ files alone, so parallel work on the TUI does not conflict in one file.
 | `feed.ts` | The feed of the conversation: `renderContent`. |
 | `blocks.ts` | The blocks that the feed and the panels draw: cards, panels, code, Markdown, excerpts and chips. |
 | `details.ts` | The details of an act: prompts, commands, programs, and the references that open a value. |
-| `rail.ts` | The sidebar: the switcher of the workspaces, the questions that wait, the sessions and the threads of the workspace shown, and the keys that move in it. |
+| `rail.ts` | The sidebar: the questions that wait and the threads of the session shown, and the keys that move in it. The outline and the inbox hold the workspaces and the sessions too. |
 | `sidebar.ts` | The context of the chain shown, the threads of a chain: their fold, their reply and their resolve. |
 | `spaces.ts` | The workspaces and the sessions in the sidebar, with their menus, rename, archive and delete. |
 | `composer.ts` | The input: drafts, history, submit, and the suggestions for a command, a path or a value. |

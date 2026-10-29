@@ -33,20 +33,35 @@ async function railClick({ session, screen, frame }: Composing, text: string): P
 const listed = (session: Composing["session"]) =>
   chainThreads(session.ladderIndex.on, session.ladderIndex.ids, new Set(session.host.prompts.keys()));
 
-test("the sidebar lists the workspaces and the threads of the session shown, and holds no tree of chains", () =>
+test("the sidebar lists the threads of the session shown, with no workspace and no session, and holds no tree of chains", () =>
   composing(
     async ({ session, frame }) => {
       await idle(session);
       const shown = await frame();
       keep("sidebar", shown);
       const text = rail(session, shown).join("\n");
-      expect(text).toContain("Workspaces");
       expect(text).toContain("Threads");
+      expect(text).not.toContain("Workspaces");
+      expect(text).not.toContain("New session");
       expect(text).not.toContain("Chains");
       expect(text).not.toContain("← ");
       const first = listed(session)[0];
       expect(first).toBeDefined();
       expect(text).toContain((first?.title ?? "").slice(0, 12));
+    },
+    size,
+    true,
+  ));
+
+test("the workspaces and their sessions stand in the switcher that ⌃W opens, with the row that starts a session", () =>
+  composing(
+    async ({ session, app, frame }) => {
+      await idle(session);
+      await frame();
+      await app.workspacePicker();
+      const shown = await frame();
+      expect(shown).toContain("Workspaces and sessions");
+      expect(shown).toContain("New session");
     },
     size,
     true,
@@ -147,7 +162,7 @@ test("a question of a str shows a field in its card in the sidebar, and Enter in
     true,
   ));
 
-test("a question that waits shows on top of the sidebar and as a mark on its workspace and its session, and the input goes to the thread that is lit", () =>
+test("a question that waits shows on top of the sidebar, and the input goes to the thread that is lit", () =>
   composing(
     async (use) => {
       const { session, frame } = use;
@@ -166,7 +181,7 @@ test("a question that waits shows on top of the sidebar and as a mark on its wor
       // The question stands pinned under that line with its words and the chips that answer it in place.
       expect(rows.some((line) => line.includes("Apply the search shortcut?"))).toBe(true);
       expect(rows.some((line) => line.includes("1 yes"))).toBe(true);
-      expect(rows.some((line) => line.includes("Switch or add a workspace"))).toBe(true);
+      expect(rows.some((line) => line.includes("Switch or add a workspace"))).toBe(false);
       expect(rows.filter((line) => line.includes("◆ 1")).length).toBeGreaterThan(0);
       expect(listed(session).some((one) => one.act.id === question)).toBe(false);
       // The input sends its message to the open thread that the sidebar lights, unless the operator asks for a new thread,

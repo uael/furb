@@ -9,8 +9,8 @@ import {
 import { type Ask, type ChainThread, chainThreads, gist } from "furb/life";
 import { checkoutOf } from "../checkout.ts";
 import { clock } from "../clock.ts";
-import { shortenHome, shortenHomes } from "../files.ts";
-import { clip, dollars, recordLabel } from "../format.ts";
+import { shortenHomes } from "../files.ts";
+import { dollars, recordLabel } from "../format.ts";
 import { isRailStyle, type RailStyle } from "../preferences.ts";
 import { type Session, statusLabels } from "../session.ts";
 import { theme as c, glyph, spacing as space, threadTone } from "../theme.ts";
@@ -360,12 +360,6 @@ export const rail = part({
       style !== "outline"
         ? waiting.map(({ entry, ask }) => [entry.path, ask.id, ask.label, ask.message, ask.choices])
         : 0,
-      style === "cards"
-        ? [
-            lib.groups.map((group) => [group.name, group.directory, this.attentionOf(group.sessions)]),
-            lib.notice,
-          ]
-        : 0,
       this.choice,
       lib.current?.path,
       lib.groupOf()?.directory,
@@ -375,7 +369,7 @@ export const rail = part({
     const room = width - LEFT - RIGHT;
     const edge: BoxOptions = { paddingLeft: LEFT, paddingRight: RIGHT };
     if (style === "cards") {
-      // A question that waits shows on top, wherever it waits; the rest of the marks stand on the rows of the switcher.
+      // A question that waits shows on top, wherever it waits. The workspaces and the sessions stand behind ⌃W.
       if (total.asks)
         this.railSession.add(
           this.railSplit(
@@ -399,7 +393,6 @@ export const rail = part({
           ),
         );
       if (waiting.length) this.railSession.add(this.box({ height: space.section }));
-      this.renderSwitcher(room, edge);
       return;
     }
     const head: Part[] = total.asks
@@ -499,54 +492,6 @@ export const rail = part({
     holder.add(input);
     row.add(holder);
     return row;
-  },
-
-  /** The switcher of the shape cards: one row for each workspace, the one shown lit, each with what needs a look in it.
-   * It shows the rows around the workspace shown when they are many. */
-  renderSwitcher(room: number, edge: BoxOptions): void {
-    const lib = this.options.workspaces;
-    const current = lib.groupOf();
-    const heading = this.row({ paddingLeft: LEFT, paddingRight: RIGHT });
-    heading.add(this.text("Workspaces", c.text, { attributes: bold, flexGrow: 1 }));
-    heading.add(this.text("⌃W", c.faint, { run: () => void this.workspacePicker() }));
-    this.railSession.add(heading);
-    const groups = lib.groups;
-    const needing = (group: Workspace) => {
-      const a = this.attentionOf(group.sessions);
-      return a.asks + a.failed + a.held > 0;
-    };
-    // The workspace shown and each one that needs a look stand here; the others stand behind the picker, since a row
-    // for each of them would push the threads down.
-    const shown = groups.filter((group) => group === current || needing(group));
-    for (const group of shown) {
-      const mine = group === current;
-      const attention = this.attentionOf(group.sessions);
-      const id = `ws:${group.directory}`;
-      this.railOrder.push(id);
-      this.railHandlers.set(id, { enter: () => void this.focusWorkspace(group).catch(this.report) });
-      const row = this.railSplit(
-        [[mine ? glyph.mark : " ", c.accent], [" "], [group.name, mine ? c.text : c.muted, mine ? bold : 0]],
-        this.badges(attention),
-        () => void this.focusWorkspace(group).catch(this.report),
-        edge,
-        mine || (this.railKeys && this.railAt === id),
-      );
-      this.railSession.add(row);
-    }
-    const hidden = groups.length - shown.length;
-    this.railSession.add(
-      this.railSplit(
-        [
-          [hidden ? `${hidden} more · ` : "", c.faint],
-          ["Switch or add a workspace", c.faint],
-        ],
-        [],
-        () => void this.workspacePicker(),
-        edge,
-      ),
-    );
-    void room;
-    this.railSession.add(this.box({ height: space.section }));
   },
 
   /** The workspaces and the threads in the scroll of the sidebar. The workspace shown stands open, with its sessions
@@ -854,21 +799,9 @@ export const rail = part({
     };
 
     if (style === "cards") {
-      const group = current;
-      if (group) {
-        const { shown, earlier } = sessionsOf(group);
-        // The switcher on top holds the workspace shown, so its folder stands here without a second row for its name.
-        this.railSpaces.add(
-          this.inset(
-            LEFT + 2,
-            this.line(clip(shortenHome(group.directory), width - LEFT - RIGHT - 3, "end"), c.faint, {
-              truncate: true,
-            }),
-          ),
-        );
-        step(1);
-        for (const entry of shown) sessionRow(group, entry);
-        folds(group, earlier);
+      // The tree of the threads is all that the sidebar holds of the life: the workspaces and the sessions stand in the
+      // switcher that ⌃W opens.
+      if (current) {
         const open = threads.filter((one) => !one.resolved || one === active);
         const done = threads.filter((one) => !open.includes(one));
         const heading = this.row({ paddingLeft: LEFT, paddingRight: RIGHT, marginTop: space.section });
@@ -943,7 +876,7 @@ export const rail = part({
         folds(group, earlier);
       }
     }
-    // The shape cards holds the row that adds a workspace in its switcher, and the others hold it here.
+    // The shape cards leaves the workspaces to the switcher of ⌃W, and the others hold the row that adds one here.
     if (style !== "cards") {
       plainRow([[" "], ["+ ", c.faint], ["Add a workspace", c.faint]], () => this.insert("/workspace "), {
         marginTop: space.section,

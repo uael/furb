@@ -56,15 +56,14 @@ The captures of the feed show a real life: a conductor and the workers that it h
 life of furb, with 23 chains, 21 of them at work, and ladders of up to 76 rungs. `tui/fixtures/conductor.jsonl`
 holds it, with no key and no path of a home in it, and `bun run demo` opens it beside the scripted life.
 
-The sidebar shows the workspaces, and the threads of the workspace where you work. Its shape cards is the default. A
-switcher on top lists each workspace on one row, the one shown lit, with the marks of what needs a look in it: ◆ for a
-question that waits, ✗ for a session that failed, ◌ for a pause, ◉ for work, and ● for a finished session that you did
-not see. When a question waits in any workspace, a line on top says how many, and ⌥A goes to the next one, in the
-session where it waits. Under the switcher stand the folder and the sessions of the workspace shown, then its threads
-as cards. A card holds the whole title of a thread, its state, the count of its messages, the time since it works, and
-its chain when it is not Main. The sidebar is wide, 56 columns by default, and it scrolls with the wheel.
+The sidebar shows the threads of the session where you work. Its shape cards is the default, and it holds no list of
+workspaces and no list of sessions: ⌃W opens them as a switcher, with the row that starts a new session, and a click on
+the name of the workspace in the top line does the same. When a question waits in any workspace, a line on top says how
+many, and ⌥A goes to the next one, in the session where it waits. Under it, the threads stand as cards. A card holds the
+whole title of a thread, its state, the count of its messages, the time since it works, and its chain when it is not
+Main. The sidebar is wide, 56 columns by default, and it scrolls with the wheel.
 
-A click on a workspace gives it the focus: its session that asks, else one that lives, else its newest, opens in the
+In the shapes outline and inbox, a click on a workspace gives it the focus: its session that asks, else one that lives, else its newest, opens in the
 feed. A click on the arrow of a workspace that has not the focus shows its sessions without a change of focus. A click
 on a thread shows it in the feed, on its chain, and the input then sends each message to it, as
 `prompt(str, message, on=thread)`, which its model reads at its next step and answers. A message to a resolved thread
@@ -373,7 +372,7 @@ keeps the last one. The loom and the graph stand over the feed of the selected c
 screen of main stays where it is in each view: the transcript, the changes, the palette, the dialogs, the desk, and
 the composer. Each row of a chain shows its state, its actor, its cost, and the question that it waits on.
 
-Main shows the feed of the selected chain under nothing, and the workspaces and their threads in the sidebar.
+Main shows the feed of the selected chain under nothing, and the threads in the sidebar.
 
 ![Main](screenshots/02-feed.png)
 
