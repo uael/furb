@@ -594,9 +594,8 @@ def bound(id, of="object"):
 
 
 def shown(text, show):
-  return "\n".join(
-    x[:1000] + f"... ({len(x)} chars)" if (x := text.lines[i - 1])[1000:] else x for i in show(text.lines)
-  )
+  lines = text.lines
+  return "\n".join(x[:1000] + f"... ({len(x)} chars)" if (x := lines[i - 1])[1000:] else x for i in show(lines))
 
 
 def unquoted(word):
