@@ -318,6 +318,20 @@ test("the Context part of the sidebar is one line: its meter, its share and what
     true,
   ));
 
+test("the Context part of the sidebar draws no meter for a window that no answer gave, and says the tokens of the prompt", () =>
+  composing(
+    async ({ session, frame }) => {
+      await idle(session);
+      session.filled = undefined;
+      const rows = rail(session, await frame()).map((line) => line.trim());
+      const row = rows.find((line) => line.startsWith("Context")) ?? "";
+      expect(row).toMatch(/^Context \d[\d.]*k? +\$/);
+      expect(row).not.toContain("━");
+    },
+    size,
+    true,
+  ));
+
 test("a string of three marks over many lines shows as one string with its escapes, folded to its start and an underlined ..., and its statement keeps its colors", () =>
   composing(
     async ({ session, screen, frame }) => {
