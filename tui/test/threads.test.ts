@@ -138,6 +138,10 @@ test("a question that waits shows on top of the sidebar and as a mark on its wor
       keep("question", shown);
       const rows = rail(session, shown);
       expect(rows.some((line) => line.includes("1 needs you"))).toBe(true);
+      // The question stands pinned under that line with its words and the chips that answer it in place.
+      expect(rows.some((line) => line.includes("Apply the search shortcut?"))).toBe(true);
+      expect(rows.some((line) => line.includes("1 yes"))).toBe(true);
+      expect(rows.some((line) => line.includes("Switch or add a workspace"))).toBe(true);
       expect(rows.filter((line) => line.includes("◆ 1")).length).toBeGreaterThan(0);
       expect(listed(session).some((one) => one.act.id === question)).toBe(false);
       // The input sends its message to the open thread that the sidebar lights, unless the operator asks for a new thread,
