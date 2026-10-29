@@ -798,10 +798,10 @@ fn a_word_of_the_client_runs_as_a_rung_and_a_pause_holds_a_chain_until_its_wake(
   let mut client = Client::new(&yard);
   assert_eq!(
     client.data("1", json!({"type": "rung", "word": "k = 1\nclose(k + 1)"})),
-    json!({"act": "rung7"}),
+    json!({"act": "rung8"}),
     "the six rungs of the extensions and the turn of skills come first"
   );
-  assert_eq!(client.done("rung7")["value"], 2);
+  assert_eq!(client.done("rung8")["value"], 2);
   client.data("2", json!({"type": "pause", "act": "chain1"}));
   let state = client.data("3", json!({"type": "state"}));
   assert_eq!(
@@ -911,7 +911,7 @@ fn the_state_names_the_work_that_an_earlier_life_left_pending() {
   let mut later = Client::new(&yard);
   let state = later.data("1", json!({"type": "state"}));
   // The rungs of the official extensions and the turn of skills come first, and the rung of the client made the wait.
-  assert_eq!(state["pending"], json!([["rung7", "rung"], ["wait1", "wait"]]));
+  assert_eq!(state["pending"], json!([["rung8", "rung"], ["wait1", "wait"]]));
   later.data("2", json!({"type": "cancel", "act": "wait1"}));
   let state = later.data("3", json!({"type": "state"}));
   assert_eq!(state["pending"], json!([]), "an act that is done is pending no more");
