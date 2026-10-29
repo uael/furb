@@ -836,7 +836,7 @@ export class App {
     if (this.draftKey !== this.composeKey()) this.showDraft(this.composeKey());
     this.orphans();
     // The mode of a screen reader shows one column of text, and no sidebar beside it.
-    this.rail.visible = w.preferences.sidebar && !this.reader && this.renderer.width >= 100;
+    this.rail.visible = this.sidebarShown;
     this.rail.width = w.preferences.sidebarWidth;
     this.renderTop();
     const pending = w.operatorPrompt;
