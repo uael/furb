@@ -3,29 +3,17 @@ name: gallery
 # The gallery of the TUI, docs/screenshots and docs/furb.gif, rendered again from main. The README and docs/tui.md show
 # these files, so a change that a screen shows leaves them old until something renders them. This workflow renders
 # both on a runner of CI, as `bun run screenshots` and `bun run animation` do on a machine, and keeps one pull request
-# open on one fixed branch with the files that changed. The next push replaces the files of that branch, so only one
+# open on one fixed branch with the files that changed. The next run replaces the files of that branch, so only one
 # such pull request stands at a time, and it conflicts with nothing, since each run builds the branch again from the
 # commit that it renders. A run on a branch other than main does the same on a branch of its own, w/gallery-proof,
 # and opens a draft, which the round of the conductor does not merge.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    # What a capture reads: the TUI and its fixtures, the bindings that it draws a life with, the engine and the crate
-    # behind them, the words of the official extensions, the doctrine that a chain tells, and the toolchain.
-    paths:
-      - tui/**
-      - bind/typescript/**
-      - extensions/**
-      - src/**
-      - build.rs
-      - Cargo.toml
-      - Cargo.lock
-      - rust-toolchain.toml
-      - package.json
-      - bun.lock
-      - DOCTRINE.md
-      - .github/workflows/gallery.yml
+  # Every three hours, by the ruling of the owner on 10-29: a render on each push to main made a pull request to
+  # merge after nearly every merge, and its gates took the runners. The owner merges the open one early when he
+  # wants it, or runs this workflow by hand.
+  schedule:
+    - cron: "17 */3 * * *"
 
 # A run on a newer commit ends the run before it: only the render of the newest commit is worth a pull request.
 concurrency:
