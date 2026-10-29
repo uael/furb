@@ -25,6 +25,7 @@ import { type ChromePart, chrome } from "./app/chrome.ts";
 import { type ComposerPart, composer, composerBound } from "./app/composer.ts";
 import { type DeskPart, desk, deskBound } from "./app/desk.ts";
 import { type DetailsPart, details } from "./app/details.ts";
+import { type DialogsPart, dialogs } from "./app/dialogs.ts";
 import { type FeedPart, feed } from "./app/feed.ts";
 import { GhostTextarea } from "./app/ghost.ts";
 import { type InputPart, input, inputBound } from "./app/input.ts";
@@ -173,7 +174,7 @@ export class App {
   railWatched?: string;
   /** The next question that the key for the next question goes to. */
   railNext = 0;
-  /** The threads of the session shown on every chain, read again only when its acts or its questions change. */
+  /** The threads of the session shown on every chain, read again only when its prompts or its questions change. */
   railThreadCache?: {
     session: unknown;
     version: number;
@@ -182,7 +183,7 @@ export class App {
     chains: Map<string, ChainRead>;
   };
   /** The key of the rows of the threads of the sidebar, by the list that it came from and the minute. */
-  railThreadKey?: { list: ChainThread[]; minute: number; text: string };
+  railThreadKey?: { list: ChainThread[]; minute: number; parts: string[]; count: number; text: string };
   /** The threads of the chain shown, read again only when the acts or the questions that wait change. */
   threadList: ThreadList = {
     session: undefined,
@@ -322,6 +323,12 @@ export class App {
   /** The first choice that the list shows, and whether each choice takes rows for its command and its detail. */
   paletteStart = 0;
   rich = false;
+  /** The errors of the completions of the parts for the token of the input, which its list shows. */
+  suggestionError = "";
+  /** What takes away the keys of the actions of the dialog that is open. */
+  paletteKeysOff?: () => void;
+  /** What a dialog that a part awaits does when it closes with no choice, as Escape closes it. */
+  overlayClosed?: () => void;
   redraw?: ReturnType<typeof setTimeout>;
   lastView = "";
   /** Whether this run is the first one, whose welcome shows the check of the setup. */
@@ -836,7 +843,7 @@ export class App {
     if (this.draftKey !== this.composeKey()) this.showDraft(this.composeKey());
     this.orphans();
     // The mode of a screen reader shows one column of text, and no sidebar beside it.
-    this.rail.visible = w.preferences.sidebar && !this.reader && this.renderer.width >= 100;
+    this.rail.visible = this.sidebarShown;
     this.rail.width = w.preferences.sidebarWidth;
     this.renderTop();
     const pending = w.operatorPrompt;
@@ -1123,6 +1130,7 @@ export interface App
     WelcomePart,
     StagePart,
     DeskPart,
+    DialogsPart,
     QuestionsPart,
     DetailsPart,
     SidebarPart,
@@ -1145,6 +1153,7 @@ assemble(
   welcome,
   stage,
   desk,
+  dialogs,
   questions,
   details,
   sidebar,

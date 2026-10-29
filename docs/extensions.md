@@ -9,7 +9,7 @@ caches of the chain stays valid.
 
 ## The official extensions
 
-Five extensions come with furb, and each life runs them unless a config turns them off.
+Six extensions come with furb, and each life runs them unless a config turns them off.
 
 - **`memory`** tells a chain the memory files of its project. The memory of a folder is its `AGENTS.md`, or its
   `CLAUDE.md` when it has no `AGENTS.md`. When a chain starts, it reads the memory of the user, in the config
@@ -60,8 +60,26 @@ Five extensions come with furb, and each life runs them unless a config turns th
   no search, it uses the free search of Parallel for agents, which needs no key. `web_fetch(url)` reads a page, as
   Markdown when it is HTML. Each is an act to await, as a command is, since a page takes seconds. The extension has no
   life word.
+- **`mcp`** connects the chain to the servers of the Model Context Protocol, as Claude Code does. A server comes from
+  three configs, and the later wins for a name: `mcp.json` in the config directory of the user, `.mcp.json` of the
+  project, which has the form of Claude Code, and `.furb/mcp.json`. Each holds `{"mcpServers": {name: server}}`: a
+  command, its `args`, `env` and `cwd` for a server over stdio, or a `type` of `http` or `sse` with a `url` and
+  `headers` for a remote one. `${VAR}` and `${VAR:-default}` expand in each of them, `"timeout"` bounds a call in
+  seconds, `"deny"` hides tools, and `"disabled": true` turns a server off. A server of `.mcp.json` runs only once the
+  operator approves it. The ear of the World connects each server, ends each server over stdio with the life, connects
+  a lost server again with a backoff, and signs in to a remote server with OAuth 2.1 when it asks for a login: the
+  token stays in the Keychain on macOS, else in a file that only the user reads. Its life word, `mcp_index()`, tells
+  each chain one line for each server, with its state and its tools, and binds the tools of each short server as a
+  class of typed functions, so a model writes `await github.create_issue(owner="o", repo="r", title="t")` and the gate
+  checks each argument before the call. `mcp_use(server)` binds a larger server, `mcp_tools(server)` and
+  `mcp_tool(server, name)` tell signatures and schemas, `mcp_call(server, tool, arguments)` calls a tool by its
+  original names, `mcp_read(server, uri)` reads a resource, `mcp_prompt(server, name, arguments)` expands a prompt,
+  and `mcp_control(action, server)` reconnects, enables, disables, approves, logs in or logs out. Each answer of a
+  server stays in the record, so a later life asks no server again. Its part for the TUI gives `/mcp`, a dialog of the
+  servers and their actions, a command for each prompt of a server, a status in the footer, a row for each call of a
+  tool, and `@` in the input, which completes the resources of the servers.
 
-`compaction` and `web` each hold a short guide for the model, a quote named after the extension, which the model reads
+`compaction`, `web` and `mcp` each hold a short guide for the model, a quote named after the extension, which the model reads
 on each chain.
 
 ## Turn an extension on or off
@@ -168,13 +186,50 @@ export default function (furb) {
   alt acts only on an empty input.
 - `furb.command(name, detail, run)` adds a command to the palette, which `/name` runs too. A key of the TUI wins over
   a key of a part, and a part that names a command of the TUI fails.
+- `furb.commands(draw)` gives commands from the life: `draw(seen)` gives a list of `{ name, detail, run }`, which the
+  palette, the suggestions of the input and `/name` read again at each use. So a part adds and drops commands as the
+  life changes, as the part of `mcp` gives a command for each prompt of each server that is connected. A command that
+  the TUI or a part names already wins, and a listed command whose name holds a space or a slash is dropped. A list
+  that throws shows its error in the palette.
+- `furb.complete(trigger, list)` completes a word of a message that starts with the trigger, one sign as `@` or `#`:
+  `list(text, seen)` gives `{ label, detail, text }` for the text after the trigger, and a completion that the
+  operator takes puts its `text` in the place of the trigger and of the text after it. `/` and `:` are the TUI's own,
+  and after `@`, the completions of the parts come before the files of the project. A list that throws shows its
+  error under the input.
+- `furb.status(draw)` adds a status to the footer: `draw(seen)` gives a line, which shows after the state of the
+  session only when it is not empty. A status that throws shows its error in its place.
 - `seen` gives the chain on screen, every act of the life, `compactions`, each compaction of a chain as the model of
-  a life gives it, `of(kind)` for the acts of a kind, `run(word)`, which runs Python on the chain through the gate as
-  `/run` does, and `say(text)`, which shows a notice in the footer.
+  a life gives it, and `of(kind)` for the acts of a kind. It acts in the life too, and each of its acts goes through
+  the record:
+  - `run(word)` runs Python on the chain through the gate, as `/run` does, and gives the value of the last act that
+    the word made on the chain, once that act is done, as the record holds it. A word that makes no act gives
+    `undefined`, and a word that raises or that the gate refuses rejects with its error. So a part that needs a value
+    gets it from an act of its extension, which the record keeps, as `await seen.run('mcp_control("reconnect", "x")')`.
+  - `send(text)` sends a message of the operator to the chain on screen, as Enter sends the input, and
+    `draft(text)` puts a text in the input, for the operator to change and send.
+  - `open(url)` opens an address of http or https in the browser of the system, and rejects any other address.
+  - `say(text)` shows a notice in the footer.
+  - `choose(title, items, { note, actions, selected })` opens a list and gives what the operator chose, as
+    `{ value, action }`. Each item has a `label`, a `detail`, a `tone`, the `lines` that show under it while it is
+    selected, and its `value`. Enter gives the selected item with the action `""`, and the key of an action, as
+    `{ key: "r", label: "reconnect" }`, gives the item with that key. A key that types a sign acts only while the
+    filter of the list is empty.
+  - `form(title, fields, { note })` opens a form and gives the value of each field by its name. A field has a
+    `name`, a `label`, a `detail`, a `value` that it starts with, and can be `secret`, which shows a dot for each
+    sign, or `required`. Tab and Enter go to the next field, and Enter on the last one sends the form, which stays
+    open while a field that it needs is empty.
+  - `confirm(title, text, { yes, no })` asks a question and gives `true` for yes.
+
+  A dialog that Escape closes, or that another dialog replaces, gives `undefined`, or `false` for a confirm. A key or a
+  command whose run awaits a dialog keeps the TUI free while the dialog is open.
   `furb.life` is [the model of a life](../bind/typescript/README.md), `furb/life`.
 
 A part imports types alone, so it loads in any project. `tui/src/parts.ts` gives the types, and `tui/fixtures/todo`
-is an extension with a part. The TUI loads the parts when it opens a session, and again when a file of the folder of
+is an extension with a part that uses each of them. The part of `mcp`, `extensions/mcp/tui.ts`, uses only this API.
+
+![The dialog of a list that a part opens](screenshots/75e-part-list.png)
+
+The TUI loads the parts when it opens a session, and again when a file of the folder of
 a part changes, or when a write of the life lands in `.furb` or in the folder of a part, as a write of `extend` does.
 It loads them also for a life that enables no extension, such as the demo, since a part reads only the acts of the
 life.

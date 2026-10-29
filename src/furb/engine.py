@@ -118,16 +118,16 @@ def cwd(on="") -> str:
   return answer("cd", on, "") or standing()[1]
 
 
-def pause(id: str):
-  control("pause", "paused", id)
+def pause(id: str, why=None):
+  control("pause", "paused", id, why)
 
 
 def wake(id: str):
   control("wake", "woke", id)
 
 
-def cancel(id: str):
-  control("cancel", "cancelled", id)
+def cancel(id: str, why=None):
+  control("cancel", "cancelled", id, why)
 
 
 def close(value: object, id=""):
@@ -297,7 +297,9 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
           and about not in [x[1] for x in transcript(id, "close") if scope(x[2]) == id != x[2]]
         ):
           scope(about) != id and (yield "tell", maker, [headed(about, "done", value=value)])
-          value is None or isinstance(value, CancelledError) or (unseen := (about + " done", maker))
+          value is None or isinstance(value, CancelledError) or (
+            unseen := (about + " done", maker, isinstance(value, Exception))
+          )
         case ("done", _, by, Refused() as why) if (
           r[0] == "reply"
           and r[3] != id
@@ -305,7 +307,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
           and (maker := (get(p := get(r[2])[2]) or a)[2]) in running
         ):
           yield "tell", maker, [headed(p, "paused", why=why)]
-          running[maker] or (unseen := (p + " paused", maker))
+          running[maker] or (unseen := (p + " paused", maker, 0))
       if scope(a[1]) != id:
         continue
       if a[0] in ("ready", "done"):
@@ -344,14 +346,14 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
             found = ran and gate(word)
             if not found:
               running[rid] = act("run", id, None, rid, unquoted(word), donor)
-          except Exception as e:
+          except Refused as e:
             found = [str(e)]
           if found:
             yield told(rid, "refused", findings="\n".join(found))
             refused.add(rid)
             close(Refused(), rid)
-        case ("done", _, "", Refused()) if r[0] == "reply":
-          pause(id)
+        case ("done", _, "", Refused() as why) if r[0] == "reply":
+          pause(id, why)
       if r[0] == "run":
         running[r[4]] = a[0] != "done"
       elif r[0] == "wants":
@@ -375,9 +377,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
           unseen = ""
       if unseen and not waiting and (r[2] in running or over(r[2]) or a[0] == "tell"):
         ours = get(unseen[1])[2]
-        while over(ours) and prompted(up := get(ours)[3]):
-          ours = up
-        prompt(None, unseen[0], on=ours * prompted(ours))
+        prompted(ours) and (unseen[2] or not over(ours)) and prompt(None, unseen[0], on=ours)
         unseen = ""
 
   return act("chain", on, ear, label, source)
@@ -400,7 +400,7 @@ def grant(usd: float | None = None, share: float | None = None, on="") -> Act[No
           spent += cost
           yield told(id, "ledger", spent=spent)
           if (usd and spent >= usd) or (share and filled(about) >= share):
-            pause(here)
+            pause(here, "ceiling")
 
   return act("grant", on, controlled(ear), usd, share)
 
@@ -666,7 +666,11 @@ def controlled(ear, lasting=False):
         case ("pause" | "wake", *_) if covers(a, id) and (stopped := a[0] == "pause"):
           pass
         case ("cancel" | "close", _, by, *_) if covers(a, id) and not (over(id) or (stopped and under(by, id))):
-          yield "done", id, a[3] if a[:2] == ("close", id) else CancelledError()
+          yield (
+            "done",
+            id,
+            CancelledError(*filter(None, a[3:])) if a[0] == "cancel" else a[3] if a[1] == id else CancelledError(),
+          )
         case _ if stopped and get(a[1]) is not a:
           later.append(a)
         case _:

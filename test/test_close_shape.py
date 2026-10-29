@@ -8,17 +8,17 @@ from furb.engine import OPERATOR
 
 
 async def test_a_close_is_a_cancel_that_carries_what_the_act_it_names_is_done_with() -> None:
-  """A close is a cancel that carries what the act it names is done with, and it is a kind of its own, since a tuple has no slot that may be empty."""
+  """A close is a cancel that carries what the act it names is done with, and it is a kind of its own, since the word of a cancel is its cause, which the act raises as a CancelledError, where the word of a close is what the act comes to."""
   _, log, root, act = slow()
   gone = engine.bash("other", on=root)
   engine.close(21, act)
-  engine.cancel(gone)
+  engine.cancel(gone, "stop")
   await settle()
   shut, over = said(log, "close")[0], said(log, "cancel")[0]
   assert shut == ("close", act, OPERATOR, 21)
-  assert over == ("cancel", gone, OPERATOR)
-  assert (len(shut), len(over)) == (4, 3)
-  assert engine.peek(act) == 21 and isinstance(engine.peek(gone), CancelledError)
+  assert over == ("cancel", gone, OPERATOR, "stop")
+  ended = engine.peek(gone)
+  assert engine.peek(act) == 21 and isinstance(ended, CancelledError) and ended.args == ("stop",)
 
 
 async def test_a_close_is_over_the_act_it_names_and_the_words_running_under_it() -> None:

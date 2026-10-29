@@ -3,8 +3,10 @@
  * and again when a file of its folder changes or when a write of an extension or of the config of the project lands,
  * with no restart and no build of furb. The part of an official extension is the text that the crate carries, which
  * changes only with a build of furb. The module exports a function as its default, which the TUI calls with a
- * `Furb`: through it, the part adds panels, the rows of the acts of a kind, marks in the feed of a chain, keys, and
- * commands of the palette. A part imports no value of furb: it takes all that it needs from what the TUI gives it, so
+ * `Furb`: through it, the part adds panels, the rows of the acts of a kind, marks in the feed of a chain, keys,
+ * commands of the palette, which it can give from the life, completions of the input after a trigger, and a status in
+ * the footer. A component acts in the life through `Seen`, which runs words, sends messages, opens an address, and
+ * opens the dialogs that it awaits. A part imports no value of furb: it takes all that it needs from what the TUI gives it, so
  * it loads in any project. A module that fails to load, and a component that throws, show the error in plain words in
  * the panel of the part, and the TUI goes on. */
 import { type FSWatcher, mkdirSync, statSync, watch, writeFileSync } from "node:fs";
@@ -14,6 +16,7 @@ import { parts as configured, type LiveAct, type Part } from "furb";
 import type { Compaction } from "furb/life";
 import * as model from "furb/life";
 import { commands } from "./commands.ts";
+import { openFile } from "./editor.ts";
 
 /** The tone of a run of text, which the theme colors. */
 export type Tone = "text" | "muted" | "faint" | "accent" | "success" | "warning" | "danger";
@@ -33,6 +36,59 @@ export interface Mark {
   title: string;
   lines?: readonly Line[];
 }
+/** An item of a list that a dialog asks the operator to choose from: its label, what it says after the label, the
+ * tone of its label, the lines that show under it while it is selected, and the value that a choice of it gives. */
+export interface Item<T = unknown> {
+  label: string;
+  detail?: string;
+  tone?: Tone;
+  lines?: readonly Line[];
+  value: T;
+}
+/** An action on the selected item of a list, by its key, as `ctrl+r` or `r`, and what it does in a few words, which
+ * the dialog says under its title. A key that types a sign acts only while the filter of the list is empty, and a key
+ * of the dialog itself, as Enter, Escape or an arrow, is the dialog's own. */
+export interface Action {
+  key: string;
+  label: string;
+}
+/** What the operator chose in a list: the value of the item, and the key of the action, which is empty for Enter. */
+export interface Chosen<T = unknown> {
+  value: T;
+  action: string;
+}
+/** A field of a form: the name of its value, its label, what it says under the label, the value that it starts
+ * with, whether it hides what is typed as a dot for each sign, and whether the form needs it. */
+export interface Field {
+  name: string;
+  label: string;
+  detail?: string;
+  value?: string;
+  secret?: boolean;
+  required?: boolean;
+}
+/** A command of the palette and of the input, as `/name`, with what it does. */
+export interface Command {
+  name: string;
+  detail: string;
+  run: (argument: string, seen: Seen) => unknown;
+}
+/** A command of a part as the life gives it now, with its part, or the error of a list of commands that threw, which
+ * has no name and runs nothing. */
+export interface Listed extends Command {
+  part: string;
+  error?: string;
+}
+/** A completion of the input after a trigger: its label in the list, what it says after the label, and the text that
+ * takes the place of the trigger and of the text after it. */
+export interface Completion {
+  label: string;
+  detail?: string;
+  text: string;
+}
+/** The signs that a trigger cannot be: those of a word, a space, a quote, and the triggers that the TUI reads. */
+const owned = /[\p{L}\p{N}\s/:"'`]/u;
+
 /** What a component reads of the life, and what it can do in it. */
 export interface Seen {
   /** The chain on screen. */
@@ -43,10 +99,36 @@ export interface Seen {
   compactions: readonly Compaction[];
   /** The acts of a kind, in the order of the record. */
   of(kind: string): LiveAct[];
-  /** Runs python on the chain on screen, through the gate, as `/run` does. */
-  run(word: string): Promise<void>;
+  /** Runs python on the chain on screen, through the gate, as `/run` does, and gives, once the word ended, the value
+   * of the last act that the word made on that chain, as the record holds it once that act is done. A word that makes
+   * no act gives undefined, and a word that raises or that the gate refuses rejects with its error. */
+  run(word: string): Promise<unknown>;
   /** Shows a notice in the footer. */
   say(text: string): void;
+  /** Sends a message of the operator to the chain on screen, as the input does when Enter sends it. */
+  send(text: string): Promise<void>;
+  /** Puts a text in the input, in the place of what it held, for the operator to change and send. */
+  draft(text: string): void;
+  /** Opens an address of http or https in the browser of the system, and rejects any other address. */
+  open(url: string): Promise<void>;
+  /** Opens a dialog of a list, which a filter narrows, and gives what the operator chose: Enter chooses the selected
+   * item, and the key of an action acts on it. Escape, or a dialog that another one replaces, gives undefined. */
+  choose<T>(
+    title: string,
+    items: readonly Item<T>[],
+    options?: { note?: string; actions?: readonly Action[]; selected?: number },
+  ): Promise<Chosen<T> | undefined>;
+  /** Opens a dialog of a form, and gives the value of each field by its name once Enter sends the last field. Tab and
+   * Enter go to the next field, ⇧Tab to the one before, and a form with an empty field that it needs says so and
+   * stays open. Escape, or a dialog that another one replaces, gives undefined. */
+  form(
+    title: string,
+    fields: readonly Field[],
+    options?: { note?: string },
+  ): Promise<Record<string, string> | undefined>;
+  /** Opens a dialog that asks a question with a text, and gives true when the operator chooses yes, and false when he
+   * chooses no or closes it. */
+  confirm(title: string, text: string, options?: { yes?: string; no?: string }): Promise<boolean>;
 }
 /** What the TUI gives the function that a part exports. */
 export interface Furb {
@@ -65,6 +147,17 @@ export interface Furb {
   key(on: string, run: (seen: Seen) => unknown): void;
   /** A command of the palette and of the input, as `/name`, with what it does. A command of the TUI wins. */
   command(name: string, detail: string, run: (argument: string, seen: Seen) => unknown): void;
+  /** Commands that the part gives from the life: the palette, the input and `/name` read them again at each use, so
+   * a part adds and drops commands as the life changes. A command that the TUI or a part names already wins, and a
+   * listed command whose name holds a space or a slash is dropped. */
+  commands(draw: (seen: Seen) => readonly Command[]): void;
+  /** The completions of the input after a trigger, a sign that starts a word of a message, as `@`: `list` gives them
+   * for the text after the trigger, at each change of the input. A trigger is one sign that is no letter, no digit, no
+   * space and no quote, and neither `/` nor `:`, which the TUI reads. After `@`, the completions of the parts come
+   * before the files of the project. */
+  complete(trigger: string, list: (text: string, seen: Seen) => readonly Completion[]): void;
+  /** A status in the footer, which the TUI draws again with the life, and which shows only when it is not empty. */
+  status(draw: (seen: Seen) => Line): void;
 }
 /** A part as the TUI loaded it: its extension, its file, its components, and the error that stopped its load. */
 export interface Loaded {
@@ -78,7 +171,10 @@ export interface Loaded {
   rows: Map<string, (act: LiveAct, seen: Seen) => Row>;
   marks: ((seen: Seen) => readonly Mark[])[];
   keys: { on: string; run: (seen: Seen) => unknown }[];
-  commands: { name: string; detail: string; run: (argument: string, seen: Seen) => unknown }[];
+  commands: Command[];
+  lists: ((seen: Seen) => readonly Command[])[];
+  completions: { trigger: string; list: (text: string, seen: Seen) => readonly Completion[] }[];
+  statuses: ((seen: Seen) => Line)[];
 }
 
 /** The text of an error in plain words, as its message says it, with no stack. */
@@ -103,6 +199,9 @@ export function summary(part: Loaded): string {
     ...(marks ? [`${marks} ${marks === 1 ? "mark" : "marks"} in the feed`] : []),
     ...part.keys.map((one) => `key ${one.on}`),
     ...part.commands.map((one) => `/${one.name}`),
+    ...(part.lists.length ? ["commands from the life"] : []),
+    ...part.completions.map((one) => `completions after ${one.trigger}`),
+    ...(part.statuses.length ? ["a status in the footer"] : []),
   ];
   return found.length ? `Its part gives ${found.join(", ")}.` : "Its part gives nothing.";
 }
@@ -118,7 +217,15 @@ const bare = (name: string, file: string, error?: string, stamp?: string): Loade
   marks: [],
   keys: [],
   commands: [],
+  lists: [],
+  completions: [],
+  statuses: [],
 });
+
+/** The text of a line, with no tone. */
+export function lineText(line: Line): string {
+  return typeof line === "string" ? line : line.map(([text]) => String(text)).join("");
+}
 
 /** What the disk holds of a file now, which changes when the file does, so a change shows with no event. */
 function stamped(file: string): string {
@@ -166,6 +273,15 @@ export async function loadPart(name: string, file: string, text?: string): Promi
       if (Object.hasOwn(commands, title)) throw new Error(`The command /${title} is the TUI's own.`);
       part.commands.push({ name: String(title), detail: String(detail), run });
     },
+    commands: (draw) => void part.lists.push(draw),
+    complete: (trigger, list) => {
+      if (typeof trigger !== "string" || [...trigger].length !== 1 || owned.test(trigger))
+        throw new Error(
+          `The trigger ${JSON.stringify(trigger)} is not one sign that is no letter, no digit, no space, no quote, no / and no :.`,
+        );
+      part.completions.push({ trigger, list });
+    },
+    status: (draw) => void part.statuses.push(draw),
   };
   try {
     const from = text === undefined ? file : carried(file, text);
@@ -268,13 +384,96 @@ export class Parts {
     if (loads) this.soon();
   }
 
-  /** The command of a part of that name. */
-  command(name: string): Loaded["commands"][number] | undefined {
-    for (const part of this.loaded) {
-      const found = part.commands.find((one) => one.name === name);
-      if (found) return found;
-    }
-    return undefined;
+  /** Opens an address in the browser of the system. A test gives its own opener, so that no browser opens. */
+  opener: (url: string) => Promise<void> = openFile;
+
+  /** Each command of the parts, the ones that a part names, then, with what a component reads, the ones that the
+   * lists of the parts give from the life now. A listed command whose name the TUI or a part takes already, or whose
+   * name holds a space or a slash, is dropped, and a list that throws or gives no list gives its error in its place. */
+  commands(seen?: Seen): Listed[] {
+    const out: Listed[] = [];
+    const taken = new Set<string>();
+    for (const part of this.loaded)
+      for (const one of part.commands) {
+        taken.add(one.name);
+        out.push({ ...one, part: part.name });
+      }
+    if (!seen) return out;
+    for (const part of this.loaded)
+      for (const list of part.lists)
+        try {
+          const given = list(seen);
+          if (!Array.isArray(given)) throw new Error("Its commands give no list.");
+          for (const one of given as readonly Command[]) {
+            const name = String(one?.name ?? "");
+            if (!/^[^\s/]+$/.test(name) || Object.hasOwn(commands, name) || taken.has(name)) continue;
+            if (typeof one.run !== "function") continue;
+            taken.add(name);
+            out.push({ name, detail: String(one.detail ?? ""), run: one.run, part: part.name });
+          }
+        } catch (error) {
+          const said = plainError(error);
+          out.push({
+            name: "",
+            detail: `The commands of ${part.name} failed: ${said}`,
+            run: () => {},
+            part: part.name,
+            error: said,
+          });
+        }
+    return out;
+  }
+
+  /** The command of a part of that name: one that a part names, or, with what a component reads, one that a list
+   * gives now. */
+  command(name: string, seen?: Seen): Listed | undefined {
+    return this.commands(seen).find((one) => !one.error && one.name === name);
+  }
+
+  /** The triggers of the completions of the parts, each once. */
+  triggers(): string[] {
+    return [...new Set(this.loaded.flatMap((part) => part.completions.map((one) => one.trigger)))];
+  }
+
+  /** The completions that the parts give after a trigger for the text after it, in the order of the parts, and the
+   * error of each list that throws or gives no list. A completion with no text is dropped. */
+  completions(trigger: string, text: string, seen: Seen): { items: Completion[]; errors: string[] } {
+    const items: Completion[] = [];
+    const errors: string[] = [];
+    for (const part of this.loaded)
+      for (const one of part.completions) {
+        if (one.trigger !== trigger) continue;
+        try {
+          const given = one.list(text, seen);
+          if (!Array.isArray(given)) throw new Error("Its completions give no list.");
+          for (const item of given as readonly Completion[])
+            if (typeof item?.text === "string" && item.text)
+              items.push({
+                label: String(item.label ?? item.text),
+                detail: String(item.detail ?? ""),
+                text: item.text,
+              });
+        } catch (error) {
+          errors.push(`The completions of ${part.name} failed: ${plainError(error)}`);
+        }
+      }
+    return { items, errors };
+  }
+
+  /** The status of each part in the footer that is not empty, in the order of the parts, and the error of a status
+   * that throws in its place, in the tone danger. */
+  status(seen: Seen): Line[] {
+    const out: Line[] = [];
+    for (const part of this.loaded)
+      for (const draw of part.statuses)
+        try {
+          const line = draw(seen);
+          if (typeof line !== "string" && !Array.isArray(line)) throw new Error("Its status gives no line.");
+          if (lineText(line).trim()) out.push(line);
+        } catch (error) {
+          out.push([[`The status of ${part.name} failed: ${plainError(error)}`, "danger"]]);
+        }
+    return out;
   }
 
   /** The marks that the parts give for the feed of a chain, which shows each chain of its run of compactions, in the

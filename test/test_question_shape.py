@@ -2,7 +2,7 @@
 
 from conftest import Sand, acts, born, chained, life, said, settle
 from furb import engine
-from furb.engine import OPERATOR, Act, Text
+from furb.engine import OPERATOR, Text
 
 
 async def test_a_fact_that_takes_a_name_of_its_own_when_it_is_said_and_is_answered() -> None:
@@ -51,16 +51,14 @@ async def test_a_question_is_named_by_its_kind() -> None:
 
 async def test_the_name_of_an_act() -> None:
   """The name of an act is its kind and how many acts of that kind the life has made with it, so the root is chain1, the first command is bash1 and the first prompt is prompt1, and python binds each name as it is."""
-  _, log, root = born("x = bash('echo hi')\ny = bash('echo ho')\nclose(1)", "close(bash1 + bash2 == 'bash1bash2')")
+  _, log, root = born("x = bash('echo hi')\ny = bash('echo ho')", "close(bash1 + bash2 == 'bash1bash2')")
   asking = engine.prompt(int, "run it", on=root)
-  assert await asking == 1
+  assert await asking is True
   await settle()
   assert (root, asking) == ("chain1", "prompt1")
   assert said(log, "rung")[0][1] == "rung1"
   assert [a[1] for a in said(log, "bash")] == ["bash1", "bash2"]
-  assert await Act("prompt2") is True
-  await settle()
-  assert [a[1] for a in said(log, "prompt")] == ["prompt1", "prompt2", "prompt3"]
+  assert [a[1] for a in said(log, "prompt")] == ["prompt1"]
   assert all(name.isidentifier() for name in acts(log))
   twin = await chained("twin", root, 300)
   assert twin == "chain2"
