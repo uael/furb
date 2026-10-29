@@ -130,7 +130,7 @@ test("a folded thread marks new work with a dot, and the dot goes once the threa
         await Bun.sleep(25);
         marked = await folded();
       }
-      expect(marked).toMatch(/┃ ✓ Explore this project.* ● /);
+      expect(marked).toMatch(/┃ Explore this project.* ● /);
       app.foldThread(id, false);
       // The box draws open over a few frames on a slow machine, and the thread counts as seen once it has.
       let open = await frame();
