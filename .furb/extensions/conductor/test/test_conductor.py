@@ -2163,3 +2163,12 @@ async def test_the_bottom_of_a_stack_waits_while_a_layer_above_runs_its_checks(c
   two(conductor, top=("IN_PROGRESS",))
   await conductor.land(conductor.prs[7], False)
   assert "merge" not in conductor.log()
+
+
+@POSIX
+@JQ
+async def test_a_stack_whose_lower_layer_merged_counts_as_linked(conductor: Round) -> None:
+  two(conductor)
+  conductor.say(r"stack link", "✗ Cannot update stack: this would remove #6 from the stack Current stack: #6, #7, #8")
+  await conductor.linking()
+  assert conductor.heard == ["The stack #7 <- #8 is linked on GitHub."]

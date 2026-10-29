@@ -2006,7 +2006,10 @@ async def linking() -> None:
     got = await bash(f"gh stack link {numbers} 2>&1", show=HIDDEN, timeout=120)
     said = " ".join(got.stdout.content.split())[-200:]
     names = " <- ".join("#" + str(up["n"]) for up in layers)
-    linked = got.code == 0 and "✗" not in got.stdout.content
+    held = re.search(r"Current stack: ([#\d, ]+)", got.stdout.content)
+    # A stack whose lower layer merged stays one stack on GitHub, with that layer in it, so it is linked already.
+    within = bool(held) and set(numbers.split()) <= set(re.findall(r"\d+", held[1] if held else ""))
+    linked = within or (got.code == 0 and "✗" not in got.stdout.content)
     heard.append(f"The stack {names} " + ("is linked on GitHub." if linked else f"was not linked: {said}"))
 
 
