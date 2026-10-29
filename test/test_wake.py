@@ -109,17 +109,11 @@ async def test_a_wake_lifts_the_pause_and_delivers_every_held_result() -> None:
 async def test_a_wake_gates_and_runs_a_held_response() -> None:
   """A wake gates and runs a held response."""
   _, log, root, act = await hushed("close(7)")
-  assert gated(log) == [] and ran(log) == []
+  assert gated(log) == [] and [one[4] for one in said(log, "run")] == [said(log, "rung")[0][1] + "_told"]
   engine.wake(root)
   await settle()
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
-  bound = fresh(
-    root,
-    prompted(act, "int", "count"),
-    f"#{step} advance on {act}",
-    f"#{root} paused by operator",
-    f"#{root} woke by operator",
-  )
+  bound = fresh(root, prompted(act, "int", "count"), f"#{step} advance on {act}")
   assert gated(log) == ["close(7)"] and ran(log) == [bound, "close(7)"] and (await act) == 7
 
 

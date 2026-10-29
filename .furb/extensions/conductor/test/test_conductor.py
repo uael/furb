@@ -1,3 +1,4 @@
+import ast
 import asyncio
 import hashlib
 import json
@@ -503,11 +504,10 @@ def test_the_prune_removes_what_the_work_left_and_keeps_its_work(conductor: Roun
     )
   assert got.stdout.startswith("The prune removed the worktrees ")
   assert "; 1 remote branch, listed in .furb/trashed.tsv; 1 scratch directory; 1 folder of " in got.stdout
-  assert sorted(p.name for p in tmp_path.glob("furb-w-*")) == ["furb-w-busy", "furb-w-fresh", "furb-w-open"]
+  assert sorted(p.name for p in tmp_path.glob("furb-w-*")) == ["furb-w-busy", "furb-w-fresh"]
   assert git("for-each-ref", "--format=%(refname:short)", "refs/heads/w", cwd=root, env=env).split() == [
     "w/busy",
     "w/fresh",
-    "w/open",
   ]
   kept = sorted((root / ".furb" / "archive").glob("*/*"))
   assert [re.sub(r"-\d{6}\.", ".", p.name) for p in kept] == ["merged.bundle", "merged.patch"]
@@ -693,9 +693,32 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 
 STATE = (
   "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed fixes silent"
-  " comments measures timers noted debriefs briefed owns watched after parked awaited covers kinds vetoes ordered tips shifted hired paced landed heard handled sent ends requeued"
+  " comments measures timers noted debriefs briefed owns watched after parked awaited covering kinds pool slots areas vetoes ordered tips shifted hired paced landed heard handled sent ends requeued"
   " statused secret budgeted flaky runs_read"
 ).split()
+
+
+def test_no_name_of_the_state_of_the_round_or_of_converge_is_a_name_of_the_engine() -> None:
+  furb = HERE.parents[2]
+  tree = ast.parse((furb / "src" / "furb" / "engine.py").read_text(encoding="utf-8"))
+  engine: set[str] = set()
+  for node in tree.body:
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+      engine.add(node.name)
+    elif isinstance(node, ast.Assign):
+      engine |= {x.id for x in node.targets if isinstance(x, ast.Name)}
+    elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+      engine.add(node.target.id)
+    elif isinstance(node, ast.TypeAlias):
+      engine.add(node.name.id)
+    elif isinstance(node, (ast.Import, ast.ImportFrom)):
+      engine |= {(x.asname or x.name).split(".")[0] for x in node.names}
+  bound = set()
+  for word in ("conductor/conductor.py", "converge/converge.py"):
+    text = (furb / ".furb" / "extensions" / word).read_text(encoding="utf-8")
+    bound |= set(re.findall(r'globals\(\)\.setdefault\("(\w+)"', text))
+  assert "queue" in bound
+  assert sorted(bound & engine) == []
 
 
 def play(conductor: Round) -> None:
@@ -1241,7 +1264,7 @@ async def test_a_fixer_that_starts_on_a_pr_with_a_live_worker_tells_that_worker(
 
 
 def test_the_brief_of_a_fixer_says_how_to_share_a_branch_and_to_wait_for_github(conductor: Round) -> None:
-  for words in ("git worktree list", "If the head of the PR is not {sha} any more", "headRefOid,mergeable", "20 seconds"):
+  for words in ("the workspace that the end of this brief names", "If the head of the PR is not {sha} any more", "headRefOid,mergeable", "20 seconds"):
     assert words in conductor.FIX
 
 
@@ -1368,7 +1391,7 @@ def test_each_brief_holds_the_recipes_that_fixers_found(conductor: Round) -> Non
   for word in ("credential.helper", "actions/jobs", "sed -i ''", "timeout=1800", "hypothesis"):
     assert word in conductor.WORKER
     assert word in conductor.FIX
-  assert "Keep the worktree until your PR merges" in conductor.WORKER
+  assert "{workspace}" in conductor.WORKER and "Leave the workspace clean" in conductor.WORKSPACE
 
 
 @POSIX
@@ -1871,11 +1894,11 @@ async def test_a_failed_check_that_waits_on_a_decision_of_the_owner_gets_no_orde
 @JQ
 async def test_a_flake_that_a_working_item_covers_goes_to_its_worker_by_its_test_or_its_key(conductor: Round) -> None:
   conductor.busy("p1", "bench-fix", OPUS)
-  conductor.covers["bench-fix"] = ["a host test", "budget-the-tui"]
+  conductor.covering["bench-fix"] = ["a host test", "budget-the-tui"]
   await flaked(conductor)
   assert conductor.queue == []
   assert conductor.prompts[-1][1] == "chain-bench-fix" and "came again" in conductor.prompts[-1][0]
-  conductor.covers["bench-fix"] = ["flake-a-host-test"]
+  conductor.covering["bench-fix"] = ["flake-a-host-test"]
   assert (conductor.taken("flake-a-host-test"), conductor.taken("budget-the-tui"), conductor.taken("bench-fix")) == ("p1", "", "p1")
   conductor.working.clear()
   conductor.queue.append(("bench-fix", "", "ci"))
@@ -1898,3 +1921,78 @@ def test_an_item_has_a_kind_whose_model_and_brief_it_takes(conductor: Round) -> 
   conductor.tend()
   assert conductor.heard == [f"The auditor look ({name}) ended, and results[{name!r}] keeps its report."]
   assert len(conductor.prompts) == 1
+
+
+def test_an_ended_worker_takes_the_next_item_of_its_area_until_half_of_its_window_and_a_hire_forks_the_base(
+  conductor: Round,
+) -> None:
+  made: list[tuple[str, str]] = []
+  conductor.ns["chain"] = lambda label="", source="": (made.append((label, source)), f"chain-{label}")[1]
+  conductor.ns["quietly"] = lambda verb, *args, **words: (
+    asyncio.run(verb(*args, **words)) if verb == conductor.bash else verb(*args, **words)
+  )
+  share = {"reply1": 0.3}
+  conductor.ns["filled"] = share.get
+  conductor.ns["transcript"] = lambda on="", of="": [("reply", "reply1", "", on)] if of == "reply" else []
+  conductor.facts["chain-tui/a"] = ("chain", "chain-tui/a", "rung1", "chain1", "tui/a", "")
+  conductor.facts["p1"] = ("prompt", "p1", "rung1", "chain-tui/a", "tuple[int, str]", "", "")
+  conductor.working["p1"], conductor.models["p1"] = "a", SONNET_HIGH
+  conductor.done["p1"] = (12, "done")
+  conductor.ns["DEBRIEFS"] = False
+  conductor.tend()
+  assert conductor.pool == {"chain-tui/a": {"key": "a", "model": SONNET_HIGH, "thread": "tui", "pr": 12, "folders": None}}
+  conductor.real_hire("b", "more", "tui")
+  assert made == [] and conductor.homes["b"] == "chain-tui/a" and conductor.pool == {}
+  assert "b goes on chain-tui/a, the chain of a, which worked on the same area." in conductor.heard
+  conductor.pool["chain-tui/a"] = {"key": "b", "model": SONNET_HIGH, "thread": "tui", "pr": 13, "folders": ["tui"]}
+  share["reply1"] = 0.6
+  conductor.real_hire("c", "other", "tui")
+  conductor.real_hire("d", "more", "gui")
+  assert made == [("base/edit/sonnet/high", ""), ("tui/c", "chain-base/edit/sonnet/high"), ("gui/d", "chain-base/edit/sonnet/high")]
+  assert conductor.bases == {f"edit {SONNET_HIGH}": "chain-base/edit/sonnet/high"}
+  assert [on for word, on in conductor.rungs if "AGENTS.md" in word and "read(" in word] == ["chain-base/edit/sonnet/high"]
+  share["reply1"] = 0.2
+  conductor.areas["e"] = ["tui"]
+  conductor.real_hire("e", "near", "ci")
+  assert conductor.homes["e"] == "chain-tui/a"
+
+
+def test_a_worker_takes_a_free_workspace_at_its_hire_and_gives_it_back_when_it_ends(conductor: Round) -> None:
+  conductor.ns["quietly"] = lambda verb, *args, **words: (
+    asyncio.run(verb(*args, **words)) if verb == conductor.bash else verb(*args, **words)
+  )
+  repo = str(conductor.tmp)
+  first = conductor.real_hire("k1", "one", "tui")
+  assert f"Work in the workspace {repo}-w1," in conductor.prompts[-1][0] and "{workspace}" not in conductor.prompts[-1][0]
+  assert "-w-k1" not in conductor.prompts[-1][0]
+  conductor.real_hire("fix5", "", "", conductor.FIX)
+  assert conductor.prompts[-1][0].endswith(conductor.WORKSPACE.replace("{repo}", repo).replace("{slot}", "w2"))
+  conductor.kinds["look"] = "audit"
+  conductor.real_hire("look", "read")
+  assert "workspace" not in conductor.prompts[-1][0]
+  assert sorted(conductor.slots.values()) == ["w1", "w2"]
+  conductor.ns["DEBRIEFS"] = False
+  conductor.done[first] = (9, "done")
+  conductor.tend()
+  assert first not in conductor.slots
+  conductor.real_hire("k3", "three", "gui")
+  assert f"{repo}-w1," in conductor.prompts[-1][0]
+
+
+def test_the_triage_folds_like_items_into_the_earlier_one_before_a_hire(conductor: Round) -> None:
+  words = "\n".join(f"The owner wants the line {i} of the feed to keep its color when it scrolls." for i in range(6))
+  conductor.queue[:] = [
+    ("converge-pr1", f"The open PR #1.\n{words}\nGap: the first row is cut off at column eighty of the screen.", "tui"),
+    ("other", "Fix the flake of the TUI in the bench of a new act, which fails one run in ten.", "tui"),
+    ("converge-pr2", f"The open PR #2.\n{words}\nGap: the second row has the wrong tone in the dark theme.", "tui"),
+    ("converge-pr3", f"The open PR #3.\n{words}\nGap: a third row.", "gui"),
+  ]
+  conductor.triage()
+  folded = conductor.queue[0][1]
+  assert folded.startswith(conductor.TRIAGED) and folded.count("line 3 of the feed") == 1
+  assert "## The item converge-pr2, folded in by the triage\nThe open PR #2.\nGap: the second row" in folded
+  conductor.staff()
+  assert [key for key, _ in conductor.hired] == ["converge-pr1", "other", "converge-pr3"]
+  assert conductor.covering == {"converge-pr1": ["converge-pr2"]}
+  assert conductor.heard == ["The triage folded the item converge-pr2 into converge-pr1, which it is like."]
+  assert conductor.taken("converge-pr2") == "worker1"
