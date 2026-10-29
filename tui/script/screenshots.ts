@@ -430,6 +430,14 @@ try {
   Object.defineProperty(session.host, "streams", { configurable: true, writable: true, value: new Map() });
   await session.submit("/run this is invalid python !!!").catch(session.fail);
   await capture("20-gate-findings");
+  // A chain that paused says who paused it and why, from its own pause, and no older error of a word stands in for it.
+  await session.engine.pause(session.selected, { why: "reply4 found no ear to take it" });
+  await until(session, () => session.paused);
+  await session.refresh();
+  await capture("113-pause-cause");
+  await session.engine.wake(session.selected);
+  await until(session, () => !session.paused);
+  await session.refresh();
   const record = session.host.record;
   if (!record) throw new Error("The demo session has no record.");
   await session.engine.wait([], { seconds: 60, on: session.engine.root });

@@ -1,5 +1,5 @@
 import { type Call, call, isFault } from "./ears.js";
-import { type Compaction, type LiveAct, WORK } from "./life/acts.js";
+import { type Compaction, errorOf, type LiveAct, type PauseCause, WORK } from "./life/acts.js";
 import { bound, display, type Fact, isQuestion, usageOf } from "./types.js";
 
 /** One answer of a model on a chain: its place in time, the actor whose reply it answered, and its usage, which is
@@ -47,6 +47,8 @@ export class Activity {
   /** The chain, the actor and the maker of each reply that is not done. The maker of a reply is the rung that waits
    * for the word that the reply writes. */
   private readonly replies = new Map<string, [string, string, string]>();
+  /** The reply of each chain that ended with an error, which a pause that the chain says of itself names. */
+  private readonly turned = new Map<string, { act: string; why: unknown }>();
   /** How many changes of a row the table has made, and the count at the last change of each row, so that a reader
    * takes only the rows that changed since it last read. */
   private changes = 0;
@@ -157,18 +159,22 @@ export class Activity {
       this.compactions.push({ chain: id, by, at });
     } else if (kind === "pause" || kind === "wake") {
       const paused = kind === "pause";
+      const cause = paused ? this.caused(id, by, fact[3]) : undefined;
       this.controls.delete(id);
       this.controls.set(id, fact);
       for (const name of [...this.open]) {
         const row = this.acts.get(name);
         if (row && row.paused !== paused && (yield* covers(fact, row.id))) {
           row.paused = paused;
+          if (cause) row.pause = cause;
+          else delete row.pause;
           this.mark(row);
         }
       }
     } else if (kind === "done") {
       const reply = this.replies.get(id);
       this.replies.delete(id);
+      if (reply && errorOf(fact[3])) this.turned.set(reply[0], { act: id, why: fact[3] });
       if (reply && Array.isArray(fact[3]) && Array.isArray(fact[3][2])) {
         const usage: Answered["usage"] = usageOf(fact[3][2]);
         this.cost += usage[4];
@@ -232,6 +238,13 @@ export class Activity {
     if (!chain || !source || restored !== source || this.compactions.some((one) => one.chain === chain.id))
       return;
     this.compactions.push({ chain: chain.id, from: source, by: rung.by, at: chain.began });
+  }
+  /** The cause of a pause. A chain that pauses itself because a reply ended with an error says that error as its
+   * cause, so the reply that ended with it is the act that paused the chain. */
+  private caused(id: string, by: string, why: unknown): PauseCause {
+    const turned = by === id ? this.turned.get(id) : undefined;
+    const act = turned && JSON.stringify(turned.why) === JSON.stringify(why) ? turned.act : undefined;
+    return { by, ...(act ? { act } : {}), ...(why === null || why === undefined ? {} : { why }) };
   }
   /** Whether the last control over a new act is a pause. Only a control no older than the oldest pause can make
    * it one. */

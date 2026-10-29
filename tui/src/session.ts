@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { FileChange, ImageAttachment, LiveAct, SetupInfo, Turn } from "furb";
+import type { PauseCause } from "furb/life";
 import {
   actorParts,
   decodeRecord,
@@ -337,6 +338,7 @@ export class Session extends EventEmitter {
   readonly errors: Record<string, string> = {};
   loading = false;
   paused = false;
+  cause: PauseCause | null = null;
   editing?: string;
   /** The thread that the operator chose in the sidebar, to which the input sends each message as prompt(None, message,
    * on=thread): its model reads it at its next step, and a message to a resolved thread opens it again. */

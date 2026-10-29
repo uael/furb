@@ -15,7 +15,7 @@ import {
   type Stream,
   type Turn,
 } from "furb";
-import type { Compaction, Measure } from "furb/life";
+import type { Compaction, Measure, PauseCause } from "furb/life";
 import {
   aboutOf,
   buildOf,
@@ -62,6 +62,8 @@ export interface Snapshot {
   mark: number;
   dispatched: string[];
   paused: boolean;
+  /** The cause that the pause over the chain gave, null when none stands or none was given. */
+  cause: PauseCause | null;
   roster?: Roster;
   /** The acts that changed after the count the session asked with. */
   acts: ActRow[];
