@@ -1561,6 +1561,19 @@ def test_the_ledger_of_the_tooling_keeps_one_form_of_when_and_moves_the_old_entr
   assert whens == [str(calendar.timegm((2026, 10, 23, 0, 0, 0))), "1793181153"]
 
 
+def test_a_flaw_that_a_merged_pr_fixed_is_closed_with_that_pr_and_opens_again_when_it_comes_again(
+  conductor: Round,
+) -> None:
+  conductor.flaw("The PATH of the World lacks /opt/homebrew/bin", "A second friction")
+  assert conductor.settle_flaw("path of the world", 707) == 1
+  assert conductor.settle_flaw("path of the world", 707) == 0
+  held = {x["what"]: x for x in json.loads(conductor.files[conductor.TOOLING])}
+  assert (held["The PATH of the World lacks /opt/homebrew/bin"]["state"], held["The PATH of the World lacks /opt/homebrew/bin"]["closed_by"]) == ("closed", "#707")
+  assert held["A second friction"]["state"] == "open" and "closed_by" not in held["A second friction"]
+  conductor.flaw("The PATH of the World lacks /opt/homebrew/bin")
+  assert json.loads(conductor.files[conductor.TOOLING])[0]["state"] == "open"
+
+
 def test_an_item_that_names_its_pr_owns_it_before_a_label_or_a_push_does(conductor: Round) -> None:
   conductor.busy("p1", "tui-stack", OPUS)
   one = conductor.pr(n=606, checks=("FAILURE",))
