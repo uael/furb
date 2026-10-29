@@ -697,7 +697,7 @@ test("a word that the gate refused shows a cross on the line that the refusal na
       const lines = (await frame()).split("\n");
       const refused = lines.findIndex((line) => /1 ```python +✗/.test(line));
       expect(refused).toBeGreaterThan(0);
-      expect(lines[refused + 1]).toMatch(/^[ ┃]+# Got unexpected token/);
+      expect(lines[refused + 1]).toMatch(/^[ ┃]+# error\[invalid-syntax\].*Got unexpected token/);
       // The numbers of the thread go on from the refused word to the word that replaced it.
       const retried = lines.findIndex((line) => / 4 close\("Here it is again as plain Python/.test(line));
       expect(retried).toBeGreaterThan(refused + 1);
