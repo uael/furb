@@ -307,6 +307,8 @@ export const details = part({
       minWidth: gutterWidth(digits),
       lineNumbers: new Map([[0, number]]),
     });
+    // The loader stands left of the number from the first frame, so that the row never lacks it before the first tick.
+    view.setLineSign(0, { before: spin(), beforeColor: c.accent });
     this.thinkingRows.set(step, {
       view,
       text,
