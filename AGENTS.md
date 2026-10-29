@@ -352,7 +352,8 @@ fix what your change broke, and report what was broken before.
   budgets are set again, and `FURB_BENCH_FACTS` sets the size of the long life.
 - `bun run screenshots` and `bun run animation`: capture `docs/screenshots/` and `docs/furb.gif` again from the
   real renderer. Run both after a change that a screen shows, and read each capture. One run of each at a time holds
-  its home in `/tmp`, and a second run waits until the first ends. A screen that does not come in three minutes ends
+  its home in `/tmp`, and a second run waits until the first ends. `FURB_GALLERY_ROOT` names another folder for the
+  home and its lock, so that runs with two roots run at once. A screen that does not come in three minutes ends
   the run with an error that names the screen, and a run never waits past thirty minutes. A run that waits says how
   long the run that holds the home has held it. The clock of the view stands still by default, so that two runs of
   the same code draw the same captures, and `FURB_STILL_CLOCK`, a time in milliseconds, sets another time.
