@@ -25,6 +25,7 @@ import { type ChromePart, chrome } from "./app/chrome.ts";
 import { type ComposerPart, composer, composerBound } from "./app/composer.ts";
 import { type DeskPart, desk, deskBound } from "./app/desk.ts";
 import { type DetailsPart, details } from "./app/details.ts";
+import { type DialogsPart, dialogs } from "./app/dialogs.ts";
 import { type FeedPart, feed } from "./app/feed.ts";
 import { GhostTextarea } from "./app/ghost.ts";
 import { type InputPart, input, inputBound } from "./app/input.ts";
@@ -322,6 +323,12 @@ export class App {
   /** The first choice that the list shows, and whether each choice takes rows for its command and its detail. */
   paletteStart = 0;
   rich = false;
+  /** The errors of the completions of the parts for the token of the input, which its list shows. */
+  suggestionError = "";
+  /** What takes away the keys of the actions of the dialog that is open. */
+  paletteKeysOff?: () => void;
+  /** What a dialog that a part awaits does when it closes with no choice, as Escape closes it. */
+  overlayClosed?: () => void;
   redraw?: ReturnType<typeof setTimeout>;
   lastView = "";
   /** Whether this run is the first one, whose welcome shows the check of the setup. */
@@ -1123,6 +1130,7 @@ export interface App
     WelcomePart,
     StagePart,
     DeskPart,
+    DialogsPart,
     QuestionsPart,
     DetailsPart,
     SidebarPart,
@@ -1145,6 +1153,7 @@ assemble(
   welcome,
   stage,
   desk,
+  dialogs,
   questions,
   details,
   sidebar,
