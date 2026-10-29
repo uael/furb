@@ -35,8 +35,13 @@ def test_a_change_to_the_crate_or_to_the_engine_runs_every_job() -> None:
   assert scope.scope(["Cargo.lock"]) == every
 
 
+def test_a_change_to_an_extension_of_the_project_runs_the_suite_on_linux() -> None:
+  got = scope.scope([".furb/extensions/conductor/conductor.py", ".furb/config.json"])
+  assert got == {"suite_os": LINUX, "ts_os": LINUX, "crate": False, "gui": False, "code": True}
+
+
 def test_a_change_to_prose_or_to_the_tools_runs_the_jobs_on_linux_alone() -> None:
-  got = scope.scope(["AGENTS.md", "docs/tui.md", "script/budgets.py", ".furb/extensions/x/x.py", "LICENSE"])
+  got = scope.scope(["AGENTS.md", "docs/tui.md", "script/budgets.py", ".furb/tests/x.json", "LICENSE"])
   assert got == {"suite_os": LINUX, "ts_os": LINUX, "crate": False, "gui": False, "code": False}
 
 

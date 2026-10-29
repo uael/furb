@@ -32,12 +32,11 @@ jobs:
     name: the render
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    # The pull request of the gallery is opened by this job, which needs to push a branch and to start the gates on it:
-    # a pull request that GITHUB_TOKEN opens starts no workflow by itself.
+    # This job opens the pull request of the gallery as github-actions[bot], with GITHUB_TOKEN, whose push and pull
+    # request start no workflow: a render of screenshots runs no gate, by the ruling of the owner on 10-29.
     permissions:
       contents: write
       pull-requests: write
-      actions: write
     env:
       # The round of the conductor merges a pull request only from a branch w/..., so the one fixed branch is one.
       BRANCH: ${{ github.ref == 'refs/heads/main' && 'w/gallery' || 'w/gallery-proof' }}
@@ -68,11 +67,7 @@ jobs:
           retention-days: 7
       - name: open the pull request
         env:
-          # The secret GALLERY_TOKEN is optional: a fine-grained token of this repository with the permissions contents
-          # and pull requests, both write. A push and a pull request of such a token start the gates and the check of
-          # the title by themselves. With no secret, the job uses GITHUB_TOKEN and starts both by hand, as below.
-          GH_TOKEN: ${{ secrets.GALLERY_TOKEN || github.token }}
-          OWN_TOKEN: ${{ secrets.GALLERY_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           TITLE: "chore(tui): Render the gallery again"
         run: |
           set -euo pipefail
@@ -132,10 +127,4 @@ jobs:
             gh pr create --base main --head "$BRANCH" --title "$TITLE" --body-file "$RUNNER_TEMP/body.md" $draft
           else
             gh pr edit "$number" --title "$TITLE" --body-file "$RUNNER_TEMP/body.md"
-          fi
-          # A push by GITHUB_TOKEN starts no workflow, so with no GALLERY_TOKEN the gates and the check of the title
-          # start by hand on the new head.
-          if [ "$pushed" = true ] && [ -z "$OWN_TOKEN" ]; then
-            gh workflow run gates.yml --ref "$BRANCH"
-            gh workflow run titles.yml --ref "$BRANCH"
           fi

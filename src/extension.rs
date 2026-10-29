@@ -359,6 +359,17 @@ pub fn word(source: &str) -> String {
 /// import, and an assignment to names in capitals, in its order. A word that does not parse is its own definitions,
 /// so the gate says why it is refused.
 pub fn definitions(word: &str) -> String {
+  shaped(word, false)
+}
+
+/// What a chain plays when it reloads a word: its [`definitions`] and, in the same order, each name of state that it
+/// assigns, as `name = globals().setdefault("name", value)`. So a name that the module lacks takes its value, and a
+/// name that the module holds keeps the value that it holds.
+pub fn reloads(word: &str) -> String {
+  shaped(word, true)
+}
+
+fn shaped(word: &str, state: bool) -> String {
   let Ok(parsed) = parse_module(word) else { return word.to_owned() };
   let capital = |target: &Expr| match target {
     Expr::Name(name) => {
@@ -367,7 +378,7 @@ pub fn definitions(word: &str) -> String {
     }
     _ => false,
   };
-  let defines = |one: &&Stmt| match one {
+  let defines = |one: &Stmt| match one {
     Stmt::FunctionDef(_)
     | Stmt::ClassDef(_)
     | Stmt::TypeAlias(_)
@@ -377,8 +388,39 @@ pub fn definitions(word: &str) -> String {
     Stmt::AnnAssign(one) => one.value.is_some() && capital(&one.target),
     _ => false,
   };
-  let kept: Vec<&str> =
-    parsed.syntax().body.iter().filter(defines).map(|one| &word[one.range()]).collect();
+  let held = |id: &str, annotation: &str, value: &Expr, whole: &str| {
+    let value = &word[value.range()];
+    if value.starts_with("globals().setdefault(") {
+      whole.to_owned()
+    } else {
+      format!("{id}{annotation} = globals().setdefault({id:?}, {value})")
+    }
+  };
+  let kept: Vec<String> = parsed
+    .syntax()
+    .body
+    .iter()
+    .filter_map(|one| {
+      let whole = &word[one.range()];
+      if defines(one) {
+        return Some(whole.to_owned());
+      }
+      match one {
+        Stmt::Assign(two) if state => match two.targets.as_slice() {
+          [Expr::Name(name)] => Some(held(name.id.as_str(), "", &two.value, whole)),
+          _ => None,
+        },
+        Stmt::AnnAssign(two) if state => match (&*two.target, &two.value) {
+          (Expr::Name(name), Some(value)) => {
+            let annotation = format!(": {}", &word[two.annotation.range()]);
+            Some(held(name.id.as_str(), &annotation, value, whole))
+          }
+          _ => None,
+        },
+        _ => None,
+      }
+    })
+    .collect();
   kept.join("\n\n")
 }
 
@@ -402,8 +444,8 @@ pub fn enabled(root: &[Fact]) -> Vec<Extension> {
 /// extension that plays on the root alone. No contract holds it, so this is the one home of its shape. The ear says it for each extension it is given that the life does not run as it is given, at each
 /// stand that this life answers, the first of which is at the tip, and for an extension of a folder that a config
 /// turns on, when a write of the life in that folder lands. The fact of an extension that the life runs already
-/// reloads it: each chain plays the definitions of its new word alone, so each name of state keeps its value, and its
-/// life word does not run again. The ear plays the rungs from the fact alone, so a later life plays the same rungs
+/// reloads it: each chain plays the definitions of its new word and each name of state that it lacks, so each name of
+/// state that it holds keeps its value, and its life word does not run again. The ear plays the rungs from the fact alone, so a later life plays the same rungs
 /// where the journal says the fact again.
 pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
   hearing(&["chain", "stand", "write", ENABLE], move |mut co| async move {
@@ -478,7 +520,7 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
           continue;
         };
         if enabled[at].word != one.word {
-          let word = definitions(&one.word);
+          let word = reloads(&one.word);
           for (chain, had) in &chains {
             if had.contains(&one.name) {
               ring(&mut co, chain, &word).await?;
