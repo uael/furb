@@ -65,10 +65,10 @@ async def test_grant_on_a_chain_puts_a_ceiling_on_it_dollars_a_share_of_the_wind
 
 
 async def test_the_engine_enters_a_pause_on_the_chain_when_a_response_carries_the_ledger_to_its_ceiling() -> None:
-  """The engine enters a pause on the chain when a response carries the ledger to its ceiling."""
+  """The engine enters a pause on the chain when a response carries the ledger to its ceiling, whose cause is ceiling."""
   _, log, root, ceiling, act = await capped("a = 1", "close(2)")
   assert engine.peek(act, ...) is ...
-  assert [(one[1], one[2]) for one in said(log, "pause")] == [(root, ceiling)]
+  assert [one[1:] for one in said(log, "pause")] == [(root, ceiling, "ceiling")]
 
 
 async def test_the_word_of_the_response_that_crossed_the_ceiling_runs() -> None:

@@ -42,18 +42,24 @@ async def test_a_cancel_is_over_the_act_it_names_and_everything_that_act_made() 
 
 
 async def test_cancel_is_given_the_id_of_an_act_and_says_a_cancel_over_it() -> None:
-  """cancel is given the id of an act, and says a cancel over it."""
+  """cancel is given the id of an act and a cause, None when none is given, and says a cancel over it that carries that cause."""
   _, log, _, one = slow()
   engine.cancel(one)
-  assert said(log, "cancel") == [("cancel", one, OPERATOR)]
+  engine.cancel(one, "no need")
+  assert said(log, "cancel") == [("cancel", one, OPERATOR, None), ("cancel", one, OPERATOR, "no need")]
 
 
 async def test_a_cancelled_act_completes_with_cancellederror() -> None:
-  """A cancelled act completes with CancelledError."""
-  _, _, _, one = slow()
+  """A cancelled act completes with CancelledError, which carries the cause of the cancel when it has one."""
+  _, _, root, one = slow()
+  two = engine.bash("two", on=root)
   engine.cancel(one)
+  engine.cancel(two, "no need")
   await settle()
-  assert isinstance(engine.peek(one), CancelledError)
+  assert [(type(got := engine.peek(x)), isinstance(got, CancelledError) and got.args) for x in (one, two)] == [
+    (CancelledError, ()),
+    (CancelledError, ("no need",)),
+  ]
 
 
 async def test_a_cancelled_prompt_raises_cancellederror_to_whoever_awaits_it() -> None:

@@ -124,7 +124,7 @@ export const actions = part({
       return true;
     }
     // A command of a part of an extension, which no command of the TUI shadows.
-    const part = name ? this.parts.command(name) : undefined;
+    const part = name ? this.parts.command(name, this.seen()) : undefined;
     if (part) {
       this.partRun(() => part.run(argument, this.seen()));
       return true;
@@ -341,7 +341,7 @@ export const actions = part({
             w.lastOwn?.id === act.id && message
               ? {
                   label: "Take back",
-                  detail: "Cancel this message alone, and give it back to the input to write again",
+                  detail: "Cancel this message alone, and put it back in the input",
                   run: () => this.action("/cancel"),
                 }
               : {
@@ -356,7 +356,7 @@ export const actions = part({
             {
               label: message ? "Edit and send again" : "Branch after it",
               detail: message
-                ? "A new branch that has not read this message, with the message in the input"
+                ? "A new branch before this message, with the message in the input"
                 : "A new branch that reads the chain up to this act",
               run: () => this.rewindTo(act),
             },

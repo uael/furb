@@ -18,12 +18,12 @@ async def test_a_filter_is_given_the_acts_of_the_transcript_up_to_the_source() -
 async def test_a_filter_says_which_acts_the_turns_of_that_chain_keep_each_with_its_entries() -> None:
   """A filter says which acts the turns of that chain keep, each with its entries."""
   _, log, root = await lived()
-  (one, ack), command = [a[1] for a in said(log, "prompt")], said(log, "bash")[0][1]
-  step, answered = [a[1] for a in said(log, "rung") if a[2] in (one, ack)]
+  (one,), command = [a[1] for a in said(log, "prompt")], said(log, "bash")[0][1]
+  (step,) = [a[1] for a in said(log, "rung") if a[2] == one]
   narrow = engine.chain("narrow", source=root, filter=engine.take(command, inside=False))
   await settle()
-  assert named(engine.turns(on=root)) == [root, root, one, step, "read1", command, ack, command, answered]
-  assert named(engine.turns(on=narrow)) == [root, root, one, step, "read1", ack, answered, narrow]
+  assert named(engine.turns(on=root)) == [root, root, one, step, "read1", command, command]
+  assert named(engine.turns(on=narrow)) == [root, root, one, step, "read1", narrow]
   kept = [part for part in paragraphs(engine.turns(on=narrow)) if part.startswith(f"#{step} ")]
   assert kept == [f"#{step} advance on {one}"]
 

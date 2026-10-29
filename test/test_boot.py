@@ -251,7 +251,7 @@ async def test_the_engine_makes_a_chain_from_the_record_and_in_no_other_way() ->
   was = dict(engine.program(root))
   again, over = await relived(Sand(), list(sand.record))
   assert ran(again) == ran(log)
-  assert [one for one in ran(again) if ": Act[" not in one] == [WORD, "close(None)"]
+  assert [one for one in ran(again) if ": Act[" not in one] == [WORD]
   assert engine.program(over) == was
 
 
@@ -289,8 +289,8 @@ async def test_the_journal_answers_what_the_record_holds_an_answer_for_the_gate_
   sand, _, _ = await lived()
   later = Sand()
   again, _ = await relived(later, list(sand.record))
-  assert [a[0] for a in later.calls] == ["stand"] and gated(again) == [WORD, "close(None)"]
-  assert [a[2] for a in said(again, "done") if a[1].startswith("gate")] == ["journal", "journal"]
+  assert [a[0] for a in later.calls] == ["stand"] and gated(again) == [WORD]
+  assert [a[2] for a in said(again, "done") if a[1].startswith("gate")] == ["journal"]
 
 
 async def test_a_later_life_on_a_kept_record_starts_nothing_and_keeps_the_ids_of_the_earlier_life() -> None:
@@ -564,8 +564,8 @@ async def test_one_said_again_takes_the_name_it_had() -> None:
   _, over = await relived(later, list(sand.record))
   later.script[over] = ["close(9)"]
   one = engine.prompt(int, "more", on=over)
-  assert [a[1] for a in said(log, "prompt")] == ["prompt1", "prompt2"]
-  assert await one == 9 and one == "prompt3"
+  assert [a[1] for a in said(log, "prompt")] == ["prompt1"]
+  assert await one == 9 and one == "prompt2"
   assert one not in ids(log)
 
 

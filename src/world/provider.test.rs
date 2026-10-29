@@ -248,7 +248,7 @@ fn a_second_refusal_in_a_row_of_an_actor_on_a_chain_pauses_the_chain_before_its_
       format!("['#{root} m/high answered nothing: ProviderError: boom again']"),
     ),
     ("tell", root.as_str(), format!("['#{root} paused by provider']")),
-    ("pause", root.as_str(), String::new()),
+    ("pause", root.as_str(), "None".into()),
     ("done", "reply2", refused("boom again")),
   ];
   let expected: Vec<_> =
@@ -346,7 +346,7 @@ fn a_cancel_over_a_reply_ends_the_call_of_its_model_and_the_ear_says_nothing_mor
   let (mut engine, _) = life("cancel", vec![Model::new("m", 1000, model.clone())]);
   let id = asked(&mut engine);
   assert!(until(&mut engine, |_| model.asked.load(Ordering::SeqCst)), "the model is asked");
-  engine.cancel(&id).expect("the prompt is cancelled");
+  engine.cancel(&id, Default::default()).expect("the prompt is cancelled");
   let no = block_on(Act::<Object>::of(&mut engine, "reply1")).expect_err("the reply ends");
   assert_eq!(no.name, "CancelledError");
   assert!(
@@ -1049,7 +1049,7 @@ fn the_host_is_told_nothing_more_of_what_a_model_writes_once_its_reply_is_over()
   let id = asked(&mut engine);
   let parts = |told: &Arc<Mutex<Vec<[String; 4]>>>| told.lock().expect("the parts told").len();
   assert!(until(&mut engine, |_| parts(&told) == 1), "the model wrote a part");
-  engine.cancel(&id).expect("the prompt is cancelled");
+  engine.cancel(&id, Default::default()).expect("the prompt is cancelled");
   let over = |engine: &mut Engine| {
     let root = engine.root().to_owned();
     let facts =
@@ -1965,4 +1965,33 @@ fn each_image_comes_once_in_a_request_after_the_text_that_names_it_as_a_fork_giv
     })
     .collect();
   assert_eq!(users, [vec!["text", "name", "image"], vec!["text"]]);
+}
+
+#[test]
+fn a_turn_of_the_model_that_the_gate_refused_goes_on_the_user_side_quoted_under_its_finding() {
+  let turn = |role: &str, text: &str| {
+    Object::tuple([Object::string(role), Object::string(text), Object::none(), Object::none()])
+  };
+  let finding = "#rung2 refused\nrung2_findings = 'line 1: BAD is not defined'";
+  let turns = Object::list([
+    turn("user", "ask"),
+    turn("assistant", "x = BAD"),
+    turn("user", &format!("{finding}\n\n#rung3 advance on prompt1")),
+    turn("assistant", "close(1)"),
+  ]);
+  let model = scripted(&MockCompletionModel::new([]));
+  let got = messages(turns.as_ref(), &model, &mut images::Images::new(None)).unwrap();
+  let said: Vec<Value> = got
+    .iter()
+    .map(|one| match one {
+      super::Message::User { content } => json!(["user", format!("{content:?}")]),
+      super::Message::Assistant { content, .. } => json!(["assistant", format!("{content:?}")]),
+      super::Message::System { .. } => json!(["system"]),
+    })
+    .collect();
+  assert_eq!(said.len(), 2, "the refused word is no turn of the model: {said:?}");
+  let text = said[0][1].as_str().unwrap_or_default();
+  let quoted = "ask\\n\\n#rung2 refused\\nrung2_findings = 'line 1: BAD is not defined'\\n<s:rung2_word>\\nx = BAD\\n</s:rung2_word>\\n\\n#rung3 advance";
+  assert!(text.contains(quoted), "{said:?}");
+  assert_eq!(said[1][0], "assistant");
 }

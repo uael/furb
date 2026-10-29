@@ -268,8 +268,8 @@ impl Server {
       "cancel" | "pause" | "wake" => {
         let (act, engine) = (command.needed("act")?, &mut self.life.engine);
         let done = match kind {
-          "cancel" => engine.cancel(&act),
-          "pause" => engine.pause(&act),
+          "cancel" => engine.cancel(&act, Default::default()),
+          "pause" => engine.pause(&act, Default::default()),
           _ => engine.wake(&act),
         };
         done.map_err(failed).map(|()| Value::Null)

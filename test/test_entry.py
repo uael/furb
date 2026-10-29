@@ -46,5 +46,5 @@ async def test_the_record_is_a_sequence_of_entries_about_acts() -> None:
   assert all(isinstance(e, tuple) for e in sand.record)
   assert all(e[0][1] in acts(log) for e in sand.record)
   kinds = ["chain", "stand", "done", "prompt", "reply", "started", "done", "gate", "done", "read", "done"]
-  kinds += ["bash", "started", "merged", "out", "done", "reply", "started", "done", "gate", "done"]
+  kinds += ["bash", "started", "merged", "out", "done"]
   assert [e[0][0] for e in sand.record] == kinds
