@@ -464,7 +464,7 @@ fn a_cancel_of_a_command_ends_the_process_that_it_started_and_not_only_its_shell
     let _ = lived.engine.peek("bash1", verbs::Peek::default());
   }
   let sleeper = std::fs::read_to_string(&pid).unwrap().trim().to_owned();
-  lived.engine.cancel(&cancelled).unwrap();
+  lived.engine.cancel(&cancelled, Default::default()).unwrap();
   assert_eq!(lived.settled("bash1").unwrap_err().name, "CancelledError");
   let alive =
     || std::process::Command::new("kill").args(["-0", &sleeper]).output().unwrap().status.success();
