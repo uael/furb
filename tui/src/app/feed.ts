@@ -27,15 +27,7 @@ import { theme as c, glyph, spacing as space, spin, threadTone } from "../theme.
 import { bold, italic, type Part, plain } from "../ui.ts";
 import { branchMessages, branchStart, branchTakes, earlierSteps } from "../watching.ts";
 import { part } from "./part.ts";
-import {
-  type BlockOptions,
-  MEASURE,
-  MESSAGE_ROWS,
-  PROGRAM_STEPS,
-  spell,
-  threadMarks,
-  viewLabels,
-} from "./shared.ts";
+import { type BlockOptions, MESSAGE_ROWS, PROGRAM_STEPS, spell, threadMarks, viewLabels } from "./shared.ts";
 import { SCROLL } from "./thread.ts";
 
 export const feed = part({
@@ -512,7 +504,7 @@ export const feed = part({
               [`${glyph.rule.repeat(2)} `, c.border],
               [mark.title, c.muted],
               [
-                ` ${glyph.rule.repeat(Math.max(0, Math.min(this.feedWidth, MEASURE) - Bun.stringWidth(mark.title) - 8))}`,
+                ` ${glyph.rule.repeat(Math.max(0, this.feedWidth - Bun.stringWidth(mark.title) - 8))}`,
                 c.border,
               ],
             ],

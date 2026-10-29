@@ -24,7 +24,7 @@ import { type ActRow, working } from "../session.ts";
 import { theme as c, glyph, spacing as space, spin } from "../theme.ts";
 import { type Part, plain, styled } from "../ui.ts";
 import { part } from "./part.ts";
-import { type BlockOptions, chipColors, MEASURE, noBorder, type State, stateOf } from "./shared.ts";
+import { type BlockOptions, chipColors, noBorder, type State, stateOf } from "./shared.ts";
 
 /** The lines of code whose colors the view keeps, and the widest line that it keeps. */
 const PAINTED_LINES = 4096,
@@ -184,14 +184,7 @@ export const blocks = part({
       return;
     }
     prior?.node.destroyRecursively();
-    // A card of prose keeps the measure of a line, and the card of a step that runs takes the room of its hints.
-    const box = this.box({
-      id,
-      gap: space.stack,
-      marginTop: margin,
-      paddingLeft: options.indent ?? 0,
-      ...(rung ? {} : { maxWidth: MEASURE + (options.indent ?? 0) }),
-    });
+    const box = this.box({ id, gap: space.stack, marginTop: margin, paddingLeft: options.indent ?? 0 });
     const labelNode = this.line(heading, c.muted, {
       truncate: true,
       visible,

@@ -74,22 +74,6 @@ test("a thread is one box: its message with a line of its color, its program as 
     true,
   ));
 
-test("the cards of prose keep the measure of a line, 100 columns, on a wide screen with no sidebar", () =>
-  composing(
-    async ({ session, app, frame }) => {
-      await idle(session);
-      session.preferences.sidebar = false;
-      await frame();
-      await frame();
-      const cards = app.scroll.getChildren().filter((node) => /^prompt\d+(-answer|-reply)?$/.test(node.id));
-      expect(cards.length).toBeGreaterThan(0);
-      for (const card of cards) expect(card.width).toBeLessThanOrEqual(100);
-      expect(app.scroll.width).toBeGreaterThan(200);
-    },
-    { width: 220, height: 46 },
-    true,
-  ));
-
 test("a terminal narrower than 100 columns shows the sidebar in place of the feed with its key, and the feed again with the same key", () =>
   composing(
     async ({ session, app, frame }) => {
