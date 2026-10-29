@@ -78,9 +78,11 @@ export type ThreadList = {
   list: ChainThread[];
   by: Map<string, ChainThread>;
   of: Map<string, ChainThread>;
+  /** The thread of each question and each notice that a thread made, by the id of the prompt. */
+  asked: Map<string, ChainThread>;
 };
 
-/** The threads of one chain, as they stood when the chain had that stamp, which counts the acts placed on it. */
+/** The threads of one chain, as they stood when the chain had that stamp, which counts the prompts placed on it. */
 export type ChainRead = {
   stamp: number;
   list: ChainThread[];

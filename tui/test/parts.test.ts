@@ -179,9 +179,17 @@ test("the command /compact of the part of compaction asks a model what the chain
       // The acts of the life reach the view a moment after the word ran.
       for (let tries = 0; tries < 400 && !app.seen().acts.some((act) => act.kind === "rung"); tries++)
         await Bun.sleep(25);
+      // The footer cuts a notice to its room once the question of the model opens, and a slow machine opens it before
+      // the first frame, so the test reads the notice where the session says it.
+      const said: string[] = [];
+      const hear = () => {
+        if (session.notice) said.push(session.notice);
+      };
+      session.on("change", hear);
       app.composer.setText("/compact");
       await app.submit();
-      await shows(frame, "A model compacts this chain");
+      session.off("change", hear);
+      expect(said).toContain("A model compacts this chain");
       let asked = "";
       for (let tries = 0; tries < 400 && !asked; tries++) {
         await session.refresh();

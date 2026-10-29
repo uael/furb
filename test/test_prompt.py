@@ -329,8 +329,8 @@ async def test_a_word_written_to_its_door_is_a_rung_of_it() -> None:
   await settle()
   first, asking, made = [a[1] for a in said(log, "rung") if a[2] == act]
   bind = fresh(root, prompted(act, "int", "count"), f"#{first} advance on {act}")
-  told = f"#{first} told nothing\n\n#{asking} advance on {act}\n\n{written(made, 'close(5)', act)}"
-  assert (await act) == 5 and ran(log) == [bind, "a = 1", told, "close(5)"]
+  told = f"#{first} told nothing\n\n#{asking} advance on {act}"
+  assert (await act) == 5 and ran(log) == [bind, "a = 1", told, written(made, "close(5)", act), "close(5)"]
   assert [a[2] for a in said(log, "rung") if a[4] == "close(5)"] == [act]
 
 
@@ -495,6 +495,17 @@ async def test_the_acknowledgment_carries_no_shape_and_a_message_that_names_the_
   _, log, _ = await lived()
   command = said(log, "bash")[0][1]
   assert [(one[4], one[5]) for one in said(log, "prompt")] == [("int", "read and run"), ("None", f"{command} done")]
+
+
+async def test_a_done_whose_value_is_none_makes_no_acknowledgment() -> None:
+  """A done whose value is None makes no acknowledgment, since it gives the model nothing to read."""
+  _, log, root = born("x = prompt(None, 'note', to=OPERATOR)\nclose(1)")
+  assert await engine.prompt(int, "go", on=root) == 1
+  note = said(log, "prompt")[1][1]
+  engine.close(None, note)
+  await settle()
+  assert engine.peek(note) is None
+  assert [(one[4], one[5]) for one in said(log, "prompt")] == [("int", "go"), ("None", "note")]
 
 
 async def test_the_acknowledgment_is_a_prompt_on_the_thread_that_made_the_rung_that_made_the_act() -> None:

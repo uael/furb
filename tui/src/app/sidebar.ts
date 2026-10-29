@@ -1,4 +1,5 @@
 import type { BoxOptions, BoxRenderable, Renderable, TextRenderable } from "@opentui/core";
+import { unmarked } from "furb";
 import { type ChainThread, chainThreads } from "furb/life";
 import { count, dollars } from "../format.ts";
 import type { ActRow } from "../session.ts";
@@ -33,7 +34,9 @@ export const sidebar = part({
     };
     const spend = w.spend;
     const ceiling =
-      grant?.words[1] === null || grant?.words[1] === undefined ? undefined : Number(grant.words[1]);
+      grant?.words[1] === null || grant?.words[1] === undefined
+        ? undefined
+        : Number(unmarked(grant.words[1]));
     const known = window !== undefined && Number.isFinite(window);
     const tokens = spend.input + spend.output + spend.cacheRead + spend.cacheWrite;
     // A chain with a source reads the prompt of its origin before it answers once, so its context shows from its birth.
@@ -70,7 +73,7 @@ export const sidebar = part({
       const spent =
         limit === null || limit === undefined
           ? dollars(spend.dollars)
-          : `${dollars(spend.dollars)}/${dollars(Number(limit))}`;
+          : `${dollars(spend.dollars)}/${dollars(Number(unmarked(limit)))}`;
       // The numbers lose their words one by one before they lose their room, so that the line shows whole.
       const cached = spend.cacheRead ? ` · ${count(spend.cacheRead)} cached` : "";
       const forms =
@@ -101,23 +104,38 @@ export const sidebar = part({
   chainThreadsBy(chain: string): ThreadList {
     const w = this.session;
     if (w.selected !== chain)
-      return { session: w, chain, acts: undefined, owed: "", list: [], by: new Map(), of: new Map() };
+      return {
+        session: w,
+        chain,
+        acts: undefined,
+        owed: "",
+        list: [],
+        by: new Map(),
+        of: new Map(),
+        asked: new Map(),
+      };
     const owed = [...w.host.prompts.keys()].join(" ");
     // A list read from another session or another chain is no list of this one, even when its version is the same.
     const kept = this.threadList;
-    if (kept.session !== w || kept.chain !== chain || kept.acts !== w.version || kept.owed !== owed) {
+    if (
+      kept.session !== w ||
+      kept.chain !== chain ||
+      kept.acts !== w.threadStamp(chain) ||
+      kept.owed !== owed
+    ) {
       const index = w.ladderIndex;
       const list = chainThreads(index.on, index.ids, new Set(w.host.prompts.keys()), this.promptsRead);
       this.threadList = {
         session: w,
         chain,
-        acts: w.version,
+        acts: w.threadStamp(chain),
         owed,
         list,
         by: new Map(list.map((one) => [one.act.id, one])),
         of: new Map(
           list.flatMap((one) => one.messages.map((message): [string, ChainThread] => [message.id, one])),
         ),
+        asked: new Map(list.flatMap((one) => one.asked.map((ask): [string, ChainThread] => [ask.id, one]))),
       };
     }
     return this.threadList;

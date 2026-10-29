@@ -172,7 +172,7 @@ export class App {
   railWatched?: string;
   /** The next question that the key for the next question goes to. */
   railNext = 0;
-  /** The threads of the session shown on every chain, read again only when its acts or its questions change. */
+  /** The threads of the session shown on every chain, read again only when its prompts or its questions change. */
   railThreadCache?: {
     session: unknown;
     version: number;
@@ -181,7 +181,7 @@ export class App {
     chains: Map<string, ChainRead>;
   };
   /** The key of the rows of the threads of the sidebar, by the list that it came from and the minute. */
-  railThreadKey?: { list: ChainThread[]; minute: number; text: string };
+  railThreadKey?: { list: ChainThread[]; minute: number; parts: string[]; count: number; text: string };
   /** The threads of the chain shown, read again only when the acts or the questions that wait change. */
   threadList: ThreadList = {
     session: undefined,
@@ -191,6 +191,7 @@ export class App {
     list: [],
     by: new Map(),
     of: new Map(),
+    asked: new Map(),
   };
   /** The lists of the sidebar that the operator unfolded: the finished chains, under the key finished, and the
    * archived sessions of a workspace, under its folder. */
@@ -835,7 +836,7 @@ export class App {
     if (this.draftKey !== this.composeKey()) this.showDraft(this.composeKey());
     this.orphans();
     // The mode of a screen reader shows one column of text, and no sidebar beside it.
-    this.rail.visible = w.preferences.sidebar && !this.reader && this.renderer.width >= 100;
+    this.rail.visible = this.sidebarShown;
     this.rail.width = w.preferences.sidebarWidth;
     this.renderTop();
     const pending = w.operatorPrompt;

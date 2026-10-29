@@ -21,6 +21,7 @@ import {
   type Role,
   reads,
   type Served,
+  tellAbout,
 } from "./hosting.ts";
 import type { EngineOptions } from "./models.ts";
 
@@ -40,7 +41,7 @@ if (!record || !place) {
 }
 const started = Date.now();
 const about: About = { pid: process.pid, record, build: "", engine: "", protocol: PROTOCOL, started };
-const tell = () => writeFileSync(place.about, `${JSON.stringify(about)}\n`, { mode: 0o600 });
+const tell = () => tellAbout(place, about);
 // Another host of the life that runs owns it, so this one ends before it opens a second life on the record. The host
 // says of itself at once, so a window knows who opens the life while it opens.
 const rival = aboutOf(place);

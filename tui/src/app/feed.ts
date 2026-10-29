@@ -521,7 +521,7 @@ export const feed = part({
         const thread = threadsOwn.by.get(act.id);
         const tone = threadTone(act.id);
         const made = madeBy(act.id);
-        const seen = `${made.length}:${made.filter((one) => one.done).length}:${thread?.messages.length ?? 0}:${thread?.state}`;
+        const seen = `${made.length}:${made.filter((one) => one.done).length}:${thread?.messages.length ?? 0}:${thread?.asked.length ?? 0}:${thread?.state}`;
         if (thread && this.threadFolded(act.id)) {
           collapsed = depth;
           const news = this.unread(act.id, seen, true);
@@ -688,6 +688,88 @@ export const feed = part({
         // The answer of a message stands after the code that its model ran to answer it, which the next run of the
         // program holds.
         let waiting: Section | undefined;
+        // The questions and the notices that the thread made stand in its box, in time: after the code that came
+        // before them, and before the next message.
+        const asked = (thread?.asked ?? []).map((one) => one as ActRow);
+        const slot = (ask: ActRow) => says.filter((say) => say.began <= ask.began).length;
+        const askSection = (ask: ActRow): Section => {
+          const text = String(ask.words[1] ?? "");
+          const notice = ask.words[0] === "None";
+          const pending = w.desk.asks.find((one) => one.id === ask.id);
+          const aimed = Boolean(pending) && w.aimed?.id === ask.id;
+          const value = typeof ask.value === "boolean" ? (ask.value ? "yes" : "no") : display(ask.value);
+          const short = !value.includes("\n") && Bun.stringWidth(value) < this.feedWidth - 24 - indent;
+          // A long notice shows its first rows until a click opens it, as a long message does.
+          const [shortened, rest] =
+            notice && w.folds[`message:${ask.id}`] !== false ? this.firstRows(text, MESSAGE_ROWS) : [text, 0];
+          return {
+            id: `${act.id}-ask-${ask.id}`,
+            key: `${text}\n${notice}\n${Boolean(pending)}\n${aimed}\n${ask.done ? value : ""}\n${rest}\n${this.feedWidth}\n${this.theme}`,
+            apart: true,
+            act: ask,
+            shown: text,
+            body: (box) => {
+              box.add(
+                this.text(
+                  [
+                    [`${glyph.asks} `, pending ? c.warning : c.faint],
+                    [notice ? "Notice" : "Question", notice ? c.muted : c.text, bold],
+                  ],
+                  c.text,
+                ),
+              );
+              box.add(this.markdown(shortened, c.text, c.background));
+              if (rest)
+                box.add(
+                  this.link(
+                    [
+                      [`${glyph.closed} `, c.faint],
+                      [`${rest} more ${rest === 1 ? "line" : "lines"}`, c.muted],
+                    ],
+                    () => {
+                      w.folds[`message:${ask.id}`] = false;
+                      w.save();
+                      this.renderContent();
+                    },
+                  ),
+                );
+              // The question that the input answers says so, and a click on another one points the input at it.
+              if (pending)
+                box.add(
+                  this.text(
+                    aimed
+                      ? [
+                          ["The input below answers this question", c.muted],
+                          [
+                            pending.choices.length ? ` with ${wants(pending)}` : `, as ${pending.shape}`,
+                            c.muted,
+                          ],
+                          [", or press ", c.faint],
+                          ["⌃A", c.muted],
+                        ]
+                      : [["Click here to answer this question in the input below", c.muted]],
+                    c.muted,
+                    {
+                      run: () =>
+                        aimed ? this.question(pending) : void w.point(pending.id).catch(this.report),
+                    },
+                  ),
+                );
+              else if (ask.done && !notice)
+                box.add(
+                  short
+                    ? this.text(
+                        [
+                          ["You answered  ", c.faint],
+                          [value, c.muted],
+                        ],
+                        c.muted,
+                      )
+                    : this.markdown(value),
+                );
+            },
+          };
+        };
         for (const [index, run] of runs.entries()) {
           const writer = run.writes;
           let given = run.lines;
@@ -833,6 +915,7 @@ export const feed = part({
           }
           if (waiting) sections.push(waiting);
           waiting = undefined;
+          for (const ask of asked) if (slot(ask) === index) sections.push(askSection(ask));
           const next = says[index];
           if (next) {
             // The answer of the thread stands where it came in time: before a message that came after it and opened the
@@ -847,7 +930,17 @@ export const feed = part({
               key: `${text}\n${this.feedWidth}\n${this.theme}`,
               apart: true,
               bar: tone,
-              body: (box) => box.add(said(text)),
+              body: (box) => {
+                // A right click on a later message opens its menu too, as on the first message of the thread.
+                const row = this.box({
+                  onMouseDown: (event) => {
+                    if (event.button === 2)
+                      this.actActions(this.session.acts.find((one) => one.id === next.id) ?? next);
+                  },
+                });
+                row.add(said(text));
+                box.add(row);
+              },
             });
             // A message of a shape that asks an answer stands with its answer, after the code that answered it, so that
             // a thread holds pairs of a message and its answer.
@@ -912,6 +1005,8 @@ export const feed = part({
         )
           continue;
         if (line.type === "prompt" && threadsOwn.of.has(line.act.id)) continue;
+        // A question or a notice that a thread made stands in the box of that thread, with its answer.
+        if (threadsOwn.asked.has(line.act.id)) continue;
         // The answer of a thread stands in its box.
         if (line.type === "value" && threadsOwn.by.has(line.act.id)) continue;
         // Only a line that the feed shows places a mark: a step under a step stands folded, whenever it began.

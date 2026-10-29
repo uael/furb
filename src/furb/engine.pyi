@@ -290,10 +290,11 @@ def get(about: str) -> Question:
   A name of no act of the life gives nothing, since the life holds nothing under it.
   """
 
-def pause(id: str) -> None:
+def pause(id: str, why: object = None) -> None:
   """A pause: while it stands, nothing it is over hears, and what is said meanwhile waits for the wake.
   A control from outside the chain of an act that is not over tells a header of its own name, so a model reads what another did to its work.
   pause is given the id of a pending act or the id of a chain.
+  A pause carries its cause, None when none is given, as a close carries its value, so a pause from outside the chain of its act tells that cause under the word value.
   A pause stops no reply in flight: the reply returns.
   A paused chain goes quiet as its in-flight work returns.
   A kind a pause stops: it starts its ear, and while a pause over it stands the ear hears nothing, and at the wake it hears the wake and then everything that was said meanwhile, in order.
@@ -317,11 +318,11 @@ def wake(id: str) -> None:
   A wake that this life says past the tip, and not one that the journal says again, puts every pending act it is over on to the outside, so the World takes each wait, prompt to the operator and reply of them and closes each command of them as interrupted, and a model reads the transcript as it grew.
   """
 
-def cancel(id: str) -> None:
+def cancel(id: str, why: object = None) -> None:
   """A cancel of that prompt reaches the acts that its rungs made on the chain with a source.
   A cancel is over the act it names and everything that act made, and each of them is done with CancelledError.
-  cancel is given the id of an act, and says a cancel over it.
-  A cancelled act completes with CancelledError.
+  cancel is given the id of an act and a cause, None when none is given, and says a cancel over it that carries that cause.
+  A cancelled act completes with CancelledError, which carries the cause of the cancel when it has one.
   A cancelled prompt raises CancelledError to whoever awaits it.
   A cancel touches nothing else on the chain.
   The awaiter of a cancelled command raises CancelledError in its step.
@@ -461,6 +462,7 @@ def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[No
   A prompt carries the name of its shape as a word, and takes the name as well as the shape, so the journal makes it again.
   The name of a shape is the word a chain says it by, so a shape that holds a class of the engine or of the chain names it as the chain does, under no module.
   The acknowledgment carries no shape and a message that names the act and what happened to it, as prompt3 done.
+  A done whose value is None makes no acknowledgment, since it gives the model nothing to read.
   The acknowledgment is a prompt on the thread that made the rung that made the act, so the actor of that thread sees it in that thread, and a prompt on the chain when that rung answers no prompt.
   When that thread is over, the acknowledgment is on the nearest thread above it that is open, or on the thread at the top of its lineage when each is over, so a model whose task is open reads it as a message of that task and closes no prompt for it.
   A prompt on a thread is on the chain of that thread, and goes to the actor of the thread unless it names one.
@@ -570,14 +572,16 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   Before the first prompt to another actor whose roster entry holds a doctrine, and before the advance of a reply to such an actor, the chain tells its doctrine when nothing told it, and the chain never tells a doctrine that its transcript tells already, so the model reads it once, and a chain whose actor reads none and that asks no such actor tells nothing of it.
   When nothing was told on the chain since the word of the last rung that the chain did not make was ready, the chain tells that rung under the header told nothing before the advance, so the model sees that the word showed it nothing.
   The chain holds the text of each paragraph told on it, in order.
-  At the first ready of the next rung, the chain runs that text as the told rung of that rung, before its word, and holds nothing more.
+  At the advance of the next rung, before it asks the reply, or at the first ready of a rung that it does not advance, the chain runs that text as the told rung of that rung, and holds nothing more.
   Each act that a told paragraph opened and each value that it told is bound for the word of that rung, whoever wrote it.
   The gate never reads a told rung as a word, since the engine wrote it.
   The turns do not show a told rung, since the turn shows its python already.
   A told rung is no act, and the record keeps neither it nor its run.
   A later life hears the same paragraphs and runs the told rung again.
-  A told rung takes the name of the rung whose first ready runs it, with _told after it, as rung5_told.
-  A rung makes at most one told rung, at its first ready, so no two told rungs share a name.
+  A told rung takes the name of the rung whose advance or first ready runs it, with _told after it, as rung5_told.
+  A rung makes at most one told rung, at its advance or at its first ready, so no two told rungs share a name.
+  The chain advances no rung that is over, so it asks no reply for a rung that a close or a cancel ended before its advance.
+  A statement that the model of a rung writes runs after the told rung of that rung, so it reads each value that the advance of that rung bound.
   The chain takes its own act, since the engine is the one that runs it.
   The chain asks the model of a rung for its word by a reply it makes under the site of that rung, whose one word is the actor.
   When an act that a rung of the chain made on another chain is done while the word of that rung does not run and no word of the chain awaited it, the chain tells it about that rung under the header done, and binds what it came to under the word value, since its model reads no other transcript.
@@ -587,7 +591,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
 def grant(usd: float | None = None, share: float | None = None, on: str = "") -> Act[None]:
   """A ceiling on a chain, in dollars, in the share of the window that one answer fills, or both: it holds the ledger of the chain from the moment it is made, the dollars of the answers since then and the share of the window the last one filled, and it tells the dollars of that ledger at each answer of a model, since the advance binds the share before the next reply, so no turn a reply has sent grows a line after it.
   grant on a chain puts a ceiling on it: dollars, a share of the window, or both.
-  The engine enters a pause on the chain when a response carries the ledger to its ceiling.
+  The engine enters a pause on the chain when a response carries the ledger to its ceiling, whose cause is ceiling.
   The word of the response that crossed the ceiling runs.
   No reply follows the response that carried the ledger to the ceiling, until a wake.
   The model continues after a later grant and a wake.
@@ -783,7 +787,7 @@ type Tell = tuple[Literal["tell"], str, str, list[Note]]
 What an act tells is the telling of its chain, so the journal keeps none of it, and a later life tells it again.
 A tell is the one fact that carries notes, which the turns are folded from: a control tells its header by a tell.
 """
-type Pause = tuple[Literal["pause"], str, str]
+type Pause = tuple[Literal["pause"], str, str, object]
 """While a pause stands, nothing that the pause is over hears, and what is said meanwhile waits for the wake.
 A control is a fact over an act: over that act, over everything that act made, and over everything on a chain when the control names a chain.
 A control reaches what it is over, and whatever else the words of the control name.
@@ -797,12 +801,12 @@ type Wake = tuple[Literal["wake"], str, str]
 """A wake ends the pause over the same act, and what waited is heard.
 A wake is over the act it names and everything under it.
 """
-type Cancel = tuple[Literal["cancel"], str, str]
+type Cancel = tuple[Literal["cancel"], str, str, object]
 """A cancel ends everything it is over: each of them is done with CancelledError, and none of them says anything of its own again.
 A cancel reaches to any depth, and on whatever chain.
 """
 type Close = tuple[Literal["close"], str, str, object]
-"""A close is a cancel that carries what the act it names is done with, and it is a kind of its own, since a tuple has no slot that may be empty.
+"""A close is a cancel that carries what the act it names is done with, and it is a kind of its own, since the word of a cancel is its cause, which the act raises as a CancelledError, where the word of a close is what the act comes to.
 A close is over the act it names, the words running under it and the replies that ask for those words, where a cancel is over everything under it.
 """
 type Started = tuple[Literal["started"], str, str]
@@ -820,7 +824,7 @@ The model reads the turns of the chain at each step.
 A reply carries the rung it asks for as its maker, the chain that asks as the chain it is on, and the actor as its one word, and nothing else.
 A reply is on the chain that asks, so the World keys its facts and its cache by chain.
 A reply the World cannot answer is the World's to refuse: it pauses the chain first when it wants a wake, and is done with the refusal, which the rung comes to and the prompt asks again after.
-The life refuses a reply that no ear owns, and the chain that asks then pauses itself, since that fault stands until a wake.
+The life refuses a reply that no ear owns, and the chain that asks then pauses itself with that refusal as its cause, since that fault stands until a wake.
 A reply ends as a wait does, so a cancel or a close over it ends it with a CancelledError.
 The World reads the turns of the chain whole when it takes a reply, folded again for that reply, and the journal keeps the answer and no turns.
 The World answers a reply with a done whose value is the turn of the model, which stands as the turn it is, with its usage and the blocks of the provider.
@@ -996,7 +1000,7 @@ def headed(id: str, what: str = "", **words: object) -> str:
   """The paragraph of an act: its header, # and the id with no space between, then what happened, and under it the binding of each word, in order.
   headed binds each value by its repr with no check, since every value that reaches it is a wire value, and the repr of a wire value is python.
   headed shows a value as python shows it, less the path of the module before the name of its class, since a chain binds a class by its name alone.
-  An open of an act that the word of a rung on its chain made tells no string that the word holds, as python writes it or as a quote, since the turn of the model shows that word, and an act that tells a text tells each of its words.
+  An open of an act that the word of a rung on its chain made tells no string that the word holds as a whole literal, between the quotes that python writes it with, between double quotes or as a quote, since the turn of the model shows that word, and an act that tells a text tells each of its words.
   """
 
 def bound(id: str, of: str = "object") -> str:
@@ -1008,7 +1012,7 @@ def shown(text: Text, show: Show) -> str:
 def unquoted(word: str) -> str:
   """What a word is as python: each quote in it bound as a string.
   A quote is a string a word writes between two marks, <s:name> at the start of a line and </s:name> at the end of a line, name being any python name, so nothing in it needs an escape.
-  The open mark is looked for line by line from the top, and its close mark from the open mark down, so a quote may hold the marks of a quote of another name.
+  The open mark is looked for line by line from the top, its close mark from the open mark down, and the next open mark after that close mark, so the text of a quote holds the marks of any quote as text.
   The value of a quote is the text between its marks, less a line break just after the open mark.
   A quote becomes its name bound to its value as python writes it, on the line of the open mark, and each other line of the quote becomes an empty line, so every line after it keeps its number.
   An open mark that has no close mark stays as it is, and the gate reads it as the python it is not.
@@ -1087,6 +1091,8 @@ def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:
   What it keeps it says, so that the World holds the record and the journal alone says what belongs in it; a World that is durable keeps what it is told, one that is not keeps nothing, and either way what the World holds is what the life after it is given.
   Given at its birth what the World kept of an earlier life, it says those entries again in the order it was given them, each once every fact said before it has been heard: an act whose maker is neither an act nor an ear that boot was given it makes again through its verb under the site of its maker, once the chain it is on has been made again, since that maker makes nothing again of what the record holds; an act whose maker is an ear that boot was given or an act it makes not, since that ear, or the word of that act, makes it again when it needs it; and any other fact it says once the act it is about has been made again, so that its controls and its dones land where they landed.
   An entry whose act this life has not made again when every fact said before it has been heard, which for an act whose maker is neither an act nor an ear that boot was given is the chain it is on, the journal steps over, since this life will not make that act at that place, and it keeps the name of that act taken, so the entries after it go on and their acts keep their names.
+  The journal keeps a joined mark, ("joined", "", "journal", kind, act), which names the kind and the act of the fact that it joins, before a fact that it keeps right after the fact it kept last, with no other fact heard between them, since one ear said both while it heard one fact, and a later life says that fact again at once after the one before it, so the ears hear that burst in one burst again, as the first life did.
+  A fact that the journal keeps after a fact that it does not keep holds no mark, so a later life says it again only once every fact said before it has been heard, after the reaction that came between them, as the first life did.
   The journal says the whole record again before boot returns, so no entry waits for an act that a host makes after boot.
   One said again takes the name it had, since a later life makes its acts again in the order of the record, and the life counts each kind on from there, so that no later act takes a name that is taken.
   A boot is a life; a second boot is a second life, and the first is gone.

@@ -118,16 +118,16 @@ def cwd(on="") -> str:
   return answer("cd", on, "") or standing()[1]
 
 
-def pause(id: str):
-  control("pause", "paused", id)
+def pause(id: str, why=None):
+  control("pause", "paused", id, why)
 
 
 def wake(id: str):
   control("wake", "woke", id)
 
 
-def cancel(id: str):
-  control("cancel", "cancelled", id)
+def cancel(id: str, why=None):
+  control("cancel", "cancelled", id, why)
 
 
 def close(value: object, id=""):
@@ -236,8 +236,13 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
   def ear(id):
     rungs = {x: w for x, w in program(source).items() if over(x) or not get(x)}
     refused, running, waiting, last, heard = set(), {}, {}, standing(), []
-    asking = unseen = ran = reply = ""
+    asking = unseen = ran = reply = note = to = ""
     stood = module(source or get(id)[3]).get("actor", last and last[2])
+
+    def bind(whose):
+      w = "\n\n".join(heard)
+      heard.clear()
+      return w and act("run", id, None, n := whose + "_told", unquoted(rungs.setdefault(n, w)), "")
 
     def takes():
       teach(id, stood)
@@ -291,7 +296,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
           isinstance(value, Exception) and r[0] != "reply" and "",
         ) and repr(about) not in str(transcript(id, "wants")):
           scope(about) != id and (yield "tell", maker, [headed(about, "done", value=value)])
-          isinstance(value, CancelledError) or (unseen := (about + " done", maker))
+          value is None or isinstance(value, CancelledError) or (unseen := (about + " done", maker))
         case ("done", _, by, Refused() as why) if (
           r[0] == "reply"
           and r[3] != id
@@ -325,13 +330,15 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
           waiting[rid] = running[rid] = ""
         case ("tell", *_, notes):
           heard.append("\n".join(notes))
+          if a is note:
+            note = bind(asking)
+        case ("done", about, *_) if about == note:
+          with site.set(asking):
+            reply = act("reply", id, controlled(idle), to)
         case ("ready", rid, _, word):
           try:
-            heard and act(
-              "run", id, None, name := rid + "_told", unquoted(rungs.setdefault(name, "\n\n".join(heard))), ""
-            )
-            heard = []
-            ran = tells(rid) and rid
+            rid == asking or bind(rid)
+            ran = tells(rid) and (rid, len(heard))
             rungs[(donor := r[5]) or rid] = word
             found = ran and gate(word)
             if not found:
@@ -342,30 +349,28 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
             yield told(rid, "refused", findings="\n".join(found))
             refused.add(rid)
             close(Refused(), rid)
-        case ("done", _, "", Refused()) if r[0] == "reply":
-          pause(id)
+        case ("done", _, "", Refused() as why) if r[0] == "reply":
+          pause(id, why)
       if r[0] == "run":
         running[r[4]] = a[0] != "done"
       elif r[0] == "wants":
         running[get(r[2])[4]] = a[0] != "started"
       if any(running.values()):
         continue
-      if asking not in waiting and (asking := next((x for x in waiting if not paused(x)), "")):
+      if asking not in waiting and (asking := next((x for x in waiting if not (paused(x) or over(x))), "")):
         maker, to = get(asking)[2::4]
         if offered(last[0], to) is None:
           close(Refused(to + " no actor"), maker * prompted(maker) or asking)
         else:
-          if ran and not heard:
-            yield told(ran, "told nothing")
+          if ran and len(heard) == ran[1]:
+            yield told(ran[0], "told nothing")
           teach(id, to)
-          yield told(
+          note = yield told(
             asking,
             "advance on " + maker,
             share=filled(reply) or None,
             waits=[c for *_, c in transcript(id, "wants") if not over(c)] or None,
           )
-          with site.set(asking):
-            reply = act("reply", id, controlled(idle), to)
           unseen = ""
       if unseen and not waiting and (r[2] in running or over(r[2]) or a[0] == "tell"):
         ours = get(unseen[1])[2]
@@ -394,7 +399,7 @@ def grant(usd: float | None = None, share: float | None = None, on="") -> Act[No
           spent += cost
           yield told(id, "ledger", spent=spent)
           if (usd and spent >= usd) or (share and filled(about) >= share):
-            pause(here)
+            pause(here, "ceiling")
 
   return act("grant", on, controlled(ear), usd, share)
 
@@ -568,11 +573,11 @@ def control(kind, name, id, *words):
 
 def headed(id, what="", **words):
   text = f"#{id} {what}".rstrip()
-  held = "" if what or "text" in words else program(id).get(get(id)[2], "")
+  held = "" if what or "text" in words else next((x[5] for x in transcript(id, "run") if get(id)[2] in x[4::2]), "")
   for word, value in words.items():
     name = id + "_" + word
     if isinstance(value, str):
-      if repr(value)[1:-1] in held:
+      if not value or any(q + repr(value)[1:-1] + q in held for q in "'\""):
         continue
       if "\n" in value:
         while "</s:" + name + ">\n" in value + "\n":
@@ -594,11 +599,18 @@ def shown(text, show):
 
 
 def unquoted(word):
-  for n in re.findall(r"(?m)^<s:(\w+)>", word):
-    word = re.sub(
-      f"(?ms)^<s:({n})>\\n?(.*?)</s:{n}>$", lambda m: m[1] + " = " + repr(m[2]) + "\n" * m[0].count("\n"), word
-    )
-  return word
+  made, at, shut = [], 0, set()
+  for o in re.finditer(r"(?m)^<s:(\w+)>\n?", word):
+    if o.start() >= at and o[1] not in shut:
+      if m := re.compile(f"(?m)</s:{o[1]}>$").search(word, o.end()):
+        made += [
+          word[at : o.start()],
+          f"{o[1]} = {word[o.end() : m.start()]!r}" + "\n" * word.count("\n", o.start(), m.end()),
+        ]
+        at = m.end()
+      else:
+        shut.add(o[1])
+  return "".join(made) + word[at:]
 
 
 def offered(roster, to, at=2):
@@ -653,7 +665,11 @@ def controlled(ear, lasting=False):
         case ("pause" | "wake", *_) if covers(a, id) and (stopped := a[0] == "pause"):
           pass
         case ("cancel" | "close", _, by, *_) if covers(a, id) and not (over(id) or (stopped and under(by, id))):
-          yield "done", id, a[3] if a[:2] == ("close", id) else CancelledError()
+          yield (
+            "done",
+            id,
+            CancelledError(*filter(None, a[3:])) if a[0] == "cancel" else a[3] if a[1] == id else CancelledError(),
+          )
         case _ if stopped and get(a[1]) is not a:
           later.append(a)
         case _:
@@ -680,10 +696,14 @@ def boot(record=(), **outside):
       due.pop()
     return due
 
-  def journal(a=()):
+  def journal(a=(), last=None):
     try:
       while True:
-        while owed() and (not (log or left) or (a and a[::2] == ("wake", "journal") and due[-1][1] in taken)):
+        while owed() and (
+          not (log or left)
+          or (due[-1][0] == "joined" and due.pop() and due)
+          or (a and a[::2] == ("wake", "journal") and due[-1][1] in taken)
+        ):
           match due.pop():
             case (kind, name, by, on, *words) if question((kind, name)):
               if by in outside or by in kept or (on and not get(on)):
@@ -698,6 +718,7 @@ def boot(record=(), **outside):
                   pass
             case (kind, about, _, *words) if scope(about):
               yield kind, about, *words
+        b = a
         match a := (yield):
           case (kind, about, by, *_) if (
             (q := get(about)) and by != "journal" and (by or repr(first.get(about)) != repr(a))
@@ -706,7 +727,12 @@ def boot(record=(), **outside):
               raise drift(about)
             if by not in known and by not in driven:
               about in kept or (yield "keep", "", (kept.setdefault(about, q),))
-              a is q or (yield "keep", "", (a,))
+              if a is not q:
+                b is last and kind not in ("started", "done") and (
+                  yield "keep", "", (("joined", "", "journal", kind, about),)
+                )
+                yield "keep", "", (a,)
+              last = a
             if kind == "wake" and not owed():
               for name in [x for x in taken if taken[x] and covers(a, x) and not over(x)]:
                 del taken[name]

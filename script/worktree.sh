@@ -1,6 +1,7 @@
 #!/bin/sh
 # Make a git worktree whose build starts warm: its build directories are a copy on write of those of the main
-# checkout, so cargo, maturin and bun build only what changed.
+# checkout, or of the worktree of this clone whose commit stands nearest, so cargo, maturin and bun build only what
+# changed.
 # Usage: script/worktree.sh <path> <branch> [base, origin/main by default]
 # A branch that stands on origin, or in this clone, is checked out and not made again: a local branch that only lags
 # behind origin moves up to it, and a local branch with work that origin lacks stays as it is. The base is the start
@@ -74,17 +75,41 @@ python_note() {
   fi
 }
 
+# The source of the warm build: of the main checkout and each worktree of this clone where uv sync built the crate
+# into a .venv, the one whose commit stands nearest to the commit of the new tree. A target is as fresh as the work
+# done in its tree: the main checkout can stand far behind origin, and a tree that only built the TypeScript side holds
+# no unit that maturin builds, so a copy of either builds again each dependency. The main checkout wins a tie.
+here=$(git -C "$path" rev-parse HEAD)
+src=$main
+best=-1
+trees=$(git -C "$main" worktree list --porcelain | sed -n 's/^worktree //p')
+while IFS= read -r tree; do
+  if [ -z "$tree" ] || [ "$tree" = "$path" ] || [ ! -d "$tree/target" ] || ! ls -d "$tree"/.venv/lib/python*/site-packages/furb_monty-*.dist-info >/dev/null 2>&1; then
+    continue
+  fi
+  far=$(git -C "$tree" rev-list --count "$here...HEAD" 2>/dev/null) || continue
+  if [ "$best" -lt 0 ] || [ "$far" -lt "$best" ]; then
+    src=$tree
+    best=$far
+  fi
+done <<EOF
+$trees
+EOF
+if [ "$src" != "$main" ]; then
+  echo "The build is copied from $src, whose commit stands $best commits from $branch."
+fi
+
 # A copy on write: clonefile on APFS, a reflink on Btrfs or XFS. Each keeps the timestamps, which cargo compares.
 case $(uname) in
   Darwin) clone() { cp -cRp "$1" "$2"; } ;;
   *) clone() { cp -a --reflink=always "$1" "$2"; } ;;
 esac
-if [ ! -f "$main/Cargo.toml" ]; then
-  echo "$main holds no checkout to copy: $path is ready on $branch, and builds from nothing."
+if [ ! -f "$src/Cargo.toml" ]; then
+  echo "$src holds no checkout to copy: $path is ready on $branch, and builds from nothing."
   python_note
   exit 0
 fi
-if ! clone "$main/Cargo.toml" "$path/.worktree-probe" 2>/dev/null; then
+if ! clone "$src/Cargo.toml" "$path/.worktree-probe" 2>/dev/null; then
   echo "This file system has no copy on write: $path builds from nothing."
   python_note
   exit 0
@@ -95,12 +120,12 @@ rm -f "$path/.worktree-probe"
 # the cache of the tests of the TUI. The environment of python is not copied: its scripts name the path of the main
 # checkout, and uv sync makes it again on the warm target.
 for dir in target node_modules bind/typescript/node_modules tui/node_modules bind/typescript/dist .furb/tests; do
-  if [ -e "$main/$dir" ] && [ ! -e "$path/$dir" ]; then
+  if [ -e "$src/$dir" ] && [ ! -e "$path/$dir" ]; then
     mkdir -p "$(dirname "$path/$dir")"
-    clone "$main/$dir" "$path/$dir"
+    clone "$src/$dir" "$path/$dir"
   fi
 done
-for node in "$main"/bind/typescript/*.node "$main"/bind/typescript/index.cjs; do
+for node in "$src"/bind/typescript/*.node "$src"/bind/typescript/index.cjs; do
   if [ -e "$node" ]; then
     clone "$node" "$path/bind/typescript/"
   fi
@@ -110,7 +135,7 @@ if [ -d "$path/target" ]; then
   find "$path/target" -type d -name incremental -prune -exec rm -rf {} +
 fi
 
-# The copied dist and native module are those of the main checkout, whose commit may differ from the base. Link the
+# The copied dist and native module are those of the source, whose commit may differ from the base. Link the
 # workspace from the copied cache, then build the native module and the TypeScript package of this tree on the warm
 # target, so that bun run check and bun run test run at once.
 if [ -d "$path/node_modules" ] && command -v bun >/dev/null 2>&1; then

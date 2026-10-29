@@ -116,6 +116,9 @@ test("a folded thread marks new work with a dot, and the dot goes once the threa
       expect(await folded()).not.toContain("●");
       await session.reply(id, "One more thing");
       await until(session, () => (listed(session)[0]?.messages.length ?? 0) === 1);
+      // The model works the message after it lands. Work that ends after the thread folds again is new work, which
+      // marks the thread again, so the thread opens only once the work ends.
+      await idle(session);
       expect(await folded()).toMatch(/┃ ● .*Explore this project/);
       app.foldThread(id, false);
       // The box draws open over a few frames on a slow machine, and the thread counts as seen once it has.

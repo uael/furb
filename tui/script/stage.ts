@@ -79,7 +79,8 @@ async function hold(lock: string): Promise<void> {
  * directory of a user differs on each machine of macOS. Its path holds no link, as the workspaces hold each folder by
  * such a path, and /tmp of macOS is a link to /private/tmp.
  * One run at a time holds the home: two runs in it would open the same records, and each would remove the files of
- * the other, so a second run waits for the first. The child ends when its parent ends, and the parent stops the child
+ * the other, so a second run waits for the first. FURB_GALLERY_ROOT names another folder for the home and its lock,
+ * so that runs in two trees, each with a root of its own, run at once. The child ends when its parent ends, and the parent stops the child
  * when the parent is stopped or when the child runs past LIMIT seconds. */
 export async function home(name: string, environment: Record<string, string> = {}): Promise<string> {
   const given = process.env.FURB_GALLERY_HOME;
@@ -93,7 +94,9 @@ export async function home(name: string, environment: Record<string, string> = {
       }, 1000).unref();
     return given;
   }
-  const gallery = join(process.platform === "win32" ? tmpdir() : "/tmp", name);
+  const root = process.env.FURB_GALLERY_ROOT || (process.platform === "win32" ? tmpdir() : "/tmp");
+  await mkdir(root, { recursive: true });
+  const gallery = join(root, name);
   const lock = `${gallery}.lock`;
   await hold(lock);
   let child: ReturnType<typeof Bun.spawn> | undefined;
