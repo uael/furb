@@ -303,6 +303,16 @@ def test_the_budget_ends_the_loop(world: World) -> None:
   assert world.told() == ["converge: tui spent its budget: 1 captures and 0.00 dollars."]
 
 
+def test_a_later_run_starts_with_the_whole_budget(world: World) -> None:
+  world.ns["JOBS"] = 1
+  world.judge = lambda message, to: gap()
+  world.waited = lambda: world.round["queue"].clear()
+  assert world.run(10)["state"] == "spent"
+  book = world.run(10)
+  assert book["state"] == "spent"
+  assert book["jobs"] == 2
+
+
 def test_a_failed_check_of_the_head_is_a_gap_of_its_own(world: World) -> None:
   world.say(r"python3 -I -", listing(failed=[["check: bun run check", "the step check: bun run check of the capture failed: type error", ""]]))
   book = world.run(1)

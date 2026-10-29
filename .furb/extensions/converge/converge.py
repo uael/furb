@@ -11,7 +11,7 @@ The owner rules, on 10-29: "TUI PR merge as soon as ready, defects from the conv
 A grant holds each chain of a judge under EACH dollars. A judge whose chain waits on a usage limit is neither cut nor counted, and its BOUND starts again when the limit ends. A judge that fails, or that the round cuts at BOUND or by a pause, gives no answer: its pass is inconclusive. A pass whose judges the round cut all counts as no try, and a head whose judges failed to answer twice is stuck, which tells the operator and keeps the veto until a new head.
 A target keeps CAPTURES trees, <tree>-1 to <tree>-N, each with a home of the gallery of its own under FURB_GALLERY_ROOT, so its captures run at once, each in a tree where no other capture runs, at most as many as the free slots of the cap of chains of the round, and one at least. A pass of main runs in the first tree alone, so its frames and those of the pass before it read the same paths.
 A gap is held once. The ledger of a target keeps each open gap, keyed by its capture and the words of the owner that it quotes, for the PR or the pass of main that showed it first. A head that shows a gap that the ledger holds for another live PR, or that a pass of main shows, has no such gap: converge tells the one worker or item that holds it, once for each PR, orders no second one, and judges the head on its own gaps alone. A gap leaves the ledger when its holder shows it no more, and the gap of a PR that ended leaves it once a pass of main no longer shows it.
-The ledger of a target, .furb/converge/<name>.json, keeps each pass, the open gaps, the frames and the records of the last pass, each judged head and the step that runs, so a later life goes on from it. The loop ends when it spent JOBS captures or USD dollars."""
+The ledger of a target, .furb/converge/<name>.json, keeps each pass, the open gaps, the frames and the records of the last pass, each judged head and the step that runs, so a later life goes on from it. A run ends when it spent JOBS captures or USD dollars, and a later run starts with the whole budget."""
 JUDGES = ("claude-cli:sonnet/high",)
 CLEAN = 2
 STALL = 3
@@ -1034,6 +1034,10 @@ async def screened(target: dict, book: dict, job: dict, gaps: list[list[str]], w
 
 async def converge(target: dict, ticks: int = 0) -> dict:
   book, job, tick = shared(target), {}, 0
+  # The budget counts the captures and the dollars of this run, so a run that the coordinator starts again has it whole.
+  if book["state"] == "spent":
+    book["state"] = ""
+  jobs, spent = book["jobs"], book["spent"]
   while not ticks or tick < ticks:
     tick += 1
     head = await main_head()
@@ -1043,9 +1047,9 @@ async def converge(target: dict, ticks: int = 0) -> dict:
       book.update(state="", clean=0)
     if book["step"] and await settled(target, book["step"], head):
       book["step"] = None
-    if not job and book["state"] != "spent" and (book["jobs"] >= JOBS or book["spent"] >= USD):
+    if not job and book["state"] != "spent" and (book["jobs"] - jobs >= JOBS or book["spent"] - spent >= USD):
       book["state"] = "spent"
-      tell_home(f"{target['name']} spent its budget: {book['jobs']} captures and {book['spent']:.2f} dollars.")
+      tell_home(f"{target['name']} spent its budget: {book['jobs'] - jobs} captures and {book['spent'] - spent:.2f} dollars.")
     if not job and book["state"] != "spent" and head:
       if not book["state"] and not book["step"]:
         job = await started(target, book, head)
@@ -1055,7 +1059,10 @@ async def converge(target: dict, ticks: int = 0) -> dict:
       job = await advanced(target, book, job, words, head)
       if job is was:
         break
-    MAIN.pop(target["name"], None) if not job else MAIN.__setitem__(target["name"], job)
+    if job:
+      MAIN[target["name"]] = job
+    else:
+      MAIN.pop(target["name"], None)
     booked(target, book)
     if book["state"] == "spent" and not job:
       return book
