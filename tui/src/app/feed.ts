@@ -584,14 +584,7 @@ export const feed = part({
           shown: message,
           body: (box) => {
             // A right click on a message opens its menu, as on the heading of any other act.
-            const row = this.box({
-              flexDirection: "row",
-              onMouseDown: (event) => {
-                if (event.button === 2)
-                  this.actActions(this.session.acts.find((one) => one.id === act.id) ?? act);
-              },
-            });
-            const right: Part[] = [
+            const beside: Part[] = [
               ...(news ? [[`${glyph.dot} `, c.accent] as Part] : []),
               ...(sent ? [[`${sent}  `, c.faint] as Part] : []),
               ...state,
@@ -608,7 +601,7 @@ export const feed = part({
                       [
                         clip(
                           shortenHomes(gist(message)),
-                          Math.max(8, this.feedWidth - indent - 32 - Bun.stringWidth(plain(right))),
+                          Math.max(8, this.feedWidth - indent - 32 - Bun.stringWidth(plain(beside))),
                         ),
                         c.muted,
                       ],
@@ -618,12 +611,22 @@ export const feed = part({
                 : user
                   ? said(shortened)
                   : this.markdown(shortened, c.text, c.background);
-            text.flexGrow = 1;
-            text.flexShrink = 1;
-            row.add(text);
-            row.add(this.text(right, c.faint, { marginLeft: space.between }));
             const controls = this.threadControls(act);
-            if (controls) row.add(controls);
+            const row = this.sided(
+              {
+                onMouseDown: (event) => {
+                  if (event.button === 2)
+                    this.actActions(this.session.acts.find((one) => one.id === act.id) ?? act);
+                },
+              },
+              text,
+              [this.text(beside, c.faint, { marginLeft: space.between }), controls],
+              Bun.stringWidth(plain(beside)) +
+                space.between +
+                (controls ? this.threadControlsWidth(controls) : 0),
+              this.feedWidth - indent - 8,
+              folded ? "" : shortened,
+            );
             box.add(row);
             if (rest && !folded)
               box.add(

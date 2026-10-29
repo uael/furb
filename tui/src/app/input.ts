@@ -390,12 +390,7 @@ export const input = part({
     const target = this.session.target;
     if (up && !anywhere && !this.composer.plainText && this.historyIndex < 0 && target) {
       if (this.session.lastMessage(target)) {
-        void this.session
-          .takeBackMessage(target)
-          .then((text) => {
-            if (text !== undefined && !this.composer.plainText) this.insert(text);
-          })
-          .catch(this.report);
+        void this.session.takeBackMessage(target).catch(this.report);
         return true;
       }
     }
