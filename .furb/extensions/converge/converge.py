@@ -2,15 +2,16 @@ import json
 import re
 
 CONVERGING = """converge(target) runs one loop toward the words of the owner, and nothing else: no spec, no design, no plan.
-A target is a dict: its name; words, the numbers of the issues of the owner in the private repository of the decisions, whose bodies and comments are his ruling as they stand; paths, the files whose change it judges; capture(target, pairs, out), the command that captures it at each (part, sha) of pairs in one run, on the same records, as PNG files and the cells that the renderer drew, in out/part; checks, the commands that must pass at the last sha; owners, the keys of the items of the round whose workers own its parts; and thread, the thread of its items.
-Each capture holds the clock of the view still at STILL, so that no spinner turns and no time passes in a frame, and a capture changed when its cells changed, with each time that the view measures and each frame of its spinner read as one mark: a capture of the same code in another run did not change. A judge reads a capture that changed as the text of its frame, with a mark on each row that changed, the row that it replaced and the colors of each changed row. A judge gets an image of a capture only when its change is in its colors alone, when the capture is new, and in a pass of main.
+A target is a dict: its name; words, the numbers of the issues of the owner in the private repository of the decisions, whose bodies and comments are his ruling as they stand; paths, the files whose change it judges; capture(target, pairs, out), the command that captures it at each (part, sha) of pairs in one run, on the same records, as artifacts that the renderer of the target drew, in out/part; differ(target, out, was, whole, labels), the command and the stdin that turn the artifacts of out/head and of was into out/shots.json, the captures that changed with the text and the images that a judge reads; legend and look, the words that tell a judge how to read a capture; busy, a pattern of the faults that mean a busy tree and no fault of the tool; checks, the commands that must pass at the last sha; owners, the keys of the items of the round whose workers own its parts; and thread, the thread of its items.
+A capture changed when the differ of the target says that it changed: a capture of the same code in another run did not change. A judge reads a capture that changed as the text that the differ gives it, and gets an image of a capture only when the differ gives one.
 Each pass captures the target at the head of main, and each judge in JUDGES, blind on a chain of its own, reads against his words each capture that changed since the last pass, or each capture when his words changed or no pass judged them, and closes with the gaps that it sees. A capture that did not change keeps the gaps of the last pass. A gap counts only when it names a capture that the judge read and quotes his words exactly, and a failed check of the head is a gap of its own. A step of the capture that fails is a fault of the tool and no gap: converge rebuilds the tree once and captures again, and when the step fails again it tells the operator and judges nothing, so a PR passes and a pass of main waits for a change of main under its paths or of his words.
 A pass with gaps is one step: the gaps go to each worker of an owner that works, or to one item in the queue of the round, which fixes the largest gap in one PR. The next pass comes once that work ended and its PR landed.
 The target converges after CLEAN passes in a row with no gap, and stalls after STALL passes with no fewer gaps than its best before them: each tells the operator through the round, and the loop then waits for a change of his words or of main under paths.
-Before the conductor merges a PR that changes paths, it asks converge through its vetoes: once the checks of the PR are green, converge captures main and main with the PR merged in it in one run, so that no change of main shows as a change of the PR, sends each judge his words once in each prompt, with the captures that the PR changes in prompts of BATCH captures and PROMPT characters at most, and cuts a capture over CUT characters with a note, and says no until a head shows no gap. A PR that changes no capture sends nothing to a judge. The green PRs that wait for the judges ride one train, TRAIN at most: converge captures main and main with each of them merged in it, in one run, and a train with no gap clears each of its PRs at once, a train with a gap splits in two halves, each a train of its own, down to a PR alone, so the PRs with no gap clear in few captures, and a train with a fault or no answer sends each of its PRs to be judged alone. The gaps go to its worker and to a comment, and a new head is judged again. converge puts no label on a PR.
+The owner rules, on 10-29: "TUI PR merge as soon as ready, defects from the converge loop is then run only once and the defects are addressed as follow up." So converge gives the conductor no veto: a PR merges on its checks alone. converge_veto still judges a PR when a word asks it, as main and main with the PR merged in it, in one run, with trains that split in halves. converge(target, 1) runs one pass of main after the merges, and its gaps go to follow-up items. converge puts no label on a PR.
 A grant holds each chain of a judge under EACH dollars. A judge whose chain waits on a usage limit is neither cut nor counted, and its BOUND starts again when the limit ends. A judge that fails, or that the round cuts at BOUND or by a pause, gives no answer: its pass is inconclusive. A pass whose judges the round cut all counts as no try, and a head whose judges failed to answer twice is stuck, which tells the operator and keeps the veto until a new head.
-A target keeps CAPTURES trees, <tree>-1 to <tree>-N, each with a home of the gallery of its own under FURB_GALLERY_ROOT, so its captures run at once, each in a tree where no other capture runs, at most as many as the free slots of the cap of chains of the round, and one at least. A pass of main runs in the first tree alone, so its frames and those of the pass before it read the same paths.
-The ledger of a target, .furb/converge/<name>.json, keeps each pass, the frames and the records of the last pass, each judged head and the step that runs, so a later life goes on from it. The loop ends when it spent JOBS captures or USD dollars."""
+A target keeps CAPTURES trees, <tree>-1 to <tree>-N, so its captures run at once, each in a tree where no other capture runs, at most as many as the free slots of the cap of chains of the round, and one at least. A pass of main runs in the first tree alone, so its frames and those of the pass before it read the same paths.
+A gap is held once. The ledger of a target keeps each open gap, keyed by its capture and the words of the owner that it quotes, for the PR or the pass of main that showed it first. A head that shows a gap that the ledger holds for another live PR, or that a pass of main shows, has no such gap: converge tells the one worker or item that holds it, once for each PR, orders no second one, and judges the head on its own gaps alone. A gap leaves the ledger when its holder shows it no more, and the gap of a PR that ended leaves it once a pass of main no longer shows it.
+The ledger of a target, .furb/converge/<name>.json, keeps each pass, the open gaps, the frames and the records of the last pass, each judged head and the step that runs, so a later life goes on from it. A run ends when it spent JOBS captures or USD dollars, and a later run starts with the whole budget."""
 JUDGES = ("claude-cli:sonnet/high",)
 CLEAN = 2
 STALL = 3
@@ -23,19 +24,16 @@ BATCH = 16
 PROMPT = 200000
 CUT = 100000
 EVERY = 300.0
-RECORDS = 3
-HEAVIEST = 160_000_000
-STILL = 1_767_225_600_000
 BOOKS = ".furb/converge"
-IMAGES = ""
-CAPTURER = ""
 HOME = ROOT
 CAPTURES = 3
 
-LEGEND = """Each capture stands in a capture tag, under its name, and its change says why it is here. Its text is the frame that the renderer drew, one numbered line for each row of the screen, less the runs of rows that did not change, which it names. A row marked + changed: under it, the line {was} gives what {was} showed in the columns that changed, and colors gives the colors of those columns now. A row marked ~ changed in its colors alone, which it gives for both. A row marked - is a row of {was} that is gone, and a row marked + with no line {was} under it is new, with the colors of its whole row. A color is a key and its columns, and styles names each key: its foreground, its background and its attributes. A capture whose change is the same as the change of another capture names that capture. An image shows a capture as a terminal draws it, when the capture comes with one."""
+LOOK = "each part of it"
+
+LEGEND = """Each capture stands in a capture tag, under its name, and its change says why it is here. Its text is what the target made of the change. A capture whose change is the same as the change of another capture names that capture. An image shows a capture as the target draws it, when the capture comes with one."""
 
 JUDGE = """You judge {name} against the words of its owner, quoted below as he wrote them, and against nothing else: no spec, no plan and no taste of your own. Every single detail counts.
-Read his words whole, then look at each capture whole: each line, each color, each cut, each overlap, each empty place, and each thing that his words ask for and that the capture does not show.
+Read his words whole, then look at each capture whole: {look}, and each thing that his words ask for and that the capture does not show.
 {legend} before is the last pass that judged the capture, and now is the head of main.
 Close with the list of the gaps that you see, each a tuple (capture, gap, quote): the name of the capture that shows it, as its tag gives it; what the capture shows against his words, in one or two sentences that a worker can act on; and the words of the owner that it fails, copied exactly from below, twelve characters at least. A gap that names no capture below, or whose quote is not in his words, does not count. Close with [] only when each capture serves his words.
 
@@ -48,7 +46,7 @@ The captures of {name} at {sha} that changed since the last pass, or each captur
 {captures}"""
 
 SCREEN = """You judge the PR #{n} of {name} against the words of its owner, quoted below as he wrote them, and against nothing else: no spec, no plan and no taste of your own. Every single detail counts.
-Each capture below is one that the PR changes: main, and main with the PR merged in it (the head {sha} of the PR), were captured in the same run, and a capture that the PR does not change is not below. Judge only what the PR changes: a gap counts when the head shows it against his words, and a gap that main shows the same way is not a gap of this PR. Look at each change whole: each line, each color, each cut, each overlap, each empty place, and each thing that his words ask for and that the head does not show.
+Each capture below is one that the PR changes: main, and main with the PR merged in it (the head {sha} of the PR), were captured in the same run, and a capture that the PR does not change is not below. Judge only what the PR changes: a gap counts when the head shows it against his words, and a gap that main shows the same way is not a gap of this PR. Look at each change whole: {look}, and each thing that his words ask for and that the head does not show.
 {legend}
 Close with the list of the gaps that you see, each a tuple (capture, gap, quote): the name of the capture that shows it, as its tag gives it; what the head shows against his words, in one or two sentences that a worker can act on; and the words of the owner that it fails, copied exactly from below, twelve characters at least. A gap that names no capture below, or whose quote is not in his words, does not count. Close with [] only when each change serves his words.
 
@@ -73,237 +71,6 @@ The gaps:
 
 {gaps}"""
 
-TUI_CAPTURE = r"""repo={repo}; tree={tree}; out={out}; export FURB_GALLERY_ROOT={gallery}
-fail() { printf '%s\t%s\t%s\n' "$1" "$2" "$3" >>"$out/fails.txt"; }
-[ -d "$tree" ] || "$repo/script/worktree.sh" "$tree" converge/{branch} >"$out/tree.log" 2>&1 || { fail head tree "$out/tree.log"; exit 0; }
-[ -z "$fresh" ] || rm -f "$tree/target/converge-built"
-mkdir -p "$out/records"
-python3 -I - "$repo/.furb/sessions" "$out" {records} {heaviest} >"$out/records.log" 2>&1 <<'EOF' || fail head records "$out/records.log"
-import json, os, sys
-src, out, many, most = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
-try:
-  with open(os.path.join(out, "pins.json"), encoding="utf-8") as r:
-    pinned = json.load(r)
-except (OSError, ValueError):
-  pinned = {}
-names = [f for f in os.listdir(src) if f.endswith(".jsonl") and not f.endswith(".changes.jsonl")]
-size = {f: os.path.getsize(os.path.join(src, f)) for f in names}
-chosen = {f: n for f, n in pinned.items() if f in size and isinstance(n, int) and 0 < n <= size[f]}
-for f in sorted(names, key=lambda f: -os.path.getmtime(os.path.join(src, f))):
-  if len(chosen) < many and f not in chosen and 0 < size[f] <= most:
-    chosen[f] = size[f]
-taken = {}
-for f, n in chosen.items():
-  with open(os.path.join(src, f), "rb") as r:
-    data = r.read(n)
-  data = data[: data.rfind(b"\n") + 1]
-  with open(os.path.join(out, "records", f), "wb") as w:
-    w.write(data)
-  taken[f] = len(data)
-with open(os.path.join(out, "records.json"), "w", encoding="utf-8") as w:
-  json.dump(taken, w)
-EOF
-for pair in {pairs}; do
-  part=${pair%%:*}; sha=${pair#*:}; at="$out/$part"; mkdir -p "$at"
-  (
-    cd "$tree" || exit 0
-    { git fetch -q origin main && { git cat-file -e "$sha^{commit}" 2>/dev/null || git fetch -q origin "$sha"; } && git checkout -q --detach "$sha" && git clean -fdq; } >"$at/checkout.log" 2>&1 || { fail "$part" checkout "$at/checkout.log"; exit 0; }
-    built=$(cat target/converge-built 2>/dev/null)
-    if [ -z "$built" ] || ! git diff --quiet "$built" "$sha" -- src bind build.rs Cargo.toml Cargo.lock package.json bun.lock; then
-      build=; [ -f "$TMPDIR/build.sh" ] && build="sh $TMPDIR/build.sh"
-      { bun install --frozen-lockfile && $build bun run build; } >"$at/build.log" 2>&1 || { fail "$part" build "$at/build.log"; exit 0; }
-      mkdir -p target && echo "$sha" >target/converge-built
-    fi
-    FURB_STILL_CLOCK={still} FURB_GALLERY_OUT="$at/demo" FURB_GALLERY_CELLS="$at/demo" bun run screenshots >"$at/demo.log" 2>&1 || fail "$part" demo "$at/demo.log"
-    rm -rf "$out/open" && cp -R "$out/records" "$out/open" && cp {capturer} tui/script/converge-capture.ts \
-      && FURB_STILL_CLOCK={still} FURB_CONVERGE_OUT="$at/life" FURB_CONVERGE_RECORDS="$(ls "$out"/open/*.jsonl 2>/dev/null)" \
-      bun run tui/script/converge-capture.ts >"$at/life.log" 2>&1 || fail "$part" life "$at/life.log"
-    rm -f tui/script/converge-capture.ts
-  )
-done"""
-
-SHOTS = r"""import difflib, hashlib, json, os, re, shutil, sys
-out, images, repo, now_dir, was_dir, whole, was_label, now_label = sys.argv[1:9]
-if not images:
-  sessions = os.path.join(repo, ".furb", "sessions")
-  records = [os.path.join(sessions, f) for f in os.listdir(sessions) if f.endswith(".jsonl") and not f.endswith(".changes.jsonl")]
-  images = max(records, key=os.path.getmtime) + ".images"
-os.makedirs(images, exist_ok=True)
-SPIN = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
-TIME = re.compile(r"( *)(?<![\w.])(\d+(?:\.\d+)?(?:ms|s|m|h)(?: \d+[smh])?|\d+ (?:minute|hour|day|week)s? ago)(?!\w)( *)")
-EPOCH = re.compile(r"()(?<!\d)(\d{13})(?!\d)()")
-CONTEXT = 2
-ATTRIBUTES = ((1, "bold"), (2, "dim"), (4, "italic"), (8, "underline"), (16, "blink"), (32, "inverse"), (64, "hidden"), (128, "strikethrough"))
-
-
-def digest(path):
-  with open(path, "rb") as r:
-    return hashlib.sha256(r.read()).hexdigest() + ".png"
-
-
-def stored(path):
-  name = digest(path)
-  if not os.path.exists(os.path.join(images, name)):
-    shutil.copyfile(path, os.path.join(images, name))
-  return name
-
-
-def grid(path):
-  try:
-    with open(path, encoding="utf-8") as r:
-      lines = json.load(r)["lines"]
-    return [
-      [(c, fg + " on " + bg + "".join(" " + word for bit, word in ATTRIBUTES if attrs & bit)) for text, fg, bg, attrs in spans for c in text]
-      for spans in lines
-    ]
-  except (OSError, ValueError, KeyError, TypeError):
-    return None
-
-
-def masked(cells, pattern, mark):
-  text, kept, at = "".join(c for c, _ in cells), [], 0
-  hits = list(pattern.finditer(text))
-  for hit in hits:
-    kept += cells[at : hit.start()]
-    if hit[1]:
-      kept.append((" ", cells[hit.start(1)][1]))
-    style = cells[hit.start(2)][1]
-    kept += [(c, style) for c in mark(hit[2])]
-    if hit[3]:
-      kept.append((" ", cells[hit.start(3)][1]))
-    at = hit.end()
-  return kept + cells[at:], bool(hits)
-
-
-def still(cells):
-  kept, timed = masked(cells, TIME, lambda word: re.sub(r"s ago$", " ago", re.sub(r"\d+(?:\.\d+)?", "0", word)))
-  kept, dated = masked(kept, EPOCH, lambda word: "0")
-  if timed or dated:
-    kept = [one for at, one in enumerate(kept) if not (one[0] == " " and at and kept[at - 1][0] == " ")]
-  return "".join("⠋" if c in SPIN else c for c, _ in kept), tuple(s for _, s in kept)
-
-
-def norm(png, lines):
-  return digest(png) if lines is None else hashlib.sha256(json.dumps([still(x) for x in lines]).encode()).hexdigest()
-
-
-def plain(cells):
-  return "".join(c for c, _ in cells).rstrip()
-
-
-def colors(cells, keys, lo=0, hi=None):
-  hi = len(cells) - 1 if hi is None else min(hi, len(cells) - 1)
-  runs, start = [], lo
-  for at in range(lo + 1, hi + 2):
-    if at == hi + 1 or cells[at][1] != cells[start][1]:
-      if cells[start][1] not in keys:
-        n, name = len(keys), ""
-        while n >= 0:
-          name, n = chr(97 + n % 26) + name, n // 26 - 1
-        keys[cells[start][1]] = name
-      runs.append(keys[cells[start][1]] + str(start + 1) + (f"-{at}" if at - start > 1 else ""))
-      start = at
-  return " ".join(runs)
-
-
-def frame(lines):
-  return "\n".join(f" {n:>3} {plain(line)}" for n, line in enumerate(lines, 1))
-
-
-def span(was, now):
-  size = max(len(was), len(now))
-  pad = [(" ", "")] * size
-  a, b = (was + pad)[:size], (now + pad)[:size]
-  differ = [at for at in range(size) if a[at] != b[at]]
-  return differ[0], differ[-1]
-
-
-def paired(was, now, j, keys):
-  lo, hi = span(was, now)
-  where = f"{lo + 1}-{hi + 1}" if hi > lo else f"{lo + 1}"
-  if plain(was[lo : hi + 1]) == plain(now[lo : hi + 1]) and len(was) == len(now):
-    return [f"~{j + 1:>3} {plain(now)}", f"     colors {was_label} {where}: {colors(was, keys, lo, hi)}", f"     colors {now_label} {where}: {colors(now, keys, lo, hi)}"]
-  told = [f"+{j + 1:>3} {plain(now)}", f"     {was_label} {where}: {''.join(c for c, _ in was[lo : hi + 1]).rstrip()}"]
-  return [*told, f"     colors {where}: {colors(now, keys, lo, hi)}"] if lo < len(now) else told
-
-
-def compared(was, now):
-  a, b, keys, rows = [still(x) for x in was], [still(x) for x in now], {}, []
-  for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, [x[0] for x in a], [x[0] for x in b], autojunk=False).get_opcodes():
-    if tag == "equal" or (tag == "replace" and i2 - i1 == j2 - j1):
-      for i, j in zip(range(i1, i2), range(j1, j2)):
-        rows.append((j + 1, [f" {j + 1:>3} {plain(now[j])}"]) if a[i] == b[j] else (0, paired(was[i], now[j], j, keys)))
-      continue
-    told = [f"-{i + 1:>3} {plain(was[i])}" for i in range(i1, i2)]
-    for j in range(j1, j2):
-      told += [f"+{j + 1:>3} {plain(now[j])}", f"     colors: {colors(now[j], keys)}"]
-    rows.append((0, told))
-  marks = [k for k, (same, _) in enumerate(rows) if not same]
-  told, hidden = [], []
-  for k, (same, lines) in enumerate(rows):
-    if same and not any(abs(k - m) <= CONTEXT for m in marks):
-      hidden.append(same)
-      continue
-    if hidden:
-      told.append(f"     rows {hidden[0]}-{hidden[-1]} as {was_label}")
-      hidden = []
-    told += lines
-  if hidden:
-    told.append(f"     rows {hidden[0]}-{hidden[-1]} as {was_label}")
-  return "\n".join(["     styles: " + ", ".join(f"{name} {style}" for style, name in keys.items()), *told])
-
-
-def found(root):
-  shots = {}
-  for part in ("demo", "life"):
-    folder = os.path.join(root, part)
-    for f in sorted(os.listdir(folder)) if root and os.path.isdir(folder) else []:
-      if f.endswith(".png"):
-        shots[part + "/" + f[:-4]] = (os.path.join(folder, f), os.path.join(folder, f[:-4] + ".json"))
-  return shots
-
-
-nows, wases = found(now_dir), found(was_dir)
-seen = {"shots": {}, "failed": [], "faults": [], "changed": [], "kept": [], "removed": sorted(set(wases) - set(nows)), "records": {}}
-for name, (png, cells) in nows.items():
-  mine = seen["shots"][name] = stored(png)
-  now = grid(cells)
-  if name not in wases:
-    seen["changed"].append({"name": name, "kind": "new", "text": "" if now is None else frame(now), "images": [[now_label, mine]]})
-    continue
-  was_png, was_cells = wases[name]
-  was = grid(was_cells)
-  if norm(was_png, was) == norm(png, now):
-    seen["kept"].append(name)
-    continue
-  pair = [[was_label, stored(was_png)], [now_label, mine]]
-  if now is None or was is None:
-    seen["changed"].append({"name": name, "kind": "image", "text": "", "images": pair})
-  elif [still(x)[0] for x in was] == [still(x)[0] for x in now]:
-    seen["changed"].append({"name": name, "kind": "colors", "text": compared(was, now), "images": pair})
-  else:
-    shown = [[now_label, mine]] if whole == "1" else []
-    text = compared(was, now)
-    first = next((one["name"] for one in seen["changed"] if one["text"] == text and not shown), "")
-    told = {"kind": "same", "text": f"the same change as {first}"} if first else {"kind": "text", "text": text}
-    seen["changed"].append({"name": name, **told, "images": shown})
-fails = os.path.join(out, "fails.txt")
-for line in open(fails, encoding="utf-8").read().splitlines() if os.path.exists(fails) else []:
-  fields = line.split("\t")
-  part, name, log = fields if len(fields) == 3 else ["head", *fields, ""][:3]
-  tail = open(log, encoding="utf-8", errors="replace").read()[-800:] if os.path.exists(log) else ""
-  entry = [name, f"the step {name} of the capture failed: " + " ".join(tail.split()), ""]
-  seen["failed" if part == os.path.basename(now_dir) and name.startswith("check: ") else "faults"].append(entry)
-pins = os.path.join(out, "records.json")
-if os.path.exists(pins):
-  with open(pins, encoding="utf-8") as r:
-    seen["records"] = json.load(r)
-with open(os.path.join(out, "shots.json"), "w", encoding="utf-8") as w:
-  json.dump(seen, w)
-print("wrote " + str(len(seen["changed"])) + " changed captures")
-"""
-
-
 def conductor() -> dict:
   return module()
 
@@ -312,47 +79,6 @@ def tree_of(target: dict) -> str:
   """Each tree of a target holds the slot of its capture, so the captures of one target run in CAPTURES trees at once."""
   base = str(target.get("tree") or f"{cwd()}-converge-{target['name']}")
   return f"{base}-{int(target.get('slot', 1))}"
-
-
-def gallery_of(target: dict) -> str:
-  """The root of the homes of a run of the gallery in a tree, so that a run in another tree holds no lock of it."""
-  return f"/tmp/furb-converge-{target['name']}-{int(target.get('slot', 1))}"
-
-
-def tui_capture(target: dict, pairs: list[tuple[str, str]], out: str) -> str:
-  shq = conductor()["shq"]
-  given = {
-    "{repo}": shq(cwd()),
-    "{tree}": shq(tree_of(target)),
-    "{gallery}": shq(gallery_of(target)),
-    "{branch}": f"{target['name']}-{int(target.get('slot', 1))}",
-    "{out}": shq(out),
-    "{pairs}": " ".join(shq(f"{part}:{sha}") for part, sha in pairs),
-    "{name}": str(target["name"]),
-    "{records}": str(RECORDS),
-    "{heaviest}": str(HEAVIEST),
-    "{still}": str(STILL),
-    "{capturer}": shq(CAPTURER or f"{cwd()}/.furb/extensions/converge/capture.ts"),
-  }
-  command = TUI_CAPTURE
-  for key, value in given.items():
-    command = command.replace(key, value)
-  return command
-
-
-TUI = {
-  "name": "tui",
-  "words": (14, 15, 16, 17, 28),
-  "paths": ("tui/", "bind/typescript/"),
-  "capture": tui_capture,
-  "checks": (),
-  "owners": ("tui-design", "tui-compact"),
-  "thread": "tui",
-  "tree": "",
-  "capturing": "Capture each screen that you change with the real renderer and no window, as"
-  " FURB_GALLERY_ONLY=<pattern> FURB_GALLERY_OUT=<folder> bun run screenshots does, and read each capture against his"
-  " words before you push. Never open a window on this machine.",
-}
 
 
 def book_of(target: dict) -> dict:
@@ -372,6 +98,7 @@ def book_of(target: dict) -> dict:
     ("since", ""),
     ("words", ""),
     ("faulted", ""),
+    ("ledger", {}),
     ("step", None),
     ("frames", ""),
     ("records", {}),
@@ -426,10 +153,9 @@ def capturing(target: dict, pairs: list[tuple[str, str]], out: str, pins: dict, 
   return "\n".join([f"rm -rf {shq(out)} && mkdir -p {shq(out)}", *(["fresh=1"] if fresh else []), pinned, target["capture"](target, pairs, out), *checks])
 
 
-async def shots(out: str, was: str, whole: bool, labels: tuple[str, str]) -> dict:
-  shq = conductor()["shq"]
-  words = [out, IMAGES, cwd(), f"{out}/head", was, "1" if whole else "0", *labels]
-  got = await bash("python3 -I - " + " ".join(shq(x) for x in words), stdin=SHOTS, show=HIDDEN, timeout=900)
+async def shots(target: dict, out: str, was: str, whole: bool, labels: tuple[str, str]) -> dict:
+  command, stdin = target["differ"](target, out, was, whole, labels)
+  got = await bash(command, stdin=stdin, show=HIDDEN, timeout=900)
   try:
     seen = json.loads(read(f"{out}/shots.json", HIDDEN).content) if got.code == 0 else None
   except (Refused, ValueError):
@@ -571,8 +297,92 @@ def stepped(target: dict, book: dict, gaps: list[list[str]], taken: dict[str, st
   return {"key": key, "sha": sha, "worker": "", "pr": 0}
 
 
+def keyed(shot: str, quote: str) -> str:
+  return f"{shot} | {plain(quote)}"
+
+
+def live(c: dict, holder: str) -> bool:
+  return holder == "main" or (holder.isdigit() and int(holder) in c["prs"])
+
+
+def claim(book: dict, c: dict, holder: str, gaps: list[list[str]], main: bool = False) -> tuple[list[list[str]], dict]:
+  """The ledger of the target holds each open gap once, for the PR or the pass of main that showed it first.
+
+  A gap that another live holder holds is no gap of this holder: it comes back in the second value, by holder.
+  A holder that shows a gap no more lets it go, and a pass of main lets go of the gaps of a PR that ended.
+  """
+  ledger, mine, others, seen = book["ledger"], [], {}, set()
+  for one in gaps:
+    shot, text, quote = one
+    if not quote:
+      mine.append(one)
+      continue
+    key = keyed(shot, quote)
+    if key in seen:
+      continue
+    seen.add(key)
+    was = ledger.get(key)
+    if was and was["holder"] != holder and live(c, was["holder"]):
+      others.setdefault(was["holder"], []).append((one, key))
+      continue
+    also = was["also"] if was and was["holder"] == holder else []
+    ledger[key] = {"shot": shot, "gap": text, "quote": quote, "holder": holder, "also": also}
+    mine.append(one)
+  for key, was in [*ledger.items()]:
+    if key not in seen and (was["holder"] == holder or (main and not live(c, was["holder"]))):
+      del ledger[key]
+  return mine, others
+
+
+def deliver(c: dict, book: dict, holder: str, text: str) -> None:
+  """Tell the one worker or item that holds a gap."""
+  if holder == "main":
+    step = book["step"] or {}
+    owners = [w for w in step.get("routed", []) if not over(w)]
+    for w in owners:
+      c["quietly"](prompt, None, text, on=c["working_at"](w))
+    if owners:
+      return
+    key = step.get("key", "")
+  else:
+    held = c["prs"].get(int(holder))
+    own = c["owner_of"](held) if held else ""
+    if own:
+      c["quietly"](prompt, None, text, on=c["working_at"](own))
+      return
+    start = f"converge-pr{holder}-"
+    key = next((k for k, *_ in c["queue"] if k.startswith(start)), "") or next(
+      (k for k in c["working"].values() if k.startswith(start)), ""
+    )
+  worker = c["taken"](key) if key else ""
+  if worker == "queued":
+    c["queue"][:] = [(k, t + "\n\n" + text if k == key else t, th) for k, t, th in c["queue"]]
+  elif worker:
+    c["quietly"](prompt, None, text, on=c["working_at"](worker))
+
+
+def told_holders(c: dict, book: dict, others: dict, who: str, sha: str, taken: dict[str, str]) -> None:
+  """A gap that a holder has already goes to that holder, once for each PR or pass that shows it again."""
+  for holder, items in others.items():
+    fresh = [(one, key) for one, key in items if who not in book["ledger"][key]["also"]]
+    if not fresh:
+      continue
+    for _, key in fresh:
+      book["ledger"][key]["also"].append(who)
+    shown = "the pass of main" if who == "main" else f"the PR #{who}"
+    text = safe(
+      f"converge found {len(fresh)} gap(s) that your work holds again in {shown} at {sha[:7]}. It orders no second"
+      f" worker or item for them, and it judges {shown} on its own gaps alone. Fix them in your work, and each one"
+      f" is served:\n\n{listed([one for one, _ in fresh], taken)}"
+    )
+    deliver(c, book, holder, text)
+
+
 async def settled(target: dict, step: dict, head: str) -> bool:
   c = conductor()
+  if step.get("held"):
+    gone = all(not (h.isdigit() and int(h) in c["prs"]) for h in step["held"])
+    return gone or await moved(target, step["sha"], head)
   if step.get("routed"):
     return all(over(w) for w in step["routed"]) or await moved(target, step["sha"], head)
   own = c["taken"](step["key"])
@@ -588,11 +398,10 @@ async def settled(target: dict, step: dict, head: str) -> bool:
   return not step["pr"] or step["pr"] in c["merged"] or step["pr"] not in c["prs"]
 
 
-TARGETS = [TUI]
+TARGETS: list[dict] = globals().setdefault("TARGETS", [])
 LIVE: dict[str, dict] = {}
 OPEN: dict[str, dict] = {}
 MAIN: dict[str, dict] = {}
-BUSY = re.compile(r"furb-gallery\.lock|holds the home|lock held|is busy", re.I)
 
 
 def holding(target: dict) -> set[int]:
@@ -827,8 +636,8 @@ async def advanced(target: dict, book: dict, job: dict, words: str, head: str) -
       job.update(resumed=True, act=launched(target, book, job))
       return job
     was = f"{job['out']}/before" if pr else book["frames"] if book["words"] == words else ""
-    seen = await shots(job["out"], was, not pr, ("main", "head") if pr else ("before", "now"))
-    if seen["faults"] and BUSY.search(" ".join(why for _, why, _ in seen["faults"])):
+    seen = await shots(target, job["out"], was, not pr, ("main", "head") if pr else ("before", "now"))
+    if seen["faults"] and target.get("busy") and re.search(target["busy"], " ".join(why for _, why, _ in seen["faults"]), re.I):
       # A busy tree or lock is no fault of the tool: the job ends, and its turn comes again.
       if job.get("batch"):
         return released(job)
@@ -843,7 +652,8 @@ async def advanced(target: dict, book: dict, job: dict, words: str, head: str) -
     book["jobs"] += 1
     job.update(taken=seen["shots"], failed=seen["failed"], kept=seen["kept"], records=seen["records"])
     job["shown"] = [str(one["name"]) for one in seen["changed"]]
-    brief = (SCREEN if pr else JUDGE).replace("{legend}", LEGEND.replace("{was}", "main" if pr else "before"))
+    brief = (SCREEN if pr else JUDGE).replace("{look}", str(target.get("look") or LOOK))
+    brief = brief.replace("{legend}", str(target.get("legend") or LEGEND).replace("{was}", "main" if pr else "before"))
     brief = brief.replace("{name}", str(target["name"])).replace("{sha}", job["sha"]).replace("{n}", str(job["n"]))
     captures = sections(seen["changed"])
     job["asked"] = judges(target, brief.replace("{words}", words), captures, job["label"], BATCH)
@@ -892,9 +702,15 @@ async def advanced(target: dict, book: dict, job: dict, words: str, head: str) -
     book["records"] = job["records"]
   book["words"] = words
   counts = [len(p["gaps"]) for p in book["passes"] if "gaps" in p and not p.get("n")]
+  mine, others = claim(book, conductor(), "main", gaps, main=True)
+  told_holders(conductor(), book, others, "main", job["sha"], job["taken"])
   if gaps:
     book["clean"] = 0
-    book["step"] = stepped(target, book, gaps, job["taken"], job["sha"], words)
+    book["step"] = (
+      stepped(target, book, mine, job["taken"], job["sha"], words)
+      if mine
+      else {"held": sorted(others), "sha": job["sha"]}
+    )
     if stalled(counts):
       book.update(state="stalled", since=head)
       tell_home(
@@ -915,6 +731,8 @@ async def advanced(target: dict, book: dict, job: dict, words: str, head: str) -
 
 async def screened(target: dict, book: dict, job: dict, gaps: list[list[str]], words: str) -> None:
   c, n, sha = conductor(), job["n"], job["sha"]
+  gaps, others = claim(book, c, str(n), gaps)
+  told_holders(c, book, others, str(n), sha, job["taken"])
   book["heads"][f"{n} {sha}"] = {**book["heads"].get(f"{n} {sha}", {}), "state": "gaps" if gaps else "clean", "gaps": gaps}
   if not gaps:
     return
@@ -940,6 +758,10 @@ async def screened(target: dict, book: dict, job: dict, gaps: list[list[str]], w
 
 async def converge(target: dict, ticks: int = 0) -> dict:
   book, job, tick = shared(target), {}, 0
+  # The budget counts the captures and the dollars of this run, so a run that the coordinator starts again has it whole.
+  if book["state"] == "spent":
+    book["state"] = ""
+  jobs, spent = book["jobs"], book["spent"]
   while not ticks or tick < ticks:
     tick += 1
     head = await main_head()
@@ -949,9 +771,9 @@ async def converge(target: dict, ticks: int = 0) -> dict:
       book.update(state="", clean=0)
     if book["step"] and await settled(target, book["step"], head):
       book["step"] = None
-    if not job and book["state"] != "spent" and (book["jobs"] >= JOBS or book["spent"] >= USD):
+    if not job and book["state"] != "spent" and (book["jobs"] - jobs >= JOBS or book["spent"] - spent >= USD):
       book["state"] = "spent"
-      tell_home(f"{target['name']} spent its budget: {book['jobs']} captures and {book['spent']:.2f} dollars.")
+      tell_home(f"{target['name']} spent its budget: {book['jobs'] - jobs} captures and {book['spent'] - spent:.2f} dollars.")
     if not job and book["state"] != "spent" and head:
       if not book["state"] and not book["step"]:
         job = await started(target, book, head)
@@ -961,7 +783,10 @@ async def converge(target: dict, ticks: int = 0) -> dict:
       job = await advanced(target, book, job, words, head)
       if job is was:
         break
-    MAIN.pop(target["name"], None) if not job else MAIN.__setitem__(target["name"], job)
+    if job:
+      MAIN[target["name"]] = job
+    else:
+      MAIN.pop(target["name"], None)
     booked(target, book)
     if book["state"] == "spent" and not job:
       return book
@@ -970,5 +795,3 @@ async def converge(target: dict, ticks: int = 0) -> dict:
     else:
       await wait(EVERY, *[a for a in ([job["act"]] if not job["asked"] else job["asked"]) if a != "none" and not over(a)])
   return book
-
-conductor().get("vetoes", {})["converge"] = converge_veto

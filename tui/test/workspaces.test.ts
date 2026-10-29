@@ -648,10 +648,11 @@ test("a right click on a session row opens its menu at the pointer, and Rename t
     const fooRow = row("foo");
     await screen.mockMouse.click(left + 8, fooRow, 2);
     lines = await frame();
-    const menu = lines.slice(fooRow + 1).map((line) => line.slice(left + 8).trim());
+    // The menu covers the whole sidebar, so its labels start at the left edge of the sidebar.
+    const menu = lines.slice(fooRow + 1).map((line) => line.slice(left).trim().replace(/ {2,}/g, "  "));
     expect(menu.slice(0, 8)).toEqual([
       "",
-      "foo        Esc",
+      "foo  Esc",
       "",
       "❯ Open",
       "Rename",

@@ -616,7 +616,8 @@ test("a notice cut to the room of the footer keeps one line and the mark of its 
       expect(lines[row]).toContain("F1 help");
       expect(lines.filter((line) => line.includes("and longer"))).toHaveLength(1);
       await screen.mockMouse.moveTo((lines[row] ?? "").indexOf("A notice") + 2, row);
-      expect(await frame()).toContain("to its very end");
+      // The tip stays inside the feed, so it wraps the notice at its words: the end of the notice comes on a row of the tip.
+      expect(await frame()).toContain("very end");
     },
     { width: 152, height: 40 },
   ));
@@ -639,8 +640,10 @@ test("a cancelled message keeps its place in the feed, and its cancel reads as a
     // The first message says its cancel at its right, above the second message, and the rung that the cancel ended
     // before it wrote a word shows nothing.
     const lines = shown.split("\n");
-    const first = lines.findIndex((line) => line.includes("Think until I cancel."));
-    expect(lines[first]).toMatch(/┃ ⊘ Think until I cancel\.\s+1 step {2}cancelled {2}▸ Expand/);
+    const first = lines.findIndex((line) => line.includes("Think until I"));
+    // A folded thread keeps the header of the open thread: its message as he wrote it, with no mark before it, and its
+    // state beside its shape.
+    expect(lines[first]).toMatch(/┃ ⊘ Think until I\b.*str {3}⊘ cancelled {2}1 step {2}▸ Expand/);
     expect(lines[first]).not.toContain("✗");
     expect(first).toBeLessThan(lines.findIndex((line) => line.includes("A second message.")));
     expect(lines.filter((line) => line.includes(" cancelled") && line.includes("⊘"))).toHaveLength(1);
