@@ -113,7 +113,7 @@ watched: dict[str, list[float]] = globals().setdefault("watched", {})
 after: dict[str, list[str]] = globals().setdefault("after", {})
 parked: dict[str, dict] = globals().setdefault("parked", {})
 awaited: dict[str, list[str]] = globals().setdefault("awaited", {})
-covers: dict[str, list[str]] = globals().setdefault("covers", {})
+covering: dict[str, list[str]] = globals().setdefault("covering", {})
 kinds: dict[str, str] = globals().setdefault("kinds", {})
 pool: dict[str, dict] = globals().setdefault("pool", {})
 slots: dict[str, str] = globals().setdefault("slots", {})
@@ -1845,7 +1845,7 @@ MANY_SAID = "More than {n} tests failed in one attempt, so one cause, as a machi
 
 
 def coverer(*names: str) -> str:
-  return next((k for k, held in covers.items() if set(names) & set(held)), "")
+  return next((k for k, held in covering.items() if set(names) & set(held)), "")
 
 
 def taken(key: str) -> str:
