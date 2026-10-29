@@ -103,6 +103,7 @@ class Round:
     self.files: dict[str, str] = {}
     self.facts: dict[str, tuple] = {}
     self.done: dict[str, object] = {}
+    self.words: dict[str, str] = {}
     folder = tmp / "bin"
     folder.mkdir()
     (folder / "gh").write_text(f"#!{sys.executable}\n{GH}", encoding="utf-8")
@@ -133,6 +134,7 @@ class Round:
       module=lambda on="": self.modules.get(on, {}),
     )
     ns.update(chain=lambda label="", source="": f"chain-{label}", rung=self.rung)
+    ns.update(program=lambda on="": self.words)
     ns.update(cancel=lambda name: self.cancelled.append(name))
     ns.update(pause=lambda name: self.paused_chains.append(name), paused=lambda name: name in self.paused_chains)
     ns.update(wake=lambda name: self.paused_chains.remove(name) if name in self.paused_chains else None)
@@ -726,7 +728,7 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 
 STATE = (
   "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed assigned silent"
-  " comments measures timers noted debriefs briefed owns watched after parked awaited covering kinds pool slots areas vetoes tips shifted parents hired paced landed heard handled ends requeued"
+  " comments measures timers noted debriefs briefed owns watched after parked awaited covering kinds pool slots areas vetoes tips shifted parents redmain onmain hired paced landed heard handled ends requeued"
   " statused secret updated budgeted flaky runs_read deferred"
 ).split()
 
@@ -2304,3 +2306,151 @@ async def test_a_child_whose_parent_merged_outside_the_round_is_rebased_from_its
   await conductor.restack(new, "main", conductor.prs[8])
   assert history(tmp_path, conductor, "w/kid") == ["kid", "parent (#7)", "base"]
   assert git("rev-parse", "w/kid^", cwd=tmp_path / "origin.git", env=conductor.env).strip() == shas["squash"]
+
+
+LIVE_WORD = '''BRIEF = """Quoted earlier:
+TROUBLE = ("red", "conflicting")
+parents: dict = globals().setdefault("parents", {})
+"""
+
+
+def tended(pr: dict) -> bool:
+  return True
+
+
+def table(pr: dict) -> str:
+  return "old"
+'''
+NEW_FILE = '''import json
+
+# The pair of states that a round tends.
+TROUBLE = ("red", "conflicting")
+
+
+parents: dict = globals().setdefault("parents", {})
+
+
+def tended(pr: dict) -> bool:
+  return True
+
+
+def table(pr: dict) -> str:
+  return "new"
+'''
+
+
+def test_the_parts_of_a_word_are_its_top_level_definitions(conductor: Round) -> None:
+  tree = ast.parse(SOURCE)
+  expected: set[str] = set()
+  for node in tree.body:
+    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+      expected.add(node.name)
+    elif isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+      expected.add(node.targets[0].id)
+    elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+      expected.add(node.target.id)
+  parts = conductor.parts_of(SOURCE)
+  assert set(parts) == expected
+  for text in parts.values():
+    ast.parse(text)
+  assert conductor.parts_of(LIVE_WORD) == {
+    "BRIEF": LIVE_WORD.split("\n\n\ndef tended")[0],
+    "tended": "def tended(pr: dict) -> bool:\n  return True",
+    "table": 'def table(pr: dict) -> str:\n  return "old"',
+  }
+
+
+def test_a_reload_runs_each_definition_that_the_module_lacks_or_that_changed_and_gives_their_names(
+  conductor: Round,
+) -> None:
+  # A short definition that a brief quoted earlier is no live definition, and a name that the module lacks is run.
+  del conductor.ns["TROUBLE"], conductor.ns["parents"]
+  exec(LIVE_WORD.replace("BRIEF", "BRIEF_"), conductor.ns)  # noqa: S102
+  conductor.words["rung1"] = LIVE_WORD
+  conductor.files["ext.py"] = NEW_FILE
+  assert conductor.reload("ext.py") == ["TROUBLE", "parents", "table"]
+  word, where = conductor.rungs[-1]
+  assert where == "chain1" and word == "\n\n".join(
+    [
+      '# The pair of states that a round tends.\nTROUBLE = ("red", "conflicting")',
+      'parents: dict = globals().setdefault("parents", {})',
+      'def table(pr: dict) -> str:\n  return "new"',
+    ]
+  )
+  exec(word, conductor.ns)  # noqa: S102
+  conductor.words["rung2"] = word
+  assert conductor.reload("ext.py") == []
+  assert conductor.TROUBLE == ("red", "conflicting")
+
+
+def failing(conductor: Round, main: str) -> None:
+  conductor.says.clear()
+  conductor.say(r"workflows/gates\.yml/runs\?", '{"workflow_runs": []}')
+  stamp = "2026-10-29T10:00:00.12Z"
+  conductor.say(r"run list --commit sha4", json.dumps([{"databaseId": 12, "conclusion": "failure"}]))
+  conductor.say(r"run view 12", "unit\tpytest\t2026-10-29T11:30:00.9Z FAILED test/test_x.py::test_y - boom\n")
+  conductor.say(r"run list --commit sha5", json.dumps([{"databaseId": 13, "conclusion": "failure"}]))
+  conductor.say(r"run view 13", "unit\tpytest\tFAILED test/test_x.py::test_z - bang\n")
+  conductor.say(r"run view 9", f"unit\tpytest\t{stamp} FAILED test/test_x.py::test_y - boom\n")
+  runs = [{"headSha": "m1", "conclusion": main, "databaseId": 9}]
+  conductor.say(r"compare/main\.\.\.sha4", '{"behind_by": 2}')
+  conductor.say(r"pr list --state open", json.dumps(four_five()))
+  conductor.say(r"pr list --state merged", "[]")
+  conductor.say(r"run list --branch main", json.dumps(runs))
+  conductor.say(r"issue list", "[]")
+  conductor.say(r"pr list --repo uael/monty", "[]")
+
+
+def four_five() -> list[dict]:
+  hooks = [check("the hooks", "COMPLETED", "FAILURE", "2026-10-29T10:00:00Z")]
+  return [raw(4, "w/waits", 5, hooks), raw(5, "w/real", 5, hooks)]
+
+
+@POSIX
+@JQ
+async def test_a_pr_whose_failed_lines_all_fail_on_main_waits_on_main_until_main_is_green(conductor: Round) -> None:
+  failing(conductor, "failure")
+  await conductor.sweep(300)
+  assert (conductor.prs[4]["state"], conductor.prs[5]["state"]) == ("main", "red")
+  assert [key for key, _ in conductor.hired] == ["fix5"] and conductor.assigned.keys() == {5}
+  told = [message for message, _ in conductor.prompts]
+  assert len(told) == 1 and told[0].startswith("main is red at m1.")
+  assert told[0].endswith("the round updates their branches once main is green: #4.")
+  assert conductor.log().count("run view 12") == 1
+  await conductor.sweep(300)
+  assert conductor.log().count("run view 12") == 1 and conductor.prs[4]["state"] == "main"
+  assert (len(conductor.prompts), len(conductor.hired), conductor.heard) == (1, 1, [])
+  failing(conductor, "success")
+  await conductor.sweep(300)
+  assert "pr update-branch 4\n" in conductor.log() and conductor.prs[4]["state"] == "running"
+  assert conductor.heard == [
+    "#4 waited on a red main at sha4, and main is green again, so the round updated its branch."
+  ]
+  assert [key for key, _ in conductor.hired] == ["fix5"] and conductor.onmain == {}
+
+
+@POSIX
+@JQ
+async def test_a_red_draft_whose_worker_ended_goes_to_its_maker_or_a_fixer_and_the_orphan_notice_names_it(
+  conductor: Round,
+) -> None:
+  conductor.busy("p1", "k7", SONNET)
+  draft = conductor.pr(7, ("FAILURE", "FAILURE"), labels=["w:k7"], draft=True)
+  assert conductor.tended(draft) is False
+  assert await conductor.mend(draft, 0.0, False) == "red"
+  assert (conductor.hired, conductor.prompts) == ([], [])
+  conductor.done["p1"] = (0, "ended")
+  assert conductor.tended(draft) is True
+  assert await conductor.mend(draft, 0.0, False) == "red"
+  assert [key for key, _ in conductor.hired] == ["fix7"] and conductor.assignee(draft) == "worker1"
+  conductor.limits["room"]["sonnet"] = 0
+  seven = raw(8, "w/draft", 5, [])
+  seven["isDraft"], seven["mergeable"] = True, "CONFLICTING"
+  conductor.say(r"pr list --state open", json.dumps([seven]))
+  conductor.say(r"pr list --state merged", "[]")
+  conductor.say(r"run list --branch main", json.dumps([{"headSha": "m1", "conclusion": "success", "databaseId": 9}]))
+  conductor.say(r"issue list", "[]")
+  conductor.say(r"pr list --repo uael/monty", "[]")
+  await conductor.sweep(300)
+  told = [message for message, _ in conductor.prompts]
+  assert any(m.startswith("#8 is conflicting at sha8 and no worker acts on it, a defect of the round:") for m in told)
