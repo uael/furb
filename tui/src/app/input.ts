@@ -476,7 +476,7 @@ export const input = part({
       effort: () => this.effortPicker(),
       themes: () => this.themes(),
       workspaces: () => void this.workspacePicker(),
-      sidebar: () => this.options.workspaces.toggle(),
+      sidebar: () => this.toggleSidebar(),
       details: () => this.details(),
       editor: () => void this.editDraft().catch(this.report),
       image: () => void clipboardImage((path) => this.session.attachImage(path)).catch(this.report),
