@@ -66,7 +66,7 @@ An item waits for others with after[key] = [keys], set before you queue it: staf
 Method, at each notice: read the whole state, fix every thing that is off in one go, read the state again to verify, and go on until nothing is off. Only then report. Each round also checks the state in invariants(): it gives each open PR that the round tends a home, from the chain that pushed its head, wakes no chain, and lists in the next notice what code cannot fix.
 A PR waits on a decision of the owner while awaited[decision] names one of its labels, or its number as #N, and the decision is an act that is not over, as the prompt that asked him: a failed check of that PR gets no order, no handover and no fixer, a conflict of it still does, and the round names the decision once. When the act ends, the round drops it and tends the PR again.
 The round holds at most cap() chains that hold an open prompt with a shape, and counts the chains of workers, of sub-chains and of judges alike: room() counts them, and a resume of a worker waits for a slot. When more chains stand, the round pauses the newest overflow with a note and wakes it in order when a slot frees, and it never ends its task.
-The owner rules, on 10-29: "we should use more gh stacks in conductor, because they can be merged at once (all PRs of stack as once)". So a PR on main at the bottom of a stack whose layers are all green, free of hold, paused and owner-merge, and passed by the vetoes, merges with its whole stack at once through gh stack merge; a stack that gh stack does not hold lands one layer at a time, and the round tells it once. Each sweep links each chain of stacked PRs on GitHub with gh stack link, once for each chain, so that it shows as one stack.
+The owner rules, on 10-29: "we should use more gh stacks in conductor, because they can be merged at once (all PRs of stack as once)". So a PR on main at the bottom of a stack whose layers are all green, free of hold, paused and owner-merge, and passed by the vetoes, merges with its whole stack at once through gh stack merge; a stack that gh stack does not hold lands one layer at a time, and the round tells it once. Each sweep links each chain of stacked PRs on GitHub with gh stack link, once for each chain, so that it shows as one stack. GitHub gives no priority to a queued run, so each sweep cancels each queued run of the gates that can serve no merge: a run of a closed PR, of an old head, of a draft, a held or a conflicting PR, and it defers a run of a layer above a layer that is not green, which it runs again once that layer is green and fewer than THROTTLE runs wait. It never touches a run of main or of a PR that can merge.
 A review blocks only on a defect that a command reproduces, or on a false sentence of a contract."""
 
 LIMITS = {"room": {"opus": 1, "sonnet": 3, "opus/high": 1}, "fixer": "claude-cli:sonnet/high"}
@@ -1987,6 +1987,60 @@ async def linking() -> None:
     heard.append(f"The stack {names} " + ("is linked on GitHub." if linked else f"was not linked: {said}"))
 
 
+deferred: dict[str, str] = globals().setdefault("deferred", {})
+
+THROTTLE = 6
+
+
+async def throttle() -> None:
+  """Each sweep cancels the queued runs of the gates that can serve no merge, so the runners take those that can."""
+  got = await bash(
+    "gh run list --workflow gates.yml --status queued --limit 100 --json databaseId,headBranch,headSha,event",
+    show=HIDDEN,
+    timeout=120,
+  )
+  if got.code != 0 or not got.stdout.content.strip().startswith("["):
+    return
+  runs = json.loads(got.stdout.content)
+  heads = {pr["head"]: pr for pr in prs.values()}
+  cut: list[tuple[dict, str]] = []
+  for run in runs:
+    if run.get("event") != "pull_request" or run["headBranch"] == "main":
+      continue
+    pr = heads.get(run["headBranch"])
+    below = next((p for p in prs.values() if pr and p["head"] == pr["base"]), None)
+    why = ""
+    if not pr:
+      why = "its PR is closed"
+    elif run["headSha"] != pr["sha"]:
+      why = "its PR has a newer head"
+    elif pr["draft"] or {"hold", "paused"} & set(pr["labels"]):
+      why = "its PR is a draft or held"
+    elif pr["mergeable"] == "CONFLICTING":
+      why = "its PR conflicts"
+    elif below and below["verdict"] != "pass":
+      why = "a layer below it is not green yet"
+      deferred[str(run["databaseId"])] = f"{pr['n']} {pr['sha']}"
+    if why:
+      cut.append((run, why))
+      noticed.add(f"rerun {run['headSha']}")
+  if cut:
+    await bash("; ".join(f"gh run cancel {run['databaseId']} >/dev/null 2>&1" for run, _ in cut), show=HIDDEN, timeout=120)
+    said = ", ".join(f"#{(heads.get(run['headBranch']) or {}).get('n', run['headBranch'])} ({why})" for run, why in cut)
+    heard.append(f"The round cancelled queued runs of the gates that could serve no merge: {said}.")
+  if len(runs) - len(cut) >= THROTTLE:
+    return
+  for one, key in list(deferred.items()):
+    n, sha = key.split()
+    pr = prs.get(int(n))
+    below = next((p for p in prs.values() if pr and p["head"] == pr["base"]), None)
+    if pr and pr["sha"] == sha and below and below["verdict"] != "pass":
+      continue
+    del deferred[one]
+    if pr and pr["sha"] == sha:
+      await bash(f"gh run rerun {one}", show=HIDDEN, timeout=120)
+
+
 async def sweep(every: float) -> None:
   got = await bash(PRS, show=HIDDEN, timeout=300)
   bits = re.split(r"\n--- (\d+)\n", got.stdout.content)
@@ -2019,6 +2073,7 @@ async def sweep(every: float) -> None:
       await probe(one)
   restacked = await restack_forced()
   await linking()
+  await throttle()
   main = json.loads(parts[2])
   red = "failure" in main["runs"]
   if red and f"red {main['sha']}" not in noticed:

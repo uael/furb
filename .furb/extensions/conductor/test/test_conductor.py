@@ -691,7 +691,7 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 STATE = (
   "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed fixes silent"
   " comments measures timers noted debriefs briefed owns watched after parked awaited covering kinds pool slots areas vetoes ordered tips shifted hired paced landed heard handled sent ends requeued"
-  " statused secret budgeted flaky runs_read"
+  " statused secret budgeted flaky runs_read deferred"
 ).split()
 
 
@@ -2086,3 +2086,29 @@ async def test_a_lone_failure_behind_a_green_main_reruns_its_failed_jobs_before_
   assert "update-branch" not in conductor.log()
   await conductor.mend(conductor.pr(checks=("FAILURE", "SUCCESS")), 0.0, False)
   assert "pr update-branch 5\n" in conductor.log()
+
+
+@POSIX
+@JQ
+async def test_queued_runs_that_can_serve_no_merge_are_cancelled_and_a_run_above_a_red_layer_waits(conductor: Round) -> None:
+  two(conductor, top=())
+  conductor.prs[7]["verdict"] = "fail"
+  conductor.prs[9] = conductor.pr(n=9, head="w/c", sha="new", mergeable="CONFLICTING")
+  conductor.prs[10] = conductor.pr(n=10, head="w/d", sha="d1")
+  runs = [
+    {"databaseId": 1, "headBranch": "w/b", "headSha": "abc", "event": "pull_request"},
+    {"databaseId": 2, "headBranch": "w/c", "headSha": "old", "event": "pull_request"},
+    {"databaseId": 3, "headBranch": "w/gone", "headSha": "x", "event": "pull_request"},
+    {"databaseId": 4, "headBranch": "w/d", "headSha": "d1", "event": "pull_request"},
+    {"databaseId": 5, "headBranch": "main", "headSha": "m", "event": "push"},
+  ]
+  conductor.say(r"run list --workflow gates.yml --status queued", json.dumps(runs))
+  await conductor.throttle()
+  assert [x for x in conductor.log().splitlines() if x.startswith("run cancel")] == ["run cancel 1", "run cancel 2", "run cancel 3"]
+  assert conductor.deferred == {"1": "8 abc"}
+  conductor.prs[7]["verdict"] = "pass"
+  conductor.says.clear()
+  conductor.say(r"run list --workflow gates.yml --status queued", "[]")
+  await conductor.throttle()
+  assert "run rerun 1" in conductor.log()
+  assert conductor.deferred == {}
