@@ -17,7 +17,7 @@ EVERY = ["ubuntu-latest", "macos-latest", "windows-latest"]
 # A path that no job needs on another system: prose, the tools of the repository, and the workflows that hold their
 # own proof.
 INERT = re.compile(
-  r"(.*\.md|docs/(?!examples/).*|LICENSE|\.gitignore|\.furb/.*|\.agents/.*|\.claude/.*|script/.*|reserve/.*"
+  r"(.*\.md|docs/(?!examples/).*|LICENSE|\.gitignore|\.furb/(?!extensions/|config\.json$).*|\.agents/.*|\.claude/.*|script/.*|reserve/.*"
   r"|\.github/(ISSUE_TEMPLATE/.*|budgets\.json|workflows/(publish|release|titles)\.yml)"
   r"|release-please-config\.json|\.release-please-manifest\.json)"
 )
@@ -27,6 +27,9 @@ PYTHON = re.compile(r"(test/.*|bind/python/.*|pyproject\.toml|uv\.lock|docs/exam
 TYPESCRIPT = re.compile(
   r"((tui|gui|bind/typescript)/.*|package\.json|bun\.lock|biome\.json|tsconfig.*\.json|docs/examples/typescript/.*)"
 )
+# A path that the suite of python reads on Linux alone: the extensions of the project and the config that enables
+# them, whose suite in .furb/extensions gates each word as a chain plays it.
+PROJECT = re.compile(r"\.furb/(extensions/.*|config\.json)")
 # A path that the crate builds, which every job reads.
 RUST = re.compile(
   r"((src|cli|tests|extensions|\.cargo)/.*|Cargo\.(toml|lock)|build\.rs|rust-toolchain\.toml|docs/examples/rust/.*)"
@@ -36,11 +39,13 @@ APP = re.compile(r"gui/.*")
 
 def scope(paths: list[str]) -> dict[str, object]:
   """The systems of the suite and of the bindings, and whether the crate on Windows and on macOS and the app run."""
-  kinds = {"python": False, "typescript": False, "rust": False, "other": False, "app": False}
+  kinds = {"python": False, "typescript": False, "rust": False, "other": False, "app": False, "project": False}
   for path in paths:
     if INERT.fullmatch(path):
       continue
-    if PYTHON.fullmatch(path):
+    if PROJECT.fullmatch(path):
+      kinds["project"] = True
+    elif PYTHON.fullmatch(path):
       kinds["python"] = True
     elif TYPESCRIPT.fullmatch(path):
       kinds["typescript"] = True
