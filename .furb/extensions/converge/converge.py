@@ -142,6 +142,12 @@ async def moved(target: dict, since: str, head: str) -> bool:
   return got.code != 0
 
 
+def does(target: dict, key: str):
+  # A target names its function, and the module of the chain is asked at each call, so a reload takes effect also
+  # in a loop that holds the dict of the target from before it.
+  return globals()[target[key]]
+
+
 def capturing(target: dict, pairs: list[tuple[str, str]], out: str, pins: dict, fresh: bool = False) -> str:
   shq = conductor()["shq"]
   checks = [
@@ -150,11 +156,11 @@ def capturing(target: dict, pairs: list[tuple[str, str]], out: str, pins: dict, 
     for i, check in enumerate(target["checks"])
   ]
   pinned = f"printf '%s' {shq(json.dumps(pins))} >{shq(out + '/pins.json')}"
-  return "\n".join([f"rm -rf {shq(out)} && mkdir -p {shq(out)}", *(["fresh=1"] if fresh else []), pinned, target["capture"](target, pairs, out), *checks])
+  return "\n".join([f"rm -rf {shq(out)} && mkdir -p {shq(out)}", *(["fresh=1"] if fresh else []), pinned, does(target, "capture")(target, pairs, out), *checks])
 
 
 async def shots(target: dict, out: str, was: str, whole: bool, labels: tuple[str, str]) -> dict:
-  command, stdin = target["differ"](target, out, was, whole, labels)
+  command, stdin = does(target, "differ")(target, out, was, whole, labels)
   got = await bash(command, stdin=stdin, show=HIDDEN, timeout=900)
   try:
     seen = json.loads(read(f"{out}/shots.json", HIDDEN).content) if got.code == 0 else None
