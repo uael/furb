@@ -26,7 +26,6 @@ from furb.engine import (
   pause,
   paused,
   peek,
-  program,
   prompt,
   read,
   rung,
@@ -72,7 +71,7 @@ Method, at each notice: read the whole state, fix every thing that is off in one
 A PR waits on a decision of the owner while awaited[decision] names one of its labels, or its number as #N, and the decision is an act that is not over, as the prompt that asked him: a failed check of that PR gets no order, no handover and no fixer, a conflict of it still does, and the round names the decision once. When the act ends, the round drops it and tends the PR again.
 The round holds at most cap() chains that hold an open prompt with a shape, and counts the chains of workers, of sub-chains and of judges alike: room() counts them, and a resume of a worker waits for a slot. When more chains stand, the round pauses the newest overflow with a note and wakes it in order when a slot frees, and it never ends its task.
 The owner rules, on 10-29: "we should use more gh stacks in conductor, because they can be merged at once (all PRs of stack as once)". So a PR on main at the bottom of a stack whose layers are all green, free of hold, paused and owner-merge, and passed by the vetoes, merges with its whole stack at once through gh stack merge, and while a layer above it still runs its checks, the bottom waits rather than merge alone; a stack with a red layer merges its green layers below it at once; a stack that gh stack does not hold lands one layer at a time, and the round tells it once. Each sweep links each chain of stacked PRs on GitHub with gh stack link, once for each chain, so that it shows as one stack. GitHub gives no priority to a queued run, so each sweep cancels each queued run of the gates that can serve no merge: a run of a closed PR, of an old head, of a draft, a held or a conflicting PR, and it defers a run of a layer above a layer that is not green, which it runs again once that layer is green and fewer than THROTTLE runs wait. It never touches a run of main or of a PR that can merge.
-reload(path, on) loads the definitions of the file of an extension into the module of a chain: it runs, in the order of the file, each top-level definition whose name the module lacks or whose text differs from the live definition of that name in program(), and gives the names that it ran. Use it after a PR that changed the conductor merged.
+reload(path, on) loads the definitions of the file of an extension into the module of a chain: it runs, in the order of the file, each top-level definition whose name the module lacks or whose text differs from its text in the last run of a word that ended with no fault (a load that was cancelled or failed counts for nothing, so the next reload loads it again), and gives (rung, names): the rung that runs the load, which quietly starts so that no end of the caller cancels it, and the names. The load is done only when that rung is over and peek(rung) is no exception: await it. Use it after a PR that changed the conductor merged.
 A review blocks only on a defect that a command reproduces, or on a false sentence of a contract."""
 
 LIMITS = {"room": {"opus": 1, "sonnet": 3, "opus/high": 1}, "fixer": "claude-cli:sonnet/high"}
@@ -774,16 +773,21 @@ def parts_of(word: str) -> dict[str, str]:
   return found
 
 
-def reload(path: str = CONDUCTOR, on: str = "") -> list[str]:
+def reload(path: str = CONDUCTOR, on: str = "") -> tuple[str, list[str]]:
   here = on or scope(acting())
   lived: dict[str, str] = {}
-  for word in program(here).values():
-    lived.update(parts_of(word))
+  for x in transcript(here):
+    if x[0] == "module":
+      lived = {}
+    elif x[0] == "run" and over(x[1]) and not isinstance(peek(x[1]), BaseException):
+      lived.update(parts_of(str(x[5])))
   held = module(here)
   fresh = {n: t for n, t in parts_of(read(path, HIDDEN).content).items() if n not in held or lived.get(n) != t}
-  if fresh:
-    rung("\n\n".join(fresh.values()), on=here)
-  return list(fresh)
+  if not fresh:
+    return "", []
+  # The close of the word that calls reload cancels each rung that the word made, and the load stops between two
+  # definitions: quietly makes the rung for the round, so no end of the caller reaches it.
+  return str(quietly(rung, "\n\n".join(fresh.values()), on=here)), list(fresh)
 
 
 def tend() -> None:
