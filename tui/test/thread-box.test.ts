@@ -58,9 +58,12 @@ test("a thread is one box: its message with a line of its color, its program as 
       expect(rows[at("Fieldnotes keeps ideas close")]?.indexOf("Fieldnotes")).toBe(
         rows[at("Explore this project")]?.indexOf("Explore"),
       );
+      // A message that a line beside its controls would narrow takes the whole width, with its type and its controls on
+      // a row of their own above it.
+      expect(rows[at("Explore this project") - 1]).toMatch(/^\s*┃\s+str {2}▾ Collapse\s*$/);
       // The line of the message starts half a row above it, in the top edge of the box, and ends half a row under it, in
       // the row that parts it from the code, as the line of a panel does, so the line adds no row of its own.
-      expect(rows[at("Explore this project") - 1]).toMatch(/^\s*╻▄{4,}\s*$/);
+      expect(rows[at("Explore this project") - 2]).toMatch(/^\s*╻▄{4,}\s*$/);
       expect(rows[at("Explore this project") + 1]).toMatch(/^\s*╹\s*$/);
       expect(rows[at("Explore this project") + 2]).not.toContain("┃");
       // The box has an edge under its input.
