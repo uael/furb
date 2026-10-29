@@ -40,7 +40,7 @@ The owner rules, on 10-23: "this kind of item should be done by sonnet, not opus
 The owner rules again, on 10-23: "From now on: 2 opus workers, 3 sonnet ones. max." The owner rules again, on 10-26: "add one opus/high worker for the most complex stuff". So limits["room"] gives the room of each family of model: the round runs at most 1 worker on opus/medium, 3 on sonnet and 1 on opus/high at once, by the ruling of the operator, and counts only the workers whose prompt is not over. limits lives in the state of the round, so a reload of the extension keeps it: you change it there, as limits["room"]["opus"] = 2, and cap() gives the sum of the room. You give opus/high only to the most complex items, as efforts[key] = "claude-cli:opus/high". An item whose model has no room keeps its place in queue while the next item whose model has room starts. A fixer goes before a new item. A worker that ended and whose PR needs a worker goes on in its own chain on HANDOVER, sonnet, with a new prompt there, when sonnet has room; else a fixer starts on limits["fixer"] when sonnet has room.
 The round runs on one chain, lead["home"]. After a compaction of your chain, await conduct() in the new chain: it names that chain, the round of the old chain ends at its next wake, and the state that the round reads is the state of the new chain, which you change there.
 A fault of one step of a round, as an empty answer of gh, ends no round: the round tells you once each kind of fault, with the fault and its step, and goes on at the next round. Each json.loads of a command reads its output only when the command succeeded. When the round ends for any cause but a new home, it tells you as a decision, with the cause and what stops.
-hire(key, brief, thread) starts a worker from the base chain of its actor in bases, at model_of(key), on a chain labeled thread/key, with the brief in custom or the brief of its kind, and the PR of an edit carries the labels w:key and thread:thread.
+hire(key, brief, thread) gives the item to an idle worker of the pool, by the ideas of the owner on 10-28, when one fits: a worker that ended stays in pool under its chain, with its model, its thread and the top folders of the files of its PR, and it takes an item of the same model whose thread is its own, or whose areas[key] names one of its folders, while its last reply filled under half of its window. Else hire starts a worker on a new chain that forks the base chain of its kind and model, bases["kind model"], which the round makes once and which reads AGENTS.md, so the provider serves that prefix from its cache. It starts the worker at model_of(key), on a chain labeled thread/key, with the brief in custom or the brief of its kind, and the PR of an edit carries the labels w:key and thread:thread.
 A worker does one item in a worktree of its own, runs only the tests that its change touches, opens its PR, and closes with its URL.
 A prompt of a worker that ends with CancelledError while the round made no cancel over it, as when the life restarts, goes on: the round asks it again on its chain with a new prompt, at most 3 times for an item, and tells nobody.
 The round tells you a worker that ends with no PR, with its answer, or that says nothing for 45 minutes, relays to you each question that a worker puts to the operator, and wakes a worker that paused. results keeps the answer of each worker under its prompt.
@@ -115,6 +115,8 @@ parked: dict[str, dict] = globals().setdefault("parked", {})
 awaited: dict[str, list[str]] = globals().setdefault("awaited", {})
 covers: dict[str, list[str]] = globals().setdefault("covers", {})
 kinds: dict[str, str] = globals().setdefault("kinds", {})
+pool: dict[str, dict] = globals().setdefault("pool", {})
+areas: dict[str, list[str]] = globals().setdefault("areas", {})
 DEBRIEFS = globals().get("DEBRIEFS", True)
 vetoes: dict = globals().setdefault("vetoes", {})
 ORDERED = 600.0
@@ -546,7 +548,7 @@ def hire(key: str, what: str, thread: str = "", brief: str = "") -> str:
   quietly(write, Text("scratch://build.sh", BUILD_SH))
   text = (custom.get(key) or brief or (AUDIT if kind_of(key) == "audit" else WORKER)).replace("{labels}", "".join(f" --label {m}" for m in marks))
   text = text.replace("{repo}", cwd()).replace("{key}", key).replace("{home}", scope(acting())).replace("{what}", what)
-  where = chain(f"{thread or 'w'}/{key}", source=bases.get(model, ""))
+  where = reuse(key, model, thread) or str(chain(f"{thread or 'w'}/{key}", source=base_of(kind_of(key), model)))
   quietly(rung, f"actor = {model!r}", on=where)
   name = str(quietly(prompt, tuple[int, str], text, to=model, on=where))
   working[name] = key
@@ -554,6 +556,32 @@ def hire(key: str, what: str, thread: str = "", brief: str = "") -> str:
   hired[name] = clock()
   homes[key] = where
   return name
+
+
+def base_of(kind: str, model: str) -> str:
+  name = f"{kind} {model}"
+  if name not in bases:
+    where = str(quietly(chain, f"base/{kind}/{model.split(':')[-1]}"))
+    quietly(rung, f"actor = {model!r}\nread({cwd() + '/AGENTS.md'!r})", on=where)
+    bases[name] = where
+  return bases[name]
+
+
+def share_of(where: str) -> float:
+  replies = transcript(where, "reply")
+  return float(filled(replies[-1][1]) or 0) if replies else 0.0
+
+
+def reuse(key: str, model: str, thread: str) -> str:
+  near = set(areas.get(key, []))
+  for where, one in list(pool.items()):
+    if one["model"] != model or not get(where) or paused(where) or where in parked:
+      continue
+    if (thread and one["thread"] == thread or near & set(one["folders"] or [])) and share_of(where) < 0.5:
+      del pool[where]
+      heard.append(f"{key} goes on {where}, the chain of {one['key']}, which worked on the same area.")
+      return where
+  return ""
 
 
 def debrief(name: str) -> str:
@@ -627,6 +655,12 @@ def tend() -> None:
         resume(key, where, models.get(name, ACTOR), RESUME)
         continue
     results[name] = got
+    if get(name):
+      home = str(get(name)[3])
+      label = str((get(home) or ('', '', '', '', ''))[4])
+      pr_n = got[0] if isinstance(got, tuple) and got and isinstance(got[0], int) else 0
+      thread = label.split('/')[0] if '/' in label else ''
+      pool[home] = {'key': key, 'model': models.get(name, ACTOR), 'thread': thread, 'pr': pr_n, 'folders': None}
     ends.setdefault(key, []).append((name, got[0] if isinstance(got, tuple) and got and isinstance(got[0], int) else 0))
     if DEBRIEFS and f"debrief {name}" not in noticed and get(name):
       noticed.add(f"debrief {name}")
@@ -1864,6 +1898,10 @@ async def sweep(every: float) -> None:
     pr["verdict"] = verdict(pr)
     prs[pr["n"]] = pr
   merged.update(json.loads(parts[1]))
+  for one in [x for x in pool.values() if x["pr"] and x["folders"] is None]:
+    files = await bash(f"gh pr view {one['pr']} --json files --jq '.files[].path'", show=HIDDEN, timeout=120)
+    if files.code == 0:
+      one["folders"] = sorted({x.split("/")[0] for x in files.stdout.lines if x.strip()})
   shift()
   for one in prs.values():
     if one["mergeable"] == "UNKNOWN":

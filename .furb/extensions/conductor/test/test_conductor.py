@@ -693,7 +693,7 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 
 STATE = (
   "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed fixes silent"
-  " comments measures timers noted debriefs briefed owns watched after parked awaited covers kinds vetoes ordered tips shifted hired paced landed heard handled sent ends requeued"
+  " comments measures timers noted debriefs briefed owns watched after parked awaited covers kinds pool areas vetoes ordered tips shifted hired paced landed heard handled sent ends requeued"
   " statused secret budgeted flaky runs_read"
 ).split()
 
@@ -1898,3 +1898,37 @@ def test_an_item_has_a_kind_whose_model_and_brief_it_takes(conductor: Round) -> 
   conductor.tend()
   assert conductor.heard == [f"The auditor look ({name}) ended, and results[{name!r}] keeps its report."]
   assert len(conductor.prompts) == 1
+
+
+def test_an_ended_worker_takes_the_next_item_of_its_area_until_half_of_its_window_and_a_hire_forks_the_base(
+  conductor: Round,
+) -> None:
+  made: list[tuple[str, str]] = []
+  conductor.ns["chain"] = lambda label="", source="": (made.append((label, source)), f"chain-{label}")[1]
+  conductor.ns["quietly"] = lambda verb, *args, **words: (
+    asyncio.run(verb(*args, **words)) if verb == conductor.bash else verb(*args, **words)
+  )
+  share = {"reply1": 0.3}
+  conductor.ns["filled"] = share.get
+  conductor.ns["transcript"] = lambda on="", of="": [("reply", "reply1", "", on)] if of == "reply" else []
+  conductor.facts["chain-tui/a"] = ("chain", "chain-tui/a", "rung1", "chain1", "tui/a", "")
+  conductor.facts["p1"] = ("prompt", "p1", "rung1", "chain-tui/a", "tuple[int, str]", "", "")
+  conductor.working["p1"], conductor.models["p1"] = "a", SONNET_HIGH
+  conductor.done["p1"] = (12, "done")
+  conductor.ns["DEBRIEFS"] = False
+  conductor.tend()
+  assert conductor.pool == {"chain-tui/a": {"key": "a", "model": SONNET_HIGH, "thread": "tui", "pr": 12, "folders": None}}
+  conductor.real_hire("b", "more", "tui")
+  assert made == [] and conductor.homes["b"] == "chain-tui/a" and conductor.pool == {}
+  assert "b goes on chain-tui/a, the chain of a, which worked on the same area." in conductor.heard
+  conductor.pool["chain-tui/a"] = {"key": "b", "model": SONNET_HIGH, "thread": "tui", "pr": 13, "folders": ["tui"]}
+  share["reply1"] = 0.6
+  conductor.real_hire("c", "other", "tui")
+  conductor.real_hire("d", "more", "gui")
+  assert made == [("base/edit/sonnet/high", ""), ("tui/c", "chain-base/edit/sonnet/high"), ("gui/d", "chain-base/edit/sonnet/high")]
+  assert conductor.bases == {f"edit {SONNET_HIGH}": "chain-base/edit/sonnet/high"}
+  assert [on for word, on in conductor.rungs if "AGENTS.md" in word and "read(" in word] == ["chain-base/edit/sonnet/high"]
+  share["reply1"] = 0.2
+  conductor.areas["e"] = ["tui"]
+  conductor.real_hire("e", "near", "ci")
+  assert conductor.homes["e"] == "chain-tui/a"
