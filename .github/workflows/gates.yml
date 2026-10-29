@@ -4,6 +4,11 @@ on:
   workflow_dispatch:
   pull_request:
     branches: [main]
+    # A render of the gallery changes only these files, which no gate reads, so it runs no gate, by the ruling of
+    # the owner on 10-29.
+    paths-ignore:
+      - docs/screenshots/**
+      - docs/furb.gif
   push:
     branches: [main]
 
@@ -12,7 +17,7 @@ on:
 # can save: a cancel on main made the bindings on Windows build their dependencies again on each run, in 12 minutes.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
