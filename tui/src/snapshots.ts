@@ -8,6 +8,7 @@ import {
   type Session,
   standingOf,
   type Turn,
+  usageOf,
 } from "furb";
 import type { Exit } from "furb/life";
 import type { Roster, Snapshot, Usage } from "./bridge.ts";
@@ -172,7 +173,7 @@ export class Snapshots {
     if (answered === "reply" && Array.isArray(turn) && Array.isArray(turn[2])) {
       const on = this.session.activity.scope(id);
       const answers = this.answers.get(on) ?? [];
-      answers.push(turn[2] as Usage);
+      answers.push(usageOf(turn[2]));
       this.answers.set(on, answers);
       this.replies.set(on, id);
     }

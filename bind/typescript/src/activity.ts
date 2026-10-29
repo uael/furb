@@ -1,6 +1,6 @@
 import { type Call, call, isFault } from "./ears.js";
 import { type Compaction, type LiveAct, WORK } from "./life/acts.js";
-import { bound, display, type Fact, isQuestion } from "./types.js";
+import { bound, display, type Fact, isQuestion, usageOf } from "./types.js";
 
 /** One answer of a model on a chain: its place in time, the actor whose reply it answered, and its usage, which is
  * the tokens that it read and wrote, of which the tokens that it read again and kept to read again, and its dollars. */
@@ -170,8 +170,8 @@ export class Activity {
       const reply = this.replies.get(id);
       this.replies.delete(id);
       if (reply && Array.isArray(fact[3]) && Array.isArray(fact[3][2])) {
-        const usage = fact[3][2].map(Number) as Answered["usage"];
-        this.cost += usage[4] ?? 0;
+        const usage: Answered["usage"] = usageOf(fact[3][2]);
+        this.cost += usage[4];
         const [chain, actor, maker] = reply;
         const answers = this.answers.get(chain) ?? [];
         answers.push({ at, actor, usage });
@@ -179,7 +179,7 @@ export class Activity {
         // A rung costs the dollars of the answers that wrote its word.
         const wrote = this.acts.get(maker);
         if (wrote?.kind === "rung") {
-          wrote.cost = (wrote.cost ?? 0) + (usage[4] ?? 0);
+          wrote.cost = (wrote.cost ?? 0) + usage[4];
           this.mark(wrote);
         }
       }

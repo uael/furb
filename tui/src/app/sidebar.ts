@@ -1,4 +1,5 @@
 import type { BoxOptions, BoxRenderable, Renderable } from "@opentui/core";
+import { unmarked } from "furb";
 import { type ChainThread, chainThreads } from "furb/life";
 import { count, dollars } from "../format.ts";
 import type { ActRow } from "../session.ts";
@@ -33,7 +34,9 @@ export const sidebar = part({
     };
     const spend = w.spend;
     const ceiling =
-      grant?.words[1] === null || grant?.words[1] === undefined ? undefined : Number(grant.words[1]);
+      grant?.words[1] === null || grant?.words[1] === undefined
+        ? undefined
+        : Number(unmarked(grant.words[1]));
     const known = window !== undefined && Number.isFinite(window);
     const tokens = spend.input + spend.output + spend.cacheRead + spend.cacheWrite;
     // A chain with a source reads the prompt of its origin before it answers once, so its context shows from its birth.
@@ -70,7 +73,7 @@ export const sidebar = part({
       const spent =
         limit === null || limit === undefined
           ? dollars(spend.dollars)
-          : `${dollars(spend.dollars)}/${dollars(Number(limit))}`;
+          : `${dollars(spend.dollars)}/${dollars(Number(unmarked(limit)))}`;
       // The numbers lose their words one by one before they lose their room, so that the line shows whole.
       const cached = spend.cacheRead ? ` · ${count(spend.cacheRead)} cached` : "";
       const forms =

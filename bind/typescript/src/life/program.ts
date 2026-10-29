@@ -1,5 +1,6 @@
 import { type Exit, failed, type LiveAct } from "./acts.js";
 import { actState, tailOf, valueText } from "./ladder.js";
+import { unmarked } from "./marks.js";
 import { reason } from "./plain.js";
 import { placed } from "./source.js";
 
@@ -92,7 +93,7 @@ function said(act: LiveAct, owed: ReadonlySet<string>, label: (chain: string) =>
   if (act.kind === "chain") return label(act.id);
   if (act.kind === "wait") return act.done ? `woke: ${valueText(act.value)}` : `waits ${act.words[0] ?? ""}s`;
   if (act.kind === "cd") return valueText(act.value);
-  if (act.kind === "grant") return `grant $${act.words[0] ?? ""}`;
+  if (act.kind === "grant") return `grant $${unmarked(act.words[0]) ?? ""}`;
   return "";
 }
 
@@ -325,7 +326,30 @@ function python(value: unknown): string {
   if (value === null || value === undefined) return "None";
   if (typeof value === "boolean") return value ? "True" : "False";
   if (typeof value === "number") return String(value);
-  return JSON.stringify(typeof value === "string" ? value : String(value));
+  if (typeof value === "string") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(python).join(", ")}]`;
+  if (typeof value !== "object") return JSON.stringify(String(value));
+  // The life marks what JSON cannot hold, as a float with no fraction, with its class in `is`.
+  const held = value as Record<string, unknown>;
+  const args = Array.isArray(held.args) ? held.args : [];
+  if (held.is === "float") {
+    const digits = String(args[0]);
+    return /^-?\d+$/.test(digits)
+      ? `${digits}.0`
+      : /inf|nan/i.test(digits)
+        ? `float(${JSON.stringify(digits)})`
+        : digits;
+  }
+  if (held.is === "int") return String(args[0]);
+  if (held.is === "dict" && Array.isArray(args[0]))
+    return `{${(args[0] as [unknown, unknown][]).map(([key, one]) => `${python(key)}: ${python(one)}`).join(", ")}}`;
+  if (typeof held.is === "string") {
+    const fields = Object.entries(held).filter(([key]) => key !== "is" && key !== "args");
+    return `${held.is}(${[...args.map(python), ...fields.map(([key, one]) => `${key}=${python(one)}`)].join(", ")})`;
+  }
+  return `{${Object.entries(held)
+    .map(([key, one]) => `${JSON.stringify(key)}: ${python(one)}`)
+    .join(", ")}}`;
 }
 
 /** An act that no word made, as the operator or an ear makes it, as one line of python: its call, bound to its name,
