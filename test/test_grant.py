@@ -11,12 +11,11 @@ GRANT = "#grant1\ngrant1_usd = 1.0\ngrant1: Act[None] = Act('grant1')"
 
 
 def crossed(log: list[tuple], root: str, act: str, message: str) -> str:
-  """The text that a fresh root runs as the told rung of the answer that crossed a grant of one dollar: the
-  paragraphs of its open, of its standing, of the open of the grant and of the prompt, of the line that says what the
-  answer is for, of the ledger of that answer, and of the pause that the grant said, joined by blank lines."""
+  """The text that a fresh root runs as the told rung of the advance whose answer crossed a grant of one dollar:
+  the paragraphs of its open, of its standing, of the open of the grant and of the prompt, and of the line that says
+  what the answer is for, joined by blank lines."""
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
-  ledger = "#grant1 ledger\ngrant1_spent = 1.5"
-  return fresh(root, GRANT, prompted(act, "int", message), f"#{step} advance on {act}", ledger)
+  return fresh(root, GRANT, prompted(act, "int", message), f"#{step} advance on {act}")
 
 
 async def capped(*script: str, message: str = "count") -> tuple[Sand, list[tuple], str, Act[None], Act[int]]:
