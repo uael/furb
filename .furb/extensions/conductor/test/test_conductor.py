@@ -2155,3 +2155,11 @@ async def test_a_failure_waits_for_the_end_of_its_run_before_a_rerun_an_update_o
   await conductor.mend(conductor.pr(checks=("FAILURE", running)), 0.0, False)
   assert "rerun" not in conductor.log() and "update-branch" not in conductor.log()
   assert conductor.hired == []
+
+
+@POSIX
+@JQ
+async def test_the_bottom_of_a_stack_waits_while_a_layer_above_runs_its_checks(conductor: Round) -> None:
+  two(conductor, top=("IN_PROGRESS",))
+  await conductor.land(conductor.prs[7], False)
+  assert "merge" not in conductor.log()
