@@ -252,7 +252,7 @@ async def test_a_cancelled_head_runs_again_once_then_counts_as_failed(conductor:
   conductor.say(r"run list --commit abc", json.dumps(runs))
   first = conductor.pr(checks=("CANCELLED", "SUCCESS"))
   assert first["verdict"] == "pending"
-  assert await conductor.mend(first, 0.0, False) == ""
+  assert await conductor.mend(first, 0.0, False) == "running"
   assert "run rerun 1\n" in conductor.log()
   assert conductor.heard == ["#5 had a run cancelled at its head abc, and the round ran it again."]
   assert conductor.hired == []
@@ -367,17 +367,20 @@ def test_new_items_wait_while_an_open_pr_needs_a_worker(conductor: Round) -> Non
   conductor.staff()
   assert conductor.hired == []
   conductor.working["prompt9"] = "fix7"
+  conductor.assigned[7] = {"sha": "abc", "who": "prompt9", "at": 0.0, "fixer": True, "maker": "", "tries": 1}
   conductor.staff()
   assert [key for key, _ in conductor.hired] == ["a", "b", "c"]
   assert conductor.queue == [("d", "", ""), ("e", "", "")]
   assert conductor.backlog == [("f", "", "")]
 
 
-def test_each_brief_forbids_a_window_on_this_machine(conductor: Round) -> None:
+@POSIX
+@JQ
+async def test_each_brief_forbids_a_window_on_this_machine(conductor: Round) -> None:
   rule = "Never open a window on this machine, not even for a test"
   assert rule in conductor.WORKER
   assert rule in conductor.FIX
-  conductor.boxes(conductor.pr(n=8, open=["- [ ] It is one change."]), 0.0)
+  await conductor.mend(conductor.pr(n=8, open=["- [ ] It is one change."]), 0.0, False)
   assert [key for key, _ in conductor.hired] == ["box8"]
   assert rule in conductor.hired[0][1]
 
@@ -722,8 +725,8 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 
 
 STATE = (
-  "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed fixes silent"
-  " comments measures timers noted debriefs briefed owns watched after parked awaited covering kinds pool slots areas vetoes ordered tips shifted hired paced landed heard handled sent ends requeued"
+  "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed assigned silent"
+  " comments measures timers noted debriefs briefed owns watched after parked awaited covering kinds pool slots areas vetoes tips shifted parents hired paced landed heard handled ends requeued"
   " statused secret updated budgeted flaky runs_read deferred"
 ).split()
 
@@ -957,47 +960,51 @@ def test_an_item_with_no_room_keeps_its_place_while_the_next_with_room_starts(co
   assert conductor.queue == [("c", "", "")]
 
 
-def test_a_fixer_goes_before_a_new_item_and_waits_for_room_on_sonnet(conductor: Round) -> None:
+@POSIX
+@JQ
+async def test_a_fixer_goes_before_a_new_item_and_waits_for_room_on_sonnet(conductor: Round) -> None:
   for name, key in (("p1", "a"), ("p2", "b"), ("p3", "e")):
     conductor.busy(name, key, SONNET)
   conductor.prs[8] = conductor.pr(n=8, open=["- [ ] It is one change."], verdict="open")
   conductor.efforts["c"] = SONNET
   conductor.queue[:] = [("c", "", "")]
-  conductor.boxes(conductor.prs[8], 0.0)
+  await conductor.mend(conductor.prs[8], 0.0, False)
   conductor.staff()
   assert conductor.hired == []
   conductor.done["p1"] = None
-  conductor.boxes(conductor.prs[8], 0.0)
+  await conductor.mend(conductor.prs[8], 0.0, False)
   assert [key for key, _ in conductor.hired] == ["box8"]
   assert conductor.models["worker1"] == SONNET_HIGH
 
 
-def test_a_pr_whose_fixer_ended_with_its_head_unmoved_stops_blocking_its_family(conductor: Round) -> None:
+@POSIX
+@JQ
+async def test_a_fixer_that_ends_with_its_head_unmoved_is_replaced_at_once_and_twice_at_most(conductor: Round) -> None:
   pr = conductor.pr(n=8, open=["- [ ] It is one change."], verdict="open")
   conductor.prs[8] = pr
   conductor.efforts["c"] = SONNET
-  conductor.boxes(pr, 0.0)
-  assert [key for key, _ in conductor.hired] == ["box8"]
-  fixer = next(name for name, key in conductor.working.items() if key == "box8")
-  conductor.done[fixer] = (0, "nothing to fix")
-  conductor.tend()
+  for at in (0.0, 10.0, 20.0):
+    await conductor.mend(pr, at, False)
+    if conductor.assignee(pr):
+      conductor.done[conductor.assignee(pr)] = (0, "nothing to fix")
+      conductor.tend()
+  assert [key for key, _ in conductor.hired] == ["box8", "box8"]
   conductor.queue[:] = [("c", "", "")]
   conductor.staff()
-  assert [key for key, _ in conductor.hired] == ["box8", "c"]
-  assert sum("ended" in m and "#8" in m for m, _ in conductor.prompts) == 1
-  conductor.staff()
-  assert sum("ended" in m and "#8" in m for m, _ in conductor.prompts) == 1
+  assert [key for key, _ in conductor.hired] == ["box8", "box8", "c"]
 
 
-def test_an_ended_worker_goes_on_in_its_own_chain_on_sonnet(conductor: Round) -> None:
+@POSIX
+@JQ
+async def test_an_ended_worker_goes_on_in_its_own_chain_on_sonnet(conductor: Round) -> None:
   conductor.homes["k8"] = "chain7"
   pr = conductor.pr(n=8, open=["- [ ] It is one change."], labels=["w:k8"])
   for index, key in enumerate("abc"):
     conductor.busy(f"p{index}", key, SONNET)
-  conductor.boxes(pr, 0.0)
+  await conductor.mend(pr, 0.0, False)
   assert (conductor.hired, conductor.rungs, conductor.prompts) == ([], [], [])
   conductor.done["p0"] = None
-  conductor.boxes(pr, 0.0)
+  await conductor.mend(pr, 0.0, False)
   assert conductor.hired == []
   assert conductor.rungs == [(f"actor = {SONNET!r}", "chain7")]
   assert conductor.targets == [SONNET]
@@ -1006,7 +1013,7 @@ def test_an_ended_worker_goes_on_in_its_own_chain_on_sonnet(conductor: Round) ->
   assert message.startswith(f"Your work on this chain goes on, now on {SONNET}. Your open PR #8")
   name = next(name for name, key in conductor.working.items() if key == "k8")
   assert conductor.models[name] == SONNET
-  conductor.boxes(pr, 0.0)
+  await conductor.mend(pr, 0.0, False)
   assert len(conductor.prompts) == 1
 
 
@@ -1161,7 +1168,7 @@ async def test_a_rebase_that_conflicts_pushes_nothing_and_leaves_the_child_to_a_
   assert conductor.heard[0].startswith("#8 was not rebased onto main, exit 2: w/kid conflicts with main")
   assert len(git("worktree", "list", cwd=tmp_path, env=conductor.env).splitlines()) == 1
   kid = conductor.pr(n=8, head="w/kid", mergeable="CONFLICTING", base="main", sha=shas["w/kid"])
-  assert await conductor.mend(kid, 1e9, False) == f"#8 {shas['w/kid']} conflicts with its base"
+  assert await conductor.mend(kid, 1e9, False) == "conflicting"
   assert [key for key, _ in conductor.hired] == ["fix8"]
 
 
@@ -1212,7 +1219,7 @@ VIEW = r"pr view 5 --json state,headRefOid,mergeable"
 @JQ
 async def test_an_order_is_dropped_when_the_head_moved_before_it_goes(conductor: Round) -> None:
   conductor.say(VIEW, viewing("zzz", "CONFLICTING"))
-  assert await conductor.mend(conductor.pr(mergeable="CONFLICTING"), 0.0, False) == ""
+  assert await conductor.mend(conductor.pr(mergeable="CONFLICTING"), 0.0, False) == "running"
   assert (conductor.hired, conductor.prompts) == ([], [])
 
 
@@ -1220,7 +1227,7 @@ async def test_an_order_is_dropped_when_the_head_moved_before_it_goes(conductor:
 @JQ
 async def test_an_order_is_dropped_when_the_conflict_is_gone_before_it_goes(conductor: Round) -> None:
   conductor.say(VIEW, viewing("abc", "MERGEABLE"))
-  assert await conductor.mend(conductor.pr(mergeable="CONFLICTING"), 0.0, False) == ""
+  assert await conductor.mend(conductor.pr(mergeable="CONFLICTING"), 0.0, False) == "running"
   assert (conductor.hired, conductor.prompts) == ([], [])
 
 
@@ -1235,13 +1242,11 @@ async def test_an_order_goes_when_the_pr_still_holds_its_head_and_its_conflict(c
 @POSIX
 @JQ
 async def test_a_pr_with_a_fixer_gets_no_order_and_no_second_fixer(conductor: Round) -> None:
-  conductor.working["p9"] = "fix5"
-  conductor.noticed.add("#5 abc conflicts with its base fixer")
-  assert await conductor.mend(conductor.pr(sha="def", mergeable="CONFLICTING"), 0.0, False) == ""
-  assert (conductor.hired, conductor.prompts) == ([], [])
-  box = conductor.pr(n=8, open=["- [ ] It is one change."])
-  conductor.working["p8"] = "box8"
-  assert conductor.boxes(box, 0.0) == "#8 abc open boxes"
+  conductor.working.update(p9="fix5", p8="box8")
+  conductor.assigned[5] = {"sha": "abc", "who": "p9", "at": 0.0, "fixer": True, "maker": "", "tries": 1}
+  conductor.assigned[8] = {"sha": "abc", "who": "p8", "at": 0.0, "fixer": True, "maker": "", "tries": 1}
+  assert await conductor.mend(conductor.pr(sha="def", mergeable="CONFLICTING"), 0.0, False) == "conflicting"
+  assert await conductor.mend(conductor.pr(n=8, open=["- [ ] It is one change."]), 0.0, False) == "red"
   assert (conductor.hired, conductor.prompts) == ([], [])
 
 
@@ -1249,6 +1254,7 @@ async def test_a_pr_with_a_fixer_gets_no_order_and_no_second_fixer(conductor: Ro
 @JQ
 async def test_the_round_leaves_the_branch_of_a_pr_with_a_fixer_alone_and_merges_it_not(conductor: Round) -> None:
   conductor.working["p9"] = "fix5"
+  conductor.assigned[5] = {"sha": "abc", "who": "p9", "at": 0.0, "fixer": True, "maker": "", "tries": 1}
   conductor.say(r"compare/main\.\.\.abc", '{"behind_by": 3}')
   assert await conductor.heal(conductor.pr(checks=("FAILURE", "FAILURE")), False) == ""
   await conductor.land(conductor.pr(n=5, checks=("SUCCESS",), names=["the hooks"]), False)
@@ -1271,15 +1277,14 @@ async def test_the_worker_that_owns_a_pr_hears_that_the_round_updated_its_branch
 
 @POSIX
 @JQ
-async def test_a_second_order_for_a_pr_waits_ten_minutes_after_the_first(conductor: Round) -> None:
+async def test_the_maker_gets_one_order_for_each_head_in_trouble(conductor: Round) -> None:
   conductor.busy("p1", "k5", SONNET)
   one = {"labels": ["w:k5"], "mergeable": "CONFLICTING"}
   await conductor.mend(conductor.pr(**one), 0.0, False)
+  await conductor.mend(conductor.pr(**one), 100.0, False)
   assert len(conductor.prompts) == 1
-  await conductor.mend(conductor.pr(sha="def", **one), 100.0, False)
-  assert len(conductor.prompts) == 1
-  await conductor.mend(conductor.pr(sha="ghi", **one), 700.0, False)
-  assert len(conductor.prompts) == 2
+  await conductor.mend(conductor.pr(sha="def", **one), 200.0, False)
+  assert len(conductor.prompts) == 2 and conductor.assigned[5]["sha"] == "def"
 
 
 @POSIX
@@ -1626,7 +1631,6 @@ def test_an_item_that_names_its_pr_owns_it_before_a_label_or_a_push_does(conduct
   assert conductor.owner_of(one) == ""
   conductor.owns["tui-stack"] = [606]
   assert conductor.owner_of(one) == "p1"
-  assert not conductor.needs(one)
 
 
 async def flaked(conductor: Round) -> None:
@@ -1935,14 +1939,14 @@ async def test_a_failed_check_that_waits_on_a_decision_of_the_owner_gets_no_orde
   conductor.awaited["prompt9"] = ["w:wall", "#6"]
   pr, other = conductor.pr(5, ("FAILURE",), labels=["w:wall"]), conductor.pr(6, ("FAILURE",))
   conductor.prs.update({5: pr, 6: other})
-  assert await conductor.mend(pr, 1000.0, False) == ""
-  assert await conductor.mend(other, 1000.0, False) == ""
-  assert (conductor.needs(pr), conductor.needs(other), conductor.hired, conductor.prompts) == (False, False, [], [])
+  assert await conductor.mend(pr, 1000.0, False) == "owner"
+  assert await conductor.mend(other, 1000.0, False) == "owner"
+  assert (conductor.hired, conductor.prompts) == ([], [])
   assert len(conductor.heard) == 1 and "prompt9" in conductor.heard[0] and "w:wall, #6" in conductor.heard[0]
-  assert conductor.needs(conductor.pr(5, ("FAILURE",), labels=["w:wall"], mergeable="CONFLICTING"))
+  assert conductor.table(conductor.pr(5, ("FAILURE",), labels=["w:wall"], mergeable="CONFLICTING")) == "conflicting"
   conductor.done["prompt9"] = "ruled"
   conductor.invariants()
-  assert conductor.awaited == {} and conductor.needs(pr)
+  assert conductor.awaited == {} and conductor.table(pr) == "red"
   assert "The decision prompt9 of the owner ended, so the round tends w:wall, #6 again." in conductor.heard
 
 
@@ -2224,10 +2228,79 @@ async def test_the_bottom_of_a_stack_waits_while_a_layer_above_runs_its_checks(c
   assert "merge" not in conductor.log()
 
 
-async def test_a_red_pr_whose_checks_still_run_blocks_no_family(conductor: Round) -> None:
-  pr = {"n": 9, "sha": "a" * 40, "head": "w/red", "base": "main", "labels": [], "verdict": "fail", "mergeable": "MERGEABLE", "checks": ["FAILURE", "QUEUED"]}
-  assert not conductor.needs(pr)
-  pr["checks"] = ["FAILURE", "SUCCESS"]
-  assert conductor.needs(pr)
-  pr["checks"] = ["FAILURE", "FAILURE", "QUEUED"]
-  assert conductor.needs(pr)
+def test_a_red_pr_whose_checks_still_run_blocks_no_family(conductor: Round) -> None:
+  conductor.efforts["c"] = SONNET
+  conductor.queue[:] = [("c", "", "")]
+  conductor.prs[9] = conductor.pr(n=9, checks=("FAILURE", "QUEUED"))
+  assert conductor.table(conductor.prs[9]) == "running"
+  conductor.staff()
+  assert [key for key, _ in conductor.hired] == ["c"]
+
+
+@POSIX
+@JQ
+async def test_three_failed_checks_get_a_fixer_while_two_jobs_wait_for_runners(conductor: Round) -> None:
+  pr = conductor.pr(checks=("FAILURE", "FAILURE", "FAILURE", "QUEUED", "QUEUED"))
+  assert await conductor.mend(pr, 0.0, False) == "red"
+  assert [key for key, _ in conductor.hired] == ["fix5"]
+
+
+@POSIX
+@JQ
+async def test_a_pr_whose_base_moved_to_main_with_no_run_of_the_gates_gets_one_from_the_table(conductor: Round) -> None:
+  conductor.say(r"compare/main\.\.\.abc", '{"behind_by": 3}')
+  pr = conductor.pr(checks=("SUCCESS",), names=["the title"], idle=10)
+  assert await conductor.mend(pr, 0.0, False) == "running"
+  assert "pr update-branch 5\n" in conductor.log()
+  assert conductor.hired == []
+
+
+@POSIX
+@JQ
+async def test_a_conflict_whose_maker_works_on_another_item_goes_to_a_fixer_after_fifteen_minutes(conductor: Round) -> None:
+  conductor.busy("p1", "other", SONNET)
+  conductor.owns["other"] = [5]
+  pr = conductor.pr(labels=["w:k5"], mergeable="CONFLICTING")
+  await conductor.mend(pr, 0.0, False)
+  assert conductor.prompts[0][1] == "chain-other" and conductor.hired == []
+  await conductor.mend(pr, conductor.OWNED - 1, False)
+  assert conductor.hired == []
+  await conductor.mend(pr, conductor.OWNED, False)
+  assert [key for key, _ in conductor.hired] == ["fix5"] and conductor.assignee(pr) == "worker1"
+
+
+@POSIX
+@JQ
+async def test_a_pr_in_trouble_that_no_worker_acts_on_is_told_to_main_as_a_defect_of_the_round(conductor: Round) -> None:
+  conductor.limits["room"]["sonnet"] = 0
+  four = raw(4, "w/red", 5, [check("the hooks", "COMPLETED", "FAILURE", "2026-10-23T10:00:00Z")])
+  four["mergeable"], empty = "CONFLICTING", raw(6, "w/empty", 5, [])
+  empty["changedFiles"] = 0
+  conductor.say(r"pr list --state open", json.dumps([four, empty]))
+  conductor.say(r"pr list --state merged", "[]")
+  conductor.say(r"run list --branch main", json.dumps([{"headSha": "m1", "conclusion": "success", "databaseId": 9}]))
+  conductor.say(r"issue list", "[]")
+  conductor.say(r"pr list --repo uael/monty", "[]")
+  await conductor.sweep(300)
+  told = [message for message, _ in conductor.prompts]
+  assert any(m.startswith("#4 is conflicting at sha4 and no worker acts on it, a defect of the round:") for m in told)
+  assert "pr close 6 --comment" in conductor.log()
+  assert "#6 (w/empty) changed no file, so the round closed it." in "\n".join([*told, *conductor.heard])
+
+
+@POSIX
+@JQ
+async def test_a_child_whose_parent_merged_outside_the_round_is_rebased_from_its_fork_point(
+  conductor: Round, tmp_path: Path
+) -> None:
+  shas = stacked(conductor, tmp_path)
+  del conductor.prs[9]
+  _, new = push_parent(conductor, tmp_path, False)
+  conductor.shifted.clear()
+  conductor.tips["w/parent"], conductor.parents[8] = new, "w/parent"
+  del conductor.prs[7]
+  conductor.prs[8]["base"] = "main"
+  assert [(kid["n"], old) for kid, old in conductor.shift()] == [(8, new)]
+  await conductor.restack(new, "main", conductor.prs[8])
+  assert history(tmp_path, conductor, "w/kid") == ["kid", "parent (#7)", "base"]
+  assert git("rev-parse", "w/kid^", cwd=tmp_path / "origin.git", env=conductor.env).strip() == shas["squash"]
