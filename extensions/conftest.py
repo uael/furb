@@ -10,7 +10,18 @@ from pathlib import Path
 
 import pytest
 
-from conftest import STANDS, Sand, World, engine_of, life, of, pytest_generate_tests, sown, world_says  # noqa: F401
+from conftest import (  # noqa: F401
+  STANDS,
+  Sand,
+  World,
+  engine_of,
+  life,
+  of,
+  pytest_generate_tests,
+  sown,
+  tilded,
+  world_says,
+)
 from furb import engine
 from furb.engine import Refused, Text
 from furb_monty import _monty
@@ -52,6 +63,15 @@ def tmp_path(tmp_path: Path) -> Generator[Path]:
     yield one
 
 
+@pytest.fixture(autouse=True)
+def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+  """The home of the user for a test: the folder above its temporary folder, on every system, so the World writes each
+  path of the test with ~ in place of the home, as it writes a path of a project under the home of the user."""
+  monkeypatch.setenv("HOME", str(tmp_path.parent))
+  monkeypatch.setenv("USERPROFILE", str(tmp_path.parent))
+  return tmp_path.parent
+
+
 def extended(  # noqa: PLR0913
   name: str,
   at: Path,
@@ -89,7 +109,7 @@ def noted(folder: Path, text: str, name: str = "AGENTS.md") -> Path:
 def recalled(chain: str, at: Path) -> list[str]:
   """Every paragraph of memory that a chain was told of a file under a directory, in order, since a folder above
   that directory belongs to the machine."""
-  return [one for one in of(engine.turns(on=chain), "memory") if f"_path = {str(at)!r}"[:-1] in one.split("\n")[1]]
+  return [one for one in of(engine.turns(on=chain), "memory") if f"_path = {tilded(at)!r}"[:-1] in one.split("\n")[1]]
 
 
 def memorized(question: str, path: Path, text: str) -> str:
@@ -98,7 +118,7 @@ def memorized(question: str, path: Path, text: str) -> str:
   lines = text.splitlines()
   name = question + "_text"
   told = f"<s:{name}>\n{'\n'.join(lines)}</s:{name}>" if len(lines) > 1 else f"{name} = {lines[0]!r}"
-  return f"#{question}\n{question}_path = {str(path)!r}\n{told}"
+  return f"#{question}\n{question}_path = {tilded(path)!r}\n{told}"
 
 
 def skilled(skills: Path, folder: str, head: str) -> Path:

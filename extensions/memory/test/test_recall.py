@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from conftest import chained, of
-from extensions.conftest import extended, memorized, noted, recalled
+from extensions.conftest import extended, memorized, noted, recalled, tilded
 from furb import engine
 from furb_monty import _monty
 
@@ -16,9 +16,9 @@ async def test_the_memory_of_a_chain_read_where_its_word_runs(tmp_path: Path) ->
   ran = engine.rung("await recall()", on=root)
   await ran
   reads = [a for a in engine.transcript(root) if a[0] == "read" and a[2] == ran]
-  assert [a[4] for a in reads if str(a[4]).startswith(str(tmp_path))] == [str(top)]
-  assert f"_path = {str(top)!r}" in "\n".join(of(engine.turns(on=root), "read"))
-  assert str(sub) not in "\n".join(of(engine.turns(on=root), "read"))
+  assert [a[4] for a in reads if str(a[4]).startswith(tilded(tmp_path))] == [tilded(top)]
+  assert f"_path = {tilded(top)!r}" in "\n".join(of(engine.turns(on=root), "read"))
+  assert tilded(sub) not in "\n".join(of(engine.turns(on=root), "read"))
   assert recalled(root, tmp_path) == []
 
 
@@ -45,4 +45,4 @@ async def test_the_life_word_of_the_extension_is_await_recall(tmp_path: Path) ->
   for on in (root, two):
     turns = engine.turns(on=on)
     (at,) = [n for n, one in enumerate(turns) if one[:2] == ("assistant", "await recall()")]
-    assert f"_path = {str(top)!r}" in turns[at + 1][1]
+    assert f"_path = {tilded(top)!r}" in turns[at + 1][1]

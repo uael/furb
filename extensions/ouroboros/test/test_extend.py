@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from conftest import Sand, plain, settle
-from extensions.conftest import extended
+from extensions.conftest import extended, tilded
 from furb import engine
 
 
@@ -36,7 +36,7 @@ async def test_extend_writes_the_words_of_the_rungs_it_names(tmp_path: Path) -> 
   got = await engine.rung(f"close(extend('kit', {g!r}))", on=root)
   folder = tmp_path / "work" / ".furb" / "extensions" / "kit"
   assert isinstance(got, engine.Text)
-  assert (got.path, got.content) == (str(folder / "kit.py"), G + "\n")
+  assert (got.path, got.content) == (tilded(folder / "kit.py"), G + "\n")
   await engine.rung(f"extend('kit', {f!r})", on=root)
   assert (folder / "kit.py").read_text(encoding="utf-8") == f"{G}\n\n{F}\n"
   assert json.loads((folder / "furb.json").read_text(encoding="utf-8")) == {"name": "kit", "word": "kit.py"}

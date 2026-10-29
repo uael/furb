@@ -4,7 +4,7 @@ from asyncio import CancelledError
 from pathlib import Path
 
 from conftest import paragraphs, plain, settle
-from extensions.conftest import extended, memorized, noted, recalled
+from extensions.conftest import extended, memorized, noted, recalled, tilded
 from furb import engine
 from furb_monty import _monty
 
@@ -62,7 +62,7 @@ async def test_remember_asks_nothing_of_a_read_made_before_it(tmp_path: Path) ->
   await engine.rung('read("sub/a.txt")', on=root)
   assert [a[4] for a in engine.transcript(on=root) if a[0] == "memory"] == [
     ".",
-    str(tmp_path / "work" / "sub" / "a.txt"),
+    tilded(tmp_path / "work" / "sub" / "a.txt"),
   ]
 
 
@@ -77,7 +77,7 @@ async def test_a_memory_file_enters_a_chain_once_and_again_only_when_it_changed(
   engine.stand()
   assert recalled(root, tmp_path) == [
     memorized("memory1", top, "one\ntwo\n"),
-    f"#memory4\nmemory4_path = {str(top)!r}\nmemory4_text = 'three'",
+    f"#memory4\nmemory4_path = {tilded(top)!r}\nmemory4_text = 'three'",
   ]
 
 
@@ -90,7 +90,7 @@ async def test_a_later_life_tells_what_the_record_holds(tmp_path: Path) -> None:
   top.write_text("one\nthree\n", encoding="utf-8", newline="")
   _, root = extended("memory", tmp_path, _monty.memory, record=plain(sand.record))
   await settle()
-  assert recalled(root, tmp_path) == [*first, f"#memory2\nmemory2_path = {str(top)!r}\nmemory2_text = 'three'"]
+  assert recalled(root, tmp_path) == [*first, f"#memory2\nmemory2_path = {tilded(top)!r}\nmemory2_text = 'three'"]
   assert first == [memorized("memory1", top, "one\ntwo\n")]
 
 
@@ -110,5 +110,5 @@ async def test_at_a_stand_the_catch_up_of_the_chain_tells_each_memory_file_that_
   sub.write_text("sub!\n", encoding="utf-8", newline="")
   engine.stand()
   caught = [one for one in paragraphs(engine.turns(on=root)) if one.startswith("#chain1 caught up")]
-  assert caught == [f"#chain1 caught up\nchain1_changed = {{{str(top)!r}: {{2: 'three'}}}}"]
+  assert caught == [f"#chain1 caught up\nchain1_changed = {{{tilded(top)!r}: {{2: 'three'}}}}"]
   assert recalled(root, tmp_path)[1:] == [memorized("memory6", sub, "sub!\n")]
