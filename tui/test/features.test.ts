@@ -334,7 +334,7 @@ test("/extensions lists what a life runs, and a cancel of a word of the operator
       async ({ session, frame, click }) => {
         await session.command("/extensions");
         expect(session.notice).toBe(
-          "This life runs memory with remember(), skills with counted(), compaction, ouroboros with ouroboros(), web, mcp with mcp_index(). Run a word of one with /run.",
+          "This life runs memory with await recall(), skills with await listed(), compaction, ouroboros with ouroboros(), web, mcp with mcp_index(). Run a word of one with /run.",
         );
         await session.command("/run await wait(60)");
         // The wait runs under the word, so the cancel asks first.
@@ -375,8 +375,8 @@ test("the words of the extensions stand as code: a comment that names their ear,
         const at = rows.findIndex((row) => /# extensions/.test(row));
         expect(at).toBeGreaterThanOrEqual(0);
         const shown = rows.slice(at, at + 4).join("\n");
-        expect(shown).toMatch(/ 1 remember\(\)/);
-        expect(shown).toMatch(/ 2 counted\(\)/);
+        expect(shown).toMatch(/ 1 await recall\(\)/);
+        expect(shown).toMatch(/ 2 await listed\(\)/);
         expect(shown).toMatch(/ 3 ouroboros\(\)/);
         expect(rows.join("\n")).not.toMatch(/rung\d+…\d+|remember1|ouroboros1/);
       },

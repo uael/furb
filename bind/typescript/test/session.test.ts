@@ -204,9 +204,9 @@ test("what a model writes streams into the session under its rung until its repl
   try {
     const engine = session.open();
     const prompt = engine.prompt("int", { message: "count", on: engine.root });
-    // The rungs of the six official extensions come first.
-    await until(session, () => session.streams.get("rung7")?.text === "close(3)");
-    expect(session.streams.get("rung7")).toEqual({
+    // The rungs of the six official extensions come first, and the rung of the turn that reads the skills.
+    await until(session, () => session.streams.get("rung8")?.text === "close(3)");
+    expect(session.streams.get("rung8")).toEqual({
       chain: engine.root,
       text: "close(3)",
       thinking: "counting",
@@ -215,7 +215,12 @@ test("what a model writes streams into the session under its rung until its repl
       {
         actor: "claude-cli:sonnet/high",
         chain: engine.root,
-        messages: [expect.objectContaining({ role: "user" })],
+        // The setup of the chain, the turn of the model that reads the skills, and what that turn showed.
+        messages: [
+          expect.objectContaining({ role: "user" }),
+          expect.objectContaining({ role: "assistant" }),
+          expect.objectContaining({ role: "user" }),
+        ],
         settings: {
           effort: "high",
           max_thinking_tokens: 32768,
@@ -768,9 +773,9 @@ test("record inspection reports pending work when its replay starts or feeds a c
   await first.dispose();
   try {
     expect((await inspectRecord(record)).pending.map(([id]) => id)).toEqual([
-      "rung7",
-      "bash1",
       "rung8",
+      "bash1",
+      "rung9",
       "bash2",
     ]);
   } finally {
@@ -982,9 +987,10 @@ test("a session enables the extensions of the configs, and a later session on it
   try {
     first.open();
     expect(running(first)).toEqual(["memory", "skills", "compaction", "ouroboros", "web", "mcp"]);
-    const told = first.engine?.turns({ on: "chain1" }).at(-1)?.[1] ?? "";
+    // The model reads each memory file by a turn of its own, and the turns after it show what the read gave.
+    const told = (first.engine?.turns({ on: "chain1" }) ?? []).map((turn) => String(turn[1])).join("\n\n");
     expect(told).toContain(
-      `#memory1\nmemory1_path = '${join(cwd, "CLAUDE.md").replaceAll("\\", "\\\\")}'\nmemory1_text = 'Use two spaces.'`,
+      `#read1\nread1_path = '${join(cwd, "CLAUDE.md").replaceAll("\\", "\\\\")}'\nread1_text = 'Use two spaces.'`,
     );
   } finally {
     await first.dispose();
