@@ -4,7 +4,7 @@ from collections.abc import Generator
 
 import pytest
 
-from conftest import Sand, born, keeping, kernel, paragraphs, plain, relived, said, settle, watched
+from conftest import Kernel, Sand, born, keeping, kernel, paragraphs, plain, relived, said, settle, watched
 from furb import engine
 from furb.engine import HIDDEN, OPERATOR, TIMEOUT, Act, Exit, Refused, Text, take
 
@@ -88,6 +88,30 @@ async def test_its_own_ear_is_born_after_the_ears_of_the_engine_heard_it() -> No
   asked = engine.prompt(int, "one", on=root)
   assert await asked == 1
   assert [(a[0], a[1]) for a in heard if engine.get(a[1]) == a][:2] == [("prompt", asked), ("rung", "rung1")]
+
+
+async def test_an_ear_of_the_outside_that_is_busy_when_its_turn_comes_and_waits_for_the_act_hears_it_once_it_is_done_speaking() -> (
+  None
+):
+  """An ear of the outside that is busy when its turn comes and waits for the act hears it once it is done speaking, and the act is refused only when no ear of the outside took it by then."""
+  sand = Sand()
+  log: list[tuple] = []
+  made: list[str] = []
+
+  def taker() -> Kernel:
+    while True:
+      match a := (yield {"note", "tell"}):
+        case ("tell", _, _, ["#chain1 hello"]) if not made:
+          made.append(engine.act("note", root, None, "one"))
+        case ("note", about, *_) if engine.get(about) == a:
+          yield "started", about
+
+  root = engine.boot((), **kernel(), probe=watched(log), taker=taker(), world=sand.hears())
+  engine.say("tell", root, ["#chain1 hello"])
+  await settle()
+  (one,) = made
+  assert engine.peek(one, ...) is ...
+  assert [(a[1], a[2]) for a in said(log, "started") if a[1] == one] == [(one, "taker")]
 
 
 async def test_it_is_then_put_to_the_ears_of_the_outside_in_turn_until_one_takes_it() -> None:
