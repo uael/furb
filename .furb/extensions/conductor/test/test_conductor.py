@@ -767,7 +767,7 @@ def test_the_round_plays_on_the_root_alone_and_pr_on_every_chain_before_it() -> 
   assert [manifest(name).get("plays", "every") for name in ("pr", "conductor", "converge")] == ["every", "root", "root"]
   order = list(json.loads((furb / "config.json").read_text(encoding="utf-8"))["extensions"])
   assert order.index("pr") < order.index("conductor")
-  assert re.findall(r"^(?:async )?def (\w+)", PULL.read_text(encoding="utf-8"), re.M) == ["pr_box", "pr_body", "prcheck", "pr", "shq"]
+  assert re.findall(r"^(?:async )?def (\w+)", PULL.read_text(encoding="utf-8"), re.M) == ["pr_box", "pr_body", "prcheck", "pr", "checked", "shq"]
   assert re.findall(r"^def (pr|prcheck|shq)\(", SOURCE, re.M) == []
 
 
@@ -1718,7 +1718,7 @@ def test_a_watch_on_ci_that_runs_past_ten_minutes_is_cancelled_with_a_reason_tha
   conductor.tend()
   assert conductor.cancelled == ["bash7"]
   said = conductor.prompts[-1]
-  assert said[1] == "chain-k1" and "wait on CI" in said[0] and "await wait(600)" in said[0]
+  assert said[1] == "chain-k1" and "wait on CI" in said[0] and "await checked(number)" in said[0]
   assert "close only when your PR has merged" in said[0]
   assert any("bash7" in x and "wait on CI" in x for x in conductor.heard)
 
@@ -2590,6 +2590,15 @@ async def test_a_conflict_of_the_gallery_branch_gets_no_order_until_the_wait_end
   ]
   assert await conductor.mend(pr, 1000.0 + conductor.GALLERY_WAIT, False) == "conflicting"
   assert [key for key, _ in conductor.hired] == ["fix5"]
+
+
+def test_each_brief_tells_a_worker_to_wait_for_the_checks_with_checked_and_to_rerun_only_a_machine_fault(
+  conductor: Round,
+) -> None:
+  for brief in (conductor.WORKER, conductor.FIX):
+    assert "await checked(number)" in brief
+    assert "Rerun a check only when its line says [machine]" in brief
+    assert "a [defect] is yours to fix" in brief
 
 
 def test_the_texts_of_an_order_say_how_to_read_a_rerun_a_lagging_branch_and_a_moved_file(conductor: Round) -> None:
