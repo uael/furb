@@ -135,6 +135,16 @@ fn a_quote_stands_open_from_its_open_mark_to_its_close_mark() {
 }
 
 #[test]
+fn a_quote_stands_open_as_the_table_of_the_quotes_says() {
+  let rows: Vec<serde_json::Value> =
+    serde_json::from_str(include_str!("../../../test/quotes.json")).unwrap();
+  for row in rows {
+    let word = row["word"].as_str().unwrap();
+    assert_eq!(open(word), row["open"].as_bool().unwrap(), "{word:?}");
+  }
+}
+
+#[test]
 fn a_close_mark_inside_a_line_of_a_quote_ends_nothing() {
   assert!(open("<s:old>\nlet end = \"</s:old>\" in it\nmore\n"));
   assert!(open("<s:old>\nthe mark </s:old> and more\n"));

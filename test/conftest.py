@@ -6,6 +6,7 @@ hear by, so no name of them stands in the globals of the engine. Every fact is a
 """
 
 import asyncio
+import json
 import os
 import re
 import shlex
@@ -483,6 +484,20 @@ def born(*script: str, **world: object) -> tuple[Sand, list[tuple], str]:
   return sand, log, root
 
 
+async def waiting(**world: object) -> tuple[Sand, list[tuple], str, Act[int], str, str]:
+  """A life whose prompt waits on the reply of its rung, which no model answers until the test does: the World, what
+  was said, the root, the prompt, the rung of the prompt and its reply."""
+  sand, log, root = born(**world)
+  act = engine.prompt(int, "count", on=root)
+  await settle()
+  return sand, log, root, act, said(log, "rung")[0][1], said(log, "reply")[0][1]
+
+
+def wrote(rung: str, part: str, before: int) -> tuple:
+  """A writing of a part of the word of a rung, said as the World says one."""
+  return world_says("writing", rung, part, before)
+
+
 async def lived() -> tuple[Sand, list[tuple], str]:
   """A life that reads a file, runs a command and returns what it came to: the World, what was said and the root."""
   sand, log, root = born(WORD, "close(None)")
@@ -740,3 +755,6 @@ def engine_of(request: pytest.FixtureRequest) -> Generator[str]:
 # pytest loads this file as its plugin under a name of its own; the tests and the probe import it as conftest. One
 # module object under both names keeps isinstance true against the classes above.
 sys.modules.setdefault("conftest", sys.modules[__name__])
+QUOTES = json.loads((Path(__file__).parent / "quotes.json").read_text(encoding="utf-8"))
+"""QUOTES is the table of the quotes, which the engine, the gate and the watch of the provider read alike: each word,
+the python that unquoted makes of it, whether a quote stands open at its end, and what the gate finds in it."""

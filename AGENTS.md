@@ -213,7 +213,7 @@ is the folder `test` beside it.
 2. Every test carries a sentence of the contract.
 3. Every definition has a file of its own and at least one sentence. Two definitions never share a file.
 4. The module docstring of each contract is empty.
-5. `engine.py`, minified with its program kept as it is, costs fewer than 6500 tokens of `o200k_base`, the
+5. `engine.py`, minified with its program kept as it is, costs fewer than 6750 tokens of `o200k_base`, the
    tokenizer of OpenAI, and the doctrine of furb, `DOCTRINE.md`, costs at most 2000. The test counts with `o200k_base`
    because it is local and the same on each machine: the tokenizer of Claude is not public, and only the network
    counts with it. The wall is a proxy for the cost to Claude, which reads about 1.5 tokens for each token of
@@ -247,7 +247,8 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
   this clone is checked out and not made again: a local branch that lags behind origin moves up to it, a local branch
   with work that origin lacks stays as it is, and git names the worktree that holds a branch already. A new branch
   starts from `base`, `origin/main` by default, which no existing branch uses. Run it from any directory. It copies on write the build directories of the main
-  checkout into the worktree: the `target` of cargo, which maturin and napi share, with its timestamps, the
+  checkout, or of the worktree of this clone where `uv sync` built the crate whose commit stands nearest to the new one, into the worktree, since the main
+  checkout can stand far behind origin and its build with it: the `target` of cargo, which maturin and napi share, with its timestamps, the
   `node_modules` of bun, the build of the TypeScript package, and the cache of the tests of the TUI. A copy on write
   shares the blocks of each file until a build changes it, so it takes less than 1 GiB of the disk. Then cargo builds
   only the crates of the workspace again, because their path changed, and no dependency. The script does not copy
@@ -279,7 +280,8 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 - `cargo run -p furb-cli -- <words>`, or `uv run furb <words>`: the command line, as `furb --help` says.
 - `uv run pre-commit run --all-files`: every gate the commit hook runs. A `git commit` runs the hooks, `cargo test`
   among them, and takes minutes: give it a timeout of 3600 s in `bash`, and chain the push after it with `&&`, so a
-  commit that fails stops the push. The hook of the links runs only for a README or a manifest, and reads git alone.
+  commit that fails stops the push. The hook `cargo test` runs only when a file that the crate or its tests read changed, and the gates run every hook on
+  every file. The hook of the links runs only for a README or a manifest, and reads git alone.
   The hook `stray` refuses a `*.rej`, `*.orig` or `*-E` file.
 - `uv run python script/smoke.py`: one real life on the default actor: claude-cli:opus/high through the claude command
   line on PATH, or the one `FURB_CLAUDE_BIN` names, and with no claude the first model of the network or of the local

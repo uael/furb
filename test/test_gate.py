@@ -4,6 +4,7 @@ import pytest
 
 from conftest import (
   BAD,
+  QUOTES,
   Sand,
   born,
   findings,
@@ -16,7 +17,9 @@ from conftest import (
   relived,
   said,
   settle,
+  waiting,
   written,
+  wrote,
 )
 from furb import engine
 from furb.engine import Refused
@@ -59,6 +62,19 @@ async def test_the_word_of_a_rung_runs_only_if_the_gate_accepts_the_word_or_if_t
   assert [a[5] for a in said(log, "run") if a[4].endswith("_told")] == told
   assert [word for word, _ in gatings(log)] == ["k = BAD", "k = 1", "close(k)"]
   assert ran(log) == [*told[:2], "k = 1", told[2], "close(k)"] and engine.module(root)[act] == act
+
+
+async def test_the_gate_reads_the_word_after_the_parts_of_the_writings_of_a_rung_with_no_run() -> None:
+  """The gate reads the word after the parts that the writings of a rung with no run hold too, so a rung that a word makes while its model writes it is read after what that word ran."""
+  _, _, root, act, rung, _ = await waiting()
+  defined = "def f() -> int:\n  return 1\n"
+  made = "made = rung('y = f()')\nclose(2)\n"
+  wrote(rung, defined, 0)
+  wrote(rung, made, len(defined))
+  await settle()
+  assert await act == 2
+  assert rung not in engine.program(root)
+  assert engine.module(root)["y"] == 1
 
 
 async def test_the_gate_checks_the_word_of_a_rung_against_the_rungs_before_it_in_record_order() -> None:
@@ -133,6 +149,8 @@ async def test_each_finding_names_the_line_of_the_word_it_is_found_on_and_quotes
   (found,) = engine.gate("k = 1\n  j = 2", on=root)
   assert found.startswith("line 2: ") and found.endswith(", in 'j = 2'")
   assert engine.gate(long, on=root) == [f"line 1: {why}, in {long[:77] + '...'!r}"]
+  for row in QUOTES:
+    assert engine.gate(row["word"], on=root) == row["found"], row["word"]
 
 
 async def test_a_word_that_holds_a_fence_markup_or_prose_finds_that_a_reply_is_python_and_quotes_only() -> None:

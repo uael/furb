@@ -23,3 +23,25 @@ test("what a host keeps of a prompt belongs to that act, so a prompt of the same
     ["prompt1", ["prompt2"]],
   ]);
 });
+
+test("a question and a notice that a thread made for the operator stand in that thread, with the questions that wait, and one that no thread made stands in none", () => {
+  const acts = [
+    prompt("prompt1", 1),
+    act("rung1", "rung", "chain1", "prompt1", 2),
+    act("prompt2", "prompt", "chain1", "rung1", 3, undefined, { words: ["bool", "Keep it?", "operator"] }),
+    act("prompt3", "prompt", "chain1", "rung1", 4, undefined, {
+      words: ["None", "It is 14 lines.", "operator"],
+    }),
+    act("prompt4", "prompt", "chain1", "chain1", 5, undefined, {
+      words: ["str", "A question of no thread.", "operator"],
+    }),
+  ];
+  const [thread, ...others] = chainThreads(
+    acts,
+    new Map(acts.map((one) => [one.id, one])),
+    new Set(["prompt2", "prompt4"]),
+  );
+  expect(others).toEqual([]);
+  expect(thread?.asked.map((one) => one.id)).toEqual(["prompt2", "prompt3"]);
+  expect(thread?.asks).toEqual(["prompt2"]);
+});

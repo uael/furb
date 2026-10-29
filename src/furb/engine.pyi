@@ -252,6 +252,7 @@ def gate(word: str, on: str = "") -> list[str]:
   """Whether the word of a rung may run: the gate reads it after the program of its chain, and it finds nothing when the word may run.
   The word of a rung runs only if the gate accepts the word, or if the chain wrote it.
   The gate checks the word of a rung against the rungs before it in record order.
+  The gate reads the word after the parts that the writings of a rung with no run hold too, so a rung that a word makes while its model writes it is read after what that word ran.
   A response that is not python is a finding like any other.
   Each finding names the line of the word it is found on, and quotes that line, cut to 80 characters, so a model reads what the gate read.
   A word that is not python and that holds a fence of markdown, the markup of a tool call or a sentence of prose finds that a reply is python and quotes only, with no fence, no markup and no prose, so nothing of this word ran: delete each such line.
@@ -473,6 +474,7 @@ def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[No
   A cancelled result is no orphan.
   The response of an acknowledgment is no orphan.
   When an act that a rung of the chain made is done while the word of that rung does not run, no word of the chain awaited it, no reply has shown it, no rung of the chain waits for a reply or ends the step of a prompt that is open, and no word of the chain is running, the chain prompts nothing, so that the model sees it, though after a word that the operator or an outside ear gave it waits for the next fact on the chain.
+  The chain prompts nothing too for a failure of an act that a rung of the chain made before the run of that rung, as while its model writes its word, but for a cancel, so an error asks the model again even after that word closed its prompt.
   A pause stands over the close that answers a prompt too, so what a word gave waits for the wake.
   A prompt tells its message and its binding where it is made, as every act tells its open, whether a model or the operator answers it.
   """
@@ -1009,7 +1011,7 @@ def shown(text: Text, show: Show) -> str:
 def unquoted(word: str) -> str:
   """What a word is as python: each quote in it bound as a string.
   A quote is a string a word writes between two marks, <s:name> at the start of a line and </s:name> at the end of a line, name being any python name, so nothing in it needs an escape.
-  The open mark is looked for line by line from the top, and its close mark from the open mark down, so a quote may hold the marks of a quote of another name.
+  The open mark is looked for line by line from the top, its close mark from the open mark down, and the next open mark after that close mark, so the text of a quote holds the marks of any quote as text.
   The value of a quote is the text between its marks, less a line break just after the open mark.
   A quote becomes its name bound to its value as python writes it, on the line of the open mark, and each other line of the quote becomes an empty line, so every line after it keeps its number.
   An open mark that has no close mark stays as it is, and the gate reads it as the python it is not.

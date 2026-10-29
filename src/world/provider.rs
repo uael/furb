@@ -630,6 +630,9 @@ impl Provider {
       let mut replies: HashMap<String, Reply> = HashMap::new();
       // The actor whose last reply on each chain the ear refused.
       let mut mute: HashMap<String, String> = HashMap::new();
+      // The opening of the life loaded the settings just now, so the first stand, which the boot asks, reads them
+      // again only after it: a refresh there asks each program of a model, as the claude command line, a second time.
+      let mut stood = false;
       loop {
         let a = match co.next().await {
           Next::Heard(a) => a,
@@ -825,7 +828,8 @@ impl Provider {
         let about = a.about().to_owned();
         match a.kind() {
           "stand" if a.question() => {
-            if let Some(refresh) = &refresh {
+            let first = !std::mem::replace(&mut stood, true);
+            if let Some(refresh) = refresh.as_ref().filter(|_| !first) {
               match refresh() {
                 Ok((fresh, default, budget)) => {
                   if !fresh.iter().any(|model| model.settings(&actor).is_some()) {

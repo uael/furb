@@ -291,9 +291,10 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
             stood = module()["actor"] = standing()[2]
           last = standing()
           yield takes()
-        case ("done", about, _, value) if running.get(maker := r[2]) is False and repr(about) not in str(
-          transcript(id, "wants")
-        ):
+        case ("done", about, _, value) if running.get(maker := r[2]) in (
+          False,
+          isinstance(value, Exception) and r[0] != "reply" and "",
+        ) and repr(about) not in str(transcript(id, "wants")):
           scope(about) != id and (yield "tell", maker, [headed(about, "done", value=value)])
           value is None or isinstance(value, CancelledError) or (unseen := (about + " done", maker))
         case ("done", _, by, Refused() as why) if (
@@ -326,7 +327,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
             ),
           )
         case ("rung", rid, _, _, "", *_):
-          waiting[rid] = 0
+          waiting[rid] = running[rid] = ""
         case ("tell", *_, notes):
           heard.append("\n".join(notes))
           if a is note:
@@ -598,11 +599,18 @@ def shown(text, show):
 
 
 def unquoted(word):
-  for n in re.findall(r"(?m)^<s:(\w+)>", word):
-    word = re.sub(
-      f"(?ms)^<s:({n})>\\n?(.*?)</s:{n}>$", lambda m: m[1] + " = " + repr(m[2]) + "\n" * m[0].count("\n"), word
-    )
-  return word
+  made, at, shut = [], 0, set()
+  for o in re.finditer(r"(?m)^<s:(\w+)>\n?", word):
+    if o.start() >= at and o[1] not in shut:
+      if m := re.compile(f"(?m)</s:{o[1]}>$").search(word, o.end()):
+        made += [
+          word[at : o.start()],
+          f"{o[1]} = {word[o.end() : m.start()]!r}" + "\n" * word.count("\n", o.start(), m.end()),
+        ]
+        at = m.end()
+      else:
+        shut.add(o[1])
+  return "".join(made) + word[at:]
 
 
 def offered(roster, to, at=2):

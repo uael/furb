@@ -54,7 +54,7 @@ Each round queues each open issue that the owner opened, or that he assigned to 
 Each round tells you once each fork PR of UPSTREAM that holds the label upstream-ready and not upstreamed: by the ruling of the owner, you then open its PR on pydantic/monty with the body that he reviewed, and put the label upstreamed on the fork PR.
 Each round sends each new comment of the owner on a PR or on his issue to the worker that owns it, puts the label hold on that PR, and tells you only the comments that no worker owns. A text on GitHub counts only when the owner wrote it with no 🤖 at its start, or when he put a 👍 on it; each worker starts what it writes there with 🤖.
 Each round sets one status label on each open PR and on each issue of the owner that it took: s:queued, s:working, s:checks, s:red, s:boxes, s:held, s:conflict, s:stacked, s:ready, or s:owner (green, waits for the owner).
-Each round reads the gates: when the median time of a job in its last five green runs on main passes its budget in .github/budgets.json, which script/budgets.py sets from measures, it queues an item budget-<job>, once until five new runs measure the job; and when the gates fail, then pass on the same commit, it puts each test that failed in the ledger of the flakes, flaky, and at once queues an item flake-<test>, or tells the worker that holds that item.
+Each round reads the gates: when the median time of a job in its last five green runs on main passes its budget in .github/budgets.json, which script/budgets.py sets from measures, it queues an item budget-<job>, once until five new runs measure the job; and when the gates fail, then pass on the same commit, it puts each test that failed in the ledger of the flakes, flaky, and at once queues an item flake-<test>, or tells the worker that holds that item. An item names in covers[key] the tests, the measures and the keys of the items of flakes or budgets that it covers, as covers["tui-bench-new-act"] = ["flake-bench-a-new-act-growth"]: taken() gives its worker for each of them, so a flake or a budget that it covers goes to that worker and queues no item.
 Every twelfth round audits the work against its measure, the open items, writes its line in the digest, and tells you the open entries of TOOLING, the most repeated first: turn the worst into the next item. The audit prunes what the work left behind, and loses no work: a worktree of the round whose item is not in working, queue or backlog and whose branch merged, closed, or holds nothing that main lacks, with its local branch, once its changes that are not committed are a patch and its commits that only this machine holds are a bundle, in the folder of the day in ARCHIVE; a remote branch whose PR closed at its head and that no item names, written first to TRASHED; a scratch directory of a life that no process and no item uses, older than 2 days; and a folder /tmp/furb-* older than 2 days. It tells you what went and the room that df saw freed.
 threads() gives the tree of the threads: the brief prompt of each worker and the prompts under it, with their state, their PRs, their queued items and each question that waits.
 debrief(name) asks the chain of a worker that ended for the frictions that it met in furb.
@@ -64,6 +64,7 @@ At each round a watchdog reads each open command of each worker, with no model: 
 DEBRIEFS is on by default and lives in the state of the round: DEBRIEFS = False in a word turns off the debrief of each worker that ends, which saves tokens.
 An item waits for others with after[key] = [keys], set before you queue it: staff() hires it only once each PR that those keys ended with merged, an item of backlog whose keys merged goes to queue, and the round lists in a notice each key that no item holds. The entries of held_items in the module of the root move into backlog at each round, so a dict of your own chain is not needed.
 Method, at each notice: read the whole state, fix every thing that is off in one go, read the state again to verify, and go on until nothing is off. Only then report. Each round also checks the state in invariants(): it gives each open PR that the round tends a home, from the chain that pushed its head, wakes no chain, and lists in the next notice what code cannot fix.
+A PR waits on a decision of the owner while awaited[decision] names one of its labels, or its number as #N, and the decision is an act that is not over, as the prompt that asked him: a failed check of that PR gets no order, no handover and no fixer, a conflict of it still does, and the round names the decision once. When the act ends, the round drops it and tends the PR again.
 The round holds at most cap() chains that hold an open prompt with a shape, and counts the chains of workers, of sub-chains and of judges alike: room() counts them, and a resume of a worker waits for a slot. When more chains stand, the round pauses the newest overflow with a note and wakes it in order when a slot frees, and it never ends its task.
 A review blocks only on a defect that a command reproduces, or on a false sentence of a contract."""
 
@@ -109,6 +110,8 @@ owns: dict[str, list[int]] = globals().setdefault("owns", {})
 watched: dict[str, list[float]] = globals().setdefault("watched", {})
 after: dict[str, list[str]] = globals().setdefault("after", {})
 parked: dict[str, dict] = globals().setdefault("parked", {})
+awaited: dict[str, list[str]] = globals().setdefault("awaited", {})
+covers: dict[str, list[str]] = globals().setdefault("covers", {})
 DEBRIEFS = globals().get("DEBRIEFS", True)
 vetoes: dict = globals().setdefault("vetoes", {})
 ORDERED = 600.0
@@ -119,18 +122,32 @@ hired: dict[str, float] = globals().setdefault("hired", {})
 paced: set[str] = globals().setdefault("paced", set())
 
 BUILD_SH = """d=${FURB_BUILD_SLOTS:-/tmp/furb-build-slots}
+note=${FURB_BUILD_NOTE:-60}
 mkdir -p "$d"
+start=$(date +%s)
+last=$start
 while :; do
   for i in 1 2 3; do
     if [ -f "$d/$i/pid" ] && ! kill -0 "$(cat "$d/$i/pid")" 2>/dev/null; then rm -rf "$d/$i"; fi
     if mkdir "$d/$i" 2>/dev/null; then
       echo $$ > "$d/$i/pid"
+      date +%s > "$d/$i/since"
       trap 'rm -rf "$d/$i"' EXIT
       trap 'exit 130' INT TERM
       "$@"
       exit $?
     fi
   done
+  now=$(date +%s)
+  if [ $((now - last)) -ge "$note" ]; then
+    last=$now
+    echo "build.sh: waited $((now - start)) s for a slot; the slots are held by:"
+    for i in 1 2 3; do
+      p=$(cat "$d/$i/pid" 2>/dev/null) || continue
+      s=$(cat "$d/$i/since" 2>/dev/null) || s=$now
+      echo "  slot $i: pid $p, held $((now - s)) s: $(ps -o command= -p "$p" 2>/dev/null | cut -c1-200)"
+    done
+  fi
   sleep 2
 done
 """
@@ -482,11 +499,11 @@ def assist(pr: dict, key: str, order: str, fixer: str, thread: str, brief: str) 
     if room(HANDOVER):
       noticed.update({key, key + " again", key + " fixer"})
       said = f"Your work on this chain goes on, now on {HANDOVER}. {order} Close with a tuple: the number of the PR, and your report in 200 words at most."
-      resume(maker, homes[maker], HANDOVER, said)
+      sent[f"{pr['n']} {pr['sha']}"] = resume(maker, homes[maker], HANDOVER, said)
       return True
   elif can(fixer):
     noticed.update({key, key + " again", key + " fixer"})
-    hire(fixer, "", thread, brief)
+    sent[f"{pr['n']} {pr['sha']}"] = hire(fixer, "", thread, brief)
     return True
   return False
 
@@ -750,6 +767,15 @@ async def mend(pr: dict, now: float, red: bool) -> str:
     held = "\n".join("  " + x for x in lacks.stdout.lines)
     return said + "The commits of main that the branch lacks and that change a file of the failure:\n" + held + "\n"
 
+  decision = waits_on(pr)
+  if decision:
+    if f"awaits {decision}" not in noticed:
+      noticed.add(f"awaits {decision}")
+      heard.append(
+        f"#{pr['n']} waits on the decision {decision} of the owner, which holds {', '.join(awaited[decision])}: the"
+        " round gives no order, no handover and no fixer for a failed check of them until the decision ends."
+      )
+    return ""
   healed = await heal(pr, red)
   if healed:
     heard.append(healed)
@@ -1050,6 +1076,7 @@ Title: {title}
 Read the issue whole with its comments first: gh issue view {n} --comments. Do what it asks. When it asks for a change, open the PR with Fixes #{n} in its body, so that the merge closes the issue. When it asks a question or a decision and no change, answer it in a comment on the issue, and close with that answer."""
 
 handled: set[str] = globals().setdefault("handled", set())
+sent: dict[str, str] = globals().setdefault("sent", {})
 ends: dict[str, list[tuple[str, int]]] = globals().setdefault("ends", {})
 requeued: set[str] = globals().setdefault("requeued", set())
 AGAIN = """Workers did parts of this issue before, and it is still open. Their PRs: {prs}. Read each with gh pr view, find what the issue still lacks on origin/main, and do the next part. Give pr() fixes={n} only when your change finishes the issue; else leave fixes at 0, so that the merge leaves the issue open for a next part."""
@@ -1232,13 +1259,30 @@ def verdict(pr: dict) -> str:
   return "pending"
 
 
-def needs(pr: dict) -> bool:
+def gave_up(pr: dict) -> bool:
+  name = sent.get(f"{pr['n']} {pr['sha']}", "")
+  return bool(name) and over(name)
+
+
+def lacks(pr: dict) -> bool:
   return (
     pr["head"].startswith("w/")
     and not {"paused", "hold"} & set(pr["labels"])
     and (pr["verdict"] in ("fail", "open") or pr["mergeable"] == "CONFLICTING")
     and not owner_of(pr)
+    and not waits_on(pr)
   )
+
+
+def needs(pr: dict) -> bool:
+  return lacks(pr) and not gave_up(pr)
+
+
+def waits_on(pr: dict) -> str:
+  if pr["mergeable"] == "CONFLICTING":
+    return ""
+  marks = {*pr["labels"], f"#{pr['n']}"}
+  return next((d for d, held in awaited.items() if get(d) and not over(d) and marks & set(held)), "")
 
 
 def staff() -> None:
@@ -1264,6 +1308,13 @@ def staff() -> None:
     return all(dep in ends and all(n in merged for _, n in ends[dep] if n) for dep in after.get(item, []))
 
   blocked: set[str] = set()
+  for pr in [one for one in prs.values() if lacks(one) and gave_up(one)]:
+    name = sent[f"{pr['n']} {pr['sha']}"]
+    notice(
+      f"gave up #{pr['n']} {pr['sha']}",
+      f"The worker sent for #{pr['n']} at {pr['sha'][:7]} ended ({name}) and the head did not move, so the PR no longer"
+      f" blocks its family. Its end:\n\n{str(peek(name))[:1500]}",
+    )
   for pr in [one for one in prs.values() if needs(one)]:
     maker = next((m[2:] for m in pr["labels"] if m.startswith("w:")), "")
     model = HANDOVER if homes.get(maker) and maker not in working.values() else limits["fixer"]
@@ -1290,6 +1341,10 @@ def staff() -> None:
 
 
 def invariants() -> None:
+  for decision in [d for d in awaited if over(d) or not get(d)]:
+    held = ", ".join(awaited.pop(decision))
+    said = "ended" if get(decision) else "names no act"
+    heard.append(f"The decision {decision} of the owner {said}, so the round tends {held} again.")
   old: Any = module(ROOT).get("pk_parked")
   for c, e in list(old.items()) if isinstance(old, dict) else []:
     del old[c]
@@ -1682,8 +1737,16 @@ Read the log of the attempt that failed: gh run view <run> --attempt <attempt> -
 MANY_SAID = "More than {n} tests failed in one attempt, so one cause, as a machine that is slow or a shared resource that waits, probably holds them all: find it first. "
 
 
+def coverer(*names: str) -> str:
+  return next((k for k, held in covers.items() if set(names) & set(held)), "")
+
+
 def taken(key: str) -> str:
-  return next((w for w, k in working.items() if k == key), "") or ("queued" if any(q[0] == key for q in queue) else "")
+  for one in [key, coverer(key)]:
+    got = next((w for w, k in working.items() if one and k == one), "")
+    if got or any(one and q[0] == one for q in queue):
+      return got or "queued"
+  return ""
 
 
 async def watch_ci() -> None:
@@ -1691,6 +1754,9 @@ async def watch_ci() -> None:
     return "-".join(re.findall(r"[a-z0-9]+", text.lower()))[:size].strip("-")
 
   def holder(names: list[str]) -> tuple[str, str]:
+    k = coverer(*names)
+    if k:
+      return k, next((w for w, one in working.items() if one == k and not over(w)), "")
     named = [x for x in names if len(x) >= 8]
     for k, text, _ in [*queue, *backlog]:
       if any(x in text for x in named):

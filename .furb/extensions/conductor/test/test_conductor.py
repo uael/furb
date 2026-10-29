@@ -693,7 +693,7 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 
 STATE = (
   "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed fixes silent"
-  " comments measures timers noted debriefs briefed owns watched after parked vetoes ordered tips shifted hired paced landed heard handled ends requeued"
+  " comments measures timers noted debriefs briefed owns watched after parked awaited covers vetoes ordered tips shifted hired paced landed heard handled sent ends requeued"
   " statused secret budgeted flaky runs_read"
 ).split()
 
@@ -917,6 +917,23 @@ def test_a_fixer_goes_before_a_new_item_and_waits_for_room_on_sonnet(conductor: 
   conductor.boxes(conductor.prs[8], 0.0)
   assert [key for key, _ in conductor.hired] == ["box8"]
   assert conductor.models["worker1"] == SONNET_HIGH
+
+
+def test_a_pr_whose_fixer_ended_with_its_head_unmoved_stops_blocking_its_family(conductor: Round) -> None:
+  pr = conductor.pr(n=8, open=["- [ ] It is one change."], verdict="open")
+  conductor.prs[8] = pr
+  conductor.efforts["c"] = SONNET
+  conductor.boxes(pr, 0.0)
+  assert [key for key, _ in conductor.hired] == ["box8"]
+  fixer = next(name for name, key in conductor.working.items() if key == "box8")
+  conductor.done[fixer] = (0, "nothing to fix")
+  conductor.tend()
+  conductor.queue[:] = [("c", "", "")]
+  conductor.staff()
+  assert [key for key, _ in conductor.hired] == ["box8", "c"]
+  assert sum("ended" in m and "#8" in m for m, _ in conductor.prompts) == 1
+  conductor.staff()
+  assert sum("ended" in m and "#8" in m for m, _ in conductor.prompts) == 1
 
 
 def test_an_ended_worker_goes_on_in_its_own_chain_on_sonnet(conductor: Round) -> None:
@@ -1785,3 +1802,81 @@ def test_the_chains_that_the_live_round_parked_move_into_the_state_of_the_round(
   conductor.invariants()
   assert conductor.ns["pk_parked"] == {}
   assert conductor.parked == {"chain9": {"name": "", "key": "k9", "model": SONNET, "text": ""}}
+
+
+def build_slots(tmp_path: Path, pid: int) -> dict[str, str]:
+  script = tmp_path / "build.sh"
+  script.write_text(SOURCE_BUILD(), encoding="utf-8")
+  slots = tmp_path / "slots"
+  for i in (1, 2, 3):
+    (slots / str(i)).mkdir(parents=True)
+    (slots / str(i) / "pid").write_text(str(pid), encoding="utf-8")
+    (slots / str(i) / "since").write_text(str(int(time.time()) - 90), encoding="utf-8")
+  return {**os.environ, "FURB_BUILD_SLOTS": str(slots), "FURB_BUILD_NOTE": "1", "SCRIPT": str(script)}
+
+
+def SOURCE_BUILD() -> str:
+  start = SOURCE.index('BUILD_SH = """') + len('BUILD_SH = """')
+  return SOURCE[start : SOURCE.index('"""', start)]
+
+
+@POSIX
+def test_build_sh_says_who_holds_the_slots_while_it_waits(tmp_path: Path) -> None:
+  holder = subprocess.Popen(["sleep", "30"])
+  out = tmp_path / "out.txt"
+  try:
+    env = build_slots(tmp_path, holder.pid)
+    with out.open("w", encoding="utf-8") as f:
+      waiting = subprocess.Popen(["sh", env["SCRIPT"], "echo", "ran"], env=env, stdout=f, stderr=subprocess.STDOUT)
+      time.sleep(3.5)
+      waiting.terminate()
+      waiting.wait()
+  finally:
+    holder.kill()
+    holder.wait()
+  said = out.read_text(encoding="utf-8")
+  assert "waited" in said
+  assert f"slot 1: pid {holder.pid}, held " in said
+  assert "sleep 30" in said
+  assert "ran" not in said.replace("waited", "")
+
+
+@POSIX
+def test_build_sh_frees_a_slot_whose_pid_is_gone(tmp_path: Path) -> None:
+  gone = subprocess.Popen(["true"])
+  gone.wait()
+  env = build_slots(tmp_path, gone.pid)
+  got = subprocess.run(["sh", env["SCRIPT"], "echo", "ran"], env=env, capture_output=True, text=True, timeout=20)
+  assert got.returncode == 0
+  assert got.stdout.strip() == "ran"
+
+
+async def test_a_failed_check_that_waits_on_a_decision_of_the_owner_gets_no_order_until_it_ends(conductor: Round) -> None:
+  conductor.facts["prompt9"] = ("prompt", "prompt9", "rung1", "chain1", "str", "the wall?", "operator")
+  conductor.awaited["prompt9"] = ["w:wall", "#6"]
+  pr, other = conductor.pr(5, ("FAILURE",), labels=["w:wall"]), conductor.pr(6, ("FAILURE",))
+  conductor.prs.update({5: pr, 6: other})
+  assert await conductor.mend(pr, 1000.0, False) == ""
+  assert await conductor.mend(other, 1000.0, False) == ""
+  assert (conductor.needs(pr), conductor.needs(other), conductor.hired, conductor.prompts) == (False, False, [], [])
+  assert len(conductor.heard) == 1 and "prompt9" in conductor.heard[0] and "w:wall, #6" in conductor.heard[0]
+  assert conductor.needs(conductor.pr(5, ("FAILURE",), labels=["w:wall"], mergeable="CONFLICTING"))
+  conductor.done["prompt9"] = "ruled"
+  conductor.invariants()
+  assert conductor.awaited == {} and conductor.needs(pr)
+  assert "The decision prompt9 of the owner ended, so the round tends w:wall, #6 again." in conductor.heard
+
+
+@POSIX
+@JQ
+async def test_a_flake_that_a_working_item_covers_goes_to_its_worker_by_its_test_or_its_key(conductor: Round) -> None:
+  conductor.busy("p1", "bench-fix", OPUS)
+  conductor.covers["bench-fix"] = ["a host test", "budget-the-tui"]
+  await flaked(conductor)
+  assert conductor.queue == []
+  assert conductor.prompts[-1][1] == "chain-bench-fix" and "came again" in conductor.prompts[-1][0]
+  conductor.covers["bench-fix"] = ["flake-a-host-test"]
+  assert (conductor.taken("flake-a-host-test"), conductor.taken("budget-the-tui"), conductor.taken("bench-fix")) == ("p1", "", "p1")
+  conductor.working.clear()
+  conductor.queue.append(("bench-fix", "", "ci"))
+  assert conductor.taken("flake-a-host-test") == "queued"

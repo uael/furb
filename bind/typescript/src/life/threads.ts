@@ -188,12 +188,16 @@ export function outline(tops: readonly Thread[], folds: ReadonlySet<string>): Th
 }
 
 /** One thread of a chain, as the list of the threads of that chain shows it: its prompt, the first line of its message,
- * its messages, the questions to the operator that wait in it, and its state. A thread is resolved once its prompt and
+ * its messages, the questions and the notices that it made for the operator, the questions that wait in it, and its
+ * state. A thread is resolved once its prompt and
  * each of its messages is over, and a message to a resolved thread opens it again until its model closes the message. */
 export interface ChainThread {
   act: LiveAct;
   title: string;
   messages: LiveAct[];
+  /** The prompts to the operator that the thread made, answered or not, in the order they began. */
+  asked: LiveAct[];
+  /** The ids of the questions that wait for the operator. */
   asks: string[];
   state: ActState;
   resolved: boolean;
@@ -213,11 +217,13 @@ export function chainThreads(
   const out = new Map<string, ChainThread>();
   const later: [LiveAct, string][] = [];
   const waits: [string, string][] = [];
+  const asked: [string, LiveAct][] = [];
   for (const act of on) {
     if (act.kind !== "prompt") continue;
     if (act.words[2] === "operator") {
-      const thread = owed.has(act.id) ? threadOf(act, rows) : undefined;
-      if (thread) waits.push([thread, act.id]);
+      const thread = threadOf(act, rows);
+      if (thread) asked.push([thread, act]);
+      if (thread && owed.has(act.id)) waits.push([thread, act.id]);
       continue;
     }
     // What a prompt is stays as it was said, so a host that keeps it reads each prompt once.
@@ -239,9 +245,18 @@ export function chainThreads(
       if (seen.message) later.push([act, seen.message]);
       continue;
     }
-    out.set(act.id, { act, title: seen.title, messages: [], asks: [], state: "done", resolved: true });
+    out.set(act.id, {
+      act,
+      title: seen.title,
+      messages: [],
+      asked: [],
+      asks: [],
+      state: "done",
+      resolved: true,
+    });
   }
   for (const [act, id] of later) out.get(id)?.messages.push(act);
+  for (const [id, ask] of asked) out.get(id)?.asked.push(ask);
   for (const [id, ask] of waits) out.get(id)?.asks.push(ask);
   for (const thread of out.values()) {
     const open = [thread.act, ...thread.messages].findLast((act) => !act.done);

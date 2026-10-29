@@ -48,3 +48,16 @@ async def test_a_memory_question_that_the_world_refuses_raises_refused_in_the_ca
   _, root = life(Dead(stands=STANDS), extensions=_monty.extensions([{**one, "life": ""}]))
   with pytest.raises(Refused, match="a dead World answers no memory"):
     await engine.rung("close(memory())", on=root)
+
+
+async def test_a_text_that_shares_most_lines_with_a_text_at_another_path_is_told_by_the_lines_the_chain_lacks(
+  tmp_path: Path,
+) -> None:
+  """A text whose lines a text that the chain holds at another path shares for the most part, as a checkout and its worktree hold one file, is told by the lines that the chain does not hold, so the chain holds the whole file."""
+  text = "".join(f"{n}\n" for n in range(1, 2101))
+  other = noted(tmp_path / "other", text)
+  top = noted(tmp_path / "work", text.replace("\n5\n", "\nfive\n"))
+  _, root = extended("memory", tmp_path, _monty.memory)
+  await engine.rung(f"read({str(other)!r}, HIDDEN)", on=root)
+  await engine.rung("memory()", on=root)
+  assert recalled(root, tmp_path) == [f"#memory1\nmemory1_path = {str(top)!r}\nmemory1_text = 'five'"]
