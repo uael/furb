@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
 import { existsSync, readFileSync, rmSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { createConnection, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openEngine } from "../src/bridge.ts";
-import { type About, hostPlace, listening, reachOf } from "../src/hosting.ts";
+import { type About, aboutOf, hostPlace, listening, type Place, reachOf, tellAbout } from "../src/hosting.ts";
 
 /** The moment a condition holds, read again every 50 ms. */
 async function eventually(ready: () => boolean | Promise<boolean>, what: string): Promise<void> {
@@ -23,6 +23,13 @@ function alive(pid: number): boolean {
   }
 }
 
+/** What the host at a place says of itself, which a test reads while the host runs. */
+function said(place: Place): About {
+  const about = aboutOf(place);
+  if (!about) throw new Error("The host said nothing of itself.");
+  return about;
+}
+
 /** A life of the demo in a folder of its own, whose host each window of the test reaches, and which ends with the
  * test. */
 async function demoLife(use: (record: string, directory: string) => Promise<void>): Promise<void> {
@@ -33,8 +40,9 @@ async function demoLife(use: (record: string, directory: string) => Promise<void
     await use(record, directory);
   } finally {
     // A host that a failed test left ends here, with its life.
-    if (place && existsSync(place.about)) {
-      const { pid } = JSON.parse(readFileSync(place.about, "utf8")) as About;
+    const about = place && aboutOf(place);
+    if (about) {
+      const { pid } = about;
       if (alive(pid)) process.kill(pid, "SIGTERM");
       await eventually(() => !alive(pid), "the host to end").catch(() => process.kill(pid, "SIGKILL"));
     }
@@ -67,7 +75,7 @@ await host.dispose();
         done: unknown;
       };
       expect(done).toBeNull();
-      const about = JSON.parse(readFileSync(place.about, "utf8")) as About;
+      const about = said(place);
       expect(about).toMatchObject({ record, protocol: 1 });
       expect(about.pid).not.toBe(window.pid);
       expect(about.engine).toMatch(/^[0-9a-f]{64}$/);
@@ -141,11 +149,11 @@ test.skipIf(process.platform === "win32")(
       const { engine, host } = await openEngine({ demo: true, host: true, cwd: directory, record });
       const command = await engine.bash("echo kept", { on: engine.root });
       await eventually(async () => (await engine.peek(command)) !== null, "the command to end");
-      const { pid } = JSON.parse(readFileSync(place.about, "utf8")) as About;
+      const { pid } = said(place);
       const reset = new Promise<void>((resolve) => host.once("reset", resolve));
       process.kill(pid, "SIGKILL");
       await reset;
-      const next = JSON.parse(readFileSync(place.about, "utf8")) as About;
+      const next = said(place);
       expect(next.pid).not.toBe(pid);
       expect(await engine.peek(command)).toMatchObject({ code: 0, stdout: { content: "kept\n" } });
       await host.end();
@@ -161,7 +169,7 @@ test.skipIf(process.platform === "win32")(
       const { engine, host } = await openEngine({ demo: true, host: true, cwd: directory, record });
       const command = await engine.bash("echo kept", { on: engine.root });
       await eventually(async () => (await engine.peek(command)) !== null, "the command to end");
-      const { pid } = JSON.parse(readFileSync(place.about, "utf8")) as About;
+      const { pid } = said(place);
       // The host stops, and its place takes one connection and drops it with no answer, as the socket of a host does
       // while a kill ends its process.
       process.kill(pid, "SIGSTOP");
@@ -213,7 +221,7 @@ test.skipIf(process.platform === "win32")(
       } finally {
         delete process.env.FURB_BUILD;
       }
-      const before = JSON.parse(readFileSync(place.about, "utf8")) as About;
+      const before = said(place);
       expect(before.build).toBe("0.0.0+0ld0b0i1d000");
       const kept = await old.engine.bash("echo kept", { on: old.engine.root });
       await eventually(async () => (await old.engine.peek(kept)) !== null, "the first command to end");
@@ -225,7 +233,7 @@ test.skipIf(process.platform === "win32")(
       const { engine, host } = await openEngine(options);
       const took = performance.now() - start;
       console.log(`The takeover took ${Math.round(took)} ms.`);
-      const after = JSON.parse(readFileSync(place.about, "utf8")) as About;
+      const after = said(place);
       expect(after.pid).not.toBe(before.pid);
       expect(after.build).toMatch(/\+[0-9a-f]{12}$/);
       expect(alive(before.pid)).toBe(false);
@@ -377,7 +385,7 @@ test.skipIf(process.platform === "win32")(
       const { engine, host } = await openEngine({ demo: true, host: true, cwd: directory, record });
       const command = await engine.bash("echo kept", { on: engine.root });
       await eventually(async () => (await engine.peek(command)) !== null, "the command to end");
-      const { pid } = JSON.parse(readFileSync(place.about, "utf8")) as About;
+      const { pid } = said(place);
       const faults: string[] = [];
       host.on("fault", (error: Error) => faults.push(error.message));
       const reset = new Promise<void>((resolve) => host.once("reset", resolve));
@@ -385,7 +393,7 @@ test.skipIf(process.platform === "win32")(
       await reset;
       expect(faults).toEqual([]);
       expect(host.lost).toBe("");
-      expect((JSON.parse(readFileSync(place.about, "utf8")) as About).pid).not.toBe(pid);
+      expect(said(place).pid).not.toBe(pid);
       expect(await engine.peek(command)).toMatchObject({ code: 0, stdout: { content: "kept\n" } });
       await host.end();
     }),
@@ -420,7 +428,7 @@ test.skipIf(process.platform === "win32")(
       const { engine, host } = await openEngine({ demo: true, host: true, cwd: directory, record });
       const command = await engine.bash("echo kept", { on: engine.root });
       await eventually(async () => (await engine.peek(command)) !== null, "the command to end");
-      const { pid } = JSON.parse(readFileSync(place.about, "utf8")) as About;
+      const { pid } = said(place);
       const kept = [process.env.FURB_HOST_ENDING, process.env.FURB_HOST_GRACE];
       process.env.FURB_HOST_ENDING = "300";
       process.env.FURB_HOST_GRACE = "300";
@@ -433,7 +441,7 @@ test.skipIf(process.platform === "win32")(
         expect(existsSync(place.socket)).toBe(false);
         await host.reopen();
         expect(host.lost).toBe("");
-        expect((JSON.parse(readFileSync(place.about, "utf8")) as About).pid).not.toBe(pid);
+        expect(said(place).pid).not.toBe(pid);
         expect(await engine.peek(command)).toMatchObject({ code: 0, stdout: { content: "kept\n" } });
         await host.end();
       } finally {
@@ -458,12 +466,79 @@ test.skipIf(process.platform === "win32")(
         [process.execPath, join(import.meta.dir, "../src/host.ts"), JSON.stringify(options)],
         { stdout: "ignore", stderr: "ignore" },
       );
-      await eventually(() => existsSync(place.about), "the host to say of itself");
+      await eventually(() => aboutOf(place) !== undefined, "the host to say of itself");
       const { engine, host } = await openEngine(options);
       expect(engine.root).toBeTruthy();
-      expect((JSON.parse(readFileSync(place.about, "utf8")) as About).pid).toBe(first.pid);
+      expect(said(place).pid).toBe(first.pid);
       expect(alive(first.pid)).toBe(true);
       await host.end();
       await first.exited;
+    }),
+);
+
+/** A folder of its own for the place of a host that no process serves. */
+async function quietPlace(use: (place: Place, directory: string) => Promise<void>): Promise<void> {
+  const directory = await mkdtemp(join(tmpdir(), "furb-about-"));
+  try {
+    const place = hostPlace(join(directory, "life.jsonl"));
+    if (!place) throw new Error("No socket serves here.");
+    await use(place, directory);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+const SAID = { pid: 4242, record: "life.jsonl", build: "b", engine: "e", protocol: 1, started: 7 };
+
+test.skipIf(process.platform === "win32")(
+  "a reader of what a host says of itself gets nothing, and raises nothing, for a file that is gone or not whole",
+  () =>
+    quietPlace(async (place) => {
+      expect(aboutOf(place)).toBeUndefined();
+      for (const part of ["", "{", '{"pid":4242,"rec', "null", "[]", '"pid"', '{"pid":"4242"}']) {
+        await writeFile(place.about, part);
+        expect(aboutOf(place)).toBeUndefined();
+      }
+      tellAbout(place, SAID);
+      expect(aboutOf(place)).toEqual(SAID);
+      rmSync(place.about);
+      expect(aboutOf(place)).toBeUndefined();
+    }),
+);
+
+test.skipIf(process.platform === "win32")(
+  "a host that says of itself again and again shows a reader a whole file at each moment, and leaves no other file",
+  () =>
+    quietPlace(async (place, directory) => {
+      tellAbout(place, SAID);
+      const script = join(directory, "say.ts");
+      await writeFile(
+        script,
+        `import { tellAbout } from ${JSON.stringify(join(import.meta.dir, "../src/hosting.ts"))};
+const place = JSON.parse(process.argv[2] ?? "{}");
+for (let n = 1; n <= 4000; n++) tellAbout(place, { pid: n, record: "life.jsonl", build: "b", engine: "e", protocol: 1, started: n });
+`,
+      );
+      const writer = Bun.spawn([process.execPath, script, JSON.stringify(place)], {
+        stdout: "inherit",
+        stderr: "inherit",
+      });
+      let reads = 0;
+      let torn = 0;
+      while (writer.exitCode === null) {
+        for (let n = 0; n < 100; n++) {
+          reads++;
+          if (!aboutOf(place)) torn++;
+        }
+        await Bun.sleep(0);
+      }
+      expect(await writer.exited).toBe(0);
+      expect(reads).toBeGreaterThan(100);
+      expect(torn).toBe(0);
+      expect(aboutOf(place)?.pid).toBe(4000);
+      const key = place.about.slice(place.about.lastIndexOf("/") + 1, -".json".length);
+      expect(
+        (await readdir(join(place.about, ".."))).filter((name) => name.startsWith(`${key}.`)).sort(),
+      ).toEqual([`${key}.json`]);
     }),
 );
