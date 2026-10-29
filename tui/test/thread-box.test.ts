@@ -32,16 +32,18 @@ test("a thread is one box: its message with a line of its color, its program as 
     async ({ session, app, frame }) => {
       await idle(session);
       let rows = (await frame()).split("\n").map((row) => feedOf(session, row));
+      // A row of the program quotes the answer, so the text of the answer is the one that no call of close holds.
+      const answered = (row: string) =>
+        row.includes("Fieldnotes keeps ideas close") && !row.includes("close(");
       // The markdown of the box draws over a few frames.
-      for (
-        let step = 0;
-        step < 80 && !rows.some((row) => row.includes("Fieldnotes keeps ideas close"));
-        step++
-      ) {
+      for (let step = 0; step < 80 && !rows.some(answered); step++) {
         await Bun.sleep(25);
         rows = (await frame()).split("\n").map((row) => feedOf(session, row));
       }
-      const at = (text: string) => rows.findIndex((row) => row.includes(text));
+      const at = (text: string) =>
+        rows.findIndex(
+          (row) => row.includes(text) && (text !== "Fieldnotes keeps ideas close" || answered(row)),
+        );
       // The sections of the box are cards that share one panel, in the order of the box.
       const ids = app.scroll.getChildren().map((node) => node.id);
       const head = ids.find((id) => /^prompt\d+$/.test(id)) ?? "";
