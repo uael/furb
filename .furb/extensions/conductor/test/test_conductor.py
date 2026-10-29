@@ -2145,3 +2145,13 @@ async def test_a_run_that_the_round_defers_makes_no_red_and_heal_does_not_run_it
   assert cancelled["verdict"] == "pending"
   assert await conductor.heal(cancelled, False) == ""
   assert "rerun" not in conductor.log().replace("run list", "")
+
+
+@POSIX
+@JQ
+async def test_a_failure_waits_for_the_end_of_its_run_before_a_rerun_an_update_or_a_fixer(conductor: Round) -> None:
+  conductor.say(r"compare/main\.\.\.abc", '{"behind_by": 3}')
+  running = conductor.RUNNING[0]
+  await conductor.mend(conductor.pr(checks=("FAILURE", running)), 0.0, False)
+  assert "rerun" not in conductor.log() and "update-branch" not in conductor.log()
+  assert conductor.hired == []
