@@ -454,6 +454,24 @@ test("the feed at its end stays at its end when the input grows, and a turn of t
     true,
   ));
 
+test("the help list shows each description of its first keys whole, with no cut at its end", () =>
+  composing(
+    async ({ session, frame, click }) => {
+      await idle(session);
+      await click("F1 help");
+      const rows = (await frame())
+        .split("\n")
+        .map((row) => row.slice(0, 160 - session.preferences.sidebarWidth));
+      const first = rows.findIndex((row) => row.includes("Send a message, or run Python input"));
+      const last = rows.findIndex((row) => row.includes("Inspect a value and follow its definition"));
+      expect(first).toBeGreaterThan(0);
+      expect(last).toBeGreaterThan(first);
+      expect(rows.slice(first, last + 1).filter((row) => row.includes("…"))).toEqual([]);
+    },
+    { width: 160, height: 60 },
+    true,
+  ));
+
 test("the keys of the footer and the palette answer the mouse, and a drag over the header of a thread selects and copies its text", () =>
   composing(
     async ({ session, app, screen, frame, click }) => {

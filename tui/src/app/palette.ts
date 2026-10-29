@@ -302,24 +302,35 @@ export const palette = part({
     const inner = this.paletteWidth - space.inset * 2;
     // The details stand in one column after the labels, which take at most half of the row, or what short details
     // leave.
-    const widest = (width: (choice: Choice) => number) => Math.max(0, ...this.filtered.map(width));
-    const column = Math.min(
-      Math.max(
-        Math.floor(inner / 2),
-        inner -
-          space.between -
-          widest(
-            (choice) =>
-              Bun.stringWidth(choice.detail.replace(/\s*\n\s*/g, " ")) +
-              (choice.swatch ? choice.swatch.length * 2 + space.between : 0),
-          ),
-      ),
-      widest((choice) => Bun.stringWidth(choice.label) + (choice.mark || choice.status ? 2 : 0)) +
-        space.between,
-    );
+    // A part of the list under its own title has a column of its own, so that the long labels of another part do not
+    // push its details out of the room.
+    const columns = new Map<string, number>();
+    const columnOf = (heading: string): number => {
+      const known = columns.get(heading);
+      if (known !== undefined) return known;
+      const part = this.filtered.filter((choice) => (choice.heading ?? "") === heading);
+      const widest = (width: (choice: Choice) => number) => Math.max(0, ...part.map(width));
+      const found = Math.min(
+        Math.max(
+          Math.floor(inner / 2),
+          inner -
+            space.between -
+            widest(
+              (choice) =>
+                Bun.stringWidth(choice.detail.replace(/\s*\n\s*/g, " ")) +
+                (choice.swatch ? choice.swatch.length * 2 + space.between : 0),
+            ),
+        ),
+        widest((choice) => Bun.stringWidth(choice.label) + (choice.mark || choice.status ? 2 : 0)) +
+          space.between,
+      );
+      columns.set(heading, found);
+      return found;
+    };
     for (const [offset, choice] of shown.entries()) {
       const index = start + offset;
       const selected = index === this.selection;
+      const column = columnOf(choice.heading ?? "");
       if (titled(index) || (offset === 0 && choice.heading))
         this.paletteList.add(
           this.inset(
