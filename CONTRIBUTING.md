@@ -222,7 +222,9 @@ pull request.
 4. When the checks are green and the review agrees, the pull request merges as one squash commit on `main`, with its
    title as the message.
 5. release-please keeps a pull request of the next release open on `main`, and writes [`CHANGELOG.md`](CHANGELOG.md)
-   from the titles. When that pull request merges, it tags the release, and `.github/workflows/publish.yml` publishes
+   from the titles. A fix or a feat raises the patch version, a breaking change the minor version, and only the
+   owner raises the major version. Each day, a workflow merges that pull request when its gates and the gates of
+   `main` passed. When that pull request merges, it tags the release, and `.github/workflows/publish.yml` publishes
    each package at that version: on npm and on PyPI, and on crates.io once no crate of furb stands on git, which is
    when monty stands there.
 
