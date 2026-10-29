@@ -1538,7 +1538,7 @@ export class Session extends EventEmitter {
     if (back) {
       // The words go back to where they went: the thread that they answered, or a new thread when they began one, and
       // not to the thread lit at this moment, which may be the thread that this cancel ends.
-      const into = this.acts.find((one) => one.id === act.on)?.kind === "prompt" ? act.on : undefined;
+      const into = this.sentTo.get(act.id);
       this.aim(into);
       this.pinned = into ?? null;
       await this.restore(String(act.words[1] ?? ""));
@@ -1546,6 +1546,8 @@ export class Session extends EventEmitter {
     } else this.notice = `${act.id} is cancelled${ended ? `, and ${under}` : ""}.`;
     await this.refresh();
   }
+  /** The thread that each message of the input went to, or undefined for a message that began a thread. */
+  private readonly sentTo = new Map<string, string | undefined>();
   /** The acts that a cancel of the operator ended, whose notice that cancel gave. */
   private readonly cancels = new Set<string>();
   /** The chains that a cancel reaches, each with its label, in the order of the chains. */
@@ -1654,6 +1656,7 @@ export class Session extends EventEmitter {
           ? await this.engine.prompt("str", { message: this.withImages(input), on: thread })
           : await this.engine.prompt(this.shape, { message: this.withImages(input), on: this.selected });
         if (thread) this.notice = `Your message went to the thread ${thread}.`;
+        this.sentTo.set(id, thread);
         delete this.images[this.selected];
         this.save();
         if (pending) this.emit("resume");
