@@ -79,6 +79,9 @@ class World:
       "working_at": lambda name: f"at-{name}",
       "vetoes": {},
     }
+    self.round["taken"] = lambda key: next((w for w, k in self.round["working"].items() if k == key), "") or (
+      "queued" if any(q[0] == key for q in self.round["queue"]) else ""
+    )
     self.say(r"rev-parse origin/main", "sha1\n")
     self.say(r"gh issue view", WORDS + "\n")
     self.say(r"python3 -I -", listing())

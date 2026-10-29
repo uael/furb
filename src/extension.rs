@@ -456,10 +456,14 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
         ENABLE => Extension::of(&a).filter(|one| !enabled.contains(one)).into_iter().collect(),
         _ => continue,
       };
-      for one in new {
-        if a.kind() != ENABLE {
+      // Each enable is said before any rung plays, so the journal of a later life says them again as one burst and
+      // the rungs play in the order of the first life.
+      if a.kind() != ENABLE {
+        for one in &new {
           say(&mut co, one.enable());
         }
+      }
+      for one in new {
         let Some(at) = enabled.iter().position(|two| two.name == one.name) else {
           for chain in &mut chains {
             play(&mut co, &one, chain).await?;
