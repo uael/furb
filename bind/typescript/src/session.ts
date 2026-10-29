@@ -6,7 +6,7 @@ import { Activity } from "./activity.js";
 import { FileChanges } from "./changes.js";
 import { Console, type ConsoleOptions } from "./console.js";
 import { call, type Ear } from "./ears.js";
-import { WORK } from "./life/acts.js";
+import { type PauseCause, WORK } from "./life/acts.js";
 import { furbDirectory, saveFile } from "./project.js";
 import { actorParts, type Entry, type Fact, isQuestion, standingOf } from "./types.js";
 
@@ -339,6 +339,12 @@ export class Session extends EventEmitter {
 
   isPaused(id: string): boolean {
     return this.activity.acts.get(id)?.paused ?? false;
+  }
+
+  /** The cause of the pause that stands over an act, as the fact pause gave it. */
+  pauseOf(id: string): PauseCause | undefined {
+    const act = this.activity.acts.get(id);
+    return act?.paused ? act.pause : undefined;
   }
 }
 

@@ -10,6 +10,7 @@ import {
   ladder,
   makers,
   type ProgramLine,
+  pauseSaid,
   stepLines,
   thread,
   threadProgram,
@@ -1331,11 +1332,20 @@ export const feed = part({
         } else threadBox(act, depth, indent);
       }
       for (const mark of pending.splice(0)) showMark(mark);
-      // A paused chain says so at the end of its feed, with the reason that the last failure gave, and a button that
+      // A paused chain says so at the end of its feed, with the cause that its pause gave, and a button that
       // wakes it, since nothing new runs on it until then.
       if (w.paused && !w.search) {
-        const failure = w.activity.findLast((act) => act.kind === "rung" && act.run?.status === "failed")?.run
-          ?.reason;
+        // The pause says its own cause: the act that paused the chain and its error, as the fact pause carries them. Work
+        // that the last life left holds the chain until a wake runs it again, and that note is no fault, so it takes a
+        // muted tone and says what the ids mean before it lists them, since the clip of a narrow feed cuts the end.
+        const held = [...w.host.pending.keys()];
+        const acts = held.length === 1 ? "1 act" : `${held.length} acts`;
+        const said = w.cause ? pauseSaid(w.cause) : undefined;
+        const note =
+          !said && held.length
+            ? `${acts} ran when the last life ended, and run again at a wake: ${held.join(", ")}`
+            : undefined;
+        const failure = said?.text ?? note;
         add("paused", `paused:${failure ?? ""}:${this.theme}`, [], (box) =>
           this.banner(
             box,
@@ -1347,7 +1357,10 @@ export const feed = part({
             ],
             failure
               ? this.whole(
-                  this.text(clip(shortenHomes(failure).split("\n")[0] ?? "", this.feedWidth - 8), c.danger),
+                  this.text(
+                    clip(shortenHomes(failure).split("\n")[0] ?? "", this.feedWidth - 8),
+                    said?.error ? c.danger : c.muted,
+                  ),
                   () => shortenHomes(failure),
                 )
               : undefined,

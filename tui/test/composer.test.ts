@@ -548,6 +548,37 @@ test("a paused chain says so at the end of its feed and in the footer, and Wake 
     expect(shown).not.toContain("This chain is paused");
   }));
 
+test("a paused chain names no cancel as its cause, since a word that closed its prompt or was cancelled did not fail", () =>
+  composing(async ({ session, frame }) => {
+    const id = await session.engine.rung({
+      word: "from asyncio import CancelledError\nraise CancelledError()",
+      on: session.selected,
+    });
+    await until(session, () => session.activity.some((act) => act.id === id && act.done));
+    await session.submit("/pause");
+    await until(session, () => session.paused);
+    const rows = (await frame()).split("\n");
+    const top = rows.findIndex((row) => row.includes("This chain is paused"));
+    const end = rows.findIndex((row, at) => at > top && row.includes("Wake"));
+    expect(top).toBeGreaterThan(-1);
+    expect(rows.slice(top, end + 1).join("\n")).not.toContain("CancelledError");
+  }));
+
+test("a paused chain names the act that paused it and its own error, and no older error of a word", () =>
+  composing(async ({ session, frame }) => {
+    const id = await session.engine.rung({ word: 'read("scratch://missing.txt")', on: session.selected });
+    await until(session, () => session.activity.some((act) => act.id === id && act.done));
+    await session.engine.pause(session.selected, { why: "reply9 found no ear to take it" });
+    await until(session, () => session.paused);
+    const rows = (await frame()).split("\n");
+    const top = rows.findIndex((row) => row.includes("This chain is paused"));
+    const end = rows.findIndex((row, at) => at > top && row.includes("Wake"));
+    expect(top).toBeGreaterThan(-1);
+    const banner = rows.slice(top, end + 1).join("\n");
+    expect(banner).toContain("the operator: reply9 found no ear to take it");
+    expect(banner).not.toContain("There is no file");
+  }));
+
 test("the footer offers the keys of the top layer that acts, and a click on one does what its key does", () =>
   composing(
     async ({ session, app, screen, frame, click }) => {

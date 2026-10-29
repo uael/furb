@@ -17,6 +17,7 @@ import {
   shapes,
   WORK,
 } from "furb";
+import type { PauseCause } from "furb/life";
 import {
   type ActIndex,
   type Ask,
@@ -339,6 +340,7 @@ export class Session extends EventEmitter {
   readonly errors: Record<string, string> = {};
   loading = false;
   paused = false;
+  cause: PauseCause | null = null;
   editing?: string;
   /** The thread that the operator chose in the sidebar, to which the input sends each message as prompt(None, message,
    * on=thread): its model reads it at its next step, and a message to a resolved thread opens it again. */
