@@ -1600,16 +1600,16 @@ export class Session extends EventEmitter {
   private readonly retaken = new Set<string>();
   /** The last message of the operator in a thread that still runs, or that a cancel ended, taken back: a message that
    * runs is cancelled, and its text comes back to be edited and sent again. The cancelled message leaves the box. */
-  async takeBackMessage(thread: string): Promise<string | undefined> {
+  async takeBackMessage(thread: string): Promise<void> {
     const last = this.lastMessage(thread);
-    if (!last) return undefined;
+    if (!last) return;
     this.retaken.add(last.id);
     if (!last.done) {
       this.cancels.add(last.id);
       await this.engine.cancel(last.id);
     }
     await this.refresh();
-    return String(last.words[1] ?? "");
+    this.emit("compose", String(last.words[1] ?? ""));
   }
   /** A message to a thread, from the box at the end of the thread. It goes to the thread whatever the input is
    * doing, and a message to a thread that is over opens it again. */
@@ -1664,6 +1664,25 @@ export class Session extends EventEmitter {
       }
     }
     await this.refresh();
+  }
+
+  /** Runs a word on the chain on screen, as /run does, and gives, once the word ended, the value of the last act that
+   * it made on that chain, as the record holds it once that act is done, or undefined for a word that made no act. A
+   * word that raises or that the gate refuses rejects with its error. */
+  async runWord(word: string): Promise<unknown> {
+    this.findings = [];
+    const on = this.selected;
+    const id = await this.engine.rung({ word, on });
+    try {
+      await this.engine.result(id);
+      const made = (await this.engine.transcript({ on })).filter(
+        (fact) => fact[2] === id && new RegExp(`^${String(fact[0])}\\d+$`).test(String(fact[1])),
+      );
+      const last = made.at(-1);
+      return last ? await this.engine.result(String(last[1])) : undefined;
+    } finally {
+      await this.refresh();
+    }
   }
 
   /** The extensions that the life runs, in the order that it enabled them, each with its life word. */
