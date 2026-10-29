@@ -1172,7 +1172,7 @@ export const feed = part({
               for (const rung of line.rungs) {
                 const source = this.subject(rung).trimEnd().split("\n");
                 const last = source.at(-1) ?? "";
-                if (!/^[A-Za-z_][\w.]*\(/.test(last)) continue;
+                if (!/^(await )?[A-Za-z_][\w.]*\(/.test(last)) continue;
                 const acts = [...madeBy(rung.id)];
                 out.push({
                   kind: "code",
