@@ -12,7 +12,7 @@ import {
   stepLines,
   thread,
   threadProgram,
-  wants,
+  type wants,
   writing,
 } from "furb/life";
 import { clock } from "../clock.ts";
@@ -29,6 +29,17 @@ import { type BlockOptions, MESSAGE_ROWS, PROGRAM_STEPS, spell, threadMarks, vie
 import { SCROLL } from "./thread.ts";
 
 export const feed = part({
+  /** What a question that the input answers says under it: the list of its values takes the arrows and the numbers,
+   * and a field takes the words of the shape. */
+  answeredBelow(ask: Parameters<typeof wants>[0]): Part[] {
+    if (ask.choices.length) return [["The list below answers this question", c.muted]];
+    return [
+      [`The input below answers this question, as ${ask.shape}, or `, c.muted],
+      ["⌃A", c.text],
+      [" opens each in turn", c.muted],
+    ];
+  },
+
   renderContent(): void {
     const w = this.session;
     const view = this.tree ? "tree" : `${w.selected}:${w.view}`;
@@ -738,15 +749,7 @@ export const feed = part({
                 box.add(
                   this.text(
                     aimed
-                      ? [
-                          ["The input below answers this question", c.muted],
-                          [
-                            pending.choices.length ? ` with ${wants(pending)}` : `, as ${pending.shape}`,
-                            c.muted,
-                          ],
-                          [", or press ", c.faint],
-                          ["⌃A", c.muted],
-                        ]
+                      ? this.answeredBelow(pending)
                       : [["Click here to answer this question in the input below", c.muted]],
                     c.muted,
                     {
@@ -1309,12 +1312,7 @@ export const feed = part({
                     space.between,
                     this.text(
                       aimed
-                        ? [
-                            ["The input below answers this question", c.muted],
-                            [ask.choices.length ? ` with ${wants(ask)}` : `, as ${ask.shape}`, c.muted],
-                            [", or press ", c.faint],
-                            ["⌃A", c.muted],
-                          ]
+                        ? this.answeredBelow(ask)
                         : [["Click here to answer this question in the input below", c.muted]],
                       c.muted,
                       { run: () => (aimed ? this.question(ask) : void w.point(ask.id).catch(this.report)) },
