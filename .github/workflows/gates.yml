@@ -12,7 +12,7 @@ on:
 # can save: a cancel on main made the bindings on Windows build their dependencies again on each run, in 12 minutes.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -38,6 +38,7 @@ jobs:
       ts_os: ${{ steps.scope.outputs.ts_os }}
       crate: ${{ steps.scope.outputs.crate }}
       gui: ${{ steps.scope.outputs.gui }}
+      code: ${{ steps.scope.outputs.code }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -78,6 +79,7 @@ jobs:
     # and on both engines, the one of the interpreter and the one in the sandbox of monty.
     name: the suite on ${{ matrix.os }}
     needs: scope
+    if: needs.scope.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -152,6 +154,7 @@ jobs:
   typescript:
     name: the bindings and the TUI on ${{ matrix.os }}
     needs: scope
+    if: needs.scope.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
     # A change of the lock or of this file makes every system build each crate from nothing, and main saves the cache
     # only from a job that passes. A limit shorter than that build fails every later run too, since none finds a cache.
@@ -202,6 +205,8 @@ jobs:
     # of the crate with the feature of the bindings. It runs beside the bindings on Linux, whose tests take most of
     # their time, so neither job waits for the other.
     name: the crate and the speed of the TUI on ubuntu-latest
+    needs: scope
+    if: needs.scope.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     defaults:
