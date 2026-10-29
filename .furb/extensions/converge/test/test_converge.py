@@ -865,3 +865,34 @@ def test_a_job_that_starts_its_command_again_ends_the_old_command_first(world: W
   job.update(pairs=[("before", "sha1"), ("head", "merged1")], out=str(world.tmp / "o"))
   fresh = world.launched(world.target, {"records": {}}, job, True)
   assert isinstance(world.done[open_act], Refused) and fresh != open_act
+
+
+def test_green_prs_that_wait_for_the_judges_ride_one_capture_and_a_clean_train_clears_each(world: World) -> None:
+  converged(world)
+  world.round["prs"].update({5: pr(n=5, verdict="pass"), 6: pr(n=6, sha="def", verdict="pass")})
+  world.say(r"gh pr view [56] --json files", "tui/src/app.ts\n")
+  world.say(r"refs/pull/5/head refs/pull/6/head", "base1\nin 5\nin 6\ntrain1\n")
+  world.say(r"python3 -I -", listing(kind="text"))
+  assert veto(world) is False
+  assert asyncio.run(world.converge_veto(pr(n=6, sha="def", verdict="pass"))) is False
+  heads = world.book()["heads"]
+  assert heads["5 abc"]["state"] == heads["6 def"]["state"] == "clean"
+  [asked] = world.judged()
+  assert "#5, #6" in asked
+  assert world.ns["OPEN"] == {}
+
+
+def test_a_train_with_a_gap_sends_each_of_its_prs_to_be_judged_alone(world: World) -> None:
+  converged(world)
+  world.judge = lambda message, to: gap()
+  world.round["prs"].update({5: pr(n=5, verdict="pass"), 6: pr(n=6, sha="def", verdict="pass")})
+  world.say(r"gh pr view [56] --json files", "tui/src/app.ts\n")
+  world.say(r"refs/pull/5/head refs/pull/6/head", "base1\nin 5\nin 6\ntrain1\n")
+  world.say(r"python3 -I -", listing(kind="text"))
+  assert veto(world) is True
+  heads = world.book()["heads"]
+  assert heads["5 abc"] == heads["6 def"] == {"state": "held", "solo": True}
+  assert not any(c.startswith("gh pr comment") for c in world.commands)
+  assert veto(world) is True
+  assert world.book()["heads"]["5 abc"]["state"] == "gaps"
+  assert len(world.judged()) == 2

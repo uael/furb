@@ -288,8 +288,8 @@ async def test_a_red_main_updates_no_branch(conductor: Round) -> None:
 @JQ
 async def test_a_green_pr_behind_main_updates_its_branch_though_heal_updated_it_at_that_head(conductor: Round) -> None:
   conductor.say(r"compare/main\.\.\.abc", '{"behind_by": 3}')
-  conductor.say(r"compare/abc\.\.\.main", '{"files": [{"filename": "b.py"}]}')
-  conductor.say(r"pr view 5 --json files", '{"files": [{"path": "b.py"}]}')
+  conductor.say(r"compare/abc\.\.\.main", '{"files": [{"filename": "src/engine.py"}]}')
+  conductor.say(r"pr view 5 --json files", '{"files": [{"path": "src/engine.py"}]}')
   await conductor.mend(conductor.pr(checks=("FAILURE", "FAILURE")), 0.0, False)
   assert conductor.log().count("update-branch") == 1
   green = conductor.pr(checks=("SUCCESS",), names=["the hooks"])
@@ -1953,3 +1953,55 @@ def test_a_worker_takes_a_free_workspace_at_its_hire_and_gives_it_back_when_it_e
   assert first not in conductor.slots
   conductor.real_hire("k3", "three", "gui")
   assert f"{repo}-w1," in conductor.prompts[-1][0]
+
+
+@POSIX
+@JQ
+async def test_a_green_pr_whose_files_moved_on_main_merges_with_no_update_when_no_gate_sums_them(conductor: Round) -> None:
+  conductor.say(r"compare/abc\.\.\.main", '{"files": [{"filename": "tui/src/app.ts"}]}')
+  conductor.say(r"pr view 5 --json files", '{"files": [{"path": "tui/src/app.ts"}]}')
+  conductor.say(r"pr view 5 --json state", '{"state": "MERGED"}')
+  await conductor.land(conductor.pr(checks=("SUCCESS",), names=["the hooks"]), False)
+  assert "update-branch" not in conductor.log()
+  assert "pr merge 5 --squash" in conductor.log()
+  assert 5 in conductor.merged
+
+
+def two(conductor: Round, top: tuple = ("SUCCESS",)) -> None:
+  conductor.prs[7] = conductor.pr(n=7, head="w/a", checks=("SUCCESS",), names=["the hooks"])
+  conductor.prs[8] = conductor.pr(n=8, head="w/b", base="w/a", checks=top, names=["the hooks"])
+
+
+@POSIX
+@JQ
+async def test_a_green_stack_merges_whole_at_once_through_gh_stack(conductor: Round) -> None:
+  two(conductor)
+  conductor.say(r"pr view [78] --json state", '{"state": "MERGED"}')
+  await conductor.land(conductor.prs[7], False)
+  assert "stack merge 8 --yes --squash" in conductor.log()
+  assert "pr merge" not in conductor.log()
+  assert {7, 8} <= conductor.merged
+  assert conductor.heard == ["The stack #7 <- #8 merged whole."]
+
+
+@POSIX
+@JQ
+async def test_a_stack_with_a_red_layer_does_not_merge_whole(conductor: Round) -> None:
+  two(conductor, top=("FAILURE",))
+  conductor.say(r"pr view 7 --json state", '{"state": "MERGED"}')
+  await conductor.land(conductor.prs[7], False)
+  assert "stack merge" not in conductor.log()
+  assert "pr merge 7 --squash" in conductor.log()
+
+
+@POSIX
+@JQ
+async def test_a_stack_that_gh_stack_does_not_hold_lands_one_layer_at_a_time_and_is_told_once(conductor: Round) -> None:
+  two(conductor)
+  conductor.say(r"pr view 8 --json state", '{"state": "OPEN"}')
+  conductor.say(r"pr view 7 --json state", '{"state": "MERGED"}')
+  await conductor.land(conductor.prs[7], False)
+  assert conductor.log().count("stack merge 8") == 1
+  assert "pr merge 7 --squash" in conductor.log()
+  assert "no stack w/a" in conductor.noticed
+  assert any("did not merge whole" in line for line in conductor.heard)
