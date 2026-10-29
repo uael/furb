@@ -89,11 +89,11 @@ def program(on="") -> dict[str, str]:
   return words
 
 
-def standing() -> list:
+def standing():
   return answer("stand", ROOT, [])
 
 
-def stand(on: str = ROOT) -> list:
+def stand(on=ROOT):
   return ask("stand", on)
 
 
@@ -109,7 +109,7 @@ def gate(word: str, on="") -> list[str]:
   return ask("gate", on, unquoted(word))
 
 
-def cd(path: str, on="") -> str:
+def cd(path: str, on=""):
   path = ask("cd", on, path)
   tell(on, path)
   return path
@@ -156,9 +156,7 @@ def close(value: object, id=""):
 
 def debug(template: Template):
   text = "".join(
-    x
-    if isinstance(x, str)
-    else format(("{!" + x.conversion + "}").format(x.value) if x.conversion else x.value, x.format_spec)
+    x if isinstance(x, str) else format(("%" + x.conversion) % (x.value,) if x.conversion else x.value, x.format_spec)
     for x in template
   )
   (who := acting()) and tells(who) and text and say(*told(who, "debugged", debug=text))
@@ -434,7 +432,7 @@ def grant(usd: float | None = None, share: float | None = None, on="") -> Act[No
 
 
 def bash(
-  command: str, stdin: str | None = "", timeout: float = TIMEOUT, show: Show = TAIL, show_err: Show | None = None, on=""
+  command: str, stdin: str | None = "", timeout=TIMEOUT, show: Show = TAIL, show_err: Show | None = None, on=""
 ) -> Act[Exit]:
   def ear(id):
     yield told(id, "", bound(id, "Exit"), command="" if show is HIDDEN else command)
@@ -792,13 +790,13 @@ def boot(record=(), **outside):
     a = (kind, name := names.setdefault((by, made[speaker, kind]), kind + str(len(names) + 1)), by, on, *words)
     if known.setdefault(name, a) is a:
       holds(scope(on), [a])
-      log.append((a, heard := [*outside]))
+      log.append((a, heard := {*outside} - busy))
       busy.add(id(a))
       try:
         for n, g in ears(a):
-          ear or n in heard or n == "journal" or n in busy or name in taken or hears(n, g, a) or heard.append(n)
+          ear or n in heard or n == "journal" or n in busy or name in taken or hears(n, g, a) or heard.add(n)
         if ear:
-          heard.append(name)
+          heard.add(name)
           drive(ear(name), name)
         if kept.get(name, a) == a:
           if name not in taken and (f := first.get(name)):
@@ -809,7 +807,7 @@ def boot(record=(), **outside):
               taken[name] = True
           if kind in ("run", "chain") or not owed():
             offers(a)
-        if name not in taken:
+        if name not in taken and not busy & {*outside} & {*dict(ears(a))}:
           with site.set(""):
             say("done", name, Refused("nothing takes " + kind))
       finally:
