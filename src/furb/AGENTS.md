@@ -60,8 +60,8 @@ meanings. The entry of such a name here gives only its form in the engine.
   which python can bind.
 - maker: the one that made a question, which its fact says as who said it; for a rung that retells, the rung it
   retells.
-- lineage: the makers of an act, one under the other, which the life holds and under walks; chains form a tree by
-  maker, from the operator.
+- lineage: the act and its makers, one under the other, which the life holds and lineage(name) walks, up to the
+  operator or an ear of the outside; under and covers read it, and chains form a tree by maker, from the operator.
 - under: what an act is to its ancestors.
 - scope: the chain an act is on, or the scope of the thread it is on, and itself for a chain.
 - root: chain1, which boot opens.

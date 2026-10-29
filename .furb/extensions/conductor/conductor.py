@@ -46,7 +46,7 @@ A prompt of a worker that ends with CancelledError while the round made no cance
 The round tells you a worker that ends with no PR, with its answer, or that says nothing for 45 minutes, relays to you each question that a worker puts to the operator, and wakes a worker that paused. results keeps the answer of each worker under its prompt.
 When a worker ends, the round asks it debrief() once, and adds each friction that it gives to TOOLING, the ledger of the defects of the tooling, as flaw(what) adds a defect that you find or patch live. An entry counts each time that it comes again. settle_flaw(part, pr) closes each open entry that holds part with the PR that fixed it, once you checked on main that the PR did; the audit lists the open entries alone, and an entry that comes again opens again.
 A check counts by its newest run, and the round acts on a failed check once no check of the PR runs, or at once when two failed. A failed check heals with no worker first, once for each head sha: the round reruns the failed jobs of the run whose failure is the one failed check of the PR, which costs the runners of CI the least, else it updates the branch of a PR on main that is behind main while main is green, at most once in UPDATED seconds for a PR, since a PR that still fails after an update fails on its own. It gives a PR on main whose head has no run of the gates one, once for each head sha: it updates the branch of the PR while main is green, else it reruns the workflows at the head. It reruns once, for each head sha, a run that was cancelled at the head of a PR, and a check cancelled again at that sha counts as failed.
-Each sweep puts each open PR of the round in one state of a table: green, running (its checks run, or one failed check waits for the end of its run), red (two failed checks, or one once no check runs, or an open box), conflicting, stacked, or owner (it waits on the owner). A red or conflicting PR that is not a draft and holds no label paused or hold has one worker assigned at its head, in assigned[n] with the time of the assignment. A PR in trouble with no live assignee gets one in that sweep: its maker, the live worker of its label w:key or of owns, once for each head; else a fixer. A maker whose head did not move in OWNED seconds, 15 minutes, gives the PR to a fixer. A fixer that ends with no new head is replaced at once, twice at most for a head. A sweep that ends with a PR in trouble and no assignee tells you once, as a defect of the round, with its cause. Just before it gives an order or hires a fixer, the round reads the PR again and gives none when the head moved or the conflict is gone, and it names in an order the base of a stacked PR with the head that the base had before. While a fixer is assigned to a PR, the round neither updates its branch nor merges it, and it tells the maker when it updates or rebases the branch, or when a fixer starts on it. The round closes a PR that changes no file. A mergeable that gh gives as UNKNOWN is probed with git merge-tree. The round rebases a child of a PR whose head was force-pushed onto the new head of its parent, and a child whose parent merged outside the round onto main, from the fork point when the child holds no head of the parent that the round saw.
+Each sweep puts each open PR of the round in one state of a table: green, running (its checks run, or one failed check waits for the end of its run), red (two failed checks, or one once no check runs, or an open box), conflicting, main (while main is red, each line of its failed checks fails on main too), stacked, or owner (it waits on the owner). A red or conflicting PR that holds no label paused or hold, and is not a draft whose maker lives, has one worker assigned at its head, in assigned[n] with the time of the assignment. A PR in trouble with no live assignee gets one in that sweep: its maker, the live worker of its label w:key or of owns, once for each head; else a fixer. A maker whose head did not move in OWNED seconds, 15 minutes, gives the PR to a fixer. A fixer that ends with no new head is replaced at once, twice at most for a head. A sweep that ends with a PR in trouble and no assignee tells you once, as a defect of the round, with its cause. A PR in the state main gets no order, no handover and no fixer, since no change of it can fix what main fails: the notice of a red main names such PRs, and once main is green the round updates their branches. A draft whose worker ended is tended as any PR in trouble, and only its merge waits. Just before it gives an order or hires a fixer, the round reads the PR again and gives none when the head moved or the conflict is gone, and it names in an order the base of a stacked PR with the head that the base had before. While a fixer is assigned to a PR, the round neither updates its branch nor merges it, and it tells the maker when it updates or rebases the branch, or when a fixer starts on it. The round closes a PR that changes no file. A mergeable that gh gives as UNKNOWN is probed with git merge-tree. The round rebases a child of a PR whose head was force-pushed onto the new head of its parent, and a child whose parent merged outside the round onto main, from the fork point when the child holds no head of the parent that the round saw.
 The round merges each green PR into main from the lowest number when git merges it with main clean and no file that a gate sums (SERIAL: the engine under its wall of tokens, the budgets) changed both in it and on main since its branch forked, after it moves the PRs that stack on it onto main and rebases each there with git rebase --onto from the head that it held of the PR that merged, in a scratch worktree, and pushes it with --force-with-lease (a rebase that conflicts is left to the fixer); else it updates the branch, and only when main is green.
 The label paused takes a PR out of the round. A draft, the label hold, a review that waits for its fix, and the label owner-merge, until the owner takes it off as his approval, keep a PR from a merge.
 A notice wakes you only for a decision, with the context that it needs: each event that needs none, as a worker that ends with a PR, a heal, a merge or a PR made outside the round, is one line in the next notice. The round tells you when main is red, with the lines that failed, when a PR fails to merge, with what gh said, or when a PR on main with no draft, no hold, no worker and no check that runs has no change for 45 minutes, with its checks, and each comment or issue of the owner in the private repository of the decisions, which PRIVATE names beside this word and git does not hold. await decide(title, text) opens a decision there as an issue, and news(line) adds a line at the top of its digest issue.
@@ -67,6 +67,7 @@ Method, at each notice: read the whole state, fix every thing that is off in one
 A PR waits on a decision of the owner while awaited[decision] names one of its labels, or its number as #N, and the decision is an act that is not over, as the prompt that asked him: a failed check of that PR gets no order, no handover and no fixer, a conflict of it still does, and the round names the decision once. When the act ends, the round drops it and tends the PR again.
 The round holds at most cap() chains that hold an open prompt with a shape, and counts the chains of workers, of sub-chains and of judges alike: room() counts them, and a resume of a worker waits for a slot. When more chains stand, the round pauses the newest overflow with a note and wakes it in order when a slot frees, and it never ends its task.
 The owner rules, on 10-29: "we should use more gh stacks in conductor, because they can be merged at once (all PRs of stack as once)". So a PR on main at the bottom of a stack whose layers are all green, free of hold, paused and owner-merge, and passed by the vetoes, merges with its whole stack at once through gh stack merge, and while a layer above it still runs its checks, the bottom waits rather than merge alone; a stack with a red layer merges its green layers below it at once; a stack that gh stack does not hold lands one layer at a time, and the round tells it once. Each sweep links each chain of stacked PRs on GitHub with gh stack link, once for each chain, so that it shows as one stack. GitHub gives no priority to a queued run, so each sweep cancels each queued run of the gates that can serve no merge: a run of a closed PR, of an old head, of a draft, a held or a conflicting PR, and it defers a run of a layer above a layer that is not green, which it runs again once that layer is green and fewer than THROTTLE runs wait. It never touches a run of main or of a PR that can merge.
+reload(path, on) loads the definitions of the file of an extension into the module of a chain: it runs, in the order of the file, each top-level definition whose name the module lacks or whose text differs from the live definition of that name in program(), and gives the names that it ran. Use it after a PR that changed the conductor merged.
 A review blocks only on a defect that a command reproduces, or on a false sentence of a contract."""
 
 LIMITS = {"room": {"opus": 1, "sonnet": 3, "opus/high": 1}, "fixer": "claude-cli:sonnet/high"}
@@ -125,6 +126,10 @@ OWNED = 900.0
 tips: dict[str, str] = globals().setdefault("tips", {})
 shifted: dict[int, tuple[str, str]] = globals().setdefault("shifted", {})
 parents: dict[int, str] = globals().setdefault("parents", {})
+# The lines that fail on a red main, by its sha, and for each PR the head and the main that it was read against and
+# whether each line of its failed checks fails on that main too.
+redmain: dict[str, list[str]] = globals().setdefault("redmain", {})
+onmain: dict[int, tuple[str, str, bool]] = globals().setdefault("onmain", {})
 hired: dict[str, float] = globals().setdefault("hired", {})
 paced: set[str] = globals().setdefault("paced", set())
 
@@ -639,6 +644,57 @@ def ours() -> set[str]:
   }
 
 
+# The delimiters of a long string, built apart so that no line of this reader opens one.
+TRIPLES = ('"' * 3, "'" * 3)
+DEFINED = re.compile(r"(?:async def |def |class )(\w+)|(\w+)(?:\s*:\s*[^=\n]+)?\s*=(?!=)")
+
+
+def parts_of(word: str) -> dict[str, str]:
+  """The text of each top-level definition of a word by its name, with the comments and decorators above it."""
+  stmts: list[list[str]] = []
+  quote = ""
+  for line in word.split("\n"):
+    if not stmts or (not quote and line[:1] not in ("", " ", "\t", ")", "]", "}")):
+      stmts.append([])
+    stmts[-1].append(line)
+    at = 0
+    while True:
+      if quote:
+        hit = line.find(quote, at)
+        if hit < 0:
+          break
+        quote, at = "", hit + 3
+      else:
+        hits = sorted((line.find(d, at), d) for d in TRIPLES if line.find(d, at) >= 0)
+        if not hits:
+          break
+        quote, at = hits[0][1], hits[0][0] + 3
+  found: dict[str, str] = {}
+  above: list[str] = []
+  for lines in stmts:
+    code = [x for x in lines if x.strip() and not x.startswith(("#", "@"))]
+    if not code:
+      above += lines
+      continue
+    named = DEFINED.match(code[0])
+    if named:
+      found[named[1] or named[2]] = "\n".join([*above, *lines]).strip("\n").rstrip()
+    above = []
+  return found
+
+
+def reload(path: str = CONDUCTOR, on: str = "") -> list[str]:
+  here = on or scope(acting())
+  lived: dict[str, str] = {}
+  for word in program(here).values():
+    lived.update(parts_of(word))
+  held = module(here)
+  fresh = {n: t for n, t in parts_of(read(path, HIDDEN).content).items() if n not in held or lived.get(n) != t}
+  if fresh:
+    rung("\n\n".join(fresh.values()), on=here)
+  return list(fresh)
+
+
 def tend() -> None:
   now = clock()
   for orig, relay in list(relays.items()):
@@ -776,7 +832,15 @@ TROUBLE = ("red", "conflicting")
 
 
 def tended(pr: dict) -> bool:
-  return pr["head"].startswith("w/") and not pr["draft"] and not {"paused", "hold"} & set(pr["labels"])
+  # A draft is the work in progress of its maker while that maker lives; once the worker ended, the round tends it.
+  return (
+    pr["head"].startswith("w/") and not {"paused", "hold"} & set(pr["labels"]) and not (pr["draft"] and maker_of(pr))
+  )
+
+
+def waits_main(pr: dict) -> bool:
+  held = onmain.get(pr["n"])
+  return bool(held and held[2] and held[0] == pr["sha"] and held[1] in redmain)
 
 
 def table(pr: dict) -> str:
@@ -785,6 +849,8 @@ def table(pr: dict) -> str:
     return "conflicting"
   if pr["verdict"] == "fail" and waits_on(pr):
     return "owner"
+  if pr["verdict"] == "fail" and waits_main(pr):
+    return "main"
   running = any(c in RUNNING for c in checks)
   # A lone failed check beside a check that runs may be a flake that a rerun heals once its run ends; two are none.
   if pr["verdict"] == "fail" and not (running and sum(c in FAILS for c in checks) < 2) or pr["verdict"] == "open":
@@ -815,6 +881,25 @@ async def mend(pr: dict, now: float, red: bool) -> str:
       f"#{n} waits on the decision {decision} of the owner, which holds {', '.join(awaited[decision])}: the"
       " round gives no order, no handover and no fixer for a failed check of them until the decision ends."
     )
+  if not red and n in onmain:
+    waited = onmain.pop(n)
+    if waited[2] and waited[0] == sha and tended(pr) and not fixing(pr) and not pr["draft"]:
+      got = await bash(BEHIND.replace("{sha}", sha).replace("{n}", str(n)), show=HIDDEN, timeout=180)
+      if "updated" in got.stdout.content:
+        warn(pr, f"The round updated the branch of your PR #{n} with main.")
+        heard.append(
+          f"#{n} waited on a red main at {sha[:7]}, and main is green again, so the round updated its branch."
+        )
+        return "running"
+  if red and state in ("red", "main") and pr["verdict"] == "fail" and await on_main(pr):
+    if f"waits {n} {sha}" not in noticed:
+      noticed.add(f"waits {n} {sha}")
+      if f"red {next(iter(redmain))}" in noticed:
+        heard.append(
+          f"#{n} fails at {sha[:7]} only the lines that main fails, so it waits on main: the round gives it no order"
+          " and no fixer, and updates its branch once main is green."
+        )
+    return "main"
   if state == "red" or (state == "running" and not any(c in RUNNING for c in pr["checks"])):
     healed = await heal(pr, red)
     if healed:
@@ -873,9 +958,29 @@ async def mend(pr: dict, now: float, red: bool) -> str:
   return state
 
 
-async def evidence(pr: dict) -> str:
+async def failed_lines(pr: dict) -> list[str]:
   got = await bash(PRLINES.replace("{sha}", pr["sha"]), show=HIDDEN, timeout=300)
-  seen = [x for x in got.stdout.lines if x.strip()][:30]
+  return [x for x in got.stdout.lines if x.strip()][:30]
+
+
+def alike(line: str) -> str:
+  # The same failure shows in two logs with other times, durations and colors.
+  return re.sub(r"\x1b\[[\d;]*m|\d{4}-\d\d-\d\dT[\d:.]+Z ?|\[[\d.]+m?s\]", "", line).strip()
+
+
+async def on_main(pr: dict) -> bool:
+  tip = next(iter(redmain), "")
+  held = onmain.get(pr["n"])
+  if held and held[:2] == (pr["sha"], tip):
+    return held[2]
+  mine = {alike(x) for x in await failed_lines(pr)} - {""}
+  waits = bool(tip and mine and mine <= {alike(x) for x in redmain[tip]})
+  onmain[pr["n"]] = (pr["sha"], tip, waits)
+  return waits
+
+
+async def evidence(pr: dict) -> str:
+  seen = await failed_lines(pr)
   if not seen:
     return ""
   said = "\nThe first failed lines of its job log:\n" + "\n".join("  " + x for x in seen) + "\n"
@@ -1248,6 +1353,7 @@ STATUS = {
   "s:working": ("1D76DB", "A worker of furb does it now"),
   "s:checks": ("FBCA04", "Its checks run"),
   "s:red": ("D93F0B", "A check failed, and its worker fixes it"),
+  "s:main": ("E99695", "It fails the same lines as main, so it waits for main to be green"),
   "s:boxes": ("FEF2C0", "A box of its checklist is open, and its worker closes it"),
   "s:held": ("D4C5F9", "The label hold keeps it from a merge until it comes off"),
   "s:conflict": ("B60205", "It conflicts with its base, and its worker rebases it"),
@@ -1266,6 +1372,8 @@ async def mark() -> None:
     want[n] = (
       "s:conflict"
       if pr["mergeable"] == "CONFLICTING"
+      else "s:main"
+      if table(pr) == "main"
       else "s:red"
       if pr["verdict"] == "fail"
       else "s:boxes"
@@ -2128,12 +2236,32 @@ async def sweep(every: float) -> None:
   await throttle()
   main = json.loads(parts[2])
   red = "failure" in main["runs"]
-  if red and f"red {main['sha']}" not in noticed:
-    failed = await bash(REDLINES.replace("{sha}", str(main["sha"])), show=HIDDEN, timeout=300)
+  tip = str(main["sha"])
+  if not red:
+    redmain.clear()
+  elif tip not in redmain:
+    failed = await bash(REDLINES.replace("{sha}", tip), show=HIDDEN, timeout=300)
+    redmain.clear()
+    redmain[tip] = list(failed.stdout.lines)
+  if red:
+    # A PR whose failed lines all fail on main too waits on main: no order and no fixer can fix them.
+    for one in [p for p in prs.values() if p["verdict"] == "fail" and p["head"].startswith("w/")]:
+      if "paused" not in one["labels"] and one["mergeable"] != "CONFLICTING" and not waits_on(one):
+        await on_main(one)
+  if red and f"red {tip}" not in noticed:
+    waiting = [n for n in sorted(prs) if table(prs[n]) == "main"]
+    noticed.update(f"waits {n} {prs[n]['sha']}" for n in waiting)
+    names = ", ".join(f"#{n}" for n in waiting)
     notice(
-      f"red {main['sha']}",
-      f"main is red at {str(main['sha'])[:7]}. Find its cause first. The lines that failed:\n"
-      + ("\n".join(failed.stdout.lines) or "none that the filter knows: read gh run view --log-failed"),
+      f"red {tip}",
+      f"main is red at {tip[:7]}. Find its cause first. The lines that failed:\n"
+      + ("\n".join(redmain[tip]) or "none that the filter knows: read gh run view --log-failed")
+      + (
+        f"\nThese PRs fail only those lines, so they wait on main with no order and no fixer, and the round updates"
+        f" their branches once main is green: {names}."
+        if waiting
+        else ""
+      ),
     )
   now = clock()
   for n in sorted(prs):
@@ -2170,6 +2298,8 @@ async def sweep(every: float) -> None:
       await land(pr, red)
   for n in [k for k in assigned if k not in prs]:
     del assigned[n]
+  for n in [k for k in onmain if k not in prs]:
+    del onmain[n]
   for pr in [p for p in prs.values() if tended(p) and p.get("state") in TROUBLE]:
     if not assignee(pr):
       cause = (

@@ -586,7 +586,12 @@ export const feed = part({
         // A long message shows its first rows until a click opens it, so that a brief of a page leaves the feed
         // readable at a glance.
         const [shortened, rest] =
-          w.folds[`message:${act.id}`] === false ? [message, 0] : this.firstRows(message, MESSAGE_ROWS);
+          w.folds[`message:${act.id}`] === false
+            ? [message, 0]
+            : this.firstRows(message, folded ? 2 : MESSAGE_ROWS);
+        const foldedNote = folded
+          ? [meta, rest ? `${rest} more ${rest === 1 ? "line" : "lines"}` : ""].filter(Boolean).join("  ")
+          : "";
         sections.push({
           id: act.id,
           label: user ? [["You", tone]] : [[sent, c.faint]],
@@ -598,31 +603,13 @@ export const feed = part({
             // A right click on a message opens its menu, as on the heading of any other act.
             const beside: Part[] = [
               ...(news ? [[`${glyph.dot} `, c.accent] as Part] : []),
-              ...(sent ? [[`${sent}  `, c.faint] as Part] : []),
-              ...state,
-              ...(meta ? [[`  ${meta}`, c.faint] as Part] : []),
+              ...(sent && !folded ? [[`${sent}  `, c.faint] as Part] : []),
+              ...(folded ? state.slice(1) : state),
+              ...(foldedNote ? [[`  ${foldedNote}`, c.faint] as Part] : []),
             ];
-            // A folded thread stands as one line: the mark of its state, then the start of its message, which the room
-            // cuts, so that it never wraps beside its state and its controls.
-            const [mark, markColor] = thread ? threadMarks(thread) : ["", c.faint];
-            const text =
-              folded && thread
-                ? this.link(
-                    [
-                      [`${mark} `, markColor],
-                      [
-                        clip(
-                          shortenHomes(gist(message)),
-                          Math.max(8, this.feedWidth - indent - 32 - Bun.stringWidth(plain(beside))),
-                        ),
-                        c.muted,
-                      ],
-                    ],
-                    () => this.foldThread(act.id, false),
-                  )
-                : user
-                  ? said(shortened)
-                  : this.markdown(shortened, c.text, c.background);
+            // A folded thread stands as its message, the first rows of it, in the block of a message: the bar of the
+            // thread at its left, and at its right how much it holds and the control that opens it. A click opens it.
+            const text = user ? said(shortened) : this.markdown(shortened, c.text, c.background);
             const controls = this.threadControls(act);
             const row = this.sided(
               {
@@ -630,6 +617,7 @@ export const feed = part({
                   if (event.button === 2)
                     this.actActions(this.session.acts.find((one) => one.id === act.id) ?? act);
                 },
+                ...(folded ? { onMouseUp: this.click(() => this.foldThread(act.id, false)) } : {}),
               },
               text,
               [this.text(beside, c.faint, { marginLeft: space.between }), controls],
@@ -637,7 +625,7 @@ export const feed = part({
                 space.between +
                 (controls ? this.threadControlsWidth(controls) : 0),
               this.feedWidth - indent - 8,
-              folded ? "" : shortened,
+              shortened,
             );
             box.add(row);
             if (rest && !folded)
