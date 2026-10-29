@@ -125,7 +125,7 @@ test("a folded thread marks new work with a dot, and the dot goes once the threa
         await Bun.sleep(25);
         marked = await folded();
       }
-      expect(marked).toMatch(/┃ Explore this project.* ● /);
+      expect(marked).toMatch(/┃ ✓ Explore this project.* ● /);
       app.foldThread(id, false);
       // The box draws open over a few frames on a slow machine, and the thread counts as seen once it has.
       let open = await frame();
@@ -214,7 +214,9 @@ test("a click on a ... of a window of code opens it in a block that fits its lin
       };
       const first = (await gaps())[0];
       if (!first) throw new Error("No window is rolled.");
-      const card = app.scroll.getChildren().find((node) => node.id.startsWith("program-"));
+      // The words of the extensions stand as a card of their own above, so the window is the card at the row of the gap.
+      const cards = app.scroll.getChildren().filter((node) => node.id.startsWith("program-"));
+      const card = cards.findLast((node) => node.y <= first.y) ?? cards[0];
       const key = `window:${card?.id.slice("program-".length)}:0`;
       expect(session.folds[key]).toBeUndefined();
       await screen.mockMouse.click(first.x, first.y);

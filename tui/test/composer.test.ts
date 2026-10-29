@@ -645,7 +645,7 @@ test("a cancelled message keeps its place in the feed, and its cancel reads as a
     const first = lines.findIndex((line) => line.includes("Think until I"));
     // A folded thread keeps the header of the open thread: its message as he wrote it, with no mark before it, and its
     // state beside its shape.
-    expect(lines[first]).toMatch(/┃ Think until I\b.*str {3}⊘ cancelled {2}1 step {2}▸ Expand/);
+    expect(lines[first]).toMatch(/┃ ⊘ Think until I\b.*str {3}⊘ cancelled {2}1 step {2}▸ Expand/);
     expect(lines[first]).not.toContain("✗");
     expect(first).toBeLessThan(lines.findIndex((line) => line.includes("A second message.")));
     expect(lines.filter((line) => line.includes(" cancelled") && line.includes("⊘"))).toHaveLength(1);

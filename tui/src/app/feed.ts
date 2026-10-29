@@ -578,8 +578,8 @@ export const feed = part({
         sections.push({
           id: act.id,
           label: user ? [["You", tone]] : [[sent, c.faint]],
-          key: `${message}\n${sent}\n${plain(state)}\n${rest}\n${thread?.resolved}\n${meta}\n${news}\n${this.feedWidth}\n${this.theme}`,
-          ...(user ? { bar: tone } : {}),
+          key: `${message}\n${sent}\n${plain(state)}\n${rest}\n${thread?.resolved}\n${meta}\n${news}\n${folded}\n${this.feedWidth}\n${this.theme}`,
+          ...(user || folded ? { bar: tone } : {}),
           act,
           shown: message,
           body: (box) => {
@@ -591,26 +591,41 @@ export const feed = part({
                   this.actActions(this.session.acts.find((one) => one.id === act.id) ?? act);
               },
             });
-            const text = user ? said(shortened) : this.markdown(shortened, c.text, c.background);
+            const right: Part[] = [
+              ...(news ? [[`${glyph.dot} `, c.accent] as Part] : []),
+              ...(sent ? [[`${sent}  `, c.faint] as Part] : []),
+              ...state,
+              ...(meta ? [[`  ${meta}`, c.faint] as Part] : []),
+            ];
+            // A folded thread stands as one line: the mark of its state, then the start of its message, which the room
+            // cuts, so that it never wraps beside its state and its controls.
+            const [mark, markColor] = thread ? threadMarks(thread) : ["", c.faint];
+            const text =
+              folded && thread
+                ? this.link(
+                    [
+                      [`${mark} `, markColor],
+                      [
+                        clip(
+                          shortenHomes(gist(message)),
+                          Math.max(8, this.feedWidth - indent - 32 - Bun.stringWidth(plain(right))),
+                        ),
+                        c.muted,
+                      ],
+                    ],
+                    () => this.foldThread(act.id, false),
+                  )
+                : user
+                  ? said(shortened)
+                  : this.markdown(shortened, c.text, c.background);
             text.flexGrow = 1;
             text.flexShrink = 1;
             row.add(text);
-            row.add(
-              this.text(
-                [
-                  ...(news ? [[`${glyph.dot} `, c.accent] as Part] : []),
-                  ...(sent ? [[`${sent}  `, c.faint] as Part] : []),
-                  ...state,
-                  ...(meta ? [[`  ${meta}`, c.faint] as Part] : []),
-                ],
-                c.faint,
-                { marginLeft: space.between },
-              ),
-            );
+            row.add(this.text(right, c.faint, { marginLeft: space.between }));
             const controls = this.threadControls(act);
             if (controls) row.add(controls);
             box.add(row);
-            if (rest)
+            if (rest && !folded)
               box.add(
                 this.link(
                   [
@@ -1165,11 +1180,19 @@ export const feed = part({
                   hint: hintOf(acts, owed, named),
                 });
               }
+              // A word that only defines has no line to show, so the note stands alone, with the rungs and what they made.
+              if (out.length === 1) {
+                const ids = line.rungs.map((rung) => rung.id);
+                const span =
+                  ids.length > 1 ? `${ids[0]}…${(ids.at(-1) ?? "").replace(/^\D+/, "")}` : (ids[0] ?? "");
+                const made = line.acts.map((chip) => chip.label).join(" ");
+                out[0] = { kind: "note", step: ear, text: `# ${ear.by} ${span}  ${made}`.trimEnd() };
+              }
               return out;
             },
           );
-          // An ear whose words only define shows nothing, since no line of it runs.
-          if (earLines.length > 1)
+          // An ear with no rung shows nothing.
+          if (line.rungs.length)
             programCard(act.id, earLines, indent, {
               shown: `${act.by} ${line.rungs.map((rung) => rung.id).join(" ")}`,
             });
