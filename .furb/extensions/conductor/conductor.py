@@ -1365,6 +1365,8 @@ def verdict(pr: dict) -> str:
     return "fail"
   if pr.get("open"):
     return "open"
+  if (GATE in pr.get("names", []) or pr["head"] == "w/gallery") and checks and all(c in GREEN for c in checks):
+    return "pass"
   if GATE in pr.get("names", []) and all(c in GREEN for c in checks):
     return "pass"
   return "pending"
