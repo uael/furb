@@ -213,8 +213,7 @@ def prompt[T](shape: type[T] | object, message="", to="", on="") -> Act[T]:
   )
   thread = on * prompted(on)
   to = to or (thread and get(thread)[6])
-  who = to or module(on).get("actor")
-  asks = who != OPERATOR
+  asks = (to or module(on).get("actor")) != OPERATOR
   says = asks and thread and named == "None" and not over(thread)
 
   def ear(id):
