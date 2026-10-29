@@ -98,9 +98,9 @@ export const palette = part({
     this.paletteStart = 0;
     this.composer.blur();
     this.unhover();
-    // The dialog is as wide as its longest label and detail need, from 80 columns to 110. It stands over the middle
-    // of the feed when the feed holds it, so that it cuts no word of the sidebar, and over the middle of the screen
-    // when it is wider, so that it cuts none of its own.
+    // The dialog is as wide as its longest label and detail need, from 80 columns to 110, and no wider than the feed.
+    // It stands over the middle of the feed, so that every dialog takes one place and covers no part of the sidebar,
+    // and over the middle of the screen only when the feed is narrower than 80 columns.
     const widest = (pick: (choice: Choice) => string) =>
       Math.max(0, ...choices.map((choice) => Bun.stringWidth(pick(choice))));
     const wanted = Math.max(
@@ -108,7 +108,7 @@ export const palette = part({
       Math.min(110, widest((choice) => choice.label) + widest((choice) => choice.detail) + 10),
     );
     const column = this.feedWidth + space.gutter * 2;
-    const stage = column - 4 >= wanted ? column : this.renderer.width;
+    const stage = column - 4 >= 80 ? column : this.renderer.width;
     // A menu holds its title with the key that closes it, and each label after the pointer of the list.
     const menu = Math.min(
       this.renderer.width - 2,

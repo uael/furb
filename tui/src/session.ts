@@ -1536,6 +1536,11 @@ export class Session extends EventEmitter {
     const ended = reach.acts.length;
     const under = `${ended} ${ended === 1 ? "act" : "acts"} under it on ${this.chainsOf(reach)}`;
     if (back) {
+      // The words go back to where they went: the thread that they answered, or a new thread when they began one, and
+      // not to the thread lit at this moment, which may be the thread that this cancel ends.
+      const into = this.acts.find((one) => one.id === act.on)?.kind === "prompt" ? act.on : undefined;
+      this.aim(into);
+      this.pinned = into ?? null;
       await this.restore(String(act.words[1] ?? ""));
       this.notice = `You took back ${act.id}${ended ? `, and ended ${under}` : ""}. Change it in the input, and send it again.`;
     } else this.notice = `${act.id} is cancelled${ended ? `, and ${under}` : ""}.`;

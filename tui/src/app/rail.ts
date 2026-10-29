@@ -214,8 +214,12 @@ export const rail = part({
     const chosen = w.thread ? all.find((one) => one.act.id === w.thread) : undefined;
     const own = all.filter((one) => one.act.on === w.selected);
     const open = chosen ?? own.findLast((one) => !one.resolved);
-    // The input sends its next message to the thread chosen, else to the open thread lit, else to a new thread.
-    w.lit = open?.act.id;
+    // The input sends its next message to the thread chosen, else to the open thread lit, else to a new thread. The
+    // feed and the input drew before this part found which thread is lit, so a change draws them again.
+    if (w.lit !== open?.act.id) {
+      w.lit = open?.act.id;
+      this.schedule();
+    }
     return open ?? own.at(-1);
   },
 
