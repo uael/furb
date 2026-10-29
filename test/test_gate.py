@@ -4,6 +4,7 @@ import pytest
 
 from conftest import (
   BAD,
+  QUOTES,
   Sand,
   born,
   findings,
@@ -148,6 +149,8 @@ async def test_each_finding_names_the_line_of_the_word_it_is_found_on_and_quotes
   (found,) = engine.gate("k = 1\n  j = 2", on=root)
   assert found.startswith("line 2: ") and found.endswith(", in 'j = 2'")
   assert engine.gate(long, on=root) == [f"line 1: {why}, in {long[:77] + '...'!r}"]
+  for row in QUOTES:
+    assert engine.gate(row["word"], on=root) == row["found"], row["word"]
 
 
 async def test_a_word_that_holds_a_fence_markup_or_prose_finds_that_a_reply_is_python_and_quotes_only() -> None:

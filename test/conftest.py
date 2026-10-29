@@ -6,6 +6,7 @@ hear by, so no name of them stands in the globals of the engine. Every fact is a
 """
 
 import asyncio
+import json
 import os
 import re
 import shlex
@@ -754,3 +755,6 @@ def engine_of(request: pytest.FixtureRequest) -> Generator[str]:
 # pytest loads this file as its plugin under a name of its own; the tests and the probe import it as conftest. One
 # module object under both names keeps isinstance true against the classes above.
 sys.modules.setdefault("conftest", sys.modules[__name__])
+QUOTES = json.loads((Path(__file__).parent / "quotes.json").read_text(encoding="utf-8"))
+"""QUOTES is the table of the quotes, which the engine, the gate and the watch of the provider read alike: each word,
+the python that unquoted makes of it, whether a quote stands open at its end, and what the gate finds in it."""
