@@ -1,3 +1,4 @@
+import ast
 import asyncio
 import hashlib
 import json
@@ -692,9 +693,32 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 
 STATE = (
   "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed fixes silent"
-  " comments measures timers noted debriefs briefed owns watched after parked awaited covers kinds pool slots areas vetoes ordered tips shifted hired paced landed heard handled sent ends requeued"
+  " comments measures timers noted debriefs briefed owns watched after parked awaited covering kinds pool slots areas vetoes ordered tips shifted hired paced landed heard handled sent ends requeued"
   " statused secret budgeted flaky runs_read"
 ).split()
+
+
+def test_no_name_of_the_state_of_the_round_or_of_converge_is_a_name_of_the_engine() -> None:
+  furb = HERE.parents[2]
+  tree = ast.parse((furb / "src" / "furb" / "engine.py").read_text(encoding="utf-8"))
+  engine: set[str] = set()
+  for node in tree.body:
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+      engine.add(node.name)
+    elif isinstance(node, ast.Assign):
+      engine |= {x.id for x in node.targets if isinstance(x, ast.Name)}
+    elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+      engine.add(node.target.id)
+    elif isinstance(node, ast.TypeAlias):
+      engine.add(node.name.id)
+    elif isinstance(node, (ast.Import, ast.ImportFrom)):
+      engine |= {(x.asname or x.name).split(".")[0] for x in node.names}
+  bound = set()
+  for word in ("conductor/conductor.py", "converge/converge.py"):
+    text = (furb / ".furb" / "extensions" / word).read_text(encoding="utf-8")
+    bound |= set(re.findall(r'globals\(\)\.setdefault\("(\w+)"', text))
+  assert "queue" in bound
+  assert sorted(bound & engine) == []
 
 
 def play(conductor: Round) -> None:
@@ -1870,11 +1894,11 @@ async def test_a_failed_check_that_waits_on_a_decision_of_the_owner_gets_no_orde
 @JQ
 async def test_a_flake_that_a_working_item_covers_goes_to_its_worker_by_its_test_or_its_key(conductor: Round) -> None:
   conductor.busy("p1", "bench-fix", OPUS)
-  conductor.covers["bench-fix"] = ["a host test", "budget-the-tui"]
+  conductor.covering["bench-fix"] = ["a host test", "budget-the-tui"]
   await flaked(conductor)
   assert conductor.queue == []
   assert conductor.prompts[-1][1] == "chain-bench-fix" and "came again" in conductor.prompts[-1][0]
-  conductor.covers["bench-fix"] = ["flake-a-host-test"]
+  conductor.covering["bench-fix"] = ["flake-a-host-test"]
   assert (conductor.taken("flake-a-host-test"), conductor.taken("budget-the-tui"), conductor.taken("bench-fix")) == ("p1", "", "p1")
   conductor.working.clear()
   conductor.queue.append(("bench-fix", "", "ci"))
