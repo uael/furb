@@ -39,7 +39,7 @@ API of its own:
   its manifest says it plays, every chain or the root alone, or, on a new record, plays the setup of the root, the
   read of the doctrine and of the file of each extension, whose word it runs with no rung, then their life words, and
   `parts`, the part for the TUI of each extension, which `tui/src/parts.ts` loads live.
-  `extensions/` holds the official extensions, `memory`, `skills`, `compaction`, `ouroboros`, `web` and `mcp`, each a word, a
+  `extensions/` holds the official extensions, `catchup`, `memory`, `skills`, `compaction`, `ouroboros`, `web` and `mcp`, each a word, a
   contract and a suite, and `src/extension/` holds the ear of the World of each that has one: `compaction.rs` answers a
   carry with the turns and the open prompts of a chain of another record, which the reader reads, and `mcp.rs` holds the
   servers of the Model Context Protocol, with `mcp/binding.rs`, which makes the typed class of the tools of a server,

@@ -187,7 +187,7 @@ fn a_word_its_caller_wrote_runs_on_the_root() {
 fn a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it() {
   let yard = Yard::new("resumed");
   fs::create_dir_all(yard.at.join(".furb")).expect("the folder of the project");
-  let off = r#"{"extensions": {"memory": false, "skills": false, "compaction": false, "ouroboros": false, "web": false, "mcp": false}}"#;
+  let off = r#"{"extensions": {"catchup": false, "memory": false, "skills": false, "compaction": false, "ouroboros": false, "web": false, "mcp": false}}"#;
   fs::write(yard.at.join(".furb/config.json"), off).expect("a config of the project");
   assert_eq!(printed(yard.kept(&["run", "k = 3"]), ""), "None\n");
   assert_eq!(printed(yard.kept(&["run", "debug(t\"{k=}\")\nclose(k + 1)"]), ""), "4\n");
@@ -332,7 +332,7 @@ fn a_word_run_on_a_record_that_holds_pending_work_names_that_work_and_wakes_none
 fn a_record_is_printed_as_facts_each_after_the_number_of_its_line() {
   let yard = Yard::new("facts");
   fs::create_dir_all(yard.at.join(".furb")).expect("the folder of the project");
-  let off = r#"{"extensions": {"memory": false, "skills": false, "compaction": false, "ouroboros": false, "web": false, "mcp": false}}"#;
+  let off = r#"{"extensions": {"catchup": false, "memory": false, "skills": false, "compaction": false, "ouroboros": false, "web": false, "mcp": false}}"#;
   fs::write(yard.at.join(".furb/config.json"), off).expect("a config of the project");
   assert_eq!(printed(yard.kept(&["run", "k = 3"]), ""), "None\n");
   let facts = |words: &[&str]| {
@@ -364,7 +364,7 @@ fn a_life_runs_the_extensions_that_its_record_enables_and_those_that_the_configs
   fs::create_dir_all(skill.parent().expect("a folder")).expect("the folder of a skill");
   fs::write(&skill, "---\nname: brew\ndescription: Make tea.\n---\n").expect("a skill");
   fs::write(yard.at.join("CLAUDE.md"), "Use two spaces.\n").expect("a memory file");
-  let every = "memory: await recall()\nskills: await listed()\ncompaction\nouroboros\nweb\nmcp: mcp_index()\n";
+  let every = "catchup: catchup()\nmemory: await recall()\nskills: await listed()\ncompaction\nouroboros\nweb\nmcp: mcp_index()\n";
   assert_eq!(printed(yard.furb(&["extensions"]), ""), every, "the official extensions are on");
   let path = printed(yard.kept(&["run", "close(skill('brew').path)"]), "");
   // The World writes a path under the home of the user with ~ in place of the home.
@@ -377,14 +377,14 @@ fn a_life_runs_the_extensions_that_its_record_enables_and_those_that_the_configs
   let mut turns = yard.furb(&["turns", "--record"]);
   turns.arg(yard.record());
   let said = printed(turns, "");
-  // The doctrine and the file of each official extension take the first seven reads, and the memory file is the next.
-  assert!(said.contains("\nread8_text = 'Use two spaces.'"), "{said}");
+  // The doctrine and the file of each official extension take the first eight reads, and the memory file is the next.
+  assert!(said.contains("\nread9_text = 'Use two spaces.'"), "{said}");
   fs::create_dir_all(yard.at.join(".furb")).expect("the folder of the project");
   fs::write(yard.at.join(".furb/config.json"), r#"{"extensions": {"memory": false}}"#)
     .expect("a config of the project");
   assert_eq!(
     printed(yard.furb(&["extensions"]), ""),
-    "skills: await listed()\ncompaction\nouroboros\nweb\nmcp: mcp_index()\n"
+    "catchup: catchup()\nskills: await listed()\ncompaction\nouroboros\nweb\nmcp: mcp_index()\n"
   );
   assert_eq!(printed(yard.kept(&["extensions"]), ""), every, "a life runs what its record enables");
 }
@@ -663,14 +663,14 @@ fn a_prompt_of_the_client_is_answered_by_a_model_and_its_done_is_sent() {
     turns.iter().filter(|one| one[0] == "assistant").map(|one| one[1].clone()).collect();
   assert_eq!(
     said.len(),
-    9,
+    10,
     "the doctrine, the extensions, their life words, then the model: {said:?}"
   );
   assert!(
     said[0].as_str().is_some_and(|one| one.starts_with("read(") && one.ends_with("DOCTRINE.md')"))
   );
   for (one, name) in
-    said[1..7].iter().zip(["memory", "skills", "compaction", "ouroboros", "web", "mcp"])
+    said[1..8].iter().zip(["catchup", "memory", "skills", "compaction", "ouroboros", "web", "mcp"])
   {
     let file = format!("extensions/{name}/{name}.py')");
     assert!(
@@ -678,7 +678,10 @@ fn a_prompt_of_the_client_is_answered_by_a_model_and_its_done_is_sent() {
       "{one}"
     );
   }
-  assert_eq!(said[7..], [json!("await recall()\nawait listed()\nmcp_index()"), json!(COUNT)]);
+  assert_eq!(
+    said[8..],
+    [json!("catchup()\nawait recall()\nawait listed()\nmcp_index()"), json!(COUNT)]
+  );
   let facts = client.data("4", json!({"type": "transcript", "on": "chain1"}));
   assert!(facts["facts"].as_array().expect("the facts").contains(&fact["fact"]), "{facts}");
   assert!(client.ended());
@@ -826,15 +829,18 @@ fn a_word_of_the_client_runs_as_a_rung_and_a_pause_holds_a_chain_until_its_wake(
   let mut client = Client::new(&yard);
   assert_eq!(
     client.data("1", json!({"type": "rung", "word": "k = 1\nclose(k + 1)"})),
-    json!({"act": "rung9"}),
-    "the turn of the doctrine, the six rungs of the extensions and the turn of skills come first"
+    json!({"act": "rung10"}),
+    "the turn of the doctrine, the seven rungs of the extensions and the turn of skills come first"
   );
-  assert_eq!(client.done("rung9")["value"], 2);
+  assert_eq!(client.done("rung10")["value"], 2);
   client.data("2", json!({"type": "pause", "act": "chain1"}));
   let state = client.data("3", json!({"type": "state"}));
   assert_eq!(
     (&state["paused"], &state["extensions"]),
-    (&json!(true), &json!(["memory", "skills", "compaction", "ouroboros", "web", "mcp"]))
+    (
+      &json!(true),
+      &json!(["catchup", "memory", "skills", "compaction", "ouroboros", "web", "mcp"])
+    )
   );
   client.data("4", json!({"type": "prompt", "message": "one", "shape": "int"}));
   assert!(
@@ -940,7 +946,7 @@ fn the_state_names_the_work_that_an_earlier_life_left_pending() {
   let state = later.data("1", json!({"type": "state"}));
   // The turn of the doctrine, the rungs of the official extensions and the turn of skills come first, and the rung of
   // the client made the wait.
-  assert_eq!(state["pending"], json!([["rung9", "rung"], ["wait1", "wait"]]));
+  assert_eq!(state["pending"], json!([["rung10", "rung"], ["wait1", "wait"]]));
   later.data("2", json!({"type": "cancel", "act": "wait1"}));
   let state = later.data("3", json!({"type": "state"}));
   assert_eq!(state["pending"], json!([]), "an act that is done is pending no more");
@@ -950,10 +956,10 @@ fn the_state_names_the_work_that_an_earlier_life_left_pending() {
 #[test]
 fn the_state_names_the_work_that_a_crash_loop_parked_and_a_retry_runs_it_again() {
   let yard = Yard::new("rpc-parked");
-  // The setup of the root takes the first eight replies: the doctrine, the file of each official extension and their
+  // The setup of the root takes the first nine replies: the doctrine, the file of each official extension and their
   // life words.
   let started = |one: &Value| {
-    one["type"] == "fact" && one["fact"][0] == "started" && one["fact"][1] == "reply9"
+    one["type"] == "fact" && one["fact"][0] == "started" && one["fact"][1] == "reply10"
   };
   let mut client = Client::new(&yard);
   // The fake claude gives no answer to a turn that holds WAIT, so the reply runs until the life ends.
@@ -972,9 +978,9 @@ fn the_state_names_the_work_that_a_crash_loop_parked_and_a_retry_runs_it_again()
   }
   let mut parked = Client::new(&yard);
   let state = parked.data("1", json!({"type": "state"}));
-  assert_eq!((&state["pending"], &state["parked"]), (&json!([]), &json!([["reply9", "reply"]])));
+  assert_eq!((&state["pending"], &state["parked"]), (&json!([]), &json!([["reply10", "reply"]])));
   parked.data("2", json!({"type": "wake", "act": "chain1"}));
-  parked.data("3", json!({"type": "retry", "act": "reply9"}));
+  parked.data("3", json!({"type": "retry", "act": "reply10"}));
   parked.until(started);
   let state = parked.data("4", json!({"type": "state"}));
   assert_eq!(state["parked"], json!([]), "a retry runs the act again");

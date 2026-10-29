@@ -204,7 +204,7 @@ test("what a model writes streams into the session under its rung until its repl
   try {
     const engine = session.open();
     const prompt = engine.prompt("int", { message: "count", on: engine.root });
-    // The rung that answers the prompt comes after the eight rungs of the setup of the root, so it is found as the
+    // The rung that answers the prompt comes after the nine rungs of the setup of the root, so it is found as the
     // rung that the prompt made.
     const answering = () =>
       [...session.activity.acts.values()].find((act) => act.kind === "rung" && act.by === prompt.id)?.id ??
@@ -213,7 +213,7 @@ test("what a model writes streams into the session under its rung until its repl
     const turn = (role: string, text: unknown) =>
       expect.objectContaining({ role, content: [{ type: "text", text }] });
     await until(session, () => session.streams.get(answering())?.text === "close(3)");
-    expect(answering()).toBe("rung9");
+    expect(answering()).toBe("rung10");
     expect(session.streams.get(answering())).toEqual({
       chain: engine.root,
       text: "close(3)",
@@ -231,7 +231,7 @@ test("what a model writes streams into the session under its rung until its repl
           // A path of Windows stands with its separators doubled, as python shows a backslash.
           turn("assistant", expect.stringMatching(/^read\('.*[/\\]DOCTRINE\.md'\)$/)),
           turn("user", expect.stringMatching(/^#read1\nread1_path = '.*[/\\]DOCTRINE\.md'\n/)),
-          ...["memory", "skills", "compaction", "ouroboros", "web", "mcp"].flatMap((name, at) => [
+          ...["catchup", "memory", "skills", "compaction", "ouroboros", "web", "mcp"].flatMap((name, at) => [
             turn(
               "assistant",
               expect.stringMatching(
@@ -245,7 +245,7 @@ test("what a model writes streams into the session under its rung until its repl
               ),
             ),
           ]),
-          turn("assistant", "await recall()\nawait listed()\nmcp_index()"),
+          turn("assistant", "catchup()\nawait recall()\nawait listed()\nmcp_index()"),
           // The open of the root goes as a block of its own after the setup, which ends the block before it.
           expect.objectContaining({
             role: "user",
@@ -253,13 +253,13 @@ test("what a model writes streams into the session under its rung until its repl
               {
                 type: "text",
                 text: expect.stringMatching(
-                  /^#read8\nread8_path = 'skills:\/\/'\n(<s:read8_text>\n[\s\S]*<\/s:read8_text>|read8_text = '.*')$/,
+                  /^#read9\nread9_path = 'skills:\/\/'\n(<s:read9_text>\n[\s\S]*<\/s:read9_text>|read9_text = '.*')$/,
                 ),
               },
               {
                 type: "text",
                 text: expect.stringMatching(
-                  /^#chain1\nchain1_label = 'root'\n[\s\S]*\n#chain1 standing\n[\s\S]*\n#prompt1\nprompt1_message = 'count'\nprompt1: Act\[int\] = Act\('prompt1'\)\n\n#rung9 advance on prompt1$/,
+                  /^#chain1\nchain1_label = 'root'\n[\s\S]*\n#chain1 standing\n[\s\S]*\n#prompt1\nprompt1_message = 'count'\nprompt1: Act\[int\] = Act\('prompt1'\)\n\n#rung10 advance on prompt1$/,
                 ),
               },
             ],
@@ -816,8 +816,8 @@ test("record inspection reports pending work when its replay starts or feeds a c
   await until(first, () => printed(first, "bash2") === "hello\n");
   await first.dispose();
   try {
-    // The read of the doctrine and the rungs of the six official extensions come before the two rungs.
-    expect([sleeps, feeds]).toEqual(["rung9", "rung10"]);
+    // The read of the doctrine and the rungs of the seven official extensions come before the two rungs.
+    expect([sleeps, feeds]).toEqual(["rung10", "rung11"]);
     expect((await inspectRecord(record)).pending.map(([id]) => id)).toEqual([
       sleeps,
       "bash1",
@@ -1038,15 +1038,15 @@ test("a session enables the extensions of the configs, and a later session on it
   const first = new Session({ cwd, record, config });
   try {
     first.open();
-    expect(running(first)).toEqual(["memory", "skills", "compaction", "ouroboros", "web", "mcp"]);
+    expect(running(first)).toEqual(["catchup", "memory", "skills", "compaction", "ouroboros", "web", "mcp"]);
     // The life words of the setup read each memory file, after the reads of the doctrine and of the files of the
     // extensions, and the user turn after them shows what each read gave.
     const read = (first.engine?.transcript({ on: ROOT }) ?? []).find(
       (fact) => fact[0] === "read" && fact[4] === tilded(join(cwd, "CLAUDE.md")),
     )?.[1];
-    expect(read).toBe("read8");
+    expect(read).toBe("read9");
     const turns = (first.engine?.turns({ on: "chain1" }) ?? []).map((turn) => String(turn[1]));
-    expect(turns.at(-2)).toBe("await recall()\nawait listed()\nmcp_index()");
+    expect(turns.at(-2)).toBe("catchup()\nawait recall()\nawait listed()\nmcp_index()");
     expect(turns.at(-1)).toContain(
       `#${read}\n${read}_path = '${tilded(join(cwd, "CLAUDE.md")).replaceAll("\\", "\\\\")}'\n${read}_text = 'Use two spaces.'`,
     );
@@ -1059,7 +1059,7 @@ test("a session enables the extensions of the configs, and a later session on it
     later.open();
     fresh.open();
     expect([running(later), running(fresh)]).toEqual([
-      ["memory", "skills", "compaction", "ouroboros", "web", "mcp"],
+      ["catchup", "memory", "skills", "compaction", "ouroboros", "web", "mcp"],
       [],
     ]);
   } finally {

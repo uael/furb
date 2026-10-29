@@ -17,8 +17,6 @@ async def test_one_entry_of_the_record_kept_and_said() -> None:
     "chain",
     "stand",
     "done",
-    "clock",
-    "done",
     "bash",
     "started",
     "merged",

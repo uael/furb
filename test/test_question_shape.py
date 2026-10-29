@@ -77,8 +77,8 @@ async def test_a_read_takes_its_number_as_a_command_does() -> None:
   later = Sand()
   again, _ = life(later, list(sand.record))
   await settle(300)
-  assert [a[1] for a in said(again, "read")] == ["read1", "read2", "read3"] and engine.peek("prompt1") == 2
-  assert [a for a in later.calls if a[0] in ("read", "reply")] == [("read", "read3", root, root, "/w/a.txt")]
+  assert [a[1] for a in said(again, "read")] == ["read1", "read2"] and engine.peek("prompt1") == 2
+  assert [a for a in later.calls if a[0] in ("read", "reply")] == []
 
 
 async def test_the_generator_that_settles_an_await_is_named_after_that_act() -> None:

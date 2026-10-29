@@ -97,11 +97,11 @@ async def test_a_later_life_tells_what_the_record_holds(tmp_path: Path) -> None:
 async def test_at_a_stand_the_catch_up_of_the_chain_tells_each_memory_file_that_a_read_or_a_write_gave(
   tmp_path: Path,
 ) -> None:
-  """At a stand the catch-up of the chain tells each memory file that a read or a write on the chain gave, so remember tells again only a memory file that a memory question alone gave the chain, since the World leaves out the content that the catch-up read."""
+  """At a stand the catch-up that the extension catchup makes before remember tells each memory file that a read or a write on the chain gave, so remember tells again only a memory file that a memory question alone gave the chain, since the World leaves out the content that the catch-up read."""
   top = noted(tmp_path / "work", "one\ntwo\n")
   sub = noted(tmp_path / "work" / "sub", "sub\n")
   (sub.parent / "a.txt").write_text("a\n", encoding="utf-8", newline="")
-  _, root = extended("memory", tmp_path, _monty.memory, lives=True)
+  _, root = extended("memory", tmp_path, _monty.memory, lives=True, also=("catchup",))
   await engine.rung(f"read({str(top)!r})", on=root)
   await engine.rung('read("sub/a.txt")', on=root)
   was = recalled(root, tmp_path)
