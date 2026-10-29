@@ -2114,7 +2114,7 @@ async def test_queued_runs_that_can_serve_no_merge_are_cancelled_and_a_run_above
   assert conductor.deferred == {}
 
 
-def test_a_render_of_the_gallery_runs_no_gate_and_passes_on_its_other_checks(conductor: Round) -> None:
-  gallery = conductor.pr(n=703, head="w/gallery", checks=("SUCCESS",), names=["the title"])
+def test_a_render_of_the_gallery_runs_no_check_and_passes(conductor: Round) -> None:
+  gallery = conductor.pr(n=703, head="w/gallery")
   assert gallery["verdict"] == "pass"
   assert conductor.pr(n=7, checks=("SUCCESS",), names=["the title"])["verdict"] == "pending"
