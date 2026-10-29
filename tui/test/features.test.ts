@@ -396,7 +396,12 @@ test("the words of the extensions stand as code: a comment that names their ear,
         const shown = rows.slice(at + 1, at + 13).map((row) => row.trim().replace(/\s{2,}.*$/, ""));
         expect(shown.slice(0, 8).map((row) => /^\d+ read\('/.test(row))).toEqual(Array(8).fill(true));
         // The life words stand as the calls that end their one word, each on its line.
-        expect(shown.slice(8)).toEqual(["9 catchup()", "10 await recall()", "11 await listed()", "12 mcp_index()"]);
+        expect(shown.slice(8)).toEqual([
+          "9 catchup()",
+          "10 await recall()",
+          "11 await listed()",
+          "12 mcp_index()",
+        ]);
         expect(rows.join("\n")).not.toMatch(/rung\d+…\d+|remember1|ouroboros1|catchup1/);
       },
       { width: 140, height: 42 },
