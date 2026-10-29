@@ -337,3 +337,18 @@ test("a quote that ran stands in its word as one binding, and the blank lines th
     ["code", "x = 1", 7],
   ]);
 });
+
+test("an act that no word made shows a text, a float, a list and a map of its words as python writes them, never as an object", () => {
+  const write = act("write1", "write", "chain1", "operator", 1, 2, {
+    words: [
+      { is: "Text", path: "notes.md", content: "a\n" },
+      { is: "float", args: ["3"] },
+      [1, null],
+      { x: true },
+    ],
+  });
+  const [line] = actLines(write, new Set(), label);
+  expect(line?.kind === "code" && line.text).toBe(
+    `write1 = write(Text(path="notes.md", content="a\\n"), 3.0, [1, None], {"x": True})`,
+  );
+});

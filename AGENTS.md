@@ -38,9 +38,11 @@ API of its own:
   `extensions`, which enables each by a fact that the record keeps and plays its word as a rung on each chain where
   its manifest says it plays, every chain or the root alone, and
   `parts`, the part for the TUI of each extension, which `tui/src/parts.ts` loads live.
-  `extensions/` holds the official extensions, `memory`, `skills`, `compaction`, `ouroboros` and `web`, each a word, a
+  `extensions/` holds the official extensions, `memory`, `skills`, `compaction`, `ouroboros`, `web` and `mcp`, each a word, a
   contract and a suite, and `src/extension/` holds the ear of the World of each that has one: `compaction.rs` answers a
-  carry with the turns and the open prompts of a chain of another record, which the reader reads. `docs/extensions.md`
+  carry with the turns and the open prompts of a chain of another record, which the reader reads, and `mcp.rs` holds the
+  servers of the Model Context Protocol, with `mcp/binding.rs`, which makes the typed class of the tools of a server,
+  and `tests/mcp-corpus`, the tool lists of real servers that its suite measures. `docs/extensions.md`
   says how an extension works.
 - `src/life.rs` opens a life as every host opens one: the record, and the ears of the crate after the ears of the
   host, the provider among them, on the default actor and the roster that the host names from the catalog, or every
@@ -213,7 +215,7 @@ is the folder `test` beside it.
 2. Every test carries a sentence of the contract.
 3. Every definition has a file of its own and at least one sentence. Two definitions never share a file.
 4. The module docstring of each contract is empty.
-5. `engine.py`, minified with its program kept as it is, costs fewer than 6500 tokens of `o200k_base`, the
+5. `engine.py`, minified with its program kept as it is, costs fewer than 6750 tokens of `o200k_base`, the
    tokenizer of OpenAI, and the doctrine of furb, `DOCTRINE.md`, costs at most 2000. The test counts with `o200k_base`
    because it is local and the same on each machine: the tokenizer of Claude is not public, and only the network
    counts with it. The wall is a proxy for the cost to Claude, which reads about 1.5 tokens for each token of
@@ -235,6 +237,13 @@ python that the crate carries, and the extensions. So a change of `src/furb/engi
 `uv run`, after a build of a few seconds, and a short command can take minutes. To run with no sync, which builds
 nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 
+Set the timeout of each command, and the bound of each wait, to about twice the time that the step should take,
+never a round 600 or 900 seconds in case: a ceiling that is too large hides a hang for as long. Make a step that can
+take minutes print its progress, so that a hang shows at once. The owner ruled this on 10-29.
+
+Make a small change, run the checks that it touches, and compare a check that fails with the base before the change:
+fix what your change broke, and report what was broken before.
+
 - `uv sync`: install the environment, which builds the crate with its `python` feature into the package
   `furb-monty`, and the command line into the package `furb-cli`, and builds them again after a change that their
   `cache-keys` name. `uv sync --reinstall-package furb-monty --reinstall-package furb-cli` builds them again in any
@@ -247,7 +256,8 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
   this clone is checked out and not made again: a local branch that lags behind origin moves up to it, a local branch
   with work that origin lacks stays as it is, and git names the worktree that holds a branch already. A new branch
   starts from `base`, `origin/main` by default, which no existing branch uses. Run it from any directory. It copies on write the build directories of the main
-  checkout into the worktree: the `target` of cargo, which maturin and napi share, with its timestamps, the
+  checkout, or of the worktree of this clone where `uv sync` built the crate whose commit stands nearest to the new one, into the worktree, since the main
+  checkout can stand far behind origin and its build with it: the `target` of cargo, which maturin and napi share, with its timestamps, the
   `node_modules` of bun, the build of the TypeScript package, and the cache of the tests of the TUI. A copy on write
   shares the blocks of each file until a build changes it, so it takes less than 1 GiB of the disk. Then cargo builds
   only the crates of the workspace again, because their path changed, and no dependency. The script does not copy
@@ -279,7 +289,8 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 - `cargo run -p furb-cli -- <words>`, or `uv run furb <words>`: the command line, as `furb --help` says.
 - `uv run pre-commit run --all-files`: every gate the commit hook runs. A `git commit` runs the hooks, `cargo test`
   among them, and takes minutes: give it a timeout of 3600 s in `bash`, and chain the push after it with `&&`, so a
-  commit that fails stops the push. The hook of the links runs only for a README or a manifest, and reads git alone.
+  commit that fails stops the push. The hook `cargo test` runs only when a file that the crate or its tests read changed, and the gates run every hook on
+  every file. The hook of the links runs only for a README or a manifest, and reads git alone.
   The hook `stray` refuses a `*.rej`, `*.orig` or `*-E` file.
 - `uv run python script/smoke.py`: one real life on the default actor: claude-cli:opus/high through the claude command
   line on PATH, or the one `FURB_CLAUDE_BIN` names, and with no claude the first model of the network or of the local
@@ -343,7 +354,8 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
   budgets are set again, and `FURB_BENCH_FACTS` sets the size of the long life.
 - `bun run screenshots` and `bun run animation`: capture `docs/screenshots/` and `docs/furb.gif` again from the
   real renderer. Run both after a change that a screen shows, and read each capture. One run of each at a time holds
-  its home in `/tmp`, and a second run waits until the first ends. A screen that does not come in three minutes ends
+  its home in `/tmp`, and a second run waits until the first ends. `FURB_GALLERY_ROOT` names another folder for the
+  home and its lock, so that runs with two roots run at once. A screen that does not come in three minutes ends
   the run with an error that names the screen, and a run never waits past thirty minutes. A run that waits says how
   long the run that holds the home has held it. The clock of the view stands still by default, so that two runs of
   the same code draw the same captures, and `FURB_STILL_CLOCK`, a time in milliseconds, sets another time.

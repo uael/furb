@@ -123,12 +123,13 @@ async def test_a_reply_the_world_cannot_answer_is_the_worlds_to_refuse() -> None
 
 
 async def test_the_life_refuses_a_reply_that_no_ear_owns() -> None:
-  """The life refuses a reply that no ear owns, and the chain that asks then pauses itself, since that fault stands until a wake."""
+  """The life refuses a reply that no ear owns, and the chain that asks then pauses itself with that refusal as its cause, since that fault stands until a wake."""
   log, root = life(Where())
   asked = engine.prompt(int, "count", on=root)
   await settle()
   (reply,) = [a[1] for a in said(log, "reply")]
   assert isinstance(got := engine.peek(reply), Refused) and str(got) == "nothing takes reply"
+  assert [(a[1], a[3]) for a in said(log, "pause")] == [(root, got)]
   assert (
     engine.paused(root)
     and engine.peek(asked, ...) is ...

@@ -173,3 +173,81 @@ def importing(
   heard: list[tuple] = []
   sand, root = extended("compaction", at, lambda _: carrying(heard, prompts))
   return sand, root, heard
+
+
+MCP = ("mcp_servers", "mcp_call", "mcp_read", "mcp_prompt", "mcp_control")
+"""MCP is the kinds of act that the MCP of the suite answers."""
+
+
+def served(answers: dict[str, object], heard: list[tuple]) -> World:
+  """The MCP of the suite, in memory: an ear that takes each act of a kind in MCP, keeps it in heard, says it started,
+  and says it done from its own loop with the answer of its kind, which is a value or a function of the act, or with a
+  refusal when the kind has no answer."""
+  while True:
+    a = yield
+    if a[0] in MCP and engine.question(a):
+      heard.append(a)
+      yield "started", a[1]
+      got = answers.get(a[0], Refused(f"No server answers {a[0]}."))
+      asyncio.get_running_loop().call_soon(world_says, "done", a[1], got(a) if callable(got) else got)
+
+
+def mcped(
+  at: Path, answers: dict[str, object], *, lives: bool = False, record: Sequence[tuple] = ()
+) -> tuple[Sand, str, list[tuple]]:
+  """A life that runs the extension mcp, with its life word when it lives, on the MCP of the suite with these answers:
+  the World, the root and what the MCP heard."""
+  heard: list[tuple] = []
+  sand, root = extended("mcp", at, lambda _: served(answers, heard), lives=lives, record=record)
+  return sand, root, heard
+
+
+async def given(root: str, **names: object) -> None:
+  """Binds names in the module of a chain before a word that uses them, so that the word does not hold their text
+  and the open of an act tells it: a tell leaves out a text that the word of its act already shows."""
+  await engine.rung("\n".join(f"{name} = {value!r}" for name, value in names.items()), on=root)
+
+
+def server(name: str, **words: object) -> dict:
+  """A server as the World answers mcp_servers: connected, with no tools, resources, templates, prompts or binding,
+  which the words change."""
+  return {
+    "name": name,
+    "scope": "project",
+    "transport": "stdio",
+    "target": f"{name}-mcp",
+    "state": "connected",
+    "error": "",
+    "version": "1.0",
+    "instructions": "",
+    "tools": [],
+    "resources": [],
+    "templates": [],
+    "prompts": [],
+    "binding": "",
+    **words,
+  }
+
+
+def tooled(name: str, description: str = "", schema: dict | None = None, **words: object) -> dict:
+  """A tool as a server lists it, whose input is an object with no property unless the schema gives some, which the
+  words change."""
+  return {
+    "name": name,
+    "title": "",
+    "description": description,
+    "input": schema or {"type": "object", "properties": {}},
+    "output": None,
+    "annotations": {},
+    **words,
+  }
+
+
+def bindings(name: str) -> str:
+  """The binding of a server of that name that has one tool, ping, as the extension binds a class."""
+  return f'class {name}:\n  async def ping() -> McpResult:\n    return await mcp_call("{name}", "ping", {{}})\n'
+
+
+def quoted(name: str, text: str) -> str:
+  """The quote that a paragraph binds a text of several lines in: its open mark, the text, and its close mark."""
+  return "<" + f"s:{name}>\n{text}</" + f"s:{name}>"

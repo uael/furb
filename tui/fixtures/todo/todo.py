@@ -5,6 +5,6 @@ from furb.engine import Act, act
 
 def todo(item: str, *, done: bool = False, on: str = "") -> Act:
   def ear(name: str) -> Iterator[tuple]:
-    yield "done", name, None
+    yield "done", name, item
 
   return act("todo", on, ear, item, done)

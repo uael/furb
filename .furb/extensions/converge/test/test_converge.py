@@ -63,6 +63,7 @@ class World:
     self.pending: list[tuple[str, object]] = []
     self.slow = False
     self.pausing = False
+    self.limit = False
     self.now = 1000.0
     self.round = {
       "quietly": self.quietly,
@@ -78,6 +79,9 @@ class World:
       "working_at": lambda name: f"at-{name}",
       "vetoes": {},
     }
+    self.round["taken"] = lambda key: next((w for w, k in self.round["working"].items() if k == key), "") or (
+      "queued" if any(q[0] == key for q in self.round["queue"]) else ""
+    )
     self.say(r"rev-parse origin/main", "sha1\n")
     self.say(r"gh issue view", WORDS + "\n")
     self.say(r"python3 -I -", listing())
@@ -87,11 +91,11 @@ class World:
     ns.update(bash=self.bash, prompt=self.prompt, chain=self.chain, rung=self.rung, grant=self.grant, wait=self.wait)
     ns.update(over=lambda name: name in self.done, peek=lambda name, waiting=None: self.done.get(name, waiting))
     ns.update(acting=lambda: "rung1", scope=lambda name: "chain1")
-    ns.update(get=self.facts.get, transcript=lambda on="", of="": [])
+    ns.update(get=self.facts.get, transcript=self.transcribe)
     ns.update(paused=lambda name: self.pausing, clock=lambda: self.now, cancel=self.cancel)
     exec(compile(SOURCE, str(HERE / "converge.py"), "exec"), ns)  # noqa: S102
     self.ns = ns
-    self.target = {**ns["TUI"], "capture": lambda target, pairs, out: f"echo capture {pairs}"}
+    self.target = {**ns["TUI"], "capture": lambda target, pairs, out: f"echo capture in {target.get('slot', 1)} {pairs}"}
 
   def quietly(self, verb: Callable[..., object], *args: object, **words: object) -> object:
     self.quieted.append((getattr(verb, "__name__", ""), args))
@@ -154,6 +158,10 @@ class World:
     self.waits.append([a for a in acts if a in self.done])
     self.waited()
     return self.act("wait", None)
+
+  def transcribe(self, on: str = "", of: str = "") -> list[tuple]:
+    note = f"#{on} waits on claude-cli:sonnet/high: usage limit until 2026-10-29 17:10 (Europe/Paris)"
+    return [("tell", on, "", [note])] if self.limit else []
 
   def told(self) -> list[str]:
     return [message for shape, message, to, on in self.prompts if shape is None and on == "chain1"]
@@ -310,8 +318,9 @@ def test_the_words_of_the_owner_are_his_issues_whole(world: World) -> None:
 
 def test_the_capture_of_the_tui_fills_each_place_of_its_command(world: World) -> None:
   command = world.tui_capture(world.ns["TUI"], [("before", "sha0"), ("head", "sha1")], "/out")
-  assert not re.search(r"\{(repo|tree|out|pairs|name|records|heaviest|still|capturer)\}", command)
-  assert f"tree='{world.tmp}-converge-tui'" in command
+  assert not re.search(r"\{(repo|tree|gallery|branch|out|pairs|name|records|heaviest|still|capturer)\}", command)
+  assert f"tree='{world.tmp}-converge-tui-1'" in command and " converge/tui-1 " in command
+  assert "export FURB_GALLERY_ROOT='/tmp/furb-converge-tui-1'" in command
   assert "for pair in 'before:sha0' 'head:sha1'; do" in command
   assert command.count("FURB_STILL_CLOCK=1767225600000 ") == 2 and 'FURB_GALLERY_CELLS="$at/demo"' in command
   assert "bun run screenshots" in command and "converge-capture.ts" in command
@@ -563,15 +572,15 @@ def test_judges_that_give_no_list_twice_keep_the_veto_and_tell_the_operator_once
   assert len(world.told()) == 1
 
 
-def test_a_judge_whose_chain_pauses_gives_no_answer_and_its_head_goes_stuck(world: World) -> None:
+def test_a_judge_whose_chain_pauses_is_cut_and_its_pass_counts_as_no_try(world: World) -> None:
   converged(world)
   world.slow, world.pausing = True, True
   world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
   world.say(r"python3 -I -", listing(kind="text"))
   assert [veto(world) for _ in range(3)] == [True, True, True]
-  assert world.book()["heads"]["5 abc"] == {"state": "stuck", "tries": 2}
+  assert world.book()["heads"]["5 abc"] == {"state": "held", "tries": 0}
   assert world.pending == []
-  assert len(world.told()) == 1 and "gave no answer twice" in world.told()[0]
+  assert world.told() == []
 
 
 def test_a_judge_that_passes_its_bound_gives_no_answer(world: World) -> None:
@@ -583,8 +592,38 @@ def test_a_judge_that_passes_its_bound_gives_no_answer(world: World) -> None:
   assert world.book()["heads"]["5 abc"] == {"state": "held"}
   world.now += world.ns["BOUND"]
   assert veto(world) is True
-  assert world.book()["heads"]["5 abc"] == {"state": "held", "tries": 1}
+  assert world.book()["heads"]["5 abc"] == {"state": "held", "tries": 0}
   assert world.pending == []
+
+
+def test_a_judge_whose_chain_waits_on_a_usage_limit_is_neither_cut_nor_counted(world: World) -> None:
+  converged(world)
+  world.slow, world.pausing, world.limit = True, True, True
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.say(r"python3 -I -", listing(kind="text"))
+  for _ in range(3):
+    assert veto(world) is True
+    world.now += world.ns["BOUND"] * 3
+  assert len(world.pending) == 1
+  assert world.book()["heads"]["5 abc"] == {"state": "held"}
+
+
+def test_the_bound_of_a_judge_starts_again_when_its_usage_limit_ends(world: World) -> None:
+  converged(world)
+  world.slow, world.limit = True, True
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.say(r"python3 -I -", listing(kind="text"))
+  assert veto(world) is True
+  world.now += world.ns["BOUND"] * 2
+  assert veto(world) is True
+  world.limit = False
+  world.now += world.ns["BOUND"] - 1
+  assert veto(world) is True
+  assert len(world.pending) == 1
+  world.now += 1
+  assert veto(world) is True
+  assert world.pending == []
+  assert world.book()["heads"]["5 abc"] == {"state": "held", "tries": 0}
 
 
 def test_a_capture_of_main_that_did_not_change_keeps_the_gaps_of_the_last_pass(world: World) -> None:
@@ -773,3 +812,172 @@ def test_a_capture_whose_command_ended_interrupted_starts_again_once(world: Worl
   assert world.ns["OPEN"]["5 abc"]["act"] != first
   assert veto(world) is False
   assert len(runs()) == 1
+
+
+def hold(world: World, key: str, n: int, sha: str, where: str = "OPEN", slot: int = 1) -> str:
+  open_act = world.act("bash", None)
+  del world.done[open_act]
+  job = {"kind": "pr", "sha": sha, "n": n, "target": "tui", "act": open_act, "asked": [], "pairs": [], "out": "o", "label": f"pr{n}", "slot": slot}
+  if where == "OPEN":
+    world.ns["OPEN"][key] = job
+  else:
+    world.ns["MAIN"]["tui"] = job
+  return open_act
+
+
+def trees(world: World) -> list[int]:
+  found = [re.search(r"-converge-tui-(\d+)'|echo capture in (\d+) ", c) for c in world.commands]
+  return [int(m[1] or m[2]) for m in found if m]
+
+
+def test_a_capture_starts_only_in_a_tree_of_the_target_where_no_other_capture_holds_an_open_command(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.say(r"python3 -I -", listing(kind="text"))
+  acts = [hold(world, f"{n} x{n}", n, f"x{n}", slot=n) for n in range(1, 4)]
+  world.round["prs"] = {**{n: pr(n, f"x{n}") for n in range(1, 4)}, 5: pr()}
+  assert veto(world) is True and trees(world) == []
+  world.done[acts[1]] = Exit(0, Text("stdout", ""), Text("stderr", ""))
+  assert veto(world) is False and trees(world) == [2]
+
+
+def test_two_prs_capture_at_once_each_in_a_tree_of_its_own(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view [56] --json files", "tui/src/app.ts\n")
+  world.say(r"python3 -I -", "", 1)
+  first = hold(world, "4 xyz", 4, "xyz")
+  world.round["prs"] = {4: pr(4, "xyz"), 5: pr()}
+  assert veto(world) is True
+  assert set(trees(world)) == {2} and first not in world.done
+
+
+def test_the_captures_that_run_stay_under_the_free_slots_of_the_cap_of_chains_but_one_runs_always(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.round.update(cap=lambda: 9, open_chains=lambda: [f"chain{n}" for n in range(9)])
+  hold(world, "4 xyz", 4, "xyz")
+  world.round["prs"] = {4: pr(4, "xyz"), 5: pr()}
+  assert veto(world) is True and trees(world) == []
+  world.ns["OPEN"].clear()
+  veto(world)
+  assert trees(world) == [1]
+
+
+def test_a_pass_of_main_runs_in_the_first_tree_alone_and_a_pr_takes_another(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.say(r"python3 -I -", "", 1)
+  hold(world, "", 0, "sha1", "MAIN")
+  assert veto(world) is True and set(trees(world)) == {2}
+  world.ns["MAIN"].clear()
+  world.files[".furb/converge/tui.json"] = json.dumps({"words": WORDS})
+  world.ns["LIVE"].clear()
+  hold(world, "5 abc", 5, "abc")
+  book = world.run(1)
+  assert book["passes"] == [] and set(trees(world)) == {2}
+
+
+def test_a_busy_lock_is_no_fault_of_the_tool_and_the_pr_keeps_its_veto_with_no_retry_and_no_notice(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  busy = listing(kind="text", faults=[["demo", "the step demo failed: waits for /tmp/furb-gallery.lock held by a run", ""]])
+  world.say(r"python3 -I -", busy)
+  assert veto(world) is True
+  assert world.book()["heads"]["5 abc"]["state"] == "held"
+  assert "5 abc" not in world.ns["OPEN"]
+  assert len([c for c in world.commands if "for pair in" in c]) == 1
+  assert world.told() == [] and world.judged() == []
+
+
+def test_a_pass_of_main_that_finds_a_busy_lock_waits_and_tells_nothing(world: World) -> None:
+  world.say(r"python3 -I -", listing(kind="text", faults=[["demo", "waits for /tmp/furb-gallery.lock", ""]]))
+  book = world.run(1)
+  assert book["state"] == "" and book["passes"] == [] and world.told() == []
+
+
+def test_a_job_that_starts_its_command_again_ends_the_old_command_first(world: World) -> None:
+  open_act = hold(world, "5 abc", 5, "abc")
+  job = world.ns["OPEN"]["5 abc"]
+  job.update(pairs=[("before", "sha1"), ("head", "merged1")], out=str(world.tmp / "o"))
+  fresh = world.launched(world.target, {"records": {}}, job, True)
+  assert isinstance(world.done[open_act], Refused) and fresh != open_act
+
+
+def test_green_prs_that_wait_for_the_judges_ride_one_capture_and_a_clean_train_clears_each(world: World) -> None:
+  converged(world)
+  world.round["prs"].update({5: pr(n=5, verdict="pass"), 6: pr(n=6, sha="def", verdict="pass")})
+  world.say(r"gh pr view [56] --json files", "tui/src/app.ts\n")
+  world.say(r"refs/pull/5/head refs/pull/6/head", "base1\nin 5\nin 6\ntrain1\n")
+  world.say(r"python3 -I -", listing(kind="text"))
+  assert veto(world) is False
+  assert asyncio.run(world.converge_veto(pr(n=6, sha="def", verdict="pass"))) is False
+  heads = world.book()["heads"]
+  assert heads["5 abc"]["state"] == heads["6 def"]["state"] == "clean"
+  [asked] = world.judged()
+  assert "#5, #6" in asked
+  assert world.ns["OPEN"] == {}
+
+
+def test_a_train_of_two_with_a_gap_sends_each_of_its_prs_to_be_judged_alone(world: World) -> None:
+  converged(world)
+  world.judge = lambda message, to: gap()
+  world.round["prs"].update({5: pr(n=5, verdict="pass"), 6: pr(n=6, sha="def", verdict="pass")})
+  world.say(r"gh pr view [56] --json files", "tui/src/app.ts\n")
+  world.say(r"refs/pull/5/head refs/pull/6/head", "base1\nin 5\nin 6\ntrain1\n")
+  world.say(r"python3 -I -", listing(kind="text"))
+  assert veto(world) is True
+  heads = world.book()["heads"]
+  assert heads["5 abc"] == heads["6 def"] == {"state": "held", "solo": True}
+  assert not any(c.startswith("gh pr comment") for c in world.commands)
+  assert veto(world) is True
+  assert world.book()["heads"]["5 abc"]["state"] == "gaps"
+  assert len(world.judged()) == 2
+
+
+def test_a_train_with_a_gap_splits_in_two_halves_that_each_ride_a_capture_of_their_own(world: World) -> None:
+  converged(world)
+  world.judge = lambda message, to: gap() if "#5, #6" in message else []
+  shas = {5: "abc", 6: "def", 7: "ghi", 8: "jkl"}
+  world.round["prs"].update({n: pr(n=n, sha=sha, verdict="pass") for n, sha in shas.items()})
+  world.say(r"gh pr view [5-8] --json files", "tui/src/app.ts\n")
+  world.say(r"origin main refs/pull/5/head refs/pull/6/head refs/pull/7/head refs/pull/8/head && cur", "base1\nin 5\nin 6\nin 7\nin 8\ntrain1\n")
+  world.say(r"origin main refs/pull/5/head refs/pull/6/head && cur", "base1\nin 5\nin 6\ntrain2\n")
+  world.say(r"origin main refs/pull/7/head refs/pull/8/head && cur", "base1\nin 7\nin 8\ntrain3\n")
+  world.say(r"python3 -I -", listing(kind="text"))
+  assert veto(world) is True
+  heads = world.book()["heads"]
+  assert heads["5 abc"]["half"] == heads["6 def"]["half"] == ["5 abc", "6 def"]
+  assert heads["7 ghi"]["half"] == heads["8 jkl"]["half"] == ["7 ghi", "8 jkl"]
+  assert not any("solo" in one for one in heads.values())
+  assert veto(world) is True
+  heads = world.book()["heads"]
+  assert heads["5 abc"] == heads["6 def"] == {"state": "held", "solo": True}
+  assert asyncio.run(world.converge_veto(pr(n=7, sha="ghi", verdict="pass"))) is False
+  heads = world.book()["heads"]
+  assert heads["7 ghi"]["state"] == heads["8 jkl"]["state"] == "clean"
+  assert len([c for c in world.commands if "for pair in" in c]) == 3
+  assert len(world.judged()) == 3
+
+
+def test_a_train_with_no_answer_sends_each_of_its_prs_to_be_judged_alone(world: World) -> None:
+  converged(world)
+  world.judge = lambda message, to: Refused("paused")
+  world.round["prs"].update({5: pr(n=5, verdict="pass"), 6: pr(n=6, sha="def", verdict="pass")})
+  world.say(r"gh pr view [56] --json files", "tui/src/app.ts\n")
+  world.say(r"refs/pull/5/head refs/pull/6/head", "base1\nin 5\nin 6\ntrain1\n")
+  world.say(r"python3 -I -", listing(kind="text"))
+  assert veto(world) is True
+  heads = world.book()["heads"]
+  assert heads["5 abc"] == heads["6 def"] == {"state": "held", "solo": True}
+
+
+def test_a_head_that_only_merged_main_keeps_the_verdict_of_the_same_change(world: World) -> None:
+  converged(world)
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.say(r"patch-id", "p1 abc\n")
+  world.say(r"python3 -I -", listing(kind="text"))
+  assert veto(world) is False
+  assert world.book()["heads"]["5 abc"]["patch"] == "p1"
+  assert asyncio.run(world.converge_veto(pr(sha="def", verdict="pass"))) is False
+  assert world.ns["LIVE"]["tui"]["heads"]["5 def"]["carried"] is True
+  assert len(world.judged()) == 1

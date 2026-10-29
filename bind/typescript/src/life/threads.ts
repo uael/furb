@@ -66,9 +66,12 @@ export function anchorOf(prompt: LiveAct, rows: ReadonlyMap<string, LiveAct>): A
   };
 }
 
+/** The acts of a life by their names, as a host indexes them. */
+export type Rows = Pick<ReadonlyMap<string, LiveAct>, "get">;
+
 /** The first prompt of the thread that a prompt stands in: the prompt itself, or the prompt that its thread starts
  * at, walking up the threads. */
-export function rootOf(prompt: LiveAct, rows: ReadonlyMap<string, LiveAct>): string {
+export function rootOf(prompt: LiveAct, rows: Rows): string {
   let at = prompt;
   for (let step = 0; step < 64; step++) {
     const up = at.thread ? rows.get(at.thread) : undefined;
@@ -80,7 +83,7 @@ export function rootOf(prompt: LiveAct, rows: ReadonlyMap<string, LiveAct>): str
 
 /** The thread that an act stands in: the first prompt of the thread whose rung is over it, walking up the makers. A
  * prompt that the operator, an ear or a chain made stands in none. */
-export function threadOf(act: LiveAct, rows: ReadonlyMap<string, LiveAct>): string | undefined {
+export function threadOf(act: LiveAct, rows: Rows): string | undefined {
   let maker = rows.get(act.by);
   for (let step = 0; maker && step < 64; step++) {
     if (maker.kind === "prompt") return rootOf(maker, rows);
@@ -90,19 +93,33 @@ export function threadOf(act: LiveAct, rows: ReadonlyMap<string, LiveAct>): stri
   return undefined;
 }
 
+/** The name of an act, as the engine reads it: the name of an ear or of the operator ends with no number. */
+const ACT = /^\w+?\d+$/;
+
 /** Whether a prompt is a message of a thread and no thread of its own: a prompt on a thread, which the engine makes a
  * message of that thread or a prompt that opens it again, or a prompt of None that a chain made on the chain, as the
- * acknowledgment of an act that a rung of the operator made, which belongs to the thread of that act. */
-function messageOf(act: LiveAct, rows: ReadonlyMap<string, LiveAct>): string | undefined {
-  if (act.thread) return rootOf(act, rows);
-  if (act.words[0] !== "None" || rows.get(act.by)?.kind !== "chain") return undefined;
-  const about = String(act.words[1] ?? "").match(/^(\w+?\d+) /)?.[1];
-  const subject = about ? rows.get(about) : undefined;
-  return subject
-    ? subject.kind === "prompt"
-      ? (threadOf(subject, rows) ?? subject.id)
-      : threadOf(subject, rows)
-    : "";
+ * acknowledgment of an act that a rung of the operator made, which belongs to the thread of that act. whole says
+ * whether each act that the verdict walked stood in rows: a verdict that an act which has not landed yet would change
+ * is no verdict yet. */
+function messageOf(act: LiveAct, rows: Rows): { message: string | undefined; whole: boolean } {
+  let whole = true;
+  const walked: Rows = {
+    get(id) {
+      const got = rows.get(id);
+      if (!got && ACT.test(id)) whole = false;
+      return got;
+    },
+  };
+  const verdict = (): string | undefined => {
+    if (act.thread) return rootOf(act, walked);
+    if (act.words[0] !== "None" || walked.get(act.by)?.kind !== "chain") return undefined;
+    const about = String(act.words[1] ?? "").match(/^(\w+?\d+) /)?.[1];
+    const subject = about ? walked.get(about) : undefined;
+    if (!subject) return "";
+    return subject.kind === "prompt" ? (threadOf(subject, walked) ?? subject.id) : threadOf(subject, walked);
+  };
+  const message = verdict();
+  return { message, whole };
 }
 
 /** The tree of the threads of a life: each prompt under the prompt of the ladder whose rung made it, each with its
@@ -114,7 +131,7 @@ export function threads(acts: readonly LiveAct[], owed: ReadonlySet<string>): Th
   const later: [LiveAct, string][] = [];
   for (const act of acts) {
     if (act.kind !== "prompt") continue;
-    const message = messageOf(act, rows);
+    const { message } = messageOf(act, rows);
     if (message !== undefined) {
       if (message) later.push([act, message]);
       continue;
@@ -207,7 +224,8 @@ export interface ChainThread {
  * another thread. It asks the operator while a question waits in it. The acts on the chain and the index of every act
  * of a host spare a pass over every act, and what a host keeps of each prompt it read spares a read of it again. What
  * it keeps belongs to the act itself, so an act that changed, an act of another session and an act of another branch,
- * each a new object, are read again, and no prompt keeps what another prompt of the same id was. */
+ * each a new object, are read again, and no prompt keeps what another prompt of the same id was. It keeps no verdict
+ * that an act which has not landed yet would change, so the order in which the acts land changes no verdict. */
 export function chainThreads(
   on: readonly LiveAct[],
   rows: ReadonlyMap<string, LiveAct>,
@@ -226,10 +244,9 @@ export function chainThreads(
       if (thread && owed.has(act.id)) waits.push([thread, act.id]);
       continue;
     }
-    // What a prompt is stays as it was said, so a host that keeps it reads each prompt once.
     let seen = known.get(act);
     if (!seen) {
-      const message = messageOf(act, rows);
+      const { message, whole } = messageOf(act, rows);
       seen = {
         message,
         title:
@@ -239,7 +256,8 @@ export function chainThreads(
                 .find((line) => line.trim()) ?? "")
             : "",
       };
-      known.set(act, seen);
+      // What a prompt is stays as it was said once each act that it names has landed, and only then a host keeps it.
+      if (whole) known.set(act, seen);
     }
     if (seen.message !== undefined) {
       if (seen.message) later.push([act, seen.message]);

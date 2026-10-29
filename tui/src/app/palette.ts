@@ -67,14 +67,17 @@ export const palette = part({
         run: this.command(name, argument),
       });
     }
-    for (const part of this.parts.loaded)
-      for (const one of part.commands)
-        choices.push({
-          label: title(one.name),
-          detail: `${one.detail} (${part.name})`,
-          command: `/${one.name}`,
-          run: () => this.action(`/${one.name}`),
-        });
+    for (const one of this.parts.commands(this.seen()))
+      choices.push(
+        one.error
+          ? { label: `${glyph.failed} ${one.part}`, detail: one.detail, color: c.danger, run: () => {} }
+          : {
+              label: title(one.name),
+              detail: `${one.detail} (${one.part})`,
+              command: `/${one.name}`,
+              run: () => this.action(`/${one.name}`),
+            },
+      );
     this.openPalette("Commands", choices, { rich: true });
   },
 
@@ -89,7 +92,14 @@ export const palette = part({
       note = "",
       rich = false,
       at,
-    }: { selected?: number; note?: string | string[]; rich?: boolean; at?: { x: number; y: number } } = {},
+      actions = [],
+    }: {
+      selected?: number;
+      note?: string | string[];
+      rich?: boolean;
+      at?: { x: number; y: number };
+      actions?: readonly { key: string; label: string; run: (choice: Choice) => unknown }[];
+    } = {},
   ): void {
     // A dialog or a menu takes the keys, so a name that a row takes ends first, and is kept.
     this.endRename(true);
@@ -98,9 +108,9 @@ export const palette = part({
     this.paletteStart = 0;
     this.composer.blur();
     this.unhover();
-    // The dialog is as wide as its longest label and detail need, from 80 columns to 110. It stands over the middle
-    // of the feed when the feed holds it, so that it cuts no word of the sidebar, and over the middle of the screen
-    // when it is wider, so that it cuts none of its own.
+    // The dialog is as wide as its longest label and detail need, from 80 columns to 110, and no wider than the feed.
+    // It stands over the middle of the feed, so that every dialog takes one place and covers no part of the sidebar,
+    // and over the middle of the screen only when the feed is narrower than 80 columns.
     const widest = (pick: (choice: Choice) => string) =>
       Math.max(0, ...choices.map((choice) => Bun.stringWidth(pick(choice))));
     const wanted = Math.max(
@@ -108,7 +118,7 @@ export const palette = part({
       Math.min(110, widest((choice) => choice.label) + widest((choice) => choice.detail) + 10),
     );
     const column = this.feedWidth + space.gutter * 2;
-    const stage = column - 4 >= wanted ? column : this.renderer.width;
+    const stage = column - 4 >= 80 ? column : this.renderer.width;
     // A menu holds its title with the key that closes it, and each label after the pointer of the list.
     const menu = Math.min(
       this.renderer.width - 2,
@@ -236,6 +246,30 @@ export const palette = part({
       this.renderChoices();
     });
     this.paletteInput.on(InputRenderableEvents.ENTER, () => this.choose());
+    // The keys of the actions on the selected choice stand over the keys of the App while this dialog is open, and a
+    // key that types a sign acts only while the filter is empty, so that the filter still takes it otherwise.
+    const overlay = this.overlay;
+    if (actions.length)
+      this.paletteKeysOff = this.keymap.registerLayer({
+        priority: 100,
+        enabled: () => this.overlay === overlay,
+        commands: actions.map(({ key, run }, index) => ({
+          name: `palette-action-${index}`,
+          run: () => {
+            const choice = this.filtered[this.selection];
+            if (!choice) return true;
+            this.overlayClosed = undefined;
+            this.closeOverlay();
+            void Promise.resolve()
+              .then(() => run(choice))
+              .catch(this.report);
+            return true;
+          },
+          enabled: () =>
+            /^(ctrl|meta|alt|super)\+/.test(key) || [...key].length > 1 || !this.paletteInput?.value,
+        })),
+        bindings: actions.map(({ key }, index) => ({ key, cmd: `palette-action-${index}` })),
+      });
     this.renderChoices();
     this.paletteInput.focus();
   },
@@ -266,7 +300,8 @@ export const palette = part({
       const choice = this.filtered[index];
       if (!choice) return 0;
       const above = first ? (choice.heading ? 1 : 0) : titled(index) ? 2 : 0;
-      return (this.rich ? (choice.command ? 3 : 2) : 1) + above;
+      const lines = !this.rich && index === this.selection ? Math.min(choice.lines?.length ?? 0, 10) : 0;
+      return (this.rich ? (choice.command ? 3 : 2) : 1) + above + lines;
     };
     const gap = this.rich ? space.section : 0;
     const span = (from: number, to: number) => {
@@ -410,6 +445,10 @@ export const palette = part({
           ),
         );
       this.paletteList.add(block);
+      // The lines of the selected choice stand under it, at the place of its label.
+      if (selected && choice.lines?.length)
+        for (const line of choice.lines.slice(0, 10))
+          this.paletteList.add(this.inset(space.between, this.line(line, c.text, { truncate: true })));
     }
     if (!this.filtered.length && this.paletteInput?.value)
       this.paletteList.add(this.inset(space.between, this.text("Nothing matches this filter.", c.muted)));
@@ -427,6 +466,8 @@ export const palette = part({
   choose(): void {
     const choice = this.filtered[this.selection];
     if (!choice) return;
+    // A choice is no dismissal, so the dialog that awaits it hears the choice alone.
+    this.overlayClosed = undefined;
     this.closeOverlay();
     void Promise.resolve()
       .then(() => choice.run())
@@ -435,6 +476,10 @@ export const palette = part({
 
   closeOverlay(): void {
     this.authenticationOpen = false;
+    this.paletteKeysOff?.();
+    this.paletteKeysOff = undefined;
+    const closed = this.overlayClosed;
+    this.overlayClosed = undefined;
     if (this.menuItem) {
       this.menuItem = undefined;
       this.schedule();
@@ -449,6 +494,7 @@ export const palette = part({
     this.questionDocument = undefined;
     this.answering = undefined;
     this.composer?.focus();
+    closed?.();
   },
 
   /** The keys that this terminal sends, what each mark means, and the commands. */

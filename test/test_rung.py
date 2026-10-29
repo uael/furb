@@ -207,7 +207,7 @@ async def test_a_cancel_of_a_rung_is_the_kernels_to_do() -> None:
   assert isinstance(engine.peek(run), CancelledError) and "ran" not in engine.module(root)
   assert await engine.rung("b = bash('echo hi')", on=root) is None
   await settle()
-  assert [a[5] for a in said(log, "prompt")] == ["bash1 done"]
+  assert said(log, "prompt") == [] and engine.over("bash1")
 
 
 async def test_the_word_of_a_model_is_python_code_and_nothing_else() -> None:

@@ -129,8 +129,9 @@ export const chrome = part({
     // A message to a thread names the thread where the chain stands otherwise, in the color of the thread.
     const target = prompt ? w.target : undefined;
     const aimed = target ? this.railThreads().find((one) => one.act.id === target) : undefined;
-    const title = target ? clip(shortenHomes(gist(aimed ? this.threadTitle(aimed) : target)), 20) : "";
-    const where = target ? `to ${glyph.reply} ${title}` : `on ${w.label}`;
+    const whole = target ? shortenHomes(gist(aimed ? this.threadTitle(aimed) : target)) : "";
+    let title = clip(whole, 20);
+    const where = () => (target ? `to ${glyph.reply} ${title}` : `on ${w.label}`);
     // The line spans the input but its bar and its padding.
     const room = this.feedWidth - 3;
     if (
@@ -147,7 +148,7 @@ export const chrome = part({
         prompt,
         reading,
         target,
-        title,
+        whole,
         room,
         this.theme,
       ])
@@ -168,7 +169,7 @@ export const chrome = part({
       (edited ? Bun.stringWidth(mode) + 4 : "Prompt".length + "Python".length + 8) +
       gaps +
       (shown.chord ? 4 : 0) +
-      Bun.stringWidth(where) +
+      Bun.stringWidth(where()) +
       (target ? gaps + "+ New thread".length : 0) +
       (pending ? 2 * gaps + Bun.stringWidth(`answers ${pending.id}returns ${pending.shape}`) : 0) +
       (prompt ? gaps + Bun.stringWidth(name) : 0) +
@@ -179,6 +180,8 @@ export const chrome = part({
       (stash ? gaps + "stashed “”  ⌃S".length : 0);
     for (const part of ["provider", "shape", "effort", "chord"] as const)
       if (width() > room) shown[part] = false;
+    // The title of the thread takes the room that the row leaves free, and is cut only where the row is full.
+    if (target && width() < room) title = clip(whole, Bun.stringWidth(title) + room - width());
     const gap = () => this.meta.add(this.text("   ", c.faint));
     const button = (parts: Part[], run?: () => void) => this.meta.add(this.line(parts, c.muted, { run }));
     // The mode of the input is a switch between a prompt and Python, and an answer or a program that the input edits
@@ -364,6 +367,11 @@ export const chrome = part({
       [moving && !retry ? `${spin()} ` : mark, color],
       [label, moving ? c.text : c.muted],
     ];
+    // The status of each part that is not empty stands at the end of the state, after a notice.
+    const statuses = (this.parts?.status(this.seen()) ?? []).flatMap((line): Part[] => [
+      ["   ", c.text],
+      ...this.partLine(line),
+    ]);
     // The keys that have no room beside the whole state leave the footer from the last one, so the state is never cut.
     const shown = [...keys];
     const buttonsOf = (list: typeof keys) =>
@@ -373,21 +381,28 @@ export const chrome = part({
         [` ${action}`, c.faint],
       ]);
     let buttons = buttonsOf(shown);
-    const stateWidth = Bun.stringWidth(plain(state)) + space.between * 2;
+    const stateWidth = Bun.stringWidth(plain(state)) + Bun.stringWidth(plain(statuses)) + space.between * 2;
     while (shown.length && Bun.stringWidth(plain(buttons.flat())) + stateWidth > this.feedWidth) {
       shown.pop();
       buttons = buttonsOf(shown);
     }
     const hints = buttons.flat();
     const room =
-      this.feedWidth - Bun.stringWidth(plain(hints)) - Bun.stringWidth(plain(state)) - space.between * 2;
+      this.feedWidth -
+      Bun.stringWidth(plain(hints)) -
+      Bun.stringWidth(plain(state)) -
+      Bun.stringWidth(plain(statuses)) -
+      space.between * 2;
     const tokens = this.tokens();
-    this.statusWhole = [plain(state), notice, tokens && `Tokens: ${tokens}.`].filter(Boolean).join("   ");
+    this.statusWhole = [plain(state), notice, plain(statuses).trim(), tokens && `Tokens: ${tokens}.`]
+      .filter(Boolean)
+      .join("   ");
     if (notice && room >= 8)
       state.push(
         ["   ", c.text],
         [clip(notice, room - 3), [exitNotice, rewindNotice].includes(notice) ? c.warning : c.text],
       );
+    state.push(...statuses);
     const key = JSON.stringify([plain(state), plain(hints), color, this.theme]);
     if (key === this.statusKey) return;
     this.statusKey = key;
