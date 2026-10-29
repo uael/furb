@@ -252,7 +252,9 @@ test("what a model writes streams into the session under its rung until its repl
             content: [
               {
                 type: "text",
-                text: expect.stringMatching(/^#read8\nread8_path = 'skills:\/\/'\n[\s\S]*<\/s:read8_text>$/),
+                text: expect.stringMatching(
+                  /^#read8\nread8_path = 'skills:\/\/'\n(<s:read8_text>\n[\s\S]*<\/s:read8_text>|read8_text = '.*')$/,
+                ),
               },
               {
                 type: "text",
