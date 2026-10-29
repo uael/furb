@@ -443,6 +443,7 @@ fn the_world_ends_a_command_at_a_cancel_of_its_prompt_and_never_at_a_close_of_it
   assert_eq!(dones, 1, "the World said no second done of the command a control ended");
 }
 
+#[cfg(unix)]
 #[test]
 fn a_cancel_of_a_command_ends_the_process_that_it_started_and_not_only_its_shell() {
   let pid = std::env::temp_dir().join(format!("furb-cancel-{}.pid", std::process::id()));
