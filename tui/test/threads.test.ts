@@ -489,3 +489,16 @@ test("a welcome that is taller than the screen starts at its top, with the logo,
     { width: 100, height: 16 },
     false,
   ));
+
+test("a line that failed says its reason once, under it, and not again beside it", () =>
+  composing(
+    async ({ session, frame }) => {
+      const id = await session.engine.rung({ word: 'read("missing-file.txt")', on: session.selected });
+      await until(session, () => session.activity.some((act) => act.id === id && act.done));
+      await session.refresh();
+      const shown = await frame();
+      expect(shown.split("There is no file").length - 1).toBe(1);
+    },
+    size,
+    false,
+  ));

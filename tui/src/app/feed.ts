@@ -183,7 +183,7 @@ export const feed = part({
             [`${glyph.failed} `, c.danger],
             ["The journal of file changes is damaged", c.text, bold],
           ],
-          this.text(w.damagedJournal, c.muted),
+          this.text(shortenHomes(w.damagedJournal), c.muted),
           ...actions,
         );
       });
@@ -196,7 +196,7 @@ export const feed = part({
             [`${glyph.failed} `, c.danger],
             [`The ${viewLabels[w.view].toLowerCase()} view could not load`, c.text, bold],
           ],
-          this.text(plainFailure(w.error), c.muted),
+          this.text(shortenHomes(plainFailure(w.error)), c.muted),
           [
             "Refresh view",
             "reads the view again",

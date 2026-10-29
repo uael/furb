@@ -417,14 +417,21 @@ export const details = part({
       0,
       ...lines.map((line) => (line.kind === "code" ? Bun.stringWidth(line.text) : 0)),
     );
+    // A line that failed says its reason under it, so its hint does not say the same reason again.
+    const hintOf = (line: Extract<ProgramLine, { kind: "code" }>) => {
+      const hint = this.lineHint(line);
+      return line.fails && plainReason(line.fails).includes(hint.replace(/…$/, "")) ? "" : hint;
+    };
     const noteOf = (line: Extract<ProgramLine, { kind: "code" }>) =>
-      [
-        this.lineHint(line),
-        line.runs ? since(line.awaits?.act ?? line.acts.at(-1)) : "",
-        heads.has(line) ? took(line.step) : "",
-      ]
-        .filter(Boolean)
-        .join("  ");
+      shortenHomes(
+        [
+          hintOf(line),
+          line.runs ? since(line.awaits?.act ?? line.acts.at(-1)) : "",
+          heads.has(line) ? took(line.step) : "",
+        ]
+          .filter(Boolean)
+          .join("  "),
+      );
     // The code takes the room that its hints leave, and the hints take 30 columns at most: a longer hint is cut.
     const notes = Math.max(
       0,
@@ -492,7 +499,7 @@ export const details = part({
             .split("\n")
             .filter((one) => one.trim())
             .slice(0, 3))
-            comment(push(`# ${fit(plainReason(why), room - 4)}`));
+            comment(push(`# ${fit(shortenHomes(plainReason(why)), room - 4)}`));
         }
       } else if (line.kind === "output") comment(push(`#   ${fit(line.text, room - 6)}`));
       else if (line.kind === "writes") {

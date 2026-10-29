@@ -1128,7 +1128,8 @@ try {
   const served = await project("mcp");
   const servers = join(served, ".furb", "extensions", "servers");
   await cp(resolve(import.meta.dir, "..", "fixtures", "mcp"), servers, { recursive: true });
-  await cp(resolve(import.meta.dir, "..", "..", "extensions", "mcp", "tui.ts"), join(servers, "tui.ts"));
+  // The part of mcp is the official one, which each project loads: the folder of the fixtures holds the word alone.
+  await writeFile(join(servers, "furb.json"), '{ "name": "servers", "word": "servers.py" }\n');
   await writeFile(
     join(served, ".furb", "config.json"),
     '{"extensions": {"servers": "extensions/servers"}}\n',
