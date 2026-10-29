@@ -18,6 +18,8 @@ repos:
     rev: v0.16.2
     hooks:
       - id: ruff-format
+        # A word of the project keeps its own form, as the chain it runs in reads it.
+        exclude: ^\.furb/
       - id: ruff-check
         args: [--fix, --exit-non-zero-on-fix]
 

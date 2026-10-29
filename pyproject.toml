@@ -62,10 +62,11 @@ line-length = 120
 indent-width = 2
 target-version = "py314"
 src = ["src", "test", "bind/python"]
-# A word of an extension of the project runs in a chain, on the names of the engine, and keeps its own form.
-extend-exclude = [".furb"]
 # A path given on the command line, as a hook or a worker gives it, keeps the exclude.
 force-exclude = true
+# A word of the project reads the names that a word before it in .furb/config.json defines: pr, PR_TITLE, PR_BOXES and
+# shq of pr, and the conductor, tree_of and TARGETS of converge. A test holds each of them to a definition.
+builtins = ["pr", "PR_TITLE", "PR_BOXES", "shq", "conductor", "tree_of", "TARGETS"]
 
 [tool.ruff.per-file-target-version]
 # The verifier images use Python versions older than this repository.
@@ -95,6 +96,12 @@ ignore = ["S101"]
 # A word speaks the vocabulary of the engine, which a model reads: the ear of an act takes its id, untyped, as the
 # ears of the engine do.
 "extensions/*/*.py" = ["A002", "ANN001"]
+# A word of the project is read for what breaks it: a name that nothing binds, a call that cannot run, a bug of the
+# B family. Its style stays its own, as the chain it runs in reads it, and the data of .furb are no python.
+".furb/**" = [
+  "A", "ANN", "ARG", "C4", "E", "EM", "ERA", "FBT", "I", "N", "PERF", "PGH", "PLC", "PLR", "PLW", "PT", "RET", "RUF", "S",
+  "SIM", "T20", "TID", "TRY", "UP", "W", "B905",
+]
 # boot binds the names of its life, the bus and the reads of its tables, as globals of the module.
 "src/furb/engine.py" = ["PLW0603", "S307", "TID251", "FBT003", "N818", "A001", "A002", "PLR0913", "FBT001", "FBT002", "ARG001", "ANN", "EM101", "EM102", "TRY003", "PLR0917", "PLR0912", "PLR0915", "SIM105"]
 
@@ -118,11 +125,15 @@ ban-relative-imports = "all"
 suppress-none-returning = true
 
 [tool.ruff.format]
+# A word of an extension of the project runs in a chain, and keeps its own form; the lint reads it, the formatter does not.
+exclude = [".furb/**"]
 docstring-code-format = true
 skip-magic-trailing-comma = true
 
 [tool.ty.src]
-include = ["src", "test", "script", "bind/python", "extensions"]
+# The words of the project, and no test of theirs: a test drives the engine through a double, which the checker
+# cannot follow.
+include = ["src", "test", "script", "bind/python", "extensions", ".furb/extensions/*/*.py"]
 
 # The suite of an extension imports the harness of the engine as conftest, as pytest does from its pythonpath, and
 # its own helpers from extensions.conftest. The package furb_monty is read from its source and the stub of its
@@ -150,6 +161,20 @@ include = ["bind/python/furb_monty/engine.py"]
 [tool.ty.overrides.rules]
 unresolved-attribute = "ignore"
 unresolved-import = "ignore"
+
+# A word of the project reads the names of the words before it, which ty cannot follow from file to file, and get gives
+# nothing for a name of no act, which the contract types as an act (ruff reads these names through its builtins).
+[[tool.ty.overrides]]
+include = [".furb/extensions/conductor/conductor.py", ".furb/extensions/converge-tui/tui.py"]
+
+[tool.ty.overrides.rules]
+unresolved-reference = "ignore"
+
+[[tool.ty.overrides]]
+include = [".furb/extensions/*/*.py"]
+
+[tool.ty.overrides.rules]
+redundant-condition = "ignore"
 
 [tool.pytest.ini_options]
 testpaths = ["test", "extensions", ".furb/extensions"]

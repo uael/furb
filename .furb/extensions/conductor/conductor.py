@@ -1,4 +1,5 @@
 import json
+import re
 from asyncio import CancelledError
 from typing import Any
 
@@ -9,6 +10,7 @@ from furb.engine import (
   Exit,
   Refused,
   Text,
+  act,
   acting,
   bash,
   cancel,
@@ -16,6 +18,7 @@ from furb.engine import (
   clock,
   close,
   cwd,
+  filled,
   gate,
   get,
   module,
@@ -23,6 +26,7 @@ from furb.engine import (
   pause,
   paused,
   peek,
+  program,
   prompt,
   read,
   rung,
@@ -2502,7 +2506,7 @@ def threads() -> str:
     chains.append(one)
     todo += [str(x[1]) for x in transcript(one) if x[0] == "chain"]
   asks = [x for c in chains for x in transcript(c) if x[0] == "prompt" and x[4] != "None"]
-  tops = {str(x[1]): x for x in asks if (get(x[3]) or ("", "", ""))[2] == x[2]}
+  tops = {str(x[1]): x for x in asks if (get(str(x[3])) or ("", "", ""))[2] == x[2]}
   paths: dict[str, str] = {}
   kids: dict[str, list[str]] = {}
   waits: dict[str, list[str]] = {}
@@ -2516,7 +2520,7 @@ def threads() -> str:
 
   def path(p: str) -> str:
     if p not in paths:
-      label, parent = str(get(tops[p][3])[4]), up(p)
+      label, parent = str(get(str(tops[p][3]))[4]), up(p)
       paths[p] = label if "/" in label or not parent else path(parent) + "/" + label
     return paths[p]
 
@@ -2554,7 +2558,7 @@ def threads() -> str:
 
   for p in tops:
     hits = [q for q in tops if q != p and path(p).startswith(path(q) + "/")]
-    best = max(hits, key=lambda q: len(path(q))) if hits else "" if "/" in str(get(tops[p][3])[4]) else up(p)
+    best = max(hits, key=lambda q: len(path(q))) if hits else "" if "/" in str(get(str(tops[p][3]))[4]) else up(p)
     kids.setdefault(best, []).append(p)
   for x in asks:
     if str(x[1]) not in tops and not over(x[1]):

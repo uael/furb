@@ -12,7 +12,12 @@ from pathlib import Path
 import pytest
 
 HERE = Path(__file__).resolve().parent.parent
-SOURCE = (HERE / "converge.py").read_text(encoding="utf-8") + "\n\n" + (HERE.parent / "converge-tui" / "tui.py").read_text(encoding="utf-8")
+IMPORT = re.compile(r"^from furb\.engine import (?:\(.*?\)|[^\n(]*)\n", re.S | re.M)
+SOURCE = (
+  IMPORT.sub("", (HERE / "converge.py").read_text(encoding="utf-8"))
+  + "\n\n"
+  + IMPORT.sub("", (HERE.parent / "converge-tui" / "tui.py").read_text(encoding="utf-8"))
+)
 WORDS = "## #17 I4. The TUI converges\n\n> I want the TUI to be perfect so it need to be the result of a convergence"
 QUOTE = "I want the TUI to be perfect"
 

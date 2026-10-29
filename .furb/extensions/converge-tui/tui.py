@@ -1,3 +1,5 @@
+from furb.engine import cwd
+
 TUI_CONVERGING = """The TUI is the first target of converge, and its parts are these.
 Each capture holds the clock of the view still at STILL, so that no spinner turns and no time passes in a frame, and a capture changed when its cells changed, with each time that the view measures and each frame of its spinner read as one mark: a capture of the same code in another run did not change. A judge reads a capture that changed as the text of its frame, with a mark on each row that changed, the row that it replaced and the colors of each changed row. A judge gets an image of a capture only when its change is in its colors alone, when the capture is new, and in a pass of main.
 Each tree of the target has a home of the gallery of its own under FURB_GALLERY_ROOT, so that the captures that run at once hold no lock of one another. The capture opens RECORDS records of the project anew in each part, none over HEAVIEST bytes."""

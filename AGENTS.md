@@ -278,10 +278,15 @@ fix what your change broke, and report what was broken before.
   `cargo check` to make one.
 - `uv run ruff format src test script extensions` then `uv run ruff check src test script extensions`: format and
   lint. Two spaces of indentation, 120 columns.
-- `.furb` is outside ruff, even for a path that you give it: its words keep the form of the engine. Run the tests of
-  an extension of the project alone with `uv run --no-sync pytest -q <folder> -p no:cacheprovider --no-cov`, since the
-  coverage of 100 applies to the whole suite only.
-- `uv run ty check --error-on-warning`: the type check. The tests are checked against `engine.pyi`.
+- `.furb` is outside the formatter, even for a path that you give it: its words keep the form of the engine. Ruff
+  lints it for what breaks a word, which is a name that nothing binds, a bug of the family B and an error of the family
+  PLE, and for no style. A word imports each name of the engine that it uses from `furb.engine`, which the crate leaves
+  out of the word. A name of a word before it in `.furb/config.json` is in `builtins` of `[tool.ruff]`, which
+  `.furb/extensions/test_words.py` holds to a definition. Run the tests of an extension of the project alone with
+  `uv run --no-sync pytest -q <folder> -p no:cacheprovider --no-cov`, since the coverage of 100 applies to the whole
+  suite only.
+- `uv run ty check --error-on-warning`: the type check. The tests are checked against `engine.pyi`, and the words of
+  `.furb/extensions` too, less their tests.
 - `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace`:
   the gates of the crate and of the command line. The tests of a module stand beside it, `src/engine.test.rs` beside
   `src/engine.rs`, and those of the engine drive the real engine on ears in rust. `cli/tests/furb.rs` runs `furb` as
