@@ -1,6 +1,7 @@
 import { cancelled, failed, type LiveAct, type Measure, WORK } from "./acts.js";
 import { gist } from "./asks.js";
 import { valueText } from "./ladder.js";
+import { unmarked } from "./marks.js";
 
 /** What a row of the loom does now: it asks the operator, it failed, it works, a pause holds it, its prompts are
  * all closed, or it rests. */
@@ -611,7 +612,7 @@ export function subjectOf(act: LiveAct, word: (rung: LiveAct) => string): string
     act.kind === "rung"
       ? word(act)
       : act.kind === "wait"
-        ? `up to ${duration(Number(act.words[0] ?? 0))}${act.words.length > 1 ? ` for ${act.words.slice(1).map(String).join(", ")}` : ""}`
+        ? `up to ${duration(Number(unmarked(act.words[0] ?? 0)))}${act.words.length > 1 ? ` for ${act.words.slice(1).map(String).join(", ")}` : ""}`
         : String(act.kind === "prompt" ? (act.words[1] ?? "") : (act.words[0] ?? ""));
   return (
     text
@@ -684,7 +685,7 @@ export function doingOf(
   if (act.kind === "chain") return `starts ${label(act.id)}`;
   if (act.kind === "wait") {
     const awaited = act.words.slice(1).flatMap((id) => find(String(id)) ?? []);
-    if (!awaited.length) return `waits ${duration(Number(act.words[0] ?? 0))}`;
+    if (!awaited.length) return `waits ${duration(Number(unmarked(act.words[0] ?? 0)))}`;
     const chains = new Set(awaited.map((one) => (one.kind === "prompt" ? label(one.on) : "")));
     const [only] = chains;
     if (chains.size === 1 && only) return `waits for ${only}`;

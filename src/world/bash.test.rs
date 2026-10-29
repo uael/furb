@@ -2,7 +2,9 @@
 
 use std::fs;
 
-use super::{Kept, git_sh, signalled};
+#[cfg(unix)]
+use super::asked_path;
+use super::{Kept, git_sh, merged_path, signalled};
 
 /// A program at a path, which this machine runs.
 fn made(at: &std::path::Path) {
@@ -75,4 +77,44 @@ fn a_stream_within_its_caps_is_kept_whole() {
   let mut kept = Kept::new(2, 4);
   kept.push("abcd");
   assert_eq!(kept.finish(), "abcd");
+}
+
+#[cfg(unix)]
+fn fake_shell(name: &str, body: &str) -> std::path::PathBuf {
+  use std::os::unix::fs::PermissionsExt;
+  let dir = std::env::temp_dir().join(format!("furb-login-{}-{name}", std::process::id()));
+  fs::create_dir_all(&dir).unwrap();
+  let path = dir.join("sh");
+  fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+  fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+  path
+}
+
+#[test]
+#[cfg(unix)]
+fn the_path_of_the_login_shell_is_read_between_its_marks() {
+  let shell = fake_shell(
+    "marks",
+    "echo noise of a profile; printf '<furb-path>/opt/homebrew/bin:/usr/bin</furb-path>'",
+  );
+  assert_eq!(asked_path(&shell), Some("/opt/homebrew/bin:/usr/bin".into()));
+}
+
+#[test]
+#[cfg(unix)]
+fn a_login_shell_that_fails_or_gives_no_path_gives_none() {
+  assert_eq!(asked_path(&fake_shell("fails", "printf '<furb-path>/a</furb-path>'; exit 1")), None);
+  assert_eq!(asked_path(&fake_shell("empty", "printf '<furb-path></furb-path>'")), None);
+  assert_eq!(asked_path(&fake_shell("silent", "true")), None);
+  assert_eq!(asked_path(std::path::Path::new("/no/such/shell")), None);
+}
+
+#[test]
+fn the_folders_of_the_login_path_come_first_and_the_current_ones_follow_with_no_repeat() {
+  let join = |parts: &[&str]| std::env::join_paths(parts).unwrap();
+  let got = merged_path(
+    &join(&["/opt/homebrew/bin", "/usr/bin"]),
+    &join(&["/usr/bin", "/bin", "/opt/homebrew/bin"]),
+  );
+  assert_eq!(got, join(&["/opt/homebrew/bin", "/usr/bin", "/bin"]));
 }

@@ -4,6 +4,7 @@ import {
   type LineNumberOptions,
   LineNumberRenderable,
   type MouseEvent,
+  parseColor,
   type Renderable,
   type RGBA,
   type ScrollBoxOptions,
@@ -13,7 +14,7 @@ import {
   type TextChunk,
   TextRenderable,
 } from "@opentui/core";
-import { actorParts, display, safeText, TIMEOUT } from "furb";
+import { actorParts, display, safeText, TIMEOUT, unmarked } from "furb";
 import {
   cancelled,
   type Exit,
@@ -81,7 +82,7 @@ export const details = part({
     if (act.kind === "prompt") return String(act.words[1] ?? "");
     if (act.kind === "rung")
       return String(this.session.program[act.id] || act.word || this.toldWord(act.id) || act.words[0] || "");
-    if (act.kind === "wait") return seconds(Number(act.words[0]));
+    if (act.kind === "wait") return seconds(Number(unmarked(act.words[0])));
     if (act.kind === "write") {
       // A write names the path of the Text that it writes, which a read gave whole, so the path drops the directory of
       // the chain.
@@ -91,8 +92,8 @@ export const details = part({
     }
     if (act.kind === "grant")
       return [
-        act.words[0] === null ? "" : `${dollars(Number(act.words[0]))} ceiling`,
-        act.words[1] === null ? "" : share(Number(act.words[1])),
+        act.words[0] === null ? "" : `${dollars(Number(unmarked(act.words[0])))} ceiling`,
+        act.words[1] === null ? "" : share(Number(unmarked(act.words[1]))),
       ]
         .filter(Boolean)
         .join("  ");
@@ -295,18 +296,24 @@ export const details = part({
     };
   },
 
-  /** The last row of a thread while its model works on a step: the number of the line that comes, then what the model
-   * thinks or writes, which the tick draws again, and a loader at the right end of the row. */
+  /** The last row of a thread while its model works on a step: a loader, the number of the line that comes, then what
+   * the model thinks or writes, which the tick draws again. */
   thinkingRow(step: string, display: number, digits: number, room: number): LineNumberRenderable {
-    const { number, parts } = this.thinkingParts(step, display, room - 3);
-    const text = this.text(this.loading(parts), c.muted, { wrapMode: "none" });
+    const { number, parts } = this.thinkingParts(step, display, room);
+    const text = this.text(parts, c.muted, { wrapMode: "none" });
     const view = new LineNumberRenderable(this.renderer, {
       target: text,
       paddingRight: space.inset,
       fg: c.faint,
       minWidth: gutterWidth(digits),
       lineNumbers: new Map([[0, number]]),
+      // A sign of the gutter widens the gutter by its width, which moves the number and the code of this row off the
+      // columns of the rows above it: the loader takes the first column of the gutter, which no number reaches.
+      renderAfter(buffer) {
+        buffer.drawText(spin(), this.x, this.y, parseColor(c.accent));
+      },
     });
+    // The loader is drawn by each frame, the first one too, so no tick is needed before it shows.
     this.thinkingRows.set(step, {
       view,
       text,
@@ -318,12 +325,6 @@ export const details = part({
     return view;
   },
 
-  /** The parts of a row that a model writes, with the loader after them: no sign stands between the numbers and the
-   * code. */
-  loading(parts: Part[]): Part[] {
-    return [...parts, ["  "], [spin(), c.accent]];
-  },
-
   /** The rows that models write move with the tick: the loader turns, and the text follows the stream. */
   tickThinking(): void {
     for (const [step, row] of this.thinkingRows) {
@@ -331,7 +332,7 @@ export const details = part({
         this.thinkingRows.delete(step);
         continue;
       }
-      row.view.setLineSign(0, { before: spin(), beforeColor: c.accent });
+      row.view.requestRender();
       this.followThinking(step);
     }
   },

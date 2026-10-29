@@ -118,6 +118,10 @@ interface Index {
    * how many times an act on each chain came or changed, which tells the board when to read a chain again. */
   stamps: Map<string, number>;
   chained: Map<string, number>;
+  /** How many times a prompt came or changed, and for each chain that count when a prompt on it last did: the threads of
+   * a chain depend on its prompts alone, so an act of another kind reads no thread again. */
+  threaded: Map<string, number>;
+  prompts: number;
   /** The chain of each act that came or changed, once each time, which tells the board which chains to read again. */
   touched: string[];
   /** The writes that are done, in the order that the session saw them done. */
@@ -165,6 +169,7 @@ function placed(index: Index, act: ActRow): void {
   else index.live.delete(act.id);
   index.stamps.set(act.by, (index.stamps.get(act.by) ?? 0) + 1);
   index.chained.set(act.on, (index.chained.get(act.on) ?? 0) + 1);
+  if (act.kind === "prompt") index.threaded.set(act.on, ++index.prompts);
   index.touched.push(act.on);
   const latest = index.latest.get(act.on);
   if (
@@ -899,6 +904,8 @@ export class Session extends EventEmitter {
       live: new Map(),
       stamps: new Map(),
       chained: new Map(),
+      threaded: new Map(),
+      prompts: this.index?.prompts ?? 0,
       touched: [],
       written: [],
       work: new Map(),
@@ -923,6 +930,14 @@ export class Session extends EventEmitter {
       live: index.live.values(),
       stamp: (id) => index.stamps.get(id) ?? 0,
     };
+  }
+  /** How many times a prompt came or changed, which the threads of the life read again on, and no other act. */
+  get promptsVersion(): number {
+    return this.indexed().prompts;
+  }
+  /** The value of promptsVersion when a prompt on the chain last came or changed. */
+  threadStamp(chain: string): number {
+    return this.indexed().threaded.get(chain) ?? 0;
   }
   /** The writes that are done, in the order that the session saw them done. */
   get written(): readonly ActRow[] {
@@ -1521,11 +1536,18 @@ export class Session extends EventEmitter {
     const ended = reach.acts.length;
     const under = `${ended} ${ended === 1 ? "act" : "acts"} under it on ${this.chainsOf(reach)}`;
     if (back) {
+      // The words go back to where they went: the thread that they answered, or a new thread when they began one, and
+      // not to the thread lit at this moment, which may be the thread that this cancel ends.
+      const into = this.sentTo.get(act.id);
+      this.aim(into);
+      this.pinned = into ?? null;
       await this.restore(String(act.words[1] ?? ""));
       this.notice = `You took back ${act.id}${ended ? `, and ended ${under}` : ""}. Change it in the input, and send it again.`;
     } else this.notice = `${act.id} is cancelled${ended ? `, and ${under}` : ""}.`;
     await this.refresh();
   }
+  /** The thread that each message of the input went to, or undefined for a message that began a thread. */
+  private readonly sentTo = new Map<string, string | undefined>();
   /** The acts that a cancel of the operator ended, whose notice that cancel gave. */
   private readonly cancels = new Set<string>();
   /** The chains that a cancel reaches, each with its label, in the order of the chains. */
@@ -1578,16 +1600,16 @@ export class Session extends EventEmitter {
   private readonly retaken = new Set<string>();
   /** The last message of the operator in a thread that still runs, or that a cancel ended, taken back: a message that
    * runs is cancelled, and its text comes back to be edited and sent again. The cancelled message leaves the box. */
-  async takeBackMessage(thread: string): Promise<string | undefined> {
+  async takeBackMessage(thread: string): Promise<void> {
     const last = this.lastMessage(thread);
-    if (!last) return undefined;
+    if (!last) return;
     this.retaken.add(last.id);
     if (!last.done) {
       this.cancels.add(last.id);
       await this.engine.cancel(last.id);
     }
     await this.refresh();
-    return String(last.words[1] ?? "");
+    this.emit("compose", String(last.words[1] ?? ""));
   }
   /** A message to a thread, from the box at the end of the thread. It goes to the thread whatever the input is
    * doing, and a message to a thread that is over opens it again. */
@@ -1634,6 +1656,7 @@ export class Session extends EventEmitter {
           ? await this.engine.prompt("str", { message: this.withImages(input), on: thread })
           : await this.engine.prompt(this.shape, { message: this.withImages(input), on: this.selected });
         if (thread) this.notice = `Your message went to the thread ${thread}.`;
+        this.sentTo.set(id, thread);
         delete this.images[this.selected];
         this.save();
         if (pending) this.emit("resume");
@@ -1641,6 +1664,25 @@ export class Session extends EventEmitter {
       }
     }
     await this.refresh();
+  }
+
+  /** Runs a word on the chain on screen, as /run does, and gives, once the word ended, the value of the last act that
+   * it made on that chain, as the record holds it once that act is done, or undefined for a word that made no act. A
+   * word that raises or that the gate refuses rejects with its error. */
+  async runWord(word: string): Promise<unknown> {
+    this.findings = [];
+    const on = this.selected;
+    const id = await this.engine.rung({ word, on });
+    try {
+      await this.engine.result(id);
+      const made = (await this.engine.transcript({ on })).filter(
+        (fact) => fact[2] === id && new RegExp(`^${String(fact[0])}\\d+$`).test(String(fact[1])),
+      );
+      const last = made.at(-1);
+      return last ? await this.engine.result(String(last[1])) : undefined;
+    } finally {
+      await this.refresh();
+    }
   }
 
   /** The extensions that the life runs, in the order that it enabled them, each with its life word. */

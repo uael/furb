@@ -425,7 +425,7 @@ fn the_world_ends_a_command_at_a_cancel_of_its_prompt_and_never_at_a_close_of_it
     thread::sleep(Duration::from_millis(5));
     let _ = lived.engine.peek("bash1", verbs::Peek::default());
   }
-  lived.engine.cancel(&cancelled).unwrap();
+  lived.engine.cancel(&cancelled, Default::default()).unwrap();
   assert_eq!(lived.settled("bash1").unwrap_err().name, "CancelledError");
   let got = block_on(
     lived
@@ -464,7 +464,7 @@ fn a_cancel_of_a_command_ends_the_process_that_it_started_and_not_only_its_shell
     let _ = lived.engine.peek("bash1", verbs::Peek::default());
   }
   let sleeper = std::fs::read_to_string(&pid).unwrap().trim().to_owned();
-  lived.engine.cancel(&cancelled).unwrap();
+  lived.engine.cancel(&cancelled, Default::default()).unwrap();
   assert_eq!(lived.settled("bash1").unwrap_err().name, "CancelledError");
   let alive =
     || std::process::Command::new("kill").args(["-0", &sleeper]).output().unwrap().status.success();
@@ -636,7 +636,7 @@ fn a_wait_that_a_wake_starts_again_says_nothing_after_a_cancel() {
   let mut second = Lived::new("hushed", &[], false).unwrap();
   let root = second.root();
   second.engine.wake(&root).unwrap();
-  second.engine.cancel("wait1").unwrap();
+  second.engine.cancel("wait1", Default::default()).unwrap();
   assert_eq!(second.settled("wait1").unwrap_err().name, "CancelledError");
   // A later wait outlives the deadline of the first.
   let later = second.engine.wait(&[], verbs::Wait { seconds: Some(0.4), on: on(&root) }).unwrap();
@@ -868,7 +868,7 @@ fn the_work_an_earlier_life_left_is_pending_until_a_wake_that_this_life_says() {
     let word = Some("await wait(600)".to_owned());
     first.engine.rung(verbs::Rung { word, on: on(&root), ..Default::default() }).unwrap();
     let apart = first.engine.chain(verbs::Chain::default()).unwrap().id().to_owned();
-    first.engine.pause(&apart).unwrap();
+    first.engine.pause(&apart, Default::default()).unwrap();
     first.engine.wait(&[], verbs::Wait { seconds: Some(600.0), on: on(&apart) }).unwrap();
     assert!(
       first.engine.pending().unwrap().is_empty(),
@@ -942,7 +942,7 @@ fn an_act_that_lives_end_while_it_runs_again_and_again_is_parked_until_a_retry()
   assert_eq!(retried.engine.parked().unwrap(), reply());
   retried.engine.retry("reply1").unwrap();
   assert_eq!(started(&mut retried), 1);
-  retried.engine.cancel("reply1").unwrap();
+  retried.engine.cancel("reply1", Default::default()).unwrap();
   assert_eq!(retried.settled("reply1").unwrap_err().name, "CancelledError");
 }
 
@@ -1461,6 +1461,23 @@ fn an_ear_that_cannot_start_again_tells_the_operator_why_it_ended() {
   let told = notices(&mut engine);
   assert_eq!(told.len(), 1, "{told:?}");
   assert!(told[0].contains("probe 1 broke. It cannot start again."), "{told:?}");
+}
+
+#[test]
+fn a_gate_that_raises_refuses_the_word_and_a_fresh_gate_reads_the_next_word() {
+  let (mut engine, root) = probed("raising-gate", vec![]);
+  // A name of the engine that is no str breaks the sheet of every word, as a fault of the readying does.
+  engine.word("globals().update({1: 0})", vec![]).unwrap();
+  let no = engine
+    .verb("gate", vec![Object::string("close(1)")], vec![("on", Object::string(&root))])
+    .unwrap_err();
+  assert_eq!(no.name, "Refused");
+  assert!(no.message().contains("The ear gate raised AttributeError"), "{no}");
+  engine.word("globals().pop(1)", vec![]).unwrap();
+  let found = engine
+    .verb("gate", vec![Object::string("close(1)")], vec![("on", Object::string(&root))])
+    .unwrap();
+  assert_eq!(found.py_repr(), "[]");
 }
 
 #[test]

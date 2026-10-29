@@ -132,11 +132,11 @@ export declare class Engine {
   /** The act again, from its name: whoever holds the name of an act is given the act the life holds under it, whole as it stands. */
   get(about: string): [string, string, string, ...unknown[]] | null
   /** A pause: while it stands, nothing it is over hears, and what is said meanwhile waits for the wake. */
-  pause(id: string): void
+  pause(id: string, options?: { why?: unknown } | null): void
   /** A wake: it ends the pause over the same act, and what waited is heard. */
   wake(id: string): void
   /** A cancel of that prompt reaches the acts that its rungs made on the chain with a source. */
-  cancel(id: string): void
+  cancel(id: string, options?: { why?: unknown } | null): void
   /** An act ended from outside, by its name, with a value: it is done with it, and it ends what it made, since a close is a cancel that carries what the act it names is done with. */
   close(value: unknown, options?: { id?: string } | null): void
   /** What a word tells of itself as it runs: the text of a template, which debug makes as python makes the f-string of the same template. */

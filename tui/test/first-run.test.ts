@@ -54,8 +54,9 @@ test.skipIf(process.platform === "win32")(
     // The check of the setup comes first, then the life to watch, and no starter offers a prompt that nothing answers.
     expect(frame.indexOf("No model answers yet")).toBeLessThan(frame.indexOf("Watch a life"));
     expect(frame).not.toContain("Explore a codebase");
-    expect(frame).toContain("No model answers yet. Fix the");
-    expect(frame).toContain("setup above, or watch a life, which needs none.");
+    // The input wraps the hint at its own width, at a word.
+    expect(frame).toContain("No model answers yet. Fix the setup above, or watch a life, which");
+    expect(frame).toContain("needs none.");
     // The line under the input names no model, and not the operator that the actor falls to.
     expect(frame).toContain("on Main   no model   returns str");
     expect(frame).not.toContain("operator");
