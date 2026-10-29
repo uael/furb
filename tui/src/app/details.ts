@@ -127,12 +127,36 @@ export const details = part({
     return { name: modelName(model).id, effort };
   },
 
-  /** Who sent a prompt that is not a message of the operator, and to which model: a chain tells its model that an
-   * act it waits on is done, and a rung asks a model a question. */
+  /** Who sent a prompt that is not a message of the operator, and to which model: the model alone for a chain, which
+   * tells its model that an act it waits on is done, and the rung and the model for a rung that asks a question. */
   sender(act: ActRow): string {
     const model = this.model(String(act.words[2] ?? "")).name;
     const maker = this.session.actOf(act.by);
-    return maker?.kind === "chain" ? `the chain told ${model}` : `${act.by} asked ${model}`;
+    return maker?.kind === "chain" ? model : `${act.by} asked ${model}`;
+  },
+
+  /** The message of a prompt as a reader reads it. The chain tells a model that an act is done or paused with the id
+   * of the act, which reads as the last statement of the code of that act, in a fence of code unless it is plain. */
+  spoken(act: ActRow, plain = false): string {
+    const message = String(act.words[1] ?? "");
+    if (this.session.actOf(act.by)?.kind !== "chain") return message;
+    const told = message.match(/^([a-z_]+\d+) (done|paused)$/);
+    const about = told ? this.session.actOf(told[1] ?? "") : undefined;
+    if (!told || !about) return message;
+    // The last statement of a word is where it ended, and a long line keeps its start alone.
+    const last = this.subject(about)
+      .trimEnd()
+      .split("\n")
+      .findLast((one) => one.trim() && !/^<\/?s:\w+>/.test(one));
+    const code = clip(last?.trim() || about.id, 60);
+    const fence = plain ? "" : code.includes("`") ? "``" : "`";
+    return `${fence}${code}${fence} ${told[2] === "done" ? "is done" : "paused"}`;
+  },
+
+  /** The title of a thread as the feed reads its message. */
+  threadTitle(thread: { act: ActRow; title: string }): string {
+    const spoken = this.spoken(thread.act, true);
+    return spoken === String(thread.act.words[1] ?? "") ? thread.title : spoken;
   },
 
   /** A word of Python in a card: its numbered lines, the reason it failed, and what to do after a refusal of the

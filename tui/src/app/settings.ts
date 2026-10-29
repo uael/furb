@@ -153,7 +153,7 @@ export const settings = part({
       ...threads.map((one) => {
         const folded = this.threadFolded(one.act.id);
         return {
-          label: clip(shortenHomes(gist(one.title)) || one.act.id, 72),
+          label: clip(shortenHomes(gist(this.threadTitle(one))) || one.act.id, 72),
           detail: folded ? "Expand" : "Collapse",
           run: () => {
             this.foldThread(one.act.id, !folded);
