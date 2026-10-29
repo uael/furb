@@ -74,6 +74,22 @@ test("a thread is one box: its message with a line of its color, its program as 
     true,
   ));
 
+test("the cards of prose keep the measure of a line, 100 columns, on a wide screen with no sidebar", () =>
+  composing(
+    async ({ session, app, frame }) => {
+      await idle(session);
+      session.preferences.sidebar = false;
+      await frame();
+      await frame();
+      const cards = app.scroll.getChildren().filter((node) => /^prompt\d+(-answer|-reply)?$/.test(node.id));
+      expect(cards.length).toBeGreaterThan(0);
+      for (const card of cards) expect(card.width).toBeLessThanOrEqual(100);
+      expect(app.scroll.width).toBeGreaterThan(200);
+    },
+    { width: 220, height: 46 },
+    true,
+  ));
+
 test("a click on Reply makes the thread the target of the input, whose line and meta line take its color and its name, a message then goes to the thread and opens it again, and + New thread sends the next one to a new thread", () =>
   composing(
     async ({ session, app, screen, click, frame }) => {
