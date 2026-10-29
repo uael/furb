@@ -2551,34 +2551,60 @@ async def conduct(every: float = 300) -> dict[str, object]:
   return results
 
 
+THREADS = 3000
+
+
 def threads() -> str:
-  chains, todo = [], [ROOT]
-  while todo:
+  chains: list[str] = []
+  asks: list[tuple] = []
+  tells: dict[str, str] = {}
+  todo, seen = [ROOT], set()
+  while todo and len(chains) < THREADS:
     one = todo.pop()
+    if one in seen:
+      continue
+    seen.add(one)
     chains.append(one)
-    todo += [str(x[1]) for x in transcript(one) if x[0] == "chain"]
-  asks = [x for c in chains for x in transcript(c) if x[0] == "prompt" and x[4] != "None"]
+    notes: list[str] = []
+    for x in transcript(one):
+      if x[0] == "chain":
+        todo.append(str(x[1]))
+      elif x[0] == "prompt" and x[4] != "None":
+        asks.append(x)
+      elif x[0] == "tell":
+        notes.append(str(x[3]))
+    tells[one] = "".join(notes)
   tops = {str(x[1]): x for x in asks if (get(str(x[3])) or ("", "", ""))[2] == x[2]}
   paths: dict[str, str] = {}
+  ups: dict[str, str] = {}
   kids: dict[str, list[str]] = {}
   waits: dict[str, list[str]] = {}
+  drawn: set[str] = set()
   out: list[str] = []
 
+  def parent(of: str) -> str:
+    return str((get(of) or ("", "", ""))[2])
+
   def up(of: str) -> str:
-    of = str((get(of) or ("", "", ""))[2])
-    while of and of not in tops:
-      of = str((get(of) or ("", "", ""))[2])
-    return of
+    if of not in ups:
+      cur, hops = parent(of), 0
+      while cur and cur not in tops and hops < 100:
+        cur, hops = parent(cur), hops + 1
+      ups[of] = cur if cur in tops else ""
+    return ups[of]
 
   def path(p: str) -> str:
     if p not in paths:
-      label, parent = str(get(str(tops[p][3]))[4]), up(p)
-      paths[p] = label if "/" in label or not parent else path(parent) + "/" + label
+      label, above = str(get(str(tops[p][3]))[4]), up(p)
+      paths[p] = label if "/" in label or not above else path(above) + "/" + label
     return paths[p]
 
   def links(p: str) -> list[str]:
     found: list[str] = []
-    told_text = str(peek(p, "")) + "".join(str(x[3]) for x in transcript(str(tops[p][3])) if x[0] == "tell")
+    where = str(tops[p][3])
+    told_text = str(peek(p, "")) + (
+      tells[where] if where in tells else "".join(str(x[3]) for x in transcript(where) if x[0] == "tell")
+    )
     for part in told_text.split("https://github.com/")[1:]:
       bits = part.split("/", 4)
       digits = ""
@@ -2599,6 +2625,9 @@ def threads() -> str:
     return "unseen" if "sweep" not in timers else "merged" if n in merged else "closed"
 
   def draw(p: str, depth: int) -> None:
+    if p in drawn:
+      return
+    drawn.add(p)
     pad, where = "  " * depth, str(tops[p][3])
     state = "done" if over(p) else "paused" if paused(where) else "working"
     out.append(f"{pad}{path(p)} {state} {p} on {where}")
@@ -2608,15 +2637,23 @@ def threads() -> str:
     for q in kids.get(p, []):
       draw(q, depth + 1)
 
+  by_path: dict[str, list[str]] = {}
   for p in tops:
-    hits = [q for q in tops if q != p and path(p).startswith(path(q) + "/")]
-    best = max(hits, key=lambda q: len(path(q))) if hits else "" if "/" in str(get(str(tops[p][3]))[4]) else up(p)
+    by_path.setdefault(path(p), []).append(p)
+  for p in tops:
+    segs = path(p).split("/")
+    best = next(("/".join(segs[:k]) for k in range(len(segs) - 1, 0, -1) if "/".join(segs[:k]) in by_path), "")
+    if best:
+      best = by_path[best][0]
+    else:
+      best = "" if "/" in str(get(str(tops[p][3]))[4]) else up(p)
     kids.setdefault(best, []).append(p)
   for x in asks:
     if str(x[1]) not in tops and not over(x[1]):
       waits.setdefault(up(str(x[1])), []).append(f"{x[1]} on {x[3]} to {x[6] or 'its model'}: {str(x[5])[:200]}")
   for p in kids.get("", []):
     draw(p, 0)
-  out.extend(f"{thread or 'w'}/{key} queued" for key, _, thread in queue if thread not in paths.values())
+  placed = set(paths.values())
+  out.extend(f"{thread or 'w'}/{key} queued" for key, _, thread in queue if thread not in placed)
   out.extend(f"waits {w}" for w in waits.get("", []))
   return "\n".join(out)
