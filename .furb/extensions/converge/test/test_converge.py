@@ -885,7 +885,7 @@ def test_green_prs_that_wait_for_the_judges_ride_one_capture_and_a_clean_train_c
   assert world.ns["OPEN"] == {}
 
 
-def test_a_train_with_a_gap_sends_each_of_its_prs_to_be_judged_alone(world: World) -> None:
+def test_a_train_of_two_with_a_gap_sends_each_of_its_prs_to_be_judged_alone(world: World) -> None:
   converged(world)
   world.judge = lambda message, to: gap()
   world.round["prs"].update({5: pr(n=5, verdict="pass"), 6: pr(n=6, sha="def", verdict="pass")})
@@ -899,6 +899,43 @@ def test_a_train_with_a_gap_sends_each_of_its_prs_to_be_judged_alone(world: Worl
   assert veto(world) is True
   assert world.book()["heads"]["5 abc"]["state"] == "gaps"
   assert len(world.judged()) == 2
+
+
+def test_a_train_with_a_gap_splits_in_two_halves_that_each_ride_a_capture_of_their_own(world: World) -> None:
+  converged(world)
+  world.judge = lambda message, to: gap() if "#5, #6" in message else []
+  shas = {5: "abc", 6: "def", 7: "ghi", 8: "jkl"}
+  world.round["prs"].update({n: pr(n=n, sha=sha, verdict="pass") for n, sha in shas.items()})
+  world.say(r"gh pr view [5-8] --json files", "tui/src/app.ts\n")
+  world.say(r"origin main refs/pull/5/head refs/pull/6/head refs/pull/7/head refs/pull/8/head && cur", "base1\nin 5\nin 6\nin 7\nin 8\ntrain1\n")
+  world.say(r"origin main refs/pull/5/head refs/pull/6/head && cur", "base1\nin 5\nin 6\ntrain2\n")
+  world.say(r"origin main refs/pull/7/head refs/pull/8/head && cur", "base1\nin 7\nin 8\ntrain3\n")
+  world.say(r"python3 -I -", listing(kind="text"))
+  assert veto(world) is True
+  heads = world.book()["heads"]
+  assert heads["5 abc"]["half"] == heads["6 def"]["half"] == ["5 abc", "6 def"]
+  assert heads["7 ghi"]["half"] == heads["8 jkl"]["half"] == ["7 ghi", "8 jkl"]
+  assert not any("solo" in one for one in heads.values())
+  assert veto(world) is True
+  heads = world.book()["heads"]
+  assert heads["5 abc"] == heads["6 def"] == {"state": "held", "solo": True}
+  assert asyncio.run(world.converge_veto(pr(n=7, sha="ghi", verdict="pass"))) is False
+  heads = world.book()["heads"]
+  assert heads["7 ghi"]["state"] == heads["8 jkl"]["state"] == "clean"
+  assert len([c for c in world.commands if "for pair in" in c]) == 3
+  assert len(world.judged()) == 3
+
+
+def test_a_train_with_no_answer_sends_each_of_its_prs_to_be_judged_alone(world: World) -> None:
+  converged(world)
+  world.judge = lambda message, to: Refused("paused")
+  world.round["prs"].update({5: pr(n=5, verdict="pass"), 6: pr(n=6, sha="def", verdict="pass")})
+  world.say(r"gh pr view [56] --json files", "tui/src/app.ts\n")
+  world.say(r"refs/pull/5/head refs/pull/6/head", "base1\nin 5\nin 6\ntrain1\n")
+  world.say(r"python3 -I -", listing(kind="text"))
+  assert veto(world) is True
+  heads = world.book()["heads"]
+  assert heads["5 abc"] == heads["6 def"] == {"state": "held", "solo": True}
 
 
 def test_a_head_that_only_merged_main_keeps_the_verdict_of_the_same_change(world: World) -> None:
