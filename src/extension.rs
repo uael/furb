@@ -50,6 +50,12 @@ const JOURNAL: &str = "journal";
 /// where the journal says the fact. A chain born later reads it at its birth, from the standing alone.
 const TEACH: &str = "teach";
 
+/// The kind of the act `setup1`, `("setup", "setup1", "extensions", "chain1")`, which the ear makes on the root as it
+/// plays its setup, after the rungs of the setup that every chain shares and before those of the extensions of the root
+/// alone, and answers with nothing, so a chain with no source holds none of the acts that those make. A later life
+/// makes it again at the same place, as each rung of the setup.
+const SETUP: &str = "setup";
+
 /// What the manifest gives under `plays` for an extension that plays on every chain, which is the default.
 const EVERY: &str = "every";
 
@@ -499,14 +505,14 @@ pub fn enabled(root: &[Fact]) -> Vec<Extension> {
 /// state that it holds keeps its value, and its life word does not run again. The ear plays the rungs from the fact alone, so a later life plays the same rungs
 /// where the journal says the fact again.
 pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
-  hearing(&["chain", "stand", "rung", "write", ENABLE, TEACH], move |mut co| async move {
+  hearing(&["chain", "stand", "rung", "write", ENABLE, TEACH, SETUP], move |mut co| async move {
     // What the life enabled, in order, and each chain in the order of its birth, with the extensions it has.
     let (mut enabled, mut chains) = (Vec::<Extension>::new(), Vec::<(String, Vec<String>)>::new());
     // The setup of the root: the actor and the doctrine that the fact teach names with the enables still to hear
-    // before it plays, whether the root took it, and its last rung with its actor, at whose done the extensions of
-    // the root alone play.
+    // before it plays, and whether the root took it.
     let (mut teach, mut taught) = (None::<(String, String, i64)>, false);
-    let mut last = None::<(String, String)>;
+    // Whether this life says the fact teach, and with it the fact setup, which the journal of a later life says again.
+    let mut fresh = true;
     loop {
       let a = hear(&mut co).await;
       let runs_name = |name: &str| enabled.iter().any(|two| two.name == name);
@@ -554,11 +560,16 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
           }
           new
         }
+        SETUP if a.question() && fresh => {
+          say(&mut co, Fact::says("done", a.about(), [Object::none()]));
+          continue;
+        }
         TEACH => {
           let text = |at| a.word(at).and_then(|one| one.as_str().map(str::to_owned));
           let count = a.word(2).and_then(|one| one.as_int()).unwrap_or(0);
           if let (Some(actor), Some(path)) = (text(0), text(1)) {
             teach = Some((actor, path, count));
+            fresh = a.by() != JOURNAL;
           }
           if count > 0 {
             continue;
@@ -579,14 +590,6 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
             }
           }
           Vec::new()
-        }
-        "done" if last.as_ref().is_some_and(|one| one.0 == a.about()) => {
-          let Some((_, actor)) = last.take() else { continue };
-          for one in enabled.iter().filter(|one| one.root) {
-            loaded(&mut co, one, ROOT, &actor).await?;
-          }
-          lives(&mut co, enabled.iter().filter(|one| one.root), &actor).await?;
-          continue;
         }
         // A write of the config of the project that lands turns on each extension that it gives by its path and
         // that the life does not run, as the configs do at the tip.
@@ -622,8 +625,7 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
       };
       // The setup of the root plays once the fact teach and each enable after it were heard.
       if let Some((actor, path, 0)) = teach.take() {
-        let made = setup(&mut co, &enabled, &actor, &path).await?;
-        last = made.map(|rung| (rung, actor));
+        setup(&mut co, &enabled, &actor, &path).await?;
         taught = true;
         let every = enabled.iter().filter(|one| !one.root).map(|one| one.name.clone()).collect();
         if let Some(root) = chains.iter_mut().find(|one| one.0 == ROOT) {
@@ -679,19 +681,22 @@ async fn play(
 }
 
 /// The setup of the root, as turns of its default actor whose words furb writes: the read of the doctrine, the read
-/// of the file of each extension of every chain, in the order of the life, then the life word of each that has one.
-/// It gives the last rung that it made.
-async fn setup(
-  co: &mut Co,
-  enabled: &[Extension],
-  actor: &str,
-  path: &str,
-) -> Result<Option<String>, Fault> {
-  let mut last = written(co, ROOT, &reading(path), actor).await?;
-  for one in enabled.iter().filter(|one| !one.root) {
-    last = loaded(co, one, ROOT, actor).await?.or(last);
+/// of the file of each extension of every chain, in the order of the life, then the life word of each that has one,
+/// then the fact setup, then the same turns for the extensions of the root alone. It makes each rung at once, and the
+/// chain gives them their turns in the order it made them, so the fact setup stands before the turns of the root alone.
+async fn setup(co: &mut Co, enabled: &[Extension], actor: &str, path: &str) -> Result<(), Fault> {
+  written(co, ROOT, &reading(path), actor).await?;
+  for root in [false, true] {
+    if root {
+      let words = [SETUP, ROOT].map(Object::string).into_iter().chain([Object::none()]);
+      co.call("act", words.collect(), vec![]).await?;
+    }
+    for one in enabled.iter().filter(|one| one.root == root) {
+      loaded(co, one, ROOT, actor).await?;
+    }
+    lives(co, enabled.iter().filter(|one| one.root == root), actor).await?;
   }
-  Ok(lives(co, enabled.iter().filter(|one| !one.root), actor).await?.or(last))
+  Ok(())
 }
 
 /// The word of an extension on a chain as a turn of an actor: the read of its file, whose word the ear runs in the

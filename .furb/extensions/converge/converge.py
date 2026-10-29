@@ -300,7 +300,7 @@ def stalled(counts: list[int]) -> bool:
   return len(run) > STALL and min(run[-STALL:]) >= min(run[:-STALL])
 
 
-def listed(gaps: list[list[str]], taken: dict[str, str]) -> str:
+def itemized(gaps: list[list[str]], taken: dict[str, str]) -> str:
   lines = []
   for shot, gap, quote in gaps[:LIMIT]:
     lines.append(f"- {shot}: {gap}" + (f"\n  His words: {quote}" if quote else ""))
@@ -319,7 +319,7 @@ def stepped(target: dict, book: dict, gaps: list[list[str]], taken: dict[str, st
     ("{words}", words),
     ("{sha}", sha),
     ("{capturing}", str(target.get("capturing", ""))),
-    ("{gaps}", listed(gaps, taken)),
+    ("{gaps}", itemized(gaps, taken)),
   ):
     text = text.replace(key, value)
   text = safe(text)
@@ -409,7 +409,7 @@ def told_holders(c: dict, book: dict, others: dict, who: str, sha: str, taken: d
     text = safe(
       f"converge found {len(fresh)} gap(s) that your work holds again in {shown} at {sha[:7]}. It orders no second"
       f" worker or item for them, and it judges {shown} on its own gaps alone. Fix them in your work, and each one"
-      f" is served:\n\n{listed([one for one, _ in fresh], taken)}"
+      f" is served:\n\n{itemized([one for one, _ in fresh], taken)}"
     )
     deliver(c, book, holder, text)
 
@@ -756,7 +756,7 @@ async def advanced(target: dict, book: dict, job: dict, words: str, head: str) -
         tell_home(
           f"{target['name']} stalled: its last {STALL} passes found {counts[-STALL:]} gaps against the words of the"
           f" owner, no fewer than its best before them. His words or the measure must change, and only he changes his"
-          f" words. Its ledger is {BOOKS}/{target['name']}.json, and its last gaps are:\n{listed(gaps, {})[:3000]}"
+          f" words. Its ledger is {BOOKS}/{target['name']}.json, and its last gaps are:\n{itemized(gaps, {})[:3000]}"
         )
   else:
     book["clean"] += 1
@@ -787,7 +787,7 @@ async def screened(target: dict, book: dict, job: dict, gaps: list[list[str]], w
   told = (
     f"converge judged the head {sha[:7]} of your PR #{n} against the words of the owner, which follow, and the"
     f" conductor does not merge it until a head shows none of the gaps below. Fix them and push."
-    f"\n\n<words>\n{words}\n</words>\n\nThe gaps:\n\n{listed(gaps, job['taken'])}"
+    f"\n\n<words>\n{words}\n</words>\n\nThe gaps:\n\n{itemized(gaps, job['taken'])}"
   )
   told = safe(told)
   pr = c["prs"].get(n)

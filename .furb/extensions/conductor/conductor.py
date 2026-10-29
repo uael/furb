@@ -2173,7 +2173,7 @@ for run in runs:
 print(json.dumps({"over": over, "flakes": flakes, "read": settled}))
 '''
 
-BUDGET = """The job {job} of the gates took {median} s in the median of its last green runs on main, {runs}, over its budget of {budget} s in .github/budgets.json, so each loop of feedback waits longer for it. Find where the job spends its time, from the times of its steps in gh run view --json jobs and from its logs, and bring the job under its budget at the cause: a cache that misses, a build done twice, or a test that waits. Never drop or weaken a gate to save time: move it, share it or make it faster. Change a budget only with the measures of script/budgets.py, and say why in the PR.
+BUDGET_BRIEF = """The job {job} of the gates took {median} s in the median of its last green runs on main, {runs}, over its budget of {budget} s in .github/budgets.json, so each loop of feedback waits longer for it. Find where the job spends its time, from the times of its steps in gh run view --json jobs and from its logs, and bring the job under its budget at the cause: a cache that misses, a build done twice, or a test that waits. Never drop or weaken a gate to save time: move it, share it or make it faster. Change a budget only with the measures of script/budgets.py, and say why in the PR.
 The median of each step of the job over those runs, in seconds:
 {steps}
 A change to CI itself is proved only by the gates of its PR: after you open the PR, wait for them with await checked(number), again after a pending, before you close."""
@@ -2237,7 +2237,7 @@ async def watch_ci() -> None:
       continue
     budgeted[job] = ran
     said = "\n".join(f"- {s}: {x} s" for s, x in sorted(one["steps"].items(), key=lambda kv: -kv[1])[:15]) or "- none measured"
-    brief = BUDGET.format(job=job, median=one["median"], runs=", ".join(map(str, ran)), budget=one["budget"], steps=said)
+    brief = BUDGET_BRIEF.format(job=job, median=one["median"], runs=", ".join(map(str, ran)), budget=one["budget"], steps=said)
     queue.append((key, brief, "ci"))
     heard.append(f"The job {job} took {one['median']} s, over its budget of {one['budget']} s: queued as the item {key}.")
   for one in seen["flakes"]:

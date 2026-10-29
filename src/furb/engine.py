@@ -175,7 +175,7 @@ def rung(word="", retells="", to="", on="") -> Act:
     mine = {retells, scope(id)}
     if word:
       while (c := crafted(id)) and c[0] not in lineage(id):
-        yield
+        yield {"rung"}
       if to:
         act("reply", "", lambda r: (yield "done", r, ("assistant", word, None, None)), to)
       elif tells(id):
@@ -220,7 +220,7 @@ def prompt[T](shape: type[T] | object, message="", to="", on="") -> Act[T]:
     if asks:
       yield "started", id
       while crafted(id):
-        yield
+        yield {"rung"}
     yield told(id, "", bound(id, named), message=message, thread=thread)
     while not says:
       asks and not (paused(id) or any(id in x[2:4] and not over(x[1]) for x in transcript(id, "rung"))) and rung(to=to)
@@ -236,7 +236,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
 
   def ear(id):
     t = transcript(source or ROOT)
-    h = [x[0] == "tell" and x[3][0][:6] for x in t] + ["chain(", "#chain"]
+    h = [(x[0] == "tell" and x[3][0][:6]) or x[0] for x in t] + ["chain(", "#chain", "setup"]
     hi = h.index("#chain", lo := h.index("chain("))
     refused, running, waiting, last, heard = set(), {}, {}, standing(), []
     asking = news = ran = reply = note = to = ""
@@ -270,13 +270,16 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
 
     if source or t[lo:hi]:
       kin = {source, *[n for one in (filter or list)([x for x in t if question(x)]) for n in lineage(one[1])]}
+      later = {x[1] for x in t[h.index("setup") :] if question(x) and not get(x[2])}
+      later |= {x[1] for x in t if x[0] == "run" and x[4] in later}
       yield (
         "prefix",
         id,
         [
           it
           for n, it in enumerate(t)
-          if lo <= n < hi or (source and (not (b := get(it[1])) or (b[2] if b[0] == "reply" else it[1]) in kin))
+          if (lo <= n < hi and not later & {*lineage(it[1])})
+          or (source and (not (b := get(it[1])) or (b[2] if b[0] == "reply" else it[1]) in kin))
         ],
       )
     ladder = {x: w for x, w in program(source or id).items() if over(x) or not get(x)}

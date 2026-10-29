@@ -245,7 +245,7 @@ test("what a model writes streams into the session under its rung until its repl
               ),
             ),
           ]),
-          turn("assistant", "catchup()\nawait recall()\nawait listed()\nmcp_index()"),
+          turn("assistant", "catchup()\nawait recall()\nawait listed()\nawait mcp_index()"),
           // The open of the root goes as a block of its own after the setup, which ends the block before it.
           expect.objectContaining({
             role: "user",
@@ -1046,7 +1046,7 @@ test("a session enables the extensions of the configs, and a later session on it
     )?.[1];
     expect(read).toBe("read9");
     const turns = (first.engine?.turns({ on: "chain1" }) ?? []).map((turn) => String(turn[1]));
-    expect(turns.at(-2)).toBe("catchup()\nawait recall()\nawait listed()\nmcp_index()");
+    expect(turns.at(-2)).toBe("catchup()\nawait recall()\nawait listed()\nawait mcp_index()");
     expect(turns.at(-1)).toContain(
       `#${read}\n${read}_path = '${tilded(join(cwd, "CLAUDE.md")).replaceAll("\\", "\\\\")}'\n${read}_text = 'Use two spaces.'`,
     );

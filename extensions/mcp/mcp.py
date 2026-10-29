@@ -10,6 +10,7 @@ from furb.engine import (
   answer,
   bound,
   controlled,
+  covers,
   module,
   over,
   peek,
@@ -257,6 +258,7 @@ def mcp_index(on: str = "") -> Act:
   def ear(id: str):
     yield "started", id
     seen: dict[str, tuple] = {}
+    made: list[str] = []
     pending = act("mcp_servers", on, None)
     while True:
       if pending and over(pending):
@@ -280,10 +282,13 @@ def mcp_index(on: str = "") -> Act:
             yield told(id, "changed" if seen else "", servers="\n".join(lines))
           for name, (_, word) in now.items():
             if word and seen.get(name, ("", ""))[1] != word:
-              rung(word, on=on)
+              made.append(rung(word, on=on))
           seen = now
-      match (yield {id, "mcp_changed"} | ({pending} if pending else set())):
-        case ("mcp_changed", *_):
-          pending = act("mcp_servers", on, None)
+      if not (pending or over(id)) and all(map(over, made)):
+        yield "done", id, None
+      a = yield {id, "mcp_changed", *made} | ({pending} if pending else set())
+      if isinstance(peek(id), BaseException) or (a[0] in ("cancel", "close") and covers(a, id)):
+        return
+      pending = act("mcp_servers", on, None) if a[0] == "mcp_changed" else pending
 
-  return act("mcp_index", on, controlled(ear))
+  return act("mcp_index", on, controlled(ear, lasting=True))

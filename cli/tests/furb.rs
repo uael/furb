@@ -364,7 +364,7 @@ fn a_life_runs_the_extensions_that_its_record_enables_and_those_that_the_configs
   fs::create_dir_all(skill.parent().expect("a folder")).expect("the folder of a skill");
   fs::write(&skill, "---\nname: brew\ndescription: Make tea.\n---\n").expect("a skill");
   fs::write(yard.at.join("CLAUDE.md"), "Use two spaces.\n").expect("a memory file");
-  let every = "catchup: catchup()\nmemory: await recall()\nskills: await listed()\ncompaction\nouroboros\nweb\nmcp: mcp_index()\n";
+  let every = "catchup: catchup()\nmemory: await recall()\nskills: await listed()\ncompaction\nouroboros\nweb\nmcp: await mcp_index()\n";
   assert_eq!(printed(yard.furb(&["extensions"]), ""), every, "the official extensions are on");
   let path = printed(yard.kept(&["run", "close(skill('brew').path)"]), "");
   // The World writes a path under the home of the user with ~ in place of the home.
@@ -384,7 +384,7 @@ fn a_life_runs_the_extensions_that_its_record_enables_and_those_that_the_configs
     .expect("a config of the project");
   assert_eq!(
     printed(yard.furb(&["extensions"]), ""),
-    "catchup: catchup()\nskills: await listed()\ncompaction\nouroboros\nweb\nmcp: mcp_index()\n"
+    "catchup: catchup()\nskills: await listed()\ncompaction\nouroboros\nweb\nmcp: await mcp_index()\n"
   );
   assert_eq!(printed(yard.kept(&["extensions"]), ""), every, "a life runs what its record enables");
 }
@@ -680,7 +680,7 @@ fn a_prompt_of_the_client_is_answered_by_a_model_and_its_done_is_sent() {
   }
   assert_eq!(
     said[8..],
-    [json!("catchup()\nawait recall()\nawait listed()\nmcp_index()"), json!(COUNT)]
+    [json!("catchup()\nawait recall()\nawait listed()\nawait mcp_index()"), json!(COUNT)]
   );
   let facts = client.data("4", json!({"type": "transcript", "on": "chain1"}));
   assert!(facts["facts"].as_array().expect("the facts").contains(&fact["fact"]), "{facts}");
