@@ -82,7 +82,7 @@ export type ThreadList = {
   asked: Map<string, ChainThread>;
 };
 
-/** The threads of one chain, as they stood when the chain had that stamp, which counts the acts placed on it. */
+/** The threads of one chain, as they stood when the chain had that stamp, which counts the prompts placed on it. */
 export type ChainRead = {
   stamp: number;
   list: ChainThread[];

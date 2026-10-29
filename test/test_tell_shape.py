@@ -39,9 +39,9 @@ async def test_a_fact_that_carries_notes_is_what_the_turns_are_folded_from() -> 
   engine.close(None, root)
   controls = [a for a in log if a[0] in ("pause", "wake", "cancel", "close")]
   assert controls == [
-    ("pause", root, OPERATOR),
+    ("pause", root, OPERATOR, None),
     ("wake", root, OPERATOR),
-    ("cancel", held, OPERATOR),
+    ("cancel", held, OPERATOR, None),
     ("close", root, OPERATOR, None),
   ]
   carrying = [a for a in log if a[0] == "tell"]

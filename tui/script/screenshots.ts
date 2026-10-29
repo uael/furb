@@ -275,6 +275,10 @@ try {
   await until(session.host, () => session.host.prompts.has(files));
   await session.refresh();
   await session.point(files);
+  // The input takes the words of a question once it drew that question: words typed before stay with the chain, and
+  // a later question would show them.
+  app().render();
+  await test.flush();
   await test.mockInput.typeText('["README.md", "docs/tui.md"]');
   await capture("96-list-question");
   app().composer.setText("");
@@ -771,6 +775,12 @@ try {
         .length === 2,
   );
   const thread = session.activity.find((act) => session.isUserPrompt(act))?.id ?? "";
+  // The sidebar lights the open thread when it draws, and the input sends to the thread lit: a draw before the message
+  // makes it go to that thread, where with no draw it would start a thread of its own on some runs.
+  app().render();
+  await test.flush();
+  if (session.target !== thread)
+    throw new Error(`The input aims at ${session.target}, not at the thread ${thread}.`);
   await session.submit("Think until I cancel.");
   await until(session, () => {
     const last = session.lastOwn;
