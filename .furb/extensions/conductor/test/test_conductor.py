@@ -503,11 +503,10 @@ def test_the_prune_removes_what_the_work_left_and_keeps_its_work(conductor: Roun
     )
   assert got.stdout.startswith("The prune removed the worktrees ")
   assert "; 1 remote branch, listed in .furb/trashed.tsv; 1 scratch directory; 1 folder of " in got.stdout
-  assert sorted(p.name for p in tmp_path.glob("furb-w-*")) == ["furb-w-busy", "furb-w-fresh", "furb-w-open"]
+  assert sorted(p.name for p in tmp_path.glob("furb-w-*")) == ["furb-w-busy", "furb-w-fresh"]
   assert git("for-each-ref", "--format=%(refname:short)", "refs/heads/w", cwd=root, env=env).split() == [
     "w/busy",
     "w/fresh",
-    "w/open",
   ]
   kept = sorted((root / ".furb" / "archive").glob("*/*"))
   assert [re.sub(r"-\d{6}\.", ".", p.name) for p in kept] == ["merged.bundle", "merged.patch"]
@@ -693,7 +692,7 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 
 STATE = (
   "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed fixes silent"
-  " comments measures timers noted debriefs briefed owns watched after parked awaited covers kinds pool areas vetoes ordered tips shifted hired paced landed heard handled sent ends requeued"
+  " comments measures timers noted debriefs briefed owns watched after parked awaited covers kinds pool slots areas vetoes ordered tips shifted hired paced landed heard handled sent ends requeued"
   " statused secret budgeted flaky runs_read"
 ).split()
 
@@ -1241,7 +1240,7 @@ async def test_a_fixer_that_starts_on_a_pr_with_a_live_worker_tells_that_worker(
 
 
 def test_the_brief_of_a_fixer_says_how_to_share_a_branch_and_to_wait_for_github(conductor: Round) -> None:
-  for words in ("git worktree list", "If the head of the PR is not {sha} any more", "headRefOid,mergeable", "20 seconds"):
+  for words in ("the workspace that the end of this brief names", "If the head of the PR is not {sha} any more", "headRefOid,mergeable", "20 seconds"):
     assert words in conductor.FIX
 
 
@@ -1368,7 +1367,7 @@ def test_each_brief_holds_the_recipes_that_fixers_found(conductor: Round) -> Non
   for word in ("credential.helper", "actions/jobs", "sed -i ''", "timeout=1800", "hypothesis"):
     assert word in conductor.WORKER
     assert word in conductor.FIX
-  assert "Keep the worktree until your PR merges" in conductor.WORKER
+  assert "{workspace}" in conductor.WORKER and "Leave the workspace clean" in conductor.WORKSPACE
 
 
 @POSIX
@@ -1932,3 +1931,25 @@ def test_an_ended_worker_takes_the_next_item_of_its_area_until_half_of_its_windo
   conductor.areas["e"] = ["tui"]
   conductor.real_hire("e", "near", "ci")
   assert conductor.homes["e"] == "chain-tui/a"
+
+
+def test_a_worker_takes_a_free_workspace_at_its_hire_and_gives_it_back_when_it_ends(conductor: Round) -> None:
+  conductor.ns["quietly"] = lambda verb, *args, **words: (
+    asyncio.run(verb(*args, **words)) if verb == conductor.bash else verb(*args, **words)
+  )
+  repo = str(conductor.tmp)
+  first = conductor.real_hire("k1", "one", "tui")
+  assert f"Work in the workspace {repo}-w1," in conductor.prompts[-1][0] and "{workspace}" not in conductor.prompts[-1][0]
+  assert "-w-k1" not in conductor.prompts[-1][0]
+  conductor.real_hire("fix5", "", "", conductor.FIX)
+  assert conductor.prompts[-1][0].endswith(conductor.WORKSPACE.replace("{repo}", repo).replace("{slot}", "w2"))
+  conductor.kinds["look"] = "audit"
+  conductor.real_hire("look", "read")
+  assert "workspace" not in conductor.prompts[-1][0]
+  assert sorted(conductor.slots.values()) == ["w1", "w2"]
+  conductor.ns["DEBRIEFS"] = False
+  conductor.done[first] = (9, "done")
+  conductor.tend()
+  assert first not in conductor.slots
+  conductor.real_hire("k3", "three", "gui")
+  assert f"{repo}-w1," in conductor.prompts[-1][0]
