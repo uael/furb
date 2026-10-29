@@ -19,7 +19,9 @@
 # unset. It writes the CLAUDE_CODE_OAUTH_TOKEN and the CLAUDE_CONFIG_DIR of each process beside it too, in token.N and
 # configdir.N, or unset. When the file limited.TOKEN stands beside it, each turn of a process whose token is TOKEN gets
 # a result that says the usage limit ends in as many seconds as the file holds, and when the file signedout.TOKEN
-# stands beside it, a result that says the account is signed out.
+# stands beside it, a result that says the account is signed out. When the file lost stands beside it, a process
+# that resumes a conversation says on the stderr that it holds no such conversation and ends with a failure before it
+# reads any input, as many times as the file holds, or once when it holds nothing.
 here=$(dirname "$0")
 # A process that furb starts to ask for the models (FURB_CLAUDE_DISCOVER) answers control requests and no turn, and
 # leaves no trace of a process of a turn. It writes a line in discoveries for each one. When the file models stands
@@ -55,9 +57,11 @@ printf '%s' "$who" > "$here/token.$$"
 printf '%s' "${CLAUDE_CONFIG_DIR-unset}" > "$here/configdir.$$"
 echo "$$" >> "$here/pids"
 id=none
+resumed=
 last=
 for arg in "$@"; do
   case $last in --session-id|--resume) id=$arg ;; esac
+  if [ "$last" = --resume ]; then resumed=1; fi
   if [ "$arg" = --fork-session ]; then id="$id-forked"; fi
   last=$arg
 done
@@ -67,6 +71,12 @@ part() { say "{\"type\":\"content_block_delta\",\"index\":$at,\"delta\":{\"type\
 if [ -f "$here/loud" ]; then head -c 262144 /dev/zero | tr '\0' e >&2; fi
 if [ -f "$here/odd" ]; then echo "no line of json"; fi
 if [ -f "$here/deaf" ]; then exec sleep 60; fi
+if [ -f "$here/lost" ] && [ -n "$resumed" ]; then
+  left=$(cat "$here/lost")
+  if [ "${left:-1}" -le 1 ]; then rm -f "$here/lost"; else echo $((left - 1)) > "$here/lost"; fi
+  echo "No conversation found with session ID: $id" >&2
+  exit 1
+fi
 n=0
 while IFS= read -r line; do
   printf '%s\n' "$line" >> "$here/in"

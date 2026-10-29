@@ -91,6 +91,10 @@ const FIRST: Duration = Duration::from_millis(100);
 /// The longest pause before a process tries its program again.
 const PAUSE: Duration = Duration::from_secs(5);
 
+/// What the command line says when it holds no conversation under the id that a process resumes, as when its file
+/// is gone.
+const LOST: &str = "No conversation found with session ID";
+
 /// The words that begin the failure of a turn whose program was missing or did not run, as while an update of claude
 /// replaces it, which the provider takes for a failure that passes.
 pub(super) const MISSING: &str = "No program to run";
@@ -707,6 +711,14 @@ impl Conversation {
     }
   }
 
+  /// A new conversation under a new id, on the same account and in the same config dir.
+  fn renew(&mut self) {
+    let (account, store) = (self.account, self.store.take());
+    *self = Conversation::new(&self.name, &self.system);
+    self.account = account;
+    self.store = store;
+  }
+
   /// Write the turns before the last message as a conversation of the command line under the id of this one, with the
   /// role of each, which the first process of this one resumes. It says whether it wrote a turn.
   fn seed(&mut self, past: &[Message]) -> Result<bool, CompletionError> {
@@ -768,6 +780,10 @@ impl Conversation {
   /// asked again whole, or, when that message grew at its end by what was told since, what it gained alone, as a new
   /// message of the same conversation, which keeps its cache. It does so once: when the command line heard that and
   /// came to no reply again, the next time begins a new conversation.
+  ///
+  /// When the command line holds no conversation under the id that a process resumes, as when its file is gone, the
+  /// turn rebuilds it once: a new conversation that resumes the messages of the request. When that fails too, the
+  /// failure names the lost conversation and the failed rebuild.
   async fn turn(
     &mut self,
     messages: &[Message],
@@ -797,34 +813,49 @@ impl Conversation {
     };
     let again = grown.is_some() || start.is_some_and(|at| at > 0 && at == incoming.len());
     let anew = start.is_none() || again && self.again;
-    let delta = match (start, &grown) {
+    let mut delta = match (start, &grown) {
       (Some(_), Some(one)) if !anew => std::slice::from_ref(one),
       (Some(at), None) if !anew => &messages[if again { last } else { at }..],
       _ => {
-        let (account, store) = (self.account, self.store.take());
-        *self = Conversation::new(&self.name, &self.system);
-        self.account = account;
-        self.store = store;
+        self.renew();
         messages
       }
     };
     let asked = messages.last().cloned();
-    let again = again && !anew;
-    let mut flight = Flight {
-      conversation: self,
-      incoming,
-      asked,
-      again,
-      heard: false,
-      reply: None,
-      restored: None,
-    };
-    let got = flight.run(delta, spend, program, stall, gone, deltas).await;
-    if let Ok(response) = &got {
-      let reply = Message::Assistant { id: None, content: response.choice.clone() };
-      flight.reply = Some(canonical(&reply));
+    let mut again = again && !anew;
+    let mut lost = None;
+    loop {
+      let mut flight = Flight {
+        conversation: &mut *self,
+        incoming: incoming.clone(),
+        asked: asked.clone(),
+        again,
+        heard: false,
+        reply: None,
+        restored: None,
+      };
+      let got = flight.run(delta, spend.clone(), program, stall, gone, deltas).await;
+      if let Ok(response) = &got {
+        let reply = Message::Assistant { id: None, content: response.choice.clone() };
+        flight.reply = Some(canonical(&reply));
+      }
+      drop(flight);
+      match (got, &lost) {
+        (Err(no), None) if no.to_string().contains(LOST) => {
+          lost = Some(self.id.clone());
+          self.renew();
+          (delta, again) = (messages, false);
+        }
+        (Err(no), Some(old)) => {
+          let n = messages.len();
+          return Err(failed(format!(
+            "Claude lost the conversation {old}, and the new one that furb rebuilt from the {n} messages of the \
+             chain failed too: {no}"
+          )));
+        }
+        (got, _) => return got,
+      }
     }
-    got
   }
 
   /// A process of the conversation at what it spends: a new one, a resumed one, or the fork of its parent. When its program

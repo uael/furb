@@ -436,6 +436,45 @@ fn a_new_conversation_resumes_the_turns_before_its_last_message_from_a_conversat
   assert_eq!(entries[1]["parentUuid"], entries[0]["uuid"]);
 }
 
+/// A model of the fake that keeps its conversations in a config dir of the yard, whose command line loses the
+/// conversation that a process resumes as many times as `lost` says.
+fn losing(yard: &Yard, lost: &str) -> Completion {
+  fs::write(yard.at.join("lost"), lost).expect("the fake loses its conversations");
+  let accounts =
+    vec![Account { name: "a".to_owned(), source: Source::ConfigDir(yard.at.join("dir")) }];
+  yard.claude_as(accounts, Switch::Failover).completion_model("sonnet")
+}
+
+#[test]
+fn a_conversation_that_the_command_line_lost_is_rebuilt_once_from_the_turns_of_the_request() {
+  let yard = Yard::new("lost");
+  let model = losing(&yard, "1");
+  let turns = [user("first"), Message::assistant("read(\"x\")"), user("second")];
+  let got = asked(&model, &turns, json!({"session": "chain"})).expect("the rebuilt one answers");
+  assert_eq!(got.choice, [AssistantContent::text("close(\"reply 1\")")]);
+  let pids = yard.pids();
+  assert_eq!(pids.len(), 2, "one process lost its conversation, and one rebuilt it");
+  let lost = after(&yard.args(&pids[0]), "--resume");
+  let rebuilt = after(&yard.args(&pids[1]), "--resume");
+  assert!(lost.is_some() && rebuilt.is_some() && lost != rebuilt, "{lost:?} {rebuilt:?}");
+  let heard = yard.heard();
+  assert_eq!(heard.len(), 1, "the process that lost its conversation read nothing");
+  assert!(heard[0].contains("second") && !heard[0].contains("first"), "{}", heard[0]);
+}
+
+#[test]
+fn a_conversation_lost_again_after_its_rebuild_ends_the_turn_with_a_failure_that_says_so() {
+  let yard = Yard::new("lost-twice");
+  let model = losing(&yard, "2");
+  let turns = [user("first"), Message::assistant("read(\"x\")"), user("second")];
+  let no = asked(&model, &turns, json!({"session": "chain"})).unwrap_err().to_string();
+  assert!(
+    no.contains("rebuilt from the 3 messages") && no.contains("No conversation found"),
+    "{no}"
+  );
+  assert_eq!(yard.pids().len(), 2, "the rebuild goes once");
+}
+
 #[test]
 fn past_the_warm_processes_the_least_used_one_ends_and_past_the_held_conversations_the_least_used_one_goes()
  {
