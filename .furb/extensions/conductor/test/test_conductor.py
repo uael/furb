@@ -1993,6 +1993,6 @@ def test_the_triage_folds_like_items_into_the_earlier_one_before_a_hire(conducto
   assert "## The item converge-pr2, folded in by the triage\nThe open PR #2.\nGap: the second row" in folded
   conductor.staff()
   assert [key for key, _ in conductor.hired] == ["converge-pr1", "other", "converge-pr3"]
-  assert conductor.covers == {"converge-pr1": ["converge-pr2"]}
+  assert conductor.covering == {"converge-pr1": ["converge-pr2"]}
   assert conductor.heard == ["The triage folded the item converge-pr2 into converge-pr1, which it is like."]
   assert conductor.taken("converge-pr2") == "worker1"
