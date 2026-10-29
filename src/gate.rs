@@ -109,7 +109,7 @@ pub fn checked(sheet: &str) -> Result<Vec<(usize, String)>, Fault> {
     found.extend(unawaited(sheet));
     found.extend(told(sheet));
     found.sort_by_key(|(line, _)| *line);
-    return Ok(found);
+    return Ok(signed(found, &[sheet, ENGINE]));
   };
   let mut found =
     declared(&short, typed(&laid.modules, &laid.main, &laid.lines)?, Some(&laid.declares));
@@ -117,7 +117,10 @@ pub fn checked(sheet: &str) -> Result<Vec<(usize, String)>, Fault> {
   found.extend(unawaited(&short));
   found.extend(told(&short));
   found.sort_by_key(|(line, _)| *line);
-  Ok(found)
+  let mut sources: Vec<&str> = vec![&laid.main];
+  sources.extend(laid.modules.iter().rev().map(|(_, module)| &**module));
+  sources.push(ENGINE);
+  Ok(signed(found, &sources))
 }
 
 /// What the checker found on a text that stands on modules, each by the line of the sheet that its line stands for.
@@ -989,11 +992,76 @@ fn named(target: &Expr) -> Vec<&str> {
 fn read(said: &str) -> Option<(usize, String)> {
   let (_, rest) = said.split_once(':')?;
   let (line, rest) = rest.split_once(':')?;
-  let (_, rest) = rest.split_once(": ")?;
+  let (column, rest) = rest.split_once(": ")?;
   if !rest.starts_with("error[") || rest.starts_with(IMPORT) {
     return None;
   }
-  Some((line.trim().parse().ok()?, rest.trim().to_owned()))
+  let (rule, why) = rest.trim().split_once(' ').unwrap_or((rest.trim(), ""));
+  Some((
+    line.trim().parse().ok()?,
+    format!("{rule} (column {}) {why}", column.trim()).trim_end().to_owned(),
+  ))
+}
+
+/// The column of a place of a text, counted from 1 in characters, as the checker counts it.
+fn column(text: &str, at: usize) -> usize {
+  text[..at].rsplit('\n').next().map_or(0, |line| line.chars().count()) + 1
+}
+
+/// The most characters of a signature that a finding quotes.
+const SIGNED: usize = 300;
+
+/// Each finding that names a function, as the checker writes it, "function `name`", with the signature of that
+/// function: its name, its parameters and what it gives, as the last def of that name in the sources reads, which
+/// stand from the nearest to the word to the farthest, the engine last. A model that called a function wrongly then
+/// reads in the same finding how to call it.
+fn signed(found: Vec<(usize, String)>, sources: &[&str]) -> Vec<(usize, String)> {
+  found
+    .into_iter()
+    .map(|(line, why)| {
+      let name = why
+        .split_once("function `")
+        .and_then(|(_, rest)| rest.split_once('`'))
+        .map(|(name, _)| name)
+        .filter(|name| !name.contains('.'));
+      match name.and_then(|name| sources.iter().find_map(|source| signature(source, name))) {
+        Some(sign) => (
+          line,
+          format!("{why}; the signature of `{name}` is `{sign}`", name = name.unwrap_or_default()),
+        ),
+        None => (line, why),
+      }
+    })
+    .collect()
+}
+
+/// The signature of the last def of a name in a source, on one line and cut to `SIGNED` characters.
+fn signature(source: &str, name: &str) -> Option<String> {
+  let parsed = parse_module(source).ok()?;
+  let mut defs = Defs { source, name, found: None };
+  defs.visit_body(&parsed.syntax().body);
+  defs.found.map(|sign| sign.chars().take(SIGNED).collect())
+}
+
+/// The last def of a name in a body, at any depth, read from the name to the end of what it gives.
+struct Defs<'a> {
+  source: &'a str,
+  name: &'a str,
+  found: Option<String>,
+}
+
+impl<'a> StatementVisitor<'a> for Defs<'a> {
+  fn visit_stmt(&mut self, stmt: &'a Stmt) {
+    match stmt {
+      Stmt::FunctionDef(def) if def.name.as_str() == self.name => {
+        let end = def.returns.as_ref().map_or(def.parameters.end(), |one| one.end());
+        let text = &self.source[def.name.start().to_usize()..end.to_usize()];
+        self.found = Some(text.split_whitespace().collect::<Vec<_>>().join(" "));
+      }
+      _ => {}
+    }
+    walk_stmt(self, stmt);
+  }
 }
 
 /// Each import of the sheet that the sandbox cannot run, by the line it stands on, with what the sandbox raised.
@@ -1015,7 +1083,9 @@ fn unrun(sheet: &str) -> Vec<(usize, String)> {
     .filter_map(|at| {
       let raised =
         Sand::new().run(&sheet[at], NamedValues::new(), &mut Nobody("an import")).err()?;
-      Some((sheet[..at.start().to_usize()].matches('\n').count() + 1, format!("{IMPORT} {raised}")))
+      let start = at.start().to_usize();
+      let (line, column) = (sheet[..start].matches('\n').count() + 1, column(sheet, start));
+      Some((line, format!("{IMPORT} (column {column}) {raised}")))
     })
     .collect()
 }
@@ -1036,7 +1106,8 @@ fn unawaited(sheet: &str) -> Vec<(usize, String)> {
     .into_iter()
     .map(|(at, name)| {
       let why = format!(
-        "{AWAIT} `await` stands in `def {name}`, which is not async: write `async def {name}`, and await each call of it"
+        "{AWAIT} (column {}) `await` stands in `def {name}`, which is not async: write `async def {name}`, and await each call of it",
+        column(sheet, at)
       );
       (line(at), why)
     })
@@ -1105,7 +1176,10 @@ fn told(sheet: &str) -> Vec<(usize, String)> {
     .map(|(at, name)| {
       (
         line(at),
-        format!("{TOLD} the transcript binds `{name}`: a word reads it and never binds it"),
+        format!(
+          "{TOLD} (column {}) the transcript binds `{name}`: a word reads it and never binds it",
+          column(sheet, at)
+        ),
       )
     })
     .collect()
@@ -1244,7 +1318,11 @@ mod tests {
     let found = said(&["k = 1"], "k = 2\nimport types\nclose(types.SimpleNamespace(k=k))");
     assert_eq!(
       found,
-      vec![(2, "error[unresolved-import] ModuleNotFoundError: No module named 'types'".to_owned())]
+      vec![(
+        2,
+        "error[unresolved-import] (column 3) ModuleNotFoundError: No module named 'types'"
+          .to_owned()
+      )]
     );
   }
 
@@ -1253,7 +1331,10 @@ mod tests {
     let found = said(&[], "from typing import NoSuchName\nclose(1)");
     assert_eq!(found.len(), 1, "{found:?}");
     assert_eq!(found[0].0, 1);
-    assert!(found[0].1.starts_with("error[unresolved-import] ImportError: "), "{found:?}");
+    assert!(
+      found[0].1.starts_with("error[unresolved-import] (column 3) ImportError: "),
+      "{found:?}"
+    );
   }
 
   #[test]
@@ -1268,7 +1349,9 @@ mod tests {
       found,
       vec![(
         1,
-        format!("error[unresolved-import] ModuleNotFoundError: No module named '{MODULE}'")
+        format!(
+          "error[unresolved-import] (column 3) ModuleNotFoundError: No module named '{MODULE}'"
+        )
       )]
     );
   }
@@ -1277,7 +1360,7 @@ mod tests {
   fn an_await_in_a_function_that_is_not_async_is_a_finding_of_its_line() {
     let found = said(&[], "def fix():\n  got = await wait(0)\n  return got\nfix()");
     let why = "`await` stands in `def fix`, which is not async: write `async def fix`, and await each call of it";
-    assert_eq!(found, vec![(2, format!("{AWAIT} {why}"))]);
+    assert_eq!(found, vec![(2, format!("{AWAIT} (column 11) {why}"))]);
   }
 
   #[test]
@@ -1324,12 +1407,14 @@ mod tests {
       .filter(|(line, _)| *line > above)
       .map(|(line, why)| (line - above, why))
       .collect();
-    let told = |name: &str| {
-      format!("{TOLD} the transcript binds `{name}`: a word reads it and never binds it")
+    let told = |column: usize, name: &str| {
+      format!(
+        "{TOLD} (column {column}) the transcript binds `{name}`: a word reads it and never binds it"
+      )
     };
     assert_eq!(
       got,
-      vec![(2, told("bash1_stdout")), (3, told("prompt2")), (8, told("prompt2_value"))]
+      vec![(2, told(3, "bash1_stdout")), (3, told(7, "prompt2")), (8, told(3, "prompt2_value"))]
     );
   }
 

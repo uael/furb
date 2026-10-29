@@ -347,7 +347,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
           if found:
             yield told(rid, "refused", findings="\n".join(found))
             refused.add(rid)
-            close(Refused(), rid)
+            close(Refused(*found), rid)
         case ("done", _, "", Refused() as why) if r[0] == "reply":
           pause(id, why)
       if r[0] == "run":

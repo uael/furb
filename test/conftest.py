@@ -76,7 +76,8 @@ command is done."""
 
 def faulted(line: str) -> str:
   """What the gate finds against a word whose first line is that line, which names BAD, which nothing binds."""
-  return f"line 1: error[unresolved-reference] Name `BAD` used when not defined, in {line!r}"
+  column = line.index("BAD") + 1
+  return f"line 1: error[unresolved-reference] (column {column}) Name `BAD` used when not defined, in {line!r}"
 
 
 BAD = faulted("k = BAD")

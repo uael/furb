@@ -140,11 +140,13 @@ async def test_the_gate_gives_no_finding_when_the_gate_accepts_the_rung() -> Non
   assert engine.gate("k = BAD", on=root) == [BAD]
 
 
-async def test_each_finding_names_the_line_of_the_word_it_is_found_on_and_quotes_that_line() -> None:
-  """Each finding names the line of the word it is found on, and quotes that line, cut to 80 characters, so a model reads what the gate read."""
+async def test_each_finding_names_the_line_and_the_column_of_the_word_it_is_found_on_and_the_rule_and_quotes_that_line() -> (
+  None
+):
+  """Each finding names the line and the column of the word it is found on, and the rule, and quotes that line, cut to 80 characters, so a model reads what the gate read."""
   _, _, root = born()
   long = "k = BAD + " + "1 + " * 30 + "1"
-  why = "error[unresolved-reference] Name `BAD` used when not defined"
+  why = "error[unresolved-reference] (column 5) Name `BAD` used when not defined"
   assert engine.gate("k = 1\nj = BAD  ", on=root) == [f"line 2: {why}, in 'j = BAD'"]
   (found,) = engine.gate("k = 1\n  j = 2", on=root)
   assert found.startswith("line 2: ") and found.endswith(", in 'j = 2'")
@@ -153,20 +155,22 @@ async def test_each_finding_names_the_line_of_the_word_it_is_found_on_and_quotes
     assert engine.gate(row["word"], on=root) == row["found"], row["word"]
 
 
-async def test_a_word_that_holds_a_fence_markup_or_prose_finds_that_a_reply_is_python_and_quotes_only() -> None:
-  """A word that is not python and that holds a fence of markdown, the markup of a tool call or a sentence of prose finds that a reply is python and quotes only, with no fence, no markup and no prose, so nothing of this word ran: delete each such line."""
+async def test_a_word_that_holds_a_fence_markup_or_prose_finds_the_first_such_line_and_what_it_is() -> None:
+  """A word that is not python and that holds a fence of markdown, the markup of a tool call or a sentence of prose finds the first such line and what it is, and that a reply is python and quotes only, with no fence, no markup and no prose, so nothing of this word ran: delete each such line."""
   _, _, root = born()
   stray = (
     "a reply is python and quotes only, with no fence, no markup and no prose, so nothing of this word ran: delete each"
     " such line"
   )
-  for word, line in [
-    ("```python\nclose(1)\n```", "```python"),
-    ('<invoke name="bash">\nclose(1)', '<invoke name="bash">'),
-    ("Let me read the file first.\nclose(1)", "Let me read the file first."),
+  for word, line, kind in [
+    ("```python\nclose(1)\n```", "```python", "a fence"),
+    ('<invoke name="bash">\nclose(1)', '<invoke name="bash">', "markup"),
+    ("Let me read the file first.\nclose(1)", "Let me read the file first.", "prose"),
+    ("close(1)\nNow I check the result.", "Now I check the result.", "prose"),
   ]:
     (found,) = engine.gate(word, on=root)
-    assert found.startswith("line 1: ") and found.endswith(f"; {stray}, in {line!r}")
+    at = word.split("\n").index(line) + 1
+    assert found.startswith(f"line {at}: ") and found.endswith(f"; line {at} is {kind}: {stray}, in {line!r}")
   (found,) = engine.gate("= 1", on=root)
   assert stray not in found and found.endswith(", in '= 1'")
 
@@ -233,12 +237,12 @@ async def test_a_word_that_binds_a_name_that_the_transcript_binds_finds_that_the
   """A word that binds a name that the transcript binds, the name of an act of its chain or a name of a value that a tell of that act binds, as bash12_stdout, finds that the transcript binds that name, also for an act that the chain did not tell yet."""
   _, _, root = born()
   act = engine.rung("k = 1", on=root)
-  told = "error[transcript-name] the transcript binds `{}`: a word reads it and never binds it"
+  told = "error[transcript-name] (column {}) the transcript binds `{}`: a word reads it and never binds it"
   word = f"{act}_value = 2"
-  assert engine.gate(word, on=root) == [f"line 1: {told.format(act + '_value')}, in {word!r}"]
+  assert engine.gate(word, on=root) == [f"line 1: {told.format(1, act + '_value')}, in {word!r}"]
   await act
   assert engine.gate(f"k = 2\nfor {act} in []:\n  pass", on=root) == [
-    f"line 2: {told.format(act)}, in 'for {act} in []:'"
+    f"line 2: {told.format(5, act)}, in 'for {act} in []:'"
   ]
   assert engine.gate(f"{act}x = 1\nbash99_stdout = ''", on=root) == []
 
@@ -250,7 +254,54 @@ async def test_a_word_that_binds_a_name_that_a_rung_before_it_declares_finds_the
   await act
   word = "pr = 'a'"
   assert engine.gate(word, on=root) == [
-    'line 1: error[invalid-assignment] Object of type `Literal["a"]` is not assignable to `def pr() -> int`;'
+    'line 1: error[invalid-assignment] (column 6) Object of type `Literal["a"]` is not assignable to `def pr() -> int`;'
     f" the word of {act} declares `pr` with that type, so give this value another name, in {word!r}"
   ]
   assert engine.gate("pr: str = 'a'\nclose(pr)", on=root) == []
+
+
+async def test_a_word_that_leaves_a_bracket_open_finds_the_line_and_the_column_of_the_innermost_bracket_that_stays_open() -> (
+  None
+):
+  """A word that is not python and that leaves a bracket open finds the line and the column of the innermost bracket that stays open."""
+  _, _, root = born()
+  (found,) = engine.gate("close((503, 'done')", on=root)
+  assert "; the bracket ( of line 1, column 6, stays open," in found
+  (found,) = engine.gate("k = 1\nj = foo(1,\n  [2, 3\nclose(j)", on=root)
+  assert "; the bracket [ of line 3, column 3, stays open," in found
+  (found,) = engine.gate("k = ')'\n# (\nclose((1, 2)", on=root)
+  assert "; the bracket ( of line 3, column 6, stays open," in found
+  (found,) = engine.gate('k = \'a\\\' (\'\nj = """b\\\n("""\nclose((1, 2)', on=root)
+  assert "; the bracket ( of line 4, column 6, stays open," in found
+
+
+async def test_a_word_that_starts_with_a_shell_command_finds_that_the_line_is_a_shell_command() -> None:
+  """A word that is not python and that starts with a shell command finds that the line is a shell command, so write it as await bash("..."), and nothing of this word ran."""
+  _, _, root = born()
+  (found,) = engine.gate("git status --short", on=root)
+  assert found.endswith(
+    "; the line is a shell command, so write it as await bash(\"...\"), and nothing of this word ran, in 'git status --short'"
+  )
+  (found,) = engine.gate("close(1)\ngh pr view 3", on=root)
+  assert "the line is a shell command" in found and found.startswith("line 2: ")
+
+
+async def test_a_finding_on_a_call_of_a_function_names_the_signature_of_that_function() -> None:
+  """A finding on a call of a function names the signature of that function, so a model reads how to call it."""
+  _, _, root = born()
+  (found,) = engine.gate("close(read())", on=root)
+  assert '; the signature of `read` is `read(path: str, show: Show = HEAD, on="") -> Text`, in' in found
+  await engine.rung("def twice(n: int, *, by: int = 2) -> int:\n  return n * by", on=root)
+  (found,) = engine.gate("close(twice(1, 2))", on=root)
+  assert "; the signature of `twice` is `twice(n: int, *, by: int = 2) -> int`, in 'close(twice(1, 2))'" in found
+
+
+async def test_a_finding_on_an_await_of_a_value_that_is_no_act_says_that_the_value_stands_in_its_name_already() -> None:
+  """A finding on an await of a value that is no act says that a value which an await gave stands in its name already, so use the name and await it no more."""
+  _, _, root = born()
+  (found,) = engine.gate("got = await bash('ls')\nawait got", on=root)
+  assert found.startswith("line 2: error[invalid-await] (column 7) ")
+  assert (
+    "; a value that an await gave stands in the name already, so use the name and await it no more, in 'await got'"
+    in found
+  )
