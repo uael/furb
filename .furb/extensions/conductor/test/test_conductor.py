@@ -2747,3 +2747,27 @@ def test_the_chain_of_the_round_itself_is_left_alone(conductor: Round) -> None:
   conductor.now += 600
   conductor.tend()
   assert (conductor.cancelled, conductor.prompts) == ([], [])
+
+
+def test_threads_reads_each_transcript_once_and_fits_300_chains(conductor: Round) -> None:
+  calls: list[str] = []
+  book: dict[str, list[tuple]] = {"chain1": []}
+  for i in range(300):
+    c, p = f"chain{i + 2}", f"prompt{i + 1}"
+    conductor.facts[c] = ("chain", c, "rung1", "chain1", f"t/k{i}", "")
+    conductor.facts[p] = ("prompt", p, "rung1", c, "str", "brief", "claude")
+    tell = ("tell", p, "rung1", [f"see https://github.com/o/r/pull/{i + 1} done"])
+    book["chain1"].append(conductor.facts[c])
+    book[c] = [conductor.facts[p], tell]
+
+  def transcript(on: str = "", of: str = "") -> list[tuple]:
+    calls.append(on)
+    return book.get(on, [])[:]
+
+  conductor.ns["transcript"] = transcript
+  start = time.monotonic()
+  out = conductor.threads()
+  assert time.monotonic() - start < 5
+  assert len(calls) == 301 == len(set(calls))
+  assert out.count(" working prompt") == 300
+  assert "  PR https://github.com/o/r/pull/7 unseen" in out
