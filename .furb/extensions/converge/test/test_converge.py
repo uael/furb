@@ -63,6 +63,7 @@ class World:
     self.pending: list[tuple[str, object]] = []
     self.slow = False
     self.pausing = False
+    self.limit = False
     self.now = 1000.0
     self.round = {
       "quietly": self.quietly,
@@ -87,7 +88,7 @@ class World:
     ns.update(bash=self.bash, prompt=self.prompt, chain=self.chain, rung=self.rung, grant=self.grant, wait=self.wait)
     ns.update(over=lambda name: name in self.done, peek=lambda name, waiting=None: self.done.get(name, waiting))
     ns.update(acting=lambda: "rung1", scope=lambda name: "chain1")
-    ns.update(get=self.facts.get, transcript=lambda on="", of="": [])
+    ns.update(get=self.facts.get, transcript=self.transcribe)
     ns.update(paused=lambda name: self.pausing, clock=lambda: self.now, cancel=self.cancel)
     exec(compile(SOURCE, str(HERE / "converge.py"), "exec"), ns)  # noqa: S102
     self.ns = ns
@@ -154,6 +155,10 @@ class World:
     self.waits.append([a for a in acts if a in self.done])
     self.waited()
     return self.act("wait", None)
+
+  def transcribe(self, on: str = "", of: str = "") -> list[tuple]:
+    note = f"#{on} waits on claude-cli:sonnet/high: usage limit until 2026-10-29 17:10 (Europe/Paris)"
+    return [("tell", on, "", [note])] if self.limit else []
 
   def told(self) -> list[str]:
     return [message for shape, message, to, on in self.prompts if shape is None and on == "chain1"]
@@ -563,15 +568,15 @@ def test_judges_that_give_no_list_twice_keep_the_veto_and_tell_the_operator_once
   assert len(world.told()) == 1
 
 
-def test_a_judge_whose_chain_pauses_gives_no_answer_and_its_head_goes_stuck(world: World) -> None:
+def test_a_judge_whose_chain_pauses_is_cut_and_its_pass_counts_as_no_try(world: World) -> None:
   converged(world)
   world.slow, world.pausing = True, True
   world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
   world.say(r"python3 -I -", listing(kind="text"))
   assert [veto(world) for _ in range(3)] == [True, True, True]
-  assert world.book()["heads"]["5 abc"] == {"state": "stuck", "tries": 2}
+  assert world.book()["heads"]["5 abc"] == {"state": "held", "tries": 0}
   assert world.pending == []
-  assert len(world.told()) == 1 and "gave no answer twice" in world.told()[0]
+  assert world.told() == []
 
 
 def test_a_judge_that_passes_its_bound_gives_no_answer(world: World) -> None:
@@ -583,8 +588,38 @@ def test_a_judge_that_passes_its_bound_gives_no_answer(world: World) -> None:
   assert world.book()["heads"]["5 abc"] == {"state": "held"}
   world.now += world.ns["BOUND"]
   assert veto(world) is True
-  assert world.book()["heads"]["5 abc"] == {"state": "held", "tries": 1}
+  assert world.book()["heads"]["5 abc"] == {"state": "held", "tries": 0}
   assert world.pending == []
+
+
+def test_a_judge_whose_chain_waits_on_a_usage_limit_is_neither_cut_nor_counted(world: World) -> None:
+  converged(world)
+  world.slow, world.pausing, world.limit = True, True, True
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.say(r"python3 -I -", listing(kind="text"))
+  for _ in range(3):
+    assert veto(world) is True
+    world.now += world.ns["BOUND"] * 3
+  assert len(world.pending) == 1
+  assert world.book()["heads"]["5 abc"] == {"state": "held"}
+
+
+def test_the_bound_of_a_judge_starts_again_when_its_usage_limit_ends(world: World) -> None:
+  converged(world)
+  world.slow, world.limit = True, True
+  world.say(r"gh pr view 5 --json files", "tui/src/app.ts\n")
+  world.say(r"python3 -I -", listing(kind="text"))
+  assert veto(world) is True
+  world.now += world.ns["BOUND"] * 2
+  assert veto(world) is True
+  world.limit = False
+  world.now += world.ns["BOUND"] - 1
+  assert veto(world) is True
+  assert len(world.pending) == 1
+  world.now += 1
+  assert veto(world) is True
+  assert world.pending == []
+  assert world.book()["heads"]["5 abc"] == {"state": "held", "tries": 0}
 
 
 def test_a_capture_of_main_that_did_not_change_keeps_the_gaps_of_the_last_pass(world: World) -> None:
