@@ -158,7 +158,7 @@ def test_a_word_that_imports_the_engine_by_its_package_is_refused() -> None:
   """The gate gives the checker the engine under a name that the sheet alone says, so a word that imports the
   engine by the name of its package is refused, as it is where the engine runs in the sandbox."""
   assert said("import furb\nclose(furb)") == [
-    "line 1: error[unresolved-import] ModuleNotFoundError: No module named 'furb', in 'import furb'"
+    "line 1: error[unresolved-import] (column 1) ModuleNotFoundError: No module named 'furb', in 'import furb'"
   ]
   assert said("from furb.engine import read\nclose(read)")[0].startswith("line 1: error[unresolved-import]")
 

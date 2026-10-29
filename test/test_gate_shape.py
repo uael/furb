@@ -73,7 +73,7 @@ async def test_the_refused_paragraph_binds_the_findings_that_refused_the_word_of
   """The refused paragraph binds the findings that refused the word of a rung, one line for each, as rungN_findings."""
   _, log, root = born("k = BAD\nj = WORSE", "close(7)")
   assert await engine.prompt(int, "try", on=root) == 7
-  worse = "line 2: error[unresolved-reference] Name `WORSE` used when not defined, in 'j = WORSE'"
+  worse = "line 2: error[unresolved-reference] (column 5) Name `WORSE` used when not defined, in 'j = WORSE'"
   assert findings(log) == [[BAD, worse], []]
   step = said(log, "rung")[0][1]
   refused = [one for one in paragraphs(engine.turns(on=root)) if one.split("\n", 1)[0].endswith(" refused")]
@@ -141,7 +141,7 @@ async def test_a_rung_that_retells_stands_with_the_gate_where_the_one_it_retells
 
 
 async def test_the_chain_tells_the_findings_that_refused_a_word() -> None:
-  """The chain tells the findings that refused a word, ends that rung with a refusal that holds none of them, and the prompt of it asks again as it does for a word that gave no value."""
+  """The chain tells the findings that refused a word, ends that rung with a refusal that holds them, and the prompt of it asks again as it does for a word that gave no value."""
   _, log, root = born("k = BAD", "close(1)")
   act = engine.prompt(int, "work", on=root)
   assert await act == 1
@@ -154,7 +154,7 @@ async def test_the_chain_tells_the_findings_that_refused_a_word() -> None:
     f"#{first} refused\n{first}_findings = {BAD!r}",
   ]
   refusal = engine.peek(first)
-  assert isinstance(refusal, Refused) and refusal.args == ()
+  assert isinstance(refusal, Refused) and refusal.args == (BAD,)
   assert heads(engine.turns(on=root))[-1:] == [f"#{again} advance on {act}"]
   assert ran(log) == [bind, f"{refused}\n\n#{again} advance on {act}", "close(1)"]
 

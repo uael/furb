@@ -258,8 +258,12 @@ def gate(word: str, on: str = "") -> list[str]:
   The gate checks the word of a rung against the rungs before it in record order.
   The gate reads the word after the parts that the writings of a rung with no run hold too, so a rung that a word makes while its model writes it is read after what that word ran.
   A response that is not python is a finding like any other.
-  Each finding names the line of the word it is found on, and quotes that line, cut to 80 characters, so a model reads what the gate read.
-  A word that is not python and that holds a fence of markdown, the markup of a tool call or a sentence of prose finds that a reply is python and quotes only, with no fence, no markup and no prose, so nothing of this word ran: delete each such line.
+  Each finding names the line and the column of the word it is found on, and the rule, and quotes that line, cut to 80 characters, so a model reads what the gate read.
+  A finding on a call of a function names the signature of that function, so a model reads how to call it.
+  A finding on an await of a value that is no act says that a value which an await gave stands in its name already, so use the name and await it no more.
+  A word that is not python and that holds a fence of markdown, the markup of a tool call or a sentence of prose finds the first such line and what it is, and that a reply is python and quotes only, with no fence, no markup and no prose, so nothing of this word ran: delete each such line.
+  A word that is not python and that leaves a bracket open finds the line and the column of the innermost bracket that stays open.
+  A word that is not python and that starts with a shell command finds that the line is a shell command, so write it as await bash("..."), and nothing of this word ran.
   A word that is not python on a line that starts with a lone = finds that the line starts with =, so its binding has no name: write the name before =, as in got = 1, and nothing of this word ran.
   An open mark of a quote that has no close mark is a finding of its own, which names that mark and the close mark it wants.
   An open mark that stands inside a quote of its own name is a finding of its own, which names that mark and the line of the quote that holds it, since one close mark ends both.
@@ -936,7 +940,7 @@ The refused paragraph binds the findings that refused the word of a rung, one li
 The chain has the word of a rung gated before it runs, but a word it wrote itself, and a refused word runs never.
 A rung that retells stands with the gate where the one it retells stood, so the gate reads a word once in a life, and a replay makes no copy of a refused word, which never ran, so the chain tells nothing of that word again.
 A refused word of a rung stands in the ladder of its prompt, which its door shows, and it is no part of the program of the chain, which holds the words that run.
-The chain tells the findings that refused a word, ends that rung with a refusal that holds none of them, and the prompt of it asks again as it does for a word that gave no value.
+The chain tells the findings that refused a word, ends that rung with a refusal that holds them, and the prompt of it asks again as it does for a word that gave no value.
 A word that the chain cannot gate or run, as when the life refuses its gate, is refused as the gate refuses a word, with what went wrong as its one finding, so no word and no told text ends the ear of a chain.
 """
 type Cd = tuple[Literal["cd"], str, str, str, str]

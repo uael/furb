@@ -96,6 +96,41 @@ STRAY = (
   " such line"
 )
 """STRAY is what a finding adds when a word that is not python holds a fence, the markup of a tool call or prose."""
+SHELL = (
+  "git",
+  "gh",
+  "cd",
+  "ls",
+  "cat",
+  "grep",
+  "sed",
+  "echo",
+  "mkdir",
+  "rm",
+  "python",
+  "python3",
+  "uv",
+  "cargo",
+  "bun",
+  "pytest",
+  "ruff",
+  "npm",
+  "make",
+  "find",
+  "head",
+  "tail",
+  "curl",
+  "sh",
+)
+"""SHELL are the commands that start the line of a model that sent a shell command as its word."""
+SHELLED = 'the line is a shell command, so write it as await bash("..."), and nothing of this word ran'
+"""SHELLED is what a finding adds when the first line of a word that is not python is a shell command."""
+INDENT = 2
+"""INDENT is how far the sheet lays a word into its body, which the columns of a finding count and the gate takes back."""
+HINTS = (
+  ("[invalid-await]", "a value that an await gave stands in the name already, so use the name and await it no more"),
+)
+"""HINTS are the markers of a rule of the checker and what a finding of that rule adds."""
 NAMELESS = (
   "the line starts with =, so its binding has no name: write the name before =, as in got = 1, and nothing of this word"
   " ran"
@@ -113,16 +148,51 @@ def quoted(word: str, n: int, why: str) -> str:
   return f"line {n}: {why}, in {cut!r}" if cut else f"line {n}: {why}"
 
 
-def stray(line: str) -> bool:
-  """Whether a line is no python a model means: a fence of markdown, the markup of a tool call, or a sentence of
-  prose."""
+def stray(line: str) -> str:
+  """What a line is that is no python a model means: a fence of markdown, the markup of a tool call, or a sentence of
+  prose, and nothing for any other line."""
   text = line.strip()
   words = text.split()
-  return (
-    text.startswith(("```", "~~~"))
-    or (text.startswith("<") and not text.startswith("<s:"))
-    or (len(words) >= PROSE and words[0][:1].isupper() and all(w.strip(".,:;!?'").isalpha() for w in words))
-  )
+  if text.startswith(("```", "~~~")):
+    return "a fence"
+  if text.startswith("<") and not text.startswith("<s:"):
+    return "markup"
+  prose = len(words) >= PROSE and words[0][:1].isupper() and all(w.strip(".,:;!?'").isalpha() for w in words)
+  return "prose" if prose else ""
+
+
+def unclosed(word: str) -> tuple[int, int, str] | None:
+  """The innermost bracket that the word opens and never closes, as its line, its column and the bracket, read past
+  the comments and the strings."""
+  stack: list[tuple[int, int, str]] = []
+  pairs = {")": "(", "]": "[", "}": "{"}
+  n, col, quote, i = 1, 0, "", 0
+  while i < len(word):
+    ch, skip = word[i], 1
+    col += 1
+    if ch == "\n":
+      n, col = n + 1, 0
+      quote = quote if quote[1:] else ""
+    elif quote:
+      if ch == "\\":
+        skip = 2
+        if word[i + 1 : i + 2] == "\n":
+          n, col = n + 1, 0
+      elif word.startswith(quote, i):
+        skip, quote = len(quote), ""
+    elif ch == "#":
+      end = word.find("\n", i)
+      skip = (end if end >= 0 else len(word)) - i
+    elif ch in "'\"":
+      quote = ch * 3 if word.startswith(ch * 3, i) else ch
+      skip = len(quote)
+    elif ch in "([{":
+      stack.append((n, col, ch))
+    elif ch in pairs and stack and stack[-1][2] == pairs[ch]:
+      stack.pop()
+    col += skip - 1 if word[i : i + 1] != "\n" else 0
+    i += skip
+  return stack[-1] if stack else None
 
 
 def swallowed(lines: list[str]) -> list[tuple[int, str, int]]:
@@ -167,14 +237,21 @@ def python(word: str) -> list[str]:
     # monty raises NotImplementedError for a syntax that it does not support, as a keyword of a metaclass.
     # Which line and what it said is what an interpreter offers of it, and one that offers neither gives the text.
     why = str(getattr(bad, "msg", None) or bad)
+    column = getattr(bad, "offset", None)
     # An interpreter that gives no line number may name the line at the end of its text, as (<string>, line 2).
     tail = str(bad).rpartition(", line ")[2].removesuffix(")")
     n = getattr(bad, "lineno", None) or (int(tail) if tail.isdigit() else 1)
     line = lines[n - 1].strip() if 0 < n <= len(lines) else ""
+    why = f"error[invalid-syntax]{f' (column {column})' if column else ''} {why}"
     if line.startswith("=") and not line.startswith("=="):
       why += f"; {NAMELESS}"
-    if any(stray(one) for one in lines):
-      why += f"; {STRAY}"
+    if line.partition(" ")[0] in SHELL and " " in line:
+      why += f"; {SHELLED}"
+    if bracket := unclosed(word):
+      why += f"; the bracket {bracket[2]} of line {bracket[0]}, column {bracket[1]}, stays open"
+    first = next(((k, kind) for k, one in enumerate(lines, 1) if (kind := stray(one))), None)
+    if first:
+      why += f"; line {first[0]} is {first[1]}: {STRAY}"
     return [quoted(word, n, why)]
   return []
 
@@ -197,6 +274,15 @@ def sheet(
   return above + laid(word, 2), above.count("\n")
 
 
+def shifted(why: str) -> str:
+  """The finding with its column counted in the word, which the sheet lays INDENT columns into its body, and with
+  what its rule adds."""
+  hit = re.search(r"\(column (\d+)\)", why)
+  if hit:
+    why = why[: hit.start(1)] + str(max(int(hit[1]) - INDENT, 1)) + why[hit.end(1) :]
+  return why + "".join(f"; {hint}" for marker, hint in HINTS if marker in why)
+
+
 def gate(
   engine: dict[str, object], program: Mapping[str, str], word: str, checked: Checked, acts: Sequence[str] = ()
 ) -> list[str]:
@@ -205,7 +291,7 @@ def gate(
   if found := python(word):
     return found
   text, above = sheet(engine, program, word, acts)
-  return [quoted(word, n - above, why) for n, why in checked(text) if n > above]
+  return [quoted(word, n - above, shifted(why)) for n, why in checked(text) if n > above]
 
 
 def against(engine: dict[str, object], checked: Checked, on: str, word: str) -> list[str]:
