@@ -56,7 +56,8 @@ repos:
         name: cargo test
         entry: cargo test --workspace
         language: system
-        types_or: [rust, python, toml, json, shell]
+        # The files that the crate and its tests read. The gates run every hook on every file.
+        files: ^(src|cli|extensions|tests|docs/examples)/|^(build\.rs|Cargo\.toml|Cargo\.lock|DOCTRINE\.md)$
         pass_filenames: false
       - id: links
         name: the links of the READMEs of the packages

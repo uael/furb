@@ -8,7 +8,7 @@ Each pass captures the target at the head of main, and each judge in JUDGES, bli
 A pass with gaps is one step: the gaps go to each worker of an owner that works, or to one item in the queue of the round, which fixes the largest gap in one PR. The next pass comes once that work ended and its PR landed.
 The target converges after CLEAN passes in a row with no gap, and stalls after STALL passes with no fewer gaps than its best before them: each tells the operator through the round, and the loop then waits for a change of his words or of main under paths.
 Before the conductor merges a PR that changes paths, it asks converge through its vetoes: once the checks of the PR are green, converge captures main and main with the PR merged in it in one run, so that no change of main shows as a change of the PR, sends each judge his words once in each prompt, with the captures that the PR changes in prompts of BATCH captures and PROMPT characters at most, and cuts a capture over CUT characters with a note, and says no until a head shows no gap. A PR that changes no capture sends nothing to a judge. The gaps go to its worker and to a comment, and a new head is judged again. converge puts no label on a PR.
-A grant holds each chain of a judge under EACH dollars. A judge that fails, pauses or gives no answer in BOUND seconds gives no answer: its pass is inconclusive, and a head whose judges gave no answer twice is stuck, which tells the operator and keeps the veto until a new head.
+A grant holds each chain of a judge under EACH dollars. A judge whose chain waits on a usage limit is neither cut nor counted, and its BOUND starts again when the limit ends. A judge that fails, or that the round cuts at BOUND or by a pause, gives no answer: its pass is inconclusive. A pass whose judges the round cut all counts as no try, and a head whose judges failed to answer twice is stuck, which tells the operator and keeps the veto until a new head.
 The ledger of a target, .furb/converge/<name>.json, keeps each pass, the frames and the records of the last pass, each judged head and the step that runs, so a later life goes on from it. The loop ends when it spent JOBS captures or USD dollars."""
 JUDGES = ("claude-cli:sonnet/high",)
 CLEAN = 2
@@ -512,6 +512,16 @@ def cost_of(asked: list[str]) -> float:
   return total
 
 
+def limited(where: str) -> bool:
+  waiting = False
+  for x in transcript(where):
+    if x[0] == "tell" and len(x) > 3 and any("waits on" in str(n) and "usage limit" in str(n) for n in x[3]):
+      waiting = True
+    elif x[0] == "done" and (get(x[1]) or ("",))[0] == "reply":
+      waiting = False
+  return waiting
+
+
 def stalled(counts: list[int]) -> bool:
   run = counts[len(counts) - counts[::-1].index(0) :] if 0 in counts else counts
   return len(run) > STALL and min(run[-STALL:]) >= min(run[:-STALL])
@@ -569,6 +579,25 @@ async def settled(target: dict, step: dict, head: str) -> bool:
 TARGETS = [TUI]
 LIVE: dict[str, dict] = {}
 OPEN: dict[str, dict] = {}
+MAIN: dict[str, dict] = {}
+BUSY = re.compile(r"furb-gallery\.lock|holds the home|lock held|is busy", re.I)
+
+
+def holding(target: dict) -> bool:
+  """A target has one tree, so a capture of it runs only while no other capture of it holds an open command."""
+  jobs = [*OPEN.values(), *MAIN.values()]
+  return any(
+    j.get("target") == target["name"] and j.get("act") and not j["asked"] and not over(j["act"]) for j in jobs
+  )
+
+
+def launched(target: dict, book: dict, job: dict, fresh: bool = False) -> str:
+  """The command of a capture ends the old command of the job first, and a cancel of it kills its process group."""
+  old = job.get("act", "none")
+  if old != "none" and not over(old):
+    cancel(old)
+  command = capturing(target, job["pairs"], job["out"], book["records"], True) if fresh else capturing(target, job["pairs"], job["out"], book["records"])
+  return str(conductor()["quietly"](bash, command, show=HIDDEN, timeout=7200))
 
 
 def shared(target: dict) -> dict:
@@ -588,6 +617,8 @@ async def classified(target: dict, book: dict, pr: dict) -> str:
 
 
 async def started(target: dict, book: dict, sha: str, n: int = 0) -> dict:
+  if holding(target):
+    return {}
   shq = conductor()["shq"]
   pairs = [("head", sha)]
   if n:
@@ -601,19 +632,32 @@ async def started(target: dict, book: dict, sha: str, n: int = 0) -> dict:
     pairs = [("before", made[0].strip()), ("head", made[1].strip())]
   else:
     label = f"main{len(book['passes'])}-{sha[:12]}"
+  if holding(target):
+    return {}
   out = f"{cwd()}/{BOOKS}/{target['name']}/{label}"
-  act = str(bash(capturing(target, pairs, out, book["records"]), show=HIDDEN, timeout=7200))
-  return {"kind": "pr" if n else "main", "sha": sha, "n": n, "out": out, "label": label, "act": act, "pairs": pairs, "asked": []}
+  act = str(conductor()["quietly"](bash, capturing(target, pairs, out, book["records"]), show=HIDDEN, timeout=7200))
+  return {"kind": "pr" if n else "main", "sha": sha, "n": n, "out": out, "label": label, "act": act, "pairs": pairs, "asked": [], "target": target["name"]}
+
+
+def dropped(live: set[str]) -> None:
+  for key in [k for k in OPEN if k not in live]:
+    job = OPEN.pop(key)
+    for one in [job["act"], *job["asked"]]:
+      if one != "none" and not over(one):
+        cancel(one)
 
 
 async def converge_veto(pr: dict) -> bool:
   key = f"{pr['n']} {pr['sha']}"
+  dropped({key, *[f"{n} {one['sha']}" for n, one in conductor()["prs"].items()]})
   for target in TARGETS:
     book = shared(target)
     state = await classified(target, book, pr)
     if state == "held" and key in book["heads"]:
       job = OPEN.get(key)
       if not job:
+        if holding(target):
+          return True
         job = await started(target, book, str(pr["sha"]), int(pr["n"]))
         if not job:
           return True
@@ -647,11 +691,19 @@ async def advanced(target: dict, book: dict, job: dict, words: str, head: str) -
   if not job["asked"]:
     if not over(job["act"]):
       return job
+    if not job.get("resumed") and isinstance(peek(job["act"]), Refused):
+      job.update(resumed=True, act=launched(target, book, job))
+      return job
     was = f"{job['out']}/before" if pr else book["frames"] if book["words"] == words else ""
     seen = await shots(job["out"], was, not pr, ("main", "head") if pr else ("before", "now"))
+    if seen["faults"] and BUSY.search(" ".join(why for _, why, _ in seen["faults"])):
+      # A busy tree or lock is no fault of the tool: the job ends, and its turn comes again.
+      if pr:
+        book["heads"][f"{job['n']} {job['sha']}"] = {"state": "held"}
+      return {}
     if seen["faults"]:
       if not job.get("again"):
-        job.update(again=True, act=str(bash(capturing(target, job["pairs"], job["out"], book["records"], True), show=HIDDEN, timeout=7200)))
+        job.update(again=True, act=launched(target, book, job, True))
         return job
       return faulted(target, book, job, seen["faults"], words, head)
     book["jobs"] += 1
@@ -664,10 +716,15 @@ async def advanced(target: dict, book: dict, job: dict, words: str, head: str) -
     job["asked"] = job["asked"] or ["none"]
     job["at"] = clock()
   asked = [a for a in job["asked"] if a != "none"]
+  held = [one for one in asked if not over(one) and limited(str(get(one)[3]))]
+  if held:
+    job["at"] = clock()
   late = clock() - float(job.get("at", 0.0)) >= BOUND
+  cut = job.setdefault("cut", [])
   for one in asked:
-    if not over(one) and (late or paused(str(get(one)[3]))):
+    if not over(one) and one not in held and (late or paused(str(get(one)[3]))):
       cancel(one)
+      cut.append(one)
   if not all(over(a) for a in asked):
     return job
   found, broken = gaps_of(asked, words, set(job["shown"]))
@@ -676,7 +733,7 @@ async def advanced(target: dict, book: dict, job: dict, words: str, head: str) -
     book["passes"].append({"sha": job["sha"], "n": job["n"], "inconclusive": broken})
     if pr:
       key = f"{job['n']} {job['sha']}"
-      tries = book["heads"].get(key, {}).get("tries", 0) + 1
+      tries = book["heads"].get(key, {}).get("tries", 0) + (0 if all(one in cut for one in asked) else 1)
       book["heads"][key] = {"state": "held" if tries < 2 else "stuck", "tries": tries}
       if tries >= 2:
         tell_home(
@@ -760,11 +817,13 @@ async def converge(target: dict, ticks: int = 0) -> dict:
     if not job and book["state"] != "spent" and head:
       if not book["state"] and not book["step"]:
         job = await started(target, book, head)
+        MAIN[target["name"]] = job
     while job:
       was = job
       job = await advanced(target, book, job, words, head)
       if job is was:
         break
+    MAIN.pop(target["name"], None) if not job else MAIN.__setitem__(target["name"], job)
     booked(target, book)
     if book["state"] == "spent" and not job:
       return book

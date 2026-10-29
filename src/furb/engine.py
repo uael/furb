@@ -594,11 +594,18 @@ def shown(text, show):
 
 
 def unquoted(word):
-  for n in re.findall(r"(?m)^<s:(\w+)>", word):
-    word = re.sub(
-      f"(?ms)^<s:({n})>\\n?(.*?)</s:{n}>$", lambda m: m[1] + " = " + repr(m[2]) + "\n" * m[0].count("\n"), word
-    )
-  return word
+  made, at, shut = [], 0, set()
+  for o in re.finditer(r"(?m)^<s:(\w+)>\n?", word):
+    if o.start() >= at and o[1] not in shut:
+      if m := re.compile(f"(?m)</s:{o[1]}>$").search(word, o.end()):
+        made += [
+          word[at : o.start()],
+          f"{o[1]} = {word[o.end() : m.start()]!r}" + "\n" * word.count("\n", o.start(), m.end()),
+        ]
+        at = m.end()
+      else:
+        shut.add(o[1])
+  return "".join(made) + word[at:]
 
 
 def offered(roster, to, at=2):
