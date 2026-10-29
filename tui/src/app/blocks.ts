@@ -34,7 +34,9 @@ export const blocks = part({
   /** The columns of the feed: the screen but the sidebar that shows and the gutters. It is known before the feed is
    * laid out. */
   get feedWidth(): number {
-    return this.renderer.width - (this.sidebarShown ? this.session.preferences.sidebarWidth : 0) - space.gutter * 2;
+    return (
+      this.renderer.width - (this.sidebarShown ? this.session.preferences.sidebarWidth : 0) - space.gutter * 2
+    );
   },
 
   /** Whether the sidebar shows, from the preferences and the screen. The node of the rail follows it at the next
