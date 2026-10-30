@@ -728,6 +728,7 @@ class Act[T = object](str):
     To await an act raises the exception that the act completed with.
     To await a cancelled act raises CancelledError.
     A word that awaits a chain raises Refused where it waited, since a chain never settles and the word could go no further.
+    A word that awaits a name of no act of the life raises Refused where it waited, since no done can settle it, and so does the operator.
     The awaiter of the prompt raises that exception.
     A run that awaits it hands it to whoever steps the run, since the engine owns the order of every run; the operator, which the engine does not step, waits on its own loop.
     """
