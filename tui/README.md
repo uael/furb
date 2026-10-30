@@ -401,7 +401,6 @@ references kept in the prompt. A word that reads a PNG, JPEG, GIF, or WebP file 
 sees it as an image.
 Click the attachment row to open or remove an image from the draft.
 
-
 ## Branches, rewind and undo
 
 A branch is a new chain that reads its source up to a point. A branch that the rewind tree makes runs as a rung of
