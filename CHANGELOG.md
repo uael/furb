@@ -3,6 +3,21 @@
 Each release of furb is listed here, the newest first. release-please writes the entry of each release from the
 titles of the pull requests that it holds, as [the template of a pull request](.github/pull_request_template.md) says.
 
+## [0.3.3](https://github.com/uael/furb/compare/v0.3.2...v0.3.3) (2026-10-30)
+
+
+### Features
+
+* **memory:** Read AGENTS.local.md after AGENTS.md ([#787](https://github.com/uael/furb/issues/787)) ([4e9dd6e](https://github.com/uael/furb/commit/4e9dd6e67331201a77cb603be81bd16216cd8170))
+* **provider:** Give config chat models the efforts of local ones ([#790](https://github.com/uael/furb/issues/790)) ([9afa086](https://github.com/uael/furb/commit/9afa0866bca5fb15a798857bd0f929ea82ede1b9))
+
+
+### Fixes
+
+* **ci:** Build the npm engine for macOS on Intel on Apple silicon ([#792](https://github.com/uael/furb/issues/792)) ([adbd5cb](https://github.com/uael/furb/commit/adbd5cb8ba01268d76bf5e35f92bc7c9052622fc))
+* **engine:** Give the suite an empty config directory of the user ([#788](https://github.com/uael/furb/issues/788)) ([1f7676c](https://github.com/uael/furb/commit/1f7676c72688bc8cb4ea5d17369710617f6abdb6))
+* **npm:** Publish furb to npm as @uael/furb ([#793](https://github.com/uael/furb/issues/793)) ([2e4d49d](https://github.com/uael/furb/commit/2e4d49dc71656b5a71a077bff27f68133caf1cb5))
+
 ## [0.3.2](https://github.com/uael/furb/compare/v0.3.1...v0.3.2) (2026-10-30)
 
 
