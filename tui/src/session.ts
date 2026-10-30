@@ -38,7 +38,7 @@ import { Preferences } from "./preferences.ts";
 import { type Hunk, type Reviewed, revertWord, reviewed, type Scope, scopes } from "./review.ts";
 import { shareHtml, shareMarkdown } from "./share.ts";
 import { isThemeChoice, palettes, type ThemeChoice, type ThemeName, themeOf } from "./theme.ts";
-import { branchNotice } from "./watching.ts";
+import { asOf, branchNotice } from "./watching.ts";
 
 /** The views of a chain: the feed of what it did, the transcript that the model reads, and the files it changed. */
 export const views = ["feed", "transcript", "changes"] as const;
@@ -1453,13 +1453,7 @@ export class Session extends EventEmitter {
   at(acts: ActRow[]): ActRow[] {
     const moment = this.moment;
     if (moment === undefined) return acts;
-    return acts
-      .filter((act) => act.began < moment)
-      .map((act) =>
-        act.ended === undefined || act.ended < moment
-          ? act
-          : { ...act, done: false, value: null, run: act.run && { status: "running", reason: "" } },
-      );
+    return asOf(acts, moment);
   }
   /** Move the moment that the feed shows one step back or on in the selected chain: a step is a moment when an act of
    * the chain began or ended. A step on to the last moment returns to now. */
