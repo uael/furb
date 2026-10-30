@@ -3,6 +3,31 @@
 Each release of furb is listed here, the newest first. release-please writes the entry of each release from the
 titles of the pull requests that it holds, as [the template of a pull request](.github/pull_request_template.md) says.
 
+## [0.3.2](https://github.com/uael/furb/compare/v0.3.1...v0.3.2) (2026-10-30)
+
+
+### Features
+
+* **engine:** Stand each chain in chain(), with a stand and a cd ([#784](https://github.com/uael/furb/issues/784)) ([68a4143](https://github.com/uael/furb/commit/68a4143b04d9ce0e505a11614719afe32a507220))
+* **engine:** Tell the standing by a stand and a cd in the setup ([#780](https://github.com/uael/furb/issues/780)) ([f7cbe58](https://github.com/uael/furb/commit/f7cbe58210271ba998e087b2c18bc1b8622931e7))
+
+
+### Fixes
+
+* **ci:** Modify PR body for catalog refresh explanation ([b73a158](https://github.com/uael/furb/commit/b73a158ce60965979d22e39ef29fcf6d47cf348d))
+* **ci:** Publish to PyPI and npm from the right files ([#786](https://github.com/uael/furb/issues/786)) ([960381f](https://github.com/uael/furb/commit/960381f4b7b46ce1e2d25f026a47440f5582e8b1))
+* **engine:** Refuse to await a name of no act ([#782](https://github.com/uael/furb/issues/782)) ([d17fd42](https://github.com/uael/furb/commit/d17fd42ee84abf78a069a230f18ec8a64923cc1b))
+* **engine:** Show what each setup turn starts in the turn after it ([#771](https://github.com/uael/furb/issues/771)) ([374decf](https://github.com/uael/furb/commit/374decf4b82dd05617324e2dfa4efa4ca6576c7f))
+* **tui:** Find the name under the pointer in one pass over its line ([#777](https://github.com/uael/furb/issues/777)) ([328b38f](https://github.com/uael/furb/commit/328b38f04a79143ea7288f9acea261e540e30347))
+* **tui:** Show a setup line as running only while its work runs ([#781](https://github.com/uael/furb/issues/781)) ([d9a81ce](https://github.com/uael/furb/commit/d9a81ced683b5f77d670174829de112ec9bba304))
+* **tui:** Show the messages that a branch takes in its feed ([#779](https://github.com/uael/furb/issues/779)) ([0c4664a](https://github.com/uael/furb/commit/0c4664a8cb5393501b42d4f820ce3b5f41800641))
+
+
+### Performance
+
+* **engine:** Give the open of an act one home ([#785](https://github.com/uael/furb/issues/785)) ([da92474](https://github.com/uael/furb/commit/da924740681e9958642784f5ac7d0897ec68b077))
+* **engine:** Name two locals in one token ([#772](https://github.com/uael/furb/issues/772)) ([56ea8ee](https://github.com/uael/furb/commit/56ea8ee6122ab66dc6517e68d6e7feca3a81f15d))
+
 ## [0.3.1](https://github.com/uael/furb/compare/v0.3.0...v0.3.1) (2026-10-29)
 
 
