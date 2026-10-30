@@ -2,7 +2,8 @@
 # Prove the package furb of npm as a user installs it, from the packed packages alone: npm installs the packed furb and
 # the packed engine of this system in a new folder, with no registry for either, and node runs the example chains of
 # docs/examples/typescript there, on a claude command line that answers from a script. The first argument is the folder
-# of the packs, furb-<version>.tgz and furb-<system>-<version>.tgz, as npm pack names them. The fake claude is
+# of the packs, uael-furb-<version>.tgz and uael-furb-<system>-<version>.tgz, as npm pack names them. npm installs
+# the package under the name furb, as its README says, which the examples import. The fake claude is
 # bind/typescript/test/programs/claude.ts, which bun compiles to a program, since Windows runs no script by its shebang.
 set -eu
 packs=$(cd "$1" && pwd)
@@ -19,7 +20,10 @@ system=$(node -p '({"linux-x64": "linux-x64-gnu", "linux-arm64": "linux-arm64-gn
 cd "$yard/app"
 printf '{ "name": "proof", "private": true, "type": "module" }\n' > package.json
 # The engine of this system first, so that the optional dependency of furb on it finds it here and asks no registry.
-npm install --no-audit --no-fund --no-save "$packs/furb-$system-"[0-9]*.tgz "$packs/furb-"[0-9]*.tgz
+# A path after file: goes to npm as it stands, and the sh of Windows writes /d/a for D:\a, so the pack comes here and
+# npm reads it relative to this folder.
+cp "$packs"/uael-furb-[0-9]*.tgz .
+npm install --no-audit --no-fund --no-save "$packs/uael-furb-$system-"[0-9]*.tgz "furb@file:./$(ls uael-furb-[0-9]*.tgz)"
 cp "$root/docs/examples/typescript/chains.ts" chains.ts
 said=$(env -u FURB_LOCAL_URL -u FURB_LOCAL_KEY -u FURB_TUI FURB_CLAUDE_BIN="$claude" \
   FURB_CONFIG_DIR="$yard/config" XDG_CACHE_HOME="$yard/cache" node chains.ts)

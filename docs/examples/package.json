@@ -3,6 +3,6 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "furb": "workspace:*"
+    "furb": "workspace:@uael/furb@*"
   }
 }
