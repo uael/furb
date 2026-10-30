@@ -531,14 +531,15 @@ fn the_setup_of_the_root_ends_with_the_extensions_of_the_root_alone_and_a_chain_
   };
   let root = texts(&mut engine, "chain1");
   let life = root.iter().position(|one| one == "y = 2").unwrap();
-  assert_eq!(root[life + 2], format!("read('{rooted}')"), "{root:?}");
+  let read = format!("read({})", Object::string(&rooted).py_repr());
+  assert_eq!(root[life + 2], read, "{root:?}");
   let last = &root[life + 3];
   assert!(last.contains("#read3\n") && last.contains("#chain1\nchain1_label = 'root'"), "{last}");
   assert!(last.ends_with("chain1_actor = 'operator'"), "{last}");
   engine.chain(verbs::Chain { label: Some("two".to_owned()), ..Default::default() }).unwrap();
   let two = texts(&mut engine, "chain2");
   assert_eq!(two[..=life], root[..=life], "a chain with no source holds the shared setup");
-  assert!(two.iter().all(|one| !one.contains(&rooted)), "{two:?}");
+  assert!(two.iter().all(|one| !one.contains(&read)), "{two:?}");
   assert!(two.last().unwrap().contains("#chain2\nchain2_label = 'two'"), "{two:?}");
 }
 
