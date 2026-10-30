@@ -17,13 +17,13 @@
     },
     "bind/typescript": {
       "name": "@uael/furb",
-      "version": "0.3.2",
+      "version": "0.3.3",
       "optionalDependencies": {
-        "@uael/furb-darwin-arm64": "0.3.2",
-        "@uael/furb-darwin-x64": "0.3.2",
-        "@uael/furb-linux-arm64-gnu": "0.3.2",
-        "@uael/furb-linux-x64-gnu": "0.3.2",
-        "@uael/furb-win32-x64-msvc": "0.3.2",
+        "@uael/furb-darwin-arm64": "0.3.3",
+        "@uael/furb-darwin-x64": "0.3.3",
+        "@uael/furb-linux-arm64-gnu": "0.3.3",
+        "@uael/furb-linux-x64-gnu": "0.3.3",
+        "@uael/furb-win32-x64-msvc": "0.3.3",
       },
     },
     "docs/examples": {
@@ -729,7 +729,7 @@
 
     "fsevents": ["fsevents@2.3.3", "", { "os": "darwin" }, "sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw=="],
 
-    "furb": ["furb@workspace:bind/typescript"],
+    "furb": ["@uael/furb@workspace:bind/typescript"],
 
     "furb-examples": ["furb-examples@workspace:docs/examples"],
 
