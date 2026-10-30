@@ -9,10 +9,6 @@ pip install furb                     # Gives the command furb. It needs Python 3
 
 From a clone, `uv run furb` runs the `furb` of the clone, and `cargo run -p furb-cli --` builds it and runs it.
 
-> [!NOTE]
-> `pip install furb` gives this command from version 0.2.0 on, which waits for its release. Version 0.1.0 on PyPI
-> has an earlier command of Python with fewer words.
-
 ## The commands
 
 | Command | What it does |

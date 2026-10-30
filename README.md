@@ -22,7 +22,7 @@ time, open the record again, and the work goes on from where it stopped.
 - **One answer does a lot of work.** Most agents call one tool for each turn of the model. In furb, one word reads
   files, runs commands, asks other models, waits for them, and joins the results with loops and conditions.
 - **Nothing is hidden from you.** The whole system prompt is one Python file,
-  [`src/furb/engine.py`](https://github.com/uael/furb/blob/main/src/furb/engine.py), smaller than 6520 tokens. The transcript is the exact text that the
+  [`src/furb/engine.py`](https://github.com/uael/furb/blob/main/src/furb/engine.py), smaller than 7000 tokens. The transcript is the exact text that the
   model reads.
 - **A word is checked before it runs.** A type checker reads each word first. A word that it refuses never runs, and
   the model reads why.
@@ -33,8 +33,8 @@ time, open the record again, and the work goes on from where it stopped.
 - **You stay in control.** The model can ask you a question and wait for your answer. You can pause any work, set a
   dollar ceiling, rewind a chain to an earlier point, or change the plan of a model while it works.
 - **Extensions are Python too.** An extension is a word that each chain runs, so the model reads it as it reads its
-  own work. [Five come with furb](https://github.com/uael/furb/blob/main/docs/extensions.md): the memory of a project, its skills, compaction, the web, and
-  a guide to extend furb.
+  own work. [Seven come with furb](https://github.com/uael/furb/blob/main/docs/extensions.md): what changed on the machine since the last run, the
+  memory of a project, its skills, compaction, a guide to extend furb, the web, and the servers of MCP.
 
 ## Install
 
@@ -45,9 +45,9 @@ time, open the record again, and the work goes on from where it stopped.
 | Rust | `cargo add furb --git https://github.com/uael/furb` | The engine for a program of Rust, with no Python. Copy the [`Cargo.lock`](https://github.com/uael/furb/blob/main/Cargo.lock) of furb into a new crate before its first build, since a newer version of a dependency breaks the build today. |
 
 > [!NOTE]
-> Version 0.2.0 waits for its release. Until then, PyPI holds 0.1.0, an earlier furb with no TUI and no examples,
-> npm holds nothing, and Rust takes furb from git. crates.io will hold furb when the interpreter that furb runs on is
-> there too. [`CHANGELOG.md`](https://github.com/uael/furb/blob/main/CHANGELOG.md) says when a release lands.
+> crates.io holds only an empty furb 0.0.0, which keeps the name, so Rust takes furb from git. crates.io will hold
+> furb when the interpreter that furb runs on is there too.
+> [`CHANGELOG.md`](https://github.com/uael/furb/blob/main/CHANGELOG.md) says what each release holds.
 
 furb asks the models of the [claude command line](https://docs.claude.com/en/docs/claude-code) when it finds it,
 then the models of each provider whose key stands in the environment, such as `ANTHROPIC_API_KEY`, then the models of

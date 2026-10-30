@@ -38,11 +38,6 @@ clean/bin/pip install furb==<version>
 curl -sLO https://raw.githubusercontent.com/uael/furb/v<version>/script/bench/audit.py
 ```
 
-> [!NOTE]
-> The first release that holds the audit, 0.2.0, waits for its release. Until then, build the wheels of `furb`,
-> `furb-monty` and `furb-cli` from one commit, and install them with
-> `clean/bin/pip install --no-index --only-binary ":all:" --find-links <wheels> furb`.
-
 Then run the audit, with the network off if you want to see that it needs none. On macOS, `sandbox-exec` turns the
 network off for one command:
 
