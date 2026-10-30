@@ -41,16 +41,22 @@ async def test_the_world_answers_with_the_memory_of_the_user_first(tmp_path: Pat
   assert await paths(root, tmp_path, "../other/c.txt") == []
 
 
-async def test_the_memory_of_a_folder_is_its_agents_md_file_or_its_claude_md_file(tmp_path: Path) -> None:
-  """The memory of a folder is its AGENTS.md file, or its CLAUDE.md file when the folder holds no AGENTS.md, and the memory of the user is that of the config directory of the user."""
+async def test_the_memory_of_a_folder_is_its_agents_md_file_or_its_claude_md_file_then_its_local_file(
+  tmp_path: Path,
+) -> None:
+  """The memory of a folder is its AGENTS.md file, or its CLAUDE.md file when the folder holds no AGENTS.md, then its AGENTS.local.md file, or its CLAUDE.local.md file when the folder holds no AGENTS.local.md, which holds what is true on one machine alone and which git ignores, and the memory of the user is that of the config directory of the user."""
   user = noted(tmp_path / "config", "u\n", "CLAUDE.md")
   top = noted(tmp_path / "work", "t\n")
   noted(tmp_path / "work", "c\n", "CLAUDE.md")
+  mine = noted(tmp_path / "work", "tl\n", "AGENTS.local.md")
+  noted(tmp_path / "work", "cl\n", "CLAUDE.local.md")
   sub = noted(tmp_path / "work" / "sub", "s\n", "CLAUDE.md")
+  near = noted(tmp_path / "work" / "sub", "sl\n", "CLAUDE.local.md")
   noted(tmp_path / "work" / "low", "l\n", "agents.md")
+  noted(tmp_path / "work" / "low", "ll\n", "agents.local.md")
   _, root = extended("memory", tmp_path, _monty.memory)
-  assert await paths(root, tmp_path, "low/c.txt") == [tilded(user), tilded(top)]
-  assert await paths(root, tmp_path, "sub/c.txt") == [tilded(sub)]
+  assert await paths(root, tmp_path, "low/c.txt") == [tilded(user), tilded(top), tilded(mine)]
+  assert await paths(root, tmp_path, "sub/c.txt") == [tilded(sub), tilded(near)]
 
 
 async def test_the_world_leaves_out_a_memory_file_whose_content_the_chain_holds(tmp_path: Path) -> None:
