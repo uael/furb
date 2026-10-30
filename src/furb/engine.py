@@ -92,7 +92,7 @@ def standing():
 
 
 def stand(on=""):
-  got = ask("stand", on or ROOT * (not acting()))
+  got = ask("stand", on)
   (who := acting()) and tells(who) and say(*told(transcript(on, who)[-1][1], roster=got[0], actor=got[2]))
   return got
 
@@ -241,11 +241,11 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
     h = [(x[0] == "tell" and x[3][0][:6]) or x[0] for x in t] + ["chain(", "#chain", "setup"]
     hi = h.index("#chain", lo := h.index("chain("))
     refused, running, waiting, last, heard = set(), {}, {}, standing(), []
-    step = news = ran = reply = note = to = ""
+    step = news = ran = reply = note = to = seat = ""
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
     def placed(moved):
-      return rung("stand()" + f"\ncd({moved!r})" * bool(moved), to=stood)
+      return rung("stand()" + (moved and f"\ncd({moved!r})"), to=stood)
 
     def bind(whose):
       w = "\n\n".join(heard)
@@ -272,7 +272,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
 
     if source or t[lo:hi]:
       kin = {source, *[n for one in (filter or list)([x for x in t if question(x)]) for n in lineage(one[1])]}
-      later = {x[1] for x in t[h.index("setup") :] if question(x) and not get(x[2])}
+      later = {x[1] for x in t[h.index("setup") :] if question(x) and (not get(x[2]) or x[:3:2] == ("rung", ROOT))}
       later |= {x[1] for x in t if x[0] == "run" and x[4] in later}
       yield (
         "prefix",
@@ -291,10 +291,11 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
       yield top
       top = ""
     yield from replay()
-    seat = top and last and placed(last[1])
     while True:
       r = get((a := (yield {id, "stand", "reply"}))[1]) or a
       match a:
+        case ("prefix", _, by, _) if by != id:
+          top = ""
         case ("done", *_) if r[0] == "stand" and standing() != last:
           was, last = last, standing()
           if last[2:3] != was[2:3]:
@@ -303,7 +304,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
             yield ("tell", id, ["chain()"]) if last[3:] else top
             top *= bool(last[3:])
           elif last[3:] and not top:
-            placed(last[1] * (was[1] != last[1] and all(all(get(x[2])[4::2]) for x in transcript(id, "cd"))))
+            placed(last[1] * (was[1] != last[1]) * all(all(get(x[2])[4::2]) for x in transcript(id, "cd")))
         case ("done", about, _, value) if running.get(maker := r[2]) in (
           False,
           isinstance(value, Exception) and r[0] != "reply" and "",
@@ -573,7 +574,7 @@ def over(id):
 
 
 def tells(id):
-  return get(id)[2] != scope(id) or get(id)[5:6] == ("",)
+  return get(id)[2] != scope(id) or all(get(id)[4::2])
 
 
 def crafted(id):
@@ -858,5 +859,5 @@ def boot(record=(), **outside):
   for who, listener in [(OPERATOR, idle(OPERATOR)), *outside.items(), ("journal", journal())]:
     drive(listener, who)
   root = Act(ROOT) if known else chain("root")
-  stand()
+  stand(ROOT)
   return root

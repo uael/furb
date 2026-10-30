@@ -167,8 +167,8 @@ meanings. The entry of such a name here gives only its form in the engine.
   actors, and a provider caches them across records. The World
   makes each of these rungs at once, so the root plays its stand after the last of them and tells its open after its
   stand, in the same turn, just before its first prompt. Each chain with no source
-  holds the setup of the root as its prefix, with the same names, less the acts that the World made after the act
-  setup, and runs its words again, so every chain shares one prefix, which the
+  holds the setup of the root as its prefix, with the same names, less the acts that the World, the operator or the
+  root itself made after the act setup, as the stand of the root, and runs its words again, so every chain shares one prefix, which the
   provider ends with a block that it marks for the cache. The fact teach, `("teach", "chain1", "extensions", actor,
   doctrine, count)`, which the World says before the count of enables that the setup plays and the record keeps,
   plays the setup again where a later life says it. Every standing that the World of the crate gives names a doctrine.

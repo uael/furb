@@ -238,7 +238,7 @@ def stand(on: str = "") -> Standing:
   Only a stand on the root changes the standing, since the standing has one home.
   A stand from inside an act tells its answer under its own name, with the roster and the actor of the standing, as stand2_roster and stand2_actor, and no directory, which a cd tells, and no path of the doctrine, which the World reads in a turn of its own.
   A stand from outside an act tells nothing, so the stand that boot makes tells nothing.
-  A stand that names no chain is on the chain of the act that makes it, as every verb, and on the root from outside an act, as the stand of boot.
+  A stand that names no chain is on the chain of the act that makes it, as every verb, so the operator names the root, as boot does.
   """
 
 def clock(on: str = "") -> float:
@@ -535,8 +535,9 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   The transcript of the root begins with the open of the root, when its standing names no doctrine, since no setup comes then.
   When its first standing names a doctrine, the root tells the bare paragraph chain() at once, and tells its open once no rung with a word and an actor is open on it at the done of a rung on it, so its first turns are the setup that the World plays on it, then the turn of its stand, and the turn after it holds what the stand told, then the open.
   The chain runs no paragraph chain() as python, since that paragraph tells no call.
-  A chain with no source holds first the setup of the root, each fact of the root from its paragraph chain() up to its open but the facts of each act that an ear of the outside or the operator made on the root after the act setup that the World makes on it, and of each act under one, so every such chain holds the turns of the setup that every chain shares with the same names, and the turn of its stand and its own open come after them.
-  A chain with no source whose standing names a doctrine plays on itself, once no rung with a word and an actor is open on it, the rung of stand() and a cd to the directory of the standing, with that word and its default actor, the root after its setup and every other such chain at its birth, and it tells its open once that rung is done, so its last turn before its first prompt tells where it stands.
+  A chain with no source holds first the setup of the root, each fact of the root from its paragraph chain() up to its open but the facts of each act that an ear of the outside, the operator or the root itself made on the root after the act setup that the World makes on it, as the rung of the stand of the root, and of each act under one, so every such chain holds the turns of the setup that every chain shares with the same names, and the turn of its stand and its own open come after them.
+  A chain with no source whose standing names a doctrine plays on itself, once no rung with a word and an actor is open on it, the rung of stand() and a cd to the directory of the standing, with that word and its default actor, at the done of a rung on it, the root after its setup and every other such chain after the rungs of the setup that it runs again, and it tells its open once that rung is done, so its last turn before its first prompt tells where it stands.
+  A chain that hears a prefix that another said on it tells no open of its own and plays no stand at its birth, since the turns of the prefix hold them, as the turns that a checkpoint carries.
   A chain with no source runs again each word of the setup that it holds, as a chain with a source runs the rungs of its origin, so the words of the extensions bind their names in its module and the setup tells nothing again.
   A chain with a source holds whole the setup that its origin holds, whatever its filter, and its filter applies only to what came after that setup.
   The transcript then holds the prompt of the operator, and the replies of the model, each with its turn.
