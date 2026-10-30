@@ -27,6 +27,11 @@ from furb.engine import OPERATOR, Act, Exit, Refused, Text, site
 from furb.world import Live, entries
 from furb_monty import _monty
 
+CONFIG = Path(tempfile.mkdtemp(prefix="furb-config-"))
+"""CONFIG is the config directory of the user that every test reads, empty, which `FURB_CONFIG_DIR` names for this
+process and each process that it starts: a provider, an extension or a memory file in the config directory of the
+machine changes no test. A test that needs a config of the user writes it in a directory of its own."""
+os.environ["FURB_CONFIG_DIR"] = str(CONFIG)
 ENGINE = vars(furb.python)
 """ENGINE is the module of the engine of this interpreter, whose names the Kernel and the gate read."""
 HERE = Path(__file__).resolve().parent
