@@ -2,24 +2,58 @@
 
 import pytest
 
-from conftest import LATER, STANDS, WORLD, Sand, born, chained, paragraphs, plain, relived, said, settle, takes, tip
+from conftest import (
+  LATER,
+  STANDS,
+  WORLD,
+  Sand,
+  World,
+  born,
+  chained,
+  life,
+  paragraphs,
+  plain,
+  relived,
+  said,
+  settle,
+  stood,
+  tip,
+)
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
 
+def restanding(*chains: str) -> World:
+  """An ear that plays the turn stand() of the actor of the standing on each chain that it is given, at the done of
+  each stand that the operator made and that the World answered in this life, as the World of a later life does on
+  each chain that lives."""
+  while True:
+    a = yield None
+    if a and a[0] == "done" and engine.question(("stand", a[1])) and a[2] == WORLD and engine.get(a[1])[2] == OPERATOR:
+      for one in chains:
+        engine.rung("stand()", to=str(engine.standing()[2]), on=one)
+
+
+async def restood(sand: Sand, record: list, *chains: str) -> tuple[list[tuple], str]:
+  """A later life on a kept record, with the World that it is given and an ear that plays stand() on each chain."""
+  log, root = life(sand, record, restand=restanding(*chains))
+  await settle(300)
+  return log, root
+
+
 async def test_a_stand_is_the_question_of_what_the_chains_stand_on() -> None:
-  """A stand is the question of what the chains stand on, which boot asks the World on the root at the tip of every life, and whose answer binds the actor and the directory of every chain from its place on."""
+  """A stand is the question of what the chains stand on, which boot asks the World on the root at the tip of every life, and whose answer binds the actor of every chain from its place on."""
   sand, _, root = born()
   two = engine.chain("two")
   side = engine.chain("side", source=root)
   await settle(300)
   assert [(a[1], a[3]) for a in said(sand.calls, "stand")] == [("stand1", root)]
   for one in (root, two, side):
-    assert engine.module(one)["actor"] == "m/low" and engine.cwd(on=one) == "/w"
+    assert engine.module(one)["actor"] == "m/low"
   sand.stands = LATER
   engine.stand()
   for one in (root, two, side):
-    assert engine.module(one)["actor"] == "o/low" and engine.cwd(on=one) == "/z"
+    assert engine.module(one)["actor"] == "o/low"
 
 
 async def test_a_change_of_the_world_between_two_lives_enters_the_transcript_of_a_chain() -> None:
@@ -27,18 +61,13 @@ async def test_a_change_of_the_world_between_two_lives_enters_the_transcript_of_
   sand, _, root = born()
   assert await engine.rung("k = 1", on=root) is None
   await settle()
-  assert paragraphs(engine.turns(on=root))[1] == takes(root)
-  _, over = await relived(Sand(stands=LATER), plain(sand.record))
-  standings = [one for one in paragraphs(engine.turns(on=over)) if one.startswith(f"#{over} standing")]
-  assert over == root and standings == [takes(over), takes(over, LATER)]
-  held = engine.transcript(over)
-  assert [a for a in said(held, "tell") if a[3][0].startswith(f"#{over} standing")][-1] == (
-    "tell",
-    over,
-    over,
-    [takes(over, LATER)],
-  )
-  assert engine.cwd(on=over) == "/z" and engine.module(over)["actor"] == "o/low"
+  was = paragraphs(engine.turns(on=root))
+  again, over = await restood(Sand(stands=LATER), plain(sand.record), root)
+  asked = said(again, "stand")[-1][1]
+  assert over == root and asked == "stand3"
+  assert paragraphs(engine.turns(on=over))[: len(was)] == was
+  assert paragraphs(engine.turns(on=over))[-1] == stood(asked, LATER)
+  assert engine.module(over)["actor"] == "o/low"
 
 
 async def test_the_world_answers_a_stand_with_the_roster_the_directory_and_the_actor() -> None:
@@ -53,16 +82,24 @@ async def test_the_world_answers_a_stand_with_the_roster_the_directory_and_the_a
 
 
 async def test_a_model_asked_on_any_chain_of_a_later_life_finds_the_new_roster() -> None:
-  """A model asked on any chain of a later life finds the new roster in the transcript of its chain."""
+  """A model asked on any chain of a later life finds the new roster in the transcript of its chain, in the stand that the World plays there."""
   sand, _, root = born()
+  two = await chained("two")
   assert await engine.rung("k = 1", on=root) is None
   await settle()
   later = Sand(stands=LATER)
-  again, over = await relived(later, plain(sand.record))
-  later.script[over] = ["close(1)"]
-  assert await engine.prompt(int, "count", to="o/low", on=over) == 1
-  asked = later.turns[said(again, "reply")[-1][1]]
-  assert [one for one in paragraphs(asked) if one.startswith(f"#{over} standing")] == [takes(over), takes(over, LATER)]
+  again, over = await restood(later, plain(sand.record), root, two)
+  assert [(a[1], a[3]) for a in said(again, "stand")] == [
+    ("stand1", over),
+    ("stand2", over),
+    ("stand3", over),
+    ("stand4", two),
+  ]
+  for one in (over, two):
+    later.script[one] = ["close(1)"]
+    assert await engine.prompt(int, "count", to="o/low", on=one) == 1
+    asked = later.turns[said(engine.transcript(one), "reply")[-1][1]]
+    assert stood("stand3" if one == over else "stand4", LATER) in paragraphs(asked)
 
 
 async def test_the_world_answers_it_with_a_done_at_once() -> None:
@@ -101,7 +138,7 @@ async def test_at_its_tip_boot_stands_the_life_again() -> None:
   assert [(a[1], a[2]) for a in said(again, "stand")] == [("stand1", OPERATOR), ("stand2", OPERATOR)]
   assert later.record == tip("stand2", root, LATER)
   for one in (root, two, side):
-    assert engine.cwd(on=one) == "/z" and engine.module(one)["actor"] == "o/low"
+    assert engine.module(one)["actor"] == "o/low"
   twin = await chained("twin", root, 300)
   assert engine.module(twin)["actor"] == "o/low"
 
@@ -112,91 +149,35 @@ async def test_a_standing_binds_the_default_actor_of_the_chain_when_its_actor_di
   assert await engine.prompt(int, "count", on=root) == 1
   assert said(log, "reply")[0][4] == "m/low" and engine.module(root)["actor"] == "n/low"
   sand.stands = [STANDS[0], "/v", STANDS[2]]
-  engine.stand(on=root)
+  engine.stand()
   assert engine.module(root)["actor"] == "n/low"
-  assert paragraphs(engine.turns(on=root))[-1] == takes(root, [STANDS[0], "/v", "n/low"])
+  sand.stands = [[*STANDS[0], ["q", ["low"], 300000]], "/w", STANDS[2]]
+  engine.stand()
+  assert engine.module(root)["actor"] == "n/low"
   sand.stands = LATER
-  engine.stand(on=root)
+  engine.stand()
   assert engine.module(root)["actor"] == "o/low"
 
 
-async def test_the_chain_tells_each_standing_it_takes_in_one_paragraph_headed_standing() -> None:
-  """The chain tells each standing it takes in one paragraph headed standing, which binds its roster, its directory and its actor, as chain1_roster, chain1_cwd and chain1_actor, each entry of its roster as its name, its efforts and its window, and no path of the doctrine, which the World gives the chain to read in a turn of its own."""
-  sand, log, root = born()
-  answered = next(a[3] for a in said(log, "done") if a[1] == said(log, "stand")[0][1])
-  assert answered == STANDS
-  assert paragraphs(engine.turns(on=root))[1] == (
-    "#chain1 standing\n"
-    "chain1_roster = [['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]]\n"
-    "chain1_cwd = '/w'\n"
-    "chain1_actor = 'm/low'"
-  )
-  sand.script[root] = ["close(chain1_cwd)"]
-  assert await engine.prompt(str, "where", on=root) == "/w"
-  assert [engine.module(root)[f"chain1_{word}"] for word in ("roster", "cwd", "actor")] == STANDS
-  await relived(Sand(stands=LATER), plain(sand.record))
-  assert [one for one in paragraphs(engine.turns(on=root)) if one.startswith(f"#{root} standing")][-1] == (
-    "#chain1 standing\nchain1_roster = [['operator', [], 200000], ['o', ['low'], 200000]]\n"
-    "chain1_cwd = '/z'\nchain1_actor = 'o/low'"
-  )
-  doctrine = "/w/.furb/DOCTRINE.md"
-  _, _, root = born(stands=[[*STANDS[0], ["q", ["low"], 300000]], "/w", "q/low", doctrine])
-  await engine.rung("k = 1", to="q/low", on=root)
-  await settle()
-  assert paragraphs(engine.turns(on=root))[-1] == (
-    "#chain1 standing\n"
-    "chain1_roster = [['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000], ['q', ['low'], 300000]]\n"
-    "chain1_cwd = '/w'\n"
-    "chain1_actor = 'q/low'"
-  )
-
-
-async def test_the_standing_a_chain_tells_is_what_its_transcript_holds_of_it() -> None:
-  """The standing a chain tells is what its transcript holds of it, and the stand itself tells nothing."""
-  _, log, root = born()
-  held = engine.transcript(root)
-  stand = said(log, "stand")[0][1]
-  assert [a for a in held if a[0] == "tell" and a[1] == stand] == []
-  assert ("tell", root, root, [takes(root)]) in held
-
-
 async def test_every_chain_hears_the_done_of_every_stand() -> None:
-  """Every chain hears the done of every stand, and a chain whose standing that answer changes tells it there, and binds its default actor again when the actor of the standing changes, so the transcript grows at one end."""
+  """Every chain hears the done of every stand, and binds its default actor again when the actor of the standing changes, and tells nothing of it, since the World plays a stand on each chain whose standing changed, which tells it, so the transcript grows at one end."""
   first, _, root = born()
   assert await engine.rung("k = 1", on=root) is None
   await settle()
   was = engine.turns(on=root)
   later = Sand(stands=LATER)
   _, over = await relived(later, plain(first.record))
-  now = engine.turns(on=over)
-  assert now[0][1][: len(was[0][1])] == was[0][1]
-  assert (
-    paragraphs(now)[-1]
-    == takes(root, LATER)
-    == "\n".join(
-      [
-        "#chain1 standing",
-        "chain1_roster = [['operator', [], 200000], ['o', ['low'], 200000]]",
-        "chain1_cwd = '/z'",
-        "chain1_actor = 'o/low'",
-      ]
-    )
-  )
-  assert engine.module(root)["actor"] == "o/low"
+  assert engine.turns(on=over) == was and engine.module(root)["actor"] == "o/low"
   later.stands = Refused("no standing now")
   with pytest.raises(Refused):
-    engine.stand(on=over)
-  assert (
-    engine.standing() == LATER
-    and engine.cwd(on=over) == "/z"
-    and paragraphs(engine.turns(on=over))[-1] == takes(root, LATER)
-  )
+    engine.stand()
+  assert engine.standing() == LATER and engine.module(root)["actor"] == "o/low"
   two = await chained("two")
-  assert paragraphs(engine.turns(on=two))[-1] == takes(two, LATER)
+  told = [paragraphs(engine.turns(on=one)) for one in (over, two)]
   later.stands = STANDS
-  engine.stand(on=over)
-  assert paragraphs(engine.turns(on=over))[-1] == takes(root) and engine.module(root)["actor"] == "m/low"
-  assert paragraphs(engine.turns(on=two))[-1] == takes(two) and engine.module(two)["actor"] == "m/low"
-  before = [paragraphs(engine.turns(on=one)) for one in (over, two)]
-  engine.stand(on=over)
-  assert [paragraphs(engine.turns(on=one)) for one in (over, two)] == before
+  engine.stand()
+  assert [paragraphs(engine.turns(on=one)) for one in (over, two)] == told
+  assert engine.module(root)["actor"] == engine.module(two)["actor"] == "m/low"
+  await engine.rung("stand()", on=two)
+  assert paragraphs(engine.turns(on=two)) == [*told[1], "#rung2 by operator\nrung2_word = 'stand()'", stood("stand5")]
+  assert paragraphs(engine.turns(on=over)) == told[0]

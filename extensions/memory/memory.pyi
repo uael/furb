@@ -21,6 +21,7 @@ def remember(on: str = "") -> Act:
   A cancel over it ends it, as it ends every act, and a pause over it holds it until the wake.
   remember asks nothing of a read made before it, whose done a later life can say before or after the birth of remember, so a life and its replay ask the same memory questions.
   A memory file enters a chain once, and again only when it changed, by the lines that changed, since the World leaves out what the chain holds.
+  It tells the memory that changed at each stand from outside an act, as the stand that boot makes at the tip of a life, and at no stand that a word makes, as the one that the World plays on each new chain.
   A later life tells what the record holds, since the journal answers each memory question that the record holds, and a memory file that changed since enters the chain at the stand at the tip of that life.
   At a stand the catch-up that the extension catchup makes before remember tells each memory file that a read or a write on the chain gave, so remember tells again only a memory file that a memory question alone gave the chain, since the World leaves out the content that the catch-up read.
   """

@@ -824,8 +824,11 @@ impl Provider {
         let about = a.about().to_owned();
         match a.kind() {
           "stand" if a.question() => {
+            // A stand that a word makes, as the stand of a setup, reads the standing alone: only a stand from outside
+            // an act reads the settings again, so a setup or a new standing on many chains asks no command line.
+            let word = crate::fact::named(a.by(), "rung");
             let first = !std::mem::replace(&mut stood, true);
-            if let Some(refresh) = refresh.as_ref().filter(|_| !first) {
+            if let Some(refresh) = refresh.as_ref().filter(|_| !first && !word) {
               match refresh() {
                 Ok((fresh, default, budget)) => {
                   if !fresh.iter().any(|model| model.settings(&actor).is_some()) {
@@ -848,8 +851,11 @@ impl Provider {
             // A stand reads the settings again, as after a change of the command line or of its account, or when the
             // operator asks to retry now, so a reply whose call waits for a retry, which can wait for days at a usage
             // limit, ends its wait and asks again at once, on the models that stand now.
-            let waiting: Vec<String> =
-              replies.iter().filter(|(_, reply)| reply.waits).map(|(id, _)| id.clone()).collect();
+            let waiting: Vec<String> = replies
+              .iter()
+              .filter(|(_, reply)| reply.waits && !word)
+              .map(|(id, _)| id.clone())
+              .collect();
             for id in waiting {
               let Some(reply) = replies.get(&id) else { continue };
               let (chain, actor) = (reply.chain.clone(), reply.actor.clone());

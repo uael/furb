@@ -44,6 +44,8 @@ pub const ENABLE: &str = "enable";
 
 /// The journal, which says the record again in a later life, so a done it says answers no stand of this life.
 const JOURNAL: &str = "journal";
+/// The name of this ear, which every rung that it makes names as its maker.
+const EXTENSIONS: &str = "extensions";
 
 /// The kind of the fact by which the ear teaches the doctrine to a chain that lives when a stand of this life lands,
 /// `("teach", chain, "extensions", actor, path)`, which the record keeps, so a later life reads the doctrine again
@@ -513,6 +515,9 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
     let (mut teach, mut taught) = (None::<(String, String, i64)>, false);
     // Whether this life says the fact teach, and with it the fact setup, which the journal of a later life says again.
     let mut fresh = true;
+    // The standing that the ear heard last, as python shows it, and its directory, so a stand whose answer differs
+    // plays the new standing on each chain.
+    let mut stood: Option<(String, String)> = None;
     loop {
       let a = hear(&mut co).await;
       let runs_name = |name: &str| enabled.iter().any(|two| two.name == name);
@@ -528,6 +533,14 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
           if taught {
             let every = enabled.iter().filter(|one| !one.root).map(|one| one.name.clone());
             chains.push((a.about().to_owned(), had.unwrap_or_else(|| every.collect())));
+            if source.as_deref().is_none_or(str::is_empty) {
+              let got = co.call("standing", vec![], vec![]).await?;
+              if let Some(actor) =
+                entry(&got.as_ref(), 2).and_then(|one| one.as_str().map(str::to_owned))
+              {
+                placed(&mut co, a.about(), &actor).await?;
+              }
+            }
             continue;
           }
           chains.push((a.about().to_owned(), had.unwrap_or_default()));
@@ -540,7 +553,22 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
         // The first stand that this life answers sets up the root of a new record when the standing names a
         // doctrine: the ear says the fact teach, with the count of the enables that follow it, then each enable, and
         // it plays the setup once it heard them, as the journal of a later life says them again.
-        "done" if named(a.about(), "stand") && a.by() != JOURNAL => {
+        "done" if named(a.about(), "stand") => {
+          let got = a.word(0).map(|one| one.to_owned());
+          let directory =
+            got.as_ref().and_then(|one| entry(&one.as_ref(), 1)?.as_str().map(str::to_owned));
+          let now = got.as_ref().map(|one| (one.py_repr(), directory.unwrap_or_default()));
+          let was = std::mem::replace(&mut stood, now.clone());
+          if taught
+            && let (Some(was), Some(now)) = (&was, &now)
+            && was.0 != now.0
+          {
+            let moved = (was.1 != now.1).then_some(now.1.as_str());
+            restand(&mut co, &chains, moved).await?;
+          }
+          if a.by() == JOURNAL {
+            continue;
+          }
           let new: Vec<Extension> =
             given.iter().filter(|one| !enabled.contains(one)).cloned().collect();
           if !taught
@@ -682,7 +710,10 @@ async fn play(
 
 /// The setup of the root, as turns of its default actor whose words furb writes: the read of the doctrine, the read
 /// of the file of each extension of every chain, in the order of the life, then the life word of each that has one,
-/// then the fact setup, then the same turns for the extensions of the root alone. It makes each rung at once, and the
+/// which reads the place against the directory of the standing, as a chain that ran no cd does, then the fact setup,
+/// then the same turns for the extensions of the root alone, then `stand()` and a cd to that directory, so every turn
+/// before them is the same text whatever the actors. A chain with no source holds the turns before the fact setup, and
+/// the ear plays its own stand and cd at its birth. It makes each rung at once, and the
 /// chain gives them their turns in the order it made them, so the fact setup stands before the turns of the root alone.
 async fn setup(co: &mut Co, enabled: &[Extension], actor: &str, path: &str) -> Result<(), Fault> {
   written(co, ROOT, &reading(path), actor).await?;
@@ -696,6 +727,15 @@ async fn setup(co: &mut Co, enabled: &[Extension], actor: &str, path: &str) -> R
     }
     lives(co, enabled.iter().filter(|one| one.root == root), actor).await?;
   }
+  placed(co, ROOT, actor).await
+}
+
+/// The turn that tells a chain with no source where it stands, `stand()` and a cd to the directory of the standing,
+/// as a turn of an actor just before its open, after every turn of its setup.
+async fn placed(co: &mut Co, chain: &str, actor: &str) -> Result<(), Fault> {
+  let got = co.call("standing", vec![], vec![]).await?;
+  let directory = entry(&got.as_ref(), 1).and_then(|one| one.as_str().map(str::to_owned));
+  written(co, chain, &stood(directory.as_deref()), actor).await?;
   Ok(())
 }
 
@@ -734,6 +774,50 @@ async fn lives(
     return Ok(None);
   }
   written(co, ROOT, &words.join("\n"), actor).await
+}
+
+/// The word that tells a chain its standing: a stand, then a cd to the directory when one is given.
+fn stood(directory: Option<&str>) -> String {
+  directory.map_or_else(
+    || "stand()".to_owned(),
+    |one| format!("stand()\ncd({})", Object::string(one).py_repr()),
+  )
+}
+
+/// A new standing played on each chain as a turn of the actor of the standing: a stand, and a cd to the directory
+/// that moved, on each chain that ran no cd of its own, since a cd that the ear made is the setup's.
+async fn restand(
+  co: &mut Co,
+  chains: &[(String, Vec<String>)],
+  moved: Option<&str>,
+) -> Result<(), Fault> {
+  let got = co.call("standing", vec![], vec![]).await?;
+  let Some(actor) = entry(&got.as_ref(), 2).and_then(|one| one.as_str().map(str::to_owned)) else {
+    return Ok(());
+  };
+  for (chain, _) in chains {
+    let cd = match moved {
+      Some(_) if own(co, chain).await? => None,
+      other => other,
+    };
+    written(co, chain, &stood(cd), &actor).await?;
+  }
+  Ok(())
+}
+
+/// Whether a chain ran a cd of its own: a cd whose rung no ear of the outside made, as the setup and a new standing
+/// do.
+async fn own(co: &mut Co, chain: &str) -> Result<bool, Fault> {
+  let of = [chain, "cd"].map(Object::string).to_vec();
+  let got = co.call("transcript", of, vec![]).await?;
+  for one in got.as_ref().items().unwrap_or_default() {
+    let Some(cd) = Fact::of(one).filter(Fact::question) else { continue };
+    let maker = co.call("get", vec![Object::string(cd.by())], vec![]).await?;
+    if Fact::of(maker.as_ref()).is_none_or(|rung| rung.by() != EXTENSIONS) {
+      return Ok(true);
+    }
+  }
+  Ok(false)
 }
 
 /// The word of a read of a path, as python writes it.

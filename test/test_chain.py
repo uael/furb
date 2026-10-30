@@ -36,7 +36,7 @@ from conftest import (
   seen,
   settle,
   sown,
-  takes,
+  stood,
   world_says,
   written,
 )
@@ -82,7 +82,7 @@ async def test_chain_says_what_a_chain_does() -> None:
   two = engine.chain("two", source=root)
   await settle()
   assert isinstance(two, Act) and engine.peek(two) is None
-  assert paragraphs(engine.turns(on=two)) == [opened(root, "root"), takes(root), opened(two, "two", root)]
+  assert paragraphs(engine.turns(on=two)) == [opened(root, "root"), opened(two, "two", root)]
   assert engine.program(two) == {}
   assert engine.standing() == STANDS
 
@@ -102,9 +102,9 @@ async def test_the_open_of_a_chain_with_a_source_binds_its_label_and_its_source(
   twin = engine.chain("twin", source=root)
   bare = engine.chain(source=root)
   await settle()
-  opens = "#chain2\nchain2_label = 'twin'\nchain2_source = 'chain1'\nchain2: Act[object] = Act('chain2')"
+  opens = "#chain2\nchain2_label = 'twin'\nchain2_source = 'chain1'\nchain2: Act[Never] = Act('chain2')"
   assert paragraphs(engine.turns(on=twin))[-1] == opened(twin, "twin", root) == opens
-  opens = "#chain3\nchain3_source = 'chain1'\nchain3: Act[object] = Act('chain3')"
+  opens = "#chain3\nchain3_source = 'chain1'\nchain3: Act[Never] = Act('chain3')"
   assert paragraphs(engine.turns(on=bare))[-1] == opened(bare, "", root) == opens
 
 
@@ -295,8 +295,8 @@ async def test_a_chain_is_an_act_of_never_so_the_chain_never_completes() -> None
   assert engine.peek(two) is None and [a for a in said(log, "done") if a[1] == two] == []
 
 
-async def test_the_turns_of_a_chain_tell_the_standing_and_the_acts_of_the_operator() -> None:
-  """The turns of a chain tell the standing and the acts of the operator."""
+async def test_the_turns_of_a_chain_tell_the_acts_of_the_operator() -> None:
+  """The turns of a chain tell the acts of the operator."""
   _, _, root = born()
   step = engine.rung("k = 1", on=root)
   assert await step is None
@@ -304,7 +304,6 @@ async def test_the_turns_of_a_chain_tell_the_standing_and_the_acts_of_the_operat
   await settle()
   assert paragraphs(engine.turns(on=root)) == [
     opened(root, "root"),
-    takes(root),
     written(step, "k = 1"),
     prompted(one, "int", "how many?"),
   ]
@@ -358,7 +357,7 @@ async def test_the_engine_adds_the_acts_that_caused_a_kept_act_to_what_the_filte
   twin = engine.chain("twin", source=root, filter=take(command[1]))
   await settle()
   assert steps(log, one) == [step]
-  assert named(engine.turns(on=twin)) == [root, root, one, step, command[1], command[1], twin]
+  assert named(engine.turns(on=twin)) == [root, one, step, command[1], command[1], twin]
 
 
 async def test_the_globals_of_a_chain_whose_filter_is_a_take_that_is_not_inside() -> None:
@@ -451,7 +450,6 @@ async def test_a_prompt_that_a_step_of_another_chain_made_reads_nothing_of_that_
   asked = next(a[1] for a in said(log, "prompt") if a[3] == two)
   assert paragraphs(sand.turns[theirs[1]]) == [
     opened(two, "two"),
-    takes(two),
     prompted(asked, "int", "count"),
     f"#{theirs[2]} advance on {asked}",
   ]
@@ -474,23 +472,28 @@ async def test_the_word_of_a_rung_rebinds_the_default_actor_like_any_name() -> N
   assert engine.module(root)["actor"] == "m/high"
 
 
-async def test_the_transcript_of_the_root_begins_with_the_open_of_the_root_and_then_the_standing() -> None:
-  """The transcript of the root begins with the open of the root and then the standing, when its standing names no doctrine."""
+async def test_the_transcript_of_the_root_begins_with_the_open_of_the_root() -> None:
+  """The transcript of the root begins with the open of the root, when its standing names no doctrine, since no setup comes then."""
   _, _, root = born()
   held = [a for a in engine.transcript(root) if a[0] == "tell"]
   opens = opened(root, "root").rsplit("\n", 1)
-  assert held[:2] == [("tell", root, root, opens), ("tell", root, root, [takes(root)])]
-  assert paragraphs(engine.turns(on=root))[:2] == [opened(root, "root"), takes(root)]
+  assert held == [("tell", root, root, opens)]
+  assert paragraphs(engine.turns(on=root)) == [opened(root, "root")]
 
 
 TAUGHT: list = [*STANDS, "/w/DOCTRINE.md"]
 """A standing that names a doctrine, as the World of a new record gives it."""
 
 
+STOOD = "stand()\ncd('/w')"
+"""The turn that the World plays on a chain with no source to tell it what it stands on."""
+
+
 def playing(after: str = "") -> World:
   """An ear that plays a setup on the root at the first done of a stand, as the World of a new record does: a read,
   then a word, as two turns of the default actor, then the act setup, then a word of an extension of the root alone
-  when it is given."""
+  when it is given, then the turn that tells the standing; and that plays this last turn on each chain with no source
+  at its birth."""
   a = yield None
   while not (a and a[0] == "done" and engine.question(("stand", a[1]))):
     a = yield None
@@ -499,8 +502,11 @@ def playing(after: str = "") -> World:
   engine.act("setup", "chain1", None)
   if after:
     engine.rung(after, to="m/low", on="chain1")
+  engine.rung(STOOD, to="m/low", on="chain1")
   while True:
-    yield None
+    a = yield None
+    if a and a[0] == "chain" and engine.question(a) and not a[5]:
+      engine.rung(STOOD, to="m/low", on=a[1])
 
 
 async def taught(after: str = "") -> tuple[Sand, list[tuple], str]:
@@ -513,18 +519,20 @@ async def taught(after: str = "") -> tuple[Sand, list[tuple], str]:
 
 
 async def test_when_its_first_standing_names_a_doctrine_the_root_tells_the_bare_paragraph_chain() -> None:
-  """When its first standing names a doctrine, the root tells the bare paragraph chain() at once, and tells its open and its standing once no rung with a word and an actor is open on it at the done of a rung on it, so its first turns are the setup that the World plays on it, and the turn after the last of them holds what that one told, then the open, then the standing."""
+  """When its first standing names a doctrine, the root tells the bare paragraph chain() at once, and tells its open once no rung with a word and an actor is open on it at the done of a rung on it, so its first turns are the setup that the World plays on it, and the turn after the last of them holds what that one told, then the open."""
   _, _, root = born(stands=TAUGHT)
   assert engine.turns(on=root) == [("user", "chain()", None, None)]
   _, _, root = await taught()
   turns = engine.turns(on=root)
-  assert [one[:2] for one in turns[:4]] == [
+  assert [one[:2] for one in turns[:6]] == [
     ("user", "chain()"),
     ("assistant", "read('a.txt')"),
     ("user", "#read1\nread1_path = 'a.txt'\n<s:read1_text>\none\ntwo</s:read1_text>"),
     ("assistant", "x = 41"),
+    ("user", ""),
+    ("assistant", STOOD),
   ]
-  assert paragraphs(turns[4:]) == [opened(root, "root"), takes(root)]
+  assert paragraphs(turns[6:]) == [stood("stand2"), "#cd1\ncd1_path = '/w'", opened(root, "root")]
 
 
 async def test_the_chain_runs_no_paragraph_chain_as_python() -> None:
@@ -536,18 +544,41 @@ async def test_the_chain_runs_no_paragraph_chain_as_python() -> None:
 
 
 async def test_a_chain_with_no_source_holds_first_the_setup_of_the_root() -> None:
-  """A chain with no source holds first the setup of the root, each fact of the root from its paragraph chain() up to its open but the facts of each act that an ear of the outside or the operator made on the root after the act setup that the World makes on it, and of each act under one, so every such chain holds the turns of the setup that every chain shares with the same names, and its own open and its standing come after them."""
+  """A chain with no source holds first the setup of the root, each fact of the root from its paragraph chain() up to its open but the facts of each act that an ear of the outside or the operator made on the root after the act setup that the World makes on it, and of each act under one, so every such chain holds the turns of the setup that every chain shares with the same names, and the turn that the World plays on it and its own open come after them."""
   _, _, root = await taught("y = 1")
   two = await chained("two")
   three = await chained("three")
   setup = engine.turns(on=root)[:4]
-  assert [one[:2] for one in engine.turns(on=root)[4:6]] == [("user", ""), ("assistant", "y = 1")]
-  assert paragraphs(engine.turns(on=root)[6:]) == [opened(root, "root"), takes(root)]
+  assert [one[:2] for one in engine.turns(on=root)[4:8]] == [
+    ("user", ""),
+    ("assistant", "y = 1"),
+    ("user", ""),
+    ("assistant", STOOD),
+  ]
+  assert paragraphs(engine.turns(on=root)[8:])[-1] == opened(root, "root")
   for one in (two, three):
     turns = engine.turns(on=one)
     assert turns[:4] == setup
-    assert paragraphs(turns[4:]) == [opened(one, "two" if one == two else "three"), takes(one)]
+    assert [turn[:2] for turn in turns[4:6]] == [("user", ""), ("assistant", STOOD)]
+    assert paragraphs(turns[6:])[-1] == opened(one, "two" if one == two else "three")
     assert "y" not in engine.module(one)
+
+
+async def test_a_chain_with_no_source_whose_standing_names_a_doctrine_tells_its_open_as_the_root_does() -> None:
+  """A chain with no source whose standing names a doctrine tells its open as the root does, once no rung with a word and an actor is open on it at the done of a rung on it, so the turn that the World plays on it at its birth, as stand() and a cd, comes before its open."""
+  _, log, _ = await taught()
+  two = await chained("two")
+  turns = engine.turns(on=two)
+  (played,) = [a[1] for a in said(log, "rung") if a[3] == two and a[4] == STOOD]
+  assert turns[5][:2] == ("assistant", STOOD) and engine.get(played)[6] == "m/low"
+  assert paragraphs(turns[6:]) == [stood("stand3"), "#cd2\ncd2_path = '/w'", opened(two, "two")]
+  _, _, _ = born(stands=TAUGHT)
+  bare = await chained("bare")
+  assert f"#{bare}" not in heads(engine.turns(on=bare))
+  step = engine.rung("k = 1", on=bare)
+  assert await step is None
+  await settle()
+  assert paragraphs(engine.turns(on=bare))[-1] == opened(bare, "bare")
 
 
 async def test_a_chain_with_no_source_runs_again_each_word_of_the_setup_that_it_holds() -> None:
@@ -556,7 +587,8 @@ async def test_a_chain_with_no_source_runs_again_each_word_of_the_setup_that_it_
   two = await chained("two")
   assert engine.module(two)["x"] == 41
   assert engine.module(two)["read1_path"] == "a.txt"
-  assert [a for a in said(log, "tell") if engine.scope(a[1]) == two and a[1] != two] == []
+  (played,) = [a[1] for a in said(log, "rung") if a[3] == two and a[4] == STOOD]
+  assert [a for a in said(log, "tell") if engine.scope(a[1]) == two and a[1] != two and a[2] != played] == []
   assert heads(engine.turns(on=two)).count("#read1") == 1
 
 
@@ -633,7 +665,7 @@ async def test_a_chain_has_a_globals_dict_and_a_working_directory_of_its_own() -
   two = engine.chain("two")
   await engine.rung("here = 1", on=root)
   engine.cd("/deep", on=two)
-  assert (engine.cwd(on=root), engine.cwd(on=two)) == ("/w", "/deep")
+  assert (engine.cwd(on=root), engine.cwd(on=two)) == ("", "/deep")
   assert "here" in engine.module(root) and "here" not in engine.module(two)
 
 
@@ -723,13 +755,11 @@ async def test_a_chain_with_a_source_inherits_the_default_actor_with_the_globals
 
 
 async def test_a_chain_with_no_source_stands_on_the_default_actor_of_the_chain_it_is_on() -> None:
-  """A chain with no source stands on the default actor of the chain it is on when it is made, which for a chain that a word opens is the chain of that word, and on the actor of the standing when it is on no chain, and its standing tells that actor."""
+  """A chain with no source stands on the default actor of the chain it is on when it is made, which for a chain that a word opens is the chain of that word, and on the actor of the standing when it is on no chain."""
   sand, _, root = born("actor = 'n/low'\nkid = chain('kid')\nclose(kid)", "close(None)")
   kid = await engine.prompt(str, "open one", on=root)
   ours = await chained("ours")
   assert [engine.module(one)["actor"] for one in (root, kid, ours)] == ["n/low", "n/low", "m/low"]
-  assert paragraphs(engine.turns(on=kid))[1] == takes(kid, [*STANDS[:2], "n/low"])
-  assert paragraphs(engine.turns(on=ours))[1] == takes(ours)
   await relived(Sand(), plain(sand.record))
   assert [engine.module(one)["actor"] for one in (root, kid, ours)] == ["n/low", "n/low", "m/low"]
 
@@ -841,7 +871,7 @@ async def test_the_globals_of_a_chain_with_a_source_are_the_origins_whatever_the
   twin = engine.chain("twin", source=root, filter=take())
   await settle()
   assert engine.module(twin)["k"] == 21
-  assert paragraphs(engine.turns(on=twin)) == [opened(root, "root"), takes(root), opened(twin, "twin", root)]
+  assert paragraphs(engine.turns(on=twin)) == [opened(root, "root"), opened(twin, "twin", root)]
 
 
 async def test_a_chain_with_a_source_inherits_the_words_its_caller_wrote_with_its_prefix() -> None:
@@ -863,8 +893,8 @@ async def test_a_filter_that_skips_a_rung_its_caller_wrote_keeps_it_out_of_the_t
   twin = engine.chain("twin", source=root, filter=take(laid, inside=False))
   await settle()
   assert engine.module(twin)["k"] == 1
-  assert paragraphs(engine.turns(on=root)) == [opened(root, "root"), takes(root), written(laid, "k = 1")]
-  assert paragraphs(engine.turns(on=twin)) == [opened(root, "root"), takes(root), opened(twin, "twin", root)]
+  assert paragraphs(engine.turns(on=root)) == [opened(root, "root"), written(laid, "k = 1")]
+  assert paragraphs(engine.turns(on=twin)) == [opened(root, "root"), opened(twin, "twin", root)]
 
 
 async def test_a_chain_with_a_source_holds_the_classes_its_origin_defined_before_that_source() -> None:
@@ -885,7 +915,7 @@ async def test_a_chain_with_a_source_reads_nothing_that_its_origin_did_after_tha
   await after
   await settle()
   assert engine.turns(on=twin) == told == [("user", "\n\n".join(paragraphs(told)), None, None)]
-  assert paragraphs(told) == [opened(root, "root"), takes(root), opened(twin, "twin", root)]
+  assert paragraphs(told) == [opened(root, "root"), opened(twin, "twin", root)]
   assert "after" not in engine.module(twin) and paragraphs(engine.turns(on=root))[-1:] == [written(after, "after = 1")]
 
 
@@ -942,12 +972,7 @@ async def test_it_holds_the_transcript_of_its_origin_first_and_tells_its_own_ope
   retold = [a[1] for a in said(log, "rung") if a[3] == twin]
   assert [engine.get(one)[5] for one in retold] == [f"{step}_told", step]
   assert [a for a in held if a[1] in retold and a[0] == "tell"] == []
-  assert paragraphs(engine.turns(on=twin)) == [
-    opened(root, "root"),
-    takes(root),
-    written(step, "k = 1"),
-    opened(twin, "twin", root),
-  ]
+  assert paragraphs(engine.turns(on=twin)) == [opened(root, "root"), written(step, "k = 1"), opened(twin, "twin", root)]
 
 
 async def test_it_hears_no_control_that_ends_it() -> None:
@@ -976,7 +1001,7 @@ async def test_every_done_it_holds_answers_a_question_it_holds() -> None:
 
 
 async def test_what_a_chain_with_a_source_holds_of_the_transcript_of_its_origin() -> None:
-  """What a chain with a source holds of the transcript of its origin: what its filter kept, everything that made what it kept, the reply of every rung it kept, which cuts its turns where the origin asked its model, and the open of the origin, which tells the standing."""
+  """What a chain with a source holds of the transcript of its origin: what its filter kept, everything that made what it kept, the reply of every rung it kept, which cuts its turns where the origin asked its model, and the open of the origin."""
   _, log, root = born("x = bash('echo hi')", "close(1)")
   assert await engine.prompt(int, "run it", on=root) == 1
   await settle()
@@ -987,7 +1012,7 @@ async def test_what_a_chain_with_a_source_holds_of_the_transcript_of_its_origin(
   asked = [a for a in theirs if a[0] == "reply"]
   assert command in held and [a[1] for a in held if a[0] == "prompt"] == [one]
   assert ids(held[: held.index(("started", twin, twin))]) == [one, command[2], asked[0][1], command[1]]
-  assert [a[3] for a in said(held, "tell") if a[1] == root] == [opened(root, "root").rsplit("\n", 1), [takes(root)]]
+  assert [a[3] for a in said(held, "tell") if a[1] == root] == [opened(root, "root").rsplit("\n", 1)]
   assert [a for a in held if a[0] == "reply"] == asked[:1] and len(asked) == 2
   assert [a[1] for a in held if a[0] == "done" and a[1] in (asked[0][1], asked[1][1])] == [asked[0][1]]
   got = engine.turns(on=twin)
@@ -1016,7 +1041,7 @@ async def test_what_a_chain_said_of_itself_it_keeps_whatever_the_filter_says() -
   await engine.rung("k = 1", on=root)
   twin = engine.chain("twin", source=root, filter=take())
   await settle()
-  assert heads(engine.turns(on=twin)) == [f"#{root}", f"#{root} standing", f"#{twin}"]
+  assert heads(engine.turns(on=twin)) == [f"#{root}", f"#{twin}"]
 
 
 async def test_the_source_of_a_chain_is_a_chain_by_its_name() -> None:
@@ -1064,7 +1089,7 @@ async def test_a_chain_with_a_source_reads_what_its_origin_stands_on_as_it_stand
   _, over = await relived(later, list(sand.record))
   again = engine.chain("again", source=over)
   await settle()
-  assert engine.standing() == later.stands and engine.cwd(on=again) == "/z"
+  assert engine.standing() == later.stands and engine.cwd(on=again) == ""
   assert engine.module(again)["actor"] == "operator"
 
 
@@ -1276,7 +1301,7 @@ async def test_the_chain_tells_a_word_that_told_nothing_before_the_advance() -> 
   assert await one == 1
   first, second, third = steps(log, one)
   look = said(log, "read")[1][1]
-  assert heads(engine.turns(on=root))[3:8] == [
+  assert heads(engine.turns(on=root))[2:7] == [
     f"#{first} advance on {one}",
     f"#{first} told nothing",
     f"#{second} advance on {one}",
@@ -1317,7 +1342,6 @@ async def test_the_turns_do_not_show_a_told_rung() -> None:
   _, _, root, first, second = await told_read()
   assert paragraphs(engine.turns(on=root)) == [
     opened(root, "root"),
-    takes(root),
     written(first, "t = read('a.txt')"),
     "#read1\nread1_path = 'a.txt'\n<s:read1_text>\none\ntwo</s:read1_text>",
     written(second, "got = read1_text"),

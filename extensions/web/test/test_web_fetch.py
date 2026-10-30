@@ -36,5 +36,5 @@ async def test_a_fetch_that_the_world_refuses_completes_with_refused(tmp_path: P
   root, _ = webbed(tmp_path, {})
   with pytest.raises(Refused, match=r"No page answers https://rust-lang\.org\."):
     await engine.rung(f"await web_fetch({URL!r})", on=root)
-  opened = "#web_fetch1\nweb_fetch1: Act[Text] = Act('web_fetch1')"
+  opened = f"#web_fetch1\nweb_fetch1_url = {URL!r}\nweb_fetch1: Act[Text] = Act('web_fetch1')"
   assert of(engine.turns(on=root), "web_fetch") == [opened]

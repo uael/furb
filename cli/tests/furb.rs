@@ -197,7 +197,10 @@ fn a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it() {
     .map(|line| serde_json::from_str::<Value>(line).expect("an entry")[0][0].to_string())
     .collect();
   let stands = kinds.iter().filter(|kind| *kind == "\"stand\"").count();
-  assert_eq!(stands, 2, "each life that keeps keeps its stand: {kinds:?}");
+  assert_eq!(
+    stands, 3,
+    "each life that keeps keeps its stand, and the setup keeps the stand it tells: {kinds:?}"
+  );
   let before = fs::read(yard.record()).expect("the record");
   assert_eq!(
     ran(yard.furb(&["turns"]), "").status.code(),
@@ -210,7 +213,7 @@ fn a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it() {
   turns.arg(yard.record()).arg("--cwd").arg(&elsewhere);
   let said = printed(turns, "");
   assert!(
-    said.contains("#rung3 debugged\nrung3_debug = 'k=3'"),
+    said.contains("#rung4 debugged\nrung4_debug = 'k=3'"),
     "the turns of a record run every word again: {said}"
   );
   assert!(!said.contains("remember()"), "an inspection enables no extension: {said}");
@@ -347,8 +350,8 @@ fn a_record_is_printed_as_facts_each_after_the_number_of_its_line() {
   let expected: Vec<String> = (1..=lines).map(|n| n.to_string()).collect();
   assert_eq!(numbers, expected, "one fact for each line of the record: {all}");
   assert!(all.starts_with("1: ['chain', 'chain1', 'operator', '', 'root', '']\n"), "{all}");
-  let rung = facts(&["--act", "rung2"]);
-  assert!(rung.ends_with(": ['rung', 'rung2', 'operator', 'chain1', 'k = 3', '', '']\n"), "{rung}");
+  let rung = facts(&["--act", "rung3"]);
+  assert!(rung.ends_with(": ['rung', 'rung3', 'operator', 'chain1', 'k = 3', '', '']\n"), "{rung}");
   assert_eq!(rung.lines().count(), 1, "the facts about one act: {rung}");
   assert!(all.contains(&rung), "a fact keeps the number of its line: {all}");
   assert_eq!(facts(&["--chain", "chain1"]), all, "every fact of this record is on the root");
@@ -663,8 +666,8 @@ fn a_prompt_of_the_client_is_answered_by_a_model_and_its_done_is_sent() {
     turns.iter().filter(|one| one[0] == "assistant").map(|one| one[1].clone()).collect();
   assert_eq!(
     said.len(),
-    10,
-    "the doctrine, the extensions, their life words, then the model: {said:?}"
+    11,
+    "the doctrine, the extensions, their life words, the standing, then the model: {said:?}"
   );
   assert!(
     said[0].as_str().is_some_and(|one| one.starts_with("read(") && one.ends_with("DOCTRINE.md')"))
@@ -678,10 +681,9 @@ fn a_prompt_of_the_client_is_answered_by_a_model_and_its_done_is_sent() {
       "{one}"
     );
   }
-  assert_eq!(
-    said[8..],
-    [json!("catchup()\nawait recall()\nawait listed()\nawait mcp_index()"), json!(COUNT)]
-  );
+  assert_eq!(said[8], json!("catchup()\nawait recall()\nawait listed()\nawait mcp_index()"));
+  assert!(said[9].as_str().is_some_and(|one| one.starts_with("stand()\ncd('")), "{:?}", said[9]);
+  assert_eq!(said[10], json!(COUNT));
   let facts = client.data("4", json!({"type": "transcript", "on": "chain1"}));
   assert!(facts["facts"].as_array().expect("the facts").contains(&fact["fact"]), "{facts}");
   assert!(client.ended());
@@ -829,10 +831,10 @@ fn a_word_of_the_client_runs_as_a_rung_and_a_pause_holds_a_chain_until_its_wake(
   let mut client = Client::new(&yard);
   assert_eq!(
     client.data("1", json!({"type": "rung", "word": "k = 1\nclose(k + 1)"})),
-    json!({"act": "rung10"}),
-    "the turn of the doctrine, the seven rungs of the extensions and the turn of skills come first"
+    json!({"act": "rung11"}),
+    "the turn of the doctrine, the seven rungs of the extensions, the turn of skills and the turn of the standing come first"
   );
-  assert_eq!(client.done("rung10")["value"], 2);
+  assert_eq!(client.done("rung11")["value"], 2);
   client.data("2", json!({"type": "pause", "act": "chain1"}));
   let state = client.data("3", json!({"type": "state"}));
   assert_eq!(
@@ -944,9 +946,9 @@ fn the_state_names_the_work_that_an_earlier_life_left_pending() {
   assert!(client.ended());
   let mut later = Client::new(&yard);
   let state = later.data("1", json!({"type": "state"}));
-  // The turn of the doctrine, the rungs of the official extensions and the turn of skills come first, and the rung of
-  // the client made the wait.
-  assert_eq!(state["pending"], json!([["rung10", "rung"], ["wait1", "wait"]]));
+  // The turn of the doctrine, the rungs of the official extensions, the turn of skills and the turn of the standing
+  // come first, and the rung of the client made the wait.
+  assert_eq!(state["pending"], json!([["rung11", "rung"], ["wait1", "wait"]]));
   later.data("2", json!({"type": "cancel", "act": "wait1"}));
   let state = later.data("3", json!({"type": "state"}));
   assert_eq!(state["pending"], json!([]), "an act that is done is pending no more");
@@ -956,10 +958,10 @@ fn the_state_names_the_work_that_an_earlier_life_left_pending() {
 #[test]
 fn the_state_names_the_work_that_a_crash_loop_parked_and_a_retry_runs_it_again() {
   let yard = Yard::new("rpc-parked");
-  // The setup of the root takes the first nine replies: the doctrine, the file of each official extension and their
-  // life words.
+  // The setup of the root takes the first ten replies: the doctrine, the file of each official extension, their
+  // life words and the standing.
   let started = |one: &Value| {
-    one["type"] == "fact" && one["fact"][0] == "started" && one["fact"][1] == "reply10"
+    one["type"] == "fact" && one["fact"][0] == "started" && one["fact"][1] == "reply11"
   };
   let mut client = Client::new(&yard);
   // The fake claude gives no answer to a turn that holds WAIT, so the reply runs until the life ends.
@@ -978,9 +980,9 @@ fn the_state_names_the_work_that_a_crash_loop_parked_and_a_retry_runs_it_again()
   }
   let mut parked = Client::new(&yard);
   let state = parked.data("1", json!({"type": "state"}));
-  assert_eq!((&state["pending"], &state["parked"]), (&json!([]), &json!([["reply10", "reply"]])));
+  assert_eq!((&state["pending"], &state["parked"]), (&json!([]), &json!([["reply11", "reply"]])));
   parked.data("2", json!({"type": "wake", "act": "chain1"}));
-  parked.data("3", json!({"type": "retry", "act": "reply10"}));
+  parked.data("3", json!({"type": "retry", "act": "reply11"}));
   parked.until(started);
   let state = parked.data("4", json!({"type": "state"}));
   assert_eq!(state["parked"], json!([]), "a retry runs the act again");

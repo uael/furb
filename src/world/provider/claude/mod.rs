@@ -739,12 +739,21 @@ impl Conversation {
     let now = jiff::Timestamp::now().to_string();
     let mut lines = String::new();
     let mut parent = Value::Null;
-    for message in past {
+    // The last message of the user in the past ends the setup that every chain with no source shares, since the turn
+    // after it tells the chain where it stands, so its last block takes the mark of the cache.
+    let shared = past.iter().rposition(|one| matches!(one, Message::User { .. }));
+    for (at, message) in past.iter().enumerate() {
       let (kind, blocks): (&str, Vec<Value>) = match message {
         Message::System { .. } => continue,
         Message::User { content } => {
           let mut blocks: Vec<Value> = content.iter().map(said).collect::<Result<_, _>>()?;
-          cached(&mut blocks, &mut self.marked);
+          if Some(at) == shared
+            && !self.marked
+            && let Some(last) = blocks.last_mut()
+          {
+            last["cache_control"] = json!({"type": "ephemeral", "ttl": "1h"});
+            self.marked = true;
+          }
           ("user", blocks)
         }
         Message::Assistant { content, .. } => {

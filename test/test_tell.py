@@ -20,10 +20,10 @@ async def test_what_a_question_answered_now_that_shows_a_text_or_changes_a_state
   told = [(a[1], a[3]) for a in said(log, "tell") if a[2] == step and engine.under(a[1], step)]
   assert told == [
     ("read1", ["#read1\nread1_path = 'a.txt'\n<s:read1_text>\none\ntwo</s:read1_text>"]),
-    ("cd1", ["#cd1"]),
+    ("cd1", ["#cd1\ncd1_path = '/x'"]),
     (step, [f"#{step} debugged\n{step}_debug = '1001.0'"]),
   ]
-  assert "#cd1\n\n#bash1" in engine.turns(on=root)[-1][1]
+  assert "#cd1\ncd1_path = '/x'\n\n#bash1\nbash1_command = 'echo hi'" in engine.turns(on=root)[-1][1]
   assert [one for one in named(engine.turns(on=root)) if one in ("clock", "chance", "gate")] == []
   seen = engine.module(root)["seen"]
   assert isinstance(seen, list) and seen[2:] == [1001.0, 2 / 7, [], "/x"]
@@ -37,7 +37,7 @@ async def test_what_a_question_answered_now_that_shows_a_text_or_changes_a_state
 async def test_a_question_is_put_to_the_ears_of_the_engine_before_those_of_the_outside() -> None:
   """A question is put to the ears of the engine before those of the outside, so the World is asked for nothing that the engine knows."""
   sand, _, root = born()
-  assert engine.cwd(on=root) == "/w"
+  assert engine.cwd(on=root) == ""
   assert engine.turns(on=root) != []
   act = engine.prompt(int, "count", to=OPERATOR, on=root)
   assert engine.read(act, on=root) == Text(act, "")
@@ -64,7 +64,7 @@ async def test_a_text_is_told_by_the_lines_that_its_show_picks_under_the_word_te
   assert await engine.prompt(int, "a door of my own", on=root) == 1
   await settle()
   assert [one for one in paragraphs(engine.turns(on=root)) if one.startswith("#read")] == [
-    "#read1\nread1_value = [1, 2]",
+    "#read1\nread1_path = 'nums://a'\nread1_value = [1, 2]",
     "#read2\nread2_path = 'a.txt'\nread2_text = 'two'",
   ]
 

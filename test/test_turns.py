@@ -1,6 +1,6 @@
 """turns, what a model reads of a chain."""
 
-from conftest import acts, born, heads, of, opened, paragraphs, said, settle, takes, written
+from conftest import acts, born, heads, of, opened, paragraphs, said, settle, written
 from furb import engine
 
 CARRY = ("tell",)
@@ -17,7 +17,7 @@ async def test_the_turns_of_a_chain_folded_from_what_it_has_heard() -> None:
   _, _, root = born()
   assert await engine.rung("k = 1", on=root) is None
   got = engine.turns(on=root)
-  assert got == [("user", f"{opened(root, 'root')}\n\n{takes(root)}\n\n{written('rung1', 'k = 1')}", None, None)]
+  assert got == [("user", f"{opened(root, 'root')}\n\n{written('rung1', 'k = 1')}", None, None)]
 
 
 async def test_the_turns_of_what_a_chain_has_heard() -> None:
@@ -68,7 +68,7 @@ async def test_turns_reads_the_transcript_of_the_chain_and_asks_nothing() -> Non
   made, kept = dict(acts(log)), len(sand.record)
   got = engine.turns(on=root)
   assert [role for role, *_ in got] == ["user"]
-  assert heads(got) == [f"#{root}", f"#{root} standing", "#rung1 by operator", "#cd1"]
+  assert heads(got) == [f"#{root}", "#rung1 by operator", "#cd1"]
   assert acts(log) == made and len(sand.record) == kept
 
 
@@ -78,7 +78,7 @@ async def test_a_user_turn_packs_one_paragraph_for_each_thing_told_since_the_las
   assert await engine.rung("k = 1", on=root) is None
   got = engine.turns(on=root)
   assert len(got) == 1
-  assert heads(got) == ["#chain1", "#chain1 standing", "#rung1 by operator"]
+  assert heads(got) == ["#chain1", "#rung1 by operator"]
   assert got[0][1] == "\n\n".join(paragraphs(got))
   sand.script[root] = ["close(1)"]
   assert await engine.prompt(int, "count", on=root) == 1
@@ -166,7 +166,7 @@ async def test_the_turns_of_a_chain_show_every_act_the_model_made() -> None:
   _, command, *_ = said(log, "bash")[0]
   got = engine.turns(on=root)
   assert of(got, command) == [
-    f"#{command}\n{command}: Act[Exit] = Act('{command}')",
+    f"#{command}\n{command}_command = 'echo hi'\n{command}: Act[Exit] = Act('{command}')",
     f"#{command} exited 0\n{command}_stdout = 'ran echo hi'",
   ]
 

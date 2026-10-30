@@ -233,9 +233,12 @@ def standing() -> Standing:
   It reads the transcript of the root as it stands where the call is made, so a grant reads the window of an actor off the standing where the answer of its reply lands, and a later life reads at each place of the record the standing that the record held there.
   """
 
-def stand(on: str = ROOT) -> Standing:
+def stand(on: str = "") -> Standing:
   """stand asks the World what the chains stand on and gives the answer, which boot does on the root at the tip of every life.
   Only a stand on the root changes the standing, since the standing has one home.
+  A stand from inside an act tells its answer under its own name, with the roster and the actor of the standing, as stand2_roster and stand2_actor, and no directory, which a cd tells, and no path of the doctrine, which the World reads in a turn of its own.
+  A stand from outside an act tells nothing, so the stand that boot makes tells nothing.
+  A stand that names no chain is on the chain of the act that makes it, as every verb, and on the root from outside an act, as the stand of boot.
   """
 
 def clock(on: str = "") -> float:
@@ -281,7 +284,7 @@ def cd(path: str, on: str = "") -> str:
 
 def cwd(on: str = "") -> str:
   """The working directory of a chain is the directory that the closest cd back in its transcript came to.
-  The working directory of a chain is the directory of the standing it stands on while no cd stands in its transcript, so a later standing moves no chain that a cd moved.
+  A chain whose transcript holds no cd has no working directory, so cwd gives an empty path, and the World resolves the paths of that chain against the directory of the standing.
   The World resolves the path of a read, a write and a command against the working directory of the chain, which it reads, and the path of a cd, a read or a write that is ~ or starts with ~/, or with ~\\ on Windows, against the home of the user, and one of scratch:// against the scratch directory.
   The World writes each path under the home of the user with ~ in place of the home, as ~/a.txt, in each text, each cd and each standing that it gives, and every other path as it stands, so a path that a model reads names no home.
   cwd gives the working directory that the paths of the chain resolve against.
@@ -516,7 +519,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   A chain: its module, which is the engine itself, named for the chain, since everything the file defines is the model's to call and nothing of it is bound to one chain, and what the operator would add to it, it makes a rung of, which binds it, stands in the program and is said again in a later life, a fact said from a run being on the chain of that run, and a word that wants a chain of its own giving the name of its own as the source.
   A chain is chainN whether boot or chain opened it, and the root is chain1.
   A chain is an act of Never, so the chain never completes.
-  The turns of a chain tell the standing and the acts of the operator.
+  The turns of a chain tell the acts of the operator.
   The transcript of a chain is the facts on it, in the order they were said.
   Nothing leaves a transcript once the transcript holds it, but by a prefix said on its chain, which takes the place of what the transcript held.
   An assistant turn keeps the role assistant in every chain made from the chain.
@@ -529,10 +532,11 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   A chain holds every fact on it, and an act on another chain is that chain's.
   A prompt that a step of another chain made reads nothing of that chain.
   The word of a rung rebinds the default actor like any name, and so does an answer of a stand that changes the actor of the standing, and the last binding in record order wins.
-  The transcript of the root begins with the open of the root and then the standing, when its standing names no doctrine.
-  When its first standing names a doctrine, the root tells the bare paragraph chain() at once, and tells its open and its standing once no rung with a word and an actor is open on it at the done of a rung on it, so its first turns are the setup that the World plays on it, and the turn after the last of them holds what that one told, then the open, then the standing.
+  The transcript of the root begins with the open of the root, when its standing names no doctrine, since no setup comes then.
+  When its first standing names a doctrine, the root tells the bare paragraph chain() at once, and tells its open once no rung with a word and an actor is open on it at the done of a rung on it, so its first turns are the setup that the World plays on it, and the turn after the last of them holds what that one told, then the open.
   The chain runs no paragraph chain() as python, since that paragraph tells no call.
-  A chain with no source holds first the setup of the root, each fact of the root from its paragraph chain() up to its open but the facts of each act that an ear of the outside or the operator made on the root after the act setup that the World makes on it, and of each act under one, so every such chain holds the turns of the setup that every chain shares with the same names, and its own open and its standing come after them.
+  A chain with no source holds first the setup of the root, each fact of the root from its paragraph chain() up to its open but the facts of each act that an ear of the outside or the operator made on the root after the act setup that the World makes on it, and of each act under one, so every such chain holds the turns of the setup that every chain shares with the same names, and the turn that the World plays on it and its own open come after them.
+  A chain with no source whose standing names a doctrine tells its open as the root does, once no rung with a word and an actor is open on it at the done of a rung on it, so the turn that the World plays on it at its birth, as stand() and a cd, comes before its open.
   A chain with no source runs again each word of the setup that it holds, as a chain with a source runs the rungs of its origin, so the words of the extensions bind their names in its module and the setup tells nothing again.
   A chain with a source holds whole the setup that its origin holds, whatever its filter, and its filter applies only to what came after that setup.
   The transcript then holds the prompt of the operator, and the replies of the model, each with its turn.
@@ -547,7 +551,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   What a chain binds is its own, and a chain with a source is how a chain gets isolation.
   Two chains from one source hold the same values, since both ran the same rungs.
   A chain with a source inherits the default actor with the globals of its origin at that source.
-  A chain with no source stands on the default actor of the chain it is on when it is made, which for a chain that a word opens is the chain of that word, and on the actor of the standing when it is on no chain, and its standing tells that actor.
+  A chain with no source stands on the default actor of the chain it is on when it is made, which for a chain that a word opens is the chain of that word, and on the actor of the standing when it is on no chain.
   A chain with a source that holds an act reads the close of the act in its transcript.
   A chain with a source awaits or peeks an inherited act as it likes.
   The engine does not wake a chain with a source for the result of an inherited act.
@@ -568,7 +572,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   It holds the transcript of its origin first and tells its own open after it, and the rungs it runs again tell nothing, since every word of those stands in what it inherited.
   It hears no control that ends it, since nothing that happens to a chain ends it, and a control over a chain is over the acts on it, which end themselves.
   Every done it holds answers a question it holds, since it holds every question made on it, the ones it made itself among them.
-  What a chain with a source holds of the transcript of its origin: what its filter kept, everything that made what it kept, the reply of every rung it kept, which cuts its turns where the origin asked its model, and the open of the origin, which tells the standing.
+  What a chain with a source holds of the transcript of its origin: what its filter kept, everything that made what it kept, the reply of every rung it kept, which cuts its turns where the origin asked its model, and the open of the origin.
   The filter is given every act, what the operator asked among them, since what the operator asked of a chain no rung of it says again.
   What a chain said of itself it keeps whatever the filter says, so the open of the origin stands in the new chain.
   The source of a chain is a chain, by its name, and means the transcript of that chain as it stands.
@@ -745,8 +749,8 @@ type Note = str
 A paragraph is what one fact that tells stands as in a turn: its notes, one after the other, and a blank line between two paragraphs.
 The first line of a paragraph is its header: # and, with no space, the id of the act it is of, then what happened to the act, as #bash1 exited 0 or #prompt1, and no text that the act tells.
 Every other line of a paragraph is python: a binding of each value that the act tells, and the binding of the act on its open.
-The header of a paragraph names the act it is of by its id, what the act tells and a control over it alike, and the paragraph of a read, a write or a cd stands at the place in the run where it was asked.
-The headers of the file are the open of an act, closed, done, exited, timed out, raised, debugged, refused, ledger, standing, advance, paused, woke and cancelled.
+The header of a paragraph names the act it is of by its id, what the act tells and a control over it alike, and the paragraph of a read, a write, a stand or a cd stands at the place in the run where it was asked.
+The headers of the file are the open of an act, closed, done, exited, timed out, raised, debugged, refused, ledger, advance, paused, woke and cancelled.
 A statement or a quote that a paragraph shows binds its name in the chain, and a comment binds nothing.
 A paragraph binds each value that it tells under a name: the id of the act, an underscore, and the word that holds the value, as prompt2_message, bash1_command, read3_text or prompt2_value.
 A paragraph binds a string of more than one line as a quote, and any other value as a statement of its repr.
@@ -909,17 +913,15 @@ type Clock = tuple[Literal["clock"], str, str, str]
 type Chance = tuple[Literal["chance"], str, str, str]
 """A chance is the question of a number the World draws."""
 type Stand = tuple[Literal["stand"], str, str, str]
-"""A stand is the question of what the chains stand on, which boot asks the World on the root at the tip of every life, and whose answer binds the actor and the directory of every chain from its place on.
+"""A stand is the question of what the chains stand on, which boot asks the World on the root at the tip of every life, and whose answer binds the actor of every chain from its place on.
 A change of the World between two lives enters the transcript of a chain.
 The World answers a stand with the roster, the directory, the actor and the path of the doctrine.
-A model asked on any chain of a later life finds the new roster in the transcript of its chain.
+A model asked on any chain of a later life finds the new roster in the transcript of its chain, in the stand that the World plays there.
 The World answers it with a done at once, so the life stands on that answer before boot returns.
 The journal keeps each stand and its answer, so a later life says them again at their places and replays every chain on what it stood on there.
 At its tip, once the record is said again whole, boot stands the life again, so a change of the World reaches every chain after what it replayed.
-Every chain hears the done of every stand, and a chain whose standing that answer changes tells it there, and binds its default actor again when the actor of the standing changes, so the transcript grows at one end.
+Every chain hears the done of every stand, and binds its default actor again when the actor of the standing changes, and tells nothing of it, since the World plays a stand on each chain whose standing changed, which tells it, so the transcript grows at one end.
 A standing binds the default actor of the chain, under the name actor, when its actor differs from that of the standing before it, so a new roster or a new directory alone keeps the actor that a word chose.
-The chain tells each standing it takes in one paragraph headed standing, which binds its roster, its directory and its actor, as chain1_roster, chain1_cwd and chain1_actor, each entry of its roster as its name, its efforts and its window, and no path of the doctrine, which the World gives the chain to read in a turn of its own.
-The standing a chain tells is what its transcript holds of it, and the stand itself tells nothing.
 """
 type Module = tuple[Literal["module"], str, str, dict[str, object]]
 """A module carries the globals of a chain, which the chain says at its birth and at each replay, so its transcript says which module each of its rungs ran in."""
@@ -1017,7 +1019,6 @@ def headed(id: str, what: str = "", **words: object) -> str:
   """The paragraph of an act: its header, # and the id with no space between, then what happened, and under it the binding of each word, in order.
   headed binds each value by its repr with no check, since every value that reaches it is a wire value, and the repr of a wire value is python.
   headed shows a value as python shows it, less the path of the module before the name of its class, since a chain binds a class by its name alone.
-  An open of an act that the word of a rung on its chain made tells no string that the word holds as a whole literal, between the quotes that python writes it with, between double quotes or as a quote, since the turn of the model shows that word, and an act that tells a text tells each of its words.
   """
 
 def bound(id: str, of: str = "object") -> str:

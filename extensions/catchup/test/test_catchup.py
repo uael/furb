@@ -1,6 +1,6 @@
 """catchup, the catch-up of a chain."""
 
-from conftest import LATER, Sand, chained, paragraphs, plain, said, settle, sown, takes
+from conftest import LATER, Sand, chained, paragraphs, plain, said, settle, sown
 from extensions.conftest import CATCHUP, catching, caught, caught_up, number
 from furb import engine
 from furb.engine import Text
@@ -22,7 +22,7 @@ async def test_the_life_word_of_the_extension_is_catchup() -> None:
 
 
 async def test_on_the_root_it_reads_the_clock_as_it_starts_and_at_each_stand() -> None:
-  """On the root it reads the clock as it starts and at each stand, once the chain told the standing that the stand gives it, so the record holds a reading of the clock at the tip of every life."""
+  """On the root it reads the clock as it starts and at each stand, once the done of the stand reached it, so the record holds a reading of the clock at the tip of every life."""
   sand, log, root = await caught_up()
   two = await chained("two")
   (watcher,) = [a[1] for a in said(log, "catchup") if a[3] == root]
@@ -31,7 +31,7 @@ async def test_on_the_root_it_reads_the_clock_as_it_starts_and_at_each_stand() -
   again, _ = await catching(later, plain(sand.record))
   assert [a[1:4] for a in said(again, "clock")] == [("clock1", watcher, root), ("clock2", watcher, root)]
   held = engine.transcript(root)
-  told = held.index(("tell", root, root, [takes(root, LATER)]))
+  told = held.index(("done", "stand2", "world", LATER))
   assert [a[0] for a in held[told + 1 :]][:2] == ["clock", "done"]
   assert [a[0] for a in later.calls] == ["stand", "clock"]
   assert [a for a in engine.transcript(two) if a[0] == "clock"] == []
@@ -159,3 +159,21 @@ async def test_it_hears_no_control() -> None:
   engine.stand()
   assert caught(engine.turns(on=root), root) == ["#chain1 caught up\nchain1_changed = {'/w/a.txt': {2: 'TWO'}}"]
   assert engine.peek(watcher, "open") == "open"
+
+
+async def test_it_catches_the_chain_up_at_each_stand_from_outside_an_act() -> None:
+  """It catches the chain up at each stand from outside an act, as the stand that boot makes at the tip of a life, and at no stand that a word makes, as the one that the World plays on each new chain, so a new chain makes no read on the chains that live."""
+  sand, log, root = await caught_up()
+  two = await chained("two")
+  engine.read("a.txt", on=two)
+  sand.files["/w/a.txt"] = "one\nthree\n"
+  calls = len(sand.calls)
+  await engine.rung("stand()", on=root)
+  three = await chained("three")
+  await engine.rung("stand()", on=three)
+  assert said(sand.calls[calls:], "read") == [] and len(said(sand.calls[calls:], "stand")) == 2
+  assert caught(engine.turns(on=two), two) == []
+  engine.stand()
+  assert [(a[3], a[4]) for a in said(sand.calls[calls:], "read")] == [(two, "/w/a.txt")]
+  assert caught(engine.turns(on=two), two) == [f"#{two} caught up\n{two}_changed = {{'/w/a.txt': {{2: 'three'}}}}"]
+  assert [a[3] for a in said(log, "catchup")] == [root, two, three]

@@ -210,13 +210,19 @@ test("a follow-up that the operator removes while an earlier one is sent is not 
     expect(session.acts.filter((act) => session.isUserPrompt(act)).map((act) => act.words[1])).toEqual([
       "First follow-up on main",
     ]);
-    // The other chain holds only the rung that runs again the read of the doctrine, the word of the setup of the
-    // root that its prefix holds.
-    const setup = session.acts.find((act) => act.kind === "rung" && act.by === "extensions");
-    expect(setup?.word).toMatch(/^read\('.*DOCTRINE\.md'\)$/);
+    // The other chain holds only the rungs that run again the words of the setup of the root that its prefix holds,
+    // the read of the doctrine and what that read told, then the stand and the cd that the World plays on it at its
+    // birth.
+    const [read, stood] = session.acts.filter((act) => act.kind === "rung" && act.by === "extensions");
+    expect(read?.word).toMatch(/^read\('.*DOCTRINE\.md'\)$/);
+    expect(stood?.word).toMatch(/^stand\(\)\ncd\('.*'\)$/);
     expect(
       session.acts.filter((act) => act.on === other && act.kind === "rung").map((act) => [act.by, act.words]),
-    ).toEqual([[other, [setup?.word, setup?.id, ""]]]);
+    ).toEqual([
+      [other, [read?.word, read?.id, ""]],
+      [other, [expect.stringMatching(/^#read1\nread1_path = '.*DOCTRINE\.md'\n/), `${stood?.id}_told`, ""]],
+      ["extensions", [expect.stringMatching(/^stand\(\)\ncd\('.*'\)$/), "", "claude-cli:sonnet/high"]],
+    ]);
   } finally {
     session.host.sendQueued = send;
     await session.dispose();

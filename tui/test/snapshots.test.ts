@@ -48,11 +48,17 @@ async function withLife(
 test("idle snapshots add no facts or sandbox calls as the act table grows, and streamed output needs no peek", () =>
   withLife(
     async ({ session, engine, snapshots, calls }) => {
-      // The chain holds itself, and the rung and the read of the doctrine that the World plays on it.
-      expect(snapshots.take(engine.root).acts.map((act) => act.kind)).toEqual(["chain", "rung", "read"]);
+      // The chain holds itself, the rung of the read of the doctrine and the rung of the stand and the cd that the
+      // World plays on it, and the read of the doctrine.
+      expect(snapshots.take(engine.root).acts.map((act) => act.kind)).toEqual([
+        "chain",
+        "rung",
+        "rung",
+        "read",
+      ]);
       for (let index = 0; index < 100; index++) engine.wait([], { seconds: 60, on: engine.root });
       await Promise.resolve();
-      expect(snapshots.take(engine.root).acts).toHaveLength(103);
+      expect(snapshots.take(engine.root).acts).toHaveLength(104);
       await Promise.resolve();
       const before = [...calls],
         facts = session.facts.length;
@@ -172,7 +178,7 @@ test("a take carries the acts that changed after the count it is given, and ever
     expect(fourth.acts.map((act) => act.kind)).toEqual(["rung", "note"]);
   }));
 
-test("a new standing drops the roster, the directory and the actor that the view of a chain read", () =>
+test("a stand drops the roster, the directory and the actor that the view of a chain read, and the view reads the standing that the World plays again", () =>
   withLife(
     async ({ engine, snapshots, cwd }) => {
       const before = snapshots.take(engine.root);
@@ -181,6 +187,9 @@ test("a new standing drops the roster, the directory and the actor that the view
         cwd,
         "claude-cli:sonnet/high",
       ]);
+      // A host that holds the last snapshot takes the roster again only once the view dropped it.
+      const quiet = snapshots.take(engine.root, 0, before.mark);
+      expect(quiet.roster).toBeUndefined();
       // A stand that an ear of the word takes is answered by whoever says its done, here the operator.
       await engine.rung({
         word: 'def takes(id):\n  yield "started", id\n  while True:\n    yield\nasked = act("stand", "", takes)',
@@ -189,11 +198,15 @@ test("a new standing drops the roster, the directory and the actor that the view
       const asked = String(engine.inspect("asked", engine.root).value);
       engine.say("done", asked, [[[["operator", [], 200000]], join(cwd, "elsewhere"), "operator"]]);
       await Promise.resolve();
-      const after = snapshots.take(engine.root);
+      const after = snapshots.take(engine.root, 0, quiet.mark);
+      // The World answers the new standing with a turn of its own on the chain, which stands on the World again.
+      const [played, told] = after.turns.list.slice(-2).map((turn) => String(turn[1]));
+      expect(played?.startsWith("stand()\ncd(")).toBe(true);
+      expect(told).toMatch(/^#(stand\d+)\n\1_roster = \[\['claude-cli:sonnet', /);
       expect([after.roster, after.directory, after.actor]).toEqual([
-        [["operator", [], 200000]],
-        join(cwd, "elsewhere"),
-        "operator",
+        before.roster,
+        cwd,
+        "claude-cli:sonnet/high",
       ]);
     },
     // The roster is named, so the catalog offers no model of the claude command line that the machine holds.

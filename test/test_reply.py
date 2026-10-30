@@ -21,7 +21,6 @@ from conftest import (
   relived,
   said,
   settle,
-  takes,
 )
 from furb import engine
 from furb.engine import OPERATOR, Refused
@@ -58,14 +57,7 @@ async def test_the_request_of_a_reply_is_the_transcript_of_the_chain_as_turns() 
   assert (
     sand.turns[asked[1]]
     == engine.turns(on=root)[:1]
-    == [
-      (
-        "user",
-        f"{opened(root, 'root')}\n\n{takes(root)}\n\n{prompted(act, 'int', 'count')}\n\n#{step} advance on {act}",
-        None,
-        None,
-      )
-    ]
+    == [("user", f"{opened(root, 'root')}\n\n{prompted(act, 'int', 'count')}\n\n#{step} advance on {act}", None, None)]
   )
 
 
@@ -261,7 +253,6 @@ async def test_a_new_prompt_reads_the_whole_transcript_of_the_chain_the_cancelle
   (step,) = [a[1] for a in said(log, "rung") if a[2] == second]
   assert heads(sand.turns["reply1"]) == [
     f"#{root}",
-    f"#{root} standing",
     f"#{first}",
     f"#{first} cancelled by operator",
     f"#{second}",

@@ -69,7 +69,7 @@ def remember(on: str = "") -> Act:
           question(("read", about)) and scope(about) == scope(id) and "://" not in path and about not in before
         ):
           memory(path, on)
-        case ("done", about, *_) if question(("stand", about)):
+        case ("done", about, *_) if question(("stand", about)) and not question(("rung", get(about)[2])):
           memory(on=on)
 
   return act("remember", on, controlled(ear))

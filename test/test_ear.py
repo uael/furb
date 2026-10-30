@@ -69,7 +69,7 @@ class Answering(Sand):
 async def test_the_world_hears_every_fact(tmp_path: Path) -> None:
   """The World, the ears of the outside that serve the machine, one or many, hears every fact that it waits for, every act that no ear before it took, and every chain at its birth: it answers a stand, a clock, a chance, a cd, a read and a write of a path nobody of the engine serves, resolved against the working directory of the chain, or against the scratch directory for a path of scratch://; it takes a command, asks it whether it is merged, answers a write of its doors and feeds it what a write of its stdin gives, and ends it at its timeout and at a cancel; it takes a wait and a prompt to the operator, which it shows; and it takes a reply, which it answers with the turn of the model."""
   sand, log, root = born(files={"/w/a.txt": "one\n"}, auto=False)
-  assert engine.cwd(on=root) == "/w"
+  assert engine.cwd(on=root) == ""
   assert engine.clock(on=root) == 1001.0
   assert engine.chance(on=root) == 2 / 7
   assert engine.read("a.txt", on=root) == Text("/w/a.txt", "one\n")

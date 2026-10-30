@@ -91,8 +91,10 @@ def standing():
   return answer("stand", ROOT, [])
 
 
-def stand(on=ROOT):
-  return ask("stand", on)
+def stand(on=""):
+  got = ask("stand", on or ROOT * (not acting()))
+  (who := acting()) and tells(who) and say(*told(transcript(on, who)[-1][1], roster=got[0], actor=got[2]))
+  return got
 
 
 def clock(on="") -> float:
@@ -114,7 +116,7 @@ def cd(path: str, on=""):
 
 
 def cwd(on="") -> str:
-  return answer("cd", on, "") or standing()[1]
+  return answer("cd", on, "")
 
 
 def pause(id: str, why=None):
@@ -247,9 +249,6 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
       heard.clear()
       return w and act("run", id, None, n := whose + "_told", unquoted(ladder.setdefault(n, w)), "")
 
-    def takes():
-      return told(id, "standing", roster=last[0], cwd=last[1], actor=module()["actor"])
-
     def replay(of="", words=""):
       fresh = not of
       for whose, said in [*ladder.items()]:
@@ -284,12 +283,11 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
       )
     ladder = {x: w for x, w in program(source or id).items() if over(x) or not get(x)}
     yield "started", id
-    top = told(id, "", bound(id), label=label, source=source)
-    if last:
+    top = told(id, "", bound(id, "Never"), label=label, source=source)
+    if last and (source or not last[3:]):
       yield top
       top = ""
     yield from replay()
-    last and not source and (yield takes())
     while True:
       r = get((a := (yield {id, "stand", "reply"}))[1]) or a
       match a:
@@ -297,12 +295,9 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
           was, last = last, standing()
           if last[2:3] != was[2:3]:
             stood = module()["actor"] = last[2]
-          if was or not last[3:]:
-            was or (yield top)
-            top = ""
-            yield takes()
-          else:
-            yield "tell", id, ["chain()"]
+          if not was:
+            yield ("tell", id, ["chain()"]) if last[3:] else top
+            top *= bool(last[3:])
         case ("done", about, _, value) if running.get(maker := r[2]) in (
           False,
           isinstance(value, Exception) and r[0] != "reply" and "",
@@ -345,7 +340,6 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
         case ("done", *_) if top and r[0] == "rung" and not crafted(id):
           yield top
           top = ""
-          yield takes()
         case ("rung", rid, _, _, "", *_):
           waiting[rid] = running[rid] = ""
         case ("tell", *_, notes) if notes != ["chain()"]:
@@ -590,18 +584,13 @@ def control(kind, name, id, *words):
 
 def headed(id, what="", **words):
   text = f"#{id} {what}".rstrip()
-  held = "" if what or "text" in words else next((x[5] for x in transcript(id, "run") if get(id)[2] in x[4::2]), "")
   for word, value in words.items():
     name = id + "_" + word
-    if isinstance(value, str):
-      if not value or any(q + repr(value)[1:-1] + q in held for q in "'\""):
-        continue
-      if "\n" in value:
-        while "</s:" + name + ">\n" in value + "\n":
-          name += "_"
-        text += f"\n<s:{name}>\n{value}</s:{name}>"
-        continue
-    if value is not None:
+    if isinstance(value, str) and "\n" in value:
+      while "</s:" + name + ">\n" in value + "\n":
+        name += "_"
+      text += f"\n<s:{name}>\n{value}</s:{name}>"
+    elif value not in (None, ""):
       text += f"\n{name} = " + re.sub(r"^[\w.]+\.(?=[A-Z]\w*\()", "", repr(value))
   return text
 

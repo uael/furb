@@ -368,7 +368,8 @@ test("the words of the extensions stand as code: a comment that names their ear,
         );
         await session.refresh();
         // The setup of the root is the turns of the default actor that the ear extensions wrote: the read of the
-        // doctrine, the read of the file of each extension in the order of the life, then the life words in one word.
+        // doctrine, the read of the file of each extension in the order of the life, the life words in one word, then
+        // the stand and the cd.
         const setup = session.activity.filter((act) => act.kind === "rung" && act.by === "extensions");
         expect(setup.map((act) => act.word)).toEqual([
           // A path of Windows stands with its separators doubled, as python shows a backslash.
@@ -379,6 +380,7 @@ test("the words of the extensions stand as code: a comment that names their ear,
             ),
           ),
           "catchup()\nawait recall()\nawait listed()\nawait mcp_index()",
+          expect.stringMatching(/^stand\(\)\ncd\('.*'\)$/),
         ]);
         let rows = (await frame()).split("\n");
         for (let step = 0; step < 80 && !rows.some((row) => /earlier steps/.test(row)); step++) {
@@ -386,22 +388,24 @@ test("the words of the extensions stand as code: a comment that names their ear,
           rows = (await frame()).split("\n");
         }
         // The card of the ear holds more steps than a card shows, so its first steps and its comment fold.
-        await click("3 earlier steps");
+        await click(rows.join("\n").match(/\d+ earlier steps/)?.[0] ?? "earlier steps");
         for (let step = 0; step < 80 && !rows.some((row) => /# extensions/.test(row)); step++) {
           await Bun.sleep(25);
           rows = (await frame()).split("\n");
         }
         const at = rows.findIndex((row) => /# extensions/.test(row));
         expect(at).toBeGreaterThanOrEqual(0);
-        const shown = rows.slice(at + 1, at + 13).map((row) => row.trim().replace(/\s{2,}.*$/, ""));
+        const shown = rows.slice(at + 1, at + 15).map((row) => row.trim().replace(/\s{2,}.*$/, ""));
         expect(shown.slice(0, 8).map((row) => /^\d+ read\('/.test(row))).toEqual(Array(8).fill(true));
-        // The life words stand as the calls that end their one word, each on its line.
-        expect(shown.slice(8)).toEqual([
+        // The life words stand as the calls that end their one word, each on its line, and the stand and the cd come
+        // after them.
+        expect(shown.slice(8, 12)).toEqual([
           "9 catchup()",
           "10 await recall()",
           "11 await listed()",
           "12 await mcp_index()",
         ]);
+        expect([shown[12], shown[13]?.startsWith("14 cd('")]).toEqual(["13 stand()", true]);
         expect(rows.join("\n")).not.toMatch(/rung\d+…\d+|remember1|ouroboros1|catchup1/);
       },
       { width: 140, height: 42 },

@@ -204,7 +204,7 @@ test("what a model writes streams into the session under its rung until its repl
   try {
     const engine = session.open();
     const prompt = engine.prompt("int", { message: "count", on: engine.root });
-    // The rung that answers the prompt comes after the nine rungs of the setup of the root, so it is found as the
+    // The rung that answers the prompt comes after the ten rungs of the setup of the root, so it is found as the
     // rung that the prompt made.
     const answering = () =>
       [...session.activity.acts.values()].find((act) => act.kind === "rung" && act.by === prompt.id)?.id ??
@@ -213,7 +213,7 @@ test("what a model writes streams into the session under its rung until its repl
     const turn = (role: string, text: unknown) =>
       expect.objectContaining({ role, content: [{ type: "text", text }] });
     await until(session, () => session.streams.get(answering())?.text === "close(3)");
-    expect(answering()).toBe("rung10");
+    expect(answering()).toBe("rung11");
     expect(session.streams.get(answering())).toEqual({
       chain: engine.root,
       text: "close(3)",
@@ -224,8 +224,9 @@ test("what a model writes streams into the session under its rung until its repl
         actor: "claude-cli:sonnet/high",
         chain: engine.root,
         // The setup of the root as turns of the default actor whose words furb writes: the bare paragraph chain(), the
-        // read of the doctrine, the read of the file of each official extension, then the life words in one turn,
-        // whose user turn holds what they read, the banner and the standing of the root, then the prompt.
+        // read of the doctrine, the read of the file of each official extension, the life words in one turn, whose user
+        // turn holds what they read, then the stand and the cd, whose user turn holds what they tell, then the open of
+        // the root and the prompt.
         messages: [
           turn("user", "chain()"),
           // A path of Windows stands with its separators doubled, as python shows a backslash.
@@ -246,6 +247,13 @@ test("what a model writes streams into the session under its rung until its repl
             ),
           ]),
           turn("assistant", "catchup()\nawait recall()\nawait listed()\nawait mcp_index()"),
+          turn(
+            "user",
+            expect.stringMatching(
+              /^#read9\nread9_path = 'skills:\/\/'\n(<s:read9_text>\n[\s\S]*<\/s:read9_text>|read9_text = '.*')$/,
+            ),
+          ),
+          turn("assistant", expect.stringMatching(/^stand\(\)\ncd\('.*'\)$/)),
           // The open of the root goes as a block of its own after the setup, which ends the block before it.
           expect.objectContaining({
             role: "user",
@@ -253,13 +261,13 @@ test("what a model writes streams into the session under its rung until its repl
               {
                 type: "text",
                 text: expect.stringMatching(
-                  /^#read9\nread9_path = 'skills:\/\/'\n(<s:read9_text>\n[\s\S]*<\/s:read9_text>|read9_text = '.*')$/,
+                  /^#stand2\nstand2_roster = \[.*\]\nstand2_actor = 'claude-cli:sonnet\/high'\n\n#cd1\ncd1_path = '.*'$/,
                 ),
               },
               {
                 type: "text",
                 text: expect.stringMatching(
-                  /^#chain1\nchain1_label = 'root'\n[\s\S]*\n#chain1 standing\n[\s\S]*\n#prompt1\nprompt1_message = 'count'\nprompt1: Act\[int\] = Act\('prompt1'\)\n\n#rung10 advance on prompt1$/,
+                  /^#chain1\nchain1_label = 'root'\nchain1: Act\[Never\] = Act\('chain1'\)\n\n#prompt1\nprompt1_message = 'count'\nprompt1: Act\[int\] = Act\('prompt1'\)\n\n#rung11 advance on prompt1$/,
                 ),
               },
             ],
@@ -816,8 +824,9 @@ test("record inspection reports pending work when its replay starts or feeds a c
   await until(first, () => printed(first, "bash2") === "hello\n");
   await first.dispose();
   try {
-    // The read of the doctrine and the rungs of the seven official extensions come before the two rungs.
-    expect([sleeps, feeds]).toEqual(["rung10", "rung11"]);
+    // The read of the doctrine, the rungs of the seven official extensions, and the stand and the cd come before the
+    // two rungs.
+    expect([sleeps, feeds]).toEqual(["rung11", "rung12"]);
     expect((await inspectRecord(record)).pending.map(([id]) => id)).toEqual([
       sleeps,
       "bash1",
@@ -1045,9 +1054,11 @@ test("a session enables the extensions of the configs, and a later session on it
       (fact) => fact[0] === "read" && fact[4] === tilded(join(cwd, "CLAUDE.md")),
     )?.[1];
     expect(read).toBe("read9");
+    // The stand and the cd come after the life words, so the turn of the life words is the fourth from the end.
     const turns = (first.engine?.turns({ on: "chain1" }) ?? []).map((turn) => String(turn[1]));
-    expect(turns.at(-2)).toBe("catchup()\nawait recall()\nawait listed()\nawait mcp_index()");
-    expect(turns.at(-1)).toContain(
+    expect(turns.at(-4)).toBe("catchup()\nawait recall()\nawait listed()\nawait mcp_index()");
+    expect(turns.at(-2)).toMatch(/^stand\(\)\ncd\('.*'\)$/);
+    expect(turns.at(-3)).toContain(
       `#${read}\n${read}_path = '${tilded(join(cwd, "CLAUDE.md")).replaceAll("\\", "\\\\")}'\n${read}_text = 'Use two spaces.'`,
     );
   } finally {

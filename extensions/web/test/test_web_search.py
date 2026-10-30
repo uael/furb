@@ -41,4 +41,6 @@ async def test_a_search_that_the_world_refuses_completes_with_refused(tmp_path: 
   root, _ = webbed(tmp_path, {})
   with pytest.raises(Refused, match=r"No page answers tea\."):
     await engine.rung('await web_search("tea")', on=root)
-  assert of(engine.turns(on=root), "web_search") == ["#web_search1\nweb_search1: Act[Text] = Act('web_search1')"]
+  assert of(engine.turns(on=root), "web_search") == [
+    "#web_search1\nweb_search1_query = 'tea'\nweb_search1: Act[Text] = Act('web_search1')"
+  ]

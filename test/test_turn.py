@@ -44,7 +44,7 @@ async def test_a_turn_is_a_role_python_a_usage_and_blocks() -> None:
   assert [len(turn) for turn in got] == [4, 4, 4]
   role, py, usage, blocks = got[0]
   assert (role, usage, blocks) == ("user", None, None)
-  assert heads(got[:1]) == ["#chain1", "#chain1 standing", "#prompt1", "#rung1 advance on prompt1"]
+  assert heads(got[:1]) == ["#chain1", "#prompt1", "#rung1 advance on prompt1"]
   assert py == "\n\n".join(paragraphs(got[:1]))
 
 

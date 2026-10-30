@@ -31,7 +31,6 @@ from conftest import (
   said,
   settle,
   sown,
-  takes,
   tip,
   world_says,
 )
@@ -175,7 +174,9 @@ async def test_an_act_takes_its_name_when_the_act_opens_and_the_name_says_what_m
   _, log, root = await lived()
   command, step = said(log, "bash")[0], said(log, "rung")[0]
   assert command[2] == step[1] and engine.under(command[1], step[1])
-  assert f"#{command[1]}\n{engine.bound(command[1], 'Exit')}" in paragraphs(engine.turns(on=root))
+  assert f"#{command[1]}\n{command[1]}_command = 'echo hi'\n{engine.bound(command[1], 'Exit')}" in paragraphs(
+    engine.turns(on=root)
+  )
 
 
 async def test_the_engine_derives_the_transcripts_the_turns_the_globals_and_the_working_directories() -> None:
@@ -322,7 +323,7 @@ async def test_in_a_later_life_the_ladder_of_every_chain_runs_again() -> None:
   assert sorted(ran(again)) == sorted(
     [
       fresh(root, prompted("prompt1", "int", "one"), "#rung1 advance on prompt1"),
-      "\n\n".join([opened(two, "two"), takes(two), prompted("prompt2", "int", "two"), "#rung2 advance on prompt2"]),
+      "\n\n".join([opened(two, "two"), prompted("prompt2", "int", "two"), "#rung2 advance on prompt2"]),
       "here = 1\nclose(1)",
       "there = 2\nclose(2)",
     ]

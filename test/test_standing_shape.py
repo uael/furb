@@ -2,7 +2,7 @@
 
 import pytest
 
-from conftest import STANDS, Sand, born, life, paragraphs, plain, said, settle, takes
+from conftest import STANDS, Sand, born, life, paragraphs, plain, said, settle, stood, written
 from furb import engine
 from furb.engine import Drift
 
@@ -11,13 +11,12 @@ ROSTER = STANDS[0]
 
 async def test_what_a_chain_stands_on() -> None:
   """What a chain stands on: the actors the World offers, the directory the chain starts in, the actor a prompt goes to when it names none, and the path of the doctrine, which the World reads in the first turn of the setup of the root, and which a World that gives no doctrine leaves unsaid."""
-  _, log, root = born("close(1)")
+  _, log, root = born("close(1)", files={"/w/b.txt": "here\n"})
   assert await engine.prompt(int, "count", on=root) == 1
-  assert engine.module(root)[f"{root}_roster"] == ROSTER
-  assert engine.cwd(on=root) == "/w"
+  assert engine.standing() == STANDS and engine.standing()[0] == ROSTER
+  assert engine.cwd(on=root) == "" and engine.read("b.txt", on=root).path == "/w/b.txt"
   assert [a[4] for a in said(log, "reply")] == ["m/low"]
   assert engine.module(root)["actor"] == "m/low"
-  assert engine.standing() == STANDS
   doctrine = "/w/.furb/DOCTRINE.md"
   born(stands=[*STANDS, doctrine], files={doctrine: "Look first.\n"})
   assert engine.standing() == [*STANDS, doctrine]
@@ -26,19 +25,12 @@ async def test_what_a_chain_stands_on() -> None:
 async def test_the_roster_the_directory_and_the_actor_that_a_model_reads_are_in_the_transcript() -> None:
   """The roster, the directory and the actor that a model reads are in the transcript of its chain."""
   sand, log, root = born("close(1)")
+  step = engine.rung("stand()\ncd('/' + 'w')", on=root)
+  assert await step is None
   assert await engine.prompt(int, "count", on=root) == 1
-  told = takes(root)
-  assert told == (
-    "#chain1 standing\n"
-    "chain1_roster = [['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]]\n"
-    "chain1_cwd = '/w'\n"
-    "chain1_actor = 'm/low'"
-  )
-  assert [paragraphs(sand.turns[a[1]])[1] for a in said(log, "reply")] == [told]
-  held = engine.transcript(root)
-  assert [a for a in said(held, "tell") if a[3][0].startswith(f"#{root} standing")] == [
-    ("tell", root, root, [takes(root)])
-  ]
+  told = paragraphs(sand.turns[said(log, "reply")[0][1]])
+  assert told[1:4] == [written(step, "stand()\ncd('/' + 'w')"), stood("stand2"), "#cd1\ncd1_path = '/w'"]
+  assert [engine.module(root)[name] for name in ("stand2_roster", "cd1_path", "stand2_actor")] == STANDS
 
 
 async def test_a_standing_holds_no_source() -> None:

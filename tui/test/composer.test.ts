@@ -354,7 +354,8 @@ test("Escape twice opens the rewind tree in the feed, which keys move, fold, and
       screen.mockInput.pressArrow("up");
       expect(await frame()).not.toContain("edit it on a new branch");
       // Home goes to the chain at the top, and Left folds it.
-      screen.mockInput.pressKey("home");
+      // The mock names a key as KeyCodes does: "home" sends no Home.
+      screen.mockInput.pressKey("HOME");
       screen.mockInput.pressArrow("left");
       await frame();
       expect(rows().length).toBeLessThan(before);
@@ -713,7 +714,8 @@ test("a cancelled message keeps its place in the feed, and its cancel reads as a
     expect(first).toBeLessThan(lines.findIndex((line) => line.includes("A second message.")));
     expect(lines.filter((line) => line.includes(" cancelled") && line.includes("⊘"))).toHaveLength(1);
     // A message that its answer closed says no state, only the type of its answer.
-    expect(lines.find((line) => line.includes("A second message."))).toMatch(
+    // The feed holds the message in its block, and the sidebar names its thread on a row of its own.
+    expect(lines.find((line) => line.includes("┃ A second message."))).toMatch(
       /┃ A second message\.\s+str\s+▾ Collapse/,
     );
   }));

@@ -82,7 +82,8 @@ test("a pending result leaves JavaScript and other native operations available",
   const on = engine.root;
   const id = engine.wait([], { seconds: 60, on }).id;
   const pending = engine.result(id);
-  expect(engine.cwd({ on })).toBe("/tmp");
+  // A chain that ran no cd has no working directory of its own.
+  expect(engine.cwd({ on })).toBe("");
   expect(engine.outcome(id)).toEqual({ done: false, value: null });
   release();
   expect(await pending).toBeNull();
@@ -250,7 +251,7 @@ test("a life whose replay drifts is kept, with what boot raised", () => {
   expect(second.engine.raised).toMatchObject({ is: "Drift" });
   expect(String(second.engine.raised?.args[0])).toContain("drifts");
   expect(second.engine.root).toBe("chain1");
-  expect(second.engine.cwd({ on: second.engine.chain({ label: "two" }).id })).toBe("/tmp");
+  expect(second.engine.cwd({ on: second.engine.chain({ label: "two" }).id })).toBe("");
 });
 
 test("an ear that throws ends alone, the life goes on, and an ear of the crate hears in one engine", () => {
