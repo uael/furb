@@ -16,14 +16,14 @@
       },
     },
     "bind/typescript": {
-      "name": "furb",
+      "name": "@uael/furb",
       "version": "0.3.2",
       "optionalDependencies": {
-        "@uael/furb-engine-darwin-arm64": "0.3.2",
-        "@uael/furb-engine-darwin-x64": "0.3.2",
-        "@uael/furb-engine-linux-arm64-gnu": "0.3.2",
-        "@uael/furb-engine-linux-x64-gnu": "0.3.2",
-        "@uael/furb-engine-win32-x64-msvc": "0.3.2",
+        "@uael/furb-darwin-arm64": "0.3.2",
+        "@uael/furb-darwin-x64": "0.3.2",
+        "@uael/furb-linux-arm64-gnu": "0.3.2",
+        "@uael/furb-linux-x64-gnu": "0.3.2",
+        "@uael/furb-win32-x64-msvc": "0.3.2",
       },
     },
     "docs/examples": {
@@ -654,6 +654,8 @@
     "@types/react-dom": ["@types/react-dom@19.3.0", "", { "peerDependencies": { "@types/react": "^19.3.0" } }, "sha512-ZI7bU42mZXXKHn/qNLEw2IrbiINU7X5+vfgdixBHkCNpYWXjKgfQ/P+uyGb5CjOLB9UcnTeg3rylQtV2hym44Q=="],
 
     "@types/upng-js": ["@types/upng-js@2.1.5", "", {}, "sha512-CzXg1lcCcWzrmYmke9BLbBPzb2DpdC1bXuXf0BtK3Bygvsozslei8S1bheDI1QUfZzZpMeQI5fywfnMj4CxocQ=="],
+
+    "@uael/furb": ["@uael/furb@workspace:bind/typescript"],
 
     "@uiw/codemirror-extensions-basic-setup": ["@uiw/codemirror-extensions-basic-setup@4.25.12", "", { "dependencies": { "@codemirror/autocomplete": "^6.0.0", "@codemirror/commands": "^6.0.0", "@codemirror/language": "^6.0.0", "@codemirror/lint": "^6.0.0", "@codemirror/search": "^6.0.0", "@codemirror/state": "^6.0.0", "@codemirror/view": "^6.0.0" } }, "sha512-wR5lz7jbVcBGyiiLEObAmDikcc39KNqrrd4bdUhav85WZu48ttgnSf1YV+grHuMsj5l/WCw6u+r9ZuSfURJgiA=="],
 

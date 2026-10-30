@@ -41,7 +41,7 @@ time, open the record again, and the work goes on from where it stopped.
 | Where | Command | What you get |
 | --- | --- | --- |
 | PyPI | `pip install furb` | The Python package and `furb`, the command line. It needs Python 3.14 or later. |
-| npm | `npm install furb` | The engine for Node.js 22 or later and Bun 1.4.2 or later, with no Python. |
+| npm | `npm install furb@npm:@uael/furb` | The engine for Node.js 22 or later and Bun 1.4.2 or later, with no Python. |
 | Rust | `cargo add furb --git https://github.com/uael/furb` | The engine for a program of Rust, with no Python. Copy the [`Cargo.lock`](https://github.com/uael/furb/blob/main/Cargo.lock) of furb into a new crate before its first build, since a newer version of a dependency breaks the build today. |
 
 > [!NOTE]

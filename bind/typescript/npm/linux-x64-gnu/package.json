@@ -1,5 +1,5 @@
 {
-  "name": "@uael/furb-engine-linux-x64-gnu",
+  "name": "@uael/furb-linux-x64-gnu",
   "version": "0.3.2",
   "cpu": [
     "x64"

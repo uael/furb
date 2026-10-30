@@ -6,9 +6,10 @@ Rust crate and monty sandbox as the Python package, through N-API. Use it to ope
 
 ## Install
 
-`npm install furb` installs the package with the engine built for its system: Linux on x64 or arm64 with glibc 2.35
-or later, macOS on Apple silicon or on Intel, and Windows on x64. On another system, build the engine from a checkout
-with `bun run build`.
+`npm install furb@npm:@uael/furb` installs the package with the engine built for its system: Linux on x64 or arm64
+with glibc 2.35 or later, macOS on Apple silicon or on Intel, and Windows on x64. On another system, build the engine
+from a checkout with `bun run build`. The package of npm is `@uael/furb`, since npm refuses the name `furb` as too near
+to other names, and this command installs it under the name `furb`, which each import here names.
 
 > [!NOTE]
 > The package waits for the release of furb 0.2.0. Until then, build it from a clone with `bun install && bun run
@@ -277,7 +278,7 @@ gives. It holds no native code and no module of node, so a terminal and a window
 `napi-rs` builds `furb.<system>.node` from the host API in `src/binding.rs`, which the door to python gives too, and
 from the door in `src/binding/ts.rs` and its module `src/binding/ts/host.rs`, and generates `index.d.cts` from them.
 It writes `index.cjs` too, which loads the engine from beside itself, or from the package of the engine of its
-system, `@uael/furb-engine-<system>`, which npm installs with the package `furb`. The optional
+system, `@uael/furb-<system>`, which npm installs with the package `@uael/furb`. The optional
 `typescript` feature builds the binding in the existing crate. There is no Rust worker or second crate. The
 `Engine` of the package has one method for each verb of the contract, which the build of the crate makes from
 `src/furb/engine.pyi`, as it makes the methods of the crate: the words that the verb needs, in their order, then an

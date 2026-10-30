@@ -1,5 +1,5 @@
 {
-  "name": "furb",
+  "name": "@uael/furb",
   "version": "0.3.2",
   "description": "The core of an AI harness: the engine of furb in a sandbox, with a World of your own, for Node.js and Bun.",
   "type": "module",
@@ -12,7 +12,7 @@
   "homepage": "https://github.com/uael/furb/tree/main/bind/typescript#readme",
   "napi": {
     "binaryName": "furb",
-    "packageName": "@uael/furb-engine",
+    "packageName": "@uael/furb",
     "targets": [
       "x86_64-unknown-linux-gnu",
       "aarch64-unknown-linux-gnu",
@@ -43,11 +43,11 @@
     "build": "bun run build.ts"
   },
   "optionalDependencies": {
-    "@uael/furb-engine-linux-x64-gnu": "0.3.2",
-    "@uael/furb-engine-linux-arm64-gnu": "0.3.2",
-    "@uael/furb-engine-darwin-arm64": "0.3.2",
-    "@uael/furb-engine-darwin-x64": "0.3.2",
-    "@uael/furb-engine-win32-x64-msvc": "0.3.2"
+    "@uael/furb-linux-x64-gnu": "0.3.2",
+    "@uael/furb-linux-arm64-gnu": "0.3.2",
+    "@uael/furb-darwin-arm64": "0.3.2",
+    "@uael/furb-darwin-x64": "0.3.2",
+    "@uael/furb-win32-x64-msvc": "0.3.2"
   },
   "publishConfig": {
     "access": "public",
