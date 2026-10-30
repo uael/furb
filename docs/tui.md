@@ -601,7 +601,6 @@ shortcodes of GitHub, as you type.
 
 ![Command suggestions](screenshots/41-slash-suggestions.png)
 
-
 A space after a command whose values are known lists them: the models, the efforts, the shapes, the themes, the
 paths of the project, the chains, and the acts. Enter on a value runs the command.
 

@@ -26,7 +26,6 @@ A program that runs again on its record makes its prompts, chains and grants in 
 the act that it made before, done or still at work. A program that changed between two runs makes a new act where it
 no longer agrees with the record, and the act of the record goes on as work that waits.
 
-
 ## A durable life
 
 Run it, end the process while the model works, and run it again: the second run finds its prompt in the record and

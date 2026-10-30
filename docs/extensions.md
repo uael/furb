@@ -92,7 +92,6 @@ A config of another form, a folder with no manifest, a manifest of another name,
 with their path. The `.furb` of a project keeps all that it holds out of version control but `config.json` and
 `extensions/`, since the extensions of a project are code of the project, which its team shares.
 
-
 ## Write your own
 
 The smallest extension is a function that a model wrote in a word. When a later chain needs it too, a model calls

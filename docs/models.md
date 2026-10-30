@@ -173,7 +173,6 @@ hold, and for a server that did not answer.
 When a call to a model fails for a cause that passes, such as a lost connection or a provider that is too busy, furb
 asks again after a wait that doubles each time, up to ten attempts. The TUI counts the wait down in its footer.
 
-
 ## The doctrine
 
 Each chain reads [`DOCTRINE.md`](../DOCTRINE.md) in the first turn of its model, as a read of a file:
