@@ -174,8 +174,9 @@ async def test_an_act_takes_its_name_when_the_act_opens_and_the_name_says_what_m
   _, log, root = await lived()
   command, step = said(log, "bash")[0], said(log, "rung")[0]
   assert command[2] == step[1] and engine.under(command[1], step[1])
-  assert f"#{command[1]}\n{command[1]}_command = 'echo hi'\n{engine.bound(command[1], 'Exit')}" in paragraphs(
-    engine.turns(on=root)
+  assert (
+    f"#{command[1]}\n{command[1]}_command = 'echo hi'\n{command[1]}: Act[Exit] = Act({command[1]!r})"
+    in paragraphs(engine.turns(on=root))
   )
 
 

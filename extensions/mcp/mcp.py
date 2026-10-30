@@ -8,10 +8,10 @@ from furb.engine import (
   Text,
   act,
   answer,
-  bound,
   controlled,
   covers,
   module,
+  opened,
   over,
   peek,
   program,
@@ -114,9 +114,9 @@ def mcp_closed(got: object, show: Show) -> dict:
   return {}
 
 
-def mcp_act(kind: str, on: str, of: str, opened: dict, show: Show, *words: object) -> Act:
+def mcp_act(kind: str, on: str, of: str, fields: dict, show: Show, *words: object) -> Act:
   def ear(id: str):
-    yield told(id, "", bound(id, of), **opened)
+    yield opened(id, of, **fields)
     while True:
       match (yield):
         case ("done", about, _, got) if about == id:
@@ -176,8 +176,8 @@ def mcp_servers(on: str = "") -> Act[list[dict]]:
 
 def mcp_call(server: str, tool: str, arguments: dict | None = None, show: Show = HEAD, on: str = "") -> Act[McpResult]:
   given = dict(arguments or {})
-  opened = {"server": server, "tool": tool, **({"arguments": given} if given and not repr(given)[200:] else {})}
-  return mcp_made(dict, mcp_act("mcp_call", on, "McpResult", opened, show, server, tool, given))
+  fields = {"server": server, "tool": tool, **({"arguments": given} if given and not repr(given)[200:] else {})}
+  return mcp_made(dict, mcp_act("mcp_call", on, "McpResult", fields, show, server, tool, given))
 
 
 def mcp_read(server: str, uri: str, show: Show = HEAD, on: str = "") -> Act[McpResult]:
@@ -188,8 +188,8 @@ def mcp_prompt(
   server: str, name: str, arguments: dict | None = None, show: Show = HEAD, on: str = ""
 ) -> Act[McpResult]:
   given = {str(k): str(v) for k, v in (arguments or {}).items()}
-  opened = {"server": server, "name": name, **({"arguments": given} if given else {})}
-  return mcp_made(dict, mcp_act("mcp_prompt", on, "McpResult", opened, show, server, name, given))
+  fields = {"server": server, "name": name, **({"arguments": given} if given else {})}
+  return mcp_made(dict, mcp_act("mcp_prompt", on, "McpResult", fields, show, server, name, given))
 
 
 def mcp_control(action: str, server: str, on: str = "") -> Act[dict]:
@@ -207,7 +207,7 @@ def mcp_tools(server: str, on: str = "") -> Act[str]:
       yield told(id, "", server=server, error=str(why))
       yield "done", id, why
       return
-    yield told(id, "", bound(id, "str"), server=server, tools=text or "none")
+    yield opened(id, "str", server=server, tools=text or "none")
     yield "done", id, text
 
   return mcp_made(str, act("mcp_tools", on, ear, server))
@@ -229,10 +229,9 @@ def mcp_tool(server: str, name: str, on: str = "") -> Act[dict]:
       yield told(id, "", server=server, tool=name, error=str(fault))
       yield "done", id, fault
       return
-    yield told(
+    yield opened(
       id,
-      "",
-      bound(id, "dict"),
+      "dict",
       server=server,
       tool=name,
       title=tool.get("title"),

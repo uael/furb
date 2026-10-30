@@ -698,7 +698,7 @@ def opened(id: str, label: str, source: str = "") -> str:
   """The paragraph a chain tells of its open: its header, the bindings of its label and of its source, and its own
   binding."""
   words = [f"{id}_{word} = {value!r}" for word, value in (("label", label), ("source", source)) if value]
-  return "\n".join([f"#{id}", *words, engine.bound(id, "Never")])
+  return "\n".join([f"#{id}", *words, f"{id}: Act[Never] = Act({id!r})"])
 
 
 def of(got: Sequence[tuple], name: str) -> list[str]:
@@ -716,7 +716,7 @@ def prompted(id: str, shape: str, message: str = "", thread: str = "") -> str:
       f"#{id}",
       *[f"{id}_message = {message!r}"] * bool(message),
       *[f"{id}_thread = {thread!r}"] * bool(thread),
-      engine.bound(id, shape),
+      f"{id}: Act[{shape}] = Act({id!r})",
     ]
   )
 

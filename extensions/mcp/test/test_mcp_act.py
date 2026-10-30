@@ -17,7 +17,7 @@ OPENED = "#mcp_read1\nmcp_read1_server = 'srv'\nmcp_read1_uri = 'uu'\nmcp_read1:
 
 
 async def test_mcp_act_is_the_act_that_every_mcp_act_of_the_world_shares(tmp_path: Path) -> None:
-  """mcp_act(kind, on, of, opened, show, *words) is the act that every mcp act of the World shares: it puts the words to the World, its open tells the words of opened and binds the act to Act of the type that of names, and its done tells what mcp_closed gives for the answer."""
+  """mcp_act(kind, on, of, fields, show, *words) is the act that every mcp act of the World shares: it puts the words to the World, its open tells the words of fields and binds the act to Act of the type that of names, and its done tells what mcp_closed gives for the answer."""
   answer = {"text": "hi", "content": []}
   root, heard = mcped(tmp_path, {"mcp_read": answer})[1:]
   await given(root, S="srv", U="uu")

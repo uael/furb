@@ -1,4 +1,4 @@
-from furb.engine import HEAD, Act, Show, Text, act, bound, controlled, module, shown, told
+from furb.engine import HEAD, Act, Show, Text, act, controlled, module, opened, shown, told
 
 web = """web_search(query) searches the web with the search of the provider of your actor, or with a free search when
 it has none, and web_fetch(url) reads a page, as Markdown when it is HTML. Each gives an act of Text to await, which
@@ -7,7 +7,7 @@ tells its text with its show when it is done, as a read does."""
 
 def text_act(kind: str, on: str, show: Show, word: str, *words: str) -> Act:
   def ear(id: str):
-    yield told(id, "", bound(id, "Text"), **{word: words[0]})
+    yield opened(id, "Text", **{word: words[0]})
     while True:
       match (yield):
         case ("done", about, _, got) if about == id:
