@@ -3,6 +3,24 @@
 Each release of furb is listed here, the newest first. release-please writes the entry of each release from the
 titles of the pull requests that it holds, as [the template of a pull request](.github/pull_request_template.md) says.
 
+## [0.3.1](https://github.com/uael/furb/compare/v0.3.0...v0.3.1) (2026-10-29)
+
+
+### Features
+
+* **crate:** Write each path under the home of the user with ~ ([#767](https://github.com/uael/furb/issues/767)) ([28d762c](https://github.com/uael/furb/commit/28d762c144da7a0bdc2f776e5b3ed6daf3b1fb24))
+
+
+### Fixes
+
+* **crate:** Carry a chain that only a value names at a checkpoint ([#775](https://github.com/uael/furb/issues/775)) ([3675d9b](https://github.com/uael/furb/commit/3675d9ba4f6f6ba40038ce4baa07e55db6166132))
+* **tui:** Revert five TUI changes that converge made with no ruling ([#773](https://github.com/uael/furb/issues/773)) ([eb05cb4](https://github.com/uael/furb/commit/eb05cb4e6eb798e5e67f02b7b227d430ec42dbdb))
+
+
+### Performance
+
+* **engine:** Move the catch-up into an extension, under 7000 tokens ([#774](https://github.com/uael/furb/issues/774)) ([1497993](https://github.com/uael/furb/commit/149799357e24d2c9a57a83624f0f11236781f715))
+
 ## [0.3.0](https://github.com/uael/furb/compare/v0.2.0...v0.3.0) (2026-10-29)
 
 
