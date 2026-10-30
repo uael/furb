@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { makers } from "../../src/life/ladder.ts";
 import {
   actLines,
+  earProgram,
   foldStrings,
   hintOf,
   joinedLines,
@@ -396,4 +397,31 @@ test("an act that no word made shows a text, a float, a list and a map of its wo
   expect(line?.kind === "code" && line.text).toBe(
     `write1 = write(Text(path="notes.md", content="a\\n"), 3.0, [1, None], {"x": True})`,
   );
+});
+
+test("the last line of the setup of an ear runs while an act of its word is at work, and not while an act that is no work lives on after its done", () => {
+  const ear = act("rung1", "rung", "chain1", "extensions", 1, 9);
+  const rung = act("rung2", "rung", "chain1", "extensions", 2, 9);
+  // The watcher of an extension says its act done, then lives on, as a lasting ear does, and the memory ear never says it.
+  const watcher = act("mcp_index1", "mcp_index", "chain1", "rung2", 3, 4);
+  const keeper = act("remember1", "remember", "chain1", "rung2", 5);
+  const word = "catchup()\nawait mcp_index()";
+  const lines = (acts: ReturnType<typeof act>[]) =>
+    earProgram(
+      ear,
+      [rung],
+      [],
+      () => acts,
+      () => word,
+      new Set(),
+      label,
+    ).flatMap((line) => (line.kind === "code" ? [[line.text, line.runs]] : []));
+  expect(lines([watcher, keeper])).toEqual([
+    ["catchup()", false],
+    ["await mcp_index()", false],
+  ]);
+  const command = act("bash1", "bash", "chain1", "rung2", 6);
+  expect(lines([watcher, keeper, command]).at(-1)).toEqual(["await mcp_index()", true]);
+  const done = act("bash1", "bash", "chain1", "rung2", 6, 7);
+  expect(lines([watcher, keeper, done]).at(-1)).toEqual(["await mcp_index()", false]);
 });
