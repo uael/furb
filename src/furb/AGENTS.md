@@ -156,10 +156,12 @@ meanings. The entry of such a name here gives only its form in the engine.
 - setup: the turns that the World plays on the root of a new record at its first stand, after the bare turn
   `chain()`, as crafted rungs of the default actor: the read of the doctrine, the read of the file of each extension
   of every chain in the order of the life, whose word the World runs in the module of the root with no rung, as the
-  run `<rung>_word`, then one turn `stand()` and `cd('<the directory of the standing>')`, then one turn of their life
-  words, which read the place where the chain stands, then the act setup, `setup1`, which the World makes and answers,
-  then the same turns for the extensions of the root alone. The reads come before the stand and the cd, so their
-  turns are the same text whatever the place and the actors, and a provider caches them across records. The World
+  run `<rung>_word`, then one turn of their life words, which read the place against the directory of the standing,
+  as every chain that ran no cd, then one turn `stand()` and `cd('<the directory of the standing>')`, then the act
+  setup, `setup1`, which the World makes and answers, then the same turns for the extensions of the root alone. The
+  reads of the files come first, so their turns are the same text whatever the place and the actors, and the life
+  words before the stand and the cd, so their turns are the same text in one place whatever the actors, and a
+  provider caches them across records. The World
   makes each of these rungs at once, so the root tells its open after the last of them, in the same turn, just
   before its first prompt. Each chain with no source
   holds the setup of the root as its prefix, with the same names, less the acts that the World made after the act

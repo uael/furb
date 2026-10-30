@@ -224,8 +224,9 @@ test("what a model writes streams into the session under its rung until its repl
         actor: "claude-cli:sonnet/high",
         chain: engine.root,
         // The setup of the root as turns of the default actor whose words furb writes: the bare paragraph chain(), the
-        // read of the doctrine, the read of the file of each official extension, the stand and the cd, then the life
-        // words in one turn, whose user turn holds what they read, then the open of the root and the prompt.
+        // read of the doctrine, the read of the file of each official extension, the life words in one turn, whose user
+        // turn holds what they read, then the stand and the cd, whose user turn holds what they tell, then the open of
+        // the root and the prompt.
         messages: [
           turn("user", "chain()"),
           // A path of Windows stands with its separators doubled, as python shows a backslash.
@@ -245,14 +246,14 @@ test("what a model writes streams into the session under its rung until its repl
               ),
             ),
           ]),
-          turn("assistant", expect.stringMatching(/^stand\(\)\ncd\('.*'\)$/)),
+          turn("assistant", "catchup()\nawait recall()\nawait listed()\nawait mcp_index()"),
           turn(
             "user",
             expect.stringMatching(
-              /^#stand2\nstand2_roster = \[.*\]\nstand2_actor = 'claude-cli:sonnet\/high'\n\n#cd1$/,
+              /^#read9\nread9_path = 'skills:\/\/'\n(<s:read9_text>\n[\s\S]*<\/s:read9_text>|read9_text = '.*')$/,
             ),
           ),
-          turn("assistant", "catchup()\nawait recall()\nawait listed()\nawait mcp_index()"),
+          turn("assistant", expect.stringMatching(/^stand\(\)\ncd\('.*'\)$/)),
           // The open of the root goes as a block of its own after the setup, which ends the block before it.
           expect.objectContaining({
             role: "user",
@@ -260,7 +261,7 @@ test("what a model writes streams into the session under its rung until its repl
               {
                 type: "text",
                 text: expect.stringMatching(
-                  /^#read9\nread9_path = 'skills:\/\/'\n(<s:read9_text>\n[\s\S]*<\/s:read9_text>|read9_text = '.*')$/,
+                  /^#stand2\nstand2_roster = \[.*\]\nstand2_actor = 'claude-cli:sonnet\/high'\n\n#cd1$/,
                 ),
               },
               {
@@ -1053,9 +1054,11 @@ test("a session enables the extensions of the configs, and a later session on it
       (fact) => fact[0] === "read" && fact[4] === tilded(join(cwd, "CLAUDE.md")),
     )?.[1];
     expect(read).toBe("read9");
+    // The stand and the cd come after the life words, so the turn of the life words is the fourth from the end.
     const turns = (first.engine?.turns({ on: "chain1" }) ?? []).map((turn) => String(turn[1]));
-    expect(turns.at(-2)).toBe("catchup()\nawait recall()\nawait listed()\nawait mcp_index()");
-    expect(turns.at(-1)).toContain(
+    expect(turns.at(-4)).toBe("catchup()\nawait recall()\nawait listed()\nawait mcp_index()");
+    expect(turns.at(-2)).toMatch(/^stand\(\)\ncd\('.*'\)$/);
+    expect(turns.at(-3)).toContain(
       `#${read}\n${read}_path = '${tilded(join(cwd, "CLAUDE.md")).replaceAll("\\", "\\\\")}'\n${read}_text = 'Use two spaces.'`,
     );
   } finally {

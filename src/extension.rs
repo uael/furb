@@ -701,10 +701,10 @@ async fn play(
 }
 
 /// The setup of the root, as turns of its default actor whose words furb writes: the read of the doctrine, the read
-/// of the file of each extension of every chain, in the order of the life, then `stand()` and a cd to the directory of
-/// the standing, so the reads before them are the same text whatever the place and the actors, then the life word of
-/// each extension that has one, which reads the place, then the fact setup, then the same turns for the extensions of
-/// the root alone. It makes each rung at once, and the
+/// of the file of each extension of every chain, in the order of the life, then the life word of each that has one,
+/// which reads the place against the directory of the standing, as a chain that ran no cd does, then `stand()` and a cd
+/// to that directory, so every turn before them is the same text whatever the actors, then the fact setup, then the
+/// same turns for the extensions of the root alone. It makes each rung at once, and the
 /// chain gives them their turns in the order it made them, so the fact setup stands before the turns of the root alone.
 async fn setup(co: &mut Co, enabled: &[Extension], actor: &str, path: &str) -> Result<(), Fault> {
   written(co, ROOT, &reading(path), actor).await?;
@@ -716,12 +716,12 @@ async fn setup(co: &mut Co, enabled: &[Extension], actor: &str, path: &str) -> R
     for one in enabled.iter().filter(|one| one.root == root) {
       loaded(co, one, ROOT, actor).await?;
     }
+    lives(co, enabled.iter().filter(|one| one.root == root), actor).await?;
     if !root {
       let got = co.call("standing", vec![], vec![]).await?;
       let directory = entry(&got.as_ref(), 1).and_then(|one| one.as_str().map(str::to_owned));
       written(co, ROOT, &stood(directory.as_deref()), actor).await?;
     }
-    lives(co, enabled.iter().filter(|one| one.root == root), actor).await?;
   }
   Ok(())
 }

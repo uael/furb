@@ -537,20 +537,21 @@ fn the_setup_of_the_root_ends_with_the_extensions_of_the_root_alone_and_a_chain_
   let root = texts(&mut engine, "chain1");
   let life = root.iter().position(|one| one == "y = 2").unwrap();
   let read = format!("read({})", Object::string(&rooted).py_repr());
-  assert_eq!(root[life + 2], read, "{root:?}");
-  let last = &root[life + 3];
+  assert_eq!(root[life + 4], read, "{root:?}");
+  let last = &root[life + 5];
   assert!(last.contains("#read3\n") && last.contains("#chain1\nchain1_label = 'root'"), "{last}");
   assert!(last.ends_with("chain1: Act[Never] = Act('chain1')"), "{last}");
   let stood = format!("stand()\ncd({})", Object::string(at.display().to_string()).py_repr());
-  assert_eq!(root[life - 2], stood, "the setup tells the standing after the reads: {root:?}");
-  let told = &root[life - 1];
+  assert_eq!(root[life + 2], stood, "the setup tells the standing after the life words: {root:?}");
+  let told = &root[life + 3];
   assert!(
     told.starts_with("#stand2\nstand2_roster = ") && told.contains("\n\n#cd1\ncd1_path = "),
     "{told}"
   );
   engine.chain(verbs::Chain { label: Some("two".to_owned()), ..Default::default() }).unwrap();
   let two = texts(&mut engine, "chain2");
-  assert_eq!(two[..=life], root[..=life], "a chain with no source holds the shared setup");
+  assert_eq!(two[..=life + 2], root[..=life + 2], "a chain with no source holds the shared setup");
+  assert!(two[life + 3].starts_with(&root[life + 3]), "{two:?}");
   assert!(two.iter().all(|one| !one.contains(&read)), "{two:?}");
   assert!(two.last().unwrap().contains("#chain2\nchain2_label = 'two'"), "{two:?}");
 }

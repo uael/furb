@@ -667,7 +667,7 @@ fn a_prompt_of_the_client_is_answered_by_a_model_and_its_done_is_sent() {
   assert_eq!(
     said.len(),
     11,
-    "the doctrine, the extensions, the standing, their life words, then the model: {said:?}"
+    "the doctrine, the extensions, their life words, the standing, then the model: {said:?}"
   );
   assert!(
     said[0].as_str().is_some_and(|one| one.starts_with("read(") && one.ends_with("DOCTRINE.md')"))
@@ -681,11 +681,9 @@ fn a_prompt_of_the_client_is_answered_by_a_model_and_its_done_is_sent() {
       "{one}"
     );
   }
-  assert!(said[8].as_str().is_some_and(|one| one.starts_with("stand()\ncd('")), "{:?}", said[8]);
-  assert_eq!(
-    said[9..],
-    [json!("catchup()\nawait recall()\nawait listed()\nawait mcp_index()"), json!(COUNT)]
-  );
+  assert_eq!(said[8], json!("catchup()\nawait recall()\nawait listed()\nawait mcp_index()"));
+  assert!(said[9].as_str().is_some_and(|one| one.starts_with("stand()\ncd('")), "{:?}", said[9]);
+  assert_eq!(said[10], json!(COUNT));
   let facts = client.data("4", json!({"type": "transcript", "on": "chain1"}));
   assert!(facts["facts"].as_array().expect("the facts").contains(&fact["fact"]), "{facts}");
   assert!(client.ended());
@@ -834,7 +832,7 @@ fn a_word_of_the_client_runs_as_a_rung_and_a_pause_holds_a_chain_until_its_wake(
   assert_eq!(
     client.data("1", json!({"type": "rung", "word": "k = 1\nclose(k + 1)"})),
     json!({"act": "rung11"}),
-    "the turn of the doctrine, the seven rungs of the extensions, the turn of the standing and the turn of skills come first"
+    "the turn of the doctrine, the seven rungs of the extensions, the turn of skills and the turn of the standing come first"
   );
   assert_eq!(client.done("rung11")["value"], 2);
   client.data("2", json!({"type": "pause", "act": "chain1"}));
@@ -948,7 +946,7 @@ fn the_state_names_the_work_that_an_earlier_life_left_pending() {
   assert!(client.ended());
   let mut later = Client::new(&yard);
   let state = later.data("1", json!({"type": "state"}));
-  // The turn of the doctrine, the rungs of the official extensions, the turn of the standing and the turn of skills
+  // The turn of the doctrine, the rungs of the official extensions, the turn of skills and the turn of the standing
   // come first, and the rung of the client made the wait.
   assert_eq!(state["pending"], json!([["rung11", "rung"], ["wait1", "wait"]]));
   later.data("2", json!({"type": "cancel", "act": "wait1"}));
@@ -960,8 +958,8 @@ fn the_state_names_the_work_that_an_earlier_life_left_pending() {
 #[test]
 fn the_state_names_the_work_that_a_crash_loop_parked_and_a_retry_runs_it_again() {
   let yard = Yard::new("rpc-parked");
-  // The setup of the root takes the first ten replies: the doctrine, the file of each official extension, the
-  // standing and their life words.
+  // The setup of the root takes the first ten replies: the doctrine, the file of each official extension, their
+  // life words and the standing.
   let started = |one: &Value| {
     one["type"] == "fact" && one["fact"][0] == "started" && one["fact"][1] == "reply11"
   };
