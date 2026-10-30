@@ -25,7 +25,7 @@ import { hunkPatch, type Scope } from "../review.ts";
 import type { ActRow, View } from "../session.ts";
 import { theme as c, glyph, spacing as space, spin, threadTone } from "../theme.ts";
 import { bold, italic, type Part, plain } from "../ui.ts";
-import { branchMessages, branchStart, branchTakes, earlierSteps } from "../watching.ts";
+import { asOf, branchMessages, branchStart, branchTaken, branchTakes, earlierSteps } from "../watching.ts";
 import { part } from "./part.ts";
 import { type BlockOptions, MESSAGE_ROWS, PROGRAM_STEPS, spell, threadMarks, viewLabels } from "./shared.ts";
 import { SCROLL } from "./thread.ts";
@@ -262,11 +262,42 @@ export const feed = part({
       // the rule of each compaction parts.
       const run = w.runOf(w.selected);
       const continuing = new Set(run.slice(1));
-      const lines = run.flatMap((chain) =>
+      const own = run.flatMap((chain) =>
         index && chain === w.selected
           ? thread(chain, word, w.host.streams, owed, opened, index)
           : condense(ladder(chain, shown, word, w.host.streams, owed), opened),
       );
+      // A branch takes from its source each message before the word that made it, which the word does not leave out,
+      // with what answered it. Its feed shows these threads as they stood when the branch began, after the line that
+      // names the source and before its own acts, since its model reads them as its own turns.
+      const branch = rows.get(w.selected);
+      const source = run.length === 1 && branch?.kind === "chain" ? String(branch.words[1] ?? "") : "";
+      const maker = branch && (w.actOf(String(branch.by)) ?? branch);
+      const taken = new Set(
+        source && maker
+          ? branchTaken(shown, source, maker, this.subject(maker), (one) => w.isUserPrompt(one)).map(
+              (one) => one.id,
+            )
+          : [],
+      );
+      const takenLines: typeof own = [];
+      const frozen = branch && taken.size ? asOf(shown, branch.began) : [];
+      let frozenMade: ReturnType<typeof makers> | undefined;
+      const takenMade = () => {
+        frozenMade ??= makers(frozen);
+        return frozenMade;
+      };
+      if (frozen.length) {
+        let keep = false;
+        for (const line of ladder(source, frozen, word, w.host.streams, owed)) {
+          if (line.depth === 0) keep = taken.has(line.act.id);
+          if (keep) takenLines.push(line);
+        }
+      }
+      // The words that retell the source stand first in the feed of the branch, as the acts that the branch made.
+      const retelling = own.findIndex((line) => line.depth === 0 && line.act.by !== w.selected);
+      const after = retelling < 0 ? own.length : retelling;
+      const lines = [...own.slice(0, after), ...condense(takenLines, opened), ...own.slice(after)];
       let retold = false;
       // The feed is one program of threads: each thread is its header, then the words of its steps as python, with
       // what each line came to as a quiet comment beside it. A thread that the operator collapsed shows its header
@@ -543,7 +574,9 @@ export const feed = part({
         const user = w.isUserPrompt(act);
         const thread = threadsOwn.by.get(act.id);
         const tone = threadTone(act.id);
-        const made = madeBy(act.id);
+        // A message that a branch took shows what its thread held when the branch began.
+        const mine = taken.has(act.id);
+        const made = mine ? (takenMade().get(act.id) ?? []) : madeBy(act.id);
         const seen = `${made.length}:${made.filter((one) => one.done).length}:${thread?.messages.length ?? 0}:${thread?.asked.length ?? 0}:${thread?.state}`;
         const folded = Boolean(thread && this.threadFolded(act.id));
         if (folded) collapsed = depth;
@@ -656,8 +689,10 @@ export const feed = part({
         });
         if (folded) return emit();
         const parts = [act, ...(thread?.messages ?? [])];
-        const program = programFor(act.id, liveOf(parts.map((one) => one.id)), () =>
-          threadProgram(parts, madeMap(), word, owed, named),
+        const program = programFor(
+          mine ? `taken:${w.selected}:${act.id}` : act.id,
+          liveOf(parts.map((one) => one.id)),
+          () => threadProgram(parts, mine ? takenMade() : madeMap(), word, owed, named),
         );
         // What a model answered stands as markdown with no line of color, since it is no message of the operator.
         const answerOf = (target: ActRow, id: string): Section => {
@@ -968,7 +1003,8 @@ export const feed = part({
         if (waiting) sections.push(waiting);
         // What the model answered stands last, when no message came after it.
         if (answered && !placed) sections.push(answerOf(act, `${act.id}-answer`));
-        if (!w.host.reading) {
+        // A message that a branch took is answered on its source, so the branch offers no reply to it.
+        if (!w.host.reading && !taken.has(act.id)) {
           const over = Boolean(thread?.resolved);
           sections.push({
             id: `${act.id}-reply`,
@@ -1009,10 +1045,13 @@ export const feed = part({
             const source = String(rows.get(act.by)?.words[1] ?? "");
             // The branch says what it takes of its source: each message before the moment it starts at, which the
             // word that made it does not leave out.
-            const maker = w.actOf(String(rows.get(act.by)?.by ?? ""));
+            const made = rows.get(act.by);
+            const maker = made && (w.actOf(String(made.by)) ?? made);
             const messages =
-              maker &&
-              branchMessages(w.acts, source, maker, this.subject(maker), (one) => w.isUserPrompt(one));
+              act.by === w.selected && source
+                ? taken.size
+                : maker &&
+                  branchMessages(w.acts, source, maker, this.subject(maker), (one) => w.isUserPrompt(one));
             const name = w.labelOf(source);
             if (source)
               add(
@@ -1214,6 +1253,8 @@ export const feed = part({
               shown: `${act.by} ${line.rungs.map((rung) => rung.id).join(" ")}`,
             });
         } else if (line.type === "more") {
+          // The words that retell the source of a chain stand as the one line that names the source, folded or not.
+          if (line.act.kind === "rung" && rows.get(line.act.by)?.kind === "chain") continue;
           // The earlier prompts of a long thread, or the earlier rungs of a long ladder, stand as one line until a click
           // opens them.
           const { key, count, heads } = line;

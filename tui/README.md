@@ -422,7 +422,10 @@ the queue sends, asks the actor that the chain has then.
 
 The engine contract takes a chain as a fork source. A fork is not a filesystem rollback or an arbitrary
 historical checkpoint. A branch that the rewind tree makes uses the engine's `take` filter and runs as an operator
-rung, so the filter is made again after a reopen. Its module keeps its current state. When a write changed a file
+rung, so the filter is made again after a reopen. Its module keeps its current state. The feed of a branch, whether
+`/fork`, the rewind tree or a word made it, first names its source, then shows each message of the operator that it
+takes from there with its thread as it stood when the branch began, and then its own acts. Such a message is
+answered on its source, so it offers no reply in the branch. When a write changed a file
 after the point, the rewind tree offers to restore the conversation, the files, or both. It reads the text that each
 write replaced in the journal of file changes beside the record, and writes it back by an operator rung, so the
 record holds the restore. A change that a command made is not restored. `/undo` uses the

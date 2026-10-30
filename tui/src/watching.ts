@@ -62,10 +62,36 @@ export function branchMessages<T extends { id: string; on: string; began: number
   word: string,
   message: (act: T) => boolean,
 ): number {
+  return branchTaken(acts, source, maker, word, message).length;
+}
+
+/** The messages of the operator that a branch takes from its source, in their order, as branchMessages counts them. */
+export function branchTaken<T extends { id: string; on: string; began: number }>(
+  acts: readonly T[],
+  source: string,
+  maker: { began: number },
+  word: string,
+  message: (act: T) => boolean,
+): T[] {
   const left = new Set([...word.matchAll(/"([a-z_]+\d+)"/g)].map((found) => found[1]));
   return acts.filter(
     (act) => act.on === source && act.began < maker.began && !left.has(act.id) && message(act),
-  ).length;
+  );
+}
+
+/** The acts as they stood at a moment: each act that began before it, and an act that ended at it or later as not done
+ * yet, with no value. */
+export function asOf<T extends { began: number; ended?: number; run?: { status: string; reason: string } }>(
+  acts: readonly T[],
+  moment: number,
+): T[] {
+  return acts
+    .filter((act) => act.began < moment)
+    .map((act) =>
+      act.ended === undefined || act.ended < moment
+        ? act
+        : { ...act, done: false, value: null, run: act.run && { status: "running", reason: "" } },
+    );
 }
 
 /** What a branch takes from the chain that it branched from: the messages before the moment it starts at, with what
