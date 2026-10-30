@@ -17,8 +17,8 @@ async def test_budget_is_the_number_of_bytes_of_the_paragraph_of_a_catch_up_past
   sand, _, root = await caught_up(files={"/w/a.txt": "a\n"})
   engine.read("a.txt", on=root)
   sand.files["/w/a.txt"] = edge + "\n"
-  engine.stand()
+  engine.stand(engine.ROOT)
   assert paragraphs(engine.turns(on=root))[-1] == f"{head}{edge}'}}}}" and len(f"{head}{edge}'}}}}") == BUDGET
   sand.files["/w/a.txt"] = edge + "xx\n"
-  engine.stand()
+  engine.stand(engine.ROOT)
   assert paragraphs(engine.turns(on=root))[-1] == "#chain1 caught up\nchain1_changed = ['/w/a.txt']"

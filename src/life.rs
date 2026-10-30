@@ -354,7 +354,10 @@ impl Opening {
       {
         let opened =
           Engine::from_snapshot(&record, ears, &restore.table, restore.sand, &restore.past)
-            .and_then(|mut engine| engine.verb("stand", vec![], vec![]).map(|_| engine));
+            .and_then(|mut engine| {
+              let on = vec![("on", Object::string("chain1"))];
+              engine.verb("stand", vec![], on).map(|_| engine)
+            });
         match (opened, &path) {
           (Ok(engine), _) => engine,
           (Err(fault), Some(path)) if keeps => {

@@ -1579,9 +1579,15 @@ fn a_statement_that_a_model_streams_and_that_prompts_another_chain_has_its_reply
       replies.push(reply);
     }
   }
+  let mut taken = 0;
   for (reply, chain) in &replies {
     let held =
       engine.transcript(verbs::Transcript { on: on(chain), of: None }).expect("a transcript");
+    // The crafted rung of the stand that a chain plays on itself answers its reply itself, and no provider takes it.
+    if held.iter().any(|one| one.about() == reply && one.kind() == "done" && one.by() == reply) {
+      continue;
+    }
+    taken += 1;
     let owned: Vec<&str> = held
       .iter()
       .filter(|one| one.about() == reply && matches!(one.kind(), "started" | "done"))
@@ -1589,7 +1595,7 @@ fn a_statement_that_a_model_streams_and_that_prompts_another_chain_has_its_reply
       .collect();
     assert_eq!(owned, ["started", "done"], "the provider takes {reply} before it is done");
   }
-  assert_eq!(replies.len(), 2, "{replies:?}");
+  assert_eq!(taken, 2, "{replies:?}");
   assert!(
     answered(&mut engine),
     "the word that ran in parts closes with what the second chain gave"

@@ -24,7 +24,7 @@ async def test_standing_gives_what_the_chains_stand_on() -> None:
   sand, _, root = born(stands=later)
   assert engine.standing() == later
   sand.stands = STANDS
-  assert engine.stand() == STANDS and engine.standing() == STANDS
+  assert engine.stand(engine.ROOT) == STANDS and engine.standing() == STANDS
   assert [a[1] for a in engine.transcript(root) if a[0] == "stand"] == ["stand1", "stand2"]
 
 

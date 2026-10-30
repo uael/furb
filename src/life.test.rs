@@ -650,7 +650,7 @@ fn the_boot_of_a_life_asks_the_claude_command_line_its_models_once_and_a_later_s
     1,
     "the opening asked the models, and the stand of the boot holds what it found"
   );
-  engine.stand(verbs::Stand::default()).unwrap();
+  engine.stand(verbs::Stand { on: Some("chain1".to_owned()) }).unwrap();
   assert_eq!(asked(), 2, "a later stand asks the command line again");
 }
 
@@ -683,18 +683,18 @@ fn a_stand_reloads_provider_settings_and_a_refused_reload_keeps_the_life() {
   );
   fs::write(&path, r#"{"providers":{"bench":{"models":{"two":{"window":131072,"images":true}}}}}"#)
     .unwrap();
-  engine.stand(verbs::Stand::default()).unwrap();
+  engine.stand(verbs::Stand { on: Some("chain1".to_owned()) }).unwrap();
   assert_eq!(closed(&mut engine, names).py_repr(), "['bench:two']");
   assert_eq!(
     closed(&mut engine, "close(marker + await prompt(int, to='bench:two'))").as_ref().as_int(),
     Some(46)
   );
   fs::write(&path, r#"{"providers":{"bench":{"models":{"bad":{"window":0}}}}}"#).unwrap();
-  assert!(engine.stand(verbs::Stand::default()).is_err());
+  assert!(engine.stand(verbs::Stand { on: Some("chain1".to_owned()) }).is_err());
   assert_eq!(closed(&mut engine, names).py_repr(), "['bench:two']");
   assert_eq!(closed(&mut engine, "close(marker)").as_ref().as_int(), Some(17));
   fs::write(&path, r#"{"providers":{"bench":false}}"#).unwrap();
-  engine.stand(verbs::Stand::default()).unwrap();
+  engine.stand(verbs::Stand { on: Some("chain1".to_owned()) }).unwrap();
   assert_eq!(closed(&mut engine, names).py_repr(), "[]");
   drop(engine);
   fs::remove_dir_all(at).unwrap();

@@ -238,7 +238,7 @@ def stand(on: str = "") -> Standing:
   Only a stand on the root changes the standing, since the standing has one home.
   A stand from inside an act tells its answer under its own name, with the roster and the actor of the standing, as stand2_roster and stand2_actor, and no directory, which a cd tells, and no path of the doctrine, which the World reads in a turn of its own.
   A stand from outside an act tells nothing, so the stand that boot makes tells nothing.
-  A stand that names no chain is on the chain of the act that makes it, as every verb, and on the root from outside an act, as the stand of boot.
+  A stand that names no chain is on the chain of the act that makes it, as every verb, so the operator names the root, as boot does.
   """
 
 def clock(on: str = "") -> float:
@@ -533,10 +533,11 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   A prompt that a step of another chain made reads nothing of that chain.
   The word of a rung rebinds the default actor like any name, and so does an answer of a stand that changes the actor of the standing, and the last binding in record order wins.
   The transcript of the root begins with the open of the root, when its standing names no doctrine, since no setup comes then.
-  When its first standing names a doctrine, the root tells the bare paragraph chain() at once, and tells its open once no rung with a word and an actor is open on it at the done of a rung on it, so its first turns are the setup that the World plays on it, and the turn after the last of them holds what that one told, then the open.
+  When its first standing names a doctrine, the root tells the bare paragraph chain() at once, and tells its open once no rung with a word and an actor is open on it at the done of a rung on it, so its first turns are the setup that the World plays on it, then the turn of its stand, and the turn after it holds what the stand told, then the open.
   The chain runs no paragraph chain() as python, since that paragraph tells no call.
-  A chain with no source holds first the setup of the root, each fact of the root from its paragraph chain() up to its open but the facts of each act that an ear of the outside or the operator made on the root after the act setup that the World makes on it, and of each act under one, so every such chain holds the turns of the setup that every chain shares with the same names, and the turn that the World plays on it and its own open come after them.
-  A chain with no source whose standing names a doctrine tells its open as the root does, once no rung with a word and an actor is open on it at the done of a rung on it, so the turn that the World plays on it at its birth, as stand() and a cd, comes before its open.
+  A chain with no source holds first the setup of the root, each fact of the root from its paragraph chain() up to its open but the facts of each act that an ear of the outside, the operator or the root itself made on the root after the act setup that the World makes on it, as the rung of the stand of the root, and of each act under one, so every such chain holds the turns of the setup that every chain shares with the same names, and the turn of its stand and its own open come after them.
+  A chain with no source whose standing names a doctrine plays on itself, once no rung with a word and an actor is open on it, the rung of stand() and a cd to the directory of the standing, with that word and its default actor, the root at the done of a rung on it after its setup and every other such chain at its birth, so a prompt on it waits for that rung, and it tells its open once that rung is done, so its last turn before its first prompt tells where it stands.
+  A chain that hears a prefix that another said on it tells no open of its own and plays no stand at its birth, since the turns of the prefix hold them, as the turns that a checkpoint carries.
   A chain with no source runs again each word of the setup that it holds, as a chain with a source runs the rungs of its origin, so the words of the extensions bind their names in its module and the setup tells nothing again.
   A chain with a source holds whole the setup that its origin holds, whatever its filter, and its filter applies only to what came after that setup.
   The transcript then holds the prompt of the operator, and the replies of the model, each with its turn.
@@ -917,11 +918,11 @@ type Stand = tuple[Literal["stand"], str, str, str]
 """A stand is the question of what the chains stand on, which boot asks the World on the root at the tip of every life, and whose answer binds the actor of every chain from its place on.
 A change of the World between two lives enters the transcript of a chain.
 The World answers a stand with the roster, the directory, the actor and the path of the doctrine.
-A model asked on any chain of a later life finds the new roster in the transcript of its chain, in the stand that the World plays there.
+A model asked on any chain of a later life finds the new roster in the transcript of its chain, in the stand that its chain plays there.
 The World answers it with a done at once, so the life stands on that answer before boot returns.
 The journal keeps each stand and its answer, so a later life says them again at their places and replays every chain on what it stood on there.
 At its tip, once the record is said again whole, boot stands the life again, so a change of the World reaches every chain after what it replayed.
-Every chain hears the done of every stand, and binds its default actor again when the actor of the standing changes, and tells nothing of it, since the World plays a stand on each chain whose standing changed, which tells it, so the transcript grows at one end.
+Every chain hears the done of every stand, and binds its default actor again when the actor of the standing changes, and a chain whose standing names a doctrine plays on itself the rung of stand(), with a cd to the new directory when the directory changed and no cd of a rung with no actor moved the chain, so the transcript grows at one end.
 A standing binds the default actor of the chain, under the name actor, when its actor differs from that of the standing before it, so a new roster or a new directory alone keeps the actor that a word chose.
 """
 type Module = tuple[Literal["module"], str, str, dict[str, object]]
@@ -988,7 +989,7 @@ def filled(about: str) -> float:
 def over(id: str) -> bool:
   """Whether an act is over: its done stands, so the life holds its outcome under its name, and a name of no act is never over."""
 
-def tell(on: str, path: str, got: object = None, show: Show = HEAD) -> None:
+def tell(on: str, path: str = "", got: object = None, show: Show = HEAD, **words: object) -> None:
   """What a question answered now that shows a text or changes a state tells of itself: a paragraph headed with the name of the question, which binds its path and what it was answered, said by the run that asked it about that question, and nothing at all outside a run; one that only reads a value tells nothing, since the word that asked it holds the value, which it debugs to see.
   A question is put to the ears of the engine before those of the outside, so the World is asked for nothing that the engine knows.
   The question that tell names is the last question on its chain that the run made.
@@ -997,7 +998,9 @@ def tell(on: str, path: str, got: object = None, show: Show = HEAD) -> None:
   """
 
 def tells(id: str) -> bool:
-  """Whether an act tells: a rung that its chain made tells nothing, neither its word nor what its word does, since what it would tell stands told already."""
+  """Whether an act tells: a rung that its chain made to retell another tells nothing, neither its word nor what its word does, since what it would tell stands told already.
+  The rung of the stand that a chain plays on itself retells no rung, so it tells as any rung, and the stand and the cd of its word tell their paragraphs.
+  """
 
 def crafted(id: str) -> list[str]:
   """The rungs with a word and an actor that are open on the chain of an act, by their names, in the order that they were made, which a rung with a word, a prompt to a model and the open of the root wait for."""
