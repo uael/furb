@@ -11,7 +11,7 @@ name: publish
 #
 # Each of the two crates of PyPI goes as one wheel for each machine the gates run on and as its source for any other
 # machine, which builds it with the rust of rust-toolchain.toml. The engine of npm is built on each system that it
-# runs on. Before anything is published, each package is installed from its built artifacts alone, in a clean
+# runs on, but the engine for macOS on Intel, which is built on Apple silicon for that target. Before anything is published, each package is installed from its built artifacts alone, in a clean
 # environment: pip installs the wheels and runs the command furb; a new crate takes the packed furb as a patch of
 # crates.io, with every other crate from crates.io and no lock of furb, and runs an example of docs/examples/rust;
 # and npm installs the packed furb in a new folder and runs an example of docs/examples/typescript. A run started by
@@ -203,14 +203,16 @@ jobs:
           path: ${{ runner.temp }}/proof/crates
 
   engines:
-    # A build on Linux links the glibc of Ubuntu 22.04, so it runs on a system with glibc 2.35 or later.
+    # A build on Linux links the glibc of Ubuntu 22.04, so it runs on a system with glibc 2.35 or later. The engine for
+    # macOS on Intel is built on Apple silicon for its target: the Intel runner built it in 26 to 39 minutes with no
+    # cache, the longest job of a release, and its proof still runs on Intel.
     name: the engine of npm for ${{ matrix.system }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"os":"ubuntu-22.04","system":"linux-x64-gnu"},{"os":"ubuntu-22.04-arm","system":"linux-arm64-gnu"},{"os":"windows-latest","system":"win32-x64-msvc"}]' || '[{"os":"ubuntu-22.04","system":"linux-x64-gnu"},{"os":"ubuntu-22.04-arm","system":"linux-arm64-gnu"},{"os":"macos-latest","system":"darwin-arm64"},{"os":"macos-15-intel","system":"darwin-x64"},{"os":"windows-latest","system":"win32-x64-msvc"}]') }}
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"os":"ubuntu-22.04","system":"linux-x64-gnu"},{"os":"ubuntu-22.04-arm","system":"linux-arm64-gnu"},{"os":"windows-latest","system":"win32-x64-msvc"}]' || '[{"os":"ubuntu-22.04","system":"linux-x64-gnu"},{"os":"ubuntu-22.04-arm","system":"linux-arm64-gnu"},{"os":"macos-latest","system":"darwin-arm64"},{"os":"macos-latest","system":"darwin-x64","target":"x86_64-apple-darwin"},{"os":"windows-latest","system":"win32-x64-msvc"}]') }}
     defaults:
       run:
         shell: bash
@@ -218,9 +220,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Before the setup, so the key of the cache of rust names the target.
+      - if: matrix.target
+        run: echo "CARGO_BUILD_TARGET=${{ matrix.target }}" >> "$GITHUB_ENV"
       - uses: ./.github/actions/setup
         with:
           python: none
+      - if: matrix.target
+        run: rustup target add "${{ matrix.target }}"
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: ${{ env.BUN_VERSION }}
