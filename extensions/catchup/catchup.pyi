@@ -15,7 +15,7 @@ def catchup(on: str = "") -> Act:
   The paragraph binds hours to the hours between the last two readings of the clock of the root, to one decimal place, only when they are more than one, so it says the time since the life before.
   Past BUDGET bytes the paragraph gives the paths alone, the most recent first, as many as fit.
   A chain where nothing changed tells nothing at a stand, so its catch-up costs no token.
-  It catches the chain up at each stand from outside an act, as the stand that boot makes at the tip of a life, and at no stand that a word makes, as the one that the World plays on each new chain, so a new chain makes no read on the chains that live.
+  It catches the chain up at each stand from outside an act, as the stand that boot makes at the tip of a life, and at no stand that a word makes, as the one that each new chain plays on itself, so a new chain makes no read on the chains that live.
   The journal keeps each read and each clock of a catch-up, so a later life on the same record tells the same catch-up at the same place.
   It hears no control, as the chain that it serves hears none, so a pause of the chain holds no catch-up.
   """

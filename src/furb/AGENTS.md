@@ -22,15 +22,16 @@ meanings. The entry of such a name here gives only its form in the engine.
   actor and the path of the doctrine, each path with `~` in place of the home of the user, as every path that the World
   writes for a model; its one home is the transcript of the root, where the done of the last stand holds it. A chain
   tells no standing of its own: a stand that a word makes tells the roster and the actor, and a cd tells the directory,
-  and the World plays both in the setup, and again on each chain that lives when a later life stands on another
-  standing. The engine reads the directory of the standing nowhere, and the World resolves against it the paths of a
+  and each chain whose standing names a doctrine plays both on itself, just before its open and again when a later
+  life stands on another standing. The engine reads the directory of the standing nowhere, and the World resolves against it the paths of a
   chain that ran no cd.
 - stand: the act that asks the World for the standing, which boot makes on the root as a life opens and again at
   the tip of a later life, and which tells nothing then. A stand that a word makes tells its answer in a paragraph
   headed by its id, which binds the roster and the actor. When the standing at the tip of a later life differs from
-  the one before it, the World plays `stand()` as a turn of the default actor on each chain that lives, and
-  `cd('<directory>')` after it in the same turn when the directory changed and the chain ran no cd of its own; a cd
-  that the setup made is the setup's, and no cd of the chain.
+  the one before it, each chain whose standing names a doctrine plays `stand()` on itself, as a rung with that word
+  and its default actor, and `cd('<directory>')` after it in the same word when the directory changed and no rung
+  with no actor, as a word of a model or of the operator, ran a cd on it: a cd that a stand of a chain made is no cd
+  of its own.
 - tip: the point of a later life where the journal has said the record again whole, at which boot stands the life
   again, and after which the life goes on past it.
 - catch-up: what the official extension catchup does on each chain at each stand: it reads again, with a hidden show, each file that a read or a write on
@@ -158,13 +159,14 @@ meanings. The entry of such a name here gives only its form in the engine.
   of every chain in the order of the life, whose word the World runs in the module of the root with no rung, as the
   run `<rung>_word`, then one turn of their life words, which read the place against the directory of the standing,
   as every chain that ran no cd, then the act setup, `setup1`, which the World makes and answers, then the same turns
-  for the extensions of the root alone, then one turn `stand()` and `cd('<the directory of the standing>')`, just
-  before the open of the root. The World plays that turn on each chain with no source at its birth too, after the
-  setup that the chain holds and before its open. The reads of the files come first, so their turns are the same text
+  for the extensions of the root alone. Then the root plays on itself one turn `stand()` and `cd('<the directory of
+  the standing>')`, a rung with that word and its default actor, just before its open, as each chain with no source
+  does at its birth, after the setup that it holds: chain() in engine.py makes that rung, so a model reads in the
+  engine how its chain was set up. The reads of the files come first, so their turns are the same text
   whatever the place and the actors, then the life words, so their turns are the same text in one place whatever the
   actors, and a provider caches them across records. The World
-  makes each of these rungs at once, so the root tells its open after the last of them, in the same turn, just
-  before its first prompt. Each chain with no source
+  makes each of these rungs at once, so the root plays its stand after the last of them and tells its open after its
+  stand, in the same turn, just before its first prompt. Each chain with no source
   holds the setup of the root as its prefix, with the same names, less the acts that the World made after the act
   setup, and runs its words again, so every chain shares one prefix, which the
   provider ends with a block that it marks for the cache. The fact teach, `("teach", "chain1", "extensions", actor,
