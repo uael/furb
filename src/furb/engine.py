@@ -25,7 +25,7 @@ def ask(kind, on, *words):
 
 
 def span(lo: int, hi: int) -> Show:
-  return lambda lines: [*range(1, len(lines) + 1)[lo - (lo > 0) : hi if hi >= 0 else hi + 1 or None]]
+  return lambda lines: list(range(1, len(lines) + 1)[lo - (lo > 0) : hi if hi >= 0 else hi + 1 or None])
 
 
 def grep(pattern: str) -> Show:
@@ -73,7 +73,7 @@ def turns(on="") -> list[tuple]:
 
 
 def module(on="") -> dict:
-  return next((x[3] for x in reversed(transcript(on, "module"))), {})
+  return (transcript(on, "module") or [[{}] * 4])[-1][3]
 
 
 def program(on="") -> dict[str, str]:
@@ -142,7 +142,7 @@ def close(value: object, id=""):
       try:
         s = eval(shape, module(on)) or object
         assert any(
-          any(type(a) is type(value) and a == value for a in x.__args__)
+          value in [a for a in x.__args__ if type(a) is type(value)]
           if (origin := getattr(x, "__origin__", x)) is Literal
           else isinstance(value, origin)
           for x in (s.__args__ if isinstance(s, type(int | str)) else [s])
@@ -164,7 +164,7 @@ def debug(template: Template):
 
 def wait(seconds: float = 0, *acts: str, on="") -> Act[str | None]:
   def ear(id):
-    while not (got := [*filter(over, acts)]):
+    while not (got := list(filter(over, acts))):
       yield {id, *acts}
     yield "done", id, got[0]
 
@@ -245,7 +245,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
     def placed(moved):
-      return rung("stand()" + (moved and f"\ncd({moved!r})"), to=stood)
+      return rung("stand()" + (moved and "\ncd(" + repr(moved) + ")"), to=stood)
 
     def bind(whose):
       w = "\n\n".join(heard)
@@ -254,7 +254,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
 
     def replay(of="", words=""):
       fresh = not of
-      for whose, said in [*ladder.items()]:
+      for whose, said in list(ladder.items()):
         if under(whose, of):
           if (words + "\n").startswith(said + "\n"):
             words = words[len(said) + 1 :]
@@ -280,7 +280,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
         [
           it
           for n, it in enumerate(t)
-          if (lo <= n < hi and not later & {*lineage(it[1])})
+          if (lo <= n < hi and later.isdisjoint(lineage(it[1])))
           or (source and (not (b := get(it[1])) or (b[2] if b[0] == "reply" else it[1]) in kin))
         ],
       )
@@ -527,7 +527,7 @@ def lineage(name):
 
 
 def under(name, of):
-  return of != "" and of in lineage(name)
+  return "" != of in lineage(name)
 
 
 def acting():
@@ -777,7 +777,7 @@ def boot(record=(), **outside):
     a = (kind, name := names.setdefault((by, made[speaker, kind]), kind + str(len(names) + 1)), by, on, *words)
     if known.setdefault(name, a) is a:
       holds(scope(on), [a])
-      log.append((a, heard := {*outside} - busy))
+      log.append((a, heard := set(outside) - busy))
       busy.add(id(a))
       try:
         for n, g in ears(a):
@@ -794,7 +794,7 @@ def boot(record=(), **outside):
               taken[name] = True
           if kind in ("run", "chain") or not owed():
             offers(a)
-        if name not in taken and not busy & {*outside} & {*dict(ears(a))}:
+        if name not in taken and not busy & set(outside) & set(dict(ears(a))):
           with site.set(""):
             say("done", name, Refused("nothing takes " + kind))
       finally:
@@ -830,15 +830,14 @@ def boot(record=(), **outside):
         return
 
   def hears(name, g, a):
-    if name in busy or alive.get(name) is not g:
-      return
-    with site.set(name):
-      busy.add(name)
-      try:
-        waits[name] = w = lives(g, a)
-        w is False and alive.pop(name)
-      finally:
-        busy.discard(name)
+    if name not in busy and alive.get(name) is g:
+      with site.set(name):
+        busy.add(name)
+        try:
+          waits[name] = w = lives(g, a)
+          w is False and alive.pop(name)
+        finally:
+          busy.discard(name)
 
   def drive(g, name):
     if name in alive:
