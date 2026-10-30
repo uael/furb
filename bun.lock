@@ -19,11 +19,11 @@
       "name": "furb",
       "version": "0.3.2",
       "optionalDependencies": {
-        "furb-darwin-arm64": "0.3.2",
-        "furb-darwin-x64": "0.3.2",
-        "furb-linux-arm64-gnu": "0.3.2",
-        "furb-linux-x64-gnu": "0.3.2",
-        "furb-win32-x64-msvc": "0.3.2",
+        "@furb/engine-darwin-arm64": "0.3.2",
+        "@furb/engine-darwin-x64": "0.3.2",
+        "@furb/engine-linux-arm64-gnu": "0.3.2",
+        "@furb/engine-linux-x64-gnu": "0.3.2",
+        "@furb/engine-win32-x64-msvc": "0.3.2",
       },
     },
     "docs/examples": {

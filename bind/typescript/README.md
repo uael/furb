@@ -277,7 +277,7 @@ gives. It holds no native code and no module of node, so a terminal and a window
 `napi-rs` builds `furb.<system>.node` from the host API in `src/binding.rs`, which the door to python gives too, and
 from the door in `src/binding/ts.rs` and its module `src/binding/ts/host.rs`, and generates `index.d.cts` from them.
 It writes `index.cjs` too, which loads the engine from beside itself, or from the package of the engine of its
-system, `furb-<system>`, which npm installs with the package `furb`. The optional
+system, `@furb/engine-<system>`, which npm installs with the package `furb`. The optional
 `typescript` feature builds the binding in the existing crate. There is no Rust worker or second crate. The
 `Engine` of the package has one method for each verb of the contract, which the build of the crate makes from
 `src/furb/engine.pyi`, as it makes the methods of the crate: the words that the verb needs, in their order, then an
