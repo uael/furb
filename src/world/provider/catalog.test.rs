@@ -705,6 +705,56 @@ fn an_invalid_claude_command_is_refused_before_it_starts_a_process() {
   fs::remove_dir_all(root).unwrap();
 }
 
+#[test]
+fn a_model_of_a_chat_provider_of_the_settings_takes_the_efforts_that_it_lists_as_a_local_model() {
+  use std::fs;
+  let root = std::env::temp_dir().join(format!("furb-chat-efforts-{}", std::process::id()));
+  fs::create_dir_all(root.join(".furb")).unwrap();
+  let settings = |models: Value, protocol: &str| {
+    let provider =
+      json!({"protocol": protocol, "url": "http://127.0.0.1:9/v1", "key": "k", "models": models});
+    fs::write(
+      root.join(".furb/config.json"),
+      json!({"providers": {"strata": provider}}).to_string(),
+    )
+    .unwrap();
+    catalog(&[]).configured(&root, Some(&root))
+  };
+  let models = json!({
+    "qwen": {"window": 262144, "reasoning": true, "efforts": ["high", "off", "low", "medium"]},
+    "thinks": {"window": 262144, "reasoning": true, "efforts": ["medium"]},
+    "plain": {"window": 262144, "reasoning": true}
+  });
+  let got = settings(models, "chat").expect("efforts of the protocol chat are valid");
+  let off = json!({"chat_template_kwargs": {"enable_thinking": false}});
+  let level = |one: &str| json!({"reasoning_effort": one});
+  assert_eq!(
+    efforts(&got, "strata:qwen"),
+    [("off".to_owned(), off), ("low".to_owned(), level("low"))]
+      .into_iter()
+      .chain(["medium", "high"].map(|one| (one.to_owned(), level(one))))
+      .collect::<Vec<_>>()
+  );
+  assert!(matches!(got.find("strata:qwen").unwrap().thought, Some(super::super::Thought::Off(_))));
+  assert_eq!(efforts(&got, "strata:thinks"), [("medium".to_owned(), level("medium"))]);
+  assert!(
+    got.find("strata:thinks").unwrap().thought.is_none(),
+    "a model that takes no off is never cut"
+  );
+  assert_eq!(efforts(&got, "strata:plain"), []);
+  for (models, protocol) in [
+    (json!({"qwen": {"window": 8, "efforts": ["max"]}}), "chat"),
+    (json!({"qwen": {"window": 8, "efforts": []}}), "chat"),
+    (json!({"qwen": {"window": 8, "efforts": ["low"]}}), "openai"),
+  ] {
+    let Err(no) = settings(models.clone(), protocol) else {
+      panic!("{models} of {protocol} was accepted")
+    };
+    assert!(no.contains("strata"), "{no}");
+  }
+  fs::remove_dir_all(root).unwrap();
+}
+
 /// A first turn of a model of the claude command line, which the fake answers with its first reply.
 #[cfg(unix)]
 fn first_turn(model: &Model) {

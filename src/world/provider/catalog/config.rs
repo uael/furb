@@ -143,7 +143,12 @@ struct ConfiguredModel {
   reasoning: bool,
   #[serde(default)]
   images: bool,
+  /// The levels of effort that a model of the protocol `chat` takes, as a model of a local server takes them.
+  efforts: Option<Vec<String>>,
 }
+
+/// The levels of effort that a model of the protocol `chat` can take in the settings.
+const LEVELS: [&str; 4] = ["off", "low", "medium", "high"];
 
 impl Catalog {
   /// The catalog with the provider settings of the user and then the project. A false entry removes a provider.
@@ -287,6 +292,7 @@ impl Catalog {
         listed.key = None;
       }
       if let Some(models) = settings.models {
+        let chat = matches!(listed.rig, Client::Chat);
         listed.models = models
           .into_iter()
           .map(|(id, one)| {
@@ -296,6 +302,13 @@ impl Catalog {
                 .any(|price| *price < 0.0)
             }) {
               return Err(format!("The prices of each model of {name} must be nonnegative"));
+            }
+            if let Some(levels) = &one.efforts
+              && (!chat || levels.is_empty() || levels.iter().any(|level| !LEVELS.contains(&level.as_str())))
+            {
+              return Err(format!(
+                "The efforts of a model of {name} need the protocol chat and one or more of off, low, medium and high"
+              ));
             }
             if id.is_empty() || one.window == 0 || one.output == Some(0) {
               return Err(format!(
@@ -319,6 +332,7 @@ impl Catalog {
                   },
                   output: vec!["text".to_owned()],
                 },
+                levels: one.efforts,
                 ..Listing::default()
               },
             ))

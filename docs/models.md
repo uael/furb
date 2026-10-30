@@ -104,7 +104,13 @@ project. The project wins for each field that it gives. Other config fields stay
       "url": "http://127.0.0.1:8080/v1",
       "key_env": "OFFICE_KEY",
       "models": {
-        "qwen3": { "window": 262144, "output": 32768, "reasoning": true, "images": false }
+        "qwen3": {
+          "window": 262144,
+          "output": 32768,
+          "reasoning": true,
+          "images": false,
+          "efforts": ["off", "low", "medium", "high"]
+        }
       }
     }
   }
@@ -112,11 +118,15 @@ project. The project wins for each field that it gives. Other config fields stay
 ```
 
 A built-in provider can be `true`, `false`, or an object that overrides its URL, credential or models. A custom
-provider needs a URL and at least one model. Each model needs a positive window. Its output limit is one quarter
-of that window when unsaid. `reasoning` and `images` are false when unsaid. The optional `key` field gives a key
-directly; `key_env` wins when both are present. A custom server with neither field sends no key. An object can set
-`enabled` to false to disable a provider and keep its other fields. The names `claude-cli` and `local` can be false
-to remove the command line or the server that the environment names from the roster.
+provider needs a URL and at least one model. Each model needs a positive window. Its output limit is one quarter of
+that window when unsaid. `reasoning` and `images` are false when unsaid. `efforts` lists the efforts that a model of
+the protocol `chat` takes, from `off`, `low`, `medium` and `high`, as a local model takes them: `off` turns its
+thought off with `enable_thinking` false, and each other level is `reasoning_effort`. A model that takes `off`
+thinks at most the tokens of thought of one turn, as a local model does. With no `efforts`, it takes none. The
+optional `key` field gives a key directly; `key_env` wins when both are present. A custom server with neither field
+sends no key. An object can set `enabled` to false to disable a provider and keep its other fields. The names
+`claude-cli` and `local` can be false to remove the command line or the server that the environment names from the
+roster.
 
 To start Claude through a wrapper, set `providers.claude-cli.command` in `.furb/config.json`:
 
