@@ -16,8 +16,10 @@ function* covers(control: Fact, id: string): Generator<Call, boolean, unknown> {
 /** The questions the engine asks on the way to what an act does, which are no acts a person follows: each is
  * answered for the act that asked it, which shows what it came to. A read and a write are acts that a person follows,
  * since each says which file it read or changed. An older record holds each writing of a model as such a question,
- * where a newer one holds it as a fact. */
+ * where a newer one holds it as a fact. The act setup, which the World makes on the root at the end of the setup that
+ * every chain shares, marks a place and does nothing that a person follows. */
 const STEPS = new Set([
+  "setup",
   "stand",
   "clock",
   "chance",

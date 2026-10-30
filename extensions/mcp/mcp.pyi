@@ -100,7 +100,7 @@ def mcp_use(server: str, on: str = "") -> Act:
   """
 
 def mcp_index(on: str = "") -> Act:
-  """mcp_index() is the life word of the extension: an act on the chain that asks the World for the servers when it is made and at each fact mcp_changed, and that never completes.
+  """mcp_index() is the life word of the extension, as await mcp_index(): an act on the chain that asks the World for the servers when it is made and at each fact mcp_changed, and that completes once it told the first answer of the World and ran each binding of it, so a word that awaits it holds what it tells, and it goes on after that.
   It tells the lines of the servers, as mcp_line gives them, once, and after a change only the lines that changed, with name is gone for a server that left; it tells nothing when the list is empty or the World refuses it.
   It runs at once, as a rung of the chain, the binding of each connected server whose binding holds at most BIND characters, and the line of that server names its class; the line of a larger connected server names mcp_use.
   A cancel over it ends it, and a pause over it holds it until the wake.

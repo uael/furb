@@ -487,23 +487,27 @@ TAUGHT: list = [*STANDS, "/w/DOCTRINE.md"]
 """A standing that names a doctrine, as the World of a new record gives it."""
 
 
-def playing() -> World:
+def playing(after: str = "") -> World:
   """An ear that plays a setup on the root at the first done of a stand, as the World of a new record does: a read,
-  then a word, as two turns of the default actor."""
+  then a word, as two turns of the default actor, then the act setup, then a word of an extension of the root alone
+  when it is given."""
   a = yield None
   while not (a and a[0] == "done" and engine.question(("stand", a[1]))):
     a = yield None
   engine.rung("read('a.txt')", to="m/low", on="chain1")
   engine.rung("x = 41", to="m/low", on="chain1")
+  engine.act("setup", "chain1", None)
+  if after:
+    engine.rung(after, to="m/low", on="chain1")
   while True:
     yield None
 
 
-async def taught() -> tuple[Sand, list[tuple], str]:
-  """A life whose standing names a doctrine and whose World plays the setup of its root: the World, what was said and
-  the root."""
+async def taught(after: str = "") -> tuple[Sand, list[tuple], str]:
+  """A life whose standing names a doctrine and whose World plays the setup of its root, with a word of the root alone
+  when it is given: the World, what was said and the root."""
   sand = sown(stands=TAUGHT)
-  log, root = life(sand, setup=playing())
+  log, root = life(sand, setup=playing(after))
   await settle()
   return sand, log, root
 
@@ -532,15 +536,18 @@ async def test_the_chain_runs_no_paragraph_chain_as_python() -> None:
 
 
 async def test_a_chain_with_no_source_holds_first_the_setup_of_the_root() -> None:
-  """A chain with no source holds first the setup of the root, each fact of the root from its paragraph chain() up to its open, so every such chain holds the turns of the setup with the same names, and its own open and its standing come after them."""
-  _, _, root = await taught()
+  """A chain with no source holds first the setup of the root, each fact of the root from its paragraph chain() up to its open but the facts of each act that an ear of the outside or the operator made on the root after the act setup that the World makes on it, and of each act under one, so every such chain holds the turns of the setup that every chain shares with the same names, and its own open and its standing come after them."""
+  _, _, root = await taught("y = 1")
   two = await chained("two")
   three = await chained("three")
   setup = engine.turns(on=root)[:4]
+  assert [one[:2] for one in engine.turns(on=root)[4:6]] == [("user", ""), ("assistant", "y = 1")]
+  assert paragraphs(engine.turns(on=root)[6:]) == [opened(root, "root"), takes(root)]
   for one in (two, three):
     turns = engine.turns(on=one)
     assert turns[:4] == setup
     assert paragraphs(turns[4:]) == [opened(one, "two" if one == two else "three"), takes(one)]
+    assert "y" not in engine.module(one)
 
 
 async def test_a_chain_with_no_source_runs_again_each_word_of_the_setup_that_it_holds() -> None:

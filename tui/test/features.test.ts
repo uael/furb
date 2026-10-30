@@ -334,7 +334,7 @@ test("/extensions lists what a life runs, and a cancel of a word of the operator
       async ({ session, frame, click }) => {
         await session.command("/extensions");
         expect(session.notice).toBe(
-          "This life runs catchup with catchup(), memory with await recall(), skills with await listed(), compaction, ouroboros, web, mcp with mcp_index(). Run a word of one with /run.",
+          "This life runs catchup with catchup(), memory with await recall(), skills with await listed(), compaction, ouroboros, web, mcp with await mcp_index(). Run a word of one with /run.",
         );
         await session.command("/run await wait(60)");
         // The wait runs under the word, so the cancel asks first.
@@ -378,7 +378,7 @@ test("the words of the extensions stand as code: a comment that names their ear,
               new RegExp(`^read\\('.*[/\\\\]+extensions[/\\\\]+${name}[/\\\\]+${name}\\.py'\\)$`),
             ),
           ),
-          "catchup()\nawait recall()\nawait listed()\nmcp_index()",
+          "catchup()\nawait recall()\nawait listed()\nawait mcp_index()",
         ]);
         let rows = (await frame()).split("\n");
         for (let step = 0; step < 80 && !rows.some((row) => /earlier steps/.test(row)); step++) {
@@ -400,7 +400,7 @@ test("the words of the extensions stand as code: a comment that names their ear,
           "9 catchup()",
           "10 await recall()",
           "11 await listed()",
-          "12 mcp_index()",
+          "12 await mcp_index()",
         ]);
         expect(rows.join("\n")).not.toMatch(/rung\d+…\d+|remember1|ouroboros1|catchup1/);
       },

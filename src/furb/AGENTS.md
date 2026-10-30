@@ -149,9 +149,11 @@ meanings. The entry of such a name here gives only its form in the engine.
 - setup: the turns that the World plays on the root of a new record at its first stand, after the bare turn
   `chain()`, as crafted rungs of the default actor: the read of the doctrine, the read of the file of each extension
   of every chain in the order of the life, whose word the World runs in the module of the root with no rung, as the
-  run `<rung>_word`, then one turn of their life words. The root tells its open and its standing after them, in the
-  same turn, and then the extensions of the root alone play the same way. Each chain with no source holds the setup of
-  the root as its prefix, with the same names, and runs its words again, so every chain shares one prefix, which the
+  run `<rung>_word`, then one turn of their life words, then the act setup, `setup1`, which the World makes and answers, then the same turns
+  for the extensions of the root alone. The World makes each of these rungs at once, so the root tells its open and
+  its standing after the last of them, in the same turn, just before its first prompt. Each chain with no source
+  holds the setup of the root as its prefix, with the same names, less the acts that the World made after the act
+  setup, and runs its words again, so every chain shares one prefix, which the
   provider ends with a block that it marks for the cache. The fact teach, `("teach", "chain1", "extensions", actor,
   doctrine, count)`, which the World says before the count of enables that the setup plays and the record keeps,
   plays the setup again where a later life says it. A record whose standing names no doctrine has no setup, and its

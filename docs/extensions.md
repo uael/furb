@@ -73,7 +73,7 @@ Seven extensions come with furb, and each life runs them unless a config turns t
   seconds, `"deny"` hides tools, and `"disabled": true` turns a server off. A server of `.mcp.json` runs only once the
   operator approves it. The ear of the World connects each server, ends each server over stdio with the life, connects
   a lost server again with a backoff, and signs in to a remote server with OAuth 2.1 when it asks for a login: the
-  token stays in the Keychain on macOS, else in a file that only the user reads. Its life word, `mcp_index()`, tells
+  token stays in the Keychain on macOS, else in a file that only the user reads. Its life word, `await mcp_index()`, tells
   each chain one line for each server, with its state and its tools, and binds the tools of each short server as a
   class of typed functions, so a model writes `await github.create_issue(owner="o", repo="r", title="t")` and the gate
   checks each argument before the call. `mcp_use(server)` binds a larger server, `mcp_tools(server)` and
@@ -134,8 +134,9 @@ The manifest is a JSON map:
   `furb.engine`, so an editor, ruff and ty read it. The word that a chain runs is that file less its imports of furb.
   It only defines: it holds no comment and binds no name of the engine. It can hold one quote of guidance for the
   model, which holds no law.
-- `life` is the life word, a line of Python that starts the work of the extension, such as `remember()`. It can be
-  absent.
+- `life` is the life word, a line of Python that starts the work of the extension, such as `await recall()`. It
+  awaits each act that it starts whose first answer comes later, as `await mcp_index()` does, so what that act tells
+  stands in the turn of the life words of the setup. It can be absent.
 - `plays` says where the extension plays: `"every"`, on every chain, which is the default, or `"root"`, on the root
   chain alone. A chain with a source keeps what its source played, so a chain that goes on from the root has an
   extension of the root, and a new chain with no source has none. Give `"root"` to an extension whose names only the

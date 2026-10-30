@@ -68,3 +68,24 @@ def test_each_builtin_of_ruff_is_a_name_that_a_word_defines_for_a_word_after_it(
     assert defined, name
     assert any(first < later for first in defined for later in read), name
     assert name not in ENGINE, name
+
+
+def bound(word: str) -> set[str]:
+  """The names that a word binds at its top."""
+  names: set[str] = set()
+  for node in ast.parse(word).body:
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+      names.add(node.name)
+    elif isinstance(node, ast.TypeAlias):
+      names.add(node.name.id)
+    elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+      targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+      names |= {one.id for one in targets if isinstance(one, ast.Name)}
+  return names
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_word_binds_no_name_of_an_official_extension(name: str) -> None:
+  """A word of the project that binds a name of an official extension changes that extension on its chains, as a BUDGET of text broke the catch-up of the root."""
+  official = set().union(*(bound(one["word"]) for one in _monty.official()))
+  assert bound(word(name)) & official == set()

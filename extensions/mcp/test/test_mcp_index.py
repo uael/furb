@@ -1,6 +1,5 @@
 """mcp_index, the life word of the extension."""
 
-from asyncio import CancelledError
 from pathlib import Path
 
 from conftest import of, settle, world_says
@@ -20,18 +19,21 @@ def told(root: str) -> list[str]:
   return [x for x in of(engine.turns(on=root), "mcp_index") if "_servers" in x]
 
 
-async def test_mcp_index_asks_the_world_for_the_servers_when_made_and_at_each_change_and_never_completes(
+async def test_mcp_index_asks_the_world_for_the_servers_when_made_and_at_each_change_and_completes_after_the_first(
   tmp_path: Path,
 ) -> None:
-  """mcp_index() is the life word of the extension: an act on the chain that asks the World for the servers when it is made and at each fact mcp_changed, and that never completes."""
+  """mcp_index() is the life word of the extension, as await mcp_index(): an act on the chain that asks the World for the servers when it is made and at each fact mcp_changed, and that completes once it told the first answer of the World and ran each binding of it, so a word that awaits it holds what it tells, and it goes on after that."""
   root, heard = mcped(tmp_path, {"mcp_servers": [server("a")]})[1:]
+  assert await engine.rung(
+    "await mcp_index()\nclose([x[1] for x in transcript() if x[0] == 'tell' and x[1].startswith('mcp')])", on=root
+  ) == ["mcp_index1"]
   index = await engine.rung("close(mcp_index())", on=root)
   assert isinstance(index, str)
   await settle()
-  assert [a[0] for a in heard] == ["mcp_servers"]
-  await changed(root)
   assert [a[0] for a in heard] == ["mcp_servers", "mcp_servers"]
-  assert engine.peek(index, "living") == "living"
+  assert engine.peek(index, "living") is None
+  await changed(root)
+  assert [a[0] for a in heard] == ["mcp_servers", "mcp_servers", "mcp_servers", "mcp_servers"]
 
 
 async def test_it_tells_the_lines_once_then_only_the_lines_that_changed_and_nothing_for_an_empty_list(
@@ -63,8 +65,7 @@ async def test_it_binds_at_once_the_class_of_each_small_connected_server_and_nam
   large = server("big", tools=[tooled("x")], binding="class big:\n  pass\n# " + "x" * 3100 + "\n")
   down = server("down", state="failed", error="boom", binding=bindings("down"))
   root = mcped(tmp_path, {"mcp_servers": [small, large, down]})[1]
-  await engine.rung("mcp_index()", on=root)
-  await settle(300)
+  await engine.rung("await mcp_index()", on=root)
   lines = "github connected, 1 tools (ping). Class github.\nbig connected, 1 tools (x). mcp_use('big') binds its class."
   lines += "\ndown failed: boom"
   assert of(engine.turns(on=root), "mcp_index") == ["#mcp_index1\n" + quoted("mcp_index1_servers", lines)]
@@ -78,7 +79,7 @@ async def test_it_binds_at_once_the_class_of_each_small_connected_server_and_nam
 async def test_a_cancel_over_it_ends_it_and_a_pause_over_it_holds_it_until_the_wake(tmp_path: Path) -> None:
   """A cancel over it ends it, and a pause over it holds it until the wake."""
   states = [[server("a")], [server("a"), server("b")], [server("a"), server("b"), server("c")]]
-  root = mcped(tmp_path, {"mcp_servers": lambda _: states.pop(0)})[1]
+  root, heard = mcped(tmp_path, {"mcp_servers": lambda _: states.pop(0)})[1:]
   index = await engine.rung("close(mcp_index())", on=root)
   assert isinstance(index, str)
   await settle()
@@ -90,5 +91,5 @@ async def test_a_cancel_over_it_ends_it_and_a_pause_over_it_holds_it_until_the_w
   assert len(told(root)) == 2
   engine.cancel(index)
   await changed(root)
-  assert isinstance(engine.peek(index), CancelledError)
   assert len(told(root)) == 2
+  assert len(heard) == 2

@@ -477,6 +477,72 @@ fn an_extension_of_the_root_alone_plays_on_the_root_and_on_a_chain_whose_source_
   assert_eq!(enabled(&root), [rooted(newer)]);
 }
 
+/// A life in a directory of the tests whose standing names a doctrine, so the ear of the extensions sets up its root,
+/// given these extensions, each with the file of its word in that directory.
+fn set_up(at: &Path, given: Vec<Extension>) -> Engine {
+  fs::write(at.join("DOCTRINE.md"), "Work.\n").unwrap();
+  let doctrine = at.join("DOCTRINE.md").display().to_string();
+  let here = at.to_owned();
+  let stand = ear(move |mut co| async move {
+    loop {
+      let a = hear(&mut co).await;
+      if a.kind() == "stand" && a.question() {
+        let operator = Object::list([Object::string("operator"), Object::list([]), Object::int(1)]);
+        let place = Object::string(here.display().to_string());
+        let standing = Object::list([
+          Object::list([operator]),
+          place,
+          Object::string("operator"),
+          Object::string(&doctrine),
+        ]);
+        say(&mut co, Fact::says("done", a.about(), [standing]));
+      }
+    }
+  });
+  let given = given.into_iter().map(|one| {
+    let file = at.join(format!("{}.py", one.name));
+    fs::write(&file, &one.word).unwrap();
+    Extension { file: file.display().to_string(), ..one }
+  });
+  let (record, store) = world::store(at.join("record.jsonl")).unwrap();
+  let ears = [
+    ("extensions", extensions(given.collect())),
+    ("stand", stand),
+    ("files", world::files(world::Scratch::own(), None)),
+    ("store", store),
+  ];
+  let engine = Engine::boot(record, ears).unwrap();
+  assert!(engine.raised().is_none(), "{:?}", engine.raised());
+  engine
+}
+
+#[test]
+fn the_setup_of_the_root_ends_with_the_extensions_of_the_root_alone_and_a_chain_with_no_source_holds_none_of_them()
+ {
+  let at = place("setup");
+  let shared = Extension { name: "shared".to_owned(), life: "y = 2".to_owned(), ..note("x = 1") };
+  let rooted =
+    Extension { name: "rooted".to_owned(), life: String::new(), root: true, ..note("z = 3") };
+  let mut engine = set_up(&at, vec![shared, rooted]);
+  let rooted = at.join("rooted.py").display().to_string();
+  let texts = |engine: &mut Engine, chain: &str| -> Vec<String> {
+    let turns = engine.turns(verbs::Turns { on: Some(chain.to_owned()) }).unwrap();
+    turns.iter().map(|one| one.as_ref().items().unwrap()[1].as_str().unwrap().to_owned()).collect()
+  };
+  let root = texts(&mut engine, "chain1");
+  let life = root.iter().position(|one| one == "y = 2").unwrap();
+  let read = format!("read({})", Object::string(&rooted).py_repr());
+  assert_eq!(root[life + 2], read, "{root:?}");
+  let last = &root[life + 3];
+  assert!(last.contains("#read3\n") && last.contains("#chain1\nchain1_label = 'root'"), "{last}");
+  assert!(last.ends_with("chain1_actor = 'operator'"), "{last}");
+  engine.chain(verbs::Chain { label: Some("two".to_owned()), ..Default::default() }).unwrap();
+  let two = texts(&mut engine, "chain2");
+  assert_eq!(two[..=life], root[..=life], "a chain with no source holds the shared setup");
+  assert!(two.iter().all(|one| !one.contains(&read)), "{two:?}");
+  assert!(two.last().unwrap().contains("#chain2\nchain2_label = 'two'"), "{two:?}");
+}
+
 /// The chain and the word of each rung that the ear of the extensions made on these chains, in order.
 fn words(engine: &mut Engine, chains: &[&str]) -> Vec<(String, String)> {
   played(engine, chains).into_iter().map(|(_, chain, word)| (chain, word)).collect()
