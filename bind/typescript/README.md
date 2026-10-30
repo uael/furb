@@ -11,10 +11,6 @@ with glibc 2.35 or later, macOS on Apple silicon or on Intel, and Windows on x64
 from a checkout with `bun run build`. The package of npm is `@uael/furb`, since npm refuses the name `furb` as too near
 to other names, and this command installs it under the name `furb`, which each import here names.
 
-> [!NOTE]
-> The package waits for the release of furb 0.2.0. Until then, build it from a clone with `bun install && bun run
-> build`, and add it to a workspace of Bun as the examples do.
-
 ## A first session
 
 ```ts

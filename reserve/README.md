@@ -8,4 +8,5 @@ hand, from a checkout of main:
 cargo publish --manifest-path reserve/furb/Cargo.toml --token <token of crates.io>
 ```
 
-The first release of furb on crates.io, from `.github/workflows/publish.yml`, then comes after it as 0.2.0 or later.
+furb 0.0.0 stands on crates.io, and an empty furb-cli 0.0.0 holds the name of the command line too. Each trusts
+`.github/workflows/publish.yml`, so the first release of furb on crates.io comes after them with no token.
