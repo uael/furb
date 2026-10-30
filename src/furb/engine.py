@@ -241,7 +241,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
     h = [(x[0] == "tell" and x[3][0][:6]) or x[0] for x in t] + ["chain(", "#chain", "setup"]
     hi = h.index("#chain", lo := h.index("chain("))
     refused, running, waiting, last, heard = set(), {}, {}, standing(), []
-    step = news = ran = reply = note = to = seat = ""
+    step = news = ran = reply = note = to = ""
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
     def placed(moved):
@@ -291,6 +291,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
       yield top
       top = ""
     yield from replay()
+    seat = top and last and placed(last[1])
     while True:
       r = get((a := (yield {id, "stand", "reply"}))[1]) or a
       match a:
