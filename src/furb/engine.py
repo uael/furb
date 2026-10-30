@@ -485,9 +485,9 @@ class Exit:
 
 class Act[T = object](str):
   def __await__(self) -> Generator[object, Any, T]:
+    if (acting() and question(("chain", self))) or not get(self):
+      raise Refused(self + " never settles")
     if acting():
-      if question(("chain", self)):
-        raise Refused(self + " never settles")
       return (yield self)
     f = get_running_loop().create_future()
 
