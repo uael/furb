@@ -61,16 +61,17 @@ The owner chose the stack: Tauri 2, with a UI of web components.
   whole life in 600 seconds. The window tells the core what it drew at its next frame, or after 500 milliseconds when
   no frame comes, since WebKit draws no frame in a window that is hidden or behind others.
 - The test `gui/src-tauri/tests/check.rs` runs a check on a copy of the record of a life of the demo in
-  `tests/fixtures`, or on the record that `FURB_RECORD` names, compares the counts with those of the log beside the
-  record, which the life writes again, or with those of `furb facts` on the record when the window drew what the record
-  kept, and holds the footprint of the web view of the app, and of no other WebContent of the machine, under 300 MB. A second test runs a check in a window that `FURB_GUI_HIDDEN` hides. The gates run both on macOS.
+  `gui/src-tauri/tests/fixtures`, or on the record that `FURB_RECORD` names, compares the counts with those of the log
+  beside the record, which the life writes again, or with those of `furb facts` on the record when the window drew what
+  the record kept, and holds the footprint of the web view of the app, and of no other WebContent of the machine, under
+  300 MB. A second test runs a check in a window that `FURB_GUI_HIDDEN` hides. The gates run both on macOS.
 - `bun run web` shows the UI in a browser, on a host of its own, and `bun run shots` drives it in WebKit for the
   captures.
 
 ## The look
 
-The desktop apps of Claude Code and of Codex set the bar of finish. furb takes their care of type, space and motion,
-and not their layout or their look.
+The desktop apps of other agents set the bar of finish. furb takes their care of type, space and motion, and not
+their layout or their look.
 
 - Two themes: Ink, a blue slate that is not black, and Paper, its light twin.
 - One family of type in two forms: Atkinson Hyperlegible Next for the interface and Atkinson Hyperlegible Mono for
@@ -95,8 +96,8 @@ and not their layout or their look.
   its chain, as a compaction, stands as a rule with its title and its lines before the first step that began after
   it: the host loads the parts as the TUI loads them, and sends their marks with the life. A run of compactions into
   new chains names its last chain as its first chain and that one, as `root -> compacted`.
-- The rail at the left holds the life and what it spent, the questions that wait for you, and the tree of threads,
-  each with its whole title and what its steps came to in a tip.
-- The header says the thread, the last notice of the session, and the mark Read only on a record of another engine.
-- The menu of an act holds its controls, and a dialog asks the operator to confirm a cancel that ends running work,
-  and what a rewind gives back.
+- Rail: at the left, the life and what it spent, the questions that wait for you, and the tree of threads, each with
+  its whole title and what its steps came to in a tip.
+- Header: the thread, the last notice of the session, and the mark Read only on a record of another engine.
+- Menu of an act: its controls. A dialog asks the operator to confirm a cancel that ends running work, and shows what
+  a rewind gives back.

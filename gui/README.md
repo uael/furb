@@ -9,12 +9,11 @@ message, and rewind to an earlier point with its files.
 
 ## What you need
 
-- A clone of this repository, and the tools of [Contributing](../CONTRIBUTING.md#what-you-need): Rust and Bun 1.4.2
-  or later.
+- A clone of this repository, and the tools that [Contributing](../CONTRIBUTING.md#what-you-need) names.
 - The web view of your system. macOS has it. Windows 10 and 11 have WebView2. Linux needs WebKitGTK and the other
   libraries of the [prerequisites of Tauri](https://v2.tauri.app/start/prerequisites/).
 
-The app is proved on macOS. It builds for Windows and Linux too, but no gate runs it there yet.
+The gates prove the app on macOS alone. It builds for Windows and Linux too.
 
 ## Build it and start it
 
@@ -102,19 +101,15 @@ which names the socket of the host. Give it the words of the host to show anothe
   it writes and its answer, asks a question, answers it, cancels work that runs once it confirms, and rewinds with the
   files.
 - `furb-gui --check --record RECORD` ends the app once its window drew the whole life and its stdin ended, and prints
-  the process of its web view and how many chains, threads and acts it drew, of the log of the life or of what the
-  record kept, so the one that runs it reads that web view after the window drew. By hand, give it `< /dev/null`. A
-  check enables no extension that the record does not run, and runs as an accessory of the system, with no tile in
-  the Dock, so it takes the front from no app and ends only by its own exit. `gui/src-tauri/tests/check.rs` runs it
-  on a copy of the record of a life of the demo in `gui/src-tauri/tests/fixtures`, or on the record that
-  `FURB_RECORD` names, which must be a copy, compares the counts with those of the log beside the record, or of
-  `furb facts`, and holds the footprint of that web view under 300 MB. It runs a check in a hidden window too, as a
-  window behind others. The gates run it on macOS: `cargo test --features tauri/custom-protocol` in
-  `gui/src-tauri`, after `bun run build` at the root and in `gui`, and `cargo build -p furb-cli`.
+  how many chains, threads and acts it drew. By hand, give it `< /dev/null`. `gui/src-tauri/tests/check.rs` runs it on
+  the record in `gui/src-tauri/tests/fixtures`, or on a copy of the record that `FURB_RECORD` names, checks the counts
+  against the log of the record, and holds the web view under 300 MB. The gates run it on macOS: `cargo test --features
+  tauri/custom-protocol` in `gui/src-tauri`, after `bun run build` at the root and in `gui`, and `cargo build -p
+  furb-cli`.
 
-## What it does not do yet
+## Limits
 
 - It has no loom, no graph, and no view of the program of a chain, which the TUI has.
-- No release ships it yet: build it from a clone.
+- No release ships it: build it from a clone.
 
 [`DESIGN.md`](DESIGN.md) says how the app is made and why.

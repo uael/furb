@@ -147,7 +147,7 @@ act stands in the margin, at the line that made it. The chains of the life are t
  chains            │ chain12 › prompt34  str                      door prompt34   ⌃S writes and replays
  ▾ conduct  ◉      │   1  r = await bash("git fetch -q origin main && git worktree …")  │ bash111 ✓ 0.8s
    ├ w tui   ⠦     │   2  if r.code == 0:                                               │
-   ├ w docs  ✓     │   3    cd("/Users/uael/src/github.com/uael/furb-w-tui")            │ cd6 ✓
+   ├ w docs  ✓     │   3    cd("/home/you/src/furb-w-tui")                              │ cd6 ✓
    ├ w ui    ◆     │   4    for path in ["src/furb/AGENTS.md", "src/furb/engine.pyi"]:  │
    └ w gif   ◌     │   5      read(path, span(1, -1))                                   │ read111-112 ✓
                    │  ┄┄ rung242 ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
@@ -250,7 +250,7 @@ the models, the controls, the doors and the pending work.
 3. The lens, the door, and the time cursor with its branch.
 4. The lives, the help, and the narrow terminal. The Loom on a real life.
 
-## As built
+## As built: the Loom
 
 The first version of the Loom follows this document, with these changes that the work taught:
 
@@ -273,17 +273,18 @@ The first version of the Loom follows this document, with these changes that the
   change the life do nothing in the past, and `b` branches the selected chain at the cursor: the branch keeps the
   acts of the chain up to that moment, and the module and the files keep the state that they have now.
 
-What is left for later work: the feed, which the next part of this document designs; the commands of the old TUI that acted on its screens alone, such as the share of a
-conversation as HTML, images in the word line, the external editor, and the queue of follow-ups in the screen; a
-measure of a convergence loop beyond the dollars and the window, such as the count of retries of a ladder; and the
-replay of a record that an older engine made, which drifts: such a record opens to read, and a new session resumes it from its turns.
+What is left for later work: the feed, which the section "The feed" designs; the commands of the old TUI that acted
+on its screens alone, such as the share of a conversation as HTML, images in the word line, the external editor, and
+the queue of follow-ups in the screen; a measure of a convergence loop beyond the dollars and the window, such as the
+count of retries of a ladder; and the replay of a record that an older engine made, which drifts: such a record opens
+to read, and a new session resumes it from its turns.
 
 ## The variants
 
 The owner judged the Loom, and it did not give the effect that he expected. He gave three hints: code, debugger and
 graphs. They are one direction: a life of furb is a program that runs, so the TUI is the debugger of a living
 program. The TUI now holds variants. Each variant is a whole direction, not a skin, over one model of a life.
-`--variant loom` or `--variant graph` chooses one when the TUI starts, and `v` changes it in a running TUI, so that
+`--view loom` or `--view graph` chooses one when the TUI starts, and ⌥V changes it in a running TUI, so that
 the owner can try each one on the same life and choose.
 
 ### One model of a life
@@ -403,7 +404,7 @@ in. A click on a program of the map is left for later work.
 The owner asked for the finish of the best apps of its kind: their care of type, space, color and motion, on a
 design that is furb's own. In the terminal the same rules hold within its means:
 
-- A small palette with one accent. Dusk is the dark theme and the default, warm grays with a clay accent, and Day is
+- A small palette with one accent. Dusk is the dark theme of #255, warm grays with a clay accent, and Day is
   the light one, on paper white. Color says the state alone: the accent is work that runs, amber is what waits for
   you, rose is a failure, and a quiet sage is what ended well. The rest is text in three tones.
 - Space in place of boxes. No border holds a program, a thread or a panel: the sidebar of the threads stands on a
@@ -415,12 +416,12 @@ design that is furb's own. In the terminal the same rules hold within its means:
 - Motion is short and quiet. A spinner turns where work runs, and a dot walks along a line where a message flows.
   Nothing else moves.
 
-The skills of design that this work read: frontend-design, which this repository holds, for the restraint of one
-bold element and the plan of a palette, a type and a layout before the build; ui-ux-pro-max, which #252 vendors, for
-its rules of contrast, focus, motion and of the light and the dark themes, and its search of palettes, which gave a
-first draft that the brief changed; and opentui, which this repository holds, for the renderables and the keys.
+The skills of design that this work read: frontend-design, which this repository holds, for the restraint of one bold
+element and the plan of a palette, a type and a layout before the build; ui-ux-pro-max, which the repository does not
+hold, for its rules of contrast, focus, motion and of the light and the dark themes, and its search of palettes, which
+gave a first draft that the brief changed; and opentui, which this repository holds, for the renderables and the keys.
 
-### As built
+### As built: the graph
 
 - The variants are `loom` and `graph`, behind `--variant` and the key `v`. The loom keeps its screens. The graph is
   `tui/src/graph.ts` over `threads.ts`, `map.ts` and `source.ts`, in the App of the loom, which holds the header, the
@@ -429,16 +430,16 @@ first draft that the brief changed; and opentui, which this repository holds, fo
 - The demo is a life of many threads at once: a release that a conductor hires four workers for, a worker that hires
   two writers, a review that hangs on a change and asks the operator, a worker that asks the operator first, a grant
   that pauses a worker at its ceiling, a command that streams, and a second thread that reaches parity with Pi. The
-  words of its model are in `tui/src/script.ts`.
-- With a hundred chains, each of which asks the operator a question so that a hundred messages flow, a frame of the
-  loom takes about 21 ms, a frame of the threads and the map about 20 ms, a frame of the map alone about 52 ms, and
-  a key of the map about 8 ms, as `bun tui/script/measure.ts` measures on a laptop that runs other work. A place of
-  the map never moves, so the graph finds the line of each edge and the way of each message once.
+  words of its model were in `script.ts` on the branch of #255.
+-  With a hundred chains, each of which asks the operator a question so that a hundred messages flow, a frame of the
+  loom takes about 21 ms, a frame of the threads and the map about 20 ms, a frame of the map alone about 52 ms, and a
+  key of the map about 8 ms, as `tui/script/measure.ts` of the branch of #255 measured on a laptop that runs other work.
+  A place of the map never moves, so the graph finds the line of each edge and the way of each message once.
 - Left for later work: a breakpoint on a kind of act, which the engine does not take; the anchor of a prompt by its
   `on`, which the engine does not take either, so the anchor comes from the message; a click on a program of the map;
   and a third variant.
 
-### The feed
+## The feed
 
 The owner asked for a design of the feed of its own: where a person reads what a chain said and did, from its start
 to its end. Three directions differ at the root:
@@ -458,9 +459,9 @@ later work, to read when a model went wrong.
 
 ## The three views side by side
 
-The owner ruled on the views: keep all three, the view of main, the loom of #244 with the cursor in time of #246,
-and the graph of #255, behind a switch at run time, and iterate on each. The owner chooses later. The sections above,
-from "As built", say what #244, #246 and #255 built on their own branches. This section says how the TUI holds the
+The owner ruled on the views: keep all three, the view of main, the loom of #244 with the cursor in time of #246, and
+the graph of #255, behind a switch at run time, and iterate on each. The owner chooses later. The sections above, from
+"As built: the Loom", say what #244, #246 and #255 built on their own branches. This section says how the TUI holds the
 three now, in one App, so that no view deletes a screen of main.
 
 - The view of the life is a setting, `view` in the preferences, which `--view main|loom|graph` sets at the start,
@@ -484,6 +485,7 @@ three now, in one App, so that no view deletes a screen of main.
 - The cursor in time is one: the moment of the session, which the feed of main moves when a life is watched. The
   loom, the graph and the feed each show the life as it stood at that moment, and a move between the chains of the
   loom or the graph keeps it.
-- The themes Dusk and Day of #255 join the themes of main. GitHub Dark stays the default.
+- The themes Dusk and Day of #255 join the themes of main. The default is the choice Terminal, which takes the colors
+  of the terminal, and else shows Ink on a dark terminal and Day on a light one.
 - The demo of many threads of #255, in its `script.ts`, does not come: the demo of main stays, and the captures of the
   loom and the graph stand on the recorded life of a conductor, which holds a score of real chains.

@@ -22,8 +22,8 @@ time, open the record again, and the work goes on from where it stopped.
 - **One answer does a lot of work.** Most agents call one tool for each turn of the model. In furb, one word reads
   files, runs commands, asks other models, waits for them, and joins the results with loops and conditions.
 - **Nothing is hidden from you.** The whole system prompt is one Python file,
-  [`src/furb/engine.py`](https://github.com/uael/furb/blob/main/src/furb/engine.py), smaller than 7000 tokens. The transcript is the exact text that the
-  model reads.
+  [`src/furb/engine.py`](https://github.com/uael/furb/blob/main/src/furb/engine.py), smaller than 7000 tokens
+  of `o200k_base`, the tokenizer of OpenAI. The transcript is the exact text that the model reads.
 - **A word is checked before it runs.** A type checker reads each word first. A word that it refuses never runs, and
   the model reads why.
 - **The record is the truth.** A life that a crash stopped goes on from its record. A later run replays it exactly,
@@ -33,8 +33,9 @@ time, open the record again, and the work goes on from where it stopped.
 - **You stay in control.** The model can ask you a question and wait for your answer. You can pause any work, set a
   dollar ceiling, rewind a chain to an earlier point, or change the plan of a model while it works.
 - **Extensions are Python too.** An extension is a word that each chain runs, so the model reads it as it reads its
-  own work. [Seven come with furb](https://github.com/uael/furb/blob/main/docs/extensions.md): what changed on the machine since the last run, the
-  memory of a project, its skills, compaction, a guide to extend furb, the web, and the servers of MCP.
+  own work. furb comes with [seven extensions](https://github.com/uael/furb/blob/main/docs/extensions.md): what
+  changed on the machine since the last run, the memory of a project, its skills, compaction, a guide to extend furb,
+  the web, and the servers of MCP.
 
 ## Install
 
@@ -42,16 +43,16 @@ time, open the record again, and the work goes on from where it stopped.
 | --- | --- | --- |
 | PyPI | `pip install furb` | The Python package and `furb`, the command line. It needs Python 3.14 or later. |
 | npm | `npm install furb@npm:@uael/furb` | The engine for Node.js 22 or later and Bun 1.4.2 or later, with no Python. |
-| Rust | `cargo add furb --git https://github.com/uael/furb` | The engine for a program of Rust, with no Python. Copy the [`Cargo.lock`](https://github.com/uael/furb/blob/main/Cargo.lock) of furb into a new crate before its first build, since a newer version of a dependency breaks the build today. |
+| Rust | `cargo add furb --git https://github.com/uael/furb` | The engine for a program of Rust, with no Python. Copy the [`Cargo.lock`](https://github.com/uael/furb/blob/main/Cargo.lock) of furb into a new crate before its first build, since a newer version of a dependency can break the build. |
 
 > [!NOTE]
-> crates.io holds only an empty furb 0.0.0, which keeps the name, so Rust takes furb from git. crates.io will hold
-> furb when the interpreter that furb runs on is there too.
+> crates.io holds only an empty furb 0.0.0 and an empty furb-cli 0.0.0, which keep the names, so Rust takes furb
+> from git. crates.io will hold furb when the interpreter that furb runs on is there too.
 > [`CHANGELOG.md`](https://github.com/uael/furb/blob/main/CHANGELOG.md) says what each release holds.
 
-furb asks the models of the [claude command line](https://docs.claude.com/en/docs/claude-code) when it finds it,
-then the models of each provider whose key stands in the environment, such as `ANTHROPIC_API_KEY`, then the models of
-a local server. [The page of models](https://github.com/uael/furb/blob/main/docs/models.md) says how to choose one.
+furb asks the models of each provider whose key stands in the environment, such as `ANTHROPIC_API_KEY` or
+`OPENAI_API_KEY`, and the models of a local server that `FURB_LOCAL_URL` names.
+[The page of models](https://github.com/uael/furb/blob/main/docs/models.md) says how to choose one.
 
 ## A first life
 
@@ -76,15 +77,16 @@ import furb
 
 async def main() -> None:
   life = await furb.open("release.jsonl")
-  print(await life.prompt(str, "Plan the release of version 2."))
+  plan = await life.prompt(str, "Plan the release of version 2.")
+  print(plan)
 
 
 asyncio.run(main())
 ```
 
 Stop it while the model works, and run it again: it finds its prompt in the record and goes on, and no answer of
-the model is asked for twice. [The examples](https://github.com/uael/furb/blob/main/docs/examples/README.md) show the same program in TypeScript and in
-Rust, and four more.
+the model is asked for twice. [The examples](https://github.com/uael/furb/blob/main/docs/examples/README.md) show the
+same program in TypeScript and in Rust, and four more.
 
 ## The words of furb
 

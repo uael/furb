@@ -1,7 +1,7 @@
 # One life
 
-This is a design for the ruling of the owner. It changes no code. Each later PR of the plan at the end builds one
-part of it, with its tests.
+This is a design for the ruling of the owner. Each PR of the plan at the end builds one part of it, with its tests,
+and a note "As built" says where a PR built it otherwise.
 
 The owner, on 10-23: "I want next life to be the last one: one session, only one, to manage furb, for weeks and
 years, never a new session for a lack of features in furb."
@@ -15,12 +15,12 @@ originals were not touched.
 
 ## 1. Why a life ends today
 
-The three lives of 10-20 to 10-23, in `.furb/sessions`:
+The three lives of 10-20 to 10-23, whose records the owner keeps:
 
 | Life | Record | How it ended |
 | --- | --- | --- |
-| 1 | `d3630cdb`, 78 MB | The engine changed, and the record could not open on the new one (reborn.md:3). |
-| 2 | `f6e8243e`, 185 MB, 96322 entries | Its old engine froze on a prompt on a prompt, and the new engine could not replay it (reborn3.md:7 to :10). |
+| 1 | `d3630cdb`, 78 MB | The engine changed, and the record could not open on the new one. |
+| 2 | `f6e8243e`, 185 MB, 96322 entries | Its old engine froze on a prompt on a prompt, and the new engine could not replay it. |
 | 3 | `c3978f7f`, 423 MB, log 576 MB | It still runs. It crashed at 06:08 on 10-23, and it went on only after a person cut its record and wrote the fact `made` again by hand. |
 
 The five causes that the owner named:
@@ -31,8 +31,8 @@ The five causes that the owner named:
 - C2. An extension changes. The ear `extensions` plays a word only for an extension that the life does not run yet
   (`src/extension.rs`, `runs`). Life 3 played the word of the conductor of 10-22 16:54 on 112 chains while four PRs
   changed it on main, and its model defined `sweep` and `tend` again by hand in 16 replies.
-- C3. A chain fills its window. The chain of the orchestrator filled to 70 percent in a day in each life
-  (reborn2.md:3, reborn4.md:3), and life 2 handed over to chain98 by hand.
+- C3. A chain fills its window. The chain of the orchestrator filled to 70 percent in a day in each life,
+  and life 2 handed over to chain98 by hand.
 - C4. A record grows without end. Life 3 holds 423 MB in 21 hours, its log 576 MB and its journal of changes
   130 MB, and each open replays every entry.
 - C5. A host stops. The process of the TUI is the parent of each model and each command, so a new build of the TUI,
@@ -40,14 +40,14 @@ The five causes that the owner named:
 
 The causes that the owner did not name:
 
-- C6. A defect of the engine that the running life cannot fix: a freeze (reborn3.md:9). #302 bounds a word, but a
+- C6. A defect of the engine that the running life cannot fix: a freeze. #302 bounds a word, but a
   spin in the engine itself still ends the life.
 - C7. The provider lost the conversation of chain1 (`No conversation found with session ID`, life 3, 06:08). The
   chain paused, and the resume needed a cut of 380 entries and the four answers of the owner given again by hand.
 - C8. A cancel reaches every act under it. One key of the TUI cancelled the prompt under which the loop and five
-  workers ran (ops-decisions.md:232). #314 fixed the key, not the shape.
+  workers ran. #314 fixed the key, not the shape.
 - C9. The state of the orchestrator lives in its module, which no new life loads, so each handover wrote
-  `state.json` by hand: 6 queued items, 6 in flight, 25 efforts, 9 briefs (reborn4.md:8).
+  `state.json` by hand: 6 queued items, 6 in flight, 25 efforts, 9 briefs.
 - C10. A record of an older form drifts: the tuples before #96, and a record of 09-27 that drifts at `memory1` on
   two builds of 10-23. No file of a life names the version of its form, but the snapshot.
 - C11. The interpreter changes under the same digest. Five pins of monty came in two days, and four of them changed
@@ -57,7 +57,7 @@ The causes that the owner did not name:
 - C13. No life opens from a snapshot. The log of a life disagrees with its record after one reopen: the log of
   life 3 lacks the 3669 questions `merged` that the record kept before its last open, so `logged` gives nothing and
   `snapshot::restore` never restores. And a TypeScript `Session` writes none, since its observer is a foreign ear
-  that never ends. `.furb/sessions` holds 47 records and no snapshot.
+  that never ends. The sessions of the owner held 47 records and no snapshot.
 - C14. The bound of a turn is of the wall clock (30 s, `src/sand.rs`), so a word near the bound can raise on a
   replay on a slower machine where it did not raise live, and the replay drifts.
 - C15. The heap of a life holds every fact since its birth (#288: "The memory of a life does not shrink"). The TUI
@@ -91,7 +91,7 @@ Where the one primitive serves:
 | A chain that supersedes another | A word makes the successor of its own chain, which keeps its name. |
 | An upgrade of the engine at a checkpoint | The new engine makes each chain that the checkpoint carries again, under its name. |
 | A record that grows | The checkpoint, which carries the successors, is where a later life starts to read. |
-| A chain of another record | `carry` answers with the turns and the open prompts of a chain of another record, and `imported` makes a chain whose prefix holds them (section 3.7). |
+| A chain of another record | `carry` answers with the turns and the open prompts of a chain of another record, and `imported` makes a chain whose prefix holds them (section 3.6). |
 
 Where it serves in part: a fork for each question. A fork is a chain with a source that does not supersede it. It
 keeps the prefix of its source whole, so its first turn reads that prefix from the cache, and the source never
@@ -103,7 +103,7 @@ Where it does not serve, and what serves:
   host of its own (section 3.5) and the snapshot serve.
 - A reload of an extension: it changes the module of each chain, not the chain. A fact of the record serves
   (section 3.4).
-- The versions of the formats: section 3.6.
+- The versions of the formats: section 3.7.
 
 ## 3. The parts
 
@@ -118,7 +118,7 @@ the same need, and a checkpoint says a prefix too.
 
 The extension compaction becomes smaller: `compacted` asks `choice`, then at the next reply makes the successor with
 that filter. The conductor wraps its own chain with `compacted()` in its word. So the chain of an orchestrator is
-wrapped by default, and compaction stays a wrapper that a word puts on one chain (the ruling of reborn.md:9).
+wrapped by default, and compaction stays a wrapper that a word puts on one chain (a ruling of the owner).
 
 ### 3.2 Segments and the checkpoint
 
@@ -176,7 +176,7 @@ The form of a checkpoint is one fact of the record, whose values are in the plai
 - `open` names the acts that are not over, in the order of the record, which the next build makes again through
   their verbs under their names. An open run is not in it: the checkpoint cuts it.
 
-As built (#this PR), the fact carries the same state in another form: its words hold `entries`, facts that the journal of
+As built (#415), the fact carries the same state in another form: its words hold `entries`, facts that the journal of
 any engine already replays, so the checkpoint costs no token of the engine. The root, each chain that lives, the last
 stand, each act that a carried value names with its answer, each open prompt as an open act, and a reserve of the
 names of each kind that no entry carries. Each carried chain then takes a rung that binds the definitions and the plain
@@ -196,17 +196,16 @@ breaking changes."
 - A version is a build that replays: the engine, the Kernel, the sheet, monty and the ears of rust that make acts. A
   build names its version as a number, `VERSION` in the crate, and the fact `made` names that number and the commit
   of the build.
-- Few versions, by a rule that a machine checks. A gate replays a fixed corpus of records on the build of each PR and
-  compares the facts with the log of each record. A change that replays each record to the same facts keeps the
-  version. A change that fails the check adds one to `VERSION` and records the corpus again, in the same PR. The
-  corpus holds records that the repository can hold: the demo, the fixtures of the TUI, and a life of
-  `script/play.py` on a claude that answers from a script. So most PRs keep the version, and a life goes on with
-  them on a new build with no switch at all.
+-  Few versions, by a rule that a machine checks. A gate replays a fixed corpus of records on the build of each PR and
+  compares the facts with the log of each record. A change that replays each record to the same facts keeps the version.
+  A change that fails the check adds one to `VERSION` and records the corpus again, in the same PR. The corpus is
+  `tests/corpus`, which holds the records `refused`, `wake`, `work` and `writing`. So most PRs keep the version, and a
+  life goes on with them on a new build with no switch at all.
 - The store of builds: each build that a record names stands as one program in
   `<cache of furb>/builds/<version>/furb`. A build puts itself there at its first run. A build that the store lacks
-  is fetched from the release of its version, or built from its commit with `script/worktree.sh` and cargo. So any
+  is built with `script/builds.sh <version>`, at the last commit of `origin/main` that holds that version. So any
   later build replays any part of any record on the exact program that made it, and no replay drifts: this is the
-  rule of the owner that a drift is an internal hard error (R2).
+  rule of the owner that a drift is an internal hard error.
 - A stand on a new version: when a life opens on a build of another version than the last segment, the old build
   from the store replays the tail of that segment with no model and no command (`furb checkpoint --record <path>`),
   and writes a checkpoint at the tip. The new build starts from that checkpoint, with the successor of each chain. A
@@ -227,8 +226,8 @@ When the word of an extension that the life runs changes, by a write of the life
 the host sees, the ear `extensions` says the fact `enable` again with the new word. Each chain plays the definitions
 of the new word at its next step, with each name of state that it assigns bound only when the module lacks it. So a
 function, a class and a constant in capitals take their new value, a new name of state takes its first value, and a
-name of state that the module holds, as `queue` or `working`, keeps its value. The record keeps the fact at its place, so a later life
-plays the same change at the same place.
+name of state that the module holds, as `queue` or `working`, keeps its value. The record keeps the fact at its
+place, so a later life plays the same change at the same place.
 
 ### 3.5 A host of its own
 
@@ -244,9 +243,10 @@ on the same version, or an upgrade through a checkpoint on a new version (sectio
 runs past the wait is cut: the new host holds it as pending, and the next wake ends it as interrupted, as a command
 that a crash cut (#290), so its model runs it again if it wants. The ask to hand over is the end of the life with the
 build in its arguments, so a host that does not know it, as a host of the protocol 1 before it, ends the life as at
-any end. On the demo, a takeover takes about 0.3 seconds, and a first host about 0.18 seconds. An agent of the user starts the host again after a reboot.
+any end. On the demo, a takeover takes about 0.3 seconds, and a first host about 0.18 seconds. An agent of the user
+starts the host again after a reboot.
 
-### 3.7 A successor of a chain of another record
+### 3.6 A successor of a chain of another record
 
 The owner, on 10-23: "import chains from a previous journal." This is one more source of a successor: a chain of
 another record. `carry(record, source)` of the extension compaction is an act that the ear `compaction` of the World
@@ -286,19 +286,19 @@ chain1 of life 3, imported, reads 1391 turns. A later life on the new record, wi
 reads the same 1391 turns. The 49 tells of life 3 are the findings of the gate that the reader says. Its 58 open
 prompts are messages of the owner to chain1 that its model never closed, and each opens again on the successor and
 asks its model. The reader reads the record and its log one entry and one line at a time, so a carry holds only the
-chain that it carries. Measured with `measure_a_carry_of_a_record` in `src/extension/compaction.test.rs` on new
-copies, the carry of chain1 of life 3 takes 4.6 s and 163 MB at peak, against 7.1 s and 3.8 GB when the reader held
-the whole log and the record, and the carry of chain1 of life 4, at 249 MB and 2155 facts carried, takes 2.4 s and
-126 MB, against 2.5 s and 1.8 GB, with the same answer.
+chain that it carries. Measured with `measure_a_carry_of_a_record` in `src/extension/compaction.test.rs` on
+new copies, the carry of chain1 of life 3 takes 4.6 s and 163 MB at peak, against 7.1 s and 3.9 GB when the reader
+held the whole log and the record, and the carry of chain1 of life 4, at 249 MB and 2155 facts carried, takes 2.4 s
+and 126 MB, against 2.5 s and 1.8 GB, with the same answer.
 
-### 3.6 The versions of the formats
+### 3.7 The versions of the formats
 
-The version 2 of the record holds a chain of digests, which the owner ruled for the item bench-audit: the store
+The version 2 of the record holds a chain of digests, which the owner ruled for the audit of a record: the store
 writes beside each entry the sha256 of the entry before it, and a host that ends writes a closing fact with the
 digest of the last entry. So a record proves by itself that no entry was changed or cut, and a cut by hand, as the
 one of 10-23 (C7), shows. A checkpoint holds the digest of the entry before it, so the chain goes on across each
 segment, and a segment that the store moves to a file of its own stays proved by the checkpoint after it. The cut of
-C7 is not needed any more: the provider makes a lost conversation again (PR 10), and an upgrade replaces the hand edit
+C7 is not needed any more: the provider makes a lost conversation again (PR 11), and an upgrade replaces the hand edit
 of the fact `made`.
 
 Each file of a life names the version of its form. Each later build reads each older version, or migrates it with no
@@ -362,7 +362,7 @@ log of 236 GB and a journal of changes of 53 GB.
 | A stand on a new version after a crash | a new life | the old build replays a tail of at most 50000 facts, about 7 s at the rate of #302, then writes the checkpoint |
 | The TUI while it switches | none | the host tells each window that the life switches, with each step (the tail, the checkpoint, the boot); the feed stays readable from the log, and what the operator sends waits in the queue of follow-ups |
 | A reload | none | the definitions of one word on each chain at its next step |
-| TUI | 1.6 GB and slow at 250000 facts, and no draw at 1000000 | the item bigtui: it reads the summary, the table of chains and the pages in view, with a memory that does not grow with the age |
+| TUI | 1.6 GB and slow at 250000 facts, and no draw at 1000000 | a later TUI that reads only the summary, the table of chains and the pages in view, with a memory that does not grow with the age |
 
 Each PR that builds a part measures it again on copies of the real records.
 
@@ -372,7 +372,7 @@ Each PR that builds a part measures it again on copies of the real records.
 
 
 - A chain with a source holds whole each fact of its origin about a name that no act of the life holds, as a turn
-  that its origin carried from another record. (Taken in the PR of section 3.7: the successor of a chain of another
+  that its origin carried from another record. (Taken in the PR of section 3.6: the successor of a chain of another
   record is a word of the extension compaction, and the source of `chain` stays a chain of the life.)
 
 `chain`, changed (#371): was "Nothing leaves a transcript once the transcript holds it." Now: "Nothing leaves a
@@ -406,7 +406,7 @@ A new type, `Checkpoint`, with these sentences:
   and an assignment to a name in capitals, in the order of the program.
 - A name of a module whose value is neither plain nor a definition is not carried, and the checkpoint names it.
 - An act of carry is answered with the turns and the open prompts of one chain of another record, and the record
-  keeps that answer, so a replay reads the same turns. (Taken in the PR of section 3.7, in the contract of the
+  keeps that answer, so a replay reads the same turns. (Taken in the PR of section 3.6, in the contract of the
   extension compaction.)
 
 `boot`, new:
@@ -451,8 +451,8 @@ A new type, `Checkpoint`, with these sentences:
 `extensions/ouroboros/ouroboros.pyi`, `extend`, new: "A life that runs the extension already reloads it, so each
 chain plays the definitions of the new word at its next step."
 
-Outside the contracts, the laws that change: `CLAUDE.md`, the meaning of the record, where "loaded from the snapshot"
-gains "or from the last checkpoint"; `src/furb/CLAUDE.md`, the law "A chain is a function of the record";
+Outside the contracts, the laws that change: `AGENTS.md`, the meaning of the record, where "loaded from the snapshot"
+gains "or from the last checkpoint"; `src/furb/AGENTS.md`, the law "A chain is a function of the record";
 `src/life.rs`, where the refusal of a record of another engine becomes a boot from its last checkpoint and an upgrade
 at the tip; and `src/extension.rs`, where the ear `extensions` reloads a word that changed.
 
@@ -463,8 +463,8 @@ Each enables the next, and each carries its tests.
 1. This design, with the label owner-merge.
 2. fix(crate): the log agrees with its record after a reopen (C13), so a snapshot restores.
 3. fix(typescript): a `Session` keeps a snapshot, with its observer as an ear of the host by its name (C13).
-4. feat(crate): each format names its version, the record holds its chain of digests with the work of the item
-   bench-audit, and each reader reads each older version, with a test for each (C10).
+4. feat(crate): each format names its version, the record holds its chain of digests for the audit of a
+   record, and each reader reads each older version, with a test for each (C10).
 5. feat(crate): the version of a build, which each stand names, the gate of the corpus, and the store of builds
    (C1, C11, C16).
 6. feat(engine): a chain supersedes its source, and compaction makes a successor (C3, C9).
@@ -472,7 +472,7 @@ Each enables the next, and each carries its tests.
    C15).
 8. feat(crate): the upgrade of a running life at a checkpoint, and a stand on a new version (C1, C6, C14).
 9. feat(extensions): the reload of an extension (C2).
-10. feat(tui): a host of its own, to which the TUI and the app attach (C5, and C12 with bigtui).
+10. feat(tui): a host of its own, to which the TUI and the app attach (C5, and in part C12).
 11. fix(provider): a lost conversation is made again from the turns (C7), and the prefix of a chain stays as it
     stood.
 12. The measure on the demo: one life upgrades its engine twice, reloads an extension and compacts a chain, with no
@@ -498,4 +498,5 @@ under no prompt of the operator, which the conductor does in PR 6.
 - A reload rebinds the definitions and the names in capitals, binds each other name that the module lacks, and keeps
   each other name that it holds, so a reload keeps the state.
 - The word of the conductor wraps the chain of the orchestrator, and the engine wraps no chain.
-- The engine stays under the wall of 7180 (R3). PR 6 and PR 7 each fit it, or go back to the owner with the cost.
+-  The engine stays under the wall of 7000 tokens of `o200k_base`, as law 5 of `AGENTS.md` says. PR 6 and PR 7 each fit
+  it, or go back to the owner with the cost.

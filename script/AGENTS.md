@@ -11,13 +11,17 @@ model to go on, on the same chain. The model reads no other word.
 
 ## Before the first run
 
-    uv run python script/deepswe.py tools
+```sh
+uv run python script/deepswe.py tools
+```
 
 This installs the reporters that the verifiers of the tasks open by absolute path. Their images hold them, and
 this host does not. It needs `npm`. It says if `go-ctrf-json-reporter` or `cargo-nextest` is missing: without the
 first, a go task cannot be graded, and without the second, a rust task cannot be graded.
 
-    uv run python script/deepswe.py validate <task>
+```sh
+uv run python script/deepswe.py validate <task>
+```
 
 This grades the reference solution of the task, which is the control. A rig that scores that solution under 1
 measures itself and not the life, so a task that does not validate says nothing about the engine. Validate a task
@@ -40,8 +44,8 @@ match keeps the name that pytest gives it.
 
 `run` takes four options:
 
-- `--to provider:model/effort` is the actor the task is put to. The default is the default actor of the crate,
-  which is `claude-cli:opus/high` when this host holds the claude command line.
+- `--to provider:model/effort` is the actor the task is put to. The default is the default actor of the crate, the first
+  model that the catalog offers.
 - `--ceiling` is the dollars the life may spend, 8 by default, and 0 is no ceiling. It is a grant on the root chain,
   so the chain pauses when an answer carries the ledger to the ceiling.
 - `--timeout` is the seconds the run may take, 1800 by default, and 0 is no cap.
@@ -79,17 +83,17 @@ life stands on.
   of the copy, an editable package imports the code of the copy, and an install lands in the copy and not in the
   base.
 - The reaper of the host, which cleans its temporary directory, takes the files of an old workroot and leaves its
-  directories. So a seed writes `.seeded` last, with the commit of the base, the image config digest and the environment format.
-  A later seed keeps the base only when that seal agrees, no tracked file is gone and its Python is present. Otherwise it fetches and installs it again.
+  directories. So a seed writes `.seeded` last, with the commit of the base, the image config digest and the environment
+  format. A later seed keeps the base only when that seal agrees, no tracked file is gone and its Python is present.
+  Otherwise it fetches and installs it again.
 - The reporters stand under `~/.cache/furb-deepswe` when the path a task names is not this host's to write.
 - Every graded run is archived in `traces/`, as the record it kept and a result beside it. The archive is ignored
   by git.
 - `$DEEPSWE_GRADE` says how the verifier runs: `docker`, `unshare` or `local`. Unset, the rig takes a mount
   namespace if this host gives one, then docker if docker answers, and plain paths otherwise.
 - `$DEEPSWE_NODE_HOME` puts a node of your choosing first on the PATH of a grade.
-- `$FURB_CLAUDE_BIN` names the claude command line to ask, and the `claude` on PATH is taken when it is unset.
 
-## What a run does to itself
+## The bounds and the environment of a run
 
 A grant bounds the money and not the work, so two more bounds end a run that goes nowhere:
 

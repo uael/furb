@@ -15,7 +15,7 @@ Title: `type(area): What changed`, 70 characters or fewer, as
 - The type comes first, since release-please reads it to make the next version and CHANGELOG.md:
   `feat` for a thing that a user can do now and could not do before, `fix` for a thing that was
   wrong, `perf` for a thing that is faster or smaller, and `chore` for a change that no user of a
-  package sees. Below 1.0, a feat raises the minor version, and a fix or a perf raises the patch.
+  package sees. Below 1.0, a feat, a fix or a perf raises the patch version, and a break raises the minor.
   A chore raises nothing and stays out of the changelog. Add a `!` after the area for a break.
 - The area is required. It is the part that owns the change, such as `engine`, `crate`, `tui`,
   `gui`, `provider`, `ci`, or an extension by its name, as `compaction`. Give the primary area when
