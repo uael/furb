@@ -3,6 +3,15 @@
 Each release of furb is listed here, the newest first. release-please writes the entry of each release from the
 titles of the pull requests that it holds, as [the template of a pull request](.github/pull_request_template.md) says.
 
+## [0.3.4](https://github.com/uael/furb/compare/v0.3.3...v0.3.4) (2026-10-30)
+
+
+### Fixes
+
+* **docs:** Clean every document of stale facts and private links ([#798](https://github.com/uael/furb/issues/798)) ([d92c5e3](https://github.com/uael/furb/commit/d92c5e3db71838749afb2812f02d3f547da102f0))
+* **docs:** Say what PyPI, npm and crates.io hold now ([#795](https://github.com/uael/furb/issues/795)) ([1ff1735](https://github.com/uael/furb/commit/1ff1735c286e7c16bbb042961ce22e3e0ba44e99))
+* **doctrine:** Cut the doctrine to 751 tokens, under a wall of 1000 ([#797](https://github.com/uael/furb/issues/797)) ([72ee718](https://github.com/uael/furb/commit/72ee718959af260ff96ae1cfa443818ec96fea08))
+
 ## [0.3.3](https://github.com/uael/furb/compare/v0.3.2...v0.3.3) (2026-10-30)
 
 
