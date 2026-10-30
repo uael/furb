@@ -159,3 +159,21 @@ async def test_it_hears_no_control() -> None:
   engine.stand()
   assert caught(engine.turns(on=root), root) == ["#chain1 caught up\nchain1_changed = {'/w/a.txt': {2: 'TWO'}}"]
   assert engine.peek(watcher, "open") == "open"
+
+
+async def test_it_catches_the_chain_up_at_each_stand_from_outside_an_act() -> None:
+  """It catches the chain up at each stand from outside an act, as the stand that boot makes at the tip of a life, and at no stand that a word makes, as the one that the World plays on each new chain, so a new chain makes no read on the chains that live."""
+  sand, log, root = await caught_up()
+  two = await chained("two")
+  engine.read("a.txt", on=two)
+  sand.files["/w/a.txt"] = "one\nthree\n"
+  calls = len(sand.calls)
+  await engine.rung("stand()", on=root)
+  three = await chained("three")
+  await engine.rung("stand()", on=three)
+  assert said(sand.calls[calls:], "read") == [] and len(said(sand.calls[calls:], "stand")) == 2
+  assert caught(engine.turns(on=two), two) == []
+  engine.stand()
+  assert [(a[3], a[4]) for a in said(sand.calls[calls:], "read")] == [(two, "/w/a.txt")]
+  assert caught(engine.turns(on=two), two) == [f"#{two} caught up\n{two}_changed = {{'/w/a.txt': {{2: 'three'}}}}"]
+  assert [a[3] for a in said(log, "catchup")] == [root, two, three]

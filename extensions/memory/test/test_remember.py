@@ -112,3 +112,17 @@ async def test_at_a_stand_the_catch_up_of_the_chain_tells_each_memory_file_that_
   caught = [one for one in paragraphs(engine.turns(on=root)) if one.startswith("#chain1 caught up")]
   assert caught == [f"#chain1 caught up\nchain1_changed = {{{tilded(top)!r}: {{2: 'three'}}}}"]
   assert recalled(root, tmp_path)[1:] == [memorized("memory6", sub, "sub!\n")]
+
+
+async def test_it_tells_the_memory_that_changed_at_each_stand_from_outside_an_act(tmp_path: Path) -> None:
+  """It tells the memory that changed at each stand from outside an act, as the stand that boot makes at the tip of a life, and at no stand that a word makes, as the one that the World plays on each new chain."""
+  top = noted(tmp_path / "work", "one\n")
+  _, root = extended("memory", tmp_path, _monty.memory)
+  await engine.rung("remember()", on=root)
+  asked = [a for a in engine.transcript(on=root) if a[0] == "memory"]
+  top.write_text("three\n", encoding="utf-8", newline="")
+  await engine.rung("stand()", on=root)
+  assert [a for a in engine.transcript(on=root) if a[0] == "memory"] == asked
+  assert recalled(root, tmp_path) == [memorized("memory1", top, "one\n")]
+  engine.stand()
+  assert recalled(root, tmp_path)[1:] == [memorized("memory2", top, "three\n")]

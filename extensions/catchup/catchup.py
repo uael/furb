@@ -27,7 +27,7 @@ def catchup(on: str = "") -> Act:
       act("clock", here, None)
     while True:
       match (yield {id, "stand"}):
-        case ("done", about, *_) if question(("stand", about)):
+        case ("done", about, *_) if question(("stand", about)) and not question(("rung", get(about)[2])):
           if here == ROOT:
             act("clock", here, None)
           seen: dict[str, object] = {}
