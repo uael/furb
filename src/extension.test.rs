@@ -603,8 +603,9 @@ fn a_later_life_on_a_new_standing_plays_a_stand_on_each_chain_and_a_cd_where_the
   let cwd = |engine: &mut Engine, chain: &str| {
     engine.cwd(verbs::Cwd { on: Some(chain.to_owned()) }).unwrap()
   };
-  assert!(cwd(&mut engine, "chain2").ends_with("/other"), "the cd moved the chain");
-  assert!(cwd(&mut engine, "chain3").ends_with("/sub"), "its own cd holds");
+  let (two, three) = (cwd(&mut engine, "chain2"), cwd(&mut engine, "chain3"));
+  assert!(Path::new(&two).ends_with("other"), "the cd moved the chain: {two}");
+  assert!(Path::new(&three).ends_with("sub"), "its own cd holds: {three}");
   drop(engine);
   let mut engine = set_up_in(&at, vec![], &other);
   assert_eq!(
