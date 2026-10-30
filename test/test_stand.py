@@ -1,6 +1,6 @@
 """stand, the question of what the chains stand on."""
 
-from conftest import LATER, STANDS, Sand, born, chained, paragraphs, relived, said, settle, stood
+from conftest import LATER, STANDS, Sand, born, chained, of, paragraphs, relived, said, settle, stood
 from furb import engine
 from furb.engine import OPERATOR
 
@@ -36,13 +36,10 @@ async def test_a_stand_from_inside_an_act_tells_its_answer_under_its_own_name() 
   assert await step is None
   asked = said(log, "stand")[-1][1]
   assert asked == "stand2" and engine.module(two)["got"] == [*STANDS, "/w/DOCTRINE.md"]
-  assert (
-    paragraphs(engine.turns(on=two))[-1]
-    == stood(asked)
-    == (
-      "#stand2\nstand2_roster = [['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]]\n"
-      "stand2_actor = 'm/low'"
-    )
+  assert of(engine.turns(on=two), asked) == [stood(asked)]
+  assert stood(asked) == (
+    "#stand2\nstand2_roster = [['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]]\n"
+    "stand2_actor = 'm/low'"
   )
   assert [a for a in engine.transcript(two) if a[0] == "tell" and a[1] == asked] == [
     ("tell", asked, step, [stood(asked)])

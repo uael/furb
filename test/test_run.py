@@ -179,7 +179,7 @@ async def test_the_chain_runs_one_word_at_a_time() -> None:
   second = engine.rung("k = 2\nclose(k)", on=root)
   await settle()
   one, two = "x = bash('echo hi')\nclose(await x)", "k = 2\nclose(k)"
-  opens = f"#bash1\n{engine.bound('bash1', 'Exit')}"
+  opens = f"#bash1\nbash1_command = 'echo hi'\n{engine.bound('bash1', 'Exit')}"
   told = [engine.unquoted(fresh(root, written(first, one))), engine.unquoted(f"{opens}\n\n{written(second, two)}")]
   assert ran(log) == [told[0], one, told[1], two]
   (_, run, _, _) = [a[1] for a in said(log, "run")]

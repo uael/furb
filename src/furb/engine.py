@@ -284,7 +284,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
     ladder = {x: w for x, w in program(source or id).items() if over(x) or not get(x)}
     yield "started", id
     top = told(id, "", bound(id, "Never"), label=label, source=source)
-    if last:
+    if last and (source or not last[3:]):
       yield top
       top = ""
     yield from replay()
@@ -584,18 +584,13 @@ def control(kind, name, id, *words):
 
 def headed(id, what="", **words):
   text = f"#{id} {what}".rstrip()
-  held = "" if what or "text" in words else next((x[5] for x in transcript(id, "run") if get(id)[2] in x[4::2]), "")
   for word, value in words.items():
     name = id + "_" + word
-    if isinstance(value, str):
-      if not value or any(q + repr(value)[1:-1] + q in held for q in "'\""):
-        continue
-      if "\n" in value:
-        while "</s:" + name + ">\n" in value + "\n":
-          name += "_"
-        text += f"\n<s:{name}>\n{value}</s:{name}>"
-        continue
-    if value is not None:
+    if isinstance(value, str) and "\n" in value:
+      while "</s:" + name + ">\n" in value + "\n":
+        name += "_"
+      text += f"\n<s:{name}>\n{value}</s:{name}>"
+    elif value not in (None, ""):
       text += f"\n{name} = " + re.sub(r"^[\w.]+\.(?=[A-Z]\w*\()", "", repr(value))
   return text
 

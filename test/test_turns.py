@@ -166,7 +166,7 @@ async def test_the_turns_of_a_chain_show_every_act_the_model_made() -> None:
   _, command, *_ = said(log, "bash")[0]
   got = engine.turns(on=root)
   assert of(got, command) == [
-    f"#{command}\n{command}: Act[Exit] = Act('{command}')",
+    f"#{command}\n{command}_command = 'echo hi'\n{command}: Act[Exit] = Act('{command}')",
     f"#{command} exited 0\n{command}_stdout = 'ran echo hi'",
   ]
 

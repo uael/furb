@@ -533,6 +533,14 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
           if taught {
             let every = enabled.iter().filter(|one| !one.root).map(|one| one.name.clone());
             chains.push((a.about().to_owned(), had.unwrap_or_else(|| every.collect())));
+            if source.as_deref().is_none_or(str::is_empty) {
+              let got = co.call("standing", vec![], vec![]).await?;
+              if let Some(actor) =
+                entry(&got.as_ref(), 2).and_then(|one| one.as_str().map(str::to_owned))
+              {
+                placed(&mut co, a.about(), &actor).await?;
+              }
+            }
             continue;
           }
           chains.push((a.about().to_owned(), had.unwrap_or_default()));
@@ -702,9 +710,10 @@ async fn play(
 
 /// The setup of the root, as turns of its default actor whose words furb writes: the read of the doctrine, the read
 /// of the file of each extension of every chain, in the order of the life, then the life word of each that has one,
-/// which reads the place against the directory of the standing, as a chain that ran no cd does, then `stand()` and a cd
-/// to that directory, so every turn before them is the same text whatever the actors, then the fact setup, then the
-/// same turns for the extensions of the root alone. It makes each rung at once, and the
+/// which reads the place against the directory of the standing, as a chain that ran no cd does, then the fact setup,
+/// then the same turns for the extensions of the root alone, then `stand()` and a cd to that directory, so every turn
+/// before them is the same text whatever the actors. A chain with no source holds the turns before the fact setup, and
+/// the ear plays its own stand and cd at its birth. It makes each rung at once, and the
 /// chain gives them their turns in the order it made them, so the fact setup stands before the turns of the root alone.
 async fn setup(co: &mut Co, enabled: &[Extension], actor: &str, path: &str) -> Result<(), Fault> {
   written(co, ROOT, &reading(path), actor).await?;
@@ -717,12 +726,16 @@ async fn setup(co: &mut Co, enabled: &[Extension], actor: &str, path: &str) -> R
       loaded(co, one, ROOT, actor).await?;
     }
     lives(co, enabled.iter().filter(|one| one.root == root), actor).await?;
-    if !root {
-      let got = co.call("standing", vec![], vec![]).await?;
-      let directory = entry(&got.as_ref(), 1).and_then(|one| one.as_str().map(str::to_owned));
-      written(co, ROOT, &stood(directory.as_deref()), actor).await?;
-    }
   }
+  placed(co, ROOT, actor).await
+}
+
+/// The turn that tells a chain with no source where it stands, `stand()` and a cd to the directory of the standing,
+/// as a turn of an actor just before its open, after every turn of its setup.
+async fn placed(co: &mut Co, chain: &str, actor: &str) -> Result<(), Fault> {
+  let got = co.call("standing", vec![], vec![]).await?;
+  let directory = entry(&got.as_ref(), 1).and_then(|one| one.as_str().map(str::to_owned));
+  written(co, chain, &stood(directory.as_deref()), actor).await?;
   Ok(())
 }
 

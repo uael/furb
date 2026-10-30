@@ -535,7 +535,8 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   The transcript of the root begins with the open of the root, when its standing names no doctrine, since no setup comes then.
   When its first standing names a doctrine, the root tells the bare paragraph chain() at once, and tells its open once no rung with a word and an actor is open on it at the done of a rung on it, so its first turns are the setup that the World plays on it, and the turn after the last of them holds what that one told, then the open.
   The chain runs no paragraph chain() as python, since that paragraph tells no call.
-  A chain with no source holds first the setup of the root, each fact of the root from its paragraph chain() up to its open but the facts of each act that an ear of the outside or the operator made on the root after the act setup that the World makes on it, and of each act under one, so every such chain holds the turns of the setup that every chain shares with the same names, and its own open comes after them.
+  A chain with no source holds first the setup of the root, each fact of the root from its paragraph chain() up to its open but the facts of each act that an ear of the outside or the operator made on the root after the act setup that the World makes on it, and of each act under one, so every such chain holds the turns of the setup that every chain shares with the same names, and the turn that the World plays on it and its own open come after them.
+  A chain with no source whose standing names a doctrine tells its open as the root does, once no rung with a word and an actor is open on it at the done of a rung on it, so the turn that the World plays on it at its birth, as stand() and a cd, comes before its open.
   A chain with no source runs again each word of the setup that it holds, as a chain with a source runs the rungs of its origin, so the words of the extensions bind their names in its module and the setup tells nothing again.
   A chain with a source holds whole the setup that its origin holds, whatever its filter, and its filter applies only to what came after that setup.
   The transcript then holds the prompt of the operator, and the replies of the model, each with its turn.
@@ -1018,7 +1019,6 @@ def headed(id: str, what: str = "", **words: object) -> str:
   """The paragraph of an act: its header, # and the id with no space between, then what happened, and under it the binding of each word, in order.
   headed binds each value by its repr with no check, since every value that reaches it is a wire value, and the repr of a wire value is python.
   headed shows a value as python shows it, less the path of the module before the name of its class, since a chain binds a class by its name alone.
-  An open of an act that the word of a rung on its chain made tells no string that the word holds as a whole literal, between the quotes that python writes it with, between double quotes or as a quote, since the turn of the model shows that word, and an act that tells a text tells each of its words.
   """
 
 def bound(id: str, of: str = "object") -> str:

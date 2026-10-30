@@ -146,7 +146,7 @@ async def test_a_statement_that_a_paragraph_shows_binds_the_name_of_an_act_in_th
   assert await asking == 0
   own = [a[5] for a in said(log, "run") if a[4].endswith("_told")]
   asked = "#prompt1\n<s:prompt1_message>\nrun it\nnow</s:prompt1_message>\nprompt1: Act[int] = Act('prompt1')"
-  told = ["#bash1\nbash1: Act[Exit] = Act('bash1')", "#rung2 advance on prompt1"]
+  told = ["#bash1\nbash1_command = 'echo hi'\nbash1: Act[Exit] = Act('bash1')", "#rung2 advance on prompt1"]
   words = ["\n\n".join([opened(root, "root"), asked, "#rung1 advance on prompt1"]), "\n\n".join(told)]
   assert own == [engine.unquoted(word) for word in words]
   shown = "\n\n".join(paragraphs(engine.turns(on=root)))

@@ -261,7 +261,7 @@ test("what a model writes streams into the session under its rung until its repl
               {
                 type: "text",
                 text: expect.stringMatching(
-                  /^#stand2\nstand2_roster = \[.*\]\nstand2_actor = 'claude-cli:sonnet\/high'\n\n#cd1$/,
+                  /^#stand2\nstand2_roster = \[.*\]\nstand2_actor = 'claude-cli:sonnet\/high'\n\n#cd1\ncd1_path = '.*'$/,
                 ),
               },
               {
