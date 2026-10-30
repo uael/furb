@@ -20,8 +20,10 @@ system=$(node -p '({"linux-x64": "linux-x64-gnu", "linux-arm64": "linux-arm64-gn
 cd "$yard/app"
 printf '{ "name": "proof", "private": true, "type": "module" }\n' > package.json
 # The engine of this system first, so that the optional dependency of furb on it finds it here and asks no registry.
-main=$(ls "$packs"/uael-furb-[0-9]*.tgz)
-npm install --no-audit --no-fund --no-save "$packs/uael-furb-$system-"[0-9]*.tgz "furb@file:$main"
+# A path after file: goes to npm as it stands, and the sh of Windows writes /d/a for D:\a, so the pack comes here and
+# npm reads it relative to this folder.
+cp "$packs"/uael-furb-[0-9]*.tgz .
+npm install --no-audit --no-fund --no-save "$packs/uael-furb-$system-"[0-9]*.tgz "furb@file:./$(ls uael-furb-[0-9]*.tgz)"
 cp "$root/docs/examples/typescript/chains.ts" chains.ts
 said=$(env -u FURB_LOCAL_URL -u FURB_LOCAL_KEY -u FURB_TUI FURB_CLAUDE_BIN="$claude" \
   FURB_CONFIG_DIR="$yard/config" XDG_CACHE_HOME="$yard/cache" node chains.ts)
