@@ -19,3 +19,6 @@ node_modules/
 .furb/*
 !.furb/config.json
 !.furb/extensions/
+# The memory of a folder on this machine alone, which the memory extension reads after its AGENTS.md.
+AGENTS.local.md
+CLAUDE.local.md

@@ -1,5 +1,5 @@
 //! The ear of the memory extension, which answers a memory question from the AGENTS.md and CLAUDE.md files on the
-//! disk.
+//! disk, and from their local files, AGENTS.local.md and CLAUDE.local.md.
 
 use std::{
   collections::HashMap,
@@ -19,6 +19,10 @@ use crate::{
 
 /// The files that hold the memory of a folder: the first of them that the folder holds.
 const NAMES: [&str; 2] = ["AGENTS.md", "CLAUDE.md"];
+
+/// The files that hold the memory of a folder on this machine alone, which git ignores: the first of them that the
+/// folder holds, after the file of [`NAMES`].
+const LOCAL: [&str; 2] = ["AGENTS.local.md", "CLAUDE.local.md"];
 
 /// The ear of the memory: it answers a memory question with the texts of the memory files that apply to its path
 /// and whose content its chain does not hold at any path, which are the memory of the config directory of the user, then
@@ -62,7 +66,7 @@ pub fn memory(config: PathBuf) -> Box<dyn Ear> {
           let chain = held.get(&on);
           let mut told: Vec<Text> = Vec::new();
           for one in
-            [config.clone()].into_iter().chain(folders(&here, &target)).filter_map(|one| of(&one))
+            [config.clone()].into_iter().chain(folders(&here, &target)).flat_map(|one| of(&one))
           {
             // The chain holds a content once, whatever its path, as a checkout and its worktree hold one text.
             let fresh = !chain.is_some_and(|chain| chain.values().any(|two| *two == one.content));
@@ -140,7 +144,7 @@ fn named_path(word: ObjectRef<'_>) -> String {
 
 /// Whether a path names a memory file, by the name of its file.
 fn remembered(path: &str) -> bool {
-  Path::new(path).file_name().is_some_and(|name| NAMES.iter().any(|one| name == *one))
+  Path::new(path).file_name().is_some_and(|name| NAMES.iter().chain(&LOCAL).any(|one| name == *one))
 }
 
 /// The folders whose memory applies to a path: each folder from the root down to the working directory, then each
@@ -157,13 +161,19 @@ fn folders(here: &Path, target: &Path) -> Vec<PathBuf> {
   out
 }
 
-/// The memory of a folder: its AGENTS.md file, or its CLAUDE.md file when it holds no AGENTS.md, when the World reads
-/// it as a text. A file holds the memory under that name exactly, on a disk that ignores the case of a name too, so a
-/// folder has the same memory on every machine.
-fn of(folder: &Path) -> Option<Text> {
-  let exact = |path: &Path| {
-    let held = fs::read_dir(folder).into_iter().flatten().flatten();
-    held.map(|one| one.file_name()).any(|name| Some(name.as_os_str()) == path.file_name())
-  };
-  read(&NAMES.iter().map(|one| folder.join(one)).find(|one| one.is_file() && exact(one))?).ok()
+/// The memory of a folder: its AGENTS.md file, or its CLAUDE.md file when it holds no AGENTS.md, then its
+/// AGENTS.local.md file, or its CLAUDE.local.md file when it holds no AGENTS.local.md, each when the World reads it as
+/// a text. A file holds the memory under that name exactly, on a disk that ignores the case of a name too, so a folder
+/// has the same memory on every machine.
+fn of(folder: &Path) -> Vec<Text> {
+  let held: Vec<_> =
+    fs::read_dir(folder).into_iter().flatten().flatten().map(|one| one.file_name()).collect();
+  let exact = |path: &Path| held.iter().any(|name| Some(name.as_os_str()) == path.file_name());
+  [&NAMES, &LOCAL]
+    .into_iter()
+    .filter_map(|names| {
+      names.iter().map(|one| folder.join(one)).find(|one| one.is_file() && exact(one))
+    })
+    .filter_map(|one| read(&one).ok())
+    .collect()
 }
