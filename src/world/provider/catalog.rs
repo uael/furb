@@ -43,7 +43,7 @@ use super::{
   Hosted, Model, Provider, Streams,
   claude::{self, Claude},
   clients::{Client, Reach},
-  local::{ENV_URL, Heard, LOCAL, Server},
+  local::{self, ENV_URL, Heard, LOCAL, Server},
   search,
 };
 use crate::world::cache;
@@ -126,6 +126,10 @@ struct Listing {
   status: Option<String>,
   last_updated: Option<String>,
   provider: Option<Own>,
+  /// The levels of effort that the settings give a model of the protocol `chat`, which it takes as a model of a local
+  /// server takes them.
+  #[serde(skip)]
+  levels: Option<Vec<String>>,
 }
 
 /// The package that asks a model apart from its provider, the address it asks, and the shape of its request.
@@ -689,6 +693,16 @@ fn model(
   let dialect = client.dialect(id);
   let mut model = reached(format!("{provider}:{id}"), listing.limit.context, client, reach);
   model.efforts = listing.efforts(dialect);
+  // A model of the settings with efforts takes them as a model of a local server does, and one that takes `off` is cut
+  // at the most tokens of thought of a turn and asked again with its thought off.
+  if let (Some(levels), Dialect::Chat) = (&listing.levels, dialect) {
+    let mut each = local::efforts();
+    each.retain(|(level, _)| levels.contains(level));
+    model.efforts = each;
+    if levels.iter().any(|one| one == "off") {
+      model.thought = Some(super::Thought::Off(local::silenced()));
+    }
+  }
   model.images = listing.modalities.input.iter().any(|one| one == "image");
   model.price =
     listing.cost.map(|cost| [cost.input, cost.output, cost.cache_read, cost.cache_write]);

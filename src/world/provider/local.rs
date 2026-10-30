@@ -241,8 +241,7 @@ impl Server {
     model.fenced = true;
     model.forgets = true;
     model.efforts = efforts();
-    let off = json!({"reasoning_effort": null, "chat_template_kwargs": {"enable_thinking": false}});
-    model.thought = Some(super::Thought::Off(off.as_object().cloned().unwrap_or_default()));
+    model.thought = Some(super::Thought::Off(silenced()));
     model
   }
 
@@ -385,10 +384,17 @@ fn names(name: &str, id: &str) -> bool {
   is(name) || name.rsplit_once('/').is_some_and(leveled)
 }
 
+/// The settings that ask a model of a local server again with its thought off, once its thought passed the most of a
+/// turn: no effort of OpenAI, and `enable_thinking` false for the template of its chat.
+pub(super) fn silenced() -> Map<String, Value> {
+  let off = json!({"reasoning_effort": null, "chat_template_kwargs": {"enable_thinking": false}});
+  off.as_object().cloned().unwrap_or_default()
+}
+
 /// The efforts that a model of a local server takes, each with what its request says: `off` turns its thought off as
 /// the template of its chat reads it, and each other level is the effort of reasoning of OpenAI, which the server hands
 /// that template.
-fn efforts() -> Vec<(String, Map<String, Value>)> {
+pub(super) fn efforts() -> Vec<(String, Map<String, Value>)> {
   let off = ("off", json!({"chat_template_kwargs": {"enable_thinking": false}}));
   let levels = ["low", "medium", "high"].map(|level| (level, json!({"reasoning_effort": level})));
   let each = [off].into_iter().chain(levels);
