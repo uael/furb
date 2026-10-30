@@ -29,8 +29,8 @@ def mcp_closed(got: object, show: Show) -> dict:
   A result tells under the word text the lines of its text that its show picks, and one line of Markdown for each image block of its content, which shows the image.
   """
 
-def mcp_act(kind: str, on: str, of: str, opened: dict, show: Show, *words: object) -> Act:
-  """mcp_act(kind, on, of, opened, show, *words) is the act that every mcp act of the World shares: it puts the words to the World, its open tells the words of opened and binds the act to Act of the type that of names, and its done tells what mcp_closed gives for the answer.
+def mcp_act(kind: str, on: str, of: str, fields: dict, show: Show, *words: object) -> Act:
+  """mcp_act(kind, on, of, fields, show, *words) is the act that every mcp act of the World shares: it puts the words to the World, its open tells the words of fields and binds the act to Act of the type that of names, and its done tells what mcp_closed gives for the answer.
   An act that the World refuses completes with Refused, which an await raises in the caller, and its done tells nothing.
   """
 

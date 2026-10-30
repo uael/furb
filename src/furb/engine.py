@@ -223,7 +223,7 @@ def prompt[T](shape: type[T] | object, message="", to="", on="") -> Act[T]:
       yield "started", id
       while crafted(id):
         yield {"rung"}
-    yield told(id, "", bound(id, named), message=message, thread=thread)
+    yield opened(id, named, message=message, thread=thread)
     while not says:
       asks and not (paused(id) or any(id in x[2:4] and not over(x[1]) for x in transcript(id, "rung"))) and rung(to=to)
       yield {id}
@@ -286,7 +286,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
       )
     ladder = {x: w for x, w in program(source or id).items() if over(x) or not get(x)}
     yield "started", id
-    top = told(id, "", bound(id, "Never"), label=label, source=source)
+    top = opened(id, "Never", label=label, source=source)
     if last and (source or not last[3:]):
       yield top
       top = ""
@@ -413,7 +413,7 @@ def grant(usd: float | None = None, share: float | None = None, on="") -> Act[No
     spent = 0
     for x in transcript(here, "grant"):
       x[3] != here or x[1] == id or close(None, x[1])
-    yield told(id, "", bound(id, "None"), usd=usd, share=share)
+    yield opened(id, "None", usd=usd, share=share)
     while True:
       match (yield {id, here}):
         case ("done", about, _, (_, _, (*_, cost), _)) if question(("reply", about)):
@@ -429,7 +429,7 @@ def bash(
   command: str, stdin: str | None = "", timeout=TIMEOUT, show: Show = TAIL, show_err: Show | None = None, on=""
 ) -> Act[Exit]:
   def ear(id):
-    yield told(id, "", bound(id, "Exit"), command="" if show is HIDDEN else command)
+    yield opened(id, "Exit", command="" if show is HIDDEN else command)
     while True:
       match (yield {id, "merged"}):
         case ("merged", qid, *_, about) if about == id:
@@ -607,8 +607,8 @@ def headed(id, what="", **words):
   return text
 
 
-def bound(id, of="object"):
-  return id + ": Act[" + of + "] = Act(" + repr(id) + ")"
+def opened(id, of, **words):
+  return told(id, "", id + ": Act[" + of + "] = Act(" + repr(id) + ")", **words)
 
 
 def shown(text, show):

@@ -1025,8 +1025,8 @@ def headed(id: str, what: str = "", **words: object) -> str:
   headed shows a value as python shows it, less the path of the module before the name of its class, since a chain binds a class by its name alone.
   """
 
-def bound(id: str, of: str = "object") -> str:
-  """The statement that binds the name of an act to the act, with the type of what the act comes to, as bash1: Act[Exit] = Act('bash1'), so the gate knows what an await of it gives."""
+def opened(id: str, of: str, **words: object) -> Tell:
+  """The paragraph that opens an act: its header with no event and the binding of each of its words, then the statement that binds the name of the act to the act, with the type of what the act comes to, as bash1: Act[Exit] = Act('bash1'), so the gate knows what an await of it gives."""
 
 def shown(text: Text, show: Show) -> str:
   """The lines of a text that a show picks, as they are, one on each line, each cut at its first 1000 characters and then marked with its length, as ... (1045 chars), so a long line of a command or of a file does not fill the turns and a cut line does not read as the end of the text."""
