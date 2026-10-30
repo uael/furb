@@ -1,11 +1,12 @@
 # The JSON-RPC of furb
 
 `furb --mode rpc` serves one life on stdin and stdout, with no TUI. Use it to drive furb from a program in any
-language: the program sends commands, and reads responses and events. The shape follows the RPC mode of Pi, `pi --mode rpc`: one JSON object on each line, in
-each direction.
+language: the program sends commands, and reads responses and events. The shape follows the RPC mode of
+[Pi](https://github.com/badlogic/pi-mono), `pi --mode rpc`: one JSON object on each line, in each direction.
 
 ```sh
-furb --mode rpc --record session.jsonl --cwd path/to/project --model claude-cli:sonnet/high --roster claude-cli:haiku
+furb --mode rpc --record session.jsonl --cwd path/to/project --model anthropic:claude-sonnet-5-5/high \
+  --roster anthropic:claude-haiku-5-5
 ```
 
 - `--record` is the record to keep, and to resume from. With no record, the life keeps nothing.
@@ -13,7 +14,7 @@ furb --mode rpc --record session.jsonl --cwd path/to/project --model claude-cli:
 - `--demo` and the words after `--` are for the TUI. With `--mode rpc`, furb refuses them and exits with an error.
 
 The life runs on the engine of the crate and on the World of the crate: the files, the commands, time, the store of
-the record, the models, and the extensions that the configs turn on, as [Extensions](extensions.md) says. The roster
+the record, the models, and the extensions, as [Extensions](extensions.md) says. The roster
 of the life holds the model of the default actor, the models that `--roster` names, or each model that furb offers
 when `--roster` names none, and the operator, which is the client. `--model` names the default actor, and a prompt
 that names no actor goes to it. [Models](models.md) says how furb finds a model and how to name one. The life refuses
@@ -21,9 +22,9 @@ a prompt to a model that its roster does not hold.
 
 ## Framing
 
-- Each record is one JSON object and a line feed. furb splits its input at a line feed alone, and removes a carriage
+- Each message is one JSON object and a line feed. furb splits its input at a line feed alone, and removes a carriage
   return before it. It ignores a blank line.
-- Stdout holds the records of the protocol and nothing else. furb writes what it has to say to a person on stderr.
+- Stdout holds the messages of the protocol and nothing else. furb writes what it has to say to a person on stderr.
 - Close stdin to end the life. furb ends the commands and the models of the life, lets go of the record, and exits
   with 0. The record keeps the work that is not done, and a later life resumes it at a wake.
 
@@ -63,8 +64,8 @@ Each command is an object whose `type` names it. An `id` is optional, and the re
 - `prompt` prompts an actor on a chain. `message` is what the actor reads, and the actor reads the transcript alone when
   there is no message. `shape` is the name of the type of the response, such as `int`, `str` or `list[str]`. A prompt
   with no shape wants a `str`, so the model works until it closes the prompt with its report, and a prompt with the
-  shape `None` wants nothing. `to` is the actor, as `opus/high` or `operator`, and a prompt with no actor goes to the
-  default actor of its chain.
+  shape `None` wants nothing. `to` is the actor, as `anthropic:claude-sonnet-5-5/high` or `operator`, and a prompt
+  with no actor goes to the default actor of its chain.
 - `rung` runs `word`, which is python, as a rung on a chain, in the globals of that chain. The act is done with what
   the word gave to `close`, and with nothing when the word runs to its end.
 - `key` makes a `prompt` or a `rung` once, across a crash of furb and a retry of the client. It is any
@@ -126,8 +127,8 @@ The life says its events as they happen, after the response of the command that 
   list, a dict or a tuple is JSON, and each item has the shape of its place. An empty line answers a union that holds
   `None` with `None`. A prompt to the operator of another shape, such as `set` or the name of a class of a word, is not
   sent: furb closes it at once with a refusal, such as `the operator answers no set`. A prompt of the shape
-  `None` asks nothing: furb closes it with `None` as it sends it, so the client shows it as a notice and answers it
-  not.
+  `None` asks nothing: furb closes it with `None` as it sends it, so the client shows it as a notice and does not
+  answer it.
 
   ```json
   {"type": "prompt", "act": "prompt2", "on": "chain1", "shape": "int", "message": "how many?"}
@@ -143,15 +144,14 @@ The life says its events as they happen, after the response of the command that 
 
 ## A resumed life
 
-When furb opens on a record, the life says the record again before it serves the first command, and it streams no
-event for what it says again. `transcript` and `turns` read that part. furb wakes nothing when it opens: when the
-record holds a pause of the root, or work that an earlier life started and did not end, that work waits for a `wake`
-of the client. `state` says whether a pause stands over the root, and `pending` names the work of an earlier life that
-waits, each act as its name and its kind, such as `["bash1", "bash"]`: among each act that the World started and did
-not end, and the acts that made it, each prompt, rung, command and wait that is not done and that no pause holds. An
-act is pending no more once a `wake` puts it to the World again. A `wake` runs no command again: the World closes a
-command that an earlier life did not end with a refusal that says it was interrupted, and the model runs it again if it
-wants.
+When furb opens on a record, the life says the record again before it serves the first command, and it streams no event
+for what it says again. `transcript` and `turns` read that part. furb wakes nothing when it opens: when the record holds
+a pause of the root, or work that an earlier life started and did not end, that work waits for a `wake` of the client.
+`state` says whether a pause stands over the root, and `pending` names the work of an earlier life that waits, each act
+as its name and its kind, such as `["bash1", "bash"]`. It names each act that the World started and did not end, and
+each act that made it: each prompt, rung, command and wait that is not done and that no pause holds. An act is pending
+no more once a `wake` puts it to the World again. A `wake` runs no command again: the World closes a command that an
+earlier life did not end with a refusal that says it was interrupted, and the model runs it again if it wants.
 
 A run of a word or a reply that the record shows started in five lives and not done is parked, since each
 of those lives ended while it ran, so it may be what ended them. `parked` names each such act as `pending` names an

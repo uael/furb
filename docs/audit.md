@@ -20,7 +20,7 @@ Give the audit a record and its sha256, as the person who made the record gives 
    first act that does not agree with the record.
 4. Hashes each answer of a model and each word that the life gave the gate or ran, as the life made them again, and
    compares each hash with the hash of the same answer or word in the record. It also compares each act that you or
-   the life made with the act that the record holds.
+   the life made with the act that the record holds, where you is the operator of that life.
 
 The audit cannot make an answer of a model again, or what a command printed, since no model and no command runs. The
 sha256 of step 1 binds those answers. The replay of step 3 proves that the life made each act, and each word that it
@@ -30,12 +30,14 @@ gave the gate and ran, from those answers alone.
 
 The build that audits the record must be of the version of the build that made it. The record names that build in
 its fact `made`: the engine, as a digest of `src/furb/engine.py` and `src/furb/kernel.py`, and the version of the
-build. A build of another version refuses the record before any replay, and the audit says so. So install the release of furb that made the record, in a clean virtual environment:
+build. That version is the version of the record, which many releases share, and not the version of a release. A
+build of another version refuses the record before any replay, and the audit says so. So install a release of furb
+whose build has the version of the record, the latest one first, in a clean virtual environment:
 
 ```sh
 python3.14 -m venv clean
-clean/bin/pip install furb==<version>
-curl -sLO https://raw.githubusercontent.com/uael/furb/v<version>/script/bench/audit.py
+clean/bin/pip install furb==<release>
+curl -sLO https://raw.githubusercontent.com/uael/furb/v<release>/script/bench/audit.py
 ```
 
 Then run the audit, with the network off if you want to see that it needs none. On macOS, `sandbox-exec` turns the
@@ -45,6 +47,8 @@ network off for one command:
 sandbox-exec -p '(version 1)(allow default)(deny network*)' \
   clean/bin/python -I audit.py <record> <sha256> --report report.json
 ```
+
+On Linux, `unshare -rn` does the same: `unshare -rn clean/bin/python -I audit.py <record> <sha256>`.
 
 The audit exits 0 when everything agrees, and 1 when something does not.
 

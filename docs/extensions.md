@@ -1,8 +1,8 @@
 # Extensions
 
 An extension adds to what a model can do in furb. It is Python, as a word of a model is: a life runs the word of each
-extension on each chain where it plays, before any other word, so the functions that it defines are there for the model, and the
-model reads the extension in its turns as it reads its own work.
+extension on each chain where it plays, before any other word, so the functions that it defines are there for the model,
+and the model reads the extension in its turns as it reads its own work.
 
 An extension never goes into the system prompt. So a chain that takes one only grows at its end, and what a provider
 caches of the chain stays valid.
@@ -13,8 +13,9 @@ Seven extensions come with furb, and each life runs them unless a config turns t
 
 - **`catchup`** keeps a chain up to date with the machine. At each stand, as when a later life opens on a record, it
   reads again each file that the chain read or wrote, and tells the chain in one paragraph headed caught up the lines
-  that changed, and the hours since the life before when they are more than one. Its life word is `catchup()`. A
-  chain where nothing changed hears nothing.
+  that changed, or their count when more than 40 changed, `gone` for a file that it can no longer read, and the hours
+  since the life before when they are more than one. Its life word is `catchup()`. A chain where nothing changed hears
+  nothing.
 - **`memory`** tells a chain the memory files of its project. The memory of a folder is its `AGENTS.md`, or its
   `CLAUDE.md` when it has no `AGENTS.md`, then its `AGENTS.local.md`, or its `CLAUDE.local.md` when it has no
   `AGENTS.local.md`. A local file holds what is true on one machine alone, and git ignores it. When a chain starts, it
@@ -24,69 +25,52 @@ Seven extensions come with furb, and each life runs them unless a config turns t
   reads each memory file in the setup of the root, which every new chain holds, and then `remember()` does the rest as
   the chain works. `memory(path)` tells the memory of one path.
 - **`skills`** gives a chain the skills that it can read. `skills()` lists each skill that it finds in `.furb/skills`,
-  `.agents/skills` and `.claude/skills` of the working directory and of each folder above it, then in `skills` of the config
-  directory. `skill(name)` reads the `SKILL.md` of one skill. Its life word, `await listed()`, reads `skills://` in the
-  setup of the root, which every new chain holds. It carries one skill of its own, `extending`, which shows a model how to extend furb, with an
-  example for each way. A skill named `extending` in a folder takes its place.
-- **`compaction`** cuts a chain to the work that it still needs, and the chain goes on under its name, since a
-  compaction in furb is a prefix said on the chain, which takes the place of its transcript. `supersede(keep)` says
-  that prefix: what the filter kept, all that made it, and every act. `compact()` supersedes the chain of the caller:
-  its filter applies `FILTERS` in order, and its next word binds the summary that it is given and reads again with
-  `reground()` each file that it kept a read or write of, and shows only what changed. `latest()` keeps the last read
-  or write of each path, `quiet()` drops the commands, `recent(n)` keeps the acts of the last `n` replies,
-  `await chosen()` asks a model which acts to keep, and `together(*filters)` joins filters. `choice()` asks a model,
-  on a chain of its own, which acts the work still needs and what the rest holds, and `await condense()` asks it and
-  compacts the chain at once to what the model chose, with its summary. `compacted()` watches one chain:
-  after an answer that fills more than `SHARE`, 0.6, of the window of its model, it asks `choice()`, and at the next
-  reply after the answer, it compacts the chain to what the model chose, with its summary. It moves, stops and pauses
-  nothing, so a loop such as `while True: await conduct()` goes on with its state, and the workers that a conductor
-  hired go on. `imported(record, source)` makes a chain that goes on from the chain `source`, `chain1` by default, of
-  another record: a rung of the new chain awaits `inherit(record, source)`, which awaits `carry(record, source)`. The
-  ear of the World reads that record with no life and answers with the turns of that chain and its open prompts, and
-  the record of this life keeps the answer, so a later life opens no other file. `inherit` says the carried turns as
-  the prefix of the chain, opens each carried prompt again under a new name, and tells what it carried. Each value of
-  the module, each word that ran and each command that was open there is lost, since it ended with the life that ran
-  it, and a record whose log does not agree with it gives its replies and no tell. No chain is watched unless a word
-  asks for it, so the extension has no life word. A project changes
-  the defaults in an extension of its own whose word rebinds `SHARE`, `FILTERS`, `CHOOSER`, `LISTED` or `BRIEF`.
-  Its part for the TUI marks each compaction in the feed of the chain: a rule at its place, with its summary under
-  it, which parts what the model no longer reads from what it reads now. Its command `/compact` runs
-  `await condense()` on the chain on screen: the footer says that a model compacts the chain, and the rule shows the
-  summary once the model chose. The board of the chains says how many
-  times a chain compacted. A chain that an older compaction made, which went on in a new chain whose first word
-  restores its source, shows with that source as one chain, named `Main -> compacted`, with one feed.
-- **`ouroboros`** teaches a model to extend furb. Its file holds the lore, which every chain reads in the setup, so
-  it has no life word. The lore says the three ways to extend furb and when to take each: a def in a word, which lives with its chain; `extend(name, *rungs)`, which
-  writes the words of those rungs as an extension of the project and turns it on, so every later chain runs it; and
-  an official extension, which lives in furb. `extend(name, *rungs, tui=module)` also writes a
-  [part for the TUI](#a-part-for-the-tui). `enabled()` gives the extensions that the life runs.
+  `.agents/skills` and `.claude/skills` of the working directory and of each folder above it, then in `skills` of the
+  config directory. `skill(name)` reads the `SKILL.md` of one skill. Its life word, `await listed()`, reads `skills://`
+  in the setup of the root, which every new chain holds. It carries one skill of its own, `extending`, which shows a
+  model how to extend furb, with an example for each way. A skill named `extending` in a folder takes its place.
+- **`compaction`** cuts a chain to the work that it still needs, and the chain goes on under its name. `compact()` keeps
+  what `FILTERS` keep, binds a summary in its next word, and reads again with `reground()` each file that it kept,
+  showing only what changed. The filters are `latest()`, the last read or write of each path, `quiet()`, which drops the
+  commands, `recent(n)`, the acts of the last `n` replies, and `await chosen()`, which asks a model.
+  `together(*filters)` joins them, and `supersede(keep)` applies one. `await condense()` asks a model what to keep and
+  compacts at once. `compacted()` does the same for one chain each time an answer fills more than `SHARE`, 0.6, of the
+  window, and moves, stops and pauses nothing. `imported(record, source)` makes a chain that goes on from the chain
+  `source`, `chain1` by default, of another record: its turns and its open prompts come, and the values of its module,
+  its words and its open commands do not. The extension has no life word. A project changes `SHARE`, `FILTERS`,
+  `CHOOSER`, `LISTED` or `BRIEF` in an extension of its own. In the TUI, a rule with the summary marks each compaction
+  in the feed, and `/compact` runs `await condense()` on the chain on screen.
+- **`ouroboros`** teaches a model to extend furb. Its file holds the lore, which every chain reads in the setup, so it
+  has no life word. The lore says the three ways to extend furb and when to take each: a def in a word, which lives with
+  its chain; `extend(name, *rungs)`, which writes the words of those rungs as an extension of the project and turns it
+  on, so every later chain runs it; and an official extension, which lives in furb. `extend(name, *rungs, tui=module)`
+  also writes a [part for the TUI](#a-part-for-the-tui). `enabled()` gives the extensions that the life runs.
 - **`web`** searches the web and reads its pages. `web_search(query)` uses the search of the provider of the model of
-  the chain, or of the actor that `to` names: the tool WebSearch of the claude command line, the web search of the
-  APIs of Anthropic, OpenAI and xAI, Gemini grounded in Google Search, and the search of DeepSeek. For a provider with
-  no search, it uses the free search of Parallel for agents, which needs no key. `web_fetch(url)` reads a page, as
-  Markdown when it is HTML. Each is an act to await, as a command is, since a page takes seconds. The extension has no
-  life word.
-- **`mcp`** connects the chain to the servers of the Model Context Protocol, as Claude Code does. A server comes from
-  three configs, and the later wins for a name: `mcp.json` in the config directory of the user, `.mcp.json` of the
-  project, which has the form of Claude Code, and `.furb/mcp.json`. Each holds `{"mcpServers": {name: server}}`: a
-  command, its `args`, `env` and `cwd` for a server over stdio, or a `type` of `http` or `sse` with a `url` and
-  `headers` for a remote one. `${VAR}` and `${VAR:-default}` expand in each of them, `"timeout"` bounds a call in
-  seconds, `"deny"` hides tools, and `"disabled": true` turns a server off. A server of `.mcp.json` runs only once the
-  operator approves it. The ear of the World connects each server, ends each server over stdio with the life, connects
-  a lost server again with a backoff, and signs in to a remote server with OAuth 2.1 when it asks for a login: the
-  token stays in the Keychain on macOS, else in a file that only the user reads. Its life word, `await mcp_index()`, tells
-  each chain one line for each server, with its state and its tools, and binds the tools of each short server as a
-  class of typed functions, so a model writes `await github.create_issue(owner="o", repo="r", title="t")` and the gate
-  checks each argument before the call. `mcp_use(server)` binds a larger server, `mcp_tools(server)` and
-  `mcp_tool(server, name)` tell signatures and schemas, `mcp_call(server, tool, arguments)` calls a tool by its
-  original names, `mcp_read(server, uri)` reads a resource, `mcp_prompt(server, name, arguments)` expands a prompt,
-  and `mcp_control(action, server)` reconnects, enables, disables, approves, logs in or logs out. Each answer of a
-  server stays in the record, so a later life asks no server again. Its part for the TUI gives `/mcp`, a dialog of the
-  servers and their actions, a command for each prompt of a server, a status in the footer, a row for each call of a
-  tool, and `@` in the input, which completes the resources of the servers.
+  the chain, or of the actor that `to` names: the web search of the APIs of Anthropic, OpenAI and xAI, Gemini grounded
+  in Google Search, and the search of DeepSeek. For a provider with no search, it uses the free search of Parallel for
+  agents, which needs no key. `web_fetch(url)` reads a page, as Markdown when it is HTML. Each is an act to await, as a
+  command is, since a page takes seconds. The extension has no life word.
+- **`mcp`** connects the chain to the servers of the Model Context Protocol. A server comes from three configs, and the
+  later wins for a name: `mcp.json` in the config directory of the user, `.mcp.json` of the project, which has the form
+  of Claude Code, and `.furb/mcp.json`. Each holds `{"mcpServers": {name: server}}`: a command, its `args`, `env` and
+  `cwd` for a server over stdio, or a `type` of `http` or `sse` with a `url` and `headers` for a remote one. `${VAR}`
+  and `${VAR:-default}` expand in each of them, `"timeout"` bounds a call in seconds, `"deny"` hides tools, and
+  `"disabled": true` turns a server off. A server of `.mcp.json` runs only once the operator approves it. The ear of the
+  World connects each server, ends each server over stdio with the life, connects a lost server again with a backoff,
+  and signs in to a remote server with OAuth 2.1 when it asks for a login: the token stays in the Keychain on macOS,
+  else in a file that only the user reads. Its life word, `await mcp_index()`, tells each chain one line for each
+  server, with its state and its tools, and binds the tools of each short server as a class of typed functions, so a
+  model writes `await github.create_issue(owner="o", repo="r", title="t")` and the gate checks each argument before the
+  call. `mcp_use(server)` binds a larger server, `mcp_tools(server)` and `mcp_tool(server, name)` tell signatures and
+  schemas, `mcp_call(server, tool, arguments)` calls a tool by its original names, `mcp_read(server, uri)` reads a
+  resource, `mcp_prompt(server, name, arguments)` expands a prompt, and `mcp_control(action, server)` reconnects,
+  enables, disables, approves, logs in or logs out. Each answer of a server stays in the record, so a later life asks no
+  server again. Its part for the TUI gives `/mcp`, a dialog of the servers and their actions, a command for each prompt
+  of a server, a status in the footer, a row for each call of a tool, and `@` in the input, which completes the
+  resources of the servers.
 
-`compaction`, `web` and `mcp` each hold a short guide for the model, a quote named after the extension, which the model reads
-on each chain.
+`compaction`, `web` and `mcp` each hold a short guide for the model, a quote named after the extension, which the model
+reads on each chain.
 
 ## Turn an extension on or off
 
@@ -108,7 +92,6 @@ A config of another form, a folder with no manifest, a manifest of another name,
 with their path. The `.furb` of a project keeps all that it holds out of version control but `config.json` and
 `extensions/`, since the extensions of a project are code of the project, which its team shares.
 
-`furb extensions` prints the extensions that a life here runs, and `/extensions` lists them in the TUI.
 
 ## Write your own
 
@@ -116,7 +99,7 @@ The smallest extension is a function that a model wrote in a word. When a later 
 `extend(name, ...)` of `ouroboros`, which writes the extension for you. You can also write one by hand: an extension
 is a folder.
 
-```
+```text
 .furb/extensions/<name>/
   furb.json     the manifest
   <name>.py     the word
@@ -150,11 +133,11 @@ clock, a chance, and a prompt to the operator. It can also make acts that an ear
 Python, as `remember()` does, and answer the reads of a scheme of its own. An extension that needs an ear in Rust is
 a change of furb. The skill `extending` gives an example of each.
 
-An official extension also has a contract, `<name>.pyi`, whose laws its suite in `test/` holds, as
-[the hygiene laws](../AGENTS.md#the-hygiene-laws) say, and an ear of the World in `src/extension/<name>.rs` when it
-reads the disk or the network, as `memory`, `skills` and `web` do. Its part for the TUI, `tui.ts` beside its word as
-`compaction` has, is in the crate, so the TUI loads it from an installed package too, where no checkout of furb
-stands. It changes with a build of furb, and not live.
+An official extension also has a contract, `<name>.pyi`, whose laws its suite in `test/` holds, as [the hygiene
+laws](../AGENTS.md#the-hygiene-laws) say, and an ear of the World in `src/extension/<name>.rs` when it reads the disk or
+the network, as `memory`, `skills`, `web`, `compaction` and `mcp` do. Its part for the TUI, `tui.ts` beside its word as
+`compaction` and `mcp` have, is in the crate, so the TUI loads it from an installed package too, where no checkout of
+furb stands. It changes with a build of furb, and not live.
 
 Turn on only the extensions that you trust. A word runs in the sandbox of monty with the engine of the crate, and with
 the rights of your user with the engine of CPython, as a word of a model does there.
@@ -221,25 +204,24 @@ export default function (furb) {
     selected, and its `value`. Enter gives the selected item with the action `""`, and the key of an action, as
     `{ key: "r", label: "reconnect" }`, gives the item with that key. A key that types a sign acts only while the
     filter of the list is empty.
-  - `form(title, fields, { note })` opens a form and gives the value of each field by its name. A field has a
-    `name`, a `label`, a `detail`, a `value` that it starts with, and can be `secret`, which shows a dot for each
-    sign, or `required`. Tab and Enter go to the next field, and Enter on the last one sends the form, which stays
-    open while a field that it needs is empty.
+  - `form(title, fields, { note })` opens a form and gives the value of each field by its name. A field has a `name`, a
+    `label`, a `detail`, a `value` that it starts with, and can be `secret`, which shows a dot for each sign, or
+    `required`. Tab and Enter go to the next field, ⇧Tab to the one before, and Enter on the last one sends the form,
+    which stays open while a field that it needs is empty.
   - `confirm(title, text, { yes, no })` asks a question and gives `true` for yes.
 
   A dialog that Escape closes, or that another dialog replaces, gives `undefined`, or `false` for a confirm. A key or a
-  command whose run awaits a dialog keeps the TUI free while the dialog is open.
-  `furb.life` is [the model of a life](../bind/typescript/README.md), `furb/life`.
+  command whose run awaits a dialog keeps the TUI free while the dialog is open. `furb.life` is [the model of a
+  life](../bind/typescript/README.md#the-model-of-a-life), `furb/life`.
 
 A part imports types alone, so it loads in any project. `tui/src/parts.ts` gives the types, and `tui/fixtures/todo`
 is an extension with a part that uses each of them. The part of `mcp`, `extensions/mcp/tui.ts`, uses only this API.
 
 ![The dialog of a list that a part opens](screenshots/75e-part-list.png)
 
-The TUI loads the parts when it opens a session, and again when a file of the folder of
-a part changes, or when a write of the life lands in `.furb` or in the folder of a part, as a write of `extend` does.
-It loads them also for a life that enables no extension, such as the demo, since a part reads only the acts of the
-life.
+The TUI loads the parts when it opens a session, and again when a file of the folder of a part changes, or when a write
+of the life lands in `.furb` or in the folder of a part, as a write of `extend` does. It loads them also for a life that
+enables no extension, such as the demo, since a part reads only the acts of the life.
 
 When a part fails, the TUI goes on. A module that does not load, that exports no function, or whose function throws
 shows its error in plain words in a panel under its name. A panel or a row that throws shows its error in its place,
@@ -271,15 +253,14 @@ The extensions that a life enables at its start are those that the configs turn 
 `.furb/config.json` lands in the middle of a life, the life enables each extension that the config turns on by its
 path and that it does not run yet. An extension that a config turns off runs on until the life ends.
 
-A life reloads an extension that it runs when its word changes: at its start, or at a later stand, for the word that
-the host gives, as a new build gives a new word of an official extension, and when a write of the life lands in the
-folder of an extension that a config turns on, as `extend()` does. The life enables it again with the new word, and
-each chain plays the definitions of that word: its imports, its functions, its classes, its types and its
-names in capitals, and each name of state that it assigns, as `queue: list = []`, in file order. So a function and a
-constant take their new value, a new name of state takes its first value, a name of state that the chain holds, such
-as `queue`, keeps its value, and the life word does not run again. A change of a file that no write of the life makes reaches the life at its
-next start. A host that gives no extensions, as the DeepSWE rig does,
-enables none.
+A life reloads an extension that it runs when its word changes: at its start, or at a later stand, for the word that the
+host gives, as a new build gives a new word of an official extension, and when a write of the life lands in the folder
+of an extension that a config turns on, as `extend()` does. The life enables it again with the new word, and each chain
+plays the definitions of that word: its imports, its functions, its classes, its types and its names in capitals, and
+each name of state that it assigns, as `queue: list = []`, in file order. So a function and a constant take their new
+value, a new name of state takes its first value, a name of state that the chain holds, such as `queue`, keeps its
+value, and the life word does not run again. A change of a file that no write of the life makes reaches the life at its
+next start. A host that gives no extensions, as the DeepSWE rig does, enables none.
 
 Each thing that comes from the disk reaches a chain through a question that an ear of the World answers, and a later
 life gets the same answer from the record. So a replay is exact, and the World is asked nothing twice.

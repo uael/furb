@@ -4,7 +4,7 @@ description: "Use whenever you write, change, review, or sweep tests of furb. Th
 license: Adapted from the skill test-audit of openclaw at 9a75b9b, under the terms in LICENSE.txt
 ---
 
-# Test Audit
+# Test audit
 
 Three modes hold one bar of value. The authoring mode gates each new or changed test when you write it. The audit
 mode sweeps one part for tests of low value. The campaign mode prunes the whole test surface of one part in one
@@ -20,11 +20,11 @@ tests.
   its laws. A test of these suites is owned by its sentence: you never delete it alone. When its assertions do not
   prove its sentence, repair them. When the sentence is wrong, the owner decides, and the sentence and its test
   change together.
-- `test/outside/` proves the World, the Kernel, the door to python, and the switch of the package. The hygiene laws
-  do not hold these tests, so this gate holds them.
-- The tests of the crate stand beside each module, `src/<name>.test.rs`, and `cli/tests/furb.rs` runs the command
-  line as a process.
-- The TypeScript tests stand in `bind/typescript/test/` and `tui/test/`.
+- `test/outside/` proves the World, the Kernel, the door to python, the switch of the package, the harness, the
+  examples and the life as a program. The hygiene laws do not hold these tests, so this gate holds them.
+- The tests of the crate stand beside each module, `src/<name>.test.rs`, `tests/examples.rs` runs the examples, and
+  `cli/tests/furb.rs` runs the command line as a process.
+- The TypeScript tests stand in `bind/typescript/test/`, `tui/test/` and `gui/test/`.
 
 Each contract has one primary test at its strongest boundary. A sentence of the contract is proved once, by the
 contract suite, on both engines. A test of a door proves what the door carries that no sentence says. A test of
@@ -109,8 +109,9 @@ screen of the TUI. Also keep:
 - a test of an order of calls, when the order is a behavior someone sees;
 - a regression test whose failure can occur;
 - a check of the source, when it is the cheapest guard that fails when the contract changes and that survives a
-  rename, as the hygiene laws are;
-- a kept test that fails on the base: take it as a possible bug of the product, reproduce it, and repair the owner.
+  rename, as the hygiene laws are.
+
+A kept test that fails on the base is a possible bug of the product: reproduce it, and repair the owner.
 
 A test that is slow or that reads the source is not deleted for that. A test that looks like the implementation may
 still be the only guard of a contract; prove that it is not before you remove it.
@@ -140,11 +141,11 @@ turn a candidate you are not sure of into a cleanup to raise a count.
 
 The commands are in `AGENTS.md`, and the `testing` skill says which one proves which change.
 
-1. Run the tests of the owner and of its siblings: `uv run pytest -q <path>`, `cargo test <filter>`, or
-   `bun run test`, which gives the tests the config and the cache of `.furb/tests`.
+1. Run the tests of the owner and of its siblings: `uv run pytest -q <path> --no-cov`, `cargo test <filter>`, or
+   `bun run test <filter>`.
 2. When you remove a check of the source, run the command that owns the real contract.
 3. Format, then run `git diff --check`.
-4. Run the gates that the change needs, and `uv run pytest -q test/test_hygiene.py` for any change of a suite.
+4. Run the gates that the change needs, and `uv run pytest -q test/test_hygiene.py --no-cov` for any change of a suite.
 5. Read `git diff --numstat`, and count the product apart from the tests and their support.
 
 ## Landing

@@ -35,10 +35,10 @@ act("notes", "", notes)
 
 ## An extension
 
-An extension is a folder that a host enables on each chain of a life, and on each chain born later. The record keeps
-that it is on, so a later life runs it again.
+An extension is a folder that a host enables on each chain of a life, and on each chain born later, or on the root
+alone when its manifest says `"plays": "root"`. The record keeps that it is on, so a later life runs it again.
 
-```
+```text
 notes/
   furb.json   { "name": "notes", "word": "notes.py", "life": "act('notes', '', notes)" }
   notes.py    the word: a python module that imports from furb.engine what it uses, and only defines
@@ -56,7 +56,7 @@ An extension can also give the TUI a part: a module of TypeScript beside its wor
 `tui`. The TUI loads it at its start, and again when its file changes or when a write of the extension lands, with
 no restart. The module imports no value: it exports a function, which the TUI calls with `furb`.
 
-```
+```text
 todo/
   furb.json   { "name": "todo", "word": "todo.py", "tui": "tui.ts" }
   todo.py     def todo(item: str, *, done: bool = False, on: str = "") -> Act:
@@ -79,11 +79,11 @@ export default function (furb) {
 A panel stands over the input and gives its lines, each a text or a list of `[text, tone]`, where a tone is `text`,
 `muted`, `faint`, `accent`, `success`, `warning` or `danger`. A row gives the label and the details of each act of
 its kind in the feed. `furb.mark(draw)` gives marks, each `{ chain, at, title, lines }`: the feed of that chain shows
-a rule with the title and the lines under it, after the last act whose `began` is before `at`. A key acts while no dialog is open, and a command runs from the palette or as `/name`. A key or
-a command of the TUI wins. `extend(name, *rungs, tui=module)` writes the part with the word.
+a rule with the title and the lines under it, after the last act whose `began` is before `at`. A key acts while no
+dialog is open, and a command runs from the palette or as `/name`. A key or a command of the TUI wins.
+`extend(name, *rungs, tui=module)` writes the part with the word.
 
-The TUI loads the part again by itself each time a write of the life lands in the folder of the extension, with no
-restart. A panel reads the acts of a kind, so make them with a def in the word of the extension, as `todo` above does,
+A panel reads the acts of a kind, so make them with a def in the word of the extension, as `todo` above does,
 and `seen.of("todo")` gives them in the order of the record.
 
 Check a part before you say that it works. The TUI shows a part that fails, in plain words, in a panel under the name of
@@ -96,5 +96,4 @@ tells you an error, read the file again, change it with `replace`, and write it:
 
 An official extension of furb also has a contract, `notes.pyi`, a suite, `test/`, and, when it reads the disk, an ear
 of the World in the crate, `src/extension/notes.rs`. The crate carries its part, so the TUI loads it in an installed
-package too. The guide of the extensions of furb says the rest:
-https://github.com/uael/furb/blob/main/docs/extensions.md.
+package too. [The guide of the extensions](https://github.com/uael/furb/blob/main/docs/extensions.md) says the rest.

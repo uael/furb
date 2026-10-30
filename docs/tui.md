@@ -8,7 +8,7 @@ renderer and the real engine, with a scripted provider of the answers of the mod
 commands. `bun run screenshots` takes them again, and `bun run animation` records the animation below: it types,
 clicks, and waits in a real session, and keeps each picture that changed. The scripts are in `tui/script/`.
 
-![The furb TUI in action](furb.gif)
+![An animation of a session of the furb TUI](furb.gif)
 
 ## Welcome
 
@@ -16,18 +16,17 @@ An empty feed shows the logo of furb, what it does, the project and the model, t
 know. The first way plays a life to watch, which asks no model. A click on each other way puts its prompt in the
 input. The top line names the session, the chain, and the
 directory of the chain, and the toggle at its right switches the three views of the chain. The footer says what the
-session does and offers the keys that act now, each a button that does what its key does. Ink is the default.
+session does and offers the keys that act now, each a button that does what its key does.
 
 ![Welcome](screenshots/01-welcome.png)
 
 ## First run
 
-On the first run, and on each run while no model answers, the welcome checks the setup: the claude command line and
-whether it is signed in, the keys in the environment, the local server, and the models that answer. Each part that is
-missing shows its fix. When no model answers, the welcome says so first, then offers only the life to watch, which
-needs no model, and the input says so too. While the input is empty, `r` checks the setup again, as after a sign in.
-The welcome shows on each chain that holds no act of you or of a model, so the steps that the extensions run as a
-chain starts do not hide it. The capture is a real life on a home that holds no model.
+On the first run, and on each run while no model answers, the welcome checks the setup: the keys of the providers of
+the network in the environment, the local server, and the models that answer. Each part that is missing shows its
+fix. When no model answers, the welcome says so, offers only the life to watch, which needs no model, and the input
+says so too. F5 checks the setup again. The welcome shows on each chain that holds no act of you or of a model, so
+the steps that the extensions run as a chain starts do not hide it.
 
 ![Setup with no model](screenshots/63-setup-no-model.png)
 
@@ -40,9 +39,9 @@ who wrote it, and what it did, as "read a file". `bun run demo` opens on it.
 
 ![Watch a life](screenshots/64-watch-a-life.png)
 
-While the input is empty, `[` and `]` move the feed back and on in time: an act that began later is not there yet,
-and an act that ended later is not done yet. `b` starts a branch at the moment shown, with the files as they were
-then, and Esc comes back to now.
+While the input is empty, ⌃← and ⌃→ move the feed back and on in time: an act that began later is not there yet, and
+an act that ended later is not done yet. ⌥B starts a branch at the moment shown, with the files as they were then,
+and Esc comes back to now.
 
 ![An earlier moment](screenshots/65-watch-earlier.png)
 
@@ -56,7 +55,7 @@ The captures of the feed show a real life: a conductor and the workers that it h
 life of furb, with 23 chains, 21 of them at work, and ladders of up to 76 rungs. `tui/fixtures/conductor.jsonl`
 holds it, with no key and no path of a home in it, and `bun run demo` opens it beside the scripted life.
 
-The sidebar shows the workspaces, and the threads of the workspace where you work. Its shape cards is the default. A
+The sidebar shows the workspaces, and the threads of the workspace where you work. Its default shape is cards. A
 switcher on top lists each workspace on one row, the one shown lit, with the marks of what needs a look in it: ◆ for a
 question that waits, ✗ for a session that failed, ◌ for a pause, ◉ for work, and ● for a finished session that you did
 not see. When a question waits in any workspace, a line on top says how many, and ⌥A goes to the next one, in the
@@ -66,13 +65,14 @@ its chain when it is not Main. The sidebar is wide, 56 columns by default, and i
 
 A click on a workspace gives it the focus: its session that asks, else one that lives, else its newest, opens in the
 feed. A click on the arrow of a workspace that has not the focus shows its sessions without a change of focus. A click
-on a thread shows it in the feed, on its chain, and the input then sends each message to it, as
-`prompt(str, message, on=thread)`, which its model reads at its next step and answers. A message to a resolved thread
-opens it again. Under the thread lit, Collapse folds it in the feed to its box on one line, Resolve closes it, as
-`close(None, thread)` does, and Reply makes it the target of the input, as Reply at the end of its box does. The resolved threads fold under one row, Resolved, which a click opens. After ⌥T the
-arrows move in the sidebar, Enter opens the workspace, the session or the thread under them, → peeks at a workspace, Space
-folds, r resolves, o replies, and Esc gives the keys back to the input. At the foot of the sidebar, Context says how
-full the window of the chain shown is and where a grant pauses it, its tokens, and what it spent.
+on a thread shows it in the feed, on its chain, and the input then sends each message to it, as `prompt(str, message,
+on=thread)`, which its model reads at its next step and answers. A message to a resolved thread opens it again. Under
+the thread lit, Collapse folds it in the feed to its box on one line, Resolve closes it, as `close(None, thread)` does,
+and Reply makes it the target of the input, as Reply at the end of its box does. The resolved threads fold under one
+row, Resolved, which a click opens. After ⌥T the arrows move in the sidebar, Enter opens the workspace, the session or
+the thread under them, → peeks at a workspace, Space folds, r resolves, o replies, and Esc gives the keys back to the
+input. At the foot of the sidebar, Context says how full the window of the chain shown is and where a grant pauses it,
+its tokens, and what it spent.
 
 `/sidebar outline` and `/sidebar inbox` give the other shapes, and the flag `FURB_SIDEBAR` does the same at the start.
 The outline lists all workspaces in one tree: the workspace shown is open, with its sessions and, under the session
@@ -84,35 +84,35 @@ the questions of every workspace under its top line, each with the buttons that 
 The feed shows the threads of the chain, each as one box. A thread is a prompt: its message heads the box as markdown,
 with a line at its left in the color of the thread, which starts half a row above the message and ends half a row under
 it, as the line of a panel does, so it adds no row. Only your messages have it: the code and the answers have no line,
-and their text starts where the text of a message starts, as it starts in the input. At the right of the message stands who sent it and to which model when you did not, the type of
-its answer, its state and its controls. Each message that came to the thread later stands in the box the same way, and
-the answer of the model stands as markdown with no line of color. The words of its steps stand in the same box as code, with no
-surface of their own, as one Python program, line by line, with the number of each line in the gutter, in a quiet color.
-The input of the chain is the only input. By default it sends each message to the open thread lit, else it starts a
-new thread. `↳ Reply` at the end of a box makes that thread its target, and a reply to a thread that is over opens it
-again. While the input sends to a thread, its line takes the color of the thread, its meta line says `to ↳` and the
-name of the thread, and the box of the thread ends with `↳ Replying here` in its color. `+ New thread`, at the right
-end of the meta line, and `/newthread`, make the next message start a thread of its own. The target holds from the first
-character that you type until you send or clear the message, so a thread that opens meanwhile takes nothing that you
-wrote for another. ↑ in an empty input takes back your last message to the thread, while it runs or once a cancel ended
-it, to edit it and send it again in its place. The numbers go on from one step to the
-next, so a thread counts the lines of its program from its first step to its last, also past the steps that a fold keeps
-out. No step and no act takes a row of its own. Each line ends with a quiet hint of what its acts came to: a read the
-count of its lines, a write the lines that it added and removed, a command its exit and the count of the lines that it
-printed, a question its answer or what it waits for, and a loop its count, as x6. The first line of each step says how
-long the step ran and what the answers of its model cost. The time is known for the work that the TUI saw run, since the
-record holds no time. The line that runs is lit, with a mark in the gutter and, after a second, its time, and the last
-lines that its command prints stream under it. A line that the gate refused has a red cross at its end, and the reason
-stands under it as a comment. The line that runs has a mark at its end too, and the line that it awaits has an arrow. A
-message that you send to the thread, and each notice of the chain, stands as a comment among the steps. While the model
-of the thread works on a step, each line of its word that it finished stands above as Python in its colors, and the last
-row of the thread is the line that comes: a loader after it, and the line that the model still writes, else the last
-line that it thinks, as a comment, or `# thinking` while it shows no thought, whose letters a light crosses. The answer
-of the thread stands under its program, with the model that gave it and its effort at its right. A thread that you fold
-stands as one line, with the line of its color half a row above and under it. A
-word that you run stands as your messages stand, as its program in a panel of its own color, and so does an act that no
-word made, as a command that `/bash` starts: one line of Python that binds the act to its name, as `bash3 = bash("make
-docs")`.
+and their text starts where the text of a message starts, as it starts in the input. At the right of the message stands
+who sent it and to which model when you did not, the type of its answer, its state and its controls. Each message that
+came to the thread later stands in the box the same way, and the answer of the model stands as markdown with no line of
+color. The words of its steps stand in the same box as code, with no surface of their own, as one Python program, line
+by line, with the number of each line in the gutter, in a quiet color. The input of the chain is the only input. By
+default it sends each message to the open thread lit, else it starts a new thread. `↳ Reply` at the end of a box makes
+that thread its target, and a reply to a thread that is over opens it again. While the input sends to a thread, its line
+takes the color of the thread, its meta line says `to ↳` and the name of the thread, and the box of the thread ends with
+`↳ Replying here` in its color. `+ New thread`, at the right end of the meta line, and `/newthread`, make the next
+message start a thread of its own. The target holds from the first character that you type until you send or clear the
+message, so a thread that opens meanwhile takes nothing that you wrote for another. ↑ in an empty input takes back your
+last message to the thread, while it runs or once a cancel ended it, to edit it and send it again in its place. The
+numbers go on from one step to the next, so a thread counts the lines of its program from its first step to its last,
+also past the steps that a fold keeps out. No step and no act takes a row of its own. Each line ends with a quiet hint
+of what its acts came to: a read the count of its lines, a write the lines that it added and removed, a command its exit
+and the count of the lines that it printed, a question its answer or what it waits for, and a loop its count, as x6. The
+first line of each step says how long the step ran and what the answers of its model cost. The time is known for the
+work that the TUI saw run, since the record holds no time. The line that runs is lit, with a mark in the gutter and,
+after a second, its time, and the last lines that its command prints stream under it. A line that the gate refused has a
+red cross at its end, and the reason stands under it as a comment. The line that runs has a mark at its end too, and the
+line that it awaits has an arrow. A message that you send to the thread, and each notice of the chain, stands as a
+comment among the steps. While the model of the thread works on a step, each line of its word that it finished stands
+above as Python in its colors, and the last row of the thread is the line that comes: a loader after it, and the line
+that the model still writes, else the last line that it thinks, as a comment, or `# thinking` while it shows no thought,
+whose letters a light crosses. The answer of the thread stands under its program, with the model that gave it and its
+effort at its right. A thread that you fold stands as one line, with the line of its color half a row above and under
+it. A word that you run stands as your messages stand, as its program in a panel of its own color, and so does an act
+that no word made, as a command that `/bash` starts: one line of Python that binds the act to its name, as `bash3 =
+bash("make docs")`.
 
 ![The last row of a thread while its model works](screenshots/84-thinking-row.png)
 
@@ -163,10 +163,9 @@ or a ... once the window rolled, the line that runs stands second to last, and t
 come, or the row where the model writes. A click on a ... opens the lines in a block that scrolls, up to four
 hundred, and Roll up closes it. The feed shows one line in place of its earlier threads, as "28 earlier messages". A
 click on the line shows them. A long message shows its first rows, with a line that shows the rest. A jump to an act
-opens each fold over it. The sidebar and the feed come from the model of a life that `furb/life`
-gives, so each host shows the same life. Under the chains, the sidebar shows the workspaces, each with the session
-shown, each session that works, asks or failed, and its newest sessions up to three, and the older ones fold under
-Earlier.
+opens each fold over it. In the sidebar, a workspace lists the session shown and
+each session that works, asks or failed, then its newest other sessions until it lists three, and the older ones fold
+under Earlier.
 
 ![Feed](screenshots/02-feed.png)
 
@@ -226,13 +225,14 @@ The model picker names the current model and the window of each. ⇧Tab chooses 
 
 ## Questions and notices for you
 
-A model asks you a question with a prompt to the operator, and a prompt of None is a notice, which tells you
-something and asks nothing. A notice waits for nothing: it settles in the feed as a panel on one line, as a folded thread
-does, with the first line of its message and the count of its other lines, and a click opens it to its whole message. No key
-dismisses it. Many questions can wait at once, on many chains. The desk over the input shows what waits: a mark `◆`
-for each question, in the order that they came, and the one that you act on in the color of a question, with its place, its chain, its id, and what it wants. Under it stand the first line of
-its message, the count of its other lines, and its choices or where the input sends its answer. A click on a mark
-goes to its ask and shows its chain, and a click on the message opens it whole.
+A model asks you a question with a prompt to the operator, and a prompt of None is a notice, which tells you something
+and asks nothing. A notice waits for nothing: it settles in the feed as a panel on one line, as a folded thread does,
+with the first line of its message and the count of its other lines, and a click opens it to its whole message. No key
+dismisses it. Many questions can wait at once, on many chains. The desk over the input shows what waits: a mark `◆` for
+each question, in the order that they came, and the one that you act on in the color of a question, with its place, its
+chain, its id, and what it wants. Under it stand the first line of its message, the count of its other lines, and its
+choices or where the input sends its answer. A click on a mark goes to its ask and shows its chain, and a click on the
+message opens it whole.
 
 On the chain shown, the input answers the question that you point at, or else the oldest question of the chain. The
 line under the input says so, as `answers prompt2 returns str`, and the card of that question in the feed says that
@@ -277,8 +277,8 @@ list. Other gives the input to your own words here too.
 ![Operator notice](screenshots/22-operator-notice.png)
 
 ⌃A opens the dialog of the question that you act on, with its whole message. Tab and ⇧Tab go to the next and the
-previous question, and show its chain under the dialog. An answer goes on to the next question that waits, and the dialog
-closes when none waits.
+previous question, and show its chain under the dialog. An answer goes on to the next question that waits, and the
+dialog closes when none waits.
 
 ![Answer dialog](screenshots/53-question-dialog.png)
 
@@ -325,9 +325,9 @@ colors.
 
 In Ink, the text is a soft gray and never white. Python has one color for each part, in the feed and in the graph:
 purple for a keyword, green for a string, orange for a number, `None`, `True`, `False` and a backslash sequence, teal
-for a name that the code calls or defines, gold for a type, and gray italic for a comment. An operator keeps the color of
-the text, so a keyword is the one purple on a line. None of these colors is pastel, and each one reads on every surface
-of the feed.
+for a name that the code calls or defines, gold for a type, and gray italic for a comment. An operator keeps the color
+of the text, so a keyword is the one purple on a line. None of these colors is pastel, and each one reads on every
+surface of the feed.
 
 ![The theme of a light terminal](screenshots/78-terminal-light.png)
 
@@ -367,7 +367,7 @@ workspace shown, whatever their chain.
 
 ## Views of the life
 
-Main, the loom and the graph are three views of the whole life, side by side. ⌥V switches the view at
+Main, the loom and the graph are three views of the whole life, and one shows at a time. ⌥V switches the view at
 run time, `/view` names one or lists the three, `--view main|loom|graph` chooses one at the start, and the setting
 keeps the last one. The loom and the graph stand over the feed of the selected chain, and each
 screen of main stays where it is in each view: the transcript, the changes, the palette, the dialogs, the desk, and
@@ -384,11 +384,11 @@ dollars against the ceiling of its grant, and the share of the window that its l
 
 ![The loom](screenshots/66-loom.png)
 
-⌥G gives the keys to the loom, and Esc gives them back to the input. The arrows move between the chains and fold
-the workers of a chain into its row. `[` and `]` move a cursor in time by one moment, and `{` and `}` by ten: the
-loom and the feed show the life as it stood then, and the right edge of the loom says `then`. The verbs that change the life do nothing in
-the past, `b` branches the selected chain at the cursor, and Esc returns to now. Space pauses or wakes the selected
-chain, `x` cancels its work, `n` lets it run one more rung, and Tab answers the oldest question.
+⌥G gives the keys to the loom, and Esc gives them back to the input. The arrows move between the chains and fold the
+workers of a chain into its row. `[` and `]` move a cursor in time by one moment, and `{` and `}` by ten: the loom and
+the feed show the life as it stood then, and the right edge of the loom says `then`. The verbs that change the life do
+nothing in the past, `b` branches the selected chain at the cursor, and Esc returns to now. Space pauses or wakes the
+selected chain, `x` cancels its work, `n` lets it run one more rung, and Tab answers the oldest question.
 
 ![The cursor in time](screenshots/67-loom-time-cursor.png)
 
@@ -437,7 +437,7 @@ input, fix it and send it again, or wait while the chain asks the model again wi
 
 When a call of a model fails for a cause that passes, as a lost connection, a provider that is overloaded or a limit
 of the rate, the provider asks the model again after a wait that doubles each time, up to ten attempts. The footer
-counts the wait down, as `Retrying in 4 s, attempt 2 of 10, connection reset`.
+counts the wait down, as `Retrying in 4 s, attempt 2 of 10, connection reset: /retry or /cancel`.
 
 ![Model retry](screenshots/62-model-retry.png)
 
@@ -455,13 +455,14 @@ A session that opens with unfinished work stays paused until you resume it.
 
 ## A record to read
 
-A record whose replay drifts, as a record that a build of another version made, opens to read. The TUI shows what the record
-kept: each chain, each rung with its word, and each act. No word runs again, no model is asked, and a command that
-would change the life is refused. A read leaves the record and its log as they were. It can refresh the derived cache, `<record>.told`.
+A record whose replay drifts, as a record that a build of another version made, opens to read. The TUI shows what the
+record kept: each chain, each rung with its word, and each act. No word runs again, no model is asked, and a command
+that would change the life is refused. A read leaves the record and its log as they were. It can refresh the derived
+cache, `<record>.told`.
 
 A dialog gives the build that made the record and this build, each on a line of its own. A record of an earlier engine
-that names no engine says "an earlier engine, not named". The dialog says what a new life from the record carries, and
-offers to read the record or to start a new life in its workspace.
+that names no engine says "an earlier engine, not named". It offers three choices: read the record, resume it in a new
+session in its workspace, or start a new life from it, as [the TUI](../tui/README.md#sessions-and-records) says.
 
 ![A record to read](screenshots/56-record-to-read.png)
 
@@ -474,8 +475,8 @@ and not "Error".
 
 ![A record open to read](screenshots/56b-record-read-only.png)
 
-A new life from the record has the turns of the root chain of the record, up to a limit of size, and the list of the files that
-the record wrote, in its first word, as `earlier` and `earlier_files`.
+A new life from the record has the turns of the root chain of the record, up to a limit of size, and the list of the
+files that the record wrote, in its first word, as `earlier` and `earlier_files`.
 
 ## Cancel and take back
 
@@ -540,23 +541,14 @@ reads each change that the journal holds and skips each line that is no change.
 
 ## Workspaces
 
-The sidebar groups sessions under project folders, and its list scrolls on its own. A click on a workspace folds its
-sessions, and a click on a session opens it. Open sessions keep running while another is selected. A dot shows the
-state of each session and workspace, from live work and saved records: blue for work, yellow for input needed or
-paused work, green for an unread completion, and red for an error. An open grey dot means ready or saved, and a click
-on a completed session clears its unread mark. A line of a program opens in place with what its acts gave, a
-workspace folds to its name, and ⌃\ hides the sidebar. ⌃W lists the workspaces and their
-sessions, each with its state, the time since its last save, its cost, and its size.
+The sidebar groups sessions under project folders, and its list scrolls on its own. A click on a workspace gives it
+the focus, and a click on a session opens it. Open sessions keep running while another is selected. Each session and
+workspace shows the marks of its state, as [Keys, marks, and commands](#keys-marks-and-commands) says, and a click on
+a completed session clears its unread mark. ⌃\ hides the sidebar. ⌃W lists the workspaces and their sessions, each
+with its state, the time since its last save, its cost, and its size.
 
-On macOS and Linux, each session is a life in a host of its own, which outlives the window. A quit detaches the
-window, and the commands and the models of each life go on. A later window, or a second one at the same time, opens
-the same record and attaches to the life as it stands. A window of a new build takes the life over: the old host
-ends it, and a host of the new build opens it again on the same record. `/end` ends the life of each open session,
-then quits, and ends by force a host that does not answer in 15 seconds. A window whose life ended in another window,
-or whose host was lost, says so and offers `/reopen` to reach the life again and `/stop` to end the host by force.
-`/serve` gives two addresses of the life on the network, one to read and drive it and one to read it only, and
-`furb-tui --attach <address>` opens a window of another operator on it. `tui/README.md` says where the host listens,
-how other operators reach it, and when a life stays in the window.
+On macOS and Linux, each session is a life in a host of its own, which outlives the window and which other
+operators can reach over the network. [The TUI](../tui/README.md#a-host-that-outlives-the-window) says how.
 
 ![Workspace tree](screenshots/28-workspace-tree.png)
 
@@ -609,8 +601,6 @@ shortcodes of GitHub, as you type.
 
 ![Command suggestions](screenshots/41-slash-suggestions.png)
 
-Tab or Enter puts the emoji in place of `:` and its shortcode, and a whole `:shortcode:` becomes its emoji. Escape, a
-space, or a shortcode that matches no emoji closes the list and keeps the text as it is.
 
 A space after a command whose values are known lists them: the models, the efforts, the shapes, the themes, the
 paths of the project, the chains, and the acts. Enter on a value runs the command.
@@ -633,7 +623,9 @@ list of suggestions or a walk of the history with Up and Down is open.
 
 ## Emoji
 
-A colon that starts a word of the prompt lists the emojis whose shortcode holds what follows it, as GitHub names them. Up and Down choose, Tab or Enter puts the emoji in the prompt in place of the word, and Escape, a space or a text that no shortcode holds closes the list and keeps the text. A whole `:shortcode:` in a prompt becomes its emoji.
+A colon that starts a word of the prompt lists the emojis whose shortcode holds what follows it, as GitHub names them.
+Up and Down choose, Tab or Enter puts the emoji in the prompt in place of the word, and Escape, a space or a text that
+no shortcode holds closes the list and keeps the text. A whole `:shortcode:` in a prompt becomes its emoji.
 
 ![Emoji suggestions](screenshots/46c-emoji-suggestions.png)
 
@@ -671,7 +663,8 @@ session keeps its name in its saved view, and a workspace in the list of workspa
 
 ## Extensions
 
-`/extensions` opens a dialog of the extensions that the life runs, each with what its part for the TUI gives, or the error that stopped its load. `/run` runs a word of one. The demo runs none.
+`/extensions` opens a dialog of the extensions that the life runs, each with what its part for the TUI gives, or the
+error that stopped its load. `/run` runs a word of one. The demo runs none.
 
 ![Extension command](screenshots/42-extension-command.png)
 

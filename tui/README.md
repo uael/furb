@@ -4,13 +4,13 @@ The TUI is the home of furb in a terminal. You talk to a model, watch each word 
 questions, and steer the work of many chains at once. It shows the life in three views, keeps each session in a
 record, and goes on with unfinished work when you open it again.
 
-![The furb TUI in action](../docs/furb.gif)
+![An animation of a session of the furb TUI](../docs/furb.gif)
 
-[The gallery](../docs/tui.md) shows each screen of the TUI and what it does.
+[A tour of the TUI](../docs/tui.md) shows each screen and what it does.
 
 ## Start it
 
-The TUI runs from a clone of this repository, on every system. It needs no Python and no uv. Do these steps in order.
+The TUI runs from a clone of this repository, on every system, and needs no Python and no uv.
 
 **1. Install three tools.** Git, Bun 1.4.2 or later, and Rust through rustup, which reads the version of Rust from
 `rust-toolchain.toml` and installs it on the first build. Bun 1.3 crashes the TUI on Windows, so check
@@ -48,22 +48,20 @@ welcome checks the setup and says what is missing, as below. When `bun run build
 linker, the C tools of your system are missing. When `bun: command not found` shows, open a new terminal.
 
 The desktop app is a preview, and it is not part of this path: [`gui/README.md`](../gui/README.md) says how to build
-and start it. `furb`, the command line of `pip install furb`, opens this TUI too, but it still finds the TUI in a
-clone, so the steps above come first.
+and start it.
 
-`furb`, the command line, opens this TUI when it has no command, with `--demo`, `--record`, `--cwd`, the model and
-the effort of its `--model` as `--model` and `--effort`, each `--roster`, and the words after `--`, as
-[the command line](../cli/README.md) says.
+`furb`, the command line of `pip install furb`, opens this TUI when it has no command. It runs the TUI that
+`FURB_TUI` names, else the `furb-tui` on PATH, else the TUI of the clone that it was built from, so the steps above
+come first. It gives the TUI `--demo`, `--record`, `--cwd`, the model and the effort of its `--model` as `--model`
+and `--effort`, each `--roster`, and the words after `--`, as [the command line](../cli/README.md) says.
 
-The welcome of an empty chain offers "Watch a life" first: a short life on a small project that plays by itself and
-asks no model, so it costs nothing. A short Python program asks three models at once in it, and a branch starts from
-an earlier moment, with the files as they were. While it plays and the input is empty, `[` and `]` move the feed back
-and on in time, `b` starts a branch at the moment shown, and Esc comes back to now. `/watch` plays it too, and
-`bun run demo` opens on it.
+The welcome of an empty chain offers "Watch a life" first: a short life that plays by itself and asks no model, so
+it costs nothing. `/watch` plays it too, and `bun run demo` opens on it.
+[A tour of the TUI](../docs/tui.md#watch-a-life) shows it and its keys.
 
-On the first run, and on each run while no model answers, the welcome checks the setup first: the claude command line
-and whether it is signed in, the keys in the environment, the local server that `FURB_LOCAL_URL` names, and the models
-that the catalog offers, with a fix for each part that is missing. While the input is empty, `r` checks it again.
+On the first run, and on each run while no model answers, the welcome checks the setup: the keys of the providers of
+the network in the environment, the local server that `FURB_LOCAL_URL` names, and the models that the catalog offers,
+with a fix for each part that is missing. F5 checks it again.
 [Models](../docs/models.md) says how furb finds a model.
 
 ## Choose the models
@@ -84,12 +82,11 @@ runs, and each follow-up that the queue sends, asks the actor that the chain has
 
 ## Three views of a life
 
-The TUI holds three views of the whole life side by side: main, with the workspaces and their threads in the sidebar, the loom of the chains in time, and the
-graph of the programs that run. `--view main|loom|graph` chooses one at the start, ⌥V switches it at run time,
-`/view` names one or lists the three, and the preferences keep the last one. Each view stands over the feed of the
-selected chain, and every other screen stays the same in each one. ⌥G gives the keys to the loom or the graph, and
-Esc gives them back. [The gallery](../docs/tui.md#views-of-the-life) shows each view, and
-[`DESIGN.md`](DESIGN.md) says how they came.
+The TUI shows the whole life in one of three views: main, with the workspaces and their threads in the sidebar, the
+loom of the chains in time, and the graph of the programs that run. `--view main|loom|graph` chooses one at the
+start, ⌥V or `/view` switches it, and the preferences keep the last one. Every other screen stays the same in each
+view. ⌥G gives the keys to the loom or the graph, and Esc gives them back.
+[A tour of the TUI](../docs/tui.md#views-of-the-life) shows each view, and [`DESIGN.md`](DESIGN.md) gives their design.
 
 ## Sessions and records
 
@@ -99,25 +96,32 @@ Sessions are saved under `.furb/sessions` in the selected directory. The `.furb`
 `.images` directory too when the session has image attachments.
 
 An unfinished session opens paused and offers a resume choice. The native engine replays completed work from the
-record. A record whose replay drifts, as a record that a build of another version made, opens to read: the TUI shows
-what the record kept, runs no word again, asks no model, leaves the record and its log as they were, and refuses each command that would change the life. A
-dialog gives the build that made the record and this build, each on a line of its own, and offers three choices. Read it shows the record. Resume it opens
-a new session in its workspace that goes on from the turns of the root chain of the record, and asks again each prompt of a model that the record left open
-(the dialog counts them): it runs the word `inherit` of the extension compaction, which reads a record of any engine, so a life with that extension off gets
-the text instead. Start a new life from it opens a new session whose first word carries the turns of the root chain and the files that the record wrote as text,
-and asks no prompt again. While you read, the footer says "Read only" and
-offers the new life, and the composer is off. [The desktop preview](../gui/README.md) reads records in a window too.
+record.
 
-⌃W lists the workspaces and their sessions, each with its state, save time, cost, and record size. It reads
-unfinished work through native replay without locking or changing the saved record. The list shows at once, and each
-saved session shows its state when its replay ends. A replay holds about ten times the size of its record in memory,
-so the list replays only a record of 16 MB or less that is not archived, and only when it changed: `inspected.json`,
-beside `workspaces.json`, keeps what each replay told. A longer record shows as saved until you open it. `/workspace path` adds a folder. A git worktree is part of the workspace of its main checkout, which
-`git rev-parse --git-common-dir` names, and no workspace of its own: its sessions list there, each with the name of its
-worktree. `/new` starts a session in
-the current workspace. `/delete` archives a chosen session, or moves it and its companions to `.furb/trash` and
-removes its scratch directory from the cache of furb. The trash holds a `restore.json` with the original paths, and
-its record can be opened with `--resume`, which makes again the scratch files that its words wrote.
+A record whose replay drifts, as a record that a build of another version made, opens to read: the TUI shows what
+the record kept, runs no word again, asks no model, leaves the record and its log as they were, and refuses each
+command that would change the life. A dialog gives the build that made the record and this build, and offers three
+choices:
+
+- **Read it** shows the record. The footer says "Read only" and offers a new life, and the composer is off.
+- **Resume it** opens a new session in the workspace of the record. The session goes on from the turns of the root
+  chain of the record and asks again each prompt of a model that the record left open. It runs the word `inherit` of
+  the extension compaction, so a life with that extension off gets the turns as text.
+- **Start a new life from it** opens a new session whose first word carries, as text, the turns of the root chain
+  and the files that the record wrote. It asks no prompt again.
+
+[The desktop preview](../gui/README.md) reads records in a window too.
+
+⌃W lists the workspaces and their sessions, each with its state, save time, cost, and record size. It reads unfinished
+work through native replay without locking or changing the saved record. The list shows at once, and each saved session
+shows its state when its replay ends. A replay holds about ten times the size of its record in memory, so the list
+replays only a record of 16 MB or less that is not archived, and only when it changed: `inspected.json`, beside
+`workspaces.json`, keeps what each replay told. A longer record shows as saved until you open it. `/workspace path` adds
+a folder. A git worktree is part of the workspace of its main checkout, which `git rev-parse --git-common-dir` names,
+and no workspace of its own: its sessions list there, each with the name of its worktree. `/new` starts a session in the
+current workspace. `/delete` archives a chosen session, or moves it and its companions to `.furb/trash` and removes its
+scratch directory from the cache of furb. The trash holds a `restore.json` with the original paths, and its record can
+be opened with `--resume`, which makes again the scratch files that its words wrote.
 
 Quit saves each open session and detaches the window from its life, and SIGINT, SIGTERM, SIGHUP, and SIGQUIT quit
 the same way. On Windows, a console that closes and Ctrl+Break quit the same way. `/end` ends the life of each open
@@ -149,8 +153,9 @@ window of a new build takes the life over with its record whole.
 - A window that lost its life, as one that another window ended or one whose host was stopped, shows why in plain
   words, with two actions. `/reopen` reaches the life again, in the host that answers or in a host that the window
   starts, and reads the acts from the start. `/stop` ends the process of the host by force. `/end` does the same
-  when the host does not answer the end of the life in 15 seconds, so no `pkill` is needed. `FURB_HOST_ENDING` and
-  `FURB_HOST_GRACE` set these waits, in milliseconds, as the tests do.
+  when the host does not answer the end of the life in 15 seconds, so no `pkill` is needed. `FURB_HOST_ENDING` sets
+  that wait, and `FURB_HOST_GRACE` the 12 seconds that a host that a window stops has to end the life before the
+  window kills it, each in milliseconds.
 - A window whose build is not the build of the host takes the host over. The host waits up to 10 seconds for each
   command and each reply of a model that runs, ends the life, and exits, and each other window shows that a window of
   another build took the life. Then the window starts a host of its own build, which opens the life again on the same
@@ -171,9 +176,9 @@ folder. Each other operator comes over the network, with a key that gives a role
   free port by default, and gives two addresses: one to read and drive the life, and one to read it only. Each has the
   form `furb://host:port/key`, and each holds the key of its role. The door stays open until the host ends, and a
   later `/serve` gives the same two addresses. A host that listens at `0.0.0.0` names its machine in each address.
-- `furb-tui --attach <address>`, or `furb -- --attach <address>`, opens a window on that life. The window keeps its
-  view in a temporary folder, which goes when it quits, so the life of another operator joins no list of its machine.
-  A quit detaches the window, and a window that writes ends the life with `/end`.
+- `bun run tui -- --attach <address>`, or `furb -- --attach <address>`, opens a window on that life. The window
+  keeps its view in a temporary folder, which goes when it quits, so the life of another operator joins no list of
+  its machine. A quit detaches the window, and a window that writes ends the life with `/end`.
 - A window that reads sees each change of the life, and the host refuses each request that would change it: a
   prompt, a word, a command, an answer, a control, a serve and an end. It opens no file of the machine of the host by
   its path, so it reads only what the life holds and the changes of its project.
@@ -183,23 +188,17 @@ folder. Each other operator comes over the network, with a key that gives a role
   at `127.0.0.1` and reach it through a tunnel, as `ssh -L 7700:127.0.0.1:7700 <host>`, or through a private
   network.
 
-A recorded life is a log of a life whose first line is a header that says `"recorded": true`. The TUI reads it as it
-reads a record that a build of another version made, from its acts, and runs nothing: what you send to it fails with the reason.
-The demo life that the gallery and the tests read is as dense as a real one, and it asks no model. The models of the
-demo write the words of `tui/src/demo/`, which run for real on a project of files: on the root chain a conductor hires
-a worker for each part of a release on a chain of its own, and the workers hire others, so the tree is four chains deep.
-Their words hold `def`, `while`, `for`, `if`, `try`, `lambda` and `await`, and some are 45 lines long. The life holds each
-state that a record holds: a word that the gate refused, a word that raised, a prompt that was cancelled, a chain that a
-grant paused, a command that runs, and questions of the operator in each shape. `tui/src/demo/workspaces.ts` adds
-four workspaces with sixteen sessions in them, saved, running, blocked, paused and archived. `seedLife` and
-`seedWorkspaces` make them, and `bun run screenshots` reads them.
+## The demo
 
-The demo opens `fixtures/conductor.jsonl`, a life of a conductor of furb with 23 chains, beside its scripted life,
-when it has no `--cwd` and no record. `bun run tui/script/fixture.ts <record>.jsonl.log [out]` makes such a fixture
-from the log of a real life: it keeps the acts that the model of a life reads, keeps each word of a model whole, since
-the feed shows it as the program that ran, cuts each message and output to its first lines, keeps the last lines that
-each command that still runs printed, replaces each key, address of mail and home directory, and ends at the moment
-with the most chains at work.
+`bun run demo` asks no model. With no `--cwd` and no record, it opens a scripted life, in which a conductor hires
+workers on chains four deep and real words run on a project of files, beside `fixtures/conductor.jsonl`, the recorded
+life of a conductor of furb with 23 chains. It also adds four workspaces with eighteen sessions in every state. A
+recorded life is a log whose first line says `"recorded": true`. The TUI reads it as a record open to read, so what
+you send to it fails with the reason.
+
+`bun run tui/script/fixture.ts <record>.jsonl.log [out]` makes such a fixture from the log of a real life. It keeps
+what the models read and each word whole, cuts each message and output to its first lines, and replaces each key,
+address of mail and home directory.
 
 ## Look and access
 
@@ -209,8 +208,10 @@ its colors. Else it shows Ink on a dark terminal or on one that does not say its
 changes when the terminal changes. ⌃T or `/theme` chooses another. Sessions share the theme, and the TUI saves it in
 `$XDG_CONFIG_HOME/furb/ui.json`, or `~/.config/furb/ui.json`, and `%APPDATA%\furb\ui.json` on Windows.
 `FURB_CONFIG_DIR` selects another configuration directory. Tests and screenshot generation use isolated preferences.
-`sidebarWidth` in the preferences file sets the width of the sidebar, from 32 to 72 columns, and 56 by default. A file with no `version` comes from an earlier build, which saved its own default width with each save, so the TUI takes no width from it. `sidebarStyle` picks its shape: cards, outline or inbox. On a terminal narrower
-than 100 columns the sidebar is hidden, and `/workspace` keeps all sessions available from the keyboard.
+`sidebarWidth` in the preferences file sets the width of the sidebar, from 32 to 72 columns, and 56 by default. The
+TUI reads it only from a file of its own version. `sidebarStyle` picks its shape: cards, outline or inbox. On a
+terminal narrower than 100 columns the sidebar is hidden, and `/workspace` keeps all sessions available from the
+keyboard.
 
 A line of a word is 100 columns wide at most, and its hint counts in them as a comment does in ruff format. A string of
 three marks over many lines shows as one string with its escapes, and so does a quote of a word, `<s:name>`, as the
@@ -236,35 +237,24 @@ The TUI serves each person who uses it:
 
 ## Speed
 
-A Bun worker holds the life and the ears of each open session, in the host of the life or in the window. So rendering, input, and
-syntax coloring stay responsive while the sandbox gates and runs Python. The renderer draws at 60 frames each second.
-The first frame shows at once, before the TUI reads the record: the top line, and which record opens with its size.
-A new life shows its view and its composer at once, before the life is open: the host starts and the engine opens in the
-background, and the requests of the view wait for the open and go in the order they were made. The records of the
+A Bun worker holds the life and the ears of each open session, in the host of the life or in the window. So rendering,
+input, and syntax coloring stay responsive while the sandbox gates and runs Python. The renderer draws at 60 frames each
+second. The first frame shows at once, before the TUI reads the record: the top line, and which record opens with its
+size. A new life shows its view and its composer at once, before the life is open: the host starts and the engine opens
+in the background, and the requests of the view wait for the open and go in the order they were made. The records of the
 earlier lives are read after the first frame, and their rows fill in as they come. The first frame of a new life, with
-eight records of 150 MB in the project, takes less than 2 seconds on any machine, where the open of the life takes
-many seconds.
+eight records of 150 MB in the project, takes less than 2 seconds on any machine, where the open of the life takes many
+seconds.
 
-A view costs what it shows, and not what the life holds. A new fact makes the worker send only what changed of the
-chain shown, the session places only the acts that changed in its index, the feed reads only the steps of the thread
-that it shows, the turns of the chain shown are read from the last turn that changed, and the board and the list of
-chains read only the chains that can have changed. A record open to read holds of each file that it read or wrote and
-of each long output only what a row shows, and reads the rest from its file when the operator opens the act. A change of the life
-makes again only the cards of the acts that changed, so a frame of a long life takes about as long as a frame of a
-short one.
+A view costs what it shows, and not what the life holds. A new fact makes the worker send only what changed of the chain
+shown, the session places only the acts that changed in its index, the feed reads only the steps of the thread that it
+shows, the turns of the chain shown are read from the last turn that changed, and the board and the list of chains read
+only the chains that can have changed. A record open to read holds of each file that it read or wrote and of each long
+output only what a row shows, and reads the rest from its file when the operator opens the act. A change of the life
+makes again only the cards of the acts that changed, so a frame of a long life takes about as long as a frame of a short
+one.
 
-`bun run bench` makes a recorded life at the weight of a real record, about 2.6 KB for each fact: one of about 160000
-facts, the size of a record of an orchestrator of two days, and one of a tenth of that. In each life it measures what
-a new fact costs, from the moment the view hears of it to the frame that shows it: a line of a command, a new act, a
-paragraph told on the root chain, and a token of a model. In the long life it measures the first frame, the frames while the feed scrolls and a command
-streams, and the memory of a process that opened the life. The gates hold it on Linux, against measures of the same
-machine: the pace, the time that it takes to parse the facts of the long life, and the frames that the renderer draws
-with nothing to show. The warm first frame takes under 32 paces, the renderer draws at least 95 in each hundred of
-the frames that it draws with nothing to show, since the timers of the runtime keep a loop of 60 frames a few frames
-under 60, the 95th percentile of the frames takes under a pace and under 16.7 ms, and a new fact of each kind costs in
-the long life at most twice what it costs in the short one, or 2 ms. It takes the two sides of each comparison in turn,
-so its budgets hold on a machine whose other work loads each core three times, as on macOS with other builds.
-`FURB_BENCH_FACTS` sets the size of the long life.
+`bun run bench` measures this speed, and the gates hold it to its budgets, as [AGENTS.md](../AGENTS.md) says.
 
 ## Mouse and keys
 
@@ -315,9 +305,10 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | ↑↓ / Enter / → / ← or Esc after ⌥T | Move / open a workspace, a session or a thread / peek at a workspace / fold it again, or back to the input |
 | Space / r / o / a after ⌥T | Collapse or expand / resolve / reply to the thread / go to the next question |
 | ⌥A | Go to the next question that waits for you, in any workspace |
+| ⌃← / ⌃→ / ⌥B while a life plays to watch | Move the feed back / on in time / start a branch at the moment shown |
 | ↑↓←→ / Enter / Esc after ⌥G | Move, fold or zoom / zoom in / zoom out or go back |
 | [ ] / { } after ⌥G | Move the cursor in time by one / ten moments |
-| Space / x / n / b after ⌥G | Pause or wake / cancel / step / branch at the cursor the chain |
+| Space / x / n / b / Tab after ⌥G | Pause or wake the chain / cancel its work / let it run one more rung / branch it at the cursor / answer the oldest question |
 | ⌃PageUp / ⌃PageDown | Previous / next scope of file changes: this turn, this chain, the life, the branch |
 | ⌥R / ⌥J | Repair the journal of file changes / start a new journal, once the view of changes finds it damaged |
 | ⌃C | Clear the input, close a dialog, or cancel what you sent last (a message goes back to the input) |
@@ -334,13 +325,13 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/watch` | Play a short life that asks no model and costs nothing |
 | `/model [model]` | Choose the model that answers on this chain |
 | `/providers` | Add or remove a provider for this project |
-| `/provider <add|remove> <name> [URL model window key_env protocol]` | Save a provider in the project settings and use it now |
+| `/provider <add\|remove> <name> [URL model window key_env protocol]` | Save a provider in the project settings and use it now |
 | `/reload` | Read provider settings again and update the standing of this life |
 | `/retry` | Ask again at once each model that waits to retry, as at a usage limit, on the provider settings of now |
 | `/effort [level]` | Set the reasoning effort of the selected model |
 | `/shape [type]` | Choose the result type of the next prompt |
 | `/theme [name]` | Change the palette of every surface, or follow the terminal |
-| `/access [reader|motion]` | Turn the screen reader mode or reduced motion on or off |
+| `/access [reader\|motion]` | Turn the screen reader mode or reduced motion on or off |
 | `/chain <label>` | A conversation with its own state |
 | `/fork <label>` | Copy this chain's current transcript and program |
 | `/tree` | Browse the chains and their turns, and open or branch from one |
@@ -354,7 +345,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/run <python>` | Write a rung through the gate |
 | `/bash <command>` | Stream a shell command |
 | `/read <path>` | Show a file to this chain |
-| `/changes [turn|chain|life|branch]` | Show the files that this turn, this chain, the life or the branch against main changed |
+| `/changes [turn\|chain\|life\|branch]` | Show the files that this turn, this chain, the life or the branch against main changed |
 | `/repair` | Keep each change that the journal of file changes can read, and remove the lines that it cannot |
 | `/renew` | Start a new journal of file changes, and keep the damaged one beside it |
 | `/cd <path>` | Change this chain's working directory |
@@ -372,8 +363,8 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/share [path]` | Export a standalone HTML conversation |
 | `/export <path>` | Write the transcript and program to a new JSON file |
 | `/workspace [path]` | Choose a workspace or add a project folder |
-| `/view [main|loom|graph]` | Show the life as main, the loom, or the graph |
-| `/sidebar [outline|cards|inbox]` | Show or hide the workspaces with the threads of the session shown and the context, or give the sidebar a shape |
+| `/view [main\|loom\|graph]` | Show the life as main, the loom, or the graph |
+| `/sidebar [outline\|cards\|inbox]` | Show or hide the workspaces with the threads of the session shown and the context, or give the sidebar a shape |
 | `/delete` | Archive a session, or move it and its files to the workspace trash |
 | `/newthread` | Start a new thread with your next message, in place of a message to the thread that the input targets, as `+ New thread` does |
 | `/autocollapse` | Toggle the fold of the threads that are over |
@@ -409,29 +400,20 @@ copied beside the record. The provider of the session sends them to a model that
 references kept in the prompt. A word that reads a PNG, JPEG, GIF, or WebP file copies it there too, and the model
 sees it as an image.
 Click the attachment row to open or remove an image from the draft.
-`/model` and `/effort` open separate pickers. The model picker lists the models of the session, then every
-model that the catalog of the crate offers. `/model name` takes `provider:model` or the model's id alone, by the
-rule of the catalog. A model of the catalog that the session does not offer joins the session: the session saves
-it, opens again on its record, starts again the work that was running, but for a command, which ends as
-interrupted, and sends the next prompt of the chain to that model. Each model offers the efforts that the catalog gives it, saved in the chain's roster. A model change
-keeps the current effort if the new model offers it. A choice of a model or an effort sets the actor of the chain
-by a rung of the operator. A prompt names no actor, so the next rung of a prompt that runs, and each follow-up that
-the queue sends, asks the actor that the chain has then.
+
 
 ## Branches, rewind and undo
 
-The engine contract takes a chain as a fork source. A fork is not a filesystem rollback or an arbitrary
-historical checkpoint. A branch that the rewind tree makes uses the engine's `take` filter and runs as an operator
-rung, so the filter is made again after a reopen. Its module keeps its current state. The feed of a branch, whether
+A branch is a new chain that reads its source up to a point. A branch that the rewind tree makes runs as a rung of
+the operator, so a reopen makes it again. Its module keeps its current state. The feed of a branch, whether
 `/fork`, the rewind tree or a word made it, first names its source, then shows each message of the operator that it
 takes from there with its thread as it stood when the branch began, and then its own acts. Such a message is
 answered on its source, so it offers no reply in the branch. When a write changed a file
 after the point, the rewind tree offers to restore the conversation, the files, or both. It reads the text that each
 write replaced in the journal of file changes beside the record, and writes it back by an operator rung, so the
 record holds the restore. A change that a command made is not restored. `/undo` uses the
-same durable filter to remove the last user message from a new branch; `/redo` returns to its origin. These commands
-change the model's conversation. The module and filesystem remain current. The TUI does not add a separate
-permission or tool protocol to the engine.
+same filter to remove the last message of the operator from a new branch, and `/redo` returns to its origin. These two
+commands change only the conversation of the model: the module and the files stay as they are.
 
 ## Share and export
 
@@ -439,21 +421,21 @@ permission or tool protocol to the engine.
 and `/image` read a leading `~` as the home directory, and a relative path from the directory of the selected chain.
 The share dialog can open the file, copy its path, or upload the selected conversation to an unlisted GitHub gist
 through `gh`. Upload happens only when chosen. Anyone with its link can read the shared conversation. `/export` keeps
-the structured JSON export. `/context` sets the context ceiling.
+the structured JSON export.
 
 ## Extensions
 
-A life runs the extensions that the configs turn on, as [the guide of the extensions](../docs/extensions.md) says,
-and the feed of each chain shows the words that they ran on it as one line. An extension can also give the TUI a part, a module of TypeScript beside its word, which adds
-panels over the input, the hint of the line of each act of a kind, keys, commands that it can give from the life,
-completions of the input after a trigger, a status in the footer, and dialogs of a list, a form or a confirm that its
-commands await, and which the TUI loads again live, as
-[the guide of the extensions](../docs/extensions.md#a-part-for-the-tui) says. A model adds a part to a life that runs
-with `extend(name, *rungs, tui=module)`, which the extension ouroboros and the skill extending teach it: the panel stands
-at once, with no restart. A part that fails shows its error in plain words in its own panel, and the TUI goes on.
-`/extensions` opens a dialog of what the life runs, each extension with what its part gives or the error that stopped it,
-and `/run` runs a word of one on the chain on screen, as `/run skill("pdf")`. A cancel ends one act and the work under
-it, and not what an extension started on the chain, such as the watcher of the memory.
+A life runs the extensions that the configs turn on, as [the guide of the extensions](../docs/extensions.md) says, and
+the feed of each chain shows the words that they ran on it as one line. An extension can also give the TUI a part, a
+module of TypeScript beside its word, which adds panels over the input, the hint of the line of each act of a kind,
+keys, commands that it can give from the life, completions of the input after a trigger, a status in the footer, and
+dialogs of a list, a form or a confirm that its commands await, and which the TUI loads again live, as [the guide of the
+extensions](../docs/extensions.md#a-part-for-the-tui) says. A model adds a part to a life that runs with `extend(name,
+*rungs, tui=module)`, which the extension ouroboros and the skill extending teach it: the panel stands at once, with no
+restart. A part that fails shows its error in plain words in its own panel, and the TUI goes on. `/extensions` opens a
+dialog of what the life runs, each extension with what its part gives or the error that stopped it, and `/run` runs a
+word of one on the chain on screen, as `/run skill("pdf")`. A cancel ends one act and the work under it, and not what an
+extension started on the chain, such as the watcher of the memory.
 
 ## The parts of the App
 
@@ -477,6 +459,9 @@ files alone, so parallel work on the TUI does not conflict in one file.
 | `chrome.ts` | The bar at the top, the line of meta data and the line of status. |
 | `welcome.ts` | The welcome screen, the check of the setup and the banner of a life that the operator watches. |
 | `stage.ts` | The loom and the graph of a life, and the keys that move in them. |
+| `looms.ts` | The panel of the chains over the feed, drawn as a loom. |
+| `thread.ts` | The window of code of a thread: its rows, its open window and its scroll. |
+| `ghost.ts` | The text area of the input, which draws the grey rest of a suggestion after the cursor. |
 | `tree.ts` | The tree of the session, and the rewind. |
 | `palette.ts` | The palette, the list of chains, the other overlays and the help. |
 | `settings.ts` | The choice of a model, a provider, an effort, a theme and the mode of the display. |

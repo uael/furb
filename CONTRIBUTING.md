@@ -17,10 +17,10 @@ large change, open an issue first, so we can agree on its shape before you do th
 | --- | --- |
 | Python 3.14 or later | The engine and the suite. |
 | [uv](https://docs.astral.sh/uv/) | The Python environment, the hooks, and every Python command. |
-| Rust, from `rust-toolchain.toml` | The crate at the root, which `uv sync` builds into the packages `furb-monty` and `furb-cli`. rustup reads the version from the file. |
-| [bun](https://bun.sh) 1.4.2 or later | The TypeScript bindings, the TUI and the desktop preview. On Windows, bun 1.3 crashes the TUI. |
+| Rust, from `rust-toolchain.toml` | The crate at the root, which `uv sync` builds into the packages `furb-monty` and `furb-cli`. |
+| [bun](https://bun.sh) 1.4.2 or later | The TypeScript bindings, the TUI and the desktop app. |
 | [Git for Windows](https://gitforwindows.org), on Windows | Its sh runs the commands of a life, as /bin/sh does on Linux and on macOS. |
-| The `claude` command line, signed in, the credential of a provider, or a local server that `FURB_LOCAL_URL` names | Only for a real life, such as `bun run tui`, `furb prompt` or `script/smoke.py`. The demo and the suite need no model. |
+| The credential of a provider of the network, or a local server that `FURB_LOCAL_URL` names | Only for a real life, such as `bun run tui`, `furb prompt` or `script/smoke.py`, as [`docs/models.md`](docs/models.md) says. The demo and the suite need no model. |
 
 ## Set up a clone
 
@@ -35,9 +35,8 @@ bun run demo                         # The TUI on a scripted life. It asks no mo
 The first `uv sync` builds the crate, and it takes some minutes. After that, `uv run` builds again only what a change
 touches.
 
-To work on a second branch beside this clone, make its worktree with `script/worktree.sh <path> <branch>`. It takes an
-existing branch too. It copies
-the builds of the clone, so the first build of the worktree is warm: about 6 minutes, in place of about 35.
+To work on a second branch beside this clone, make its worktree with `script/worktree.sh <path> <branch>`, which
+[`AGENTS.md`](AGENTS.md#commands) says. It takes an existing branch too, and its first build is warm.
 
 ## How a word runs
 
@@ -61,10 +60,10 @@ contract needs a request of the owner.
 
 | File | What it holds |
 | --- | --- |
-| `src/furb/engine.pyi` | The contract: the typed surface of the engine, and the laws of each definition. Only the owner changes it. |
+| `src/furb/engine.pyi` | The contract: the typed surface of the engine, and the laws of each definition. |
 | `src/furb/engine.py` | The engine, one file, which is the system prompt of a model. |
 | `src/furb/AGENTS.md` | The technical names of the engine, and the laws that no test can hold. |
-| `DOCTRINE.md` | The doctrine of furb, which each chain reads in the first turn of its model. |
+| `DOCTRINE.md` | The doctrine of furb: how a model works in furb. The setup of the root reads it, and each chain with no source holds that read. |
 | `src/furb/__init__.py` | The switch: `FURB_ENGINE` picks the engine that `from furb import engine` gives. |
 | `src/engine.rs`, `src/sand.rs` | One life of `engine.py` in the sandbox of monty, how each value crosses, and the verbs that a host says. |
 | `src/snapshot.rs` | The snapshot of a life beside its record: the state that a later life on the same record, build and ears opens from with no replay, which it checks against the record. |
@@ -79,7 +78,7 @@ contract needs a request of the owner.
 | `src/furb/sheet.py` | The sheet that the gate reads a word on, and the findings that it reads off it. |
 | `src/gate.rs` | The gate: the type checker of monty, which reads a sheet. |
 
-### The World
+### The World and the life
 
 | File | What it holds |
 | --- | --- |
@@ -88,13 +87,13 @@ contract needs a request of the owner.
 | `src/world/scratch.rs` | The scratch directory of a life: its place in the cache of furb for each record, the paths of `scratch://`, and the files that a record makes again in it. |
 | `src/world/bash.rs` | The commands: each runs in a shell of the machine, in the working directory of its chain, with `TMPDIR` set to the scratch directory. |
 | `src/world/time.rs` | The clock, a chance, and a wait. |
-| `src/world/store.rs` | The store: the record on the disk, one fact on each line with the time the store kept it after the fact, which one process at a time owns, and the engine and the version of the build that made it, which the record names. |
+| `src/world/store.rs` | The store: the record on the disk, as a file of lines, one fact on each line with the time the store kept it, or as a database of SQLite, which one process at a time owns, and the engine and the version of the build that made it, which the record names. |
 | `src/world/log.rs` | The log of a life beside its record: every fact that the life said, which `logged` reads while it agrees with the record. |
 | `src/checkpoint.rs` | The checkpoint of a life, at the tip of its record, from which a life of any later build goes on, with the python that makes it in the names of the engine. |
 | `src/world/builds.rs` | The store of builds: the program of the command line of each version that ran on the machine, in the cache of furb, which a command on a record of that version runs. |
 | `src/world/reader.rs` | The reader of a record with no life, which `retold` gives, so a record of any engine opens to read. |
 | `src/world/operator.rs` | The rules by which every console reads what the operator answers. |
-| `src/world/provider.rs`, `src/world/provider/` | The provider of models, which [the next table](#the-provider) gives file by file. |
+| `src/world/provider.rs`, `src/world/provider/` | The provider of models, which [The provider](#the-provider) gives file by file. |
 | `src/life.rs` | The opening of a life, which every host shares: the record, the ears of the crate, and the extensions. |
 | `src/furb/world.py` | The World of Python: the ears of the crate, and the operator at its terminal. The scripts open a life on it. |
 
@@ -111,7 +110,9 @@ no network.
 | `src/world/provider/catalog.json` | The snapshot of models.dev and of the data of pi-ai, one model on each line, which `script/catalog.py` makes again. |
 | `src/world/provider/clients.rs` | The client of rig that asks each provider, with its credential and its address. |
 | `src/world/provider/pi.rs` | The protocol of pi-ai itself, which the gateway Radius speaks. |
-| `src/world/provider/claude.rs` | The claude command line, as a model of rig. |
+| `src/world/provider/claude/` | The provider `claude-cli`: the claude command line as a model of rig, its accounts and its models. |
+| `src/world/provider/codex/` | The provider `codex`: the Responses API on a ChatGPT sign-in that furb keeps. |
+| `src/world/provider/search.rs` | The native search of the web of each provider that has one, which the extension `web` asks. |
 | `src/world/provider/images.rs` | The images that a message names, each kept under the digest of its bytes. |
 | `src/world/provider/watch.rs` | The watch over the word of a reply while its model writes it, which finds the first statement that cannot be python, or that the gate refuses for a fault that no later statement can mend. |
 
@@ -133,7 +134,8 @@ no network.
 An official extension is a word, a contract and a suite in `extensions/<name>/`, and an ear of the World in
 `src/extension/<name>.rs`, which answers the questions of its word from the disk. [The guide of the
 extensions](docs/extensions.md) says which hygiene laws hold it and how a life runs it. The crate carries the manifest
-and the word, so a change of either needs `uv sync --reinstall-package furb-monty --reinstall-package furb-cli`.
+and the word, so `uv run` builds it again after a change of either, as the `cache-keys` of `bind/python/pyproject.toml`
+and `cli/pyproject.toml` say.
 
 ### The command line
 
@@ -141,7 +143,7 @@ and the word, so a change of either needs `uv sync --reinstall-package furb-mont
 
 | File | What it holds |
 | --- | --- |
-| `cli/src/main.rs` | The words of the command line, on clap, and the commands `prompt`, `turns`, `run`, `extensions` and `facts`. |
+| `cli/src/main.rs` | The words of the command line, on clap, and the commands `prompt`, `turns`, `facts`, `run`, `checkpoint`, `catalog` and `extensions`. |
 | `cli/src/life.rs` | One life on the opening of the crate: the prompt of the record it takes up, and how the operator awaits an act. |
 | `cli/src/console.rs` | The console of the terminal, which shows each prompt to the operator and reads the line back by the rules of the crate. |
 | `cli/src/rpc.rs` | The JSON-RPC of `--mode rpc`, which [`docs/rpc.md`](docs/rpc.md) says. Change the two together. |
@@ -160,20 +162,14 @@ and the word, so a change of either needs `uv sync --reinstall-package furb-mont
 | `tui/script/` | The gallery, the animation, and the rasterizer that turns a frame into a PNG. |
 
 A screen must read clearly at first sight. After a change that a screen shows, run `bun run screenshots` and read each
-capture. With `FURB_GALLERY_ONLY` set to a pattern, such as `^0[1-5]-`, it writes only the captures that match.
-Do not commit them: after a push to `main` that changes a screen, `.github/workflows/gallery.yml` draws the gallery
-and the animation again on a runner of CI, and keeps one pull request on the branch `w/gallery` with the new files.
-It ends with an error when no capture matches, and otherwise with the line `Wrote N captures to <folder>.`.
-With `FURB_GALLERY_TEXT` set to a folder, it also writes there the text of each capture, which you read when you
-cannot see an image. With `FURB_GALLERY_CELLS` set to a folder, it writes there the cells of each capture as JSON.
-The clock of the view stands still by default, so that two runs of the same code draw the same captures, and
-`FURB_STILL_CLOCK` set to a time in milliseconds sets another time. The extension converge-tui uses the cells and the
-clock to compare the captures of a pull request with those of main.
+capture. Do not commit the captures: after a push to `main`, `.github/workflows/gallery.yml` draws them again. The entry
+`bun run screenshots` of [`AGENTS.md`](AGENTS.md#commands) gives each variable that the gallery reads.
 
-### The desktop preview
+### The desktop app
 
-`gui/` is the desktop preview on Tauri 2, which reads records and runs no life. [`gui/DESIGN.md`](gui/DESIGN.md)
-says its design. Its core in `gui/src-tauri/` links the crate `furb`, and its window is in `gui/src/`.
+`gui/` is the desktop app on Tauri 2, which runs a life in a window as the TUI runs one in a terminal.
+[`gui/README.md`](gui/README.md) says how to build and use it, and [`gui/DESIGN.md`](gui/DESIGN.md) says its design. Its
+core in `gui/src-tauri/` starts the host of a life in `gui/host`, and its UI is in `gui/src/`.
 
 ### The suite
 
@@ -207,26 +203,20 @@ Each pull request runs the gates of `.github/workflows/gates.yml` on Linux, on m
 
 ## The prose
 
-Write all prose in Simplified Technical English, per [ASD-STE100](https://www.asd-ste100.org/): short sentences, one
-meaning for each word, and no em dash or en dash. This holds for a document, a docstring, a comment, a commit and a
-pull request.
+Write all prose in Simplified Technical English, with no em dash and no en dash, as [`AGENTS.md`](AGENTS.md#prose) says.
 
 ## How a pull request lands
 
 1. Make a branch from `main`, do the one change, and run the gates that it touches.
 2. Open the pull request. Its template, [`.github/pull_request_template.md`](.github/pull_request_template.md), holds
-   every rule of a pull request: its scope, its title and its body. Read it whole before you write. The workers that
-   the conductor of this project hires write each body by this template too.
+   every rule of a pull request: its scope, its title and its body. Read it whole before you write.
 3. The gates and the check of the title run on the pull request. A review blocks it only for a defect that a command
    shows, or for a sentence of a contract that is false.
 4. When the checks are green and the review agrees, the pull request merges as one squash commit on `main`, with its
    title as the message.
 5. release-please keeps a pull request of the next release open on `main`, and writes [`CHANGELOG.md`](CHANGELOG.md)
-   from the titles. A fix or a feat raises the patch version, a breaking change the minor version, and only the
-   owner raises the major version. Each day, a workflow merges that pull request when its gates and the gates of
-   `main` passed. When that pull request merges, it tags the release, and `.github/workflows/publish.yml` publishes
-   each package at that version: on npm and on PyPI, and on crates.io once no crate of furb stands on git, which is
-   when monty stands there.
+   from the titles. [`AGENTS.md`](AGENTS.md#commands) says how a release raises the version and where it publishes each
+   package.
 
 ## Where to read next
 

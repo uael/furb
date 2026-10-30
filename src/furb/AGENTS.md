@@ -18,13 +18,13 @@ meanings. The entry of such a name here gives only its form in the engine.
 - roster: the actors the World offers, each as its name, its efforts and its window.
 - window: the context size of a model in tokens, as its roster entry says.
 - share: the part of a window that one model response used.
-- standing: what the chains stand on, which the World answers a stand with: the roster, the directory, the default
-  actor and the path of the doctrine, each path with `~` in place of the home of the user, as every path that the World
-  writes for a model; its one home is the transcript of the root, where the done of the last stand holds it. A chain
-  tells no standing of its own: a stand that a word makes tells the roster and the actor, and a cd tells the directory,
-  and each chain whose standing names a doctrine plays both on itself, just before its open and again when a later
-  life stands on another standing. The engine reads the directory of the standing nowhere, and the World resolves against it the paths of a
-  chain that ran no cd.
+- standing: what the chains stand on, which the World answers a stand with: the roster, the directory, the default actor
+  and the path of the doctrine, each path with `~` in place of the home of the user, as every path that the World writes
+  for a model; its one home is the transcript of the root, where the done of the last stand holds it. A chain tells no
+  standing of its own: a stand that a word makes tells the roster and the actor, and a cd tells the directory, and each
+  chain whose standing names a doctrine plays both on itself, just before its open and again when a later life stands on
+  another standing. The engine reads the directory of the standing nowhere, and the World resolves against it the paths
+  of a chain that ran no cd.
 - stand: the act that asks the World for the standing, which boot makes on the root as a life opens and again at
   the tip of a later life, and which tells nothing then. A stand that a word makes tells its answer in a paragraph
   headed by its id, which binds the roster and the actor. When the standing at the tip of a later life differs from
@@ -34,9 +34,8 @@ meanings. The entry of such a name here gives only its form in the engine.
   of its own.
 - tip: the point of a later life where the journal has said the record again whole, at which boot stands the life
   again, and after which the life goes on past it.
-- catch-up: what the official extension catchup does on each chain at each stand: it reads again, with a hidden show, each file that a read or a write on
-  it gave, and tells in one paragraph headed caught up the lines that changed and the hours since the reading of the
-  clock of the root before, or nothing when nothing changed.
+- catch-up: what the official extension catchup does on each chain at each stand, which `extensions/catchup/catchup.pyi`
+  says.
 - default actor: the actor a prompt goes to when the prompt leaves the actor unsaid, bound as `actor` in the chain.
 - World: the ears of the outside that serve the machine, one or many, which reach the disk, the machine, the actors,
   the operator and the record; they answer what is theirs to answer, take what takes time, a command, a wait, a
@@ -138,10 +137,10 @@ meanings. The entry of such a name here gives only its form in the engine.
   by its module.
 - command: what bash runs on the machine.
 - merged: the state of a command whose stderr flows into its stdout, in the order the command wrote them.
-- door: the name of an act, with a part after it or without; the name of a prompt is the door of its ladder, and
-  the name of a command with /stdout, /stderr or /stdin after it is a door of that command: the chain of a read
-  serves it while the command runs and after it, and the World serves a write of it; the word of a rung adds a door by making an act whose ear answers reads of a
-  scheme, and the World serves the rest.
+- door: the name of an act, with a part after it or without; the name of a prompt is the door of its ladder, and the
+  name of a command with /stdout, /stderr or /stdin after it is a door of that command: the chain of a read serves it
+  while the command runs and after it, and the World serves a write of it; the word of a rung adds a door by making an
+  act whose ear answers reads of a scheme, and the World serves the rest.
 - text: what read gives, and what write is given and gives back as it landed; a Text, with a path and a content.
 - show: a callable given the lines of a text, which gives the numbers of the lines the engine tells; span, grep and
   differs make the shows of the file.
@@ -154,27 +153,25 @@ meanings. The entry of such a name here gives only its form in the engine.
 - crafted rung: a rung with a word and an actor, a turn of that actor that its caller wrote; the crafted rungs of a
   chain take their turns one at a time, in the order they were made, a rung that one of them makes takes its turn
   within the turn of its maker, and every other word of the chain and every prompt to a model wait until none is open.
-- setup: the turns that the World plays on the root of a new record at its first stand, after the bare turn
-  `chain()`, as crafted rungs of the default actor: the read of the doctrine, the read of the file of each extension
-  of every chain in the order of the life, whose word the World runs in the module of the root with no rung, as the
-  run `<rung>_word`, then one turn of their life words, which read the place against the directory of the standing,
-  as every chain that ran no cd, then the act setup, `setup1`, which the World makes and answers, then the same turns
-  for the extensions of the root alone. Then the root plays on itself one turn `stand()` and `cd('<the directory of
-  the standing>')`, a rung with that word and its default actor, just before its open, as each chain with no source
-  does at its birth, after the setup that it holds: chain() in engine.py makes that rung, so a model reads in the
-  engine how its chain was set up. The reads of the files come first, so their turns are the same text
-  whatever the place and the actors, then the life words, so their turns are the same text in one place whatever the
-  actors, and a provider caches them across records. The World
-  makes each of these rungs at once, so the root plays its stand after the last of them and tells its open after its
-  stand, in the same turn, just before its first prompt. Each chain with no source
-  holds the setup of the root as its prefix, with the same names, less the acts that the World, the operator or the
-  root itself made after the act setup, as the stand of the root, and runs its words again, so every chain shares one prefix, which the
-  provider ends with a block that it marks for the cache. The fact teach, `("teach", "chain1", "extensions", actor,
-  doctrine, count)`, which the World says before the count of enables that the setup plays and the record keeps,
-  plays the setup again where a later life says it. Every standing that the World of the crate gives names a doctrine.
-  A World that names none, as the World of the suite, plays no setup: the root tells its open at its first stand, its
-  extensions play as rungs, and its chains run no cd, so the World resolves their paths against the directory of the
-  standing.
+- setup: the turns that the World plays on the root of a new record at its first stand, after the bare turn `chain()`,
+  as crafted rungs of the default actor: the read of the doctrine, the read of the file of each extension of every chain
+  in the order of the life, whose word the World runs in the module of the root with no rung, as the run `<rung>_word`,
+  then one turn of their life words, which read the place against the directory of the standing, as every chain that ran
+  no cd, then the act setup, `setup1`, which the World makes and answers, then the same turns for the extensions of the
+  root alone. Then the root plays on itself one turn `stand()` and `cd('<the directory of the standing>')`, a rung with
+  that word and its default actor, just before its open, as each chain with no source does at its birth, after the setup
+  that it holds: chain() in engine.py makes that rung, so a model reads in the engine how its chain was set up. The
+  reads of the files come first, so their turns are the same text whatever the place and the actors, then the life
+  words, so their turns are the same text in one place whatever the actors, and a provider caches them across records.
+  The World makes each of these rungs at once, so the root plays its stand after the last of them and tells its open
+  after its stand, in the same turn, just before its first prompt. Each chain with no source holds the setup of the root
+  as its prefix, with the same names, less the acts that the World, the operator or the root itself made after the act
+  setup, as the stand of the root, and runs its words again, so every chain shares one prefix, which the provider ends
+  with a block that it marks for the cache. The fact teach, `("teach", "chain1", "extensions", actor, doctrine, count)`,
+  which the World says before the count of enables that the setup plays and the record keeps, plays the setup again
+  where a later life says it. Every standing that the World of the crate gives names a doctrine. A World that names
+  none, as the World of the suite, plays no setup: the root tells its open at its first stand, its extensions play as
+  rungs, and its chains run no cd, so the World resolves their paths against the directory of the standing.
 - template: a python template string, each interpolation of which carries an expression and its value.
 - debug: the verb that tells the interpolations of a template, a tell and no act.
 - control: a pause, a wake, a cancel or a close; a close is a cancel with a value, and a cancel a close with
@@ -196,17 +193,17 @@ meanings. The entry of such a name here gives only its form in the engine.
 - extension: python that extends the engine from a rung: its word, which defines its names, and, for one that a host
   gives a life, its life word, which starts its work; an official one has an ear of the World that answers the
   questions that its word defines.
-- enable: the fact by which the World turns an extension on in a life, with its name, its word, its life word and,
-  for an extension that plays on the root alone, root, which the record keeps; the World says it at the tip, and when
-  a write of the config of the project lands that turns on an extension by its path, and it plays the extension as a
-  rung on every chain there is where it plays when it hears the fact, and after it on each chain at its birth where
-  it plays, before the call that made the chain returns. An extension plays on every chain, or on the root alone and
-  on each chain whose source had it. The World says it again
-  for an extension that the life runs when its word changed: at a stand, for the word that the host gives, and when
-  a write of the life lands in the folder of an extension that a config turns on. That fact reloads the extension:
-  each chain that has the extension plays the definitions of the new word, its imports, functions, classes, types and names in
-  capitals, and each name of state that it assigns, as `name = globals().setdefault("name", value)`, so a new name takes
-  its value, each name that the chain holds keeps its value, and the life word does not run again.
+- enable: the fact by which the World turns an extension on in a life, with its name, its word, its life word and, for
+  an extension that plays on the root alone, root, which the record keeps; the World says it at the tip, and when a
+  write of the config of the project lands that turns on an extension by its path, and it plays the extension as a rung
+  on every chain there is where it plays when it hears the fact, and after it on each chain at its birth where it plays,
+  before the call that made the chain returns. An extension plays on every chain, or on the root alone and on each chain
+  whose source had it. The World says it again for an extension that the life runs when its word changed: at a stand,
+  for the word that the host gives, and when a write of the life lands in the folder of an extension that a config turns
+  on. That fact reloads the extension: each chain that has the extension plays the definitions of the new word, its
+  imports, functions, classes, types and names in capitals, and each name of state that it assigns, as
+  `name = globals().setdefault("name", value)`, so a new name takes its value, each name that the chain holds keeps its
+  value, and the life word does not run again.
 - made: the fact by which the store names in the record the build that made it, the digest of the engine and of the
   Kernel and the version of the build, `VERSION` in `src/world/store.rs`, which the store says as it hears the root of
   a new record at its birth. A life on a record that names another version is refused before any replay, since a
@@ -285,6 +282,5 @@ meanings. The entry of such a name here gives only its form in the engine.
 - An ear that makes acts makes each one while it hears the fact that causes it, from what it heard alone and never
   from the disk, so a later life makes it again at the same place; what the disk holds reaches a chain through a
   question that the World answers and that the journal answers again.
-- The word of an extension only defines, holds no comment, and binds no name of the engine, and it holds no
-  sentence but one doctrine of its own, a quote that holds no law, as furb holds its own in DOCTRINE.md; its contract holds
-  its laws.
+- The word of an extension only defines, holds no comment, and binds no name of the engine, and it holds no sentence but
+  one doctrine of its own, a quote that holds no law, as furb holds its own in DOCTRINE.md; its contract holds its laws.

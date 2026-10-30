@@ -5,50 +5,42 @@ one on your own machine.
 
 ## Where the models come from
 
-furb looks in three places, in this order:
+furb looks in two places, in this order:
 
-1. **The claude command line.** When furb finds the program `claude`, it offers its models, as `claude-cli:opus`,
-   `claude-cli:sonnet`, `claude-cli:haiku` and `claude-cli:fable`. Furb asks the program for them: its aliases, the
-   window of each and the efforts that each takes. The question costs no model prompt. Furb keeps the answer in its
-   cache until the program changes, and `/reload` asks again, so a new model or a new window shows with no new build
-   of furb. An older program that does not answer gives the four models above, with the windows that furb knows. They
-   use the plan that you signed in to `claude` with. furb finds the program that `FURB_CLAUDE_BIN` names, else the `claude` on PATH or in your home, else, on
-   macOS, the one that Claude Desktop installed.
-2. **A provider of the network.** furb offers the models of each provider whose key stands in the environment, as
+1. **A provider of the network.** furb offers the models of each provider whose key stands in the environment, as
    `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`. It knows the providers that [models.dev](https://models.dev) and pi-ai
    list.
-3. **A local server.** When `FURB_LOCAL_URL` gives the address of a server, furb offers the models that it lists.
+2. **A local server.** When `FURB_LOCAL_URL` gives the address of a server, furb offers the models that it lists.
    [A local model](#a-local-model) says more.
 
-The first model that furb offers is the default. So it is `claude-cli:opus` when you have the claude command line,
-else a model of the network, else a local model. The TUI checks each place on its first run, and whether the claude
-command line is signed in, as `claude auth status` says, and says how to fix each one that is missing.
+The first model that furb offers is the default: a model of the network, else a local model. The TUI checks each place
+on its first run, and says how to fix each one that is missing.
 
 ## Choose a model
 
-A model has a name of the form `provider:id`, as `claude-cli:sonnet` or `local:qwen3`. When one model alone has an
-id, the id alone names it, as `sonnet`.
+A model has a name of the form `provider:id`, as `openai:<id>` or `local:qwen3`. When one model alone has an id, the id
+alone names it, as `qwen3:8b` names a local model under A local model.
 
 An **actor** is a model and an effort, which is how hard the model thinks: `off`, `minimal`, `low`, `medium`,
-`high`, `xhigh` or `max`. Write the effort after a slash, as `claude-cli:opus/medium`. An actor with no effort takes
+`high`, `xhigh` or `max`. Write the effort after a slash, as `local:qwen3/medium`. An actor with no effort takes
 `high`, and an effort that a model does not take moves to the nearest one that it takes.
 
-- In the TUI, `/model` and `/effort` choose the actor of the chain on screen. ⌃M and ⇧Tab do the same.
-- On the command line, `--model` gives the default actor, as `furb --model claude-cli:sonnet/low`.
+- In the TUI, `/model` and `/effort` choose the actor of the chain on screen. ⌃M, and ⇧Tab or ⌃T, do the same.
+- On the command line, `--model` gives the default actor, as `furb --model local:qwen3/low`.
 - `--roster` gives more models that a life can ask, one name each time. With no `--roster`, a life can ask each
   model that furb offers. A prompt to a model that the roster does not hold is refused.
 
 ## Provider settings
 
-For a ChatGPT subscription, open `/providers` and choose `codex`. Furb uses an existing ChatGPT sign-in when
+For a ChatGPT subscription, open `/providers` and choose `codex`. furb uses an existing ChatGPT sign-in when
 one is available. Otherwise, it opens the browser for sign-in. When it connects, the Codex model picker opens.
 Choose a model there. No API key, server, model id or context size is needed.
 
 `codex` uses the limits of the ChatGPT subscription. `openai` remains the provider for an OpenAI API key.
-Claude Code stays available by default. Connecting Codex does not change a running model call.
+Connecting Codex does not change a running model call.
 
 The account service supplies the model list, the input window, image support and the supported reasoning efforts.
-Furb reserves the input headroom that the service specifies, or 5% when it leaves that value unsaid. For a model
+furb reserves the input headroom that the service specifies, or 5% when it leaves that value unsaid. For a model
 with a 500,000-token default window and 5% headroom, the picker shows 475,000 input tokens.
 
 To request a larger window, set `model_context_window` under the `codex` provider in `.furb/config.json`:
@@ -61,8 +53,8 @@ As in Codex, the value is capped at the maximum window from the account service 
 applied. With an 872,000-token maximum and a 95% usable share, this setting gives 828,400 input tokens. Without
 this setting, furb uses the default window from the account service.
 
-Model data is cached for five minutes and checked when a life opens, when the Codex model picker opens, and on `/reload`.
-If a refresh fails for a temporary cause, the last model list stays available. A changed model list or window
+Model data is cached for five minutes and checked when a life opens, when the Codex model picker opens, and on
+`/reload`. If a refresh fails for a temporary cause, the last model list stays available. A changed model list or window
 updates the standing when the operator reloads it or opens the Codex picker.
 
 The catalog of the other providers comes from two sources: models.dev, and the package pi-ai for the providers that
@@ -73,8 +65,8 @@ time of its last good fetch, and the error of its last failed one. A running lif
 stand, on `/reload`, with no restart. A scheduled job of the repository makes the bundled catalog again each day, with
 the exact version of pi-ai, and opens a pull request only when the data changes.
 
-Furb keeps its sign-in in the user config directory, under `auth`, outside the project. On Unix, the credential
-file is readable and writable only by its owner. Furb refreshes its own credential when needed. It can read an
+furb keeps its sign-in in the user config directory, under `auth`, outside the project. On Unix, the credential
+file is readable and writable only by its owner. furb refreshes its own credential when needed. It can read an
 existing Codex access token, but it does not use the Codex refresh token or change the Codex credentials.
 
 Disabling `codex` removes its models from this project and keeps the sign-in for a later connection.
@@ -87,10 +79,10 @@ credential in the environment. To add a server that uses OpenAI chat completions
 ```
 
 The arguments are the provider name, URL, model id, context window and, when needed, the name of the environment
-variable that holds its key. The optional last argument selects the protocol, which is `chat` when unsaid.
-Use `openai` for OpenAI Responses, `anthropic` for Anthropic Messages, or `gemini` for Google Gemini.
-Use `-` for the key name when the server needs no key and a protocol follows it.
-`/provider remove office` disables the provider and keeps its settings for a later add.
+variable that holds its key. The optional last argument selects the protocol, which is `chat` when unsaid. Use `openai`
+for OpenAI Responses, `anthropic` for Anthropic Messages, or `gemini` for Google Gemini. Use `-` for the key name when
+the server needs no key and a protocol follows it. `/provider remove office` disables the provider and keeps its
+settings for a later add.
 
 The same settings can be written in `config.json` in the user config directory, or in `.furb/config.json` in the
 project. The project wins for each field that it gives. Other config fields stay as they are.
@@ -117,85 +109,15 @@ project. The project wins for each field that it gives. Other config fields stay
 }
 ```
 
-A built-in provider can be `true`, `false`, or an object that overrides its URL, credential or models. A custom
-provider needs a URL and at least one model. Each model needs a positive window. Its output limit is one quarter of
-that window when unsaid. `reasoning` and `images` are false when unsaid. `efforts` lists the efforts that a model of
-the protocol `chat` takes, from `off`, `low`, `medium` and `high`, as a local model takes them: `off` turns its
-thought off with `enable_thinking` false, and each other level is `reasoning_effort`. A model that takes `off`
-thinks at most the tokens of thought of one turn, as a local model does. With no `efforts`, it takes none. The
-optional `key` field gives a key directly; `key_env` wins when both are present. A custom server with neither field
-sends no key. An object can set `enabled` to false to disable a provider and keep its other fields. The names
-`claude-cli` and `local` can be false to remove the command line or the server that the environment names from the
-roster.
-
-To start Claude through a wrapper, set `providers.claude-cli.command` in `.furb/config.json`:
-
-```json
-{
-  "providers": {
-    "claude-cli": {
-      "command": ["cswap", "run", "3", "--"]
-    }
-  }
-}
-```
-
-The first item is the executable. Each later item is one argument, before the flags that furb gives Claude for
-completions and web search. Spaces stay within an item. No shell reads the command, so shell operators and variable
-references have no special meaning. An executable name uses PATH; a path selects that file. The command can also
-be a single executable string, such as `"command": "/opt/bin/claude"`, with no arguments.
-
-The `--` in the `cswap` example separates its account options from the Claude flags that furb appends. Without
-that separator, `cswap` rejects those flags.
-
-A configured command replaces the default Claude executable, including `FURB_CLAUDE_BIN`. Without `command`, furb
-keeps its default discovery. An empty array or executable is invalid. Set `"enabled": false` in the object to
-disable Claude without removing its command. Project fields override user fields; a project `true` or `false`
-changes only whether the provider is enabled when the user config holds an object.
-
-To run Claude as one account, or as a list of accounts, set `providers.claude-cli.accounts`:
-
-```json
-{
-  "providers": {
-    "claude-cli": {
-      "accounts": [
-        {"name": "perso", "token_file": "~/.config/furb/perso.token"},
-        {"name": "team", "token_env": "FURB_CLAUDE_TEAM"},
-        {"name": "pro", "config_dir": "~/.claude-pro"}
-      ],
-      "switch": "failover"
-    }
-  }
-}
-```
-
-Each account has a `name` and exactly one place for its credential:
-
-- `token_file` is a file that holds a token of `claude setup-token`. Furb reads the file each time that it starts a
-  process, so a new token needs no reload. Let only you read the file.
-- `token_env` is the name of a variable of the environment of furb that holds such a token.
-- `config_dir` is a config directory of Claude where the account logged in with `claude auth login`.
-
-A path is absolute or starts with `~`. Furb never writes a token in a config, a message or a log. A token of
-`claude setup-token` lives one year and never refreshes, so many processes can share it, and no refresh that fails can
-empty it. It serves inference, which is all that a completion needs. A config directory refreshes its token in place,
-and many processes can race for that refresh.
-
-`switch` says which account a new conversation takes:
-
-- `failover`, the default, takes the first account of the list that is not parked.
-- `spread` takes the account that a conversation took least recently.
-
-A conversation stays on its account. When an account meets a usage limit, furb parks it until the reset that the limit
-names, or for five minutes when it names none. When an account fails to sign in, or its token cannot be read, furb
-parks it until `/reload`. The turn then fails with `Switched account from perso to team: its usage limit`, which the
-chain shows as a retry, and the retry runs as the next account, on a new conversation that holds the whole history.
-When every account is parked, furb waits for the first reset, as it does for one account. With one account, furb parks
-nothing.
-
-`command` and `accounts` work together: the command starts each process of each account. The list of models and the
-web search run as the first account that is not parked, and Claude counts as signed in when any account is.
+A built-in provider can be `true`, `false`, or an object that overrides its URL, credential or models. A custom provider
+needs a URL and at least one model. Each model needs a positive window. Its output limit is one quarter of that window
+when unsaid. `reasoning` and `images` are false when unsaid. `efforts` lists the efforts that a model of the protocol
+`chat` takes, from `off`, `low`, `medium` and `high`, as a local model takes them: `off` turns its thought off with
+`enable_thinking` false, and each other level is `reasoning_effort`. A model that takes `off` thinks at most the tokens
+of thought of one turn, as a local model does. With no `efforts`, it takes none. The optional `key` field gives a key
+directly; `key_env` wins when both are present. A custom server with neither field sends no key. An object can set
+`enabled` to false to disable a provider and keep its other fields. The name `local` can be false to remove the server
+that `FURB_LOCAL_URL` names from the roster.
 
 An optional model `cost` gives `input`, `output`, `cache_read` and `cache_write`, in dollars for one million tokens.
 A custom model has no dollar price when `cost` is unsaid, so a dollar ceiling cannot bound its cost.
@@ -212,16 +134,15 @@ its roster.
 
 ## Thinking
 
-`MAX_THINKING_TOKENS` gives the most tokens that a model can think in one turn, as it does for Claude Code, and 0
-turns thought off. The key `max_thinking_tokens` of `.furb/config.json` gives it for one project. The environment
-wins over the config, and with neither, it is 32768. A model with adaptive reasoning, such as Opus 5.5, Sonnet 5.5,
-Haiku 5.5 or a Fable model, thinks as its effort says and cannot turn its thought off.
+`MAX_THINKING_TOKENS` gives the most tokens that a model can think in one turn, and 0 turns thought off. The key
+`max_thinking_tokens` of `.furb/config.json` gives it for one project. The environment wins over the config, and with
+neither, it is 32768. A model with adaptive reasoning thinks as its effort says and cannot turn its thought off.
 
 ## A local model
 
-A local server costs nothing, and your work stays on your machine. furb talks to each server that serves the chat
-completions of OpenAI under `/v1` and lists its models at `/v1/models`, such as llama.cpp, LM Studio, Ollama, vLLM
-and Strata:
+A local server sends your work to no provider of the network, so it stays on your machine. furb talks to each server
+that serves the chat completions of OpenAI under `/v1` and lists its models at `/v1/models`, such as llama.cpp, LM
+Studio, Ollama, vLLM and Strata:
 
 ```sh
 FURB_LOCAL_URL=http://localhost:11434 furb --model local:qwen3/medium
@@ -252,21 +173,10 @@ hold, and for a server that did not answer.
 When a call to a model fails for a cause that passes, such as a lost connection or a provider that is too busy, furb
 asks again after a wait that doubles each time, up to ten attempts. The TUI counts the wait down in its footer.
 
-When the claude command line says that you hit its usage limit, furb does not stop the chain. It tells the chain that
-it waits and until when, as `#chain1 waits on claude-cli:opus/high: usage limit until 2026-10-23 17:10 (Europe/Paris)`.
-It asks again when the limit resets, and the work goes on with no act from you. This wait is no attempt, and it has no
-end. A limit that still stands after its reset makes furb ask again every five minutes at most.
-
-The claude command line can be missing for a moment while it updates itself. Then a turn tries it again for 60
-seconds, or for the seconds that `FURB_CLAUDE_GONE` gives. When it is still missing, or when the command that starts
-it, as `cswap run 3 --`, says that it found no claude, furb asks again as after a lost connection, and tells the chain
-that it waits, as `#chain1 waits on claude-cli:opus/high: the program is missing`. When the attempts are spent, the
-chain says which program it did not find. A turn that makes no progress for 15 minutes fails, or after the seconds
-that `FURB_CLAUDE_STALL` gives.
 
 ## The doctrine
 
-Each chain reads [`DOCTRINE.md`](../DOCTRINE.md) in the first turn of its model, as a read of a file: `.furb/DOCTRINE.md`
-of the project when it holds one, the `DOCTRINE.md` of the checkout in dev mode, else `~/.furb/DOCTRINE.md`, which
-furb writes from the doctrine that it carries.
-It tells the model how to work in furb: that its answer is Python, which verbs it has, and how to give its answer.
+Each chain reads [`DOCTRINE.md`](../DOCTRINE.md) in the first turn of its model, as a read of a file:
+`.furb/DOCTRINE.md` of the project when it holds one, the `DOCTRINE.md` of the checkout in dev mode, else
+`~/.furb/DOCTRINE.md`, which furb writes from the doctrine that it carries. It tells the model how to work in furb: that
+its answer is Python, which verbs it has, and how to give its answer.
