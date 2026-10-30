@@ -1,5 +1,5 @@
 {
-  "name": "@furb/engine-darwin-x64",
+  "name": "@uael/furb-engine-darwin-x64",
   "version": "0.3.2",
   "cpu": [
     "x64"

@@ -1,5 +1,5 @@
 {
-  "name": "@furb/engine-win32-x64-msvc",
+  "name": "@uael/furb-engine-win32-x64-msvc",
   "version": "0.3.2",
   "cpu": [
     "x64"
