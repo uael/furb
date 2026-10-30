@@ -147,7 +147,7 @@ async def test_none_is_a_shape_of_its_own() -> None:
   act = engine.prompt(None, "work", on=root)
   assert await act is None
   assert said(log, "prompt")[0][4] == "None"
-  assert paragraphs(engine.turns(on=root))[2] == prompted(act, "None", "work")
+  assert paragraphs(engine.turns(on=root))[1] == prompted(act, "None", "work")
 
 
 async def test_without_a_message_the_actor_reads_the_transcript_alone() -> None:
@@ -157,7 +157,7 @@ async def test_without_a_message_the_actor_reads_the_transcript_alone() -> None:
   assert await act == 7
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
   assert said(log, "prompt")[0][5] == ""
-  assert paragraphs(sand.turns[said(log, "reply")[0][1]])[2:] == [
+  assert paragraphs(sand.turns[said(log, "reply")[0][1]])[1:] == [
     f"#{act}\n{act}: Act[int] = Act({act!r})",
     f"#{step} advance on {act}",
   ]
@@ -228,7 +228,7 @@ async def test_the_binding_of_a_prompt_gives_the_shape_as_python_shows_the_expre
   await settle()
   bindings = [line for one in paragraphs(engine.turns(on=root)) for line in one.split("\n") if ": Act[" in line]
   assert bindings == [
-    "chain1: Act[object] = Act('chain1')",
+    "chain1: Act[Never] = Act('chain1')",
     "prompt1: Act[int] = Act('prompt1')",
     "prompt2: Act[list[Text]] = Act('prompt2')",
     "prompt3: Act[Text | None] = Act('prompt3')",

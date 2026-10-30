@@ -480,9 +480,14 @@ fn an_extension_of_the_root_alone_plays_on_the_root_and_on_a_chain_whose_source_
 /// A life in a directory of the tests whose standing names a doctrine, so the ear of the extensions sets up its root,
 /// given these extensions, each with the file of its word in that directory.
 fn set_up(at: &Path, given: Vec<Extension>) -> Engine {
+  set_up_in(at, given, at)
+}
+
+/// A life as `set_up` opens it, whose standing names another directory.
+fn set_up_in(at: &Path, given: Vec<Extension>, directory: &Path) -> Engine {
   fs::write(at.join("DOCTRINE.md"), "Work.\n").unwrap();
   let doctrine = at.join("DOCTRINE.md").display().to_string();
-  let here = at.to_owned();
+  let here = directory.to_owned();
   let stand = ear(move |mut co| async move {
     loop {
       let a = hear(&mut co).await;
@@ -535,12 +540,72 @@ fn the_setup_of_the_root_ends_with_the_extensions_of_the_root_alone_and_a_chain_
   assert_eq!(root[life + 2], read, "{root:?}");
   let last = &root[life + 3];
   assert!(last.contains("#read3\n") && last.contains("#chain1\nchain1_label = 'root'"), "{last}");
-  assert!(last.ends_with("chain1_actor = 'operator'"), "{last}");
+  assert!(last.ends_with("chain1: Act[Never] = Act('chain1')"), "{last}");
+  let stood = format!("stand()\ncd({})", Object::string(at.display().to_string()).py_repr());
+  assert_eq!(root[life - 2], stood, "the setup tells the standing after the reads: {root:?}");
+  let told = &root[life - 1];
+  assert!(
+    told.starts_with("#stand2\nstand2_roster = ") && told.contains("\n\n#cd1\ncd1_path = "),
+    "{told}"
+  );
   engine.chain(verbs::Chain { label: Some("two".to_owned()), ..Default::default() }).unwrap();
   let two = texts(&mut engine, "chain2");
   assert_eq!(two[..=life], root[..=life], "a chain with no source holds the shared setup");
   assert!(two.iter().all(|one| !one.contains(&read)), "{two:?}");
   assert!(two.last().unwrap().contains("#chain2\nchain2_label = 'two'"), "{two:?}");
+}
+
+#[test]
+fn a_later_life_on_a_new_standing_plays_a_stand_on_each_chain_and_a_cd_where_the_chain_ran_none_of_its_own()
+ {
+  let at = place("restand");
+  let (sub, other) = (at.join("sub"), at.join("other"));
+  fs::create_dir_all(&sub).unwrap();
+  fs::create_dir_all(&other).unwrap();
+  let last = |engine: &mut Engine, chain: &str| -> String {
+    let turns = engine.turns(verbs::Turns { on: Some(chain.to_owned()) }).unwrap();
+    let mut said =
+      turns.iter().filter(|one| one.as_ref().items().unwrap()[0].as_str() == Some("assistant"));
+    said.next_back().unwrap().as_ref().items().unwrap()[1].as_str().unwrap().to_owned()
+  };
+  let mut engine = set_up(&at, vec![]);
+  for label in ["two", "three"] {
+    engine.chain(verbs::Chain { label: Some(label.to_owned()), ..Default::default() }).unwrap();
+  }
+  let moved = verbs::Rung {
+    word: Some("cd('sub')".to_owned()),
+    on: Some("chain3".to_owned()),
+    ..Default::default()
+  };
+  engine.rung(moved).unwrap();
+  let stood = format!("stand()\ncd({})", Object::string(at.display().to_string()).py_repr());
+  assert_eq!(
+    last(&mut engine, "chain2"),
+    stood,
+    "a chain with no source holds the standing of the setup"
+  );
+  drop(engine);
+  let mut engine = set_up_in(&at, vec![], &other);
+  let stood = format!("stand()\ncd({})", Object::string(other.display().to_string()).py_repr());
+  assert_eq!(last(&mut engine, "chain1"), stood, "the cd of the setup is no cd of the root");
+  assert_eq!(last(&mut engine, "chain2"), stood);
+  assert_eq!(
+    last(&mut engine, "chain3"),
+    "stand()",
+    "a chain that ran a cd of its own stays where it stands"
+  );
+  let cwd = |engine: &mut Engine, chain: &str| {
+    engine.cwd(verbs::Cwd { on: Some(chain.to_owned()) }).unwrap()
+  };
+  assert!(cwd(&mut engine, "chain2").ends_with("/other"), "the cd moved the chain");
+  assert!(cwd(&mut engine, "chain3").ends_with("/sub"), "its own cd holds");
+  drop(engine);
+  let mut engine = set_up_in(&at, vec![], &other);
+  assert_eq!(
+    last(&mut engine, "chain2"),
+    stood,
+    "a later life on the same standing plays nothing more"
+  );
 }
 
 /// The chain and the word of each rung that the ear of the extensions made on these chains, in order.

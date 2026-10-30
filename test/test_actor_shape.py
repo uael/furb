@@ -12,12 +12,11 @@ async def test_an_actor_the_world_offers() -> None:
   assert engine.standing()[0] == offers
   assert [engine.offered(offers, to) for to in ("q/low", "m/low")] == [300000, 400000]
   _, _, root = born()
-  assert paragraphs(engine.turns(on=root)) == [
-    "#chain1\nchain1_label = 'root'\nchain1: Act[object] = Act('chain1')",
-    "#chain1 standing\nchain1_roster = [['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]]\n"
-    "chain1_cwd = '/w'\n"
-    "chain1_actor = 'm/low'",
-  ]
+  await engine.rung("stand()", on=root)
+  assert paragraphs(engine.turns(on=root))[-1] == (
+    "#stand2\nstand2_roster = [['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]]\n"
+    "stand2_actor = 'm/low'"
+  )
 
 
 async def test_the_window_that_a_roster_entry_leaves_unsaid_is_the_window_that_the_file_names() -> None:

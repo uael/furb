@@ -223,7 +223,7 @@ async def test_the_ear_of_an_act_is_given_the_name_of_the_act_and_hears_every_fa
   after = log[log.index(engine.get(one)) + 1 :]
   assert heard[0] == one and sorted(heard[1:], key=repr) == sorted(after, key=repr)
   assert engine.get(one) not in heard
-  assert paragraphs(engine.turns(on=root))[2:] == [
+  assert paragraphs(engine.turns(on=root))[1:] == [
     "#note1 spoke by yield",
     "#bash1\nbash1_command = 'echo hi'\nbash1: Act[Exit] = Act('bash1')",
     "#bash1 exited 0\nbash1_stdout = 'ran echo hi'",

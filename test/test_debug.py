@@ -116,7 +116,7 @@ async def test_debug_tells_nothing_but_the_text_of_its_template() -> None:
   await two
   three = engine.rung("debug(t'')", on=root)
   await three
-  assert paragraphs(engine.turns(on=root))[2:] == [
+  assert paragraphs(engine.turns(on=root))[1:] == [
     f"#{one} by operator\n<s:{one}_word>\nn = 1\ndebug(t'before {{n}} after')</s:{one}_word>",
     f"#{one} debugged\n{one}_debug = 'before 1 after'",
     written(two, "debug(t'nothing at all')"),
@@ -150,7 +150,7 @@ async def test_it_is_no_act_and_it_enters_no_record() -> None:
   await settle()
   assert {a[0] for a in acts(log).values() if a[1] not in made} == {"rung", "gate", "run"}
   assert [fact for fact, *_ in sand.record if fact[0] == "tell"] == []
-  assert heads(engine.turns(on=root)) == [f"#{root}", f"#{root} standing", f"#{act} by operator", f"#{act} debugged"]
+  assert heads(engine.turns(on=root)) == [f"#{root}", f"#{act} by operator", f"#{act} debugged"]
 
 
 async def test_outside_an_act_there_is_nothing_to_tell_of_so_it_tells_nothing_as_a_tell_outside_a_run() -> None:
@@ -159,7 +159,7 @@ async def test_outside_an_act_there_is_nothing_to_tell_of_so_it_tells_nothing_as
   mark = len(log)
   assert engine.debug(t"{1}") is None
   assert log[mark:] == []
-  assert heads(engine.turns(on=root)) == [f"#{root}", f"#{root} standing"]
+  assert heads(engine.turns(on=root)) == [f"#{root}"]
 
 
 async def test_a_tell_is_on_the_scope_of_the_act_it_is_of_so_debug_takes_no_chain_of_its_own() -> None:
@@ -174,4 +174,4 @@ async def test_a_tell_is_on_the_scope_of_the_act_it_is_of_so_debug_takes_no_chai
   ]
   assert engine.scope(step) == two
   assert paragraphs(engine.turns(on=two))[-1] == f"#{step} debugged\n{step}_debug = '1'"
-  assert heads(engine.turns(on=root)) == [f"#{root}", f"#{root} standing"]
+  assert heads(engine.turns(on=root)) == [f"#{root}"]

@@ -20,10 +20,10 @@ async def twice() -> tuple[str, str, str, str, str]:
 async def test_take_keeps_the_acts_it_names_and_everything_they_made() -> None:
   """take keeps the acts it names and everything they made."""
   root, first, second, one, two = await twice()
-  assert named(engine.turns(on=root)) == [root, root, first, one, second, two]
+  assert named(engine.turns(on=root)) == [root, first, one, second, two]
   kept = engine.chain("kept", source=root, filter=take(first))
   await settle(300)
-  assert named(engine.turns(on=kept)) == [root, root, first, one, kept]
+  assert named(engine.turns(on=kept)) == [root, first, one, kept]
 
 
 async def test_take_is_given_ids_and_keeps_the_acts_with_those_ids() -> None:
@@ -49,7 +49,7 @@ async def test_take_keeps_everything_that_the_acts_with_those_ids_caused() -> No
   assert [a[1] for a in take(first)(made)] == [first, step, "reply1", command]
   kept = engine.chain("kept", source=root, filter=take(first))
   await settle(300)
-  assert named(engine.turns(on=kept)) == [root, root, first, step, command, command, kept]
+  assert named(engine.turns(on=kept)) == [root, first, step, command, command, kept]
 
 
 async def test_take_that_is_not_inside_keeps_every_other_act() -> None:
@@ -57,5 +57,5 @@ async def test_take_that_is_not_inside_keeps_every_other_act() -> None:
   root, first, second, one, two = await twice()
   narrow = engine.chain("narrow", source=root, filter=take(first, inside=False))
   await settle(300)
-  assert named(engine.turns(on=root)) == [root, root, first, one, second, two]
-  assert named(engine.turns(on=narrow)) == [root, root, second, two, narrow]
+  assert named(engine.turns(on=root)) == [root, first, one, second, two]
+  assert named(engine.turns(on=narrow)) == [root, second, two, narrow]

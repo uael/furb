@@ -87,9 +87,7 @@ export function conversation(
         } else if (word === "closed") continue;
         else shown();
       } else if (act && ["chain", "grant"].includes(act.kind)) {
-        // The inspector shows what the chain stands on, so its standing, headed by its roster, is no card of the
-        // conversation.
-        if (!opens(paragraph) && !ENDS.includes(word) && word !== "standing") shown();
+        if (!opens(paragraph) && !ENDS.includes(word)) shown();
       } else if (act && (opens(paragraph) || ENDS.includes(word))) {
         if (!seen.has(act.id)) items.push({ type: "act", key: act.id, act });
         seen.add(act.id);

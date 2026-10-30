@@ -31,7 +31,6 @@ from conftest import (
   said,
   settle,
   sown,
-  takes,
   tip,
   world_says,
 )
@@ -322,7 +321,7 @@ async def test_in_a_later_life_the_ladder_of_every_chain_runs_again() -> None:
   assert sorted(ran(again)) == sorted(
     [
       fresh(root, prompted("prompt1", "int", "one"), "#rung1 advance on prompt1"),
-      "\n\n".join([opened(two, "two"), takes(two), prompted("prompt2", "int", "two"), "#rung2 advance on prompt2"]),
+      "\n\n".join([opened(two, "two"), prompted("prompt2", "int", "two"), "#rung2 advance on prompt2"]),
       "here = 1\nclose(1)",
       "there = 2\nclose(2)",
     ]

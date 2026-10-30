@@ -1999,8 +1999,7 @@ fn the_open_of_a_chain_after_its_setup_goes_as_a_block_of_its_own() {
   let turn = |role: &str, text: &str| {
     Object::tuple([Object::string(role), Object::string(text), Object::none(), Object::none()])
   };
-  let opened =
-    "#chain2\nchain2_label = 'two'\nchain2: Act[object] = Act('chain2')\n\n#chain2 standing";
+  let opened = "#chain2\nchain2_label = 'two'\nchain2: Act[Never] = Act('chain2')";
   let turns = Object::list([
     turn("user", "chain()"),
     turn("assistant", "read('a.txt')"),

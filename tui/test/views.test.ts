@@ -262,22 +262,25 @@ test("a relative path that the operator types is read from the directory of the 
     expect(session.images[session.selected]?.map((image) => image.name)).toEqual(["pixel.png"]);
   }));
 
-test("the standing of a chain is no card of the conversation, though its turns bind its three parts", () =>
+test("the stand and the cd that the World plays on a chain are no card of the conversation, though its turns bind the roster, the actor and the directory", () =>
   composing(
     async (context) => {
       const { session, app } = context;
       await show(context, "feed");
-      const root = session.engine.root;
       const told = session.turns.flatMap(([role, python]) => (role === "user" ? python.split("\n") : []));
-      const at = told.indexOf(`#${root} standing`);
+      const at = told.findIndex((line) => /^#stand\d+$/.test(line));
+      const stand = told[at]?.slice(1);
       expect(told.slice(at + 1, at + 4).map((line) => line.split(" = ", 1)[0])).toEqual([
-        `${root}_roster`,
-        `${root}_cwd`,
-        `${root}_actor`,
+        `${stand}_roster`,
+        `${stand}_actor`,
+        "",
       ]);
+      expect(told[at + 4]).toMatch(/^#cd\d+$/);
       const headings = app.scroll.getChildren().map((card) => (texts(card)[0] ?? "").replace(/^[▸▾] /, ""));
       expect(headings).toContain("You");
-      expect(headings.filter((heading) => /^(standing|roster|cwd|actor)\b/.test(heading))).toEqual([]);
+      expect(headings.filter((heading) => /^(#?stand\d*|#?cd\d*|roster|cwd|actor)\b/.test(heading))).toEqual(
+        [],
+      );
     },
     { width: 120, height: 30 },
     true,

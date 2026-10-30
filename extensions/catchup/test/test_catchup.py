@@ -1,6 +1,6 @@
 """catchup, the catch-up of a chain."""
 
-from conftest import LATER, Sand, chained, paragraphs, plain, said, settle, sown, takes
+from conftest import LATER, Sand, chained, paragraphs, plain, said, settle, sown
 from extensions.conftest import CATCHUP, catching, caught, caught_up, number
 from furb import engine
 from furb.engine import Text
@@ -22,7 +22,7 @@ async def test_the_life_word_of_the_extension_is_catchup() -> None:
 
 
 async def test_on_the_root_it_reads_the_clock_as_it_starts_and_at_each_stand() -> None:
-  """On the root it reads the clock as it starts and at each stand, once the chain told the standing that the stand gives it, so the record holds a reading of the clock at the tip of every life."""
+  """On the root it reads the clock as it starts and at each stand, once the done of the stand reached it, so the record holds a reading of the clock at the tip of every life."""
   sand, log, root = await caught_up()
   two = await chained("two")
   (watcher,) = [a[1] for a in said(log, "catchup") if a[3] == root]
@@ -31,7 +31,7 @@ async def test_on_the_root_it_reads_the_clock_as_it_starts_and_at_each_stand() -
   again, _ = await catching(later, plain(sand.record))
   assert [a[1:4] for a in said(again, "clock")] == [("clock1", watcher, root), ("clock2", watcher, root)]
   held = engine.transcript(root)
-  told = held.index(("tell", root, root, [takes(root, LATER)]))
+  told = held.index(("done", "stand2", "world", LATER))
   assert [a[0] for a in held[told + 1 :]][:2] == ["clock", "done"]
   assert [a[0] for a in later.calls] == ["stand", "clock"]
   assert [a for a in engine.transcript(two) if a[0] == "clock"] == []

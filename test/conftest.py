@@ -240,9 +240,13 @@ class Sand:
 
   def placed(self, on: str, path: str) -> str:
     """The path of a cd, a read or a write: one that is ~ or starts with ~/ hangs off the home of the user, and any
-    other resolves against the working directory of the chain, which hangs off the home when it starts with ~."""
+    other resolves against the working directory of the chain, which hangs off the directory of the standing, as the
+    World of the machine reads it, so a chain that ran no cd resolves against that directory, and off the home when it
+    starts with ~."""
     homed = lambda one: self.home + one[1:] if one == "~" or one.startswith("~/") else one  # noqa: E731
-    return homed(path) if homed(path) != path else resolved(homed(engine.cwd(on=on)), path)
+    base = self.stands[1] if isinstance(self.stands, list) else ""
+    here = homed(engine.cwd(on=on)) or homed(base)
+    return homed(path) if homed(path) != path else resolved(resolved(homed(base), here) if here else "", path)
 
   def shown(self, path: str) -> str:
     """A path as the World gives it: ~ in place of the home of the user when it is the home or stands under it."""
@@ -340,7 +344,10 @@ class Where(Sand):
   where: list[str] = field(default_factory=list)
 
   def hears(self) -> World:
-    """The World that moves, reads, writes and starts a command, each against the directory it asks the chain for."""
+    """The World that moves, reads, writes and starts a command, each against the directory it asks the chain for, or
+    the directory of the standing when the chain ran no cd."""
+    base = str(self.stands[1]) if isinstance(self.stands, list) else ""
+    here = lambda on: engine.cwd(on=on) or base  # noqa: E731
     while True:
       match (yield):
         case ("stand", qid, *_):
@@ -348,14 +355,14 @@ class Where(Sand):
         case ("cd", qid, *_, path):
           yield "done", qid, path
         case ("read", qid, _, on, path):
-          full = f"{engine.cwd(on=on)}/{path}"
+          full = f"{here(on)}/{path}"
           yield "done", qid, Text(full, self.files.get(full, ""))
         case ("write", qid, _, on, Text(path=path, content=content)):
-          self.files[full := f"{engine.cwd(on=on)}/{path}"] = content
+          self.files[full := f"{here(on)}/{path}"] = content
           yield "done", qid, Text(full, content)
         case ("bash", about, _, on, *_):
           yield "started", about
-          self.where.append(engine.cwd(on=on))
+          self.where.append(here(on))
           yield "done", about, Exit(0, Text(f"{about}/stdout"), Text(f"{about}/stderr"))
 
 
@@ -680,18 +687,18 @@ def named(got: Sequence[tuple]) -> list[str]:
   return [one[1:].split(" ", 1)[0] for one in heads(got)]
 
 
-def takes(id: str, standing: list = STANDS) -> str:
-  """The paragraph a chain tells of a standing it takes: the header standing, then the bindings of its roster, its
-  directory and its actor."""
-  roster, directory, actor = standing
-  return f"#{id} standing\n{id}_roster = {roster!r}\n{id}_cwd = {directory!r}\n{id}_actor = {actor!r}"
+def stood(id: str, standing: list = STANDS) -> str:
+  """The paragraph that a stand from inside an act tells of its answer: its header, then the bindings of the roster
+  and of the actor of the standing."""
+  roster, _, actor, *_ = standing
+  return f"#{id}\n{id}_roster = {roster!r}\n{id}_actor = {actor!r}"
 
 
 def opened(id: str, label: str, source: str = "") -> str:
   """The paragraph a chain tells of its open: its header, the bindings of its label and of its source, and its own
   binding."""
   words = [f"{id}_{word} = {value!r}" for word, value in (("label", label), ("source", source)) if value]
-  return "\n".join([f"#{id}", *words, engine.bound(id)])
+  return "\n".join([f"#{id}", *words, engine.bound(id, "Never")])
 
 
 def of(got: Sequence[tuple], name: str) -> list[str]:
@@ -723,9 +730,9 @@ def written(id: str, word: str, by: str = "operator") -> str:
 
 
 def fresh(root: str, *told: str) -> str:
-  """The text that a fresh root runs as the told rung of its first rung: the paragraph of its open, the paragraph of
-  its standing, and each paragraph told after them, joined by blank lines."""
-  return "\n\n".join([opened(root, "root"), takes(root), *told])
+  """The text that a fresh root runs as the told rung of its first rung: the paragraph of its open, and each
+  paragraph told after it, joined by blank lines."""
+  return "\n\n".join([opened(root, "root"), *told])
 
 
 def gatings(log: Sequence[tuple]) -> list[tuple[str, list[str]]]:

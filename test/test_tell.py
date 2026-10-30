@@ -37,7 +37,7 @@ async def test_what_a_question_answered_now_that_shows_a_text_or_changes_a_state
 async def test_a_question_is_put_to_the_ears_of_the_engine_before_those_of_the_outside() -> None:
   """A question is put to the ears of the engine before those of the outside, so the World is asked for nothing that the engine knows."""
   sand, _, root = born()
-  assert engine.cwd(on=root) == "/w"
+  assert engine.cwd(on=root) == ""
   assert engine.turns(on=root) != []
   act = engine.prompt(int, "count", to=OPERATOR, on=root)
   assert engine.read(act, on=root) == Text(act, "")

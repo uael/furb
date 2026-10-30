@@ -12,7 +12,7 @@ async def test_a_tell_carries_notes_about_the_act_it_is_about() -> None:
   assert await act is None
   told = [a for a in said(log, "tell") if a[1] == act]
   assert [a[3] for a in told] == [[f"#{act} by operator\n{act}_word = 'k = 1'"]]
-  assert paragraphs(engine.turns(on=root))[2:] == ["\n".join(a[3]) for a in told]
+  assert paragraphs(engine.turns(on=root))[1:] == ["\n".join(a[3]) for a in told]
 
 
 async def test_what_an_act_tells_is_the_telling_of_its_chain() -> None:

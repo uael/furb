@@ -311,7 +311,7 @@ async def test_with_a_hidden_show_it_tells_its_header_and_its_binding_alone() ->
   quiet = engine.bash("quiet", show=HIDDEN, on=root)
   sand.exits(quiet, 0)
   await quiet
-  assert paragraphs(engine.turns(on=root))[2:] == [
+  assert paragraphs(engine.turns(on=root))[1:] == [
     f"#{one}\n{one}_command = 'run'\n{one}: Act[Exit] = Act({one!r})",
     f"#{quiet}\n{quiet}: Act[Exit] = Act({quiet!r})",
   ]

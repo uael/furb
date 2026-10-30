@@ -24,7 +24,7 @@ async def test_a_control_tells_a_header_of_its_own_name() -> None:
   _, _, root = born()
   act = engine.bash("echo hi", on=root)
   engine.pause(act)
-  assert heads(engine.turns(on=root)) == [f"#{root}", f"#{root} standing", f"#{act}", f"#{act} paused by operator"]
+  assert heads(engine.turns(on=root)) == [f"#{root}", f"#{act}", f"#{act} paused by operator"]
 
 
 async def test_pause_is_given_the_id_of_a_pending_act_or_the_id_of_a_chain() -> None:
@@ -124,7 +124,7 @@ async def test_a_control_is_on_the_scope_of_what_it_is_over() -> None:
   held = said(log, "pause")[0]
   assert (held[0], held[1], held[2]) == ("pause", act, engine.OPERATOR) and engine.scope(act) == two
   assert heads(engine.turns(on=two))[-2:] == [f"#{act}", f"#{act} paused by operator"]
-  assert heads(engine.turns(on=root)) == [f"#{root}", f"#{root} standing"]
+  assert heads(engine.turns(on=root)) == [f"#{root}"]
 
 
 async def test_a_pause_of_a_name_of_no_act_raises_refused_that_names_it() -> None:

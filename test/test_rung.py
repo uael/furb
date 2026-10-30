@@ -32,7 +32,6 @@ from conftest import (
   settle,
   sown,
   stalled,
-  takes,
   watched,
   world_says,
   written,
@@ -124,7 +123,7 @@ async def test_the_header_that_tells_the_word_of_a_rung_names_the_maker_of_that_
   assert await asking == 1
   (step,) = [a[1] for a in said(log, "rung") if a[2] == asking]
   (helper,) = [a[1] for a in said(log, "rung") if a[4] == "j = 2"]
-  assert heads(engine.turns(on=two))[2:] == [f"#{made} by operator", f"#{helper} by {step}"]
+  assert heads(engine.turns(on=two))[1:] == [f"#{made} by operator", f"#{helper} by {step}"]
 
 
 async def test_a_rung_with_no_word_tells_nothing_where_it_is_made() -> None:
@@ -308,7 +307,7 @@ async def test_the_turns_of_the_chain_of_another_prompt_tell_the_rung_of_a_word_
   await settle()
   (helper,) = [a[1] for a in said(log, "rung") if a[4] == "helper = 2"]
   (step,) = [a[1] for a in said(log, "rung") if a[2] == asking]
-  assert paragraphs(engine.turns(on=two)) == [opened(two, "two"), takes(two), written(helper, "helper = 2", step)]
+  assert paragraphs(engine.turns(on=two)) == [opened(two, "two"), written(helper, "helper = 2", step)]
   assert of(engine.turns(on=root), helper) == []
 
 

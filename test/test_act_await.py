@@ -64,7 +64,6 @@ async def test_a_word_that_awaits_a_chain_raises_refused_where_it_waited() -> No
   await settle()
   assert heads(engine.turns(on=root)) == [
     "#chain1",
-    "#chain1 standing",
     "#prompt1",
     "#rung1 advance on prompt1",
     "#rung1 raised",
