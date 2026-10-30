@@ -1,5 +1,5 @@
 import { type Exit, failed, type LiveAct } from "./acts.js";
-import { actState, tailOf, valueText } from "./ladder.js";
+import { actState, type Chip, tailOf, valueText } from "./ladder.js";
 import { unmarked } from "./marks.js";
 import { reason } from "./plain.js";
 import { placed } from "./source.js";
@@ -350,6 +350,48 @@ function python(value: unknown): string {
   return `{${Object.entries(held)
     .map(([key, one]) => `${JSON.stringify(key)}: ${python(one)}`)
     .join(", ")}}`;
+}
+
+/** The program of the rungs that an ear of the outside made, as the words of the extensions: a comment that names the
+ * ear, then the calls that end each word, which are the life words of the setup, each on a line, with what the acts of
+ * the word came to on the last line. A word that only defines shows no line. The last line runs while an act of the word
+ * is at work, and not while an act lives that is no work, as the watcher of an extension does after it said it done. */
+export function earProgram(
+  ear: LiveAct,
+  rungs: readonly LiveAct[],
+  chips: readonly Chip[],
+  made: (id: string) => readonly LiveAct[],
+  subject: (rung: LiveAct) => string,
+  owed: ReadonlySet<string>,
+  label: (chain: string) => string,
+): ProgramLine[] {
+  const out: ProgramLine[] = [{ kind: "note", step: ear, text: `# ${ear.by}` }];
+  for (const rung of rungs) {
+    const source = subject(rung).trimEnd().split("\n");
+    let first = source.length;
+    while (first > 0 && /^(await )?[A-Za-z_][\w.]*\(/.test(source[first - 1] ?? "")) first--;
+    if (first === source.length) continue;
+    const acts = [...made(rung.id)];
+    for (let at = first; at < source.length; at++)
+      out.push({
+        kind: "code",
+        step: rung,
+        number: at + 1,
+        display: out.length,
+        text: source[at] ?? "",
+        acts: at === source.length - 1 ? acts : [],
+        runs: at === source.length - 1 && acts.some((one) => actState(one, owed) === "running"),
+        hint: at === source.length - 1 ? hintOf(acts, owed, label) : "",
+      });
+  }
+  // A word that only defines has no line to show, so the note stands alone, with the rungs and what they made.
+  if (out.length === 1) {
+    const ids = rungs.map((rung) => rung.id);
+    const span = ids.length > 1 ? `${ids[0]}…${(ids.at(-1) ?? "").replace(/^\D+/, "")}` : (ids[0] ?? "");
+    const acts = chips.map((chip) => chip.label).join(" ");
+    out[0] = { kind: "note", step: ear, text: `# ${ear.by} ${span}  ${acts}`.trimEnd() };
+  }
+  return out;
 }
 
 /** An act that no word made, as the operator or an ear makes it, as one line of python: its call, bound to its name,

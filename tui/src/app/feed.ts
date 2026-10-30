@@ -5,8 +5,8 @@ import {
   asksOperator,
   cancelled,
   condense,
+  earProgram,
   gist,
-  hintOf,
   ladder,
   makers,
   type ProgramLine,
@@ -1216,35 +1216,15 @@ export const feed = part({
             `ear:${act.id}`,
             `${line.state}:${line.acts.map((chip) => chip.label + chip.state).join(" ")}`,
             () => {
-              const out: ProgramLine[] = [{ kind: "note", step: ear, text: `# ${ear.by}` }];
-              for (const rung of line.rungs) {
-                const source = this.subject(rung).trimEnd().split("\n");
-                // The calls that end the word, as the life words of the setup, which one word holds, each on a line.
-                let first = source.length;
-                while (first > 0 && /^(await )?[A-Za-z_][\w.]*\(/.test(source[first - 1] ?? "")) first--;
-                if (first === source.length) continue;
-                const acts = [...madeBy(rung.id)];
-                for (let at = first; at < source.length; at++)
-                  out.push({
-                    kind: "code",
-                    step: rung,
-                    number: at + 1,
-                    display: out.length,
-                    text: source[at] ?? "",
-                    acts: at === source.length - 1 ? acts : [],
-                    runs: at === source.length - 1 && acts.some((one) => !one.done),
-                    hint: at === source.length - 1 ? hintOf(acts, owed, named) : "",
-                  });
-              }
-              // A word that only defines has no line to show, so the note stands alone, with the rungs and what they made.
-              if (out.length === 1) {
-                const ids = line.rungs.map((rung) => rung.id);
-                const span =
-                  ids.length > 1 ? `${ids[0]}…${(ids.at(-1) ?? "").replace(/^\D+/, "")}` : (ids[0] ?? "");
-                const made = line.acts.map((chip) => chip.label).join(" ");
-                out[0] = { kind: "note", step: ear, text: `# ${ear.by} ${span}  ${made}`.trimEnd() };
-              }
-              return out;
+              return earProgram(
+                ear,
+                line.rungs,
+                line.acts,
+                madeBy,
+                (rung) => this.subject(rung),
+                owed,
+                named,
+              );
             },
           );
           // An ear with no rung shows nothing.
