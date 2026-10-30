@@ -6,7 +6,6 @@ license: Adapted from the skill test-audit of openclaw at 9a75b9b, under the ter
 
 # Test audit
 
-
 Three modes hold one bar of value. The authoring mode gates each new or changed test when you write it. The audit
 mode sweeps one part for tests of low value. The campaign mode prunes the whole test surface of one part in one
 pull request; read [CAMPAIGN.md](CAMPAIGN.md) before you start one. The aim is confidence, not a count of deleted
@@ -113,7 +112,6 @@ screen of the TUI. Also keep:
   rename, as the hygiene laws are.
 
 A kept test that fails on the base is a possible bug of the product: reproduce it, and repair the owner.
-
 
 A test that is slow or that reads the source is not deleted for that. A test that looks like the implementation may
 still be the only guard of a contract; prove that it is not before you remove it.
