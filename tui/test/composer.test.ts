@@ -543,7 +543,7 @@ test("the usage of a fork counts the answers of the fork alone, and not those of
   }));
 
 test("a branch that a word made with a filter shows the messages that it took, with their answers, and not the one it left out", () =>
-  composing(async ({ session, frame }) => {
+  composing(async ({ session, frame, screen }) => {
     await session.submit("Explore this project.");
     await until(session, () => session.activity.some((act) => session.isUserPrompt(act) && act.done));
     await session.submit("Read the notes again.");
@@ -560,7 +560,8 @@ test("a branch that a word made with a filter shows the messages that it took, w
     await until(session, () => session.acts.some((act) => act.kind === "chain" && act.by === made));
     const branch = session.acts.find((act) => act.kind === "chain" && act.by === made);
     await session.select(String(branch?.id));
-    const shown = await frame();
+    // A message and an answer are markdown, which a slow machine lays out a frame or more after the code.
+    const shown = await drawn(frame, screen.renderer.root);
     expect(shown).toContain("It takes the message before it, with its answer.");
     expect(shown).toContain("Read the notes again.");
     expect(shown).not.toContain("Explore this project.");
