@@ -17,7 +17,7 @@ async def test_the_life_word_of_the_extension_is_catchup() -> None:
   assert [a[3] for a in said(log, "catchup")] == [root, two]
   engine.read("a.txt", on=two)
   sand.files["/w/a.txt"] = "one\nthree\n"
-  engine.stand()
+  engine.stand(engine.ROOT)
   assert caught(engine.turns(on=two), two) == [f"#{two} caught up\n{two}_changed = {{'/w/a.txt': {{2: 'three'}}}}"]
 
 
@@ -48,7 +48,7 @@ async def test_the_catch_up_of_a_chain() -> None:
   engine.write(Text("b.txt", "b\n"), on=two)
   sand.files.update({"/w/a.txt": "one\nthree\n", "x://y": "z\n", "/w/b.txt": "c\n"})
   calls = len(sand.calls)
-  engine.stand()
+  engine.stand(engine.ROOT)
   assert [(a[3], a[4]) for a in said(sand.calls[calls:], "read")] == [
     (root, "/w/a.txt"),
     (two, "/w/b.txt"),
@@ -77,11 +77,11 @@ async def test_the_paragraph_binds_changed_to_the_paths_that_changed() -> None:
     engine.read(path, on=root)
   sand.files.update({"/w/a.txt": "one\nTWO\n", "/w/b.txt": many.replace("\n", "!\n")})
   del sand.files["/w/c.txt"]
-  engine.stand()
+  engine.stand(engine.ROOT)
   assert caught(engine.turns(on=root), root) == [
     "#chain1 caught up\nchain1_changed = {'/w/c.txt': 'gone', '/w/b.txt': 50, '/w/a.txt': {2: 'TWO', 3: None}}"
   ]
-  engine.stand()
+  engine.stand(engine.ROOT)
   assert len(caught(engine.turns(on=root), root)) == 1
 
 
@@ -107,12 +107,12 @@ async def test_past_budget_bytes_the_paragraph_gives_the_paths_alone() -> None:
   for path in few:
     engine.read(path, on=root)
   sand.files.update(dict.fromkeys(few, long.replace("x", "y")))
-  engine.stand()
+  engine.stand(engine.ROOT)
   assert caught(engine.turns(on=root), root) == [f"#chain1 caught up\nchain1_changed = {few[::-1]!r}"]
   for path in many:
     engine.read(path, on=root)
   sand.files.update(dict.fromkeys(many, "b\n"))
-  engine.stand()
+  engine.stand(engine.ROOT)
   head = "#chain1 caught up\nchain1_changed = "
   fit = max(n for n in range(len(many) + 1) if len(f"{head}{many[::-1][:n]!r}".encode()) <= BUDGET)
   assert 0 < fit < len(many)
@@ -126,7 +126,7 @@ async def test_a_chain_where_nothing_changed_tells_nothing_at_a_stand() -> None:
   two = await chained("two")
   engine.read("a.txt", on=two)
   was = [engine.turns(on=one) for one in (root, two)]
-  engine.stand()
+  engine.stand(engine.ROOT)
   assert [engine.turns(on=one) for one in (root, two)] == was
   await catching(sown(), plain(sand.record))
   assert [engine.turns(on=one) for one in (root, two)] == was
@@ -156,13 +156,13 @@ async def test_it_hears_no_control() -> None:
   engine.pause(root)
   engine.cancel(watcher)
   sand.files["/w/a.txt"] = "one\nTWO\n"
-  engine.stand()
+  engine.stand(engine.ROOT)
   assert caught(engine.turns(on=root), root) == ["#chain1 caught up\nchain1_changed = {'/w/a.txt': {2: 'TWO'}}"]
   assert engine.peek(watcher, "open") == "open"
 
 
 async def test_it_catches_the_chain_up_at_each_stand_from_outside_an_act() -> None:
-  """It catches the chain up at each stand from outside an act, as the stand that boot makes at the tip of a life, and at no stand that a word makes, as the one that the World plays on each new chain, so a new chain makes no read on the chains that live."""
+  """It catches the chain up at each stand from outside an act, as the stand that boot makes at the tip of a life, and at no stand that a word makes, as the one that each new chain plays on itself, so a new chain makes no read on the chains that live."""
   sand, log, root = await caught_up()
   two = await chained("two")
   engine.read("a.txt", on=two)
@@ -173,7 +173,7 @@ async def test_it_catches_the_chain_up_at_each_stand_from_outside_an_act() -> No
   await engine.rung("stand()", on=three)
   assert said(sand.calls[calls:], "read") == [] and len(said(sand.calls[calls:], "stand")) == 2
   assert caught(engine.turns(on=two), two) == []
-  engine.stand()
+  engine.stand(engine.ROOT)
   assert [(a[3], a[4]) for a in said(sand.calls[calls:], "read")] == [(two, "/w/a.txt")]
   assert caught(engine.turns(on=two), two) == [f"#{two} caught up\n{two}_changed = {{'/w/a.txt': {{2: 'three'}}}}"]
   assert [a[3] for a in said(log, "catchup")] == [root, two, three]

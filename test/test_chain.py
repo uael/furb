@@ -486,14 +486,13 @@ TAUGHT: list = [*STANDS, "/w/DOCTRINE.md"]
 
 
 STOOD = "stand()\ncd('/w')"
-"""The turn that the World plays on a chain with no source to tell it what it stands on."""
+"""The turn of the stand that a chain with no source whose standing names a doctrine plays on itself."""
 
 
 def playing(after: str = "") -> World:
   """An ear that plays a setup on the root at the first done of a stand, as the World of a new record does: a read,
   then a word, as two turns of the default actor, then the act setup, then a word of an extension of the root alone
-  when it is given, then the turn that tells the standing; and that plays this last turn on each chain with no source
-  at its birth."""
+  when it is given."""
   a = yield None
   while not (a and a[0] == "done" and engine.question(("stand", a[1]))):
     a = yield None
@@ -502,11 +501,8 @@ def playing(after: str = "") -> World:
   engine.act("setup", "chain1", None)
   if after:
     engine.rung(after, to="m/low", on="chain1")
-  engine.rung(STOOD, to="m/low", on="chain1")
   while True:
-    a = yield None
-    if a and a[0] == "chain" and engine.question(a) and not a[5]:
-      engine.rung(STOOD, to="m/low", on=a[1])
+    yield None
 
 
 async def taught(after: str = "") -> tuple[Sand, list[tuple], str]:
@@ -519,7 +515,7 @@ async def taught(after: str = "") -> tuple[Sand, list[tuple], str]:
 
 
 async def test_when_its_first_standing_names_a_doctrine_the_root_tells_the_bare_paragraph_chain() -> None:
-  """When its first standing names a doctrine, the root tells the bare paragraph chain() at once, and tells its open once no rung with a word and an actor is open on it at the done of a rung on it, so its first turns are the setup that the World plays on it, and the turn after the last of them holds what that one told, then the open."""
+  """When its first standing names a doctrine, the root tells the bare paragraph chain() at once, and tells its open once no rung with a word and an actor is open on it at the done of a rung on it, so its first turns are the setup that the World plays on it, then the turn of its stand, and the turn after it holds what the stand told, then the open."""
   _, _, root = born(stands=TAUGHT)
   assert engine.turns(on=root) == [("user", "chain()", None, None)]
   _, _, root = await taught()
@@ -544,7 +540,7 @@ async def test_the_chain_runs_no_paragraph_chain_as_python() -> None:
 
 
 async def test_a_chain_with_no_source_holds_first_the_setup_of_the_root() -> None:
-  """A chain with no source holds first the setup of the root, each fact of the root from its paragraph chain() up to its open but the facts of each act that an ear of the outside or the operator made on the root after the act setup that the World makes on it, and of each act under one, so every such chain holds the turns of the setup that every chain shares with the same names, and the turn that the World plays on it and its own open come after them."""
+  """A chain with no source holds first the setup of the root, each fact of the root from its paragraph chain() up to its open but the facts of each act that an ear of the outside, the operator or the root itself made on the root after the act setup that the World makes on it, as the rung of the stand of the root, and of each act under one, so every such chain holds the turns of the setup that every chain shares with the same names, and the turn of its stand and its own open come after them."""
   _, _, root = await taught("y = 1")
   two = await chained("two")
   three = await chained("three")
@@ -565,7 +561,7 @@ async def test_a_chain_with_no_source_holds_first_the_setup_of_the_root() -> Non
 
 
 async def test_a_chain_with_no_source_whose_standing_names_a_doctrine_tells_its_open_as_the_root_does() -> None:
-  """A chain with no source whose standing names a doctrine tells its open as the root does, once no rung with a word and an actor is open on it at the done of a rung on it, so the turn that the World plays on it at its birth, as stand() and a cd, comes before its open."""
+  """A chain with no source whose standing names a doctrine plays on itself, once no rung with a word and an actor is open on it, the rung of stand() and a cd to the directory of the standing, with that word and its default actor, the root at the done of a rung on it after its setup and every other such chain at its birth, so a prompt on it waits for that rung, and it tells its open once that rung is done, so its last turn before its first prompt tells where it stands."""
   _, log, _ = await taught()
   two = await chained("two")
   turns = engine.turns(on=two)
@@ -574,11 +570,23 @@ async def test_a_chain_with_no_source_whose_standing_names_a_doctrine_tells_its_
   assert paragraphs(turns[6:]) == [stood("stand3"), "#cd2\ncd2_path = '/w'", opened(two, "two")]
   _, _, _ = born(stands=TAUGHT)
   bare = await chained("bare")
-  assert f"#{bare}" not in heads(engine.turns(on=bare))
-  step = engine.rung("k = 1", on=bare)
-  assert await step is None
-  await settle()
-  assert paragraphs(engine.turns(on=bare))[-1] == opened(bare, "bare")
+  assert heads(engine.turns(on=bare)) == ["chain()", "#stand2", "#cd1", f"#{bare}"]
+
+
+async def test_a_chain_that_hears_a_prefix_that_another_said_on_it_tells_no_open_of_its_own() -> None:
+  """A chain that hears a prefix that another said on it tells no open of its own and plays no stand at its birth, since the turns of the prefix hold them, as the turns that a checkpoint carries."""
+  # A record as a checkpoint lays it: the chains, then the stand, then a word that says the prefix of each chain.
+  record = [
+    (("chain", "chain1", OPERATOR, "", "root", ""),),
+    (("chain", "chain2", OPERATOR, "", "two", ""),),
+    (("stand", "stand1", OPERATOR, "chain1"),),
+    (("done", "stand1", "world", TAUGHT),),
+    (("rung", "rung1", OPERATOR, "chain2", "say('prefix', 'chain2', [])", "", ""),),
+  ]
+  log, _ = life(sown(stands=TAUGHT), record)
+  await settle(300)
+  assert [a for a in said(log, "rung") if a[2] == a[3] == "chain2"] == []
+  assert [one for one in heads(engine.turns(on="chain2")) if one.startswith(("#chain2", "#stand"))] == []
 
 
 async def test_a_chain_with_no_source_runs_again_each_word_of_the_setup_that_it_holds() -> None:

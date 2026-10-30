@@ -16,7 +16,7 @@ async def test_cap_is_the_number_of_lines_that_differ_in_a_file_past_which_a_cat
   engine.read("b.txt", on=root)
   sand.files["/w/a.txt"] = lines.replace("\n", "!\n", CAP)
   sand.files["/w/b.txt"] = lines.replace("\n", "!\n")
-  engine.stand()
+  engine.stand(engine.ROOT)
   shown = {i: f"{i - 1}!" for i in range(1, CAP + 1)}
   assert paragraphs(engine.turns(on=root))[-1] == (
     f"#chain1 caught up\nchain1_changed = {{'/w/b.txt': {CAP + 1}, '/w/a.txt': {shown!r}}}"

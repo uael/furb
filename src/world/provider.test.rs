@@ -240,10 +240,11 @@ fn a_second_refusal_in_a_row_of_an_actor_on_a_chain_pauses_the_chain_before_its_
   assert!(until(&mut engine, |engine| said(engine).len() == 6), "{:?}", said(&mut engine));
   let refused =
     |why: &str| format!("Refused(args=('m/high answered nothing: ProviderError: {why}'))");
+  // reply2 is the reply of the stand that the root plays on itself, which its crafted rung answers.
   let expected = [
     ("started", "reply1", String::new()),
     ("done", "reply1", refused("boom")),
-    ("started", "reply2", String::new()),
+    ("started", "reply3", String::new()),
     (
       "tell",
       root.as_str(),
@@ -252,7 +253,7 @@ fn a_second_refusal_in_a_row_of_an_actor_on_a_chain_pauses_the_chain_before_its_
       ),
     ),
     ("pause", root.as_str(), "'m/high answered nothing: ProviderError: boom again'".into()),
-    ("done", "reply2", refused("boom again")),
+    ("done", "reply3", refused("boom again")),
   ];
   let expected: Vec<_> =
     expected.into_iter().map(|(kind, about, word)| (kind.into(), about.into(), word)).collect();
@@ -281,13 +282,14 @@ fn a_function_of_the_host_that_refuses_later_twice_in_a_row_pauses_the_chain_and
   asked(&mut engine);
   assert!(until(&mut engine, |engine| said(engine).len() == 6), "{:?}", said(&mut engine));
   let kinds: Vec<_> = said(&mut engine).into_iter().map(|(kind, about, _)| (kind, about)).collect();
+  // reply2 is the reply of the stand that the root plays on itself, which its crafted rung answers.
   let expected = [
     ("started", "reply1"),
     ("done", "reply1"),
-    ("started", "reply2"),
+    ("started", "reply3"),
     ("tell", root.as_str()),
     ("pause", root.as_str()),
-    ("done", "reply2"),
+    ("done", "reply3"),
   ];
   assert_eq!(kinds, expected.map(|(kind, about)| (kind.to_owned(), about.to_owned())));
   assert_eq!(calls.load(Ordering::SeqCst), 2, "the paused chain asks the function no more");
@@ -1698,7 +1700,7 @@ fn a_stand_ends_the_wait_of_a_usage_limit_and_asks_the_model_again_at_once() {
   let heard = Arc::clone(&told);
   assert!(until(&mut engine, move |_| heard.lock().expect("the retries told").len() == 1));
   assert!(told.lock().expect("the retries told")[0].2.wait > Duration::from_secs(80_000));
-  engine.stand(verbs::Stand::default()).expect("the life stands");
+  engine.stand(verbs::Stand { on: Some("chain1".to_owned()) }).expect("the life stands");
   let done = |engine: &mut Engine| {
     engine.peek(&id, verbs::Peek::default()).is_ok_and(|one| one.as_ref().as_int() == Some(7))
   };
@@ -1734,7 +1736,7 @@ fn a_stand_on_new_settings_asks_a_reply_that_waits_for_a_usage_limit_again_on_th
   let heard = Arc::clone(&told);
   assert!(until(&mut engine, move |_| !heard.lock().expect("the retries told").is_empty()));
   switched.store(true, Ordering::SeqCst);
-  engine.stand(verbs::Stand::default()).expect("the life stands");
+  engine.stand(verbs::Stand { on: Some("chain1".to_owned()) }).expect("the life stands");
   let done = |engine: &mut Engine| {
     engine.peek(&id, verbs::Peek::default()).is_ok_and(|one| one.as_ref().as_int() == Some(7))
   };

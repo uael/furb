@@ -51,7 +51,7 @@ async def test_a_stand_is_the_question_of_what_the_chains_stand_on() -> None:
   for one in (root, two, side):
     assert engine.module(one)["actor"] == "m/low"
   sand.stands = LATER
-  engine.stand()
+  engine.stand(engine.ROOT)
   for one in (root, two, side):
     assert engine.module(one)["actor"] == "o/low"
 
@@ -82,7 +82,7 @@ async def test_the_world_answers_a_stand_with_the_roster_the_directory_and_the_a
 
 
 async def test_a_model_asked_on_any_chain_of_a_later_life_finds_the_new_roster() -> None:
-  """A model asked on any chain of a later life finds the new roster in the transcript of its chain, in the stand that the World plays there."""
+  """A model asked on any chain of a later life finds the new roster in the transcript of its chain, in the stand that its chain plays there."""
   sand, _, root = born()
   two = await chained("two")
   assert await engine.rung("k = 1", on=root) is None
@@ -149,18 +149,18 @@ async def test_a_standing_binds_the_default_actor_of_the_chain_when_its_actor_di
   assert await engine.prompt(int, "count", on=root) == 1
   assert said(log, "reply")[0][4] == "m/low" and engine.module(root)["actor"] == "n/low"
   sand.stands = [STANDS[0], "/v", STANDS[2]]
-  engine.stand()
+  engine.stand(engine.ROOT)
   assert engine.module(root)["actor"] == "n/low"
   sand.stands = [[*STANDS[0], ["q", ["low"], 300000]], "/w", STANDS[2]]
-  engine.stand()
+  engine.stand(engine.ROOT)
   assert engine.module(root)["actor"] == "n/low"
   sand.stands = LATER
-  engine.stand()
+  engine.stand(engine.ROOT)
   assert engine.module(root)["actor"] == "o/low"
 
 
 async def test_every_chain_hears_the_done_of_every_stand() -> None:
-  """Every chain hears the done of every stand, and binds its default actor again when the actor of the standing changes, and tells nothing of it, since the World plays a stand on each chain whose standing changed, which tells it, so the transcript grows at one end."""
+  """Every chain hears the done of every stand, and binds its default actor again when the actor of the standing changes, and a chain whose standing names a doctrine plays on itself the rung of stand(), with a cd to the new directory when the directory changed and no cd of a rung with no actor moved the chain, so the transcript grows at one end."""
   first, _, root = born()
   assert await engine.rung("k = 1", on=root) is None
   await settle()
@@ -170,14 +170,28 @@ async def test_every_chain_hears_the_done_of_every_stand() -> None:
   assert engine.turns(on=over) == was and engine.module(root)["actor"] == "o/low"
   later.stands = Refused("no standing now")
   with pytest.raises(Refused):
-    engine.stand()
+    engine.stand(engine.ROOT)
   assert engine.standing() == LATER and engine.module(root)["actor"] == "o/low"
   two = await chained("two")
   told = [paragraphs(engine.turns(on=one)) for one in (over, two)]
   later.stands = STANDS
-  engine.stand()
+  engine.stand(engine.ROOT)
   assert [paragraphs(engine.turns(on=one)) for one in (over, two)] == told
   assert engine.module(root)["actor"] == engine.module(two)["actor"] == "m/low"
   await engine.rung("stand()", on=two)
   assert paragraphs(engine.turns(on=two)) == [*told[1], "#rung2 by operator\nrung2_word = 'stand()'", stood("stand5")]
   assert paragraphs(engine.turns(on=over)) == told[0]
+  taught, _, root = born(stands=[*STANDS, "/w/DOCTRINE.md"])
+  await engine.rung("k = 1", on=root)
+  await settle()
+  last = lambda: [one[1] for one in engine.turns(on=root) if one[0] == "assistant"][-1]  # noqa: E731
+  assert last() == "stand()\ncd('/w')"
+  taught.stands = [STANDS[0], "/z", STANDS[2], "/w/DOCTRINE.md"]
+  engine.stand(engine.ROOT)
+  await settle()
+  assert last() == "stand()\ncd('/z')"
+  await engine.rung("cd('/y')", on=root)
+  taught.stands = [STANDS[0], "/v", STANDS[2], "/w/DOCTRINE.md"]
+  engine.stand(engine.ROOT)
+  await settle()
+  assert last() == "stand()" and engine.cwd(on=root) == "/y"
