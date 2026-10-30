@@ -26,6 +26,20 @@ import { type Part, plain, styled } from "../ui.ts";
 import { part } from "./part.ts";
 import { type BlockOptions, chipColors, noBorder, type State, stateOf } from "./shared.ts";
 
+/** The match of a pattern that covers a column of a line, as a terminal draws the line. The scan adds the width of
+ * each part once and stops past the column, so a pointer over a line of half a million characters costs one pass. */
+export function covering(line: string, column: number, pattern: RegExp): RegExpExecArray | undefined {
+  let at = 0;
+  let width = 0;
+  for (const match of line.matchAll(pattern)) {
+    width += Bun.stringWidth(line.slice(at, match.index));
+    at = match.index;
+    if (width > column) return undefined;
+    if (column < width + Bun.stringWidth(match[0])) return match;
+  }
+  return undefined;
+}
+
 /** The lines of code whose colors the view keeps, and the widest line that it keeps. */
 const PAINTED_LINES = 4096,
   PAINTED_WIDTH = 1000;
@@ -414,17 +428,10 @@ export const blocks = part({
       const line = content.split("\n")[node.getLineSources(row, 1)[0] ?? row] ?? "";
       const first = row - (info.lineWraps[row] ?? 0);
       const column = x - node.x + (info.lineStartCols[row] ?? 0) - (info.lineStartCols[first] ?? 0);
-      const under = (pattern: RegExp) =>
-        [...line.matchAll(pattern)].filter(
-          (match) =>
-            column >= Bun.stringWidth(line.slice(0, match.index)) &&
-            column < Bun.stringWidth(line.slice(0, match.index + match[0].length)),
-        );
-      const reference = under(/^#([\w@.]+)|furb-image:\/\/[\w.]+/g).find(
-        (match) => match[1] === undefined || this.session.actOf(match[1]),
-      );
-      if (reference) return { reference: true, value: reference[1] ?? reference[0] };
-      const name = under(/[\p{L}_][\p{L}\p{N}_]*/gu)[0];
+      const reference = covering(line, column, /^#([\w@.]+)|furb-image:\/\/[\w.]+/g);
+      if (reference && (reference[1] === undefined || this.session.actOf(reference[1])))
+        return { reference: true, value: reference[1] ?? reference[0] };
+      const name = covering(line, column, /[\p{L}_][\p{L}\p{N}_]*/gu);
       return name && { reference: false, value: name[0] };
     };
     node.onMouseMove = (event) => {
