@@ -239,7 +239,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
     h = [(x[0] == "tell" and x[3][0][:6]) or x[0] for x in t] + ["chain(", "#chain", "setup"]
     hi = h.index("#chain", lo := h.index("chain("))
     refused, running, waiting, last, heard = set(), {}, {}, standing(), []
-    asking = news = ran = reply = note = to = ""
+    step = news = ran = reply = note = to = ""
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
     def bind(whose):
@@ -351,13 +351,13 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
         case ("tell", *_, notes) if notes != ["chain()"]:
           heard.append("\n".join(notes))
           if a is note:
-            note = bind(asking)
+            note = bind(step)
         case ("done", about, *_) if about == note:
-          with site.set(asking):
+          with site.set(step):
             reply = act("reply", id, controlled(idle), to)
         case ("ready", rid, _, word):
           try:
-            rid == asking or bind(rid)
+            rid == step or bind(rid)
             ladder[(donor := r[5]) or rid] = word
             found = (ran := tells(rid) and (rid, len(heard))) and gate(word)
             if not found:
@@ -376,15 +376,15 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
         running[get(r[2])[4]] = a[0] != "started"
       if any(running.values()):
         continue
-      if asking not in waiting and (asking := next((x for x in waiting if not (paused(x) or over(x))), "")):
-        maker, to = get(asking)[2::4]
+      if step not in waiting and (step := next((x for x in waiting if not (paused(x) or over(x))), "")):
+        maker, to = get(step)[2::4]
         if offered(last[0], to) is None:
-          close(Refused(to + " no actor"), maker * prompted(maker) or asking)
+          close(Refused(to + " no actor"), maker * prompted(maker) or step)
         else:
           if ran and len(heard) == ran[1]:
             yield told(ran[0], "told nothing")
           note = yield told(
-            asking,
+            step,
             "advance on " + maker,
             share=filled(reply) or None,
             waits=[c for *_, c in transcript(id, "wants") if not over(c)] or None,
@@ -857,8 +857,8 @@ def boot(record=(), **outside):
   def transcript(on="", of=""):
     return held.get((scope(on or site.get()), of), [])[:]
 
-  for who, hearer in [(OPERATOR, idle(OPERATOR)), *outside.items(), ("journal", journal())]:
-    drive(hearer, who)
+  for who, listener in [(OPERATOR, idle(OPERATOR)), *outside.items(), ("journal", journal())]:
+    drive(listener, who)
   root = Act(ROOT) if known else chain("root")
   stand()
   return root
