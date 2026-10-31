@@ -310,7 +310,7 @@ export class Parts {
   private timer?: ReturnType<typeof setTimeout>;
   private readonly watchers = new Map<string, FSWatcher>();
   private readonly heardWrites = new Set<string>();
-  /** The stamp of the config of the project when the parts loaded last. */
+  /** The stamps of the configs of the project when the parts loaded last. */
   private config = "";
   private busy = 0;
   private readonly poll = setInterval(() => this.verify(), 500).unref();
@@ -343,7 +343,7 @@ export class Parts {
     }
     const loaded = await Promise.all(found.map((one) => loadPart(one.name, one.file, one.text)));
     if (asked !== this.asked || this.closed) return;
-    this.config = stamped(join(this.project, ".furb", "config.json"));
+    this.config = this.configs();
     this.loaded = error ? [bare("extensions", join(this.project, ".furb"), error), ...loaded] : loaded;
     this.follow(found);
     this.version++;
@@ -362,8 +362,15 @@ export class Parts {
    * text and has no file to watch, so the config is the one sign of a part that a project turns on. */
   private verify(): void {
     if (this.busy || this.closed) return;
-    if (stamped(join(this.project, ".furb", "config.json")) !== this.config) this.soon();
+    if (this.configs() !== this.config) this.soon();
     if (this.loaded.some((one) => one.stamp !== undefined && stamped(one.file) !== one.stamp)) this.soon();
+  }
+
+  /** The stamps of `.furb/config.json` and `.furb/config.local.json` as the disk holds them now. */
+  private configs(): string {
+    return ["config.json", "config.local.json"]
+      .map((one) => stamped(join(this.project, ".furb", one)))
+      .join(" ");
   }
 
   /** The list of writes that the parts heard last, and how many of it. */
