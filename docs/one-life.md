@@ -183,6 +183,10 @@ names of each kind that no entry carries. Each carried chain then takes a rung t
 values of its module, and says a prefix of its turns, which keeps its module. A chain with an open prompt opens paused,
 and its prompt asks its model again at a wake. `src/checkpoint.rs` holds the shape.
 
+As built, the World writes a checkpoint at an upgrade, in `upgraded` of `src/life.rs`, and when `furb checkpoint` runs.
+It writes none when a host ends and none when the tail passes a count. So a cold open of a record with no checkpoint
+replays the whole record.
+
 The entries before the last checkpoint are history. No life replays them, a reader reads them, and the store can
 move them to a file of their own beside the record.
 
