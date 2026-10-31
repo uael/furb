@@ -150,6 +150,9 @@ if [ -d "$path/node_modules" ] && command -v bun >/dev/null 2>&1; then
     python_note
     exit 0
   fi
+else
+  echo "$path holds a build that was copied from $src and not made again, since bun or node_modules is missing."
+  echo "Run bun install and bun run build there before you trust a test."
 fi
 
 echo "$path is ready on $branch."
