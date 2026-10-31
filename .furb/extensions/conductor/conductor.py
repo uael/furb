@@ -1480,11 +1480,15 @@ async def take_issues() -> None:
   for it in json.loads(got.stdout.content):
     key = f"issue{it['n']}"
     body = str(it["body"] or "")
-    if "paused" in it["labels"] or body.startswith(MARKS):
+    if "paused" in it["labels"]:
       continue
     fresh = [name for name, n in ends.get(key, []) if n and name not in requeued]
     if key in handled and not fresh:
       continue
+    if body.startswith(MARKS):
+      yes = await bash("gh api repos/{owner}/{repo}/issues/" + str(it["n"]) + "/reactions --jq '[.[] | select(.content == \"+1\") | .user.login] | index(\"" + OWNER + "\") != null'", show=HIDDEN, timeout=120)
+      if yes.stdout.content.strip() != "true":
+        continue
     handled.add(key)
     if taken(key) or any(q[0] == key for q in backlog) or any(f"w:{key}" in pr["labels"] for pr in prs.values()):
       continue
