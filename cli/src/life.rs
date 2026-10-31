@@ -2,6 +2,7 @@
 //! and what the operator hears of it.
 
 use std::{
+  collections::HashSet,
   future::{Future, poll_fn},
   pin::Pin,
   task::Poll,
@@ -136,20 +137,28 @@ impl Life {
 
   /// What an act of the operator on the root came to, awaited until it is done, as the operator waits on its own
   /// loop; or why it never will be: a pause over the act or over the root, which no one wakes while one command
+  /// runs, or work that an earlier life left and that the act awaits alone, which no wake runs while one command
   /// runs.
   pub fn settled(&mut self, id: &str) -> Result<Object, String> {
     let facts = self.engine.transcript(verbs::Transcript { on: Some(self.root.clone()), of: None });
     let facts = facts.map_err(|no| no.to_string())?;
     quieted(&mut self.quiet, &mut self.heard);
     self.quiet.watch(vec![self.root.clone(), id.to_owned()], &facts);
-    let Life { engine, quiet, heard, .. } = self;
+    let Life { engine, root, quiet, heard, .. } = self;
     reactor().block_on(poll_fn(|cx| {
       if let Poll::Ready(got) = Pin::new(&mut Act::<Object>::of(engine, id)).poll(cx) {
         return Poll::Ready(got.map_err(|no| no.to_string()));
       }
       let quiet = quieted(quiet, heard);
       if !quiet.paused {
-        return Poll::Pending;
+        return match stranded(engine, root, id) {
+          Ok(named) if named.is_empty() => Poll::Pending,
+          Ok(named) => Poll::Ready(Err(format!(
+            "the word awaits {}, and no wake runs it. A wake from the TUI or from `furb --mode rpc` makes it go on.",
+            named.join(", ")
+          ))),
+          Err(no) => Poll::Ready(Err(no)),
+        };
       }
       let why =
         if quiet.refused.is_empty() { String::new() } else { format!(": {}", quiet.refused) };
@@ -158,6 +167,38 @@ impl Life {
       )))
     }))
   }
+}
+
+/// The acts that the word of the rung awaits, each as its name and the chain it is on, when each of them is work that
+/// an earlier life left, which waits for a wake: no ear of this life moves such an act, so a word that awaits only
+/// these never goes on. None when the word awaits nothing, or awaits any act that this life can move.
+fn stranded(engine: &mut Engine, root: &str, rung: &str) -> Result<Vec<String>, String> {
+  let failed = |no: Fault| no.to_string();
+  let left = engine.pending().map_err(failed)?;
+  if left.is_empty() {
+    return Ok(Vec::new());
+  }
+  let facts =
+    engine.transcript(verbs::Transcript { on: Some(root.to_owned()), of: None }).map_err(failed)?;
+  let done: HashSet<&str> =
+    facts.iter().filter(|one| one.kind() == "done").map(Fact::about).collect();
+  let mut calls = Vec::new();
+  for one in facts.iter().filter(|one| one.kind() == "wants" && !done.contains(one.about())) {
+    let run = engine.get(one.by()).map_err(failed)?;
+    let mine = run.is_some_and(|run| run.word(1).and_then(|one| one.as_str()) == Some(rung));
+    if mine {
+      calls.push(one.word(1).and_then(|one| one.as_str()).unwrap_or_default().to_owned());
+    }
+  }
+  if calls.is_empty() || !calls.iter().all(|call| left.iter().any(|(id, _)| id == call)) {
+    return Ok(Vec::new());
+  }
+  let mut named = Vec::new();
+  for call in calls {
+    let on = engine.get(&call).map_err(failed)?.map(|one| one.on().to_owned());
+    named.push(format!("{call} on {}", on.unwrap_or_default()));
+  }
+  Ok(named)
 }
 
 /// The quiet, once it read every fact the observer heard since.
