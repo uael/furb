@@ -1,6 +1,6 @@
 /** The parts of the extensions for the TUI. A part is a module of TypeScript beside the word of an extension, which
  * the manifest names under `tui`. The TUI loads the part of each extension that the configs turn on, at its start,
- * and again when a file of its folder changes or when a write of an extension or of the config of the project lands,
+ * and again when a file of its folder changes or when a write of an extension or of a config of the project lands,
  * with no restart and no build of furb. The part of an official extension is the text that the crate carries, which
  * changes only with a build of furb. The module exports a function as its default, which the TUI calls with a
  * `Furb`: through it, the part adds panels, the rows of the acts of a kind, marks in the feed of a chain, keys,

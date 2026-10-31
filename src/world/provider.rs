@@ -55,7 +55,7 @@ use crate::{
 /// The name of the environment that gives the most tokens of thought of a model in one turn, as Claude Code reads it.
 pub(super) const ENV_THINKING: &str = "MAX_THINKING_TOKENS";
 
-/// The key of `.furb/config.json` that gives the most tokens of thought of a model in one turn, and the setting under
+/// The key of a config of the project that gives the most tokens of thought of a model in one turn, and the setting under
 /// which the provider tells it to the claude command line.
 pub(super) const KEY_THINKING: &str = "max_thinking_tokens";
 
@@ -78,14 +78,15 @@ impl Default for Thinking {
 }
 
 /// The most tokens of thought of a model in one turn, as the environment gives it, which wins, else as the key
-/// `max_thinking_tokens` of `.furb/config.json` in the directory of the life gives it, else [`THINKING`]. A value that
-/// is no count of tokens is as unsaid.
+/// `max_thinking_tokens` of the configs of the project in the directory of the life gives it, `.furb/config.local.json`
+/// over `.furb/config.json`, else [`THINKING`]. A value that is no count of tokens is as unsaid.
 pub(super) fn thinking(env: Option<&str>, directory: &std::path::Path) -> Thinking {
   let given = env.and_then(|one| one.trim().parse::<u64>().ok());
-  let config = || {
-    let text = std::fs::read_to_string(directory.join(".furb").join("config.json")).ok()?;
+  let read = |file: std::path::PathBuf| -> Option<u64> {
+    let text = std::fs::read_to_string(file).ok()?;
     serde_json::from_str::<Value>(&text).ok()?.get(KEY_THINKING)?.as_u64()
   };
+  let config = || crate::extension::projected(directory).into_iter().rev().find_map(read);
   Thinking { most: given.or_else(config).unwrap_or(THINKING), inherited: env.is_some() }
 }
 

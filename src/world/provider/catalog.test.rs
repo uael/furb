@@ -896,3 +896,32 @@ fn the_doctrine_of_a_project_comes_first_then_the_checkout_of_dev_mode_then_the_
   );
   let _ = std::fs::remove_dir_all(&at);
 }
+
+#[test]
+fn the_local_config_of_a_project_wins_over_its_config_for_a_provider() {
+  use std::fs;
+  let root = std::env::temp_dir().join(format!("furb-local-config-{}", std::process::id()));
+  fs::create_dir_all(root.join(".furb")).unwrap();
+  let local = root.join(".furb/config.local.json");
+  let _ = fs::remove_file(&local);
+  let provider = json!({
+    "protocol": "chat", "url": "http://127.0.0.1:9/v1", "key": "k", "models": {"qwen": {"window": 262144}}
+  });
+  fs::write(root.join(".furb/config.json"), json!({"providers": {"strata": provider}}).to_string())
+    .unwrap();
+  let configured = || catalog(&[]).configured(&root, Some(&root)).expect("the settings are valid");
+  assert!(
+    configured().find("strata:qwen").is_some(),
+    "the config of the project gives the provider"
+  );
+  fs::write(&local, json!({"providers": {"strata": false}}).to_string()).unwrap();
+  assert!(configured().find("strata:qwen").is_none(), "the local config turns the provider off");
+  let models = json!({"providers": {"strata": {"models": {"other": {"window": 8192}}}}});
+  fs::write(&local, models.to_string()).unwrap();
+  let got = configured();
+  assert!(
+    got.find("strata:other").is_some() && got.find("strata:qwen").is_none(),
+    "the local config wins for each field that it gives"
+  );
+  fs::remove_dir_all(root).unwrap();
+}
