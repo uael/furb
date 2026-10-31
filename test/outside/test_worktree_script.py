@@ -2,7 +2,10 @@
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 CLEAN = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
 SCRIPT = Path(__file__).resolve().parents[2] / "script" / "worktree.sh"
@@ -37,6 +40,7 @@ def run(main: Path, path: Path, branch: str) -> subprocess.CompletedProcess[str]
   )
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="the sh of Git on Windows names a path in a form of its own")
 def test_failure_names_the_path_and_the_step(tmp_path: Path) -> None:
   main = clone_with_origin(tmp_path)
   git(main, "branch", "held")
@@ -47,6 +51,7 @@ def test_failure_names_the_path_and_the_step(tmp_path: Path) -> None:
   assert last == f'worktree.sh failed at "make the worktree" with exit {got.returncode}: {tmp_path / "second"} on held'
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="the sh of Git on Windows names a path in a form of its own")
 def test_success_says_bun_run_build_suffices(tmp_path: Path) -> None:
   main = clone_with_origin(tmp_path)
   got = run(main, tmp_path / "new", "fresh")
