@@ -62,6 +62,10 @@ export interface Served {
  * hold no more than this. */
 export const HELLO = 65536;
 
+/** The longest message that a window sends after it has a role: 256 MiB. A message may hold a file or a long text, but a
+ * peer that claims more makes the host hold up to 4 GiB, so the host ends its socket. */
+export const REQUEST = 256 * 1024 * 1024;
+
 /** The requests that a window that reads makes: the views of the life and what the host reads of it, which change
  * nothing. It opens no file by its path, so it reads only what the life holds and the changes of its project. */
 const READS: Record<string, readonly string[]> = {
