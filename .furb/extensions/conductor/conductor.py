@@ -765,6 +765,11 @@ def assignee(pr: dict) -> str:
   return held["who"] if held and live else ""
 
 
+def parking(pr: dict) -> str:
+  keys = {maker_key(pr), *(k for k, ns in owns.items() if pr["n"] in ns)}
+  return next((c for c, e in parked.items() if e["key"] in keys), "")
+
+
 def owner_of(pr: dict) -> str:
   return assignee(pr) or maker_of(pr)
 
@@ -1136,7 +1141,7 @@ async def mend(pr: dict, now: float, red: bool) -> str:
       heard.append(healed)
       return "running"
   held = assigned.get(n) or {}
-  if state not in TROUBLE or not tended(pr) or spent(pr):
+  if state not in TROUBLE or not tended(pr) or spent(pr) or parking(pr):
     return state
   if state == "conflicting" and pr["head"] == GALLERY:
     # The gallery workflow builds this branch again from main, and a hand merge of its binary files means nothing.
@@ -2601,6 +2606,8 @@ async def sweep(every: float) -> None:
       cause = (
         "two fixers ended at this head and did not move it"
         if spent(pr)
+        else f"its worker waits on {parking(pr)} for a free slot of the cap of {cap()} chains"
+        if parking(pr)
         else f"{mender(pr)} has no room"
         if not room(mender(pr))
         else "the round sent no order"
