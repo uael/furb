@@ -28,15 +28,25 @@ type Ear = Generator[tuple | set[str] | None, tuple | None]
 """An ear, as the engine hears one."""
 
 
-SMART = re.compile(
-  r"(?:^|[;&|\n]\s*)(?:(?:e?grep|rg|diff|cmp|test|\[)\s|git\s[^;&|\n]*(?:--quiet|--is-ancestor|--exit-code))[^;&|\n]*\Z"
+CHECK = re.compile(
+  r"(?:^|[;&|\n]\s*)(?:(?P<search>(?:[ef]?grep|rg|test|\[)\s|git\s[^;&|\n]*--(?:quiet|is-ancestor)\b)"
+  r"|(?P<difference>(?:diff|cmp)\s|git\s[^;&|\n]*--exit-code\b))[^;&|\n]*\Z"
 )
 
 
-def accepted(command: str, code: int | None) -> bool:
-  """The default policy of the codes of a command: 0, and 1 for a command that ends in a check that exits 1 for no
-  match or for a difference."""
-  return code == 0 or (code == 1 and bool(SMART.search(command.strip())))
+def accepted(command: str, ended: object) -> bool:
+  """The default policy of the codes of a command: the code 0, and the code 1 of the check that ends the command, since
+  sh gives the code of the last command of a pipeline. A search exits 1 and writes nothing, or a count of 0, when it
+  finds nothing, so a search that wrote more failed before it, as a cd that failed in front of it. A difference
+  exits 1 and writes the difference."""
+  code = getattr(ended, "code")  # noqa: B009
+  if code == 0:
+    return True
+  found = CHECK.search(command.strip()) if code == 1 else None
+  if not found:
+    return False
+  wrote = getattr(ended, "stdout").content + getattr(ended, "stderr").content  # noqa: B009
+  return bool(found["difference"]) or not wrote.strip().strip("0").strip()
 
 
 def verb(names: Names, which: str) -> Callable[..., object]:
@@ -217,7 +227,8 @@ class Running:
   def given(self, made: str, value: object) -> object:
     """What a word that awaits the act made is given of what that act came to: a Refused in the place of the Exit of a
     command whose code it does not accept, which the command keeps for peek, and else that value. The codes come from
-    the ok of the command, and with none from the accepts of the module of its chain, else from the default."""
+    the ok of the command, and with none from accepts, the policy that the module of its chain binds, which is None
+    until a word binds it, so the default policy rules."""
     asked, shape = verb(self.names, "get")(made), self.names["Exit"]
     assert isinstance(shape, type)
     if not (isinstance(asked, tuple) and asked[0] == "bash" and isinstance(value, shape)):
@@ -226,7 +237,7 @@ class Running:
     if ok is None:
       held = verb(self.names, "module")(str(asked[3]))
       assert isinstance(held, dict)
-      ok = (held.get("accepts") or accepted)(str(asked[4]), code)
+      ok = (held.get("accepts") or accepted)(str(asked[4]), value)
     elif ok is not True:
       ok = code in ok
     if ok:

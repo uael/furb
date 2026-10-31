@@ -14,6 +14,7 @@ ROOT = "chain1"
 site = ContextVar("site", default=OPERATOR)
 raised = None
 actor = ""
+accepts = None
 type Show = Callable[[list[str]], list[int]]
 type Filter = Callable[[list[tuple]], list[tuple]]
 

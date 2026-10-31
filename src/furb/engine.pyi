@@ -659,8 +659,9 @@ def bash(
   Without a stderr show, the stderr of the command flows into its stdout.
   A command without a timeout has the timeout TIMEOUT that the file names.
   A command accepts the codes that its ok names, as ok=(0, 1), and every code when its ok is True.
-  A command with no ok accepts the code 0, and the code 1 when it ends in a grep, an egrep, an rg, a diff, a cmp, a test, or a git check with --quiet, --is-ancestor or --exit-code, which exit 1 for no match or for a difference.
-  A word that defines accepts(command, code) rules the codes of each command with no ok on its chain, in the place of that default.
+  A command with no ok is judged by accepts, the policy of its chain, and by the default policy while accepts is None.
+  The default policy accepts the code 0, and the code 1 of a check that ends the command, since sh gives the code of the last command of a pipeline: a search, as grep, egrep, fgrep, rg, test, [ or a git command with --quiet or --is-ancestor, when the command wrote nothing or only a count of 0, since a search that finds nothing writes nothing, and a difference, as diff, cmp or a git command with --exit-code, which writes the difference.
+  The default policy accepts no other code, so a timeout, a signal, and the code 1 of a search that wrote an error, as a cd that failed in front of it, fail.
   The World that takes a command answers it: it says it done with its Exit, the code and the streams it kept, since the owner of an act is the one that answers it.
   A stdin of None stays open, and the door bash1/stdin is writable while the command runs.
   The World feeds a command the text of each write of its stdin that it answers, and a write of nothing closes that stdin.
@@ -1145,6 +1146,10 @@ def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:
 actor: str
 """actor is the default actor of the chain, bound from the standing, and empty in the module of the engine, where no chain stands.
 The program rebinds actor like any name, and the last binding wins.
+"""
+accepts: Callable[[str, Exit], bool] | None
+"""accepts is the policy of the codes of the commands of a chain that give no ok: a function of the command and its Exit that says whether a word that awaits the command accepts it, and None in the module of the engine, where the default policy of bash rules.
+A word binds accepts like any name, so the policy rules each later command with no ok on its chain, and the last binding wins.
 """
 raised: BaseException | None
 """raised is the exception object that the last rung raised, rebound at each raise but a CancelledError.

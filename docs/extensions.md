@@ -150,14 +150,16 @@ the rights of your user with the engine of CPython, as a word of a model does th
 
 ## The codes of a command
 
-A word that awaits a command is refused when the command exits with a code that it does not accept. A command with no
-`ok` accepts the code 0, and the code 1 when it ends in a grep, an rg, a diff, a cmp, a test or a git check. A word that
-defines `accepts(command, code)` rules this for each command with no `ok` on its chain. An extension that plays on every
-chain, or on the root, defines it once and so sets the policy of the whole project:
+A word that awaits a command is refused when the command exits with a code that it does not accept, and `peek` gives
+its `Exit`. `ok` names the codes of one command, as `ok=(0, 1)`, and `ok=True` accepts every code. A command with no
+`ok` is judged by `accepts`, a name of the engine that is `None` until a word binds it: then the default policy accepts
+the code 0, and the code 1 of a grep, an rg, a test, a diff, a cmp or a git check that ends the command and wrote no
+error. A word binds `accepts` to a function of the command and its `Exit` for each later command of its chain, and an
+extension that plays on every chain binds it for the whole project:
 
 ```python
-def accepts(command, code):
-  return code in (0, 1)
+def accepts(command, exit):
+  return exit.code in (0, 1)
 ```
 
 ## A part for the TUI

@@ -6,7 +6,7 @@ import signal
 import sys
 import time
 from asyncio import CancelledError
-from collections.abc import Generator
+from collections.abc import Generator, Sequence
 from pathlib import Path
 
 import pytest
@@ -545,45 +545,75 @@ async def test_a_command_accepts_the_codes_that_its_ok_names_and_every_code_when
   assert [a[7] for a in said(log, "bash")] == [(0, 1), True, (0,)]
 
 
-async def test_a_command_with_no_ok_accepts_the_code_0_and_the_code_1_for_a_check_that_exits_1_for_no_match() -> None:
-  """A command with no ok accepts the code 0, and the code 1 when it ends in a grep, an egrep, an rg, a diff, a cmp, a test, or a git check with --quiet, --is-ancestor or --exit-code, which exit 1 for no match or for a difference."""
-  commands = [
-    "grep -q x f",
-    "cd d && diff a b",
-    "cat f | rg x",
-    "git diff --quiet",
-    "git merge-base --is-ancestor a b",
-    "test -f x",
-    "false",
-    "grep x f | wc -l",
-    "cat f",
-    "git status",
-  ]
-  sand, log, root = born(
-    "got = []\nfor c in "
-    + repr(commands)
-    + ":\n  x = bash(c)\n  try:\n    await x\n    got.append(c)\n  except Refused:\n    pass\nclose(got)",
-    auto=False,
+def judged(plan: Sequence[tuple[str, int | None, str]], head: str = "") -> str:
+  """A word that runs each command of the plan in turn, and closes with those whose code it accepted."""
+  return (
+    head
+    + f"got = []\nfor c in {[c for c, _, _ in plan]!r}:\n  x = bash(c)\n  try:\n    await x\n    got.append(c)\n  except Refused:\n    pass\nclose(got)"
   )
-  asked = engine.prompt(list, "run them", on=root)
-  for n in range(len(commands)):
+
+
+async def ran(sand: Sand, log: list, plan: Sequence[tuple[str, int | None, str]], at: int = 0) -> None:
+  """Each command of the plan writes its text, then exits with its code, in turn."""
+  for n, (_, code, out) in enumerate(plan):
     await settle()
-    sand.exits(said(log, "bash")[n][1], 1)
+    one = said(log, "bash")[at + n][1]
+    if out:
+      sand.writes(one, out, "stdout")
+    sand.exits(one, code)
   await settle()
-  assert await asked == commands[:6]
 
 
-async def test_a_word_that_defines_accepts_rules_the_codes_of_each_command_with_no_ok_on_its_chain() -> None:
-  """A word that defines accepts(command, code) rules the codes of each command with no ok on its chain, in the place of that default."""
-  sand, log, root = born(
-    "def accepts(command, code):\n  return code == 3\n\n"
-    "x = bash('a')\ny = bash('b')\ncode = (await x).code\n"
-    "try:\n  await y\nexcept Refused:\n  code = [code, 'refused']\nclose(code)",
-    auto=False,
+async def test_a_command_with_no_ok_is_judged_by_accepts_the_policy_of_its_chain() -> None:
+  """A command with no ok is judged by accepts, the policy of its chain, and by the default policy while accepts is None."""
+  plan = [("false", 1, ""), ("sure", 1, ""), ("false", 1, "")]
+  word = (
+    judged(plan)
+    .replace("for c in", "for n, c in enumerate(")
+    .replace(
+      ":\n  x = bash(c)", "):\n  if n == 1:\n    accepts = lambda command, exit: command == 'sure'\n  x = bash(c)"
+    )
   )
+  sand, log, root = born(word, auto=False)
   asked = engine.prompt(list, "run them", on=root)
-  await settle()
-  one, two = (a[1] for a in said(log, "bash"))
-  sand.exits(one, 3)
-  sand.exits(two, 0)
-  assert await asked == [3, "refused"]
+  await ran(sand, log, plan)
+  assert await asked == ["sure"]
+
+
+async def test_the_default_policy_accepts_the_code_0_and_the_code_1_of_a_check_that_ends_the_command() -> None:
+  """The default policy accepts the code 0, and the code 1 of a check that ends the command, since sh gives the code of the last command of a pipeline: a search, as grep, egrep, fgrep, rg, test, [ or a git command with --quiet or --is-ancestor, when the command wrote nothing or only a count of 0, since a search that finds nothing writes nothing, and a difference, as diff, cmp or a git command with --exit-code, which writes the difference."""
+  plan = [
+    ("echo hi", 0, "hi\n"),
+    ("grep -q x f", 1, ""),
+    ("cat f | rg x", 1, ""),
+    ("cd d; egrep x f", 1, ""),
+    ("test -f x", 1, ""),
+    ("[ -d x ]", 1, ""),
+    ("git diff --quiet", 1, ""),
+    ("git merge-base --is-ancestor a b", 1, ""),
+    ("grep -c x f", 1, "0\n"),
+    ("cd d && diff a b", 1, "< a\n---\n> b\n"),
+    ("cmp -s a b", 1, ""),
+    ("git diff --exit-code", 1, "+b\n"),
+  ]
+  sand, log, root = born(judged(plan), auto=False)
+  asked = engine.prompt(list, "run them", on=root)
+  await ran(sand, log, plan)
+  assert await asked == [c for c, _, _ in plan]
+
+
+async def test_the_default_policy_accepts_no_other_code() -> None:
+  """The default policy accepts no other code, so a timeout, a signal, and the code 1 of a search that wrote an error, as a cd that failed in front of it, fail."""
+  plan = [
+    ("false", 1, ""),
+    ("grep x f | wc -l", 1, ""),
+    ("cd nope && grep x f", 1, "sh: cd: nope: No such file or directory\n"),
+    ("grep x f", 2, ""),
+    ("grep x f", None, ""),
+    ("diff a b", 130, ""),
+    ("make", 1, ""),
+  ]
+  sand, log, root = born(judged(plan), auto=False)
+  asked = engine.prompt(list, "run them", on=root)
+  await ran(sand, log, plan)
+  assert await asked == []
