@@ -3459,7 +3459,7 @@ def test_the_triage_folds_no_audit_and_writes_the_covering_key_in_each_after(con
 async def test_a_later_judge_reads_the_gaps_of_the_earlier_heads_and_the_round_judges_each_head_until_it_is_cleared(
   conductor: Round,
 ) -> None:
-  ran = judging(conductor)
+  ran = judging(conductor, "+x\n" * 10)
   conductor.busy("worker9", "k", "claude-cli:sonnet/high")
   quote = "no hidden control flow"
 
@@ -3648,6 +3648,49 @@ async def test_a_merged_pr_whose_heads_had_gaps_queues_a_follow_up_for_each_gap_
   assert conductor.rulings["gap9-2"] == conductor.rulings["k"]
   assert (conductor.efforts["gap9-3"], conductor.kinds["gap9-3"]) == ("claude-cli:sonnet/high", "edit")
   assert conductor.judged == {}
+
+
+async def test_a_head_whose_earlier_gap_has_no_fix_that_it_shows_does_not_merge_and_goes_back_to_its_worker(
+  conductor: Round,
+) -> None:
+  judging(conductor)
+  posts: list[str] = []
+
+  async def bash(command: str, stdin: str | None = "", timeout: float = 600, show: object = None, **_: object) -> Exit:
+    if command.startswith("gh pr comment"):
+      posts.append(stdin or "")
+    said = "\n" if "git show" in command else "+diff\n"
+    return Exit(0, Text("stdout", said), Text("stderr", ""))
+
+  conductor.ns["bash"] = bash
+  first = regapped(conductor)
+  await conductor.bent(first)
+  conductor.done[conductor.judged["7 sha7"]["act"]] = [("no hidden control flow", "Gap one.")]
+  assert await conductor.bent(first) is True
+  pr = conductor.pr(n=7, sha="sha8", labels=["w:k"], checks=("SUCCESS",))
+  conductor.prs[7] = pr
+  await conductor.bent(pr)
+  conductor.done[conductor.judged["7 sha8"]["act"]] = ([], [('"no hidden control flow": Gap one.', "fixed at a.py:3")])
+  assert await conductor.bent(pr) is True
+  assert posts == []
+  assert conductor.judged["7 sha8"]["state"] == "gaps"
+  assert conductor.judged["7 sha8"]["gaps"] == ['"no hidden control flow": Gap one.']
+  assert await conductor.bent(pr) is True
+  assert conductor.prompts[-1][1] == "chain-k"
+
+
+async def test_a_merged_pr_that_the_round_holds_no_entry_for_gets_its_gaps_from_its_comments(conductor: Round) -> None:
+  judging(conductor)
+  comment = '🤖 The judge of the words of the owner holds abc:\n\n- "q": Gap one.\n- "q": Gap two.\n\n<!-- furb:round -->\nother\n'
+
+  async def bash(command: str, stdin: str | None = "", timeout: float = 600, show: object = None, **_: object) -> Exit:
+    said = comment if "--json comments" in command else "MERGED m1234567 w:k,thread:extensions\n"
+    return Exit(0, Text("stdout", said), Text("stderr", ""))
+
+  conductor.ns["bash"] = bash
+  await conductor.followed(905)
+  assert [k for k, _, _ in conductor.queue] == ["gap905-1", "gap905-2"]
+  assert '> "q": Gap two.' in conductor.queue[1][1]
 
 
 def test_the_audit_leaves_a_pr_with_a_hold_label_out_of_the_idle_check(conductor: Round) -> None:

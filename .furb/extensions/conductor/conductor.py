@@ -74,7 +74,7 @@ The round holds at most cap() chains that hold an open prompt with a shape, and 
 The owner rules, on 10-29: "we should use more gh stacks in conductor, because they can be merged at once (all PRs of stack as once)". So a PR on main at the bottom of a stack whose layers are all green, free of hold, paused and owner-merge, and passed by the vetoes, merges with its whole stack at once through gh stack merge, and while a layer above it still runs its checks, the bottom waits rather than merge alone; a stack with a red layer merges its green layers below it at once; a stack that gh stack does not hold lands one layer at a time, and the round tells it once. Each sweep links each chain of stacked PRs on GitHub with gh stack link, once for each chain, so that it shows as one stack. GitHub gives no priority to a queued run, so each sweep cancels each queued run of the gates that can serve no merge: a run of a closed PR, of an old head, of a draft, a held or a conflicting PR, and it defers a run of a layer above a layer that is not green, which it runs again once that layer is green and fewer than THROTTLE runs wait. It never touches a run of main or of a PR that can merge.
 reload(path, on) loads the definitions of the file of an extension into the module of a chain: it runs, in the order of the file, each top-level definition whose name the module lacks or whose text differs from its text in the last run of a word that ended with no fault (a load that was cancelled or failed counts for nothing, so the next reload loads it again), and gives (rung, names): the rung that runs the load, which quietly starts so that no end of the caller cancels it, and the names. The load is done only when that rung is over and peek(rung) is no exception: await it. Use it after a PR that changed the conductor merged.
 The owner rules, on 10-31, after #816 and #859 merged green and wrong, since no gate compared a PR with his words: an item may hold his exact words in rulings[key], a list of str, each quoted as he wrote it. hire puts them at the top of the brief, under RULED, before any line of yours. Before its merge, each green PR whose item, by its label w:key or by owns, holds rulings passes the veto bent: a blind judge on a chain of its own, RULER (opus/medium) under a grant of RULER_USD dollars, reads his words and the diff alone, and closes with each way that the diff fails or bends them, each with his exact words. A head with a gap does not merge, and its worker gets the gaps, or a worker on its chain when it ended, and a comment on the PR names them; a head that the judge cleared merges, and each new head is judged again, with the gaps of the earlier heads and the commits that answered them, so that the judge names only a gap that the newest head made or left open; the round never holds a PR for the owner by itself, by his ruling on 10-31: "it's not supposed to be on me to remove the flag. And it should be fixed until judged ok, automatically", so each new head is judged until the judge finds no gap, and only a label hold of the owner stops the loop. Each order to fix holds the gaps of every head that a judge held, the oldest first and each once, so that the worker fixes each once and trades no gap for another, and after JUDGE_ROUNDS (3) heads with gaps each fix goes to STRONGER (opus/high), so the loop converges. A hold that an earlier word put after JUDGE_ROUNDS heads comes off at the next sweep, and its PR is judged again. A judge that fails twice, with no answer or with a quote that is not his, tells you and holds the PR: judge it yourself, then set judged["n sha"]["state"] to "cleared", or give the gaps to its worker. judged keeps the state of each head.
-The owner rules again, on 10-31, after #905 merged two minutes after a judge cleared its head, with no word on the 4 gaps that a judge found at its earlier head: "WTF is wrong with you ?????????????? Please stop doing shit now and think of the proper action frist time", and of #912: "and same for 912 ! if it get merged, then follow ups are needed." So the judge of a head after heads with gaps closes with an account of each earlier gap, ACCOUNT: fixed at a file and a line of the head, or open. accounted() reads it: an account that leaves out an earlier gap fails the judge as a clear would, and an open gap holds the head as a new gap does. Before such a head merges, posted() comments the account on the PR, with the line of the head that shows each fix, and the head merges only once that comment stands. When a PR whose heads had gaps merges, by the round or by any hand, followed() reads each fix of the account in main at the merge commit, and queues at once one follow-up item gapN-i for each gap that main does not show fixed, with the gap, the PR and the words of the owner in its brief, on the model of the worker of that PR.
+The owner rules again, on 10-31, after #905 merged two minutes after a judge cleared its head, with no word on the 4 gaps that a judge found at its earlier head: "WTF is wrong with you ?????????????? Please stop doing shit now and think of the proper action frist time", and of #912: "and same for 912 ! if it get merged, then follow ups are needed." So the judge of a head after heads with gaps closes with an account of each earlier gap, ACCOUNT: fixed at a file and a line of the head, or open. accounted() reads it: an account that leaves out an earlier gap fails the judge as a clear would, and an open gap holds the head as a new gap does. Before such a head merges, posted() reads the line of the head that shows each fix: a gap with no such line sends the head back to its worker with that gap, and the head merges only once each gap shows fixed and the comment of the account stands on the PR. When a PR whose heads had gaps merges, by the round or by any hand, followed() takes the gaps from the judged entries of the PR, or from the comments of the round on it when none stands (await followed(905) queues them for a PR that merged before), reads each fix of the account in main at the merge commit, and queues at once one follow-up item gapN-i for each gap that main does not show fixed, with the gap, the PR and the words of the owner in its brief, on the model of the worker of that PR.
 A statement of yours to the owner states only what a command of the same word proved, and names each other part as a hypothesis.
 A review blocks only on a defect that a command reproduces, or on a false sentence of a contract."""
 
@@ -1613,22 +1613,21 @@ async def posted(pr: dict, held: dict) -> bool:
       show=HIDDEN,
       timeout=120,
     )
+    if got.code != 0:
+      return False
     said = [*got.stdout.content.split("\n"), *[""] * len(fixed)]
     lines = {gap: said[i].strip().replace("`", "'")[:200] for i, gap in enumerate(fixed)}
+  missing = [gap for gap in earlier if not (fixed.get(gap) and lines.get(gap))]
+  if missing:
+    held.update(state="gaps", gaps=missing, told=False)
+    heard.append(f"#{n} at {sha[:7]} does not merge: {len(missing)} earlier gaps have no fix that the head shows.")
+    return False
   shown: dict[str, list[str]] = {}
   rows = []
-  later = "a follow-up item takes it after the merge"
   for gap in earlier:
-    hit = fixed.get(gap)
-    if hit and lines.get(gap):
-      shown[gap] = [hit[1], lines[gap]]
-      rows.append(f"- {gap}\n  Fixed at {hit[1]}:{hit[2]}: `{lines[gap]}`")
-    elif hit:
-      rows.append(f"- {gap}\n  The judge names {hit[1]}:{hit[2]}, which holds no line at {sha[:7]}: {later}.")
-    elif told.get(gap) == "open":
-      rows.append(f"- {gap}\n  Open: {later}.")
-    else:
-      rows.append(f"- {gap}\n  No judge accounted for it: {later}.")
+    hit = fixed[gap]
+    shown[gap] = [hit[1], lines[gap]]
+    rows.append(f"- {gap}\n  Fixed at {hit[1]}:{hit[2]}: `{lines[gap]}`")
   body = f"🤖 The judge cleared {sha[:7]}. The account of each gap that a judge found at an earlier head of #{n}:\n\n" + "\n".join(rows)
   got = await bash(f"gh pr comment {n} --body-file -", stdin=marked(body) + "\n", show=HIDDEN, timeout=120)
   if got.code != 0:
@@ -1642,6 +1641,18 @@ async def followed(n: int) -> None:
   """When a PR whose heads had gaps merges, by the round or by any hand, the round reads the account of each of those gaps against main at the merge commit, and queues at once one follow-up item for each gap that main does not show fixed, by the ruling of the owner on 10-31: "and same for 912 ! if it get merged, then follow ups are needed"."""
   mine = {k: v for k, v in judged.items() if k.split()[0] == str(n)}
   every = list(dict.fromkeys(x for v in mine.values() for x in v.get("gaps") or []))
+  if not mine:
+    said = await bash(f"gh pr view {n} --json comments --jq '.comments[].body'", show=HIDDEN, timeout=120)
+    found: list[str] = []
+    inside = False
+    for line in said.stdout.lines if said.code == 0 else []:
+      if line.startswith("🤖 The judge of the words of the owner holds"):
+        inside = True
+      elif inside and line.startswith("- "):
+        found.append(line[2:])
+      elif inside and line.strip():
+        inside = False
+    every = list(dict.fromkeys(found))
   if every:
     got = await bash(
       f"gh pr view {n} --json state,mergeCommit,labels --jq '[.state, (.mergeCommit.oid // \"-\"), ([.labels[].name] | join(\",\"))] | join(\" \")'",
