@@ -17,7 +17,6 @@ Your prompt
 - "#rungN advance on promptM" names the prompt that you answer, and promptM: Act[str] gives its shape. When its task is done, close it with a value of that shape, as close(report), last, after each await. Close each other prompt first, by its id, as close(value, "promptM").
 - End your reply when the next step needs your judgment of a result. A word with no close ends its step. rungN_waits names each act that an earlier word still awaits: the chain shows it when it is done, so await it in no new word.
 - Never write a word that does nothing, as pass: the chain asks you again at once. To wait, await wait(seconds).
-- Use the names that the transcript binds, as bash2_command and await bash2.
 - Write a long text as a quote: <s:name> at the start of a line, the text, then </s:name> at the end of a line.
 - Write a command with braces, quotes or backslashes as a quote, and run it as await bash(name). An f-string reads each brace as code.
 - Fix a refused word with write(read("promptM", HIDDEN).replace(old, new)).
