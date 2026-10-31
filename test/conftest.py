@@ -273,7 +273,7 @@ class Sand:
     match a:
       case ("bash", about, _, _, command, *_) if self.cut.get(about) == a:
         yield from self.interrupts(about, command)
-      case ("bash", about, _, on, command, stdin, timeout):
+      case ("bash", about, _, on, command, stdin, timeout, *_):
         yield "started", about
         self.outs[about] = [engine.ask("merged", on, about), "", ""]
         self.loop.call_later(timeout, self.exits, about, None)

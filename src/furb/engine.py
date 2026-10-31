@@ -14,6 +14,7 @@ ROOT = "chain1"
 site = ContextVar("site", default=OPERATOR)
 raised = None
 actor = ""
+accepts = None
 type Show = Callable[[list[str]], list[int]]
 type Filter = Callable[[list[tuple]], list[tuple]]
 
@@ -437,7 +438,7 @@ def grant(usd: float | None = None, share: float | None = None, on="") -> Act[No
 
 
 def bash(
-  command: str, stdin: str | None = "", timeout=TIMEOUT, show: Show = TAIL, show_err: Show | None = None, on=""
+  command: str, stdin: str | None = "", timeout=TIMEOUT, ok=None, show: Show = TAIL, show_err: Show | None = None, on=""
 ) -> Act[Exit]:
   def ear(id):
     yield opened(id, "Exit", command="" if show is HIDDEN else command)
@@ -456,7 +457,7 @@ def bash(
               )
           return
 
-  return act("bash", on, controlled(ear, True), command, stdin, timeout)
+  return act("bash", on, controlled(ear, True), command, stdin, timeout, ok)
 
 
 @dataclass

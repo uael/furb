@@ -380,7 +380,7 @@ async def patch(title: str, why: str, ask: str) -> tuple[str, str, str]:
     f"git worktree remove --force {tree} 2>/dev/null; git fetch -q origin main"
     f" && git worktree add -q {tree} -B w/{key} origin/main && cat {tree}/{CONDUCTOR}",
     show=HIDDEN,
-    timeout=180,
+    timeout=180, ok=True,
   )
   if made.code != 0:
     raise Refused(f"no worktree {place}: {made.stderr.content[-500:]}")
@@ -439,7 +439,7 @@ async def patch(title: str, why: str, ask: str) -> tuple[str, str, str]:
       f" && (git fetch -q origin w/{key} 2>/dev/null; true) && git push -q --force-with-lease -u origin w/{key}"
       f" && (gh label create w:{key} --force >/dev/null 2>&1; true)",
       show=HIDDEN,
-      timeout=180,
+      timeout=180, ok=True,
     )
     if pushed.code != 0:
       raise Refused(f"no push of w/{key}: {pushed.stderr.content[-500:]}")
@@ -601,7 +601,7 @@ async def based_now(pr: dict) -> str:
     return said + ref
   old, new = shifted[n]
   setup = f"base={shq(base)} head={shq(head)} old={shq(old)}\n"
-  got = await bash(setup + REBASED, show=HIDDEN, timeout=120)
+  got = await bash(setup + REBASED, show=HIDDEN, timeout=120, ok=True)
   if got.code != 0 or len(got.stdout.lines) < 3:
     return said + ref
   how, cut, count, *gained = got.stdout.lines
@@ -619,7 +619,7 @@ git cherry -v origin/main "$sha" | cut -c1-120"""
 
 
 async def squashed(pr: dict) -> str:
-  got = await bash(f"n={pr['n']} sha={shq(pr['sha'])}\n" + SQUASHED, show=HIDDEN, timeout=120)
+  got = await bash(f"n={pr['n']} sha={shq(pr['sha'])}\n" + SQUASHED, show=HIDDEN, timeout=120, ok=True)
   rows = [x.split(" ", 2) for x in got.stdout.lines if x[:2] in ("+ ", "- ")] if got.code == 0 else []
   held = [(x[1], x[2] if len(x) > 2 else "") for x in rows if x[0] == "-"]
   if not held:
@@ -639,7 +639,7 @@ async def squashed(pr: dict) -> str:
 
 async def main_changes(pr: dict) -> str:
   held = await squashed(pr)
-  got = await bash(f"n={pr['n']} sha={shq(pr['sha'])}\n" + CHANGED, show=HIDDEN, timeout=120)
+  got = await bash(f"n={pr['n']} sha={shq(pr['sha'])}\n" + CHANGED, show=HIDDEN, timeout=120, ok=True)
   if got.code != 0:
     return held
   commits: list[list] = []
@@ -670,7 +670,7 @@ async def main_changes(pr: dict) -> str:
 
 
 async def stale(pr: dict, conflict: bool = False) -> bool:
-  got = await bash(VIEW.replace("{n}", str(pr["n"])), show=HIDDEN, timeout=120)
+  got = await bash(VIEW.replace("{n}", str(pr["n"])), show=HIDDEN, timeout=120, ok=True)
   parts = got.stdout.content.split()
   if got.code != 0 or len(parts) != 3:
     return False
@@ -1300,7 +1300,7 @@ async def evidence(pr: dict) -> str:
     + " ".join(shq(f) for f in files)
     + " | head -8",
     show=HIDDEN,
-    timeout=120,
+    timeout=120, ok=True,
   )
   if lacks.code != 0 or not lacks.stdout.content.strip():
     return said
@@ -1339,7 +1339,7 @@ def spec(head: str) -> str:
 async def restack(old: str, onto: str, kid: dict, parent: int = 0) -> None:
   head = kid["head"]
   setup = f"onto={shq(onto)} head={shq(head)} old={shq(old)} sha={shq(kid['sha'])} parent={parent}\n"
-  got = await bash(setup + RESTACK, show=HIDDEN, timeout=300)
+  got = await bash(setup + RESTACK, show=HIDDEN, timeout=300, ok=True)
   if got.code != 0:
     why = " ".join((got.stdout.content + got.stderr.content).split())[-300:]
     heard.append(f"#{kid['n']} was not rebased onto {onto}, exit {got.code}: {why}")
@@ -1554,7 +1554,7 @@ async def bent(pr: dict) -> bool:
     )
     return True
   got = await bash(
-    f"git fetch -q origin main refs/pull/{n}/head && git diff origin/main...{sha}", show=HIDDEN, timeout=180
+    f"git fetch -q origin main refs/pull/{n}/head && git diff origin/main...{sha}", show=HIDDEN, timeout=180, ok=True
   )
   diff = got.stdout.content
   if got.code != 0 or not diff.strip():
@@ -1638,7 +1638,7 @@ async def land(pr: dict, red: bool) -> None:
     got = await bash(
       f"gh api 'repos/{{owner}}/{{repo}}/compare/{sha}...main' --jq '.files[].filename' && echo --- && gh pr view {n} --json files --jq '.files[].path'",
       show=HIDDEN,
-      timeout=120,
+      timeout=120, ok=True,
     )
     if got.code != 0 or "---\n" not in got.stdout.content:
       return
@@ -1646,7 +1646,7 @@ async def land(pr: dict, red: bool) -> None:
     if {x for x in moved.splitlines() if SERIAL.search(x)} & {x for x in own.splitlines() if x}:
       if not red and f"land update {sha}" not in noticed:
         noticed.add(f"land update {sha}")
-        updated = await bash(f"gh pr update-branch {n}", show=HIDDEN, timeout=120)
+        updated = await bash(f"gh pr update-branch {n}", show=HIDDEN, timeout=120, ok=True)
         if updated.code == 0:
           warn(pr, f"The round updated the branch of your PR #{n} with main.")
       return
@@ -1656,7 +1656,7 @@ async def land(pr: dict, red: bool) -> None:
     found = await bash(
       f"git fetch -q origin {spec(pr['head'])} {spec(up['head'])} && git merge-base {shq('origin/' + pr['head'])} {shq('origin/' + up['head'])}",
       show=HIDDEN,
-      timeout=120,
+      timeout=120, ok=True,
     )
     cuts[up["n"]] = found.stdout.content.strip() if found.code == 0 and found.stdout.content.strip() else pr["sha"]
   moves = "".join(f"gh pr edit {up['n']} --base main >/dev/null 2>&1; " for up in kids)
@@ -1664,7 +1664,7 @@ async def land(pr: dict, red: bool) -> None:
     f"{moves}out=$(gh pr merge {n} --squash --delete-branch 2>&1) || out=\"$out $(gh stack merge {n} --yes --squash 2>&1)\";"
     f" sleep 5; echo \"$out\" | tail -4; gh pr view {n} --json state --jq .state",
     show=HIDDEN,
-    timeout=400,
+    timeout=400, ok=True,
   )
   if got.stdout.lines[-1:] == ["MERGED"]:
     merged.add(n)
@@ -1826,7 +1826,7 @@ AGAIN = """Workers did parts of this issue before, and it is still open. Their P
 
 
 async def take_issues() -> None:
-  got = await bash(ISSUES, show=HIDDEN, timeout=120)
+  got = await bash(ISSUES, show=HIDDEN, timeout=120, ok=True)
   if got.code != 0 or not got.stdout.content.startswith("["):
     notice(f"issues {int(clock() // 3600)}", "The command that lists the issues failed: " + (got.stderr.content or got.stdout.content)[-500:])
     return
@@ -1854,7 +1854,7 @@ async def take_issues() -> None:
     handled.add(key)
     if taken(key) or any(q[0] == key for q in backlog) or any(f"w:{key}" in pr["labels"] for pr in prs.values()):
       continue
-    got = await bash(NAMING.replace("{n}", str(it["n"])), show=HIDDEN, timeout=120)
+    got = await bash(NAMING.replace("{n}", str(it["n"])), show=HIDDEN, timeout=120, ok=True)
     named = [x for x in got.stdout.lines if x.strip()] if got.code == 0 else []
     if any(" OPEN " in x for x in named):
       handled.discard(key)
@@ -2618,7 +2618,7 @@ async def watch_ci() -> None:
         return k, ""
     return "", ""
 
-  got = await bash(f"python3 -I - {shq(json.dumps(sorted(runs_read)))}", stdin=CI_PY, show=HIDDEN, timeout=900)
+  got = await bash(f"python3 -I - {shq(json.dumps(sorted(runs_read)))}", stdin=CI_PY, show=HIDDEN, timeout=900, ok=True)
   if got.code != 0 or not got.stdout.content.startswith("{"):
     notice(f"ci {int(clock() // 3600)}", "The command that measures the gates failed: " + (got.stderr.content or got.stdout.content)[-500:])
     return
@@ -2683,7 +2683,7 @@ async def linking() -> None:
     if len(layers) < 2 or f"linked {numbers}" in noticed:
       continue
     noticed.add(f"linked {numbers}")
-    got = await bash(f"gh stack link {numbers} 2>&1", show=HIDDEN, timeout=120)
+    got = await bash(f"gh stack link {numbers} 2>&1", show=HIDDEN, timeout=120, ok=True)
     said = " ".join(got.stdout.content.split())[-200:]
     names = " <- ".join("#" + str(up["n"]) for up in layers)
     linked = got.code == 0 and "✗" not in got.stdout.content
@@ -2711,7 +2711,7 @@ async def throttle() -> None:
   got = await bash(
     "gh run list --workflow gates.yml --status queued --limit 100 --json databaseId,headBranch,headSha,event",
     show=HIDDEN,
-    timeout=120,
+    timeout=120, ok=True,
   )
   if got.code != 0 or not got.stdout.content.strip().startswith("["):
     return
@@ -2795,7 +2795,7 @@ async def sweep(every: float) -> None:
   merged.update(json.loads(parts[1]))
   await unheld()
   for one in [x for x in pool.values() if x["pr"] and x["folders"] is None]:
-    files = await bash(f"gh pr view {one['pr']} --json files --jq '.files[].path'", show=HIDDEN, timeout=120)
+    files = await bash(f"gh pr view {one['pr']} --json files --jq '.files[].path'", show=HIDDEN, timeout=120, ok=True)
     if files.code == 0:
       one["folders"] = sorted({x.split("/")[0] for x in files.stdout.lines if x.strip()})
   left = shift()

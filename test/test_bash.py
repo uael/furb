@@ -6,7 +6,7 @@ import signal
 import sys
 import time
 from asyncio import CancelledError
-from collections.abc import Generator
+from collections.abc import Generator, Sequence
 from pathlib import Path
 
 import pytest
@@ -79,12 +79,14 @@ async def test_the_commands_of_the_world_run_at_the_same_time() -> None:
   assert ((await one).code, (await two).code) == (0, 1)
 
 
-async def test_bash_is_given_a_command_its_stdin_a_timeout_and_a_show_for_each_stream() -> None:
-  """bash is given a command, its stdin, a timeout, and a show for each stream, the plain words first, so the journal makes it again."""
+async def test_bash_is_given_a_command_its_stdin_a_timeout_the_codes_that_it_accepts_and_a_show_for_each_stream() -> (
+  None
+):
+  """bash is given a command, its stdin, a timeout, the codes that it accepts, and a show for each stream, the plain words first, so the journal makes it again."""
   sand, log, root = born(auto=False)
-  engine.bash("echo hi", "go", 5.0, HEAD, TAIL, on=root)
+  engine.bash("echo hi", "go", 5.0, (0, 1), HEAD, TAIL, on=root)
   word = said(log, "bash")[0]
-  assert word == ("bash", word[1], OPERATOR, root, "echo hi", "go", 5.0)
+  assert word == ("bash", word[1], OPERATOR, root, "echo hi", "go", 5.0, (0, 1))
   assert [e[0] for e in sand.record if e[0][0] == "bash"] == [word]
   again, _ = await relived(Sand(auto=False), plain(sand.record))
   assert said(again, "bash") == [word]
@@ -486,7 +488,7 @@ async def test_the_world_hears_the_bash_itself() -> None:
   engine.cd("/deep", on=root)
   one = engine.bash("echo hi", stdin=None, timeout=5.0, show=HIDDEN, show_err=TAIL, on=root)
   assert (await one).stdout.content == "ran echo hi\n"
-  assert said(log, "bash") == [("bash", one, OPERATOR, root, "echo hi", None, 5.0)]
+  assert said(log, "bash") == [("bash", one, OPERATOR, root, "echo hi", None, 5.0, None)]
 
 
 async def test_the_world_that_takes_a_command_answers_it() -> None:
@@ -523,3 +525,95 @@ async def test_the_world_runs_the_command_in_a_posix_sh(tmp_path: Path) -> None:
   got = await engine.bash('n=6; echo "$((n * 7))" "${n#6}x"', on=root)
   live.end()
   assert (got.code, got.stdout.content, Path(_monty.shell()).stem) == (0, "42 x\n", "sh")
+
+
+async def test_a_command_accepts_the_codes_that_its_ok_names_and_every_code_when_its_ok_is_true() -> None:
+  """A command accepts the codes that its ok names, as ok=(0, 1), and every code when its ok is True."""
+  sand, log, root = born(
+    "one = bash('false', ok=(0, 1))\ntwo = bash('slow', ok=True)\nthree = bash('false', ok=(0,))\n"
+    "got = [(await one).code, (await two).code]\n"
+    "try:\n  await three\nexcept Refused as no:\n  got.append(str(no))\nclose(got)",
+    auto=False,
+  )
+  asked = engine.prompt(list, "run them", on=root)
+  await settle()
+  one, two, three = (a[1] for a in said(log, "bash"))
+  sand.exits(one, 1)
+  sand.exits(two, None)
+  sand.exits(three, 1)
+  assert await asked == [1, None, f"{three} exited 1"]
+  assert [a[7] for a in said(log, "bash")] == [(0, 1), True, (0,)]
+
+
+def judged(plan: Sequence[tuple[str, int | None, str]], head: str = "") -> str:
+  """A word that runs each command of the plan in turn, and closes with those whose code it accepted."""
+  return (
+    head
+    + f"got = []\nfor c in {[c for c, _, _ in plan]!r}:\n  x = bash(c)\n  try:\n    await x\n    got.append(c)\n  except Refused:\n    pass\nclose(got)"
+  )
+
+
+async def ran(sand: Sand, log: list, plan: Sequence[tuple[str, int | None, str]], at: int = 0) -> None:
+  """Each command of the plan writes its text, then exits with its code, in turn."""
+  for n, (_, code, out) in enumerate(plan):
+    await settle()
+    one = said(log, "bash")[at + n][1]
+    if out:
+      sand.writes(one, out, "stdout")
+    sand.exits(one, code)
+  await settle()
+
+
+async def test_a_command_with_no_ok_is_judged_by_accepts_the_policy_of_its_chain() -> None:
+  """A command with no ok is judged by accepts, the policy of its chain, and by the default policy while accepts is None."""
+  plan = [("false", 1, ""), ("sure", 1, ""), ("false", 1, "")]
+  word = (
+    judged(plan)
+    .replace("for c in", "for n, c in enumerate(")
+    .replace(
+      ":\n  x = bash(c)", "):\n  if n == 1:\n    accepts = lambda command, exit: command == 'sure'\n  x = bash(c)"
+    )
+  )
+  sand, log, root = born(word, auto=False)
+  asked = engine.prompt(list, "run them", on=root)
+  await ran(sand, log, plan)
+  assert await asked == ["sure"]
+
+
+async def test_the_default_policy_accepts_the_code_0_and_the_code_1_of_a_check_that_ends_the_command() -> None:
+  """The default policy accepts the code 0, and the code 1 of a check that ends the command, since sh gives the code of the last command of a pipeline: a search, as grep, egrep, fgrep, rg, test, [ or a git command with --quiet or --is-ancestor, when the command wrote nothing or only a count of 0, since a search that finds nothing writes nothing, and a difference, as diff, cmp or a git command with --exit-code, which writes the difference."""
+  plan = [
+    ("echo hi", 0, "hi\n"),
+    ("grep -q x f", 1, ""),
+    ("cat f | rg x", 1, ""),
+    ("cd d; egrep x f", 1, ""),
+    ("test -f x", 1, ""),
+    ("[ -d x ]", 1, ""),
+    ("git diff --quiet", 1, ""),
+    ("git merge-base --is-ancestor a b", 1, ""),
+    ("grep -c x f", 1, "0\n"),
+    ("cd d && diff a b", 1, "< a\n---\n> b\n"),
+    ("cmp -s a b", 1, ""),
+    ("git diff --exit-code", 1, "+b\n"),
+  ]
+  sand, log, root = born(judged(plan), auto=False)
+  asked = engine.prompt(list, "run them", on=root)
+  await ran(sand, log, plan)
+  assert await asked == [c for c, _, _ in plan]
+
+
+async def test_the_default_policy_accepts_no_other_code() -> None:
+  """The default policy accepts no other code, so a timeout, a signal, and the code 1 of a search that wrote an error, as a cd that failed in front of it, fail."""
+  plan = [
+    ("false", 1, ""),
+    ("grep x f | wc -l", 1, ""),
+    ("cd nope && grep x f", 1, "sh: cd: nope: No such file or directory\n"),
+    ("grep x f", 2, ""),
+    ("grep x f", None, ""),
+    ("diff a b", 130, ""),
+    ("make", 1, ""),
+  ]
+  sand, log, root = born(judged(plan), auto=False)
+  asked = engine.prompt(list, "run them", on=root)
+  await ran(sand, log, plan)
+  assert await asked == []

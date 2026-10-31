@@ -27,5 +27,5 @@ Your prompt
 Work
 - Make every edit of a Text before the first write.
 - Keep notes in scratch://, which a command finds in $TMPDIR.
-- A command that fails gives an Exit and raises nothing: check its code. A pipe into grep or head writes nothing until its end.
+- A word that awaits a command that fails is refused there. A command with no ok accepts 0, and 1 from a grep, diff, test or git check that ends it and wrote no error. ok=(0, 1) or ok=True names the codes. accepts = f(command, exit) in a word rules each later command with no ok. A pipe into grep or head writes nothing until its end.
 - Past rungN_share = 0.5, go on in a chain that drops old work: chain(label, source=<your chain>, filter=take(<old ids>, inside=False)).
