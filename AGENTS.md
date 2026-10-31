@@ -333,7 +333,7 @@ fix what your change broke, and report what was broken before.
   `tui/src/commands.ts`.
 - `bun run bench`: the speed of the TUI on two recorded lives of about 2.6 KB for each fact, one of about 160000 facts
   and one of a tenth of that: the cost of a new fact, the first frame, the frames while the feed scrolls and a command
-  streams, and the memory. It fails over its budgets, which the docstring of `tui/script/bench.ts` gives in paces of the
+  streams, and the memory on Linux. It fails over its budgets, which the docstring of `tui/script/bench.ts` gives in paces of the
   machine, and which the gates hold on Linux. `FURB_BENCH_JSON` names a file that takes the measures of each run, and
   `FURB_BENCH_FACTS` sets the size of the long life.
 - `bun run screenshots` and `bun run animation`: draw `docs/screenshots/` and `docs/furb.gif` again from the real

@@ -15,9 +15,14 @@
  * renderer, each round after a measure of the renderer with nothing to show, and how much memory a process of its own
  * holds once it opened the life. It takes the best of the warm first frames and the round that draws the most of the
  * frames of its empty renderer, since other work of the machine makes a measure worse and
- * never better. The pace is the time that the machine takes to parse the facts of the long life, with no code of
- * furb, which says how fast the machine runs. Each budget is set from these measures of the machine, so that it holds
- * on a fast machine and on a slow one, and on a machine whose other work loads each core three times.
+ * never better. The memory stands on Linux alone, where the resident size of the process counts the pages that it
+ * holds. On macOS the system compresses and pages out the idle memory of a process: six runs on one life of 1.6
+ * million facts gave 4.5 to 12.8 GB after a collection, and a peak of 8.7 to 12.8 GB, so no resident size holds
+ * there, and the heap of the JavaScript engine, which is steady, is a twentieth of it. A system other than Linux
+ * prints no row of memory, and the memory has no budget yet. The pace is the time that the machine takes to parse
+ * the facts of the long life, with no code of furb, which says how fast the machine runs. Each budget is set from
+ * these measures of the machine, so that it holds on a fast machine and on a slow one, and on a machine whose other
+ * work loads each core three times.
  *
  * It fails when the warm first frame takes 32 paces or more, when the renderer draws fewer than 95 in each hundred of
  * the frames that it draws with nothing to show, when the 95th percentile of the frames takes a pace or more, or
@@ -418,7 +423,7 @@ const bytes = statSync(record).size;
 const unit = pace(record);
 const cold = await open(record);
 await cold.close();
-const memory = await held(record);
+const memory = process.platform === "linux" ? await held(record) : undefined;
 const warm = await open(record);
 const shortOpened = await open(short);
 const kinds = ["line", "act", "tell", "token"] as const;
@@ -472,13 +477,14 @@ const grown = (kind: Kind) => (after[kind] < FLOOR ? {} : { under: GROWTH });
 /** The round that drew the most of the frames that an empty renderer drew just before it. */
 const fullest = rounds.reduce((best, one) => (one.rate / one.empty > best.rate / best.empty ? one : best));
 /** Each measure, its unit, and its budget: a value that it must stay under, or the least that it must reach. */
-const rows: [string, number, string, { under?: number; least?: number }][] = [
+type Row = [string, number, string, { under?: number; least?: number }];
+const rows: Row[] = [
   ["load average at the start", loaded, "load", {}],
   ["load average at the end", load(), "load", {}],
   ["pace of the machine", unit, "ms", {}],
   ["first frame, cold", cold.first, "ms", {}],
   ["first frame, warm", first, "ms", { under: FIRST * unit }],
-  ["memory of a life open", memory / 2 ** 20, "MB", {}],
+  ...(memory === undefined ? [] : [["memory of a life open", memory / 2 ** 20, "MB", {}] as Row]),
   ["frames each second, empty", fullest.empty, "fps", {}],
   ["frames each second", fullest.rate, "fps", { least: fullest.empty * 0.95 }],
   ["frame, median", least((one) => percentile(one.times, 0.5)), "ms", {}],
