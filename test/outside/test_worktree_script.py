@@ -58,3 +58,33 @@ def test_success_says_bun_run_build_suffices(tmp_path: Path) -> None:
   assert got.returncode == 0
   assert "bun run build there suffices" in got.stdout
   assert "failed" not in got.stderr
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the sh of Git on Windows names a path in a form of its own")
+def test_fetch_runs_again_when_another_fetch_holds_a_ref_lock(tmp_path: Path) -> None:
+  main = clone_with_origin(tmp_path)
+  real = shutil.which("git")
+  assert real
+  shim = tmp_path / "shim"
+  shim.mkdir()
+  count = tmp_path / "count"
+  (shim / "git").write_text(
+    "#!/bin/sh\n"
+    'case " $* " in\n'
+    '  *" fetch "*) echo x >> "$COUNT"; if [ "$(wc -l < "$COUNT")" -eq 1 ]; then\n'
+    '    echo "error: cannot lock ref refs/remotes/origin/main" >&2; exit 1; fi ;;\n'
+    "esac\n"
+    f'exec {real} "$@"\n'
+  )
+  (shim / "git").chmod(0o755)
+  env = {**CLEAN, "COUNT": str(count), "PATH": f"{shim}:/usr/bin:/bin:" + CLEAN["PATH"]}
+  got = subprocess.run(
+    ["sh", str(main / "script" / "worktree.sh"), str(tmp_path / "new"), "fresh"],
+    capture_output=True,
+    text=True,
+    env=env,
+    check=False,
+  )
+  assert got.returncode == 0
+  assert "runs again in 1 s: error: cannot lock ref refs/remotes/origin/main" in got.stderr
+  assert (tmp_path / "new").is_dir()
