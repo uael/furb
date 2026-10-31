@@ -200,10 +200,15 @@ jobs:
           ls ~/.cargo/git ~/.cargo/git/db ~/.cargo/git/checkouts 2>&1 | head -20 || true
           echo "-- offline"
           (CARGO_NET_OFFLINE=true cargo metadata --format-version 1 --features typescript --filter-platform "$CARGO_BUILD_TARGET" 2>&1 >/dev/null | head -12) || true
+          find ~/.cargo/registry/index -type f | sort > "$RUNNER_TEMP/before.txt"
+          wc -l < "$RUNNER_TEMP/before.txt"
           echo "-- online"
           s=$(date +%s)
           (cargo metadata --format-version 1 --features typescript --filter-platform "$CARGO_BUILD_TARGET" 2>&1 >/dev/null | while IFS= read -r l; do echo "$(date +%T) $l"; done) || true
           echo "online took $(( $(date +%s) - s )) s"
+          find ~/.cargo/registry/index -type f | sort > "$RUNNER_TEMP/after.txt"
+          wc -l < "$RUNNER_TEMP/after.txt"
+          diff "$RUNNER_TEMP/before.txt" "$RUNNER_TEMP/after.txt" | head -60 || true
       # The job of the crate runs the clippy and the tests of the crate with this feature on Windows and on macOS, and
       # the job of the speed of the TUI on Linux.
       - run: bun run build
