@@ -443,7 +443,7 @@ def test_a_worker_that_ends_with_a_pr_is_a_line_and_its_debrief_feeds_the_ledger
   conductor.ns["prune"] = pruned
   asyncio.run(conductor.audit(False))
   told = conductor.prompts[-1][0]
-  assert "- 2x A  slow gate\n- 1x No jq on the PATH\nThe prune found nothing to remove." in told
+  assert "- e1 2x A  slow gate\n- e0 1x No jq on the PATH\nThe prune found nothing to remove." in told
 
 
 @POSIX
@@ -1707,6 +1707,21 @@ def test_the_ledger_of_the_tooling_keeps_one_form_of_when_and_moves_the_old_entr
   conductor.flaw("a new friction")
   whens = [x["when"] for x in json.loads(conductor.files[conductor.TOOLING])]
   assert whens == [str(calendar.timegm((2026, 10, 23, 0, 0, 0))), "1793181153"]
+
+
+def test_the_ledger_gives_each_entry_a_stable_id_and_one_closed_state(conductor: Round) -> None:
+  conductor.files[conductor.TOOLING] = json.dumps(
+    [
+      {"when": "1", "what": "a", "state": "in-pr #497", "count": 1},
+      {"when": "1", "what": "b", "state": "open: #364", "count": 1},
+      {"when": "1", "what": "c", "state": "queued", "count": 1},
+    ]
+  )
+  conductor.flaw("d")
+  held = json.loads(conductor.files[conductor.TOOLING])
+  assert [(x["id"], x["state"]) for x in held] == [("e0", "closed"), ("e1", "open"), ("e2", "queued"), ("e3", "open")]
+  assert held[0]["note"] == "in-pr #497"
+  assert conductor.ledger_text("e2", "e3") == "e2 [queued] 1x c\ne3 [open] 1x d"
 
 
 def test_a_flaw_that_a_merged_pr_fixed_is_closed_with_that_pr_and_opens_again_when_it_comes_again(
