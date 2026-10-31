@@ -152,6 +152,8 @@ window of a new build takes the life over with its record whole.
   of disk, or over three quarters of the memory bound of the sandbox, it shows a notice in each window. A full disk
   stops the record, the log and the snapshot, and at the memory bound the life stops. `FURB_DISK_WARN` sets the disk
   limit in bytes, `FURB_MEMORY_WARN` the share of the memory, and `FURB_SANDBOX_MEMORY` the bound in MiB.
+  A record in `.furb/sessions` adds a notice when the files of that folder hold more than 10 GiB, since nothing else
+  removes them. `FURB_SESSIONS_WARN` sets that limit in bytes.
 - A host says of itself in `<key>.json` as soon as it starts, and it listens at its socket before it opens the life. A
   window that finds a host that still opens the life, as on a long record, attaches to it and waits for the open on
   that socket, and starts no second one. A signal, or `/end` from a window, cuts the open: the host ends, removes its

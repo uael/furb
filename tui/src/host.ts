@@ -2,9 +2,9 @@
 // outlives each window. A window starts it, detached from the window, with the options of the life as JSON. It loads
 // no module that loads OpenTUI, since it draws nothing.
 import { randomUUID, timingSafeEqual } from "node:crypto";
-import { rmSync, statfsSync, writeFileSync } from "node:fs";
+import { readdirSync, rmSync, statfsSync, statSync, writeFileSync } from "node:fs";
 import { type AddressInfo, createConnection, createServer, type Socket } from "node:net";
-import { dirname } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { sandboxBound, sandboxHeld } from "furb";
 import type { HostState } from "./bridge.ts";
 import {
@@ -334,8 +334,37 @@ const HIGH = Number(process.env.FURB_MEMORY_WARN ?? 0.75);
 /** How long the host waits between two looks at the disk and at the memory, in milliseconds. */
 const EVERY = Number(process.env.FURB_HOST_WATCH ?? 30000);
 
+/** The size of the files of the folder of the sessions of a project over which the host tells its windows, in bytes:
+ * 10 GiB, or what FURB_SESSIONS_WARN says. A record, its log and its snapshot grow for as long as a life lives, and
+ * nothing else removes them. */
+const SESSIONS = Number(process.env.FURB_SESSIONS_WARN ?? 10 * 1024 ** 3);
+
+/** The look at the folder of the sessions of the project of the record, when the record stands in `.furb/sessions`:
+ * the sizes of its files, not of the folders in it. */
+const warnSessions = (): void => {
+  const folder = dirname(record);
+  if (basename(folder) !== "sessions" || basename(dirname(folder)) !== ".furb") return;
+  let total = 0;
+  try {
+    for (const name of readdirSync(folder))
+      try {
+        const stat = statSync(join(folder, name));
+        if (stat.isFile()) total += stat.size;
+      } catch {}
+  } catch {
+    return;
+  }
+  warn(
+    "sessions",
+    total > SESSIONS
+      ? `The sessions of this project hold ${(total / 1e9).toFixed(1)} GB. Delete the sessions that you no longer need.`
+      : undefined,
+  );
+};
+
 /** The look at the free space of the disk of the record and at the memory of the life. */
 const watch = (): void => {
+  warnSessions();
   try {
     const stats = statfsSync(dirname(record));
     const free = stats.bavail * stats.bsize;
