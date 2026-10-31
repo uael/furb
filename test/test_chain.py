@@ -107,6 +107,18 @@ async def test_the_open_of_a_chain_with_a_source_binds_its_label_and_its_source(
   assert paragraphs(engine.turns(on=bare))[-1] == opened(bare, "", root) == opens
 
 
+async def test_the_open_of_a_chain_with_no_source_binds_its_actor_and_the_chain_whose_module_gave_it_or_stand_when_the_standing_did() -> (
+  None
+):
+  """The open of a chain with no source binds its actor, and the chain whose module gave it, or stand when the standing did."""
+  _, _, root = born("actor = 'n/low'\nkid = chain('kid')\nclose(kid)", "close(None)")
+  kid = await engine.prompt(str, "open one", on=root)
+  ours = await chained("ours")
+  await settle()
+  assert paragraphs(engine.turns(on=kid))[-1] == opened(kid, "kid", actor="n/low", via=root)
+  assert paragraphs(engine.turns(on=ours))[-1] == opened(ours, "ours")
+
+
 async def test_the_entry_that_opens_a_chain_with_a_source_carries_its_label_after_the_prefix() -> None:
   """The entry that opens a chain with a source carries its label, after the prefix."""
   _, _, root = born("close(1)")

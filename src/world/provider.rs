@@ -783,7 +783,13 @@ impl Provider {
             // A wait for the end of a limit lasts hours, so the chain is told once, before it. A stand asks the call
             // again, and a call that meets the same wait tells nothing more.
             if let (true, Some(reply)) = (limit, replies.get_mut(&id)) {
-              let note = format!("#{} waits on {}: {}", reply.chain, reply.actor, retry.why);
+              let mut note = format!("#{} waits on {}: {}", reply.chain, reply.actor, retry.why);
+              if retry.why.starts_with("usage limit") {
+                let chain = &reply.chain;
+                note += &format!(
+                  ". To go on with another actor, say rung(\"actor = '<model>'\", on=\"{chain}\") and wake(\"{chain}\")."
+                );
+              }
               if reply.noted.as_deref() != Some(note.as_str()) {
                 say(
                   &mut co,

@@ -304,6 +304,8 @@ async def test_a_failure_behind_a_green_main_updates_its_branch_before_a_fixer(c
 @JQ
 async def test_a_red_main_updates_no_branch(conductor: Round) -> None:
   conductor.say(r"compare/main\.\.\.abc", '{"behind_by": 3}')
+  conductor.say(r"run list --commit abc", json.dumps([{"databaseId": 7, "conclusion": "failure"}]))
+  failed_run(conductor, 7, {"unit": "FAILED test/test_x.py::test_y - boom\n"})
   await conductor.mend(conductor.pr(checks=("FAILURE", "FAILURE")), 0.0, True)
   assert "update-branch" not in conductor.log()
   assert [key for key, _ in conductor.hired] == ["fix5"]
@@ -477,7 +479,7 @@ async def test_a_notice_carries_its_context_and_each_other_event_is_a_line(condu
   conductor.say(r"pr list --state open", json.dumps(prs))
   conductor.say(r"pr list --state merged", "[]")
   conductor.say(r"run list --branch main", json.dumps([{"headSha": "m1", "conclusion": "failure", "databaseId": 9}]))
-  conductor.say(r"run view 9", "unit\tpytest\tFAILED test/test_x.py::test_y - boom\nunit\tpytest\tok\n")
+  failed_run(conductor, 9, {"unit": "FAILED test/test_x.py::test_y - boom\nok\n"})
   conductor.say(r"issue list", "[]")
   conductor.say(r"pr list --repo uael/monty", "[]")
   await conductor.sweep(300)
@@ -1871,6 +1873,14 @@ def test_each_row_of_the_reviews_ends_its_line_and_a_body_holds_no_carriage_retu
   assert rows == [NOT_FOUND, "394\ti394\tuael\t0\t-\ta  b c d"]
 
 
+def failed_run(conductor: Round, run: int, jobs: dict[str, str]) -> None:
+  """Say the failed jobs of a run and the log of each, as the jobs API of gh gives them."""
+  listed = [{"id": run * 10 + at, "name": name, "conclusion": "failure"} for at, name in enumerate(jobs, 1)]
+  conductor.say(rf"actions/runs/{run}/jobs", json.dumps({"jobs": listed}))
+  for one, log in zip(listed, jobs.values()):
+    conductor.say(rf"actions/jobs/{one['id']}/logs", log)
+
+
 def evidence_repo(conductor: Round, tmp_path: Path) -> str:
   env = conductor.env
   git("init", "-q", "-b", "main", cwd=tmp_path, env=env)
@@ -1895,7 +1905,7 @@ async def test_an_order_for_a_failed_check_carries_its_failed_lines_and_the_comm
   sha = evidence_repo(conductor, tmp_path)
   runs = json.dumps([{"databaseId": 9, "conclusion": "failure"}])
   conductor.say(r"limit 30 --json databaseId,conclusion", runs)
-  conductor.say(r"run view 9 --log-failed", "gates\tstep\tFAILED test/test_hygiene.py::test_wall - 6520 > 6500\ngates\tstep\tnoise\n")
+  failed_run(conductor, 9, {"gates": "FAILED test/test_hygiene.py::test_wall - 6520 > 6500\nnoise\n"})
   conductor.busy("p1", "k5", SONNET)
   await conductor.mend(conductor.pr(checks=("FAILURE",), sha=sha, labels=["w:k5"]), 0.0, False)
   order = conductor.prompts[-1][0]
@@ -1909,7 +1919,7 @@ async def test_an_order_for_a_failed_check_carries_its_failed_lines_and_the_comm
 async def test_a_fixer_brief_for_a_failed_check_carries_the_same_lines(conductor: Round, tmp_path: Path) -> None:
   sha = evidence_repo(conductor, tmp_path)
   conductor.say(r"limit 30 --json databaseId,conclusion", json.dumps([{"databaseId": 9, "conclusion": "failure"}]))
-  conductor.say(r"run view 9 --log-failed", "gates\tstep\tFAILED test/test_hygiene.py::test_wall\n")
+  failed_run(conductor, 9, {"gates": "FAILED test/test_hygiene.py::test_wall\n"})
   await conductor.mend(conductor.pr(checks=("FAILURE",), sha=sha), 0.0, False)
   assert [key for key, _ in conductor.hired] == ["fix5"]
   assert "FAILED test/test_hygiene.py::test_wall" in conductor.hired[0][1]
@@ -3064,10 +3074,10 @@ def failing(conductor: Round, main: str, tip: str = "m1") -> None:
   conductor.say(r"workflows/gates\.yml/runs\?", '{"workflow_runs": []}')
   stamp = "2026-10-29T10:00:00.12Z"
   conductor.say(r"run list --commit sha4", json.dumps([{"databaseId": 12, "conclusion": "failure"}]))
-  conductor.say(r"run view 12", "unit\tpytest\t2026-10-29T11:30:00.9Z FAILED test/test_x.py::test_y - boom\n")
+  failed_run(conductor, 12, {"unit": "2026-10-29T11:30:00.9Z FAILED test/test_x.py::test_y - boom\n"})
   conductor.say(r"run list --commit sha5", json.dumps([{"databaseId": 13, "conclusion": "failure"}]))
-  conductor.say(r"run view 13", "unit\tpytest\tFAILED test/test_x.py::test_z - bang\n")
-  conductor.say(r"run view 9", f"unit\tpytest\t{stamp} FAILED test/test_x.py::test_y - boom\n")
+  failed_run(conductor, 13, {"unit": "FAILED test/test_x.py::test_z - bang\n"})
+  failed_run(conductor, 9, {"unit": f"{stamp} FAILED test/test_x.py::test_y - boom\n"})
   runs = [{"headSha": tip, "conclusion": main, "databaseId": 9}]
   conductor.say(r"compare/main\.\.\.sha4", '{"behind_by": 2}')
   conductor.say(r"pr list --state open", json.dumps(four_five()))
@@ -3092,9 +3102,9 @@ async def test_a_pr_whose_failed_lines_all_fail_on_main_waits_on_main_until_main
   told = [message for message, _ in conductor.prompts]
   assert len(told) == 1 and told[0].startswith("main is red at m1.")
   assert told[0].endswith("the round updates their branches once main is green: #4.")
-  assert conductor.log().count("run view 12") == 1
+  assert conductor.log().count("actions/runs/12/jobs") == 1
   await conductor.sweep(300)
-  assert conductor.log().count("run view 12") == 1 and conductor.prs[4]["state"] == "main"
+  assert conductor.log().count("actions/runs/12/jobs") == 1 and conductor.prs[4]["state"] == "main"
   assert (len(conductor.prompts), len(conductor.hired), conductor.heard) == (1, 1, [])
   failing(conductor, "success")
   await conductor.sweep(300)
@@ -3876,3 +3886,62 @@ async def test_a_green_pr_that_changes_a_file_that_a_wall_sums_updates_with_main
   assert conductor.log().count("update-branch") == 1
   assert "pr merge" not in conductor.log()
   assert 5 not in conductor.merged
+
+
+MAIN_LINES = [
+  "the suite on ubuntu-latest\t2026-10-31T19:23:18.8520831Z E     AssertionError: the doctrine costs 1008 tokens, over the 1000 budget",
+  "the suite on ubuntu-latest\t2026-10-31T19:23:18.8535311Z test/test_hygiene.py:141: AssertionError",
+  "the suite on ubuntu-latest\t2026-10-31T19:23:18.8546544Z FAILED test/test_hygiene.py::test_doctrine - AssertionError",
+]
+
+
+@POSIX
+@JQ
+async def test_the_failed_lines_of_two_runs_that_differ_only_in_the_system_the_time_and_the_attempt_are_alike(
+  conductor: Round,
+) -> None:
+  conductor.redmain["m1"] = MAIN_LINES
+  conductor.say(r"run list --commit sha4", json.dumps([{"databaseId": 41, "conclusion": "success"}, {"databaseId": 42, "conclusion": "failure"}]))
+  failed_run(
+    conductor,
+    42,
+    {
+      "the suite on windows-latest": "2026-10-31T19:46:40.2794448Z E     AssertionError: the doctrine costs 1008 tokens, over the 1000 budget\n"
+      "2026-10-31T19:46:40.2795539Z test\\test_hygiene.py:141: AssertionError\n"
+      "2026-10-31T19:46:40.2815986Z FAILED test/test_hygiene.py::test_doctrine - AssertionError\n"
+    },
+  )
+  pr = conductor.pr(4, ("FAILURE",), sha="sha4")
+  assert await conductor.on_main(pr) is True
+  assert conductor.onmain == {4: ("sha4", "m1", True)}
+
+
+@POSIX
+@JQ
+async def test_a_pr_whose_failed_lines_the_round_cannot_read_yet_gets_no_order_until_it_reads_them(
+  conductor: Round,
+) -> None:
+  conductor.redmain["m1"] = MAIN_LINES
+  conductor.say(r"run list --commit sha4", json.dumps([{"databaseId": 12, "conclusion": ""}]))
+  failed_run(conductor, 12, {"the suite on ubuntu-latest": ""})
+  pr = conductor.pr(4, ("FAILURE",), sha="sha4")
+  assert await conductor.mend(pr, 0.0, True) == "running"
+  assert (conductor.hired, conductor.prompts, conductor.onmain) == ([], [], {})
+  conductor.says.pop()
+  conductor.say(r"actions/jobs/121/logs", "2026-10-31T19:46:40.27Z test/test_hygiene.py:141: AssertionError\n")
+  assert await conductor.mend(pr, 10.0, True) == "main"
+  assert (conductor.hired, conductor.onmain) == ([], {4: ("sha4", "m1", True)})
+
+
+@POSIX
+@JQ
+async def test_a_pr_whose_failed_lines_stay_unread_gets_its_fixer_after_the_unread_wait(conductor: Round) -> None:
+  conductor.redmain["m1"] = MAIN_LINES
+  conductor.say(r"run list --commit sha4", json.dumps([{"databaseId": 12, "conclusion": ""}]))
+  failed_run(conductor, 12, {"the suite on ubuntu-latest": ""})
+  pr = conductor.pr(4, ("FAILURE",), sha="sha4")
+  assert await conductor.mend(pr, 0.0, True) == "running"
+  assert await conductor.mend(pr, conductor.UNREAD - 1, True) == "running"
+  assert conductor.hired == []
+  await conductor.mend(pr, conductor.UNREAD, True)
+  assert [key for key, _ in conductor.hired] == ["fix4"] and conductor.onmain == {4: ("sha4", "m1", False)}

@@ -702,10 +702,18 @@ def stood(id: str, standing: list = STANDS) -> str:
   return f"#{id}\n{id}_roster = {roster!r}\n{id}_actor = {actor!r}"
 
 
-def opened(id: str, label: str, source: str = "") -> str:
+def opened(id: str, label: str, source: str = "", actor: str = "m/low", via: str = "") -> str:
   """The paragraph a chain tells of its open: its header, the bindings of its label and of its source, and its own
   binding."""
-  words = [f"{id}_{word} = {value!r}" for word, value in (("label", label), ("source", source)) if value]
+  words = [
+    f"{id}_{word} = {value!r}"
+    for word, value in (
+      ("label", label),
+      ("source", source),
+      *(() if source else (("actor", actor), ("actor_via", via or "stand"))),
+    )
+    if value
+  ]
   return "\n".join([f"#{id}", *words, f"{id}: Act[Never] = Act({id!r})"])
 
 
