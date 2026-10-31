@@ -2,8 +2,9 @@
 //! hears it, so a reader shows the life whole with no life. It holds what the record leaves out, as the rungs of each
 //! ladder, each run, and each tell of a chain. It is a cache, which each life on the record writes again from its
 //! first line, since a later life says every fact of its record again, before it says its own. A life writes it in
-//! `<record>.log.new`, which takes the place of the log when the life keeps its first entry, after its replay, so a
-//! life whose replay drifts leaves the log of the life before it as it was.
+//! `<record>.log.new`, which takes the place of the log when the life keeps its first entry, after its replay, and
+//! which goes when the life ends before that, so a life whose replay drifts leaves the log of the life before it as it
+//! was, and nothing more.
 //!
 //! Its first line is a map that holds under `entries` how many entries the record held when the life opened. Each
 //! other line is one fact, as JSON reads a value of the sandbox, but for the line `["keep", "", n]`, which says that
@@ -271,6 +272,16 @@ impl Log {
     self.whole += self.waiting.len() as u64;
     self.waiting.clear();
     Ok(())
+  }
+}
+
+impl Drop for Log {
+  /// The file that the life wrote the log again in goes when it never took the place of the log.
+  fn drop(&mut self) {
+    if let Some(fresh) = self.fresh.take() {
+      self.file = None;
+      let _ = std::fs::remove_file(fresh);
+    }
   }
 }
 

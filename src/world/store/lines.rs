@@ -17,8 +17,8 @@ use super::{Lease, Store, entry_of, failed, leased, now};
 
 /// The record at a path as a file of lines, under its lease.
 ///
-/// A final line that a crash tore is removed, and a final line that is whole but not ended is ended, before the
-/// store keeps anything after it. Each line holds the entry and, after the fact, the time at which the store kept
+/// A final line that a crash tore is removed, and a final line that is whole but not ended is ended, at the first
+/// keep, so a store that keeps nothing leaves the record as it was. Each line holds the entry and, after the fact, the time at which the store kept
 /// it, which the life never reads. The store writes each line at once, and syncs the data of the file only at a sync
 /// that follows a line. A line that the store fails to write whole is cut from the file before the next line.
 pub struct Lines {
@@ -30,6 +30,8 @@ pub struct Lines {
   whole: Option<u64>,
   /// Whether a write failed after that length, so the file can hold a part of a line past it.
   torn: bool,
+  /// Whether the last line of the file is whole but not ended, so the next line starts with an end of line.
+  unended: bool,
   _lease: Lease,
 }
 
@@ -46,19 +48,32 @@ impl Lines {
       .open(&path)
       .map_err(|no| failed(&path, no))?;
     file.seek(SeekFrom::End(0)).map_err(|no| failed(&path, no))?;
-    Ok(Self { path, file, unsynced: false, whole: None, torn: false, _lease: lease })
+    Ok(Self {
+      path,
+      file,
+      unsynced: false,
+      whole: None,
+      torn: false,
+      unended: false,
+      _lease: lease,
+    })
   }
 }
 
 impl Store for Lines {
   fn entries(&mut self) -> Result<Vec<Object>, Fault> {
     let mut entries = Vec::new();
-    read(&self.path, true, &mut |one| entries.push(one))?;
+    match read(&self.path, &mut |one| entries.push(one))? {
+      Tail::Torn(whole) => (self.whole, self.torn) = (Some(whole), true),
+      Tail::Unended => self.unended = true,
+      Tail::Ended => {}
+    }
     Ok(entries)
   }
 
   fn keep(&mut self, entry: ObjectRef<'_>) -> Result<(), Fault> {
     let line = stamped(record(entry), now());
+    let line = if self.unended { format!("\n{line}") } else { line };
     let whole = match self.whole {
       Some(whole) => whole,
       None => self.file.metadata().map_err(|no| failed(&self.path, no))?.len(),
@@ -76,6 +91,7 @@ impl Store for Lines {
       return Err(failed(&self.path, no));
     }
     self.whole = Some(whole + line.len() as u64);
+    self.unended = false;
     Ok(())
   }
 
@@ -91,13 +107,13 @@ impl Store for Lines {
 /// What the file of lines at a path holds, read with no lease and changed in nothing.
 pub(super) fn kept(path: &Path) -> Result<Vec<Object>, Fault> {
   let mut entries = Vec::new();
-  read(path, false, &mut |one| entries.push(one))?;
+  read(path, &mut |one| entries.push(one))?;
   Ok(entries)
 }
 
 /// Each entry of the file of lines at a path, in order, read with no lease and changed in nothing, one line at a time.
 pub(super) fn each(path: &Path, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
-  read(path, false, take)
+  read(path, take).map(drop)
 }
 
 /// The entries of the file of lines at a path whose fact is of one of some kinds, as [`kept`] reads them: a line whose
@@ -134,13 +150,24 @@ fn stamped(mut entry: Value, at: u64) -> String {
   format!("{entry}\n")
 }
 
+/// How the last line of a record ends, which a store mends at its first keep.
+enum Tail {
+  /// Each line ends, or the record holds none.
+  Ended,
+  /// The last line was torn as it was written, after the length that the record held whole: nothing after it was
+  /// kept, so it goes.
+  Torn(u64),
+  /// The last line is whole and not ended.
+  Unended,
+}
+
 /// Each entry of a record, in order, each the fact it kept in a list of one, as boot takes them, read one line at a
-/// time. The time that a line holds after its fact stays out of the entry, and a line with no time, as an older store
-/// kept it, reads the same.
-fn read(path: &Path, repair: bool, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
+/// time and changed in nothing, and how its last line ends. The time that a line holds after its fact stays out of
+/// the entry, and a line with no time, as an older store kept it, reads the same.
+fn read(path: &Path, take: &mut dyn FnMut(Object)) -> Result<Tail, Fault> {
   let file = match File::open(path) {
     Ok(file) => file,
-    Err(no) if no.kind() == ErrorKind::NotFound => return Ok(()),
+    Err(no) if no.kind() == ErrorKind::NotFound => return Ok(Tail::Ended),
     Err(no) => return Err(failed(path, no)),
   };
   let invalid =
@@ -164,12 +191,7 @@ fn read(path: &Path, repair: bool, take: &mut dyn FnMut(Object)) -> Result<(), F
     let parsed = serde_json::from_str::<Vec<&RawValue>>(text);
     let Ok(held) = parsed else {
       if !ended {
-        // The last line was torn as it was written: nothing after it was kept, so it goes.
-        if repair {
-          let file = OpenOptions::new().write(true).open(path).map_err(|no| failed(path, no))?;
-          file.set_len(start as u64).map_err(|no| failed(path, no))?;
-        }
-        break;
+        return Ok(Tail::Torn(start as u64));
       }
       return Err(invalid(start));
     };
@@ -178,13 +200,12 @@ fn read(path: &Path, repair: bool, take: &mut dyn FnMut(Object)) -> Result<(), F
       return Err(invalid(start));
     }
     take(entry_of(held[0]).ok_or_else(|| invalid(start))?);
-    if !ended && repair {
-      let mut file = OpenOptions::new().append(true).open(path).map_err(|no| failed(path, no))?;
-      file.write_all(b"\n").map_err(|no| failed(path, no))?;
+    if !ended {
+      return Ok(Tail::Unended);
     }
     start = next;
   }
-  Ok(())
+  Ok(Tail::Ended)
 }
 
 #[cfg(test)]

@@ -1,18 +1,5 @@
-import {
-  closeSync,
-  existsSync,
-  fstatSync,
-  linkSync,
-  openSync,
-  readdirSync,
-  readSync,
-  renameSync,
-  rmSync,
-  statSync,
-  truncateSync,
-  utimesSync,
-} from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { closeSync, existsSync, fstatSync, openSync, readSync } from "node:fs";
+import { basename } from "node:path";
 import {
   Activity,
   type Actor,
@@ -101,59 +88,6 @@ export function readingNote(reading: Reading): string[] {
         ]
       : []),
   ];
-}
-
-/** What a read of a record leaves as it was. A life that opens on a record writes beside it before its replay drifts:
- * it adds the entries that it says, replaces the log, and makes files of its own. The guard holds the sizes of the
- * record and its siblings and a link to the log, and `undo` gives back what the open changed, so a record that opens
- * to read is the record that it was. `keep` lets the guard go when the life opened. */
-export function guard(record: string): { undo(): void; keep(): void } {
-  const folder = dirname(record);
-  const name = basename(record);
-  const log = `${record}.log`;
-  const held = `${record}.log.held`;
-  // A host that was killed in the middle of an open leaves its hold behind: the same rule that `undo` uses frees it,
-  // so the next open goes on. A log is derived from its record and each life writes it again, so the log that goes
-  // back is the one that the cut open found, and nothing of the record is lost.
-  if (existsSync(log) && existsSync(held)) {
-    if (statSync(log).ino === statSync(held).ino) rmSync(held);
-    else renameSync(held, log);
-  }
-  const siblings = () => readdirSync(folder).filter((one) => one === name || one.startsWith(`${name}.`));
-  const before = new Map(
-    siblings().map((one) => {
-      const info = statSync(join(folder, one));
-      return [one, { size: info.size, atime: info.atimeMs, mtime: info.mtimeMs }] as const;
-    }),
-  );
-  const logged = before.has(`${name}.log`);
-  if (logged) linkSync(log, held);
-  const size = before.get(`${name}.log`)?.size ?? 0;
-  const release = () => {
-    if (logged) rmSync(held, { force: true });
-  };
-  return {
-    keep: release,
-    undo() {
-      for (const one of siblings())
-        if (!before.has(one) && one !== `${name}.log.held`)
-          rmSync(join(folder, one), { recursive: true, force: true });
-      const length = before.get(name)?.size;
-      if (length !== undefined && statSync(record).size > length) truncateSync(record, length);
-      if (logged) {
-        // A log that the life wrote on in place is the file that the link holds, and one it replaced is not.
-        if (existsSync(log) && statSync(log).ino === statSync(held).ino) rmSync(held);
-        else renameSync(held, log);
-        if (statSync(log).size > size) truncateSync(log, size);
-      }
-      // A file that the open wrote and gave back keeps the time it had, since the times tell when a record was used.
-      for (const [one, was] of before) {
-        const path = join(folder, one);
-        if (existsSync(path) && statSync(path).mtimeMs !== was.mtime)
-          utimesSync(path, was.atime / 1000, was.mtime / 1000);
-      }
-    },
-  };
 }
 
 /** Whether a record is a recorded life: a log of a life whose first line is a header that says so, which a host reads
