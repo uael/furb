@@ -7,7 +7,8 @@ The one law of the rig is that no rule of it reaches the model. The system promp
 nothing else, and the life enables no extension, so no rung of one reaches the chain. The message is the
 instruction of the task as the task wrote it, and one line that asks the model to close with a float from 0 to 1
 for how sure it is that the work is done. Under 0.9, the operator says that the level is too low and asks the
-model to go on, on the same chain. The model reads no other word.
+model to go on, on the same chain. When the model closes at 0.9 or more and its checkout holds no change against the
+base, the operator says once that nothing is submitted and asks the model to go on. The model reads no other word.
 
 ## Before the first run
 
@@ -68,6 +69,9 @@ life stands on.
   holds one commit and no tag, so a step builds the tree at a version that git makes up. After the steps, a seed
   installs again, from the tree, each distribution that the image built from it, at the version the image holds.
   What a layer holds is kept under `~/.cache/furb-deepswe/layers`, so each layer is read once.
+- After the steps, a python seed also installs each `requirements*.txt` file at the root whose name holds `dev` or
+  `test`, since a Dockerfile can leave out the packages that the suite needs, as `mocker`. A seed made before this
+  step has the stamp of an older environment, so the rig makes it again.
 - The interpreter starts with each indexed Python distribution of the image, at its version, including pip and
   poetry. The steps of the Dockerfile then run on that environment. A step that calls poetry reads and writes its
   config under `poetry` in the workroot, and not the config of the host.

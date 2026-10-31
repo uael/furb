@@ -89,6 +89,12 @@ ASKED = "\n\nWhen the work is done, close with a float from 0 to 1: how sure you
 """ASKED is what the rig adds to the instruction of the task, which says the shape of the answer and no more."""
 AGAIN = "confidence level {} is too low, continue"
 """AGAIN is what the operator says to a model that closed under the confidence it wants."""
+NOTHING = (
+  "your tree has no diff against the base, so nothing is submitted. "
+  "Change the files that the task asks for, then close again."
+)
+"""NOTHING is what the operator says, once, to a model that closed sure of itself while its checkout held no change."""
+
 CONFIDENT = 0.9
 """CONFIDENT is the confidence the rig takes for done, under which it asks the model to go on."""
 LOOK = 10
@@ -444,6 +450,16 @@ def generic(repo: Path, lang: str, env: Mapping[str, str], swaps: Sequence[tuple
   ran(["bash", "-lc", venved(repo) + hosted(words, swaps)], where=repo, env=env)
 
 
+def required(repo: Path, env: Mapping[str, str], swaps: Sequence[tuple[str, str]]) -> None:
+  """Install the dev and test requirements that a python checkout holds, which its Dockerfile may leave out."""
+  for need in sorted(repo.glob("requirements*.txt")):
+    if re.search(r"dev|test", need.name):
+      cmd = hosted(f"pip install -q -r {shlex.quote(need.name)}", swaps)
+      say(f"[deepswe] RUN {cmd[:90]}")
+      if ran(["bash", "-lc", venved(repo) + cmd], where=repo, env=env):
+        say("[deepswe]   the requirements failed; the rig goes on with what did land")
+
+
 def installed(task: Path, repo: Path, lang: str) -> None:
   """Take the steps of the task's own Dockerfile in the checkout, so the tree is the one its verifier wants."""
   # A step of poetry reads and writes its config in the workroot: no setting of the host reaches the step, and
@@ -484,6 +500,8 @@ def installed(task: Path, repo: Path, lang: str) -> None:
       say("[deepswe]   the step failed; the rig goes on with what did land")
   if told and lang in ("typescript", "javascript") and not (repo / "node_modules").is_dir():
     generic(repo, lang, env, swaps)
+  if lang == "python":
+    required(repo, env, swaps)
   rebuilt(repo, dists)
 
 
@@ -530,7 +548,7 @@ def seeded(task: str, *, keep_app: bool = False) -> tuple[Path, Path, Mapping[st
   work.mkdir(parents=True, exist_ok=True)
   manifest, _ = image_config(image(where))
   stamp = json.dumps(
-    {"base": meta["base_commit_hash"], "image": manifest["config"]["digest"], "environment": 1}, sort_keys=True
+    {"base": meta["base_commit_hash"], "image": manifest["config"]["digest"], "environment": 2}, sort_keys=True
   )
   complete = whole(base, seal, stamp)
   if meta["language"] == "python" and not (base / ".venv" / "bin" / "python").is_file():
@@ -782,7 +800,14 @@ def watched(record: Path, root: str, began: float, mark: dict[str, float]) -> st
   return ""
 
 
-async def worked(told: str, app: Path, run_dir: Path, args: argparse.Namespace) -> tuple[object, str, Path]:
+def changed(app: Path, syn: str) -> bool:
+  """Whether the checkout differs from the base: a file edited or new, or a commit on top of it."""
+  if spoke([*gits(app), "status", "--porcelain"]):
+    return True
+  return captured([*gits(app), "diff", "--quiet", syn]).returncode != 0
+
+
+async def worked(told: str, app: Path, run_dir: Path, args: argparse.Namespace, syn: str) -> tuple[object, str, Path]:
   """One life on the checkout, asked the task and nothing else, and what it answered.
 
   The message of the prompt is the instruction of the task as the task wrote it. The model is told nothing else:
@@ -796,6 +821,7 @@ async def worked(told: str, app: Path, run_dir: Path, args: argparse.Namespace) 
   if args.ceiling:
     engine.grant(usd=args.ceiling, on=root)
   stopped, got, looks, message = "", None, 0, told + ASKED
+  empty = False
   mark: dict[str, float] = {"did": 0, "answers": 0}
   began = time.monotonic()
   try:
@@ -812,8 +838,15 @@ async def worked(told: str, app: Path, run_dir: Path, args: argparse.Namespace) 
       if stopped:
         break
       got = await act
-      if not isinstance(got, (int, float)) or float(got) >= CONFIDENT:
+      if not isinstance(got, (int, float)):
         break
+      if float(got) >= CONFIDENT:
+        if empty or changed(app, syn):
+          break
+        say("[deepswe] the model closed sure of itself with no change in its checkout; it is told so, once")
+        empty = True
+        message = NOTHING
+        continue
       say(f"[deepswe] the model is {got} sure, under the {CONFIDENT} the rig wants; it is asked to go on")
       message = AGAIN.format(got)
   except Exception as no:
@@ -842,7 +875,7 @@ def run(args: argparse.Namespace) -> int:
   os.chdir(app)
   say(f"[deepswe] run {args.task}: to={args.to} ceiling={args.ceiling} timeout={args.timeout or 'none'}s")
   began = time.monotonic()
-  got, stopped, record = asyncio.run(worked(told, app, run_dir, args))
+  got, stopped, record = asyncio.run(worked(told, app, run_dir, args, syn))
   numbers = numbered(record, began)
   (run_dir / "numbers.json").write_text(
     json.dumps({"value": got, **numbers, "root": args.task}, indent=2, default=repr) + "\n", encoding="utf-8"
