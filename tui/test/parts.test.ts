@@ -727,3 +727,20 @@ test("a write of the life whose path starts with ~ and lands in .furb loads the 
     parts.dispose();
   }
 });
+
+test("the parts load again when the config of the project changes, though no part of the project loaded before", async () => {
+  const { directory } = project();
+  const config = join(directory, ".furb", "config.json");
+  const was = readFileSync(config, "utf8");
+  writeFileSync(config, '{"extensions": {}}\n');
+  const parts = new Parts(directory, () => {});
+  try {
+    await parts.load();
+    expect(parts.loaded.map((one) => one.name)).not.toContain("todo");
+    writeFileSync(config, was);
+    for (let tries = 0; tries < 200 && !parts.loaded.some((one) => one.name === "todo"); tries++) await Bun.sleep(25);
+    expect(parts.loaded.map((one) => one.name)).toContain("todo");
+  } finally {
+    parts.dispose();
+  }
+});
