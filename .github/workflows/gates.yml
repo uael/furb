@@ -197,10 +197,11 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           t() { s=$(date +%s); "$@" >/dev/null 2>&1; echo "$* took $(( $(date +%s) - s )) s"; }
+          grep -c 'source = "git' Cargo.lock || true
+          du -sh ~/.cargo/registry ~/.cargo/git 2>/dev/null || true
+          t env CARGO_NET_OFFLINE=true cargo metadata --format-version 1 --features typescript --filter-platform "$CARGO_BUILD_TARGET"
+          t env CARGO_NET_OFFLINE=true cargo metadata --format-version 1 --features typescript --filter-platform "$CARGO_BUILD_TARGET"
           t cargo metadata --format-version 1 --features typescript --filter-platform "$CARGO_BUILD_TARGET"
-          t cargo metadata --format-version 1 --features typescript --filter-platform "$CARGO_BUILD_TARGET"
-          CARGO_NET_OFFLINE=true t cargo metadata --format-version 1 --features typescript --filter-platform "$CARGO_BUILD_TARGET"
-          t cargo metadata --format-version 1 --features typescript --filter-platform "$CARGO_BUILD_TARGET" --locked --offline
           t bun x --no-install napi --version
           t cargo --version
       # The job of the crate runs the clippy and the tests of the crate with this feature on Windows and on macOS, and
