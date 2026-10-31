@@ -655,10 +655,7 @@ async function attach(
           link.host.emit("fault", new Error(why));
           return;
         }
-        if (!link.closed && first && !reaching)
-          reaching = again().finally(() => {
-            reaching = undefined;
-          });
+        if (!link.closed && first) void reconnect();
       });
       held.on("error", () => {});
       // A host that ends its side of the socket ends it whole: bun closes no socket whose peer ended while a write of
@@ -723,6 +720,12 @@ async function attach(
       }
     }
   };
+  /** The one reach of the host that is under way: a drop of the link and a reopen that come together join it, since
+   * two reaches would start two hosts, which write one file of faults, and one reach would read the fault of the other. */
+  const reconnect = (): Promise<void> =>
+    (reaching ??= again().finally(() => {
+      reaching = undefined;
+    }));
   /** The end of the host by force: the window lets the life go, ends the process of the host, and removes what the
    * host left. The window does this when the host does not answer, and no end of the life reaches it. */
   const stop = async (): Promise<void> => {
@@ -759,7 +762,7 @@ async function attach(
     link.send = undefined;
     old?.destroy();
     link.revive();
-    await again();
+    await reconnect();
     if (!link.closed) link.host.emit("reset");
   };
   try {
