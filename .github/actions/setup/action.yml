@@ -29,6 +29,9 @@ inputs:
 runs:
   using: composite
   steps:
+    # Windows Defender scans each file that the job reads or writes. With these folders excluded, the steps that touch
+    # many files took less time: in three runs the bindings and the TUI took 227 to 232 s, against a median of 328 to
+    # 364 s on main.
     - if: runner.os == 'Windows'
       shell: pwsh
       run: |
