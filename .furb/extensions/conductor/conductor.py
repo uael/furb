@@ -39,7 +39,7 @@ from furb.engine import (
 )
 
 CONDUCTING = """Conduct the work in one loop, and plan no further than the next step.
-Put each item in queue as (key, brief, thread), or in backlog to wait behind queue, then await conduct(). Each round tends the workers and the open PRs, hires a worker for each item, cap() at once, and waits every seconds or until a worker ends. It hires no item of a family of model while an open PR in trouble has no worker and needs one of that family. So the fixers take the free slots of their family first, the round merges before it starts new work there, and each other family hires on its own room. It tells you once when such a PR waits for a fixer whose family has no room at all. It moves the first item of backlog to queue while queue and working hold fewer than cap() items.
+Put each item in queue as (key, brief, thread), or in backlog to wait behind queue, then await conduct(). Each round tends the workers and the open PRs, hires a worker for each item, cap() at once, and waits every seconds or until a worker ends. It hires no item of a family of model while an open PR in trouble has no worker and needs one of that family. A PR in trouble takes the first model of HANDOVER, the model of its maker, limits["fixer"] and ACTOR that has room, so it waits only when no family has room. So the fixers take the free slots of their family first, the round merges before it starts new work there, and each other family hires on its own room. It tells you once when such a PR waits for a fixer whose family has no room at all. It moves the first item of backlog to queue while queue and working hold fewer than cap() items.
 When you find a defect, a wrong state or a gap in your own work, or the owner points at one, fix the state at once, then make its durable fix at once: a PR, through patch() for the word of the conductor, or an item at the head of the queue. Never keep it as a note for later, and never fix it only with a live patch. When a message of the owner asks whether a state is right, that is a sign that it is not: read the whole state, list each thing that is off, fix all of them in one go, read the state again to verify it, and do this again until nothing is off. Only then report, with what you verified.
 The owner rules, on 10-23: "this kind of item should be done by sonnet, not opus. You need to use Sonnet more, when it make sense. And opus/medium should be your default, not opus/high. opus/high is kinda the max, xhigh for the coordination and my rulings only. most of the time sonnet/{medium,high} and opus/high are perfect." So a debrief asks the model of its worker, and a worker runs efforts[key], or the model of its kind. An item has a kind, kinds[key], by the ruling of the owner on 10-28 on dedicated audit and edit workers: audit reads and writes a register in scratch, with no worktree and no PR, on ACTOR, opus/medium, with the brief AUDIT; edit makes a worktree and a PR, on EDITOR, sonnet/high, with the brief WORKER; fix mends one red PR on limits["fixer"]. An item with no kind is a fix when its key is fixN or boxN, else an edit. An auditor that ends with 0 and its report is a line in the next notice, and each row of the table | Dn | key | model | area | brief | in its register is queued once as the item triage-<key>, at the end of queue, on the model of its row. A fixer (fixN, boxN) runs on limits["fixer"], sonnet/high, by the ruling of the operator. A worker runs only a model of MODELS: sonnet/medium, sonnet/high, opus/medium or opus/high. hire() refuses xhigh and max, and the round starts no item that asks for one and tells you. You choose sonnet for an item where it makes sense, as efforts[key] = "claude-cli:sonnet/medium" before you queue it.
 The owner rules again, on 10-23: "From now on: 2 opus workers, 3 sonnet ones. max." The owner rules again, on 10-26: "add one opus/high worker for the most complex stuff". So limits["room"] gives the room of each family of model: the round runs at most 1 worker on opus/medium, 3 on sonnet and 1 on opus/high at once, by the ruling of the operator, and counts only the workers whose prompt is not over. limits lives in the state of the round, so a reload of the extension keeps it: you change it there, as limits["room"]["opus"] = 2, and cap() gives the sum of the room. You give opus/high only to the most complex items, as efforts[key] = "claude-cli:opus/high". An item whose model has no room keeps its place in queue while the next item whose model has room starts. A fixer goes before a new item. A worker that ended and whose PR needs a fixer goes on in its own chain on HANDOVER, sonnet, with a new prompt there, when sonnet has room, else on the model of its last prompt when that has room; else a fixer starts on limits["fixer"].
@@ -661,8 +661,8 @@ def follow() -> str:
   return here
 
 
-def hire(key: str, what: str, thread: str = "", brief: str = "") -> str:
-  model = model_of(key)
+def hire(key: str, what: str, thread: str = "", brief: str = "", model: str = "") -> str:
+  model = model or model_of(key)
   if model not in MODELS:
     raise Refused(
       f"{key} asks {model}, and a worker runs only {', '.join(MODELS)}: xhigh and max stay for the coordination and the rulings of the owner"
@@ -1107,10 +1107,9 @@ def handing(pr: dict) -> bool:
 
 
 def mender(pr: dict) -> str:
-  if not handing(pr):
-    return limits["fixer"]
   last = next((name for name, _ in reversed(ends.get(maker_key(pr), []))), "")
-  return next((m for m in (HANDOVER, models.get(last, "")) if room(m)), HANDOVER)
+  options = [*((HANDOVER, models.get(last, "")) if handing(pr) else ()), limits["fixer"], ACTOR]
+  return next((m for m in options if room(m)), options[0])
 
 
 async def mend(pr: dict, now: float, red: bool) -> str:
@@ -1201,6 +1200,8 @@ async def mend(pr: dict, now: float, red: bool) -> str:
       who = resume(label, homes[label], onto, said + " of the PR, and your report in 200 words at most.")
   elif can(key):
     who = hire(key, "", thread, brief)
+  elif not efforts.get(key) and room(mender(pr)):
+    who = hire(key, "", thread, brief, mender(pr))
   if who:
     tries = turn.get("tries", 0) + 1
     assigned[n] = {"sha": sha, "who": who, "at": now, "fixer": True, "maker": turn.get("maker", ""), "tries": tries}
