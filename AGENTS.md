@@ -250,6 +250,8 @@ fix what your change broke, and report what was broken before.
 - `uv run pytest -q`: the suite on both engines, with the coverage of `furb` and of `furb_monty`, which must be
   whole.
 - `uv run pytest -q test/test_hygiene.py`: the hygiene laws alone.
+  `addopts` in `pyproject.toml` holds `-n auto`, so `-p no:xdist` fails with an unrecognized argument. Run the
+  suite in one process with `-n0`, as `uv run pytest -q -n0 <path>`.
 - `uv run python script/tokens.py`: the cost of the minified engine and of `DOCTRINE.md` in tokens of `o200k_base`,
   against their walls, from the code of law 5 and in seconds. It builds nothing: it counts the newest minified engine
   that is the program of `engine.py`, from the installed `furb_monty` or a `system.py` in `target`, and when none is, it
