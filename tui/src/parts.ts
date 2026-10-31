@@ -17,6 +17,7 @@ import type { Compaction } from "furb/life";
 import * as model from "furb/life";
 import { commands } from "./commands.ts";
 import { openFile } from "./editor.ts";
+import { expandHome } from "./files.ts";
 
 /** The tone of a run of text, which the theme colors. */
 export type Tone = "text" | "muted" | "faint" | "accent" | "success" | "warning" | "danger";
@@ -375,7 +376,7 @@ export class Parts {
       this.heardWrites.add(act.id);
       const path = (act.words[0] as { path?: unknown } | null)?.path;
       if (typeof path !== "string") continue;
-      const at = resolve(this.project, path);
+      const at = resolve(this.project, expandHome(path));
       const inside = (folder: string) => {
         const way = relative(folder, at);
         return !way.startsWith("..") && !isAbsolute(way);

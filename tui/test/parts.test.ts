@@ -9,8 +9,8 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { join, relative, resolve } from "node:path";
 import type { LiveAct } from "furb";
 import { demoSession } from "../src/demo.ts";
 import { loadPart, Parts, plainError, type Seen, summary } from "../src/parts.ts";
@@ -707,6 +707,22 @@ test("a part loads again when its file changes though its watcher says nothing",
     writeFileSync(file, PART.replace('"Todo"', '"Todo list"'));
     for (let tries = 0; tries < 200 && parts.version === version; tries++) await Bun.sleep(25);
     expect(parts.loaded.find((one) => one.name === "todo")?.panels[0]?.name).toBe("Todo list");
+  } finally {
+    parts.dispose();
+  }
+});
+
+test("a write of the life whose path starts with ~ and lands in .furb loads the parts again", async () => {
+  const { directory } = project();
+  const parts = new Parts(directory, () => {});
+  try {
+    await parts.load();
+    const version = parts.version;
+    const path = `~/${relative(homedir(), join(directory, ".furb", "config.json"))}`;
+    const write = { kind: "write", id: "write1", done: true, words: [{ path }] };
+    parts.heard([write] as unknown as Parameters<Parts["heard"]>[0]);
+    for (let tries = 0; tries < 200 && parts.version === version; tries++) await Bun.sleep(25);
+    expect(parts.version).toBe(version + 1);
   } finally {
     parts.dispose();
   }
