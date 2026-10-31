@@ -155,6 +155,21 @@ def quoted(word: str, n: int, why: str) -> str:
   return f"line {n}: {why}, in {cut!r}" if cut else f"line {n}: {why}"
 
 
+DASHES = ("--", "---", "\u2013", "\u2014")
+"""DASHES are the marks that stand alone between the words of prose and that no python line holds, since a lone - is a
+minus."""
+
+
+def worded(word: str) -> bool:
+  """Whether a word of a line reads as a word of prose: letters with a mark of punctuation or of a quote at its edges and
+  an apostrophe, a hyphen or a dash between letters, a word that holds a backtick, or a dash that stands alone."""
+  if "`" in word or word in DASHES:
+    return True
+  return all(
+    part.isalpha() for part in re.split("['\u2019\\-\u2013\u2014]", word.strip(".,:;!?'\"\u2019\u201c\u201d()*_"))
+  )
+
+
 def stray(line: str) -> str:
   """What a line is that is no python a model means: a fence of markdown, the markup of a tool call, or a sentence of
   prose, and nothing for any other line."""
@@ -164,7 +179,7 @@ def stray(line: str) -> str:
     return "a fence"
   if text.startswith("<") and not text.startswith(("<s:", "</s:")):
     return "markup"
-  prose = len(words) >= PROSE and words[0][:1].isupper() and all(w.strip(".,:;!?'").isalpha() for w in words)
+  prose = len(words) >= PROSE and words[0][:1].isupper() and all(map(worded, words))
   return "prose" if prose else ""
 
 
