@@ -41,7 +41,7 @@ CONDUCTING = """Conduct the work in one loop, and plan no further than the next 
 Put each item in queue as (key, brief, thread), or in backlog to wait behind queue, then await conduct(). Each round tends the workers and the open PRs, hires a worker for each item, cap() at once, and waits every seconds or until a worker ends. It hires no item of a family of model while an open PR in trouble has no worker and needs one of that family. So the fixers take the free slots of their family first, the round merges before it starts new work there, and each other family hires on its own room. It tells you once when such a PR waits for a fixer whose family has no room at all. It moves the first item of backlog to queue while queue and working hold fewer than cap() items.
 When you find a defect, a wrong state or a gap in your own work, or the owner points at one, fix the state at once, then make its durable fix at once: a PR, through patch() for the word of the conductor, or an item at the head of the queue. Never keep it as a note for later, and never fix it only with a live patch. When a message of the owner asks whether a state is right, that is a sign that it is not: read the whole state, list each thing that is off, fix all of them in one go, read the state again to verify it, and do this again until nothing is off. Only then report, with what you verified.
 The owner rules, on 10-23: "this kind of item should be done by sonnet, not opus. You need to use Sonnet more, when it make sense. And opus/medium should be your default, not opus/high. opus/high is kinda the max, xhigh for the coordination and my rulings only. most of the time sonnet/{medium,high} and opus/high are perfect." So a debrief asks the model of its worker, and a worker runs efforts[key], or the model of its kind. An item has a kind, kinds[key], by the ruling of the owner on 10-28 on dedicated audit and edit workers: audit reads and writes a register in scratch, with no worktree and no PR, on ACTOR, opus/medium, with the brief AUDIT; edit makes a worktree and a PR, on EDITOR, sonnet/high, with the brief WORKER; fix mends one red PR on limits["fixer"]. An item with no kind is a fix when its key is fixN or boxN, else an edit. An auditor that ends with 0 and its report is a line in the next notice. A fixer (fixN, boxN) runs on limits["fixer"], sonnet/high, by the ruling of the operator. A worker runs only a model of MODELS: sonnet/medium, sonnet/high, opus/medium or opus/high. hire() refuses xhigh and max, and the round starts no item that asks for one and tells you. You choose sonnet for an item where it makes sense, as efforts[key] = "claude-cli:sonnet/medium" before you queue it.
-The owner rules again, on 10-23: "From now on: 2 opus workers, 3 sonnet ones. max." The owner rules again, on 10-26: "add one opus/high worker for the most complex stuff". So limits["room"] gives the room of each family of model: the round runs at most 1 worker on opus/medium, 3 on sonnet and 1 on opus/high at once, by the ruling of the operator, and counts only the workers whose prompt is not over. limits lives in the state of the round, so a reload of the extension keeps it: you change it there, as limits["room"]["opus"] = 2, and cap() gives the sum of the room. You give opus/high only to the most complex items, as efforts[key] = "claude-cli:opus/high". An item whose model has no room keeps its place in queue while the next item whose model has room starts. A fixer goes before a new item. A worker that ended and whose PR needs a fixer goes on in its own chain on HANDOVER, sonnet, with a new prompt there, when sonnet has room; else a fixer starts on limits["fixer"].
+The owner rules again, on 10-23: "From now on: 2 opus workers, 3 sonnet ones. max." The owner rules again, on 10-26: "add one opus/high worker for the most complex stuff". So limits["room"] gives the room of each family of model: the round runs at most 1 worker on opus/medium, 3 on sonnet and 1 on opus/high at once, by the ruling of the operator, and counts only the workers whose prompt is not over. limits lives in the state of the round, so a reload of the extension keeps it: you change it there, as limits["room"]["opus"] = 2, and cap() gives the sum of the room. You give opus/high only to the most complex items, as efforts[key] = "claude-cli:opus/high". An item whose model has no room keeps its place in queue while the next item whose model has room starts. A fixer goes before a new item. A worker that ended and whose PR needs a fixer goes on in its own chain on HANDOVER, sonnet, with a new prompt there, when sonnet has room, else on the model of its last prompt when that has room; else a fixer starts on limits["fixer"].
 The round runs on one chain, lead["home"]. After a compaction of your chain, await conduct() in the new chain: it names that chain, the round of the old chain ends at its next wake, and the state that the round reads is the state of the new chain, which you change there.
 A fault of one step of a round, as an empty answer of gh, ends no round: the round tells you once each kind of fault, with the fault and its step, and goes on at the next round. Each json.loads of a command reads its output only when the command succeeded. When the round ends for any cause but a new home, it tells you as a decision, with the cause and what stops.
 hire(key, brief, thread) gives the item to an idle worker of the pool, by the ideas of the owner on 10-28, when one fits: a worker that ended stays in pool under its chain, with its model, its thread and the top folders of the files of its PR, and it takes an item of the same model whose thread is its own, or whose areas[key] names one of its folders, while its last reply filled under half of its window. Else hire starts a worker on a new chain that forks the base chain of its kind and model, bases["kind model"], which the round makes once and which reads AGENTS.md, so the provider serves that prefix from its cache. It starts the worker at model_of(key), on a chain labeled thread/key, with the brief in custom or the brief of its kind, and the PR of an edit carries the labels w:key and thread:thread.
@@ -1009,9 +1009,20 @@ def spent(pr: dict) -> bool:
   return held.get("sha") == pr["sha"] and held.get("tries", 0) >= 2
 
 
+def maker_key(pr: dict) -> str:
+  return next((m[2:] for m in pr["labels"] if m.startswith("w:")), "")
+
+
+def handing(pr: dict) -> bool:
+  maker = maker_key(pr)
+  return bool(homes.get(maker)) and maker not in working.values()
+
+
 def mender(pr: dict) -> str:
-  maker = next((m[2:] for m in pr["labels"] if m.startswith("w:")), "")
-  return HANDOVER if homes.get(maker) and maker not in working.values() else limits["fixer"]
+  if not handing(pr):
+    return limits["fixer"]
+  last = next((name for name, _ in reversed(ends.get(maker_key(pr), []))), "")
+  return next((m for m in (HANDOVER, models.get(last, "")) if room(m)), HANDOVER)
 
 
 async def mend(pr: dict, now: float, red: bool) -> str:
@@ -1095,10 +1106,11 @@ async def mend(pr: dict, now: float, red: bool) -> str:
     return state
   label = next((m[2:] for m in pr["labels"] if m.startswith("w:")), "")
   who = ""
-  if mender(pr) == HANDOVER:
-    if room(HANDOVER):
-      said = f"Your work on this chain goes on, now on {HANDOVER}. {order} {{workspace}} Close with a tuple: the number"
-      who = resume(label, homes[label], HANDOVER, said + " of the PR, and your report in 200 words at most.")
+  if handing(pr):
+    onto = mender(pr)
+    if room(onto):
+      said = f"Your work on this chain goes on, now on {onto}. {order} {{workspace}} Close with a tuple: the number"
+      who = resume(label, homes[label], onto, said + " of the PR, and your report in 200 words at most.")
   elif can(key):
     who = hire(key, "", thread, brief)
   if who:

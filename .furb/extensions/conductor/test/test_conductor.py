@@ -1030,6 +1030,31 @@ async def test_an_ended_worker_goes_on_in_its_own_chain_on_sonnet(conductor: Rou
   assert len(conductor.prompts) == 1
 
 
+@POSIX
+@JQ
+async def test_an_ended_worker_goes_on_on_its_own_model_when_sonnet_has_no_room(conductor: Round) -> None:
+  conductor.homes["k8"] = "chain7"
+  conductor.ends["k8"] = [("p9", 0)]
+  conductor.models["p9"] = OPUS
+  pr = conductor.pr(n=8, open=["- [ ] It is one change."], labels=["w:k8"])
+  assert conductor.mender(pr) == SONNET
+  for index, key in enumerate("abc"):
+    conductor.busy(f"p{index}", key, SONNET)
+  conductor.busy("p4", "e", OPUS)
+  assert conductor.mender(pr) == SONNET
+  conductor.done["p4"] = None
+  assert conductor.mender(pr) == OPUS
+  await conductor.mend(pr, 0.0, False)
+  assert conductor.hired == []
+  assert conductor.rungs == [(f"actor = {OPUS!r}", "chain7")]
+  assert conductor.targets == [OPUS]
+  message, on = conductor.prompts[0]
+  assert on == "chain7"
+  assert message.startswith(f"Your work on this chain goes on, now on {OPUS}. Your open PR #8")
+  name = next(name for name, key in conductor.working.items() if key == "k8")
+  assert conductor.models[name] == OPUS
+
+
 def test_the_round_follows_the_compaction_of_its_orchestrator(conductor: Round, tmp_path: Path) -> None:
   (tmp_path / "new").mkdir()
   new = Round(tmp_path / "new", "chain2", conductor.modules)
