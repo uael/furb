@@ -228,6 +228,11 @@ pub(crate) fn read(at: &Path) -> Result<Text, Fault> {
 /// back. A file that is no text of utf-8 and is an image gives what `seen` says.
 pub(super) fn text(at: &Path, name: String, gallery: Option<&Path>) -> Result<Text, Fault> {
   let info = fs::metadata(at).map_err(|no| failed(&no, &name))?;
+  if info.is_dir() {
+    return Err(Fault::refused(format!(
+      "Read needs a text file, and {name} is a directory: await bash(\"ls {name}\") lists it"
+    )));
+  }
   if !info.is_file() {
     return Err(Fault::refused(format!("Read needs a text file: {name}")));
   }
