@@ -208,6 +208,8 @@ file that its build reads changed, which the `cache-keys` of its `pyproject.toml
 python that the crate carries, and the extensions. So a change of `src/furb/engine.py` reaches the suite at the next
 `uv run`, after a build of a few seconds, and a short command can take minutes. To run with no sync, which builds
 nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
+A worktree holds no `.venv`: run one test file there with the `.venv/bin/python` of the main checkout, as
+`<main>/.venv/bin/python -m pytest -q <file> -p no:cacheprovider --no-cov`, which syncs nothing.
 
 Set the timeout of each command, and the bound of each wait, to about twice the time that the step should take, never a
 round 600 or 900 seconds in case: a ceiling that is too large hides a hang for as long. Make a step that can take
@@ -304,6 +306,8 @@ fix what your change broke, and report what was broken before.
   filter that matches no file fails. `FURB_TEST_OUTPUT=1` shows all that each run wrote. The tests read the configs and
   the cache of `.furb/tests` of the root, from any folder, not those of the machine. As root, the test of a folder that cannot be read fails, since
   root reads every folder.
+  A script of bun in `$TMPDIR` cannot import the package `furb`, so write a quick check in the worktree, where
+  `node_modules` stands.
 - `bun run demo` and `bun run tui`: the TUI on the demo session, which asks no model, or on a real life.
 - `bun run docs`: write the tables of keys and commands in `tui/README.md` again from `tui/src/keys.ts` and
   `tui/src/commands.ts`.
