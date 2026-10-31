@@ -59,6 +59,7 @@ An ear speaks by yielding a saying, and the work it began speaks later by say, u
 The chain has the gate read every rung but the ones it wrote itself, and the Kernel begin every rung, by the acts gate and run.
 The Kernel takes a run as that run, begins its word in the module of the chain when it hears that it took it, makes a wants as the run when the word waits for an act that is not done, carries the word on at the done of that wants, and says the run done with what the word gave.
 The Kernel sets the site to the rung whose word it steps, for as long as it steps it, so what the word says is said by that rung.
+The Kernel holds the run of the word of a turn of a model, once that word is over, while a command that the word started and did not await is open, for 30 seconds at the most, by a wait that the run makes, so the chain tells what the command gave before it asks the next reply.
 """
 
 type Show = Callable[[list[str]], list[int]]

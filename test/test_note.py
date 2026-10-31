@@ -140,17 +140,21 @@ async def test_a_statement_that_a_paragraph_shows_binds_the_name_of_an_act_in_th
   """A statement or a quote that a paragraph shows binds its name in the chain, and a comment binds nothing."""
   sand, log, root = born("x = bash('echo hi')", "close((await bash1).code)", auto=False)
   asking = engine.prompt(int, "run it\nnow", on=root)
-  while "rung2" not in [a[4] for a in said(log, "run")]:
+  while "bash1" not in [a[1] for a in said(log, "bash")]:
     await settle()
   sand.exits("bash1", 0)
   assert await asking == 0
   own = [a[5] for a in said(log, "run") if a[4].endswith("_told")]
   asked = "#prompt1\n<s:prompt1_message>\nrun it\nnow</s:prompt1_message>\nprompt1: Act[int] = Act('prompt1')"
-  told = ["#bash1\nbash1_command = 'echo hi'\nbash1: Act[Exit] = Act('bash1')", "#rung2 advance on prompt1"]
+  told = [
+    "#bash1\nbash1_command = 'echo hi'\nbash1: Act[Exit] = Act('bash1')",
+    "#bash1 exited 0",
+    "#rung2 advance on prompt1",
+  ]
   words = ["\n\n".join([opened(root, "root"), asked, "#rung1 advance on prompt1"]), "\n\n".join(told)]
   assert own == [engine.unquoted(word) for word in words]
   shown = "\n\n".join(paragraphs(engine.turns(on=root)))
-  assert shown == "\n\n".join([*words, "#bash1 exited 0"])
+  assert shown == "\n\n".join(words)
   assert engine.module(root)["bash1"] == "bash1"
   assert engine.module(root)["prompt1_message"] == "run it\nnow"
   _, _, fixed = born(

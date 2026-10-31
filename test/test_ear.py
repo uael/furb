@@ -19,6 +19,7 @@ from conftest import (
   fresh,
   life,
   machine,
+  paragraphs,
   prompted,
   ran,
   said,
@@ -205,6 +206,29 @@ async def test_the_kernel_sets_the_site_to_the_rung_whose_word_it_steps() -> Non
   _, log, root = born("x = bash('echo hi')\nclose((await x).code)")
   assert await engine.prompt(int, "run it", on=root) == 0
   assert [(one[1], one[2]) for one in said(log, "bash")] == [("bash1", "rung1")] and engine.site.get() == OPERATOR
+
+
+async def test_the_kernel_holds_the_run_of_a_word_while_a_command_that_it_did_not_await_is_open() -> None:
+  """The Kernel holds the run of the word of a turn of a model, once that word is over, while a command that the word started and did not await is open, for 30 seconds at the most, by a wait that the run makes, so the chain tells what the command gave before it asks the next reply."""
+  sand, log, root = born("x = bash('slow')", "close(1)", "y = bash('slow')", auto=False)
+  asking = engine.prompt(int, "run it", on=root)
+  while "bash1" not in [a[1] for a in said(log, "bash")]:
+    await settle()
+  await settle()
+  assert [(a[1], a[2], a[4:]) for a in said(log, "wait")] == [("wait1", "run2", (30.0, "bash1"))]
+  assert engine.peek("run2", ...) is ... and len(said(log, "reply")) == 1
+  sand.exits("bash1", 0)
+  assert await asking == 1
+  told = [one.split("\n")[0] for one in paragraphs(engine.turns(on=root))]
+  assert told[told.index("#bash1 exited 0") + 1] == "#rung2 advance on prompt1"
+  again = engine.prompt(int, "run more", on=root)
+  while "bash2" not in [a[1] for a in said(log, "bash")]:
+    await settle()
+  await settle()
+  (held,) = [a[1] for a in said(log, "rung") if a[2] == again]
+  engine.cancel(held)
+  await settle()
+  assert [engine.peek(a[1], ...) for a in said(log, "run") if a[4] == held] == [None]
 
 
 async def test_the_opening_of_a_life_gives_the_world_the_scratch_directory_of_its_record(tmp_path: Path) -> None:
