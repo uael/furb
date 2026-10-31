@@ -1800,7 +1800,7 @@ def test_an_issue_that_an_open_pr_names_is_not_queued_and_is_looked_at_again(con
   assert [key for key, _, _ in conductor.queue] == ["issue394"]
 
 
-def says_comment(conductor: Round, labels: list[str]) -> None:
+def says_comment(conductor: Round, labels: list[str], body: str = "Fix this.") -> None:
   conductor.prs[7] = conductor.pr(n=7, labels=labels)
   conductor.say(r"pr list", json.dumps([{"number": 7}]))
   comment = {
@@ -1810,7 +1810,7 @@ def says_comment(conductor: Round, labels: list[str]) -> None:
     "reactions": {"+1": 0},
     "path": "a.py",
     "line": 3,
-    "body": "Fix this.",
+    "body": body,
   }
   conductor.say(r"pulls/7/comments", json.dumps([comment]))
 
@@ -3518,3 +3518,14 @@ def test_the_namespace_of_the_round_binds_each_name_that_the_words_use(conductor
       elif isinstance(node, (ast.Import, ast.ImportFrom)):
         bound |= {(x.asname or x.name).split(".")[0] for x in node.names}
   assert sorted(used - bound - set(conductor.ns)) == []
+
+
+@POSIX
+@JQ
+def test_a_comment_that_the_round_marked_is_no_comment_of_the_owner(conductor: Round) -> None:
+  says_comment(conductor, ["w:k7", "hold:owner-review"], "Status of the round.\n\n<!-- furb:round -->")
+  conductor.busy("p1", "k7", SONNET)
+  asyncio.run(conductor.review(False))
+  assert conductor.prompts == []
+  assert "pr edit 7 --add-label hold" not in conductor.log()
+  assert "c55" in conductor.ns["comments"]
