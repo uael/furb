@@ -1553,8 +1553,10 @@ Title: {title}
 
 {body}
 
-Read the issue whole with its comments first: gh issue view {n} --comments. Do what it asks. When it asks for a change, open the PR with Fixes #{n} in its body, so that the merge closes the issue. When it asks a question or a decision and no change, answer it in a comment on the issue, and close with that answer."""
+Read the issue whole with its comments first: gh issue view {n} --json title,body,comments, since --comments alone can print the comments and not the body. Check on origin/main that the issue still holds: git log origin/main --grep "#{n}" and the PRs below, when any, show what is done already. When it is done, answer in a comment that starts with 🤖 and close with 0. Do what it asks. When it asks for a change, open the PR with Fixes #{n} in its body, so that the merge closes the issue. When it asks a question or a decision and no change, answer it in a comment on the issue, and close with that answer."""
 
+ISSUE_BODY = 6000
+NAMING = r"""gh pr list --state all --limit 50 --search "{n} in:body" --json number,title,state,body --jq '[.[] | select((.body // "") | test("#{n}([^0-9]|$)")) | "#\(.number) \(.state) \(.title)"] | .[]'"""
 handled: set[str] = globals().setdefault("handled", set())
 ends: dict[str, list[tuple[str, int]]] = globals().setdefault("ends", {})
 requeued: set[str] = globals().setdefault("requeued", set())
@@ -1581,9 +1583,19 @@ async def take_issues() -> None:
     handled.add(key)
     if taken(key) or any(q[0] == key for q in backlog) or any(f"w:{key}" in pr["labels"] for pr in prs.values()):
       continue
+    got = await bash(NAMING.replace("{n}", str(it["n"])), show=HIDDEN, timeout=120)
+    named = [x for x in got.stdout.lines if x.strip()] if got.code == 0 else []
+    if any(" OPEN " in x for x in named):
+      handled.discard(key)
+      continue
     requeued.update(fresh)
     brief = ISSUE.replace("{n}", str(it["n"])).replace("{url}", it["url"]).replace("{title}", it["title"])
-    brief = brief.replace("{body}", body[:6000])
+    shown = body[:ISSUE_BODY]
+    if body[ISSUE_BODY:]:
+      shown += f"\n\n[The body is cut here, at {ISSUE_BODY} of {len(body)} characters. Read the rest with gh issue view {it['n']} --json body --jq .body.]"
+    brief = brief.replace("{body}", shown)
+    if named:
+      brief += "\n\nThe PRs that name this issue (read what main holds of them before you change a line):\n" + "\n".join(f"  {x}" for x in named[:10])
     if fresh:
       listed = ", ".join(f"#{n}" for _, n in ends[key] if n)
       brief += "\n\n" + AGAIN.replace("{prs}", listed).replace("{n}", str(it["n"]))

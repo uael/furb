@@ -1576,6 +1576,39 @@ def test_an_issue_that_starts_with_a_mark_is_queued_once_the_owner_puts_a_thumb_
   assert "issue574" in conductor.handled
 
 
+def named_issue(body: str = "b") -> dict:
+  return {"number": 394, "title": "T", "body": body, "author": {"login": "uael"}, "assignees": [], "labels": [], "url": "u"}
+
+
+@POSIX
+@JQ
+def test_an_issue_brief_names_the_prs_that_name_the_issue_and_marks_a_cut_body(conductor: Round) -> None:
+  conductor.say(r"issue list", json.dumps([named_issue("x" * 6100)]))
+  merged = [
+    {"number": 575, "title": "feat(x): Add y", "state": "MERGED", "body": "🤖 Part of #394."},
+    {"number": 9, "title": "other", "state": "MERGED", "body": "It names #3940 only."},
+  ]
+  conductor.say(r"pr list --state all", json.dumps(merged))
+  asyncio.run(conductor.take_issues())
+  [(key, brief, _)] = conductor.queue
+  assert key == "issue394" and "  #575 MERGED feat(x): Add y" in brief and "#9 MERGED" not in brief
+  assert "The body is cut here, at 6000 of 6100 characters" in brief and "--json body --jq .body" in brief
+  assert "gh issue view 394 --json title,body,comments" in brief and 'git log origin/main --grep "#394"' in brief
+
+
+@POSIX
+@JQ
+def test_an_issue_that_an_open_pr_names_is_not_queued_and_is_looked_at_again(conductor: Round) -> None:
+  conductor.say(r"issue list", json.dumps([named_issue()]))
+  conductor.say(r"pr list --state all", json.dumps([{"number": 570, "title": "T", "state": "OPEN", "body": "Fixes #394"}]))
+  asyncio.run(conductor.take_issues())
+  assert conductor.queue == [] and "issue394" not in conductor.handled
+  conductor.says.pop()
+  conductor.say(r"pr list --state all", json.dumps([{"number": 570, "title": "T", "state": "MERGED", "body": "Fixes #394"}]))
+  asyncio.run(conductor.take_issues())
+  assert [key for key, _, _ in conductor.queue] == ["issue394"]
+
+
 NOT_FOUND = '{"message":"Not Found","documentation_url":"https://docs.github.com/rest","status":"404"}'
 
 
