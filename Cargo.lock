@@ -1555,6 +1555,7 @@ dependencies = [
  "rig-vertexai",
  "ruff_python_ast 0.0.9",
  "ruff_python_parser 0.0.9",
+ "ruff_python_stdlib",
  "ruff_text_size 0.0.9",
  "rusqlite",
  "rustix",
