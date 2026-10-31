@@ -3,7 +3,7 @@
 // changes what they share, such as the environment or the clock. A first run of each file, which matches no name,
 // lists its tests. Then the tests of all the files go into runs of at most one size, about four runs for each core,
 // the runs of the largest files first. Twice as many runs go at once as the machine has cores, since a test waits for
-// its session as much as it works. A word given filters the files by their path, and a flag goes to each run. A test
+// its session as much as it works. A word given filters the files by their path, or by the name of their package and their file, as tui/host, and a flag goes to each run. A test
 // that passes shows its line, a run that fails shows all that it wrote, and one failed run fails them all. The
 // last line counts the tests that passed and failed, and a filter that matches no file fails. FURB_TEST_OUTPUT=1
 // shows all that each run wrote, so a console.log in a test shows too. Each
@@ -18,8 +18,17 @@ const given = process.argv.slice(2);
 const flags = given.filter((one) => one.startsWith("-"));
 const filters = given.filter((one) => !one.startsWith("-"));
 const files = ["bind/typescript/test", "tui/test", "gui/test"]
-  .flatMap((root) => [...new Glob("**/*.test.ts").scanSync(root)].map((file) => `./${root}/${file}`))
-  .filter((file) => filters.length === 0 || filters.some((filter) => file.includes(filter)))
+  .flatMap((root) =>
+    [...new Glob("**/*.test.ts").scanSync(root)].map((file) => ({
+      path: `./${root}/${file}`,
+      named: `${root.slice(0, -"/test".length)}/${file}`,
+    })),
+  )
+  .filter(
+    ({ path, named }) =>
+      filters.length === 0 || filters.some((one) => path.includes(one) || named.includes(one)),
+  )
+  .map(({ path }) => path)
   .sort((one, other) => Bun.file(other).size - Bun.file(one).size);
 if (files.length === 0) {
   console.log(`0 pass, 0 fail: no test file matches ${filters.join(" ")}`);
