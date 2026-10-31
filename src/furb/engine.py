@@ -287,7 +287,18 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
       )
     ladder = {x: w for x, w in program(source or id).items() if over(x) or not get(x)}
     yield "started", id
-    top = opened(id, "Never", label=label, source=source)
+
+    def opening():
+      return opened(
+        id,
+        "Never",
+        label=label,
+        source=source,
+        actor=stood * (not source),
+        actor_via=(not source) * (get(id)[3] or "stand") or None,
+      )
+
+    top = opening()
     if last and (source or not last[3:]):
       yield top
       top = ""
@@ -302,6 +313,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
           was, last = last, standing()
           if last[2:3] != was[2:3]:
             stood = module()["actor"] = last[2]
+            top = top and opening()
           if not was:
             yield ("tell", id, ["chain()"]) if last[3:] else top
             top *= bool(last[3:])
