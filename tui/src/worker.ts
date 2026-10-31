@@ -7,6 +7,7 @@ import { type Compaction, type Measure, measureOf } from "furb/life";
 import type { HostState } from "./bridge.ts";
 import { scripts } from "./demo/index.ts";
 import { scripted, transcriptOf } from "./demo/script.ts";
+import { guarded } from "./faults.ts";
 import { expandHome } from "./files.ts";
 import { type EngineOptions, roster } from "./models.ts";
 import { changeProvider } from "./providers.ts";
@@ -102,6 +103,13 @@ const state = () => {
   };
   sentFacts = owner.facts.length;
   self.postMessage({ state: snapshot });
+};
+const sent = guarded(state, (fault) => self.postMessage({ fault }));
+const refresh = () => {
+  timer ??= setTimeout(() => {
+    timer = undefined;
+    sent();
+  }, 20);
 };
 /** What the demo thinks and answers on a later turn, by what the turn says. */
 const replies: [cue: string, thinking: string, answer: string][] = [
@@ -279,11 +287,7 @@ async function answer(data: { target: string; method: string; args: unknown[] })
       // A recorded life follows its file: each fact that a later line adds is heard as the life said it, and the view
       // hears of it as it hears of a life that runs.
       follower = watchFile(options.record, () => {
-        if (recorded.follow())
-          timer ??= setTimeout(() => {
-            timer = undefined;
-            state();
-          }, 20);
+        if (recorded.follow()) refresh();
       });
       return recorded.root;
     }
@@ -330,12 +334,7 @@ async function answer(data: { target: string; method: string; args: unknown[] })
       }),
     );
     opened.on("log", (line: string) => self.postMessage({ log: line }));
-    opened.on("change", () => {
-      timer ??= setTimeout(() => {
-        timer = undefined;
-        state();
-      }, 20);
-    });
+    opened.on("change", refresh);
     return engine.root;
   }
   if (reader) return read(data);
