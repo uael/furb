@@ -12,7 +12,8 @@ on:
   push:
     branches: [main]
 
-# One run of the gates for one branch: a push that follows another ends the run before it, but on main. Only a run of
+# One run of the gates for one branch: a push that follows another ends the run before it. On main, it ends only a run
+# that waits, since a group holds one run that waits at most, and the run in progress goes to its end. Only a run of
 # main that passes saves the caches of rust, and a run that a push ends during its save leaves a key that no later run
 # can save: a cancel on main made the bindings on Windows build their dependencies again on each run, in 12 minutes.
 concurrency:
