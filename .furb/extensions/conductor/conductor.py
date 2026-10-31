@@ -59,7 +59,7 @@ Each round tells you once each fork PR of UPSTREAM that holds the label upstream
 Each round sends each new comment of the owner on a PR or on his issue to the worker that owns it, puts the label hold on that PR, and tells you only the comments that no worker owns. A text on GitHub counts only when the owner wrote it with no 🤖 at its start, or when he put a 👍 on it; each worker starts what it writes there with 🤖.
 Each round sets one status label on each open PR and on each issue of the owner that it took: s:queued, s:working, s:checks, s:red, s:boxes, s:held, s:conflict, s:stacked, s:ready, or s:owner (green, waits for the owner).
 Before it hires, each round folds into one item each queued item that is like an earlier one, by the ruling of the owner on 10-29: the same thread, kind and model, and the same PR or a brief whose long lines are half the same. The earlier item keeps its key and its place, takes the lines of the later one that it lacks, and covers its key, so a flake, an order or a step of converge for it goes to its worker. Each round reads the gates: when the median time of a job in its last five green runs on main passes its budget in .github/budgets.json, which script/budgets.py sets from measures, it queues an item budget-<job>, once until five new runs measure the job; and when the gates fail, then pass on the same commit, it puts each test that failed in the ledger of the flakes, flaky, and at once queues an item flake-<test>, or tells the worker that holds that item. An item names in covering[key] the tests, the measures and the keys of the items of flakes or budgets that it covers, as covering["tui-bench-new-act"] = ["flake-bench-a-new-act-growth"]: taken() gives its worker for each of them, so a flake or a budget that it covers goes to that worker and queues no item.
-Every twelfth round audits the work against its measure, the open items, writes its line in the digest, and tells you the open entries of TOOLING, the most repeated first: turn the worst into the next item. The audit prunes what the work left behind, and loses no work: a worktree of the round whose item is not in working, queue or backlog and whose branch merged, closed, or holds nothing that main lacks, or whose work is all committed and pushed, with its local branch, once its changes that are not committed are a patch and its commits that only this machine holds are a bundle, in the folder of the day in ARCHIVE; a remote branch whose PR closed at its head and that no item names, written first to TRASHED; a scratch directory of a life that no process and no item uses, older than 2 days; and a folder /tmp/furb-* older than 2 days. It tells you what went and the room that df saw freed.
+Every twelfth round audits the work against its measure, the open items, writes its line in the digest, and tells you the open entries of TOOLING, the most repeated first, each with its id: turn the worst into the next item. TOOLING is untracked, so a worker in a worktree cannot read it: put ledger_text(id, ...), the text of the entries that the item names, in its brief. Each entry has a stable id and one state of STATES, and a state of another form moves to its note. The audit prunes what the work left behind, and loses no work: a worktree of the round whose item is not in working, queue or backlog and whose branch merged, closed, or holds nothing that main lacks, or whose work is all committed and pushed, with its local branch, once its changes that are not committed are a patch and its commits that only this machine holds are a bundle, in the folder of the day in ARCHIVE; a remote branch whose PR closed at its head and that no item names, written first to TRASHED; a scratch directory of a life that no process and no item uses, older than 2 days; and a folder /tmp/furb-* older than 2 days. It tells you what went and the room that df saw freed.
 threads() gives the tree of the threads: the brief prompt of each worker and the prompts under it, with their state, their PRs, their queued items and each question that waits.
 debrief(name) asks the chain of a worker that ended for the frictions that it met in furb.
 Each act of the round is made through quietly(verb, ...), so its end wakes nobody: you hear only a notice, and each merge rides on the next one. Make each act that you do not await the same way.
@@ -89,6 +89,7 @@ GREEN = ("SUCCESS", "SKIPPED", "NEUTRAL")
 RUNNING = ("", "PENDING", "QUEUED", "IN_PROGRESS", "WAITING", "REQUESTED", "EXPECTED")
 UPSTREAM = "uael/monty"
 TOOLING = ".furb/tooling.json"
+STATES = ("open", "queued", "closed", "dropped")
 ARCHIVE = ".furb/archive"
 TRASHED = ".furb/trashed-branches.tsv"
 # The module of a chain may hold these names already, with values: a name binds its default only when it is not there.
@@ -1521,7 +1522,7 @@ async def audit(red: bool) -> None:
   news(line[2:])
   pruned = await prune()
   entries = sorted((x for x in ledger() if x.get("state") == "open"), key=lambda x: -int(x.get("count", 1)))
-  flaws = "\n".join(f"- {x.get('count', 1)}x {str(x.get('what', ''))[:300]}" for x in entries[:10]) or "none"
+  flaws = "\n".join(f"- {x['id']} {x.get('count', 1)}x {str(x.get('what', ''))[:300]}" for x in entries[:10]) or "none"
   quietly(
     prompt,
     None,
@@ -1964,7 +1965,19 @@ def ledger() -> list[dict]:
       year = 1970 + int(clock() // 31556952)
       at = day(year, int(old[1]), int(old[2])) * 86400
       x["when"] = str(at if at <= clock() + 172800 else day(year - 1, int(old[1]), int(old[2])) * 86400)
+  for n, x in enumerate(entries):
+    x.setdefault("id", f"e{n}")
+    state = str(x.get("state", "open"))
+    if state not in STATES:
+      x["note"] = state
+      x["state"] = "open" if state.startswith(("open", "watch")) else "closed"
   return entries
+
+
+def ledger_text(*ids: str) -> str:
+  return "\n".join(
+    f"{x['id']} [{x['state']}] {x.get('count', 1)}x {x.get('what', '')}" for x in ledger() if x["id"] in ids
+  )
 
 
 def flaw(*whats: str, source: str = "live", item: str = "") -> None:
@@ -1977,7 +1990,15 @@ def flaw(*whats: str, source: str = "live", item: str = "") -> None:
       same["state"] = "open"
     else:
       entries.append(
-        {"when": str(int(clock())), "source": source, "what": what[:600], "state": "open", "item": item, "count": 1}
+        {
+          "id": f"e{len(entries)}",
+          "when": str(int(clock())),
+          "source": source,
+          "what": what[:600],
+          "state": "open",
+          "item": item,
+          "count": 1,
+        }
       )
   quietly(write, Text(TOOLING, json.dumps(entries, indent=1) + "\n"))
 
