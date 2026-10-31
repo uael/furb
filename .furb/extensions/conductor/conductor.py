@@ -55,7 +55,7 @@ Each sweep puts each open PR of the round in one state of a table: green, runnin
 The round merges each green PR into main from the lowest number when git merges it with main clean and no file that a gate sums (SERIAL: the engine under its wall of tokens, the budgets) changed both in it and on main since its branch forked, after it moves the PRs that stack on it onto main and rebases each there with git rebase --onto from the head that it held of the PR that merged, in a scratch worktree, and pushes it with --force-with-lease (a rebase that conflicts is left to the fixer); else it updates the branch, and only when main is green.
 The label paused takes a PR out of the round. A draft, the label hold or hold:owner-review, a review that waits for its fix, and the label owner-merge, until the owner takes it off as his approval, keep a PR from a merge.
 A notice wakes you only for a decision, with the context that it needs: each event that needs none, as a worker that ends with a PR, a heal, a merge or a PR made outside the round, is one line in the next notice. The round tells you when main is red, with the lines that failed, when a PR fails to merge, with what gh said, or when a PR on main with no draft, no hold, no worker and no check that runs has no change for 45 minutes, with its checks, and each comment or issue of the owner in the private repository of the decisions, which PRIVATE names beside this word and git does not hold. await decide(title, text) opens a decision there as an issue, and news(line) adds a line at the top of its digest issue.
-Each round queues each open issue that the owner opened, or that he assigned to himself, as an item issueN, once, and its PR closes it. It queues an open issue again, once for each worker that ended on it with a PR, when no item of it works or waits and no open PR with the label w:issueN holds it, with the PRs that ended it in its brief. After ISSUE_ROUNDS (3) ends with a PR on an issue that is still open, it queues the issue no more, and tells you once, with the PRs, so that the owner closes the issue or says what is left.
+Each round queues each open issue that the owner opened, or that he assigned to himself, as an item issueN, once, and its PR closes it. It queues an open issue again, once for each worker that ended on it with a PR, when no item of it works or waits and no open PR with the label w:issueN holds it, with the PRs that ended it in its brief.
 Each round tells you once each fork PR of UPSTREAM that holds the label upstream-ready and not upstreamed: by the ruling of the owner, you then open its PR on pydantic/monty with the body that he reviewed, and put the label upstreamed on the fork PR.
 Each round sends each new comment of the owner on a PR or on his issue to the worker that owns it, puts the label hold on that PR, and tells you only the comments that no worker owns. The label hold:owner-review, which the owner puts on a PR to iterate with its worker, holds it like hold and keeps its worker on it: the round puts no hold of its own on it, and sends each new comment of the owner to the chain of its maker even when the prompt of the maker ended, as a handover on that chain on the model of the maker. A text on GitHub counts only when the owner wrote it with no 🤖 at its start, or when he put a 👍 on it; each worker starts what it writes there with 🤖.
 Each round sets one status label on each open PR and on each issue of the owner that it took: s:queued, s:working, s:checks, s:red, s:boxes, s:held, s:conflict, s:stacked, s:ready, or s:owner (green, waits for the owner).
@@ -1797,7 +1797,6 @@ Title: {title}
 Read the issue whole with its comments first: gh issue view {n} --json title,body,comments, since --comments alone can print the comments and not the body. Check on origin/main that the issue still holds: git log origin/main --grep "#{n}" and the PRs below, when any, show what is done already. When it is done, answer in a comment that starts with 🤖 and close with 0. Do what it asks. When it asks for a change, open the PR with Fixes #{n} in its body, so that the merge closes the issue. When it asks a question or a decision and no change, answer it in a comment on the issue, and close with that answer."""
 
 ISSUE_BODY = 6000
-ISSUE_ROUNDS = 3
 NAMING = r"""gh pr list --state all --limit 50 --search "{n} in:body" --json number,title,state,body --jq '[.[] | select((.body // "") | test("#{n}([^0-9]|$)")) | "#\(.number) \(.state) \(.title)"] | .[]'"""
 handled: set[str] = globals().setdefault("handled", set())
 ends: dict[str, list[tuple[str, int]]] = globals().setdefault("ends", {})
@@ -1814,15 +1813,6 @@ async def take_issues() -> None:
     key = f"issue{it['n']}"
     body = str(it["body"] or "")
     if "paused" in it["labels"]:
-      continue
-    issued = [n for _, n in ends.get(key, []) if n]
-    if len(issued) >= ISSUE_ROUNDS:
-      notice(
-        f"issue rounds {key}",
-        f"The issue #{it['n']}, {it['title']}, is still open after {len(issued)} workers ended on it with PRs"
-        f" {', '.join('#' + str(n) for n in issued)}, so the round queues it no more. Close the issue, say what is"
-        " left, or raise ISSUE_ROUNDS.",
-      )
       continue
     fresh = [name for name, n in ends.get(key, []) if n and name not in requeued]
     if key in handled and not fresh:
