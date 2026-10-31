@@ -134,6 +134,50 @@ Every host can request the same reload with `engine.stand()`. The model list fun
 gave an explicit roster keeps that limit: it can choose an added model when it opens a life with that model in
 its roster.
 
+## The claude command line
+
+The provider `claude-cli` runs the `claude` command line as one account by default. To run it as several accounts, list
+them under `providers.claude-cli` in `.furb/config.json`:
+
+```json
+{
+  "providers": {
+    "claude-cli": {
+      "accounts": [
+        {"name": "perso", "token_file": "~/.config/furb/perso.token"},
+        {"name": "team", "token_env": "FURB_CLAUDE_TEAM"},
+        {"name": "pro", "config_dir": "~/.claude-pro"}
+      ],
+      "switch": "failover"
+    }
+  }
+}
+```
+
+An account has a `name` and exactly one place for its credential:
+
+- `token_file` is a file that holds a token of `claude setup-token`. furb reads the file each time it starts a process.
+- `token_env` is the name of a variable of the environment of furb that holds such a token.
+- `config_dir` is a config directory of the command line, where the account logged in.
+
+A path is absolute or starts with `~`. furb never writes a token in a config, a message or a log. A token of
+`claude setup-token` lives one year and never refreshes, so it cannot lose its sign in as a refreshed login can. The
+user runs `claude setup-token` once for each account, since it opens a browser and shows the token once.
+
+`switch` is `failover` or `spread`. With `failover`, which is the default, a new conversation takes the first account of
+the list that is not parked. With `spread`, it takes the account that a conversation took least recently.
+
+A turn that meets a usage limit parks its account. The park lasts until the reset that the message gives, or for
+5 minutes when the message gives none. A turn whose sign in fails, or whose token cannot be read, parks its account until `/reload`. When
+another account is free, the turn ends as a failure that passes, with the words `Switched account from a to b`. Then
+furb asks again, as the section on a failed call says. The retry runs as the other account, in a new conversation
+with the whole history. When every account is parked, the turn waits for the first reset. With one account or none,
+furb parks nothing. The list of models and the web search run as the first account that is not parked, and they do not
+switch.
+
+`command` gives the program of the command line, as a word or as a list of words, such as `["cswap", "run", "3", "--"]`.
+Its words come before each flag, for each account.
+
 ## Thinking
 
 `MAX_THINKING_TOKENS` gives the most tokens that a model can think in one turn, and 0 turns thought off. The key
