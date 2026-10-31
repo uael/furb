@@ -1,0 +1,20 @@
+#!/bin/sh
+# Runs the hooks of pre-commit and prints only what fails or what they changed, so that the tail of a command that
+# commits and pushes shows the push. PRE_COMMIT names the command that runs them, which a test replaces.
+top=$(git rev-parse --show-toplevel) || exit 1
+if [ -z "$PRE_COMMIT" ]; then
+  if [ -x "$top/.venv/bin/python" ]; then
+    PRE_COMMIT="$top/.venv/bin/python -mpre_commit"
+  else
+    PRE_COMMIT=pre-commit
+  fi
+fi
+out=$(mktemp "${TMPDIR:-/tmp}/furb-hook.XXXXXX") || exit 1
+trap 'rm -f "$out"' EXIT
+# shellcheck disable=SC2086
+$PRE_COMMIT hook-impl --config=.pre-commit-config.yaml --hook-type=pre-commit --hook-dir "$(dirname "$0")" -- "$@" >"$out" 2>&1
+code=$?
+if [ "$code" -ne 0 ]; then
+  grep -vE '(Passed|Skipped)$' "$out"
+fi
+exit "$code"
