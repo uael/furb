@@ -711,7 +711,7 @@ impl Provider {
                 told(&mut co, &chain, &format!("#{rung} {WRAPPED}"));
               }
               if ran.is_some() {
-                told(&mut co, &chain, &format!("#{rung} {AFTER}\n{why}"));
+                noted(&mut co, &chain, &rung, AFTER, ("findings", &why)).await;
               }
               say(&mut co, Fact::says("done", &id, [turn]));
             }
@@ -729,7 +729,7 @@ impl Provider {
                 if watch.as_ref().is_some_and(Watch::dropped) {
                   told(&mut co, &chain, &format!("#{rung} {WRAPPED}"));
                 }
-                told(&mut co, &chain, &format!("#{rung} {STOPPED}: {}", retry.why));
+                noted(&mut co, &chain, &rung, STOPPED, ("why", &retry.why)).await;
                 say(&mut co, Fact::says("done", &id, [turn]));
               }
               continue;
@@ -789,12 +789,12 @@ impl Provider {
                   got
                 } else {
                   let Ok(turn) = cut(&ran) else { continue };
-                  let note = if got.is_err() {
-                    format!("#{rung} {why}")
-                  } else {
-                    format!("#{rung} {AFTER}\n{why}")
-                  };
-                  told(&mut co, &chain, &note);
+                  match &got {
+                    Err(no) => {
+                      noted(&mut co, &chain, &rung, STOPPED, ("why", &no.to_string())).await
+                    }
+                    Ok(_) => noted(&mut co, &chain, &rung, AFTER, ("findings", &why)).await,
+                  }
                   Ok(turn)
                 }
               }
@@ -996,7 +996,7 @@ enum Replied {
 
 /// What the chain is told after the rung of a turn whose model wrote a fault after the part of its word that ran.
 const AFTER: &str = "wrote a statement after the part of its word that ran, which the chain would refuse, so its turn \
-  is the word that ran, and the gate found:";
+  is the word that ran";
 
 /// What the chain is told after the rung of a reply whose call ended after a part of its word ran.
 const STOPPED: &str =
@@ -1035,6 +1035,22 @@ async fn writing(co: &mut Co<Replied>, rung: &str, part: &str, before: usize) ->
 /// A note told to a chain.
 fn told(co: &mut Co<Replied>, chain: &str, note: &str) {
   say(co, Fact::says("tell", chain, [Object::list([Object::string(note)])]));
+}
+
+/// A note of the chain about the turn of a rung: its header, then a text that the gate or the call gave, which the engine
+/// binds under the rung as it binds a value of an act, so the turn that holds the note stays python. A text after the
+/// header as a line of its own is no python, and the run of the turn would raise a SyntaxError.
+async fn noted(
+  co: &mut Co<Replied>,
+  chain: &str,
+  rung: &str,
+  what: &str,
+  (word, text): (&str, &str),
+) {
+  let words = vec![Object::string(rung), Object::string(what)];
+  let got = co.call("headed", words, vec![(word, Object::string(text))]).await;
+  let note = got.ok().and_then(|one| one.as_ref().as_str().map(str::to_owned));
+  told(co, chain, &note.unwrap_or_else(|| format!("#{rung} {what}")));
 }
 
 /// What a turn tells as it streams, sent to the work of its reply, which tells the host and reads the word.
