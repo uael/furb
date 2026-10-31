@@ -195,7 +195,7 @@ lands as a gh stack of PRs, each layer one change, opened from this chain, and y
 The item, {key}:
 {what}"""
 
-WORKSPACE = """Work in the workspace {repo}-{slot}, one of the workspaces w1, w2 and on that the round gives again from item to item, so that each build starts warm. If it does not stand, make it: {repo}/script/worktree.sh {repo}-{slot} <your branch>. If it stands, it holds the branch of an earlier item: run git status there, commit what no commit holds as a WIP commit on that branch and push it, then git fetch origin and git switch -C <your branch> onto origin/<your branch> when that branch is on origin, else onto origin/main. Leave the workspace clean when you close, each change committed and pushed, since your branch is on origin and the round gives the workspace to the next item. The git dir of a workspace holds a file furb-holder that names the chain that holds it. Once the workspace stands, write your chain there: echo {chain} > "$(git -C {repo}-{slot} rev-parse --absolute-git-dir)/furb-holder". Before your first command of each prompt in a workspace, read that file: if it names another chain than {chain}, run nothing in that workspace, since the round gave it to another worker, and use the workspace that your brief names. A holder that names a chain with no live prompt of a worker, which threads() shows, is stale: the round writes your chain there itself when it gives you the workspace, and if a stale name stays, write your chain over it and go on."""
+WORKSPACE = """Work in the workspace {repo}-{slot}, one of the workspaces w1, w2 and on that the round gives again from item to item, so that each build starts warm. If it does not stand, make it: {repo}/script/worktree.sh {repo}-{slot} <your branch>. If it stands, it holds the branch of an earlier item: run git status there, commit what no commit holds as a WIP commit on that branch and push it, then git fetch origin and git switch -C <your branch> onto origin/<your branch> when that branch is on origin, else onto origin/main. Leave the workspace clean when you close, each change committed and pushed, since your branch is on origin and the round gives the workspace to the next item. Your chain stands in the directory of the main checkout until a cd moves it, and a relative path of read, write or bash acts there: once the workspace stands, give cd({repo}-{slot}) in a word of your own, and use no relative path before it. The git dir of a workspace holds a file furb-holder that names the chain that holds it. Once the workspace stands, write your chain there: echo {chain} > "$(git -C {repo}-{slot} rev-parse --absolute-git-dir)/furb-holder". Before your first command of each prompt in a workspace, read that file: if it names another chain than {chain}, run nothing in that workspace, since the round gave it to another worker, and use the workspace that your brief names. A holder that names a chain with no live prompt of a worker, which threads() shows, is stale: the round writes your chain there itself when it gives you the workspace, and if a stale name stays, write your chain over it and go on."""
 
 MOVED = "Your earlier workspace {repo}-{moved} now belongs to another worker: touch nothing in it and run no command there."
 
@@ -682,8 +682,10 @@ def placed(key: str, text: str, where: str = "") -> tuple[str, str]:
   moved = " " + MOVED.replace("{moved}", last) if last and last != slot else ""
   text = text.replace("{workspace}", WORKSPACE + moved).replace("{repo}", cwd()).replace("{slot}", slot)
   if where:
-    home = shq(f"{cwd()}-{slot}")
+    path = f"{cwd()}-{slot}"
+    home = shq(path)
     quietly(bash, f'[ -d {home} ] && echo {shq(where)} > "$(git -C {home} rev-parse --absolute-git-dir)/furb-holder"', show=HIDDEN)
+    quietly(rung, f"try:\n  cd({path!r})\nexcept Refused:\n  pass", on=where)
   return text.replace("{chain}", where), slot
 
 

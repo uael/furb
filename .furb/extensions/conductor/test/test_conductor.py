@@ -1019,7 +1019,8 @@ async def test_an_ended_worker_goes_on_in_its_own_chain_on_sonnet(conductor: Rou
   conductor.done["p0"] = None
   await conductor.mend(pr, 0.0, False)
   assert conductor.hired == []
-  assert conductor.rungs == [(f"actor = {SONNET!r}", "chain7")]
+  assert conductor.rungs[0] == (f"actor = {SONNET!r}", "chain7")
+  assert [on for _, on in conductor.rungs] == ["chain7", "chain7"] and conductor.rungs[1][0].startswith("try:\n  cd(")
   assert conductor.targets == [SONNET]
   message, on = conductor.prompts[0]
   assert on == "chain7"
@@ -1046,7 +1047,8 @@ async def test_an_ended_worker_goes_on_on_its_own_model_when_sonnet_has_no_room(
   assert conductor.mender(pr) == OPUS
   await conductor.mend(pr, 0.0, False)
   assert conductor.hired == []
-  assert conductor.rungs == [(f"actor = {OPUS!r}", "chain7")]
+  assert conductor.rungs[0] == (f"actor = {OPUS!r}", "chain7")
+  assert [on for _, on in conductor.rungs] == ["chain7", "chain7"] and conductor.rungs[1][0].startswith("try:\n  cd(")
   assert conductor.targets == [OPUS]
   message, on = conductor.prompts[0]
   assert on == "chain7"
@@ -2888,3 +2890,14 @@ def test_the_round_writes_the_new_chain_into_the_holder_file_of_the_workspace_it
 def test_a_workspace_says_that_a_holder_with_no_live_prompt_of_a_worker_is_stale() -> None:
   source = SOURCE
   assert "A holder that names a chain with no live prompt of a worker" in source
+
+
+def test_the_round_puts_the_chain_of_a_worker_in_the_workspace_it_gives_so_that_a_relative_path_acts_there(
+  conductor: Round,
+) -> None:
+  text, slot = conductor.placed("k", "{workspace}", "chain-tui/k")
+  assert slot == "w1"
+  assert conductor.rungs == [(f"try:\n  cd({str(conductor.tmp) + '-w1'!r})\nexcept Refused:\n  pass", "chain-tui/k")]
+  assert "give cd(" + str(conductor.tmp) + "-w1) in a word of your own" in text
+  conductor.placed("k2", "{workspace}")
+  assert len(conductor.rungs) == 1
