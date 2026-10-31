@@ -715,7 +715,15 @@ impl Provider {
                 told(&mut co, &chain, &format!("#{rung} {WRAPPED}"));
               }
               if ran.is_some() {
-                noted(&mut co, &chain, &rung, AFTER, ("findings", &why)).await;
+                let ran = ending(ran.as_deref().unwrap_or_default());
+                noted(
+                  &mut co,
+                  &chain,
+                  &rung,
+                  AFTER,
+                  &[("findings", &afterward(&why)), ("ran", &ran)],
+                )
+                .await;
               }
               say(&mut co, Fact::says("done", &id, [turn]));
             }
@@ -733,7 +741,14 @@ impl Provider {
                 if watch.as_ref().is_some_and(Watch::dropped) {
                   told(&mut co, &chain, &format!("#{rung} {WRAPPED}"));
                 }
-                noted(&mut co, &chain, &rung, STOPPED, ("why", &retry.why)).await;
+                noted(
+                  &mut co,
+                  &chain,
+                  &rung,
+                  STOPPED,
+                  &[("why", &retry.why), ("ran", &ending(ran.as_deref().unwrap_or_default()))],
+                )
+                .await;
                 say(&mut co, Fact::says("done", &id, [turn]));
               }
               continue;
@@ -799,9 +814,20 @@ impl Provider {
                   let Ok(turn) = cut(&ran) else { continue };
                   match &got {
                     Err(no) => {
-                      noted(&mut co, &chain, &rung, STOPPED, ("why", &no.to_string())).await
+                      noted(
+                        &mut co,
+                        &chain,
+                        &rung,
+                        STOPPED,
+                        &[("why", &no.to_string()), ("ran", &ending(&ran))],
+                      )
+                      .await
                     }
-                    Ok(_) => noted(&mut co, &chain, &rung, AFTER, ("findings", &why)).await,
+                    Ok(_) => {
+                      let fields = [("findings", afterward(&why)), ("ran", ending(&ran))];
+                      let fields = fields.each_ref().map(|(word, text)| (*word, text.as_str()));
+                      noted(&mut co, &chain, &rung, AFTER, &fields).await
+                    }
                   }
                   Ok(turn)
                 }
@@ -1006,8 +1032,27 @@ enum Replied {
 }
 
 /// What the chain is told after the rung of a turn whose model wrote a fault after the part of its word that ran.
-const AFTER: &str = "wrote a statement after the part of its word that ran, which the chain would refuse, so its turn \
-  is the word that ran";
+const AFTER: &str = "ran a part of its word, whose last lines its ran shows, then wrote a statement that the chain \
+  would refuse, so its turn is the word that ran: each act, close and name of that part stands, and no later statement \
+  runs";
+
+/// How many lines of the end of the word that ran a note shows.
+const ENDING: usize = 3;
+
+/// The last lines of the word that ran, each with its number, which a note shows so that a model knows where its run
+/// stopped.
+fn ending(ran: &str) -> String {
+  let lines: Vec<(usize, &str)> =
+    ran.trim_end().lines().enumerate().filter(|(_, line)| !line.trim().is_empty()).collect();
+  let shown = lines[lines.len().saturating_sub(ENDING)..].iter();
+  shown.map(|(at, line)| format!("line {}: {line}\n", at + 1)).collect()
+}
+
+/// The findings of the gate on a word whose part ran. The gate says of a word that is not python that nothing of it
+/// ran, which holds only while no part of it ran.
+fn afterward(findings: &str) -> String {
+  findings.replace("nothing of this word ran", "no statement after the part that ran runs")
+}
 
 /// What the chain is told after the rung of a reply whose call ended after a part of its word ran.
 const STOPPED: &str =
@@ -1048,18 +1093,13 @@ fn told(co: &mut Co<Replied>, chain: &str, note: &str) {
   say(co, Fact::says("tell", chain, [Object::list([Object::string(note)])]));
 }
 
-/// A note of the chain about the turn of a rung: its header, then a text that the gate or the call gave, which the engine
-/// binds under the rung as it binds a value of an act, so the turn that holds the note stays python. A text after the
+/// A note of the chain about the turn of a rung: its header, then each text that the gate or the call gave, which the
+/// engine binds under the rung as it binds a value of an act, so the turn that holds the note stays python. A text after the
 /// header as a line of its own is no python, and the run of the turn would raise a SyntaxError.
-async fn noted(
-  co: &mut Co<Replied>,
-  chain: &str,
-  rung: &str,
-  what: &str,
-  (word, text): (&str, &str),
-) {
+async fn noted(co: &mut Co<Replied>, chain: &str, rung: &str, what: &str, fields: &[(&str, &str)]) {
   let words = vec![Object::string(rung), Object::string(what)];
-  let got = co.call("headed", words, vec![(word, Object::string(text))]).await;
+  let fields = fields.iter().map(|(word, text)| (*word, Object::string(*text))).collect();
+  let got = co.call("headed", words, fields).await;
   let note = got.ok().and_then(|one| one.as_ref().as_str().map(str::to_owned));
   told(co, chain, &note.unwrap_or_else(|| format!("#{rung} {what}")));
 }
