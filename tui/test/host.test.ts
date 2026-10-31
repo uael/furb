@@ -854,3 +854,29 @@ test.skipIf(process.platform === "win32")(
       await opened.host.end();
     }),
 );
+
+test.skipIf(process.platform === "win32")(
+  "a host that has two warnings to tell says both in one notice, so the second does not replace the first",
+  () =>
+    demoLife(async (_, directory) => {
+      const folder = join(directory, ".furb", "sessions");
+      await mkdir(folder, { recursive: true });
+      const own = join(folder, "life.jsonl");
+      const set = { FURB_SESSIONS_WARN: "1", FURB_DISK_WARN: String(1e18), FURB_HOST_WATCH: "100" };
+      Object.assign(process.env, set);
+      const lines: string[] = [];
+      let opened: Awaited<ReturnType<typeof openEngine>>;
+      try {
+        opened = await openEngine({ demo: true, host: true, cwd: directory, record: own }, (link) =>
+          link.host.on("log", (line: string) => lines.push(line)),
+        );
+      } finally {
+        for (const name of Object.keys(set)) delete process.env[name];
+      }
+      await eventually(
+        () => lines.some((line) => line.includes("The sessions of this project") && line.includes("Only ")),
+        "the host to say both warnings in one notice",
+      );
+      await opened.host.end();
+    }),
+);

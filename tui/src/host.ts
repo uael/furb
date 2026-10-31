@@ -256,7 +256,7 @@ function heard(message: Request, send: Send, role: Role): void {
     // A window that attaches draws what the life holds, so the first state tells it that facts came.
     if (last) send({ state: { ...last, facts: Math.max(1, last.facts) } });
     if (stopped) send({ fault: stopped });
-    for (const line of warnings.values()) send({ log: line });
+    if (warnings.size) send({ log: [...warnings.values()].join(" ") });
     windows.set(send, role);
     return;
   }
@@ -311,8 +311,9 @@ async function handOver(build: string): Promise<void> {
   ask("session", "end", [], { id: 0 });
 }
 
-/** A warning of a kind: a window hears it once when it begins, and a window that attaches while it stands hears it at
- * its hello. A warning that ends is forgotten, so it can begin again. */
+/** A warning of a kind: a window hears it once when it begins, in one notice with each warning that stands, since a later
+ * notice replaces an earlier one in the window. A window that attaches while a warning stands hears it at its hello. A
+ * warning that ends is forgotten, so it can begin again. */
 const warn = (kind: string, line: string | undefined): void => {
   if (line === undefined) {
     warnings.delete(kind);
@@ -320,7 +321,8 @@ const warn = (kind: string, line: string | undefined): void => {
   }
   if (warnings.has(kind)) return;
   warnings.set(kind, line);
-  for (const send of windows.keys()) send({ log: line });
+  const all = [...warnings.values()].join(" ");
+  for (const send of windows.keys()) send({ log: all });
 };
 
 /** The free space under which the host tells its windows that the disk is nearly full, in bytes: 2 GiB, or what
