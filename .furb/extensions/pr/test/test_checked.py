@@ -38,6 +38,7 @@ class World:
     self.polls, self.logs, self.now = polls, logs or {}, 0.0
     self.runs = runs or [[]]
     self.commands: list[str] = []
+    self.shows: list[object] = []
     self.waits: list[float] = []
     ns: dict = {
       "bash": self.bash,
@@ -51,8 +52,9 @@ class World:
     exec(compile(IMPORT.sub("", (HERE / "pr.py").read_text(encoding="utf-8")), "pr.py", "exec"), ns)  # noqa: S102
     self.checked = ns["checked"]
 
-  async def bash(self, command: str, **_: object) -> Exit:
+  async def bash(self, command: str, show: object = None, **_: object) -> Exit:
     self.commands.append(command)
+    self.shows.append(show)
     if "actions/jobs" in command:
       job = re.search(r"id=(\d+)", command)
       assert job
@@ -169,3 +171,9 @@ def test_the_bound_of_a_call_without_one_is_an_hour() -> None:
   world = World([[row("hooks", "pending")]])
   assert run(world) == ("pending", ["head abc1234: still pending after 3600 s: hooks"])
   assert len(world.waits) == 60
+
+
+def test_a_poll_and_a_log_read_show_their_command_and_none_of_their_output() -> None:
+  world = World([[row("a", "fail", 5)]], {"5": "FAILED x"})
+  run(world)
+  assert len(world.shows) == 2 and all(show == (0, 0) for show in world.shows)
