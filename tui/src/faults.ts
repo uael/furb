@@ -1,5 +1,5 @@
-/** A function that runs a step which no request waits for, as a timer does. A fault of the step goes to `fault` as its
- * message, so the step cannot end the process that runs it. */
+/** Wraps a step that no request waits for, such as a timer. A fault of the step goes to `fault` as its message.
+ * The step cannot end the process that runs it. */
 export function guarded(step: () => void, fault: (message: string) => void): () => void {
   return () => {
     try {
