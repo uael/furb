@@ -123,7 +123,7 @@ class World:
     self.facts[name] = (kind, name, "rung1", *fact)
     return name
 
-  def bash(self, command: str, stdin: str | None = "", timeout: float = 600, show: object = None, ok: object = (0,)) -> Done:
+  def bash(self, command: str, stdin: str | None = "", timeout: float = 600, show: object = None) -> Done:
     self.commands.append(command)
     out, code = next(((o, c) for p, o, c in self.says if re.search(p, command)), ("", 0))
     if stdin and command.startswith("python3 -I - ") and code == 0 and out:

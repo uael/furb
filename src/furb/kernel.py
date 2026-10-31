@@ -14,6 +14,7 @@ of a word in their order, says that each ran, with what it raised, and the run o
 left of the word, so a statement of a word runs once, wherever the word came from.
 """
 
+import re
 from ast import PyCF_ALLOW_TOP_LEVEL_AWAIT
 from collections.abc import Callable, Coroutine, Generator
 from contextvars import ContextVar
@@ -25,6 +26,17 @@ type Names = dict[str, object]
 """The names of the engine: its module, in which every word runs in the module of its chain."""
 type Ear = Generator[tuple | set[str] | None, tuple | None]
 """An ear, as the engine hears one."""
+
+
+SMART = re.compile(
+  r"(?:^|[;&|\n]\s*)(?:(?:e?grep|rg|diff|cmp|test|\[)\s|git\s[^;&|\n]*(?:--quiet|--is-ancestor|--exit-code))[^;&|\n]*\Z"
+)
+
+
+def accepted(command: str, code: int | None) -> bool:
+  """The default policy of the codes of a command: 0, and 1 for a command that ends in a check that exits 1 for no
+  match or for a difference."""
+  return code == 0 or (code == 1 and bool(SMART.search(command.strip())))
 
 
 def verb(names: Names, which: str) -> Callable[..., object]:
@@ -203,20 +215,24 @@ class Running:
     return True
 
   def given(self, made: str, value: object) -> object:
-    """What a word that awaits the act made is given of what that act came to: a Failed in the place of the Exit of a
-    command whose code is not one of the codes that it accepts, which its words hold after its timeout, and else
-    that value, so the word stops where the command failed and the command keeps its Exit."""
+    """What a word that awaits the act made is given of what that act came to: a Refused in the place of the Exit of a
+    command whose code it does not accept, which the command keeps for peek, and else that value. The codes come from
+    the ok of the command, and with none from the accepts of the module of its chain, else from the default."""
     asked, shape = verb(self.names, "get")(made), self.names["Exit"]
     assert isinstance(shape, type)
     if not (isinstance(asked, tuple) and asked[0] == "bash" and isinstance(value, shape)):
       return value
     code, ok = getattr(value, "code"), next(iter(asked[7:]), None)  # noqa: B009
-    if ok is None or code in ok:
+    if ok is None:
+      held = verb(self.names, "module")(str(asked[3]))
+      assert isinstance(held, dict)
+      ok = (held.get("accepts") or accepted)(str(asked[4]), code)
+    elif ok is not True:
+      ok = code in ok
+    if ok:
       return value
     ended = f"timed out after {asked[6]}s" if code is None else f"exited {code}"
-    failed = verb(self.names, "Failed")(f"{made} {ended}")
-    assert isinstance(failed, BaseException)
-    return failed
+    return self.refusing(f"{made} {ended}")
 
   def refusal(self, got: object) -> BaseException:
     made = verb(self.names, "Refused")(f"a rung awaits an act, and {got!r} is none")

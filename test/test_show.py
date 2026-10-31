@@ -30,7 +30,7 @@ async def test_a_show_is_no_word_of_a_fact() -> None:
   assert await engine.prompt(int, "run it", on=root) == 1
   await settle()
   command = said(log, "bash")[0][1]
-  assert said(log, "bash")[0][4:] == ("echo hi", "", 120.0, (0,))
+  assert said(log, "bash")[0][4:] == ("echo hi", "", 120.0, None)
   assert [a[4:] for a in acts(log).values() if a[0] == "read"] == [("a.txt",)]
   assert [word for (fact,) in sand.record for word in fact if callable(word)] == []
   told = [one for one in paragraphs(engine.turns(on=root)) if one.startswith(("#read1", f"#{command} exited"))]

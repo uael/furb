@@ -345,7 +345,7 @@ async def test_a_finding_on_a_call_of_a_function_names_the_signature_of_that_fun
   """A finding on a call of a function names the signature of that function, so a model reads how to call it."""
   _, _, root = born()
   (found,) = engine.gate("close(read())", on=root)
-  assert '; the signature of `read` is `read(path: str, show=HEAD, on="") -> Text`, in' in found
+  assert '; the signature of `read` is `read(path: str, show: Show = HEAD, on="") -> Text`, in' in found
   await engine.rung("def twice(n: int, *, by: int = 2) -> int:\n  return n * by", on=root)
   (found,) = engine.gate("close(twice(1, 2))", on=root)
   assert "; the signature of `twice` is `twice(n: int, *, by: int = 2) -> int`, in 'close(twice(1, 2))'" in found

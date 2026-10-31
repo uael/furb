@@ -57,9 +57,11 @@ impl Kind {
       "int" => Kind::Int,
       "float" | "float | None" => Kind::Float,
       "bool" => Kind::Bool,
-      "object" | "type[T] | object" | "Show" | "Filter" | "tuple[int | None, ...] | None" => {
-        Kind::Object
-      }
+      "object"
+      | "type[T] | object"
+      | "Show"
+      | "Filter"
+      | "tuple[int | None, ...] | bool | None" => Kind::Object,
       "Text" => Kind::Text,
       "list[str]" => Kind::Strs,
       "Show | None" | "Filter | None" | "Callable[[str], Ear] | None" => Kind::MaybeCallable,

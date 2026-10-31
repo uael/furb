@@ -57,8 +57,8 @@ async def test_to_await_a_cancelled_act_raises_cancellederror() -> None:
     await one
 
 
-async def test_a_word_that_awaits_a_command_whose_code_is_not_one_that_it_accepts_raises_failed() -> None:
-  """A word that awaits a command whose code is not one that the command accepts raises Failed where it waited, and the command keeps its Exit, which peek gives."""
+async def test_a_word_that_awaits_a_command_whose_code_is_not_one_that_it_accepts_raises_refused() -> None:
+  """A word that awaits a command whose code is not one that the command accepts raises Refused where it waited, and the command keeps its Exit, which peek gives."""
   sand, log, root = born("x = bash('false')\nawait x\nclose(1)", "close(2)", auto=False)
   asked = engine.prompt(int, "run it", on=root)
   await settle()
@@ -66,7 +66,7 @@ async def test_a_word_that_awaits_a_command_whose_code_is_not_one_that_it_accept
   sand.exits(one, 1)
   assert await asked == 2
   await settle()
-  assert f"#rung1 raised\nrung1_raised = Failed('{one} exited 1')" in paragraphs(engine.turns(on=root))
+  assert f"#rung1 raised\nrung1_raised = Refused('{one} exited 1')" in paragraphs(engine.turns(on=root))
   assert engine.peek(one) == Exit(1, Text(f"{one}/stdout"), Text(f"{one}/stderr"))
 
 

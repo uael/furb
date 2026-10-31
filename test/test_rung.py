@@ -185,7 +185,7 @@ async def test_a_rung_that_retells_another_rung_names_its_acts_under_that_one() 
   retold = [a for a in said(log, "rung") if a[3] == twin]
   program = engine.program(root)
   assert [a[5] for a in retold] == list(program) and step in program
-  assert said(log, "bash") == [("bash", "bash1", step, root, "echo hi", "", 120.0, (0,))]
+  assert said(log, "bash") == [("bash", "bash1", step, root, "echo hi", "", 120.0, None)]
   assert engine.module(twin)["x"] == engine.module(root)["x"] == "bash1"
 
 
@@ -551,7 +551,7 @@ async def test_a_rung_that_retells_says_each_question_it_makes_as_the_rung_it_re
   twin = await chained("twin", root, 300)
   (retold,) = [a[1] for a in said(log, "rung") if a[3] == twin and a[5] == step]
   assert [a for a in acts(log).values() if a[0] == "read"] == [("read", "read1", step, root, "a.txt")]
-  assert said(log, "bash") == [("bash", "bash1", step, root, "echo hi", "", 120.0, (0,))]
+  assert said(log, "bash") == [("bash", "bash1", step, root, "echo hi", "", 120.0, None)]
   assert retold != step and engine.module(twin)["x"] == "bash1"
 
 

@@ -184,7 +184,7 @@ async def test_two_acts_that_say_the_same_words_under_one_name_are_one_act() -> 
   one = await first
   assert isinstance(one, str)
   assert (await again) is None
-  assert engine.get(one) == ("bash", one, first, root, "echo hi", "", TIMEOUT, (0,))
+  assert engine.get(one) == ("bash", one, first, root, "echo hi", "", TIMEOUT, None)
   await settle()
   got = engine.peek(one)
   assert got == engine.peek(one) and isinstance(got, Exit) and got.code == 0
@@ -233,8 +233,8 @@ async def test_the_ear_of_an_act_is_given_the_name_of_the_act_and_hears_every_fa
 async def test_an_act_carries_the_words_of_its_kind() -> None:
   """An act carries the words of its kind, which are the plain arguments the verb was given, in the order of the verb, and a show or a filter is none of them."""
   sand, _, root = born()
-  one = engine.bash("echo hi", "go", 5.0, (0,), HIDDEN, HIDDEN, on=root)
-  assert engine.get(one) == ("bash", one, OPERATOR, root, "echo hi", "go", 5.0, (0,))
+  one = engine.bash("echo hi", "go", 5.0, None, HIDDEN, HIDDEN, on=root)
+  assert engine.get(one) == ("bash", one, OPERATOR, root, "echo hi", "go", 5.0, None)
   two = engine.chain("two", source=root, filter=take(root))
   assert engine.get(two) == ("chain", two, OPERATOR, "", "two", root)
   sand.files["/w/a.txt"] = "one\n"
