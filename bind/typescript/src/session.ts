@@ -183,7 +183,7 @@ export class Session extends EventEmitter {
       // The observer heard the entries that the life kept as it opened, after the record it opened on.
       this.entries = [...(engine.record as Entry[]), ...this.entries];
       this.opened = engine.record.length;
-      this.save();
+      this.saveAtOpen();
       return engine;
     } catch (error) {
       this.stopped = true;
@@ -280,6 +280,19 @@ export class Session extends EventEmitter {
     const chosen = this.actor === "operator" ? {} : actorParts(this.actor);
     const saved: Saved = { options: { cwd: this.directory, ...chosen } };
     saveFile(`${this.record}.session.json`, JSON.stringify(saved));
+  }
+
+  /** The save at the open. A life that replayed for minutes is worth more than its file of options, so a save that
+   * fails here is told in the log, when the host listens, and the life goes on. */
+  private saveAtOpen(): void {
+    try {
+      this.save();
+    } catch (error) {
+      const line = `The session could not save its file of options, so a later open does not know its folder and its actor: ${(error as Error).message}`;
+      setTimeout(() => {
+        if (!this.stopped) this.emit("log", line);
+      }, 0);
+    }
   }
 
   /** The work that an earlier life left, which waits for a wake that this life says, by the kind of each act, as the
