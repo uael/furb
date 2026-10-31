@@ -8,6 +8,7 @@ import { openEngine } from "../src/bridge.ts";
 import {
   type About,
   aboutOf,
+  framed,
   hostPlace,
   isHost,
   listening,
@@ -211,7 +212,7 @@ test.skipIf(process.platform === "win32")(
         (error: Error) => error.message,
       );
       expect(failure).toContain("Invalid record entry");
-      expect(existsSync(hostPlace(record)?.socket ?? "")).toBe(false);
+      await eventually(() => !existsSync(hostPlace(record)?.socket ?? ""), "the host to remove its socket");
     }),
 );
 
@@ -618,5 +619,97 @@ for (let n = 1; n <= 4000; n++) tellAbout(place, { pid: n, record: "life.jsonl",
       expect(
         (await readdir(join(place.about, ".."))).filter((name) => name.startsWith(`${key}.`)).sort(),
       ).toEqual([`${key}.json`]);
+    }),
+);
+
+/** A raw window of the host at a place: the replies that it hears, and how to say a request. */
+async function rawWindow(place: Place): Promise<{
+  replies: Record<string, unknown>[];
+  say: (message: object) => void;
+  closed: Promise<void>;
+}> {
+  const socket = createConnection(place.socket);
+  await new Promise<void>((resolve) => socket.once("connect", () => resolve()));
+  const replies: Record<string, unknown>[] = [];
+  const say = framed(socket, (message: never) => replies.push(message));
+  const closed = new Promise<void>((resolve) => socket.once("close", () => resolve()));
+  return { replies, say, closed };
+}
+
+/** A host that waits lag milliseconds before it opens its life, which stands for a record that takes minutes to open. */
+function slowHost(record: string, directory: string, lag: number) {
+  const options = { demo: true, host: true, cwd: directory, record };
+  return Bun.spawn([process.execPath, join(import.meta.dir, "../src/host.ts"), JSON.stringify(options)], {
+    env: { ...process.env, FURB_HOST_OPEN_LAG: String(lag) },
+    stdout: "ignore",
+    stderr: "ignore",
+  });
+}
+
+const HELLO = { id: 1, target: "host", method: "hello", args: [{}] };
+
+test.skipIf(process.platform === "win32")(
+  "a host listens while it opens its life, and answers the hello of a window once the life is open",
+  () =>
+    demoLife(async (record, directory) => {
+      const place = hostPlace(record);
+      if (!place) throw new Error("No socket serves here.");
+      const host = slowHost(record, directory, 1500);
+      await eventually(() => existsSync(place.socket), "the host to listen");
+      const window = await rawWindow(place);
+      window.say(HELLO);
+      window.say({ id: 2, target: "engine", method: "get", args: [] });
+      await eventually(() => window.replies.length > 0, "the host to answer the request");
+      expect(window.replies).toEqual([{ id: 2, error: "The life is still opening." }]);
+      await eventually(() => window.replies.length > 1, "the host to answer the hello after the open");
+      expect(window.replies[1]).toMatchObject({ id: 1, value: { pid: host.pid, role: "write" } });
+      expect((window.replies[1]?.value as { root: string }).root).toBeTruthy();
+      process.kill(host.pid, "SIGTERM");
+      await host.exited;
+    }),
+);
+
+test.skipIf(process.platform === "win32")(
+  "a host that a signal ends while it opens its life ends at once, tells the window that waits why, and leaves no file",
+  () =>
+    demoLife(async (record, directory) => {
+      const place = hostPlace(record);
+      if (!place) throw new Error("No socket serves here.");
+      const host = slowHost(record, directory, 60000);
+      await eventually(() => existsSync(place.socket), "the host to listen");
+      const window = await rawWindow(place);
+      window.say(HELLO);
+      window.say({ id: 2, target: "engine", method: "get", args: [] });
+      await eventually(() => window.replies.length > 0, "the host to answer the request");
+      process.kill(host.pid, "SIGTERM");
+      await window.closed;
+      expect(window.replies).toEqual([
+        { id: 2, error: "The life is still opening." },
+        { id: 1, error: "The host was stopped while it opened the life." },
+      ]);
+      expect(await host.exited).toBe(1);
+      expect(existsSync(place.socket)).toBe(false);
+      expect(existsSync(place.about)).toBe(false);
+    }),
+);
+
+test.skipIf(process.platform === "win32")(
+  "a window that ends the life while the host opens it cuts the open, and the host ends",
+  () =>
+    demoLife(async (record, directory) => {
+      const place = hostPlace(record);
+      if (!place) throw new Error("No socket serves here.");
+      const host = slowHost(record, directory, 60000);
+      await eventually(() => existsSync(place.socket), "the host to listen");
+      const window = await rawWindow(place);
+      window.say(HELLO);
+      window.say({ id: 2, target: "session", method: "end", args: [] });
+      await window.closed;
+      expect(window.replies).toEqual([
+        { id: 2, value: null, disposed: true },
+        { id: 1, error: "The life was ended from another window while it opened." },
+      ]);
+      expect(await host.exited).toBe(1);
+      expect(existsSync(place.socket)).toBe(false);
     }),
 );
