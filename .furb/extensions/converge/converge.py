@@ -651,10 +651,15 @@ async def converge_veto(pr: dict) -> bool:
   return False
 
 
+def counted(book: dict) -> list[int]:
+  return [len(p["gaps"]) for p in book["passes"] if "gaps" in p and not p.get("n")]
+
+
 def faulted(target: dict, book: dict, job: dict, faults: list[list[str]], words: str, head: str) -> dict:
   said = " ".join(why for _, why, _ in faults)[:800]
   name, sha = target["name"], job["sha"][:7]
   if job["kind"] == "pr":
+    debug(t"{name} PR #{job['n']} at {sha}: faulted, no judge read it")
     book["heads"][f"{job['n']} {job['sha']}"] = {"state": "unjudged"}
     tell_home(f"the capture of {name} for the PR #{job['n']} at {sha} failed again after converge rebuilt its tree. That is a fault of the tool and no gap, so no judge read the PR and the conductor does not hold it: {said}")
   else:
@@ -737,7 +742,7 @@ async def advanced(target: dict, book: dict, job: dict, words: str, head: str) -
   if job["records"]:
     book["records"] = job["records"]
   book["words"] = words
-  counts = [len(p["gaps"]) for p in book["passes"] if "gaps" in p and not p.get("n")]
+  counts = counted(book)
   label, best = target["name"], min(counts)
   debug(t"{label} pass {len(counts)} at {job['sha'][:7]}: {len(gaps)} gaps, best {best}, PR none")
   mine, others = claim(book, conductor(), "main", gaps, main=True)
@@ -799,13 +804,14 @@ async def screened(target: dict, book: dict, job: dict, gaps: list[list[str]], w
 
 
 async def converge(target: dict, ticks: int = 0) -> dict:
-  book, job, tick = shared(target), {}, 0
+  book, job, tick, spoke = shared(target), {}, 0, ""
   # The budget counts the captures and the dollars of this run, so a run that the coordinator starts again has it whole.
   if book["state"] == "spent":
     book["state"] = ""
   jobs, spent = book["jobs"], book["spent"]
   while not ticks or tick < ticks:
     tick += 1
+    before = len(counted(book))
     head = await main_head()
     words = await ruling(target)
     said = book["faulted"] if book["state"] == "faulted" else book["words"]
@@ -832,6 +838,12 @@ async def converge(target: dict, ticks: int = 0) -> dict:
     else:
       MAIN.pop(target["name"], None)
     booked(target, book)
+    state = book["state"] or ("waits" if job else "idle")
+    if len(counted(book)) == before and (job or state != spoke):
+      counts = counted(book)
+      last = f"{counts[-1]} gaps, best {min(counts)}" if counts else "no pass yet"
+      debug(t"{target['name']} tick {tick} at {head[:7]}: {state}, {last}")
+    spoke = state
     if book["state"] == "spent" and not job:
       return book
     if not job:

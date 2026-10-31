@@ -775,6 +775,7 @@ def test_a_step_that_fails_again_is_a_fault_of_the_tool_and_the_pr_passes(world:
   assert world.judged() == []
   [said] = world.told()
   assert "a fault of the tool and no gap" in said and "Cannot find package furb" in said
+  assert "tui PR #5 at abc: faulted, no judge read it" in world.debugs
 
 
 def test_a_pass_of_main_whose_capture_fails_again_waits_for_a_change(world: World) -> None:
@@ -1085,6 +1086,26 @@ def test_a_pass_tells_one_debug_line_with_its_gaps_and_its_best(world: World) ->
   world.judge = lambda message, to: gap()
   world.run(1)
   assert world.debugs == ["tui pass 1 at sha1: 1 gaps, best 1, PR none"]
+
+
+def test_a_pass_that_waits_for_its_judges_tells_a_debug_line_for_each_tick(world: World) -> None:
+  world.slow = True
+  world.run(2)
+  assert world.debugs == ["tui tick 1 at sha1: waits, no pass yet", "tui tick 2 at sha1: waits, no pass yet"]
+
+
+def test_a_pass_of_main_that_faults_tells_a_debug_line_with_its_state(world: World) -> None:
+  world.say(r"python3 -I -", faulty())
+  world.run(2)
+  assert world.debugs == ["tui tick 1 at sha1: waits, no pass yet", "tui tick 2 at sha1: faulted, no pass yet"]
+
+
+def test_a_target_that_stands_still_tells_its_state_once_and_no_pass_twice(world: World) -> None:
+  world.run(4)
+  assert world.debugs == [
+    "tui pass 1 at sha1: 0 gaps, best 0, PR none",
+    "tui pass 2 at sha1: 0 gaps, best 0, PR none",
+  ]
 
 
 def stall(world: World) -> None:
