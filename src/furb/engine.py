@@ -468,15 +468,14 @@ class Text:
 
   def replace(self, old: str, new: str, count=-1) -> Text:
     if old not in self.content:
-      raise Refused(self.path + " no " + repr(old))
+      raise Refused(self.path + " no " + repr(min(old.splitlines(), key=self.content.count)))
     (made := Text(self.path, self.content.replace(old, new, count))).before = self
     return made
 
   def undo(self, n=1) -> Text:
-    made = self
     for _ in range(n):
-      made = made.before or made
-    return made
+      self = self.before or self  # noqa: PLW0642
+    return self
 
   def append(self, text: str) -> Text:
     return self.insert(len(self.lines) + 1, text)
