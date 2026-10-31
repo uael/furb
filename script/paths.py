@@ -62,7 +62,12 @@ def stale(
 
 
 def ignored(paths: list[str]) -> set[str]:
-  return set(git("check-ignore", "-z", "--stdin", stdin="\0".join(paths) + "\0")) if paths else set()
+  """The paths that git ignores. A folder that does not stand yet is ignored by a rule that ends in a slash only when
+  it is asked as a folder, so each path is asked in both forms."""
+  if not paths:
+    return set()
+  asked = [*paths, *(x + "/" for x in paths)]
+  return {x.rstrip("/") for x in git("check-ignore", "-z", "--stdin", stdin="\0".join(asked) + "\0")}
 
 
 def main() -> int:

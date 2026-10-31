@@ -1,7 +1,10 @@
 """A script or a workflow of this repository names only paths that stand."""
 
 import importlib.util
+import subprocess
 from pathlib import Path
+
+import pytest
 
 SPEC = importlib.util.spec_from_file_location("paths", Path(__file__).resolve().parents[2] / "script" / "paths.py")
 assert SPEC and SPEC.loader
@@ -54,3 +57,12 @@ def test_a_path_that_a_build_makes_and_git_ignores_stands() -> None:
 def test_a_path_that_a_script_makes_outside_the_repository_stands_when_it_is_listed() -> None:
   assert paths.stale(FILES, {"script/b.sh": "cp demo.rs src/main.rs"}) == []
   assert paths.stale(FILES, {"script/b.sh": "cp demo.rs src/other.rs"}) == [("script/b.sh", 1, "src/other.rs")]
+
+
+def test_a_folder_that_a_rule_of_git_ignores_as_a_folder_stands_before_a_build_makes_it(
+  tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+  subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)  # noqa: S607
+  (tmp_path / ".gitignore").write_text("dist/\n")
+  monkeypatch.setattr(paths, "ROOT", tmp_path)
+  assert paths.ignored(["bind/dist", "bind/src"]) == {"bind/dist"}
