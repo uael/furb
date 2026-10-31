@@ -263,7 +263,8 @@ fix what your change broke, and report what was broken before.
   among them, and takes minutes: give it a timeout in `bash` of twice the time that it took last, and chain the push
   after it with `&&`, so a commit that fails stops the push. The hook `cargo test` runs only when a file that the crate
   or its tests read changed, and the gates run every hook on every file. The hook of the links runs only for a README or
-  a manifest, and reads git alone. The hook `stray` refuses a `*.rej`, `*.orig` or `*-E` file.
+  a manifest, and reads git alone. The hook `stray` refuses a `*.rej`, `*.orig` or `*-E` file. The hook `paths` runs on
+  each commit, since a move of a file leaves its old path in a script that the commit does not touch.
 - `uv run python script/smoke.py`: one real life on the default actor of the crate, the first model that the catalog
   offers, which may cost dollars. `--model` names the actor, as `--model local:qwen3` on the local server that
   `FURB_LOCAL_URL` names. It is no test of the suite and spends one prompt.
@@ -299,6 +300,9 @@ fix what your change broke, and report what was broken before.
 - `uv run python script/links.py`: check that each link in a README that a package carries works on the page of the
   package on PyPI, npm or crates.io, which read no relative link. It lists each package and its README from the
   manifests, and fails on a relative link, which `--fix` writes as absolute, at `main` on GitHub. The hooks run it.
+- `uv run python script/paths.py`: check that each path of the repository that a file of `script/` or of
+  `.github/workflows/` names is a file or a folder that git holds, or a file that a build makes and git ignores. It
+  names the file, the line and the path of each one that stands no more, and it reads git alone. The hooks run it.
 - `bun install && bun run build`: install the TypeScript workspace, and build the N-API package that the TUI uses.
 - `bun run check`, `bun run lint` and `bun run test`: the type check, the lint and the tests of the TypeScript side.
   `tui/script/test.ts` deals the tests into runs, each a process that runs one test at a time with a limit of thirty
