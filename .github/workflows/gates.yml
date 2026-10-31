@@ -193,6 +193,16 @@ jobs:
         with:
           bun-version: "1.4.2"
       - run: bun install --frozen-lockfile
+      - name: time the steps of napi
+        if: runner.os == 'Windows'
+        run: |
+          t() { s=$(date +%s); "$@" >/dev/null 2>&1; echo "$* took $(( $(date +%s) - s )) s"; }
+          t cargo metadata --format-version 1 --features typescript --filter-platform "$CARGO_BUILD_TARGET"
+          t cargo metadata --format-version 1 --features typescript --filter-platform "$CARGO_BUILD_TARGET"
+          CARGO_NET_OFFLINE=true t cargo metadata --format-version 1 --features typescript --filter-platform "$CARGO_BUILD_TARGET"
+          t cargo metadata --format-version 1 --features typescript --filter-platform "$CARGO_BUILD_TARGET" --locked --offline
+          t bun x --no-install napi --version
+          t cargo --version
       # The job of the crate runs the clippy and the tests of the crate with this feature on Windows and on macOS, and
       # the job of the speed of the TUI on Linux.
       - run: bun run build
