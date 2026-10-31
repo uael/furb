@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
-import { createConnection, createServer } from "node:net";
+import { createConnection, createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openEngine } from "../src/bridge.ts";
@@ -622,14 +622,34 @@ for (let n = 1; n <= 4000; n++) tellAbout(place, { pid: n, record: "life.jsonl",
     }),
 );
 
-/** A raw window of the host at a place: the replies that it hears, and how to say a request. */
+/** A connection to the socket at a path, and nothing when the host does not accept one yet. */
+function accepted(path: string): Promise<Socket | undefined> {
+  return new Promise((resolve) => {
+    const socket = createConnection(path);
+    socket.once("connect", () => {
+      socket.removeAllListeners("error");
+      resolve(socket);
+    });
+    socket.once("error", () => resolve(undefined));
+  });
+}
+
+/** A raw window of the host at a place, once the host accepts it: the replies that it hears, and how to say a request.
+ * The file of the socket stands from the bind of the host, before it listens, so a connection to that file can be
+ * refused. */
 async function rawWindow(place: Place): Promise<{
   replies: Record<string, unknown>[];
   say: (message: object) => void;
   closed: Promise<void>;
 }> {
-  const socket = createConnection(place.socket);
-  await new Promise<void>((resolve) => socket.once("connect", () => resolve()));
+  const found: Socket[] = [];
+  await eventually(async () => {
+    const one = await accepted(place.socket);
+    if (one) found.push(one);
+    return one !== undefined;
+  }, "the host to accept a window");
+  const socket = found[0];
+  if (!socket) throw new Error("No host accepted the window.");
   const replies: Record<string, unknown>[] = [];
   const say = framed(socket, (message: never) => replies.push(message));
   const closed = new Promise<void>((resolve) => socket.once("close", () => resolve()));
@@ -655,7 +675,6 @@ test.skipIf(process.platform === "win32")(
       const place = hostPlace(record);
       if (!place) throw new Error("No socket serves here.");
       const host = slowHost(record, directory, 1500);
-      await eventually(() => existsSync(place.socket), "the host to listen");
       const window = await rawWindow(place);
       window.say(HELLO);
       window.say({ id: 2, target: "engine", method: "get", args: [] });
@@ -676,7 +695,6 @@ test.skipIf(process.platform === "win32")(
       const place = hostPlace(record);
       if (!place) throw new Error("No socket serves here.");
       const host = slowHost(record, directory, 60000);
-      await eventually(() => existsSync(place.socket), "the host to listen");
       const window = await rawWindow(place);
       window.say(HELLO);
       window.say({ id: 2, target: "engine", method: "get", args: [] });
@@ -700,7 +718,6 @@ test.skipIf(process.platform === "win32")(
       const place = hostPlace(record);
       if (!place) throw new Error("No socket serves here.");
       const host = slowHost(record, directory, 60000);
-      await eventually(() => existsSync(place.socket), "the host to listen");
       const window = await rawWindow(place);
       window.say(HELLO);
       window.say({ id: 2, target: "session", method: "end", args: [] });
