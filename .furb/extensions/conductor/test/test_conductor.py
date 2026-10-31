@@ -869,7 +869,7 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 
 STATE = (
   "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed assigned silent"
-  " comments measures timers noted debriefs briefed owns watched after parked awaited covering kinds pool slots areas vetoes rulings judged tips shifted parents redmain onmain hired paced landed heard handled ends requeued"
+  " comments measures timers noted debriefs briefed owns watched after parked awaited covering kinds pool slots areas faulted vetoes rulings judged tips shifted parents redmain onmain hired paced landed heard handled ends requeued"
   " statused secret updated budgeted flaky runs_read deferred"
 ).split()
 
@@ -1259,8 +1259,32 @@ def test_a_fault_of_a_step_is_told_once_and_the_round_goes_on(conductor: Round) 
   assert calls == ["tend", "sweep"] * 3
   assert [message for message, _ in conductor.prompts] == [
     "The round on chain1 met a fault in its step tend: JSONDecodeError: Expecting value: line 1 column 1 (char 0)."
-    " The round goes on at the next round, and tells this kind of fault once."
+    " The round goes on at the next round, and tells this fault again only after a round of this step with no fault."
   ]
+
+
+def test_a_fault_of_a_step_is_told_again_with_its_count_after_a_round_with_no_fault(conductor: Round) -> None:
+  calls: list[str] = []
+
+  def tend() -> None:
+    calls.append("tend")
+    if len(calls) != 2:
+      json.loads("")
+
+  async def swept(every: float) -> None:
+    return None
+
+  async def waits(every: float, *acts: str) -> None:
+    if len(calls) == 4:
+      conductor.lead["home"] = "chain2"
+
+  conductor.queue.append(("a", "", ""))
+  conductor.ns.update(tend=tend, sweep=swept, staff=lambda: None, wait=waits)
+  asyncio.run(conductor.conduct())
+  told = [message for message, _ in conductor.prompts]
+  assert len(told) == 2 and "It is the round" not in told[0]
+  assert "JSONDecodeError" in told[1] and "It is the round 2 with this fault in this life." in told[1]
+  assert conductor.faulted == {"fault tend JSONDecodeError": 3}
 
 
 def test_a_round_that_ends_with_no_work_tells_it_as_a_decision(conductor: Round) -> None:
@@ -2162,6 +2186,40 @@ def test_the_chains_that_the_live_round_parked_move_into_the_state_of_the_round(
   conductor.invariants()
   assert conductor.ns["pk_parked"] == {}
   assert conductor.parked == {"chain9": {"name": "", "key": "k9", "model": SONNET, "text": ""}}
+
+
+def nested(conductor: Round) -> dict:
+  asks = crowd(conductor, conductor.cap())
+  conductor.busy("pw", "audit-a", OPUS)
+  conductor.facts["pw"] = ("prompt", "pw", "rung1", "chain2", "tuple[int, str]", "b", "")
+  subs = [("chain", f"chain{i}", "rung9", "chain2", f"audit {i}", "") for i in (20, 21)]
+  conductor.facts.update({f[1]: f for f in subs})
+  asks.update({f[1]: [("prompt", f"q{f[1]}", "rung9", f[1], "str", "b", "")] for f in subs})
+  top = [("chain", f"chain{i}", "rung1", "chain1", f"w/k{i}", "") for i in range(2, conductor.cap() + 2)]
+  facts = {"chain1": top, "chain2": [*subs, *asks["chain2"]]}
+  conductor.ns["transcript"] = lambda on="", of="": [] if of else facts.get(on) or asks.get(on, [])
+  return asks
+
+
+def test_a_sub_chain_of_a_live_worker_counts_within_the_slot_of_that_worker(conductor: Round) -> None:
+  nested(conductor)
+  assert conductor.open_chains() == [f"chain{i}" for i in range(2, 7)]
+  conductor.invariants()
+  assert conductor.parked == {} and conductor.paused_chains == []
+  conductor.parked["chain20"] = {"name": "", "key": "", "model": "", "text": ""}
+  conductor.paused_chains.append("chain20")
+  conductor.staff()
+  assert conductor.parked == {} and conductor.paused_chains == []
+
+
+def test_a_parked_chain_takes_a_free_slot_before_a_new_chain(conductor: Round) -> None:
+  asks = crowd(conductor, conductor.cap())
+  del asks["chain2"]
+  assert conductor.room(SONNET)
+  conductor.facts["chain9"] = ("chain", "chain9", "rung1", "chain1", "w/k9", "")
+  conductor.parked["chain9"] = {"name": "", "key": "k9", "model": SONNET, "text": "go on"}
+  assert not conductor.room(SONNET)
+  assert conductor.room(SONNET, "chain9")
 
 
 def build_slots(tmp_path: Path, pid: int) -> dict[str, str]:

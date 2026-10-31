@@ -44,7 +44,7 @@ When you find a defect, a wrong state or a gap in your own work, or the owner po
 The owner rules, on 10-23: "this kind of item should be done by sonnet, not opus. You need to use Sonnet more, when it make sense. And opus/medium should be your default, not opus/high. opus/high is kinda the max, xhigh for the coordination and my rulings only. most of the time sonnet/{medium,high} and opus/high are perfect." So a debrief asks the model of its worker, and a worker runs efforts[key], or the model of its kind. An item has a kind, kinds[key], by the ruling of the owner on 10-28 on dedicated audit and edit workers: audit reads and writes a register in scratch, with no worktree and no PR, on ACTOR, opus/medium, with the brief AUDIT; edit makes a worktree and a PR, on EDITOR, sonnet/high, with the brief WORKER; fix mends one red PR on limits["fixer"]. An item with no kind is a fix when its key is fixN or boxN, else an edit. An auditor that ends with 0 and its report is a line in the next notice, and each row of the table | Dn | key | model | area | brief | in its register is queued once as the item triage-<key>, at the end of queue, on the model of its row. A fixer (fixN, boxN) runs on limits["fixer"], sonnet/high, by the ruling of the operator. A worker runs only a model of MODELS: sonnet/medium, sonnet/high, opus/medium or opus/high. hire() refuses xhigh and max, and the round starts no item that asks for one and tells you. You choose sonnet for an item where it makes sense, as efforts[key] = "claude-cli:sonnet/medium" before you queue it.
 The owner rules again, on 10-23: "From now on: 2 opus workers, 3 sonnet ones. max." The owner rules again, on 10-26: "add one opus/high worker for the most complex stuff". So limits["room"] gives the room of each family of model: the round runs at most 1 worker on opus/medium, 3 on sonnet and 1 on opus/high at once, by the ruling of the operator, and counts only the workers whose prompt is not over. limits lives in the state of the round, so a reload of the extension keeps it: you change it there, as limits["room"]["opus"] = 2, and cap() gives the sum of the room. You give opus/high only to the most complex items, as efforts[key] = "claude-cli:opus/high". An item whose model has no room keeps its place in queue while the next item whose model has room starts. A fixer goes before a new item. A worker that ended and whose PR needs a fixer goes on in its own chain on HANDOVER, sonnet, with a new prompt there, when sonnet has room, else on the model of its last prompt when that has room; else a fixer starts on limits["fixer"].
 The round runs on one chain, lead["home"]. After a compaction of your chain, await conduct() in the new chain: it names that chain, the round of the old chain ends at its next wake, and the state that the round reads is the state of the new chain, which you change there.
-A fault of one step of a round, as an empty answer of gh, ends no round: the round tells you once each kind of fault, with the fault and its step, and goes on at the next round. Each json.loads of a command reads its output only when the command succeeded. When the round ends for any cause but a new home, it tells you as a decision, with the cause and what stops.
+A fault of one step of a round, as an empty answer of gh, ends no round: the round tells you each kind of fault, with the fault and its step and the count of its rounds, once and again only after a round of that step with no fault, so a step that faults at each round is seen, and goes on at the next round. Each json.loads of a command reads its output only when the command succeeded. When the round ends for any cause but a new home, it tells you as a decision, with the cause and what stops.
 hire(key, brief, thread) gives the item to an idle worker of the pool, by the ideas of the owner on 10-28, when one fits: a worker that ended stays in pool under its chain, with its model, its thread and the top folders of the files of its PR, and it takes an item of the same model whose thread is its own, or whose areas[key] names one of its folders, while its last reply filled under half of its window. Else hire starts a worker on a new chain that forks the base chain of its kind and model, bases["kind model"], which the round makes once and which reads AGENTS.md, so the provider serves that prefix from its cache. It starts the worker at model_of(key), on a chain labeled thread/key, with the brief in custom or the brief of its kind, and the PR of an edit carries the labels w:key and thread:thread.
 A worker does one item in a workspace {repo}-wN, which the round gives at its hire to it alone and again to a later worker once it ends, and which it leaves clean with its branch pushed (a chain goes on in the workspace that it held last when no live worker holds it, else it gets a new one and its brief says that the old one now belongs to another worker, and the file furb-holder in the git dir of a workspace names its chain, which each worker reads before its first command of a prompt there, and before the round gives a workspace it commits and pushes the work that an earlier item left there, on a branch w/wip-<sha> when HEAD is detached), runs only the tests that its change touches, opens its PR, and closes with its URL.
 A prompt of a worker that ends with CancelledError while the round made no cancel over it, as when the life restarts, goes on: the round asks it again on its chain with a new prompt, at most 3 times for an item, and tells nobody.
@@ -70,7 +70,7 @@ DEBRIEFS is on by default and lives in the state of the round: DEBRIEFS = False 
 An item waits for others with after[key] = [keys], set before you queue it: staff() hires it only once each PR that those keys ended with merged, an item of backlog whose keys merged goes to queue, and the round lists in a notice each key that no item holds. The entries of held_items in the module of the root move into backlog at each round, so a dict of your own chain is not needed.
 Method, at each notice: read the whole state, fix every thing that is off in one go, read the state again to verify, and go on until nothing is off. Only then report. Each round also checks the state in invariants(): it gives each open PR that the round tends a home, from the chain that pushed its head, wakes no chain, and lists in the next notice what code cannot fix.
 A PR waits on a decision of the owner while awaited[decision] names one of its labels, or its number as #N, and the decision is an act that is not over, as the prompt that asked him: a failed check of that PR gets no order, no handover and no fixer, a conflict of it still does, and the round names the decision once. When the act ends, the round drops it and tends the PR again.
-The round holds at most cap() chains that hold an open prompt with a shape, and counts the chains of workers, of sub-chains and of judges alike: room() counts them, and a resume of a worker waits for a slot. When more chains stand, the round pauses the newest overflow with a note and wakes it in order when a slot frees, and it never ends its task.
+The round holds at most cap() chains that hold an open prompt with a shape, and counts the chains of workers, of sub-chains and of judges alike: room() counts them, and a resume of a worker waits for a slot. A sub-chain that a chain of a live worker made, at any depth, counts within the slot of that worker, since the worker waits on it: the round never parks it. A parked chain takes the next free slot before any new chain, since tend and sweep hire before staff wakes. When more chains stand, the round pauses the newest overflow with a note and wakes it in order when a slot frees, and it never ends its task.
 The owner rules, on 10-29: "we should use more gh stacks in conductor, because they can be merged at once (all PRs of stack as once)". So a PR on main at the bottom of a stack whose layers are all green, free of hold, paused and owner-merge, and passed by the vetoes, merges with its whole stack at once through gh stack merge, and while a layer above it still runs its checks, the bottom waits rather than merge alone; a stack with a red layer merges its green layers below it at once; a stack that gh stack does not hold lands one layer at a time, and the round tells it once. Each sweep links each chain of stacked PRs on GitHub with gh stack link, once for each chain, so that it shows as one stack. GitHub gives no priority to a queued run, so each sweep cancels each queued run of the gates that can serve no merge: a run of a closed PR, of an old head, of a draft, a held or a conflicting PR, and it defers a run of a layer above a layer that is not green, which it runs again once that layer is green and fewer than THROTTLE runs wait. It never touches a run of main or of a PR that can merge.
 reload(path, on) loads the definitions of the file of an extension into the module of a chain: it runs, in the order of the file, each top-level definition whose name the module lacks or whose text differs from its text in the last run of a word that ended with no fault (a load that was cancelled or failed counts for nothing, so the next reload loads it again), and gives (rung, names): the rung that runs the load, which quietly starts so that no end of the caller cancels it, and the names. The load is done only when that rung is over and peek(rung) is no exception: await it. Use it after a PR that changed the conductor merged.
 The owner rules, on 10-31, after #816 and #859 merged green and wrong, since no gate compared a PR with his words: an item may hold his exact words in rulings[key], a list of str, each quoted as he wrote it. hire puts them at the top of the brief, under RULED, before any line of yours. Before its merge, each green PR whose item, by its label w:key or by owns, holds rulings passes the veto bent: a blind judge on a chain of its own, RULER (opus/medium) under a grant of RULER_USD dollars, reads his words and the diff alone, and closes with each way that the diff fails or bends them, each with his exact words. A head with a gap does not merge, and its worker gets the gaps, or a worker on its chain when it ended, and a comment on the PR names them; a head that the judge cleared merges, and each new head is judged again. A judge that fails twice, with no answer or with a quote that is not his, tells you and holds the PR: judge it yourself, then set judged["n sha"]["state"] to "cleared", or give the gaps to its worker. judged keeps the state of each head.
@@ -128,6 +128,7 @@ kinds: dict[str, str] = globals().setdefault("kinds", {})
 pool: dict[str, dict] = globals().setdefault("pool", {})
 slots: dict[str, str] = globals().setdefault("slots", {})
 areas: dict[str, list[str]] = globals().setdefault("areas", {})
+faulted: dict[str, int] = globals().setdefault("faulted", {})
 DEBRIEFS = globals().get("DEBRIEFS", True)
 vetoes: dict = globals().setdefault("vetoes", {})
 rulings: dict[str, list[str]] = globals().setdefault("rulings", {})
@@ -460,26 +461,41 @@ def family(model: str) -> str:
   return name if name in limits["room"] else name.split("/")[0]
 
 
-def open_chains() -> list[str]:
-  found: list[str] = []
-  seen, todo = {ROOT}, [ROOT]
+def tree() -> dict[str, bool]:
+  """Each chain under the root, and whether a chain of a live worker made it, at any depth."""
+  mine = {str(get(n)[3]) for n in working if get(n) and not over(n)}
+  found: dict[str, bool] = {}
+  seen, todo = {ROOT}, [(ROOT, False)]
   while todo:
-    for x in transcript(todo.pop()):
+    at, under = todo.pop()
+    for x in transcript(at):
       c = str(x[1])
       if x[0] == "chain" and c not in seen:
         seen.add(c)
-        todo.append(c)
-        if c not in parked and any(y[0] == "prompt" and not over(y[1]) and y[4] != "None" for y in transcript(c)):
-          found.append(c)
+        found[c] = under or at in mine
+        todo.append((c, found[c]))
+  return found
+
+
+def open_chains() -> list[str]:
+  found = [
+    c
+    for c, under in tree().items()
+    if not under
+    and c not in parked
+    and any(y[0] == "prompt" and not over(y[1]) and y[4] != "None" for y in transcript(c))
+  ]
   return sorted(found, key=lambda c: int(re.sub(r"\D", "", c) or 0))
 
 
-def room(model: str) -> bool:
+def room(model: str, but: str = "") -> bool:
   if model not in MODELS:
     return False
   mine = family(model)
   live = [n for n in working if not over(n) and family(models.get(n, ACTOR)) == mine]
-  return len(live) < limits["room"][mine] and len(open_chains()) < cap()
+  # A parked chain takes the next free slot before a new chain: tend and sweep run before staff in each round.
+  waiting = [c for c in parked if c != but and get(c)]
+  return len(live) < limits["room"][mine] and len(open_chains()) + len(waiting) < cap()
 
 
 def resume(key: str, where: str, model: str, text: str) -> str:
@@ -1968,14 +1984,15 @@ def triage() -> None:
 
 
 def staff() -> None:
+  under = tree()
   for c in list(parked):
     entry = parked[c]
     if not get(c):
       del parked[c]
-    elif len(open_chains()) >= cap():
+    elif len(open_chains()) >= cap() and not under.get(c):
       break
     elif entry["text"]:
-      if room(entry["model"]):
+      if room(entry["model"], c):
         del parked[c]
         resume(entry["key"], c, entry["model"], entry["text"])
     else:
@@ -2810,11 +2827,17 @@ async def conduct(every: float = 300) -> dict[str, object]:
             staff()
           else:
             invariants()
+          for key in [k for k in noticed if k.startswith(f"fault {at} ")]:
+            noticed.discard(key)
         except Exception as fault:
+          key = f"fault {at} {type(fault).__name__}"
+          faulted[key] = faulted.get(key, 0) + 1
+          times = f" It is the round {faulted[key]} with this fault in this life." if faulted[key] > 1 else ""
           notice(
-            f"fault {at} {type(fault).__name__}",
-            f"The round on {here} met a fault in its step {at}: {type(fault).__name__}: {str(fault)[:1000]}. The round goes"
-            " on at the next round, and tells this kind of fault once.",
+            key,
+            f"The round on {here} met a fault in its step {at}: {type(fault).__name__}: {str(fault)[:1000]}.{times}"
+            " The round goes on at the next round, and tells this fault again only after a round of this step with"
+            " no fault.",
           )
       if not (
         queue
