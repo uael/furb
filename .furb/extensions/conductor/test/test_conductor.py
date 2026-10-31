@@ -3015,7 +3015,7 @@ def test_a_load_ends_with_a_check_that_refuses_each_name_that_the_module_binds_w
   assert conductor.reload("ext.py") == ("rung3", ["tended"])
 
 
-def failing(conductor: Round, main: str) -> None:
+def failing(conductor: Round, main: str, tip: str = "m1") -> None:
   conductor.says.clear()
   conductor.say(r"workflows/gates\.yml/runs\?", '{"workflow_runs": []}')
   stamp = "2026-10-29T10:00:00.12Z"
@@ -3024,7 +3024,7 @@ def failing(conductor: Round, main: str) -> None:
   conductor.say(r"run list --commit sha5", json.dumps([{"databaseId": 13, "conclusion": "failure"}]))
   conductor.say(r"run view 13", "unit\tpytest\tFAILED test/test_x.py::test_z - bang\n")
   conductor.say(r"run view 9", f"unit\tpytest\t{stamp} FAILED test/test_x.py::test_y - boom\n")
-  runs = [{"headSha": "m1", "conclusion": main, "databaseId": 9}]
+  runs = [{"headSha": tip, "conclusion": main, "databaseId": 9}]
   conductor.say(r"compare/main\.\.\.sha4", '{"behind_by": 2}')
   conductor.say(r"pr list --state open", json.dumps(four_five()))
   conductor.say(r"pr list --state merged", "[]")
@@ -3059,6 +3059,27 @@ async def test_a_pr_whose_failed_lines_all_fail_on_main_waits_on_main_until_main
     "#4 waited on a red main at sha4, and main is green again, so the round updated its branch."
   ]
   assert [key for key, _ in conductor.hired] == ["fix5"] and conductor.onmain == {}
+
+
+@POSIX
+@JQ
+async def test_a_tip_of_main_whose_run_still_runs_keeps_the_verdict_of_the_last_tip_whose_run_ended(
+  conductor: Round,
+) -> None:
+  failing(conductor, "failure")
+  await conductor.sweep(300)
+  assert list(conductor.redmain) == ["m1"] and conductor.prs[4]["state"] == "main"
+  failing(conductor, "", "m2")
+  await conductor.sweep(300)
+  assert list(conductor.redmain) == ["m1"] and conductor.prs[4]["state"] == "main"
+  assert "update-branch" not in conductor.log() and conductor.heard == [] and conductor.onmain != {}
+  assert (len(conductor.prompts), len(conductor.hired)) == (1, 1)
+  failing(conductor, "success", "m2")
+  await conductor.sweep(300)
+  assert "pr update-branch 4\n" in conductor.log() and conductor.redmain == {}
+  assert conductor.heard == [
+    "#4 waited on a red main at sha4, and main is green again, so the round updated its branch."
+  ]
 
 
 @POSIX
