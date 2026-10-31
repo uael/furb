@@ -8,6 +8,11 @@ LORE: Final[str] = ...
 def enabled() -> list[str]:
   """enabled gives the name of each extension that the life runs, once, in the order the life enabled it, as the enable facts of the root say, and it asks nothing."""
 
+def bound_by(on: str = "") -> dict[str, str]:
+  """bound_by gives the names that the words of a chain bind at their top level, a def, a class, an assignment or a quote, each with the rung whose word bound it last, and it asks nothing.
+  The words of the extensions that play on the chain count, each under the rung that played it, and a name that the engine defines is not there unless a word binds it again.
+  """
+
 def extend(name: str, *rungs: str, tui: str = "") -> Text:
   """extend writes the words of the rungs it names, in order, as the program of the chain holds them, with a blank line between two, after the word that the file holds, as the word of the extension of that name in .furb/extensions/<name>, with a manifest of that name and of that word, and gives the word as it landed.
   extend writes tui, when it is given, as tui.ts in the folder of the extension, the part that the TUI loads, and the manifest names tui.ts under tui whenever the folder holds that file.

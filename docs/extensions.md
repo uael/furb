@@ -49,7 +49,7 @@ Seven extensions come with furb, and each life runs them unless a config turns t
   has no life word. The lore says the three ways to extend furb and when to take each: a def in a word, which lives with
   its chain; `extend(name, *rungs)`, which writes the words of those rungs as an extension of the project and turns it
   on, so every later chain runs it; and an official extension, which lives in furb. `extend(name, *rungs, tui=module)`
-  also writes a [part for the TUI](#a-part-for-the-tui). `enabled()` gives the extensions that the life runs.
+  also writes a [part for the TUI](#a-part-for-the-tui). `enabled()` gives the extensions that the life runs. `bound_by()` gives each name that a word of the chain bound, with the rung of that word.
 - **`web`** searches the web and reads its pages. `web_search(query)` uses the search of the provider of the model of
   the chain, or of the actor that `to` names: the web search of the APIs of Anthropic, OpenAI and xAI, Gemini grounded
   in Google Search, and the search of DeepSeek. For a provider with no search, it uses the free search of Parallel for
