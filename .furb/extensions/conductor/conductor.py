@@ -2820,6 +2820,9 @@ async def sweep(every: float) -> None:
   main = json.loads(parts[2])
   red = "failure" in main["runs"]
   tip = str(main["sha"])
+  if not red and not all(main["runs"]) and redmain:
+    # A tip whose run still runs tells nothing, so the verdict of the last tip whose run ended stands.
+    red, tip = True, next(iter(redmain))
   if not red:
     redmain.clear()
   elif tip not in redmain:
