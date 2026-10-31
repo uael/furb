@@ -156,6 +156,8 @@ export class App {
   programs = new Map<string, { session: unknown; version: number; live: string; lines: ProgramLine[] }>();
   /** What each thread showed when it was last seen open, which tells a folded thread that new work came. */
   readonly seenThreads = new Map<string, { seen: string; folded: boolean }>();
+  /** The programs that have a line which runs, each with the times of those lines as it drew them last. */
+  liveLines = new Map<LineNumberRenderable, { times: () => string; shown: string }>();
   /** The rows that a model writes, by the step that it writes, which the tick draws again, each with the lines that
    * the card above it shows. */
   thinkingRows = new Map<
@@ -644,6 +646,7 @@ export class App {
       if (this.statusMoves) this.renderStatus();
       if (this.stage.visible && this.cursor === undefined && this.moves()) this.renderStage();
       if (this.thinkingRows.size) this.tickThinking();
+      if (this.liveLines.size) this.tickLive();
       if (this.tree?.panel?.live) this.renderChains();
     }, frame);
     this.render();

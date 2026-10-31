@@ -3,7 +3,7 @@
 //! hears the facts of a life.
 //!
 //! While the log beside the record agrees with it, the reader gives every fact of the log, as [`logged`] reads it.
-//! Else it gives the facts that the record kept. The record keeps only what the outside said: the World, the models
+//! Else it gives the facts that the record kept, each value as the engine gives it. The record keeps only what the outside said: the World, the models
 //! and the operator. So the reader says, after the facts that name them, the facts that the engine said and the record
 //! does not keep, as far as the kept facts show them:
 //!
@@ -159,7 +159,7 @@ pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
 }
 
 /// What the build that writes a file of what a record tells names in it: a reader of another build writes it again.
-const BUILD: &str = concat!(env!("CARGO_PKG_VERSION"), "/", env!("CARGO_PKG_NAME"), "/1");
+const BUILD: &str = concat!(env!("CARGO_PKG_VERSION"), "/", env!("CARGO_PKG_NAME"), "/2");
 
 /// The size and the time of change of a file, in nanoseconds, or nothing when no file stands there.
 fn stamped(path: &Path) -> Option<(u64, u128)> {
@@ -189,9 +189,9 @@ fn cached(told: &Path, stamp: &serde_json::Value, log: &Path) -> Option<Retold> 
   })
 }
 
-/// The fact of an entry of a record.
+/// The fact of an entry of a record, with its values as the engine gives them.
 fn kept(entry: &Object) -> Option<Fact> {
-  Fact::owned(entry.as_ref().items()?.first()?.to_owned())
+  Fact::owned(plain(entry.as_ref().items()?.into_iter().next()?))
 }
 
 /// The sha256 of an entry of a record, in the plain form that the record keeps.
@@ -216,15 +216,37 @@ fn question<'a>(
   Object::list([kind, id, maker].into_iter().chain(words).map(Object::string))
 }
 
-/// The items of a value that is a list or a tuple, which a record keeps as a map whose `is` is tuple.
+/// The items of a value that is a list or a tuple.
 fn items(said: ObjectRef<'_>) -> Vec<ObjectRef<'_>> {
-  match field(&said, IS).and_then(|one| one.as_str()) {
-    Some("tuple") => {
-      field(&said, "args").and_then(|one| entry(&one, 0)).and_then(|one| one.items())
+  said.items().unwrap_or_default()
+}
+
+/// A value that a record kept, as the engine gives it: a tuple and a whole float, which keep a mark in the record so
+/// that a later life reads them again as they were, come back as a tuple and a float, so a host reads the file of what
+/// a record tells as it reads the log of a life.
+fn plain(said: ObjectRef<'_>) -> Object {
+  if said.type_name() == "dict"
+    && let Some(pairs) = said.pairs()
+  {
+    let first = field(&said, "args").and_then(|one| entry(&one, 0));
+    match (field(&said, IS).and_then(|one| one.as_str()), first) {
+      (Some("tuple"), Some(args)) if args.items().is_some() => {
+        return Object::tuple(items(args).into_iter().map(plain));
+      }
+      (Some("float"), Some(args)) => {
+        if let Some(number) = args.as_str().and_then(|one| one.trim().parse::<f64>().ok()) {
+          return Object::float(number);
+        }
+      }
+      _ => {}
     }
-    _ => said.items(),
+    return Object::dict(pairs.into_iter().map(|(key, one)| (plain(key), plain(one))));
   }
-  .unwrap_or_default()
+  match (said.type_name(), said.items()) {
+    ("list", Some(held)) => Object::list(held.into_iter().map(plain)),
+    ("tuple", Some(held)) => Object::tuple(held.into_iter().map(plain)),
+    _ => said.to_owned(),
+  }
 }
 
 /// The text of a word of a fact, and an empty text when it is no text.
@@ -235,7 +257,7 @@ fn text(fact: &Fact, at: usize) -> String {
 /// The facts that a record kept, with the facts that the engine said and the record does not keep.
 #[cfg(test)]
 fn told(kept: Vec<Object>) -> Vec<Object> {
-  let facts: Vec<Fact> = kept.into_iter().filter_map(Fact::owned).collect();
+  let facts: Vec<Fact> = kept.iter().filter_map(|one| Fact::owned(plain(one.as_ref()))).collect();
   let mut makers = Makers::default();
   facts.iter().for_each(|one| makers.hear(one));
   let mut out = Vec::new();

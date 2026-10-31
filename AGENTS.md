@@ -306,7 +306,7 @@ fix what your change broke, and report what was broken before.
 - `bun install && bun run build`: install the TypeScript workspace, and build the N-API package that the TUI uses.
 - `bun run check`, `bun run lint` and `bun run test`: the type check, the lint and the tests of the TypeScript side.
   `tui/script/test.ts` deals the tests into runs, each a process that runs one test at a time with a limit of thirty
-  seconds, and runs twice as many at once as the machine has cores. A word after `bun run test` filters the files, and a
+  seconds, and runs twice as many at once as the machine has cores. A word after `bun run test` filters the files by their path or by `package/file`, as `tui/host`, and a
   filter that matches no file fails. `FURB_TEST_OUTPUT=1` shows all that each run wrote. The tests read the configs and
   the cache of `.furb/tests` of the root, from any folder, not those of the machine. As root, the test of a folder that cannot be read fails, since
   root reads every folder.
