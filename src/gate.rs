@@ -55,6 +55,9 @@ const IMPORT: &str = "error[unresolved-import]";
 /// The rule of a finding on an await in a function that is not async.
 const AWAIT: &str = "error[await-outside-async]";
 
+/// The rule of a finding on a read of asyncio in a word.
+const ASYNCIO: &str = "error[asyncio-in-word]";
+
 /// The most brackets, one in another, that the checker reads in a literal. The checker takes time of about the fourth
 /// power of the depth of a literal, and more again when a part has no type that it knows, as an empty list: a list of
 /// 32 levels with an empty list at the bottom takes 6 s. monty writes a value of about 990 levels as a literal, which
@@ -107,6 +110,7 @@ pub fn checked(sheet: &str) -> Result<Vec<(usize, String)>, Fault> {
     let mut found = declared(sheet, typed(&[], &text, &stands)?, None);
     found.extend(unrun(sheet));
     found.extend(unawaited(sheet));
+    found.extend(unscheduled(sheet));
     found.extend(told(sheet));
     found.sort_by_key(|(line, _)| *line);
     return Ok(signed(found, &[sheet, ENGINE]));
@@ -115,6 +119,7 @@ pub fn checked(sheet: &str) -> Result<Vec<(usize, String)>, Fault> {
     declared(&short, typed(&laid.modules, &laid.main, &laid.lines)?, Some(&laid.declares));
   found.extend(unrun(&short));
   found.extend(unawaited(&short));
+  found.extend(unscheduled(&short));
   found.extend(told(&short));
   found.sort_by_key(|(line, _)| *line);
   let mut sources: Vec<&str> = vec![&laid.main];
@@ -1212,6 +1217,80 @@ fn unawaited(sheet: &str) -> Vec<(usize, String)> {
     .collect()
 }
 
+/// Each name of asyncio but `CancelledError` that the word reads, by the line it stands on.
+///
+/// A word runs in a call of the host, where the sandbox refuses each future of asyncio: `asyncio.sleep` raises a
+/// RuntimeError, and `asyncio.gather` refuses an act with a TypeError, since an act is a name. The stubs of monty type
+/// both as right, so the gate refuses each read of asyncio in the word first, and names the verbs that do its work.
+fn unscheduled(sheet: &str) -> Vec<(usize, String)> {
+  let Ok(parsed) = parse_module(sheet) else { return vec![] };
+  let Some(body) = bodied(parsed.syntax()) else { return vec![] };
+  let mut modules = Asyncio(HashSet::new());
+  modules.visit_body(body);
+  let mut reads = Scheduled { modules: &modules.0, found: vec![] };
+  reads.visit_body(word_of(body));
+  let line = |at: usize| sheet[..at].matches('\n').count() + 1;
+  reads
+    .found
+    .into_iter()
+    .map(|(at, name)| {
+      let why = format!(
+        "{ASYNCIO} (column {}) `asyncio.{name}` cannot run in a word, which runs in a call of the host: await wait(seconds) to pause, and await each act by itself",
+        column(sheet, at)
+      );
+      (line(at), why)
+    })
+    .collect()
+}
+
+/// The names that the sheet binds to the module asyncio, at any depth.
+struct Asyncio<'a>(HashSet<&'a str>);
+
+impl<'a> StatementVisitor<'a> for Asyncio<'a> {
+  fn visit_stmt(&mut self, stmt: &'a Stmt) {
+    if let Stmt::Import(one) = stmt {
+      for alias in one.names.iter().filter(|alias| alias.name.as_str() == "asyncio") {
+        self.0.insert(alias.asname.as_ref().unwrap_or(&alias.name).as_str());
+      }
+    }
+    walk_stmt(self, stmt);
+  }
+}
+
+/// The reads of asyncio in a word, but `CancelledError`, each by where it starts, with the name that it reads.
+struct Scheduled<'a, 'b> {
+  modules: &'b HashSet<&'a str>,
+  found: Vec<(usize, &'a str)>,
+}
+
+impl<'a> Visitor<'a> for Scheduled<'a, '_> {
+  fn visit_stmt(&mut self, stmt: &'a Stmt) {
+    if let Stmt::ImportFrom(one) = stmt
+      && one.module.as_ref().is_some_and(|module| module.as_str() == "asyncio")
+    {
+      self.found.extend(
+        one
+          .names
+          .iter()
+          .filter(|alias| alias.name.as_str() != "CancelledError")
+          .map(|alias| (alias.start().to_usize(), alias.name.as_str())),
+      );
+    }
+    visitor::walk_stmt(self, stmt);
+  }
+
+  fn visit_expr(&mut self, expr: &'a Expr) {
+    if let Expr::Attribute(one) = expr
+      && let Expr::Name(module) = &*one.value
+      && self.modules.contains(module.id.as_str())
+      && one.attr.as_str() != "CancelledError"
+    {
+      self.found.push((expr.start().to_usize(), one.attr.as_str()));
+    }
+    visitor::walk_expr(self, expr);
+  }
+}
+
 /// The awaits of a sheet that stand in a function that is not async: the name of the innermost function while it
 /// is not async, and each await found, by where it starts, with the name of its function.
 struct Awaits<'a> {
@@ -1452,6 +1531,20 @@ mod tests {
         )
       )]
     );
+  }
+
+  #[test]
+  fn a_read_of_asyncio_in_the_word_is_a_finding_of_its_line_but_its_cancelled_error() {
+    let found = said(
+      &[],
+      "import asyncio as aio\nfrom asyncio import gather, CancelledError\ntry:\n  await aio.sleep(1)\nexcept aio.CancelledError:\n  pass",
+    );
+    let why = |column: usize, name: &str| {
+      format!(
+        "{ASYNCIO} (column {column}) `asyncio.{name}` cannot run in a word, which runs in a call of the host: await wait(seconds) to pause, and await each act by itself"
+      )
+    };
+    assert_eq!(found, vec![(2, why(23, "gather")), (4, why(11, "sleep"))]);
   }
 
   #[test]
