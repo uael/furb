@@ -899,3 +899,20 @@ test("the feed has its width when the sidebar hides, before the next render draw
     library.toggle();
     expect(app().feedWidth).toBe(152 - spacing.gutter * 2);
   }));
+
+test("Add a workspace in the sidebar adds the folder that the input then names, as /workspace does", () =>
+  withLibrary(async ({ directory, open, sidebar }) => {
+    const { library } = await fooAndBar(directory, open);
+    await mkdir(join(directory, "other"));
+    const { screen, app, left, row } = await sidebar(library);
+    const add = row("Add a workspace");
+    expect(add).toBeGreaterThan(0);
+    await screen.mockMouse.click(left + 6, add);
+    await screen.flush();
+    expect(app().composer.plainText).toBe("/workspace ");
+    await screen.mockInput.typeText(join(directory, "other"));
+    await screen.flush();
+    screen.mockInput.pressEnter();
+    await until(library, () => library.groupOf()?.name === "other");
+    expect(library.groups.map((group) => group.name)).toEqual(["project", "other"]);
+  }));

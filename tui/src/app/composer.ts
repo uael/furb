@@ -166,6 +166,8 @@ export const composer = part({
     this.closeOverlay();
     if (this.draftKey !== this.composeKey()) this.showDraft(this.composeKey());
     this.composer.replaceText(text);
+    // replaceText leaves the cursor where the old text had it, so what the operator types next would go before the text.
+    this.composer.cursorOffset = text.length;
     this.composer.focus();
   },
 
