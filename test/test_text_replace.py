@@ -17,8 +17,10 @@ def test_replace_old_new_count_gives_a_new_text_with_the_edit_added() -> None:
 
 
 def test_a_replace_of_a_string_that_the_text_does_not_hold_is_refused() -> None:
-  """A replace of a string that the text does not hold is refused, and the refusal names the path and the string, as for an edit of lines that are not there."""
+  """A replace of a string that the text does not hold is refused, and the refusal names the path and the first line of that string that the text holds the fewest times, so a string of many lines names a line that the text does not hold, and not the whole string again."""
   with pytest.raises(Refused, match=r"^/w/n\.txt no 'three'$"):
     ONE.replace("three", "3")
   with pytest.raises(Refused, match=r"^/w/n\.txt no 'One'$"):
     ONE.replace("One", "1", 1)
+  with pytest.raises(Refused, match=r"^/w/n\.txt no 'three'$"):
+    ONE.replace("one\ntwo\nthree\none", "1")

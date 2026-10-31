@@ -693,7 +693,7 @@ class Text:
     """
   def replace(self, old: str, new: str, count: int = -1) -> Text:
     """replace(old, new, count) gives a new text with the edit added, as str.replace gives with the same count.
-    A replace of a string that the text does not hold is refused, and the refusal names the path and the string, as for an edit of lines that are not there.
+    A replace of a string that the text does not hold is refused, and the refusal names the path and the first line of that string that the text holds the fewest times, so a string of many lines names a line that the text does not hold, and not the whole string again.
     """
   def undo(self, n: int = 1) -> Text:
     """undo(n) gives a new text without its last n edits.
