@@ -81,7 +81,29 @@ export async function seedLife(session: Session): Promise<Set<string>> {
   await engine.prompt("str", { message: checklist, on: engine.root });
   await settle(session);
   await seedAsks(session);
+  await reached(session);
   return new Set(session.acts.filter((act) => !act.done).map((act) => act.id));
+}
+
+/** Wait until the host holds each prompt that waits for the operator. The worker sends its state to the host 20 ms
+ * after the console takes a prompt, so the host reads a prompt later than the acts of the life hold it. */
+async function reached(session: Session, limit = 10_000): Promise<void> {
+  const start = Date.now();
+  for (;;) {
+    await session.refresh();
+    const missing = session.acts.filter(
+      (act) =>
+        act.kind === "prompt" &&
+        !act.done &&
+        act.words[2] === "operator" &&
+        act.words[0] !== "None" &&
+        !session.host.prompts.has(act.id),
+    );
+    if (missing.length === 0) return;
+    if (Date.now() - start > limit)
+      throw new Error(`The host did not hold ${missing.map((act) => act.id).join(", ")} in ${limit} ms.`);
+    await new Promise((done) => setTimeout(done, 20));
+  }
 }
 
 /** The chain that a label names. */
