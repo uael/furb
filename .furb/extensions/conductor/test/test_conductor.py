@@ -313,8 +313,8 @@ async def test_a_red_main_updates_no_branch(conductor: Round) -> None:
 @JQ
 async def test_a_green_pr_behind_main_updates_its_branch_though_heal_updated_it_at_that_head(conductor: Round) -> None:
   conductor.say(r"compare/main\.\.\.abc", '{"behind_by": 3}')
-  conductor.say(r"compare/abc\.\.\.main", '{"files": [{"filename": "src/engine.py"}]}')
-  conductor.say(r"pr view 5 --json files", '{"files": [{"path": "src/engine.py"}]}')
+  conductor.say(r"compare/abc\.\.\.main", '{"files": [{"filename": "src/furb/engine.py"}]}')
+  conductor.say(r"pr view 5 --json files", '{"files": [{"path": "src/furb/engine.py"}]}')
   await conductor.mend(conductor.pr(checks=("FAILURE", "FAILURE")), 0.0, False)
   assert conductor.log().count("update-branch") == 1
   green = conductor.pr(checks=("SUCCESS",), names=["the hooks"])
@@ -2965,6 +2965,45 @@ def test_reload_starts_its_load_through_quietly_so_that_no_end_of_the_caller_can
   assert [on for _, on in conductor.rungs] == ["chain1"] and 'return "new"' in conductor.rungs[0][0]
 
 
+ENGINE_FILE = '''from furb.engine import (
+  bash,
+)
+
+
+async def lister() -> None:
+  await bash("ls", {call})
+'''
+
+
+def test_a_reload_refuses_a_file_that_calls_the_engine_with_a_parameter_that_the_bash_of_the_life_lacks(
+  conductor: Round,
+) -> None:
+  import furb
+  import furb_monty
+  from furb import sheet
+
+  conductor.ns["gate"] = lambda word, on="": sheet.gate(vars(furb.python), {}, word, furb_monty.gate)
+  # The bash of the engine that the gate reads has no parameter nope, as the bash of an older build had no ok.
+  conductor.files["ext.py"] = ENGINE_FILE.format(call="nope=True")
+  with pytest.raises(conductor.Refused) as why:
+    conductor.reload("ext.py")
+  assert str(why.value) == (
+    "ext.py needs the engine of a newer build, since bash do not fit the engine of this life:"
+    " restart the life on that build to load it"
+  )
+  assert conductor.rungs == []
+  conductor.files["ext.py"] = ENGINE_FILE.format(call="timeout=1.0")
+  assert conductor.reload("ext.py") == ("rung1", ["lister"])
+
+
+def test_a_reload_leaves_a_finding_on_a_name_that_the_file_does_not_import_from_the_engine_to_the_gate(
+  conductor: Round,
+) -> None:
+  conductor.ns["gate"] = lambda word, on="": ["line 1: error[unresolved-reference] Name `lister2` used when not defined"]
+  conductor.files["ext.py"] = ENGINE_FILE.format(call="timeout=1.0")
+  assert conductor.reload("ext.py") == ("rung1", ["lister"])
+
+
 def test_a_load_whose_end_did_not_run_counts_for_nothing_and_loads_again(conductor: Round) -> None:
   # The definitions ran and seal did not, as in a load that was cancelled or failed between two definitions.
   exec(NEW_FILE, conductor.ns)  # noqa: S102
@@ -3020,7 +3059,7 @@ def test_a_load_ends_with_a_check_that_refuses_each_name_that_the_module_binds_w
   assert conductor.reload("ext.py") == ("rung3", ["tended"])
 
 
-def failing(conductor: Round, main: str) -> None:
+def failing(conductor: Round, main: str, tip: str = "m1") -> None:
   conductor.says.clear()
   conductor.say(r"workflows/gates\.yml/runs\?", '{"workflow_runs": []}')
   stamp = "2026-10-29T10:00:00.12Z"
@@ -3029,7 +3068,7 @@ def failing(conductor: Round, main: str) -> None:
   conductor.say(r"run list --commit sha5", json.dumps([{"databaseId": 13, "conclusion": "failure"}]))
   conductor.say(r"run view 13", "unit\tpytest\tFAILED test/test_x.py::test_z - bang\n")
   conductor.say(r"run view 9", f"unit\tpytest\t{stamp} FAILED test/test_x.py::test_y - boom\n")
-  runs = [{"headSha": "m1", "conclusion": main, "databaseId": 9}]
+  runs = [{"headSha": tip, "conclusion": main, "databaseId": 9}]
   conductor.say(r"compare/main\.\.\.sha4", '{"behind_by": 2}')
   conductor.say(r"pr list --state open", json.dumps(four_five()))
   conductor.say(r"pr list --state merged", "[]")
@@ -3064,6 +3103,27 @@ async def test_a_pr_whose_failed_lines_all_fail_on_main_waits_on_main_until_main
     "#4 waited on a red main at sha4, and main is green again, so the round updated its branch."
   ]
   assert [key for key, _ in conductor.hired] == ["fix5"] and conductor.onmain == {}
+
+
+@POSIX
+@JQ
+async def test_a_tip_of_main_whose_run_still_runs_keeps_the_verdict_of_the_last_tip_whose_run_ended(
+  conductor: Round,
+) -> None:
+  failing(conductor, "failure")
+  await conductor.sweep(300)
+  assert list(conductor.redmain) == ["m1"] and conductor.prs[4]["state"] == "main"
+  failing(conductor, "", "m2")
+  await conductor.sweep(300)
+  assert list(conductor.redmain) == ["m1"] and conductor.prs[4]["state"] == "main"
+  assert "update-branch" not in conductor.log() and conductor.heard == [] and conductor.onmain != {}
+  assert (len(conductor.prompts), len(conductor.hired)) == (1, 1)
+  failing(conductor, "success", "m2")
+  await conductor.sweep(300)
+  assert "pr update-branch 4\n" in conductor.log() and conductor.redmain == {}
+  assert conductor.heard == [
+    "#4 waited on a red main at sha4, and main is green again, so the round updated its branch."
+  ]
 
 
 @POSIX
@@ -3766,3 +3826,17 @@ def test_a_comment_that_the_round_marked_is_no_comment_of_the_owner(conductor: R
   assert conductor.prompts == []
   assert "pr edit 7 --add-label hold" not in conductor.log()
   assert "c55" in conductor.ns["comments"]
+
+
+@POSIX
+@JQ
+@pytest.mark.parametrize("path", ["DOCTRINE.md", "src/furb/engine.py", ".github/budgets.json"])
+async def test_a_green_pr_that_changes_a_file_that_a_wall_sums_updates_with_main_before_it_merges(
+  conductor: Round, path: str
+) -> None:
+  conductor.say(r"compare/abc\.\.\.main", json.dumps({"files": [{"filename": path}]}))
+  conductor.say(r"pr view 5 --json files", json.dumps({"files": [{"path": path}]}))
+  await conductor.land(conductor.pr(checks=("SUCCESS",), names=["the hooks"]), False)
+  assert conductor.log().count("update-branch") == 1
+  assert "pr merge" not in conductor.log()
+  assert 5 not in conductor.merged
