@@ -23,11 +23,11 @@ async def test_whether_an_act_tells() -> None:
 
 async def test_the_rung_of_the_stand_that_a_chain_plays_on_itself_tells_as_any_rung() -> None:
   """The rung of the stand that a chain plays on itself retells no rung, so it tells as any rung, and the stand and the cd of its word tell their paragraphs."""
-  _, log, _ = born(stands=[*STANDS, "/w/DOCTRINE.md"])
+  _, log, _ = born(stands=[*STANDS, "/w/DOCTRINE.md", []], files={"/w/DOCTRINE.md": "Read first.\n"})
   two = await chained("two")
   assert await engine.rung("k = 1", on=two) is None
   await settle()
-  (placed,) = [a for a in said(log, "rung") if a[3] == two and a[2] == two]
+  (placed,) = [a for a in said(log, "rung") if a[3] == two and a[2] == two and a[4].startswith("stand()")]
   assert placed[4:] == ("stand()\ncd('/w')", "", "m/low") and engine.tells(placed[1])
   made = [a[1] for a in said(log, "stand") + said(log, "cd") if a[2] == placed[1]]
   told = [a[3][0].split("\n")[0] for a in said(engine.transcript(two), "tell") if a[1] in made]

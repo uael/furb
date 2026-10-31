@@ -165,7 +165,17 @@ function step(act: LiveAct, depth: number, { chain, made, word, streams, owed }:
   return { line: { type: "act", act, depth, state } as Line, lead, steps: [] as LiveAct[], trail };
 }
 
-/** The line of the rungs in a row that an ear of the outside made on the chain, as the words of the extensions. */
+/** A rung that no act wrote: an ear of the outside wrote it, or the chain wrote it on itself and it retells no word of
+ * another rung, as the setup of the root and each stand and cd. The words of a chain that retell its source, whose
+ * donor is a rung, are no such rung. */
+function written(act: LiveAct, known: (id: string) => boolean): boolean {
+  return (
+    act.kind === "rung" && act.by !== "operator" && (!known(act.by) || (act.by === act.on && !act.words[1]))
+  );
+}
+
+/** The line of the rungs in a row that one maker wrote on the chain with no word of its own, as the words of the
+ * extensions and the setup of a chain. */
 function earLine(rungs: LiveAct[], { made, owed }: Reading): Line {
   const states = rungs.map((rung) => actState(rung, owed));
   return {
@@ -182,12 +192,12 @@ function earLine(rungs: LiveAct[], { made, owed }: Reading): Line {
 }
 
 /** The steps at the top of the thread of a chain: each act on it that no act on it made, in the order it began, and
- * the rungs in a row that one ear of the outside made, as one step. */
+ * the rungs in a row that one maker wrote with no word of its own, as one step. */
 function tops(on: readonly LiveAct[], local: (id: string) => boolean, rows: ReadonlyMap<string, LiveAct>) {
   const out: { act: LiveAct; ear?: LiveAct[] }[] = [];
   for (const act of on) {
     if (local(act.by)) continue;
-    if (act.kind === "rung" && act.by !== "operator" && !rows.has(act.by)) {
+    if (written(act, (id) => rows.has(id))) {
       const last = out.at(-1);
       if (last?.ear && last.act.by === act.by) last.ear.push(act);
       else out.push({ act, ear: [act] });
@@ -267,7 +277,7 @@ function listed(
     const taken = take(act);
     if (!taken) continue;
     const last = held.steps.at(-1);
-    // The rungs in a row that one ear made stand as one step.
+    // The rungs in a row that one maker wrote with no word of its own stand as one step.
     if (taken === "ear" && last?.ear && last.by === act.by) {
       last.ear.push(act.id);
       continue;
@@ -330,7 +340,7 @@ export function thread(
     const act = ids.get(id);
     return act !== undefined && act.on === chain && act.kind !== "chain";
   };
-  const ear = (act: LiveAct) => act.kind === "rung" && act.by !== "operator" && !ids.has(act.by);
+  const ear = (act: LiveAct) => written(act, (id) => ids.has(id));
   // A step stays shown when a prompt or a rung under it asks the operator or runs: each such act marks each step from
   // it up to the top, through the lines that the thread makes of it, in the level of the step above it.
   const alive = new Map<string, string[]>();

@@ -705,7 +705,7 @@ fn a_prompt_of_the_client_is_answered_by_a_model_and_its_done_is_sent() {
   for (one, name) in
     said[1..8].iter().zip(["catchup", "memory", "skills", "compaction", "ouroboros", "web", "mcp"])
   {
-    let file = format!("extensions/{name}/{name}.py', HIDDEN))");
+    let file = format!("extensions/{name}/{name}.py', HIDDEN).content)");
     assert!(
       one.as_str().is_some_and(|one| one.starts_with("rung(read(") && one.ends_with(&file)),
       "{one}"

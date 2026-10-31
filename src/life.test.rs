@@ -797,7 +797,7 @@ const UNSHOWN: &str = "[(c, x[1], x[4]) for c in [f'chain{n}' for n in range(1, 
 /// Each extension whose file the root does not show as the turn `rung(read('<file>', HIDDEN))` and then the turn
 /// of its code alone, or whose definitions the module of the root lacks.
 const UNSEEDED: &str = "[e[3] for e in transcript('chain1', 'enable') if e[4].strip() and (not any(t[:2] == \
-                        ('assistant', f'rung(read({e[7]!r}, HIDDEN))') and turns(on='chain1')[n + 1][:2] == \
+                        ('assistant', f'rung(read({e[7]!r}, HIDDEN).content)') and turns(on='chain1')[n + 1][:2] == \
                         ('user', e[4]) for n, t in enumerate(turns(on='chain1'))) or not all(m in \
                         module('chain1') for m in re.findall(r'^(?:def|class) (\\w+)', e[4], re.M)))]";
 

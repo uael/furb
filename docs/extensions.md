@@ -3,8 +3,9 @@
 An extension adds to what a model can do in furb. It is Python, as a word of a model is: a life runs the word of each
 extension on each chain where it plays, before any other word, so the functions that it defines are there for the model,
 and the model reads the extension in its turns as it reads its own work. In the setup of the root, which every new chain
-holds, each extension is two turns: a turn of the model whose word is `rung(read('<file>', HIDDEN))`, and the turn of the
-rung that this word made, which holds the code of the file alone, since that rung runs it. The file is a copy of the
+holds, each extension is two turns: a turn of the model whose word is `rung(read('<file>', HIDDEN).content)`, and the
+turn of the rung that this word made, which holds the code of the file alone, since that rung runs it. The engine
+crafts these turns itself from the extensions that the World gives in the standing. The file is a copy of the
 word of the extension in `~/.furb/extensions/<name>/`, which holds no import of furb.
 
 An extension never goes into the system prompt. So a chain that takes one only grows at its end, and what a provider

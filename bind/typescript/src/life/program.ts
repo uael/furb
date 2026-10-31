@@ -352,10 +352,11 @@ function python(value: unknown): string {
     .join(", ")}}`;
 }
 
-/** The program of the rungs that an ear of the outside made, as the words of the extensions: a comment that names the
- * ear, then the calls that end each word, which are the life words of the setup, each on a line, with what the acts of
- * the word came to on the last line. A word that only defines shows no line. The last line runs while an act of the word
- * is at work, and not while an act lives that is no work, as the watcher of an extension does after it said it done. */
+/** The program of the rungs that one maker wrote with no word of its own, as the words of the extensions that an ear of
+ * the outside made or the setup that the root wrote on itself: a comment that names the ear, or setup for a chain, then
+ * the calls that end each word, which are the life words of the setup, each on a line, with what the acts of the word
+ * came to on the last line. A word that only defines shows no line. The last line runs while an act of the word is at
+ * work, and not while an act lives that is no work, as the watcher of an extension does after it said it done. */
 export function earProgram(
   ear: LiveAct,
   rungs: readonly LiveAct[],
@@ -365,7 +366,9 @@ export function earProgram(
   owed: ReadonlySet<string>,
   label: (chain: string) => string,
 ): ProgramLine[] {
-  const out: ProgramLine[] = [{ kind: "note", step: ear, text: `# ${ear.by}` }];
+  // A chain that wrote rungs on itself, as the root writes its setup, has an id that names no maker for a reader.
+  const who = ear.by === ear.on ? "setup" : ear.by;
+  const out: ProgramLine[] = [{ kind: "note", step: ear, text: `# ${who}` }];
   for (const rung of rungs) {
     const source = subject(rung).trimEnd().split("\n");
     let first = source.length;
@@ -389,7 +392,7 @@ export function earProgram(
     const ids = rungs.map((rung) => rung.id);
     const span = ids.length > 1 ? `${ids[0]}…${(ids.at(-1) ?? "").replace(/^\D+/, "")}` : (ids[0] ?? "");
     const acts = chips.map((chip) => chip.label).join(" ");
-    out[0] = { kind: "note", step: ear, text: `# ${ear.by} ${span}  ${acts}`.trimEnd() };
+    out[0] = { kind: "note", step: ear, text: `# ${who} ${span}  ${acts}`.trimEnd() };
   }
   return out;
 }

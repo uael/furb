@@ -50,12 +50,6 @@ const JOURNAL: &str = "journal";
 /// where the journal says the fact. A chain born later reads it at its birth, from the standing alone.
 const TEACH: &str = "teach";
 
-/// The kind of the act `setup1`, `("setup", "setup1", "extensions", "chain1")`, which the ear makes on the root as it
-/// plays its setup, after the rungs of the setup that every chain shares and before those of the extensions of the root
-/// alone, and answers with nothing, so a chain with no source holds none of the acts that those make. A later life
-/// makes it again at the same place, as each rung of the setup.
-const SETUP: &str = "setup";
-
 /// What the manifest gives under `plays` for an extension that plays on every chain, which is the default.
 const EVERY: &str = "every";
 
@@ -514,14 +508,12 @@ pub fn enabled(root: &[Fact]) -> Vec<Extension> {
 /// state that it holds keeps its value, and its life word does not run again. The ear plays the rungs from the fact alone, so a later life plays the same rungs
 /// where the journal says the fact again.
 pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
-  hearing(&["chain", "stand", "rung", "write", ENABLE, TEACH, SETUP], move |mut co| async move {
+  hearing(&["chain", "stand", "rung", "write", ENABLE, TEACH], move |mut co| async move {
     // What the life enabled, in order, and each chain in the order of its birth, with the extensions it has.
     let (mut enabled, mut chains) = (Vec::<Extension>::new(), Vec::<(String, Vec<String>)>::new());
     // The setup of the root: the actor and the doctrine that the fact teach names with the enables still to hear
     // before it plays, and whether the root took it.
     let (mut teach, mut taught) = (None::<(String, String, i64)>, false);
-    // Whether this life says the fact teach, and with it the fact setup, which the journal of a later life says again.
-    let mut fresh = true;
     loop {
       let a = hear(&mut co).await;
       let runs_name = |name: &str| enabled.iter().any(|two| two.name == name);
@@ -569,16 +561,11 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
           }
           new
         }
-        SETUP if a.question() && fresh => {
-          say(&mut co, Fact::says("done", a.about(), [Object::none()]));
-          continue;
-        }
         TEACH => {
           let text = |at| a.word(at).and_then(|one| one.as_str().map(str::to_owned));
           let count = a.word(2).and_then(|one| one.as_int()).unwrap_or(0);
           if let (Some(actor), Some(path)) = (text(0), text(1)) {
             teach = Some((actor, path, count));
-            fresh = a.by() != JOURNAL;
           }
           if count > 0 {
             continue;
@@ -632,9 +619,9 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
         ENABLE => Extension::of(&a).filter(|one| !enabled.contains(one)).into_iter().collect(),
         _ => continue,
       };
-      // The setup of the root plays once the fact teach and each enable after it were heard.
-      if let Some((actor, path, 0)) = teach.take() {
-        setup(&mut co, &enabled, &actor, &path).await?;
+      // The root of a new record takes its setup from the engine, which crafts it from the standing, once the fact
+      // teach and each enable after it were heard: each chain then has what the setup of the root gives it.
+      if let Some((_, _, 0)) = teach.take() {
         taught = true;
         let every = enabled.iter().filter(|one| !one.root).map(|one| one.name.clone()).collect();
         if let Some(root) = chains.iter_mut().find(|one| one.0 == ROOT) {
@@ -689,79 +676,6 @@ async fn play(
   ring(co, chain, &word).await
 }
 
-/// The setup of the root, as turns of its default actor whose words furb writes: the read of the doctrine, the turn
-/// `rung(read('<file>', HIDDEN))` of each extension of every chain, in the order of the life, then the life word of each that has one,
-/// then the fact setup, then the same turns for the extensions of the root alone. It makes each rung at once, and the
-/// chain gives them their turns in the order it made them, so the fact setup stands before the turns of the root alone.
-async fn setup(co: &mut Co, enabled: &[Extension], actor: &str, path: &str) -> Result<(), Fault> {
-  written(co, ROOT, &reading(path), actor).await?;
-  for root in [false, true] {
-    if root {
-      let words = [SETUP, ROOT].map(Object::string).into_iter().chain([Object::none()]);
-      co.call("act", words.collect(), vec![]).await?;
-    }
-    for one in enabled.iter().filter(|one| one.root == root) {
-      loaded(co, one, ROOT, actor).await?;
-    }
-    lives(co, enabled.iter().filter(|one| one.root == root), actor).await?;
-  }
-  Ok(())
-}
-
-/// The word of an extension on a chain as a turn of an actor whose word is `rung(read('<its file>', HIDDEN))`: the read
-/// tells nothing, and the rung that the word makes tells the code of the file alone, which is the code that it runs, so
-/// the turn after it holds that code. The file holds the word of the extension, as [`copy`] writes it. An extension
-/// whose word has no file plays its word as a rung. An extension whose word is blank, as one that holds only a part
-/// for the TUI, plays nothing: a run of no word would stand in the program of the chain as a word that a replay asks
-/// a model for.
-async fn loaded(
-  co: &mut Co,
-  one: &Extension,
-  chain: &str,
-  actor: &str,
-) -> Result<Option<String>, Fault> {
-  if one.word.trim().is_empty() {
-    return Ok(None);
-  }
-  if one.file.is_empty() {
-    ring(co, chain, &one.word).await?;
-    return Ok(None);
-  }
-  let word = format!("rung(read({}, HIDDEN))", Object::string(&one.file).py_repr());
-  written(co, chain, &word, actor).await
-}
-
-/// The life words of extensions on the root as one turn of an actor, so the turn after it holds what each told, and
-/// no turn is empty while one of them tells. It gives the rung that it made, and none when no life word is given.
-async fn lives(
-  co: &mut Co,
-  given: impl Iterator<Item = &Extension>,
-  actor: &str,
-) -> Result<Option<String>, Fault> {
-  let words: Vec<&str> = given.map(|one| one.life.as_str()).filter(|one| !one.is_empty()).collect();
-  if words.is_empty() {
-    return Ok(None);
-  }
-  written(co, ROOT, &words.join("\n"), actor).await
-}
-
-/// The word of a read of a path, as python writes it.
-fn reading(path: &str) -> String {
-  format!("read({})", Object::string(path).py_repr())
-}
-
-/// A turn of an actor on a chain whose word furb writes: a rung of that word and that actor, by its name.
-async fn written(
-  co: &mut Co,
-  chain: &str,
-  word: &str,
-  actor: &str,
-) -> Result<Option<String>, Fault> {
-  let words = vec![("to", Object::string(actor)), ("on", Object::string(chain))];
-  let made = co.call("rung", vec![Object::string(word)], words).await?;
-  Ok(made.as_ref().as_str().map(str::to_owned))
-}
-
 /// The default actor and the path of the doctrine that the standing names, or none while it names no doctrine, as in a
 /// record of a build before the doctrine was read.
 async fn doctrine(co: &mut Co) -> Result<Option<(String, String)>, Fault> {
@@ -770,11 +684,11 @@ async fn doctrine(co: &mut Co) -> Result<Option<(String, String)>, Fault> {
   Ok(text(2).zip(text(3)))
 }
 
-/// Whether the root holds no reply, as the root of a new record, since a root that a checkpoint carries holds the
-/// replies that read what it needs.
+/// Whether the engine seeded the root at this stand, which it does on a root of a new record: the root then holds the
+/// fact setup, which the engine says as it crafts the setup, before this ear hears the stand.
 async fn bare(co: &mut Co) -> Result<bool, Fault> {
-  let of = [ROOT, "reply"].map(Object::string).to_vec();
-  Ok(entry(&co.call("transcript", of, vec![]).await?.as_ref(), 0).is_none())
+  let of = [ROOT, "setup"].map(Object::string).to_vec();
+  Ok(entry(&co.call("transcript", of, vec![]).await?.as_ref(), 0).is_some())
 }
 
 /// A word played on a chain as a rung, unless it is empty.

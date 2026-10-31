@@ -45,8 +45,17 @@ test.skipIf(process.platform === "win32")(
   "a real life on a home with no claude and no key shows the check of the setup over the steps of its extensions",
   async () => {
     const { frame, acts } = await firstRun();
-    // The extensions played their words on the chain, and the welcome shows all the same.
-    expect(acts.some((line) => line.endsWith(" extensions"))).toBe(true);
+    // The root wrote its setup on itself, each rung of an extension wrote the code of that extension, and the life
+    // words started the watchers, and the welcome shows all the same.
+    expect(acts.filter((line) => line.endsWith(" chain1"))).toEqual(
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 17].map((n) => `rung${n} chain1`),
+    );
+    expect(acts.filter((line) => /^rung\d+ rung\d+$/.test(line))).toEqual(
+      [2, 3, 4, 5, 6, 7, 8].map((n) => `rung${n + 8} rung${n}`),
+    );
+    expect(
+      acts.filter((line) => line.endsWith(" rung9")).filter((line) => !/^(memory|read)\d+ /.test(line)),
+    ).toEqual(["catchup1 rung9", "remember1 rung9", "mcp_index1 rung9"]);
     expect(frame).toContain("No model answers yet");
     expect(frame).toContain("Claude command line  Not found.");
     expect(frame).toContain("Other providers  No model available.");

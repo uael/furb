@@ -85,15 +85,6 @@ async def test_a_step_that_raised_nothing_and_debugged_nothing_tells_nothing() -
   ]
 
 
-async def test_a_text_given_as_the_word_is_its_content() -> None:
-  """A Text given as the word is its content, so rung(read(path, HIDDEN)) runs the code of a file, which the open of the rung tells."""
-  _, log, root = born(files={"/w/code.py": "def f():\n  return 7\n"})
-  assert await engine.rung("await rung(read('code.py', HIDDEN))", on=root) is None
-  (inner,) = [a for a in said(log, "rung") if a[4] != "await rung(read('code.py', HIDDEN))"]
-  assert inner[4] == "def f():\n  return 7\n" and [a[3] for a in said(log, "tell") if a[1] == inner[1]] == [[inner[4]]]
-  assert engine.module(root)["f"]() == 7
-
-
 async def test_the_open_of_a_rung_with_a_word_tells_that_word_alone() -> None:
   """The open of a rung with a word tells that word alone, the code that the rung runs, and the chain binds no paragraph that holds it, so no word that ran runs again."""
   sand, log, root = born()

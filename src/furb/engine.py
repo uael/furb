@@ -171,9 +171,7 @@ def wait(seconds: float = 0, *acts: str, on="") -> Act[str | None]:
   return act("wait", on, controlled(ear), seconds, *acts)
 
 
-def rung(word: str | Text = "", retells="", to="", on="") -> Act:
-  word = getattr(word, "content", word)
-
+def rung(word="", retells="", to="", on="") -> Act:
   def ear(id):
     yield "started", id
     mine = {retells, scope(id)}
@@ -275,7 +273,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
     if source or t[lo:hi]:
       kin = {source, *[n for one in (filter or list)([x for x in t if question(x)]) for n in lineage(one[1])]}
       later = {x[1] for x in t[h.index("setup") :] if question(x) and (not get(x[2]) or x[:3:2] == ("rung", ROOT))}
-      later |= {x[1] for x in t if x[0] == "run" and x[4] in later}
+      later |= {x[1] for x in t if x[0] == "run" and not later.isdisjoint(lineage(x[4]))}
       yield (
         "prefix",
         id,
@@ -306,6 +304,8 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
           if not was:
             yield ("tell", id, ["chain()"]) if last[3:] else top
             top *= bool(last[3:])
+            if last[4:] and id == ROOT and not transcript(id, "reply"):
+              yield from seeded(id, last, stood)
           elif last[3:] and not top:
             placed(last[1] * (was[1] != last[1]) * all(all(get(x[2])[4::2]) for x in transcript(id, "cd")))
         case ("done", about, _, value) if running.get(maker := r[2]) in (
@@ -402,6 +402,15 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
         news = ""
 
   return act("chain", on, ear, label, source)
+
+
+def seeded(id, last, to):
+  rung(f"read({last[3]!r})", to=to)
+  for k in 0, 1:
+    k and (yield "setup", id)
+    for x in last[4]:
+      x[1] and x[3] == k and rung(f"rung(read({x[1]!r}, HIDDEN).content)", to=to)
+    (w := "\n".join(y[2] for y in last[4] if y[3] == k and y[2])) and rung(w, to=to)
 
 
 def grant(usd: float | None = None, share: float | None = None, on="") -> Act[None]:

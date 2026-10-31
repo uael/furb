@@ -153,26 +153,31 @@ meanings. The entry of such a name here gives only its form in the engine.
 - crafted rung: a rung with a word and an actor, a turn of that actor that its caller wrote; the crafted rungs of a
   chain take their turns one at a time, in the order they were made, a rung that one of them makes takes its turn
   within the turn of its maker, and every other word of the chain and every prompt to a model wait until none is open.
-- setup: the turns that the World plays on the root of a new record at its first stand, after the bare turn `chain()`,
-  as crafted rungs of the default actor: the read of the doctrine, the turn `rung(read('<file>', HIDDEN))` of each
-  extension of every chain in the order of the life, whose rung tells the code of the file alone in the turn after it
-  and runs that code in the module of the root, the file being the copy of the word in `~/.furb/extensions/<name>/`,
-  then one turn of their life words, which read the place against the directory of the standing, as every chain that ran
-  no cd, then the act setup, `setup1`, which the World makes and answers, then the same turns for the extensions of the
-  root alone. Then the root plays on itself one turn `stand()` and `cd('<the directory of the standing>')`, a rung with
-  that word and its default actor, just before its open, as each chain with no source does at its birth, after the setup
-  that it holds: chain() in engine.py makes that rung, so a model reads in the engine how its chain was set up. The
-  reads of the files come first, so their turns are the same text whatever the place and the actors, then the life
-  words, so their turns are the same text in one place whatever the actors, and a provider caches them across records.
-  The World makes each of these rungs at once, so the root plays its stand after the last of them and tells its open
-  after its stand, in the same turn, just before its first prompt. Each chain with no source holds the setup of the root
-  as its prefix, with the same names, less the acts that the World, the operator or the root itself made after the act
-  setup, as the stand of the root, and runs its words again, so every chain shares one prefix, which the provider ends
-  with a block that it marks for the cache. The fact teach, `("teach", "chain1", "extensions", actor, doctrine, count)`,
-  which the World says before the count of enables that the setup plays and the record keeps, plays the setup again
-  where a later life says it. Every standing that the World of the crate gives names a doctrine. A World that names
-  none, as the World of the suite, plays no setup: the root tells its open at its first stand, its extensions play as
-  rungs, and its chains run no cd, so the World resolves their paths against the directory of the standing.
+- setup: the turns that the engine crafts on the root of a new record at its first stand, after the bare turn
+  `chain()`, from the standing alone, in `seeded()` of `engine.py`: the World gives in the standing, after the path of
+  the doctrine, each extension that the life runs as `[name, file, life word, root alone]`, and the root, when it holds
+  no reply, makes crafted rungs of its default actor: the read of the doctrine, the turn
+  `rung(read('<file>', HIDDEN).content)` of each extension of every chain that has a file, in the order of the life,
+  whose rung tells the code of the file alone in the turn after it and runs that code in the module of the root, the
+  file being the copy of the word in `~/.furb/extensions/<name>/`, then one turn of their life words, which read the
+  place against the directory of the standing, as every chain that ran no cd, then the fact setup,
+  `("setup", "chain1", "chain1")`, then the same turns for the extensions of the root alone. No ear makes a rung of the
+  setup, so the transcript shows each word that ran, and the record holds only the standing that the World gave. Then
+  the root plays on itself one turn `stand()` and `cd('<the directory of the standing>')`, a rung with that word and
+  its default actor, just before its open, as each chain with no source does at its birth, after the setup that it
+  holds. The reads of the files come first, so their turns are the same text whatever the place and the actors, then
+  the life words, so their turns are the same text in one place whatever the actors, and a provider caches them across
+  records. The engine makes each of these rungs at once, so the root plays its stand after the last of them and tells
+  its open after its stand, in the same turn, just before its first prompt. Each chain with no source holds the setup
+  of the root as its prefix, with the same names, less the acts that the World, the operator or the root itself made
+  after the fact setup, as the stand of the root, and each act under one, and runs its words again, so every chain
+  shares one prefix, which the provider ends with a block that it marks for the cache. The fact teach,
+  `("teach", "chain1", "extensions", actor, doctrine, count)`, which the World says when the engine seeded the root,
+  before the count of enables, tells the ear of the extensions that the setup holds them, so it plays them on no chain.
+  A standing that gives no extensions, as that of a World that names no doctrine, as the World of the suite, seeds no
+  setup: the root tells its open at its first stand, the extensions play as rungs of the ear, and its chains run no
+  cd, so the World resolves their paths against the directory of the standing. A later life replays the setup from
+  the standing that the record holds.
 - template: a python template string, each interpolation of which carries an expression and its value.
 - debug: the verb that tells the interpolations of a template, a tell and no act.
 - control: a pause, a wake, a cancel or a close; a close is a cancel with a value, and a cancel a close with

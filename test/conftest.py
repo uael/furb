@@ -258,9 +258,10 @@ class Sand:
     return "~" + path[len(self.home) :] if path == self.home or path.startswith(self.home + "/") else path
 
   def standing(self) -> list | Refused:
-    """What the World answers a stand with: what the chains stand on, each path as it gives a path, or the refusal."""
+    """What the World answers a stand with: what the chains stand on, each path but those of the extensions as it gives
+    a path, or the refusal."""
     s = self.stands
-    return s if isinstance(s, Refused) else [s[0], *map(self.shown, s[1:2]), *s[2:3], *map(self.shown, s[3:])]
+    return s if isinstance(s, Refused) else [s[0], *map(self.shown, s[1:2]), *s[2:3], *map(self.shown, s[3:4]), *s[4:]]
 
   def hear(self, a: tuple) -> World:
     """What the World does with one fact: it takes a command, a wait, a prompt to the operator and a reply, answers

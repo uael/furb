@@ -25,6 +25,8 @@ async def test_the_extension_has_no_life_word(tmp_path: Path) -> None:
   two = await chained("two")
   for on in (root, two):
     turns = engine.turns(on=on)
-    (at,) = [n for n, one in enumerate(turns) if one[0] == "assistant" and one[1].endswith("ouroboros.py', HIDDEN))")]
+    (at,) = [
+      n for n, one in enumerate(turns) if one[0] == "assistant" and one[1].endswith("ouroboros.py', HIDDEN).content)")
+    ]
     assert LORE in turns[at + 1][1]
     assert of(turns, "ouroboros") == []

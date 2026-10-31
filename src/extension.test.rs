@@ -484,6 +484,23 @@ fn set_up_in(at: &Path, given: Vec<Extension>, directory: &Path) -> Engine {
   fs::write(at.join("DOCTRINE.md"), "Work.\n").unwrap();
   let doctrine = at.join("DOCTRINE.md").display().to_string();
   let here = directory.to_owned();
+  let given: Vec<Extension> = given
+    .into_iter()
+    .map(|one| {
+      let file = at.join(format!("{}.py", one.name));
+      fs::write(&file, &one.word).unwrap();
+      Extension { file: file.display().to_string(), ..one }
+    })
+    .collect();
+  // The standing gives each extension, as the provider of a life does, so the engine seeds the root from it.
+  let advertised: Vec<(String, String, String, bool)> = given
+    .iter()
+    .filter(|one| !(one.word.trim().is_empty() && one.life.is_empty()))
+    .map(|one| {
+      let file = if one.word.trim().is_empty() { String::new() } else { one.file.clone() };
+      (one.name.clone(), file, one.life.clone(), one.root)
+    })
+    .collect();
   let stand = ear(move |mut co| async move {
     loop {
       let a = hear(&mut co).await;
@@ -495,19 +512,18 @@ fn set_up_in(at: &Path, given: Vec<Extension>, directory: &Path) -> Engine {
           place,
           Object::string("operator"),
           Object::string(&doctrine),
+          Object::list(advertised.iter().map(|(name, file, life, root)| {
+            let texts = [name, file, life].map(Object::string);
+            Object::list(texts.into_iter().chain([Object::bool(*root)]))
+          })),
         ]);
         say(&mut co, Fact::says("done", a.about(), [standing]));
       }
     }
   });
-  let given = given.into_iter().map(|one| {
-    let file = at.join(format!("{}.py", one.name));
-    fs::write(&file, &one.word).unwrap();
-    Extension { file: file.display().to_string(), ..one }
-  });
   let (record, store) = world::store(at.join("record.jsonl")).unwrap();
   let ears = [
-    ("extensions", extensions(given.collect())),
+    ("extensions", extensions(given)),
     ("stand", stand),
     ("files", world::files(world::Scratch::own(), None)),
     ("store", store),
@@ -532,7 +548,8 @@ fn the_setup_of_the_root_ends_with_the_extensions_of_the_root_alone_and_a_chain_
   };
   let root = texts(&mut engine, "chain1");
   let life = root.iter().position(|one| one == "y = 2").unwrap();
-  let hidden = |path: &str| format!("rung(read({}, HIDDEN))", Object::string(path).py_repr());
+  let hidden =
+    |path: &str| format!("rung(read({}, HIDDEN).content)", Object::string(path).py_repr());
   let shared = at.join("shared.py").display().to_string();
   let (shared, rooted) = (hidden(&shared), hidden(&rooted));
   assert_eq!(
@@ -576,7 +593,7 @@ fn the_setup_plays_no_read_and_no_run_for_an_extension_whose_word_is_blank() {
   for one in engine.transcript(on).unwrap() {
     match one.kind() {
       "run" if one.by() == "extensions" => runs.push(text(&one, 2).unwrap_or_default()),
-      "rung" if one.by() == "extensions" => reads.push(text(&one, 1).unwrap_or_default()),
+      "rung" if one.by() == "chain1" => reads.push(text(&one, 1).unwrap_or_default()),
       _ => {}
     }
   }

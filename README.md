@@ -22,7 +22,7 @@ time, open the record again, and the work goes on from where it stopped.
 - **One answer does a lot of work.** Most agents call one tool for each turn of the model. In furb, one word reads
   files, runs commands, asks other models, waits for them, and joins the results with loops and conditions.
 - **Nothing is hidden from you.** The whole system prompt is one Python file,
-  [`src/furb/engine.py`](https://github.com/uael/furb/blob/main/src/furb/engine.py), smaller than 7000 tokens
+  [`src/furb/engine.py`](https://github.com/uael/furb/blob/main/src/furb/engine.py), smaller than 7200 tokens
   of `o200k_base`, the tokenizer of OpenAI. The transcript is the exact text that the model reads.
 - **A word is checked before it runs.** A type checker reads each word first. A word that it refuses never runs, and
   the model reads why.

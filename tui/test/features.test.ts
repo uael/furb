@@ -355,7 +355,7 @@ test("/extensions lists what a life runs, and a cancel of a word of the operator
   }
 });
 
-test("the words of the extensions stand as code: a comment that names their ear, then the call that ends each word, with no ids of acts", async () => {
+test("the setup of the root stands as code: a comment that names the setup, then the call that ends each word, with no ids of acts", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-ear-code-"));
   try {
     await writeFile(join(directory, "a.txt"), "one");
@@ -367,52 +367,55 @@ test("the words of the extensions stand as code: a comment that names their ear,
           session.activity.some((act) => act.kind === "rung" && act.by === "operator" && act.done),
         );
         await session.refresh();
-        // The setup of the root is the turns of the default actor that the ear extensions wrote: the read of the
-        // doctrine, the word rung(read('<file>', HIDDEN)) of each extension in the order of the life, then the life
-        // words in one word.
-        // The stand and the cd come after them, as a rung that the root plays on itself.
-        const setup = session.activity.filter((act) => act.kind === "rung" && act.by === "extensions");
+        // The root writes its setup on itself, each rung to the one default actor and with no rung whose word it
+        // retells: the read of the doctrine, the word rung(read('<file>', HIDDEN).content) of each extension in the
+        // order of the life, the life words in one word, then the stand and the cd.
+        const setup = session.activity.filter((act) => act.kind === "rung" && act.by === act.on);
+        expect(setup.map((act) => act.on)).toEqual(Array(10).fill(session.engine.root));
+        expect(setup.map((act) => act.words.slice(1))).toEqual(Array(10).fill(["", setup[0]?.words[2]]));
         expect(setup.map((act) => act.word)).toEqual([
           // A path of Windows stands with its separators doubled, as python shows a backslash.
           expect.stringMatching(/^read\('.*[/\\]DOCTRINE\.md'\)$/),
           ...["catchup", "memory", "skills", "compaction", "ouroboros", "web", "mcp"].map((name) =>
             expect.stringMatching(
               new RegExp(
-                `^rung\\(read\\('.*[/\\\\]+extensions[/\\\\]+${name}[/\\\\]+${name}\\.py', HIDDEN\\)\\)$`,
+                `^rung\\(read\\('.*[/\\\\]+extensions[/\\\\]+${name}[/\\\\]+${name}\\.py', HIDDEN\\)\\.content\\)$`,
               ),
             ),
           ),
           "catchup()\nawait recall()\nawait listed()\nawait mcp_index()",
+          expect.stringMatching(/^stand\(\)\ncd\('.*'\)$/),
         ]);
-        const stood = session.activity.find((act) => act.kind === "rung" && act.by === act.on);
-        expect(stood?.word).toMatch(/^stand\(\)\ncd\('.*'\)$/);
         let rows = (await frame()).split("\n");
         for (let step = 0; step < 80 && !rows.some((row) => /earlier steps/.test(row)); step++) {
           await Bun.sleep(25);
           rows = (await frame()).split("\n");
         }
-        // The card of the ear holds more steps than a card shows, so its first steps and its comment fold.
+        // The card of the setup holds more steps than a card shows, so its first steps and its comment fold.
         await click(rows.join("\n").match(/\d+ earlier steps/)?.[0] ?? "earlier steps");
-        for (let step = 0; step < 80 && !rows.some((row) => /# extensions/.test(row)); step++) {
+        for (let step = 0; step < 80 && !rows.some((row) => /# setup/.test(row)); step++) {
           await Bun.sleep(25);
           rows = (await frame()).split("\n");
         }
-        const at = rows.findIndex((row) => /# extensions/.test(row));
+        const at = rows.findIndex((row) => /# setup/.test(row));
         expect(at).toBeGreaterThanOrEqual(0);
-        const shown = rows.slice(at + 1, at + 14).map((row) => row.trim().replace(/\s{2,}.*$/, ""));
-        expect(shown[0]).toMatch(/^1 read\('/);
-        expect(shown.slice(1, 8).map((row) => /^\d+ rung\(read\('.*', HIDDEN\)\)$/.test(row))).toEqual(
-          Array(7).fill(true),
-        );
-        // The life words stand as the calls that end their one word, each on its line, and the card of the ear ends
-        // there, since the stand and the cd are no word of the ear.
-        expect(shown.slice(8, 12)).toEqual([
+        expect(rows[at]?.trim().replace(/\s{2,}.*$/, "")).toBe("# setup");
+        const shown = rows.slice(at + 1, at + 16).map((row) => row.trim().replace(/\s{2,}.*$/, ""));
+        expect(shown[0]).toMatch(/^1 read\('.*DOCTRINE\.md'\)$/);
+        expect(
+          shown.slice(1, 8).map((row) => /^\d+ rung\(read\('.*', HIDDEN\)\.content\)$/.test(row)),
+        ).toEqual(Array(7).fill(true));
+        // The life words stand as the calls that end their one word, each on its line, then the stand and the cd,
+        // and the card ends there.
+        expect(shown.slice(8, 13)).toEqual([
           "9 catchup()",
           "10 await recall()",
           "11 await listed()",
           "12 await mcp_index()",
+          "13 stand()",
         ]);
-        expect(shown[12]).not.toMatch(/^13 /);
+        expect(shown[13]).toMatch(/^14 cd\('.*'\)$/);
+        expect(shown[14]).not.toMatch(/^15 /);
         expect(rows.join("\n")).not.toMatch(/rung\d+…\d+|remember1|ouroboros1|catchup1/);
       },
       { width: 140, height: 42 },
