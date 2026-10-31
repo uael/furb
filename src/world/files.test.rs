@@ -66,7 +66,12 @@ fn a_read_gives_the_whole_text_of_a_file_of_any_size_and_refuses_what_is_no_file
   fs::write(at.join("large.txt"), &content).unwrap();
   assert_eq!(read(&at.join("large.txt")).unwrap().content, content);
   let shown = tilded(&at, std::env::home_dir().as_deref());
-  assert_eq!(read(&at).unwrap_err().message(), format!("Read needs a text file: {shown}"));
+  assert_eq!(
+    read(&at).unwrap_err().message(),
+    format!(
+      "Read needs a text file, and {shown} is a directory: await bash(\"ls {shown}\") lists it"
+    )
+  );
   fs::remove_dir_all(&at).unwrap();
 }
 
