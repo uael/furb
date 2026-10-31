@@ -50,7 +50,9 @@ export function stale(root: string): string[] {
     let latest = "";
     let at = made;
     for (const pattern of sources)
-      for (const file of new Glob(pattern).scanSync({ cwd: root, onlyFiles: true })) {
+      for (const found of new Glob(pattern).scanSync({ cwd: root, onlyFiles: true })) {
+        // Windows gives a path with backslashes.
+        const file = found.replaceAll("\\", "/");
         const time = changed(join(root, file));
         if (time > at && !apart.test(file)) {
           latest = file;
