@@ -3487,3 +3487,34 @@ async def test_a_later_judge_reads_the_gaps_of_the_earlier_heads_and_the_pr_is_h
   assert "The judge held #7 for 3 heads in turn" in told
   assert all(x in told for x in ("Gap one", "Gap two", "Gap three", "sha7:", "sha9:"))
   assert await conductor.bent(pr) is True
+
+
+def test_the_audit_leaves_a_pr_with_a_hold_label_out_of_the_idle_check(conductor: Round) -> None:
+  held = ((1, []), (2, ["hold"]), (3, ["hold:owner-review"]), (4, ["hold:x"]), (5, ["paused"]))
+  conductor.ns["prs"].update({n: conductor.pr(n, idle=90, labels=labels) for n, labels in held})
+
+  async def pruned() -> str:
+    return "nothing"
+
+  conductor.ns["prune"] = pruned
+  asyncio.run(conductor.audit(False))
+  assert "PRs with no change for an hour: [1, 5]" in conductor.prompts[-1][0]
+
+
+def test_the_namespace_of_the_round_binds_each_name_that_the_words_use(conductor: Round) -> None:
+  import builtins
+
+  used, bound = set(), set(dir(builtins))
+  for path in (PULL, HERE / "conductor.py"):
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+      if isinstance(node, ast.Name):
+        (used if isinstance(node.ctx, ast.Load) else bound).add(node.id)
+      elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        bound.add(node.name)
+      elif isinstance(node, ast.arg):
+        bound.add(node.arg)
+      elif isinstance(node, ast.ExceptHandler) and node.name:
+        bound.add(node.name)
+      elif isinstance(node, (ast.Import, ast.ImportFrom)):
+        bound |= {(x.asname or x.name).split(".")[0] for x in node.names}
+  assert sorted(used - bound - set(conductor.ns)) == []
