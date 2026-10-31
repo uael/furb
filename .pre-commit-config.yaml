@@ -1,4 +1,7 @@
-default_install_hook_types: [pre-commit, commit-msg]
+default_install_hook_types: [pre-commit]
+# Each hook runs once, before the commit. A hook of no stage also runs at the stage of the message, on that file alone,
+# where each gate says that it found no files to check.
+default_stages: [pre-commit]
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
