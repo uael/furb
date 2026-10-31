@@ -8,7 +8,7 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 git -C "$root" fetch -q origin main
 # The last commit of a version is the parent of the commit that made the next version, or the tip of main.
 next=$(git -C "$root" log --format=%H -G "^pub const VERSION: i64 = $((version + 1));" origin/main -- src/world/store.rs | tail -n 1)
-commit=$(git -C "$root" rev-parse "${next:+$next^}${next:-origin/main}")
+commit=$(git -C "$root" rev-parse "${next:-origin/main}${next:+^}")
 if ! git -C "$root" show "$commit:src/world/store.rs" | grep -q "^pub const VERSION: i64 = $version;\$"; then
   echo "builds.sh: no commit of origin/main holds the version $version" >&2
   exit 1
