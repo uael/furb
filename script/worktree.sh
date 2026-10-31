@@ -15,10 +15,12 @@ fi
 path=$1
 branch=$2
 base=${3:-origin/main}
+step="read the arguments"
 case $path in
   /*) ;;
   *) path=$PWD/$path ;;
 esac
+trap 'code=$?; if [ "$code" -ne 0 ]; then echo "worktree.sh failed at \"$step\" with exit $code: $path on $branch" >&2; fi' EXIT
 
 common=$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-common-dir)
 if [ "$(git --git-dir="$common" rev-parse --is-bare-repository)" = true ]; then
@@ -27,7 +29,9 @@ else
   main=$(dirname "$common")
 fi
 
+step="fetch origin"
 git -C "$main" fetch -q origin
+step="make the worktree"
 
 # Where the branch stands decides how it opens. Git refuses a branch that another worktree holds, and says where.
 if git -C "$main" show-ref --verify -q "refs/heads/$branch"; then
@@ -66,10 +70,12 @@ if [ $opened != new ]; then
   fi
 fi
 
+step="copy the build"
 # What the python side needs, said at each end of the script.
 python_note() {
-  echo "$path has no .venv. uv sync there makes it, builds the crate again and takes minutes, and uv run --no-sync before it"
-  echo "falls back to the system python, which lacks the packages. Run: (cd $path && uv sync)"
+  echo "TypeScript work needs no .venv: bun run build there suffices."
+  echo "$path has no .venv. For python work, uv sync there makes it, builds the crate again and takes minutes, and"
+  echo "uv run --no-sync before it falls back to the system python, which lacks the packages. Run: (cd $path && uv sync)"
   if [ -x "$main/.venv/bin/python" ]; then
     echo "Until then, run a probe with $main/.venv/bin/python."
   fi
