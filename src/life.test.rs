@@ -730,6 +730,38 @@ fn make_the_corpus() {
 }
 
 #[test]
+fn a_life_whose_replay_drifts_keeps_nothing_beside_its_record_but_the_lease() {
+  let at = place("drifts");
+  let record = at.join("record.jsonl");
+  // The place where the first stand stood, changed, makes the replay drift at the word that the stand told.
+  let mut lines: Vec<String> =
+    fs::read_to_string(corpus().join("work.jsonl")).unwrap().lines().map(str::to_owned).collect();
+  let stood = lines
+    .iter()
+    .position(|line| line.starts_with(r#"[["done","stand1","#))
+    .expect("the corpus holds the first stand");
+  let mut entry: serde_json::Value = serde_json::from_str(&lines[stood]).unwrap();
+  let place = entry[0][3][1].as_str().expect("the stand names its place").to_owned();
+  entry[0][3][1] = serde_json::Value::from(format!("{place}-elsewhere"));
+  lines[stood] = entry.to_string();
+  // The last line is whole and not ended, which a store mends only at its first keep.
+  fs::write(&record, lines.join("\n")).unwrap();
+  fs::write(at.join("record.jsonl.log"), "{\"entries\": 0}\n").unwrap();
+  let held = |name: &str| fs::read(at.join(name)).unwrap();
+  let (text, log) = (held("record.jsonl"), held("record.jsonl.log"));
+  let refused = opening(&at, true).boot::<String>([]).map(|_| ()).unwrap_err();
+  assert!(refused.to_string().starts_with("Drift: "), "{refused}");
+  let mut beside: Vec<String> = fs::read_dir(&at)
+    .unwrap()
+    .map(|one| one.unwrap().file_name().to_string_lossy().into_owned())
+    .collect();
+  beside.sort();
+  assert_eq!(beside, ["record.jsonl", "record.jsonl.lock", "record.jsonl.log"]);
+  assert_eq!(held("record.jsonl"), text, "the record stays as it was");
+  assert_eq!(held("record.jsonl.log"), log, "the log stays as it was");
+}
+
+#[test]
 fn each_record_of_the_corpus_names_this_version_and_replays_on_this_build_with_no_drift() {
   let mut records: Vec<PathBuf> = fs::read_dir(corpus())
     .unwrap()

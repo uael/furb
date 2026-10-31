@@ -50,19 +50,20 @@ fn one_store_at_a_time_holds_a_record_and_a_read_with_no_lease_reads_it_all_the_
 }
 
 #[test]
-fn the_store_removes_a_torn_last_line_ends_a_whole_one_and_refuses_a_damaged_line() {
+fn the_store_reads_past_a_torn_last_line_and_a_whole_one_that_no_keep_mends_and_refuses_a_damaged_line()
+ {
   let at = place("mend");
   let path = at.join("record.jsonl");
   fs::write(&path, "[[\"done\",\"x\",\"world\",null]]\n[\"partial\"").unwrap();
   let (record, ear) = store(&path).unwrap();
   drop(ear);
   assert_eq!(record.len(), 1);
-  assert_eq!(fs::read_to_string(&path).unwrap(), "[[\"done\",\"x\",\"world\",null]]\n");
+  assert_eq!(fs::read_to_string(&path).unwrap(), "[[\"done\",\"x\",\"world\",null]]\n[\"partial\"");
   fs::write(&path, "[[\"done\",\"x\",\"world\",null]]").unwrap();
   let (record, ear) = store(&path).unwrap();
   drop(ear);
   assert_eq!(record.len(), 1);
-  assert_eq!(fs::read_to_string(&path).unwrap(), "[[\"done\",\"x\",\"world\",null]]\n");
+  assert_eq!(fs::read_to_string(&path).unwrap(), "[[\"done\",\"x\",\"world\",null]]");
   fs::write(&path, "[[\"done\",\"x\",\"world\",null]]\nbroken\n").unwrap();
   let refused = store(&path).err().unwrap();
   let at = "[[\"done\",\"x\",\"world\",null]]\n".len();

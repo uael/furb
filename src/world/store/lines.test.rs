@@ -88,3 +88,25 @@ fn a_line_that_the_store_failed_to_write_whole_is_cut_before_the_next_line() {
   let want: Vec<String> = entries.iter().map(|one| one.as_ref().py_repr()).collect();
   assert_eq!(shown, want);
 }
+
+#[test]
+fn a_record_whose_last_line_is_torn_or_not_ended_is_mended_at_the_first_keep_and_not_before() {
+  let one = "[[\"stand\",\"stand1\",\"operator\",\"chain1\"]]\n";
+  for (tail, name) in [
+    ("[[\"stand\",\"sta", "torn-tail"),
+    ("[[\"stand\",\"stand2\",\"operator\",\"chain1\"]]", "unended"),
+  ] {
+    let at = place(name);
+    fs::write(&at, format!("{one}{tail}")).unwrap();
+    let before = fs::read(&at).unwrap();
+    let mut store = Lines::open(&at).unwrap();
+    let entries = store.entries().unwrap();
+    store.sync().unwrap();
+    assert_eq!(fs::read(&at).unwrap(), before, "a store that keeps nothing changes nothing");
+    store.keep(entries[0].as_ref()).unwrap();
+    store.sync().unwrap();
+    let held = kept(&at).unwrap().len();
+    assert_eq!(held, if name == "torn-tail" { 2 } else { 3 });
+    assert!(fs::read_to_string(&at).unwrap().ends_with('\n'));
+  }
+}
