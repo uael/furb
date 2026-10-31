@@ -89,3 +89,30 @@ def test_word_binds_no_name_of_an_official_extension(name: str) -> None:
   """A word of the project that binds a name of an official extension changes that extension on its chains, as a BUDGET of text broke the catch-up of the root."""
   official = set().union(*(bound(one["word"]) for one in _monty.official()))
   assert bound(word(name)) & official == set()
+
+
+def binders(text: str) -> list[tuple[str, bool]]:
+  """Each name that a word binds at its top, with whether its binding reads that name, as a word that extends a list does."""
+  found: list[tuple[str, bool]] = []
+  for node in ast.parse(text).body:
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+      found.append((node.name, False))
+    elif isinstance(node, ast.TypeAlias):
+      found.append((node.name.id, False))
+    elif isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value is not None:
+      targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+      read = {one.id for one in ast.walk(node.value) if isinstance(one, ast.Name)}
+      found += [(one.id, one.id in read) for one in targets if isinstance(one, ast.Name)]
+  return found
+
+
+def test_no_two_words_of_the_project_bind_one_name_but_to_extend_it() -> None:
+  """The words of the project load into the module of the root, so a name that two of them bind is one name, and the later word breaks the earlier."""
+  homes: dict[str, str] = {}
+  clashes: list[str] = []
+  for name in NAMES:
+    for bound_name, extends in binders(word(name)):
+      if bound_name in homes and homes[bound_name] != name and not extends:
+        clashes.append(f"{bound_name}: {homes[bound_name]} and {name}")
+      homes.setdefault(bound_name, name)
+  assert clashes == []
