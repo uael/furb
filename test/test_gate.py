@@ -167,10 +167,16 @@ async def test_a_word_that_holds_a_fence_markup_or_prose_finds_the_first_such_li
     ('<invoke name="bash">\nclose(1)', '<invoke name="bash">', "markup"),
     ("Let me read the file first.\nclose(1)", "Let me read the file first.", "prose"),
     ("close(1)\nNow I check the result.", "Now I check the result.", "prose"),
+    ("I'll read the file first.\nclose(1)", "I'll read the file first.", "prose"),
+    ("Let me read `x.py` and run it.\nclose(1)", "Let me read `x.py` and run it.", "prose"),
+    ("Read the file \u2014 then close it.\nclose(1)", "Read the file \u2014 then close it.", "prose"),
+    ("Use a well-known name -- and close it.\nclose(1)", "Use a well-known name -- and close it.", "prose"),
   ]:
     (found,) = engine.gate(word, on=root)
     at = word.split("\n").index(line) + 1
     assert found.startswith(f"line {at}: ") and found.endswith(f"; line {at} is {kind}: {stray}, in {line!r}")
+  (found,) = engine.gate("Total - rest - more\nclose(", on=root)
+  assert "is prose" not in found
   (found,) = engine.gate("= 1", on=root)
   assert stray not in found and found.endswith(", in '= 1'")
 
