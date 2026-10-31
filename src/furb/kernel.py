@@ -18,6 +18,9 @@ from ast import PyCF_ALLOW_TOP_LEVEL_AWAIT
 from collections.abc import Callable, Coroutine, Generator
 from contextvars import ContextVar
 
+# The seconds that a word that is over waits at the most for the commands that it started and did not await.
+LINGER = 30.0
+
 type Names = dict[str, object]
 """The names of the engine: its module, in which every word runs in the module of its chain."""
 type Ear = Generator[tuple | set[str] | None, tuple | None]
@@ -78,6 +81,7 @@ class Running:
     self.awaits: dict[str, list[str]] = {}
     self.parts: dict[str, tuple[str, str, int]] = {}
     self.heard = 0
+    self.lingers: dict[str, str] = {}
 
   def of(self, job: str) -> tuple[str, str, str, str, int]:
     """The job, as the life holds it: its kind, its chain, its rung, its word, and how many characters of the word
@@ -117,16 +121,51 @@ class Running:
     line = self.line.get(rung) or []
     if run in line:
       line.remove(run)
+    if kind == "run" and got is None and self.linger(run, rung):
+      return
     if kind == "run":
-      with self.site.set(run):
-        verb(self.names, "say")("done", run, got)
-      self.line.pop(rung, None)
-      self.broke.pop(rung, None)
+      self.finish(run, rung, got)
     else:
       del self.parts[run]
       with self.site.set(rung):
         verb(self.names, "say")("ran", rung, before, got)
     self.drives(rung)
+
+  def linger(self, run: str, rung: str) -> bool:
+    """The word of a turn of a model that is over with each command that it started and did not await still open
+    waits for them, for
+    LINGER seconds at the most, by a wait for them that its run makes with no wants: the chain counts the run as a
+    word that runs, so it acknowledges none of them and asks no reply, and it tells what each command gave before it
+    asks the next one, so the model reads it in the turn after the word that started it."""
+    made = verb(self.names, "get")(rung)
+    if not isinstance(made, tuple) or made[4] or not (left := self.left(rung)):
+      return False
+    with self.site.set(run):
+      waited = verb(self.names, "wait")(LINGER, *left)
+    self.lingers[str(waited)] = run
+    return True
+
+  def left(self, rung: str) -> list[str]:
+    """Each command under a rung that is not over."""
+    over, under = verb(self.names, "over"), verb(self.names, "under")
+    made = verb(self.names, "transcript")(rung, "bash")
+    assert isinstance(made, list)
+    return [x[1] for x in made if under(x[1], rung) and not over(x[1])]
+
+  def lingered(self, waited: str, value: object) -> None:
+    """The wait of a word that lingers is over: the word waits again for the commands that are still open when the
+    wait ended at the end of one, and its run is done with nothing once none is open or the seconds passed."""
+    run = self.lingers.pop(waited)
+    rung = self.of(run)[2]
+    if value is None or not self.linger(run, rung):
+      self.finish(run, rung, None)
+
+  def finish(self, run: str, rung: str, got: BaseException | None) -> None:
+    """The run of a word, said done with what the word gave, as that run."""
+    with self.site.set(run):
+      verb(self.names, "say")("done", run, got)
+    self.line.pop(rung, None)
+    self.broke.pop(rung, None)
 
   def carry(self, run: str, given: object) -> None:
     """The word stepped as its rung with what it waited for, and stepped again while what it waits for is done."""
@@ -250,6 +289,9 @@ class Running:
   def dropped(self, control: tuple) -> None:
     """Every run whose rung a control is over, dropped: the frame of a word that is mid step is never closed."""
     covers = verb(self.names, "covers")
+    for waited, one in list(self.lingers.items()):
+      if covers(control, self.of(one)[2]) and self.lingers.pop(waited, None):
+        self.finish(one, self.of(one)[2], None)
     for one in [x for x in self.frames if covers(control, self.of(x)[2])]:
       if not getattr(self.frames[one], "cr_running", False):
         self.frames[one].close()
@@ -261,7 +303,7 @@ def kernel(names: Names) -> Ear:
   of a rung that the life holds when it hears the writing, and carries the word at the done of each wants it made."""
   held, heard = Running(names), {"run", "writing", "wants", "cancel", "close"}
   while True:
-    match (yield heard | set(held.awaits)):
+    match (yield heard | set(held.awaits) | set(held.lingers)):
       case ("run", run, *_):
         # This Kernel runs every word, retold or not, so it reads no donor off the run.
         held.took(run)
@@ -272,6 +314,8 @@ def kernel(names: Names) -> Ear:
       case ("done", made, _, value) if made in held.awaits:
         for one in held.awaits.pop(made):
           held.carry(one, value)
+      case ("done", waited, _, value) if waited in held.lingers:
+        held.lingered(waited, value)
       case ("done", wants, _, value) if wants in held.waits:
         held.carry(held.waits.pop(wants), value)
       case ("cancel" | "close", *_) as control:
