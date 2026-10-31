@@ -29,7 +29,7 @@ Each gate runs locally. `uv run` builds the crate again after a change of it, as
 | The command line, `cli/` | `cargo test -p furb-cli`, which runs `furb` as a process on a claude command line that answers from a script |
 | The TUI, `tui/` | `bun run check`, `bun run lint`, `bun run test`; after a change that a screen shows, `bun run screenshots` and read each capture |
 | The contract of a value that crosses a door | The gates of both doors, since each door gives the same host API |
-| The workflow | `git diff --check`, then read the run of the workflow on the pull request |
+| The workflow, or a script of `script/` | `git diff --check` and `uv run python script/paths.py`, then read the run of the workflow on the pull request |
 | The documents alone | Their links and their format, `uv run python script/links.py` for a README of a package, and `git diff --check`; no test of the runtime |
 
 ## Boundaries of source and state

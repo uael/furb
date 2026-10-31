@@ -68,6 +68,13 @@ repos:
         language: system
         files: (^|/)(README\.md|pyproject\.toml|Cargo\.toml|package\.json)$
         pass_filenames: false
+      - id: paths
+        name: the paths that the scripts and the workflows name
+        # Each commit runs it, since a move of a file in a commit that touches no script leaves the old path in one.
+        entry: uv run --no-sync python script/paths.py
+        language: system
+        always_run: true
+        pass_filenames: false
       - id: stray
         name: no backup or reject file
         entry: A backup or reject file of a patch or of sed is in the commit. Delete it.
