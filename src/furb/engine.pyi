@@ -510,6 +510,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   """chain says what a chain does: how it is opened, what it tells, and what it answers for.
   boot gives the root, and chain gives the chain, which never settles.
   The open of a chain with a source binds its label and its source.
+  The open of a chain with no source binds its actor, and the chain whose module gave it, or stand when the standing did.
   The entry that opens a chain with a source carries its label, after the prefix.
   chain gives the new chain, which never completes.
   boot gives the root as an act of Never, and the root never completes.
