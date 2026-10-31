@@ -66,15 +66,26 @@ function compile(script: string, home: string): void {
     stderr: "pipe",
   });
   if (made.exitCode) throw new Error(`${script} does not compile: ${made.stderr.toString()}`);
-  // The program starts here once, with no input and no log, so no test bounds the time of the first start.
-  const { FURB_FAKE_LOG: _, ...env } = process.env;
-  Bun.spawnSync([path], { cwd: work, env, stdin: "ignore", stdout: "ignore", stderr: "ignore" });
+  const program = join(home, "program");
   try {
-    renameSync(work, join(home, "program"));
-  } catch {
+    renameSync(work, program);
+  } catch (error) {
     // Another run compiled the same script first, and its program stands.
+    if (!existsSync(program)) throw error;
     rmSync(work, { recursive: true, force: true });
+    return;
   }
+  // The program starts here once, with no input and no log, so no test bounds the time of the first start. It starts
+  // after the move: on Windows the system holds a program that just started, and a folder that holds it cannot move.
+  const { FURB_FAKE_LOG: _, ...env } = process.env;
+  const file = process.platform === "win32" ? "program.exe" : "program";
+  Bun.spawnSync([join(program, file)], {
+    cwd: program,
+    env,
+    stdin: "ignore",
+    stdout: "ignore",
+    stderr: "ignore",
+  });
 }
 
 if (import.meta.main) compiled(process.argv[2] ?? "");
