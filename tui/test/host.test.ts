@@ -694,6 +694,26 @@ test.skipIf(process.platform === "win32")(
 );
 
 test.skipIf(process.platform === "win32")(
+  "a host that a kill cuts while it opens its life leaves a socket that the next host replaces",
+  () =>
+    demoLife(async (record, directory) => {
+      const place = hostPlace(record);
+      if (!place) throw new Error("No socket serves here.");
+      const host = slowHost(record, directory, 60000);
+      await eventually(() => existsSync(place.socket), "the host to listen");
+      host.kill("SIGKILL");
+      await host.exited;
+      // A kill runs no cleanup, so the socket and what the host said of itself stay.
+      expect(existsSync(place.socket)).toBe(true);
+      expect(isHost(host.pid)).toBe(false);
+      const next = await openEngine({ demo: true, host: true, cwd: directory, record });
+      expect(next.engine.root).toBeString();
+      expect(said(place).pid).not.toBe(host.pid);
+      await next.host.end();
+    }),
+);
+
+test.skipIf(process.platform === "win32")(
   "a window that ends the life while the host opens it cuts the open, and the host ends",
   () =>
     demoLife(async (record, directory) => {
