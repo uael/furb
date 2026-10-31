@@ -252,8 +252,9 @@ export function tellAbout(place: Place, about: About): void {
   }
 }
 
-/** Whether a process is a host of a life: it runs, and its command line names the program of the host. A process
- * that ended, one that waits to be reaped, and an unrelated process that took the number of a host are no host. */
+/** Whether a process is a host of a life: it runs, and its command line names the program of the host with the options
+ * that a window gives it, as `bun /path/host.ts {...}`. A process that ended, one that waits to be reaped, a process that
+ * only names host.ts, as an editor does, and an unrelated process that took the number of a host are no host. */
 export function isHost(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -261,7 +262,7 @@ export function isHost(pid: number): boolean {
     return false;
   }
   const got = Bun.spawnSync(["ps", "-o", "command=", "-p", String(pid)]);
-  return got.stdout.toString().includes("host.ts");
+  return /(^|\/)host\.ts \{/.test(got.stdout.toString());
 }
 
 /** The end of a host that does not answer: the signal that ends a life as the end of a window does, and the kill after
