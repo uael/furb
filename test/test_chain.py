@@ -1302,6 +1302,17 @@ async def test_the_advance_binds_each_act_that_a_word_of_the_chain_awaits() -> N
   assert f"#{first} advance on {one}" in told and f"#{second} advance on {two}\n{second}_waits = [{waited!r}]" in told
 
 
+async def test_the_chain_advances_no_rung_after_a_word_that_told_nothing_while_a_word_awaits() -> None:
+  """While a word of the chain awaits an act that is not over, the chain advances no rung after a word that told nothing, so it asks no reply until a fact is told on the chain."""
+  _, log, root = born("x = bash('slow')\nawait x", "y = 1", "y = 2", "close(2)", auto=False)
+  engine.prompt(int, "count", on=root)
+  await settle()
+  two = engine.prompt(int, "tally", on=root)
+  await settle()
+  await settle()
+  assert (len(said(log, "reply")), engine.peek(two)) == (2, None)
+
+
 async def test_the_chain_tells_a_word_that_told_nothing_before_the_advance() -> None:
   """When nothing was told on the chain since the word of the last rung that the chain did not make was ready, the chain tells that rung under the header told nothing before the advance, so the model sees that the word showed it nothing."""
   _, log, root = born("x = read('/w/a.txt', show=HIDDEN)", "x = read('/w/a.txt')", "close(1)")

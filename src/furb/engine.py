@@ -355,6 +355,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
           waiting[rid] = running[rid] = ""
         case ("tell", *_, notes) if notes != ["chain()"]:
           heard.append("\n".join(notes))
+          ran = ""
           if a is note:
             note = bind(step)
         case ("done", about, *_) if about == note:
@@ -364,7 +365,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
           try:
             rid == step or bind(rid)
             ladder[(donor := r[5]) or rid] = word
-            found = (ran := tells(rid) and (rid, len(heard))) and gate(word)
+            found = (ran := tells(rid) and rid) and gate(word)
             if not found:
               running[rid] = act("run", id, None, rid, unquoted(word), donor)
           except Refused as e:
@@ -381,19 +382,17 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
         running[get(r[2])[4]] = a[0] != "started"
       if any(running.values()):
         continue
-      if step not in waiting and (step := next((x for x in waiting if not (paused(x) or over(x))), "")):
+      waits = [c for *_, c in transcript(id, "wants") if not over(c)]
+      if step not in waiting and (
+        step := next((x for x in waiting if not (paused(x) or over(x) or (ran and waits))), "")
+      ):
         maker, to = get(step)[2::4]
         if offered(last[0], to) is None:
           close(Refused(to + " no actor"), maker * prompted(maker) or step)
         else:
-          if ran and len(heard) == ran[1]:
-            yield told(ran[0], "told nothing")
-          note = yield told(
-            step,
-            "advance on " + maker,
-            share=filled(reply) or None,
-            waits=[c for *_, c in transcript(id, "wants") if not over(c)] or None,
-          )
+          if ran:
+            yield told(ran, "told nothing")
+          note = yield told(step, "advance on " + maker, share=filled(reply) or None, waits=waits or None)
           news = ""
       if news and not waiting and (r[2] in running or over(r[2]) or a[0] == "tell"):
         ours = get(news[1])[2]
