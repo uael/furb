@@ -1,16 +1,5 @@
 import { expect, test } from "bun:test";
-import {
-  appendFile,
-  link,
-  mkdtemp,
-  readdir,
-  readFile,
-  rename,
-  rm,
-  stat,
-  utimes,
-  writeFile,
-} from "node:fs/promises";
+import { appendFile, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
@@ -18,7 +7,7 @@ import { retold } from "furb";
 import { App } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { Preferences } from "../src/preferences.ts";
-import { guard, Reader } from "../src/reading.ts";
+import { Reader } from "../src/reading.ts";
 import { Workspaces } from "../src/workspaces.ts";
 
 /** What the folder of a record holds that belongs to it: each file by name, with its time and its bytes. */
@@ -405,74 +394,6 @@ test("a chain that the record does not keep takes its first prompt as its label 
   }
 });
 
-test("the guard gives back a record that a life wrote beside before its replay drifted", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "furb-guard-"));
-  try {
-    for (const way of ["replaced", "appended", "absent"]) {
-      const record = join(directory, `${way}.jsonl`);
-      await writeFile(record, "one\ntwo\n");
-      if (way !== "absent") await writeFile(`${record}.log`, "log\n");
-      await writeFile(`${record}.ui.json`, "{}");
-      await utimes(record, 1_700_000_000, 1_700_000_000);
-      const before = await folder(record);
-      const held = guard(record);
-      await Bun.sleep(5);
-      await appendFile(record, "three\n");
-      await writeFile(`${record}.log.new`, "fresh log\n");
-      if (way === "replaced" || way === "absent") await rename(`${record}.log.new`, `${record}.log`);
-      else await appendFile(`${record}.log`, "more\n");
-      await writeFile(`${record}.snapshot`, "state");
-      held.undo();
-      expectKept(await folder(record), before);
-      expect((await stat(record)).mtimeMs).toBe(1_700_000_000_000);
-      const clean = guard(record);
-      clean.keep();
-      expectKept(await folder(record), before);
-    }
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
-});
-
-test("the guard frees the hold that a killed host left, so the record opens again", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "furb-stale-held-"));
-  try {
-    // The host died after the link and before `keep`: the life wrote a log again, on another inode.
-    const replaced = join(directory, "replaced.jsonl");
-    await writeFile(replaced, "one\n");
-    await writeFile(`${replaced}.log`, "the log as it was, whole\n");
-    await link(`${replaced}.log`, `${replaced}.log.held`);
-    await rm(`${replaced}.log`);
-    await writeFile(`${replaced}.log`, "partial\n");
-    guard(replaced).keep();
-    expect(await readFile(`${replaced}.log`, "utf8")).toBe("the log as it was, whole\n");
-    expect((await readdir(directory)).sort()).toEqual(["replaced.jsonl", "replaced.jsonl.log"]);
-
-    // The host died after the life wrote on in place: the log and the hold are one file.
-    const same = join(directory, "same.jsonl");
-    await writeFile(same, "one\n");
-    await writeFile(`${same}.log`, "written in place\n");
-    await link(`${same}.log`, `${same}.log.held`);
-    guard(same).keep();
-    expect(await readFile(`${same}.log`, "utf8")).toBe("written in place\n");
-    expect((await readdir(directory)).sort()).toEqual([
-      "replaced.jsonl",
-      "replaced.jsonl.log",
-      "same.jsonl",
-      "same.jsonl.log",
-    ]);
-
-    // The open that goes on gives back its own change as before.
-    const again = guard(replaced);
-    await writeFile(`${replaced}.log.new`, "fresh\n");
-    await rename(`${replaced}.log.new`, `${replaced}.log`);
-    again.undo();
-    expect(await readFile(`${replaced}.log`, "utf8")).toBe("the log as it was, whole\n");
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
-});
-
 test("a record name cannot add Python statements to the word that carries its work", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-carry-name-"));
   try {
@@ -587,20 +508,6 @@ test("a record with no journal gains no journal when its replay drifts", async (
     } finally {
       await open.close();
     }
-    expectKept(await folder(record), before);
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
-});
-
-test("a guard with no log keeps a held file that it did not make", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "furb-record-other-held-"));
-  try {
-    const record = join(directory, "life.jsonl");
-    await writeFile(record, "");
-    await writeFile(`${record}.log.held`, "another operation\n");
-    const before = await folder(record);
-    guard(record).keep();
     expectKept(await folder(record), before);
   } finally {
     await rm(directory, { recursive: true, force: true });

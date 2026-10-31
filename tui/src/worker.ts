@@ -1,5 +1,5 @@
 // The worker loads no module that loads OpenTUI, whose native library belongs to the thread that draws.
-import { existsSync, type FSWatcher, readFileSync, watch as watchFile } from "node:fs";
+import { type FSWatcher, readFileSync, watch as watchFile } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { Engine, FileChange, SessionOptions, Turn } from "furb";
 import { Act, actorParts, codexAuth, ENGINE, model, models, retold, Session, setup, standingOf } from "furb";
@@ -12,7 +12,7 @@ import { expandHome } from "./files.ts";
 import { type EngineOptions, roster } from "./models.ts";
 import { changeProvider } from "./providers.ts";
 import { queueDispatches, queueHash } from "./queue.ts";
-import { guard, isRecorded, Reader } from "./reading.ts";
+import { isRecorded, Reader } from "./reading.ts";
 import { branchChanges, net } from "./review.ts";
 import type { FollowUp } from "./session.ts";
 import { Snapshots } from "./snapshots.ts";
@@ -295,26 +295,15 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     userConfig = options.config;
     demo = (scripted || watch) ?? false;
     await refreshCodex(options.cwd);
-    // The session constructor can create a journal, so the guard stands before it as well as before the replay.
-    const held = options.record && existsSync(options.record) ? guard(options.record) : undefined;
     let opened: Session | undefined;
     try {
       opened = demo ? scriptedSession(options, watch) : new Session({ ...options, roster: roster(options) });
       engine = opened.open();
-      held?.keep();
     } catch (error) {
       // A record that a build of another version made drifts on a replay, so it opens to read, with the facts that
       // it kept.
       const why = error instanceof Error ? error.message : String(error);
-      if (!opened) {
-        held?.undo();
-        throw error;
-      }
-      if (!why.startsWith("Drift") || !opened.record) {
-        held?.keep();
-        throw error;
-      }
-      held?.undo();
+      if (!opened || !why.startsWith("Drift") || !opened.record) throw error;
       const { file, made, engine: ours, version, current, logged } = retold(opened.record);
       reader = new Reader(
         opened.directory,

@@ -116,10 +116,9 @@ export class FileChanges {
       }
       return;
     }
-    // The changes stand beside the record, whose directory may not stand yet when the session is made.
-    mkdirSync(dirname(path), { recursive: true });
     this.index(path);
-    this.fd = openSync(path, "a+", 0o600);
+    // A journal that does not stand is made at its first change, so a life that fails to open leaves nothing.
+    if (this.indexed) this.fd = openSync(path, "a+", 0o600);
   }
   /** The position of each complete line of the journal. A writable journal replaces a cut tail only on a write,
    * since opening a life can still fail. Open to read, the tail stays and its page reports it as damaged. */
@@ -204,7 +203,12 @@ export class FileChanges {
   append(change: FileChange): void {
     this.writable();
     const path = this.path;
-    if (this.fd === undefined || !path) return;
+    if (!path || this.disposed) return;
+    if (this.fd === undefined) {
+      // The changes stand beside the record, whose directory may not stand yet when the session is made.
+      mkdirSync(dirname(path), { recursive: true });
+      this.fd = openSync(path, "a+", 0o600);
+    }
     if (this.cut) this.reopen(path, () => truncateSync(path, this.end));
     const data = Buffer.from(`${JSON.stringify(change)}\n`);
     writeSync(this.fd, data);
