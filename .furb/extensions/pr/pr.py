@@ -96,6 +96,7 @@ async def pr(
   body = pr_body(why, outcome, breaking or [], fixes, checks, part_of)
   name = shq(title)
   flags = "".join(f" --label {shq(x)}" for x in labels) if isinstance(labels, list) else labels
+  flags = f" {flags.strip()}" if flags.strip() else ""
   names = labels if isinstance(labels, list) else re.findall(r"--label '?([^'\s]+)'?", labels)
   made = "".join(f"gh label create {shq(x)} --force >/dev/null 2>&1; " for x in names)
   rules = 'R=CLAUDE.md; [ -f AGENTS.md ] && R=AGENTS.md; sed "s/{rules}/$R/g" | '
