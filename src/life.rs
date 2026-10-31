@@ -205,6 +205,11 @@ impl Opening {
     let path = self.record.as_deref().unwrap_or_default();
     drifts(path, &record)?;
     let cut = checkpoint::last(&record).is_some();
+    // The log reads the record whole, so a life after a checkpoint writes on after the log of the lives before it.
+    let logs = self.record.as_ref().filter(|_| keeps).map(|path| match continued && !cut {
+      true => world::continued(path, record.len()),
+      false => world::log(path, &record),
+    });
     let record = checkpoint::booted(record);
     let log = self.log.as_ref().map(|log| log.0.clone());
     let told = |line: &str| match &log {
@@ -224,10 +229,6 @@ impl Opening {
       true => extension::configured(&places, self.directory.as_ref())?,
       false => Vec::new(),
     };
-    let logs = self.record.as_ref().filter(|_| keeps).map(|path| match continued && !cut {
-      true => world::continued(path, record.len()),
-      false => world::log(path, &record),
-    });
     let gallery = self.gallery();
     let project = PathBuf::from(&self.directory);
     let (provider, search) = self.provider()?;

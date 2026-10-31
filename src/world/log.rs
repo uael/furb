@@ -6,6 +6,11 @@
 //! which goes when the life ends before that, so a life whose replay drifts leaves the log of the life before it as it
 //! was, and nothing more.
 //!
+//! A life that goes on from a checkpoint replays only what the checkpoint carries, so its log starts with the lines of
+//! the log before it that come before the checkpoint, while that log agrees with the record up to there, then a line
+//! of keep for the checkpoint and for each entry after it, and then what the life says. So a reader of the log still
+//! finds each fact of the lives before the checkpoint, and the log agrees with the record.
+//!
 //! Its first line is a map that holds under `entries` how many entries the record held when the life opened. Each
 //! other line is one fact, as JSON reads a value of the sandbox, but for the line `["keep", "", n]`, which says that
 //! the record keeps its entry `n`, counted from 1, there. An act that no fact showed before, since an ear of the
@@ -121,6 +126,46 @@ struct Log {
   behind: Rc<Cell<bool>>,
 }
 
+/// The lines of the log at a path that come before a checkpoint, the entries before which a record holds, with its
+/// head, and each name that they show: nothing when the log does not agree with those entries, as [`agreed`] reads it.
+/// A log of a life that went on from an earlier checkpoint holds a line of keep for this checkpoint, where they end.
+fn earlier(log: &Path, before: &[Object]) -> Option<(String, HashSet<String>)> {
+  let text = std::fs::read_to_string(log).ok()?;
+  let mut lines = text.split_inclusive('\n');
+  let head = lines.next()?;
+  let mut entries =
+    usize::try_from(serde_json::from_str::<Value>(head.trim_end()).ok()?.get("entries")?.as_u64()?)
+      .ok()?;
+  let mut asked: HashSet<String> = before
+    .iter()
+    .filter_map(|entry| Fact::of(*entry.as_ref().items()?.first()?))
+    .filter(Fact::question)
+    .map(|one| one.about().to_owned())
+    .collect();
+  let (mut kept, mut seen) = (head.to_owned(), HashSet::new());
+  for line in lines {
+    let whole = line.strip_suffix('\n')?;
+    let value = serde_json::from_str::<Value>(whole).ok()?;
+    if let Some(at) = whole.strip_prefix(KEEP).and_then(|one| one.strip_suffix(']')) {
+      let at = at.parse::<usize>().ok()?;
+      if at != entries + 1 {
+        return None;
+      }
+      if at > before.len() {
+        break;
+      }
+      entries = at;
+    } else if let Some(name) = question(whole) {
+      asked.remove(&name);
+    }
+    if let Some(about) = value.get(1).and_then(Value::as_str).filter(|one| !one.is_empty()) {
+      seen.insert(about.to_owned());
+    }
+    kept.push_str(line);
+  }
+  (entries == before.len() && asked.is_empty()).then_some((kept, seen))
+}
+
 /// Whether a name is the name of an act, as `bash3`, and not the name of an ear.
 fn named_act(name: &str) -> bool {
   let kind = name.trim_end_matches(|one: char| one.is_ascii_digit());
@@ -148,10 +193,13 @@ fn owed(held: &[Object]) -> Vec<(String, Value)> {
 }
 
 impl Log {
-  /// The log of the record at a path, written again from its first line.
+  /// The log of the record at a path, which holds these entries, written again from its first line, or from the
+  /// lines of the log before it that come before the last checkpoint of the record.
   fn open(record: &Path, held: &[Object]) -> Log {
     let path = PathBuf::from(format!("{}.log", record.display()));
     let fresh = PathBuf::from(format!("{}.log.new", record.display()));
+    let earlier = crate::checkpoint::last(held)
+      .and_then(|at| earlier(&path, &held[..at]).map(|(text, seen)| (at, text, seen)));
     let file = OpenOptions::new().create(true).write(true).truncate(true).open(&fresh).ok();
     let entries = held.len();
     let mut log = Log {
@@ -166,7 +214,18 @@ impl Log {
       torn: false,
       behind: Rc::default(),
     };
-    log.line(&serde_json::json!({ "entries": entries }));
+    match earlier {
+      Some((at, text, seen)) => {
+        log.seen = seen;
+        log.waiting = text;
+        for n in at + 1..=entries {
+          log.waiting.push_str(&format!("{}\n", serde_json::json!(["keep", "", n])));
+        }
+        let failed = log.flushed().is_err();
+        log.behind.set(failed);
+      }
+      None => log.line(&serde_json::json!({ "entries": entries })),
+    }
     log
   }
 
