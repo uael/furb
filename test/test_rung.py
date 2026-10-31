@@ -468,6 +468,17 @@ async def test_a_replay_makes_a_rung_of_its_own_retelling_each_rung_of_the_donor
   assert mine and all(a[1] != a[5] for a in mine)
 
 
+async def test_a_replay_makes_no_rung_for_a_word_that_is_empty() -> None:
+  """A replay makes no rung for a word that is empty, since a rung with no word asks a model for a word."""
+  _, log, root = born("", "close(1)")
+  assert await engine.prompt(int, "count", on=root) == 1
+  await settle()
+  side = await chained("side", root, 300)
+  assert "" in engine.program(root).values()
+  assert [a[1] for a in said(log, "reply") if a[3] == side] == []
+  assert "" not in [a[4] for a in said(log, "rung") if a[3] == side]
+
+
 async def test_a_rung_that_retells_names_the_rung_that_the_word_first_ran_in() -> None:
   """A rung that retells names the rung that the word first ran in and never another rung that retells it, so a second replay makes the same acts and asks the World nothing twice."""
   sand, log, root = born()

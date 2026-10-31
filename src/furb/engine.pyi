@@ -424,6 +424,7 @@ def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
   Of the acts its word made and read at once it tells nothing, since such an act tells of itself or not at all.
   An answer with no text is a word like any other, so the gate reads it, the run gives no value, and the model is asked again.
   A replay makes a rung of its own retelling each rung of the donor it keeps.
+  A replay makes no rung for a word that is empty, since a rung with no word asks a model for a word.
   What a rung that retells asks is named under the one it retells, so the life answers it with what it answered then and the World is asked nothing twice.
   A rung that awaits an act nobody settles waits until a cancel ends it, and holds nothing else of the chain.
   A rung that retells says each question it makes as the rung it retells, so the question it makes at a place is the one that rung made there.
