@@ -186,7 +186,7 @@ WORKER = """You are a worker on the repository {repo}. Do one item, and open its
 1. Your branch is w/{key}. {workspace} Build on origin/main, and stack your branch on an open PR only when your change needs its code, and say why in the body. Make a stack with gh stack, and run skill("gh-stack") in a word of your own before you make or touch one. Link its PRs on GitHub with gh stack submit --auto or gh stack link: the round merges a green gh stack whole, all its PRs at once. Run each build of Rust through sh $TMPDIR/build.sh <command>, which runs three at once at most.
 2. Change it as the AGENTS.md files of the repository say.
 3. Run only the tests that your change touches.
-4. Commit with the title of the PR as its message (a commit that the item brought keeps its own message, since the merge squashes them), and push the branch. Then open the PR, or update it when it stands, with pr(), which fills the template of the owner from what you give it and checks each of its rules: await pr(title, why, outcome, checks, breaking=[], fixes=0, where=<your worktree>, labels="{labels}"). title is type(area): What changed, 70 characters or fewer: the type is feat, fix, perf, or chore for a change that no user sees, and the area is the part that owns the change (engine, crate, tui, gui, provider, ci, conductor, or an extension by its name). why is the problem and why it matters now, from your own work and not from git log. outcome is a list: what is true now that was not, each with the evidence of what you ran, and each gap that you leave. breaking lists each change that forces a caller of a door or of the contract to change code. 300 words at most, and no how, which the diff holds. prcheck(title, why, outcome, breaking) before the commit checks the title and gives the word count. checks is six lines, one for each box of the checklist of the template in its order: verify each box one by one, then give the evidence of how you verified it, or not: and the work that it still needs, which leaves that box open. A flaw that you name in outcome ticks the box about flaws. When the item says that the owner ruled several changes one PR, that ruling is the evidence of the box about one change. A pr() that breaks a rule, or whose gh fails, raises Refused and says why; never write the body of a PR by hand.
+4. Commit with the title of the PR as its message (a commit that the item brought keeps its own message, since the merge squashes them), and push the branch. Then open the PR, or update it when it stands, with pr(), which fills the template of the owner from what you give it and checks each of its rules: await pr(title, why, outcome, checks, breaking=[], fixes=0, where=<your worktree>, labels="{labels}"). title is type(area): What changed, 70 characters or fewer: the type is feat, fix, perf, or chore for a change that no user sees, and the area is the part that owns the change (engine, crate, tui, gui, provider, ci, conductor, or an extension by its name). why is the problem and why it matters now, from your own work and not from git log. outcome is a list: what is true now that was not, each with the evidence of what you ran, and each gap that you leave. breaking lists each change that forces a caller of a door or of the contract to change code. 300 words at most, and no how, which the diff holds. prcheck(title, why, outcome, breaking) before the commit checks the title and gives the word count. checks is six lines, one for each box of the checklist of the template in its order: verify each box one by one, then give the evidence of how you verified it, or not: and the work that it still needs, which leaves that box open. A flaw that you name in outcome ticks the box about flaws. When the item says that the owner ruled several changes one PR, that ruling is the evidence of the box about one change. A pr() that breaks a rule, or whose gh fails, raises Refused and says why; never write the body of a PR by hand. Open the PR ready, never as a draft: the round cancels the gates of a draft.
 5. Open your first PR within about an hour of work, as soon as one coherent part serves the item: a large item
 lands as a gh stack of PRs, each layer one change, opened from this chain, and you close with the number of the last one.
 6. A fix comes back to your branch in any workspace, and the audit prunes nothing that a branch on origin holds. When the item asks for no change, answer it in a comment that starts with 🤖 on its issue or PR. Close with a tuple: the number of your PR, or 0 when the item asked for no change, and your report in 200 words at most: what you measured, what you decided, and what is left.
@@ -2414,6 +2414,25 @@ async def throttle() -> None:
     await bash("; ".join(f"gh run cancel {run['databaseId']} >/dev/null 2>&1" for run, _ in cut), show=HIDDEN, timeout=120)
     said = ", ".join(f"#{(heads.get(run['headBranch']) or {}).get('n', run['headBranch'])} ({why})" for run, why in cut)
     heard.append(f"The round cancelled queued runs of the gates that could serve no merge: {said}.")
+    for run, _ in cut:
+      pr = heads.get(run["headBranch"])
+      if not pr or run["headSha"] != pr["sha"] or f"cancelled {run['headSha']}" in noticed:
+        continue
+      mine = owner_of(pr) if pr["draft"] or {"hold", "paused"} & set(pr["labels"]) else ""
+      if mine:
+        noticed.add(f"cancelled {run['headSha']}")
+        n, sha = pr["n"], run["headSha"][:7]
+        if pr["draft"]:
+          tail = f"a draft gets no gates. Run gh pr ready {n}, and the gates run again at once."
+        else:
+          tail = "the label hold or paused stands on it. The gates run again once the round takes that label off."
+        quietly(
+          prompt,
+          None,
+          f"The round cancelled the queued run of the gates at the head {sha} of your PR #{n}, since {tail}"
+          " checked() shows that run as cancelled.",
+          on=working_at(mine),
+        )
   if len(runs) - len(cut) >= THROTTLE:
     return
   for one, key in list(deferred.items()):

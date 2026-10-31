@@ -2379,6 +2379,38 @@ async def test_queued_runs_that_can_serve_no_merge_are_cancelled_and_a_run_above
   assert conductor.deferred == {}
 
 
+@POSIX
+@JQ
+async def test_the_worker_of_a_draft_or_held_pr_hears_once_that_the_round_cancelled_its_gates(conductor: Round) -> None:
+  conductor.busy("p1", "k7", SONNET)
+  conductor.busy("p2", "k8", SONNET)
+  conductor.prs[7] = conductor.pr(n=7, head="w/a", sha="s7", labels=["w:k7"], draft=True)
+  conductor.prs[8] = conductor.pr(n=8, head="w/b", sha="s8", labels=["w:k8", "hold"])
+  runs = [
+    {"databaseId": 1, "headBranch": "w/a", "headSha": "s7", "event": "pull_request"},
+    {"databaseId": 2, "headBranch": "w/b", "headSha": "s8", "event": "pull_request"},
+  ]
+  conductor.say(r"run list --workflow gates.yml --status queued", json.dumps(runs))
+  await conductor.throttle()
+  assert [x for x in conductor.log().splitlines() if x.startswith("run cancel")] == ["run cancel 1", "run cancel 2"]
+  [(draft, draft_on), (held, held_on)] = conductor.prompts
+  assert draft_on == "chain-k7" and "head s7 of your PR #7" in draft and "gh pr ready 7" in draft
+  assert held_on == "chain-k8" and "head s8 of your PR #8" in held and "label hold" in held
+  assert "checked() shows that run as cancelled" in draft
+  await conductor.throttle()
+  assert len(conductor.prompts) == 2
+
+
+@POSIX
+@JQ
+async def test_a_run_of_a_pr_with_no_live_worker_is_cancelled_with_no_word_to_a_worker(conductor: Round) -> None:
+  conductor.prs[7] = conductor.pr(n=7, head="w/a", sha="s7", draft=True)
+  runs = [{"databaseId": 1, "headBranch": "w/a", "headSha": "s7", "event": "pull_request"}]
+  conductor.say(r"run list --workflow gates.yml --status queued", json.dumps(runs))
+  await conductor.throttle()
+  assert "run cancel 1" in conductor.log() and conductor.prompts == []
+
+
 def test_a_render_of_the_gallery_runs_no_check_and_passes(conductor: Round) -> None:
   gallery = conductor.pr(n=703, head="w/gallery")
   assert gallery["verdict"] == "pass"
