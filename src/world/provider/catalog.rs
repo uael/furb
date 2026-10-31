@@ -30,7 +30,7 @@ use std::{
   collections::{HashMap, HashSet},
   env, fs,
   path::{Path, PathBuf},
-  sync::{Arc, OnceLock},
+  sync::{Arc, Mutex, OnceLock, PoisonError},
   time::Duration,
 };
 
@@ -735,17 +735,27 @@ pub(super) fn reached(
 }
 
 /// The providers of the snapshot, with the models of each that the caches hold, read again by each catalog so that a
-/// life which stands again sees an update. The cache of models.dev is refreshed in the background when it is a day
-/// old.
-fn listed(cached: Option<&PathBuf>) -> IndexMap<String, Listed> {
+/// life which stands again sees an update. The parse of the caches stays while both files hold the same text, since
+/// the cache of models.dev is several megabytes and a catalog is made at each stand, each setup and each query. The
+/// cache of models.dev is refreshed in the background when it is a day old.
+fn listed(cached: Option<&PathBuf>) -> Arc<IndexMap<String, Listed>> {
+  type Kept = (Option<String>, Option<String>, Arc<IndexMap<String, Listed>>);
+  static KEPT: OnceLock<Mutex<HashMap<Option<PathBuf>, Kept>>> = OnceLock::new();
   if let Some(at) = cached {
     update::background(at);
   }
   let text = cached.and_then(|at| fs::read_to_string(at).ok());
-  let mut listed = parsed(SNAPSHOT, text.as_deref());
   let pi = cached.and_then(|at| fs::read_to_string(at.with_file_name(update::PI)).ok());
-  update::applied(&mut listed, pi.as_deref());
-  listed
+  let mut kept = KEPT.get_or_init(Default::default).lock().unwrap_or_else(PoisonError::into_inner);
+  match kept.get(&cached.cloned()) {
+    Some((was, was_pi, made)) if *was == text && *was_pi == pi => return made.clone(),
+    _ => {}
+  }
+  let mut made = parsed(SNAPSHOT, text.as_deref());
+  update::applied(&mut made, pi.as_deref());
+  let made = Arc::new(made);
+  kept.insert(cached.cloned(), (text, pi, made.clone()));
+  made
 }
 
 /// The providers of a snapshot, each with the models of the cache when the cache holds models of it as new as those
