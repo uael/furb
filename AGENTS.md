@@ -248,7 +248,8 @@ fix what your change broke, and report what was broken before.
   `base`, `origin/main` by default. It copies on write the build directories of the checkout whose build stands nearest
   to the new commit, so cargo builds only the crates of the workspace again: the `target` of cargo, the `node_modules`
   of bun, the build of the TypeScript package and the cache of the tests of the TUI. Then it runs
-  `bun install --offline` and `bun run build`. It does not copy `.venv`: run the `uv sync` that it prints, and before
+  `bun install --offline` and `bun run build`. It sets `core.hooksPath` of the clone to `script/hooks` when no value
+  stands, so that the hooks of each worktree print only what fails. It does not copy `.venv`: run the `uv sync` that it prints, and before
   that, probe with the `.venv/bin/python` of the main checkout. A first build takes about 6 minutes, against about 35 in
   a worktree of `git worktree add`. Copy on write needs APFS, Btrfs or XFS; on another file system, the script makes a
   plain worktree. Remove a worktree with `git worktree remove --force <path>`, then `git branch -D <branch>`. The
