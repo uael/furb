@@ -69,6 +69,18 @@ async function deal<T, R>(works: T[], slots: number, work: (one: T) => Promise<R
   return results;
 }
 
+// A browser URL reaches Windows through PowerShell, whose first start is slow on a machine that other runs load. It
+// starts once here, before any run, so no test bounds that first start.
+if (process.platform === "win32") {
+  const began = Date.now();
+  Bun.spawnSync(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", "exit"], {
+    env,
+    stdin: "ignore",
+    stdout: "ignore",
+    stderr: "ignore",
+  });
+  console.log(`PowerShell started in ${Date.now() - began} ms before any run.`);
+}
 const programs = join(import.meta.dir, "../../bind/typescript/test/programs");
 const compiling = Promise.all(
   [...new Glob("*.ts").scanSync(programs)].map(async (file) => {
