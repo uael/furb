@@ -30,7 +30,7 @@ async def test_only_a_stand_on_the_root_changes_the_standing() -> None:
 
 
 async def test_a_stand_from_inside_an_act_tells_its_answer_under_its_own_name() -> None:
-  """A stand from inside an act tells its answer under its own name, with the roster, the actor and the extensions of the standing, as stand2_roster, stand2_actor and stand2_extensions, and no directory, which a cd tells, and no path of the doctrine, which the root reads in a turn of its own."""
+  """A stand from inside an act tells its answer under its own name, with the roster and the actor of the standing, as stand2_roster and stand2_actor, and no directory, which a cd tells, and no path of the doctrine and no extensions, which the root reads in turns of its own."""
   taught = [*STANDS, "/w/DOCTRINE.md", [["one", "/w/one.py", "", False]]]
   _, log, root = born(stands=taught, files={"/w/DOCTRINE.md": "Read first.\n", "/w/one.py": "x = 41\n"})
   two = await chained("two")
@@ -38,16 +38,16 @@ async def test_a_stand_from_inside_an_act_tells_its_answer_under_its_own_name() 
   step = engine.rung("got = stand()", on=two)
   assert await step is None
   (asked,) = [a[1] for a in said(log, "stand") if a[2] == step]
-  # The root played stand2 in the first turn of its setup and stand3 after it, and chain two played its own, stand4,
-  # at its birth, so the stand of the word is stand5.
-  assert asked == "stand5" and engine.module(two)["got"] == taught
-  assert of(engine.turns(on=two), asked) == [stood(asked, taught)]
-  assert stood(asked, taught) == (
-    "#stand5\nstand5_roster = [['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]]\n"
-    "stand5_actor = 'm/low'\nstand5_extensions = [['one', '/w/one.py', '', False]]"
+  # The root played its stand, stand2, after its setup, and chain two its own, stand3, at its birth, so the stand of
+  # the word is stand4.
+  assert asked == "stand4" and engine.module(two)["got"] == taught
+  assert of(engine.turns(on=two), asked) == [stood(asked)]
+  assert stood(asked) == (
+    "#stand4\nstand4_roster = [['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]]\n"
+    "stand4_actor = 'm/low'"
   )
   assert [a for a in engine.transcript(two) if a[0] == "tell" and a[1] == asked] == [
-    ("tell", asked, step, [stood(asked, taught)])
+    ("tell", asked, step, [stood(asked)])
   ]
   assert paragraphs(engine.turns(on=root)) == was
 

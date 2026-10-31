@@ -225,14 +225,17 @@ test("what a model writes streams into the session under its rung until its repl
         actor: "claude-cli:sonnet/high",
         chain: engine.root,
         // The setup of the root as turns of the default actor whose words furb writes: the bare paragraph chain(), the
-        // stand, whose user turn holds the standing with its extensions, the read of the doctrine, for each official extension the word rung(read('<file>', HIDDEN).content) and the turn
+        // debug of the extensions of the standing, whose user turn holds them, the read of the doctrine, for each official extension the word rung(read('<file>', HIDDEN).content) and the turn
         // of the rung that it made, which holds the code alone, then the life words in one turn, whose user turn holds
         // what they read, then the stand and the cd, whose user turn holds what they tell, then the open of the root and
         // the prompt.
         messages: [
           turn("user", "chain()"),
-          turn("assistant", "stand()"),
-          turn("user", expect.stringMatching(/^#stand2\nstand2_roster = [\s\S]*\nstand2_extensions = /)),
+          turn("assistant", 'debug(t"{standing()[4]=}")'),
+          turn(
+            "user",
+            expect.stringMatching(/^#rung1 debugged\nrung1_debug = "standing\(\)\[4\]=\[\['catchup', /),
+          ),
           // A path of Windows stands with its separators doubled, as python shows a backslash.
           turn("assistant", expect.stringMatching(/^read\('.*[/\\]DOCTRINE\.md'\)$/)),
           turn("user", expect.stringMatching(/^#read1\nread1_path = '.*[/\\]DOCTRINE\.md'\n/)),
@@ -263,7 +266,7 @@ test("what a model writes streams into the session under its rung until its repl
               {
                 type: "text",
                 text: expect.stringMatching(
-                  /^#stand3\nstand3_roster = \[.*\]\nstand3_actor = 'claude-cli:sonnet\/high'\nstand3_extensions = \[.*\]\n\n#cd1\ncd1_path = '.*'$/,
+                  /^#stand2\nstand2_roster = \[.*\]\nstand2_actor = 'claude-cli:sonnet\/high'\n\n#cd1\ncd1_path = '.*'$/,
                 ),
               },
               {

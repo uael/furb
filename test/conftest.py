@@ -697,10 +697,9 @@ def named(got: Sequence[tuple]) -> list[str]:
 
 def stood(id: str, standing: list = STANDS) -> str:
   """The paragraph that a stand from inside an act tells of its answer: its header, then the bindings of the roster
-  and of the actor of the standing, then of its extensions when it gives any."""
-  roster, _, actor, *rest = standing
-  extensions = f"\n{id}_extensions = {rest[1]!r}" if rest[1:] and rest[1] else ""
-  return f"#{id}\n{id}_roster = {roster!r}\n{id}_actor = {actor!r}{extensions}"
+  and of the actor of the standing."""
+  roster, _, actor, *_ = standing
+  return f"#{id}\n{id}_roster = {roster!r}\n{id}_actor = {actor!r}"
 
 
 def opened(id: str, label: str, source: str = "") -> str:

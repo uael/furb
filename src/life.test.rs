@@ -733,19 +733,17 @@ fn make_the_corpus() {
 fn a_life_whose_replay_drifts_keeps_nothing_beside_its_record_but_the_lease() {
   let at = place("drifts");
   let record = at.join("record.jsonl");
-  // The place where each stand stood, changed, makes the replay drift at the cd that the turn of the stand writes,
-  // since that turn reads the place from the last stand, as the stand of the first turn of the setup.
+  // The place where the first stand stood, changed, makes the replay drift at the word that the stand told.
   let mut lines: Vec<String> =
     fs::read_to_string(corpus().join("work.jsonl")).unwrap().lines().map(str::to_owned).collect();
-  let stood: Vec<usize> =
-    (0..lines.len()).filter(|&n| lines[n].starts_with(r#"[["done","stand"#)).collect();
-  assert!(stood.len() > 1, "the corpus holds the stand of the setup and the stand after it");
-  for n in stood {
-    let mut entry: serde_json::Value = serde_json::from_str(&lines[n]).unwrap();
-    let place = entry[0][3][1].as_str().expect("the stand names its place").to_owned();
-    entry[0][3][1] = serde_json::Value::from(format!("{place}-elsewhere"));
-    lines[n] = entry.to_string();
-  }
+  let stood = lines
+    .iter()
+    .position(|line| line.starts_with(r#"[["done","stand1","#))
+    .expect("the corpus holds the first stand");
+  let mut entry: serde_json::Value = serde_json::from_str(&lines[stood]).unwrap();
+  let place = entry[0][3][1].as_str().expect("the stand names its place").to_owned();
+  entry[0][3][1] = serde_json::Value::from(format!("{place}-elsewhere"));
+  lines[stood] = entry.to_string();
   // The last line is whole and not ended, which a store mends only at its first keep.
   fs::write(&record, lines.join("\n")).unwrap();
   fs::write(at.join("record.jsonl.log"), "{\"entries\": 0}\n").unwrap();
@@ -753,6 +751,11 @@ fn a_life_whose_replay_drifts_keeps_nothing_beside_its_record_but_the_lease() {
   let (text, log) = (held("record.jsonl"), held("record.jsonl.log"));
   let refused = opening(&at, true).boot::<String>([]).map(|_| ()).unwrap_err();
   assert!(refused.to_string().starts_with("Drift: "), "{refused}");
+  let moved = format!("stand()\\ncd('{place}-elsewhere')");
+  assert!(
+    refused.to_string().contains(&moved),
+    "the drift is at the word that the stand told: {refused}"
+  );
   let mut beside: Vec<String> = fs::read_dir(&at)
     .unwrap()
     .map(|one| one.unwrap().file_name().to_string_lossy().into_owned())
