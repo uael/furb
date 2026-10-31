@@ -22,6 +22,8 @@ concurrency:
 
 permissions:
   contents: read
+  # The step clear of each job deletes the old cache of rust of that job, on main.
+  actions: write
 
 env:
   # The one uv every gate installs, so a run of today and a run of next month read the lock the same way.
@@ -79,6 +81,7 @@ jobs:
         env:
           SKIP: pytest
           UV_NO_SYNC: "1"
+      - uses: ./.github/actions/clear
 
   suite:
     # The engine speaks to a machine through the World, and a machine answers as itself: the suite runs on each,
@@ -122,6 +125,7 @@ jobs:
         env:
           UV_NO_SYNC: "1"
           FURB_UNCOUNTED: ${{ runner.os == 'Windows' && '*/src/furb/life.py' || '' }}
+      - uses: ./.github/actions/clear
 
   crate:
     # The hooks run the gates of the crate and of the command line on Linux. Windows and macOS have a job of their own,
@@ -156,6 +160,9 @@ jobs:
           key: typescript
       - run: cargo clippy --all-targets ${{ matrix.crates }} -- -D warnings
       - run: cargo test ${{ matrix.crates }}
+      - uses: ./.github/actions/clear
+        with:
+          key: typescript
 
   typescript:
     name: the bindings and the TUI on ${{ matrix.os }}
@@ -202,6 +209,9 @@ jobs:
       - run: bun run check
       - run: bun run lint
       - run: bun run test
+      - uses: ./.github/actions/clear
+        with:
+          key: ${{ runner.os == 'Windows' && 'package' || '' }}
 
   bench:
     # The budget of the speed of the TUI holds on Linux, on a machine that runs no other work while it measures: the
@@ -290,3 +300,6 @@ jobs:
           ps -axo pid,etime,command | grep -E 'furb|WebContent|WebKit|bun' | grep -v grep || true
           ls -t ~/Library/Logs/DiagnosticReports | head -20 || true
           log show --last 25m --style compact --predicate 'process == "furb-gui" OR process CONTAINS "WebContent" OR process == "launchservicesd"' | tail -150 || true
+      - uses: ./.github/actions/clear
+        with:
+          key: app

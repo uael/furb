@@ -82,7 +82,8 @@ runs:
     # Only main saves the cache, and a pull request reads the cache of main.
     # Only a job that passes saves it. A job that fails or is cancelled holds part of the build, and a key that
     # matches whole is never saved again, so every later run would build again what that part lacks.
-    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+    - id: rust
+      uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       with:
         key: ${{ inputs.key }}
         shared-key: ${{ inputs.shared }}
@@ -90,6 +91,8 @@ runs:
         add-rust-environment-hash-key: true
         save-if: ${{ github.ref == 'refs/heads/main' && inputs.shared == '' }}
         cache-on-failure: false
+    - run: echo "RUST_CACHE_HIT=${{ steps.rust.outputs.cache-hit }}" >> "$GITHUB_ENV"
+      shell: bash
     - if: inputs.python != 'none'
       run: uv python install
       shell: bash
