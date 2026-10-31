@@ -247,3 +247,18 @@ fn a_second_read_of_a_record_that_did_not_change_takes_the_file_of_what_it_tells
   assert_eq!(changed.made.as_deref(), Some("abd"));
   assert_eq!(shown(&filed(&changed)), ["['made', 'chain1', 'store', 'abd']"]);
 }
+
+#[test]
+fn a_record_that_keeps_a_tuple_and_a_whole_float_tells_them_as_the_engine_gives_them() {
+  let at = place("plain");
+  let done = answered("x = 1").replace("0.5]", r#"{"is": "float", "args": ["2"]}]"#);
+  fs::write(
+    &at,
+    OPENS.iter().chain([&done.as_str()]).map(|one| format!("[{one}]\n")).collect::<String>(),
+  )
+  .unwrap();
+  let read = retold(&at).unwrap();
+  let text = fs::read_to_string(&read.file).unwrap();
+  let line = text.lines().find(|one| one.starts_with(r#"["done","reply1""#)).unwrap();
+  assert_eq!(line, r#"["done","reply1","provider",["assistant","x = 1",[1,2,3,4,2.0],null]]"#);
+}
