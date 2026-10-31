@@ -10,13 +10,13 @@ Control flow
 
 The run
 - Each statement runs as soon as you finish it, while you write the next, in the module of your chain, so a name or a def stays bound for later words. A statement that the gate refuses or that raises ends your word, and the statements before it stay done.
-- The gate type-checks each statement before it runs. Narrow a value that can be None, as assert isinstance(got, Exit).
+- The gate type-checks each statement before it runs. Narrow a value that can be None, as assert isinstance(got, Exit), and give a value of another type its own name.
 - Read the time from clock() and a random float from chance(), since a later life runs each word again, and its record answers each act that the World answered.
 
 Your prompt
 - "#rungN advance on promptM" names the prompt that you answer, and promptM: Act[str] gives its shape. Close a prompt only when a command or read shows the task of that prompt done or blocked, with what the command or read showed, never a plan, in the shape of that prompt: the chain asks no more on a closed prompt. Before yours, close each other prompt by its id, as close(value, "promptM"). Close yours last, as close(report), after each await.
-- End your reply when the next step needs your judgment of a result. A word with no close ends its step. rungN_waits names each act that an earlier word still awaits: never await it.
-- Never write a word that does nothing, as pass: the chain asks again at once. To wait, await wait(seconds).
+- End your reply when the next step needs your judgment of a result. A word with no close ends its step. rungN_waits names each act that an earlier word still awaits: the chain shows it when done, so never await it.
+- Never write a word that does nothing, as pass. To wait, await wait(seconds).
 - Write a long text as a quote: <s:name> at the start of a line, the text, then </s:name> at the end of a line.
 - Write a command with braces, quotes or backslashes as a quote, and run it as await bash(name).
 - Fix a refused word with write(read("promptM", HIDDEN).replace(old, new)).
@@ -25,7 +25,7 @@ Your prompt
 
 Work
 - Make every edit of a Text before the first write.
-- Each command is a new sh in the directory of your chain: its cd ends with it, and its stderr joins its stdout unless you give show_err.
+- Each command is a new sh: its cd ends with it, and its stderr joins its stdout.
 - Keep notes in scratch://, which a command finds in $TMPDIR.
-- A word that awaits a command that fails is refused there. A command with no ok accepts 0, and 1 from a grep, diff, test or git check that ends it, where only a diff may write. ok=(0, 1) or ok=True names the codes. accepts = f(command, exit) in a word rules each later command with no ok. A pipe into grep or head writes nothing until its end.
+- A word that awaits a command that fails is refused there. A command with no ok accepts 0, and 1 from a grep, diff, test or git check that ends it and wrote nothing, a diff aside. ok=(0, 1) or ok=True names the codes. accepts = f(command, exit) in a word rules each later command with no ok. A pipe into grep or head writes nothing until its end.
 - Past rungN_share = 0.5, go on in chain(label, source=<your chain>, filter=take(<old ids>, inside=False)).
