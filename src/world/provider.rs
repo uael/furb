@@ -196,6 +196,9 @@ fn passing(no: &CompletionError) -> Option<String> {
 /// The wait before the claude command line is asked again when its message gives no moment for the end of a limit.
 const LIMIT_POLL: Duration = Duration::from_secs(300);
 
+/// The wait before the claude command line is asked again after a failed sign in, which a sign in outside furb ends.
+const SIGN_POLL: Duration = Duration::from_secs(60);
+
 /// The time after the end of a limit that the provider waits, so the call is not made before the limit lifts.
 const LIMIT_SLACK: Duration = Duration::from_secs(1);
 
@@ -1457,7 +1460,8 @@ fn ended(provider: &str, response: CompletionResponse) -> StreamFinal {
 /// or why it answered nothing, in the order they came; and nothing more once the reply went, which ends the call of
 /// the model. A call that failed for a cause that passes is made again after the wait of its backoff, until its
 /// attempts are spent. A call that a usage limit refused is made again at the reset that the limit names, however
-/// long that takes, and each such wait is no attempt.
+/// long that takes, and each such wait is no attempt. A call that a failed sign in refused is made again every minute
+/// until it succeeds or a stand asks it at once, since a sign in outside furb ends the failure.
 fn answered(
   id: String,
   asked: Result<(Model, Asked), CompletionError>,
@@ -1471,6 +1475,7 @@ fn answered(
       let (model, asked) = asked?;
       let mut attempt = 1;
       let mut limited = false;
+      let mut signed = false;
       loop {
         let no = match (model.answers)(asked.clone()).await {
           Ok(Answer::Response(response)) => return turn(&model, &response),
@@ -1492,6 +1497,14 @@ fn answered(
           let _ = tells.send(Replied::Retried { id: id.clone(), retry, limit: !limited });
           limited = true;
           tokio::time::sleep(wait).await;
+          continue;
+        }
+        if claude::signed_out(&no) {
+          let why = "signed out, sign in again".to_owned();
+          let retry = Retry { attempt: attempt + 1, most: backoff.most, wait: SIGN_POLL, why };
+          let _ = tells.send(Replied::Retried { id: id.clone(), retry, limit: !signed });
+          signed = true;
+          tokio::time::sleep(SIGN_POLL).await;
           continue;
         }
         let Some(why) = passing(&no).filter(|_| attempt < backoff.most) else { return Err(no) };

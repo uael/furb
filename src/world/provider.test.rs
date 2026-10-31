@@ -1684,6 +1684,37 @@ fn a_call_that_the_usage_limit_refuses_waits_for_its_reset_and_the_chain_is_told
 }
 
 #[test]
+fn a_call_that_a_failed_sign_in_refuses_waits_for_a_stand_and_the_chain_is_told_once() {
+  let (host, calls) = failing(&["Invalid API key \u{b7} Please run /login"]);
+  let (retries, told) = retried();
+  let model = scripted(&MockCompletionModel::default()).hosted(host);
+  let provider =
+    Provider::new(yard("signed-out").display().to_string(), vec![model]).retries(retries);
+  let mut engine = lived(provider);
+  let id = asked(&mut engine);
+  let heard = Arc::clone(&told);
+  assert!(until(&mut engine, move |_| heard.lock().expect("the retries told").len() == 1));
+  let first = told.lock().expect("the retries told")[0].2.clone();
+  assert_eq!(
+    (first.why.as_str(), first.wait),
+    ("signed out, sign in again", Duration::from_secs(60))
+  );
+  engine.stand(verbs::Stand { on: Some("chain1".to_owned()) }).expect("the life stands");
+  let done = |engine: &mut Engine| {
+    engine.peek(&id, verbs::Peek::default()).is_ok_and(|one| one.as_ref().as_int() == Some(7))
+  };
+  assert!(until(&mut engine, done), "the reply waits no more for the sign in");
+  assert_eq!(calls.load(Ordering::SeqCst), 2);
+  let root = engine.root().to_owned();
+  let notes: Vec<_> = said(&mut engine)
+    .into_iter()
+    .filter(|(kind, _, note)| kind == "tell" && note.contains("waits on"))
+    .collect();
+  assert_eq!(notes.len(), 1);
+  assert!(notes[0].2.contains(&format!("#{root} waits on m/high: signed out, sign in again")));
+}
+
+#[test]
 fn a_stand_ends_the_wait_of_a_usage_limit_and_asks_the_model_again_at_once() {
   let later = std::time::SystemTime::now()
     .duration_since(std::time::UNIX_EPOCH)
