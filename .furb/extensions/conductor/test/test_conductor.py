@@ -3423,3 +3423,43 @@ def test_the_triage_folds_no_audit_and_writes_the_covering_key_in_each_after(con
   conductor.triage()
   assert [key for key, _, _ in conductor.queue] == ["e1"]
   assert conductor.after["later"] == ["e1", "x"] and conductor.after["other"] == ["e1"]
+
+
+@POSIX
+@JQ
+async def test_a_later_judge_reads_the_gaps_of_the_earlier_heads_and_the_pr_is_held_after_judge_rounds_heads(
+  conductor: Round,
+) -> None:
+  ran = judging(conductor)
+  conductor.busy("worker9", "k", "claude-cli:sonnet/high")
+  quote = "no hidden control flow"
+
+  def head(sha: str) -> dict:
+    pr = conductor.pr(n=7, sha=sha, labels=["w:k"], checks=("SUCCESS",))
+    conductor.prs[7] = pr
+    return pr
+
+  pr = head("sha7")
+  await conductor.bent(pr)
+  assert "Earlier judges" not in conductor.prompts[-1][0]
+  conductor.done[conductor.judged["7 sha7"]["act"]] = [(quote, "Gap one, in a.py.")]
+  assert await conductor.bent(pr) is True
+  pr = head("sha8")
+  await conductor.bent(pr)
+  message = conductor.prompts[-1][0]
+  assert f'At sha7 the judge found:\n  - "{quote}": Gap one, in a.py.\nThe worker pushed up to the next head:' in message
+  assert "git log --format='  - %s' sha7..sha8" in " ".join(ran)
+  conductor.done[conductor.judged["7 sha8"]["act"]] = [(quote, "Gap two.")]
+  assert await conductor.bent(pr) is True
+  assert conductor.judged["7 sha8"]["state"] == "gaps"
+  pr = head("sha9")
+  await conductor.bent(pr)
+  conductor.done[conductor.judged["7 sha9"]["act"]] = [(quote, "Gap three.")]
+  assert await conductor.bent(pr) is True
+  assert {v["state"] for v in conductor.judged.values()} == {"held"}
+  assert "gh pr edit 7 --add-label hold >/dev/null 2>&1" in ran
+  assert [on for _, on in conductor.prompts].count("chain-k") == 2
+  told = conductor.prompts[-1][0]
+  assert "The judge held #7 for 3 heads in turn" in told
+  assert all(x in told for x in ("Gap one", "Gap two", "Gap three", "sha7:", "sha9:"))
+  assert await conductor.bent(pr) is True
