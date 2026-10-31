@@ -6,7 +6,7 @@ use std::{
   time::{Duration, Instant},
 };
 
-use super::{INTERVAL, Keeper, aside, fits, free, path};
+use super::{INTERVAL, Keeper, aside, fits, path};
 use crate::engine::Table;
 
 /// A new folder of the test, empty.
@@ -96,6 +96,6 @@ fn a_snapshot_fits_on_a_disk_that_holds_twice_its_size_free_or_that_says_nothing
 #[test]
 #[cfg(unix)]
 fn the_free_space_of_a_folder_is_the_space_of_its_disk() {
-  let room = free(&place("free")).expect("a disk says its free space");
+  let room = super::free(&place("free")).expect("a disk says its free space");
   assert!(room > 0);
 }
