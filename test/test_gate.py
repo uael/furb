@@ -327,3 +327,24 @@ async def test_a_finding_on_an_await_of_a_value_that_is_no_act_says_that_the_val
     "; a value that an await gave stands in the name already, so use the name and await it no more, in 'await got'"
     in found
   )
+
+
+async def test_a_finding_on_a_text_that_a_word_uses_as_a_str_says_that_a_text_is_no_str() -> None:
+  """A finding on a Text that a word uses as a str says that a Text is no str, so use its .content for its text and its .lines for its lines."""
+  _, _, root = born()
+  for word in ("t = read('a')\nx = t + 'b'", "t = read('a')\nx = t.split()", "x = read('a')\nfor line in x: pass"):
+    (found,) = engine.gate(word, on=root)
+    assert "; a Text is no str, so use its .content for its text and its .lines for its lines, in " in found
+
+
+async def test_a_finding_on_a_str_that_a_word_asks_for_the_content_of_a_text_says_that_a_name_of_a_tell_holds_a_str() -> (
+  None
+):
+  """A finding on a str that a word asks for the .content or the .lines of a Text says that a name which a tell binds, as read1_text, holds a str and no Text, so use read(path) to get a Text, whose .content is its text."""
+  _, _, root = born()
+  for name in ("content", "lines"):
+    (found,) = engine.gate(f"x = 'abc'\ny = x.{name}", on=root)
+    assert (
+      "; a name that a tell binds, as read1_text, holds a str and no Text, so use read(path) to get a Text, whose .content is its text, in "
+      in found
+    )

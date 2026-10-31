@@ -134,8 +134,16 @@ SHELLED = 'the line is a shell command, so write it as await bash("..."), and no
 """SHELLED is what a finding adds when the first line of a word that is not python is a shell command."""
 INDENT = 2
 """INDENT is how far the sheet lays a word into its body, which the columns of a finding count and the gate takes back."""
+TEXTLESS = (
+  "a name that a tell binds, as read1_text, holds a str and no Text, so use read(path) to get a Text, whose .content"
+  " is its text"
+)
+"""TEXTLESS is what a finding adds when a word asks a str for the .content or the .lines of a Text."""
 HINTS = (
   ("[invalid-await]", "a value that an await gave stands in the name already, so use the name and await it no more"),
+  ("`Text`", "a Text is no str, so use its .content for its text and its .lines for its lines"),
+  ("has no attribute `content`", TEXTLESS),
+  ("has no attribute `lines`", TEXTLESS),
 )
 """HINTS are the markers of a rule of the checker and what a finding of that rule adds."""
 NAMELESS = (
