@@ -2198,3 +2198,55 @@ fn the_local_config_of_the_project_gives_the_most_thought_over_its_config() {
     "a local value that is no count is as unsaid"
   );
 }
+
+#[test]
+fn a_pause_over_the_chain_holds_the_next_call_of_a_reply_that_waits_for_a_retry_until_the_wake() {
+  let (host, calls) = failing(&["Connection reset by peer (os error 54)"]);
+  let (retries, told) = retried();
+  let model = scripted(&MockCompletionModel::default()).hosted(host);
+  let backoff = Backoff { most: 10, first: Duration::from_millis(200) };
+  let at = yard("pause-retry").display().to_string();
+  let provider = Provider::new(at, vec![model]).backoff(backoff).retries(retries);
+  let mut engine = lived(provider);
+  let id = asked(&mut engine);
+  let heard = Arc::clone(&told);
+  assert!(until(&mut engine, move |_| heard.lock().expect("the retries told").len() == 1));
+  let root = engine.root().to_owned();
+  engine.pause(&root, Default::default()).expect("the chain pauses");
+  let early = within(&mut engine, Duration::from_millis(800), |_| calls.load(Ordering::SeqCst) > 1);
+  assert!(!early, "a paused reply asks its model no more");
+  engine.wake(&root).expect("the chain wakes");
+  let done = |engine: &mut Engine| {
+    engine.peek(&id, verbs::Peek::default()).is_ok_and(|one| one.as_ref().as_int() == Some(7))
+  };
+  assert!(until(&mut engine, done), "the wake lets the call go on");
+  assert_eq!(calls.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn a_stand_over_a_paused_chain_asks_no_model_until_the_wake() {
+  let later = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .expect("a time after the epoch")
+    .as_secs()
+    + 86_400;
+  let (host, calls) = failing(&[&format!("Claude AI usage limit reached|{later}")]);
+  let (retries, told) = retried();
+  let model = scripted(&MockCompletionModel::default()).hosted(host);
+  let at = yard("pause-stand").display().to_string();
+  let mut engine = lived(Provider::new(at, vec![model]).retries(retries));
+  let id = asked(&mut engine);
+  let heard = Arc::clone(&told);
+  assert!(until(&mut engine, move |_| heard.lock().expect("the retries told").len() == 1));
+  let root = engine.root().to_owned();
+  engine.pause(&root, Default::default()).expect("the chain pauses");
+  engine.stand(verbs::Stand { on: Some(root.clone()) }).expect("the life stands");
+  let early = within(&mut engine, Duration::from_millis(500), |_| calls.load(Ordering::SeqCst) > 1);
+  assert!(!early, "a stand asks no model for a paused reply");
+  engine.wake(&root).expect("the chain wakes");
+  let done = |engine: &mut Engine| {
+    engine.peek(&id, verbs::Peek::default()).is_ok_and(|one| one.as_ref().as_int() == Some(7))
+  };
+  assert!(until(&mut engine, done), "the wake asks the model again");
+  assert_eq!(calls.load(Ordering::SeqCst), 2);
+}

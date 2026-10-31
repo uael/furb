@@ -220,6 +220,7 @@ hold, and for a server that did not answer.
 When a call to a model fails for a cause that passes, such as a lost connection or a provider that is too busy, furb
 asks again after a wait that doubles each time, up to ten attempts. The TUI counts the wait down in its footer.
 A usage limit of the claude command line is no attempt. furb asks again at the reset that the limit names. A failed sign in of that command line is no attempt too. furb asks again every minute, and a stand asks at once. So the user can sign in again outside furb, and the chain goes on with no pause.
+A pause of the chain holds the next call of a reply that waits, and the wake makes it. A call that runs returns.
 
 ## The doctrine
 
