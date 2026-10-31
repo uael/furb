@@ -885,7 +885,7 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 
 STATE = (
   "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed assigned silent"
-  " comments measures timers noted debriefs briefed owns watched after parked awaited covering kinds pool slots areas round_faults vetoes rulings judged tips shifted parents redmain onmain hired paced landed heard bindings handled ends requeued"
+  " comments measures timers noted debriefs briefed owns watched after parked awaited covering kinds pool slots areas round_faults vetoes rulings judged owed recovered tips shifted parents redmain onmain hired paced landed heard bindings handled ends requeued"
   " statused secret updated budgeted flaky runs_read deferred"
 ).split()
 
@@ -3784,6 +3784,33 @@ async def test_a_merged_pr_that_the_round_holds_no_entry_for_gets_its_gaps_from_
   await conductor.followed(905)
   assert [k for k, _, _ in conductor.queue] == ["gap905-1", "gap905-2"]
   assert '> "q": Gap two.' in conductor.queue[1][1]
+
+
+async def test_no_pr_merges_while_a_merged_pr_owes_its_follow_ups_and_the_round_pays_the_debt_of_905(
+  conductor: Round,
+) -> None:
+  judging(conductor)
+  ran: list[str] = []
+  comment = '🤖 The judge of the words of the owner holds abc:\n\n- "q": Gap one.\n\n<!-- furb:round -->\n'
+
+  async def bash(command: str, stdin: str | None = "", timeout: float = 600, show: object = None, **_: object) -> Exit:
+    ran.append(command)
+    said = comment if "--json comments" in command else "MERGED m1234567 w:k,thread:extensions\n"
+    return Exit(0, Text("stdout", said), Text("stderr", ""))
+
+  conductor.ns["bash"] = bash
+  pr = conductor.pr(n=7, sha="sha7", checks=("SUCCESS",))
+  pr["verdict"] = "pass"
+  conductor.owed.add(905)
+  await conductor.land(pr, False)
+  assert ran == []
+  await conductor.owing()
+  assert [k for k, _, _ in conductor.queue] == ["gap905-1"]
+  assert conductor.recovered == {905}
+  await conductor.owing()
+  assert len([x for x in ran if "--json comments" in x]) == 1
+  await conductor.land(pr, False)
+  assert ran[-1] != ran[0] and len(ran) > 2
 
 
 def test_the_audit_leaves_a_pr_with_a_hold_label_out_of_the_idle_check(conductor: Round) -> None:
