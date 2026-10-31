@@ -2987,6 +2987,41 @@ def test_the_round_writes_the_new_chain_into_the_holder_file_of_the_workspace_it
   assert other == "w2" and not Path(f"{conductor.tmp}-w2").exists()
 
 
+def test_the_round_saves_the_work_of_an_earlier_item_before_it_gives_a_workspace(conductor: Round) -> None:
+  conductor.ns["quietly"] = lambda verb, *args, **words: (
+    asyncio.run(verb(*args, **words)) if verb == conductor.bash else verb(*args, **words)
+  )
+  env = conductor.env
+
+  def git(*args: str, at: Path) -> str:
+    done = subprocess.run(["git", "-C", str(at), *args], check=True, capture_output=True, text=True, env=env)
+    return done.stdout.strip()
+
+  origin, folder = Path(f"{conductor.tmp}-origin.git"), Path(f"{conductor.tmp}-w1")
+  subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(origin)], check=True, env=env)
+  subprocess.run(["git", "clone", "-q", str(origin), str(folder)], check=True, env=env)
+  for key, value in (("user.name", "t"), ("user.email", "t@t")):
+    git("config", key, value, at=folder)
+  (folder / "a").write_text("1\n", encoding="utf-8")
+  git("add", "a", at=folder)
+  git("commit", "-q", "-m", "one", at=folder)
+  git("push", "-q", "origin", "HEAD:main", at=folder)
+  git("checkout", "-q", "--detach", at=folder)
+  (folder / "b").write_text("2\n", encoding="utf-8")
+  git("add", "b", at=folder)
+  git("commit", "-q", "-m", "two", at=folder)
+  (folder / "c").write_text("3\n", encoding="utf-8")
+  holder = Path(git("rev-parse", "--absolute-git-dir", at=folder)) / "furb-holder"
+  holder.write_text("chain273\n", encoding="utf-8")
+  conductor.placed("k", "{workspace}", "chain-tui/k")
+  branch = git("branch", "--show-current", at=folder)
+  assert branch.startswith("w/wip-")
+  assert git("status", "--porcelain", at=folder) == ""
+  assert git("log", "-1", "--format=%s", at=folder) == "chore(wip): Keep the work of an earlier item"
+  assert branch in git("ls-remote", "--heads", "origin", branch, at=folder)
+  assert holder.read_text(encoding="utf-8") == "chain-tui/k\n"
+
+
 def test_a_workspace_says_that_a_holder_with_no_live_prompt_of_a_worker_is_stale() -> None:
   source = SOURCE
   assert "A holder that names a chain with no live prompt of a worker" in source
