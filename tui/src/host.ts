@@ -2,8 +2,9 @@
 // outlives each window. A window starts it, detached from the window, with the options of the life as JSON. It loads
 // no module that loads OpenTUI, since it draws nothing.
 import { randomUUID, timingSafeEqual } from "node:crypto";
-import { rmSync, writeFileSync } from "node:fs";
+import { rmSync, statfsSync, writeFileSync } from "node:fs";
 import { type AddressInfo, createConnection, createServer, type Socket } from "node:net";
+import { dirname } from "node:path";
 import type { HostState } from "./bridge.ts";
 import {
   type About,
@@ -91,6 +92,8 @@ let stopped: string | undefined;
 let root = "";
 /** Why the life did not open, which each window that comes while the host ends hears. */
 let refusal = "";
+/** What the host told its windows of the free space of the disk, which a window that attaches later hears too. */
+let warning = "";
 /** How long a host that hands its life over waits for the commands and the replies of the models that run, so that
  * each that ends in time lands in the record. Each other ends as interrupted in the life of the next host, as a
  * command that a crash cut does. */
@@ -251,6 +254,7 @@ function heard(message: Request, send: Send, role: Role): void {
     // A window that attaches draws what the life holds, so the first state tells it that facts came.
     if (last) send({ state: { ...last, facts: Math.max(1, last.facts) } });
     if (stopped) send({ fault: stopped });
+    if (warning) send({ log: warning });
     windows.set(send, role);
     return;
   }
@@ -304,6 +308,29 @@ async function handOver(build: string): Promise<void> {
   why = `A window of the build ${build} took the life over, and a host of that build goes on with it. Open the life again in a window of that build.`;
   ask("session", "end", [], { id: 0 });
 }
+
+/** The free space under which the host tells its windows that the disk is nearly full, in bytes: 2 GiB, or what
+ * FURB_DISK_WARN says. A full disk stops the record, the log and the snapshot, so the host says so before it is full. */
+const LOW = Number(process.env.FURB_DISK_WARN ?? 2 * 1024 ** 3);
+
+/** The look at the free space of the disk of the record: a window hears once when it falls under LOW, and a window that
+ * attaches while it stays under hears at its hello. */
+const watchDisk = (): void => {
+  let free: number;
+  try {
+    const stats = statfsSync(dirname(record));
+    free = stats.bavail * stats.bsize;
+  } catch {
+    return;
+  }
+  if (free >= LOW) {
+    warning = "";
+    return;
+  }
+  if (warning) return;
+  warning = `Only ${(free / 1e9).toFixed(1)} GB is free on the disk of this record. A full disk stops the record, the log and the snapshot. Free some space soon.`;
+  for (const send of windows.keys()) send({ log: warning });
+};
 
 /** The end of a host whose life is not open: the worker goes, which cuts the open, and each window that waits for its
  * hello hears why. */
@@ -374,3 +401,5 @@ tell();
 // The lease of the record is this host's, and each window that said hello while the life opened gets its answer.
 for (const [send, { message, role }] of hellos) heard(message, send, role);
 hellos.clear();
+watchDisk();
+setInterval(watchDisk, 30000).unref();

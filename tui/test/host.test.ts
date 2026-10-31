@@ -777,3 +777,25 @@ test.skipIf(process.platform === "win32")(
       await host.end();
     }),
 );
+
+test.skipIf(process.platform === "win32")(
+  "a host tells its windows once that the disk of the record is nearly full",
+  () =>
+    demoLife(async (record, directory) => {
+      process.env.FURB_DISK_WARN = String(1e18);
+      const lines: string[] = [];
+      let opened: Awaited<ReturnType<typeof openEngine>>;
+      try {
+        opened = await openEngine({ demo: true, host: true, cwd: directory, record }, (link) =>
+          link.host.on("log", (line: string) => lines.push(line)),
+        );
+      } finally {
+        delete process.env.FURB_DISK_WARN;
+      }
+      await eventually(() => lines.length > 0, "the host to warn of the disk");
+      expect(lines[0]).toMatch(/^Only [\d.]+ GB is free on the disk of this record\./);
+      await Bun.sleep(300);
+      expect(lines).toHaveLength(1);
+      await opened.host.end();
+    }),
+);
