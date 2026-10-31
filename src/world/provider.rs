@@ -39,7 +39,7 @@ use rig_core::{
   streaming::{StreamFinal, StreamedAssistantContent, StreamingCompletionResponse},
 };
 use serde_json::{Map, Value, json};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, watch as holding};
 use unsync::oneshot;
 
 use self::{images::Images, search::Searches, watch::Watch};
@@ -608,6 +608,9 @@ impl Provider {
   /// A stand ends the wait of each reply whose call waits for a retry, a usage limit among them, and asks its model
   /// again at once, on the models that stand then: so a change of the command line or of its account, or the operator
   /// who asks to retry now, ends a wait at once.
+  ///
+  /// A pause over the chain of a reply holds the next call of its model: the call that waits for a retry, or that a
+  /// stand asks again, is made at the wake, and not at the end of its wait. A call that runs returns.
   pub fn ear(self) -> Box<dyn Ear> {
     let Provider {
       directory,
@@ -893,7 +896,7 @@ impl Provider {
             for id in waiting {
               let Some(reply) = replies.get(&id) else { continue };
               let (chain, actor) = (reply.chain.clone(), reply.actor.clone());
-              let (watch, stop) = asking(
+              let (watch, stop, hold) = asking(
                 &mut co,
                 &id,
                 &chain,
@@ -903,11 +906,13 @@ impl Provider {
                 &mut images,
                 thinking,
                 backoff,
+                true,
               )
               .await?;
               if let Some(reply) = replies.get_mut(&id) {
                 reply.waits = false;
                 reply.watch = watch.then(Watch::default);
+                reply.hold = hold;
                 reply._stop = stop;
               }
             }
@@ -916,7 +921,7 @@ impl Provider {
             say(&mut co, Fact::says("started", &about, []));
             let chain = a.on().to_owned();
             let actor = a.word(1).and_then(|one| one.as_str()).unwrap_or_default().to_owned();
-            let (watch, stop) = asking(
+            let (watch, stop, hold) = asking(
               &mut co,
               &about,
               &chain,
@@ -926,13 +931,23 @@ impl Provider {
               &mut images,
               thinking,
               backoff,
+              false,
             )
             .await?;
             let again = mute.get(&chain) == Some(&actor);
             let rung = a.by().to_owned();
             let watch = watch.then(Watch::default);
-            let reply =
-              Reply { chain, actor, rung, again, watch, waits: false, noted: None, _stop: stop };
+            let reply = Reply {
+              chain,
+              actor,
+              rung,
+              again,
+              watch,
+              waits: false,
+              noted: None,
+              hold,
+              _stop: stop,
+            };
             replies.insert(about, reply);
           }
           // A part of a word that raised ends the word where it raised, so its reply ends with the word that ran,
@@ -972,6 +987,18 @@ impl Provider {
               mute.insert(chain, actor);
             }
           }
+          // A pause or a wake changes what holds a reply, so each reply that stands reads whether a pause holds it
+          // now, and a call that waits to be made again goes on at the wake.
+          "pause" | "wake" => {
+            let ids: Vec<String> = replies.keys().cloned().collect();
+            for id in ids {
+              let held = co.call("paused", vec![Object::string(&id)], vec![]).await;
+              let held = held.ok().and_then(|one| one.as_ref().as_bool()).unwrap_or(false);
+              if let Some(reply) = replies.get(&id) {
+                reply.hold.send_replace(held);
+              }
+            }
+          }
           _ => {}
         }
       }
@@ -991,6 +1018,9 @@ struct Reply {
   waits: bool,
   /// The last note that told the chain of a wait, so the same wait asked again after a stand is told once.
   noted: Option<String>,
+  /// Whether a pause holds the reply, which holds the next call of its model: a call that runs returns, and a call
+  /// that waits to be made again waits for the wake.
+  hold: holding::Sender<bool>,
   _stop: oneshot::Sender<()>,
 }
 
@@ -1007,19 +1037,30 @@ async fn asking(
   images: &mut Images,
   thinking: Thinking,
   backoff: Backoff,
-) -> Result<(bool, oneshot::Sender<()>), Fault> {
+  retry: bool,
+) -> Result<(bool, oneshot::Sender<()>, holding::Sender<bool>), Fault> {
   let turns = co.call("turns", vec![], vec![("on", Object::string(chain))]).await?;
   let (tells, told) = mpsc::unbounded_channel();
   let wrote = written(about, &tells);
   let key = format!("{life}/{chain}");
-  let held = models.read().unwrap_or_else(PoisonError::into_inner);
-  let asked = requested(&held, actor, chain, turns.as_ref(), &key, images, wrote)
-    .map(|one| thinks(one, thinking));
-  drop(held);
+  let asked = {
+    let held = models.read().unwrap_or_else(PoisonError::into_inner);
+    requested(&held, actor, chain, turns.as_ref(), &key, images, wrote)
+      .map(|one| thinks(one, thinking))
+  };
   let streams = asked.as_ref().is_ok_and(|(model, _)| model.streams_its_word());
+  let paused = co.call("paused", vec![Object::string(about)], vec![]).await;
+  let paused = paused.ok().and_then(|one| one.as_ref().as_bool()).unwrap_or(false);
+  let (hold, holds) = holding::channel(paused);
   let (stop, stopped) = oneshot::channel();
-  co.work(answered(about.to_owned(), asked, backoff, tells, told, stopped));
-  Ok((streams, stop))
+  co.work(answered(about.to_owned(), asked, backoff, tells, told, stopped, holds, retry));
+  Ok((streams, stop, hold))
+}
+
+/// The wait of a call of a model to be made again while a pause holds its reply, which the wake ends. A reply that
+/// went has no pause to wait for.
+async fn released(hold: &mut holding::Receiver<bool>) {
+  let _ = hold.wait_for(|paused| !*paused).await;
 }
 
 /// What the work of a reply gives: a part that its model wrote, a retry of the call of its model, or what the reply
@@ -1506,6 +1547,7 @@ fn ended(provider: &str, response: CompletionResponse) -> StreamFinal {
 /// attempts are spent. A call that a usage limit refused is made again at the reset that the limit names, however
 /// long that takes, and each such wait is no attempt. A call that a failed sign in refused is made again every minute
 /// until it succeeds or a stand asks it at once, since a sign in outside furb ends the failure.
+#[allow(clippy::too_many_arguments)]
 fn answered(
   id: String,
   asked: Result<(Model, Asked), CompletionError>,
@@ -1513,6 +1555,8 @@ fn answered(
   tells: mpsc::UnboundedSender<Replied>,
   mut told: mpsc::UnboundedReceiver<Replied>,
   stopped: oneshot::Receiver<()>,
+  mut hold: holding::Receiver<bool>,
+  retry: bool,
 ) -> impl Stream<Item = Replied> {
   let came = async move {
     let got = async {
@@ -1520,6 +1564,9 @@ fn answered(
       let mut attempt = 1;
       let mut limited = false;
       let mut signed = false;
+      if retry {
+        released(&mut hold).await;
+      }
       loop {
         let no = match (model.answers)(asked.clone()).await {
           Ok(Answer::Response(response)) => return turn(&model, &response),
@@ -1541,6 +1588,7 @@ fn answered(
           let _ = tells.send(Replied::Retried { id: id.clone(), retry, limit: !limited });
           limited = true;
           tokio::time::sleep(wait).await;
+          released(&mut hold).await;
           continue;
         }
         if claude::signed_out(&no) {
@@ -1549,6 +1597,7 @@ fn answered(
           let _ = tells.send(Replied::Retried { id: id.clone(), retry, limit: !signed });
           signed = true;
           tokio::time::sleep(SIGN_POLL).await;
+          released(&mut hold).await;
           continue;
         }
         let Some(why) = passing(&no).filter(|_| attempt < backoff.most) else { return Err(no) };
@@ -1557,6 +1606,7 @@ fn answered(
         let retry = Retry { attempt, most: backoff.most, wait, why };
         let _ = tells.send(Replied::Retried { id: id.clone(), retry, limit: false });
         tokio::time::sleep(wait).await;
+        released(&mut hold).await;
       }
     };
     let (got, dropped) = match got.await {
