@@ -131,35 +131,60 @@ impl Watch {
     (self.given > 0).then(|| &self.text[..self.given])
   }
 
-  /// Whether the text dropped a mark of a fence or of a tool call.
-  pub(super) fn dropped(&self) -> bool {
-    self.bare.dropped
+  /// What the chain is told of the marks that the text dropped, or of the name that it gave a binding of no name.
+  pub(super) fn note(&self) -> Option<String> {
+    self.bare.note()
   }
 }
 
 /// The marks that a model writes around its word out of the habit of a fence or of a tool call, which the word loses
-/// line by line: a fence, as ``` alone or with a language, or a line that is a tag of a tool call alone, as
-/// `<invoke name="python">`, `<parameter name="code">` or their close, while no line of the word stands before it;
-/// and once one went, each such line and each fence, a tag `<parameter ...>` at the start of a line and its close at
-/// the end of one, outside a quote. A word that no such mark opens keeps each line.
+/// line by line: a fence, as ``` alone or with a language, a line that is a tag of a tool call alone, as
+/// `<invoke name="python">`, `<parameter name="code">` or their close, or a line that is a break of HTML alone, as
+/// `<br>`, while no line of the word stands before it; and once one went, each such line and each fence, a tag
+/// `<parameter ...>` at the start of a line and its close at the end of one, outside a quote. A line that is the close
+/// of a tag of a tool call alone goes too after the word that it ends, when that word is python, so the line stands in
+/// no string. A word that no such mark opens keeps each line. A first line of the word that starts with a lone `=`, as
+/// the binding of a model that left out its name, binds `_`.
 #[derive(Default)]
 pub(super) struct Bare {
   /// Whether a line of the word that is no mark stood.
   started: bool,
   /// Whether a mark went.
   dropped: bool,
+  /// Whether the first line of the word bound `_` in place of no name.
+  named: bool,
 }
 
 /// The names of the tags of a tool call.
 const TAGS: [&str; 3] = ["invoke", "parameter", "function_calls"];
 
+/// What the chain is told after the rung of a turn whose word lost the marks of a fence or of a tool call around it.
+const WRAPPED: &str = "wrapped its word in a fence, in the markup of a tool call or in a break of HTML, and the \
+  provider dropped that markup: a reply is python and quotes only, with no fence and no markup";
+
+/// What the chain is told after the rung of a turn whose word started with a binding of no name.
+const NAMED: &str = "started its word with =, a binding with no name, and the provider bound it to _: write the \
+  name before =, as in got = 1";
+
 impl Bare {
   /// A line of the text as the word holds it, or none when it is a mark that goes. `before` is the word before it.
   pub(super) fn line(&mut self, line: &str, before: &str) -> Option<String> {
     let mut line = line.to_owned();
+    let trimmed = line.trim();
+    if !open(before)
+      && trimmed.starts_with("</")
+      && tag(trimmed).is_some_and(str::is_empty)
+      && self.started
+      && parse_module(&unquoted(before)).is_ok()
+    {
+      self.dropped = true;
+      return None;
+    }
     if (!self.started || self.dropped) && !open(before) {
-      let trimmed = line.trim();
-      if fence(trimmed) || tag(trimmed).is_some_and(str::is_empty) {
+      if fence(trimmed)
+        || tag(trimmed).is_some_and(str::is_empty)
+        || (!self.started && broke(trimmed))
+      {
         self.dropped = true;
         return None;
       }
@@ -176,9 +201,30 @@ impl Bare {
         }
       }
     }
+    if !self.started
+      && let Some(rest) = line.trim_start().strip_prefix('=')
+      && !rest.starts_with('=')
+    {
+      self.named = true;
+      line = format!("_ ={rest}");
+    }
     self.started |= !line.trim().is_empty();
     Some(line)
   }
+
+  /// What the chain is told of what the word lost or gained, if it lost or gained anything.
+  pub(super) fn note(&self) -> Option<String> {
+    let said: Vec<&str> = [self.dropped.then_some(WRAPPED), self.named.then_some(NAMED)]
+      .into_iter()
+      .flatten()
+      .collect();
+    (!said.is_empty()).then(|| said.join(", and "))
+  }
+}
+
+/// Whether a line, trimmed, is a break of HTML alone, as `<br>`, `<br/>` or `<br />`.
+fn broke(line: &str) -> bool {
+  matches!(line.to_ascii_lowercase().as_str(), "<br>" | "<br/>" | "<br />")
 }
 
 /// Whether a line, trimmed, is a fence: ``` alone or with the name of a language.
@@ -200,8 +246,9 @@ fn tag(line: &str) -> Option<&str> {
   Some(after[after.find('>')? + 1..].trim())
 }
 
-/// A whole text less the marks that [`Bare`] drops, or none when it drops none.
-pub(super) fn bare(text: &str) -> Option<String> {
+/// A whole text less the marks that [`Bare`] drops, with the name that it gives a binding of no name, and what the
+/// chain is told of it; none when it changes nothing.
+pub(super) fn bare(text: &str) -> Option<(String, String)> {
   let (mut bare, mut kept) = (Bare::default(), String::new());
   for line in text.split('\n') {
     if let Some(line) = bare.line(line, &kept) {
@@ -209,7 +256,7 @@ pub(super) fn bare(text: &str) -> Option<String> {
       kept.push('\n');
     }
   }
-  bare.dropped.then(|| kept.trim_end().to_owned())
+  bare.note().map(|note| (kept.trim_end().to_owned(), note))
 }
 
 /// The line, counted from 1, on which the last statement at the top of a word starts, if the word is python and holds
@@ -220,11 +267,11 @@ pub(super) fn last(word: &str) -> Option<usize> {
   Some(word[..start].matches('\n').count() + 1)
 }
 
-/// Whether a quote stands open in a word, since the text of a quote is no python until its end is written. A quote
-/// opens at `<s:name>` at the start of a line and ends at the first `</s:name>` after it that ends a line, as the
-/// engine reads one, so a close mark inside a line of its text ends nothing.
-pub(super) fn open(word: &str) -> bool {
-  let mut from = 0;
+/// Each quote of a word, as the engine reads one: where it starts and, when it ends, where its close mark ends. A
+/// quote opens at `<s:name>` at the start of a line and ends at the first `</s:name>` after it that ends a line, so a
+/// close mark inside a line of its text ends nothing. The list ends with the first quote that does not end.
+fn quotes(word: &str) -> Vec<(usize, &str, Option<usize>)> {
+  let (mut from, mut found) = (0, Vec::new());
   while let Some(start) = word[from..].find(QUOTE).map(|at| from + at) {
     from = start + QUOTE.len();
     let Some((name, _)) = word[from..].split_once('>') else { continue };
@@ -238,11 +285,35 @@ pub(super) fn open(word: &str) -> bool {
       .match_indices(&close)
       .find(|(at, _)| matches!(word[text + at + close.len()..].chars().next(), None | Some('\n')));
     match ends {
-      Some((at, _)) => from = text + at + close.len(),
-      None => return true,
+      Some((at, _)) => {
+        from = text + at + close.len();
+        found.push((start, name, Some(from)));
+      }
+      None => {
+        found.push((start, name, None));
+        break;
+      }
     }
   }
-  false
+  found
+}
+
+/// Whether a quote stands open in a word, since the text of a quote is no python until its end is written.
+pub(super) fn open(word: &str) -> bool {
+  quotes(word).last().is_some_and(|(_, _, end)| end.is_none())
+}
+
+/// A word with each quote that ends as a binding of its name, on as many lines, so the word parses as python.
+fn unquoted(word: &str) -> String {
+  let (mut made, mut at) = (String::new(), 0);
+  for (start, name, end) in quotes(word) {
+    let Some(end) = end else { break };
+    made.push_str(&word[at..start]);
+    made.push_str(&format!("{name} = 0{}", "\n".repeat(word[start..end].matches('\n').count())));
+    at = end;
+  }
+  made.push_str(&word[at..]);
+  made
 }
 
 /// The line, counted from 1, of the first fault of a word that more text cannot mend, if it has one: a fault at the

@@ -2,6 +2,11 @@
 
 use super::{Watch, broken, last, open, refused, settled};
 
+/// A whole text less the marks that the watch drops, as [`super::bare`] gives it.
+fn word(text: &str) -> Option<String> {
+  super::bare(text).map(|(word, _)| word)
+}
+
 #[test]
 fn a_fence_that_opens_a_word_is_a_fault_at_its_line() {
   assert_eq!(broken("```python\n"), Some(1));
@@ -60,7 +65,7 @@ fn a_word_is_cut_after_the_end_of_a_line_of_it() {
 fn a_fence_around_a_word_goes_as_each_of_its_lines_ends() {
   let mut watch = Watch::default();
   assert_eq!(watch.wrote("```python\nx = 1\n"), None);
-  assert!(watch.dropped());
+  assert!(watch.note().is_some());
   let end = watch.wrote("y = 2\n```").expect("the fence stands at the left edge");
   assert_eq!(watch.upto(end), "x = 1\ny = 2\n");
   assert_eq!(broken(watch.upto(end)), None);
@@ -72,49 +77,37 @@ fn the_markup_of_a_tool_call_around_a_word_goes_as_each_of_its_lines_ends() {
   watch.wrote(
     "<invoke name=\"python\">\n<parameter name=\"code\">x = 1\ny = 2</parameter>\n</invoke>\nz",
   );
-  assert!(watch.dropped());
+  assert!(watch.note().is_some());
   assert_eq!(watch.through(2), "x = 1\ny = 2");
   let mut plain = Watch::default();
   plain.wrote("x = 1\n");
-  assert!(!plain.dropped());
+  assert!(plain.note().is_none());
 }
 
 #[test]
 fn a_text_loses_the_marks_of_a_fence_or_of_a_tool_call_around_it_and_keeps_all_else() {
-  assert_eq!(super::bare("```python\nclose(3)\n```").as_deref(), Some("close(3)"));
-  assert_eq!(
-    super::bare("```\nclose(3)").as_deref(),
-    Some("close(3)"),
-    "a fence with no close goes"
-  );
+  assert_eq!(word("```python\nclose(3)\n```").as_deref(), Some("close(3)"));
+  assert_eq!(word("```\nclose(3)").as_deref(), Some("close(3)"), "a fence with no close goes");
   let call =
     "<invoke name=\"python\">\n<parameter name=\"code\">\nclose(3)\n</parameter>\n</invoke>";
-  assert_eq!(super::bare(call).as_deref(), Some("close(3)"));
+  assert_eq!(word(call).as_deref(), Some("close(3)"));
   let inline = "<function_calls>\n<invoke name=\"python\">\n<parameter name=\"code\">x = 1\nclose(x)</parameter>\n</invoke>\n</function_calls>";
-  assert_eq!(super::bare(inline).as_deref(), Some("x = 1\nclose(x)"));
-  assert_eq!(
-    super::bare("<invoke name=\"bash\">").as_deref(),
-    Some(""),
-    "a word of marks alone is empty"
-  );
+  assert_eq!(word(inline).as_deref(), Some("x = 1\nclose(x)"));
+  assert_eq!(word("<invoke name=\"bash\">").as_deref(), Some(""), "a word of marks alone is empty");
   let quoted = "```python\n<s:doc>\n```sh\nls\n```\n</s:doc>\nclose(doc)\n```";
   assert_eq!(
-    super::bare(quoted).as_deref(),
+    word(quoted).as_deref(),
     Some("<s:doc>\n```sh\nls\n```\n</s:doc>\nclose(doc)"),
     "the fences of a quote stay"
   );
-  assert_eq!(super::bare("close(3)\n```"), None, "a fence that no mark opened stays");
+  assert_eq!(word("close(3)\n```"), None, "a fence that no mark opened stays");
+  assert_eq!(word("x = 1\n<invoke name=\"a\">"), None, "a tag after a line of the word stays");
   assert_eq!(
-    super::bare("x = 1\n<invoke name=\"a\">"),
-    None,
-    "a tag after a line of the word stays"
-  );
-  assert_eq!(
-    super::bare("<s:invoke>\nhi\n</s:invoke>\nclose(invoke)"),
+    word("<s:invoke>\nhi\n</s:invoke>\nclose(invoke)"),
     None,
     "the mark of a quote is no tag"
   );
-  assert_eq!(super::bare("```js and more\nclose(3)"), None, "a fence with words after it stays");
+  assert_eq!(word("```js and more\nclose(3)"), None, "a fence with words after it stays");
 }
 
 #[test]
@@ -210,4 +203,48 @@ fn a_line_that_opens_a_clause_of_the_statement_before_it_holds_that_statement() 
   let mut other = Watch::default();
   let end = other.wrote("x = 1\nelsewhere = 2\n").expect("a line at the left edge");
   assert!(!other.clause(end), "a name that starts with a keyword opens no clause");
+}
+
+#[test]
+fn a_first_line_that_starts_with_a_lone_equal_sign_binds_an_underscore() {
+  let (named, note) =
+    super::bare("= await bash(\"ls\")\nclose(1)").expect("the binding takes a name");
+  assert_eq!(named, "_ = await bash(\"ls\")\nclose(1)");
+  assert!(note.contains("a binding with no name"), "{note}");
+  let (named, _) =
+    super::bare("```python\n= read(\"a\")\n```").expect("a fence and a binding of no name");
+  assert_eq!(named, "_ = read(\"a\")");
+  assert_eq!(word("x == 1"), None, "a comparison is no binding");
+  assert_eq!(word("== 1"), None, "a lone == is no binding of no name");
+  assert_eq!(word("x = 1\n= 2"), None, "a later line keeps its fault for the gate");
+  let mut watch = Watch::default();
+  let end = watch.wrote("= await bash(\"ls\")\nclose(1)").expect("a line at the left edge");
+  assert_eq!(watch.upto(end), "_ = await bash(\"ls\")\n");
+  assert!(watch.note().is_some());
+}
+
+#[test]
+fn a_break_of_html_alone_goes_before_the_word() {
+  assert_eq!(word("<br>").as_deref(), Some(""), "a word of a break alone is empty");
+  assert_eq!(word("<br/>\n```\nclose(1)").as_deref(), Some("close(1)"));
+  assert_eq!(word("<BR />\nclose(1)").as_deref(), Some("close(1)"));
+  assert_eq!(word("close(1)\n<br>"), None, "a break after a line of the word stays for the gate");
+}
+
+#[test]
+fn the_close_of_a_tag_of_a_tool_call_alone_after_a_word_of_python_goes() {
+  assert_eq!(word("x = 1\nclose(x)\n</parameter>").as_deref(), Some("x = 1\nclose(x)"));
+  assert_eq!(word("x = 1\n</invoke>\n</function_calls>").as_deref(), Some("x = 1"));
+  assert_eq!(
+    word("<s:doc>\nhi\n</s:doc>\nclose(doc)\n</parameter>").as_deref(),
+    Some("<s:doc>\nhi\n</s:doc>\nclose(doc)"),
+    "a quote that ends is python"
+  );
+  assert_eq!(word("x = \"\"\"\n</parameter>\n\"\"\""), None, "the close in a string stays");
+  assert_eq!(
+    word("<s:doc>\n</parameter>\n</s:doc>\nclose(doc)"),
+    None,
+    "the close in a quote stays"
+  );
+  assert_eq!(word("x = (\n</parameter>"), None, "the close after a word that is not python stays");
 }

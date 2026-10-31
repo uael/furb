@@ -705,14 +705,14 @@ impl Provider {
             // turn is the word that ran, which the chain runs as it ran, and the chain is told why before it. The
             // model wrote no more of it that counts, and its call ends with the reply.
             let ran = watch.ran().map(str::to_owned);
-            let wrapped = watch.dropped();
+            let wrapped = watch.note();
             let Ok(turn) = cut(ran.as_deref().unwrap_or_else(|| watch.through(line))) else {
               continue;
             };
             if let Some(Reply { chain, .. }) = replies.remove(&id) {
               mute.remove(&chain);
-              if wrapped {
-                told(&mut co, &chain, &format!("#{rung} {WRAPPED}"));
+              if let Some(note) = wrapped {
+                told(&mut co, &chain, &format!("#{rung} {note}"));
               }
               if ran.is_some() {
                 let ran = ending(ran.as_deref().unwrap_or_default());
@@ -738,8 +738,8 @@ impl Provider {
             if let Some(Ok(turn)) = ran.as_deref().map(cut) {
               if let Some(Reply { chain, rung, watch, .. }) = replies.remove(&id) {
                 mute.remove(&chain);
-                if watch.as_ref().is_some_and(Watch::dropped) {
-                  told(&mut co, &chain, &format!("#{rung} {WRAPPED}"));
+                if let Some(note) = watch.as_ref().and_then(Watch::note) {
+                  told(&mut co, &chain, &format!("#{rung} {note}"));
                 }
                 noted(
                   &mut co,
@@ -836,7 +836,7 @@ impl Provider {
             };
             let Some(reply) = replies.get(&id) else { continue };
             // The word that runs is not all the text that the model wrote, so the chain is told what went, before it.
-            let wrapped = reply.watch.as_ref().is_some_and(Watch::dropped).then_some(WRAPPED);
+            let wrapped = reply.watch.as_ref().and_then(Watch::note);
             if let Some(dropped) = dropped.or(wrapped) {
               let note = format!("#{} {dropped}", reply.rung);
               say(
@@ -948,8 +948,8 @@ impl Provider {
             let Some(Ok(turn)) = ran.as_deref().map(cut) else { continue };
             if let Some(Reply { chain, rung, watch, .. }) = replies.remove(&id) {
               mute.remove(&chain);
-              if watch.as_ref().is_some_and(Watch::dropped) {
-                told(&mut co, &chain, &format!("#{rung} {WRAPPED}"));
+              if let Some(note) = watch.as_ref().and_then(Watch::note) {
+                told(&mut co, &chain, &format!("#{rung} {note}"));
               }
               say(&mut co, Fact::says("done", &id, [turn]));
             }
@@ -1023,12 +1023,13 @@ async fn asking(
 }
 
 /// What the work of a reply gives: a part that its model wrote, a retry of the call of its model, or what the reply
-/// came to, and what the chain is told when its turn lost marks of its text: the marks of a fence or of a tool call,
-/// which [`watch::bare`] drops, or the line of three backticks at the end of its word, which [`unclosed`] drops.
+/// came to, and what the chain is told when its turn lost marks of its text: the marks of a fence, of a tool call or of
+/// a break of HTML, and the name that a binding of no name lacked, which [`watch::bare`] drops and gives, or the line
+/// of three backticks at the end of its word, which [`unclosed`] drops.
 enum Replied {
   Wrote { id: String, text: String, thinking: String },
   Retried { id: String, retry: Retry, limit: bool },
-  Came { id: String, got: Result<Object, CompletionError>, dropped: Option<&'static str> },
+  Came { id: String, got: Result<Object, CompletionError>, dropped: Option<String> },
 }
 
 /// What the chain is told after the rung of a turn whose model wrote a fault after the part of its word that ran.
@@ -1218,7 +1219,7 @@ fn messages(
       let next = all.get(at + 1).and_then(|one| entry(one, 1)?.as_str().map(str::to_owned));
       if let Some(place) = next.as_deref().and_then(refusal) {
         // The quote holds the word less the marks of a fence or of a tool call, which the model would write again.
-        let word = watch::bare(python).unwrap_or_else(|| python.to_owned());
+        let word = watch::bare(python).map_or_else(|| python.to_owned(), |(word, _)| word);
         quoted = (!word.trim().is_empty()).then_some((word, place));
         joins = true;
         continue;
@@ -1331,7 +1332,7 @@ fn unmarked(blocks: Vec<AssistantContent>) -> (Vec<AssistantContent>, bool) {
     .into_iter()
     .filter_map(|one| match one {
       AssistantContent::Text(text) => match watch::bare(&text.text) {
-        Some(word) => {
+        Some((word, _)) => {
           bared = true;
           (!word.trim().is_empty()).then(|| AssistantContent::text(word))
         }
@@ -1474,10 +1475,6 @@ fn unfenced(text: &str) -> Option<String> {
   Some(kept.join("\n").trim_end().to_owned())
 }
 
-/// What the chain is told after the rung of a turn whose word lost the marks of a fence or of a tool call around it.
-const WRAPPED: &str = "wrapped its word in a fence or in the markup of a tool call, and the provider dropped that \
-  markup: a reply is python and quotes only, with no fence and no markup";
-
 /// What the chain is told after the rung of a turn whose word lost the line of three backticks at its end.
 const UNCLOSED: &str = "wrote a line of three backticks alone at the end of its word, and the provider dropped that \
   line: a reply is python and quotes only, with no fence";
@@ -1577,7 +1574,8 @@ fn answered(
 /// The turn of a model: its text, which is the word of the rung, what it read and wrote, and the blocks it gave.
 ///
 /// A model speaks python alone, so prose around the code stays in the word, for the gate to refuse, but for the marks
-/// of a fence or of a tool call around it, which [`watch::bare`] drops, and a line of three backticks alone at its end,
+/// of a fence, of a tool call or of a break of HTML around it, which [`watch::bare`] drops with the name that it gives
+/// a first binding of no name, and a line of three backticks alone at its end,
 /// which [`unclosed`] drops, since they hold no code that runs and a model writes them out of habit; a turn of a model that may wrap its word in a fence, as a model of a local server, loses
 /// instead the fence that opens its text, and the closing fence at its end when it has one. What it read is every token of its input, the cache
 /// among them, and what it wrote is the rest of its total, its thought among it. A model that says why each turn
@@ -1588,7 +1586,7 @@ fn answered(
 fn turn(
   model: &Model,
   response: &CompletionResponse,
-) -> Result<(Object, Option<&'static str>), CompletionError> {
+) -> Result<(Object, Option<String>), CompletionError> {
   let cut = match response.finish_reason() {
     _ if !model.ends => None,
     None => Some(format!("the stream of {} stopped before its end", model.name)),
@@ -1610,10 +1608,10 @@ fn turn(
     && let Some(word) = unfenced(&text)
   {
     (choice, text) = (worded(choice, &word), word);
-  } else if let Some(word) = watch::bare(&text) {
-    (choice, text, dropped) = (worded(choice, &word), word, Some(WRAPPED));
+  } else if let Some((word, note)) = watch::bare(&text) {
+    (choice, text, dropped) = (worded(choice, &word), word, Some(note));
   } else if let Some(word) = unclosed(&text) {
-    (choice, text, dropped) = (worded(choice, &word), word, Some(UNCLOSED));
+    (choice, text, dropped) = (worded(choice, &word), word, Some(UNCLOSED.to_owned()));
   }
   let spent = response.usage;
   let (read, wrote) = (spent.cached_input_tokens, spent.cache_creation_input_tokens);
