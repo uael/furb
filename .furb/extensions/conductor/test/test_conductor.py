@@ -147,6 +147,7 @@ class Round:
     ns.update(pause=lambda name: self.paused_chains.append(name), paused=lambda name: name in self.paused_chains)
     ns.update(wake=lambda name: self.paused_chains.remove(name) if name in self.paused_chains else None)
     ns.update(act=lambda kind, on, ear, *words: kind, close=lambda value, id="": self.closed.append((id, value)))
+    ns.update(grant=lambda usd=None, share=None, on="": "grant")
     ns.update(filled=lambda about: None, gate=lambda word, on="": [], wait=self.wait)
     # The root plays pr before the conductor, which uses its names, as .furb/config.json orders them.
     exec(compile(IMPORT.sub("", PULL.read_text(encoding="utf-8")), str(PULL), "exec"), ns)  # noqa: S102
@@ -689,6 +690,127 @@ async def test_a_veto_keeps_a_green_pr_from_a_merge(conductor: Round) -> None:
   assert "pr merge" not in conductor.log()
 
 
+def judging(conductor: Round, diff: str = "+rung(read(path, HIDDEN))\n") -> list[str]:
+  ran: list[str] = []
+
+  async def bash(command: str, stdin: str | None = "", timeout: float = 600, show: object = None, **_: object) -> Exit:
+    ran.append(command)
+    return Exit(0, Text("stdout", diff), Text("stderr", ""))
+
+  def quietly(verb: object, *args: object, **words: object) -> object:
+    got = verb(*args, **words)  # ty: ignore[call-non-callable]
+    if asyncio.iscoroutine(got):
+      got.close()
+    return got
+
+  conductor.ns.update(bash=bash, quietly=quietly)
+  conductor.rulings["k"] = ["an explicit crafted turn rung(read(path, HIDDEN))\nwith no hidden control flow"]
+  return ran
+
+
+def test_hire_puts_the_words_of_the_owner_at_the_top_of_the_brief(conductor: Round) -> None:
+  conductor.ns["quietly"] = lambda verb, *args, **words: (
+    asyncio.run(verb(*args, **words)) if verb == conductor.bash else verb(*args, **words)
+  )
+  conductor.kinds["look"] = "audit"
+  conductor.rulings["look"] = ['say "no"\nthen stop', "one more"]
+  conductor.real_hire("look", "find the leaks", "defects")
+  assert conductor.prompts[-1][0].startswith(
+    conductor.RULED + '\n\n> say "no"\n> then stop\n\n> one more\n\nYou are an auditor'
+  )
+  conductor.real_hire("other", "x", "defects", "A brief.")
+  assert conductor.prompts[-1][0].startswith("A brief.")
+
+
+async def test_a_pr_with_no_rulings_passes_the_veto_of_the_words_with_no_judge(conductor: Round) -> None:
+  ran = judging(conductor)
+  conductor.rulings.clear()
+  pr = conductor.pr(n=7, sha="sha7", labels=["w:k"], checks=("SUCCESS",))
+  conductor.prs[7] = pr
+  assert await conductor.bent(pr) is False
+  assert (ran, conductor.prompts, conductor.judged) == ([], [], {})
+
+
+async def test_a_blind_judge_reads_the_words_and_the_diff_and_a_head_that_it_cleared_merges(conductor: Round) -> None:
+  ran = judging(conductor)
+  pr = conductor.pr(n=7, sha="sha7", labels=["w:k"], checks=("SUCCESS",))
+  conductor.prs[7] = pr
+  assert await conductor.bent(pr) is True
+  assert ran == ["git fetch -q origin main refs/pull/7/head && git diff origin/main...sha7"]
+  message, on = conductor.prompts[-1]
+  assert (on, conductor.targets[-1]) == ("chain-judge/k/7", "claude-cli:opus/medium")
+  assert "an explicit crafted turn rung(read(path, HIDDEN))\nwith no hidden control flow" in message
+  assert message.endswith("The diff of #7 at sha7:\n\n+rung(read(path, HIDDEN))\n")
+  assert ("actor = 'claude-cli:opus/medium'", "chain-judge/k/7") in conductor.rungs
+  act = conductor.judged["7 sha7"]["act"]
+  assert await conductor.bent(pr) is True
+  assert len(conductor.prompts) == 1
+  conductor.done[act] = []
+  assert await conductor.bent(pr) is False
+  assert await conductor.bent(pr) is False
+  assert conductor.judged["7 sha7"]["state"] == "cleared"
+  del conductor.prs[7]
+  assert await conductor.bent(conductor.pr(n=8, sha="sha8")) is False
+  assert conductor.judged == {}
+
+
+async def test_a_head_with_a_gap_does_not_merge_and_its_worker_gets_the_gaps(conductor: Round) -> None:
+  judging(conductor)
+  pr = conductor.pr(n=7, sha="sha7", labels=["w:k"], checks=("SUCCESS",))
+  conductor.prs[7] = pr
+  conductor.busy("worker9", "k", "claude-cli:sonnet/high")
+  await conductor.bent(pr)
+  conductor.done[conductor.judged["7 sha7"]["act"]] = [("rung(read(path,  HIDDEN))", "It reads in an ear, in a.py.")]
+  assert await conductor.bent(pr) is True
+  message, on = conductor.prompts[-1]
+  assert on == "chain-k"
+  assert '- "rung(read(path, HIDDEN))": It reads in an ear, in a.py.' in message
+  assert conductor.judged["7 sha7"]["told"] is True
+  assert await conductor.bent(pr) is True
+  assert len(conductor.prompts) == 2
+  moved = conductor.pr(n=7, sha="sha9", labels=["w:k"], checks=("SUCCESS",))
+  conductor.prs[7] = moved
+  assert await conductor.bent(moved) is True
+  assert conductor.prompts[-1][1] == "chain-judge/k/7"
+
+
+async def test_a_judge_that_fails_twice_tells_the_coordinator_and_holds_the_pr(conductor: Round) -> None:
+  judging(conductor)
+  pr = conductor.pr(n=7, sha="sha7", labels=["w:k"], checks=("SUCCESS",))
+  conductor.prs[7] = pr
+  await conductor.bent(pr)
+  conductor.done[conductor.judged["7 sha7"]["act"]] = Refused("no answer")
+  assert await conductor.bent(pr) is True
+  assert await conductor.bent(pr) is True
+  assert len(conductor.prompts) == 2
+  conductor.done[conductor.judged["7 sha7"]["act"]] = [("words that he never wrote", "A gap.")]
+  assert await conductor.bent(pr) is True
+  assert conductor.judged["7 sha7"]["state"] == "stuck"
+  assert "failed twice on #7 at sha7" in conductor.prompts[-1][0]
+  assert await conductor.bent(pr) is True
+  assert len(conductor.prompts) == 3
+
+
+@POSIX
+@JQ
+async def test_the_veto_of_the_words_keeps_a_green_pr_from_a_merge(conductor: Round) -> None:
+  judging(conductor)
+  pr = conductor.pr(n=7, sha="sha7", labels=["w:k"], checks=("SUCCESS",), names=["the hooks"])
+  conductor.prs[7] = pr
+  await conductor.land(pr, False)
+  assert conductor.prompts[-1][1] == "chain-judge/k/7"
+  assert "pr merge" not in conductor.log()
+
+
+def test_conducting_says_the_veto_of_the_words_and_the_rule_of_a_statement(conductor: Round) -> None:
+  for words in (
+    "an item may hold his exact words in rulings[key]",
+    "A judge that fails twice",
+    "states only what a command of the same word proved, and names each other part as a hypothesis",
+  ):
+    assert words in conductor.CONDUCTING
+
+
 def test_the_environment_of_each_git_holds_no_variable_of_a_commit(
   tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -747,7 +869,7 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 
 STATE = (
   "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed assigned silent"
-  " comments measures timers noted debriefs briefed owns watched after parked awaited covering kinds pool slots areas vetoes tips shifted parents redmain onmain hired paced landed heard handled ends requeued"
+  " comments measures timers noted debriefs briefed owns watched after parked awaited covering kinds pool slots areas vetoes rulings judged tips shifted parents redmain onmain hired paced landed heard handled ends requeued"
   " statused secret updated budgeted flaky runs_read deferred"
 ).split()
 
