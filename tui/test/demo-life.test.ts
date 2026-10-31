@@ -67,7 +67,7 @@ test("the life of the demo is as dense as a real one: chains in a tree, threads,
         ),
         JSON.stringify([...session.host.prompts.keys()]),
         JSON.stringify(
-          session.host.facts
+          (session.host as unknown as { facts: unknown[][] }).facts
             .map((fact, at) => [at, fact[0], fact[1], fact[2]])
             .filter((one) => ["prompt34", "prompt35", "prompt36"].includes(String(one[2]))),
         ),
