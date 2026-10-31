@@ -313,8 +313,8 @@ async def test_a_red_main_updates_no_branch(conductor: Round) -> None:
 @JQ
 async def test_a_green_pr_behind_main_updates_its_branch_though_heal_updated_it_at_that_head(conductor: Round) -> None:
   conductor.say(r"compare/main\.\.\.abc", '{"behind_by": 3}')
-  conductor.say(r"compare/abc\.\.\.main", '{"files": [{"filename": "src/engine.py"}]}')
-  conductor.say(r"pr view 5 --json files", '{"files": [{"path": "src/engine.py"}]}')
+  conductor.say(r"compare/abc\.\.\.main", '{"files": [{"filename": "src/furb/engine.py"}]}')
+  conductor.say(r"pr view 5 --json files", '{"files": [{"path": "src/furb/engine.py"}]}')
   await conductor.mend(conductor.pr(checks=("FAILURE", "FAILURE")), 0.0, False)
   assert conductor.log().count("update-branch") == 1
   green = conductor.pr(checks=("SUCCESS",), names=["the hooks"])
@@ -3606,3 +3606,17 @@ def test_a_comment_that_the_round_marked_is_no_comment_of_the_owner(conductor: R
   assert conductor.prompts == []
   assert "pr edit 7 --add-label hold" not in conductor.log()
   assert "c55" in conductor.ns["comments"]
+
+
+@POSIX
+@JQ
+@pytest.mark.parametrize("path", ["DOCTRINE.md", "src/furb/engine.py", ".github/budgets.json"])
+async def test_a_green_pr_that_changes_a_file_that_a_wall_sums_updates_with_main_before_it_merges(
+  conductor: Round, path: str
+) -> None:
+  conductor.say(r"compare/abc\.\.\.main", json.dumps({"files": [{"filename": path}]}))
+  conductor.say(r"pr view 5 --json files", json.dumps({"files": [{"path": path}]}))
+  await conductor.land(conductor.pr(checks=("SUCCESS",), names=["the hooks"]), False)
+  assert conductor.log().count("update-branch") == 1
+  assert "pr merge" not in conductor.log()
+  assert 5 not in conductor.merged
