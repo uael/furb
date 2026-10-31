@@ -17,6 +17,7 @@ import type { Compaction } from "furb/life";
 import * as model from "furb/life";
 import { commands } from "./commands.ts";
 import { openFile } from "./editor.ts";
+import { expandHome } from "./files.ts";
 
 /** The tone of a run of text, which the theme colors. */
 export type Tone = "text" | "muted" | "faint" | "accent" | "success" | "warning" | "danger";
@@ -309,6 +310,8 @@ export class Parts {
   private timer?: ReturnType<typeof setTimeout>;
   private readonly watchers = new Map<string, FSWatcher>();
   private readonly heardWrites = new Set<string>();
+  /** The stamps of the configs of the project when the parts loaded last. */
+  private config = "";
   private busy = 0;
   private readonly poll = setInterval(() => this.verify(), 500).unref();
 
@@ -340,6 +343,7 @@ export class Parts {
     }
     const loaded = await Promise.all(found.map((one) => loadPart(one.name, one.file, one.text)));
     if (asked !== this.asked || this.closed) return;
+    this.config = this.configs();
     this.loaded = error ? [bare("extensions", join(this.project, ".furb"), error), ...loaded] : loaded;
     this.follow(found);
     this.version++;
@@ -353,11 +357,20 @@ export class Parts {
     this.timer = setTimeout(() => void this.load(), 30);
   }
 
-  /** Loads the parts again when the disk holds another file than the one that a part loaded from, since a watcher can
-   * miss a change, and no later event then tells it. */
+  /** Loads the parts again when the disk holds another config of the project, or another file than the one that a part
+   * loaded from, since a watcher can miss a change, and no later event then tells it. A part of the crate carries its
+   * text and has no file to watch, so the config is the one sign of a part that a project turns on. */
   private verify(): void {
     if (this.busy || this.closed) return;
+    if (this.configs() !== this.config) this.soon();
     if (this.loaded.some((one) => one.stamp !== undefined && stamped(one.file) !== one.stamp)) this.soon();
+  }
+
+  /** The stamps of `.furb/config.json` and `.furb/config.local.json` as the disk holds them now. */
+  private configs(): string {
+    return ["config.json", "config.local.json"]
+      .map((one) => stamped(join(this.project, ".furb", one)))
+      .join(" ");
   }
 
   /** The list of writes that the parts heard last, and how many of it. */
@@ -375,7 +388,7 @@ export class Parts {
       this.heardWrites.add(act.id);
       const path = (act.words[0] as { path?: unknown } | null)?.path;
       if (typeof path !== "string") continue;
-      const at = resolve(this.project, path);
+      const at = resolve(this.project, expandHome(path));
       const inside = (folder: string) => {
         const way = relative(folder, at);
         return !way.startsWith("..") && !isAbsolute(way);
