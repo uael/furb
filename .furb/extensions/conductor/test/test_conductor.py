@@ -1534,6 +1534,21 @@ def test_an_open_issue_whose_worker_ended_with_a_pr_is_queued_again_once_for_eac
   assert conductor.queue == []
 
 
+@POSIX
+@JQ
+def test_an_issue_that_starts_with_a_mark_is_queued_once_the_owner_puts_a_thumb_on_it(conductor: Round) -> None:
+  marked = {"number": 574, "title": "T", "body": "🤖 Idea", "author": {"login": "uael"}, "assignees": [], "labels": [], "url": "u"}
+  conductor.say(r"issue list", json.dumps([marked]))
+  conductor.say(r"issues/574/reactions", json.dumps([{"content": "heart", "user": {"login": "uael"}}, {"content": "+1", "user": {"login": "x"}}]))
+  asyncio.run(conductor.take_issues())
+  assert conductor.queue == [] and "issue574" not in conductor.handled
+  conductor.says.pop()
+  conductor.say(r"issues/574/reactions", json.dumps([{"content": "+1", "user": {"login": "uael"}}]))
+  asyncio.run(conductor.take_issues())
+  assert [key for key, _, _ in conductor.queue] == ["issue574"]
+  assert "issue574" in conductor.handled
+
+
 NOT_FOUND = '{"message":"Not Found","documentation_url":"https://docs.github.com/rest","status":"404"}'
 
 
