@@ -1,4 +1,4 @@
-import { mkdirSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 /** The directory `.furb/<parts>` of a project, made when it is absent. Records, file contents, shares and images
@@ -29,7 +29,7 @@ const pause = new Int32Array(new SharedArrayBuffer(4));
  * again until that handle lets the file go, for RELEASE milliseconds at most: a session that reads the state of a
  * record as it lists it, in this process or in another, holds that file for a moment. A save that fails throws an
  * error that names its file, with the error of the system as its cause, since the error of the runtime does not
- * always name the file: bun 1.4 on Windows says only "write". */
+ * always name the file: bun 1.4 on Windows says only "write". A save that fails leaves no draft. */
 export function saveFile(path: string, text: string): void {
   const draft = `${path}.tmp`;
   try {
@@ -43,6 +43,9 @@ export function saveFile(path: string, text: string): void {
         if (process.platform !== "win32" || !HELD.has(code) || Date.now() >= deadline) throw error;
       }
   } catch (error) {
+    try {
+      rmSync(draft, { force: true });
+    } catch {}
     throw new Error(`Could not save ${path} through ${draft}: ${(error as Error).message}`, { cause: error });
   }
 }

@@ -15,6 +15,7 @@ import {
   Life,
   ROOT,
   Session,
+  saveFile,
   type Turn,
 } from "../src/index.ts";
 import { compactedRun, pauseSaid } from "../src/life/acts.ts";
@@ -850,6 +851,40 @@ test("a close of the session whose save fails still ends its life and its comman
     // A process the session ended ends a moment after, once the system hears of it.
     for (let tries = 0; alive(pid) && tries < 100; tries++) await Bun.sleep(20);
     expect(alive(pid)).toBe(false);
+  } finally {
+    await remove(cwd);
+  }
+});
+
+test("a session whose save fails at the open keeps its life, and says so in its log", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-open-save-"));
+  const record = join(cwd, "life.jsonl");
+  // A directory where the save writes its file makes the save fail on every system.
+  await mkdir(`${record}.session.json.tmp`);
+  const session = new Session({ cwd, record });
+  const lines: string[] = [];
+  session.on("log", (line: string) => lines.push(line));
+  try {
+    const engine = session.open();
+    await until(session, () => lines.length > 0, "log");
+    expect(lines[0]).toContain("life.jsonl.session.json.tmp");
+    expect(engine.disposed).toBe(false);
+    expect(await engine.rung({ word: "close('up')", on: engine.root })).toBe("up");
+  } finally {
+    await rm(`${record}.session.json.tmp`, { recursive: true, force: true });
+    await session.dispose();
+    await remove(cwd);
+  }
+});
+
+test.skipIf(process.platform === "win32")("a save that fails leaves no draft of its file", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-draft-"));
+  try {
+    // A directory that holds a file cannot take the place of a file, so the rename of the save fails.
+    await mkdir(join(cwd, "saved"));
+    await writeFile(join(cwd, "saved", "kept"), "x");
+    expect(() => saveFile(join(cwd, "saved"), "text")).toThrow("saved.tmp");
+    expect(await readdir(cwd)).toEqual(["saved"]);
   } finally {
     await remove(cwd);
   }
