@@ -272,7 +272,7 @@ test("what a model writes streams into the session under its rung until its repl
               {
                 type: "text",
                 text: expect.stringMatching(
-                  /^#chain1\nchain1_label = 'root'\nchain1: Act\[Never\] = Act\('chain1'\)\n\n#prompt1\nprompt1_message = 'count'\nprompt1: Act\[int\] = Act\('prompt1'\)\n\n#rung19 advance on prompt1$/,
+                  /^#chain1\nchain1_label = 'root'\nchain1_actor = 'claude-cli:sonnet\/high'\nchain1_actor_via = 'stand'\nchain1: Act\[Never\] = Act\('chain1'\)\n\n#prompt1\nprompt1_message = 'count'\nprompt1: Act\[int\] = Act\('prompt1'\)\n\n#rung19 advance on prompt1$/,
                 ),
               },
             ],
