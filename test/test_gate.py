@@ -303,6 +303,20 @@ async def test_a_word_that_leaves_a_bracket_open_finds_the_line_and_the_column_o
   assert "; the bracket ( of line 4, column 6, stays open," in found
 
 
+async def test_a_word_that_is_not_python_and_that_holds_a_string_of_one_quote_that_a_newline_ends_finds_that_a_string_of_one_quote_ends_at_the_end_of_its_line_so_write_a_text_of_several_lines_as_a_triple_quote_or_as_a_quote_s_name_on_lines_of_its_own_before_the_call_and_nothing_of_this_word_ran() -> (
+  None
+):
+  """A word that is not python and that holds a string of one quote that a newline ends finds that a string of one quote ends at the end of its line, so write a text of several lines as a triple quote, or as a quote <s:name> on lines of its own before the call, and nothing of this word ran."""
+  _, _, root = born()
+  (found,) = engine.gate('k = 1\nclose(bash("ls\n-la"))', on=root)
+  fix = (
+    "a string of one quote ends at the end of its line, so write a text of several lines as a triple quote, or as a"
+    " quote <s:name> on lines of its own before the call, and nothing of this word ran"
+  )
+  assert found.startswith("line 2: error[invalid-syntax] ")
+  assert f"; {fix}, in " in found
+
+
 async def test_a_word_that_starts_with_a_shell_command_finds_that_the_line_is_a_shell_command() -> None:
   """A word that is not python and that starts with a shell command finds that the line is a shell command, so write it as await bash("..."), and nothing of this word ran."""
   _, _, root = born()
