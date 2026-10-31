@@ -1,7 +1,7 @@
 //! The catalog of models, read from a snapshot of the tests and from the snapshot the crate carries, with the
 //! credentials a test gives, so no test reads the environment or the network.
 
-use std::{path::PathBuf, sync::Arc};
+use std::{fs, path::PathBuf, sync::Arc};
 
 use rig_core::{completion::CompletionRequest, message::Message};
 use serde_json::{Value, json};
@@ -15,7 +15,8 @@ use super::{
       test::{dropping, fake},
     },
   },
-  Catalog, DOCTRINE, SNAPSHOT, clamp, doctrine_in, parsed,
+  Catalog, DOCTRINE, SNAPSHOT, clamp, doctrine_in, listed, parsed,
+  update::{MODELS, PI},
 };
 use crate::ear::reactor;
 
@@ -323,6 +324,22 @@ fn the_newer_of_the_cache_and_the_snapshot_holds_for_each_provider() {
   assert_eq!(held("2026-08-31"), 4, "a cache older than the snapshot hides nothing of it");
   assert_eq!(held("2026-09-01"), 1);
   assert_eq!(held("2026-10-01"), 1);
+}
+
+#[test]
+fn the_parse_of_the_caches_is_made_again_only_when_a_file_changes() {
+  let root = std::env::temp_dir().join(format!("furb-listed-{}", std::process::id()));
+  fs::create_dir_all(&root).unwrap();
+  let at = root.join(MODELS);
+  fs::write(&at, "{}").unwrap();
+  let first = listed(Some(&at));
+  assert!(Arc::ptr_eq(&first, &listed(Some(&at))));
+  fs::write(root.join(PI), "{}").unwrap();
+  let second = listed(Some(&at));
+  assert!(!Arc::ptr_eq(&first, &second), "a change of the data of pi-ai is read");
+  fs::write(&at, "not json").unwrap();
+  assert!(!Arc::ptr_eq(&second, &listed(Some(&at))), "a change of the cache is read");
+  fs::remove_dir_all(&root).unwrap();
 }
 
 #[test]
