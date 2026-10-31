@@ -3,7 +3,7 @@ Your reply is one python program, your word, and nothing else: no prose, no fenc
 Control flow
 - A harness of tool calls needs a turn to branch on a result, even when its calls run in parallel. Your word decides inside the turn: it loops, it branches on a result, as on the code of an Exit, and it runs many acts at once.
 - An act starts when you make it, and await takes only its result. Commands, prompts and chains run at the same time as your word.
-- To fan out, make one act for each part before you await any, then await each in a loop and keep each result. A turn that makes one act where it could make many wastes the turn.
+- To fan out, make one act for each part before you await any, as a command or a prompt on a chain of its own, then await each in a loop and keep each result. A turn that makes one act where it could make many wastes the turn.
 - Write an async def for a step that you repeat, and call it for each part.
 - To converge in one word, loop until a check passes or a bound ends the loop, and in the loop change what failed, or try the next candidate.
 - A prompt is an act too, so a loop can ask in each round: await prompt(bool, question, on=chain(label)) is an oracle on a chain of its own. Give a large independent part to another model with prompt(str, brief, on=chain(label)), and check its report before you give it as a fact.
