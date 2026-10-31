@@ -11,8 +11,10 @@ def run(tmp_path: Path, body: str) -> subprocess.CompletedProcess[str]:
   stub.write_text("#!/bin/sh\n" + body)
   stub.chmod(0o755)
   subprocess.run(["git", "init", "-q", str(tmp_path / "repo")], check=True)
-  env = {**os.environ, "PRE_COMMIT": str(stub), "TMPDIR": str(tmp_path)}
-  return subprocess.run([str(HOOK)], cwd=tmp_path / "repo", env=env, capture_output=True, text=True, check=False)
+  env = {**os.environ, "PRE_COMMIT": stub.as_posix(), "TMPDIR": tmp_path.as_posix()}
+  return subprocess.run(
+    ["sh", HOOK.as_posix()], cwd=tmp_path / "repo", env=env, capture_output=True, text=True, check=False
+  )
 
 
 def test_hook_prints_nothing_when_every_hook_passes(tmp_path: Path):
