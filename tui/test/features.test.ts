@@ -375,7 +375,7 @@ test("the words of the extensions stand as code: a comment that names their ear,
           // A path of Windows stands with its separators doubled, as python shows a backslash.
           expect.stringMatching(/^read\('.*[/\\]DOCTRINE\.md'\)$/),
           expect.stringMatching(
-            /^CAP = 40\n[^]*\ndef mcp_index\([^]*\n\ncatchup\(\)\nawait recall\(\)\nawait listed\(\)\nawait mcp_index\(\)$/,
+            /^CAP = 40\n[\s\S]*\ndef mcp_index\([\s\S]*\n\ncatchup\(\)\nawait recall\(\)\nawait listed\(\)\nawait mcp_index\(\)$/,
           ),
         ]);
         const stood = session.activity.find((act) => act.kind === "rung" && act.by === act.on);

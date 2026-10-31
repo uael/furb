@@ -235,7 +235,7 @@ test("what a model writes streams into the session under its rung until its repl
           turn(
             "assistant",
             expect.stringMatching(
-              /^CAP = 40\n[^]*\ndef mcp_index\([^]*\n\ncatchup\(\)\nawait recall\(\)\nawait listed\(\)\nawait mcp_index\(\)$/,
+              /^CAP = 40\n[\s\S]*\ndef mcp_index\([\s\S]*\n\ncatchup\(\)\nawait recall\(\)\nawait listed\(\)\nawait mcp_index\(\)$/,
             ),
           ),
           turn(
