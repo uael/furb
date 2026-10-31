@@ -887,7 +887,7 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 
 STATE = (
   "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed assigned silent"
-  " comments measures timers noted debriefs briefed owns watched after parked awaited covering kinds pool slots areas round_faults vetoes rulings judged owed recovered tips shifted parents redmain onmain hired paced landed heard bindings handled ends requeued"
+  " comments measures timers noted debriefs briefed owns watched after parked awaited covering kinds pool slots areas round_faults vetoes rulings judged tips shifted parents redmain onmain hired paced landed heard bindings handled ends requeued"
   " statused secret updated budgeted flaky runs_read deferred"
 ).split()
 
@@ -3780,66 +3780,6 @@ async def test_a_head_whose_earlier_gap_has_no_fix_that_it_shows_does_not_merge_
   assert conductor.judged["7 sha8"]["gaps"] == ['"no hidden control flow": Gap one.']
   assert await conductor.bent(pr) is True
   assert conductor.prompts[-1][1] == "chain-k"
-
-
-async def test_a_merged_pr_that_the_round_holds_no_entry_for_gets_its_gaps_from_its_comments(conductor: Round) -> None:
-  judging(conductor)
-  bodies = ['🤖 The judge of the words of the owner holds abc:\n\n- "q": Gap one.\n- "q": Gap two.\n\n<!-- furb:round -->\nother']
-  comment = "\n".join(json.dumps(x) for x in [*bodies, "A word of the owner.\n- \"q\": done"]) + "\n"
-
-  async def bash(command: str, stdin: str | None = "", timeout: float = 600, show: object = None, **_: object) -> Exit:
-    said = comment if "--json comments" in command else "MERGED m1234567 w:k,thread:extensions\n"
-    return Exit(0, Text("stdout", said), Text("stderr", ""))
-
-  conductor.ns["bash"] = bash
-  await conductor.followed(905)
-  assert [k for k, _, _ in conductor.queue] == ["gap905-1", "gap905-2"]
-  assert '> "q": Gap two.' in conductor.queue[1][1]
-
-
-async def test_no_pr_merges_while_a_merged_pr_owes_its_follow_ups_and_the_round_pays_the_debt_of_905(
-  conductor: Round,
-) -> None:
-  judging(conductor)
-  ran: list[str] = []
-  bodies = [
-    '🤖 The judge of the words of the owner holds aaa:\n\n- "q": Old gap.\n\n<!-- furb:round -->',
-    '🤖 The judge of the words of the owner holds abc:\n\n- "q": Gap one.\n- "r": Gap two.\n\n<!-- furb:round -->',
-    '🤖 #905 merged at 6e8fe91 (34c58f7). Each gap, checked on main:\n- "r": line 30 keeps it.\n\n<!-- furb:round -->',
-  ]
-  comment = "\n".join(json.dumps(x) for x in bodies) + "\n"
-
-  async def bash(command: str, stdin: str | None = "", timeout: float = 600, show: object = None, **_: object) -> Exit:
-    ran.append(command)
-    said = comment if "--json comments" in command else "MERGED m1234567 w:k,thread:extensions\n"
-    return Exit(0, Text("stdout", said), Text("stderr", ""))
-
-  conductor.ns["bash"] = bash
-  pr = conductor.pr(n=7, sha="sha7", checks=("SUCCESS",))
-  pr["verdict"] = "pass"
-  conductor.owed.add(905)
-  await conductor.land(pr, False)
-  assert ran == []
-  await conductor.owing()
-  assert [k for k, _, _ in conductor.queue] == ["gap905-1"]
-  assert conductor.recovered == {905}
-  await conductor.owing()
-  assert len([x for x in ran if "--json comments" in x]) == 1
-  assert "Old gap" not in conductor.queue[0][1] and "Gap two" not in conductor.queue[0][1]
-  await conductor.land(pr, False)
-  assert len(ran) == 2
-  own = conductor.pr(n=8, sha="sha8", labels=["w:gap905-1"], checks=("SUCCESS",))
-  own["verdict"] = "pass"
-  await conductor.land(own, False)
-  assert len(ran) > 2
-  conductor.queue.clear()
-  conductor.ends["gap905-1"] = [("worker9", 950)]
-  before = len(ran)
-  await conductor.land(pr, False)
-  assert len(ran) == before
-  conductor.merged.add(950)
-  await conductor.land(pr, False)
-  assert len(ran) > before
 
 
 def test_the_audit_leaves_a_pr_with_a_hold_label_out_of_the_idle_check(conductor: Round) -> None:

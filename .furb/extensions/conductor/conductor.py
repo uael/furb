@@ -76,7 +76,7 @@ The round holds at most cap() chains that hold an open prompt with a shape, and 
 The owner rules, on 10-29: "we should use more gh stacks in conductor, because they can be merged at once (all PRs of stack as once)". So a PR on main at the bottom of a stack whose layers are all green, free of hold, paused and owner-merge, and passed by the vetoes, merges with its whole stack at once through gh stack merge, and while a layer above it still runs its checks, the bottom waits rather than merge alone; a stack with a red layer merges its green layers below it at once; a stack that gh stack does not hold lands one layer at a time, and the round tells it once. Each sweep links each chain of stacked PRs on GitHub with gh stack link, once for each chain, so that it shows as one stack. GitHub gives no priority to a queued run, so each sweep cancels each queued run of the gates that can serve no merge: a run of a closed PR, of an old head or of a conflicting PR, and a run whose gates withheld(pr) holds back, which is a run of a draft, of a held or a paused PR, or of a layer above a layer that is not green. It defers each run that it cancels under a hold or under a layer below, and runs it again once withheld(pr) at the same head is empty and fewer than THROTTLE runs wait, once for each cancel, and it notes rerun <sha> then, so that heal does not run that head again; a draft runs its gates again when it is made ready. It never touches a run of main or of a PR that can merge.
 reload(path, on) loads the definitions of the file of an extension into the module of a chain: it runs, in the order of the file, each top-level definition whose binding in the module now is not its text in the file, and ends the load with seal(path). Before it starts the load, it gates the load word, and it raises Refused with one line when a name that the file imports from furb.engine does not fit the engine that the life runs, as a call with a parameter that the bash of the life lacks: the file needs the engine of a newer build, and a restart of the life on that build loads it. Monty gives a function no source, so seal keeps in bindings the object that each name of the load bound and its text, and a binding has that text only while the module holds that same object: a later word that binds the name again, an older word or another extension, makes the next reload run it again, and a load that was cancelled or failed before its end loads again. Then seal raises Refused with each name of the file that the module binds with another text, so a load that leaves the round on old code fails and says which names. reload gives (rung, names): the rung that runs the load, which quietly starts so that no end of the caller cancels it, and the names. The load is done only when that rung is over and peek(rung) is no exception: await it. Use it after a PR that changed the conductor merged.
 The owner rules, on 10-31, after #816 and #859 merged green and wrong, since no gate compared a PR with his words: an item may hold his exact words in rulings[key], a list of str, each quoted as he wrote it. hire puts them at the top of the brief, under RULED, before any line of yours. Before its merge, each green PR whose item, by its label w:key or by owns, holds rulings passes the veto bent: a blind judge on a chain of its own, RULER (opus/medium) under a grant of RULER_USD dollars, reads his words and the diff alone, and closes with each way that the diff fails or bends them, each with his exact words. A head with a gap does not merge, and its worker gets the gaps, or a worker on its chain when it ended, and a comment on the PR names them; a head that the judge cleared merges, and each new head is judged again, with the gaps of the earlier heads and the commits that answered them, so that the judge names only a gap that the newest head made or left open; the round never holds a PR for the owner by itself, by his ruling on 10-31: "it's not supposed to be on me to remove the flag. And it should be fixed until judged ok, automatically", so each new head is judged until the judge finds no gap, and only a label hold of the owner stops the loop. Each order to fix holds the gaps of every head that a judge held, the oldest first and each once, so that the worker fixes each once and trades no gap for another, and after JUDGE_ROUNDS (3) heads with gaps each fix goes to STRONGER (opus/high), so the loop converges. A hold that an earlier word put after JUDGE_ROUNDS heads comes off at the next sweep, and its PR is judged again. A judge that fails twice, with no answer or with a quote that is not his, tells you and holds the PR: judge it yourself, then set judged["n sha"]["state"] to "cleared", or give the gaps to its worker. judged keeps the state of each head.
-The owner rules again, on 10-31, after #905 merged two minutes after a judge cleared its head, with no word on the 4 gaps that a judge found at its earlier head: "WTF is wrong with you ?????????????? Please stop doing shit now and think of the proper action frist time", and of #912: "and same for 912 ! if it get merged, then follow ups are needed." So the judge of a head after heads with gaps closes with an account of each earlier gap, ACCOUNT: fixed at a file and a line of the head, or open. accounted() reads it: an account that leaves out an earlier gap fails the judge as a clear would, and an open gap holds the head as a new gap does. Before such a head merges, posted() reads the line of the head that shows each fix: a gap with no such line sends the head back to its worker with that gap, and the head merges only once each gap shows fixed and the comment of the account stands on the PR. When a PR whose heads had gaps merges, by the round or by any hand, followed() takes the gaps from the judged entries of the PR, or from the comments of the round on it when none stands (await followed(905) queues them for a PR that merged before), reads each fix of the account in main at the merge commit, and queues at once one follow-up item gapN-i for each gap that main does not show fixed, with the gap, the PR and the words of the owner in its brief, on the model of the worker of that PR. No PR merges while owed names a merged PR that followed() has not read, nor while unfixed() names a follow-up item gapN-i, one that waits, that a worker holds or whose PR has not merged, but the PRs of those items: owing() reads #905 first, from the last judge comment of the round on it less each gap that a later comment of the round accounts for, since its entries were gone when it merged.
+The owner rules again, on 10-31, after #905 merged two minutes after a judge cleared its head, with no word on the 4 gaps that a judge found at its earlier head: "WTF is wrong with you ?????????????? Please stop doing shit now and think of the proper action frist time", and of #912: "and same for 912 ! if it get merged, then follow ups are needed." So the judge of a head after heads with gaps closes with an account of each earlier gap, ACCOUNT: fixed at a file and a line of the head, or open. accounted() reads it: an account that leaves out an earlier gap fails the judge as a clear would, and an open gap holds the head as a new gap does. Before such a head merges, posted() reads the line of the head that shows each fix: a gap with no such line sends the head back to its worker with that gap, and the head merges only once each gap shows fixed and the comment of the account stands on the PR. When a PR whose heads had gaps merges, by the round or by any hand, followed() takes the gaps from the judged entries of the PR, reads each fix of the account in main at the merge commit, and queues at once one follow-up item gapN-i for each gap that main does not show fixed, with the gap, the PR and the words of the owner in its brief, on the model of the worker of that PR.
 A statement of yours to the owner states only what a command of the same word proved, and names each other part as a hypothesis.
 A review blocks only on a defect that a command reproduces, or on a false sentence of a contract."""
 
@@ -137,8 +137,6 @@ vetoes: dict = globals().setdefault("vetoes", {})
 vetoes.pop("owner-review", None)
 rulings: dict[str, list[str]] = globals().setdefault("rulings", {})
 judged: dict[str, dict] = globals().setdefault("judged", {})
-owed: set[int] = globals().setdefault("owed", set())
-recovered: set[int] = globals().setdefault("recovered", set())
 OWNED = 900.0
 HELD = 120.0
 GALLERY = "w/gallery"
@@ -1687,44 +1685,10 @@ async def posted(pr: dict, held: dict) -> bool:
   return True
 
 
-def unfixed() -> list[str]:
-  """The follow-up items gapN-i whose gap main does not show fixed yet: each that waits in queue or backlog, that a worker holds, or that ended with a PR that has not merged. An item that ended with no PR, as 0 when main already fixes its gap, is done."""
-  waiting = {q[0] for q in [*queue, *backlog]} | set(working.values())
-  keys = waiting | set(ends)
-  return sorted(
-    k
-    for k in keys
-    if re.fullmatch(r"gap\d+-\d+", k) and (k in waiting or any(m and m not in merged for _, m in ends.get(k, [])))
-  )
-
-
-async def owing() -> None:
-  """No PR merges while a merged PR still owes its follow-ups, by the ruling of the owner on 10-31, "Please stop doing shit now and think of the proper action frist time": the round holds each merge in land() until followed() has read each PR in owed, and then until unfixed() names no follow-up item gapN-i, but the PRs of those items. The first round after a reload owes #905, which merged over 4 open gaps whose entries the round had already dropped: the gaps of the last judge comment of the round on it, since each earlier head answered the ones before, less each gap that a later comment of the round accounts for, as the account that the round posted on #905 at 34c58f7."""
-  if 905 not in recovered:
-    owed.add(905)
-  for n in sorted(owed - recovered):
-    if await followed(n):
-      recovered.add(n)
-
-
-async def followed(n: int) -> bool:
+async def followed(n: int) -> None:
   """When a PR whose heads had gaps merges, by the round or by any hand, the round reads the account of each of those gaps against main at the merge commit, and queues at once one follow-up item for each gap that main does not show fixed, by the ruling of the owner on 10-31: "and same for 912 ! if it get merged, then follow ups are needed"."""
   mine = {k: v for k, v in judged.items() if k.split()[0] == str(n)}
   every = list(dict.fromkeys(x for v in mine.values() for x in v.get("gaps") or []))
-  if not mine:
-    said = await bash(f"gh pr view {n} --json comments --jq '.comments[].body | @json'", show=HIDDEN, timeout=120)
-    if said.code != 0:
-      return False
-    found: list[str] = []
-    answered: set[str] = set()
-    for body in [json.loads(x) for x in said.stdout.lines if x.strip()]:
-      rows = [x[2:] for x in str(body).splitlines() if x.startswith("- ")]
-      if str(body).startswith("🤖 The judge of the words of the owner holds"):
-        found, answered = rows, set()
-      elif by_round(str(body)):
-        answered |= {x.split('": ', 1)[0] for x in rows if x.startswith('"')}
-    every = list(dict.fromkeys(x for x in found if x.split('": ', 1)[0] not in answered))
-  settled = not every
   if every:
     got = await bash(
       f"gh pr view {n} --json state,mergeCommit,labels --jq '[.state, (.mergeCommit.oid // \"-\"), ([.labels[].name] | join(\",\"))] | join(\" \")'",
@@ -1732,7 +1696,7 @@ async def followed(n: int) -> bool:
       timeout=120,
     )
     if got.code != 0:
-      return False
+      return
     state, merge, labels = [*got.stdout.content.split(), "", "", ""][:3]
     if state == "MERGED" and merge not in ("", "-"):
       told: dict[str, str] = {}
@@ -1750,7 +1714,7 @@ async def followed(n: int) -> bool:
           timeout=180,
         )
         if out.code != 0:
-          return False
+          return
         seen = {gap for gap, said in zip(checks, out.stdout.lines) if said == "yes"}
       marks = labels.split(",")
       maker = next((m[2:] for m in marks if m.startswith("w:")), "")
@@ -1783,10 +1747,8 @@ async def followed(n: int) -> bool:
         queued.append(key)
       if queued:
         heard.append(f"#{n} merged with {len(queued)} gaps that main does not show fixed, so the round queued {', '.join(queued)}.")
-      settled = True
   for k in mine:
     del judged[k]
-  return settled
 
 
 async def whole(layers: list[dict]) -> str:
@@ -1827,15 +1789,7 @@ async def whole(layers: list[dict]) -> str:
 
 async def land(pr: dict, red: bool) -> None:
   n, sha = pr["n"], pr["sha"]
-  if pr["verdict"] != "pass" or fixing(pr) or owed - recovered:
-    return
-  open_gaps = unfixed()
-  if open_gaps and not re.fullmatch(r"gap\d+-\d+", maker_key(pr)):
-    notice(
-      f"hold {' '.join(open_gaps)}",
-      f"The round merges no PR but those of {', '.join(open_gaps)}: each follow-up of a gap that a merged PR left open"
-      " holds every other merge until its PR merges, or until its worker ends with 0 since main already fixes it.",
-    )
+  if pr["verdict"] != "pass" or fixing(pr):
     return
   for veto in [bent, *vetoes.values()]:
     if await veto(pr):
@@ -3001,7 +2955,6 @@ async def sweep(every: float) -> None:
     prs[pr["n"]] = pr
   merged.update(json.loads(parts[1]))
   await unheld()
-  await owing()
   for one in [x for x in pool.values() if x["pr"] and x["folders"] is None]:
     files = await bash(f"gh pr view {one['pr']} --json files --jq '.files[].path'", show=HIDDEN, timeout=120, ok=True)
     if files.code == 0:
