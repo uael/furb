@@ -747,13 +747,17 @@ impl Provider {
             if let (Some(retries), Some(reply)) = (&retries, replies.get(&id)) {
               retries(&reply.rung, &reply.chain, &retry);
             }
-            // A wait for the end of a limit lasts hours, so the chain is told once, before it.
-            if let (true, Some(reply)) = (limit, replies.get(&id)) {
+            // A wait for the end of a limit lasts hours, so the chain is told once, before it. A stand asks the call
+            // again, and a call that meets the same wait tells nothing more.
+            if let (true, Some(reply)) = (limit, replies.get_mut(&id)) {
               let note = format!("#{} waits on {}: {}", reply.chain, reply.actor, retry.why);
-              say(
-                &mut co,
-                Fact::says("tell", &reply.chain, [Object::list([Object::string(&note)])]),
-              );
+              if reply.noted.as_deref() != Some(note.as_str()) {
+                say(
+                  &mut co,
+                  Fact::says("tell", &reply.chain, [Object::list([Object::string(&note)])]),
+                );
+                reply.noted = Some(note);
+              }
             }
             continue;
           }
@@ -901,7 +905,8 @@ impl Provider {
             let again = mute.get(&chain) == Some(&actor);
             let rung = a.by().to_owned();
             let watch = watch.then(Watch::default);
-            let reply = Reply { chain, actor, rung, again, watch, waits: false, _stop: stop };
+            let reply =
+              Reply { chain, actor, rung, again, watch, waits: false, noted: None, _stop: stop };
             replies.insert(about, reply);
           }
           // A part of a word that raised ends the word where it raised, so its reply ends with the word that ran,
@@ -958,6 +963,8 @@ struct Reply {
   again: bool,
   watch: Option<Watch>,
   waits: bool,
+  /// The last note that told the chain of a wait, so the same wait asked again after a stand is told once.
+  noted: Option<String>,
   _stop: oneshot::Sender<()>,
 }
 

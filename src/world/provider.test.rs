@@ -1740,6 +1740,38 @@ fn a_stand_ends_the_wait_of_a_usage_limit_and_asks_the_model_again_at_once() {
 }
 
 #[test]
+fn a_stand_that_meets_the_same_usage_limit_again_tells_the_chain_nothing_more() {
+  let later = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .expect("a time after the epoch")
+    .as_secs()
+    + 86_400;
+  let limit = format!("Claude AI usage limit reached|{later}");
+  let (host, calls) = failing(&[&limit, &limit]);
+  let (retries, told) = retried();
+  let model = scripted(&MockCompletionModel::default()).hosted(host);
+  let provider =
+    Provider::new(yard("limit-twice").display().to_string(), vec![model]).retries(retries);
+  let mut engine = lived(provider);
+  let id = asked(&mut engine);
+  for waits in 1..=2 {
+    let heard = Arc::clone(&told);
+    assert!(until(&mut engine, move |_| heard.lock().expect("the retries told").len() == waits));
+    engine.stand(verbs::Stand { on: Some("chain1".to_owned()) }).expect("the life stands");
+  }
+  let done = |engine: &mut Engine| {
+    engine.peek(&id, verbs::Peek::default()).is_ok_and(|one| one.as_ref().as_int() == Some(7))
+  };
+  assert!(until(&mut engine, done), "the reply asks the model again after the second stand");
+  assert_eq!(calls.load(Ordering::SeqCst), 3);
+  let notes = said(&mut engine)
+    .into_iter()
+    .filter(|(kind, _, note)| kind == "tell" && note.contains("waits on"))
+    .count();
+  assert_eq!(notes, 1);
+}
+
+#[test]
 fn a_stand_on_new_settings_asks_a_reply_that_waits_for_a_usage_limit_again_on_the_new_command_line()
 {
   let later = std::time::SystemTime::now()
