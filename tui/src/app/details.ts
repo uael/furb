@@ -43,6 +43,9 @@ import { gutterWidth, saidOf, seconds, stateOf } from "./shared.ts";
 const plainReason = (why: string) =>
   why.replace(/^line \d+: /, "").replace(/\s*\(<string>, line \d+\)(?:, in '.*'$)?/, "");
 
+/** The columns that a line which runs keeps for its time. The tick draws them, so no layout of the text holds them. */
+const TIME = 8;
+
 export const details = part({
   /** The rung that took the place of a rung of a model that failed: a later rung for the same prompt, which the model
    * wrote once it read the failure, so the failure no longer stands. */
@@ -361,6 +364,21 @@ export const details = part({
     }
   },
 
+  /** The programs that have a line which runs move with the tick: a program draws again when a time of its lines
+   * changed, and its text is not laid out again. */
+  tickLive(): void {
+    for (const [view, row] of this.liveLines) {
+      if (view.isDestroyed) {
+        this.liveLines.delete(view);
+        continue;
+      }
+      const now = row.times();
+      if (now === row.shown) continue;
+      row.shown = now;
+      view.requestRender();
+    }
+  },
+
   /** The row of a model follows its stream. A line that the model finished stands in the card above the row, which the
    * next frame of the feed makes: until the card shows it, the row keeps its text and its number, so that no frame
    * shows the line twice, or the next number under a program that lacks its line. */
@@ -423,21 +441,14 @@ export const details = part({
       return line.fails && plainReason(line.fails).includes(hint.replace(/…$/, "")) ? "" : hint;
     };
     const noteOf = (line: Extract<ProgramLine, { kind: "code" }>) =>
-      shortenHomes(
-        [
-          hintOf(line),
-          line.runs ? since(line.awaits?.act ?? line.acts.at(-1)) : "",
-          heads.has(line) ? took(line.step) : "",
-        ]
-          .filter(Boolean)
-          .join("  "),
-      );
+      shortenHomes([hintOf(line), heads.has(line) ? took(line.step) : ""].filter(Boolean).join("  "));
     // The code takes the room that its hints leave, and the hints take 30 columns at most: a longer hint is cut.
     const notes = Math.max(
       0,
       ...lines.map((line) => (line.kind === "code" ? Bun.stringWidth(noteOf(line)) : 0)),
     );
-    const column = Math.max(24, Math.min(100, widest, room - (notes ? Math.min(notes, 26) + 4 : 0)));
+    const slot = lines.some((line) => line.kind === "code" && line.runs) ? TIME + 2 : 0;
+    const column = Math.max(24, Math.min(100, widest, room - slot - (notes ? Math.min(notes, 26) + 4 : 0)));
     const fit = (text: string, most: number) => clip(text, Math.max(4, most));
     const lane = lines.some((line) => line.kind === "code" && markOf(line)) ? 2 : 0;
     // The line of the program that each row shows, which a click opens or folds.
@@ -450,6 +461,8 @@ export const details = part({
     // program as it ran, each part of a row with where it starts in that program, and the rows that only comment.
     let program = "";
     const pieces: [row: number, from: number, to: number, at: number][] = [];
+    // The lines that run: where the time of each stands in its row, and the act that it counts.
+    const live: { row: number; col: number; act: Parameters<typeof since>[0] }[] = [];
     const fixed: [row: number, from: number, to: number, group: string][] = [];
     const comment = (row: number, from = 0) => fixed.push([row, from, texts[row]?.length ?? 0, "comment"]);
     const push = (text: string, number?: number, source?: ProgramLine) => {
@@ -467,16 +480,24 @@ export const details = part({
         // opened, until it fits one row, and a line that still does not fit lays out in rows as ruff format would.
         // The code takes 100 columns at most, and its hint counts in them as a comment does in ruff format: a line
         // that fits beside the column of the hints stands in it, and a longer one takes the room that its hint leaves.
-        const width = Math.min(100, Math.max(column, room - lane - (note ? Bun.stringWidth(note) + 6 : 0)));
+        const width = Math.min(
+          100,
+          Math.max(column, room - lane - (line.runs ? TIME + 2 : 0) - (note ? Bun.stringWidth(note) + 6 : 0)),
+        );
         const rows = layout(line.text, width, this.lineOpen(line) ? undefined : this.openStrings(line));
         const code = rows[0]?.text ?? "";
         const mark = markOf(line);
         // The mark stands in a lane of its own after the code, before the comment, so that no line is longer for it.
-        const hint = note ? `# ${fit(note, room - Math.max(column, Bun.stringWidth(code)) - 4 - lane)}` : "";
+        const hint = note
+          ? `# ${fit(note, room - Math.max(column, Bun.stringWidth(code)) - 4 - lane - (line.runs ? TIME + 2 : 0))}`
+          : "";
         const left = `${code}${" ".repeat(Math.max(0, column - Bun.stringWidth(code)))}`;
-        const body = hint || mark ? `${left}  ${lane ? (mark ? `${mark} ` : "  ") : ""}${hint}` : code;
+        const front = hint || mark ? `${left}  ${lane ? (mark ? `${mark} ` : "  ") : ""}${hint}` : code;
+        const body = line.runs ? `${front}  ${" ".repeat(TIME)}` : front;
         const at = push(body, line.display, line);
-        if (hint) fixed.push([at, body.length - hint.length, body.length, "comment"]);
+        if (hint) fixed.push([at, front.length - hint.length, front.length, "comment"]);
+        if (line.runs)
+          live.push({ row: at, col: Bun.stringWidth(front) + 2, act: line.awaits?.act ?? line.acts.at(-1) });
         if (mark) flag(at, left.length + 2);
         for (const row of rows.slice(1)) push(row.text, undefined, line);
         const base = program.length;
@@ -620,7 +641,20 @@ export const details = part({
       lineNumbers: numbers,
       hideLineNumbers: hidden,
       lineColors: colors,
+      // The time of a line that runs is written over the blanks that its row keeps, so that a tick moves it and the
+      // text of the program stays as it was laid out.
+      renderAfter(buffer) {
+        for (const { row, col, act } of live)
+          buffer.drawText(
+            since(act).slice(0, TIME).padEnd(TIME),
+            target.x + col,
+            this.y + row,
+            parseColor(c.syntaxComment),
+          );
+      },
     });
+    const times = () => live.map((one) => since(one.act)).join("|");
+    if (live.length) this.liveLines.set(view, { times, shown: times() });
     // The gutter of the numbers takes the events of the pointer over the program, so it shows the string of a fold.
     view.onMouseMove = (event) => {
       if (hover(event)) return;

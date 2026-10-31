@@ -102,17 +102,17 @@ of what its acts came to: a read the count of its lines, a write the lines that 
 and the count of the lines that it printed, a question its answer or what it waits for, and a loop its count, as x6. The
 first line of each step says how long the step ran and what the answers of its model cost. The time is known for the
 work that the TUI saw run, since the record holds no time. The line that runs is lit, with a mark in the gutter and,
-after a second, its time, and the last lines that its command prints stream under it. A line that the gate refused has a
-red cross at its end, and the reason stands under it as a comment. The line that runs has a mark at its end too, and the
-line that it awaits has an arrow. A message that you send to the thread, and each notice of the chain, stands as a
-comment among the steps. While the model of the thread works on a step, each line of its word that it finished stands
-above as Python in its colors, and the last row of the thread is the line that comes: a loader after it, and the line
-that the model still writes, else the last line that it thinks, as a comment, or `# thinking` while it shows no thought,
-whose letters a light crosses. The answer of the thread stands under its program, with the model that gave it and its
-effort at its right. A thread that you fold stands as one line, with the line of its color half a row above and under
-it. A word that you run stands as your messages stand, as its program in a panel of its own color, and so does an act
-that no word made, as a command that `/bash` starts: one line of Python that binds the act to its name, as `bash3 =
-bash("make docs")`.
+after a second, its time, which only the clock moves, and the last lines that its command prints stream under it. A line
+that the gate refused has a red cross at its end, and the reason stands under it as a comment. The line that runs has a
+mark at its end too, and the line that it awaits has an arrow. A message that you send to the thread, and each notice of
+the chain, stands as a comment among the steps. While the model of the thread works on a step, each line of its word
+that it finished stands above as Python in its colors, and the last row of the thread is the line that comes: a loader
+after it, and the line that the model still writes, else the last line that it thinks, as a comment, or `# thinking`
+while it shows no thought, whose letters a light crosses. The answer of the thread stands under its program, with the
+model that gave it and its effort at its right. A thread that you fold stands as one line, with the line of its color
+half a row above and under it. A word that you run stands as your messages stand, as its program in a panel of its own
+color, and so does an act that no word made, as a command that `/bash` starts: one line of Python that binds the act to
+its name, as `bash3 = bash("make docs")`.
 
 ![The last row of a thread while its model works](screenshots/84-thinking-row.png)
 
