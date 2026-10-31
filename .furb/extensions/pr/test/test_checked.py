@@ -34,8 +34,9 @@ class Refused(Exception):
 class World:
   """The engine as the word reads it: bash answers from a script, wait moves a clock, and every command is kept."""
 
-  def __init__(self, polls: list[list[dict]], logs: dict[str, str] | None = None) -> None:
+  def __init__(self, polls: list[list[dict]], logs: dict[str, str] | None = None, runs: list | None = None) -> None:
     self.polls, self.logs, self.now = polls, logs or {}, 0.0
+    self.runs = runs or [[]]
     self.commands: list[str] = []
     self.waits: list[float] = []
     ns: dict = {
@@ -57,7 +58,9 @@ class World:
       assert job
       return Exit(0, Text("out", self.shell(command, self.logs[job[1]])), Text("err"))
     rows = self.polls.pop(0) if len(self.polls) > 1 else self.polls[0]
-    return Exit(0, Text("out", "abc1234def\n" + (json.dumps(rows) if rows is not None else "")), Text("err"))
+    runs = self.runs.pop(0) if len(self.runs) > 1 else self.runs[0]
+    lines = [json.dumps(rows) if rows is not None else "", json.dumps(runs) if runs is not None else ""]
+    return Exit(0, Text("out", "abc1234def\n" + "\n".join(lines)), Text("err"))
 
   def shell(self, command: str, log: str) -> str:
     """Run the command in sh, with a gh that prints the log: the sorting of a log is the script's."""
@@ -75,6 +78,10 @@ class World:
 
 def row(name: str, bucket: str, job: int = 1) -> dict:
   return {"name": name, "bucket": bucket, "link": LINK.format(job)}
+
+
+def flow(name: str, status: str) -> dict:
+  return {"workflowName": name, "status": status}
 
 
 def run(world: World, **words: object) -> tuple[str, list[str]]:
@@ -131,3 +138,34 @@ def test_a_directory_is_entered_before_each_command() -> None:
   world = World([[row("a", "pass")]])
   run(world, where="/work tree")
   assert world.commands[0].startswith("cd '/work tree' || exit 1; n=5\n")
+
+
+def test_a_run_of_the_head_that_is_not_complete_holds_a_pass_that_every_listed_check_gives() -> None:
+  world = World(
+    [[row("the title", "pass")], [row("the title", "pass"), row("the hooks", "pass")]],
+    runs=[[flow("titles", "completed"), flow("gates", "queued")], [flow("titles", "completed"), flow("gates", "completed")]],
+  )
+  assert run(world) == ("pass", ["head abc1234: 2 checks, 0 failed"])
+  assert world.waits == [60.0]
+
+
+def test_a_list_of_runs_that_does_not_load_holds_a_pass_until_it_loads() -> None:
+  world = World([[row("hooks", "pass")]], runs=[None, [flow("gates", "completed")]])
+  assert run(world) == ("pass", ["head abc1234: 1 checks, 0 failed"])
+  assert world.waits == [60.0]
+
+
+def test_a_bound_that_ends_with_a_run_open_names_the_run() -> None:
+  world = World([[row("hooks", "pass")]], runs=[[flow("gates", "in_progress")]])
+  assert run(world, bound=60.0) == ("pending", ["head abc1234: still pending after 60 s: the run of gates"])
+
+
+def test_a_bound_that_ends_with_no_list_of_runs_says_so() -> None:
+  world = World([[row("hooks", "pass")]], runs=[None])
+  assert run(world, bound=0.0) == ("pending", ["head abc1234: still pending after 0 s: the runs are unread"])
+
+
+def test_the_bound_of_a_call_without_one_is_an_hour() -> None:
+  world = World([[row("hooks", "pending")]])
+  assert run(world) == ("pending", ["head abc1234: still pending after 3600 s: hooks"])
+  assert len(world.waits) == 60
