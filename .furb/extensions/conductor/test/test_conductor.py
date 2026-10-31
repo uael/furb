@@ -2960,6 +2960,45 @@ def test_reload_starts_its_load_through_quietly_so_that_no_end_of_the_caller_can
   assert [on for _, on in conductor.rungs] == ["chain1"] and 'return "new"' in conductor.rungs[0][0]
 
 
+ENGINE_FILE = '''from furb.engine import (
+  bash,
+)
+
+
+async def lister() -> None:
+  await bash("ls", {call})
+'''
+
+
+def test_a_reload_refuses_a_file_that_calls_the_engine_with_a_parameter_that_the_bash_of_the_life_lacks(
+  conductor: Round,
+) -> None:
+  import furb
+  import furb_monty
+  from furb import sheet
+
+  conductor.ns["gate"] = lambda word, on="": sheet.gate(vars(furb.python), {}, word, furb_monty.gate)
+  # The bash of the engine that the gate reads has no parameter nope, as the bash of an older build had no ok.
+  conductor.files["ext.py"] = ENGINE_FILE.format(call="nope=True")
+  with pytest.raises(conductor.Refused) as why:
+    conductor.reload("ext.py")
+  assert str(why.value) == (
+    "ext.py needs the engine of a newer build, since bash do not fit the engine of this life:"
+    " restart the life on that build to load it"
+  )
+  assert conductor.rungs == []
+  conductor.files["ext.py"] = ENGINE_FILE.format(call="timeout=1.0")
+  assert conductor.reload("ext.py") == ("rung1", ["lister"])
+
+
+def test_a_reload_leaves_a_finding_on_a_name_that_the_file_does_not_import_from_the_engine_to_the_gate(
+  conductor: Round,
+) -> None:
+  conductor.ns["gate"] = lambda word, on="": ["line 1: error[unresolved-reference] Name `lister2` used when not defined"]
+  conductor.files["ext.py"] = ENGINE_FILE.format(call="timeout=1.0")
+  assert conductor.reload("ext.py") == ("rung1", ["lister"])
+
+
 def test_a_load_whose_end_did_not_run_counts_for_nothing_and_loads_again(conductor: Round) -> None:
   # The definitions ran and seal did not, as in a load that was cancelled or failed between two definitions.
   exec(NEW_FILE, conductor.ns)  # noqa: S102
