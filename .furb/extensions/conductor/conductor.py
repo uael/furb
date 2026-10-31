@@ -259,6 +259,15 @@ landed: list[int] = globals().setdefault("landed", [])
 heard: list[str] = globals().setdefault("heard", [])
 OWNER = "uael"
 MARKS = ("🤖", "[furb")
+ROUND = "<!-- furb:round -->"
+
+
+def marked(text: str) -> str:
+  return text.rstrip("\n") + "\n\n" + ROUND
+
+
+def by_round(body: str) -> bool:
+  return body.startswith(MARKS) or ROUND in body
 
 
 def quietly(verb, *args, **words):
@@ -1496,7 +1505,7 @@ async def bent(pr: dict) -> bool:
     quietly(
       bash,
       f"gh pr comment {n} --body-file -",
-      stdin=f"🤖 The judge of the words of the owner holds {sha[:7]}:\n\n" + "\n".join(f"- {x}" for x in gaps) + ending + "\n",
+      stdin=marked(f"🤖 The judge of the words of the owner holds {sha[:7]}:\n\n" + "\n".join(f"- {x}" for x in gaps) + ending) + "\n",
       show=HIDDEN,
     )
     if stop:
@@ -1654,7 +1663,7 @@ def owner_review(pr: dict, line: str) -> bool:
 async def review(seed: bool) -> None:
   got = await bash(REVIEWS, show=HIDDEN, timeout=600)
   rows = [p for p in (x.split("\t", 5) for x in got.stdout.content.splitlines()) if len(p) == 6 and p[1] not in comments]
-  mine = [p for p in rows if p[2] == OWNER and not p[5].startswith(MARKS)]
+  mine = [p for p in rows if p[2] == OWNER and not by_round(p[5])]
   kinds = {"c": "pulls", "i": "issues"}
   others = [p for p in rows if p[2] != OWNER and p[3] not in ("0", "null", "") and p[1][0] in kinds]
   if others:
@@ -1704,7 +1713,7 @@ async def decide(title: str, text: str) -> str:
   repo = ops()[0]
   count = await bash(f"gh issue list --repo {shq(repo)} --label decision --state all --limit 500 --json number --jq length", show=HIDDEN, timeout=120)
   n = 1 + int(count.stdout.content.strip() or "0")
-  body = "🤖 " + text + "\n\nKeep it with no answer, or comment here with your change or your veto."
+  body = marked("🤖 " + text + "\n\nKeep it with no answer, or comment here with your change or your veto.")
   made = await bash(f"gh issue create --repo {shq(repo)} --label decision --title {shq(f'D{n}. {title}')} --body-file -", stdin=body, show=HIDDEN, timeout=120)
   return f"D{n} ({made.stdout.content.strip()})"
 
@@ -1805,7 +1814,7 @@ async def take_issues() -> None:
     fresh = [name for name, n in ends.get(key, []) if n and name not in requeued]
     if key in handled and not fresh:
       continue
-    if body.startswith(MARKS):
+    if by_round(body):
       yes = await bash("gh api repos/{owner}/{repo}/issues/" + str(it["n"]) + "/reactions --jq '[.[] | select(.content == \"+1\") | .user.login] | index(\"" + OWNER + "\") != null'", show=HIDDEN, timeout=120)
       if yes.stdout.content.strip() != "true":
         continue
@@ -1831,7 +1840,7 @@ async def take_issues() -> None:
     queue.append((key, brief, "issues"))
     again = "again " if fresh else ""
     heard.append(f"The issue #{it['n']}, {it['title']}, is queued {again}as the item {key}.")
-    quietly(bash, f"gh issue comment {it['n']} --body '🤖 Taken {again}: a worker of furb does this as the item {key}, and its PR or its answer comes here.'".replace(" :", ":"), show=HIDDEN)
+    quietly(bash, f"gh issue comment {it['n']} --body '🤖 Taken {again}: a worker of furb does this as the item {key}, and its PR or its answer comes here. {ROUND}'".replace(" :", ":"), show=HIDDEN)
 
 
 STATUS = {
@@ -2808,7 +2817,7 @@ async def sweep(every: float) -> None:
     if n in restacked:
       continue
     if pr.get("files") == 0 and not pr["draft"]:
-      said = "🤖 This PR changes no file: main holds all of its change, so the round closes it."
+      said = marked("🤖 This PR changes no file: main holds all of its change, so the round closes it.")
       await bash(f"gh pr close {n} --comment {shq(said)}", show=HIDDEN, timeout=120)
       heard.append(f"#{n} ({pr['head']}) changed no file, so the round closed it.")
       continue
@@ -2861,7 +2870,7 @@ async def sweep(every: float) -> None:
       p for p in (x.split("\t", 3) for x in watched.stdout.content.splitlines()) if len(p) == 4 and p[1] not in comments
     ]
     comments.update(p[1] for p in wrote)
-    fresh = [p for p in wrote if p[2] == OWNER and not p[3].startswith(MARKS)]
+    fresh = [p for p in wrote if p[2] == OWNER and not by_round(p[3])]
     if fresh and "ops" in timers:
       quietly(
         prompt,
