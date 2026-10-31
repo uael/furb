@@ -255,7 +255,9 @@ fix what your change broke, and report what was broken before.
 - `uv run python script/tokens.py`: the cost of the minified engine and of `DOCTRINE.md` in tokens of `o200k_base`,
   against their walls, from the code of law 5 and in seconds. It builds nothing: it counts the newest minified engine
   that is the program of `engine.py`, from the installed `furb_monty` or a `system.py` in `target`, and when none is, it
-  names `cargo check` to make one.
+  names `cargo check` to make one. `--doctrine` or `--engine` prints that one count alone, and `--stdin` counts a draft
+  of the doctrine from stdin, so `uv run python script/tokens.py --stdin < draft.md` checks it against the wall with no
+  write. Each exits 1 over its wall.
 - `uv run ruff format src test script extensions` then `uv run ruff check src test script extensions`: format and
   lint. Two spaces of indentation, 120 columns.
 - `.furb` is outside the formatter, even for a path that you give it: its words keep the form of the engine. Ruff
