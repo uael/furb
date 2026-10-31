@@ -58,6 +58,10 @@ def test_success_says_bun_run_build_suffices(tmp_path: Path) -> None:
   assert got.returncode == 0
   assert "bun run build there suffices" in got.stdout
   assert "failed" not in got.stderr
+  hooks = subprocess.run(
+    ["git", "-C", str(main), "config", "core.hooksPath"], capture_output=True, text=True, env=CLEAN, check=False
+  )
+  assert hooks.stdout.strip() == "script/hooks"
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="the sh of Git on Windows names a path in a form of its own")
