@@ -133,6 +133,8 @@ salsa-macro-rules = "=0.28.2"
 ruff_python_parser = "0.0.9"
 ruff_python_ast = "0.0.9"
 ruff_text_size = "0.0.9"
+# The builtins of python, which a name that a word deletes falls back to.
+ruff_python_stdlib = "0.0.14"
 
 [target.'cfg(unix)'.dependencies]
 # The process group of a command, which the World ends whole.

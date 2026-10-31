@@ -294,12 +294,32 @@ fn laid(lines: &[&str], first: usize, tail: usize, short: &str) -> Option<Laid> 
     let mut named: Vec<String> = vec![];
     let mut binders: Vec<String> = vec![];
     let mut declares: Vec<(String, usize)> = vec![];
+    let (mut unsourced, mut undeclared): (Vec<String>, Vec<String>) = (vec![], vec![]);
     for (place, (from, to)) in chunk.iter().enumerate() {
-      let (text, unit) = rebinding_unit(&lines[*from..=*to], &mut state.bound);
+      let (text, unit, _) = rebinding_unit(&lines[*from..=*to], &mut state.bound);
       module.push_str(&text);
       named.extend(unit.named.iter().cloned());
+      unsourced.retain(|one| !unit.names.contains(one) && !unit.inner.contains(one));
       binders.extend(unit.names.iter().chain(&unit.inner).cloned());
+      undeclared.retain(|one| !unit.declares.contains(one));
       declares.extend(unit.declares.iter().map(|one| (one.clone(), at * CHUNK + place)));
+      for one in &unit.deletes {
+        declares.retain(|(name, _)| name != one);
+        undeclared.push(one.clone());
+        if builtin(one) {
+          binders.push(one.clone());
+          unsourced.retain(|name| name != one);
+        } else {
+          binders.retain(|name| name != one);
+          unsourced.push(one.clone());
+        }
+      }
+    }
+    for one in &unsourced {
+      state.source.remove(one);
+    }
+    for one in &undeclared {
+      state.declared.remove(one);
     }
     let named: Vec<&str> = named.iter().map(String::as_str).collect();
     let (seeds, imports) = seeded(&named, &state.source, &state.declared, "");
@@ -325,16 +345,18 @@ fn laid(lines: &[&str], first: usize, tail: usize, short: &str) -> Option<Laid> 
   let mut rest = String::new();
   let mut stands: Vec<usize> = vec![];
   for (place, (from, to)) in units.iter().enumerate().skip(full) {
-    let (text, unit) = rebinding_unit(&lines[*from..=*to], &mut state.bound);
+    let (text, unit, added) = rebinding_unit(&lines[*from..=*to], &mut state.bound);
     named.extend(unit.named.iter().cloned());
     for one in &unit.declares {
       state.declared.insert(one.clone(), place);
     }
-    let added = text.lines().count() - (to - from + 1);
+    for one in &unit.deletes {
+      state.declared.remove(one);
+    }
     for (at, line) in text.split_inclusive('\n').enumerate() {
       rest.push_str("  ");
       rest.push_str(line);
-      stands.push(if at < added { from + 1 } else { from + 1 + at - added });
+      stands.push(if at < added { from + 1 } else { from + 1 + (at - added).min(to - from) });
     }
   }
   for (at, line) in shorts.iter().enumerate().skip(tail) {
@@ -365,15 +387,21 @@ fn remember(key: u64, state: &Laying) {
 }
 
 /// The text of one word of the program at the top of a module, after the line that rebinds the names that it binds
-/// again, and what the gate read of it. Each name that it binds is bound after it.
-fn rebinding_unit(lines: &[&str], bound: &mut HashSet<String>) -> (String, Rc<Unit>) {
+/// again and before the line that restores the names that it deletes, what the gate read of it, and how many lines
+/// stand before the word. Each name that it binds is bound after it, and each name that it deletes is not, but a
+/// builtin.
+fn rebinding_unit(lines: &[&str], bound: &mut HashSet<String>) -> (String, Rc<Unit>, usize) {
   let unit = read_unit(lines);
   let names: Vec<&str> = unit.names.iter().map(String::as_str).collect();
   let inner: Vec<&str> = unit.inner.iter().map(String::as_str).collect();
+  let gone: Vec<&str> = unit.deletes.iter().map(String::as_str).collect();
   let added = rebinding(&names, &inner, |name| bound.contains(name))
     .map_or(String::new(), |line| format!("{line}\n"));
+  let after = restoring(&gone).map_or(String::new(), |line| format!("{line}\n"));
   bound.extend(unit.names.iter().chain(&unit.inner).cloned());
-  (added + &unit.text, unit)
+  bound.retain(|name| !gone.contains(&name.as_str()) || builtin(name));
+  let before = added.matches('\n').count();
+  (added + &unit.text + &after, unit, before)
 }
 
 /// The sheet with each word of the program cut, which keeps its lines, for the readings of the word alone: an empty
@@ -412,13 +440,14 @@ fn program_lines(lines: &[&str]) -> Option<(usize, usize)> {
 }
 
 /// What the gate reads of one word of the program, in its try: its text at the top of a module, the names that the
-/// statements at its top bind, the names that a statement beneath them binds, the names that it declares, and each
-/// name that it names.
+/// statements at its top bind, the names that a statement beneath them binds, the names that it declares, the names
+/// that the statements at its top leave deleted, and each name that it names.
 struct Unit {
   text: String,
   names: Vec<String>,
   inner: Vec<String>,
   declares: Vec<String>,
+  deletes: Vec<String>,
   named: Vec<String>,
 }
 
@@ -450,13 +479,15 @@ fn read_unit(lines: &[&str]) -> Rc<Unit> {
     _ => None,
   });
   let owned = |names: Vec<&str>| names.into_iter().map(str::to_owned).collect::<Vec<_>>();
-  let (names, inner, declares) = tried.map_or((vec![], vec![], vec![]), |inside| {
-    let mut nested = Nested(vec![]);
-    nested.visit_body(inside);
-    (owned(inside.iter().flat_map(binds).collect()), owned(nested.0), owned(Declared::of(inside)))
-  });
+  let (names, inner, declares, deletes) =
+    tried.map_or((vec![], vec![], vec![], vec![]), |inside| {
+      let mut nested = Nested(vec![]);
+      nested.visit_body(inside);
+      let names = owned(inside.iter().flat_map(binds).collect());
+      (names, owned(nested.0), owned(Declared::of(inside)), owned(deleted(inside)))
+    });
   let named = owned(Names::of(body).0);
-  let unit = Rc::new(Unit { text: text.clone(), names, inner, declares, named });
+  let unit = Rc::new(Unit { text: text.clone(), names, inner, declares, deletes, named });
   UNITS_READ.with_borrow_mut(|held| {
     if held.len() >= UNITS {
       held.clear();
@@ -694,12 +725,16 @@ fn rebound(sheet: &str) -> (String, Vec<usize>) {
   let (mut text, mut stands) = (String::with_capacity(sheet.len()), vec![]);
   let mut inserts = inserted.into_iter().peekable();
   for (at, line) in lines.iter().enumerate() {
-    if let Some((_, added)) = inserts.next_if(|(before, _)| *before == at) {
+    while let Some((_, added)) = inserts.next_if(|(before, _)| *before == at) {
       text.push_str(&added);
       stands.push(at + 1);
     }
     text.push_str(line);
     stands.push(at + 1);
+  }
+  for (_, added) in inserts {
+    text.push_str(&added);
+    stands.push(lines.len());
   }
   (text, stands)
 }
@@ -729,6 +764,18 @@ fn rebinds(sheet: &str) -> Vec<(usize, String)> {
       }
       bound.extend(names);
       bound.extend(inner);
+      if let Stmt::Try(one) = stmt
+        && worded(one)
+      {
+        let gone = deleted(&one.body);
+        if let Some(added) = restoring(&gone) {
+          let line = sheet[..stmt.start().to_usize()].matches('\n').count();
+          let indent: String = lines[line].chars().take_while(|one| *one == ' ').collect();
+          let after = sheet[..stmt.end().to_usize()].matches('\n').count() + 1;
+          inserted.push((after, format!("{indent}{added}\n")));
+        }
+        bound.retain(|name| !gone.contains(name) || builtin(name));
+      }
     }
   }
   inserted
@@ -745,6 +792,54 @@ fn rebinding(names: &[&str], inner: &[&str], bound: impl Fn(&str) -> bool) -> Op
     parts.push(format!("del {}", again.join(", ")));
   }
   parts.extend(kept.iter().map(|name| format!("{name} = {name}")));
+  (!parts.is_empty()).then(|| parts.join("; "))
+}
+
+/// The names that the statements at the top of a body leave deleted: each name that a `del` deletes and that no later
+/// statement at the top binds again.
+fn deleted(body: &[Stmt]) -> Vec<&str> {
+  let mut gone: Vec<&str> = vec![];
+  for stmt in body {
+    let bound = binds(stmt);
+    gone.retain(|name| !bound.contains(name));
+    if let Stmt::Delete(one) = stmt {
+      for name in one.targets.iter().flat_map(named) {
+        if !gone.contains(&name) {
+          gone.push(name);
+        }
+      }
+    }
+  }
+  gone
+}
+
+/// The name under which the statement after the try of a word reads the builtins, which it deletes at once.
+const BUILTINS: &str = "__builtins_of_the_gate";
+
+/// Whether python gives a name that no module binds from its builtins, as `sum`.
+fn builtin(name: &str) -> bool {
+  ruff_python_stdlib::builtins::is_python_builtin(name, 14, false)
+}
+
+/// The statement that stands after the try of a word that deletes names at its top: it binds each builtin of them to
+/// that builtin, and deletes each other one again.
+///
+/// The module of a chain gives a name that a word deleted from its builtins, or from none, so a later word that calls
+/// `sum` after a word bound `sum = bash(...)` and another ran `del sum` calls the builtin. But the sheet holds the
+/// program in a function, where a name is local and has no builtin, and the checker reads the name after the try
+/// through its except, as it was bound before the `del`. So the checker would refuse the call of the builtin, and
+/// let a word read a name that no module holds. Nothing when the word deletes no name.
+fn restoring(names: &[&str]) -> Option<String> {
+  let (kept, gone): (Vec<&str>, Vec<&str>) = names.iter().copied().partition(|name| builtin(name));
+  let mut parts: Vec<String> = vec![];
+  if !kept.is_empty() {
+    parts.push(format!("import builtins as {BUILTINS}"));
+    parts.extend(kept.iter().map(|name| format!("{name} = {BUILTINS}.{name}")));
+    parts.push(format!("del {BUILTINS}"));
+  }
+  if !gone.is_empty() {
+    parts.push(format!("del {}", gone.join(", ")));
+  }
   (!parts.is_empty()).then(|| parts.join("; "))
 }
 
@@ -879,6 +974,9 @@ fn declared(
         declares.retain(|(held, _)| *held != name);
         declares.push((name, rungs.get(at).copied()));
       }
+    }
+    for name in deleted(&one.body) {
+      declares.retain(|(held, _)| *held != name);
     }
   }
   let mut stored = Stored(vec![]);
@@ -1389,6 +1487,22 @@ mod tests {
     let found = said(&["x = ''", "x = x + 'a'\nx = 1"], "y: str = x");
     assert_eq!(found.len(), 1, "{found:?}");
     assert!(found[0].1.contains("`Literal[1]` is not assignable to `str`"), "{found:?}");
+  }
+
+  #[test]
+  fn a_name_that_a_word_deletes_falls_back_to_its_builtin_or_to_no_binding() {
+    assert_eq!(said(&["sum = bash('ls')", "del sum"], "close(sum([1, 2]))"), vec![]);
+    assert_eq!(said(&["sum = bash('ls')", "sum = 1\ndel sum"], "close(sum([1, 2]))"), vec![]);
+    let found = said(&["sum = 1", "del sum\nsum = 'a'"], "y: int = sum");
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(found[0].1.contains("`Literal[\"a\"]` is not assignable to `int`"), "{found:?}");
+    let found = said(&["x = 1", "del x"], "close(x)");
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(found[0].1.starts_with("error[unresolved-reference]"), "{found:?}");
+    let mut program = vec!["sum = bash('ls')".to_owned(), "del sum".to_owned()];
+    program.extend((0..2 * CHUNK).map(|n| format!("k = {n}")));
+    let program: Vec<&str> = program.iter().map(String::as_str).collect();
+    assert_eq!(said(&program, "close(sum([1, 2]))"), vec![]);
   }
 
   #[test]
