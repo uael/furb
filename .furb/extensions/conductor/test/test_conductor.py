@@ -103,6 +103,7 @@ class Round:
     self.paused_chains: list[str] = []
     self.closed: list[tuple[str, object]] = []
     self.hired: list[tuple[str, str]] = []
+    self.hired_models: list[str] = []
     self.files: dict[str, str] = {}
     self.facts: dict[str, tuple] = {}
     self.done: dict[str, object] = {}
@@ -212,8 +213,9 @@ class Round:
     self.files[text.path] = text.content
     return text
 
-  def hire(self, key: str, what: str, thread: str = "", brief: str = "") -> str:
+  def hire(self, key: str, what: str, thread: str = "", brief: str = "", model: str = "") -> str:
     self.hired.append((key, brief))
+    self.hired_models.append(model)
     name = f"worker{len(self.hired)}"
     self.ns["working"][name] = key
     self.ns["models"][name] = self.ns["model_of"](key)
@@ -1079,8 +1081,8 @@ def test_the_round_runs_one_on_opus_medium_three_on_sonnet_and_one_on_opus_high(
 
 
 def test_an_item_hires_on_its_own_room_while_a_pr_waits_for_a_fixer_that_no_room_allows(conductor: Round) -> None:
-  conductor.limits["room"]["sonnet"] = 0
-  conductor.efforts.update(s=SONNET, o=OPUS)
+  conductor.limits["room"].update(sonnet=0, opus=0)
+  conductor.efforts.update(s=SONNET, o=TOP)
   conductor.queue[:] = [("s", "", ""), ("o", "", "")]
   conductor.prs[7] = conductor.pr(n=7, checks=("FAILURE",))
   conductor.staff()
@@ -1108,6 +1110,7 @@ def test_an_item_with_no_room_keeps_its_place_while_the_next_with_room_starts(co
 async def test_a_fixer_goes_before_a_new_item_and_waits_for_room_on_sonnet(conductor: Round) -> None:
   for name, key in (("p1", "a"), ("p2", "b"), ("p3", "e")):
     conductor.busy(name, key, SONNET)
+  conductor.busy("p4", "f", OPUS)
   conductor.prs[8] = conductor.pr(n=8, open=["- [ ] It is one change."], verdict="open")
   conductor.efforts["c"] = SONNET
   conductor.queue[:] = [("c", "", "")]
@@ -1144,6 +1147,7 @@ async def test_an_ended_worker_goes_on_in_its_own_chain_on_sonnet(conductor: Rou
   pr = conductor.pr(n=8, open=["- [ ] It is one change."], labels=["w:k8"])
   for index, key in enumerate("abc"):
     conductor.busy(f"p{index}", key, SONNET)
+  conductor.busy("p4", "d", OPUS)
   await conductor.mend(pr, 0.0, False)
   assert (conductor.hired, conductor.rungs, conductor.prompts) == ([], [], [])
   conductor.done["p0"] = None
@@ -2684,7 +2688,7 @@ async def test_a_conflict_whose_maker_works_on_another_item_goes_to_a_fixer_afte
 @POSIX
 @JQ
 async def test_a_pr_in_trouble_that_no_worker_acts_on_is_told_to_main_as_a_defect_of_the_round(conductor: Round) -> None:
-  conductor.limits["room"]["sonnet"] = 0
+  conductor.limits["room"].update(sonnet=0, opus=0)
   four = raw(4, "w/red", 5, [check("the hooks", "COMPLETED", "FAILURE", "2026-10-23T10:00:00Z")])
   four["mergeable"], empty = "CONFLICTING", raw(6, "w/empty", 5, [])
   empty["changedFiles"] = 0
@@ -2893,7 +2897,7 @@ async def test_a_red_draft_whose_worker_ended_goes_to_its_maker_or_a_fixer_and_t
   assert conductor.tended(draft) is True
   assert await conductor.mend(draft, 0.0, False) == "red"
   assert [key for key, _ in conductor.hired] == ["fix7"] and conductor.assignee(draft) == "worker1"
-  conductor.limits["room"]["sonnet"] = 0
+  conductor.limits["room"].update(sonnet=0, opus=0)
   seven = raw(8, "w/draft", 5, [])
   seven["isDraft"], seven["mergeable"] = True, "CONFLICTING"
   conductor.say(r"pr list --state open", json.dumps([seven]))
@@ -3252,3 +3256,36 @@ def test_the_harness_binds_each_name_that_a_word_it_runs_reads(conductor: Round)
   words = [IMPORT.sub("", PULL.read_text(encoding="utf-8")), IMPORT.sub("", SOURCE)]
   missing = {name for text in words for name in global_reads(text)} - set(conductor.ns) - set(dir(builtins))
   assert not missing, f"the harness binds no {sorted(missing)}"
+
+
+@POSIX
+@JQ
+async def test_a_pr_in_trouble_takes_the_first_model_with_room_so_it_waits_only_when_no_family_has_room(
+  conductor: Round,
+) -> None:
+  pr = conductor.pr(n=8, open=["- [ ] It is one change."], verdict="open")
+  conductor.prs[8] = pr
+  for index, key in enumerate("abc"):
+    conductor.busy(f"p{index}", key, SONNET)
+  assert conductor.mender(pr) == OPUS
+  conductor.busy("p4", "d", OPUS)
+  assert conductor.mender(pr) == SONNET_HIGH
+  conductor.done["p4"] = None
+  await conductor.mend(pr, 0.0, False)
+  assert [key for key, _ in conductor.hired] == ["box8"] and conductor.hired_models == [OPUS]
+
+
+def test_a_handover_takes_the_model_of_its_maker_before_the_fixer_and_waits_on_sonnet_when_no_family_has_room(
+  conductor: Round,
+) -> None:
+  conductor.homes["k8"] = "chain7"
+  conductor.ends["k8"] = [("p9", 0)]
+  conductor.models["p9"] = TOP
+  pr = conductor.pr(n=8, labels=["w:k8"])
+  for index, key in enumerate("abc"):
+    conductor.busy(f"p{index}", key, SONNET)
+  assert conductor.mender(pr) == TOP
+  conductor.busy("p4", "d", TOP)
+  assert conductor.mender(pr) == OPUS
+  conductor.busy("p5", "e", OPUS)
+  assert conductor.mender(pr) == SONNET
