@@ -1,7 +1,8 @@
 """Print the cost of the engine and of the doctrine in tokens of o200k_base, against their walls.
 
 The hygiene laws hold the same count, from the same code: `test/test_hygiene.py` imports it from here. It builds
-nothing. The engine that a model reads is the minified `engine.py`, which only the build of the crate makes, so this
+nothing. `--doctrine` and `--engine` print one count, and `--stdin` counts a draft of the doctrine read from
+stdin. The engine that a model reads is the minified `engine.py`, which only the build of the crate makes, so this
 script looks for the newest copy of it that is the program on disk: the one in the installed `furb_monty`, then each
 `system.py` that cargo left in `target`. When no copy is current, it says which command makes one.
 """
@@ -25,6 +26,12 @@ ENGINE = ROOT / "src" / "furb" / "engine.py"
 BUDGET = 7_000
 DOCTRINE = 1_000
 QUOTE = (ROOT / "DOCTRINE.md").read_text(encoding="utf-8")
+
+
+MISSING = (
+  "no minified engine is the program of src/furb/engine.py: run `cargo check`, whose build script makes it, "
+  "or `uv sync`, and run this again\n"
+)
 
 
 def tokens(text: str) -> int:
@@ -51,27 +58,41 @@ def copies() -> list[tuple[str, str]]:
   return found + [(str(one.relative_to(ROOT)), one.read_text(encoding="utf-8")) for one in built]
 
 
-def main() -> int:
-  spent = doctrine_tokens()
-  sys.stdout.write(
-    f"the doctrine costs {spent} tokens, against the wall of {DOCTRINE}{' (over)' if spent > DOCTRINE else ''}\n"
-  )
-  over = spent > DOCTRINE
+def engine_count() -> tuple[int, str] | None:
   for where, system in copies():
     try:
-      if not current(system):
-        continue
+      if current(system):
+        return engine_tokens(system), where
     except SyntaxError:
       continue
-    spent = engine_tokens(system)
-    sys.stdout.write(f"the engine costs {spent} tokens, against the wall of {BUDGET}, counted in {where}\n")
-    return int(over or spent >= BUDGET)
-  sys.stderr.write(
-    "no minified engine is the program of src/furb/engine.py: run `cargo check`, whose build script makes it, "
-    "or `uv sync`, and run this again\n"
-  )
-  return 1
+  return None
+
+
+def main(args: list[str]) -> int:
+  if args in (["--stdin"], ["--doctrine"]):
+    spent = doctrine_tokens(sys.stdin.read() if args == ["--stdin"] else QUOTE)
+    sys.stdout.write(f"{spent}\n")
+    return int(spent > DOCTRINE)
+  if args == ["--engine"]:
+    found = engine_count()
+    if found is None:
+      sys.stderr.write(MISSING)
+      return 1
+    sys.stdout.write(f"{found[0]}\n")
+    return int(found[0] >= BUDGET)
+  if args:
+    sys.stderr.write("usage: tokens.py [--doctrine | --engine | --stdin]\n")
+    return 2
+  spent = doctrine_tokens()
+  over = spent > DOCTRINE
+  sys.stdout.write(f"the doctrine costs {spent} tokens, against the wall of {DOCTRINE}{' (over)' if over else ''}\n")
+  found = engine_count()
+  if found is None:
+    sys.stderr.write(MISSING)
+    return 1
+  sys.stdout.write(f"the engine costs {found[0]} tokens, against the wall of {BUDGET}, counted in {found[1]}\n")
+  return int(over or found[0] >= BUDGET)
 
 
 if __name__ == "__main__":
-  sys.exit(main())
+  sys.exit(main(sys.argv[1:]))
