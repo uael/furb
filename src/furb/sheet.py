@@ -247,6 +247,27 @@ def unclosed(word: str) -> tuple[int, int, str] | None:
   return stack[-1] if stack else None
 
 
+LITERAL = r"""'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*\""""
+"""LITERAL matches one string literal on one line, as unquoted writes the value of a quote."""
+LONE = (
+  "the word is the quote <s:{name}> and nothing else, so it only binds {name} and nothing of it runs: write the code"
+  " as the word itself, with no quote around it, and quote only a text that the code uses"
+)
+"""LONE is what a finding says when a word is one quote and nothing else, as a model that wraps its word in a quote
+of the name of its rung writes it."""
+
+
+def lone(word: str) -> str:
+  """The name of the quote that the word is and nothing else, as unquoted gives it: one line that binds a name to one
+  string literal, and after it only the empty lines that stood for the lines of the quote. Nothing for any other
+  word."""
+  line, newline, rest = word.partition("\n")
+  name, equals, value = line.partition(" = ")
+  if newline and not rest.strip() and equals and name.isidentifier() and re.fullmatch(LITERAL, value):
+    return name
+  return ""
+
+
 def swallowed(lines: list[str]) -> list[tuple[int, str, int]]:
   """The open marks that stand inside the text of the quote of their own name, as (line, name, line of the quote).
   The word is read after its quotes became strings of one line each, so the text of a quote is the string on the line
@@ -254,7 +275,7 @@ def swallowed(lines: list[str]) -> list[tuple[int, str, int]]:
   found: list[tuple[int, str, int]] = []
   for n, one in enumerate(lines, 1):
     name, equals, rest = one.partition(" = ")
-    if not (equals and name.isidentifier() and re.fullmatch(r"""'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*\"""", rest)):
+    if not (equals and name.isidentifier() and re.fullmatch(LITERAL, rest)):
       continue
     # monty has no literal_eval, and the match above holds the line to one string literal, so eval runs no code.
     text = eval(rest, {"__builtins__": {}})  # noqa: S307
@@ -373,9 +394,11 @@ def against(engine: dict[str, object], checked: Checked, on: str, word: str) -> 
 
 def gating(engine: dict[str, object], checked: Checked) -> Ear:
   """The gate as the ear of a life: it answers each gate with what it finds against the word, on its chain as the
-  chain stands when the gate takes it."""
+  chain stands when the gate takes it. A word that is one quote and nothing else is a finding of the gate alone, and
+  not of against, which a host reads while a model writes the word, as a quote that the rest of the word uses."""
   gates = {"gate"}
   while True:
     match (yield gates):
       case ("gate", qid, _, on, word):
-        yield "done", qid, against(engine, checked, on, word)
+        name = lone(word)
+        yield "done", qid, [quoted(word, 1, LONE.format(name=name))] if name else against(engine, checked, on, word)
