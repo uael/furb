@@ -1720,6 +1720,10 @@ fn a_call_that_the_usage_limit_refuses_waits_for_its_reset_and_the_chain_is_told
   assert_eq!(kinds, [("started", "reply1"), ("tell", root.as_str()), ("done", "reply1")]);
   let note = &facts[1].2;
   assert!(note.contains(&format!("#{root} waits on m/high: usage limit until ")), "{note}");
+  assert!(
+    note.contains(&format!("rung(\"actor = \\'<model>\\'\", on=\"{root}\") and wake(\"{root}\")")),
+    "{note}"
+  );
 }
 
 #[test]
