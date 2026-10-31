@@ -9,7 +9,7 @@ WINDOW: Final[int] = 200000
 """WINDOW is the window, in tokens, of a model whose roster entry does not say one."""
 OPERATOR: Final[str] = "operator"
 """OPERATOR is the name of the operator in the roster and as an actor."""
-TIMEOUT: Final[float] = 600.0
+TIMEOUT: Final[float] = 120.0
 """TIMEOUT is the timeout, in seconds, of a command that does not say one."""
 LARGEST: Final[int] = 524288
 """LARGEST is the largest number of bytes that a read tells of the lines that its show picks."""

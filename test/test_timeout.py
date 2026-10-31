@@ -7,10 +7,10 @@ from furb.engine import TIMEOUT
 
 async def test_timeout_is_the_timeout_in_seconds_of_a_command_that_does_not_say_one() -> None:
   """TIMEOUT is the timeout, in seconds, of a command that does not say one."""
-  assert TIMEOUT == 600.0
+  assert TIMEOUT == 120.0
   _, log, root, quiet = slow()
   short = engine.bash("shorter", timeout=0.05, on=root)
-  assert [timeout for *_, timeout in said(log, "bash")] == [600.0, 0.05]
+  assert [timeout for *_, timeout in said(log, "bash")] == [120.0, 0.05]
   assert (await short).code is None
   await settle()
   assert engine.peek(quiet, ...) is ...

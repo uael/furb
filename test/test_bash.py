@@ -212,7 +212,7 @@ async def test_a_command_without_a_timeout_has_the_timeout_timeout_that_the_file
   """A command without a timeout has the timeout TIMEOUT that the file names."""
   _, log, root = born(auto=False)
   engine.bash("run", on=root)
-  assert engine.TIMEOUT == 600.0
+  assert engine.TIMEOUT == 120.0
   assert [a[6] for a in said(log, "bash")] == [engine.TIMEOUT]
 
 
