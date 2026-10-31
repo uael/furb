@@ -217,6 +217,10 @@ Set the timeout of each command, and the bound of each wait, to about twice the 
 round 600 or 900 seconds in case: a ceiling that is too large hides a hang for as long. Make a step that can take
 minutes print its progress, so that a hang shows at once.
 
+Search the code with `git grep`, which reads the tracked files alone, and never with `grep -r` or `rg` on the root. A
+worktree holds `target/` and `node_modules/`, and a walk of them takes minutes and ends at the timeout. To search an
+ignored or an untracked file, give `grep -r` the path of a folder, as `src` or `docs`.
+
 Never end a process by its name or by a pattern of its command line: not `pkill`, not `killall`, not `pkill -f`. A
 pattern matches the windows of the owner, the processes of other workers and your own shell, whose command line holds
 the pattern. Start a process that you may need to end with its pid written to `$TMPDIR`, or in a process group of its
