@@ -1721,7 +1721,9 @@ async def audit(red: bool) -> None:
 
   mine = [n for n, pr in prs.items() if not waits(pr)]
   owner = [n for n in prs if n not in mine]
-  stale = [n for n in mine if prs[n]["idle"] >= 60]
+  stale = [
+    n for n in mine if prs[n]["idle"] >= 60 and not any(x == "hold" or x.startswith("hold:") for x in prs[n]["labels"])
+  ]
   measures.append(len(queue) + len(working) + len(mine))
   def depth(pr: dict | None) -> int:
     d = 0
