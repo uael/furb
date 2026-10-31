@@ -203,7 +203,8 @@ meanings. The entry of such a name here gives only its form in the engine.
   on. That fact reloads the extension: each chain that has the extension plays the definitions of the new word, its
   imports, functions, classes, types and names in capitals, and each name of state that it assigns, as
   `name = globals().setdefault("name", value)`, so a new name takes its value, each name that the chain holds keeps its
-  value, and the life word does not run again.
+  value, and the life word does not run again. An extension whose word is blank, as one that holds only a part for
+  the TUI, plays no word: no read of its file and no run in a setup, and no rung on a chain.
 - made: the fact by which the store names in the record the build that made it, the digest of the engine and of the
   Kernel and the version of the build, `VERSION` in `src/world/store.rs`, which the store says as it hears the root of
   a new record at its birth. A life on a record that names another version is refused before any replay, since a
