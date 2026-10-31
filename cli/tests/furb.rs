@@ -331,6 +331,36 @@ fn a_word_run_on_a_record_that_holds_pending_work_names_that_work_and_wakes_none
   assert_eq!(yard.answered(), 0, "the reply that waits is not asked again");
 }
 
+/// What a command did, or nothing when it still ran after this many seconds and was killed.
+fn ran_within(mut command: Command, seconds: u64) -> Option<Output> {
+  let piped = || Stdio::piped();
+  let mut child =
+    command.stdin(Stdio::null()).stdout(piped()).stderr(piped()).spawn().expect("furb starts");
+  let end = Instant::now() + Duration::from_secs(seconds);
+  while child.try_wait().expect("furb is polled").is_none() {
+    if Instant::now() >= end {
+      let _ = child.kill();
+      let _ = child.wait();
+      return None;
+    }
+    thread::sleep(Duration::from_millis(50));
+  }
+  child.wait_with_output().ok()
+}
+
+#[test]
+fn a_word_run_that_awaits_only_work_that_no_wake_runs_ends_with_an_error_that_names_that_work() {
+  let yard = Yard::new("stranded");
+  printed(yard.kept(&["run", "prompt(str, 'WAIT', on=chain('w'))\nclose(1)"]), "");
+  let output = ran_within(yard.kept(&["run", "close(await Act('prompt1'))"]), 20);
+  let output = output.expect("furb ends, as no ear can move the act that its word awaits");
+  assert_eq!(output.status.code(), Some(1), "{}", String::from_utf8_lossy(&output.stderr));
+  assert_eq!(String::from_utf8_lossy(&output.stdout), "");
+  let err = String::from_utf8_lossy(&output.stderr);
+  assert!(err.contains("the word awaits prompt1 on chain2, and no wake runs it"), "{err}");
+  assert_eq!(yard.answered(), 0, "the reply that waits is not asked again");
+}
+
 #[test]
 fn a_record_is_printed_as_facts_each_after_the_number_of_its_line() {
   let yard = Yard::new("facts");

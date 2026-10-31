@@ -345,6 +345,7 @@ fn facts(record: &Path, act: Option<&str>, chain: Option<&str>) -> Result<(), St
 }
 
 /// One word its caller wrote, run as a rung on the root of a life, awaited for what the word gave, as python shows it.
+/// A word that awaits only work that an earlier life left, which no wake runs, ends with an error that names that work.
 fn run(opening: Opening, word: String) -> Result<(), String> {
   let mut life = Life::lived(opening)?;
   let mut pending = Vec::new();
