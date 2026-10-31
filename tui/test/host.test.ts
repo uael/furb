@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { existsSync, readFileSync, rmSync } from "node:fs";
-import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { createConnection, createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -823,6 +823,32 @@ test.skipIf(process.platform === "win32")(
       await opened.engine.rung({ word: "x = 'a' * (60 << 20)", on: opened.engine.root });
       await eventually(() => lines.length > 0, "the host to warn of the memory");
       expect(lines[0]).toMatch(/^The life holds \d+ MiB of the 400 MiB of memory that bounds it\./);
+      await Bun.sleep(400);
+      expect(lines).toHaveLength(1);
+      await opened.host.end();
+    }),
+);
+
+test.skipIf(process.platform === "win32")(
+  "a host tells its windows once that the sessions of the project hold more than the limit",
+  () =>
+    demoLife(async (_, directory) => {
+      const folder = join(directory, ".furb", "sessions");
+      await mkdir(folder, { recursive: true });
+      const own = join(folder, "life.jsonl");
+      const set = { FURB_SESSIONS_WARN: "1", FURB_DISK_WARN: "0", FURB_HOST_WATCH: "100" };
+      Object.assign(process.env, set);
+      const lines: string[] = [];
+      let opened: Awaited<ReturnType<typeof openEngine>>;
+      try {
+        opened = await openEngine({ demo: true, host: true, cwd: directory, record: own }, (link) =>
+          link.host.on("log", (line: string) => lines.push(line)),
+        );
+      } finally {
+        for (const name of Object.keys(set)) delete process.env[name];
+      }
+      await eventually(() => lines.length > 0, "the host to warn of the sessions");
+      expect(lines[0]).toMatch(/^The sessions of this project hold [\d.]+ GB\./);
       await Bun.sleep(400);
       expect(lines).toHaveLength(1);
       await opened.host.end();
