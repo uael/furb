@@ -879,6 +879,40 @@ fn a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_promp
 }
 
 #[test]
+fn the_log_of_a_life_after_a_checkpoint_holds_the_facts_of_the_lives_before_it_and_agrees_with_its_record()
+ {
+  let at = place("checkpoint-log");
+  let record = at.join("record.jsonl");
+  let mut first = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  let before = "before = 'said before'\nclose(before)";
+  closed(&mut first, before);
+  drop(first);
+  let (mut inspected, kept) =
+    Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap();
+  let written = crate::checkpoint::written(&mut inspected, &kept).unwrap();
+  drop(inspected);
+  crate::checkpoint::keep(&record, written).unwrap();
+  for word in ["close('said after')", "close('said last')"] {
+    let mut later = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+    closed(&mut later, word);
+    drop(later);
+    let facts = world::logged(&record).unwrap().expect("the log agrees with its record");
+    let words: Vec<String> = facts
+      .iter()
+      .filter_map(|one| {
+        let items = one.as_ref().items()?;
+        (items.first()?.as_str()? == "rung")
+          .then(|| items.get(4)?.as_str().map(str::to_owned))
+          .flatten()
+      })
+      .collect();
+    for said in [before, word] {
+      assert_eq!(words.iter().filter(|one| *one == said).count(), 1, "{said}");
+    }
+  }
+}
+
+#[test]
 fn a_chain_that_only_a_value_names_goes_on_from_a_checkpoint_with_its_own_module() {
   let at = place("checkpoint-named");
   let mut first = scripted(&at, &[]).boot::<String>([]).unwrap().0;
