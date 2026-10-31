@@ -1,6 +1,6 @@
 """Ready, the word a rung holds."""
 
-from conftest import DOOR, Sand, acts, born, faulted, fresh, plain, prompted, relived, said, settle, written
+from conftest import DOOR, Sand, acts, born, faulted, fresh, plain, prompted, relived, said, settle
 from furb import engine
 
 
@@ -63,7 +63,6 @@ async def test_the_old_words_stay_in_the_program_and_in_the_turns_after_a_rung_r
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
   program = engine.program(root)
   wrote = fresh(root, prompted(act, "None", "bind it"), f"#{step} advance on {act}")
-  shut = engine.unquoted(written(laid, new))
-  assert program == {f"{step}_told": wrote, step: old, f"{laid}_told": shut, laid: new}
+  assert program == {f"{step}_told": wrote, step: old, laid: new}
   assert [turn[1] for turn in engine.turns(on=root) if turn[0] == "assistant"] == [old]
-  assert engine.turns(on=root)[-1][1].endswith(f"#{laid} by operator\n<s:{laid}_word>\n{new}</s:{laid}_word>")
+  assert engine.turns(on=root)[-1][1] == new

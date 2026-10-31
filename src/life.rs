@@ -231,7 +231,16 @@ impl Opening {
     };
     let gallery = self.gallery();
     let project = PathBuf::from(&self.directory);
-    let (provider, search) = self.provider()?;
+    // The standing gives each extension whose word or life word plays, with the file of a word that is not blank.
+    let advertised = extensions
+      .iter()
+      .filter(|one| !(one.word.trim().is_empty() && one.life.is_empty()))
+      .map(|one| {
+        let file = if one.word.trim().is_empty() { String::new() } else { one.file.clone() };
+        (one.name.clone(), file, one.life.clone(), one.root)
+      })
+      .collect();
+    let (provider, search) = self.provider(advertised)?;
     let working = |made: Option<Box<dyn Ear>>| made.unwrap_or_else(silent);
     let config = places.config;
     // An ear that holds nothing that a fresh one lacks starts again after it raises. A fresh ear of the commands
@@ -277,7 +286,10 @@ impl Opening {
   /// The ear of the provider: the models of the roster that the catalog makes, which the function of the host
   /// answers when it gives one, and which a life that inspects asks nothing; and the native search of the web of
   /// each of them, which the ear of the web asks.
-  fn provider(self) -> Result<(Box<dyn Ear>, world::Search), Fault> {
+  fn provider(
+    self,
+    advertised: Vec<world::Advertised>,
+  ) -> Result<(Box<dyn Ear>, world::Search), Fault> {
     let works = self.works();
     let gallery = self.gallery();
     let stall = self.stall.and_then(|seconds| Duration::try_from_secs_f64(seconds).ok());
@@ -309,6 +321,7 @@ impl Opening {
         fresh.provider(directory.clone(), offered.as_deref(), actor, answer.clone())?;
       Ok(candidate.into_settings())
     }));
+    provider = provider.advertises(advertised);
     if let Some(gallery) = gallery {
       provider = provider.images(gallery);
     }

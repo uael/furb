@@ -48,17 +48,18 @@ async function withLife(
 test("idle snapshots add no facts or sandbox calls as the act table grows, and streamed output needs no peek", () =>
   withLife(
     async ({ session, engine, snapshots, calls }) => {
-      // The chain holds itself, the rung of the read of the doctrine that the World plays on it and that read, then
-      // the rung of the stand and the cd that the chain plays on itself.
+      // The chain holds itself, the rung of the debug of the extensions, the rung of the read of the doctrine and that
+      // read, then the rung of the stand and the cd, which the chain crafts on itself.
       expect(snapshots.take(engine.root).acts.map((act) => act.kind)).toEqual([
         "chain",
+        "rung",
         "rung",
         "read",
         "rung",
       ]);
       for (let index = 0; index < 100; index++) engine.wait([], { seconds: 60, on: engine.root });
       await Promise.resolve();
-      expect(snapshots.take(engine.root).acts).toHaveLength(104);
+      expect(snapshots.take(engine.root).acts).toHaveLength(105);
       await Promise.resolve();
       const before = [...calls],
         facts = session.facts.length;

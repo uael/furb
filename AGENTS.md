@@ -125,6 +125,12 @@ engine does not serve its meaning, the name is wrong, and the name changes.
 - started or done is ownership, and the owner of an act answers it. The life refuses an act that no ear owns.
 - A view reads the life, and makes nothing and keeps nothing: get, peek and transcript, and all that is derived
   from them.
+- No hidden control flow and no magic, which is a hard rule of the owner: a model can rebuild the whole flow of what it
+  read from the exact code that ran. Each change of the module of a chain comes from a word that the transcript of that
+  chain shows as a turn, and the transcript is the whole of what ran: no run is made on the side, and no control flow
+  is hidden. furb hosts itself with its own verbs. Only the Kernel and the World stand outside `src/furb/engine.py`,
+  and the seeding of a chain, each turn that furb crafts for it, lives in `engine.py` alone. The test
+  `each_run_of_a_chain_of_the_corpus_has_a_turn_that_shows_its_word` in `src/life.test.rs` holds the first part.
 - The record is the one truth of a life. A cache of a life is derived from its record and checked against it, and a
   reader drops a cache that does not agree: the log of a life holds every fact that the life said, and each later
   life writes it again from the record. A record is made again by running its words, or loaded from the snapshot
@@ -189,7 +195,7 @@ is the folder `test` beside it.
 2. Every test carries a sentence of the contract.
 3. Every definition has a file of its own and at least one sentence. Two definitions never share a file.
 4. The module docstring of each contract is empty.
-5. `engine.py`, minified with its program kept as it is, costs fewer than 7000 tokens of `o200k_base`, the
+5. `engine.py`, minified with its program kept as it is, costs fewer than 7200 tokens of `o200k_base`, the
    tokenizer of OpenAI, and the doctrine of furb, `DOCTRINE.md`, costs at most 1000. The test counts with `o200k_base`
    because it is local and the same on each machine: the tokenizer of Claude is not public, and only the network
    counts with it. The wall is a proxy for the cost to Claude, which reads about 1.5 tokens for each token of

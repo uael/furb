@@ -15,9 +15,9 @@ test("a record whose fact drifts opens to read, with what it kept, and a dialog 
     const first = await openEngine({ cwd: directory, record, demo: true });
     const ran = await first.engine.rung({ word: 'await bash("echo hi")', on: first.engine.root });
     await first.engine.result(ran);
-    // The read of the doctrine and the stand and the cd are the first rungs of the chain, so the rung of the command
-    // comes after them.
-    expect(ran).toBe("rung3");
+    // The debug of the extensions, the read of the doctrine and the stand and the cd are the first rungs of the chain,
+    // so the rung of the command comes after them.
+    expect(ran).toBe("rung4");
     await first.host.dispose();
     // The record keeps the command with a word that this engine does not make, as an earlier engine kept it.
     const kept = await readFile(record, "utf8");

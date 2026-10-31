@@ -1209,8 +1209,9 @@ export const feed = part({
             },
           );
         } else if (line.type === "ear") {
-          // The rungs that an ear wrote, as the words of the extensions, stand as code: a comment that names the ear,
-          // then the calls that end each word, with what its acts came to. A word that only defines shows no line.
+          // The rungs that an ear wrote, as the words of the extensions, or that a chain wrote on itself, as the setup
+          // of the root, stand as code: a comment that names the ear or the setup, then the calls that end each word,
+          // with what its acts came to. A word that only defines shows no line.
           const ear = act;
           const earLines = programFor(
             `ear:${act.id}`,

@@ -495,9 +495,11 @@ impl Model {
 }
 
 /// The provider: the directory the life stands on, the models it offers, the default actor, the most tokens of thought
-/// of a model in one turn, the directory of the images that a turn names, and whom it tells what a model writes.
+/// of a model in one turn, the directory of the images that a turn names, whom it tells what a model writes, and the
+/// extensions that it gives in the standing.
 pub struct Provider {
   directory: String,
+  extensions: Option<Vec<Advertised>>,
   models: Arc<RwLock<Vec<Model>>>,
   actor: Option<String>,
   thinking: Thinking,
@@ -508,6 +510,10 @@ pub struct Provider {
   refresh: Option<Refresh>,
 }
 
+/// An extension as the standing gives it: its name, the file of its word, its life word, and whether it plays on the
+/// root alone.
+pub type Advertised = (String, String, String, bool);
+
 type Refresh =
   Arc<dyn Fn() -> Result<(Vec<Model>, Option<String>, Thinking), String> + Send + Sync>;
 
@@ -517,6 +523,7 @@ impl Provider {
     let directory = directory.into();
     Provider {
       directory,
+      extensions: None,
       models: Arc::new(RwLock::new(models)),
       actor: None,
       thinking: Thinking::default(),
@@ -548,6 +555,12 @@ impl Provider {
   /// none when none is given, and the operator when there is no model.
   pub fn actor(mut self, actor: Option<String>) -> Provider {
     self.actor = actor;
+    self
+  }
+
+  /// The extensions that the standing gives, from which the engine seeds the root of a new record.
+  pub fn advertises(mut self, extensions: Vec<Advertised>) -> Provider {
+    self.extensions = Some(extensions);
     self
   }
 
@@ -615,6 +628,7 @@ impl Provider {
   pub fn ear(self) -> Box<dyn Ear> {
     let Provider {
       directory,
+      extensions,
       models,
       actor,
       mut thinking,
@@ -883,8 +897,12 @@ impl Provider {
                 }
               }
             }
-            let stood =
-              standing(&models.read().unwrap_or_else(PoisonError::into_inner), &directory, &actor);
+            let stood = standing(
+              &models.read().unwrap_or_else(PoisonError::into_inner),
+              &directory,
+              &actor,
+              extensions.as_deref(),
+            );
             say(&mut co, Fact::says("done", &about, [stood]));
             // A stand reads the settings again, as after a change of the command line or of its account, or when the
             // operator asks to retry now, so a reply whose call waits for a retry, which can wait for days at a usage
@@ -1157,8 +1175,15 @@ fn written(id: &str, tells: &mpsc::UnboundedSender<Replied>) -> Told {
 }
 
 /// What the chains stand on: the models and the operator, the directory, the default actor, and the path of the
-/// doctrine that a chain reads, which [`catalog::doctrine`] gives, each path as [`super::files::tilded`] writes it.
-fn standing(models: &[Model], directory: &str, actor: &str) -> Object {
+/// doctrine that a chain reads, which [`catalog::doctrine`] gives, each path as [`super::files::tilded`] writes it, then
+/// the extensions that the engine seeds the root with, each as `[name, file, life word, root alone]`. A standing with
+/// no doctrine, or of a provider that advertises no extensions, gives none, and the engine seeds no root then.
+fn standing(
+  models: &[Model],
+  directory: &str,
+  actor: &str,
+  extensions: Option<&[Advertised]>,
+) -> Object {
   let offered = models.iter().map(|model| {
     let efforts = model.efforts.iter().map(|(effort, _)| Object::string(effort));
     let window = i64::try_from(model.window).unwrap_or(i64::MAX);
@@ -1170,8 +1195,18 @@ fn standing(models: &[Model], directory: &str, actor: &str) -> Object {
   let home = std::env::home_dir();
   let shown = |one: &Path| Object::string(super::files::tilded(one, home.as_deref()));
   let doctrine = catalog::doctrine(Path::new(directory)).map(|one| shown(&one));
+  let given = |all: &[Advertised]| {
+    Object::list(all.iter().map(|(name, file, life, root)| {
+      let texts = [name, file, life].map(Object::string);
+      Object::list(texts.into_iter().chain([Object::bool(*root)]))
+    }))
+  };
+  let advertised = extensions.filter(|_| doctrine.is_some()).map(given);
   Object::list(
-    [roster, shown(Path::new(directory)), Object::string(actor)].into_iter().chain(doctrine),
+    [roster, shown(Path::new(directory)), Object::string(actor)]
+      .into_iter()
+      .chain(doctrine)
+      .chain(advertised),
   )
 }
 

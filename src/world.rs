@@ -38,7 +38,7 @@ pub use log::{log, logged};
 pub use operator::{SHAPES, answered, answers};
 pub(crate) use provider::search::{posted, spawned};
 pub use provider::{
-  BACKOFF, Backoff, Hosted, Model, Provider, Retries, Retry, Search, Told, Writes,
+  Advertised, BACKOFF, Backoff, Hosted, Model, Provider, Retries, Retry, Search, Told, Writes,
   catalog::{self, Catalog},
   claude, codex, images,
   search::Searches,

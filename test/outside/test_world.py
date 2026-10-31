@@ -35,14 +35,17 @@ async def test_the_world_stands_a_life_on_the_provider_of_the_crate_and_its_mode
   assert [one[0] for one in live.calls] == ["stand", "stand", "reply"]
   (request,) = seen
   assert (request["actor"], request["chain"], request["settings"]["effort"]) == ("claude-cli:opus/xhigh", root, "xhigh")
-  assert [message["role"] for message in request["messages"]] == ["user", "assistant", "user", "assistant", "user"]
-  assert request["messages"][1]["content"][0]["text"].startswith("read(") and "DOCTRINE.md" in str(
-    request["messages"][1]
+  roles = [message["role"] for message in request["messages"]]
+  assert roles == ["user", "assistant", "user", "assistant", "user", "assistant", "user"]
+  assert request["messages"][1]["content"][0]["text"] == 'debug(t"{standing()[4]=}")'
+  assert request["messages"][2]["content"][0]["text"].startswith("#rung1 debugged\nrung1_debug = ")
+  assert request["messages"][3]["content"][0]["text"].startswith("read(") and "DOCTRINE.md" in str(
+    request["messages"][3]
   )
   opened = "\n\n#prompt1\nprompt1_message = 'count'\nprompt1: Act[int] = Act('prompt1')\n\n"
-  assert request["messages"][2]["content"][0]["text"].startswith("#read1\n")
-  assert request["messages"][3]["content"][0]["text"].startswith("stand()\ncd(")
-  first, last = request["messages"][4]["content"]
+  assert request["messages"][4]["content"][0]["text"].startswith("#read1\n")
+  assert request["messages"][5]["content"][0]["text"].startswith("stand()\ncd(")
+  first, last = request["messages"][6]["content"]
   assert first["text"].startswith("#stand2\n") and last["text"].startswith(f"#{root}\n")
   assert opened in last["text"]
 

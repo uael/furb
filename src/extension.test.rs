@@ -48,12 +48,12 @@ fn note(word: &str) -> Extension {
   }
 }
 
-/// The extension that a folder loads, with the file of its word in that folder.
-fn filed(one: Extension, root: &Path) -> Extension {
-  Extension {
-    file: crate::world::files::tilded(&root.join("note.py"), std::env::home_dir().as_deref()),
-    ..one
-  }
+/// The extension that a folder loads, with the file of its word: the copy of that word in the home, whatever the
+/// folder.
+fn filed(one: Extension, _root: &Path) -> Extension {
+  let home = std::env::home_dir();
+  let copy = home.as_deref().unwrap().join(".furb").join("extensions").join("note").join("note.py");
+  Extension { file: crate::world::files::tilded(&copy, home.as_deref()), ..one }
 }
 
 #[test]
@@ -347,12 +347,7 @@ fn a_life_enables_at_its_tip_each_extension_it_is_given_and_plays_its_word_then_
   assert_eq!(played(&mut engine, &["chain1"]), [rung("rung1", "chain1", &full)]);
   let turns = engine.turns(verbs::Turns { on: Some("chain1".to_owned()) }).unwrap();
   let told = turns.last().unwrap().as_ref().items().unwrap()[1].as_str().unwrap().to_owned();
-  assert!(
-    told.contains(&format!(
-      "#rung1 by extensions\n<s:rung1_word>\n{full}</s:rung1_word>\n\n#read1\nread1_path = 'note.txt'\n"
-    )),
-    "{told}"
-  );
+  assert!(told.contains(&format!("{full}\n\n#read1\nread1_path = 'note.txt'\n")), "{told}");
 }
 
 #[test]
@@ -489,6 +484,23 @@ fn set_up_in(at: &Path, given: Vec<Extension>, directory: &Path) -> Engine {
   fs::write(at.join("DOCTRINE.md"), "Work.\n").unwrap();
   let doctrine = at.join("DOCTRINE.md").display().to_string();
   let here = directory.to_owned();
+  let given: Vec<Extension> = given
+    .into_iter()
+    .map(|one| {
+      let file = at.join(format!("{}.py", one.name));
+      fs::write(&file, &one.word).unwrap();
+      Extension { file: file.display().to_string(), ..one }
+    })
+    .collect();
+  // The standing gives each extension, as the provider of a life does, so the engine seeds the root from it.
+  let advertised: Vec<(String, String, String, bool)> = given
+    .iter()
+    .filter(|one| !(one.word.trim().is_empty() && one.life.is_empty()))
+    .map(|one| {
+      let file = if one.word.trim().is_empty() { String::new() } else { one.file.clone() };
+      (one.name.clone(), file, one.life.clone(), one.root)
+    })
+    .collect();
   let stand = ear(move |mut co| async move {
     loop {
       let a = hear(&mut co).await;
@@ -500,19 +512,18 @@ fn set_up_in(at: &Path, given: Vec<Extension>, directory: &Path) -> Engine {
           place,
           Object::string("operator"),
           Object::string(&doctrine),
+          Object::list(advertised.iter().map(|(name, file, life, root)| {
+            let texts = [name, file, life].map(Object::string);
+            Object::list(texts.into_iter().chain([Object::bool(*root)]))
+          })),
         ]);
         say(&mut co, Fact::says("done", a.about(), [standing]));
       }
     }
   });
-  let given = given.into_iter().map(|one| {
-    let file = at.join(format!("{}.py", one.name));
-    fs::write(&file, &one.word).unwrap();
-    Extension { file: file.display().to_string(), ..one }
-  });
   let (record, store) = world::store(at.join("record.jsonl")).unwrap();
   let ears = [
-    ("extensions", extensions(given.collect())),
+    ("extensions", extensions(given)),
     ("stand", stand),
     ("files", world::files(world::Scratch::own(), None)),
     ("store", store),
@@ -537,14 +548,16 @@ fn the_setup_of_the_root_ends_with_the_extensions_of_the_root_alone_and_a_chain_
   };
   let root = texts(&mut engine, "chain1");
   let life = root.iter().position(|one| one == "y = 2").unwrap();
-  let hidden = |path: &str| format!("read({}, HIDDEN)", Object::string(path).py_repr());
+  let hidden =
+    |path: &str| format!("rung(read({}, HIDDEN).content)", Object::string(path).py_repr());
   let shared = at.join("shared.py").display().to_string();
+  let (shared, rooted) = (hidden(&shared), hidden(&rooted));
   assert_eq!(
     root[life - 2..life],
-    [hidden(&shared), "x = 1".to_owned()],
-    "the read of the file of an extension, then its code alone: {root:?}"
+    [shared, "x = 1".to_owned()],
+    "a file, then its code alone: {root:?}"
   );
-  assert_eq!(root[life + 2..life + 4], [hidden(&rooted), "z = 3".to_owned()], "{root:?}");
+  assert_eq!(root[life + 2..life + 4], [rooted.clone(), "z = 3".to_owned()], "{root:?}");
   let stood = format!("stand()\ncd({})", Object::string(at.display().to_string()).py_repr());
   assert_eq!(root[life + 4], stood, "the root tells its standing after every extension: {root:?}");
   let last = &root[life + 5];
@@ -563,7 +576,7 @@ fn the_setup_of_the_root_ends_with_the_extensions_of_the_root_alone_and_a_chain_
     "the ear tells a chain with no source its standing at its birth: {two:?}"
   );
   assert!(two[life + 3].starts_with("#stand3\nstand3_roster = "), "{two:?}");
-  assert!(two.iter().all(|one| !one.contains(&hidden(&rooted)) && one != "z = 3"), "{two:?}");
+  assert!(two.iter().all(|one| !one.contains(&rooted) && one != "z = 3"), "{two:?}");
   assert!(two.last().unwrap().contains("#chain2\nchain2_label = 'two'"), "{two:?}");
 }
 
@@ -580,11 +593,11 @@ fn the_setup_plays_no_read_and_no_run_for_an_extension_whose_word_is_blank() {
   for one in engine.transcript(on).unwrap() {
     match one.kind() {
       "run" if one.by() == "extensions" => runs.push(text(&one, 2).unwrap_or_default()),
-      "rung" if one.by() == "extensions" => reads.push(text(&one, 1).unwrap_or_default()),
+      "rung" if one.by() == "chain1" => reads.push(text(&one, 1).unwrap_or_default()),
       _ => {}
     }
   }
-  assert_eq!(runs, ["x = 1"], "an extension whose word is blank plays no run: {runs:?}");
+  assert!(runs.is_empty(), "the setup makes no run of its own: {runs:?}");
   assert!(reads.iter().any(|one| one.contains("kept.py")), "{reads:?}");
   assert!(reads.iter().all(|one| !one.contains("blank.py")), "nor a read of its file: {reads:?}");
 }

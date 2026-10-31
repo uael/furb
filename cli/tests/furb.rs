@@ -213,7 +213,7 @@ fn a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it() {
   turns.arg(yard.record()).arg("--cwd").arg(&elsewhere);
   let said = printed(turns, "");
   assert!(
-    said.contains("#rung4 debugged\nrung4_debug = 'k=3'"),
+    said.contains("#rung5 debugged\nrung5_debug = 'k=3'"),
     "the turns of a record run every word again: {said}"
   );
   assert!(!said.contains("remember()"), "an inspection enables no extension: {said}");
@@ -380,8 +380,8 @@ fn a_record_is_printed_as_facts_each_after_the_number_of_its_line() {
   let expected: Vec<String> = (1..=lines).map(|n| n.to_string()).collect();
   assert_eq!(numbers, expected, "one fact for each line of the record: {all}");
   assert!(all.starts_with("1: ['chain', 'chain1', 'operator', '', 'root', '']\n"), "{all}");
-  let rung = facts(&["--act", "rung3"]);
-  assert!(rung.ends_with(": ['rung', 'rung3', 'operator', 'chain1', 'k = 3', '', '']\n"), "{rung}");
+  let rung = facts(&["--act", "rung4"]);
+  assert!(rung.ends_with(": ['rung', 'rung4', 'operator', 'chain1', 'k = 3', '', '']\n"), "{rung}");
   assert_eq!(rung.lines().count(), 1, "the facts about one act: {rung}");
   assert!(all.contains(&rung), "a fact keeps the number of its line: {all}");
   assert_eq!(facts(&["--chain", "chain1"]), all, "every fact of this record is on the root");
@@ -538,9 +538,12 @@ fn a_prompt_the_record_already_holds_is_taken_up_and_never_asked_again() {
   turns.arg(yard.record());
   let said = printed(turns, "");
   assert!(
-    said.starts_with("[user] chain()\n[assistant] read('"),
-    "the setup of the root comes first: {said}"
+    said.starts_with(
+      "[user] chain()\n[assistant] debug(t\"{standing()[4]=}\")\n[user] #rung1 debugged\n"
+    ),
+    "the setup of the root comes first, with the turn of its extensions: {said}"
   );
+  assert!(said.contains("\n[assistant] read('"), "then the read of the doctrine: {said}");
   assert!(said.contains("\n\n#chain1\nchain1_label = 'root'\n"), "then the root itself: {said}");
   let paragraphs = "\n\n#prompt1\nprompt1_message = 'say a number'\nprompt1: Act[int] = Act('prompt1')\n\n#prompt1 closed by console\nprompt1_value = 7";
   assert!(said.contains(paragraphs), "the turns of a root as a model read them: {said}");
@@ -696,24 +699,25 @@ fn a_prompt_of_the_client_is_answered_by_a_model_and_its_done_is_sent() {
     turns.iter().filter(|one| one[0] == "assistant").map(|one| one[1].clone()).collect();
   assert_eq!(
     said.len(),
-    11,
-    "the doctrine, the extensions, their life words, the standing, then the model: {said:?}"
+    12,
+    "the extensions, the doctrine, the files of the extensions, their life words, the standing, then the model: {said:?}"
   );
+  assert_eq!(said[0], json!("debug(t\"{standing()[4]=}\")"));
   assert!(
-    said[0].as_str().is_some_and(|one| one.starts_with("read(") && one.ends_with("DOCTRINE.md')"))
+    said[1].as_str().is_some_and(|one| one.starts_with("read(") && one.ends_with("DOCTRINE.md')"))
   );
   for (one, name) in
-    said[1..8].iter().zip(["catchup", "memory", "skills", "compaction", "ouroboros", "web", "mcp"])
+    said[2..9].iter().zip(["catchup", "memory", "skills", "compaction", "ouroboros", "web", "mcp"])
   {
-    let file = format!("extensions/{name}/{name}.py', HIDDEN)");
+    let file = format!("extensions/{name}/{name}.py', HIDDEN).content)");
     assert!(
-      one.as_str().is_some_and(|one| one.starts_with("read(") && one.ends_with(&file)),
+      one.as_str().is_some_and(|one| one.starts_with("rung(read(") && one.ends_with(&file)),
       "{one}"
     );
   }
-  assert_eq!(said[8], json!("catchup()\nawait recall()\nawait listed()\nawait mcp_index()"));
-  assert!(said[9].as_str().is_some_and(|one| one.starts_with("stand()\ncd('")), "{:?}", said[9]);
-  assert_eq!(said[10], json!(COUNT));
+  assert_eq!(said[9], json!("catchup()\nawait recall()\nawait listed()\nawait mcp_index()"));
+  assert!(said[10].as_str().is_some_and(|one| one.starts_with("stand()\ncd('")), "{:?}", said[10]);
+  assert_eq!(said[11], json!(COUNT));
   let facts = client.data("4", json!({"type": "transcript", "on": "chain1"}));
   assert!(facts["facts"].as_array().expect("the facts").contains(&fact["fact"]), "{facts}");
   assert!(client.ended());
@@ -861,10 +865,10 @@ fn a_word_of_the_client_runs_as_a_rung_and_a_pause_holds_a_chain_until_its_wake(
   let mut client = Client::new(&yard);
   assert_eq!(
     client.data("1", json!({"type": "rung", "word": "k = 1\nclose(k + 1)"})),
-    json!({"act": "rung11"}),
-    "the turn of the doctrine, the seven rungs of the extensions, the turn of skills and the turn of the standing come first"
+    json!({"act": "rung19"}),
+    "the turn of the extensions, the turn of the doctrine, the seven rungs of the extensions and the rung that each made, the turn of the life words and the turn of the standing come first"
   );
-  assert_eq!(client.done("rung11")["value"], 2);
+  assert_eq!(client.done("rung19")["value"], 2);
   client.data("2", json!({"type": "pause", "act": "chain1"}));
   let state = client.data("3", json!({"type": "state"}));
   assert_eq!(
@@ -976,9 +980,9 @@ fn the_state_names_the_work_that_an_earlier_life_left_pending() {
   assert!(client.ended());
   let mut later = Client::new(&yard);
   let state = later.data("1", json!({"type": "state"}));
-  // The turn of the doctrine, the rungs of the official extensions, the turn of skills and the turn of the standing
-  // come first, and the rung of the client made the wait.
-  assert_eq!(state["pending"], json!([["rung11", "rung"], ["wait1", "wait"]]));
+  // The turn of the extensions, the turn of the doctrine, the rungs of the official extensions, the turn of their life
+  // words and the turn of the standing come first, and the rung of the client made the wait.
+  assert_eq!(state["pending"], json!([["rung19", "rung"], ["wait1", "wait"]]));
   later.data("2", json!({"type": "cancel", "act": "wait1"}));
   let state = later.data("3", json!({"type": "state"}));
   assert_eq!(state["pending"], json!([]), "an act that is done is pending no more");
@@ -988,10 +992,10 @@ fn the_state_names_the_work_that_an_earlier_life_left_pending() {
 #[test]
 fn the_state_names_the_work_that_a_crash_loop_parked_and_a_retry_runs_it_again() {
   let yard = Yard::new("rpc-parked");
-  // The setup of the root takes the first ten replies: the doctrine, the file of each official extension, their
-  // life words and the standing.
+  // The setup of the root takes the first eleven replies: the extensions, the doctrine, the file of each official
+  // extension, their life words and the standing.
   let started = |one: &Value| {
-    one["type"] == "fact" && one["fact"][0] == "started" && one["fact"][1] == "reply11"
+    one["type"] == "fact" && one["fact"][0] == "started" && one["fact"][1] == "reply12"
   };
   let mut client = Client::new(&yard);
   // The fake claude gives no answer to a turn that holds WAIT, so the reply runs until the life ends.
@@ -1010,9 +1014,9 @@ fn the_state_names_the_work_that_a_crash_loop_parked_and_a_retry_runs_it_again()
   }
   let mut parked = Client::new(&yard);
   let state = parked.data("1", json!({"type": "state"}));
-  assert_eq!((&state["pending"], &state["parked"]), (&json!([]), &json!([["reply11", "reply"]])));
+  assert_eq!((&state["pending"], &state["parked"]), (&json!([]), &json!([["reply12", "reply"]])));
   parked.data("2", json!({"type": "wake", "act": "chain1"}));
-  parked.data("3", json!({"type": "retry", "act": "reply11"}));
+  parked.data("3", json!({"type": "retry", "act": "reply12"}));
   parked.until(started);
   let state = parked.data("4", json!({"type": "state"}));
   assert_eq!(state["parked"], json!([]), "a retry runs the act again");

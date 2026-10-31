@@ -20,12 +20,13 @@ async def test_the_doctrine_of_a_chain_told(tmp_path: Path) -> None:
 
 
 async def test_the_extension_has_no_life_word(tmp_path: Path) -> None:
-  """The extension has no life word, since the setup of the root reads the file of the extension, and the turn after that read holds the code of the extension alone, which holds LORE, so each chain with no source reads the doctrine once, in its setup, and the chain tells no act of it."""
+  """The extension has no life word, since the setup of the root reads the file of the extension, which holds LORE, so each chain with no source reads the doctrine once, in its setup, and the chain tells no act of it."""
   _, root = extended("ouroboros", tmp_path, lives=True, doctrine="Read first.\n")
   two = await chained("two")
   for on in (root, two):
     turns = engine.turns(on=on)
-    (at,) = [n for n, one in enumerate(turns) if one[0] == "assistant" and one[1].endswith("ouroboros.py', HIDDEN)")]
-    assert turns[at + 1][0] == "user"
-    assert turns[at + 1][1].startswith("import json\n") and LORE in turns[at + 1][1]
+    (at,) = [
+      n for n, one in enumerate(turns) if one[0] == "assistant" and one[1].endswith("ouroboros.py', HIDDEN).content)")
+    ]
+    assert LORE in turns[at + 1][1]
     assert of(turns, "ouroboros") == []
