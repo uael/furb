@@ -738,7 +738,8 @@ test("the parts load again when the config of the project changes, though no par
     await parts.load();
     expect(parts.loaded.map((one) => one.name)).not.toContain("todo");
     writeFileSync(config, was);
-    for (let tries = 0; tries < 200 && !parts.loaded.some((one) => one.name === "todo"); tries++) await Bun.sleep(25);
+    for (let tries = 0; tries < 200 && !parts.loaded.some((one) => one.name === "todo"); tries++)
+      await Bun.sleep(25);
     expect(parts.loaded.map((one) => one.name)).toContain("todo");
   } finally {
     parts.dispose();
