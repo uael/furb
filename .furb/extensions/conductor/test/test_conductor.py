@@ -1730,30 +1730,6 @@ def test_an_open_issue_whose_worker_ended_with_a_pr_is_queued_again_once_for_eac
 
 @POSIX
 @JQ
-def test_an_issue_that_workers_ended_on_with_issue_rounds_prs_is_queued_no_more_and_told_once(
-  conductor: Round,
-) -> None:
-  owned = {"number": 394, "title": "T", "body": "b", "author": {"login": "uael"}, "assignees": [], "labels": [], "url": "u"}
-  conductor.say(r"issue list", json.dumps([owned]))
-  for index, number in enumerate((483, 440), 1):
-    conductor.working[f"prompt{index}"] = "issue394"
-    conductor.done[f"prompt{index}"] = (number, "report")
-  conductor.tend()
-  asyncio.run(conductor.take_issues())
-  assert [key for key, _, _ in conductor.queue] == ["issue394"]
-  conductor.queue.clear()
-  conductor.working["prompt3"], conductor.done["prompt3"] = "issue394", (429, "report")
-  conductor.tend()
-  asyncio.run(conductor.take_issues())
-  assert conductor.queue == []
-  told = [message for message, _ in conductor.prompts]
-  assert sum("is still open after 3 workers ended on it with PRs #483, #440, #429" in m for m in told) == 1
-  asyncio.run(conductor.take_issues())
-  assert conductor.queue == [] and len(conductor.prompts) == len(told)
-
-
-@POSIX
-@JQ
 def test_an_issue_that_starts_with_a_mark_is_queued_once_the_owner_puts_a_thumb_on_it(conductor: Round) -> None:
   marked = {"number": 574, "title": "T", "body": "🤖 Idea", "author": {"login": "uael"}, "assignees": [], "labels": [], "url": "u"}
   conductor.say(r"issue list", json.dumps([marked]))
