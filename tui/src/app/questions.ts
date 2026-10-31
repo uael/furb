@@ -29,9 +29,11 @@ export const questions = part({
     const typing = !ask || this.choice.other;
     const changed = this.composer.visible !== typing;
     if (changed) this.composer.visible = typing;
-    // A record open to read has no input. Other inputs, such as a row being renamed, keep their focus.
-    if (this.session.host.reading) this.composer.blur();
-    else if (changed) {
+    // A record open to read takes only a command, as the row Add a workspace puts there. Other inputs, such as a row
+    // being renamed, keep their focus.
+    if (this.session.host.reading) {
+      if (!this.composer.plainText.startsWith("/")) this.composer.blur();
+    } else if (changed) {
       if (typing && !this.overlay) this.composer.focus();
       else this.composer.blur();
     }
