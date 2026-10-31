@@ -7,12 +7,15 @@
 // that passes shows its line, a run that fails shows all that it wrote, and one failed run fails them all. The
 // last line counts the tests that passed and failed, and a filter that matches no file fails. FURB_TEST_OUTPUT=1
 // shows all that each run wrote, so a console.log in a test shows too. Each
-// program that a test runs compiles first, all at once, so that no compile takes the machine from a test.
+// program that a test runs compiles first, all at once, so that no compile takes the machine from a test. A build
+// behind its sources, as after a switch of branch, shows a warning before the run and again after a failure, since
+// tests that read that build then fail as they fail on main. CI=true skips that check.
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { availableParallelism, tmpdir } from "node:os";
 import { join } from "node:path";
 import { Glob } from "bun";
 import { environment } from "./environment.ts";
+import { stale, warning } from "./stale.ts";
 
 const given = process.argv.slice(2);
 const flags = given.filter((one) => one.startsWith("-"));
@@ -34,6 +37,8 @@ if (files.length === 0) {
   console.log(`0 pass, 0 fail: no test file matches ${filters.join(" ")}`);
   process.exit(1);
 }
+const behind = process.env.CI === "true" ? [] : stale(join(import.meta.dir, "../.."));
+if (behind.length > 0) console.log(warning(behind));
 const cores = availableParallelism();
 const everything = process.env.FURB_TEST_OUTPUT === "1";
 let passes = 0;
@@ -132,5 +137,6 @@ await deal(runs, 2 * cores, async ({ file, names }) => {
   }
 });
 if (failed.length > 0) console.log(`\n${failed.length} of ${runs.length} runs failed: ${failed.join(", ")}`);
+if (failed.length > 0 && behind.length > 0) console.log(`\n${warning(behind)}`);
 console.log(`${passes} pass, ${fails} fail`);
 process.exit(failed.length > 0 ? 1 : 0);

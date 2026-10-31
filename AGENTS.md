@@ -323,7 +323,9 @@ fix what your change broke, and report what was broken before.
   their path or by `package/file`, as `tui/host`, and a filter that matches no file fails. Use it, and not a plain
   `bun test <file>`, which keeps `claude` on the PATH and fails where a test names a model, and says so; a bunfig.toml
   in the root and in each package gives a plain run the limit of thirty seconds and the folders of the runner.
-  `FURB_TEST_OUTPUT=1` shows all that each run wrote. The tests read the configs and the cache of `.furb/tests` of the
+  `FURB_TEST_OUTPUT=1` shows all that each run wrote. The tests read the built package, so a build older than its
+  sources, as after a switch of branch, fails them as they fail on main: the runner warns before the run and after a
+  failure, and `bun run build` makes the build again. The tests read the configs and the cache of `.furb/tests` of the
   root, from any folder, not those of the machine. As root, the test of a folder that cannot be read fails, since
   root reads every folder.
   A script of bun in `$TMPDIR` cannot import the package `furb`, so write a quick check in the worktree, where
