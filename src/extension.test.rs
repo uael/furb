@@ -44,15 +44,6 @@ fn note(word: &str) -> Extension {
     word: word.to_owned(),
     life: "note()".to_owned(),
     root: false,
-    file: String::new(),
-  }
-}
-
-/// The extension that a folder loads, with the file of its word in that folder.
-fn filed(one: Extension, root: &Path) -> Extension {
-  Extension {
-    file: crate::world::files::tilded(&root.join("note.py"), std::env::home_dir().as_deref()),
-    ..one
   }
 }
 
@@ -73,7 +64,7 @@ fn the_word_of_a_file_is_the_file_less_its_imports_of_furb_and_its_runs_of_empty
 fn a_folder_loads_under_the_name_its_manifest_gives_with_the_word_of_its_file() {
   let at = place("load");
   folder(&at.join("good"), r#"{"name": "note", "word": "note.py", "life": "note()"}"#, "x = 1\n");
-  assert_eq!(load("note", &at.join("good")).unwrap(), filed(note("x = 1"), &at.join("good")));
+  assert_eq!(load("note", &at.join("good")).unwrap(), note("x = 1"));
   folder(&at.join("bare"), r#"{"name": "note", "word": "note.py"}"#, "x = 1\n");
   assert_eq!(load("note", &at.join("bare")).unwrap().life, "");
   let refused = |root: &str, name: &str| load(name, &at.join(root)).unwrap_err().message();
@@ -168,7 +159,7 @@ fn a_manifest_names_the_part_of_an_extension_for_a_tui_as_text() {
   folder(&at.join("good"), r#"{"name": "note", "word": "note.py", "tui": "tui.ts"}"#, "x = 1\n");
   assert_eq!(
     load("note", &at.join("good")).unwrap(),
-    filed(Extension { life: String::new(), ..note("x = 1") }, &at.join("good"))
+    Extension { life: String::new(), ..note("x = 1") }
   );
   folder(&at.join("bad"), r#"{"name": "note", "word": "note.py", "tui": 1}"#, "x = 1\n");
   let manifest = at.join("bad").join("furb.json").display().to_string();
@@ -377,7 +368,6 @@ fn a_chain_takes_each_extension_at_its_birth_and_a_later_life_plays_the_same_run
     word: "o = 1".to_owned(),
     life: String::new(),
     root: false,
-    file: String::new(),
   };
   let mut engine = lived(&at, vec![note(NOTE), other]);
   let expected = [
@@ -416,12 +406,9 @@ fn a_manifest_says_whether_its_extension_plays_on_every_chain_or_on_the_root_alo
     format!(r#"{{"name": "note", "word": "note.py", "life": "note()", "plays": {plays}}}"#)
   };
   folder(&at.join("every"), &manifest(r#""every""#), "x = 1\n");
-  assert_eq!(load("note", &at.join("every")).unwrap(), filed(note("x = 1"), &at.join("every")));
+  assert_eq!(load("note", &at.join("every")).unwrap(), note("x = 1"));
   folder(&at.join("root"), &manifest(r#""root""#), "x = 1\n");
-  assert_eq!(
-    load("note", &at.join("root")).unwrap(),
-    filed(Extension { root: true, ..note("x = 1") }, &at.join("root"))
-  );
+  assert_eq!(load("note", &at.join("root")).unwrap(), Extension { root: true, ..note("x = 1") });
   let refused = |root: &str| load("note", &at.join(root)).unwrap_err().message();
   let file = |root: &str| at.join(root).join("furb.json").display().to_string();
   folder(&at.join("some"), &manifest(r#""some""#), "x = 1\n");
@@ -505,14 +492,9 @@ fn set_up_in(at: &Path, given: Vec<Extension>, directory: &Path) -> Engine {
       }
     }
   });
-  let given = given.into_iter().map(|one| {
-    let file = at.join(format!("{}.py", one.name));
-    fs::write(&file, &one.word).unwrap();
-    Extension { file: file.display().to_string(), ..one }
-  });
   let (record, store) = world::store(at.join("record.jsonl")).unwrap();
   let ears = [
-    ("extensions", extensions(given.collect())),
+    ("extensions", extensions(given)),
     ("stand", stand),
     ("files", world::files(world::Scratch::own(), None)),
     ("store", store),
@@ -530,16 +512,14 @@ fn the_setup_of_the_root_ends_with_the_extensions_of_the_root_alone_and_a_chain_
   let rooted =
     Extension { name: "rooted".to_owned(), life: String::new(), root: true, ..note("z = 3") };
   let mut engine = set_up(&at, vec![shared, rooted]);
-  let rooted = at.join("rooted.py").display().to_string();
   let texts = |engine: &mut Engine, chain: &str| -> Vec<String> {
     let turns = engine.turns(verbs::Turns { on: Some(chain.to_owned()) }).unwrap();
     turns.iter().map(|one| one.as_ref().items().unwrap()[1].as_str().unwrap().to_owned()).collect()
   };
   let root = texts(&mut engine, "chain1");
-  let life = root.iter().position(|one| one == "y = 2").unwrap();
-  let read = format!("read({})", Object::string(&rooted).py_repr());
-  assert_eq!(root[life + 2], read, "{root:?}");
-  assert!(root[life + 3].starts_with("#read3\n"), "{root:?}");
+  let life = root.iter().position(|one| one == "x = 1\n\ny = 2").unwrap();
+  let rooted = "z = 3";
+  assert_eq!(root[life + 2], rooted, "{root:?}");
   let stood = format!("stand()\ncd({})", Object::string(at.display().to_string()).py_repr());
   assert_eq!(root[life + 4], stood, "the root tells its standing after every extension: {root:?}");
   let last = &root[life + 5];
@@ -558,12 +538,12 @@ fn the_setup_of_the_root_ends_with_the_extensions_of_the_root_alone_and_a_chain_
     "the ear tells a chain with no source its standing at its birth: {two:?}"
   );
   assert!(two[life + 3].starts_with("#stand3\nstand3_roster = "), "{two:?}");
-  assert!(two.iter().all(|one| !one.contains(&read)), "{two:?}");
+  assert!(two.iter().all(|one| one != rooted), "{two:?}");
   assert!(two.last().unwrap().contains("#chain2\nchain2_label = 'two'"), "{two:?}");
 }
 
 #[test]
-fn the_setup_plays_no_read_and_no_run_for_an_extension_whose_word_is_blank() {
+fn the_setup_plays_no_word_and_no_run_for_an_extension_whose_word_is_blank() {
   let at = place("blank");
   let kept = Extension { name: "kept".to_owned(), life: String::new(), ..note("x = 1") };
   let blank = Extension { name: "blank".to_owned(), life: String::new(), ..note("\n") };
@@ -571,17 +551,20 @@ fn the_setup_plays_no_read_and_no_run_for_an_extension_whose_word_is_blank() {
   let on = verbs::Transcript { on: Some("chain1".to_owned()), of: None };
   let text = |one: &Fact, at: usize| one.word(at).and_then(|one| one.as_str().map(str::to_owned));
   let mut runs = Vec::new();
-  let mut reads = Vec::new();
+  let mut words = Vec::new();
   for one in engine.transcript(on).unwrap() {
     match one.kind() {
       "run" if one.by() == "extensions" => runs.push(text(&one, 2).unwrap_or_default()),
-      "rung" if one.by() == "extensions" => reads.push(text(&one, 1).unwrap_or_default()),
+      "rung" if one.by() == "extensions" => words.push(text(&one, 1).unwrap_or_default()),
       _ => {}
     }
   }
-  assert_eq!(runs, ["x = 1"], "an extension whose word is blank plays no run: {runs:?}");
-  assert!(reads.iter().any(|one| one.contains("kept.py")), "{reads:?}");
-  assert!(reads.iter().all(|one| !one.contains("blank.py")), "nor a read of its file: {reads:?}");
+  assert!(runs.is_empty(), "the ear plays no run: {runs:?}");
+  assert_eq!(
+    words[1..],
+    ["x = 1"],
+    "an extension whose word is blank stands in no turn: {words:?}"
+  );
 }
 
 #[test]
