@@ -3352,3 +3352,16 @@ def test_a_handover_takes_the_model_of_its_maker_before_the_fixer_and_waits_on_s
   assert conductor.mender(pr) == OPUS
   conductor.busy("p5", "e", OPUS)
   assert conductor.mender(pr) == SONNET
+
+
+def test_the_triage_folds_no_audit_and_writes_the_covering_key_in_each_after(conductor: Round) -> None:
+  words = "\n".join(f"The owner wants the line {i} of the feed to keep its color when it scrolls." for i in range(6))
+  conductor.kinds.update({"audit-a": "audit", "audit-b": "audit"})
+  conductor.queue[:] = [("audit-a", f"The open PR #1.\n{words}", "tui"), ("audit-b", f"The open PR #1.\n{words}", "tui")]
+  conductor.triage()
+  assert [key for key, _, _ in conductor.queue] == ["audit-a", "audit-b"]
+  conductor.queue[:] = [("e1", f"The open PR #2.\n{words}", "tui"), ("e2", f"The open PR #2.\n{words}", "tui")]
+  conductor.after.update({"later": ["e2", "x"], "other": ["e1", "e2"]})
+  conductor.triage()
+  assert [key for key, _, _ in conductor.queue] == ["e1"]
+  assert conductor.after["later"] == ["e1", "x"] and conductor.after["other"] == ["e1"]
