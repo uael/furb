@@ -148,6 +148,8 @@ window of a new build takes the life over with its record whole.
   host again and reads the acts of the life again from the start. A window hears that a window ended the life only
   when a window did. A host that ends because its worker raised writes the fault in `<key>.failed`. A window starts no
   host for that fault: it shows the fault, and `/reopen` tries once more.
+- A host looks at the free space of the disk of the record every 30 seconds. Under 2 GiB it shows a notice in each
+  window, since a full disk stops the record, the log and the snapshot. `FURB_DISK_WARN` sets that limit in bytes.
 - A host says of itself in `<key>.json` as soon as it starts, and it listens at its socket before it opens the life. A
   window that finds a host that still opens the life, as on a long record, attaches to it and waits for the open on
   that socket, and starts no second one. A signal, or `/end` from a window, cuts the open: the host ends, removes its
