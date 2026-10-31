@@ -880,7 +880,7 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 
 STATE = (
   "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed assigned silent"
-  " comments measures timers noted debriefs briefed owns watched after parked awaited covering kinds pool slots areas round_faults vetoes rulings judged tips shifted parents redmain onmain hired paced landed heard handled ends requeued"
+  " comments measures timers noted debriefs briefed owns watched after parked awaited covering kinds pool slots areas round_faults vetoes rulings judged tips shifted parents redmain onmain hired paced landed heard bindings handled ends requeued"
   " statused secret updated budgeted flaky runs_read deferred"
 ).split()
 
@@ -2773,6 +2773,28 @@ async def test_a_run_that_the_round_defers_makes_no_red_and_heal_does_not_run_it
 
 @POSIX
 @JQ
+async def test_a_hold_that_comes_off_runs_again_once_the_gates_that_were_cancelled_under_it(conductor: Round) -> None:
+  conductor.prs[8] = conductor.pr(n=8, head="w/b", sha="s8", labels=["hold"])
+  runs = [{"databaseId": 1, "headBranch": "w/b", "headSha": "s8", "event": "pull_request"}]
+  conductor.say(r"run list --workflow gates.yml --status queued", json.dumps(runs))
+  await conductor.throttle()
+  assert "run cancel 1" in conductor.log().splitlines()
+  held = conductor.pr(n=8, head="w/b", sha="s8", labels=["hold"], checks=("CANCELLED",), names=["the hooks"])
+  assert held["verdict"] == "pending"
+  assert await conductor.heal(held, False) == ""
+  conductor.prs[8]["labels"] = []
+  conductor.says.clear()
+  conductor.say(r"run list --workflow gates.yml --status queued", "[]")
+  await conductor.throttle()
+  await conductor.throttle()
+  free = conductor.pr(n=8, head="w/b", sha="s8", checks=("CANCELLED",), names=["the hooks"])
+  assert await conductor.heal(free, False) == ""
+  said = conductor.log().splitlines()
+  assert [x for x in said if "rerun" in x] == ["run rerun 1"] and not [x for x in said if "headRefOid" in x]
+
+
+@POSIX
+@JQ
 async def test_a_failure_waits_for_the_end_of_its_run_before_a_rerun_an_update_or_a_fixer(conductor: Round) -> None:
   conductor.say(r"compare/main\.\.\.abc", '{"behind_by": 3}')
   running = conductor.RUNNING[0]
@@ -2932,20 +2954,21 @@ def test_a_reload_runs_each_definition_that_the_module_lacks_or_that_changed_and
 ) -> None:
   # A short definition that a brief quoted earlier is no live definition, and a name that the module lacks is run.
   del conductor.ns["TROUBLE"], conductor.ns["parents"]
-  exec(LIVE_WORD.replace("BRIEF", "BRIEF_"), conductor.ns)  # noqa: S102
-  loaded(conductor, ("run1", LIVE_WORD, None))
+  conductor.files["ext.py"] = LIVE_WORD
+  conductor.reload("ext.py")
+  run_load(conductor, conductor.rungs[-1][0])
   conductor.files["ext.py"] = NEW_FILE
-  assert conductor.reload("ext.py") == ("rung1", ["TROUBLE", "parents", "table"])
+  assert conductor.reload("ext.py") == ("rung2", ["TROUBLE", "parents", "table"])
   word, where = conductor.rungs[-1]
   assert where == "chain1" and word == "\n\n".join(
     [
       '# The pair of states that a round tends.\nTROUBLE = ("red", "conflicting")',
       'parents: dict = globals().setdefault("parents", {})',
       'def table(pr: dict) -> str:\n  return "new"',
+      "seal('ext.py')",
     ]
   )
-  exec(word, conductor.ns)  # noqa: S102
-  loaded(conductor, ("run1", LIVE_WORD, None), ("run2", word, None))
+  run_load(conductor, word)
   assert conductor.reload("ext.py") == ("", [])
   assert conductor.TROUBLE == ("red", "conflicting")
 
@@ -2954,7 +2977,6 @@ def test_reload_starts_its_load_through_quietly_so_that_no_end_of_the_caller_can
   made: list[object] = []
   inner = conductor.ns["quietly"]
   conductor.ns["quietly"] = lambda verb, *args, **words: (made.append(verb), inner(verb, *args, **words))[1]
-  loaded(conductor)
   conductor.files["ext.py"] = NEW_FILE
   conductor.ns["tended"] = None
   got, names = conductor.reload("ext.py")
@@ -2962,24 +2984,59 @@ def test_reload_starts_its_load_through_quietly_so_that_no_end_of_the_caller_can
   assert [on for _, on in conductor.rungs] == ["chain1"] and 'return "new"' in conductor.rungs[0][0]
 
 
-def test_a_load_that_was_cancelled_or_failed_or_still_runs_counts_for_nothing_and_loads_again(conductor: Round) -> None:
+def test_a_load_whose_end_did_not_run_counts_for_nothing_and_loads_again(conductor: Round) -> None:
+  # The definitions ran and seal did not, as in a load that was cancelled or failed between two definitions.
   exec(NEW_FILE, conductor.ns)  # noqa: S102
   conductor.files["ext.py"] = NEW_FILE
   names = ["TROUBLE", "parents", "tended", "table"]
-  loaded(conductor, ("run1", NEW_FILE, None))
-  assert conductor.reload("ext.py") == ("", [])
-  for end in (conductor.CancelledError(), ValueError("boom"), "open"):
-    loaded(conductor, ("run1", NEW_FILE, end))
-    assert conductor.reload("ext.py")[1] == names
-  loaded(conductor, ("run1", NEW_FILE, None), after=(("module", "module1", "rung0", {}),))
   assert conductor.reload("ext.py")[1] == names
-  loaded(conductor, ("run1", NEW_FILE, conductor.CancelledError()), ("run2", NEW_FILE, None))
+  run_load(conductor, conductor.rungs[-1][0])
   assert conductor.reload("ext.py") == ("", [])
+  conductor.reload("ext.py")
+  conductor.ns["tended"] = lambda pr: False
+  assert conductor.reload("ext.py") == ("rung2", ["tended"])
 
 
 def test_conducting_says_that_a_load_is_done_only_when_its_rung_is_over_with_no_fault(conductor: Round) -> None:
   for words in ("gives (rung, names)", "The load is done only when that rung is over and peek(rung) is no exception"):
     assert words in conductor.CONDUCTING
+
+
+OLD_TABLE = 'def table(pr: dict) -> str:\n  return "old"\n'
+
+
+def run_load(conductor: Round, word: str) -> None:
+  # The load runs as the word of the rung that acts, so program() of the chain holds it under that rung.
+  conductor.words["rung1"] = word
+  exec(word, conductor.ns)  # noqa: S102
+
+
+def test_a_reload_compares_each_definition_with_the_binding_that_the_module_holds_now(conductor: Round) -> None:
+  # A later word bound an older table and ended with a fault, as an older owner_review(pr) stood in the root on 10-31.
+  conductor.files["ext.py"] = NEW_FILE
+  conductor.reload("ext.py")
+  load = conductor.rungs[-1][0]
+  run_load(conductor, load)
+  exec(OLD_TABLE, conductor.ns)  # noqa: S102
+  loaded(conductor, ("run1", load, None), ("run2", OLD_TABLE, ValueError("late")))
+  assert conductor.reload("ext.py") == ("rung2", ["table"])
+
+
+def test_a_load_ends_with_a_check_that_refuses_each_name_that_the_module_binds_with_another_text_than_the_file(
+  conductor: Round,
+) -> None:
+  conductor.files["ext.py"] = NEW_FILE
+  conductor.reload("ext.py")
+  first = conductor.rungs[-1][0]
+  run_load(conductor, first)
+  conductor.files["ext.py"] = NEW_FILE.replace('"new"', '"newer"')
+  assert conductor.reload("ext.py") == ("rung2", ["table"])
+  # Another word binds tended before the load runs, as converge.py bound faulted of conductor.py in the root.
+  exec("def tended(pr: dict) -> bool:\n  return False\n", conductor.ns)  # noqa: S102
+  with pytest.raises(conductor.Refused, match=r"ext\.py .*: tended$"):
+    run_load(conductor, conductor.rungs[-1][0])
+  assert conductor.table({}) == "newer"
+  assert conductor.reload("ext.py") == ("rung3", ["tended"])
 
 
 def failing(conductor: Round, main: str) -> None:
