@@ -29,8 +29,8 @@ use serde_json::{Value, json};
 use jiff::{Zoned, civil};
 
 use super::{
-  Backoff, Hosted, Model, Provider, Retries, Retry, Thinking, Writes, catalog::Catalog, images,
-  limit, local::Server, messages, passing, resets, thinking, unclosed, unfenced,
+  Backoff, Hosted, Model, Provider, Retries, Retry, Thinking, Writes, budgeted, catalog::Catalog,
+  images, limit, local::Server, messages, passing, resets, tail, thinking, unclosed, unfenced,
 };
 use crate::{Act, Ear, Engine, Fact, Object, SYSTEM, verbs, world};
 
@@ -1338,21 +1338,36 @@ fn a_turn_that_the_most_it_writes_ended_is_refused_and_no_part_of_its_word_runs(
 fn rethinking(
   first: String,
   again: String,
-) -> (Engine, String, std::thread::JoinHandle<[String; 3]>) {
+) -> (Engine, String, std::thread::JoinHandle<Vec<String>>) {
+  rethinking_at("local:qwen/high", vec![first, again])
+}
+
+/// A life whose root prompts this actor of local:qwen of a local server of the tests whose most thought in a turn is
+/// two parts at the effort `high` and 16 at another, which lists it with a window of 1000 and streams these events for each request
+/// in turn; the prompt, and the requests the server read, the listing first.
+fn rethinking_at(
+  actor: &str,
+  answers: Vec<String>,
+) -> (Engine, String, std::thread::JoinHandle<Vec<String>>) {
   let listener = TcpListener::bind("127.0.0.1:0").expect("a port of this machine");
   let port = listener.local_addr().expect("the port").port();
   let listing =
     json!({"object": "list", "data": [{"id": "qwen", "object": "model", "meta": {"n_ctx": 1000}}]});
   let asked_of = thread::spawn(move || {
-    [listing.to_string(), first, again].map(|one| exchanged(&listener, &one))
+    [vec![listing.to_string()], answers]
+      .concat()
+      .iter()
+      .map(|one| exchanged(&listener, one))
+      .collect()
   });
   let address = format!("http://127.0.0.1:{port}");
   let env = |name: &str| (name == "FURB_LOCAL_URL").then(|| address.clone());
   let catalog =
     Catalog::of(&super::catalog::parsed("{}", None), None, Server::named(env).map(Arc::new), env);
-  let (models, actor) = catalog.roster(None, Some("local:qwen")).expect("the model is offered");
+  let most = if actor.ends_with("/high") { 2 } else { 16 };
+  let (models, actor) = catalog.roster(None, Some(actor)).expect("the model is offered");
   let provider = Provider::new(yard("rethought").display().to_string(), models).actor(actor);
-  let mut engine = lived(provider.thinking(Thinking { most: 2, inherited: false }));
+  let mut engine = lived(provider.thinking(Thinking { most, inherited: false }));
   let id = asked(&mut engine);
   (engine, id, asked_of)
 }
@@ -1372,7 +1387,7 @@ fn a_model_whose_thought_passes_its_most_is_asked_again_with_that_thought_and_no
   let (mut engine, id, asked_of) = rethinking(thought.concat(), again.concat());
   let turn = replied(&mut engine);
   let reasoning =
-    "{'type': 'reasoning', 'id': None, 'content': [{'type': 'text', 'content': {'text': 'abc'}}]}";
+    "{'type': 'reasoning', 'id': 'cut', 'content': [{'type': 'text', 'content': {'text': 'abc'}}]}";
   let expected = format!(
     "('assistant', 'close(3)', (100, 8, 0, 0, 0.0), [{reasoning}, {{'type': 'text', 'text': 'close(3)'}}])"
   );
@@ -1382,11 +1397,12 @@ fn a_model_whose_thought_passes_its_most_is_asked_again_with_that_thought_and_no
   );
   let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
   assert_eq!(got.as_ref().as_int(), Some(3));
-  let [_, first, second] = asked_of.join().expect("the server read the requests");
+  let got = asked_of.join().expect("the server read the requests");
+  let (first, second) = (&got[1], &got[2]);
   let body = |request: &str| -> Value {
     serde_json::from_str(request.split("\r\n\r\n").nth(1).unwrap_or_default()).expect("a JSON body")
   };
-  let (first, second) = (body(&first), body(&second));
+  let (first, second) = (body(first), body(second));
   assert_eq!(
     first.get("chat_template_kwargs"),
     None,
@@ -1464,7 +1480,8 @@ fn a_local_model_reads_its_earlier_turn_with_no_thought() {
   let (mut engine, id, asked_of) = rethinking(first.concat(), again.concat());
   let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
   assert_eq!(got.as_ref().as_int(), Some(1));
-  let [_, _, second] = asked_of.join().expect("the server read the requests");
+  let got = asked_of.join().expect("the server read the requests");
+  let second = &got[2];
   let body: Value =
     serde_json::from_str(second.split("\r\n\r\n").nth(1).unwrap_or_default()).expect("a JSON body");
   let earlier = body["messages"]
@@ -1520,14 +1537,15 @@ fn a_turn_with_a_thought_and_no_word_is_asked_again_with_that_thought_and_no_tho
   let (mut engine, id, asked_of) = rethinking(first.concat(), again.concat());
   let turn = replied(&mut engine);
   let reasoning =
-    "{'type': 'reasoning', 'id': None, 'content': [{'type': 'text', 'content': {'text': 'ab'}}]}";
+    "{'type': 'reasoning', 'id': 'cut', 'content': [{'type': 'text', 'content': {'text': 'ab'}}]}";
   let expected = format!(
     "('assistant', 'close(3)', (100, 7, 0, 0, 0.0), [{reasoning}, {{'type': 'text', 'text': 'close(3)'}}])"
   );
   assert_eq!(turn, expected, "the turn holds the thought and the word, and counts what both wrote");
   let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
   assert_eq!(got.as_ref().as_int(), Some(3));
-  let [_, _, second] = asked_of.join().expect("the server read the requests");
+  let got = asked_of.join().expect("the server read the requests");
+  let second = &got[2];
   let second: Value =
     serde_json::from_str(second.split("\r\n\r\n").nth(1).unwrap_or_default()).expect("a JSON body");
   let last =
@@ -2249,4 +2267,77 @@ fn a_stand_over_a_paused_chain_asks_no_model_until_the_wake() {
   };
   assert!(until(&mut engine, done), "the wake asks the model again");
   assert_eq!(calls.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn a_model_whose_thought_the_provider_cuts_thinks_an_eighth_of_the_most_at_low_and_a_quarter_at_medium()
+ {
+  assert_eq!(budgeted(32_768, Some("low")), 4096);
+  assert_eq!(budgeted(32_768, Some("minimal")), 4096);
+  assert_eq!(budgeted(32_768, Some("medium")), 8192);
+  assert_eq!(budgeted(32_768, Some("high")), 32_768);
+  assert_eq!(budgeted(32_768, Some("max")), 32_768);
+  assert_eq!(budgeted(32_768, None), 32_768, "a model with no effort thinks to the most");
+  assert_eq!(budgeted(2, Some("low")), 1, "a share is one token at least");
+}
+
+#[test]
+fn a_model_at_medium_is_cut_at_a_quarter_of_the_most_thought() {
+  let thought =
+    ["a", "b", "c", "d", "e", "f"].map(|one| chunk(json!({"reasoning_content": one}), Value::Null));
+  let usage = json!({"id": "c", "object": "chat.completion.chunk", "created": 0, "model": "qwen", "choices": [],
+    "usage": {"prompt_tokens": 100, "completion_tokens": 5, "total_tokens": 105}});
+  let again = [
+    chunk(json!({"role": "assistant", "content": "close(3)"}), json!("stop")),
+    format!("data: {usage}\n\ndata: [DONE]\n\n"),
+  ];
+  let (mut engine, id, asked_of) =
+    rethinking_at("local:qwen/medium", vec![thought.concat(), again.concat()]);
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  assert_eq!(got.as_ref().as_int(), Some(3));
+  let got = asked_of.join().expect("the server read the requests");
+  let second: Value =
+    serde_json::from_str(got[2].split("\r\n\r\n").nth(1).unwrap_or_default()).expect("a JSON body");
+  let last =
+    second["messages"].as_array().and_then(|messages| messages.last()).cloned().unwrap_or_default();
+  assert_eq!(
+    (&last["reasoning_content"], &second["chat_template_kwargs"]),
+    (&json!("abcde"), &json!({"enable_thinking": false})),
+    "a most of 16 at medium cuts the thought after its fifth part"
+  );
+}
+
+#[test]
+fn a_local_model_reads_the_end_of_a_thought_that_the_provider_cut_in_its_next_turn_alone() {
+  let usage = json!({"id": "c", "object": "chat.completion.chunk", "created": 0, "model": "qwen", "choices": [],
+    "usage": {"prompt_tokens": 100, "completion_tokens": 5, "total_tokens": 105}});
+  let ended = format!("data: {usage}\n\ndata: [DONE]\n\n");
+  let word = |text: &str| {
+    [chunk(json!({"role": "assistant", "content": text}), json!("stop")), ended.clone()].concat()
+  };
+  let thought =
+    ["a", "b", "c", "d"].map(|one| chunk(json!({"reasoning_content": one}), Value::Null));
+  let answers = vec![thought.concat(), word("x = 1"), word("y = 2"), word("close(x + y)")];
+  let (mut engine, id, asked_of) = rethinking_at("local:qwen/high", answers);
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  assert_eq!(got.as_ref().as_int(), Some(3));
+  let got = asked_of.join().expect("the server read the requests");
+  let thoughts = |request: &str| -> Vec<Value> {
+    let body: Value = serde_json::from_str(request.split("\r\n\r\n").nth(1).unwrap_or_default())
+      .expect("a JSON body");
+    let messages = body["messages"].as_array().cloned().unwrap_or_default();
+    messages
+      .iter()
+      .filter(|one| one["role"] == "assistant")
+      .map(|one| one.get("reasoning_content").cloned().unwrap_or_default())
+      .collect()
+  };
+  assert_eq!(thoughts(&got[3])[0], json!("abc"), "the next turn reads the thought that was cut");
+  assert_eq!(
+    thoughts(&got[4]).iter().filter(|one| !one.is_null()).count(),
+    0,
+    "a later turn reads it no more"
+  );
+  assert_eq!(tail("abcdé", 2), "dé", "the end of a thought counts characters");
+  assert_eq!(tail("ab", 5), "ab");
 }

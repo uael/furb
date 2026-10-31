@@ -60,7 +60,8 @@ pub(super) const ENV_THINKING: &str = "MAX_THINKING_TOKENS";
 pub(super) const KEY_THINKING: &str = "max_thinking_tokens";
 
 /// The most tokens of thought of a model in one turn when neither the environment nor the config gives one: a model
-/// that thinks more than this rarely writes a word in the turn.
+/// that thinks more than this rarely writes a word in the turn. A model whose thought the provider cuts takes a share
+/// of it at a lower effort, as [`budgeted`] says.
 pub const THINKING: u64 = 32_768;
 
 /// The most tokens of thought of a model in one turn, as Claude Code means it, 0 turning the thought off, and whether
@@ -1211,18 +1212,33 @@ fn requested(
   Ok((model.clone(), asked))
 }
 
-/// What a reply asks a model, with the most tokens of thought of the turn as the model takes it.
+/// The most tokens of thought of one turn at an effort of its actor, for a model whose thought the provider cuts: an
+/// eighth of the most at `minimal` or `low`, a quarter at `medium`, and all of it at `high`, above it or with no effort,
+/// since a model that thinks to the most of `high` at each level spends minutes on a turn that a lower level means to
+/// keep short. A share is one token at least.
+pub(super) fn budgeted(most: u64, effort: Option<&str>) -> u64 {
+  match effort {
+    Some("minimal" | "low") => (most / 8).max(1),
+    Some("medium") => (most / 4).max(1),
+    _ => most,
+  }
+}
+
+/// What a reply asks a model, with the most tokens of thought of the turn as the model takes it, at the effort of its
+/// actor as [`budgeted`] says for a model whose thought the provider cuts.
 fn thinks((model, mut asked): (Model, Asked), thinking: Thinking) -> (Model, Asked) {
   let mut settings = match asked.request.additional_params.take() {
     Some(Value::Object(settings)) => settings,
     _ => Map::new(),
   };
+  let effort =
+    asked.actor.strip_prefix(model.name.as_str()).and_then(|rest| rest.strip_prefix('/'));
   asked.thought = match &model.thought {
     Some(Thought::Off(off)) if thinking.most == 0 => {
       merged(&mut settings, off);
       None
     }
-    Some(Thought::Off(off)) => Some((thinking.most, off.clone())),
+    Some(Thought::Off(off)) => Some((budgeted(thinking.most, effort), off.clone())),
     Some(Thought::Told) if !thinking.inherited => {
       settings.insert(KEY_THINKING.to_owned(), Value::from(thinking.most));
       None
@@ -1233,10 +1249,40 @@ fn thinks((model, mut asked): (Model, Asked), thinking: Thinking) -> (Model, Ask
   (model, asked)
 }
 
+/// The id of a thought that the provider cut at the most of its turn, or that ended with no word, and gave back to its
+/// model to write its word with no more thought.
+const CUT: &str = "cut";
+
+/// The most characters of a thought that the provider cut that a model that forgets reads again in its next turn.
+pub(super) const TAIL: usize = 16_384;
+
+/// The blocks of a turn of a model that forgets its thought, less that thought: but for the last turn, which keeps the
+/// end of a thought that the provider cut, [`TAIL`] characters at most, since the model wrote a word from that thought
+/// alone, and with no thought of it in the next turn, it thinks again to the most of that turn.
+fn forgotten(blocks: Vec<AssistantContent>, latest: bool) -> Vec<AssistantContent> {
+  blocks
+    .into_iter()
+    .filter_map(|one| match one {
+      AssistantContent::Reasoning(thought) if latest && thought.id.as_deref() == Some(CUT) => {
+        let text = thought.display_text();
+        Some(AssistantContent::Reasoning(Reasoning::new(tail(&text, TAIL)).with_id(CUT.to_owned())))
+      }
+      AssistantContent::Reasoning(_) => None,
+      other => Some(other),
+    })
+    .collect()
+}
+
+/// The last characters of a text, this many at most.
+pub(super) fn tail(text: &str, most: usize) -> &str {
+  let skip = text.chars().count().saturating_sub(most);
+  text.char_indices().nth(skip).map_or("", |(at, _)| &text[at..])
+}
+
 /// The turns of a chain as messages of rig. The engine phrases every turn as python and the provider renders
 /// nothing: a user turn goes as its python and the images that the prompts it opens name, each after the text that
 /// names it and once in the request, and one that holds nothing goes not at all; an assistant turn goes as the blocks
-/// its provider gave, less its thought for a model that forgets it, or as its python when a provider of another kind
+/// its provider gave, less its thought for a model that forgets it, as [`forgotten`] says, or as its python when a provider of another kind
 /// gave them. A turn of the model whose word the gate refused goes on the user side, as a quote under the finding of
 /// its rung, so the model reads it as a word that the chain refused and never as one that it would write again. A
 /// model that takes no image refuses a turn that names one.
@@ -1253,6 +1299,12 @@ fn messages(
   // The word of the turn of the model that the gate refused, which the next user turn holds under its finding.
   let mut quoted: Option<(String, usize)> = None;
   let all = turns.items().unwrap_or_default();
+  // The last turn that a model wrote, whose thought that the provider cut a model that forgets still reads. A word that
+  // the chain placed in the turns, as a stand, holds no blocks, so it is no turn of the model.
+  let last = all.iter().rposition(|turn| {
+    entry(turn, 0).and_then(|one| one.as_str()) == Some("assistant")
+      && entry(turn, 3).and_then(|one| one.items()).is_some()
+  });
   for (at, turn) in all.iter().enumerate() {
     let Some(role) = entry(turn, 0).and_then(|one| one.as_str()) else { continue };
     let python = entry(turn, 1).and_then(|one| one.as_str()).unwrap_or_default();
@@ -1265,14 +1317,10 @@ fn messages(
         joins = true;
         continue;
       }
+      let latest = Some(at) == last;
       let blocks = entry(turn, 3)
         .and_then(|one| serde_json::from_value::<Vec<AssistantContent>>(wire::record(one)).ok())
-        .map(|mut blocks| {
-          if model.forgets {
-            blocks.retain(|one| !matches!(one, AssistantContent::Reasoning(_)));
-          }
-          blocks
-        })
+        .map(|blocks| if model.forgets { forgotten(blocks, latest) } else { blocks })
         .filter(|blocks| !blocks.is_empty())
         .unwrap_or_else(|| vec![AssistantContent::text(python)]);
       let (blocks, bared) = unmarked(blocks);
@@ -1452,8 +1500,8 @@ fn whole(stream: StreamingCompletionResponse) -> CompletionResponse {
 
 /// The turn of a model whose thought passed its budget. The provider asks it again with the same turns, its thought
 /// given back as a turn of its own that holds that thought and no word, and with the settings of its budget, which turn its
-/// thought off, so it writes its word at once. The turn holds that thought and the word, and what the model wrote
-/// counts each part of that thought.
+/// thought off, so it writes its word at once. The turn holds that thought, under the id [`CUT`], and the word, and
+/// what the model wrote counts each part of that thought.
 async fn rethought(
   streams: &Streams,
   mut request: CompletionRequest,
@@ -1468,7 +1516,7 @@ async fn rethought(
   };
   merged(&mut settings, again);
   request.additional_params = (!settings.is_empty()).then_some(Value::Object(settings));
-  let thought = AssistantContent::Reasoning(Reasoning::new(&thinking));
+  let thought = AssistantContent::Reasoning(Reasoning::new(&thinking).with_id(CUT.to_owned()));
   // rig sends no turn that holds no text, so the turn of the thought holds an empty text too.
   let given = vec![thought.clone(), AssistantContent::text("")];
   request.chat_history.push(Message::Assistant { id: None, content: given });

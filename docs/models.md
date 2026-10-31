@@ -183,7 +183,10 @@ Its words come before each flag, for each account.
 `MAX_THINKING_TOKENS` gives the most tokens that a model can think in one turn, and 0 turns thought off. The key
 `max_thinking_tokens` of `.furb/config.json` gives it for one project, and the same key of `.furb/config.local.json`
 wins over it. The environment wins over the config, and with
-neither, it is 32768. A model with adaptive reasoning thinks as its effort says and cannot turn its thought off.
+neither, it is 32768. A model whose thought furb cuts at that most, as a local model, thinks an eighth of it at the
+effort `low` and a quarter at `medium`, and the whole most at `high`. When furb cuts a thought, the model writes its
+word from that thought, and it reads the end of that thought again in its next turn. A model with adaptive reasoning
+thinks as its effort says and cannot turn its thought off.
 
 ## A local model
 
