@@ -5,6 +5,7 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { rmSync, statfsSync, writeFileSync } from "node:fs";
 import { type AddressInfo, createConnection, createServer, type Socket } from "node:net";
 import { dirname } from "node:path";
+import { sandboxBound, sandboxHeld } from "furb";
 import type { HostState } from "./bridge.ts";
 import {
   type About,
@@ -92,8 +93,9 @@ let stopped: string | undefined;
 let root = "";
 /** Why the life did not open, which each window that comes while the host ends hears. */
 let refusal = "";
-/** What the host told its windows of the free space of the disk, which a window that attaches later hears too. */
-let warning = "";
+/** What the host told its windows of the disk and of the memory, by the kind of warning, which a window that attaches
+ * later hears too. */
+const warnings = new Map<string, string>();
 /** How long a host that hands its life over waits for the commands and the replies of the models that run, so that
  * each that ends in time lands in the record. Each other ends as interrupted in the life of the next host, as a
  * command that a crash cut does. */
@@ -254,7 +256,7 @@ function heard(message: Request, send: Send, role: Role): void {
     // A window that attaches draws what the life holds, so the first state tells it that facts came.
     if (last) send({ state: { ...last, facts: Math.max(1, last.facts) } });
     if (stopped) send({ fault: stopped });
-    if (warning) send({ log: warning });
+    for (const line of warnings.values()) send({ log: line });
     windows.set(send, role);
     return;
   }
@@ -309,27 +311,50 @@ async function handOver(build: string): Promise<void> {
   ask("session", "end", [], { id: 0 });
 }
 
+/** A warning of a kind: a window hears it once when it begins, and a window that attaches while it stands hears it at
+ * its hello. A warning that ends is forgotten, so it can begin again. */
+const warn = (kind: string, line: string | undefined): void => {
+  if (line === undefined) {
+    warnings.delete(kind);
+    return;
+  }
+  if (warnings.has(kind)) return;
+  warnings.set(kind, line);
+  for (const send of windows.keys()) send({ log: line });
+};
+
 /** The free space under which the host tells its windows that the disk is nearly full, in bytes: 2 GiB, or what
  * FURB_DISK_WARN says. A full disk stops the record, the log and the snapshot, so the host says so before it is full. */
 const LOW = Number(process.env.FURB_DISK_WARN ?? 2 * 1024 ** 3);
 
-/** The look at the free space of the disk of the record: a window hears once when it falls under LOW, and a window that
- * attaches while it stays under hears at its hello. */
-const watchDisk = (): void => {
-  let free: number;
+/** The share of the memory bound of the sandbox over which the host tells its windows: three quarters, or what
+ * FURB_MEMORY_WARN says. At the bound the life stops, so the host says so before it does. */
+const HIGH = Number(process.env.FURB_MEMORY_WARN ?? 0.75);
+
+/** How long the host waits between two looks at the disk and at the memory, in milliseconds. */
+const EVERY = Number(process.env.FURB_HOST_WATCH ?? 30000);
+
+/** The look at the free space of the disk of the record and at the memory of the life. */
+const watch = (): void => {
   try {
     const stats = statfsSync(dirname(record));
-    free = stats.bavail * stats.bsize;
-  } catch {
-    return;
-  }
-  if (free >= LOW) {
-    warning = "";
-    return;
-  }
-  if (warning) return;
-  warning = `Only ${(free / 1e9).toFixed(1)} GB is free on the disk of this record. A full disk stops the record, the log and the snapshot. Free some space soon.`;
-  for (const send of windows.keys()) send({ log: warning });
+    const free = stats.bavail * stats.bsize;
+    warn(
+      "disk",
+      free < LOW
+        ? `Only ${(free / 1e9).toFixed(1)} GB is free on the disk of this record. A full disk stops the record, the log and the snapshot. Free some space soon.`
+        : undefined,
+    );
+  } catch {}
+  const held = sandboxHeld();
+  const bound = sandboxBound();
+  const mib = (bytes: number) => Math.round(bytes / 2 ** 20);
+  warn(
+    "memory",
+    bound > 0 && held > bound * HIGH
+      ? `The life holds ${mib(held)} MiB of the ${mib(bound)} MiB of memory that bounds it. At the bound the life stops. Open it again, or end it, before then.`
+      : undefined,
+  );
 };
 
 /** The end of a host whose life is not open: the worker goes, which cuts the open, and each window that waits for its
@@ -401,5 +426,5 @@ tell();
 // The lease of the record is this host's, and each window that said hello while the life opened gets its answer.
 for (const [send, { message, role }] of hellos) heard(message, send, role);
 hellos.clear();
-watchDisk();
-setInterval(watchDisk, 30000).unref();
+watch();
+setInterval(watch, EVERY).unref();

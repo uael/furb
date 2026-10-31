@@ -329,6 +329,14 @@ def config_directory() -> str:
 def shell() -> str:
   """The POSIX shell that runs a command of this machine, which a host runs its own commands in too."""
 
+def sandbox_held() -> int:
+  """The memory that the sandboxes of this process hold, in bytes, above the least that the process held when the first
+  began. A host reads it from any thread, to warn the operator before the bound."""
+
+def sandbox_bound() -> int:
+  """The memory at which a sandbox raises a MemoryError and the life stops, in bytes: 4 GiB, or what
+  FURB_SANDBOX_MEMORY gives in MiB."""
+
 def shapes() -> list[str]:
   """Every shape the operator answers, by its name."""
 

@@ -10,7 +10,7 @@
 //! any depth, since the session holds each call of the host that waits. A value of the sandbox with no data form, and
 //! a class of the sandbox, crosses to the host as a handle, which the session holds until the host releases it.
 
-use std::time::Duration;
+use std::{sync::atomic::Ordering, time::Duration};
 
 use monty::{MontyRepl, ReplFunctionCall, ReplProgress, ReplStartError};
 use monty_types::{
@@ -292,6 +292,24 @@ fn memory() -> usize {
 /// says so holds nothing to mend.
 fn count() {
   let _ = monty_alloc::set_hard_limit(None);
+}
+
+/// What the sandboxes of the program hold of the memory that bounds them, in bytes: what the counting allocator holds
+/// above the least that the program held when a sandbox began. It is nothing before a sandbox began, and in a
+/// program with no counting allocator. A host reads it from any thread, to warn before the [`bound`].
+#[cfg_attr(not(any(feature = "python", feature = "typescript")), allow(dead_code))]
+pub(crate) fn held() -> usize {
+  let base = monty_types::BASELINE_MEMORY.load(Ordering::Relaxed);
+  if base == usize::MAX {
+    return 0;
+  }
+  monty_types::LIVE_MEMORY.load(Ordering::Relaxed).saturating_sub(base)
+}
+
+/// The memory at which a sandbox raises a `MemoryError`, in bytes: [`MEMORY`], or what `FURB_SANDBOX_MEMORY` gives.
+#[cfg_attr(not(any(feature = "python", feature = "typescript")), allow(dead_code))]
+pub(crate) fn bound() -> usize {
+  memory()
 }
 
 /// The bound of the turn of a sandbox: [`TURN`], or what the test set.

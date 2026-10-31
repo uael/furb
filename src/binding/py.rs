@@ -1251,6 +1251,8 @@ fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
     wrap_pyfunction!(skills, module)?,
     wrap_pyfunction!(config_directory, module)?,
     wrap_pyfunction!(shell, module)?,
+    wrap_pyfunction!(sandbox_held, module)?,
+    wrap_pyfunction!(sandbox_bound, module)?,
     wrap_pyfunction!(shapes, module)?,
     wrap_pyfunction!(answers, module)?,
     wrap_pyfunction!(answered, module)?,

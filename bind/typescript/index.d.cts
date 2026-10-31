@@ -527,6 +527,18 @@ export declare function retold(path: string): { made: string | null; engine: str
 export declare const ROOT: string
 
 /**
+ * The memory at which a sandbox raises a `MemoryError` and the life stops, in bytes: 4 GiB, or what
+ * `FURB_SANDBOX_MEMORY` gives in MiB.
+ */
+export declare function sandboxBound(): number
+
+/**
+ * The memory that the sandboxes of this process hold, in bytes, above the least that the process held when the first
+ * began. A host reads it from any thread, to warn the operator before the bound.
+ */
+export declare function sandboxHeld(): number
+
+/**
  * The scratch directory of the record at a path, in the cache of furb, which a host removes when it deletes the
  * record; nothing when the machine has no cache of furb.
  */

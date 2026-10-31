@@ -510,6 +510,22 @@ pub fn shell() -> String {
   world::shell().display().to_string()
 }
 
+/// The memory that the sandboxes of this process hold, in bytes, above the least that the process held when the first
+/// began. A host reads it from any thread, to warn the operator before the bound.
+#[cfg_attr(feature = "python", pyfunction)]
+#[cfg_attr(feature = "typescript", napi)]
+pub fn sandbox_held() -> i64 {
+  i64::try_from(crate::sand::held()).unwrap_or(i64::MAX)
+}
+
+/// The memory at which a sandbox raises a `MemoryError` and the life stops, in bytes: 4 GiB, or what
+/// `FURB_SANDBOX_MEMORY` gives in MiB.
+#[cfg_attr(feature = "python", pyfunction)]
+#[cfg_attr(feature = "typescript", napi)]
+pub fn sandbox_bound() -> i64 {
+  i64::try_from(crate::sand::bound()).unwrap_or(i64::MAX)
+}
+
 /// Every shape the operator answers, by its name.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
