@@ -880,7 +880,7 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 
 STATE = (
   "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed assigned silent"
-  " comments measures timers noted debriefs briefed owns watched after parked awaited covering kinds pool slots areas faulted vetoes rulings judged tips shifted parents redmain onmain hired paced landed heard handled ends requeued"
+  " comments measures timers noted debriefs briefed owns watched after parked awaited covering kinds pool slots areas round_faults vetoes rulings judged tips shifted parents redmain onmain hired paced landed heard handled ends requeued"
   " statused secret updated budgeted flaky runs_read deferred"
 ).split()
 
@@ -1297,7 +1297,7 @@ def test_a_fault_of_a_step_is_told_again_with_its_count_after_a_round_with_no_fa
   told = [message for message, _ in conductor.prompts]
   assert len(told) == 2 and "It is the round" not in told[0]
   assert "JSONDecodeError" in told[1] and "It is the round 2 with this fault in this life." in told[1]
-  assert conductor.faulted == {"fault tend JSONDecodeError": 3}
+  assert conductor.round_faults == {"fault tend JSONDecodeError": 3}
 
 
 def test_a_round_that_ends_with_no_work_tells_it_as_a_decision(conductor: Round) -> None:

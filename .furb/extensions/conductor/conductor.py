@@ -128,7 +128,7 @@ kinds: dict[str, str] = globals().setdefault("kinds", {})
 pool: dict[str, dict] = globals().setdefault("pool", {})
 slots: dict[str, str] = globals().setdefault("slots", {})
 areas: dict[str, list[str]] = globals().setdefault("areas", {})
-faulted: dict[str, int] = globals().setdefault("faulted", {})
+round_faults: dict[str, int] = globals().setdefault("round_faults", {})
 DEBRIEFS = globals().get("DEBRIEFS", True)
 vetoes: dict = globals().setdefault("vetoes", {})
 vetoes.pop("owner-review", None)
@@ -2936,8 +2936,8 @@ async def conduct(every: float = 300) -> dict[str, object]:
             noticed.discard(key)
         except Exception as fault:
           key = f"fault {at} {type(fault).__name__}"
-          faulted[key] = faulted.get(key, 0) + 1
-          times = f" It is the round {faulted[key]} with this fault in this life." if faulted[key] > 1 else ""
+          round_faults[key] = round_faults.get(key, 0) + 1
+          times = f" It is the round {round_faults[key]} with this fault in this life." if round_faults[key] > 1 else ""
           notice(
             key,
             f"The round on {here} met a fault in its step {at}: {type(fault).__name__}: {str(fault)[:1000]}.{times}"
