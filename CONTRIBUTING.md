@@ -27,7 +27,7 @@ large change, open an issue first, so we can agree on its shape before you do th
 ```sh
 git clone https://github.com/uael/furb && cd furb
 uv sync                              # The Python environment, which builds the crate and the command line.
-uv run pre-commit install            # The hooks, which run the gates at each commit.
+git config core.hooksPath script/hooks # The hooks: the gates at each commit, with output for failures only.
 bun install && bun run build         # The TypeScript workspace, and the N-API package that the TUI uses.
 bun run demo                         # The TUI on a scripted life. It asks no model.
 ```
