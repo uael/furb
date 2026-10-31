@@ -139,9 +139,9 @@ impl Watch {
 
 /// The marks that a model writes around its word out of the habit of a fence or of a tool call, which the word loses
 /// line by line: a fence, as ``` alone or with a language, a line that is a tag of a tool call alone, as
-/// `<invoke name="python">`, `<parameter name="code">` or their close, or a line that is a break of HTML alone, as
+/// `<invoke name="python">`, `<function=write>` or their close, or a line that is a break of HTML alone, as
 /// `<br>`, while no line of the word stands before it; and once one went, each such line and each fence, a tag
-/// `<parameter ...>` at the start of a line and its close at the end of one, outside a quote. A line that is the close
+/// of a tool call at the start of a line and its close at the end of one, outside a quote. A line that is the close
 /// of a tag of a tool call alone goes too after the word that it ends, when that word is python, so the line stands in
 /// no string. A word that no such mark opens keeps each line. A first line of the word that starts with a lone `=`, as
 /// the binding of a model that left out its name, binds `_`.
@@ -156,11 +156,12 @@ pub(super) struct Bare {
 }
 
 /// The names of the tags of a tool call.
-const TAGS: [&str; 3] = ["invoke", "parameter", "function_calls"];
+const TAGS: [&str; 5] = ["invoke", "parameter", "function_calls", "function", "tool_call"];
 
 /// What the chain is told after the rung of a turn whose word lost the marks of a fence or of a tool call around it.
 const WRAPPED: &str = "wrapped its word in a fence, in the markup of a tool call or in a break of HTML, and the \
-  provider dropped that markup: a reply is python and quotes only, with no fence and no markup";
+  provider dropped that markup: a reply is python and quotes only, with no fence and no markup, and the text of a \
+  file is a quote";
 
 /// What the chain is told after the rung of a turn whose word started with a binding of no name.
 const NAMED: &str = "started its word with =, a binding with no name, and the provider bound it to _: write the \
@@ -181,21 +182,25 @@ impl Bare {
       return None;
     }
     if (!self.started || self.dropped) && !open(before) {
-      if fence(trimmed)
-        || tag(trimmed).is_some_and(str::is_empty)
-        || (!self.started && broke(trimmed))
-      {
+      if fence(trimmed) || (!self.started && broke(trimmed)) {
         self.dropped = true;
         return None;
       }
-      if let Some(rest) = trimmed.strip_prefix("<parameter").and_then(|_| tag(trimmed)) {
+      if let Some(mut rest) = tag(trimmed) {
+        while let Some(more) = tag(rest) {
+          rest = more;
+        }
         self.dropped = true;
+        if rest.is_empty() {
+          return None;
+        }
         line = rest.to_owned();
       }
       if self.dropped {
         let end = line.trim_end();
-        if let Some(kept) =
-          end.strip_suffix("</parameter>").or_else(|| end.strip_suffix("</invoke>"))
+        if let Some(kept) = ["</parameter>", "</invoke>", "</function>"]
+          .into_iter()
+          .find_map(|close| end.strip_suffix(close))
         {
           line = kept.to_owned();
         }
@@ -234,13 +239,13 @@ fn fence(line: &str) -> bool {
     .is_some_and(|name| name.chars().all(|one| one.is_ascii_alphanumeric() || "_+-.".contains(one)))
 }
 
-/// What follows a tag of a tool call that opens a line, trimmed: `<invoke ...>`, `<parameter ...>`, `<function_calls>`
-/// or the close of one; none when the line opens with no such tag.
+/// What follows a tag of a tool call that opens a line, trimmed: `<invoke ...>`, `<parameter ...>`, `<function=...>`,
+/// `<tool_call>`, `<function_calls>` or the close of one; none when the line opens with no such tag.
 fn tag(line: &str) -> Option<&str> {
   let inside = line.strip_prefix("</").or_else(|| line.strip_prefix('<'))?;
   let name = TAGS.into_iter().find(|name| inside.starts_with(name))?;
   let after = &inside[name.len()..];
-  if !after.starts_with([' ', '>']) {
+  if !after.starts_with([' ', '>', '=']) {
     return None;
   }
   Some(after[after.find('>')? + 1..].trim())

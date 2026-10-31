@@ -248,3 +248,17 @@ fn the_close_of_a_tag_of_a_tool_call_alone_after_a_word_of_python_goes() {
   );
   assert_eq!(word("x = (\n</parameter>"), None, "the close after a word that is not python stays");
 }
+
+#[test]
+fn the_markup_of_a_tool_call_of_qwen_goes_as_that_of_a_tool_call_of_claude_does() {
+  let call = "<tool_call>\n<function=write>\n<parameter=content>\nx = 1\nclose(x)\n</parameter>\n</function>\n</tool_call>";
+  assert_eq!(word(call).as_deref(), Some("x = 1\nclose(x)"));
+  assert_eq!(word("<function=write><parameter=content>x = 1").as_deref(), Some("x = 1"));
+  assert_eq!(
+    word("<function=write>\n<parameter=content>x = 1\nclose(x)</function>").as_deref(),
+    Some("x = 1\nclose(x)")
+  );
+  assert_eq!(word("x = 1\n<function=write>"), None, "a tag after a line of the word stays");
+  let (_, note) = super::bare("<function=write>\nx = 1").expect("the markup goes");
+  assert!(note.contains("quote"), "{note}");
+}
