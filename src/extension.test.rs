@@ -562,7 +562,7 @@ fn the_setup_of_the_root_ends_with_the_extensions_of_the_root_alone_and_a_chain_
   assert_eq!(root[life + 4], stood, "the root tells its standing after every extension: {root:?}");
   let last = &root[life + 5];
   assert!(
-    last.starts_with("#stand2\nstand2_roster = ") && last.contains("\n\n#cd1\ncd1_path = "),
+    last.starts_with("#stand3\nstand3_roster = ") && last.contains("\n\n#cd1\ncd1_path = "),
     "{last}"
   );
   assert!(last.contains("#chain1\nchain1_label = 'root'"), "{last}");
@@ -575,7 +575,7 @@ fn the_setup_of_the_root_ends_with_the_extensions_of_the_root_alone_and_a_chain_
     stood,
     "the ear tells a chain with no source its standing at its birth: {two:?}"
   );
-  assert!(two[life + 3].starts_with("#stand3\nstand3_roster = "), "{two:?}");
+  assert!(two[life + 3].starts_with("#stand4\nstand4_roster = "), "{two:?}");
   assert!(two.iter().all(|one| !one.contains(&rooted) && one != "z = 3"), "{two:?}");
   assert!(two.last().unwrap().contains("#chain2\nchain2_label = 'two'"), "{two:?}");
 }

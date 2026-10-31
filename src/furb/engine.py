@@ -93,7 +93,7 @@ def standing():
 
 def stand(on=""):
   got = ask("stand", on)
-  tell(on, roster=got[0], actor=got[2])
+  tell(on, roster=got[0], actor=got[2], extensions=(got[4:] and got[4]) or None)
   return got
 
 
@@ -405,6 +405,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
 
 
 def seeded(id, last, to):
+  rung("stand()", to=to)
   rung(f"read({last[3]!r})", to=to)
   for k in 0, 1:
     k and (yield "setup", id)

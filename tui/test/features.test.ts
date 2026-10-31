@@ -368,12 +368,13 @@ test("the setup of the root stands as code: a comment that names the setup, then
         );
         await session.refresh();
         // The root writes its setup on itself, each rung to the one default actor and with no rung whose word it
-        // retells: the read of the doctrine, the word rung(read('<file>', HIDDEN).content) of each extension in the
+        // retells: the stand, the read of the doctrine, the word rung(read('<file>', HIDDEN).content) of each extension in the
         // order of the life, the life words in one word, then the stand and the cd.
         const setup = session.activity.filter((act) => act.kind === "rung" && act.by === act.on);
-        expect(setup.map((act) => act.on)).toEqual(Array(10).fill(session.engine.root));
-        expect(setup.map((act) => act.words.slice(1))).toEqual(Array(10).fill(["", setup[0]?.words[2]]));
+        expect(setup.map((act) => act.on)).toEqual(Array(11).fill(session.engine.root));
+        expect(setup.map((act) => act.words.slice(1))).toEqual(Array(11).fill(["", setup[0]?.words[2]]));
         expect(setup.map((act) => act.word)).toEqual([
+          "stand()",
           // A path of Windows stands with its separators doubled, as python shows a backslash.
           expect.stringMatching(/^read\('.*[/\\]DOCTRINE\.md'\)$/),
           ...["catchup", "memory", "skills", "compaction", "ouroboros", "web", "mcp"].map((name) =>
@@ -400,22 +401,23 @@ test("the setup of the root stands as code: a comment that names the setup, then
         const at = rows.findIndex((row) => /# setup/.test(row));
         expect(at).toBeGreaterThanOrEqual(0);
         expect(rows[at]?.trim().replace(/\s{2,}.*$/, "")).toBe("# setup");
-        const shown = rows.slice(at + 1, at + 16).map((row) => row.trim().replace(/\s{2,}.*$/, ""));
-        expect(shown[0]).toMatch(/^1 read\('.*DOCTRINE\.md'\)$/);
+        const shown = rows.slice(at + 1, at + 17).map((row) => row.trim().replace(/\s{2,}.*$/, ""));
+        expect(shown[0]).toBe("1 stand()");
+        expect(shown[1]).toMatch(/^2 read\('.*DOCTRINE\.md'\)$/);
         expect(
-          shown.slice(1, 8).map((row) => /^\d+ rung\(read\('.*', HIDDEN\)\.content\)$/.test(row)),
+          shown.slice(2, 9).map((row) => /^\d+ rung\(read\('.*', HIDDEN\)\.content\)$/.test(row)),
         ).toEqual(Array(7).fill(true));
         // The life words stand as the calls that end their one word, each on its line, then the stand and the cd,
         // and the card ends there.
-        expect(shown.slice(8, 13)).toEqual([
-          "9 catchup()",
-          "10 await recall()",
-          "11 await listed()",
-          "12 await mcp_index()",
-          "13 stand()",
+        expect(shown.slice(9, 14)).toEqual([
+          "10 catchup()",
+          "11 await recall()",
+          "12 await listed()",
+          "13 await mcp_index()",
+          "14 stand()",
         ]);
-        expect(shown[13]).toMatch(/^14 cd\('.*'\)$/);
-        expect(shown[14]).not.toMatch(/^15 /);
+        expect(shown[14]).toMatch(/^15 cd\('.*'\)$/);
+        expect(shown[15]).not.toMatch(/^16 /);
         expect(rows.join("\n")).not.toMatch(/rung\d+…\d+|remember1|ouroboros1|catchup1/);
       },
       { width: 140, height: 42 },

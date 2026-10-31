@@ -78,7 +78,11 @@ async def test_the_world_answers_a_stand_with_the_roster_the_directory_and_the_a
   answered = next(a for a in said(log, "done") if a[1] == asked[1])
   assert answered[2] == WORLD and answered[3] == [*STANDS, doctrine, []]
   assert answered[3] == [STANDS[0], "/w", "m/low", doctrine, []]
-  assert said(sand.calls, "stand") == [asked, ("stand", "stand2", "rung2", "chain1")]
+  assert said(sand.calls, "stand") == [
+    asked,
+    ("stand", "stand2", "rung1", "chain1"),
+    ("stand", "stand3", "rung3", "chain1"),
+  ]
 
 
 async def test_a_model_asked_on_any_chain_of_a_later_life_finds_the_new_roster() -> None:

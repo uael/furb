@@ -211,16 +211,19 @@ test("a follow-up that the operator removes while an earlier one is sent is not 
       "First follow-up on main",
     ]);
     // The other chain holds only the rungs that run again the words of the setup of the root that its prefix holds,
-    // the read of the doctrine and what that read told, then the stand and the cd that it plays on itself, as the
-    // root played its own.
+    // the stand and what it told, the read of the doctrine and what that read told, then the stand and the cd that it
+    // plays on itself, as the root played its own.
     const setup = session.acts.filter((act) => act.kind === "rung" && act.by === session.engine.root);
-    const read = setup[0];
+    const [first, read] = setup;
     const stood = setup.at(-1);
+    expect(first?.word).toBe("stand()");
     expect(read?.word).toMatch(/^read\('.*DOCTRINE\.md'\)$/);
     expect(stood?.word).toMatch(/^stand\(\)\ncd\('.*'\)$/);
     expect(
       session.acts.filter((act) => act.on === other && act.kind === "rung").map((act) => [act.by, act.words]),
     ).toEqual([
+      [other, [first?.word, first?.id, ""]],
+      [other, [expect.stringMatching(/^#stand2\nstand2_roster = /), `${read?.id}_told`, ""]],
       [other, [read?.word, read?.id, ""]],
       [other, [expect.stringMatching(/^#read1\nread1_path = '.*DOCTRINE\.md'\n/), `${stood?.id}_told`, ""]],
       [other, [stood?.word, "", "claude-cli:sonnet/high"]],

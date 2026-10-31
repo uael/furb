@@ -508,7 +508,7 @@ async def taught(*extensions: list) -> tuple[Sand, list[tuple], str]:
 
 
 async def test_when_its_first_standing_names_a_doctrine_the_root_tells_the_bare_paragraph_chain() -> None:
-  """When its first standing names a doctrine, the root tells the bare paragraph chain() at once, and tells its open once no rung with a word and an actor is open on it at the done of a rung on it, so its first turns are the setup that it crafts on itself, when that standing gives the extensions and the root holds no reply, each a rung with a word and its default actor: the read of the doctrine, the word rung(read('<file>', HIDDEN).content) of each extension that plays on every chain and has a file, whose rung tells the code of that file alone in the turn after it, the life words of those extensions in one turn, then the fact setup, then the same turns for the extensions of the root alone, then the turn of its stand, and the turn after it holds what the stand told, then the open."""
+  """When its first standing names a doctrine, the root tells the bare paragraph chain() at once, and tells its open once no rung with a word and an actor is open on it at the done of a rung on it, so its first turns are the setup that it crafts on itself, when that standing gives the extensions and the root holds no reply, each a rung with a word and its default actor: the turn stand(), whose answer tells the extensions that the words after it load, the read of the doctrine, the word rung(read('<file>', HIDDEN).content) of each extension that plays on every chain and has a file, whose rung tells the code of that file alone in the turn after it, the life words of those extensions in one turn, then the fact setup, then the same turns for the extensions of the root alone, then the turn of its stand, and the turn after it holds what the stand told, then the open."""
   _, _, root = born(stands=TAUGHT, files=TAUGHT_FILES)
   held = engine.transcript(root)
   first = next(n for n, a in enumerate(held) if a[0] == "rung")
@@ -517,8 +517,10 @@ async def test_when_its_first_standing_names_a_doctrine_the_root_tells_the_bare_
   assert (engine.turns(on=root), said(log, "rung")) == ([("user", "chain()", None, None)], [])
   _, log, root = await taught(LATE)
   turns = engine.turns(on=root)
-  assert [one[:2] for one in turns[:12]] == [
+  assert [one[:2] for one in turns[:14]] == [
     ("user", "chain()"),
+    ("assistant", "stand()"),
+    ("user", stood("stand2", [*TAUGHT[:4], [*TAUGHT[4], LATE]])),
     ("assistant", "read('/w/DOCTRINE.md')"),
     ("user", "#read1\nread1_path = '/w/DOCTRINE.md'\n<s:read1_text>\nRead first.\nThen act.</s:read1_text>"),
     ("assistant", "rung(read('/w/one.py', HIDDEN).content)"),
@@ -531,7 +533,8 @@ async def test_when_its_first_standing_names_a_doctrine_the_root_tells_the_bare_
     ("user", ""),
     ("assistant", STOOD),
   ]
-  assert paragraphs(turns[12:]) == [stood("stand2"), "#cd1\ncd1_path = '/w'", opened(root, "root")]
+  standing = [*TAUGHT[:4], [*TAUGHT[4], LATE]]
+  assert paragraphs(turns[14:]) == [stood("stand3", standing), "#cd1\ncd1_path = '/w'", opened(root, "root")]
   crafted = [a for a in said(log, "rung") if a[3] == root and a[2] == root]
   assert [(a[4], a[6]) for a in crafted] == [(one[1], "m/low") for one in turns if one[0] == "assistant"]
   (setup,) = [n for n, a in enumerate(engine.transcript(root)) if a[0] == "setup"]
@@ -553,20 +556,20 @@ async def test_a_chain_with_no_source_holds_first_the_setup_of_the_root() -> Non
   _, _, root = await taught(LATE)
   two = await chained("two")
   three = await chained("three")
-  setup = engine.turns(on=root)[:7]
-  assert [one[:2] for one in engine.turns(on=root)[7:12]] == [
+  setup = engine.turns(on=root)[:9]
+  assert [one[:2] for one in engine.turns(on=root)[9:14]] == [
     ("assistant", "rung(read('/w/late.py', HIDDEN).content)"),
     ("user", "y = 1\n"),
     ("assistant", "w = y + 1"),
     ("user", ""),
     ("assistant", STOOD),
   ]
-  assert paragraphs(engine.turns(on=root)[12:])[-1] == opened(root, "root")
+  assert paragraphs(engine.turns(on=root)[14:])[-1] == opened(root, "root")
   for one in (two, three):
     turns = engine.turns(on=one)
-    assert turns[:7] == setup
-    assert [turn[:1] for turn in turns[7:8]] == [("assistant",)] and turns[7][1] == STOOD
-    assert paragraphs(turns[8:])[-1] == opened(one, "two" if one == two else "three")
+    assert turns[:9] == setup
+    assert [turn[:1] for turn in turns[9:10]] == [("assistant",)] and turns[9][1] == STOOD
+    assert paragraphs(turns[10:])[-1] == opened(one, "two" if one == two else "three")
     assert (engine.module(one)["z"], "y" in engine.module(one), "w" in engine.module(one)) == (42, False, False)
 
 
@@ -576,11 +579,11 @@ async def test_a_chain_with_no_source_whose_standing_names_a_doctrine_tells_its_
   two = await chained("two")
   turns = engine.turns(on=two)
   (played,) = [a[1] for a in said(log, "rung") if a[3] == two and a[4] == STOOD]
-  assert turns[7][:2] == ("assistant", STOOD) and engine.get(played)[6] == "m/low"
-  assert paragraphs(turns[8:]) == [stood("stand3"), "#cd2\ncd2_path = '/w'", opened(two, "two")]
+  assert turns[9][:2] == ("assistant", STOOD) and engine.get(played)[6] == "m/low"
+  assert paragraphs(turns[10:]) == [stood("stand4", TAUGHT), "#cd2\ncd2_path = '/w'", opened(two, "two")]
   _, _, _ = born(stands=[*STANDS, "/w/DOCTRINE.md", []], files=TAUGHT_FILES)
   bare = await chained("bare")
-  assert heads(engine.turns(on=bare)) == ["chain()", "#read1", "#stand3", "#cd2", f"#{bare}"]
+  assert heads(engine.turns(on=bare)) == ["chain()", "#stand2", "#read1", "#stand4", "#cd2", f"#{bare}"]
 
 
 async def test_a_chain_that_hears_a_prefix_that_another_said_on_it_tells_no_open_of_its_own() -> None:

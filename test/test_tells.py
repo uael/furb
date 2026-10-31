@@ -27,7 +27,7 @@ async def test_the_rung_of_the_stand_that_a_chain_plays_on_itself_tells_as_any_r
   two = await chained("two")
   assert await engine.rung("k = 1", on=two) is None
   await settle()
-  (placed,) = [a for a in said(log, "rung") if a[3] == two and a[2] == two and a[4].startswith("stand()")]
+  (placed,) = [a for a in said(log, "rung") if a[3] == two and a[2] == two and a[4].startswith("stand()\n")]
   assert placed[4:] == ("stand()\ncd('/w')", "", "m/low") and engine.tells(placed[1])
   made = [a[1] for a in said(log, "stand") + said(log, "cd") if a[2] == placed[1]]
   told = [a[3][0].split("\n")[0] for a in said(engine.transcript(two), "tell") if a[1] in made]
