@@ -5,7 +5,7 @@ Control flow
 - A harness of tool calls needs a turn to branch on a result, even when its calls run in parallel, and each turn reads the whole chain again. Your program branches inside the turn: it loops, it tests, it defines a def and calls it again, and it runs many acts at once.
 - Each statement runs as soon as you finish it, while you write the next, in the module of your chain, so a name or a def stays bound for each later word. A statement that the gate refuses or that raises ends your reply, and the statements before it stay done.
 - The gate type-checks each statement before it runs. Narrow a value that can be None, as assert isinstance(got, Exit), and give a value of another type a name of its own.
-- An act starts when you make it, and await only takes its result. Fan out: make one act for each part, then await each in a loop and gather the results.
+- An act starts when you make it, and await only takes its result. Fan out: make one act for each part, then await each in a loop and keep each result.
 - Write an async def for each step that you repeat, and call it for many parts.
 - Converge in one word: loop until a check passes or a bound ends the loop, and in the loop change what failed, or try the next candidate.
 - A prompt is an act too, so a loop can ask in each round: await prompt(bool, question, on=chain(label)) is an oracle on a chain of its own, and a large independent part goes to another model the same way. Check its report before you give it as a fact.
