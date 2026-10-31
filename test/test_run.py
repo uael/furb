@@ -18,7 +18,6 @@ from conftest import (
   settle,
   sown,
   watched,
-  written,
 )
 from furb import engine
 
@@ -26,7 +25,7 @@ from furb import engine
 async def test_a_run_is_the_act_of_running_the_word_of_a_rung() -> None:
   """A run is the act of running the word of a rung or the text of a told rung, which the chain makes on itself and the Kernel takes: it says started as the run, runs what the writings of that rung left of the word, as the rung, and says the run done with what the word gave."""
   log, root, laid, act, step = await counted()
-  first = fresh(root, written(laid, "k = 1"))
+  first = fresh(root)
   second = f"{prompted(act, 'int', 'count')}\n\n#{step} advance on {act}"
   assert [a[2:] for a in said(log, "run")] == [
     (root, root, f"{laid}_told", first, ""),
@@ -180,8 +179,7 @@ async def test_the_chain_runs_one_word_at_a_time() -> None:
   await settle()
   one, two = "x = bash('echo hi')\nclose(await x)", "k = 2\nclose(k)"
   opens = "#bash1\nbash1_command = 'echo hi'\nbash1: Act[Exit] = Act('bash1')"
-  told = [engine.unquoted(fresh(root, written(first, one))), engine.unquoted(f"{opens}\n\n{written(second, two)}")]
-  assert ran(log) == [told[0], one, told[1], two]
+  assert ran(log) == [fresh(root), one, opens, two]
   (_, run, _, _) = [a[1] for a in said(log, "run")]
   spoken = [(a[0], a[2]) for a in log if a[0] in ("bash", "wants", "close")]
   assert spoken == [("bash", first), ("wants", run), ("close", second)]

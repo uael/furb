@@ -181,31 +181,25 @@ pub fn projected(project: &Path) -> [PathBuf; 2] {
   [furb.join("config.json"), furb.join("config.local.json")]
 }
 
-/// The official extensions, in the order a life runs them, each with the file of its word: in dev mode the file of the
-/// checkout of git that this furb was built from, else the official copy, `.furb/extensions/<name>/<file>` in the
-/// home, which it writes from the text that it carries when that copy differs, as the doctrine does.
+/// The official extensions, in the order a life runs them, each with the file of its word, the [`copy`] in the home.
 pub fn official() -> Vec<Extension> {
   let whole = "an official extension is whole";
-  let checkout = Path::new(env!("CARGO_MANIFEST_DIR"));
-  let dev = checkout.join(".git").exists().then_some(checkout);
   let home = std::env::home_dir();
   OFFICIAL
     .iter()
     .map(|(manifest, word, _)| {
       let mut one = manifested(manifest, |_| Ok(word)).expect(whole);
-      one.file = copy(&one.name, &one.file, word, dev, home.as_deref());
+      one.file = copy(&one.name, &one.file, &one.word, home.as_deref());
       one
     })
     .collect()
 }
 
-/// The path of the file of the word of an official extension, from the checkout of dev mode and the home, as
-/// [`official`] gives it, or nothing when neither holds it and the home takes no copy.
-fn copy(name: &str, file: &str, text: &str, dev: Option<&Path>, home: Option<&Path>) -> String {
+/// The path of the copy of the word of an extension, `.furb/extensions/<name>/<file>` in the home, which it writes
+/// from the word when that copy differs, or nothing when the home takes no copy. The setup reads this copy and not the
+/// file of the source, since the source imports from `furb.engine`, and a word of a chain imports nothing of furb.
+fn copy(name: &str, file: &str, text: &str, home: Option<&Path>) -> String {
   let at = Path::new("extensions").join(name).join(file);
-  if let Some(dev) = dev.map(|one| one.join(&at)).filter(|one| one.is_file()) {
-    return files::tilded(&dev, home);
-  }
   let Some(official) = home.map(|one| one.join(".furb").join(&at)) else { return String::new() };
   if fs::read_to_string(&official).ok().as_deref() != Some(text)
     && official
@@ -225,7 +219,7 @@ pub fn load(name: &str, root: &Path) -> Result<Extension, Fault> {
   let text = fs::read_to_string(&file).map_err(|no| refused(no.to_string()))?;
   let read = |word: &str| fs::read_to_string(root.join(word)).map_err(|no| format!("{word}: {no}"));
   let mut one = manifested(&text, read).map_err(refused)?;
-  one.file = files::tilded(&root.join(&one.file), std::env::home_dir().as_deref());
+  one.file = copy(&one.name, &one.file, &one.word, std::env::home_dir().as_deref());
   let lawful = name.starts_with(|one: char| one.is_ascii_lowercase())
     && name.chars().all(|one| one.is_ascii_lowercase() || one.is_ascii_digit() || one == '-');
   if !lawful || one.name != name {
@@ -528,10 +522,6 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
     let (mut teach, mut taught) = (None::<(String, String, i64)>, false);
     // Whether this life says the fact teach, and with it the fact setup, which the journal of a later life says again.
     let mut fresh = true;
-    // Each read of the file of an extension that the setup made, with the word that the ear runs at its ready.
-    let mut shown = Vec::<(String, String)>::new();
-    // The actor and the doctrine of the part of the setup of the root alone, while the shared part still runs.
-    let mut rooted = None::<(String, String)>;
     loop {
       let a = hear(&mut co).await;
       let runs_name = |name: &str| enabled.iter().any(|two| two.name == name);
@@ -578,22 +568,6 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
             continue;
           }
           new
-        }
-        // The read of the file of an extension is ready: the ear runs the word of the extension in the module of the
-        // chain as the run `<rung>_word`, which no act makes, so the turn after the read holds that word alone, as
-        // python. A later life makes the same run at the same place, as the ear hears the same ready.
-        "ready" if shown.first().is_some_and(|one| one.0 == a.about()) => {
-          let (rung, word) = shown.remove(0);
-          let words = ["run", ROOT].map(Object::string).into_iter().chain([Object::none()]);
-          let words =
-            words.chain([format!("{rung}_word"), word].map(Object::string)).chain([Object::none()]);
-          co.call("act", words.collect(), vec![]).await?;
-          if shown.is_empty()
-            && let Some((actor, path)) = rooted.take()
-          {
-            shown = setup(&mut co, &enabled, &actor, &path, true).await?;
-          }
-          continue;
         }
         SETUP if a.question() && fresh => {
           say(&mut co, Fact::says("done", a.about(), [Object::none()]));
@@ -660,12 +634,7 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
       };
       // The setup of the root plays once the fact teach and each enable after it were heard.
       if let Some((actor, path, 0)) = teach.take() {
-        shown = setup(&mut co, &enabled, &actor, &path, false).await?;
-        if shown.is_empty() {
-          shown = setup(&mut co, &enabled, &actor, &path, true).await?;
-        } else {
-          rooted = Some((actor, path));
-        }
+        setup(&mut co, &enabled, &actor, &path).await?;
         taught = true;
         let every = enabled.iter().filter(|one| !one.root).map(|one| one.name.clone()).collect();
         if let Some(root) = chains.iter_mut().find(|one| one.0 == ROOT) {
@@ -720,46 +689,37 @@ async fn play(
   ring(co, chain, &word).await
 }
 
-/// One part of the setup of the root, as turns of its default actor whose words furb writes. The shared part is the
-/// read of the doctrine, then the two turns of the file of each extension of every chain, in the order of the life,
-/// then the life word of each that has one. The part of the root alone is the fact setup, then the same turns for the
-/// extensions of the root alone. The ear plays the part of the root alone once it ran the word of each extension of
-/// the shared part, so the fact setup stands after each act of the shared part, which a chain with no source forks. It
-/// makes each rung at once, and the chain gives them their turns in the order it made them. It gives each read of a
-/// file with the word that the ear runs at its ready, in the order it made them.
-async fn setup(
-  co: &mut Co,
-  enabled: &[Extension],
-  actor: &str,
-  path: &str,
-  root: bool,
-) -> Result<Vec<(String, String)>, Fault> {
-  if root {
-    let words = [SETUP, ROOT].map(Object::string).into_iter().chain([Object::none()]);
-    co.call("act", words.collect(), vec![]).await?;
-  } else {
-    written(co, ROOT, &reading(path), actor).await?;
+/// The setup of the root, as turns of its default actor whose words furb writes: the read of the doctrine, the turn
+/// `rung(read('<file>', HIDDEN))` of each extension of every chain, in the order of the life, then the life word of each that has one,
+/// then the fact setup, then the same turns for the extensions of the root alone. It makes each rung at once, and the
+/// chain gives them their turns in the order it made them, so the fact setup stands before the turns of the root alone.
+async fn setup(co: &mut Co, enabled: &[Extension], actor: &str, path: &str) -> Result<(), Fault> {
+  written(co, ROOT, &reading(path), actor).await?;
+  for root in [false, true] {
+    if root {
+      let words = [SETUP, ROOT].map(Object::string).into_iter().chain([Object::none()]);
+      co.call("act", words.collect(), vec![]).await?;
+    }
+    for one in enabled.iter().filter(|one| one.root == root) {
+      loaded(co, one, ROOT, actor).await?;
+    }
+    lives(co, enabled.iter().filter(|one| one.root == root), actor).await?;
   }
-  let mut shown = Vec::new();
-  for one in enabled.iter().filter(|one| one.root == root) {
-    shown.extend(loaded(co, one, ROOT, actor).await?);
-  }
-  lives(co, enabled.iter().filter(|one| one.root == root), actor).await?;
-  Ok(shown)
+  Ok(())
 }
 
-/// The word of an extension on the root as two turns: a turn of an actor whose word reads the file of the word with
-/// `HIDDEN`, which tells nothing, and the turn after it, which holds the code of the word alone, as the ear tells it at
-/// the ready of that read, so the chain runs that code in its module at that place, as it runs each turn that a word
-/// told. It gives the rung of the read with that code. An extension whose word has no file plays its word as a rung.
-/// An extension whose word is blank, as one that holds only a part for the TUI, plays nothing: a run of no word would
-/// stand in the program of the chain as a word that a replay asks a model for.
+/// The word of an extension on a chain as a turn of an actor whose word is `rung(read('<its file>', HIDDEN))`: the read
+/// tells nothing, and the rung that the word makes tells the code of the file alone, which is the code that it runs, so
+/// the turn after it holds that code. The file holds the word of the extension, as [`copy`] writes it. An extension
+/// whose word has no file plays its word as a rung. An extension whose word is blank, as one that holds only a part
+/// for the TUI, plays nothing: a run of no word would stand in the program of the chain as a word that a replay asks
+/// a model for.
 async fn loaded(
   co: &mut Co,
   one: &Extension,
   chain: &str,
   actor: &str,
-) -> Result<Option<(String, String)>, Fault> {
+) -> Result<Option<String>, Fault> {
   if one.word.trim().is_empty() {
     return Ok(None);
   }
@@ -767,9 +727,8 @@ async fn loaded(
     ring(co, chain, &one.word).await?;
     return Ok(None);
   }
-  let word = format!("read({}, HIDDEN)", Object::string(&one.file).py_repr());
-  let made = written(co, chain, &word, actor).await?;
-  Ok(made.map(|rung| (rung, one.word.clone())))
+  let word = format!("rung(read({}, HIDDEN))", Object::string(&one.file).py_repr());
+  written(co, chain, &word, actor).await
 }
 
 /// The life words of extensions on the root as one turn of an actor, so the turn after it holds what each told, and

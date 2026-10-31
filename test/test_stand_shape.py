@@ -179,7 +179,7 @@ async def test_every_chain_hears_the_done_of_every_stand() -> None:
   assert [paragraphs(engine.turns(on=one)) for one in (over, two)] == told
   assert engine.module(root)["actor"] == engine.module(two)["actor"] == "m/low"
   await engine.rung("stand()", on=two)
-  assert paragraphs(engine.turns(on=two)) == [*told[1], "#rung2 by operator\nrung2_word = 'stand()'", stood("stand5")]
+  assert paragraphs(engine.turns(on=two)) == [*told[1], "stand()", stood("stand5")]
   assert paragraphs(engine.turns(on=over)) == told[0]
   taught, _, root = born(stands=[*STANDS, "/w/DOCTRINE.md"])
   await engine.rung("k = 1", on=root)

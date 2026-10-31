@@ -205,7 +205,7 @@ test("what a model writes streams into the session under its rung until its repl
   try {
     const engine = session.open();
     const prompt = engine.prompt("int", { message: "count", on: engine.root });
-    // The rung that answers the prompt comes after the ten rungs of the setup of the root, so it is found as the
+    // The rung that answers the prompt comes after the seventeen rungs of the setup of the root, so it is found as the
     // rung that the prompt made.
     const answering = () =>
       [...session.activity.acts.values()].find((act) => act.kind === "rung" && act.by === prompt.id)?.id ??
@@ -214,7 +214,7 @@ test("what a model writes streams into the session under its rung until its repl
     const turn = (role: string, text: unknown) =>
       expect.objectContaining({ role, content: [{ type: "text", text }] });
     await until(session, () => session.streams.get(answering())?.text === "close(3)");
-    expect(answering()).toBe("rung11");
+    expect(answering()).toBe("rung18");
     expect(session.streams.get(answering())).toEqual({
       chain: engine.root,
       text: "close(3)",
@@ -225,9 +225,10 @@ test("what a model writes streams into the session under its rung until its repl
         actor: "claude-cli:sonnet/high",
         chain: engine.root,
         // The setup of the root as turns of the default actor whose words furb writes: the bare paragraph chain(), the
-        // read of the doctrine, the read of the file of each official extension, each followed by its code alone, the
-        // life words in one turn, whose user turn holds what they read, then the stand and the cd, whose user turn holds
-        // what they tell, then the open of the root and the prompt.
+        // read of the doctrine, for each official extension the word rung(read('<file>', HIDDEN)) and the turn of the
+        // rung that it made, which holds the code alone, then the life words in one turn, whose user turn holds what
+        // they read, then the stand and the cd, whose user turn holds what they tell, then the open of the root and the
+        // prompt.
         messages: [
           turn("user", "chain()"),
           // A path of Windows stands with its separators doubled, as python shows a backslash.
@@ -237,10 +238,12 @@ test("what a model writes streams into the session under its rung until its repl
             turn(
               "assistant",
               expect.stringMatching(
-                new RegExp(`^read\\('.*[/\\\\]+extensions[/\\\\]+${name}[/\\\\]+${name}\\.py', HIDDEN\\)$`),
+                new RegExp(
+                  `^rung\\(read\\('.*[/\\\\]+extensions[/\\\\]+${name}[/\\\\]+${name}\\.py', HIDDEN\\)\\)$`,
+                ),
               ),
             ),
-            // The turn after the read holds the code of the word of the extension alone, which ran in the module.
+            // The turn of the rung that the word made holds the code of the file alone, which that rung ran.
             turn("user", expect.stringMatching(/^(?!#)[\s\S]*\ndef \w+\(/)),
           ]),
           turn("assistant", "catchup()\nawait recall()\nawait listed()\nawait mcp_index()"),
@@ -264,7 +267,7 @@ test("what a model writes streams into the session under its rung until its repl
               {
                 type: "text",
                 text: expect.stringMatching(
-                  /^#chain1\nchain1_label = 'root'\nchain1: Act\[Never\] = Act\('chain1'\)\n\n#prompt1\nprompt1_message = 'count'\nprompt1: Act\[int\] = Act\('prompt1'\)\n\n#rung11 advance on prompt1$/,
+                  /^#chain1\nchain1_label = 'root'\nchain1: Act\[Never\] = Act\('chain1'\)\n\n#prompt1\nprompt1_message = 'count'\nprompt1: Act\[int\] = Act\('prompt1'\)\n\n#rung18 advance on prompt1$/,
                 ),
               },
             ],
@@ -823,7 +826,7 @@ test("record inspection reports pending work when its replay starts or feeds a c
   try {
     // The read of the doctrine, the rungs of the seven official extensions, and the stand and the cd come before the
     // two rungs.
-    expect([sleeps, feeds]).toEqual(["rung11", "rung12"]);
+    expect([sleeps, feeds]).toEqual(["rung18", "rung19"]);
     expect((await inspectRecord(record)).pending.map(([id]) => id)).toEqual([
       sleeps,
       "bash1",

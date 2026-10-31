@@ -189,7 +189,7 @@ export class Snapshots {
     // A run adds its word to the program as the program reads it, which keeps the last word of each rung since the
     // last module.
     if (kind === "run" && isQuestion(kind, id) && view.program) {
-      const [rung, word, donor] = fact.slice(4).map((one) => String(one ?? ""));
+      const [rung, word, donor] = fact.slice(4).map(String);
       const key = donor || rung || "";
       view.program[key] = word ?? "";
       view.worded ??= { whole: false, words: {} };

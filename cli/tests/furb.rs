@@ -705,9 +705,9 @@ fn a_prompt_of_the_client_is_answered_by_a_model_and_its_done_is_sent() {
   for (one, name) in
     said[1..8].iter().zip(["catchup", "memory", "skills", "compaction", "ouroboros", "web", "mcp"])
   {
-    let file = format!("extensions/{name}/{name}.py', HIDDEN)");
+    let file = format!("extensions/{name}/{name}.py', HIDDEN))");
     assert!(
-      one.as_str().is_some_and(|one| one.starts_with("read(") && one.ends_with(&file)),
+      one.as_str().is_some_and(|one| one.starts_with("rung(read(") && one.ends_with(&file)),
       "{one}"
     );
   }
@@ -861,10 +861,10 @@ fn a_word_of_the_client_runs_as_a_rung_and_a_pause_holds_a_chain_until_its_wake(
   let mut client = Client::new(&yard);
   assert_eq!(
     client.data("1", json!({"type": "rung", "word": "k = 1\nclose(k + 1)"})),
-    json!({"act": "rung11"}),
-    "the turn of the doctrine, the seven rungs of the extensions, the turn of skills and the turn of the standing come first"
+    json!({"act": "rung18"}),
+    "the turn of the doctrine, the seven rungs of the extensions and the rung that each made, the turn of skills and the turn of the standing come first"
   );
-  assert_eq!(client.done("rung11")["value"], 2);
+  assert_eq!(client.done("rung18")["value"], 2);
   client.data("2", json!({"type": "pause", "act": "chain1"}));
   let state = client.data("3", json!({"type": "state"}));
   assert_eq!(
@@ -978,7 +978,7 @@ fn the_state_names_the_work_that_an_earlier_life_left_pending() {
   let state = later.data("1", json!({"type": "state"}));
   // The turn of the doctrine, the rungs of the official extensions, the turn of skills and the turn of the standing
   // come first, and the rung of the client made the wait.
-  assert_eq!(state["pending"], json!([["rung11", "rung"], ["wait1", "wait"]]));
+  assert_eq!(state["pending"], json!([["rung18", "rung"], ["wait1", "wait"]]));
   later.data("2", json!({"type": "cancel", "act": "wait1"}));
   let state = later.data("3", json!({"type": "state"}));
   assert_eq!(state["pending"], json!([]), "an act that is done is pending no more");

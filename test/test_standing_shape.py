@@ -2,7 +2,7 @@
 
 import pytest
 
-from conftest import STANDS, Sand, born, life, paragraphs, plain, said, settle, stood, written
+from conftest import STANDS, Sand, born, life, paragraphs, plain, said, settle, stood
 from furb import engine
 from furb.engine import Drift
 
@@ -29,7 +29,7 @@ async def test_the_roster_the_directory_and_the_actor_that_a_model_reads_are_in_
   assert await step is None
   assert await engine.prompt(int, "count", on=root) == 1
   told = paragraphs(sand.turns[said(log, "reply")[0][1]])
-  assert told[1:4] == [written(step, "stand()\ncd('/' + 'w')"), stood("stand2"), "#cd1\ncd1_path = '/w'"]
+  assert told[1:4] == ["stand()\ncd('/' + 'w')", stood("stand2"), "#cd1\ncd1_path = '/w'"]
   assert [engine.module(root)[name] for name in ("stand2_roster", "cd1_path", "stand2_actor")] == STANDS
 
 

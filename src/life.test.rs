@@ -789,43 +789,61 @@ fn each_record_of_the_corpus_names_this_version_and_replays_on_this_build_with_n
   }
 }
 
-/// The texts of the items of each turn.
-fn texts(all: &[Object]) -> Vec<Vec<String>> {
-  all
-    .iter()
-    .map(|one| {
-      let items = one.as_ref().items().unwrap();
-      items.iter().map(|item| item.as_str().unwrap_or_default().to_owned()).collect()
-    })
-    .collect()
+/// Each run of each chain whose word no turn of that chain shows, as a python expression in the names of the engine.
+const UNSHOWN: &str = "[(c, x[1], x[4]) for c in [f'chain{n}' for n in range(1, 99) if get(f'chain{n}')] \
+                       for x in transcript(c, 'run') if x[3] == c \
+                       and not any(x[5] in unquoted(t[1]) for t in turns(on=c))]";
+
+/// Each extension whose file the root does not show as the turn `rung(read('<file>', HIDDEN))` and then the turn
+/// of its code alone, or whose definitions the module of the root lacks.
+const UNSEEDED: &str = "[e[3] for e in transcript('chain1', 'enable') if e[4].strip() and (not any(t[:2] == \
+                        ('assistant', f'rung(read({e[7]!r}, HIDDEN))') and turns(on='chain1')[n + 1][:2] == \
+                        ('user', e[4]) for n, t in enumerate(turns(on='chain1'))) or not all(m in \
+                        module('chain1') for m in re.findall(r'^(?:def|class) (\\w+)', e[4], re.M)))]";
+
+/// Each record of the corpus, replayed in a life that only inspects it, by its name.
+fn replayed() -> Vec<(String, Engine)> {
+  let mut records: Vec<PathBuf> = fs::read_dir(corpus())
+    .unwrap()
+    .map(|one| one.unwrap().path())
+    .filter(|one| one.extension().is_some_and(|named| named == "jsonl"))
+    .collect();
+  records.sort();
+  let open = |one: PathBuf| {
+    let name = one.file_stem().unwrap().to_string_lossy().into_owned();
+    let at = place(&format!("shown-{name}"));
+    fs::copy(&one, at.join("record.jsonl")).unwrap();
+    let inspects = Opening { inspecting: Some(true), ..opening(&at, false) };
+    (name, inspects.boot::<String>([]).unwrap().0)
+  };
+  records.into_iter().map(open).collect()
 }
 
 #[test]
-fn a_replay_of_the_corpus_shows_the_file_of_each_extension_as_its_read_then_its_word_alone() {
-  let at = place("corpus-turns");
-  fs::copy(corpus().join("work.jsonl"), at.join("record.jsonl")).unwrap();
-  let inspects = Opening { inspecting: Some(true), ..opening(&at, false) };
-  let mut engine = inspects.boot::<String>([]).unwrap().0;
-  let root = || Some("chain1".to_owned());
-  let turns = texts(&engine.turns(verbs::Turns { on: root() }).unwrap());
-  let of = Some("enable".to_owned());
-  let enables = engine.transcript(verbs::Transcript { on: root(), of }).unwrap();
-  assert_eq!(enables.len(), 7, "each official extension runs on the life of the corpus");
-  for enable in enables {
-    let text = |at| enable.word(at).and_then(|one| one.as_str().map(str::to_owned)).unwrap();
-    let (name, word) = (text(0), text(1));
-    let file = format!("/{name}/{name}.py', HIDDEN)");
-    let reads: Vec<usize> = (0..turns.len())
-      .filter(|&at| turns[at][0] == "assistant" && turns[at][1].starts_with("read('"))
-      .filter(|&at| turns[at][1].ends_with(&file))
-      .collect();
-    assert_eq!(reads.len(), 1, "one turn reads the file of {name}: {turns:?}");
+fn each_run_of_a_chain_of_the_corpus_has_a_turn_that_shows_its_word() {
+  for (name, mut engine) in replayed() {
+    let unshown = engine.word(UNSHOWN, vec![]).unwrap();
     assert_eq!(
-      turns[reads[0] + 1][..2],
-      ["user", word.as_str()],
-      "the turn after it holds the word of {name} alone"
+      unshown.as_ref().items().unwrap().len(),
+      0,
+      "{name}: {}",
+      unshown.as_ref().py_repr()
     );
   }
+}
+
+#[test]
+fn a_replay_of_the_corpus_shows_each_file_of_an_extension_as_the_rung_of_its_read_then_its_code_alone()
+ {
+  let (_, mut engine) = replayed().into_iter().find(|one| one.0 == "work").unwrap();
+  let enables = engine.word("len(transcript('chain1', 'enable'))", vec![]).unwrap();
+  assert_eq!(
+    enables.as_ref().as_int(),
+    Some(7),
+    "each official extension runs on the life of the corpus"
+  );
+  let unseeded = engine.word(UNSEEDED, vec![]).unwrap();
+  assert_eq!(unseeded.as_ref().items().unwrap().len(), 0, "{}", unseeded.as_ref().py_repr());
 }
 
 #[test]

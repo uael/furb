@@ -206,7 +206,7 @@ def peek(at: str, waiting: object = None) -> object:
 
 def turns(on: str = "") -> list[Turn]:
   """The turns of a chain, folded from what it has heard.
-  The turns of what a chain has heard: every tell stands as a paragraph of its notes, a run with no donor stands as a paragraph of its word, and nothing else stands at all.
+  The turns of what a chain has heard: every tell stands as a paragraph of its notes, and nothing else stands at all.
   The turn a model was answered with closes the turn of the operator and stands as the turn it is, and a text stands by the lines that the show of the one that tells it picks.
   turns reads the transcript of the chain and asks nothing, so no act is made and the journal keeps nothing.
   A user turn packs one paragraph for each thing told since the last reply, in order.
@@ -389,13 +389,13 @@ def wait(seconds: float = 0, *acts: str, on: str = "") -> Act[str | None]:
   The ear of a wait says it done when one of its acts is done, and the World stops its timer when it hears that done, as when a control ends it.
   """
 
-def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
+def rung(word: str | Text = "", retells: str = "", to: str = "", on: str = "") -> Act:
   """The run of a word on a chain: a word its caller wrote, which it tells, since nothing else did; or, with no word, a turn of a model, which its chain asks for at the turn it gives it and which the World answers, of which it tells nothing, since that turn stands as the turn it is.
+  A Text given as the word is its content, so rung(read(path, HIDDEN)) runs the code of a file, which the open of the rung tells.
   A rung is an act: the run of one word in the globals of its chain, which the chain has the Kernel run.
   The engine tells what a step raised.
   A step that raised nothing and debugged nothing tells nothing.
-  The open of a rung with a word tells that word as a command tells its command, bound as rungN_word, so no word that ran runs again.
-  The header that tells the word of a rung names the maker of that rung, as #rungN by operator, so a turn says who made a word that it did not ask for.
+  The open of a rung with a word tells that word alone, the code that the rung runs, and the chain binds no paragraph that holds it, so no word that ran runs again.
   A rung with no word tells nothing where it is made, since the chain tells it as the last line of the turn it asks for it with.
   A rung with no word and no actor takes the default actor of its chain when it is made, and writes it into its actor word, so its reply and its ledger read the one actor.
   A rung with a word and an actor is a turn of that actor that its caller wrote: it answers its own reply to that actor with the turn ("assistant", word, None, None) before it says its word ready, so the turns show the word as the turn of that actor, the rung runs it as its step, and no World asks a model for it.
@@ -596,7 +596,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   The advance binds each act that a word of the chain awaits and that is not over, as rung5_waits = ['bash3'], and no waits when no word awaits, so the model sees which acts the words that it wrote before still wait for.
   When nothing was told on the chain since the word of the last rung that the chain did not make was ready, the chain tells that rung under the header told nothing before the advance, so the model sees that the word showed it nothing.
   While a word of the chain awaits an act that is not over, the chain advances no rung after a word that told nothing, so it asks no reply until a fact is told on the chain.
-  The chain holds the text of each paragraph told on it, in order.
+  The chain holds the text of each paragraph told on it but the word of a rung, in order.
   At the advance of the next rung, before it asks the reply, or at the first ready of a rung that it does not advance, the chain runs that text as the told rung of that rung, and holds nothing more.
   Each act that a told paragraph opened and each value that it told is bound for the word of that rung, whoever wrote it.
   The gate never reads a told rung as a word, since the engine wrote it.
@@ -874,7 +874,7 @@ The word of a rung enters the program of the chain when the gate accepts it or w
 The word of a rung that extends the engine is part of the program, so the extension returns in a later life.
 The old words stay in the program and in the turns after a rung rebinds a name.
 """
-type Run = tuple[Literal["run"], str, str, str, str, str, str | None]
+type Run = tuple[Literal["run"], str, str, str, str, str, str]
 """A run is the act of running the word of a rung or the text of a told rung, which the chain makes on itself and the Kernel takes: it says started as the run, runs what the writings of that rung left of the word, as the rung, and says the run done with what the word gave.
 The word a run carries is python, which unquoted made of the word of the rung.
 A run names the rung that the word retells, so a Kernel may answer a retold run from what it kept of that one instead of running the word again.

@@ -1,6 +1,6 @@
 """transcript, the facts on a chain."""
 
-from conftest import born, fresh, heads, lasting, paragraphs, said, settle, slow, written
+from conftest import born, fresh, heads, lasting, paragraphs, said, settle, slow
 from furb import engine
 from furb.engine import OPERATOR
 
@@ -38,7 +38,7 @@ async def test_the_transcript_is_the_whole_state_of_a_chain() -> None:
   await laid
   held = engine.transcript(root)
   assert engine.module(root) == [a[3] for a in held if a[0] == "module"][-1]
-  program = {f"{laid}_told": engine.unquoted(fresh(root, written(laid, word))), laid: word}
+  program = {f"{laid}_told": engine.unquoted(fresh(root)), laid: word}
   assert engine.program(root) == {a[4]: a[5] for a in held if a[0] == "run"} == program
   assert engine.cwd(on=root) == [a[4] for a in held if a[0] == "cd"][-1] == "/x"
   assert paragraphs(engine.turns(on=root)) == ["\n".join(a[3]) for a in said(held, "tell")]

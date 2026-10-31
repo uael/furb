@@ -69,8 +69,6 @@ def turns(on="") -> list[tuple]:
         sent = []
       case ("tell", *_, notes):
         user.append("\n".join(notes))
-      case ("run", *_, word, None):
-        user.append(word)
   return [*folded, ("user", "\n\n".join(sent + user), None, None)]
 
 
@@ -173,7 +171,9 @@ def wait(seconds: float = 0, *acts: str, on="") -> Act[str | None]:
   return act("wait", on, controlled(ear), seconds, *acts)
 
 
-def rung(word="", retells="", to="", on="") -> Act:
+def rung(word: str | Text = "", retells="", to="", on="") -> Act:
+  word = getattr(word, "content", word)
+
   def ear(id):
     yield "started", id
     mine = {retells, scope(id)}
@@ -183,7 +183,7 @@ def rung(word="", retells="", to="", on="") -> Act:
       if to:
         act("reply", "", lambda r: (yield "done", r, ("assistant", word, None, None)), to)
       elif tells(id):
-        yield told(id, "by " + get(id)[2], word=word)
+        yield "tell", id, [word]
       while not over(retells) and get(retells) if retells else paused(get(id)[2]):
         yield mine
       yield "ready", id, word
@@ -355,7 +355,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
             seat = placed(last[1])
         case ("rung", rid, _, _, "", *_):
           waiting[rid] = running[rid] = ""
-        case ("tell", *_, notes) if notes != ["chain()"]:
+        case ("tell", *_, notes) if notes not in (["chain()"], [*r[4:5]]):
           heard.append("\n".join(notes))
           ran = ""
           if a is note:

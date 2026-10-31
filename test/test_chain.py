@@ -38,7 +38,6 @@ from conftest import (
   sown,
   stood,
   world_says,
-  written,
 )
 from furb import engine
 from furb.engine import OPERATOR, ROOT, Act, Refused, Text, take
@@ -143,7 +142,7 @@ async def test_the_engine_makes_a_chain_in_one_way_by_running_its_ladder() -> No
   laid = engine.rung("k = 1", on=root)
   await laid
   twin = await chained("twin", root)
-  told = fresh(root, written(laid, "k = 1"))
+  told = fresh(root)
   assert ran(log) == [told, "k = 1", opened(twin, "twin", root), told, "k = 1"] and engine.module(twin)["k"] == 1
   await engine.rung("later = 2", on=root)
   assert "later" not in engine.module(twin)
@@ -265,7 +264,7 @@ async def test_a_chain_its_module_which_is_the_engine_itself_named_for_the_chain
   laid = engine.rung("k = 21", on=root)
   await laid
   program = engine.program(root)
-  assert list(program.values()) == [fresh(root, written(laid, "k = 21")), "k = 21"] and engine.module(root)["k"] == 21
+  assert list(program.values()) == [fresh(root), "k = 21"] and engine.module(root)["k"] == 21
   sand.script[root] = ["x = bash('echo hi')\nclose(1)", "close(None)"]
   assert await engine.prompt(int, "run it", on=root) == 1
   await settle()
@@ -302,11 +301,7 @@ async def test_the_turns_of_a_chain_tell_the_acts_of_the_operator() -> None:
   assert await step is None
   one = engine.prompt(int, "how many?", to=OPERATOR, on=root)
   await settle()
-  assert paragraphs(engine.turns(on=root)) == [
-    opened(root, "root"),
-    written(step, "k = 1"),
-    prompted(one, "int", "how many?"),
-  ]
+  assert paragraphs(engine.turns(on=root)) == [opened(root, "root"), "k = 1", prompted(one, "int", "how many?")]
 
 
 async def test_the_transcript_of_a_chain_is_the_facts_on_it_in_the_order_it_heard_them() -> None:
@@ -901,7 +896,7 @@ async def test_a_filter_that_skips_a_rung_its_caller_wrote_keeps_it_out_of_the_t
   twin = engine.chain("twin", source=root, filter=take(laid, inside=False))
   await settle()
   assert engine.module(twin)["k"] == 1
-  assert paragraphs(engine.turns(on=root)) == [opened(root, "root"), written(laid, "k = 1")]
+  assert paragraphs(engine.turns(on=root)) == [opened(root, "root"), "k = 1"]
   assert paragraphs(engine.turns(on=twin)) == [opened(root, "root"), opened(twin, "twin", root)]
 
 
@@ -924,7 +919,7 @@ async def test_a_chain_with_a_source_reads_nothing_that_its_origin_did_after_tha
   await settle()
   assert engine.turns(on=twin) == told == [("user", "\n\n".join(paragraphs(told)), None, None)]
   assert paragraphs(told) == [opened(root, "root"), opened(twin, "twin", root)]
-  assert "after" not in engine.module(twin) and paragraphs(engine.turns(on=root))[-1:] == [written(after, "after = 1")]
+  assert "after" not in engine.module(twin) and paragraphs(engine.turns(on=root))[-1:] == ["after = 1"]
 
 
 async def test_a_chain_with_a_source_retells_no_rung_of_its_origin_that_is_not_over_at_its_birth() -> None:
@@ -980,7 +975,7 @@ async def test_it_holds_the_transcript_of_its_origin_first_and_tells_its_own_ope
   retold = [a[1] for a in said(log, "rung") if a[3] == twin]
   assert [engine.get(one)[5] for one in retold] == [f"{step}_told", step]
   assert [a for a in held if a[1] in retold and a[0] == "tell"] == []
-  assert paragraphs(engine.turns(on=twin)) == [opened(root, "root"), written(step, "k = 1"), opened(twin, "twin", root)]
+  assert paragraphs(engine.turns(on=twin)) == [opened(root, "root"), "k = 1", opened(twin, "twin", root)]
 
 
 async def test_it_hears_no_control_that_ends_it() -> None:
@@ -1142,8 +1137,8 @@ async def test_a_replay_makes_the_rungs_of_a_chain_again_from_its_donor() -> Non
   assert [(a[4], a[5]) for a in made] == [(bind, f"{first}_told"), ("a = 1", first), *advances, ("b = 20\nc = 30", "")]
   last = made[-1][1]
   kept = engine.program(root)
-  held = [f"{first}_told", first, *[one for _, one in advances], f"{last}_told", last]
-  told = [bind, "a = 1", *[one for one, _ in advances], engine.unquoted(written(last, "b = 20\nc = 30", act))]
+  held = [f"{first}_told", first, *[one for _, one in advances], last]
+  told = [bind, "a = 1", *[one for one, _ in advances]]
   assert list(kept) == held and list(kept.values()) == [*told, "b = 20\nc = 30"]
   assert (engine.module(root)["b"], engine.module(root)["c"]) == (20, 30)
 
@@ -1180,13 +1175,12 @@ async def test_a_write_of_a_door_gives_the_words_of_that_ladder_alone() -> None:
   engine.write(Text(act, "a = 2"), on=root)
   await settle()
   program = engine.program(root)
-  first, closer, made = steps(log, act)
+  first, closer, _ = steps(log, act)
   assert list(program.values()) == [
-    fresh(root, written(laid, "mine = 1")),
+    fresh(root),
     "mine = 1",
     f"{prompted(act, 'None', 'count')}\n\n#{first} advance on {act}",
     f"#{first} told nothing\n\n#{closer} advance on {act}",
-    written(made, "a = 2", act),
     "a = 2",
   ]
   assert engine.module(root)["mine"] == 1 and engine.module(root)["a"] == 2
@@ -1330,10 +1324,13 @@ async def test_the_chain_tells_a_word_that_told_nothing_before_the_advance() -> 
 
 
 async def test_the_chain_holds_the_text_of_each_paragraph_told_on_it() -> None:
-  """The chain holds the text of each paragraph told on it, in order."""
+  """The chain holds the text of each paragraph told on it but the word of a rung, in order."""
   _, log, root, first, second = await told_read()
   told = [a[5] for a in said(log, "run") if a[4] in (f"{first}_told", f"{second}_told")]
-  assert "\n\n".join(told) == engine.unquoted("\n\n".join(paragraphs(engine.turns(on=root))))
+  words = ["t = read('a.txt')", "got = read1_text"]
+  held = paragraphs(engine.turns(on=root))
+  assert [one for one in held if one in words] == words
+  assert "\n\n".join(told) == engine.unquoted("\n\n".join(one for one in held if one not in words))
 
 
 async def test_at_the_advance_of_the_next_rung_the_chain_runs_that_text() -> None:
@@ -1358,12 +1355,12 @@ async def test_the_gate_never_reads_a_told_rung_as_a_word() -> None:
 
 async def test_the_turns_do_not_show_a_told_rung() -> None:
   """The turns do not show a told rung, since the turn shows its python already."""
-  _, _, root, first, second = await told_read()
+  _, _, root, _, _ = await told_read()
   assert paragraphs(engine.turns(on=root)) == [
     opened(root, "root"),
-    written(first, "t = read('a.txt')"),
+    "t = read('a.txt')",
     "#read1\nread1_path = 'a.txt'\n<s:read1_text>\none\ntwo</s:read1_text>",
-    written(second, "got = read1_text"),
+    "got = read1_text",
   ]
 
 

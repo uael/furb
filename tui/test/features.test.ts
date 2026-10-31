@@ -368,7 +368,8 @@ test("the words of the extensions stand as code: a comment that names their ear,
         );
         await session.refresh();
         // The setup of the root is the turns of the default actor that the ear extensions wrote: the read of the
-        // doctrine, the read of the file of each extension in the order of the life, then the life words in one word.
+        // doctrine, the word rung(read('<file>', HIDDEN)) of each extension in the order of the life, then the life
+        // words in one word.
         // The stand and the cd come after them, as a rung that the root plays on itself.
         const setup = session.activity.filter((act) => act.kind === "rung" && act.by === "extensions");
         expect(setup.map((act) => act.word)).toEqual([
@@ -376,7 +377,9 @@ test("the words of the extensions stand as code: a comment that names their ear,
           expect.stringMatching(/^read\('.*[/\\]DOCTRINE\.md'\)$/),
           ...["catchup", "memory", "skills", "compaction", "ouroboros", "web", "mcp"].map((name) =>
             expect.stringMatching(
-              new RegExp(`^read\\('.*[/\\\\]+extensions[/\\\\]+${name}[/\\\\]+${name}\\.py', HIDDEN\\)$`),
+              new RegExp(
+                `^rung\\(read\\('.*[/\\\\]+extensions[/\\\\]+${name}[/\\\\]+${name}\\.py', HIDDEN\\)\\)$`,
+              ),
             ),
           ),
           "catchup()\nawait recall()\nawait listed()\nawait mcp_index()",
@@ -397,7 +400,10 @@ test("the words of the extensions stand as code: a comment that names their ear,
         const at = rows.findIndex((row) => /# extensions/.test(row));
         expect(at).toBeGreaterThanOrEqual(0);
         const shown = rows.slice(at + 1, at + 14).map((row) => row.trim().replace(/\s{2,}.*$/, ""));
-        expect(shown.slice(0, 8).map((row) => /^\d+ read\('/.test(row))).toEqual(Array(8).fill(true));
+        expect(shown[0]).toMatch(/^1 read\('/);
+        expect(shown.slice(1, 8).map((row) => /^\d+ rung\(read\('.*', HIDDEN\)\)$/.test(row))).toEqual(
+          Array(7).fill(true),
+        );
         // The life words stand as the calls that end their one word, each on its line, and the card of the ear ends
         // there, since the stand and the cd are no word of the ear.
         expect(shown.slice(8, 12)).toEqual([
