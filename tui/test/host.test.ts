@@ -799,3 +799,32 @@ test.skipIf(process.platform === "win32")(
       await opened.host.end();
     }),
 );
+
+test.skipIf(process.platform === "win32")(
+  "a host tells its windows once that the life holds most of the memory that bounds it",
+  () =>
+    demoLife(async (record, directory) => {
+      const set = {
+        FURB_SANDBOX_MEMORY: "400",
+        FURB_MEMORY_WARN: "0.1",
+        FURB_HOST_WATCH: "100",
+        FURB_DISK_WARN: "0",
+      };
+      Object.assign(process.env, set);
+      const lines: string[] = [];
+      let opened: Awaited<ReturnType<typeof openEngine>>;
+      try {
+        opened = await openEngine({ demo: true, host: true, cwd: directory, record }, (link) =>
+          link.host.on("log", (line: string) => lines.push(line)),
+        );
+      } finally {
+        for (const name of Object.keys(set)) delete process.env[name];
+      }
+      await opened.engine.rung({ word: "x = 'a' * (60 << 20)", on: opened.engine.root });
+      await eventually(() => lines.length > 0, "the host to warn of the memory");
+      expect(lines[0]).toMatch(/^The life holds \d+ MiB of the 400 MiB of memory that bounds it\./);
+      await Bun.sleep(400);
+      expect(lines).toHaveLength(1);
+      await opened.host.end();
+    }),
+);
