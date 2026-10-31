@@ -15,9 +15,9 @@ async def test_a_wants_is_the_act_that_a_run_makes_when_its_word_waits() -> None
   assert (wants[2], wants[3], wants[4]) == (run, root, command)
   assert [a[2] for a in said(log, "started") if a[1] == wants[1]] == [act]
   engine.pause(act)
-  sand.exits(command, 3)
+  sand.exits(command, 0)
   await settle()
   assert dones(log, "wants") == [] and engine.peek(act, ...) is ...
   engine.wake(act)
   await settle()
-  assert [(a[2], a[3]) for a in dones(log, "wants")] == [(act, engine.peek(command))] and (await act) == 3
+  assert [(a[2], a[3]) for a in dones(log, "wants")] == [(act, engine.peek(command))] and (await act) == 0

@@ -635,6 +635,7 @@ def bash(
   command: str,
   stdin: str | None = "",
   timeout: float = TIMEOUT,
+  ok: tuple[int | None, ...] | bool | None = None,
   show: Show = TAIL,
   show_err: Show | None = None,
   on: str = "",
@@ -642,7 +643,7 @@ def bash(
   """A command: its streams as they come, its exit, the door of its streams and of its stdin, and what it came to.
   bash is given one show for each stream that bash tells.
   The commands of the World run at the same time.
-  bash is given a command, its stdin, a timeout, and a show for each stream, the plain words first, so the journal makes it again.
+  bash is given a command, its stdin, a timeout, the codes that it accepts, and a show for each stream, the plain words first, so the journal makes it again.
   bash gives the command, which is awaited for its exit code and its streams.
   The World runs the command in the working directory of the chain, which it reads.
   The World runs the command in a POSIX sh: /bin/sh, and on Windows the sh of Git for Windows, which it finds on PATH, beside the git on PATH, or in the folder of the programs of the machine.
@@ -657,6 +658,9 @@ def bash(
   A stdin of text is fed whole to the command at its start, and then it closes, so the default, an empty text, gives a stdin that is empty and closed.
   Without a stderr show, the stderr of the command flows into its stdout.
   A command without a timeout has the timeout TIMEOUT that the file names.
+  A command accepts the codes that its ok names, as ok=(0, 1), and every code when its ok is True.
+  A command with no ok accepts the code 0, and the code 1 when it ends in a grep, an egrep, an rg, a diff, a cmp, a test, or a git check with --quiet, --is-ancestor or --exit-code, which exit 1 for no match or for a difference.
+  A word that defines accepts(command, code) rules the codes of each command with no ok on its chain, in the place of that default.
   The World that takes a command answers it: it says it done with its Exit, the code and the streams it kept, since the owner of an act is the one that answers it.
   A stdin of None stays open, and the door bash1/stdin is writable while the command runs.
   The World feeds a command the text of each write of its stdin that it answers, and a write of nothing closes that stdin.
@@ -735,6 +739,8 @@ class Act[T = object](str):
     A rung awaits an act and nothing else.
     To await an act raises the exception that the act completed with.
     To await a cancelled act raises CancelledError.
+    A word that awaits a command whose code is not one that the command accepts raises Refused where it waited, and the command keeps its Exit, which peek gives.
+    The operator, which awaits from outside a run, is given the Exit of a command whatever its code, since the codes that a command accepts rule the word that awaits it.
     A word that awaits a chain raises Refused where it waited, since a chain never settles and the word could go no further.
     A word that awaits a name of no act of the life raises Refused where it waited, since no done can settle it, and so does the operator.
     The awaiter of the prompt raises that exception.
@@ -744,6 +750,8 @@ class Act[T = object](str):
 class Refused(Exception):
   """What a call the engine will not make raises in the one that made it.
   A refused call raises Refused in the caller.
+  A word that awaits a command whose code the command does not accept is refused where it waited, with a message that names the command and how it ended, as bash3 exited 1, or bash3 timed out after 5.0s.
+  A word that catches that refusal reads the Exit of the command with peek, as peek(bash3).
   """
 
 class Drift(Exception):
@@ -965,7 +973,7 @@ type Chain = tuple[Literal["chain"], str, str, str, str, str]
 """A chain carries the label and the source of a chain, and every chain is chainN whether boot or chain opened it."""
 type Grant = tuple[Literal["grant"], str, str, str, float | None, float | None]
 """A grant carries the ceiling in dollars and the ceiling in share of the window."""
-type Bash = tuple[Literal["bash"], str, str, str, str, str | None, float]
+type Bash = tuple[Literal["bash"], str, str, str, str, str | None, float, tuple[int | None, ...] | bool | None]
 """A bash carries the command, the stdin and the timeout, and no show and no working directory."""
 
 def under(name: str, of: str) -> bool:

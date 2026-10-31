@@ -12,7 +12,7 @@ async def test_the_act_again_from_its_name() -> None:
   await settle()
   step = said(log, "rung")[0][1]
   assert engine.get(which) == said(log, "bash")[0]
-  assert engine.get(which) == ("bash", which, step, root, "echo hi", "", 120.0)
+  assert engine.get(which) == ("bash", which, step, root, "echo hi", "", 120.0, None)
   ended = engine.peek(which)
   assert isinstance(ended, Exit) and ended.code == 0
 
@@ -22,7 +22,7 @@ async def test_get_gives_an_act_again_from_the_id_of_the_act() -> None:
   _, _, root = born()
   act = engine.bash("echo hi", on=root)
   again = engine.get(act)
-  assert again == ("bash", act, OPERATOR, root, "echo hi", "", 120.0)
+  assert again == ("bash", act, OPERATOR, root, "echo hi", "", 120.0, None)
   assert (await act).code == 0 and engine.get(act) == again
 
 
