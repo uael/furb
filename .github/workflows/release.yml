@@ -78,9 +78,14 @@ jobs:
               exit 0
               ;;
           esac
-          main=$(gh run list --workflow gates.yml --branch main --status completed --limit 1 --json conclusion --jq '.[0].conclusion // ""')
+          # A push to main cancels the run of main that waits for the run before it, so a cancelled run gives no verdict:
+          # the job reads the last run of main that ran to its end.
+          read -r main ran <<EOF
+          $(gh run list --workflow gates.yml --branch main --status completed --limit 100 --json conclusion,headSha \
+            --jq '[.[] | select(.conclusion != "cancelled" and .conclusion != "skipped")][0] // {} | "\(.conclusion // "") \(.headSha // "")"')
+          EOF
           if [ "$main" != success ]; then
-            echo "::error::The last gates of main ended with ${main:-no run}, so no release comes today."
+            echo "::error::The last gates of main that ran to their end, at ${ran:-no commit}, ended with ${main:-no run}, so no release comes today."
             exit 1
           fi
           gh pr merge "$n" --squash --match-head-commit "$sha"
