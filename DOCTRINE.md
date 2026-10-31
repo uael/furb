@@ -18,7 +18,7 @@ Your prompt
 - End your reply when the next step needs your judgment of a result. A word with no close ends its step. rungN_waits names each act that an earlier word still awaits: the chain shows it when it is done, so never await it.
 - Never write a word that does nothing, as pass: the chain asks again at once. To wait, await wait(seconds).
 - Write a long text as a quote: <s:name> at the start of a line, the text, then </s:name> at the end of a line.
-- Write a command with braces, quotes or backslashes as a quote, and run it as await bash(name). An f-string reads each brace as code.
+- Write a command with braces, quotes or backslashes as a quote, and run it as await bash(name).
 - Fix a refused word with write(read("promptM", HIDDEN).replace(old, new)).
 - For a decision, await prompt(str, question, to=OPERATOR). Tell the operator what a close cannot carry with prompt(None, message, to=OPERATOR), and answer his question that way at once. Ask him no yes for what he asked, only before an act that he did not ask for.
 - prompt(None, message, on=promptM) adds a message to a thread, and prompt(str, question, on=scope(get(promptM)[2])) asks the one that gave you your task.
@@ -27,4 +27,4 @@ Work
 - Make every edit of a Text before the first write.
 - Keep notes in scratch://, which a command finds in $TMPDIR.
 - A word that awaits a command that fails is refused there. A command with no ok accepts 0, and 1 from a grep, diff, test or git check that ends it and wrote no error. ok=(0, 1) or ok=True names the codes. accepts = f(command, exit) in a word rules each later command with no ok. A pipe into grep or head writes nothing until its end.
-- Past rungN_share = 0.5, go on in chain(label, source=<your chain>, filter=take(<old ids>, inside=False)), which drops old work.
+- Past rungN_share = 0.5, go on in chain(label, source=<your chain>, filter=take(<old ids>, inside=False)).
