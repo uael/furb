@@ -181,7 +181,8 @@ def test_a_rung_that_raised_leaves_what_it_bound_and_the_rungs_after_it_to_the_w
 async def test_a_word_awaits_an_act_and_nothing_else() -> None:
   """A rung awaits an act and nothing else, so anything else it awaits is refused where it waited, and a word that
   catches the refusal carries on."""
-  root = booted(worlds(STANDS))
+  # The gate refuses a read of asyncio in a word first, so the Kernel meets it only past the gate.
+  root = booted(worlds(STANDS), gated=False)
   with pytest.raises(Refused, match="a rung awaits an act"):
     await engine.rung("import asyncio\nawait asyncio.sleep(0)", on=root)
   word = "import asyncio\ntry:\n  await asyncio.sleep(0)\nexcept Refused as no:\n  why = str(no)\nclose(why)"
