@@ -181,6 +181,9 @@ The suite drives the engine through its public API alone, end to end, from the m
   in seconds fails on a machine under load.
 - A helper that only one file needs lives in that file. A helper that several files need lives in
   `test/conftest.py`, and one that only the suites of the extensions need lives in `extensions/conftest.py`.
+  A test folder of an extension takes no `conftest.py`: it shadows the module `conftest` that `extensions/conftest.py`
+  imports by name, and breaks the main suite. `test_words.py` fails on it. Put its fixtures in
+  `.furb/extensions/conftest.py`.
 - `test/outside/` holds the tests of the World, the Kernel, the door, the switch of the package that
   `FURB_ENGINE` sets, and the harness. These tests stand outside the hygiene laws.
 

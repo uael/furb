@@ -116,3 +116,22 @@ def test_no_two_words_of_the_project_bind_one_name_but_to_extend_it() -> None:
         clashes.append(f"{bound_name}: {homes[bound_name]} and {name}")
       homes.setdefault(bound_name, name)
   assert clashes == []
+
+
+ALLOWED = ("extensions/conftest.py", ".furb/extensions/conftest.py")
+
+
+def test_no_test_folder_of_an_extension_holds_a_conftest_that_shadows_the_conftest_of_the_suite() -> None:
+  """A conftest.py in a test folder of an extension shadows the conftest module that extensions/conftest.py imports by name."""
+  root = PROJECT.parent
+  found = sorted(
+    one.relative_to(root).as_posix()
+    for place in (root / "extensions", PROJECT / "extensions")
+    for one in place.rglob("conftest.py")
+    if "node_modules" not in one.parts
+  )
+  shadows = [one for one in found if one not in ALLOWED]
+  assert not shadows, (
+    f"{shadows} shadows the conftest module that extensions/conftest.py imports by name, and breaks the tests of the"
+    " main suite with no life: put its fixtures in .furb/extensions/conftest.py, or import its file by a unique name."
+  )
