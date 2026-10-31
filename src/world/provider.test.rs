@@ -1907,6 +1907,31 @@ fn once_a_part_ran_a_fault_after_it_ends_the_reply_with_the_word_that_ran_and_th
 }
 
 #[test]
+fn the_note_of_a_fault_after_the_word_that_ran_is_python_that_binds_the_findings_under_the_rung() {
+  let model = Halting::writes(&["x = 3\n", "y = nothing_binds_this\n", "z = 1\n"]);
+  let (mut engine, _) = life("noted", vec![Model::new("m", 1000, model)]);
+  asked(&mut engine);
+  assert_eq!(replied(&mut engine), cut("x = 3"));
+  assert!(until(&mut engine, |engine| told_of(
+    engine,
+    &["is the word that ran", "nothing_binds_this"]
+  )));
+  let next = |engine: &mut Engine| {
+    said(engine).iter().any(|(kind, about, _)| kind == "done" && about == "reply3")
+  };
+  assert!(until(&mut engine, next), "the chain asks its model again after the note");
+  let root = engine.root().to_owned();
+  let facts = engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
+  let raised: Vec<String> = facts
+    .iter()
+    .filter(|one| one.kind() == "done" && one.about().starts_with("run"))
+    .map(|one| one.word(0).map(|word| word.py_repr()).unwrap_or_default())
+    .filter(|word| word.contains("SyntaxError"))
+    .collect();
+  assert!(raised.is_empty(), "the turn that holds the note runs as python: {raised:?}");
+}
+
+#[test]
 fn a_reply_whose_call_ended_after_a_part_of_its_word_ran_is_the_word_that_ran() {
   let model = Halting::breaks(&["x = 3\n", "y = x"]);
   let (mut engine, _) = life("ended", vec![Model::new("m", 1000, model)]);
