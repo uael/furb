@@ -103,6 +103,13 @@ QUOTING = (
 )
 """QUOTING is what a finding adds when a word that is not python holds a mark of a quote inside a line, as a model
 that opens a quote inside a call writes it."""
+UNTERMINATED = (
+  "a string of one quote ends at the end of its line, so write a text of several lines as a triple quote, or as a"
+  " quote <s:name> on lines of its own before the call, and nothing of this word ran"
+)
+"""UNTERMINATED is what a finding adds when a word that is not python holds a string of one quote that a newline
+ends, as a model that writes a text of several lines inside one pair of quote marks writes it."""
+
 SHELL = (
   "git",
   "gh",
@@ -271,6 +278,8 @@ def python(word: str) -> list[str]:
       why += f"; {SHELLED}"
     if bracket := unclosed(word):
       why += f"; the bracket {bracket[2]} of line {bracket[0]}, column {bracket[1]}, stays open"
+    if re.search(r"unterminated string|missing closing quote", why):
+      why += f"; {UNTERMINATED}"
     if mark := inline(lines):
       why += f"; line {mark[0]}: {QUOTING.format(mark=mark[1], name=mark[2])}"
     first = next(((k, kind) for k, one in enumerate(lines, 1) if (kind := stray(one))), None)
