@@ -512,6 +512,28 @@ test("deleting the current session moves to the next session that opens, and to 
     }
   }));
 
+test("a workspace whose newest session cannot open opens on a new session that names the refusal", () =>
+  withLibrary(async ({ directory, open }) => {
+    let library = open();
+    let lease: NativeEar | undefined;
+    try {
+      const held = await library.create(await library.add(directory), "Held elsewhere");
+      await library.dispose();
+      lease = store(held.path)[1];
+      library = open();
+      const group = await library.add(directory);
+      const row = group.sessions.find((entry) => entry.path === held.path);
+      const made = await library.enter(group, row);
+      expect(row?.status).toBe("error");
+      expect(made).not.toBe(row);
+      expect(library.current).toBe(made);
+      expect(made.session?.notice).toStartWith("“Held elsewhere” did not open, so this is a new session. ");
+      expect(made.session?.notice).toContain("Another process owns");
+    } finally {
+      lease?.dispose();
+    }
+  }));
+
 test("the workspace list keeps what each instance saves, and a list that cannot be read stays for the user to repair", () =>
   withLibrary(async ({ directory, open }) => {
     const path = join(directory, "config/workspaces.json");
