@@ -18,7 +18,6 @@ from conftest import (
   settle,
   sown,
   watched,
-  written,
 )
 from furb import engine
 from furb.engine import OPERATOR, Refused, Text
@@ -49,7 +48,7 @@ async def test_a_gate_carries_the_word_alone() -> None:
   assert await act == 3
   await settle()
   assert [len(e[0]) for e in sand.record if e[0][0] == "gate"] == [5] * 6
-  first, bad, after, edit, made, last = [a[1] for a in said(log, "rung") if a[2] == act]
+  first, bad, after, edit, _, last = [a[1] for a in said(log, "rung") if a[2] == act]
   bind = fresh(root, prompted(act, "int", "edit"), f"#{first} advance on {act}")
   refused = f"#{bad} refused\n{bad}_findings = {faulted('x = BAD')!r}"
   told = [
@@ -58,7 +57,7 @@ async def test_a_gate_carries_the_word_alone() -> None:
     f"#{after} told nothing\n\n#{edit} advance on {act}",
   ]
   read = engine.unquoted(f"#read1\nread1_path = {act!r}\n<s:read1_text>\nk = 1\nx = BAD\ny = 2</s:read1_text>")
-  again = [read, bind, "k = 1", *told, written(made, "k = 3", act)]
+  again = [read, bind, "k = 1", *told]
   assert gatings(log) == [
     ("k = 1", [bind]),
     ("x = BAD", [bind, "k = 1", told[0]]),

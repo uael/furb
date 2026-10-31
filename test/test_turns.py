@@ -1,6 +1,6 @@
 """turns, what a model reads of a chain."""
 
-from conftest import acts, born, heads, of, opened, paragraphs, said, settle, written
+from conftest import acts, born, heads, of, opened, paragraphs, said, settle
 from furb import engine
 
 CARRY = ("tell",)
@@ -17,29 +17,20 @@ async def test_the_turns_of_a_chain_folded_from_what_it_has_heard() -> None:
   _, _, root = born()
   assert await engine.rung("k = 1", on=root) is None
   got = engine.turns(on=root)
-  assert got == [("user", f"{opened(root, 'root')}\n\n{written('rung1', 'k = 1')}", None, None)]
+  assert got == [("user", f"{opened(root, 'root')}\n\nk = 1", None, None)]
 
 
 async def test_the_turns_of_what_a_chain_has_heard() -> None:
-  """The turns of what a chain has heard: every tell stands as a paragraph of its notes, a run with no donor stands as a paragraph of its word, and nothing else stands at all."""
+  """The turns of what a chain has heard: every tell stands as a paragraph of its notes, and nothing else stands at all."""
   sand, _, root = born()
   assert await engine.rung("k = 1", on=root) is None
-  engine.act("run", root, None, "loaded", "j = 5", None)
-  await settle()
-  sand.script[root] = ["close(k + j)"]
-  assert await engine.prompt(int, "count", on=root) == 6
+  sand.script[root] = ["close(k + 1)"]
+  assert await engine.prompt(int, "count", on=root) == 2
   await settle()
   held = engine.transcript(root)
-  carried: list[list[object]] = []
-  for a in held:
-    if a[0] in CARRY and isinstance(a[3], list):
-      carried.append(a[3])
-    elif a[0] == "run" and a[6] is None:
-      carried.append([a[5]])
-  assert ["j = 5"] in carried
+  carried = notes(held)
   assert all(isinstance(note, str) for one in carried for note in one)
-  told = [turn[1] for turn in engine.turns(on=root) if turn[0] == "user" and turn[1]]
-  assert "\n\n".join(told) == "\n\n".join("\n".join(str(note) for note in one) for one in carried)
+  assert paragraphs(engine.turns(on=root)) == ["\n".join(str(note) for note in one) for one in carried]
   assert {a[0] for a in held if a[0] not in CARRY} == {
     "close",
     "stand",
@@ -77,7 +68,7 @@ async def test_turns_reads_the_transcript_of_the_chain_and_asks_nothing() -> Non
   made, kept = dict(acts(log)), len(sand.record)
   got = engine.turns(on=root)
   assert [role for role, *_ in got] == ["user"]
-  assert heads(got) == [f"#{root}", "#rung1 by operator", "#cd1"]
+  assert heads(got) == [f"#{root}", "cd('/x')", "#cd1"]
   assert acts(log) == made and len(sand.record) == kept
 
 
@@ -87,7 +78,7 @@ async def test_a_user_turn_packs_one_paragraph_for_each_thing_told_since_the_las
   assert await engine.rung("k = 1", on=root) is None
   got = engine.turns(on=root)
   assert len(got) == 1
-  assert heads(got) == ["#chain1", "#rung1 by operator"]
+  assert heads(got) == ["#chain1", "k = 1"]
   assert got[0][1] == "\n\n".join(paragraphs(got))
   sand.script[root] = ["close(1)"]
   assert await engine.prompt(int, "count", on=root) == 1

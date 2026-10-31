@@ -1,5 +1,5 @@
 [["chain","chain1","operator","","root",""],1793206844934]
-[["made","chain1","store","af2eeb2883012530bfd26532f4795b59ab5a9e83d93aea60400e67d71be0a0b3",7],1793206844934]
+[["made","chain1","store","af2eeb2883012530bfd26532f4795b59ab5a9e83d93aea60400e67d71be0a0b3",8],1793206844934]
 [["stand","stand1","operator","chain1"],1793206846764]
 [["done","stand1","provider",[[["operator",[],200000]],"/Users/uael/Library/Caches/furb/scratch/c2ea8047ef899c78/corpus","operator"]],1793206846765]
 [["rung","rung1","operator","chain1","try:\n  await bash('sleep 60')\nexcept Refused:\n  pass\nclock() if all(over(a[1]) for a in transcript(of='bash')) else chance()","",""],1793206846829]

@@ -258,9 +258,10 @@ class Sand:
     return "~" + path[len(self.home) :] if path == self.home or path.startswith(self.home + "/") else path
 
   def standing(self) -> list | Refused:
-    """What the World answers a stand with: what the chains stand on, each path as it gives a path, or the refusal."""
+    """What the World answers a stand with: what the chains stand on, each path but those of the extensions as it gives
+    a path, or the refusal."""
     s = self.stands
-    return s if isinstance(s, Refused) else [s[0], *map(self.shown, s[1:2]), *s[2:3], *map(self.shown, s[3:])]
+    return s if isinstance(s, Refused) else [s[0], *map(self.shown, s[1:2]), *s[2:3], *map(self.shown, s[3:4]), *s[4:]]
 
   def hear(self, a: tuple) -> World:
     """What the World does with one fact: it takes a command, a wait, a prompt to the operator and a reply, answers
@@ -659,10 +660,12 @@ def acts(log: Sequence[tuple]) -> dict[str, tuple]:
 
 
 def paragraphs(got: Sequence[tuple]) -> list[str]:
-  """Every paragraph the user turns of a fold hold, in order: what one fact that tells stands as. A blank line that a
-  header follows is where one paragraph ends, since a word its caller wrote may hold a blank line of its own. A quote
-  holds no header: its text may hold a blank line and a line that starts with #, as a heading of markdown does. The
-  close mark of a quote is the first line after its open mark that ends with it, as the engine reads one."""
+  """Every paragraph the user turns of a fold hold, in order: what one fact that tells stands as. A blank line ends a
+  paragraph that starts with a header, and a blank line that a header follows ends any paragraph, since the word of a
+  rung stands with no header and may hold a blank line of its own: two words told one after the other read as one
+  paragraph, as the model reads them. A quote holds no header: its text may hold a blank line and a line that starts
+  with #, as a heading of markdown does. The close mark of a quote is the first line after its open mark that ends
+  with it, as the engine reads one."""
   found: list[str] = []
   for role, py, _, _ in got:
     if role != "user" or not py:
@@ -670,7 +673,7 @@ def paragraphs(got: Sequence[tuple]) -> list[str]:
     lines: list[str] = []
     closing = ""
     for line in py.split("\n"):
-      if not closing and lines and lines[-1] == "" and re.match(r"#\S", line):
+      if not closing and lines and lines[-1] == "" and (re.match(r"#\S", line) or re.match(r"#\S", lines[0])):
         found.append("\n".join(lines[:-1]))
         lines = []
       lines.append(line)
@@ -723,14 +726,6 @@ def prompted(id: str, shape: str, message: str = "", thread: str = "") -> str:
       *[f"{id}_thread = {thread!r}"] * bool(thread),
       f"{id}: Act[{shape}] = Act({id!r})",
     ]
-  )
-
-
-def written(id: str, word: str, by: str = "operator") -> str:
-  """The paragraph a rung tells of a word that its caller wrote: its header, which names the maker of the rung, and the binding of that word, as a quote
-  when the word holds more than one line."""
-  return (
-    f"#{id} by {by}\n<s:{id}_word>\n{word}</s:{id}_word>" if "\n" in word else f"#{id} by {by}\n{id}_word = {word!r}"
   )
 
 

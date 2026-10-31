@@ -18,7 +18,6 @@ from conftest import (
   said,
   settle,
   waiting,
-  written,
   wrote,
 )
 from furb import engine
@@ -35,7 +34,7 @@ async def test_whether_the_word_of_a_rung_may_run() -> None:
   assert await act == 2
   await settle()
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
-  told = [fresh(root, written(laid, "k = 1")), f"{prompted(act, 'int', 'count')}\n\n#{step} advance on {act}"]
+  told = [fresh(root), f"{prompted(act, 'int', 'count')}\n\n#{step} advance on {act}"]
   assert gatings(log) == [("k = 1", told[:1]), ("close(k + 1)", [told[0], "k = 1", told[1]])]
   assert findings(log) == [[], []]
 
@@ -47,12 +46,12 @@ async def test_the_word_of_a_rung_runs_only_if_the_gate_accepts_the_word_or_if_t
   with pytest.raises(Refused):
     await bad
   assert findings(log) == [[BAD]]
-  told = [fresh(root, written(bad, "k = BAD"))]
+  told = [fresh(root)]
   assert ran(log) == told and "k" not in engine.module(root)
   laid = engine.rung("k = 1", on=root)
   assert await laid is None
   refused = f"#{bad} refused\n{bad}_findings = {BAD!r}"
-  told.append(f"{refused}\n\n{written(laid, 'k = 1')}")
+  told.append(refused)
   assert ran(log) == [*told, "k = 1"] and engine.module(root)["k"] == 1
   sand.script[root] = ["close(k)"]
   act = engine.prompt(int, "count", on=root)
@@ -93,19 +92,13 @@ async def test_the_gate_checks_the_word_of_a_rung_against_the_rungs_before_it_in
   await again
   (finding,) = next(one for one in findings(log) if one)
   refused = f"#{early} refused\n{early}_findings = {finding!r}"
-  told = [
-    fresh(root, written(first, "a = 1")),
-    written(second, "b = a + 1"),
-    written(early, "c = later"),
-    f"{refused}\n\n{written(later, 'later = 3')}",
-    written(again, "c = later"),
-  ]
+  bound = fresh(root)
   assert gatings(log) == [
-    ("a = 1", told[:1]),
-    ("b = a + 1", [told[0], "a = 1", told[1]]),
-    ("c = later", [told[0], "a = 1", told[1], "b = a + 1", told[2]]),
-    ("later = 3", [told[0], "a = 1", told[1], "b = a + 1", told[2], told[3]]),
-    ("c = later", [told[0], "a = 1", told[1], "b = a + 1", told[2], told[3], "later = 3", told[4]]),
+    ("a = 1", [bound]),
+    ("b = a + 1", [bound, "a = 1"]),
+    ("c = later", [bound, "a = 1", "b = a + 1"]),
+    ("later = 3", [bound, "a = 1", "b = a + 1", refused]),
+    ("c = later", [bound, "a = 1", "b = a + 1", refused, "later = 3"]),
   ]
   assert [bool(found) for found in findings(log)] == [False, False, True, False, False]
 

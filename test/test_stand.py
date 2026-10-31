@@ -30,19 +30,21 @@ async def test_only_a_stand_on_the_root_changes_the_standing() -> None:
 
 
 async def test_a_stand_from_inside_an_act_tells_its_answer_under_its_own_name() -> None:
-  """A stand from inside an act tells its answer under its own name, with the roster and the actor of the standing, as stand2_roster and stand2_actor, and no directory, which a cd tells, and no path of the doctrine, which the World reads in a turn of its own."""
-  _, log, root = born(stands=[*STANDS, "/w/DOCTRINE.md"])
+  """A stand from inside an act tells its answer under its own name, with the roster and the actor of the standing, as stand2_roster and stand2_actor, and no directory, which a cd tells, and no path of the doctrine and no extensions, which the root reads in turns of its own."""
+  taught = [*STANDS, "/w/DOCTRINE.md", [["one", "/w/one.py", "", False]]]
+  _, log, root = born(stands=taught, files={"/w/DOCTRINE.md": "Read first.\n", "/w/one.py": "x = 41\n"})
   two = await chained("two")
   was = paragraphs(engine.turns(on=root))
   step = engine.rung("got = stand()", on=two)
   assert await step is None
   (asked,) = [a[1] for a in said(log, "stand") if a[2] == step]
-  # Chain two played its own stand, stand2, at its birth, so the stand of the word is stand3.
-  assert asked == "stand3" and engine.module(two)["got"] == [*STANDS, "/w/DOCTRINE.md"]
+  # The root played its stand, stand2, after its setup, and chain two its own, stand3, at its birth, so the stand of
+  # the word is stand4.
+  assert asked == "stand4" and engine.module(two)["got"] == taught
   assert of(engine.turns(on=two), asked) == [stood(asked)]
   assert stood(asked) == (
-    "#stand3\nstand3_roster = [['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]]\n"
-    "stand3_actor = 'm/low'"
+    "#stand4\nstand4_roster = [['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]]\n"
+    "stand4_actor = 'm/low'"
   )
   assert [a for a in engine.transcript(two) if a[0] == "tell" and a[1] == asked] == [
     ("tell", asked, step, [stood(asked)])

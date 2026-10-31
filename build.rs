@@ -52,7 +52,8 @@ enum Kind {
 impl Kind {
   fn of(annotation: &str) -> Kind {
     match annotation {
-      "str" => Kind::Str,
+      // A host gives a word as text; a Text is for the words of the engine alone.
+      "str" | "str | Text" => Kind::Str,
       "str | None" => Kind::MaybeStr,
       "int" => Kind::Int,
       "float" | "float | None" => Kind::Float,

@@ -71,14 +71,14 @@ async def test_a_change_of_the_world_between_two_lives_enters_the_transcript_of_
 
 
 async def test_the_world_answers_a_stand_with_the_roster_the_directory_and_the_actor() -> None:
-  """The World answers a stand with the roster, the directory, the actor and the path of the doctrine."""
+  """The World answers a stand with the roster, the directory, the actor, the path of the doctrine and the extensions."""
   doctrine = "/w/.furb/DOCTRINE.md"
-  sand, log, _ = born(stands=[*STANDS, doctrine], files={doctrine: "Look first.\n"})
+  sand, log, _ = born(stands=[*STANDS, doctrine, []], files={doctrine: "Look first.\n"})
   asked = said(log, "stand")[0]
   answered = next(a for a in said(log, "done") if a[1] == asked[1])
-  assert answered[2] == WORLD and answered[3] == [*STANDS, doctrine]
-  assert answered[3] == [STANDS[0], "/w", "m/low", doctrine]
-  assert said(sand.calls, "stand") == [asked]
+  assert answered[2] == WORLD and answered[3] == [*STANDS, doctrine, []]
+  assert answered[3] == [STANDS[0], "/w", "m/low", doctrine, []]
+  assert said(sand.calls, "stand") == [asked, ("stand", "stand2", "rung3", "chain1")]
 
 
 async def test_a_model_asked_on_any_chain_of_a_later_life_finds_the_new_roster() -> None:
@@ -179,19 +179,19 @@ async def test_every_chain_hears_the_done_of_every_stand() -> None:
   assert [paragraphs(engine.turns(on=one)) for one in (over, two)] == told
   assert engine.module(root)["actor"] == engine.module(two)["actor"] == "m/low"
   await engine.rung("stand()", on=two)
-  assert paragraphs(engine.turns(on=two)) == [*told[1], "#rung2 by operator\nrung2_word = 'stand()'", stood("stand5")]
+  assert paragraphs(engine.turns(on=two)) == [*told[1], "stand()", stood("stand5")]
   assert paragraphs(engine.turns(on=over)) == told[0]
-  taught, _, root = born(stands=[*STANDS, "/w/DOCTRINE.md"])
+  taught, _, root = born(stands=[*STANDS, "/w/DOCTRINE.md", []], files={"/w/DOCTRINE.md": "Read first.\n"})
   await engine.rung("k = 1", on=root)
   await settle()
   last = lambda: [one[1] for one in engine.turns(on=root) if one[0] == "assistant"][-1]  # noqa: E731
   assert last() == "stand()\ncd('/w')"
-  taught.stands = [STANDS[0], "/z", STANDS[2], "/w/DOCTRINE.md"]
+  taught.stands = [STANDS[0], "/z", STANDS[2], "/w/DOCTRINE.md", []]
   engine.stand(engine.ROOT)
   await settle()
   assert last() == "stand()\ncd('/z')"
   await engine.rung("cd('/y')", on=root)
-  taught.stands = [STANDS[0], "/v", STANDS[2], "/w/DOCTRINE.md"]
+  taught.stands = [STANDS[0], "/v", STANDS[2], "/w/DOCTRINE.md", []]
   engine.stand(engine.ROOT)
   await settle()
   assert last() == "stand()" and engine.cwd(on=root) == "/y"

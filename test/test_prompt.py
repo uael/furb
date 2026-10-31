@@ -23,7 +23,6 @@ from conftest import (
   said,
   settle,
   waiting,
-  written,
   wrote,
 )
 from furb import engine
@@ -327,10 +326,10 @@ async def test_a_word_written_to_its_door_is_a_rung_of_it() -> None:
   await settle()
   engine.write(Text(act, "a = 1\nclose(5)"), on=root)
   await settle()
-  first, asking, made = [a[1] for a in said(log, "rung") if a[2] == act]
+  first, asking, _ = [a[1] for a in said(log, "rung") if a[2] == act]
   bind = fresh(root, prompted(act, "int", "count"), f"#{first} advance on {act}")
   told = f"#{first} told nothing\n\n#{asking} advance on {act}"
-  assert (await act) == 5 and ran(log) == [bind, "a = 1", told, written(made, "close(5)", act), "close(5)"]
+  assert (await act) == 5 and ran(log) == [bind, "a = 1", told, "close(5)"]
   assert [a[2] for a in said(log, "rung") if a[4] == "close(5)"] == [act]
 
 

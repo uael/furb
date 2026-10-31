@@ -1,6 +1,6 @@
 """debug, what a word tells of itself as it runs."""
 
-from conftest import acts, born, chained, heads, paragraphs, prompted, said, settle, written
+from conftest import acts, born, chained, heads, paragraphs, prompted, said, settle
 from furb import engine
 
 
@@ -117,11 +117,11 @@ async def test_debug_tells_nothing_but_the_text_of_its_template() -> None:
   three = engine.rung("debug(t'')", on=root)
   await three
   assert paragraphs(engine.turns(on=root))[1:] == [
-    f"#{one} by operator\n<s:{one}_word>\nn = 1\ndebug(t'before {{n}} after')</s:{one}_word>",
+    "n = 1\ndebug(t'before {n} after')",
     f"#{one} debugged\n{one}_debug = 'before 1 after'",
-    written(two, "debug(t'nothing at all')"),
+    "debug(t'nothing at all')",
     f"#{two} debugged\n{two}_debug = 'nothing at all'",
-    written(three, "debug(t'')"),
+    "debug(t'')",
   ]
 
 
@@ -150,7 +150,7 @@ async def test_it_is_no_act_and_it_enters_no_record() -> None:
   await settle()
   assert {a[0] for a in acts(log).values() if a[1] not in made} == {"rung", "gate", "run"}
   assert [fact for fact, *_ in sand.record if fact[0] == "tell"] == []
-  assert heads(engine.turns(on=root)) == [f"#{root}", f"#{act} by operator", f"#{act} debugged"]
+  assert heads(engine.turns(on=root)) == [f"#{root}", "n = 1", f"#{act} debugged"]
 
 
 async def test_outside_an_act_there_is_nothing_to_tell_of_so_it_tells_nothing_as_a_tell_outside_a_run() -> None:
@@ -169,7 +169,7 @@ async def test_a_tell_is_on_the_scope_of_the_act_it_is_of_so_debug_takes_no_chai
   step = engine.rung("debug(t'{1}')", on=two)
   await step
   assert [one for one in said(log, "tell") if one[1] == step] == [
-    ("tell", step, step, [written(step, "debug(t'{1}')")]),
+    ("tell", step, step, ["debug(t'{1}')"]),
     ("tell", step, step, [f"#{step} debugged\n{step}_debug = '1'"]),
   ]
   assert engine.scope(step) == two

@@ -27,7 +27,6 @@ from conftest import (
   settle,
   slow,
   sown,
-  written,
 )
 from furb import engine
 from furb.engine import OPERATOR, Exit, Refused, Text
@@ -176,7 +175,7 @@ async def test_the_chain_has_the_gate_read_and_the_kernel_begin_every_rung() -> 
   sand.script[root] = ["close(k + 1)"]
   assert await engine.prompt(int, "count", on=root) == 2
   await settle()
-  told = [fresh(root, written("rung1", "k = 1")), f"{prompted('prompt1', 'int', 'count')}\n\n#rung2 advance on prompt1"]
+  told = [fresh(root), f"{prompted('prompt1', 'int', 'count')}\n\n#rung2 advance on prompt1"]
   assert ran(log) == [told[0], "k = 1", told[1], "close(k + 1)"]
   assert [a[4] for a in said(log, "run")] == ["rung1_told", "rung1", "rung2_told", "rung2"]
   assert [one[2] for one in said(log, "done") if one[1].startswith("gate")] == ["gate", "gate"]

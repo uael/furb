@@ -90,16 +90,22 @@ def extended(  # noqa: PLR0913
   extension of that name, with its life word when it lives: it hears the ear of the extension when it has one, whose
   config directory of the user is the folder config of the directory, and the files of the machine after the World
   of the suite, or after the World it is given. A standing that names a doctrine, which the folder holds as
-  DOCTRINE.md with that text, sets up the root as a new record of this build does. Before it, the life enables each
+  DOCTRINE.md with that text, and each extension that the life enables, as the World of a life gives them, sets up
+  the root as a new record of this build does. Before it, the life enables each
   official extension that also names, with its life word. It gives the World and the root."""
   one = next(x for x in _monty.official() if x["name"] == name)
   (at / "work").mkdir(exist_ok=True)
   before = [x for x in _monty.official() if x["name"] in also]
-  given = _monty.extensions([*before, one if lives else {**one, "life": ""}])
+  enabled = [*before, one if lives else {**one, "life": ""}]
+  given = _monty.extensions(enabled)
   taught = []
   if doctrine:
     (path := at / "DOCTRINE.md").write_text(doctrine, encoding="utf-8", newline="")
-    taught = [str(path)]
+    plays = [x for x in enabled if x["word"].strip() or x["life"]]
+    taught = [
+      str(path),
+      [[x["name"], str(dict(x)["file"]) if x["word"].strip() else "", x["life"], x["root"]] for x in plays],
+    ]
   sand = replace(sand or sown(), stands=[STANDS[0], str(at / "work"), STANDS[2], *taught])
   files = _monty.files(str(at / "scratch"))
   return sand, life(sand, record, extensions=given, **({name: ear(str(at / "config"))} if ear else {}), files=files)[1]

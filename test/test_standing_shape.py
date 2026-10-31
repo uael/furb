@@ -2,7 +2,7 @@
 
 import pytest
 
-from conftest import STANDS, Sand, born, life, paragraphs, plain, said, settle, stood, written
+from conftest import STANDS, Sand, born, life, paragraphs, plain, said, settle, stood
 from furb import engine
 from furb.engine import Drift
 
@@ -10,7 +10,7 @@ ROSTER = STANDS[0]
 
 
 async def test_what_a_chain_stands_on() -> None:
-  """What a chain stands on: the actors the World offers, the directory the chain starts in, the actor a prompt goes to when it names none, and the path of the doctrine, which the World reads in the first turn of the setup of the root, and which a World that gives no doctrine leaves unsaid."""
+  """What a chain stands on: the actors the World offers, the directory the chain starts in, the actor a prompt goes to when it names none, and the path of the doctrine, which the root reads in the first turn of its setup, then the extensions that the root crafts the rest of its setup from, each as [name, file, life word, root alone], and a World that gives no doctrine leaves both unsaid."""
   _, log, root = born("close(1)", files={"/w/b.txt": "here\n"})
   assert await engine.prompt(int, "count", on=root) == 1
   assert engine.standing() == STANDS and engine.standing()[0] == ROSTER
@@ -18,8 +18,8 @@ async def test_what_a_chain_stands_on() -> None:
   assert [a[4] for a in said(log, "reply")] == ["m/low"]
   assert engine.module(root)["actor"] == "m/low"
   doctrine = "/w/.furb/DOCTRINE.md"
-  born(stands=[*STANDS, doctrine], files={doctrine: "Look first.\n"})
-  assert engine.standing() == [*STANDS, doctrine]
+  born(stands=[*STANDS, doctrine, []], files={doctrine: "Look first.\n"})
+  assert engine.standing() == [*STANDS, doctrine, []]
 
 
 async def test_the_roster_the_directory_and_the_actor_that_a_model_reads_are_in_the_transcript() -> None:
@@ -29,7 +29,7 @@ async def test_the_roster_the_directory_and_the_actor_that_a_model_reads_are_in_
   assert await step is None
   assert await engine.prompt(int, "count", on=root) == 1
   told = paragraphs(sand.turns[said(log, "reply")[0][1]])
-  assert told[1:4] == [written(step, "stand()\ncd('/' + 'w')"), stood("stand2"), "#cd1\ncd1_path = '/w'"]
+  assert told[1:4] == ["stand()\ncd('/' + 'w')", stood("stand2"), "#cd1\ncd1_path = '/w'"]
   assert [engine.module(root)[name] for name in ("stand2_roster", "cd1_path", "stand2_actor")] == STANDS
 
 
