@@ -96,6 +96,13 @@ STRAY = (
   " such line"
 )
 """STRAY is what a finding adds when a word that is not python holds a fence, the markup of a tool call or prose."""
+QUOTING = (
+  "the mark {mark} stands inside a line, and a quote opens only with <s:{name}> at the start of a line and closes only"
+  " with </s:{name}> at the end of a line, so nothing of this word ran: write the quote on lines of its own before the"
+  " call, and give the call the name {name}"
+)
+"""QUOTING is what a finding adds when a word that is not python holds a mark of a quote inside a line, as a model
+that opens a quote inside a call writes it."""
 SHELL = (
   "git",
   "gh",
@@ -155,10 +162,25 @@ def stray(line: str) -> str:
   words = text.split()
   if text.startswith(("```", "~~~")):
     return "a fence"
-  if text.startswith("<") and not text.startswith("<s:"):
+  if text.startswith("<") and not text.startswith(("<s:", "</s:")):
     return "markup"
   prose = len(words) >= PROSE and words[0][:1].isupper() and all(w.strip(".,:;!?'").isalpha() for w in words)
   return "prose" if prose else ""
+
+
+def inline(lines: list[str]) -> tuple[int, str, str] | None:
+  """The first mark of a quote that stands inside a line, as its line, the mark and its name: an open mark with text
+  before it, as write(Text(path, <s:name>, or a close mark with text after it, as </s:name>)). A line that is one
+  string already, as a quote that has its marks in place becomes, holds no mark of its own."""
+  for n, one in enumerate(lines, 1):
+    name, equals, rest = one.partition(" = ")
+    if equals and name.isidentifier() and rest[:1] in "'\"" and rest[-1:] == rest[:1]:
+      continue
+    if (hit := re.search(r"<s:(\w+)>", one)) and hit.start() > 0:
+      return n, hit[0], hit[1]
+    if (hit := re.search(r"</s:(\w+)>", one)) and one[hit.end() :].strip():
+      return n, hit[0], hit[1]
+  return None
 
 
 def unclosed(word: str) -> tuple[int, int, str] | None:
@@ -249,6 +271,8 @@ def python(word: str) -> list[str]:
       why += f"; {SHELLED}"
     if bracket := unclosed(word):
       why += f"; the bracket {bracket[2]} of line {bracket[0]}, column {bracket[1]}, stays open"
+    if mark := inline(lines):
+      why += f"; line {mark[0]}: {QUOTING.format(mark=mark[1], name=mark[2])}"
     first = next(((k, kind) for k, one in enumerate(lines, 1) if (kind := stray(one))), None)
     if first:
       why += f"; line {first[0]} is {first[1]}: {STRAY}"
