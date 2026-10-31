@@ -1,11 +1,13 @@
 import ast
 import asyncio
+import builtins
 import hashlib
 import json
 import os
 import re
 import shutil
 import subprocess
+import symtable
 import sys
 import time
 from dataclasses import dataclass
@@ -99,6 +101,7 @@ class Round:
     self.prompts: list[tuple[str, str]] = []
     self.cancelled: list[str] = []
     self.paused_chains: list[str] = []
+    self.closed: list[tuple[str, object]] = []
     self.hired: list[tuple[str, str]] = []
     self.files: dict[str, str] = {}
     self.facts: dict[str, tuple] = {}
@@ -143,6 +146,8 @@ class Round:
     ns.update(cancel=lambda name: self.cancelled.append(name), say=lambda *fact: self.said.append(fact))
     ns.update(pause=lambda name: self.paused_chains.append(name), paused=lambda name: name in self.paused_chains)
     ns.update(wake=lambda name: self.paused_chains.remove(name) if name in self.paused_chains else None)
+    ns.update(act=lambda kind, on, ear, *words: kind, close=lambda value, id="": self.closed.append((id, value)))
+    ns.update(filled=lambda about: None, gate=lambda word, on="": [], wait=self.wait)
     # The root plays pr before the conductor, which uses its names, as .furb/config.json orders them.
     exec(compile(IMPORT.sub("", PULL.read_text(encoding="utf-8")), str(PULL), "exec"), ns)  # noqa: S102
     exec(compile(IMPORT.sub("", SOURCE), str(HERE / "conductor.py"), "exec"), ns)  # noqa: S102
@@ -159,6 +164,9 @@ class Round:
     if asyncio.iscoroutine(got) and verb == self.bash:
       got.close()
     return got
+
+  async def wait(self, seconds: float = 0, *acts: str, on: str = "") -> None:
+    return None
 
   def say(self, pattern: str, out: str, code: int = 0) -> None:
     self.says.append((pattern, out, code))
@@ -3104,3 +3112,21 @@ async def test_the_orphan_notice_names_the_parked_worker_of_the_pr(conductor: Ro
   cause = f"its worker waits on chain7 for a free slot of the cap of {conductor.cap()} chains"
   assert any(m.startswith("#8 is conflicting at sha8 and no worker acts on it, a defect of the round: " + cause) for m in told)
   assert conductor.hired == []
+
+
+def global_reads(text: str) -> set[str]:
+  found: set[str] = set()
+
+  def walk(table: symtable.SymbolTable) -> None:
+    found.update(s.get_name() for s in table.get_symbols() if s.is_referenced() and (table.get_type() == "module" or s.is_global()))
+    for one in table.get_children():
+      walk(one)
+
+  walk(symtable.symtable(text, "word", "exec"))
+  return found
+
+
+def test_the_harness_binds_each_name_that_a_word_it_runs_reads(conductor: Round) -> None:
+  words = [IMPORT.sub("", PULL.read_text(encoding="utf-8")), IMPORT.sub("", SOURCE)]
+  missing = {name for text in words for name in global_reads(text)} - set(conductor.ns) - set(dir(builtins))
+  assert not missing, f"the harness binds no {sorted(missing)}"
