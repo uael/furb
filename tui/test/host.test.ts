@@ -5,7 +5,16 @@ import { createConnection, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openEngine } from "../src/bridge.ts";
-import { type About, aboutOf, hostPlace, listening, type Place, reachOf, tellAbout } from "../src/hosting.ts";
+import {
+  type About,
+  aboutOf,
+  hostPlace,
+  isHost,
+  listening,
+  type Place,
+  reachOf,
+  tellAbout,
+} from "../src/hosting.ts";
 
 /** The moment a condition holds, read again every 50 ms. */
 async function eventually(ready: () => boolean | Promise<boolean>, what: string): Promise<void> {
@@ -298,6 +307,23 @@ test.skipIf(process.platform === "win32")(
       await host.end();
       await eventually(() => !alive(about.pid), "the host to end");
     }),
+);
+
+test.skipIf(process.platform === "win32")(
+  "a process that only names host.ts is no host, and a process that runs host.ts with options is",
+  () => {
+    const run = (...words: string[]) =>
+      Bun.spawn(["sh", "-c", "sleep 30; :", "sh", ...words], { stdout: "ignore", stderr: "ignore" });
+    const editor = run("/tmp/furb/host.ts", "--edit");
+    const host = run("/tmp/furb/host.ts", '{"demo":true}');
+    try {
+      expect(isHost(editor.pid)).toBe(false);
+      expect(isHost(host.pid)).toBe(true);
+    } finally {
+      editor.kill();
+      host.kill();
+    }
+  },
 );
 
 test.skipIf(process.platform === "win32")(
