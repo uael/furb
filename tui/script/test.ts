@@ -8,11 +8,11 @@
 // last line counts the tests that passed and failed, and a filter that matches no file fails. FURB_TEST_OUTPUT=1
 // shows all that each run wrote, so a console.log in a test shows too. Each
 // program that a test runs compiles first, all at once, so that no compile takes the machine from a test.
-import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { availableParallelism, tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { join } from "node:path";
 import { Glob } from "bun";
+import { environment } from "./environment.ts";
 
 const given = process.argv.slice(2);
 const flags = given.filter((one) => one.startsWith("-"));
@@ -35,27 +35,10 @@ if (files.length === 0) {
   process.exit(1);
 }
 const cores = availableParallelism();
-// The tests find no claude command line, as on a machine that has none: a roster of the demo names a model that the
-// aliases of a real program may lack. A FURB_CLAUDE_BIN of the caller goes too.
-const program = process.platform === "win32" ? "claude.exe" : "claude";
-const path = (process.env.PATH ?? "")
-  .split(delimiter)
-  .filter((folder) => folder && !existsSync(join(folder, program)))
-  .join(delimiter);
-// Absolute, so that a run from any folder writes the configs and the cache under the .furb of the root, which git ignores.
-const tests = join(import.meta.dir, "../../.furb/tests");
 const everything = process.env.FURB_TEST_OUTPUT === "1";
 let passes = 0;
 let fails = 0;
-const env = {
-  ...process.env,
-  PATH: path,
-  FURB_CONFIG_DIR: tests,
-  XDG_CACHE_HOME: join(tests, "cache"),
-  FURB_CLAUDE_BIN: "",
-  FURB_LOCAL_URL: "",
-  MAX_THINKING_TOKENS: "",
-};
+const env = environment();
 const entities: Record<string, string> = { quot: '"', amp: "&", lt: "<", gt: ">", apos: "'" };
 
 /** What a run of the tests wrote, and whether it passed. */
