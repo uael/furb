@@ -136,7 +136,7 @@ ruff_text_size = "0.0.9"
 
 [target.'cfg(unix)'.dependencies]
 # The process group of a command, which the World ends whole.
-rustix = { version = "1", features = ["process"] }
+rustix = { version = "1", features = ["fs", "process"] }
 
 [target.'cfg(windows)'.dependencies]
 # The console of Windows, whose end a host hears through a door.
