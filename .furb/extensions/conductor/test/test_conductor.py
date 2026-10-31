@@ -3451,7 +3451,7 @@ def test_the_triage_folds_no_audit_and_writes_the_covering_key_in_each_after(con
 
 @POSIX
 @JQ
-async def test_a_later_judge_reads_the_gaps_of_the_earlier_heads_and_the_pr_is_held_after_judge_rounds_heads(
+async def test_a_later_judge_reads_the_gaps_of_the_earlier_heads_and_the_round_judges_each_head_until_it_is_cleared(
   conductor: Round,
 ) -> None:
   ran = judging(conductor)
@@ -3463,11 +3463,16 @@ async def test_a_later_judge_reads_the_gaps_of_the_earlier_heads_and_the_pr_is_h
     conductor.prs[7] = pr
     return pr
 
-  pr = head("sha7")
-  await conductor.bent(pr)
-  assert "Earlier judges" not in conductor.prompts[-1][0]
-  conductor.done[conductor.judged["7 sha7"]["act"]] = [(quote, "Gap one, in a.py.")]
-  assert await conductor.bent(pr) is True
+  async def judge(sha: str, gap: str) -> str:
+    pr = head(sha)
+    await conductor.bent(pr)
+    conductor.done[conductor.judged[f"7 {sha}"]["act"]] = [(quote, gap)]
+    assert await conductor.bent(pr) is True
+    return conductor.prompts[-1][0]
+
+  told = await judge("sha7", "Gap one, in a.py.")
+  assert not [p for p, _ in conductor.prompts if "Earlier judges" in p]
+  assert "- \"no hidden control flow\": Gap one, in a.py." in told
   pr = head("sha8")
   await conductor.bent(pr)
   message = conductor.prompts[-1][0]
@@ -3475,18 +3480,57 @@ async def test_a_later_judge_reads_the_gaps_of_the_earlier_heads_and_the_pr_is_h
   assert "git log --format='  - %s' sha7..sha8" in " ".join(ran)
   conductor.done[conductor.judged["7 sha8"]["act"]] = [(quote, "Gap two.")]
   assert await conductor.bent(pr) is True
-  assert conductor.judged["7 sha8"]["state"] == "gaps"
-  pr = head("sha9")
-  await conductor.bent(pr)
-  conductor.done[conductor.judged["7 sha9"]["act"]] = [(quote, "Gap three.")]
-  assert await conductor.bent(pr) is True
-  assert {v["state"] for v in conductor.judged.values()} == {"held"}
-  assert "gh pr edit 7 --add-label hold >/dev/null 2>&1" in ran
-  assert [on for _, on in conductor.prompts].count("chain-k") == 2
   told = conductor.prompts[-1][0]
-  assert "The judge held #7 for 3 heads in turn" in told
-  assert all(x in told for x in ("Gap one", "Gap two", "Gap three", "sha7:", "sha9:"))
-  assert await conductor.bent(pr) is True
+  assert told.index("Gap one") < told.index("Gap two") and told.count("Gap one") == 1
+  for sha, gap in (("sha9", "Gap three."), ("sha10", "Gap four.")):
+    told = await judge(sha, gap)
+  assert {v["state"] for v in conductor.judged.values()} == {"gaps"}
+  assert not [x for x in ran if "--add-label hold" in x]
+  assert [on for _, on in conductor.prompts].count("chain-k") == 4
+  assert all(f"Gap {x}" in told for x in ("one", "two", "three", "four"))
+  assert "The round holds" not in " ".join(p for p, _ in conductor.prompts)
+  pr = head("sha11")
+  await conductor.bent(pr)
+  conductor.done[conductor.judged["7 sha11"]["act"]] = []
+  assert await conductor.bent(pr) is False
+  assert conductor.judged["7 sha11"]["state"] == "cleared"
+
+
+@POSIX
+@JQ
+async def test_each_fix_after_judge_rounds_heads_with_gaps_goes_to_a_stronger_model(conductor: Round) -> None:
+  judging(conductor)
+  conductor.busy("worker9", "k", "claude-cli:sonnet/high")
+  quote = "no hidden control flow"
+  strong = f"actor = {conductor.ns['STRONGER']!r}"
+  for i, sha in enumerate(("s1", "s2", "s3", "s4")):
+    pr = conductor.pr(n=7, sha=sha, labels=["w:k"], checks=("SUCCESS",))
+    conductor.prs[7] = pr
+    await conductor.bent(pr)
+    conductor.done[conductor.judged[f"7 {sha}"]["act"]] = [(quote, f"Gap {i}.")]
+    assert await conductor.bent(pr) is True
+    rungs = [w for w, on in conductor.rungs if on == "chain-k"]
+    assert (strong in rungs) == (i == 3), (i, rungs)
+
+
+@POSIX
+@JQ
+async def test_a_hold_that_an_earlier_word_put_after_judge_rounds_heads_comes_off_and_the_pr_is_judged_again(
+  conductor: Round,
+) -> None:
+  ran = judging(conductor)
+  conductor.busy("worker9", "k", "claude-cli:sonnet/high")
+  conductor.judged.update({f"7 s{i}": {"state": "held", "act": "", "fails": 0, "gaps": [f"Gap {i}."]} for i in range(3)})
+  conductor.judged["8 t"] = {"state": "held", "act": "", "fails": 0, "gaps": ["Gap."]}
+  conductor.prs[7] = conductor.pr(n=7, sha="s2", labels=["w:k", "hold"], checks=("SUCCESS",))
+  await conductor.unheld()
+  assert {v["state"] for v in conductor.judged.values()} == {"gaps"}
+  assert "gh pr edit 7 --remove-label hold >/dev/null 2>&1" in ran
+  assert conductor.prs[7]["labels"] == ["w:k"]
+  assert not [x for x in ran if "edit 8" in x]
+  assert await conductor.bent(conductor.prs[7]) is True
+  told = conductor.prompts[-1][0]
+  assert all(f"Gap {i}." in told for i in range(3))
 
 
 def test_the_audit_leaves_a_pr_with_a_hold_label_out_of_the_idle_check(conductor: Round) -> None:
