@@ -216,7 +216,7 @@ jobs:
           fails=0
           for i in $(seq 1 100); do
             if ! FURB_TEST_OUTPUT=1 bun run tui/script/test.ts tui/test/demo-life.test.ts "--test-name-pattern=the life of the demo is as dense" > "$RUNNER_TEMP/dl.log" 2>&1; then
-              fails=$((fails+1)); echo "run $i failed"; grep -E 'DIAG|error:|^[-+] ' "$RUNNER_TEMP/dl.log" | head -40
+              fails=$((fails+1)); echo "run $i failed"; tail -45 "$RUNNER_TEMP/dl.log"
             fi
           done
           kill $(jobs -p) || true
