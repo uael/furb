@@ -563,6 +563,28 @@ fn the_setup_of_the_root_ends_with_the_extensions_of_the_root_alone_and_a_chain_
 }
 
 #[test]
+fn the_setup_plays_no_read_and_no_run_for_an_extension_whose_word_is_blank() {
+  let at = place("blank");
+  let kept = Extension { name: "kept".to_owned(), life: String::new(), ..note("x = 1") };
+  let blank = Extension { name: "blank".to_owned(), life: String::new(), ..note("\n") };
+  let mut engine = set_up(&at, vec![kept, blank]);
+  let on = verbs::Transcript { on: Some("chain1".to_owned()), of: None };
+  let text = |one: &Fact, at: usize| one.word(at).and_then(|one| one.as_str().map(str::to_owned));
+  let mut runs = Vec::new();
+  let mut reads = Vec::new();
+  for one in engine.transcript(on).unwrap() {
+    match one.kind() {
+      "run" if one.by() == "extensions" => runs.push(text(&one, 2).unwrap_or_default()),
+      "rung" if one.by() == "extensions" => reads.push(text(&one, 1).unwrap_or_default()),
+      _ => {}
+    }
+  }
+  assert_eq!(runs, ["x = 1"], "an extension whose word is blank plays no run: {runs:?}");
+  assert!(reads.iter().any(|one| one.contains("kept.py")), "{reads:?}");
+  assert!(reads.iter().all(|one| !one.contains("blank.py")), "nor a read of its file: {reads:?}");
+}
+
+#[test]
 fn a_later_life_on_a_new_standing_plays_a_stand_on_each_chain_and_a_cd_where_the_chain_ran_none_of_its_own()
  {
   let at = place("restand");

@@ -716,13 +716,18 @@ async fn setup(co: &mut Co, enabled: &[Extension], actor: &str, path: &str) -> R
 
 /// The word of an extension on a chain as a turn of an actor: the read of its file, whose word the ear runs in the
 /// module of the chain with no rung, as the run `<rung>_word`, so the chain shows the read alone and holds the
-/// definitions of the word. An extension whose word has no file plays its word as a rung.
+/// definitions of the word. An extension whose word has no file plays its word as a rung. An extension whose word
+/// is blank, as one that holds only a part for the TUI, plays nothing: a run of no word would stand in the program of
+/// the chain as a word that a replay asks a model for.
 async fn loaded(
   co: &mut Co,
   one: &Extension,
   chain: &str,
   actor: &str,
 ) -> Result<Option<String>, Fault> {
+  if one.word.trim().is_empty() {
+    return Ok(None);
+  }
   if one.file.is_empty() {
     ring(co, chain, &one.word).await?;
     return Ok(None);
