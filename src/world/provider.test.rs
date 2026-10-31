@@ -1995,6 +1995,45 @@ fn the_note_of_a_fault_after_the_word_that_ran_is_python_that_binds_the_findings
 }
 
 #[test]
+fn the_note_of_a_fault_after_the_word_that_ran_shows_the_last_lines_that_ran() {
+  let model = Halting::writes(&["x = 3\n", "y = x\n", "Now I know.\n", "z = 1\n"]);
+  let (mut engine, _) = life("stopped", vec![Model::new("m", 1000, model)]);
+  asked(&mut engine);
+  assert_eq!(replied(&mut engine), cut("x = 3\ny = x"));
+  assert!(
+    until(&mut engine, |engine| told_of(
+      engine,
+      &[
+        "each act, close and name of that part stands",
+        "line 1: x = 3",
+        "line 2: y = x",
+        "no later statement runs"
+      ]
+    )),
+    "the chain is told the last lines that ran"
+  );
+}
+
+#[test]
+fn a_finding_of_the_gate_on_a_word_whose_part_ran_claims_no_word_that_ran_nothing() {
+  let model = streaming(&[("x = 3\ny = x\nThat is all, the count is done.", Usage::new())]);
+  let (mut engine, _) = life("markup", vec![Model::new("m", 1000, model)]);
+  asked(&mut engine);
+  assert_eq!(replied(&mut engine), cut("x = 3\ny = x"));
+  assert!(
+    until(&mut engine, |engine| told_of(
+      engine,
+      &["line 2: y = x", "no statement after the part that ran runs"]
+    )),
+    "the chain is told that no statement after the part that ran runs"
+  );
+  assert!(
+    !told_of(&mut engine, &["nothing of this word ran"]),
+    "no note says that nothing of the word ran"
+  );
+}
+
+#[test]
 fn a_reply_whose_call_ended_after_a_part_of_its_word_ran_is_the_word_that_ran() {
   let model = Halting::breaks(&["x = 3\n", "y = x"]);
   let (mut engine, _) = life("ended", vec![Model::new("m", 1000, model)]);
