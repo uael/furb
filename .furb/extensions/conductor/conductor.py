@@ -45,7 +45,7 @@ The owner rules again, on 10-23: "From now on: 2 opus workers, 3 sonnet ones. ma
 The round runs on one chain, lead["home"]. After a compaction of your chain, await conduct() in the new chain: it names that chain, the round of the old chain ends at its next wake, and the state that the round reads is the state of the new chain, which you change there.
 A fault of one step of a round, as an empty answer of gh, ends no round: the round tells you once each kind of fault, with the fault and its step, and goes on at the next round. Each json.loads of a command reads its output only when the command succeeded. When the round ends for any cause but a new home, it tells you as a decision, with the cause and what stops.
 hire(key, brief, thread) gives the item to an idle worker of the pool, by the ideas of the owner on 10-28, when one fits: a worker that ended stays in pool under its chain, with its model, its thread and the top folders of the files of its PR, and it takes an item of the same model whose thread is its own, or whose areas[key] names one of its folders, while its last reply filled under half of its window. Else hire starts a worker on a new chain that forks the base chain of its kind and model, bases["kind model"], which the round makes once and which reads AGENTS.md, so the provider serves that prefix from its cache. It starts the worker at model_of(key), on a chain labeled thread/key, with the brief in custom or the brief of its kind, and the PR of an edit carries the labels w:key and thread:thread.
-A worker does one item in a workspace {repo}-wN, which the round gives at its hire to it alone and again to a later worker once it ends, and which it leaves clean with its branch pushed (a chain goes on in the workspace that it held last when no live worker holds it, else it gets a new one and its brief says that the old one now belongs to another worker, and the file furb-holder in the git dir of a workspace names its chain, which each worker reads before its first command of a prompt there), runs only the tests that its change touches, opens its PR, and closes with its URL.
+A worker does one item in a workspace {repo}-wN, which the round gives at its hire to it alone and again to a later worker once it ends, and which it leaves clean with its branch pushed (a chain goes on in the workspace that it held last when no live worker holds it, else it gets a new one and its brief says that the old one now belongs to another worker, and the file furb-holder in the git dir of a workspace names its chain, which each worker reads before its first command of a prompt there, and before the round gives a workspace it commits and pushes the work that an earlier item left there, on a branch w/wip-<sha> when HEAD is detached), runs only the tests that its change touches, opens its PR, and closes with its URL.
 A prompt of a worker that ends with CancelledError while the round made no cancel over it, as when the life restarts, goes on: the round asks it again on its chain with a new prompt, at most 3 times for an item, and tells nobody.
 The round tells you a worker that ends with no PR, with its answer, or that says nothing for 45 minutes, relays to you each question that a worker puts to the operator, and wakes a worker that paused. results keeps the answer of each worker under its prompt.
 When a worker ends, the round asks it debrief() once, and adds each friction that it gives to TOOLING, the ledger of the defects of the tooling, as flaw(what) adds a defect that you find or patch live. An entry counts each time that it comes again. settle_flaw(part, pr) closes each open entry that holds part with the PR that fixed it, once you checked on main that the PR did; the audit lists the open entries alone, and an entry that comes again opens again.
@@ -198,6 +198,17 @@ The item, {key}:
 {what}"""
 
 WORKSPACE = """Work in the workspace {repo}-{slot}, one of the workspaces w1, w2 and on that the round gives again from item to item, so that each build starts warm. If it does not stand, make it: {repo}/script/worktree.sh {repo}-{slot} <your branch>. If it stands, it holds the branch of an earlier item: run git status there, commit what no commit holds as a WIP commit on that branch and push it, then git fetch origin and git switch -C <your branch> onto origin/<your branch> when that branch is on origin, else onto origin/main. Leave the workspace clean when you close, each change committed and pushed, since your branch is on origin and the round gives the workspace to the next item. Your chain stands in the directory of the main checkout until a cd moves it, and a relative path of read, write or bash acts there: once the workspace stands, give cd({repo}-{slot}) in a word of your own, and use no relative path before it. The git dir of a workspace holds a file furb-holder that names the chain that holds it. Once the workspace stands, write your chain there: echo {chain} > "$(git -C {repo}-{slot} rev-parse --absolute-git-dir)/furb-holder". Before your first command of each prompt in a workspace, read that file: if it names another chain than {chain}, run nothing in that workspace, since the round gave it to another worker, and use the workspace that your brief names. A holder that names a chain with no live prompt of a worker, which threads() shows, is stale: the round writes your chain there itself when it gives you the workspace, and if a stale name stays, write your chain over it and go on."""
+
+SETTLE = """cd "$1" 2>/dev/null || exit 0
+[ "$(cat "$(git rev-parse --absolute-git-dir)/furb-holder" 2>/dev/null)" = "$2" ] && exit 0
+b=$(git branch --show-current)
+dirty=$(git status --porcelain)
+ahead=$(git rev-list HEAD --not --remotes | head -1)
+[ -n "$dirty$ahead" ] || exit 0
+if [ -z "$b" ]; then b=w/wip-$(git rev-parse --short HEAD); git switch -q -c "$b" || exit 0; fi
+[ -z "$dirty" ] || { git add -A && git commit -q --no-verify -m "chore(wip): Keep the work of an earlier item"; }
+git push -q origin "$b"
+"""
 
 MOVED = "Your earlier workspace {repo}-{moved} now belongs to another worker: touch nothing in it and run no command there."
 
@@ -687,6 +698,7 @@ def placed(key: str, text: str, where: str = "") -> tuple[str, str]:
   if where:
     path = f"{cwd()}-{slot}"
     home = shq(path)
+    quietly(bash, f"sh -c {shq(SETTLE)} sh {home} {shq(where)}", show=HIDDEN)
     quietly(bash, f'[ -d {home} ] && echo {shq(where)} > "$(git -C {home} rev-parse --absolute-git-dir)/furb-holder"', show=HIDDEN)
     quietly(rung, f"try:\n  cd({path!r})\nexcept Refused:\n  pass", on=where)
   return text.replace("{chain}", where), slot
