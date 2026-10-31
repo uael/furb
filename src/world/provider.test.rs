@@ -522,6 +522,27 @@ fn a_word_whose_statements_stand_over_many_lines_is_not_ended_while_the_model_wr
 }
 
 #[test]
+fn a_reply_that_is_one_quote_and_nothing_else_is_refused_with_the_fix() {
+  let parts = ["<s:rung9_word>\n", "x = 1\n", "</s:rung9_word>\n"];
+  let usage = Usage { input_tokens: 10, output_tokens: 5, total_tokens: 15, ..Default::default() };
+  let events: Vec<_> = parts
+    .iter()
+    .map(|part| MockStreamEvent::text(*part))
+    .chain([MockStreamEvent::FinalResponse(StreamFinal::new("mock", usage))])
+    .collect();
+  let model = MockCompletionModel::from_stream_turns([events]);
+  let (mut engine, _) = life("lone", vec![scripted(&model)]);
+  asked(&mut engine);
+  assert!(
+    until(&mut engine, |engine| told_of(
+      engine,
+      &["the word is the quote <s:rung9_word> and nothing else"]
+    )),
+    "the chain is told that the word only binds the name of its quote"
+  );
+}
+
+#[test]
 fn a_close_mark_inside_a_line_of_a_quote_does_not_end_the_reply_at_its_open_mark() {
   let parts =
     ["<s:old>\n", "x = \"</s:old>\" in text\n", "more text\n", "</s:old>\n", "close(len(old))"];

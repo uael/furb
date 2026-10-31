@@ -249,6 +249,19 @@ async def test_an_open_mark_that_stands_inside_a_quote_of_its_own_name_is_a_find
   assert engine.gate("<s:a>\nA\n</s:a>\n<s:a>\nB\n</s:a>\nclose(a)", on=root) == []
 
 
+async def test_a_word_that_is_one_quote_and_nothing_else_finds_that_it_only_binds_the_name_of_the_quote() -> None:
+  """A word that is one quote and nothing else finds that it only binds the name of the quote and nothing of it runs, so write the code as the word itself, with no quote around it, and quote only a text that the code uses."""
+  _, _, root = born()
+  why = (
+    "the word is the quote <s:rung9_word> and nothing else, so it only binds rung9_word and nothing of it runs: write"
+    " the code as the word itself, with no quote around it, and quote only a text that the code uses"
+  )
+  found = engine.gate("<s:rung9_word>\nwrite(text)\n</s:rung9_word>\n", on=root)
+  assert found == [f"line 1: {why}, in \"rung9_word = 'write(text)\\\\n'\""]
+  assert engine.gate("<s:plan>\nstep one\n</s:plan>\nclose(plan)", on=root) == []
+  assert engine.gate("k = 'a'", on=root) == []
+
+
 async def test_the_journal_keeps_what_the_gate_found() -> None:
   """The journal keeps what the gate found, since the gate is of the outside, so a later life reads the same findings and asks the gate nothing again."""
   sand, log, root = born("close(1)")
