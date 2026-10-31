@@ -23,6 +23,7 @@ is [machine] or [cancelled], once for each head, with gh run rerun <run> --faile
 again."""
 
 
+PR_SENTENCE = 25
 PR_TITLE = r"(feat|fix|perf|chore)\([a-z0-9][a-z0-9:/_.-]*\)!?: [A-Z0-9`].*"
 PR_BOXES = [
   "I am accountable for this diff, whoever or whatever wrote it.",
@@ -53,7 +54,10 @@ def pr_body(
 
 def prcheck(title: str, why: str, outcome: list[str], breaking: list[str] | None = None) -> int:
   if len(title) > 70 or not re.fullmatch(PR_TITLE, title):
-    raise Refused(f"the title {title!r} is not type(area): What changed, in 70 characters or fewer")
+    raise Refused(
+      f"the title {title!r} holds {len(title)} characters and is not type(area): What changed, in 70 characters or"
+      " fewer, with type feat, fix, perf or chore"
+    )
   if not why.strip() or not outcome:
     raise Refused("a PR needs a why and at least one outcome")
   parts = [len(why.split()), len(" ".join(outcome).split()), len(" ".join(breaking or []).split())]
@@ -62,6 +66,14 @@ def prcheck(title: str, why: str, outcome: list[str], breaking: list[str] | None
       f"the body holds {sum(parts)} words, over 300 (why {parts[0]}, outcome {parts[1]}, breaking {parts[2]}):"
       " delete a whole paragraph, not a word"
     )
+  long = [
+    f"{len(s.split())} words: {' '.join(s.split()[:8])} ..."
+    for part in [why, *outcome, *(breaking or [])]
+    for s in re.split(r"(?<=[.!?])\s+", part.strip())
+    if len(s.split()) > PR_SENTENCE
+  ]
+  if long:
+    raise Refused(f"{len(long)} sentences over {PR_SENTENCE} words, split each one:\n" + "\n".join(long))
   return sum(parts)
 
 
