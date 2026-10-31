@@ -249,6 +249,34 @@ test.skipIf(process.platform === "win32")(
 );
 
 test.skipIf(process.platform === "win32")(
+  "a window of the old build that finds the host that took its build attaches to that host and takes the life back from no one",
+  () =>
+    demoLife(async (record, directory) => {
+      const place = hostPlace(record);
+      if (!place) throw new Error("No socket serves here.");
+      const options = { demo: true, host: true, cwd: directory, record };
+      const asOld = async () => {
+        process.env.FURB_BUILD = "0.0.0+0ld0b0i1d000";
+        try {
+          return await openEngine(options);
+        } finally {
+          delete process.env.FURB_BUILD;
+        }
+      };
+      await asOld();
+      const { host } = await openEngine(options);
+      const after = said(place);
+      expect(after.from).toBe("0.0.0+0ld0b0i1d000");
+      const again = await asOld();
+      expect(said(place)).toMatchObject({ pid: after.pid, build: after.build });
+      expect(alive(after.pid)).toBe(true);
+      expect(again.engine.root).toBeString();
+      await host.end();
+      await eventually(() => !alive(after.pid), "the host to end");
+    }),
+);
+
+test.skipIf(process.platform === "win32")(
   "a command that runs past the wait of a host that hands its life over waits in the new host, and a wake ends it as interrupted",
   () =>
     demoLife(async (record, directory) => {
