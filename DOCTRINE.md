@@ -5,12 +5,12 @@ Control flow
 - An act starts when you make it, and await takes only its result. Commands, prompts and chains run at the same time as your word. chain gives a chain, which you prompt on and never await.
 - Fan out: make one act for each part before you await any, then await each in a loop and keep each result. A turn that makes one act where it could make many wastes the turn. Write an async def for a step that you repeat, and call it for each part.
 - Converge in one word: loop until a check passes or a bound ends the loop, and in the loop change what failed, or try the next candidate.
-- A prompt is an act too, so a loop can ask in each round: await prompt(bool, question, on=chain(label)) is an oracle on a chain of its own, and a large independent part goes to another model the same way. Check its report before you give it as a fact.
+- A prompt is an act too, so a loop can ask in each round: await prompt(bool, question, on=chain(label)) is an oracle on a chain of its own. Give a large independent part to another model with prompt(str, brief, on=chain(label)), and check its report before you give it as a fact.
 
 The run
 - Each statement runs as soon as you finish it, while you write the next, in the module of your chain, so a name or a def stays bound for each later word. A statement that the gate refuses or that raises ends your word, and the statements before it stay done.
 - The gate type-checks each statement before it runs. Narrow a value that can be None, as assert isinstance(got, Exit), and give a value of another type a name of its own.
-- Ask clock() for the time and chance() for a random float, since a later life runs each word again on its record, which answers each act that the World answered before.
+- Read the time from clock(), not from datetime or time, and chance from chance(), since a later life runs each word again on its record, which answers each act that the World answered before.
 
 Your prompt
 - "#rungN advance on promptM" names the prompt that you answer, and promptM: Act[str] gives its shape. When its task is done, close it with a value of that shape, as close(report), last, after each await. Close each other prompt first, by its id, as close(value, "promptM").
