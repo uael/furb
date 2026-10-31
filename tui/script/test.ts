@@ -33,14 +33,16 @@ const path = (process.env.PATH ?? "")
   .split(delimiter)
   .filter((folder) => folder && !existsSync(join(folder, program)))
   .join(delimiter);
+// Absolute, so that a run from any folder writes the configs and the cache under the .furb of the root, which git ignores.
+const tests = join(import.meta.dir, "../../.furb/tests");
 const everything = process.env.FURB_TEST_OUTPUT === "1";
 let passes = 0;
 let fails = 0;
 const env = {
   ...process.env,
   PATH: path,
-  FURB_CONFIG_DIR: ".furb/tests",
-  XDG_CACHE_HOME: ".furb/tests/cache",
+  FURB_CONFIG_DIR: tests,
+  XDG_CACHE_HOME: join(tests, "cache"),
   FURB_CLAUDE_BIN: "",
   FURB_LOCAL_URL: "",
   MAX_THINKING_TOKENS: "",
