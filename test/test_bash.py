@@ -79,12 +79,14 @@ async def test_the_commands_of_the_world_run_at_the_same_time() -> None:
   assert ((await one).code, (await two).code) == (0, 1)
 
 
-async def test_bash_is_given_a_command_its_stdin_a_timeout_and_a_show_for_each_stream() -> None:
-  """bash is given a command, its stdin, a timeout, and a show for each stream, the plain words first, so the journal makes it again."""
+async def test_bash_is_given_a_command_its_stdin_a_timeout_the_codes_that_it_accepts_and_a_show_for_each_stream() -> (
+  None
+):
+  """bash is given a command, its stdin, a timeout, the codes that it accepts, and a show for each stream, the plain words first, so the journal makes it again."""
   sand, log, root = born(auto=False)
-  engine.bash("echo hi", "go", 5.0, HEAD, TAIL, on=root)
+  engine.bash("echo hi", "go", 5.0, (0, 1), HEAD, TAIL, on=root)
   word = said(log, "bash")[0]
-  assert word == ("bash", word[1], OPERATOR, root, "echo hi", "go", 5.0)
+  assert word == ("bash", word[1], OPERATOR, root, "echo hi", "go", 5.0, (0, 1))
   assert [e[0] for e in sand.record if e[0][0] == "bash"] == [word]
   again, _ = await relived(Sand(auto=False), plain(sand.record))
   assert said(again, "bash") == [word]
@@ -486,7 +488,7 @@ async def test_the_world_hears_the_bash_itself() -> None:
   engine.cd("/deep", on=root)
   one = engine.bash("echo hi", stdin=None, timeout=5.0, show=HIDDEN, show_err=TAIL, on=root)
   assert (await one).stdout.content == "ran echo hi\n"
-  assert said(log, "bash") == [("bash", one, OPERATOR, root, "echo hi", None, 5.0)]
+  assert said(log, "bash") == [("bash", one, OPERATOR, root, "echo hi", None, 5.0, None)]
 
 
 async def test_the_world_that_takes_a_command_answers_it() -> None:
@@ -523,3 +525,65 @@ async def test_the_world_runs_the_command_in_a_posix_sh(tmp_path: Path) -> None:
   got = await engine.bash('n=6; echo "$((n * 7))" "${n#6}x"', on=root)
   live.end()
   assert (got.code, got.stdout.content, Path(_monty.shell()).stem) == (0, "42 x\n", "sh")
+
+
+async def test_a_command_accepts_the_codes_that_its_ok_names_and_every_code_when_its_ok_is_true() -> None:
+  """A command accepts the codes that its ok names, as ok=(0, 1), and every code when its ok is True."""
+  sand, log, root = born(
+    "one = bash('false', ok=(0, 1))\ntwo = bash('slow', ok=True)\nthree = bash('false', ok=(0,))\n"
+    "got = [(await one).code, (await two).code]\n"
+    "try:\n  await three\nexcept Refused as no:\n  got.append(str(no))\nclose(got)",
+    auto=False,
+  )
+  asked = engine.prompt(list, "run them", on=root)
+  await settle()
+  one, two, three = (a[1] for a in said(log, "bash"))
+  sand.exits(one, 1)
+  sand.exits(two, None)
+  sand.exits(three, 1)
+  assert await asked == [1, None, f"{three} exited 1"]
+  assert [a[7] for a in said(log, "bash")] == [(0, 1), True, (0,)]
+
+
+async def test_a_command_with_no_ok_accepts_the_code_0_and_the_code_1_for_a_check_that_exits_1_for_no_match() -> None:
+  """A command with no ok accepts the code 0, and the code 1 when it ends in a grep, an egrep, an rg, a diff, a cmp, a test, or a git check with --quiet, --is-ancestor or --exit-code, which exit 1 for no match or for a difference."""
+  commands = [
+    "grep -q x f",
+    "cd d && diff a b",
+    "cat f | rg x",
+    "git diff --quiet",
+    "git merge-base --is-ancestor a b",
+    "test -f x",
+    "false",
+    "grep x f | wc -l",
+    "cat f",
+    "git status",
+  ]
+  sand, log, root = born(
+    "got = []\nfor c in "
+    + repr(commands)
+    + ":\n  x = bash(c)\n  try:\n    await x\n    got.append(c)\n  except Refused:\n    pass\nclose(got)",
+    auto=False,
+  )
+  asked = engine.prompt(list, "run them", on=root)
+  for n in range(len(commands)):
+    await settle()
+    sand.exits(said(log, "bash")[n][1], 1)
+  await settle()
+  assert await asked == commands[:6]
+
+
+async def test_a_word_that_defines_accepts_rules_the_codes_of_each_command_with_no_ok_on_its_chain() -> None:
+  """A word that defines accepts(command, code) rules the codes of each command with no ok on its chain, in the place of that default."""
+  sand, log, root = born(
+    "def accepts(command, code):\n  return code == 3\n\n"
+    "x = bash('a')\ny = bash('b')\ncode = (await x).code\n"
+    "try:\n  await y\nexcept Refused:\n  code = [code, 'refused']\nclose(code)",
+    auto=False,
+  )
+  asked = engine.prompt(list, "run them", on=root)
+  await settle()
+  one, two = (a[1] for a in said(log, "bash"))
+  sand.exits(one, 3)
+  sand.exits(two, 0)
+  assert await asked == [3, "refused"]

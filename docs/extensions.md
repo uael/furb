@@ -146,6 +146,18 @@ furb stands. It changes with a build of furb, and not live.
 Turn on only the extensions that you trust. A word runs in the sandbox of monty with the engine of the crate, and with
 the rights of your user with the engine of CPython, as a word of a model does there.
 
+## The codes of a command
+
+A word that awaits a command is refused when the command exits with a code that it does not accept. A command with no
+`ok` accepts the code 0, and the code 1 when it ends in a grep, an rg, a diff, a cmp, a test or a git check. A word that
+defines `accepts(command, code)` rules this for each command with no `ok` on its chain. An extension that plays on every
+chain, or on the root, defines it once and so sets the policy of the whole project:
+
+```python
+def accepts(command, code):
+  return code in (0, 1)
+```
+
 ## A part for the TUI
 
 An extension can give the TUI a part: a module of TypeScript, which its manifest names under `tui`. A part can add a

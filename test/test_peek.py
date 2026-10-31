@@ -88,8 +88,8 @@ async def test_the_outcome_is_no_slot_of_the_act() -> None:
   """The outcome is no slot of the act, so the plain form of an act holds none of it, and an act made again from the record waits until its done is said again."""
   sand, log, root, act = slow()
   await settle()
-  assert engine.peek(act, ...) is ... and len(said(log, "bash")[0]) == 7
+  assert engine.peek(act, ...) is ... and len(said(log, "bash")[0]) == 8
   kept = list(sand.record)
-  assert [len(e[0]) for e in kept if e[0][0] == "bash"] == [7]
+  assert [len(e[0]) for e in kept if e[0][0] == "bash"] == [8]
   _, over = await relived(Sand(auto=False), kept)
   assert over == root and engine.get(act) is not None and engine.peek(act, ...) is ...

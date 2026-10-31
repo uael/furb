@@ -427,7 +427,7 @@ def grant(usd: float | None = None, share: float | None = None, on="") -> Act[No
 
 
 def bash(
-  command: str, stdin: str | None = "", timeout=TIMEOUT, show: Show = TAIL, show_err: Show | None = None, on=""
+  command: str, stdin: str | None = "", timeout=TIMEOUT, ok=None, show: Show = TAIL, show_err: Show | None = None, on=""
 ) -> Act[Exit]:
   def ear(id):
     yield opened(id, "Exit", command="" if show is HIDDEN else command)
@@ -446,7 +446,7 @@ def bash(
               )
           return
 
-  return act("bash", on, controlled(ear, True), command, stdin, timeout)
+  return act("bash", on, controlled(ear, True), command, stdin, timeout, ok)
 
 
 @dataclass
@@ -555,7 +555,7 @@ def tell(on, path="", got=None, show=HEAD, **words):
       path=path,
       **words,
       **{"numbers": at if (at := show(got.lines)) and at[-1] - at[0] >= len(at) else None, "text": shown(got, show)}
-      if isinstance(got, Text)
+      if type(got) is Text
       else {"value": got},
     )
   )

@@ -13,7 +13,7 @@ async def test_the_open_of_an_act_tells_the_id_and_what_the_act_says_of_itself()
   await settle()
   opened = next(a[3] for a in said(log, "tell") if a[1] == act)
   assert opened == [f"#{act}\n{act}_command = 'echo hi'", f"{act}: Act[Exit] = Act('{act}')"]
-  assert said(log, "bash")[0][4:] == ("echo hi", "go", 9.0)
+  assert said(log, "bash")[0][4:] == ("echo hi", "go", 9.0, None)
 
 
 async def test_a_closed_paragraph_binds_what_the_act_came_to_under_the_word_value() -> None:
