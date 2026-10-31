@@ -215,6 +215,11 @@ Set the timeout of each command, and the bound of each wait, to about twice the 
 round 600 or 900 seconds in case: a ceiling that is too large hides a hang for as long. Make a step that can take
 minutes print its progress, so that a hang shows at once.
 
+Never end a process by its name or by a pattern of its command line: not `pkill`, not `killall`, not `pkill -f`. A
+pattern matches the windows of the owner, the processes of other workers and your own shell, whose command line holds
+the pattern. Start a process that you may need to end with its pid written to `$TMPDIR`, or in a process group of its
+own, and end that pid or that group alone.
+
 Make a small change, run the checks that it touches, and compare a check that fails with the base before the change:
 fix what your change broke, and report what was broken before.
 
