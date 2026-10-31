@@ -147,9 +147,11 @@ window of a new build takes the life over with its record whole.
 - When a host ends while the life goes on, as at a crash or at a signal such as the one of `kill`, the window starts a
   host again and reads the acts of the life again from the start. A window hears that a window ended the life only
   when a window did.
-- A host says of itself in `<key>.json` as soon as it starts. A window that finds a host that still opens the life, as
-  on a long record, waits for that host while its process runs, and starts no second one. A record that another
-  program holds, which is no host, fails with the words to end that program.
+- A host says of itself in `<key>.json` as soon as it starts, and it listens at its socket before it opens the life. A
+  window that finds a host that still opens the life, as on a long record, attaches to it and waits for the open on
+  that socket, and starts no second one. A signal, or `/end` from a window, cuts the open: the host ends, removes its
+  socket and its file, and tells each window that waits why. A record that another program holds, which is no host,
+  fails with the words to end that program.
 - A window that lost its life, as one that another window ended or one whose host was stopped, shows why in plain
   words, with two actions. `/reopen` reaches the life again, in the host that answers or in a host that the window
   starts, and reads the acts from the start. `/stop` ends the process of the host by force. `/end` does the same

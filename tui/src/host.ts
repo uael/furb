@@ -3,7 +3,7 @@
 // no module that loads OpenTUI, since it draws nothing.
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { rmSync, writeFileSync } from "node:fs";
-import { type AddressInfo, createServer, type Socket } from "node:net";
+import { type AddressInfo, createConnection, createServer, type Socket } from "node:net";
 import type { HostState } from "./bridge.ts";
 import {
   type About,
@@ -57,19 +57,22 @@ const about: About = {
 const tell = () => tellAbout(place, about);
 // Another host of the life that runs owns it, so this one ends before it opens a second life on the record. The host
 // says of itself at once, so a window knows who opens the life while it opens.
-const rival = aboutOf(place);
-if (rival && rival.pid !== process.pid && isHost(rival.pid)) {
-  const said = `${RIVAL}, the process ${rival.pid}.`;
+const occupied = (pid?: number): never => {
+  const said = pid ? `${RIVAL}, the process ${pid}.` : `${RIVAL}.`;
   writeFileSync(place.failed, `${JSON.stringify({ pid: process.pid, error: said })}\n`, { mode: 0o600 });
   console.error(`furb-host: ${said}`);
   process.exit(1);
-}
+};
+const rival = aboutOf(place);
+if (rival && rival.pid !== process.pid && isHost(rival.pid)) occupied(rival.pid);
 tell();
 const building = buildOf().catch((error: unknown) => `unknown: ${error}`);
 
 const worker = new Worker(new URL("worker.ts", import.meta.url).href, { type: "module" });
 /** Each window that said hello, by its sender, with its role. */
 const windows = new Map<Send, Role>();
+/** Each window that said hello while the life opens, with its hello, which the host answers once the life is open. */
+const hellos = new Map<Send, { message: Request; role: Role }>();
 /** Each request that the worker has not answered, under the number that the host gave it: the window that made it and
  * its number there. */
 const waiting = new Map<number, Asker>();
@@ -84,6 +87,10 @@ let why = "The life was ended from another window.";
 let signalled = false;
 /** Why the life stopped, when a fault cut a run of its sandbox, which each window that attaches later hears. */
 let stopped: string | undefined;
+/** The root of the life, which stands once the life is open and the host knows its build. */
+let root = "";
+/** Why the life did not open, which each window that comes while the host ends hears. */
+let refusal = "";
 /** How long a host that hands its life over waits for the commands and the replies of the models that run, so that
  * each that ends in time lands in the record. Each other ends as interrupted in the life of the next host, as a
  * command that a crash cut does. */
@@ -111,6 +118,12 @@ function close(code: number): never {
   process.exit(code);
 }
 
+/** A window that went: it hears nothing more, and its hello gets no answer. */
+function gone(send: Send): void {
+  windows.delete(send);
+  hellos.delete(send);
+}
+
 // The socket of Unix stands in a folder that only the user opens, so each window that comes through it writes.
 const server = createServer((socket) => {
   const send = framed(
@@ -118,8 +131,8 @@ const server = createServer((socket) => {
     (message: Request) => heard(message, send, "write"),
     () => REQUEST,
   );
-  socket.on("close", () => windows.delete(send));
-  socket.on("error", () => windows.delete(send));
+  socket.on("close", () => gone(send));
+  socket.on("error", () => gone(send));
 });
 
 /** The door of the life on the network, which a window that writes opens: the addresses that it gives each role. */
@@ -179,9 +192,9 @@ function welcome(socket: Socket, keys: Record<Role, string>): void {
   );
   socket.on("close", () => {
     clearTimeout(timer);
-    windows.delete(send);
+    gone(send);
   });
-  socket.on("error", () => windows.delete(send));
+  socket.on("error", () => gone(send));
 }
 
 worker.onmessage = ({ data }) => {
@@ -225,6 +238,10 @@ worker.onerror = (event) => {
 /** What a window says: its hello, which attaches it with its role, or a request, which goes to the worker when the role
  * of the window makes it. A window that detaches only closes its socket, and the life goes on. */
 function heard(message: Request, send: Send, role: Role): void {
+  if (!root) {
+    whileOpening(message, send, role);
+    return;
+  }
   if (message.target === "host" && message.method === "hello") {
     send({ id: message.id, value: { ...about, root, seq: last?.seq ?? 0, role } satisfies Hello });
     // A window that attaches draws what the life holds, so the first state tells it that facts came.
@@ -284,29 +301,72 @@ async function handOver(build: string): Promise<void> {
   ask("session", "end", [], { id: 0 });
 }
 
-let root: string;
-try {
-  root = String(await asked("session", "open", options));
-  about.engine = String((await asked("library", "made")) ?? "");
-} catch (error) {
-  // The reason goes to a file of its own, so a host that listens keeps what it said of itself.
-  const why = error instanceof Error ? error.message : String(error);
-  writeFileSync(place.failed, `${JSON.stringify({ pid: process.pid, error: why })}\n`, { mode: 0o600 });
-  console.error(`furb-host: ${why}`);
-  rmSync(place.about, { force: true });
-  process.exit(1);
-}
-about.build = await building;
-// The lease of the record is this host's now, so a socket at the place is of a host that ended.
+/** The end of a host whose life is not open: the worker goes, which cuts the open, and each window that waits for its
+ * hello hears why. */
+const abandon = (reason: string): void => {
+  ending = true;
+  for (const [send, { message }] of hellos) send({ id: message.id, error: reason });
+  worker.terminate();
+  setTimeout(() => close(1), 50);
+};
+
+/** What a window says while the life opens: its hello waits for the open, and the end of the life cuts the open. */
+const whileOpening = (message: Request, send: Send, role: Role): void => {
+  if (refusal) send({ id: message.id, error: refusal });
+  else if (message.target === "host" && message.method === "hello") hellos.set(send, { message, role });
+  else if (message.target === "session" && message.method === "end" && role === "write") {
+    send({ id: message.id, value: null, disposed: true });
+    abandon("The life was ended from another window while it opened.");
+  } else send({ id: message.id, error: "The life is still opening." });
+};
+
+// A socket that answers at the place is of a host that runs, so this one ends: the lease of the record is not this
+// host's yet. A socket that answers none is of a host that ended.
+const answered = await new Promise<boolean>((resolve) => {
+  const probe = createConnection(place.socket);
+  probe.once("connect", () => {
+    probe.destroy();
+    resolve(true);
+  });
+  probe.once("error", () => resolve(false));
+});
+if (answered) occupied(rival?.pid);
 rmSync(place.socket, { force: true });
+// The host listens before it opens the life, so a window reaches it while it opens, and a signal or the end of the
+// life cuts the open.
 server.listen(place.socket, tell);
-// A signal ends the life as the end of a window does, so the commands and the models end with it.
 for (const signal of ["SIGINT", "SIGTERM"] as const)
   process.once(signal, () => {
     signalled = true;
+    if (!root) {
+      abandon("The host was stopped while it opened the life.");
+      return;
+    }
     if (!ending) {
       ending = true;
       ask("session", "end", [], { id: 0 });
     }
     setTimeout(() => close(1), 10000).unref();
   });
+try {
+  // FURB_HOST_OPEN_LAG holds the open for that many milliseconds, as a test of a life that takes minutes to open does.
+  const lag = Number(process.env.FURB_HOST_OPEN_LAG ?? 0);
+  if (lag) await Bun.sleep(lag);
+  const opened = String(await asked("session", "open", options));
+  about.engine = String((await asked("library", "made")) ?? "");
+  about.build = await building;
+  root = opened;
+} catch (error) {
+  // The reason goes to a file of its own, so a host that listens keeps what it said of itself.
+  const why = error instanceof Error ? error.message : String(error);
+  writeFileSync(place.failed, `${JSON.stringify({ pid: process.pid, error: why })}\n`, { mode: 0o600 });
+  console.error(`furb-host: ${why}`);
+  refusal = why;
+  for (const [send, { message }] of hellos) send({ id: message.id, error: why });
+  await Bun.sleep(200);
+  close(1);
+}
+tell();
+// The lease of the record is this host's, and each window that said hello while the life opened gets its answer.
+for (const [send, { message, role }] of hellos) heard(message, send, role);
+hellos.clear();

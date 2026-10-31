@@ -563,6 +563,9 @@ async function launch(
 const graceOf = () => Number(process.env.FURB_HOST_GRACE ?? 12000);
 /** How long a host has to answer the end of the life before the window stops it, in milliseconds. */
 const endingOf = () => Number(process.env.FURB_HOST_ENDING ?? 15000);
+/** What a window says when a program that is no host holds the life. */
+const HELD =
+  "Another program holds the life, and it is no host that this window can reach. End that program, then open the life again.";
 
 /** A connection to the host of a life: the host that answers at its place, or a host that the window starts as a
  * process of its own, detached from the window, which it waits for. A host that ends before it listens says why. A
@@ -583,10 +586,7 @@ async function reach(
     if (!got.includes(RIVAL) && !got.includes(OWNED)) throw new Error(got);
     const host = await waiting(place, stopped);
     if (host) return host;
-    if (tries >= 3)
-      throw new Error(
-        "Another program holds the life, and it is no host that this window can reach. End that program, then open the life again.",
-      );
+    if (tries >= 3) throw new Error(HELD);
   }
 }
 
@@ -628,7 +628,8 @@ async function attach(
   let reaching: Promise<void> | undefined;
   const hello = async (): Promise<Hello> => {
     let from: string | undefined;
-    for (let took = false; ; took = true) {
+    let tries = 0;
+    for (let took = false; ; ) {
       const held = await reachHost(() => stopping, from);
       socket = held;
       // The record of a host on the network stands on another machine, or is the record of another operator, so the
@@ -654,12 +655,26 @@ async function attach(
       // the window waits on it, so the socket would wait with no close.
       held.on("end", () => held.destroy());
       const build = await mine;
-      const said = (await link.request(
-        "host",
-        "hello",
-        [{ window: process.pid, protocol: PROTOCOL, build, key }],
-        true,
-      )) as Hello;
+      let said: Hello;
+      try {
+        said = (await link.request(
+          "host",
+          "hello",
+          [{ window: process.pid, protocol: PROTOCOL, build, key }],
+          true,
+        )) as Hello;
+      } catch (error) {
+        // A host whose open met another owner of the life says so in the answer to the hello, as it ends: the window
+        // waits for that owner, as it does for a host that ends before it listens.
+        const why = error instanceof Error ? error.message : String(error);
+        if (!place || !(why.includes(RIVAL) || why.includes(OWNED))) throw error;
+        socket = undefined;
+        link.send = undefined;
+        held.destroy();
+        if (++tries >= 3) throw new Error(HELD);
+        (await waiting(place, () => stopping))?.destroy();
+        continue;
+      }
       // A host that this window started after a takeover keeps its build, so two windows of two builds that open
       // the life at once do not take it over from each other with no end. A host that took the life from the build
       // of this window is not taken back: a window of an old build attaches to it.
@@ -668,6 +683,7 @@ async function attach(
         link.send = undefined;
         await takeOver(held, send, said, build);
         from = said.build;
+        took = true;
         continue;
       }
       if (said.protocol !== PROTOCOL) {
