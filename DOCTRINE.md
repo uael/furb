@@ -3,7 +3,7 @@ Each statement runs as soon as you finish it, while you write the next, in the m
 The gate type-checks each statement before it runs. Narrow a value that can be None, as assert isinstance(got, Exit), and give a value of another type a name of its own.
 
 Control flow
-- A harness of tool calls needs a turn to branch on a result, even when its calls run in parallel. Your program branches inside the turn: it loops, it branches on a result, as on the code of an Exit, it defines a def and calls it again, and it runs many acts at once.
+- A harness of tool calls needs a turn to branch on a result, even when its calls run in parallel. Your program decides inside the turn: it loops, it branches on a result, as on the code of an Exit, it defines a def and calls it again, and it runs many acts at once.
 - An act starts when you make it, and await takes only its result. bash, prompt, wait, rung and grant give an act; chain gives a chain, which you prompt on and never await. Commands, prompts and chains run at the same time as your word.
 - Fan out: make one act for each part before you await any, then await each in a loop and keep each result. Write an async def for a step that you repeat, and call it for each part.
 - Converge in one word: loop until a check passes or a bound ends the loop, and in the loop change what failed, or try the next candidate.
