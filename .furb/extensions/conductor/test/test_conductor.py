@@ -1655,6 +1655,48 @@ async def test_a_fixer_brief_for_a_failed_check_carries_the_same_lines(conductor
   assert "main sets the wall to 6500" in conductor.hired[0][1]
 
 
+def squashed_repo(conductor: Round, tmp_path: Path, same: bool) -> tuple[str, str]:
+  env, up = conductor.env, tmp_path / "up"
+  up.mkdir()
+
+  def commit(name: str, text: str, message: str) -> str:
+    (up / name).write_text(text, encoding="utf-8")
+    git("add", name, cwd=up, env=env)
+    git("commit", "-q", "-m", message, cwd=up, env=env)
+    return git("rev-parse", "HEAD", cwd=up, env=env).strip()
+
+  git("init", "-q", "-b", "main", cwd=up, env=env)
+  commit("f.txt", "a\n", "base")
+  git("switch", "-q", "-c", "w/x", cwd=up, env=env)
+  held = commit("g.txt", "g\n", "pre-squash one")
+  head = commit("h.txt", "h\n", "its own change")
+  git("update-ref", "refs/pull/5/head", head, cwd=up, env=env)
+  git("switch", "-q", "main", cwd=up, env=env)
+  commit("g.txt", "g\n" if same else "other\n", "squash of the first PR (#4)")
+  git("init", "-q", "-b", "main", cwd=tmp_path, env=env)
+  git("remote", "add", "origin", str(up), cwd=tmp_path, env=env)
+  return head, held
+
+
+@POSIX
+async def test_an_order_for_a_conflict_names_the_commits_whose_patch_main_holds_already(
+  conductor: Round, tmp_path: Path
+) -> None:
+  head, held = squashed_repo(conductor, tmp_path, True)
+  note = await conductor.main_changes(conductor.pr(n=5, sha=head, head="w/x"))
+  assert "This is no stack. The branch of this PR holds 1 commit whose patch main holds already" in note
+  assert f"  {held[:7]} pre-squash one\n" in note
+  assert f"Fix: git rebase --onto origin/main {held[:12]} w/x replays only the commits after them." in note
+  assert "its own change" not in note and "squash of the first PR (#4)" in note
+
+
+@POSIX
+async def test_a_branch_whose_patches_main_lacks_gets_no_note_of_a_squash(conductor: Round, tmp_path: Path) -> None:
+  head, _ = squashed_repo(conductor, tmp_path, False)
+  note = await conductor.main_changes(conductor.pr(n=5, sha=head, head="w/x"))
+  assert "no stack" not in note and "squash of the first PR (#4)" in note
+
+
 def test_the_ledger_of_the_tooling_keeps_one_form_of_when_and_moves_the_old_entries_once(conductor: Round) -> None:
   import calendar
 
@@ -2039,6 +2081,59 @@ def test_an_item_has_a_kind_whose_model_and_brief_it_takes(conductor: Round) -> 
   conductor.tend()
   assert conductor.heard == [f"The auditor look ({name}) ended, and results[{name!r}] keeps its report."]
   assert len(conductor.prompts) == 1
+
+
+REGISTER = """# Register of the audit look
+
+| Dn | key | model | area | brief |
+|----|-----|-------|------|-------|
+| D1 | fix-a | sonnet/high | conductor | Fix the first thing. |
+| D2 | Fix B | claude-cli:opus/high | pr | Fix the second thing. |
+| D3 | fix-c | xhigh | | Fix the third thing. |
+| D4 | fix-a | sonnet/medium | tui | A row whose key stands already. |
+"""
+
+
+def test_an_auditor_that_ends_queues_the_rows_of_its_register_once_at_the_end_of_the_queue(conductor: Round) -> None:
+  conductor.ns["quietly"] = lambda verb, *args, **words: (
+    asyncio.run(verb(*args, **words)) if verb == conductor.bash else verb(*args, **words)
+  )
+  conductor.kinds["look"] = "audit"
+  conductor.queue.append(("early", "", ""))
+  name = conductor.real_hire("look", "find the leaks", "defects")
+  prompt = conductor.prompts[-1][0]
+  assert "| Dn | key | model | area | brief |" in prompt and "the item triage-<key>" in prompt
+  assert "claude-cli:sonnet/high" in prompt and "{models}" not in prompt
+  conductor.ns["DEBRIEFS"] = False
+  conductor.files["scratch://audit/look.md"] = REGISTER
+  conductor.done[name] = (0, "found three")
+  conductor.tend()
+  assert [key for key, _, _ in conductor.queue] == ["early", "triage-fix-a", "triage-fix-b", "triage-fix-c"]
+  assert conductor.queue[1] == (
+    "triage-fix-a",
+    "Fix the first thing.\n\nThis item is row D1 of the register scratch://audit/look.md of the audit look.",
+    "conductor",
+  )
+  assert [conductor.queue[2][2], conductor.queue[3][2]] == ["pr", "triage"]
+  assert conductor.efforts == {"triage-fix-a": SONNET_HIGH, "triage-fix-b": "claude-cli:opus/high"}
+  assert conductor.heard[-1].startswith("The auditor look left 3 items in its register")
+  conductor.register("look", name)
+  assert len(conductor.queue) == 4
+
+
+def test_an_auditor_whose_register_is_missing_or_has_no_table_queues_nothing(conductor: Round) -> None:
+  conductor.ns["quietly"] = lambda verb, *args, **words: (
+    asyncio.run(verb(*args, **words)) if verb == conductor.bash else verb(*args, **words)
+  )
+  conductor.kinds["look"] = "audit"
+  name = conductor.real_hire("look", "find the leaks", "defects")
+  conductor.ns["DEBRIEFS"] = False
+  conductor.done[name] = (0, "found none")
+  conductor.tend()
+  assert conductor.queue == [] and len(conductor.heard) == 1
+  conductor.files["scratch://audit/look.md"] = "No table here.\n| D1 | only | three |\n"
+  conductor.register("look", "other")
+  assert conductor.queue == []
 
 
 def test_an_ended_worker_takes_the_next_item_of_its_area_until_half_of_its_window_and_a_hire_forks_the_base(
