@@ -16,10 +16,10 @@ with the body that the template of the owner asks, and refuses one that breaks a
 prcheck(title, why, outcome, breaking) checks the title and the size of the body before you commit, and gives the
 count of its words. shq(s) quotes s for sh.
 checked(number) waits for the checks of a PR, and never in a loop of your own. It reads gh pr checks once a minute for
-9 minutes at most, and gives a tuple: "pass", "fail", or "pending" when the bound ended, and lines. A line names the
+an hour at most, and gives a tuple: "pass", "fail", or "pending" when the bound ended, and lines. A line names the
 head. For each failed check it gives [machine] when the log shows a fault of the runner or the network, [defect]
 when it shows a fault of the code, [cancelled], or [unread], with its run and its job and its first failed lines. It
-waits until no check pends, since a check that fails first may be the only one that fails. Rerun a check only when it
+waits until no check pends and no run of the head is open. The jobs of a push or of a rerun are not all listed at once, and a check that fails first may be the only one that fails. Rerun a check only when it
 is [machine] or [cancelled], once for each head, with gh run rerun <run> --failed, and then await checked(number)
 again."""
 
@@ -118,8 +118,11 @@ CHECK_POLL = r"""for try in 1 2 3; do
   case "$rows" in "["*) break ;; esac
   sleep 2
 done
-gh pr view "$n" --json headRefOid --jq .headRefOid 2>/dev/null || echo
+head=$(gh pr view "$n" --json headRefOid --jq .headRefOid 2>/dev/null)
+echo "$head"
 echo "$rows"
+[ -n "$head" ] && gh run list --commit "$head" --json status,workflowName --limit 100 2>/dev/null
+echo
 """
 
 CHECK_LOG = r"""ok=
@@ -135,22 +138,32 @@ printf '%s\n' "$found"
 """
 
 
-async def checked(number: int, where: str = "", bound: float = 540.0, every: float = 60.0) -> tuple[str, list[str]]:
+async def checked(number: int, where: str = "", bound: float = 3600.0, every: float = 60.0) -> tuple[str, list[str]]:
   start = clock()
   enter = f"cd {shq(where)} || exit 1; " if where else ""
   while True:
     got = await bash(f"{enter}n={int(number)}\n{CHECK_POLL}", show=HIDDEN, timeout=180)
     head, _, text = got.stdout.content.partition("\n")
-    try:
-      rows = json.loads(text) if text.lstrip().startswith("[") else []
-    except ValueError:
-      rows = []
-    pending = [str(one["name"]) for one in rows if one["bucket"] == "pending"]
-    if rows and not pending:
+    found = []
+    for line in [*text.splitlines(), "", ""][:2]:
+      try:
+        found.append(json.loads(line))
+      except ValueError:
+        found.append(None)
+    rows, runs = (x if isinstance(x, list) else None for x in found)
+    pending = [str(one["name"]) for one in rows or [] if one["bucket"] == "pending"]
+    unfinished = [str(one["workflowName"]) for one in runs or [] if one["status"] != "completed"]
+    if rows and runs is not None and not pending and not unfinished:
       break
     spent = clock() - start
     if spent + every > bound:
-      seen = ", ".join(pending) if rows else "no check has started"
+      seen = "no check has started"
+      if pending:
+        seen = ", ".join(pending)
+      elif unfinished:
+        seen = "the run of " + ", ".join(unfinished)
+      elif rows:
+        seen = "the runs are unread"
       return "pending", [f"head {head.strip()[:7]}: still pending after {int(spent)} s: {seen}"]
     await wait(every)
   failed = [one for one in rows if one["bucket"] in ("fail", "cancel")]
