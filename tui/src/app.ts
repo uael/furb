@@ -524,8 +524,12 @@ export class App {
       ],
       syntaxStyle: this.style,
       onContentChange: () => {
-        // A record open to read takes no text: its composer stays empty.
-        if (this.session.host.reading && this.composer.plainText) {
+        // A record open to read takes no text but a command: its composer stays empty until a / starts one.
+        if (
+          this.session.host.reading &&
+          this.composer.plainText &&
+          !this.composer.plainText.startsWith("/")
+        ) {
           this.composer.setText("");
           return;
         }

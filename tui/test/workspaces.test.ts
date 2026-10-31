@@ -938,3 +938,129 @@ test("Add a workspace in the sidebar adds the folder that the input then names, 
     await until(library, () => library.groupOf()?.name === "other");
     expect(library.groups.map((group) => group.name)).toEqual(["project", "other"]);
   }));
+
+async function twoSpaces(directory: string, open: () => Workspaces) {
+  const { library, group, first, second } = await fooAndBar(directory, open);
+  await mkdir(join(directory, "other"));
+  const other = await library.add(join(directory, "other"));
+  const third = await library.create(other, "baz");
+  await library.select(first);
+  return { library, group, first, second, other, third };
+}
+
+async function railTo(sidebar: Sidebar, id: string): Promise<boolean> {
+  for (let step = 0; step < 60 && sidebar.app().railAt !== id; step++) {
+    sidebar.screen.mockInput.pressArrow("down");
+    await sidebar.frame();
+  }
+  return sidebar.app().railAt === id;
+}
+
+test("after ⌥T, Enter on a workspace row switches to it", () =>
+  withLibrary(async ({ directory, open, sidebar }) => {
+    const { library, other, third } = await twoSpaces(directory, open);
+    const shown = await sidebar(library);
+    shown.screen.mockInput.pressKey("t", { meta: true });
+    await shown.frame();
+    expect(shown.app().railKeys).toBe(true);
+    expect(await railTo(shown, `ws:${other.directory}`)).toBe(true);
+    shown.screen.mockInput.pressEnter();
+    await until(library, () => library.groupOf() === other);
+    expect(library.current).toBe(third);
+  }));
+
+test("after ⌥T, the right arrow peeks at a workspace and shows its sessions", () =>
+  withLibrary(async ({ directory, open, sidebar }) => {
+    const { library, other } = await twoSpaces(directory, open);
+    const shown = await sidebar(library);
+    shown.screen.mockInput.pressKey("t", { meta: true });
+    await shown.frame();
+    expect(await railTo(shown, `ws:${other.directory}`)).toBe(true);
+    shown.screen.mockInput.pressArrow("right");
+    const frame = (await shown.frame()).map((line) => line.slice(shown.left)).join("\n");
+    expect(frame).toContain("baz");
+  }));
+
+test("each session row of a workspace opens its session, and New session makes one", () =>
+  withLibrary(async ({ directory, open, sidebar }) => {
+    const { library, group, first, second } = await twoSpaces(directory, open);
+    const shown = await sidebar(library);
+    for (const entry of [second, first]) {
+      await shown.frame();
+      await shown.screen.mockMouse.click(shown.left + 6, shown.row(entry.name));
+      await until(library, () => library.current === entry);
+    }
+    await shown.frame();
+    const count = group.sessions.length;
+    await shown.screen.mockMouse.click(shown.left + 6, shown.row("New session"));
+    await until(library, () => group.sessions.length === count + 1 && library.current === group.sessions[0]);
+  }));
+
+test("a click on another workspace row switches to it, and in the cards a click on the switcher does", () =>
+  withLibrary(async ({ directory, open, sidebar }) => {
+    const { library, group, other, third } = await twoSpaces(directory, open);
+    const shown = await sidebar(library);
+    await shown.frame();
+    await shown.screen.mockMouse.click(shown.left + 6, shown.row("other"));
+    await until(library, () => library.current === third);
+    library.preferences.sidebarStyle = "cards";
+    await shown.frame();
+    await shown.screen.mockMouse.click(shown.left + 6, shown.row("project"));
+    await until(library, () => library.groupOf() === group);
+    expect(other.sessions.length).toBe(1);
+  }));
+
+test("an archived session comes back to the list of its workspace", () =>
+  withLibrary(async ({ directory, open }) => {
+    const { library, group, second } = await twoSpaces(directory, open);
+    await library.archive(second);
+    expect(second.archived).toBe(true);
+    await library.restore(second);
+    expect(second.archived).toBeFalsy();
+    expect(group.sessions).toContain(second);
+  }));
+
+test("Add a workspace in the sidebar works in the Python mode of the input", () =>
+  withLibrary(async ({ directory, open, sidebar }) => {
+    const { library } = await fooAndBar(directory, open);
+    await mkdir(join(directory, "other"));
+    const shown = await sidebar(library);
+    shown.screen.mockInput.pressKey("r", { ctrl: true });
+    await shown.frame();
+    await shown.screen.mockMouse.click(shown.left + 6, shown.row("Add a workspace"));
+    await shown.frame();
+    await shown.screen.mockInput.typeText(join(directory, "other"));
+    shown.screen.mockInput.pressEnter();
+    await until(library, () => library.groupOf()?.name === "other");
+  }));
+
+test("Add a workspace in the sidebar works while the session shown is open to read", () =>
+  withLibrary(async ({ directory, open, sidebar }) => {
+    let library = open();
+    const made = await library.create(await library.add(directory), "Made elsewhere");
+    await library.dispose();
+    const text = await readFile(made.path, "utf8");
+    const found = /\["made","chain1","store","([0-9a-f]{64})",(\d+)\]/.exec(text);
+    if (!found?.[2]) throw new Error("no build");
+    await writeFile(
+      made.path,
+      text.replace(found[0], `["made","chain1","store","${"0".repeat(64)}",${Number(found[2]) + 1}]`),
+    );
+    library = open();
+    const group = await library.add(directory);
+    const row = group.sessions.find((entry) => entry.path === made.path);
+    if (!row) throw new Error("no row");
+    await library.select(row);
+    await mkdir(join(directory, "other"));
+    const shown = await sidebar(library);
+    await shown.frame();
+    // The dialog of the record read only stands first: the operator chooses Read it.
+    shown.screen.mockInput.pressEnter();
+    await shown.frame();
+    await shown.screen.mockMouse.click(shown.left + 6, shown.row("Add a workspace"));
+    await shown.frame();
+    expect(shown.app().composer.plainText).toBe("/workspace ");
+    await shown.screen.mockInput.typeText(join(directory, "other"));
+    shown.screen.mockInput.pressEnter();
+    await until(library, () => library.groupOf()?.name === "other");
+  }));

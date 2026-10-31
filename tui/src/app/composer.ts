@@ -126,7 +126,23 @@ export const composer = part({
   },
 
   async submit(): Promise<void> {
-    if (this.submitting || this.session.host.reading) return;
+    if (this.submitting) return;
+    if (this.session.host.reading) {
+      const typed = this.composer.plainText.trim();
+      this.composer.setText("");
+      let ran = false;
+      try {
+        ran = typed.startsWith("/") && (await this.globalCommand(typed));
+      } catch (error) {
+        ran = true;
+        this.report(error);
+      }
+      if (!ran)
+        this.session.notice =
+          "This record is open to read: the input takes only a command, as /workspace or /new.";
+      this.render();
+      return;
+    }
     this.submitting = true;
     const key = this.draftKey;
     const base = this.session.draftKey;
