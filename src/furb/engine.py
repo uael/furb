@@ -8,7 +8,7 @@ from typing import Any, Callable, Generator, Literal, Never  # noqa: UP035
 
 WINDOW = 200000
 OPERATOR = "operator"
-TIMEOUT = 600.0
+TIMEOUT = 120.0
 LARGEST = 524288
 ROOT = "chain1"
 site = ContextVar("site", default=OPERATOR)
