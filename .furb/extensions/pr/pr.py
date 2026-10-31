@@ -2,7 +2,6 @@ import json
 import re
 
 from furb.engine import (
-  HIDDEN,
   Exit,
   Refused,
   bash,
@@ -142,7 +141,7 @@ async def checked(number: int, where: str = "", bound: float = 3600.0, every: fl
   start = clock()
   enter = f"cd {shq(where)} || exit 1; " if where else ""
   while True:
-    got = await bash(f"{enter}n={int(number)}\n{CHECK_POLL}", show=HIDDEN, timeout=180)
+    got = await bash(f"{enter}n={int(number)}\n{CHECK_POLL}", show=span(0, 0), timeout=180)
     head, _, text = got.stdout.content.partition("\n")
     found = []
     for line in [*text.splitlines(), "", ""][:2]:
@@ -173,7 +172,7 @@ async def checked(number: int, where: str = "", bound: float = 3600.0, every: fl
     if one["bucket"] == "cancel" or not hit:
       lines.append(f"{name} [{'cancelled' if one['bucket'] == 'cancel' else 'unread'}] {one['link']}")
       continue
-    log = await bash(f"{enter}id={hit[2]}\n{CHECK_LOG}", show=HIDDEN, timeout=180)
+    log = await bash(f"{enter}id={hit[2]}\n{CHECK_LOG}", show=span(0, 0), timeout=180)
     kind, *found = log.stdout.content.splitlines() or ["unread"]
     lines.append(f"{name} [{kind}] run {hit[1]} job {hit[2]}")
     lines += [f"  {x}" for x in found]
