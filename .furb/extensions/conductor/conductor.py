@@ -27,6 +27,7 @@ from furb.engine import (
   pause,
   paused,
   peek,
+  program,
   prompt,
   read,
   rung,
@@ -50,7 +51,7 @@ A worker does one item in a workspace {repo}-wN, which the round gives at its hi
 A prompt of a worker that ends with CancelledError while the round made no cancel over it, as when the life restarts, goes on: the round asks it again on its chain with a new prompt, at most 3 times for an item, and tells nobody.
 The round tells you a worker that ends with no PR, with its answer, or that says nothing for 45 minutes, relays to you each question that a worker puts to the operator, and wakes a worker that paused. results keeps the answer of each worker under its prompt.
 When a worker ends, the round asks it debrief() once, and adds each friction that it gives to TOOLING, the ledger of the defects of the tooling, as flaw(what) adds a defect that you find or patch live. An entry counts each time that it comes again. settle_flaw(part, pr) closes each open entry that holds part with the PR that fixed it, once you checked on main that the PR did; the audit lists the open entries alone, and an entry that comes again opens again.
-A check counts by its newest run, and the round acts on a failed check once no check of the PR runs, or at once when two failed. A failed check heals with no worker first, once for each head sha: the round reruns the failed jobs of the run whose failure is the one failed check of the PR, which costs the runners of CI the least, else it updates the branch of a PR on main that is behind main while main is green, at most once in UPDATED seconds for a PR, since a PR that still fails after an update fails on its own. It gives a PR on main whose head has no run of the gates one, once for each head sha: it updates the branch of the PR while main is green, else it reruns the workflows at the head. It reruns once, for each head sha, a run that was cancelled at the head of a PR, and a check cancelled again at that sha counts as failed.
+A check counts by its newest run, and the round acts on a failed check once no check of the PR runs, or at once when two failed. A failed check heals with no worker first, once for each head sha: the round reruns the failed jobs of the run whose failure is the one failed check of the PR, which costs the runners of CI the least, else it updates the branch of a PR on main that is behind main while main is green, at most once in UPDATED seconds for a PR, since a PR that still fails after an update fails on its own. It gives a PR on main whose head has no run of the gates one, once for each head sha: it updates the branch of the PR while main is green, else it reruns the workflows at the head. It reruns once, for each head sha, a run that was cancelled at the head of a PR whose gates withheld(pr) does not hold back and that throttle did not defer, and a check cancelled again at that sha counts as failed.
 Each sweep puts each open PR of the round in one state of a table: green, running (its checks run, or one failed check waits for the end of its run), red (two failed checks, or one once no check runs, or an open box), conflicting, main (while main is red, each line of its failed checks fails on main too), stacked, or owner (it waits on the owner). A red or conflicting PR that holds no label paused or hold, and is not a draft whose maker lives, has one worker assigned at its head, in assigned[n] with the time of the assignment. A PR in trouble with no live assignee gets one in that sweep: its maker, the live worker of its label w:key or of owns, once for each head; else a fixer. A maker whose head did not move in OWNED seconds, 15 minutes, gives the PR to a fixer. A fixer that ends with no new head is replaced at once, twice at most for a head. A sweep that ends with a PR in trouble and no assignee tells you once, as a defect of the round, with its cause. A PR in the state main gets no order, no handover and no fixer, since no change of it can fix what main fails: the notice of a red main names such PRs, and once main is green the round updates their branches. A draft whose worker ended is tended as any PR in trouble, and only its merge waits. The order and the brief of a fixer are built from a fresh read at the moment of the order: the failed checks by name with their first failed lines, the commits of main that changed a file of the PR (with the files that they delete or move), and for a stacked PR the merge ref of its checks and the rebase command that fits the base now (a plain rebase when the base only advanced, rebase --onto from the commit that the branch shares with the old base when it was rewritten), with the commits that the base gained. A conflict of w/gallery gets no order for GALLERY_WAIT seconds, since the gallery workflow builds the branch again from main. Just before it gives an order or hires a fixer, the round reads the PR again and gives none when the head moved or the conflict is gone, and it names in an order the base of a stacked PR with the head that the base had before. While a fixer is assigned to a PR, the round neither updates its branch nor merges it, and it tells the maker when it updates or rebases the branch, or when a fixer starts on it. The round closes a PR that changes no file. A mergeable that gh gives as UNKNOWN is probed with git merge-tree. The round rebases a child of a PR whose head was force-pushed onto the new head of its parent, and a child whose parent merged outside the round onto main, from the fork point when the child holds no head of the parent that the round saw.
 The round merges each green PR into main from the lowest number when git merges it with main clean and no file that a gate sums (SERIAL: the engine under its wall of tokens, the budgets) changed both in it and on main since its branch forked, after it moves the PRs that stack on it onto main and rebases each there with git rebase --onto from the head that it held of the PR that merged, in a scratch worktree, and pushes it with --force-with-lease (a rebase that conflicts is left to the fixer); else it updates the branch, and only when main is green.
 The label paused takes a PR out of the round. A draft, the label hold or hold:owner-review, a review that waits for its fix, and the label owner-merge, until the owner takes it off as his approval, keep a PR from a merge.
@@ -71,8 +72,8 @@ An item waits for others with after[key] = [keys], set before you queue it: staf
 Method, at each notice: read the whole state, fix every thing that is off in one go, read the state again to verify, and go on until nothing is off. Only then report. Each round also checks the state in invariants(): it gives each open PR that the round tends a home, from the chain that pushed its head, wakes no chain, and lists in the next notice what code cannot fix.
 A PR waits on a decision of the owner while awaited[decision] names one of its labels, or its number as #N, and the decision is an act that is not over, as the prompt that asked him: a failed check of that PR gets no order, no handover and no fixer, a conflict of it still does, and the round names the decision once. When the act ends, the round drops it and tends the PR again.
 The round holds at most cap() chains that hold an open prompt with a shape, and counts the chains of workers, of sub-chains and of judges alike: room() counts them, and a resume of a worker waits for a slot. A sub-chain that a chain of a live worker made, at any depth, counts within the slot of that worker, since the worker waits on it: the round never parks it. A parked chain takes the next free slot before any new chain, since tend and sweep hire before staff wakes. When more chains stand, the round pauses the newest overflow with a note and wakes it in order when a slot frees, and it never ends its task.
-The owner rules, on 10-29: "we should use more gh stacks in conductor, because they can be merged at once (all PRs of stack as once)". So a PR on main at the bottom of a stack whose layers are all green, free of hold, paused and owner-merge, and passed by the vetoes, merges with its whole stack at once through gh stack merge, and while a layer above it still runs its checks, the bottom waits rather than merge alone; a stack with a red layer merges its green layers below it at once; a stack that gh stack does not hold lands one layer at a time, and the round tells it once. Each sweep links each chain of stacked PRs on GitHub with gh stack link, once for each chain, so that it shows as one stack. GitHub gives no priority to a queued run, so each sweep cancels each queued run of the gates that can serve no merge: a run of a closed PR, of an old head, of a draft, a held or a conflicting PR, and it defers a run of a layer above a layer that is not green, which it runs again once that layer is green and fewer than THROTTLE runs wait. It never touches a run of main or of a PR that can merge.
-reload(path, on) loads the definitions of the file of an extension into the module of a chain: it runs, in the order of the file, each top-level definition whose name the module lacks or whose text differs from its text in the last run of a word that ended with no fault (a load that was cancelled or failed counts for nothing, so the next reload loads it again), and gives (rung, names): the rung that runs the load, which quietly starts so that no end of the caller cancels it, and the names. The load is done only when that rung is over and peek(rung) is no exception: await it. Use it after a PR that changed the conductor merged.
+The owner rules, on 10-29: "we should use more gh stacks in conductor, because they can be merged at once (all PRs of stack as once)". So a PR on main at the bottom of a stack whose layers are all green, free of hold, paused and owner-merge, and passed by the vetoes, merges with its whole stack at once through gh stack merge, and while a layer above it still runs its checks, the bottom waits rather than merge alone; a stack with a red layer merges its green layers below it at once; a stack that gh stack does not hold lands one layer at a time, and the round tells it once. Each sweep links each chain of stacked PRs on GitHub with gh stack link, once for each chain, so that it shows as one stack. GitHub gives no priority to a queued run, so each sweep cancels each queued run of the gates that can serve no merge: a run of a closed PR, of an old head or of a conflicting PR, and a run whose gates withheld(pr) holds back, which is a run of a draft, of a held or a paused PR, or of a layer above a layer that is not green. It defers each run that it cancels under a hold or under a layer below, and runs it again once withheld(pr) at the same head is empty and fewer than THROTTLE runs wait, once for each cancel, and it notes rerun <sha> then, so that heal does not run that head again; a draft runs its gates again when it is made ready. It never touches a run of main or of a PR that can merge.
+reload(path, on) loads the definitions of the file of an extension into the module of a chain: it runs, in the order of the file, each top-level definition whose binding in the module now is not its text in the file, and ends the load with seal(path). Monty gives a function no source, so seal keeps in bindings the object that each name of the load bound and its text, and a binding has that text only while the module holds that same object: a later word that binds the name again, an older word or another extension, makes the next reload run it again, and a load that was cancelled or failed before its end loads again. Then seal raises Refused with each name of the file that the module binds with another text, so a load that leaves the round on old code fails and says which names. reload gives (rung, names): the rung that runs the load, which quietly starts so that no end of the caller cancels it, and the names. The load is done only when that rung is over and peek(rung) is no exception: await it. Use it after a PR that changed the conductor merged.
 The owner rules, on 10-31, after #816 and #859 merged green and wrong, since no gate compared a PR with his words: an item may hold his exact words in rulings[key], a list of str, each quoted as he wrote it. hire puts them at the top of the brief, under RULED, before any line of yours. Before its merge, each green PR whose item, by its label w:key or by owns, holds rulings passes the veto bent: a blind judge on a chain of its own, RULER (opus/medium) under a grant of RULER_USD dollars, reads his words and the diff alone, and closes with each way that the diff fails or bends them, each with his exact words. A head with a gap does not merge, and its worker gets the gaps, or a worker on its chain when it ended, and a comment on the PR names them; a head that the judge cleared merges, and each new head is judged again, with the gaps of the earlier heads and the commits that answered them, so that the judge names only a gap that the newest head made or left open; the round never holds a PR for the owner by itself, by his ruling on 10-31: "it's not supposed to be on me to remove the flag. And it should be fixed until judged ok, automatically", so each new head is judged until the judge finds no gap, and only a label hold of the owner stops the loop. Each order to fix holds the gaps of every head that a judge held, the oldest first and each once, so that the worker fixes each once and trades no gap for another, and after JUDGE_ROUNDS (3) heads with gaps each fix goes to STRONGER (opus/high), so the loop converges. A hold that an earlier word put after JUDGE_ROUNDS heads comes off at the next sweep, and its PR is judged again. A judge that fails twice, with no answer or with a quote that is not his, tells you and holds the PR: judge it yourself, then set judged["n sha"]["state"] to "cleared", or give the gaps to its worker. judged keeps the state of each head.
 A statement of yours to the owner states only what a command of the same word proved, and names each other part as a hypothesis.
 A review blocks only on a defect that a command reproduces, or on a false sentence of a contract."""
@@ -854,21 +855,40 @@ def parts_of(word: str) -> dict[str, str]:
   return found
 
 
+# Monty gives a function no source and no code, so the end of each load keeps the object that each name bound and the
+# text that bound it: a binding has that text only while the module still holds that same object.
+bindings: dict[str, tuple[object, str]] = globals().setdefault("bindings", {})
+
+
+def text_of(held: dict, name: str) -> str | None:
+  if name in held and name in bindings and bindings[name][0] is held[name]:
+    return bindings[name][1]
+  return None
+
+
+def unlike(held: dict, path: str) -> dict[str, str]:
+  return {n: t for n, t in parts_of(read(path, HIDDEN).content).items() if text_of(held, n) != t}
+
+
 def reload(path: str = CONDUCTOR, on: str = "") -> tuple[str, list[str]]:
   here = on or scope(acting())
-  lived: dict[str, str] = {}
-  for x in transcript(here):
-    if x[0] == "module":
-      lived = {}
-    elif x[0] == "run" and over(x[1]) and not isinstance(peek(x[1]), BaseException):
-      lived.update(parts_of(str(x[5])))
-  held = module(here)
-  fresh = {n: t for n, t in parts_of(read(path, HIDDEN).content).items() if n not in held or lived.get(n) != t}
+  fresh = unlike(module(here), path)
   if not fresh:
     return "", []
   # The close of the word that calls reload cancels each rung that the word made, and the load stops between two
   # definitions: quietly makes the rung for the round, so no end of the caller reaches it.
-  return str(quietly(rung, "\n\n".join(fresh.values()), on=here)), list(fresh)
+  return str(quietly(rung, "\n\n".join([*fresh.values(), f"seal({path!r})"]), on=here)), list(fresh)
+
+
+def seal(path: str) -> None:
+  here = scope(acting())
+  held = module(here)
+  for name, text in parts_of(program(here)[acting()]).items():
+    if name in held:
+      bindings[name] = (held[name], text)
+  wrong = list(unlike(held, path))
+  if wrong:
+    raise Refused(f"{path} is not what the module binds: {', '.join(wrong)}")
 
 
 ROW = re.compile(r"^\|\s*(D\d+)\s*\|\s*([^|]+?)\s*\|\s*([^|]*?)\s*\|\s*([^|]*?)\s*\|\s*(.+?)\s*\|?$")
@@ -1983,9 +2003,7 @@ async def heal(pr: dict, red: bool) -> str:
     pr["base"] == "main"
     and GATE not in pr["names"]
     and pr["idle"] >= GATELESS
-    and not pr["draft"]
-    and not on_hold(pr)
-    and "paused" not in pr["labels"]
+    and not withheld(pr)
     and not fixing(pr)
     and f"gateless {sha}" not in noticed
   ):
@@ -2004,7 +2022,7 @@ async def heal(pr: dict, red: bool) -> str:
     )
     return ""
   if not failed:
-    if "CANCELLED" not in pr["checks"] or f"rerun {sha}" in noticed or f"{n} {sha}" in deferred.values():
+    if "CANCELLED" not in pr["checks"] or f"rerun {sha}" in noticed or withheld(pr) or f"{n} {sha}" in deferred.values():
       return ""
     noticed.add(f"rerun {sha}")
     got = await bash(rehead('.conclusion == "cancelled"'), show=HIDDEN, timeout=300)
@@ -2020,9 +2038,7 @@ async def heal(pr: dict, red: bool) -> str:
   if (
     pr["base"] == "main"
     and not red
-    and not pr["draft"]
-    and not on_hold(pr)
-    and "paused" not in pr["labels"]
+    and not withheld(pr)
     and not fixing(pr)
     and f"heal update {sha}" not in noticed
     and (n not in updated or clock() - updated[n] >= UPDATED)
@@ -2679,6 +2695,17 @@ deferred: dict[str, str] = globals().setdefault("deferred", {})
 THROTTLE = 6
 
 
+def withheld(pr: dict) -> str:
+  below = next((p for p in prs.values() if p["head"] == pr["base"]), None)
+  if pr["draft"]:
+    return "its PR is a draft"
+  if on_hold(pr) or "paused" in pr["labels"]:
+    return "its PR is held"
+  if below and below["verdict"] != "pass":
+    return "a layer below it is not green yet"
+  return ""
+
+
 async def throttle() -> None:
   """Each sweep cancels the queued runs of the gates that can serve no merge, so the runners take those that can."""
   got = await bash(
@@ -2695,23 +2722,19 @@ async def throttle() -> None:
     if run.get("event") != "pull_request" or run["headBranch"] == "main":
       continue
     pr = heads.get(run["headBranch"])
-    below = next((p for p in prs.values() if pr and p["head"] == pr["base"]), None)
-    why = ""
     if not pr:
       why = "its PR is closed"
     elif run["headSha"] != pr["sha"]:
       why = "its PR has a newer head"
-    elif pr["draft"] or on_hold(pr) or "paused" in pr["labels"]:
-      why = "its PR is a draft or held"
     elif pr["mergeable"] == "CONFLICTING":
       why = "its PR conflicts"
-    elif below and below["verdict"] != "pass":
-      why = "a layer below it is not green yet"
-      deferred[str(run["databaseId"])] = f"{pr['n']} {pr['sha']}"
+    else:
+      why = withheld(pr)
+      # A draft runs its gates again when it is made ready, so the round owes a run only to a hold or a layer below.
+      if why and not pr["draft"]:
+        deferred[str(run["databaseId"])] = f"{pr['n']} {pr['sha']}"
     if why:
       cut.append((run, why))
-      if str(run["databaseId"]) not in deferred:
-        noticed.add(f"rerun {run['headSha']}")
   if cut:
     await bash("; ".join(f"gh run cancel {run['databaseId']} >/dev/null 2>&1" for run, _ in cut), show=HIDDEN, timeout=120)
     said = ", ".join(f"#{(heads.get(run['headBranch']) or {}).get('n', run['headBranch'])} ({why})" for run, why in cut)
@@ -2740,11 +2763,11 @@ async def throttle() -> None:
   for one, key in list(deferred.items()):
     n, sha = key.split()
     pr = prs.get(int(n))
-    below = next((p for p in prs.values() if pr and p["head"] == pr["base"]), None)
-    if pr and pr["sha"] == sha and below and below["verdict"] != "pass":
+    if pr and pr["sha"] == sha and withheld(pr):
       continue
     del deferred[one]
     if pr and pr["sha"] == sha:
+      noticed.add(f"rerun {sha}")
       await bash(f"gh run rerun {one}", show=HIDDEN, timeout=120)
 
 
