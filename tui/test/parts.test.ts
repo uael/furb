@@ -345,6 +345,7 @@ test("a word that writes an extension with extend() gives the TUI its part in a 
   const session = await demoSession({ cwd: directory, extensions: true });
   await composing(
     async ({ app, frame, screen }) => {
+      await app.partsReady;
       expect(app.parts.loaded.map((one) => one.name)).toEqual(["compaction", "mcp"]);
       await session.command(`/run ${TODO}`);
       const word = 'next(k for k, w in program().items() if "def todo" in w)';
