@@ -12,7 +12,8 @@
 //!
 //! The session holds each fact that the life said and each value that its facts hold, so a snapshot weighs about as
 //! much as the record and its log together: a long life writes one of gigabytes. A life writes it only as often as
-//! [`PACE`] lets, and a snapshot that fails to land leaves no part of it on the disk.
+//! [`PACE`] lets, and a snapshot that fails to land leaves no part of it on the disk. A life writes none when the disk holds
+//! less than twice its size free, since the record and the log need room to grow.
 
 use std::{
   fs,
@@ -27,6 +28,27 @@ use crate::{SHEET, engine::Table, sand::Sand, value::Object, wire, world};
 
 /// The version of the form of a snapshot.
 const VERSION: u64 = 2;
+
+/// How many times its size the disk must hold free for a snapshot to be written: the new snapshot stands beside the old
+/// one until it takes its name, and the record and the log must still grow.
+const ROOM: u64 = 2;
+
+/// The bytes that a process may still write on the disk that holds a folder, none when the disk does not say.
+#[cfg(unix)]
+fn free(folder: &Path) -> Option<u64> {
+  let stat = rustix::fs::statvfs(folder).ok()?;
+  stat.f_bavail.checked_mul(stat.f_frsize)
+}
+
+#[cfg(not(unix))]
+fn free(_: &Path) -> Option<u64> {
+  None
+}
+
+/// Whether a snapshot of a size fits on a disk with this much free. A disk that does not say is taken to hold it.
+fn fits(room: Option<u64>, size: usize) -> bool {
+  room.is_none_or(|room| room >= (size as u64).saturating_mul(ROOM))
+}
 
 /// How long a life waits at least after it wrote its snapshot before it writes it again, but when it ends.
 const INTERVAL: Duration = Duration::from_secs(30);
@@ -167,6 +189,9 @@ impl Keeper {
     bytes.push(b'\n');
     bytes.extend_from_slice(dump);
     let (at, aside) = (path(&self.record), aside(&self.record));
+    if !fits(at.parent().and_then(free), bytes.len()) {
+      return None;
+    }
     fs::write(&aside, &bytes).ok()?;
     fs::rename(&aside, &at).ok()?;
     self.covered = Some(log);

@@ -6,7 +6,7 @@ use std::{
   time::{Duration, Instant},
 };
 
-use super::{INTERVAL, Keeper, aside, path};
+use super::{INTERVAL, Keeper, aside, fits, free, path};
 use crate::engine::Table;
 
 /// A new folder of the test, empty.
@@ -83,4 +83,19 @@ fn a_snapshot_that_fails_to_land_leaves_no_part_of_it_on_the_disk() {
   keeper.write(&table, &[0; 4096]);
   assert!(!aside(&record).exists(), "the part of the snapshot is removed");
   assert!(path(&record).is_dir());
+}
+
+#[test]
+fn a_snapshot_fits_on_a_disk_that_holds_twice_its_size_free_or_that_says_nothing() {
+  assert!(fits(None, 1 << 30), "a disk that says nothing is taken to hold it");
+  assert!(fits(Some(12), 6));
+  assert!(!fits(Some(11), 6), "the record needs room to grow beside the new snapshot");
+  assert!(!fits(Some(0), 1));
+}
+
+#[test]
+#[cfg(unix)]
+fn the_free_space_of_a_folder_is_the_space_of_its_disk() {
+  let room = free(&place("free")).expect("a disk says its free space");
+  assert!(room > 0);
 }
