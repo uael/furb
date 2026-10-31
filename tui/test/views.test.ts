@@ -212,6 +212,40 @@ test("the footer counts down the wait of a call of a model that the provider mak
     { width: 152, height: 40 },
   ));
 
+test("the footer says the end of a usage limit and how many chains wait for it, with no attempt and no countdown", () =>
+  composing(
+    async ({ session, frame }) => {
+      const limit = {
+        attempt: 2,
+        most: 10,
+        until: Date.now() + 86_400_000,
+        why: "usage limit until 2026-10-30 16:00 (EST)",
+      };
+      // Each state of the worker carries the streams of its session, so the streams of the test come again with each.
+      const stream = () => {
+        session.host.streams = new Map(
+          ["rung1", "rung2", "rung3"].map(
+            (rung, at) =>
+              [
+                rung,
+                { chain: at ? `chain${at + 1}` : session.selected, text: "", thinking: "", retry: limit },
+              ] as const,
+          ),
+        );
+      };
+      stream();
+      session.host.on("change", stream);
+      try {
+        const shown = await frame();
+        expect(shown).toContain("usage limit until 2026-10-30 16:00 (EST), 3 chains wait: /retry or /cancel");
+        expect(shown).not.toContain("attempt 2");
+      } finally {
+        session.host.off("change", stream);
+      }
+    },
+    { width: 152, height: 40 },
+  ));
+
 test("a window whose life ended says so in plain words, and offers to open the life again and to stop its host", () =>
   composing(
     async ({ session, frame }) => {

@@ -322,7 +322,7 @@ export const chrome = part({
     const label = loading
       ? "Loading"
       : retry
-        ? retryLine(retry)
+        ? retryLine(retry, retries.length)
         : w.host.reading
           ? readOnly(w.host.reading)
           : w.host.lost

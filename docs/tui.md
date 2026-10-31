@@ -437,7 +437,9 @@ input, fix it and send it again, or wait while the chain asks the model again wi
 
 When a call of a model fails for a cause that passes, as a lost connection, a provider that is overloaded or a limit
 of the rate, the provider asks the model again after a wait that doubles each time, up to ten attempts. The footer
-counts the wait down, as `Retrying in 4 s, attempt 2 of 10, connection reset: /retry or /cancel`.
+counts the wait down, as `Retrying in 4 s, attempt 2 of 10, connection reset: /retry or /cancel`. A wait for the end of a
+usage limit, or for a sign in, has no attempt and no countdown. The footer says why and how many chains wait, as `usage
+limit until 2026-10-30 16:00 (EST), 7 chains wait: /retry or /cancel`.
 
 ![Model retry](screenshots/62-model-retry.png)
 

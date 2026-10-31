@@ -2,10 +2,14 @@ import type { Retry } from "furb";
 import { clock } from "./clock.ts";
 
 /** What the footer says of a retry of the call of a model: the seconds left of its wait, its attempt, why the
- * attempt before it failed, and the commands that end the wait. */
-export function retryLine(retry: Retry, now = clock()): string {
+ * attempt before it failed, and the commands that end the wait. A wait for the end of a usage limit or for a sign in
+ * has no attempt and no countdown, since it lasts until a date or a sign in, so the footer says why alone. When more
+ * than one call waits, it counts them. */
+export function retryLine(retry: Retry, waiting = 1, now = clock()): string {
+  const chains = waiting > 1 ? `, ${waiting} chains wait` : "";
+  if (/^(usage limit|signed out)/.test(retry.why)) return `${retry.why}${chains}: /retry or /cancel`;
   const seconds = Math.max(0, Math.ceil((retry.until - now) / 1000));
-  return `Retrying in ${seconds} s, attempt ${retry.attempt} of ${retry.most}, ${retry.why}: /retry or /cancel`;
+  return `Retrying in ${seconds} s, attempt ${retry.attempt} of ${retry.most}, ${retry.why}${chains}: /retry or /cancel`;
 }
 
 /** A failure in plain words: a file that holds data that cannot be read says so, in place of the words of the parser
