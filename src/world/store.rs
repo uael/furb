@@ -112,7 +112,7 @@ pub const MADE: &str = "made";
 /// makes the corpus again in the same change, as `tests/corpus/README.md` says. The command line of each version puts
 /// its program in the store of builds of the machine, where [`build`](super::build) says, so a build of a later
 /// version hands a record of this one to it.
-pub const VERSION: i64 = 5;
+pub const VERSION: i64 = 6;
 
 /// The engine of this build, which a record names: a digest of the engine and of the Kernel, which make each act of
 /// a replay. Another engine can make other acts from the same record, so a record replays only on the engine that

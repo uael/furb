@@ -789,6 +789,45 @@ fn each_record_of_the_corpus_names_this_version_and_replays_on_this_build_with_n
   }
 }
 
+/// The texts of the items of each turn.
+fn texts(all: &[Object]) -> Vec<Vec<String>> {
+  all
+    .iter()
+    .map(|one| {
+      let items = one.as_ref().items().unwrap();
+      items.iter().map(|item| item.as_str().unwrap_or_default().to_owned()).collect()
+    })
+    .collect()
+}
+
+#[test]
+fn a_replay_of_the_corpus_shows_the_file_of_each_extension_as_its_read_then_its_word_alone() {
+  let at = place("corpus-turns");
+  fs::copy(corpus().join("work.jsonl"), at.join("record.jsonl")).unwrap();
+  let inspects = Opening { inspecting: Some(true), ..opening(&at, false) };
+  let mut engine = inspects.boot::<String>([]).unwrap().0;
+  let root = || Some("chain1".to_owned());
+  let turns = texts(&engine.turns(verbs::Turns { on: root() }).unwrap());
+  let of = Some("enable".to_owned());
+  let enables = engine.transcript(verbs::Transcript { on: root(), of }).unwrap();
+  assert_eq!(enables.len(), 7, "each official extension runs on the life of the corpus");
+  for enable in enables {
+    let text = |at| enable.word(at).and_then(|one| one.as_str().map(str::to_owned)).unwrap();
+    let (name, word) = (text(0), text(1));
+    let file = format!("/{name}/{name}.py', HIDDEN)");
+    let reads: Vec<usize> = (0..turns.len())
+      .filter(|&at| turns[at][0] == "assistant" && turns[at][1].starts_with("read('"))
+      .filter(|&at| turns[at][1].ends_with(&file))
+      .collect();
+    assert_eq!(reads.len(), 1, "one turn reads the file of {name}: {turns:?}");
+    assert_eq!(
+      turns[reads[0] + 1][..2],
+      ["user", word.as_str()],
+      "the turn after it holds the word of {name} alone"
+    );
+  }
+}
+
 #[test]
 #[ignore = "a measure, which a person runs in release"]
 fn measure_how_long_a_life_opens_from_its_snapshot_and_by_a_replay() {

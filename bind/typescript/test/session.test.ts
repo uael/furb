@@ -204,7 +204,7 @@ test("what a model writes streams into the session under its rung until its repl
   try {
     const engine = session.open();
     const prompt = engine.prompt("int", { message: "count", on: engine.root });
-    // The rung that answers the prompt comes after the three rungs of the setup of the root, so it is found as the
+    // The rung that answers the prompt comes after the ten rungs of the setup of the root, so it is found as the
     // rung that the prompt made.
     const answering = () =>
       [...session.activity.acts.values()].find((act) => act.kind === "rung" && act.by === prompt.id)?.id ??
@@ -213,7 +213,7 @@ test("what a model writes streams into the session under its rung until its repl
     const turn = (role: string, text: unknown) =>
       expect.objectContaining({ role, content: [{ type: "text", text }] });
     await until(session, () => session.streams.get(answering())?.text === "close(3)");
-    expect(answering()).toBe("rung4");
+    expect(answering()).toBe("rung11");
     expect(session.streams.get(answering())).toEqual({
       chain: engine.root,
       text: "close(3)",
@@ -224,24 +224,29 @@ test("what a model writes streams into the session under its rung until its repl
         actor: "claude-cli:sonnet/high",
         chain: engine.root,
         // The setup of the root as turns of the default actor whose words furb writes: the bare paragraph chain(), the
-        // read of the doctrine, the words of the official extensions then their life words in one turn, whose user
-        // turn holds what they read, then the stand and the cd, whose user turn holds what they tell, then the open of
-        // the root and the prompt.
+        // read of the doctrine, the read of the file of each official extension, each followed by its code alone, the
+        // life words in one turn, whose user turn holds what they read, then the stand and the cd, whose user turn holds
+        // what they tell, then the open of the root and the prompt.
         messages: [
           turn("user", "chain()"),
           // A path of Windows stands with its separators doubled, as python shows a backslash.
           turn("assistant", expect.stringMatching(/^read\('.*[/\\]DOCTRINE\.md'\)$/)),
           turn("user", expect.stringMatching(/^#read1\nread1_path = '.*[/\\]DOCTRINE\.md'\n/)),
-          turn(
-            "assistant",
-            expect.stringMatching(
-              /^CAP = 40\n[\s\S]*\ndef mcp_index\([\s\S]*\n\ncatchup\(\)\nawait recall\(\)\nawait listed\(\)\nawait mcp_index\(\)$/,
+          ...["catchup", "memory", "skills", "compaction", "ouroboros", "web", "mcp"].flatMap((name) => [
+            turn(
+              "assistant",
+              expect.stringMatching(
+                new RegExp(`^read\\('.*[/\\\\]+extensions[/\\\\]+${name}[/\\\\]+${name}\\.py', HIDDEN\\)$`),
+              ),
             ),
-          ),
+            // The turn after the read holds the code of the word of the extension alone, which ran in the module.
+            turn("user", expect.stringMatching(/^(?!#)[\s\S]*\ndef \w+\(/)),
+          ]),
+          turn("assistant", "catchup()\nawait recall()\nawait listed()\nawait mcp_index()"),
           turn(
             "user",
             expect.stringMatching(
-              /^#read2\nread2_path = 'skills:\/\/'\n(<s:read2_text>\n[\s\S]*<\/s:read2_text>|read2_text = '.*')$/,
+              /^#read9\nread9_path = 'skills:\/\/'\n(<s:read9_text>\n[\s\S]*<\/s:read9_text>|read9_text = '.*')$/,
             ),
           ),
           turn("assistant", expect.stringMatching(/^stand\(\)\ncd\('.*'\)$/)),
@@ -258,7 +263,7 @@ test("what a model writes streams into the session under its rung until its repl
               {
                 type: "text",
                 text: expect.stringMatching(
-                  /^#chain1\nchain1_label = 'root'\nchain1: Act\[Never\] = Act\('chain1'\)\n\n#prompt1\nprompt1_message = 'count'\nprompt1: Act\[int\] = Act\('prompt1'\)\n\n#rung4 advance on prompt1$/,
+                  /^#chain1\nchain1_label = 'root'\nchain1: Act\[Never\] = Act\('chain1'\)\n\n#prompt1\nprompt1_message = 'count'\nprompt1: Act\[int\] = Act\('prompt1'\)\n\n#rung11 advance on prompt1$/,
                 ),
               },
             ],
@@ -815,9 +820,9 @@ test("record inspection reports pending work when its replay starts or feeds a c
   await until(first, () => printed(first, "bash2") === "hello\n");
   await first.dispose();
   try {
-    // The read of the doctrine, the rung of the official extensions, and the stand and the cd come before the two
-    // rungs.
-    expect([sleeps, feeds]).toEqual(["rung4", "rung5"]);
+    // The read of the doctrine, the rungs of the seven official extensions, and the stand and the cd come before the
+    // two rungs.
+    expect([sleeps, feeds]).toEqual(["rung11", "rung12"]);
     expect((await inspectRecord(record)).pending.map(([id]) => id)).toEqual([
       sleeps,
       "bash1",
@@ -1039,15 +1044,15 @@ test("a session enables the extensions of the configs, and a later session on it
   try {
     first.open();
     expect(running(first)).toEqual(["catchup", "memory", "skills", "compaction", "ouroboros", "web", "mcp"]);
-    // The life words of the setup read each memory file, after the read of the doctrine, and the user turn after them
-    // shows what each read gave.
+    // The life words of the setup read each memory file, after the reads of the doctrine and of the files of the
+    // extensions, and the user turn after them shows what each read gave.
     const read = (first.engine?.transcript({ on: ROOT }) ?? []).find(
       (fact) => fact[0] === "read" && fact[4] === tilded(join(cwd, "CLAUDE.md")),
     )?.[1];
-    expect(read).toBe("read2");
+    expect(read).toBe("read9");
     // The stand and the cd come after the life words, so the turn of the life words is the fourth from the end.
     const turns = (first.engine?.turns({ on: "chain1" }) ?? []).map((turn) => String(turn[1]));
-    expect(turns.at(-4)).toEndWith("\n\ncatchup()\nawait recall()\nawait listed()\nawait mcp_index()");
+    expect(turns.at(-4)).toBe("catchup()\nawait recall()\nawait listed()\nawait mcp_index()");
     expect(turns.at(-2)).toMatch(/^stand\(\)\ncd\('.*'\)$/);
     expect(turns.at(-3)).toContain(
       `#${read}\n${read}_path = '${tilded(join(cwd, "CLAUDE.md")).replaceAll("\\", "\\\\")}'\n${read}_text = 'Use two spaces.'`,

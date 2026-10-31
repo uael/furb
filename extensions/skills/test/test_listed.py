@@ -25,5 +25,5 @@ async def test_the_life_word_of_the_extension_is_await_listed(tmp_path: Path) ->
   two = await chained("two")
   for on in (root, two):
     turns = engine.turns(on=on)
-    (at,) = [n for n, one in enumerate(turns) if one[0] == "assistant" and one[1].endswith("\nawait listed()")]
+    (at,) = [n for n, one in enumerate(turns) if one[:2] == ("assistant", "await listed()")]
     assert "Make tea." in turns[at + 1][1]
