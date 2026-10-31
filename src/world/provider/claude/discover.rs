@@ -9,7 +9,7 @@
 use std::{
   collections::HashMap,
   fs,
-  io::{BufRead, BufReader, Write},
+  io::{BufRead, BufReader, Read, Write},
   process::Stdio,
   sync::{Mutex, OnceLock, mpsc},
   thread,
@@ -140,6 +140,44 @@ pub(super) fn takes(program: &Program, alias: &str, effort: &str) -> bool {
   }
   let Some(found) = models(program) else { return false };
   found.iter().any(|one| one.alias == alias && one.efforts.iter().any(|one| one == effort))
+}
+
+/// Whether the program lists a flag in its help, asked once for each stamp of the program. A program that does not
+/// answer in time lists none, so furb gives it no flag that it may not know.
+pub(super) fn lists(program: &Program, flag: &str) -> bool {
+  static LISTED: OnceLock<Mutex<HashMap<String, bool>>> = OnceLock::new();
+  let held = LISTED.get_or_init(Default::default);
+  let key = format!("{}\0{flag}", stamp(program));
+  if let Some(known) = held.lock().unwrap_or_else(|one| one.into_inner()).get(&key) {
+    return *known;
+  }
+  let listed = help(program).is_some_and(|text| text.contains(flag));
+  held.lock().unwrap_or_else(|one| one.into_inner()).insert(key, listed);
+  listed
+}
+
+/// What the program says for `--help`, none when it does not run or does not answer within [`WITHIN`].
+fn help(program: &Program) -> Option<String> {
+  let mut command = program.command().ok()?;
+  let mut child = command
+    .as_std_mut()
+    .arg("--help")
+    .stdin(Stdio::null())
+    .stdout(Stdio::piped())
+    .stderr(Stdio::null())
+    .spawn()
+    .ok()?;
+  let mut out = child.stdout.take()?;
+  let (send, heard) = mpsc::channel();
+  thread::spawn(move || {
+    let mut bytes = Vec::new();
+    let _ = out.read_to_end(&mut bytes);
+    let _ = send.send(String::from_utf8_lossy(&bytes).into_owned());
+  });
+  let text = heard.recv_timeout(WITHIN).ok();
+  let _ = child.kill();
+  let _ = child.wait();
+  text
 }
 
 /// Forget each discovery, so the next models ask the command line again.

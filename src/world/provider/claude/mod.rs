@@ -225,6 +225,15 @@ impl Claude {
   }
 }
 
+/// The flag by which the command line records its system prompt once for a conversation.
+const SNAPSHOT: &str = "--system-prompt-snapshot";
+
+/// Whether the command line lists a flag in its help. It is asked once for each version of its program.
+async fn lists(program: &Program, flag: &'static str) -> bool {
+  let program = program.clone();
+  tokio::task::spawn_blocking(move || discover::lists(&program, flag)).await.unwrap_or(false)
+}
+
 /// The program that starts the command line: its file, and the words that come before each flag that furb gives it,
 /// as `cswap run 3` holds the file `cswap` and the words `run` and `3`. It starts a process with no shell, so each
 /// word reaches the program as it stands.
@@ -888,6 +897,11 @@ impl Conversation {
     command.args(["--verbose", "--include-partial-messages", "--model", &self.name]);
     let prompt = prompt_file(&self.system)?;
     command.arg("--system-prompt-file").arg(&prompt).args(["--setting-sources", ""]);
+    // Else a resumed or forked conversation sends the system prompt that its first request recorded, and not this
+    // one. A command line that does not list the flag would refuse it, so it gets none.
+    if lists(program, SNAPSHOT).await {
+      command.args([SNAPSHOT, "off"]);
+    }
     command.current_dir(home()?);
     // A completion needs no tool: no tool of the command line, no server of another, and no command of its own.
     command.args(["--strict-mcp-config", "--tools", "", "--disable-slash-commands"]);
@@ -910,6 +924,8 @@ impl Conversation {
     command.env("CLAUDE_CODE_DISABLE_AUTO_MEMORY", "1");
     command.env("CLAUDE_CODE_DISABLE_FILE_MENTIONS", "1");
     command.env("CLAUDE_CODE_DISABLE_ATTACHMENTS", "1");
+    // Else the command line adds the CLAUDE.md files of the project and of the user to the context.
+    command.env("CLAUDE_CODE_DISABLE_CLAUDE_MDS", "1");
     command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
     // A program that a process holds open to write it is busy, as a new program is for a moment while a fork of
     // another thread holds it, so it starts at a later try.
@@ -1538,7 +1554,9 @@ fn input(messages: &[Message], marked: &mut bool) -> Result<String, CompletionEr
     return Err(failed("There is no new message for Claude."));
   }
   cached(&mut content, marked);
-  let line = json!({"type": "user", "message": {"role": "user", "content": content}});
+  // The client composed the turn, so the command line delivers its text as written: no file mention, no slash command
+  // and no attachment pass at the start of the turn.
+  let line = json!({"type": "user", "message": {"role": "user", "content": content}, "client_composed": true});
   Ok(format!("{line}\n"))
 }
 
