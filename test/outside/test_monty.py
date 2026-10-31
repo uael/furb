@@ -625,3 +625,13 @@ def test_a_word_that_grows_past_the_memory_bound_ends_with_a_memory_error_and_it
     [sys.executable, "-I", str(script), test, word], capture_output=True, text=True, env=env, timeout=110, check=False
   )
   assert (got.returncode, got.stdout.strip()) == (0, "MemoryError"), got.stderr[-2000:]
+
+
+def test_the_door_gives_the_memory_that_the_sandboxes_hold_and_the_bound_that_stops_them(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  """The bound is what FURB_SANDBOX_MEMORY gives in MiB, 64 here, and the memory that the sandboxes hold is a count of
+  bytes, which no sandbox makes negative."""
+  monkeypatch.setenv("FURB_SANDBOX_MEMORY", "64")
+  assert _monty.sandbox_bound() == 64 << 20
+  assert _monty.sandbox_held() >= 0
