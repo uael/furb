@@ -30,7 +30,11 @@ type Send = (message: object) => void;
 /** Who waits for an answer of the worker: a window, with the number of its request there, or the host itself. */
 type Asker = { send?: Send; id: number; settle?: (value: unknown, error?: string) => void };
 
-const { host: _, ...options } = JSON.parse(process.argv[2] ?? "{}") as EngineOptions;
+const {
+  host: _,
+  from,
+  ...options
+} = JSON.parse(process.argv[2] ?? "{}") as EngineOptions & { from?: string };
 const record = options.record;
 const place = record ? hostPlace(record) : undefined;
 if (!record || !place) {
@@ -40,7 +44,15 @@ if (!record || !place) {
   process.exit(2);
 }
 const started = Date.now();
-const about: About = { pid: process.pid, record, build: "", engine: "", protocol: PROTOCOL, started };
+const about: About = {
+  pid: process.pid,
+  record,
+  build: "",
+  engine: "",
+  protocol: PROTOCOL,
+  started,
+  ...(from ? { from } : {}),
+};
 const tell = () => tellAbout(place, about);
 // Another host of the life that runs owns it, so this one ends before it opens a second life on the record. The host
 // says of itself at once, so a window knows who opens the life while it opens.

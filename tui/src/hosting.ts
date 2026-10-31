@@ -34,6 +34,8 @@ export interface About {
   engine: string;
   protocol: number;
   started: number;
+  /** The build that a window of this build took the life from, when a takeover started this host. */
+  from?: string;
 }
 
 /** What the hello of the host gives a window: what it says of itself, the root of its life, the count of facts that

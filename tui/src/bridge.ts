@@ -402,7 +402,7 @@ export async function openEngine(
   const place =
     options.host && options.record && !isRecorded(options.record) ? hostPlace(options.record) : undefined;
   return place
-    ? attach(options, (stopped) => reach(options, place, stopped), "", true, made)
+    ? attach(options, (stopped, from) => reach(options, place, stopped, from), "", true, made)
     : inWindow(options, made);
 }
 
@@ -520,11 +520,12 @@ async function launch(
   options: EngineOptions,
   place: Place,
   stopped: () => boolean,
+  from?: string,
 ): Promise<Socket | string> {
   const log = openSync(place.log, "a", 0o600);
   const child = spawn(
     process.execPath,
-    [new URL("host.ts", import.meta.url).pathname, JSON.stringify(options)],
+    [new URL("host.ts", import.meta.url).pathname, JSON.stringify(from ? { ...options, from } : options)],
     {
       detached: true,
       stdio: ["ignore", log, log],
@@ -571,12 +572,13 @@ async function reach(
   options: EngineOptions,
   place: Place,
   stopped: () => boolean = () => false,
+  from?: string,
 ): Promise<Socket> {
   for (let tries = 1; ; tries++) {
     const found = await connect(place.socket);
     if (found) return found;
     if (stopped()) throw new Error(STOPPED);
-    const got = await launch(options, place, stopped);
+    const got = await launch(options, place, stopped, from);
     if (typeof got !== "string") return got;
     if (!got.includes(RIVAL) && !got.includes(OWNED)) throw new Error(got);
     const host = await waiting(place, stopped);
@@ -600,7 +602,7 @@ const TAKEOVER = 60000;
  * on the same record. */
 async function attach(
   options: EngineOptions,
-  reachHost: (stopped: () => boolean) => Promise<Socket>,
+  reachHost: (stopped: () => boolean, from?: string) => Promise<Socket>,
   key = "",
   takes = false,
   made?: (link: Link) => void,
@@ -625,8 +627,9 @@ async function attach(
   let first: Hello | undefined;
   let reaching: Promise<void> | undefined;
   const hello = async (): Promise<Hello> => {
+    let from: string | undefined;
     for (let took = false; ; took = true) {
-      const held = await reachHost(() => stopping);
+      const held = await reachHost(() => stopping, from);
       socket = held;
       // The record of a host on the network stands on another machine, or is the record of another operator, so the
       // window keeps its view at its own record.
@@ -658,11 +661,13 @@ async function attach(
         true,
       )) as Hello;
       // A host that this window started after a takeover keeps its build, so two windows of two builds that open
-      // the life at once do not take it over from each other with no end.
-      if (takes && !took && said.build !== build) {
+      // the life at once do not take it over from each other with no end. A host that took the life from the build
+      // of this window is not taken back: a window of an old build attaches to it.
+      if (takes && !took && said.build !== build && said.from !== build) {
         socket = undefined;
         link.send = undefined;
         await takeOver(held, send, said, build);
+        from = said.build;
         continue;
       }
       if (said.protocol !== PROTOCOL) {
