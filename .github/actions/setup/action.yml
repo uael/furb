@@ -29,6 +29,11 @@ inputs:
 runs:
   using: composite
   steps:
+    - if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        Add-MpPreference -ExclusionPath "$env:USERPROFILE\.cargo", "$env:USERPROFILE\.rustup", $env:GITHUB_WORKSPACE, $env:RUNNER_TEMP
+        Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
     # A python restored from the cache on Windows holds a link to its directory that the restore breaks, so uv
     # install fails there on every run after the first: Windows installs its python each time.
     - if: inputs.python != 'none'
@@ -82,15 +87,6 @@ runs:
         add-rust-environment-hash-key: true
         save-if: ${{ github.ref == 'refs/heads/main' && inputs.shared == '' }}
         cache-on-failure: false
-    # The cache of rust restores no index entry of the direct dependencies of the workspace, so cargo metadata fetches
-    # them, one request each: on Windows this took 36 s in each run of the bindings, before cargo started. This cache
-    # keeps the whole index of a job, which cargo then reads with no request. Its key holds the job, so each job saves
-    # the entries that its own commands fetched.
-    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: ~/.cargo/registry/index
-        key: cargo-index-${{ github.job }}-${{ runner.os }}-${{ inputs.key }}-${{ hashFiles('Cargo.lock') }}
-        restore-keys: cargo-index-${{ github.job }}-${{ runner.os }}-${{ inputs.key }}-
     - if: inputs.python != 'none'
       run: uv python install
       shell: bash
