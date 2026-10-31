@@ -213,44 +213,6 @@ jobs:
         with:
           key: ${{ runner.os == 'Windows' && 'package' || '' }}
 
-  stress:
-    name: stress ${{ matrix.shard }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/setup
-        with:
-          python: none
-          shared: typescript
-      - run: |
-          echo "CARGO_BUILD_TARGET=$(rustc -vV | sed -n 's/^host: //p')" >> "$GITHUB_ENV"
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: "1.4.2"
-      - run: bun install --frozen-lockfile
-      - run: bun run build
-      - name: stress the demo life
-        run: |
-          for i in 1 2 3 4 5 6; do (while :; do :; done) & done
-          fails=0
-          for i in $(seq 1 100); do
-            if ! FURB_TEST_OUTPUT=1 bun run tui/script/test.ts tui/test/demo-life.test.ts "--test-name-pattern=the life of the demo is as dense" > "$RUNNER_TEMP/dl.log" 2>&1; then
-              fails=$((fails+1)); echo "run $i failed"; tail -45 "$RUNNER_TEMP/dl.log"
-            fi
-          done
-          kill $(jobs -p) || true
-          echo "fails $fails of 100"
-
   bench:
     # The budget of the speed of the TUI holds on Linux, on a machine that runs no other work while it measures: the
     # first frame of a life of 160000 facts, the frames of the renderer at 60 each second while it scrolls and streams,
