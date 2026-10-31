@@ -1454,6 +1454,27 @@ mod tests {
     assert_eq!(said(&program, "pr: str = 'a'\nclose(pr)"), vec![]);
   }
 
+  /// The factor by which a test of speed lets one time pass another. Work that grows in a line passes it at 4, and
+  /// work that grows in a square fails it at 16.
+  const SLACK: u32 = 10;
+
+  /// The least time of five runs of `work`, which a pause of the machine in some of them cannot raise. A bound in
+  /// seconds fails on a machine under load, so a test of speed compares two times that one process measures. The
+  /// gate keeps what it read of a text, so each run reads a text of its own, which `make` gives from the number of
+  /// the run, and a run before them all, which is not timed, reads the typeshed and the engine.
+  fn quickest<T>(make: impl Fn(usize) -> T, work: impl Fn(T)) -> std::time::Duration {
+    work(make(0));
+    (1..=5)
+      .map(|run| {
+        let given = make(run);
+        let start = std::time::Instant::now();
+        work(given);
+        start.elapsed()
+      })
+      .min()
+      .expect("five runs")
+  }
+
   /// A name that a tell binds to a value of lists, `depth` levels deep, as monty writes it.
   fn lists(depth: usize) -> String {
     format!("#bash1 exited 0\nbash1_value = {}{}", "[".repeat(depth), "]".repeat(depth))
@@ -1488,16 +1509,21 @@ mod tests {
 
   #[test]
   fn a_value_that_a_tell_wrote_as_a_deep_literal_stalls_no_word() {
-    let start = std::time::Instant::now();
+    let word = "y: int = len(bash1_value)\nclose(bash1_value[0])";
+    let checked = |program: String| assert_eq!(said(&[&program], word), vec![]);
+    let shallow = quickest(|run| format!("{}\n# {run}", lists(1)), checked);
     for deep in [
       lists(990),
       format!("bash1_value = {}", mixed(100)),
       format!("bash1_value = {}", mixed(DEEP)),
     ] {
-      assert_eq!(said(&[&deep], "y: int = len(bash1_value)\nclose(bash1_value[0])"), vec![]);
+      let took = quickest(|run| format!("{deep}\n# {run}"), checked);
+      assert!(
+        took < shallow * SLACK,
+        "{} bytes took {took:?}, a shallow value {shallow:?}",
+        deep.len()
+      );
     }
-    let took = start.elapsed();
-    assert!(took.as_secs() < 3, "{took:?}");
   }
 
   #[test]
@@ -1519,14 +1545,15 @@ mod tests {
 
   #[test]
   fn a_name_that_each_word_binds_in_a_loop_stalls_no_word() {
-    let program: Vec<String> = (0..800).map(looped).collect();
-    let program: Vec<&str> = program.iter().map(String::as_str).collect();
-    let (text, _) = sheet(&program, "close(one + label)");
-    let start = std::time::Instant::now();
-    let got = found(&text);
-    let took = start.elapsed();
-    assert_eq!(got, vec![]);
-    assert!(took.as_secs() < 3, "{took:?}");
+    let timed = |words: usize| {
+      let make = |run: usize| {
+        let program: Vec<String> = (0..words).map(|n| looped(run * 1000 + n)).collect();
+        sheet(&program.iter().map(String::as_str).collect::<Vec<_>>(), "close(one + label)").0
+      };
+      quickest(make, |text| assert_eq!(found(&text), vec![]))
+    };
+    let (few, many) = (timed(100), timed(400));
+    assert!(many < few * SLACK, "400 words took {many:?}, 100 words {few:?}");
   }
 
   #[test]
