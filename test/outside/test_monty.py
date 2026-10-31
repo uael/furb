@@ -432,8 +432,8 @@ async def test_the_door_gives_none_where_the_contract_holds_none_beside_a_defaul
   held = furb_monty.engine.held_engine()
   opened, shut = held.bash("cat", stdin=None, on=root), held.bash("cat", on=root)
   assert [held.get(str(one)) for one in (opened, shut)] == [
-    ("bash", str(opened), OPERATOR, root, "cat", None, TIMEOUT),
-    ("bash", str(shut), OPERATOR, root, "cat", "", TIMEOUT),
+    ("bash", str(opened), OPERATOR, root, "cat", None, TIMEOUT, None),
+    ("bash", str(shut), OPERATOR, root, "cat", "", TIMEOUT, None),
   ]
 
 

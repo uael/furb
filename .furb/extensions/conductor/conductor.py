@@ -27,6 +27,7 @@ from furb.engine import (
   pause,
   paused,
   peek,
+  program,
   prompt,
   read,
   rung,
@@ -39,6 +40,7 @@ from furb.engine import (
 )
 
 CONDUCTING = """Conduct the work in one loop, and plan no further than the next step.
+The round is autonomous, by the ruling of the owner on 10-31: "#916 should have never been queued. Make it clear in conductor doc that it's designed to be autonomous. The word of the owner (me) can be asynchronous". So the round never makes work wait for the owner by a rule of its own: no cap, no count of rounds and no hold of the round ends in "the owner decides", and such a rule is a defect of the round, never a design. The owner speaks asynchronously: by his own labels on a PR (owner-merge, hold, hold:owner-review, paused), which the round obeys as they stand, and by his comments and rulings, each of which changes what the round does from then on. Until his word comes, the round decides from the rulings and goes on.
 Put each item in queue as (key, brief, thread), or in backlog to wait behind queue, then await conduct(). Each round tends the workers and the open PRs, hires a worker for each item, cap() at once, and waits every seconds or until a worker ends. It hires no item of a family of model while an open PR in trouble has no worker and needs one of that family. A PR in trouble takes the first model of HANDOVER, the model of its maker, limits["fixer"] and ACTOR that has room, so it waits only when no family has room. So the fixers take the free slots of their family first, the round merges before it starts new work there, and each other family hires on its own room. It tells you once when such a PR waits for a fixer whose family has no room at all. It moves the first item of backlog to queue while queue and working hold fewer than cap() items.
 When you find a defect, a wrong state or a gap in your own work, or the owner points at one, fix the state at once, then make its durable fix at once: a PR, through patch() for the word of the conductor, or an item at the head of the queue. Never keep it as a note for later, and never fix it only with a live patch. When a message of the owner asks whether a state is right, that is a sign that it is not: read the whole state, list each thing that is off, fix all of them in one go, read the state again to verify it, and do this again until nothing is off. Only then report, with what you verified.
 The owner rules, on 10-23: "this kind of item should be done by sonnet, not opus. You need to use Sonnet more, when it make sense. And opus/medium should be your default, not opus/high. opus/high is kinda the max, xhigh for the coordination and my rulings only. most of the time sonnet/{medium,high} and opus/high are perfect." So a debrief asks the model of its worker, and a worker runs efforts[key], or the model of its kind. An item has a kind, kinds[key], by the ruling of the owner on 10-28 on dedicated audit and edit workers: audit reads and writes a register in scratch, with no worktree and no PR, on ACTOR, opus/medium, with the brief AUDIT; edit makes a worktree and a PR, on EDITOR, sonnet/high, with the brief WORKER; fix mends one red PR on limits["fixer"]. An item with no kind is a fix when its key is fixN or boxN, else an edit. An auditor that ends with 0 and its report is a line in the next notice, and each row of the table | Dn | key | model | area | brief | in its register is queued once as the item triage-<key>, at the end of queue, on the model of its row. A fixer (fixN, boxN) runs on limits["fixer"], sonnet/high, by the ruling of the operator. A worker runs only a model of MODELS: sonnet/medium, sonnet/high, opus/medium or opus/high. hire() refuses xhigh and max, and the round starts no item that asks for one and tells you. You choose sonnet for an item where it makes sense, as efforts[key] = "claude-cli:sonnet/medium" before you queue it.
@@ -50,12 +52,12 @@ A worker does one item in a workspace {repo}-wN, which the round gives at its hi
 A prompt of a worker that ends with CancelledError while the round made no cancel over it, as when the life restarts, goes on: the round asks it again on its chain with a new prompt, at most 3 times for an item, and tells nobody.
 The round tells you a worker that ends with no PR, with its answer, or that says nothing for 45 minutes, relays to you each question that a worker puts to the operator, and wakes a worker that paused. results keeps the answer of each worker under its prompt.
 When a worker ends, the round asks it debrief() once, and adds each friction that it gives to TOOLING, the ledger of the defects of the tooling, as flaw(what) adds a defect that you find or patch live. An entry counts each time that it comes again. settle_flaw(part, pr) closes each open entry that holds part with the PR that fixed it, once you checked on main that the PR did; the audit lists the open entries alone, and an entry that comes again opens again.
-A check counts by its newest run, and the round acts on a failed check once no check of the PR runs, or at once when two failed. A failed check heals with no worker first, once for each head sha: the round reruns the failed jobs of the run whose failure is the one failed check of the PR, which costs the runners of CI the least, else it updates the branch of a PR on main that is behind main while main is green, at most once in UPDATED seconds for a PR, since a PR that still fails after an update fails on its own. It gives a PR on main whose head has no run of the gates one, once for each head sha: it updates the branch of the PR while main is green, else it reruns the workflows at the head. It reruns once, for each head sha, a run that was cancelled at the head of a PR, and a check cancelled again at that sha counts as failed.
+A check counts by its newest run, and the round acts on a failed check once no check of the PR runs, or at once when two failed. A failed check heals with no worker first, once for each head sha: the round reruns the failed jobs of the run whose failure is the one failed check of the PR, which costs the runners of CI the least, else it updates the branch of a PR on main that is behind main while main is green, at most once in UPDATED seconds for a PR, since a PR that still fails after an update fails on its own. It gives a PR on main whose head has no run of the gates one, once for each head sha: it updates the branch of the PR while main is green, else it reruns the workflows at the head. It reruns once, for each head sha, a run that was cancelled at the head of a PR whose gates withheld(pr) does not hold back and that throttle did not defer, and a check cancelled again at that sha counts as failed.
 Each sweep puts each open PR of the round in one state of a table: green, running (its checks run, or one failed check waits for the end of its run), red (two failed checks, or one once no check runs, or an open box), conflicting, main (while main is red, each line of its failed checks fails on main too), stacked, or owner (it waits on the owner). A red or conflicting PR that holds no label paused or hold, and is not a draft whose maker lives, has one worker assigned at its head, in assigned[n] with the time of the assignment. A PR in trouble with no live assignee gets one in that sweep: its maker, the live worker of its label w:key or of owns, once for each head; else a fixer. A maker whose head did not move in OWNED seconds, 15 minutes, gives the PR to a fixer. A fixer that ends with no new head is replaced at once, twice at most for a head. A sweep that ends with a PR in trouble and no assignee tells you once, as a defect of the round, with its cause. A PR in the state main gets no order, no handover and no fixer, since no change of it can fix what main fails: the notice of a red main names such PRs, and once main is green the round updates their branches. A draft whose worker ended is tended as any PR in trouble, and only its merge waits. The order and the brief of a fixer are built from a fresh read at the moment of the order: the failed checks by name with their first failed lines, the commits of main that changed a file of the PR (with the files that they delete or move), and for a stacked PR the merge ref of its checks and the rebase command that fits the base now (a plain rebase when the base only advanced, rebase --onto from the commit that the branch shares with the old base when it was rewritten), with the commits that the base gained. A conflict of w/gallery gets no order for GALLERY_WAIT seconds, since the gallery workflow builds the branch again from main. Just before it gives an order or hires a fixer, the round reads the PR again and gives none when the head moved or the conflict is gone, and it names in an order the base of a stacked PR with the head that the base had before. While a fixer is assigned to a PR, the round neither updates its branch nor merges it, and it tells the maker when it updates or rebases the branch, or when a fixer starts on it. The round closes a PR that changes no file. A mergeable that gh gives as UNKNOWN is probed with git merge-tree. The round rebases a child of a PR whose head was force-pushed onto the new head of its parent, and a child whose parent merged outside the round onto main, from the fork point when the child holds no head of the parent that the round saw.
 The round merges each green PR into main from the lowest number when git merges it with main clean and no file that a gate sums (SERIAL: the engine under its wall of tokens, the budgets) changed both in it and on main since its branch forked, after it moves the PRs that stack on it onto main and rebases each there with git rebase --onto from the head that it held of the PR that merged, in a scratch worktree, and pushes it with --force-with-lease (a rebase that conflicts is left to the fixer); else it updates the branch, and only when main is green.
 The label paused takes a PR out of the round. A draft, the label hold or hold:owner-review, a review that waits for its fix, and the label owner-merge, until the owner takes it off as his approval, keep a PR from a merge.
 A notice wakes you only for a decision, with the context that it needs: each event that needs none, as a worker that ends with a PR, a heal, a merge or a PR made outside the round, is one line in the next notice. The round tells you when main is red, with the lines that failed, when a PR fails to merge, with what gh said, or when a PR on main with no draft, no hold, no worker and no check that runs has no change for 45 minutes, with its checks, and each comment or issue of the owner in the private repository of the decisions, which PRIVATE names beside this word and git does not hold. await decide(title, text) opens a decision there as an issue, and news(line) adds a line at the top of its digest issue.
-Each round queues each open issue that the owner opened, or that he assigned to himself, as an item issueN, once, and its PR closes it. It queues an open issue again, once for each worker that ended on it with a PR, when no item of it works or waits and no open PR with the label w:issueN holds it, with the PRs that ended it in its brief. After ISSUE_ROUNDS (3) ends with a PR on an issue that is still open, it queues the issue no more, and tells you once, with the PRs, so that the owner closes the issue or says what is left.
+Each round queues each open issue that the owner opened, or that he assigned to himself, as an item issueN, once, and its PR closes it. It queues an open issue again, once for each worker that ended on it with a PR, when no item of it works or waits and no open PR with the label w:issueN holds it, with the PRs that ended it in its brief.
 Each round tells you once each fork PR of UPSTREAM that holds the label upstream-ready and not upstreamed: by the ruling of the owner, you then open its PR on pydantic/monty with the body that he reviewed, and put the label upstreamed on the fork PR.
 Each round sends each new comment of the owner on a PR or on his issue to the worker that owns it, puts the label hold on that PR, and tells you only the comments that no worker owns. The label hold:owner-review, which the owner puts on a PR to iterate with its worker, holds it like hold and keeps its worker on it: the round puts no hold of its own on it, and sends each new comment of the owner to the chain of its maker even when the prompt of the maker ended, as a handover on that chain on the model of the maker. A text on GitHub counts only when the owner wrote it with no 🤖 at its start, or when he put a 👍 on it; each worker starts what it writes there with 🤖.
 Each round sets one status label on each open PR and on each issue of the owner that it took: s:queued, s:working, s:checks, s:red, s:boxes, s:held, s:conflict, s:stacked, s:ready, or s:owner (green, waits for the owner).
@@ -71,8 +73,8 @@ An item waits for others with after[key] = [keys], set before you queue it: staf
 Method, at each notice: read the whole state, fix every thing that is off in one go, read the state again to verify, and go on until nothing is off. Only then report. Each round also checks the state in invariants(): it gives each open PR that the round tends a home, from the chain that pushed its head, wakes no chain, and lists in the next notice what code cannot fix.
 A PR waits on a decision of the owner while awaited[decision] names one of its labels, or its number as #N, and the decision is an act that is not over, as the prompt that asked him: a failed check of that PR gets no order, no handover and no fixer, a conflict of it still does, and the round names the decision once. When the act ends, the round drops it and tends the PR again.
 The round holds at most cap() chains that hold an open prompt with a shape, and counts the chains of workers, of sub-chains and of judges alike: room() counts them, and a resume of a worker waits for a slot. A sub-chain that a chain of a live worker made, at any depth, counts within the slot of that worker, since the worker waits on it: the round never parks it. A parked chain takes the next free slot before any new chain, since tend and sweep hire before staff wakes. When more chains stand, the round pauses the newest overflow with a note and wakes it in order when a slot frees, and it never ends its task.
-The owner rules, on 10-29: "we should use more gh stacks in conductor, because they can be merged at once (all PRs of stack as once)". So a PR on main at the bottom of a stack whose layers are all green, free of hold, paused and owner-merge, and passed by the vetoes, merges with its whole stack at once through gh stack merge, and while a layer above it still runs its checks, the bottom waits rather than merge alone; a stack with a red layer merges its green layers below it at once; a stack that gh stack does not hold lands one layer at a time, and the round tells it once. Each sweep links each chain of stacked PRs on GitHub with gh stack link, once for each chain, so that it shows as one stack. GitHub gives no priority to a queued run, so each sweep cancels each queued run of the gates that can serve no merge: a run of a closed PR, of an old head, of a draft, a held or a conflicting PR, and it defers a run of a layer above a layer that is not green, which it runs again once that layer is green and fewer than THROTTLE runs wait. It never touches a run of main or of a PR that can merge.
-reload(path, on) loads the definitions of the file of an extension into the module of a chain: it runs, in the order of the file, each top-level definition whose name the module lacks or whose text differs from its text in the last run of a word that ended with no fault (a load that was cancelled or failed counts for nothing, so the next reload loads it again), and gives (rung, names): the rung that runs the load, which quietly starts so that no end of the caller cancels it, and the names. The load is done only when that rung is over and peek(rung) is no exception: await it. Use it after a PR that changed the conductor merged.
+The owner rules, on 10-29: "we should use more gh stacks in conductor, because they can be merged at once (all PRs of stack as once)". So a PR on main at the bottom of a stack whose layers are all green, free of hold, paused and owner-merge, and passed by the vetoes, merges with its whole stack at once through gh stack merge, and while a layer above it still runs its checks, the bottom waits rather than merge alone; a stack with a red layer merges its green layers below it at once; a stack that gh stack does not hold lands one layer at a time, and the round tells it once. Each sweep links each chain of stacked PRs on GitHub with gh stack link, once for each chain, so that it shows as one stack. GitHub gives no priority to a queued run, so each sweep cancels each queued run of the gates that can serve no merge: a run of a closed PR, of an old head or of a conflicting PR, and a run whose gates withheld(pr) holds back, which is a run of a draft, of a held or a paused PR, or of a layer above a layer that is not green. It defers each run that it cancels under a hold or under a layer below, and runs it again once withheld(pr) at the same head is empty and fewer than THROTTLE runs wait, once for each cancel, and it notes rerun <sha> then, so that heal does not run that head again; a draft runs its gates again when it is made ready. It never touches a run of main or of a PR that can merge.
+reload(path, on) loads the definitions of the file of an extension into the module of a chain: it runs, in the order of the file, each top-level definition whose binding in the module now is not its text in the file, and ends the load with seal(path). Monty gives a function no source, so seal keeps in bindings the object that each name of the load bound and its text, and a binding has that text only while the module holds that same object: a later word that binds the name again, an older word or another extension, makes the next reload run it again, and a load that was cancelled or failed before its end loads again. Then seal raises Refused with each name of the file that the module binds with another text, so a load that leaves the round on old code fails and says which names. reload gives (rung, names): the rung that runs the load, which quietly starts so that no end of the caller cancels it, and the names. The load is done only when that rung is over and peek(rung) is no exception: await it. Use it after a PR that changed the conductor merged.
 The owner rules, on 10-31, after #816 and #859 merged green and wrong, since no gate compared a PR with his words: an item may hold his exact words in rulings[key], a list of str, each quoted as he wrote it. hire puts them at the top of the brief, under RULED, before any line of yours. Before its merge, each green PR whose item, by its label w:key or by owns, holds rulings passes the veto bent: a blind judge on a chain of its own, RULER (opus/medium) under a grant of RULER_USD dollars, reads his words and the diff alone, and closes with each way that the diff fails or bends them, each with his exact words. A head with a gap does not merge, and its worker gets the gaps, or a worker on its chain when it ended, and a comment on the PR names them; a head that the judge cleared merges, and each new head is judged again, with the gaps of the earlier heads and the commits that answered them, so that the judge names only a gap that the newest head made or left open; the round never holds a PR for the owner by itself, by his ruling on 10-31: "it's not supposed to be on me to remove the flag. And it should be fixed until judged ok, automatically", so each new head is judged until the judge finds no gap, and only a label hold of the owner stops the loop. Each order to fix holds the gaps of every head that a judge held, the oldest first and each once, so that the worker fixes each once and trades no gap for another, and after JUDGE_ROUNDS (3) heads with gaps each fix goes to STRONGER (opus/high), so the loop converges. A hold that an earlier word put after JUDGE_ROUNDS heads comes off at the next sweep, and its PR is judged again. A judge that fails twice, with no answer or with a quote that is not his, tells you and holds the PR: judge it yourself, then set judged["n sha"]["state"] to "cleared", or give the gaps to its worker. judged keeps the state of each head.
 The owner rules again, on 10-31, after #905 merged two minutes after a judge cleared its head, with no word on the 4 gaps that a judge found at its earlier head: "WTF is wrong with you ?????????????? Please stop doing shit now and think of the proper action frist time", and of #912: "and same for 912 ! if it get merged, then follow ups are needed." So the judge of a head after heads with gaps closes with an account of each earlier gap, ACCOUNT: fixed at a file and a line of the head, or open. accounted() reads it: an account that leaves out an earlier gap fails the judge as a clear would, and an open gap holds the head as a new gap does. Before such a head merges, posted() reads the line of the head that shows each fix: a gap with no such line sends the head back to its worker with that gap, and the head merges only once each gap shows fixed and the comment of the account stands on the PR. When a PR whose heads had gaps merges, by the round or by any hand, followed() takes the gaps from the judged entries of the PR, or from the comments of the round on it when none stands (await followed(905) queues them for a PR that merged before), reads each fix of the account in main at the merge commit, and queues at once one follow-up item gapN-i for each gap that main does not show fixed, with the gap, the PR and the words of the owner in its brief, on the model of the worker of that PR.
 A statement of yours to the owner states only what a command of the same word proved, and names each other part as a hypothesis.
@@ -380,7 +382,7 @@ async def patch(title: str, why: str, ask: str) -> tuple[str, str, str]:
     f"git worktree remove --force {tree} 2>/dev/null; git fetch -q origin main"
     f" && git worktree add -q {tree} -B w/{key} origin/main && cat {tree}/{CONDUCTOR}",
     show=HIDDEN,
-    timeout=180,
+    timeout=180, ok=True,
   )
   if made.code != 0:
     raise Refused(f"no worktree {place}: {made.stderr.content[-500:]}")
@@ -439,7 +441,7 @@ async def patch(title: str, why: str, ask: str) -> tuple[str, str, str]:
       f" && (git fetch -q origin w/{key} 2>/dev/null; true) && git push -q --force-with-lease -u origin w/{key}"
       f" && (gh label create w:{key} --force >/dev/null 2>&1; true)",
       show=HIDDEN,
-      timeout=180,
+      timeout=180, ok=True,
     )
     if pushed.code != 0:
       raise Refused(f"no push of w/{key}: {pushed.stderr.content[-500:]}")
@@ -601,7 +603,7 @@ async def based_now(pr: dict) -> str:
     return said + ref
   old, new = shifted[n]
   setup = f"base={shq(base)} head={shq(head)} old={shq(old)}\n"
-  got = await bash(setup + REBASED, show=HIDDEN, timeout=120)
+  got = await bash(setup + REBASED, show=HIDDEN, timeout=120, ok=True)
   if got.code != 0 or len(got.stdout.lines) < 3:
     return said + ref
   how, cut, count, *gained = got.stdout.lines
@@ -619,7 +621,7 @@ git cherry -v origin/main "$sha" | cut -c1-120"""
 
 
 async def squashed(pr: dict) -> str:
-  got = await bash(f"n={pr['n']} sha={shq(pr['sha'])}\n" + SQUASHED, show=HIDDEN, timeout=120)
+  got = await bash(f"n={pr['n']} sha={shq(pr['sha'])}\n" + SQUASHED, show=HIDDEN, timeout=120, ok=True)
   rows = [x.split(" ", 2) for x in got.stdout.lines if x[:2] in ("+ ", "- ")] if got.code == 0 else []
   held = [(x[1], x[2] if len(x) > 2 else "") for x in rows if x[0] == "-"]
   if not held:
@@ -639,7 +641,7 @@ async def squashed(pr: dict) -> str:
 
 async def main_changes(pr: dict) -> str:
   held = await squashed(pr)
-  got = await bash(f"n={pr['n']} sha={shq(pr['sha'])}\n" + CHANGED, show=HIDDEN, timeout=120)
+  got = await bash(f"n={pr['n']} sha={shq(pr['sha'])}\n" + CHANGED, show=HIDDEN, timeout=120, ok=True)
   if got.code != 0:
     return held
   commits: list[list] = []
@@ -670,7 +672,7 @@ async def main_changes(pr: dict) -> str:
 
 
 async def stale(pr: dict, conflict: bool = False) -> bool:
-  got = await bash(VIEW.replace("{n}", str(pr["n"])), show=HIDDEN, timeout=120)
+  got = await bash(VIEW.replace("{n}", str(pr["n"])), show=HIDDEN, timeout=120, ok=True)
   parts = got.stdout.content.split()
   if got.code != 0 or len(parts) != 3:
     return False
@@ -855,21 +857,40 @@ def parts_of(word: str) -> dict[str, str]:
   return found
 
 
+# Monty gives a function no source and no code, so the end of each load keeps the object that each name bound and the
+# text that bound it: a binding has that text only while the module still holds that same object.
+bindings: dict[str, tuple[object, str]] = globals().setdefault("bindings", {})
+
+
+def text_of(held: dict, name: str) -> str | None:
+  if name in held and name in bindings and bindings[name][0] is held[name]:
+    return bindings[name][1]
+  return None
+
+
+def unlike(held: dict, path: str) -> dict[str, str]:
+  return {n: t for n, t in parts_of(read(path, HIDDEN).content).items() if text_of(held, n) != t}
+
+
 def reload(path: str = CONDUCTOR, on: str = "") -> tuple[str, list[str]]:
   here = on or scope(acting())
-  lived: dict[str, str] = {}
-  for x in transcript(here):
-    if x[0] == "module":
-      lived = {}
-    elif x[0] == "run" and over(x[1]) and not isinstance(peek(x[1]), BaseException):
-      lived.update(parts_of(str(x[5])))
-  held = module(here)
-  fresh = {n: t for n, t in parts_of(read(path, HIDDEN).content).items() if n not in held or lived.get(n) != t}
+  fresh = unlike(module(here), path)
   if not fresh:
     return "", []
   # The close of the word that calls reload cancels each rung that the word made, and the load stops between two
   # definitions: quietly makes the rung for the round, so no end of the caller reaches it.
-  return str(quietly(rung, "\n\n".join(fresh.values()), on=here)), list(fresh)
+  return str(quietly(rung, "\n\n".join([*fresh.values(), f"seal({path!r})"]), on=here)), list(fresh)
+
+
+def seal(path: str) -> None:
+  here = scope(acting())
+  held = module(here)
+  for name, text in parts_of(program(here)[acting()]).items():
+    if name in held:
+      bindings[name] = (held[name], text)
+  wrong = list(unlike(held, path))
+  if wrong:
+    raise Refused(f"{path} is not what the module binds: {', '.join(wrong)}")
 
 
 ROW = re.compile(r"^\|\s*(D\d+)\s*\|\s*([^|]+?)\s*\|\s*([^|]*?)\s*\|\s*([^|]*?)\s*\|\s*(.+?)\s*\|?$")
@@ -1281,7 +1302,7 @@ async def evidence(pr: dict) -> str:
     + " ".join(shq(f) for f in files)
     + " | head -8",
     show=HIDDEN,
-    timeout=120,
+    timeout=120, ok=True,
   )
   if lacks.code != 0 or not lacks.stdout.content.strip():
     return said
@@ -1320,7 +1341,7 @@ def spec(head: str) -> str:
 async def restack(old: str, onto: str, kid: dict, parent: int = 0) -> None:
   head = kid["head"]
   setup = f"onto={shq(onto)} head={shq(head)} old={shq(old)} sha={shq(kid['sha'])} parent={parent}\n"
-  got = await bash(setup + RESTACK, show=HIDDEN, timeout=300)
+  got = await bash(setup + RESTACK, show=HIDDEN, timeout=300, ok=True)
   if got.code != 0:
     why = " ".join((got.stdout.content + got.stderr.content).split())[-300:]
     heard.append(f"#{kid['n']} was not rebased onto {onto}, exit {got.code}: {why}")
@@ -1566,7 +1587,7 @@ async def bent(pr: dict) -> bool:
     )
     return True
   got = await bash(
-    f"git fetch -q origin main refs/pull/{n}/head && git diff origin/main...{sha}", show=HIDDEN, timeout=180
+    f"git fetch -q origin main refs/pull/{n}/head && git diff origin/main...{sha}", show=HIDDEN, timeout=180, ok=True
   )
   diff = got.stdout.content
   if got.code != 0 or not diff.strip():
@@ -1772,7 +1793,7 @@ async def land(pr: dict, red: bool) -> None:
     got = await bash(
       f"gh api 'repos/{{owner}}/{{repo}}/compare/{sha}...main' --jq '.files[].filename' && echo --- && gh pr view {n} --json files --jq '.files[].path'",
       show=HIDDEN,
-      timeout=120,
+      timeout=120, ok=True,
     )
     if got.code != 0 or "---\n" not in got.stdout.content:
       return
@@ -1780,7 +1801,7 @@ async def land(pr: dict, red: bool) -> None:
     if {x for x in moved.splitlines() if SERIAL.search(x)} & {x for x in own.splitlines() if x}:
       if not red and f"land update {sha}" not in noticed:
         noticed.add(f"land update {sha}")
-        updated = await bash(f"gh pr update-branch {n}", show=HIDDEN, timeout=120)
+        updated = await bash(f"gh pr update-branch {n}", show=HIDDEN, timeout=120, ok=True)
         if updated.code == 0:
           warn(pr, f"The round updated the branch of your PR #{n} with main.")
       return
@@ -1790,7 +1811,7 @@ async def land(pr: dict, red: bool) -> None:
     found = await bash(
       f"git fetch -q origin {spec(pr['head'])} {spec(up['head'])} && git merge-base {shq('origin/' + pr['head'])} {shq('origin/' + up['head'])}",
       show=HIDDEN,
-      timeout=120,
+      timeout=120, ok=True,
     )
     cuts[up["n"]] = found.stdout.content.strip() if found.code == 0 and found.stdout.content.strip() else pr["sha"]
   moves = "".join(f"gh pr edit {up['n']} --base main >/dev/null 2>&1; " for up in kids)
@@ -1798,7 +1819,7 @@ async def land(pr: dict, red: bool) -> None:
     f"{moves}out=$(gh pr merge {n} --squash --delete-branch 2>&1) || out=\"$out $(gh stack merge {n} --yes --squash 2>&1)\";"
     f" sleep 5; echo \"$out\" | tail -4; gh pr view {n} --json state --jq .state",
     show=HIDDEN,
-    timeout=400,
+    timeout=400, ok=True,
   )
   if got.stdout.lines[-1:] == ["MERGED"]:
     merged.add(n)
@@ -1952,7 +1973,6 @@ Title: {title}
 Read the issue whole with its comments first: gh issue view {n} --json title,body,comments, since --comments alone can print the comments and not the body. Check on origin/main that the issue still holds: git log origin/main --grep "#{n}" and the PRs below, when any, show what is done already. When it is done, answer in a comment that starts with 🤖 and close with 0. Do what it asks. When it asks for a change, open the PR with Fixes #{n} in its body, so that the merge closes the issue. When it asks a question or a decision and no change, answer it in a comment on the issue, and close with that answer."""
 
 ISSUE_BODY = 6000
-ISSUE_ROUNDS = 3
 NAMING = r"""gh pr list --state all --limit 50 --search "{n} in:body" --json number,title,state,body --jq '[.[] | select((.body // "") | test("#{n}([^0-9]|$)")) | "#\(.number) \(.state) \(.title)"] | .[]'"""
 handled: set[str] = globals().setdefault("handled", set())
 ends: dict[str, list[tuple[str, int]]] = globals().setdefault("ends", {})
@@ -1961,7 +1981,7 @@ AGAIN = """Workers did parts of this issue before, and it is still open. Their P
 
 
 async def take_issues() -> None:
-  got = await bash(ISSUES, show=HIDDEN, timeout=120)
+  got = await bash(ISSUES, show=HIDDEN, timeout=120, ok=True)
   if got.code != 0 or not got.stdout.content.startswith("["):
     notice(f"issues {int(clock() // 3600)}", "The command that lists the issues failed: " + (got.stderr.content or got.stdout.content)[-500:])
     return
@@ -1969,15 +1989,6 @@ async def take_issues() -> None:
     key = f"issue{it['n']}"
     body = str(it["body"] or "")
     if "paused" in it["labels"]:
-      continue
-    issued = [n for _, n in ends.get(key, []) if n]
-    if len(issued) >= ISSUE_ROUNDS:
-      notice(
-        f"issue rounds {key}",
-        f"The issue #{it['n']}, {it['title']}, is still open after {len(issued)} workers ended on it with PRs"
-        f" {', '.join('#' + str(n) for n in issued)}, so the round queues it no more. Close the issue, say what is"
-        " left, or raise ISSUE_ROUNDS.",
-      )
       continue
     fresh = [name for name, n in ends.get(key, []) if n and name not in requeued]
     if key in handled and not fresh:
@@ -1989,7 +2000,7 @@ async def take_issues() -> None:
     handled.add(key)
     if taken(key) or any(q[0] == key for q in backlog) or any(f"w:{key}" in pr["labels"] for pr in prs.values()):
       continue
-    got = await bash(NAMING.replace("{n}", str(it["n"])), show=HIDDEN, timeout=120)
+    got = await bash(NAMING.replace("{n}", str(it["n"])), show=HIDDEN, timeout=120, ok=True)
     named = [x for x in got.stdout.lines if x.strip()] if got.code == 0 else []
     if any(" OPEN " in x for x in named):
       handled.discard(key)
@@ -2138,9 +2149,7 @@ async def heal(pr: dict, red: bool) -> str:
     pr["base"] == "main"
     and GATE not in pr["names"]
     and pr["idle"] >= GATELESS
-    and not pr["draft"]
-    and not on_hold(pr)
-    and "paused" not in pr["labels"]
+    and not withheld(pr)
     and not fixing(pr)
     and f"gateless {sha}" not in noticed
   ):
@@ -2159,7 +2168,7 @@ async def heal(pr: dict, red: bool) -> str:
     )
     return ""
   if not failed:
-    if "CANCELLED" not in pr["checks"] or f"rerun {sha}" in noticed or f"{n} {sha}" in deferred.values():
+    if "CANCELLED" not in pr["checks"] or f"rerun {sha}" in noticed or withheld(pr) or f"{n} {sha}" in deferred.values():
       return ""
     noticed.add(f"rerun {sha}")
     got = await bash(rehead('.conclusion == "cancelled"'), show=HIDDEN, timeout=300)
@@ -2175,9 +2184,7 @@ async def heal(pr: dict, red: bool) -> str:
   if (
     pr["base"] == "main"
     and not red
-    and not pr["draft"]
-    and not on_hold(pr)
-    and "paused" not in pr["labels"]
+    and not withheld(pr)
     and not fixing(pr)
     and f"heal update {sha}" not in noticed
     and (n not in updated or clock() - updated[n] >= UPDATED)
@@ -2757,7 +2764,7 @@ async def watch_ci() -> None:
         return k, ""
     return "", ""
 
-  got = await bash(f"python3 -I - {shq(json.dumps(sorted(runs_read)))}", stdin=CI_PY, show=HIDDEN, timeout=900)
+  got = await bash(f"python3 -I - {shq(json.dumps(sorted(runs_read)))}", stdin=CI_PY, show=HIDDEN, timeout=900, ok=True)
   if got.code != 0 or not got.stdout.content.startswith("{"):
     notice(f"ci {int(clock() // 3600)}", "The command that measures the gates failed: " + (got.stderr.content or got.stdout.content)[-500:])
     return
@@ -2822,7 +2829,7 @@ async def linking() -> None:
     if len(layers) < 2 or f"linked {numbers}" in noticed:
       continue
     noticed.add(f"linked {numbers}")
-    got = await bash(f"gh stack link {numbers} 2>&1", show=HIDDEN, timeout=120)
+    got = await bash(f"gh stack link {numbers} 2>&1", show=HIDDEN, timeout=120, ok=True)
     said = " ".join(got.stdout.content.split())[-200:]
     names = " <- ".join("#" + str(up["n"]) for up in layers)
     linked = got.code == 0 and "✗" not in got.stdout.content
@@ -2834,12 +2841,23 @@ deferred: dict[str, str] = globals().setdefault("deferred", {})
 THROTTLE = 6
 
 
+def withheld(pr: dict) -> str:
+  below = next((p for p in prs.values() if p["head"] == pr["base"]), None)
+  if pr["draft"]:
+    return "its PR is a draft"
+  if on_hold(pr) or "paused" in pr["labels"]:
+    return "its PR is held"
+  if below and below["verdict"] != "pass":
+    return "a layer below it is not green yet"
+  return ""
+
+
 async def throttle() -> None:
   """Each sweep cancels the queued runs of the gates that can serve no merge, so the runners take those that can."""
   got = await bash(
     "gh run list --workflow gates.yml --status queued --limit 100 --json databaseId,headBranch,headSha,event",
     show=HIDDEN,
-    timeout=120,
+    timeout=120, ok=True,
   )
   if got.code != 0 or not got.stdout.content.strip().startswith("["):
     return
@@ -2850,23 +2868,19 @@ async def throttle() -> None:
     if run.get("event") != "pull_request" or run["headBranch"] == "main":
       continue
     pr = heads.get(run["headBranch"])
-    below = next((p for p in prs.values() if pr and p["head"] == pr["base"]), None)
-    why = ""
     if not pr:
       why = "its PR is closed"
     elif run["headSha"] != pr["sha"]:
       why = "its PR has a newer head"
-    elif pr["draft"] or on_hold(pr) or "paused" in pr["labels"]:
-      why = "its PR is a draft or held"
     elif pr["mergeable"] == "CONFLICTING":
       why = "its PR conflicts"
-    elif below and below["verdict"] != "pass":
-      why = "a layer below it is not green yet"
-      deferred[str(run["databaseId"])] = f"{pr['n']} {pr['sha']}"
+    else:
+      why = withheld(pr)
+      # A draft runs its gates again when it is made ready, so the round owes a run only to a hold or a layer below.
+      if why and not pr["draft"]:
+        deferred[str(run["databaseId"])] = f"{pr['n']} {pr['sha']}"
     if why:
       cut.append((run, why))
-      if str(run["databaseId"]) not in deferred:
-        noticed.add(f"rerun {run['headSha']}")
   if cut:
     await bash("; ".join(f"gh run cancel {run['databaseId']} >/dev/null 2>&1" for run, _ in cut), show=HIDDEN, timeout=120)
     said = ", ".join(f"#{(heads.get(run['headBranch']) or {}).get('n', run['headBranch'])} ({why})" for run, why in cut)
@@ -2895,11 +2909,11 @@ async def throttle() -> None:
   for one, key in list(deferred.items()):
     n, sha = key.split()
     pr = prs.get(int(n))
-    below = next((p for p in prs.values() if pr and p["head"] == pr["base"]), None)
-    if pr and pr["sha"] == sha and below and below["verdict"] != "pass":
+    if pr and pr["sha"] == sha and withheld(pr):
       continue
     del deferred[one]
     if pr and pr["sha"] == sha:
+      noticed.add(f"rerun {sha}")
       await bash(f"gh run rerun {one}", show=HIDDEN, timeout=120)
 
 
@@ -2927,7 +2941,7 @@ async def sweep(every: float) -> None:
   merged.update(json.loads(parts[1]))
   await unheld()
   for one in [x for x in pool.values() if x["pr"] and x["folders"] is None]:
-    files = await bash(f"gh pr view {one['pr']} --json files --jq '.files[].path'", show=HIDDEN, timeout=120)
+    files = await bash(f"gh pr view {one['pr']} --json files --jq '.files[].path'", show=HIDDEN, timeout=120, ok=True)
     if files.code == 0:
       one["folders"] = sorted({x.split("/")[0] for x in files.stdout.lines if x.strip()})
   left = shift()
