@@ -44,6 +44,9 @@ done
 if [ -z "$fetched" ]; then
   git -C "$main" fetch -q origin
 fi
+# The hooks print only what fails, so that the tail of a command that commits and pushes shows the push. The setting is
+# shared by each worktree of the clone, and one that the owner set stays.
+git -C "$main" config --get core.hooksPath >/dev/null || git -C "$main" config core.hooksPath script/hooks
 step="make the worktree"
 
 # Where the branch stands decides how it opens. Git refuses a branch that another worktree holds, and says where.
