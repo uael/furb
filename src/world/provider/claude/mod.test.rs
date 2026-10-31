@@ -981,3 +981,33 @@ fn the_block_before_the_first_open_of_a_chain_in_a_conversation_is_marked_for_th
   cached(&mut later, &mut marked);
   assert_eq!(later[0].get("cache_control"), None, "a conversation marks one block at most");
 }
+
+#[test]
+fn a_turn_is_written_as_composed_by_the_client_and_its_process_loads_no_claude_md() {
+  let yard = Yard::new("composed");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  asked(&model, &[user("first @file /compact")], json!({"session": "chain"})).unwrap();
+  let line: serde_json::Value = serde_json::from_str(&yard.heard()[0]).unwrap();
+  assert_eq!(line["client_composed"], json!(true));
+  let mds = fs::read_to_string(yard.at.join(format!("mds.{}", yard.pids()[0]))).unwrap();
+  assert_eq!(mds, "1");
+}
+
+#[test]
+fn a_process_records_no_snapshot_of_the_system_prompt_when_its_command_line_lists_the_flag() {
+  let yard = Yard::new("snapshot");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  asked(&model, &[user("first")], json!({"session": "chain"})).unwrap();
+  let args = yard.args(&yard.pids()[0]);
+  assert_eq!(after(&args, "--system-prompt-snapshot").as_deref(), Some("off"));
+}
+
+#[test]
+fn a_process_gets_no_flag_that_its_command_line_does_not_list() {
+  let yard = Yard::new("nosnapshot");
+  fs::write(yard.at.join("nosnapshot"), "").unwrap();
+  let model = yard.claude(10_000).completion_model("sonnet");
+  asked(&model, &[user("first")], json!({"session": "chain"})).unwrap();
+  let args = yard.args(&yard.pids()[0]);
+  assert!(!args.iter().any(|one| one == "--system-prompt-snapshot"), "{args:?}");
+}

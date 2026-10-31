@@ -21,7 +21,9 @@
 # a result that says the usage limit ends in as many seconds as the file holds, and when the file signedout.TOKEN
 # stands beside it, a result that says the account is signed out. When the file lost stands beside it, a process
 # that resumes a conversation says on the stderr that it holds no such conversation and ends with a failure before it
-# reads any input, as many times as the file holds, or once when it holds nothing.
+# reads any input, as many times as the file holds, or once when it holds nothing. It lists the flag
+# --system-prompt-snapshot in its help, unless the file nosnapshot stands beside it, and it writes the
+# CLAUDE_CODE_DISABLE_CLAUDE_MDS of each process beside it too, in mds.N, or unset.
 here=$(dirname "$0")
 # A process that furb starts to ask for the models (FURB_CLAUDE_DISCOVER) answers control requests and no turn, and
 # leaves no trace of a process of a turn. It writes a line in discoveries for each one. When the file models stands
@@ -50,7 +52,16 @@ if [ -n "${FURB_CLAUDE_DISCOVER-}" ]; then
   done
   exit 0
 fi
+for arg in "$@"; do
+  if [ "$arg" = --help ]; then
+    echo "Usage: claude [options]"
+    echo "  --system-prompt <prompt>  System prompt to use for the session"
+    [ -f "$here/nosnapshot" ] || echo "  --system-prompt-snapshot <on|off>  Record the system prompt once per conversation"
+    exit 0
+  fi
+done
 printf '%s\0' "$@" > "$here/args.$$"
+printf '%s' "${CLAUDE_CODE_DISABLE_CLAUDE_MDS-unset}" > "$here/mds.$$"
 printf '%s' "${MAX_THINKING_TOKENS-unset}" > "$here/thinking.$$"
 who=${CLAUDE_CODE_OAUTH_TOKEN-unset}
 printf '%s' "$who" > "$here/token.$$"
