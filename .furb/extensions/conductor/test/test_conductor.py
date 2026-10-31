@@ -328,7 +328,7 @@ async def test_a_green_pr_behind_main_updates_its_branch_though_heal_updated_it_
 @JQ
 async def test_a_draft_or_a_held_or_a_paused_pr_gets_no_branch_update_from_heal(conductor: Round) -> None:
   conductor.say(r"compare/main\.\.\.abc", '{"behind_by": 3}')
-  for more in ({"draft": True}, {"labels": ["hold"]}, {"labels": ["paused"]}):
+  for more in ({"draft": True}, {"labels": ["hold"]}, {"labels": ["hold:owner-review"]}, {"labels": ["paused"]}):
     assert await conductor.heal(conductor.pr(checks=("FAILURE", "FAILURE"), **more), False) == ""
   assert "update-branch" not in conductor.log()
   assert "heal update abc" not in conductor.noticed
@@ -412,6 +412,15 @@ async def test_each_brief_forbids_a_window_on_this_machine(conductor: Round) -> 
 @POSIX
 async def test_a_held_green_pr_shows_s_held(conductor: Round) -> None:
   conductor.prs[9] = conductor.pr(n=9, checks=("SUCCESS",), names=["the hooks"], labels=["hold"])
+  await conductor.mark()
+  assert "pr edit 9 --add-label s:held " in conductor.log()
+
+
+@POSIX
+async def test_a_pr_with_the_label_hold_owner_review_is_held_and_tended_by_no_fixer(conductor: Round) -> None:
+  pr = conductor.pr(n=9, checks=("SUCCESS",), names=["the hooks"], labels=["hold:owner-review"])
+  assert conductor.on_hold(pr) and not conductor.tended(pr)
+  conductor.prs[9] = pr
   await conductor.mark()
   assert "pr edit 9 --add-label s:held " in conductor.log()
 
@@ -1741,6 +1750,60 @@ def test_an_issue_that_an_open_pr_names_is_not_queued_and_is_looked_at_again(con
   conductor.say(r"pr list --state all", json.dumps([{"number": 570, "title": "T", "state": "MERGED", "body": "Fixes #394"}]))
   asyncio.run(conductor.take_issues())
   assert [key for key, _, _ in conductor.queue] == ["issue394"]
+
+
+def says_comment(conductor: Round, labels: list[str]) -> None:
+  conductor.prs[7] = conductor.pr(n=7, labels=labels)
+  conductor.say(r"pr list", json.dumps([{"number": 7}]))
+  comment = {
+    "pull_request_url": "u/pulls/7",
+    "id": 55,
+    "user": {"login": "uael"},
+    "reactions": {"+1": 0},
+    "path": "a.py",
+    "line": 3,
+    "body": "Fix this.",
+  }
+  conductor.say(r"pulls/7/comments", json.dumps([comment]))
+
+
+@POSIX
+@JQ
+def test_a_comment_on_a_pr_with_hold_owner_review_goes_to_its_live_maker_and_adds_no_label_hold(
+  conductor: Round,
+) -> None:
+  says_comment(conductor, ["w:k7", "hold:owner-review"])
+  conductor.busy("p1", "k7", SONNET)
+  asyncio.run(conductor.review(False))
+  [(message, on)] = conductor.prompts
+  assert on == "chain-k7" and "hold:owner-review" in message and "Fix this." in message
+  assert "pr edit 7 --add-label hold" not in conductor.log()
+
+
+@POSIX
+@JQ
+def test_a_comment_on_a_pr_with_hold_owner_review_goes_to_the_chain_of_an_ended_maker_on_its_model(
+  conductor: Round,
+) -> None:
+  says_comment(conductor, ["w:k7", "hold:owner-review"])
+  conductor.homes["k7"] = "chain7"
+  conductor.ends["k7"] = [("p9", 7)]
+  conductor.models["p9"] = SONNET_HIGH
+  asyncio.run(conductor.review(False))
+  assert conductor.rungs[0] == (f"actor = {SONNET_HIGH!r}", "chain7")
+  [(message, on)] = conductor.prompts
+  assert on == "chain7" and message.startswith(f"Your work on this chain goes on, now on {SONNET_HIGH}.")
+  assert "Fix this." in message and "hold:owner-review" in message
+  assert "pr edit 7 --add-label hold" not in conductor.log()
+
+
+@POSIX
+@JQ
+def test_a_comment_on_a_pr_without_the_label_still_gets_the_label_hold(conductor: Round) -> None:
+  says_comment(conductor, ["w:k7"])
+  conductor.busy("p1", "k7", SONNET)
+  asyncio.run(conductor.review(False))
+  assert "pr edit 7 --add-label hold\n" in conductor.log()
 
 
 NOT_FOUND = '{"message":"Not Found","documentation_url":"https://docs.github.com/rest","status":"404"}'
