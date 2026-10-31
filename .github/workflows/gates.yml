@@ -193,6 +193,17 @@ jobs:
         with:
           bun-version: "1.4.2"
       - run: bun install --frozen-lockfile
+      - name: time the steps of napi
+        if: runner.os == 'Windows'
+        run: |
+          grep 'source = "git' Cargo.lock | sort -u || true
+          ls ~/.cargo/git ~/.cargo/git/db ~/.cargo/git/checkouts 2>&1 | head -20 || true
+          echo "-- offline"
+          (CARGO_NET_OFFLINE=true cargo metadata --format-version 1 --features typescript --filter-platform "$CARGO_BUILD_TARGET" 2>&1 >/dev/null | head -12) || true
+          echo "-- online"
+          s=$(date +%s)
+          (cargo metadata --format-version 1 --features typescript --filter-platform "$CARGO_BUILD_TARGET" 2>&1 >/dev/null | while IFS= read -r l; do echo "$(date +%T) $l"; done) || true
+          echo "online took $(( $(date +%s) - s )) s"
       # The job of the crate runs the clippy and the tests of the crate with this feature on Windows and on macOS, and
       # the job of the speed of the TUI on Linux.
       - run: bun run build
