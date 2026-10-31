@@ -109,10 +109,14 @@ class Round:
     folder.mkdir()
     (folder / "gh").write_text(f"#!{sys.executable}\n{GH}", encoding="utf-8")
     (folder / "gh").chmod(0o755)
+    # The commands of the round sleep to let GitHub settle. The stub ends at once, so no test waits for GitHub.
+    (folder / "sleep").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    (folder / "sleep").chmod(0o755)
     (tmp / "home.gitconfig").write_text("", encoding="utf-8")
     who = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
     self.env = {
-      **{name: value for name, value in os.environ.items() if not name.startswith("GIT_")},
+      # A python that coverage patches starts slower, and the stub of gh starts for each call of gh.
+      **{n: v for n, v in os.environ.items() if not n.startswith(("GIT_", "COVERAGE_PROCESS_"))},
       **who,
       "GIT_CONFIG_GLOBAL": str(tmp / "home.gitconfig"),
       "GIT_CONFIG_NOSYSTEM": "1",
@@ -1922,7 +1926,10 @@ def test_build_sh_says_who_holds_the_slots_while_it_waits(tmp_path: Path) -> Non
     env = build_slots(tmp_path, holder.pid)
     with out.open("w", encoding="utf-8") as f:
       waiting = subprocess.Popen(["sh", env["SCRIPT"], "echo", "ran"], env=env, stdout=f, stderr=subprocess.STDOUT)
-      time.sleep(3.5)
+      for _ in range(100):
+        time.sleep(0.1)
+        if "slot 3: pid" in out.read_text(encoding="utf-8"):
+          break
       waiting.terminate()
       waiting.wait()
   finally:
