@@ -40,8 +40,8 @@ Seven extensions come with furb, and each life runs them unless a config turns t
   its words and its open commands do not. The extension has no life word. A project changes `SHARE`, `FILTERS`,
   `CHOOSER`, `LISTED` or `BRIEF` in an extension of its own. In the TUI, a rule with the summary marks each compaction
   in the feed, and `/compact` runs `await condense()` on the chain on screen.
-- **`ouroboros`** teaches a model to extend furb. Its file holds the lore, which every chain reads in the setup, so it
-  has no life word. The lore says the three ways to extend furb and when to take each: a def in a word, which lives with
+- **`ouroboros`** teaches a model to extend furb. Its word holds the lore, which every chain reads in the turn of the setup
+  that runs it, so it has no life word. The lore says the three ways to extend furb and when to take each: a def in a word, which lives with
   its chain; `extend(name, *rungs)`, which writes the words of those rungs as an extension of the project and turns it
   on, so every later chain runs it; and an official extension, which lives in furb. `extend(name, *rungs, tui=module)`
   also writes a [part for the TUI](#a-part-for-the-tui). `enabled()` gives the extensions that the life runs.
