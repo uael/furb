@@ -3001,3 +3001,38 @@ def test_the_round_puts_the_chain_of_a_worker_in_the_workspace_it_gives_so_that_
   assert "give cd(" + str(conductor.tmp) + "-w1) in a word of your own" in text
   conductor.placed("k2", "{workspace}")
   assert len(conductor.rungs) == 1
+
+
+@POSIX
+@JQ
+async def test_a_pr_whose_worker_waits_in_parked_gets_no_second_order(conductor: Round) -> None:
+  conductor.homes["k8"] = "chain7"
+  pr = conductor.pr(n=8, open=["- [ ] It is one change."], labels=["w:k8"])
+  conductor.parked["chain7"] = {"name": "", "key": "k8", "model": SONNET, "text": "Go on."}
+  assert conductor.parking(pr) == "chain7"
+  await conductor.mend(pr, 0.0, False)
+  assert (conductor.hired, conductor.rungs, conductor.prompts) == ([], [], [])
+  del conductor.parked["chain7"]
+  assert conductor.parking(pr) == ""
+  await conductor.mend(pr, 0.0, False)
+  assert len(conductor.prompts) == 1
+
+
+@POSIX
+@JQ
+async def test_the_orphan_notice_names_the_parked_worker_of_the_pr(conductor: Round) -> None:
+  conductor.limits["room"]["sonnet"] = 0
+  conductor.owns["k8"] = [8]
+  conductor.parked["chain7"] = {"name": "", "key": "k8", "model": SONNET, "text": "Go on."}
+  seven = raw(8, "w/draft", 5, [])
+  seven["isDraft"], seven["mergeable"] = False, "CONFLICTING"
+  conductor.say(r"pr list --state open", json.dumps([seven]))
+  conductor.say(r"pr list --state merged", "[]")
+  conductor.say(r"run list --branch main", json.dumps([{"headSha": "m1", "conclusion": "success", "databaseId": 9}]))
+  conductor.say(r"issue list", "[]")
+  conductor.say(r"pr list --repo uael/monty", "[]")
+  await conductor.sweep(300)
+  told = [message for message, _ in conductor.prompts]
+  cause = f"its worker waits on chain7 for a free slot of the cap of {conductor.cap()} chains"
+  assert any(m.startswith("#8 is conflicting at sha8 and no worker acts on it, a defect of the round: " + cause) for m in told)
+  assert conductor.hired == []
