@@ -30,7 +30,20 @@ else
 fi
 
 step="fetch origin"
-git -C "$main" fetch -q origin
+# Other workers fetch in the same clone, and two fetches that meet fail with "cannot lock ref". The second try and the
+# third wait a little, and the last one prints its own error.
+fetched=
+for pause in 1 3; do
+  if err=$(git -C "$main" fetch -q origin 2>&1); then
+    fetched=1
+    break
+  fi
+  echo "The fetch of origin failed, so it runs again in $pause s: $(printf '%s' "$err" | tail -n 1)" >&2
+  sleep "$pause"
+done
+if [ -z "$fetched" ]; then
+  git -C "$main" fetch -q origin
+fi
 step="make the worktree"
 
 # Where the branch stands decides how it opens. Git refuses a branch that another worktree holds, and says where.

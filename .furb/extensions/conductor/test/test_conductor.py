@@ -1476,7 +1476,7 @@ async def test_a_child_stays_when_its_parent_only_gains_a_commit(conductor: Roun
 
 
 def test_each_brief_holds_the_recipes_that_fixers_found(conductor: Round) -> None:
-  for word in ("credential.helper", "actions/jobs", "sed -i ''", "timeout=1800", "hypothesis"):
+  for word in ("credential.helper", "actions/jobs", "sed -i ''", "timeout=1800", "hypothesis", "git stash", "cannot lock ref"):
     assert word in conductor.WORKER
     assert word in conductor.FIX
   assert "{workspace}" in conductor.WORKER and "Leave the workspace clean" in conductor.WORKSPACE
