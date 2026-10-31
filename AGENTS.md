@@ -302,7 +302,7 @@ fix what your change broke, and report what was broken before.
   `tui/script/test.ts` deals the tests into runs, each a process that runs one test at a time with a limit of thirty
   seconds, and runs twice as many at once as the machine has cores. A word after `bun run test` filters the files, and a
   filter that matches no file fails. `FURB_TEST_OUTPUT=1` shows all that each run wrote. The tests read the configs and
-  the cache of `.furb/tests`, not those of the machine. As root, the test of a folder that cannot be read fails, since
+  the cache of `.furb/tests` of the root, from any folder, not those of the machine. As root, the test of a folder that cannot be read fails, since
   root reads every folder.
 - `bun run demo` and `bun run tui`: the TUI on the demo session, which asks no model, or on a real life.
 - `bun run docs`: write the tables of keys and commands in `tui/README.md` again from `tui/src/keys.ts` and
