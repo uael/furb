@@ -569,10 +569,34 @@ async def based_now(pr: dict) -> str:
   return f" Its base is {base}, whose head changed from {old} to {new}: {move}.{ref}{lost}"
 
 
+SQUASHED = """git fetch -q origin main "refs/pull/$n/head" || exit 1
+git cherry -v origin/main "$sha" | cut -c1-120"""
+
+
+async def squashed(pr: dict) -> str:
+  got = await bash(f"n={pr['n']} sha={shq(pr['sha'])}\n" + SQUASHED, show=HIDDEN, timeout=120)
+  rows = [x.split(" ", 2) for x in got.stdout.lines if x[:2] in ("+ ", "- ")] if got.code == 0 else []
+  held = [(x[1], x[2] if len(x) > 2 else "") for x in rows if x[0] == "-"]
+  if not held:
+    return ""
+  last = max(i for i, x in enumerate(rows) if x[0] == "-")
+  if all(x[0] == "-" for x in rows[: last + 1]):
+    fix = f"git rebase --onto origin/main {held[-1][0][:12]} {pr['head']} replays only the commits after them"
+  else:
+    fix = "git rebase origin/main drops them as it replays your other commits"
+  lines = "\n".join(f"  {one[:7]} {title}" for one, title in held[:8])
+  return (
+    f"\nThis is no stack. The branch of this PR holds {len(held)} commit{'' if len(held) == 1 else 's'} whose patch"
+    " main holds already, the commits of a PR that main took as one squash commit, so a merge of main conflicts on"
+    f" them and gh stack sync does not help:\n{lines}\nFix: {fix}.\n"
+  )
+
+
 async def main_changes(pr: dict) -> str:
+  held = await squashed(pr)
   got = await bash(f"n={pr['n']} sha={shq(pr['sha'])}\n" + CHANGED, show=HIDDEN, timeout=120)
   if got.code != 0:
-    return ""
+    return held
   commits: list[list] = []
   for line in got.stdout.lines:
     parts = line.split("\t")
@@ -585,7 +609,7 @@ async def main_changes(pr: dict) -> str:
         commits[-1][2].append(f"{parts[1]} to {parts[2]}")
       commits[-1][3] += 1
   if not commits:
-    return ""
+    return held
   commits.sort(key=lambda c: not (c[1] or c[2] or " Revert" in " " + c[0].split(" ", 1)[-1]))
   rows = []
   for title, gone, moved, files in commits[:8]:
@@ -594,7 +618,7 @@ async def main_changes(pr: dict) -> str:
       + (f"; it deletes {', '.join(gone[:4])}" if gone else "")
       + (f"; it moves {', '.join(moved[:4])}" if moved else "")
     )
-  return (
+  return held + (
     "\nThe commits of main since the fork that changed a file of this PR (a revert, a deleted file or a moved file"
     " means that your hunks belong in another place):\n" + "\n".join(rows) + "\n"
   )
