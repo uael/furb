@@ -669,6 +669,48 @@ test("an act that no word made stands as a lit line of python in a panel, which 
     { width: 120, height: 40 },
   ));
 
+test("a tick writes only the time of a line that runs, and the text of its program is laid out once", () =>
+  composing(
+    async ({ session, app, screen, frame }) => {
+      const start = Date.now();
+      setSystemTime(new Date(start));
+      try {
+        const id = await session.engine.wait([], { seconds: 60, on: session.engine.root });
+        await session.refresh();
+        let layouts = 0;
+        const layout = app.programView.bind(app);
+        Reflect.set(app, "programView", (...args: Parameters<typeof layout>) => {
+          layouts++;
+          return layout(...args);
+        });
+        setSystemTime(new Date(start + 1300));
+        const first = (await frame()).split("\n");
+        const built = layouts;
+        expect(first.filter((line) => line.includes(`${id} = wait(60)`)).length).toBe(1);
+        expect(first.join("\n")).toMatch(/# waits 60s +1\.0s/);
+        // The tick reads the time of the line again, and asks for a frame when it changed.
+        const view = [...app.liveLines.keys()][0];
+        if (!view) throw new Error("No program view holds a line that runs.");
+        const times = app.liveLines.get(view);
+        setSystemTime(new Date(start + 2300));
+        await new Promise((done) => setTimeout(done, 350));
+        expect(times?.shown).toBe("2.0s");
+        await screen.flush();
+        const second = screen.captureCharFrame().split("\n");
+        // Only the time moved: the frames differ in that row alone, and by the time alone.
+        const moved = second.flatMap((line, row) => (line === first[row] ? [] : [row]));
+        expect(moved.length).toBe(1);
+        const time = /(# waits 60s) +\d+\.\ds/;
+        expect(second[moved[0] ?? 0]).toMatch(/# waits 60s +2\.0s/);
+        expect(second[moved[0] ?? 0]?.replace(time, "$1")).toBe(first[moved[0] ?? 0]?.replace(time, "$1"));
+        expect(layouts).toBe(built);
+      } finally {
+        setSystemTime();
+      }
+    },
+    { width: 120, height: 40 },
+  ));
+
 test("a name inside a transcript tag opens the same live inspector as Python code", () =>
   composing(
     async ({ session, app, screen, frame }) => {
