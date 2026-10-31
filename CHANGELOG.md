@@ -3,6 +3,29 @@
 Each release of furb is listed here, the newest first. release-please writes the entry of each release from the
 titles of the pull requests that it holds, as [the template of a pull request](.github/pull_request_template.md) says.
 
+## [0.3.5](https://github.com/uael/furb/compare/v0.3.4...v0.3.5) (2026-10-31)
+
+
+### Features
+
+* **config:** Read a local config of the project that git ignores ([#805](https://github.com/uael/furb/issues/805)) ([3efa5b5](https://github.com/uael/furb/commit/3efa5b5b27afa147e5d683bd0ec0692112a565da))
+
+
+### Fixes
+
+* **conductor:** Take a marked issue that the owner approves ([#813](https://github.com/uael/furb/issues/813)) ([c608f29](https://github.com/uael/furb/commit/c608f2956ceb261a58293fc22c3470eb32824859))
+* **docs:** Drop five blank lines that the cleanup doubled ([#799](https://github.com/uael/furb/issues/799)) ([ab52b7c](https://github.com/uael/furb/commit/ab52b7c34cc8d722b8aa36d030aae6b368eb59f1))
+* **doctrine:** Tell a model never to write a word that does nothing ([#809](https://github.com/uael/furb/issues/809)) ([17a1ded](https://github.com/uael/furb/commit/17a1ded32faf511cc4ee5a4e99486d59a03c63de))
+* **engine:** Replay no empty word as a turn of a model ([#804](https://github.com/uael/furb/issues/804)) ([58adf2e](https://github.com/uael/furb/commit/58adf2e461eded6f4ad5bc341a0ac6033d3f7a3d))
+* **extension:** Play nothing of an extension whose word is blank ([#806](https://github.com/uael/furb/issues/806)) ([06f49b0](https://github.com/uael/furb/commit/06f49b0a735e0349304836fb8e16bb6890f9fc61))
+* **provider:** Bind the findings of a fault after the word that ran ([#808](https://github.com/uael/furb/issues/808)) ([8a1cf9a](https://github.com/uael/furb/commit/8a1cf9a67188394deaf99870bb33f3791c830ed3))
+* **tui:** Escape each pipe of a command in the README tables ([#802](https://github.com/uael/furb/issues/802)) ([6c7a16f](https://github.com/uael/furb/commit/6c7a16f9865e740cc3b6642d3bcfdf8f3d341eb2))
+
+
+### Performance
+
+* **conductor:** Stop the tests of the round from waiting ([#811](https://github.com/uael/furb/issues/811)) ([d09d874](https://github.com/uael/furb/commit/d09d8741bb48225592bba55099dd7111ce5cef8e))
+
 ## [0.3.4](https://github.com/uael/furb/compare/v0.3.3...v0.3.4) (2026-10-30)
 
 
