@@ -140,6 +140,7 @@ OWNED = 900.0
 HELD = 120.0
 GALLERY = "w/gallery"
 GALLERY_WAIT = 6 * 3600.0
+UNREAD = 300.0
 tips: dict[str, str] = globals().setdefault("tips", {})
 shifted: dict[int, tuple[str, str]] = globals().setdefault("shifted", {})
 parents: dict[int, str] = globals().setdefault("parents", {})
@@ -1203,7 +1204,13 @@ async def mend(pr: dict, now: float, red: bool) -> str:
           f"#{n} waited on a red main at {sha[:7]}, and main is green again, so the round updated its branch."
         )
         return "running"
-  if red and state in ("red", "main") and pr["verdict"] == "fail" and await on_main(pr):
+  waits = await on_main(pr) if red and state in ("red", "main") and pr["verdict"] == "fail" else False
+  if waits is None:
+    # The round orders nothing for a PR whose failed lines it cannot read yet, until UNREAD seconds pass.
+    if now - timers.setdefault(f"unread {n} {sha}", now) < UNREAD:
+      return "running"
+    onmain[n] = (sha, next(iter(redmain), ""), False)
+  if waits:
     if f"waits {n} {sha}" not in noticed:
       noticed.add(f"waits {n} {sha}")
       if f"red {next(iter(redmain))}" in noticed:
@@ -1287,17 +1294,21 @@ async def failed_lines(pr: dict) -> list[str]:
 
 
 def alike(line: str) -> str:
-  # The same failure shows in two logs with other times, durations and colors.
-  return re.sub(r"\x1b\[[\d;]*m|\d{4}-\d\d-\d\dT[\d:.]+Z ?|\[[\d.]+m?s\]", "", line).strip()
+  # The same failure shows in two logs with other times, durations, colors, systems and path separators.
+  line = re.sub(r"\x1b\[[\d;]*m|\d{4}-\d\d-\d\dT[\d:.]+Z ?|\[[\d.]+m?s\]", "", line)
+  return re.sub(r"\b(?:ubuntu|macos|windows)-latest\b", "os", line).replace("\\", "/").strip()
 
 
-async def on_main(pr: dict) -> bool:
+async def on_main(pr: dict) -> bool | None:
   tip = next(iter(redmain), "")
   held = onmain.get(pr["n"])
   if held and held[:2] == (pr["sha"], tip):
     return held[2]
   mine = {alike(x) for x in await failed_lines(pr)} - {""}
-  waits = bool(tip and mine and mine <= {alike(x) for x in redmain[tip]})
+  if not mine:
+    # An empty read is unknown, not a fault of the PR: the log of a job that just ended can be late, so no verdict stays.
+    return None
+  waits = bool(tip and mine <= {alike(x) for x in redmain[tip]})
   onmain[pr["n"]] = (pr["sha"], tip, waits)
   return waits
 
@@ -1977,11 +1988,11 @@ for id in $(gh run list --commit {sha} --limit 50 --json databaseId,workflowName
 
 BEHIND = """[ "$(gh api 'repos/{owner}/{repo}/compare/main...{sha}' --jq .behind_by 2>/dev/null)" -gt 0 ] 2>/dev/null && gh pr update-branch {n} >/dev/null 2>&1 && echo updated"""
 
-FAILLINES = r"""gh run view "$id" --log-failed 2>/dev/null | grep -E 'FAILED|panicked|Error|error\[|AssertionError|\(fail\)|timed out' | cut -f1,3 | head -30 | cut -c1-300"""
+FAILLINES = r"""for id in $ids; do gh api "repos/{owner}/{repo}/actions/runs/$id/jobs" --paginate --jq '.jobs[] | select(.conclusion == "failure" or .conclusion == "timed_out") | "\(.id)\t\(.name)"'; done | while IFS=$(printf '\t') read -r job name; do gh api "repos/{owner}/{repo}/actions/jobs/$job/logs" 2>/dev/null | grep -E 'FAILED|panicked|Error|error\[|AssertionError|\(fail\)|timed out' | awk -v n="$name" '{print n "\t" $0}'; done | head -30 | cut -c1-300"""
 
-REDLINES = r"""id=$(gh run list --branch main --workflow gates.yml --commit {sha} --limit 1 --json databaseId --jq '.[0].databaseId'); """ + FAILLINES
+REDLINES = r"""ids=$(gh run list --branch main --workflow gates.yml --commit {sha} --limit 1 --json databaseId --jq '.[].databaseId'); """ + FAILLINES
 
-PRLINES = r"""id=$(gh run list --commit {sha} --limit 30 --json databaseId,conclusion --jq '[.[] | select(.conclusion == "failure" or .conclusion == "timed_out")][0].databaseId'); [ -n "$id" ] && [ "$id" != null ] && """ + FAILLINES
+PRLINES = r"""ids=$(gh run list --commit {sha} --limit 30 --json databaseId,conclusion --jq '.[] | select(.conclusion != "success") | .databaseId'); """ + FAILLINES
 
 UPSTREAMING = """gh pr list --repo {upstream} --label upstream-ready --state open --json number,headRefName,title,url,labels --jq '.[] | select([.labels[].name] | index("upstreamed") | not) | "\\(.number)\\t\\(.headRefName)\\t\\(.title)\\t\\(.url)"'"""
 
