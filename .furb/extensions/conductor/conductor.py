@@ -1662,7 +1662,7 @@ async def review(seed: bool) -> None:
     else:
       told.append(line)
   if held:
-    await conduct_sh("".join(f"gh pr edit {n} --add-label hold >/dev/null 2>&1; " for n in sorted(held)), show=HIDDEN, timeout=300)
+    await bash("".join(f"gh pr edit {n} --add-label hold >/dev/null 2>&1; " for n in sorted(held)), show=HIDDEN, timeout=300)
   if told:
     quietly(prompt, None, "New comments of the owner that no worker owns:\n" + "\n".join(told) + merged_since())
 
@@ -1844,7 +1844,7 @@ async def mark() -> None:
         + " >/dev/null 2>&1"
       )
   if edits:
-    await conduct_sh("; ".join(edits), show=HIDDEN, timeout=600)
+    await bash("; ".join(edits), show=HIDDEN, timeout=600)
 
 
 PRIVATE = ".furb/extensions/conductor/private.json"
@@ -2646,7 +2646,7 @@ async def throttle() -> None:
       if str(run["databaseId"]) not in deferred:
         noticed.add(f"rerun {run['headSha']}")
   if cut:
-    await conduct_sh("; ".join(f"gh run cancel {run['databaseId']} >/dev/null 2>&1" for run, _ in cut), show=HIDDEN, timeout=120)
+    await bash("; ".join(f"gh run cancel {run['databaseId']} >/dev/null 2>&1" for run, _ in cut), show=HIDDEN, timeout=120)
     said = ", ".join(f"#{(heads.get(run['headBranch']) or {}).get('n', run['headBranch'])} ({why})" for run, why in cut)
     heard.append(f"The round cancelled queued runs of the gates that could serve no merge: {said}.")
     for run, _ in cut:
@@ -2678,7 +2678,7 @@ async def throttle() -> None:
       continue
     del deferred[one]
     if pr and pr["sha"] == sha:
-      await conduct_sh(f"gh run rerun {one}", show=HIDDEN, timeout=120)
+      await bash(f"gh run rerun {one}", show=HIDDEN, timeout=120)
 
 
 async def sweep(every: float) -> None:
@@ -2764,7 +2764,7 @@ async def sweep(every: float) -> None:
       continue
     if pr.get("files") == 0 and not pr["draft"]:
       said = "🤖 This PR changes no file: main holds all of its change, so the round closes it."
-      await conduct_sh(f"gh pr close {n} --comment {shq(said)}", show=HIDDEN, timeout=120)
+      await bash(f"gh pr close {n} --comment {shq(said)}", show=HIDDEN, timeout=120)
       heard.append(f"#{n} ({pr['head']}) changed no file, so the round closed it.")
       continue
     pr["state"] = await mend(pr, now, red)
@@ -2852,7 +2852,7 @@ async def conduct(every: float = 300) -> dict[str, object]:
   here, at = follow(), "labels"
   try:
     made = "".join(f"gh label create {s} --force -c {c} -d {shq(d)} >/dev/null 2>&1; " for s, (c, d) in STATUS.items())
-    await conduct_sh(made + LABELS, show=HIDDEN)
+    await bash(made + LABELS, show=HIDDEN)
     while lead.get("home") == here:
       for at in ("tend", "sweep", "staff", "invariants"):
         try:

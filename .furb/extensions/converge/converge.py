@@ -788,7 +788,7 @@ async def screened(target: dict, book: dict, job: dict, gaps: list[list[str]], w
     " the conductor does not merge it until a head shows none of these gaps:\n\n"
     + "\n".join(f"- {shot}: {gap}" + (f" His words: {quote}" if quote else "") for shot, gap, quote in gaps[:LIMIT])
   )
-  await converge_sh(f"gh pr comment {n} --body-file -", stdin=body, show=HIDDEN, timeout=120)
+  await bash(f"gh pr comment {n} --body-file -", stdin=body, show=HIDDEN, timeout=120)
   told = (
     f"converge judged the head {sha[:7]} of your PR #{n} against the words of the owner, which follow, and the"
     f" conductor does not merge it until a head shows none of the gaps below. Fix them and push."
