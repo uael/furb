@@ -188,7 +188,7 @@ class Running:
             # part waits for its act with no wants, and goes on at the done of that act.
             self.awaits.setdefault(got, []).append(run)
           return None
-        given = peek(got)
+        given = self.given(got, peek(got))
 
   def wants(self, job: str, made: str) -> bool:
     """A wants for the act that a job waits for, made as the run of its rung, once that run stands in the line of
@@ -201,6 +201,22 @@ class Running:
     assert isinstance(wants, str)
     self.waits[wants] = job
     return True
+
+  def given(self, made: str, value: object) -> object:
+    """What a word that awaits the act made is given of what that act came to: a Failed in the place of the Exit of a
+    command whose code is not one of the codes that it accepts, which its words hold after its timeout, and else
+    that value, so the word stops where the command failed and the command keeps its Exit."""
+    asked, shape = verb(self.names, "get")(made), self.names["Exit"]
+    assert isinstance(shape, type)
+    if not (isinstance(asked, tuple) and asked[0] == "bash" and isinstance(value, shape)):
+      return value
+    code, ok = getattr(value, "code"), next(iter(asked[7:]), None)  # noqa: B009
+    if ok is None or code in ok:
+      return value
+    ended = f"timed out after {asked[6]}s" if code is None else f"exited {code}"
+    failed = verb(self.names, "Failed")(f"{made} {ended}")
+    assert isinstance(failed, BaseException)
+    return failed
 
   def refusal(self, got: object) -> BaseException:
     made = verb(self.names, "Refused")(f"a rung awaits an act, and {got!r} is none")
@@ -313,10 +329,12 @@ def kernel(names: Names) -> Ear:
         held.begin(run)
       case ("done", made, _, value) if made in held.awaits:
         for one in held.awaits.pop(made):
-          held.carry(one, value)
+          held.carry(one, held.given(made, value))
       case ("done", waited, _, value) if waited in held.lingers:
         held.lingered(waited, value)
       case ("done", wants, _, value) if wants in held.waits:
-        held.carry(held.waits.pop(wants), value)
+        asked = verb(names, "get")(wants)
+        assert isinstance(asked, tuple)
+        held.carry(held.waits.pop(wants), held.given(str(asked[4]), value))
       case ("cancel" | "close", *_) as control:
         held.dropped(control)

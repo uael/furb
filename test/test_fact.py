@@ -11,11 +11,11 @@ async def test_a_fact_is_a_tuple_its_kind_the_act_it_is_about_who_said_it_and_it
   act = engine.bash("echo hi", stdin="go", on=root)
   word = said(log, "bash")[0]
   match word:
-    case ("bash", about, by, on, command, stdin, timeout):
-      got = (about, by, on, command, stdin, timeout)
+    case ("bash", about, by, on, command, stdin, timeout, ok):
+      got = (about, by, on, command, stdin, timeout, ok)
     case _:
       got = None
-  assert got == (act, OPERATOR, root, "echo hi", "go", 120.0)
+  assert got == (act, OPERATOR, root, "echo hi", "go", 120.0, (0,))
 
 
 async def test_everything_that_the_engine_the_world_the_kernel_and_the_operator_say_is_a_fact() -> None:

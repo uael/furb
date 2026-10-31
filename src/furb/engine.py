@@ -43,7 +43,7 @@ def take(*ids: str, inside=True) -> Filter:
   return lambda facts: [a for a in facts if any(under(a[1], one) for one in ids) == inside]
 
 
-def read(path: str, show: Show = HEAD, on="") -> Text:
+def read(path: str, show=HEAD, on="") -> Text:
   got = ask("read", on, path)
   if acting() and isinstance(got, Text) and (size := len(shown(got, show).encode())) > LARGEST:
     raise Refused(f"{path} shows {size} bytes, over {LARGEST}")
@@ -427,17 +427,17 @@ def grant(usd: float | None = None, share: float | None = None, on="") -> Act[No
 
 
 def bash(
-  command: str, stdin: str | None = "", timeout=TIMEOUT, show: Show = TAIL, show_err: Show | None = None, on=""
+  command: str, stdin: str | None = "", timeout=TIMEOUT, ok=(0,), show=TAIL, show_err: Show | None = None, on=""
 ) -> Act[Exit]:
   def ear(id):
-    yield opened(id, "Exit", command="" if show is HIDDEN else command)
+    yield opened(id, "Exit", command=command * (show != HIDDEN))
     while True:
       match (yield {id, "merged"}):
         case ("merged", qid, *_, about) if about == id:
           yield "done", qid, show_err is None
         case ("done", about, _, got) if about == id:
           match got:
-            case Exit(code, out, err) if show is not HIDDEN:
+            case Exit(code, out, err) if show != HIDDEN:
               yield told(
                 id,
                 f"timed out after {timeout}s" if code is None else f"exited {code}",
@@ -446,7 +446,7 @@ def bash(
               )
           return
 
-  return act("bash", on, controlled(ear, True), command, stdin, timeout)
+  return act("bash", on, controlled(ear, True), command, stdin, timeout, ok)
 
 
 @dataclass
@@ -520,6 +520,9 @@ class Refused(Exception): ...
 class Drift(Exception): ...
 
 
+class Failed(Exception): ...
+
+
 def lineage(name):
   yield name
   while a := get(name):
@@ -555,7 +558,7 @@ def tell(on, path="", got=None, show=HEAD, **words):
       path=path,
       **words,
       **{"numbers": at if (at := show(got.lines)) and at[-1] - at[0] >= len(at) else None, "text": shown(got, show)}
-      if isinstance(got, Text)
+      if type(got) is Text
       else {"value": got},
     )
   )

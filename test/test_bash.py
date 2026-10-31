@@ -79,12 +79,14 @@ async def test_the_commands_of_the_world_run_at_the_same_time() -> None:
   assert ((await one).code, (await two).code) == (0, 1)
 
 
-async def test_bash_is_given_a_command_its_stdin_a_timeout_and_a_show_for_each_stream() -> None:
-  """bash is given a command, its stdin, a timeout, and a show for each stream, the plain words first, so the journal makes it again."""
+async def test_bash_is_given_a_command_its_stdin_a_timeout_the_codes_that_it_accepts_and_a_show_for_each_stream() -> (
+  None
+):
+  """bash is given a command, its stdin, a timeout, the codes that it accepts, and a show for each stream, the plain words first, so the journal makes it again."""
   sand, log, root = born(auto=False)
-  engine.bash("echo hi", "go", 5.0, HEAD, TAIL, on=root)
+  engine.bash("echo hi", "go", 5.0, (0, 1), HEAD, TAIL, on=root)
   word = said(log, "bash")[0]
-  assert word == ("bash", word[1], OPERATOR, root, "echo hi", "go", 5.0)
+  assert word == ("bash", word[1], OPERATOR, root, "echo hi", "go", 5.0, (0, 1))
   assert [e[0] for e in sand.record if e[0][0] == "bash"] == [word]
   again, _ = await relived(Sand(auto=False), plain(sand.record))
   assert said(again, "bash") == [word]
@@ -486,7 +488,7 @@ async def test_the_world_hears_the_bash_itself() -> None:
   engine.cd("/deep", on=root)
   one = engine.bash("echo hi", stdin=None, timeout=5.0, show=HIDDEN, show_err=TAIL, on=root)
   assert (await one).stdout.content == "ran echo hi\n"
-  assert said(log, "bash") == [("bash", one, OPERATOR, root, "echo hi", None, 5.0)]
+  assert said(log, "bash") == [("bash", one, OPERATOR, root, "echo hi", None, 5.0, (0,))]
 
 
 async def test_the_world_that_takes_a_command_answers_it() -> None:
@@ -523,3 +525,29 @@ async def test_the_world_runs_the_command_in_a_posix_sh(tmp_path: Path) -> None:
   got = await engine.bash('n=6; echo "$((n * 7))" "${n#6}x"', on=root)
   live.end()
   assert (got.code, got.stdout.content, Path(_monty.shell()).stem) == (0, "42 x\n", "sh")
+
+
+async def test_a_command_accepts_the_code_0_alone_and_ok_names_the_codes_that_it_accepts_in_its_place() -> None:
+  """A command accepts the code 0 alone, and ok names the codes that it accepts in its place, as ok=(0, 1) for a grep or a diff, which exits 1 for no match or for a difference."""
+  sand, log, root = born(
+    "one = bash('grep', ok=(0, 1))\ngot = await one\ntwo = bash('false')\ntry:\n  await two\nexcept Failed as no:\n  close([got.code, str(no)])",
+    auto=False,
+  )
+  asked = engine.prompt(list, "run them", on=root)
+  await settle()
+  one = said(log, "bash")[0][1]
+  sand.exits(one, 1)
+  await settle()
+  two = said(log, "bash")[1][1]
+  sand.exits(two, 1)
+  assert await asked == [1, f"{two} exited 1"]
+  assert [a[7] for a in said(log, "bash")] == [(0, 1), (0,)]
+
+
+async def test_a_command_with_ok_none_accepts_every_code_the_none_of_a_timeout_among_them() -> None:
+  """A command with ok=None accepts every code, the None of a timeout among them."""
+  sand, log, root = born("one = bash('slow', ok=None)\ngot = await one\nclose(str(got.code))", auto=False)
+  asked = engine.prompt(str, "run it", on=root)
+  await settle()
+  sand.exits(said(log, "bash")[0][1], None)
+  assert await asked == "None"

@@ -62,7 +62,7 @@ async def test_a_part_that_waits_for_an_act_while_its_model_writes_makes_no_want
   answered(reply, first + "close(3)")
   await settle()
   assert rung in [a[4] for a in said(log, "run")]
-  sand.exits(said(log, "bash")[0][1], 1)
+  sand.exits(said(log, "bash")[0][1], 0)
   assert await act == 3
 
 

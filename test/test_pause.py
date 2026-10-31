@@ -94,11 +94,11 @@ async def test_an_act_made_in_that_time_it_hears_at_once() -> None:
   step = engine.rung("x = bash('two')\nclose((await x).code)", on=root)
   await settle()
   engine.pause(step)
-  sand.exits(said(log, "bash")[-1][1], 5)
+  sand.exits(said(log, "bash")[-1][1], 0)
   await settle()
   assert [a[2] for a in said(log, "started") if a[1] in [w[1] for w in said(log, "wants")]] == [step]
   engine.wake(step)
-  assert await step == 5
+  assert await step == 0
 
 
 async def test_a_pause_stands_over_what_is_made_after_it_until_the_wake() -> None:

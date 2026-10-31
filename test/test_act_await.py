@@ -57,6 +57,28 @@ async def test_to_await_a_cancelled_act_raises_cancellederror() -> None:
     await one
 
 
+async def test_a_word_that_awaits_a_command_whose_code_is_not_one_that_it_accepts_raises_failed() -> None:
+  """A word that awaits a command whose code is not one that the command accepts raises Failed where it waited, and the command keeps its Exit, which peek gives."""
+  sand, log, root = born("x = bash('false')\nawait x\nclose(1)", "close(2)", auto=False)
+  asked = engine.prompt(int, "run it", on=root)
+  await settle()
+  one = said(log, "bash")[0][1]
+  sand.exits(one, 1)
+  assert await asked == 2
+  await settle()
+  assert f"#rung1 raised\nrung1_raised = Failed('{one} exited 1')" in paragraphs(engine.turns(on=root))
+  assert engine.peek(one) == Exit(1, Text(f"{one}/stdout"), Text(f"{one}/stderr"))
+
+
+async def test_the_operator_is_given_the_exit_of_a_command_whatever_its_code() -> None:
+  """The operator, which awaits from outside a run, is given the Exit of a command whatever its code, since the codes that a command accepts rule the word that awaits it."""
+  sand, _, root = born(auto=False)
+  one = engine.bash("false", on=root)
+  await settle()
+  sand.exits(one, 1)
+  assert (await one).code == 1
+
+
 async def test_a_word_that_awaits_a_chain_raises_refused_where_it_waited() -> None:
   """A word that awaits a chain raises Refused where it waited, since a chain never settles and the word could go no further."""
   _, log, root = born("sub = chain('sub')\nawait sub\nclose(1)", "close(2)")

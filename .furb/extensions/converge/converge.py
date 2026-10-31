@@ -145,14 +145,14 @@ async def ruling(target: dict) -> str:
   repo = conductor()["ops"]()[0]
   jq = r'"## #\(.number) \(.title)\n\n\(.body)" + ([.comments[] | "\n\n-- \(.author.login), \(.createdAt[0:10]):\n\n\(.body)"] | join(""))'
   views = [f"gh issue view {n} --repo {shq(repo)} --json number,title,body,comments --jq {shq(jq)}" for n in target["words"]]
-  got = await bash(" && echo && ".join(views), show=HIDDEN, timeout=300)
+  got = await bash(" && echo && ".join(views), show=HIDDEN, timeout=300, ok=None)
   if got.code != 0 or not got.stdout.content.strip():
     raise Refused(f"the words of the owner on {target['name']} did not load: {got.stderr.content[-300:]}")
   return got.stdout.content.strip()
 
 
 async def main_head() -> str:
-  got = await bash("git fetch -q origin main && git rev-parse origin/main", show=HIDDEN, timeout=300)
+  got = await bash("git fetch -q origin main && git rev-parse origin/main", show=HIDDEN, timeout=300, ok=None)
   return got.stdout.content.strip() if got.code == 0 else ""
 
 
@@ -168,7 +168,7 @@ async def moved(target: dict, since: str, head: str, only: list[str] | None = No
     return False
   shq = conductor()["shq"]
   paths = " ".join(shq(p) for p in (target["paths"] if only is None else only))
-  got = await bash(f"git diff --quiet {shq(since)} {shq(head)} -- {paths}", show=HIDDEN, timeout=120)
+  got = await bash(f"git diff --quiet {shq(since)} {shq(head)} -- {paths}", show=HIDDEN, timeout=120, ok=None)
   return got.code != 0
 
 
@@ -191,7 +191,7 @@ def capturing(target: dict, pairs: list[tuple[str, str]], out: str, pins: dict, 
 
 async def shots(target: dict, out: str, was: str, whole: bool, labels: tuple[str, str]) -> dict:
   command, stdin = does(target, "differ")(target, out, was, whole, labels)
-  got = await bash(command, stdin=stdin, show=HIDDEN, timeout=900)
+  got = await bash(command, stdin=stdin, show=HIDDEN, timeout=900, ok=None)
   try:
     seen = json.loads(read(f"{out}/shots.json", HIDDEN).content) if got.code == 0 else None
   except (Refused, ValueError):
@@ -482,7 +482,7 @@ def shared(target: dict) -> dict:
 async def classified(target: dict, book: dict, pr: dict) -> str:
   key = f"{pr['n']} {pr['sha']}"
   if key not in book["heads"]:
-    got = await bash(f"gh pr view {pr['n']} --json files --jq '.files[].path'", show=HIDDEN, timeout=120)
+    got = await bash(f"gh pr view {pr['n']} --json files --jq '.files[].path'", show=HIDDEN, timeout=120, ok=None)
     if got.code != 0:
       return "held"
     if not any(f.startswith(tuple(target["paths"])) for f in got.stdout.lines):
@@ -492,7 +492,7 @@ async def classified(target: dict, book: dict, pr: dict) -> str:
     same = await bash(
       f"git fetch -q origin main refs/pull/{pr['n']}/head && git diff origin/main...{pr['sha']} | git patch-id --stable",
       show=HIDDEN,
-      timeout=120,
+      timeout=120, ok=None,
     )
     patch = (same.stdout.content.split() or [""])[0] if same.code == 0 else ""
     was = next(
@@ -514,7 +514,7 @@ async def started(target: dict, book: dict, sha: str, n: int = 0) -> dict:
     label = f"pr{n}-{sha[:12]}"
     # The head is main with the PR merged in it, so a change of main shows in neither part of the pair.
     make = "t=$(git merge-tree --write-tree origin/main " + shq(sha) + ") && git rev-parse origin/main && git commit-tree \"$t\" -p origin/main -m converge"
-    got = await bash(f"git fetch -q origin main refs/pull/{n}/head && {make}", show=HIDDEN, timeout=300)
+    got = await bash(f"git fetch -q origin main refs/pull/{n}/head && {make}", show=HIDDEN, timeout=300, ok=None)
     made = got.stdout.lines
     if got.code != 0 or len(made) != 2:
       return {}
@@ -603,7 +603,7 @@ async def trained(target: dict, book: dict, pr: dict) -> dict:
   got = await bash(
     f"git fetch -q origin main {pulls} && cur=$(git rev-parse origin/main) && echo $cur{steps} && echo $cur",
     show=HIDDEN,
-    timeout=300,
+    timeout=300, ok=None,
   )
   lines = [x.strip() for x in got.stdout.lines if x.strip()]
   ins = {x.split()[1] for x in lines if x.startswith("in ")}
@@ -788,7 +788,7 @@ async def screened(target: dict, book: dict, job: dict, gaps: list[list[str]], w
     " the conductor does not merge it until a head shows none of these gaps:\n\n"
     + "\n".join(f"- {shot}: {gap}" + (f" His words: {quote}" if quote else "") for shot, gap, quote in gaps[:LIMIT])
   )
-  await bash(f"gh pr comment {n} --body-file -", stdin=body, show=HIDDEN, timeout=120)
+  await bash(f"gh pr comment {n} --body-file -", stdin=body, show=HIDDEN, timeout=120, ok=None)
   told = (
     f"converge judged the head {sha[:7]} of your PR #{n} against the words of the owner, which follow, and the"
     f" conductor does not merge it until a head shows none of the gaps below. Fix them and push."
