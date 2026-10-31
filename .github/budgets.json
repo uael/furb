@@ -1,10 +1,14 @@
 {
+  "the app on macos-latest": 300,
   "the bindings and the TUI on macos-latest": 360,
-  "the bindings and the TUI on ubuntu-latest": 240,
-  "the bindings and the TUI on windows-latest": 420,
-  "the crate on windows-latest": 240,
-  "the hooks": 180,
-  "the suite on macos-latest": 240,
-  "the suite on ubuntu-latest": 180,
-  "the suite on windows-latest": 300
+  "the bindings and the TUI on ubuntu-latest": 360,
+  "the bindings and the TUI on windows-latest": 540,
+  "the crate and the speed of the TUI on ubuntu-latest": 480,
+  "the crate on macos-latest": 240,
+  "the crate on windows-latest": 300,
+  "the hooks": 240,
+  "the scope": 60,
+  "the suite on macos-latest": 360,
+  "the suite on ubuntu-latest": 240,
+  "the suite on windows-latest": 360
 }
