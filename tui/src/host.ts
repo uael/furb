@@ -17,6 +17,7 @@ import {
   isHost,
   listening,
   PROTOCOL,
+  REQUEST,
   RIVAL,
   type Role,
   reads,
@@ -112,7 +113,11 @@ function close(code: number): never {
 
 // The socket of Unix stands in a folder that only the user opens, so each window that comes through it writes.
 const server = createServer((socket) => {
-  const send = framed(socket, (message: Request) => heard(message, send, "write"));
+  const send = framed(
+    socket,
+    (message: Request) => heard(message, send, "write"),
+    () => REQUEST,
+  );
   socket.on("close", () => windows.delete(send));
   socket.on("error", () => windows.delete(send));
 });
@@ -170,7 +175,7 @@ function welcome(socket: Socket, keys: Record<Role, string>): void {
       clearTimeout(timer);
       heard(said, send, role);
     },
-    () => (role ? Number.POSITIVE_INFINITY : HELLO),
+    () => (role ? REQUEST : HELLO),
   );
   socket.on("close", () => {
     clearTimeout(timer);

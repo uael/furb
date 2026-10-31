@@ -277,6 +277,30 @@ test.skipIf(process.platform === "win32")(
 );
 
 test.skipIf(process.platform === "win32")(
+  "a window that claims a message of more than 256 MiB loses its socket, and the host and the life go on",
+  () =>
+    demoLife(async (record, directory) => {
+      const place = hostPlace(record);
+      if (!place) throw new Error("No socket serves here.");
+      const { engine, host } = await openEngine({ demo: true, host: true, cwd: directory, record });
+      const socket = createConnection(place.socket);
+      await new Promise<void>((resolve) => socket.once("connect", () => resolve()));
+      const closed = new Promise<void>((resolve) => socket.once("close", () => resolve()));
+      const head = Buffer.alloc(4);
+      head.writeUInt32LE(0xffffffff, 0);
+      socket.write(head);
+      await closed;
+      const about = said(place);
+      expect(alive(about.pid)).toBe(true);
+      const command = await engine.bash("echo up", { on: engine.root });
+      await eventually(async () => (await engine.peek(command)) !== null, "the command to end");
+      expect(await engine.peek(command)).toMatchObject({ code: 0, stdout: { content: "up\n" } });
+      await host.end();
+      await eventually(() => !alive(about.pid), "the host to end");
+    }),
+);
+
+test.skipIf(process.platform === "win32")(
   "a command that runs past the wait of a host that hands its life over waits in the new host, and a wake ends it as interrupted",
   () =>
     demoLife(async (record, directory) => {
