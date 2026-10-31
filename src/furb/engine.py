@@ -265,7 +265,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
       if fresh:
         yield "module", id, {**globals(), "__name__": id, "actor": stood}
         for whose, said in ladder.items():
-          whose in refused or rung(said, whose)
+          whose in refused or (said and rung(said, whose))
       if words:
         with site.set(of):
           rung(words)
