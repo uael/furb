@@ -165,3 +165,9 @@ ruff_text_size = "0.0.9"
 opt-level = 3
 debug-assertions = false
 overflow-checks = false
+
+# The tests of the bindings and of the TUI boot many lives, and the code of this crate in each life ran unoptimized, so
+# the tests spent a third of their CPU time there. The step of the tests is the longest step of the bindings on a
+# runner of four cores. Level 1 keeps the build of this crate short.
+[profile.dev.package.furb]
+opt-level = 1

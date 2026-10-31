@@ -200,11 +200,7 @@ jobs:
       - run: git diff --exit-code -- bind/typescript/index.d.cts tui/README.md
       - run: bun run check
       - run: bun run lint
-      - run: |
-          vmstat 5 > "$RUNNER_TEMP/vm.log" &
-          nproc; grep -m1 'model name' /proc/cpuinfo
-          time bun run test
-          kill %1; tail -n 45 "$RUNNER_TEMP/vm.log"
+      - run: bun run test
 
   bench:
     # The budget of the speed of the TUI holds on Linux, on a machine that runs no other work while it measures: the
