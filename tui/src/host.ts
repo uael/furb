@@ -231,6 +231,10 @@ worker.onerror = (event) => {
   // The worker of a life that ended may fail as it closes, which ends nothing more.
   if (ending) return;
   console.error(`furb-host: ${event.message}`);
+  // The fault goes to the file of failures, so a window does not start a host again for the same fault.
+  writeFileSync(place?.failed ?? "", `${JSON.stringify({ pid: process.pid, error: event.message })}\n`, {
+    mode: 0o600,
+  });
   for (const send of windows.keys()) send({ fault: event.message });
   close(1);
 };

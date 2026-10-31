@@ -226,6 +226,17 @@ export const RIVAL = "Another host of this life runs";
 /** What the lease of a record says when a process that is no host holds it. */
 export const OWNED = "Another process owns";
 
+/** Why the host with a process number stopped, when it wrote its fault in the file of failures of its place before it
+ * ended: nothing when the file is gone, holds the fault of another host, or is not whole. */
+export function failureOf(place: Place, pid: number): string | undefined {
+  try {
+    const said = JSON.parse(readFileSync(place.failed, "utf8")) as { pid?: unknown; error?: unknown };
+    return said.pid === pid && typeof said.error === "string" ? said.error : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** What the host at a place said of itself, or nothing when it said none, when the file is gone, or when it holds no
  * whole JSON of a host. It reads the file once and looks at nothing before: a host that ends removes the file at any
  * moment, so a look before the read is a race. */

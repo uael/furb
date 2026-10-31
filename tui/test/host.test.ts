@@ -750,3 +750,30 @@ test.skipIf(process.platform === "win32")(
       expect(existsSync(place.socket)).toBe(false);
     }),
 );
+
+test.skipIf(process.platform === "win32")(
+  "a window whose host wrote a fault before it ended starts no host for that fault, and /reopen tries once more",
+  () =>
+    demoLife(async (record, directory) => {
+      const place = hostPlace(record);
+      if (!place) throw new Error("No socket serves here.");
+      const { host } = await openEngine({ demo: true, host: true, cwd: directory, record });
+      const { pid } = said(place);
+      const faults: string[] = [];
+      host.on("fault", (error: Error) => faults.push(error.message));
+      await writeFile(place.failed, `${JSON.stringify({ pid, error: "boom in the worker" })}\n`);
+      process.kill(pid, "SIGKILL");
+      await eventually(() => faults.length > 0, "the window to hear the fault");
+      const why =
+        "The host of the life stopped with a fault: boom in the worker. Open the life again to try once more.";
+      expect(faults[0]).toBe(why);
+      expect(host.lost).toBe(why);
+      // The window starts no host in the time that it takes the socket of a killed host to refuse it.
+      await Bun.sleep(1500);
+      expect(aboutOf(place)?.pid).toBe(pid);
+      await host.reopen();
+      expect(host.lost).toBe("");
+      expect(said(place).pid).not.toBe(pid);
+      await host.end();
+    }),
+);

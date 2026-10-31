@@ -19,6 +19,7 @@ import type { Compaction, Measure, PauseCause } from "furb/life";
 import {
   aboutOf,
   buildOf,
+  failureOf,
   framed,
   type Hello,
   hostPlace,
@@ -645,6 +646,15 @@ async function attach(
         if (socket !== held) return;
         link.send = undefined;
         link.drop(lost);
+        // A host that wrote its fault before it ended is not started again by the window: the same fault would end the
+        // next host after a replay of minutes. The window says it, and /reopen tries once more.
+        const fault = place && first ? failureOf(place, first.pid) : undefined;
+        if (fault && !link.closed) {
+          const why = `The host of the life stopped with a fault: ${fault}. Open the life again to try once more.`;
+          link.end(why);
+          link.host.emit("fault", new Error(why));
+          return;
+        }
         if (!link.closed && first && !reaching)
           reaching = again().finally(() => {
             reaching = undefined;
