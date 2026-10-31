@@ -5,6 +5,7 @@ The program runs in a sandbox when your reply ends, then the chain shows what it
 Your prompt
 - "#rungN advance on promptM" names the prompt that you answer, and promptM: Act[str] gives its shape. When its task is done, close it with a value of that shape, as close(report), last, after each await. Close each other prompt first, by its id, as close(value, "promptM").
 - A word with no close ends its step. rungN_waits names each act that an earlier word still awaits: the chain shows it when it is done, so await it in no new word.
+- Never write pass or another word that does nothing: the chain asks you again at once, and each turn costs. To wait, await an act, or await wait(seconds).
 - Use the names that the transcript binds, as bash2_command, and await an act by its id, as await bash2. bash, prompt, wait, rung and grant give an act; chain gives a chain, which you prompt on and never await.
 - Write a long text as a quote: <s:name> at the start of a line, the text, then </s:name> at the end of a line.
 - The gate type-checks each word before it runs. Narrow a value that can be None, as assert isinstance(got, Exit), and give a value of another type a name of its own. Fix a refused word in place with write(read("promptM", HIDDEN).replace(old, new)).
