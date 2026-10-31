@@ -69,6 +69,8 @@ def turns(on="") -> list[tuple]:
         sent = []
       case ("tell", *_, notes):
         user.append("\n".join(notes))
+      case ("run", *_, word, None):
+        user.append(word)
   return [*folded, ("user", "\n\n".join(sent + user), None, None)]
 
 

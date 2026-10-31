@@ -206,7 +206,7 @@ def peek(at: str, waiting: object = None) -> object:
 
 def turns(on: str = "") -> list[Turn]:
   """The turns of a chain, folded from what it has heard.
-  The turns of what a chain has heard: every tell stands as a paragraph of its notes, and nothing else stands at all.
+  The turns of what a chain has heard: every tell stands as a paragraph of its notes, a run with no donor stands as a paragraph of its word, and nothing else stands at all.
   The turn a model was answered with closes the turn of the operator and stands as the turn it is, and a text stands by the lines that the show of the one that tells it picks.
   turns reads the transcript of the chain and asks nothing, so no act is made and the journal keeps nothing.
   A user turn packs one paragraph for each thing told since the last reply, in order.
@@ -870,7 +870,7 @@ The word of a rung enters the program of the chain when the gate accepts it or w
 The word of a rung that extends the engine is part of the program, so the extension returns in a later life.
 The old words stay in the program and in the turns after a rung rebinds a name.
 """
-type Run = tuple[Literal["run"], str, str, str, str, str, str]
+type Run = tuple[Literal["run"], str, str, str, str, str, str | None]
 """A run is the act of running the word of a rung or the text of a told rung, which the chain makes on itself and the Kernel takes: it says started as the run, runs what the writings of that rung left of the word, as the rung, and says the run done with what the word gave.
 The word a run carries is python, which unquoted made of the word of the rung.
 A run names the rung that the word retells, so a Kernel may answer a retold run from what it kept of that one instead of running the word again.

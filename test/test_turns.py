@@ -21,16 +21,25 @@ async def test_the_turns_of_a_chain_folded_from_what_it_has_heard() -> None:
 
 
 async def test_the_turns_of_what_a_chain_has_heard() -> None:
-  """The turns of what a chain has heard: every tell stands as a paragraph of its notes, and nothing else stands at all."""
+  """The turns of what a chain has heard: every tell stands as a paragraph of its notes, a run with no donor stands as a paragraph of its word, and nothing else stands at all."""
   sand, _, root = born()
   assert await engine.rung("k = 1", on=root) is None
-  sand.script[root] = ["close(k + 1)"]
-  assert await engine.prompt(int, "count", on=root) == 2
+  engine.act("run", root, None, "loaded", "j = 5", None)
+  await settle()
+  sand.script[root] = ["close(k + j)"]
+  assert await engine.prompt(int, "count", on=root) == 6
   await settle()
   held = engine.transcript(root)
-  carried = notes(held)
+  carried: list[list[object]] = []
+  for a in held:
+    if a[0] in CARRY and isinstance(a[3], list):
+      carried.append(a[3])
+    elif a[0] == "run" and a[6] is None:
+      carried.append([a[5]])
+  assert ["j = 5"] in carried
   assert all(isinstance(note, str) for one in carried for note in one)
-  assert paragraphs(engine.turns(on=root)) == ["\n".join(str(note) for note in one) for one in carried]
+  told = [turn[1] for turn in engine.turns(on=root) if turn[0] == "user" and turn[1]]
+  assert "\n\n".join(told) == "\n\n".join("\n".join(str(note) for note in one) for one in carried)
   assert {a[0] for a in held if a[0] not in CARRY} == {
     "close",
     "stand",

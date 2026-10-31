@@ -2,7 +2,9 @@
 
 An extension adds to what a model can do in furb. It is Python, as a word of a model is: a life runs the word of each
 extension on each chain where it plays, before any other word, so the functions that it defines are there for the model,
-and the model reads the extension in its turns as it reads its own work.
+and the model reads the extension in its turns as it reads its own work. In the setup of the root, which every new chain
+holds, each file of an extension is two turns: a turn of the model whose word is `read('<the file>', HIDDEN)`, and the
+turn after it, which holds the code of the extension alone, as Python, since that code runs there.
 
 An extension never goes into the system prompt. So a chain that takes one only grows at its end, and what a provider
 caches of the chain stays valid.
@@ -40,8 +42,8 @@ Seven extensions come with furb, and each life runs them unless a config turns t
   its words and its open commands do not. The extension has no life word. A project changes `SHARE`, `FILTERS`,
   `CHOOSER`, `LISTED` or `BRIEF` in an extension of its own. In the TUI, a rule with the summary marks each compaction
   in the feed, and `/compact` runs `await condense()` on the chain on screen.
-- **`ouroboros`** teaches a model to extend furb. Its word holds the lore, which every chain reads in the turn of the setup
-  that runs it, so it has no life word. The lore says the three ways to extend furb and when to take each: a def in a word, which lives with
+- **`ouroboros`** teaches a model to extend furb. Its file holds the lore, which every chain reads in the setup, in the
+  turn after the read of the file, so it has no life word. The lore says the three ways to extend furb and when to take each: a def in a word, which lives with
   its chain; `extend(name, *rungs)`, which writes the words of those rungs as an extension of the project and turns it
   on, so every later chain runs it; and an official extension, which lives in furb. `extend(name, *rungs, tui=module)`
   also writes a [part for the TUI](#a-part-for-the-tui). `enabled()` gives the extensions that the life runs.

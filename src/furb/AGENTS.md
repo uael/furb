@@ -154,16 +154,19 @@ meanings. The entry of such a name here gives only its form in the engine.
   chain take their turns one at a time, in the order they were made, a rung that one of them makes takes its turn
   within the turn of its maker, and every other word of the chain and every prompt to a model wait until none is open.
 - setup: the turns that the World plays on the root of a new record at its first stand, after the bare turn `chain()`,
-  as crafted rungs of the default actor: the read of the doctrine, then one turn whose word is the word of each extension
-  of every chain in the order of the life and then their life words, which read the place against the directory of the
-  standing, as every chain that ran no cd, so the model reads in its context the code that ran in that turn, then the
-  act setup, `setup1`, which the World makes and answers, then the same turn for the extensions of the
-  root alone. Then the root plays on itself one turn `stand()` and `cd('<the directory of the standing>')`, a rung with
+  as crafted rungs of the default actor: the read of the doctrine, then two turns for the file of each extension of every
+  chain in the order of the life, a turn whose word is `read('<the file>', HIDDEN)`, which tells nothing, and the turn
+  after it, which holds the word of the extension alone, as python, with no header and no quote, since the World runs
+  that word in the module of the root at the ready of that read, as the run `<rung>_word` with no donor, and the turns
+  show a run with no donor as a paragraph of its word, then one turn of their life words, which read the place against
+  the directory of the standing, as every chain that ran no cd, then the act setup, `setup1`, which the World makes and
+  answers once it ran the word of each of these extensions, then the same turns for the extensions of the root alone. Then the root plays on itself one turn `stand()` and `cd('<the directory of the standing>')`, a rung with
   that word and its default actor, just before its open, as each chain with no source does at its birth, after the setup
   that it holds: chain() in engine.py makes that rung, so a model reads in the engine how its chain was set up. The
-  words of that turn are the same text whatever the place and the actors, and so is the read of the doctrine in one
-  place, so a provider caches them across records.
-  The World makes each of these rungs at once, so the root plays its stand after the last of them and tells its open
+  reads of the files and their words come first, so their turns are the same text whatever the place and the actors,
+  then the life words, so their turns are the same text in one place whatever the actors, and a provider caches them
+  across records. The World makes each of these rungs at once, but those of the root alone, which it makes with the act
+  setup, so the root plays its stand after the last of them and tells its open
   after its stand, in the same turn, just before its first prompt. Each chain with no source holds the setup of the root
   as its prefix, with the same names, less the acts that the World, the operator or the root itself made after the act
   setup, as the stand of the root, and runs its words again, so every chain shares one prefix, which the provider ends
@@ -204,7 +207,7 @@ meanings. The entry of such a name here gives only its form in the engine.
   imports, functions, classes, types and names in capitals, and each name of state that it assigns, as
   `name = globals().setdefault("name", value)`, so a new name takes its value, each name that the chain holds keeps its
   value, and the life word does not run again. An extension whose word is blank, as one that holds only a part for
-  the TUI, plays no word: none in the turn of the setup, and no rung on a chain.
+  the TUI, plays no word: no read of its file and no run in a setup, and no rung on a chain.
 - made: the fact by which the store names in the record the build that made it, the digest of the engine and of the
   Kernel and the version of the build, `VERSION` in `src/world/store.rs`, which the store says as it hears the root of
   a new record at its birth. A life on a record that names another version is refused before any replay, since a
