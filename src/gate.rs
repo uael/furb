@@ -1520,6 +1520,14 @@ mod tests {
   }
 
   #[test]
+  fn a_word_that_reads_the_list_of_filter_as_an_iterator_is_refused() {
+    // The sandbox gives a list for filter, map, zip, enumerate and reversed, where python gives an iterator.
+    let found = said(&[], "got = next(filter(None, [1]))\nclose(got)");
+    assert_eq!(found.iter().map(|(line, _)| *line).collect::<Vec<_>>(), vec![1], "{found:?}");
+    assert!(found[0].1.starts_with("error[invalid-argument-type]"), "{found:?}");
+  }
+
+  #[test]
   fn a_word_that_imports_the_engine_by_the_name_of_the_checker_is_refused() {
     let found = said(&[], &format!("import {MODULE}\nclose(1)"));
     assert_eq!(
