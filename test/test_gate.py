@@ -175,6 +175,28 @@ async def test_a_word_that_holds_a_fence_markup_or_prose_finds_the_first_such_li
   assert stray not in found and found.endswith(", in '= 1'")
 
 
+async def test_a_word_that_holds_a_mark_of_a_quote_inside_a_line_finds_the_first_such_mark() -> None:
+  """A word that is not python and that holds a mark of a quote inside a line, as write(Text(path, <s:name>, finds the first such mark, and that a quote opens only with <s:name> at the start of a line and closes only with </s:name> at the end of a line, so nothing of this word ran: write the quote on lines of its own before the call, and give the call the name."""
+  _, _, root = born()
+  stray = "a reply is python and quotes only"
+  for word, at, mark in [
+    ('write(Text("a.py", <s:body>\nx = 1\n</s:body>))', 1, "<s:body>"),
+    ("text = <s:body>\nx = 1</s:body>", 1, "<s:body>"),
+    ("text = f(1\n</s:body>))", 2, "</s:body>"),
+  ]:
+    (found,) = engine.gate(word, on=root)
+    assert stray not in found
+    assert (
+      f"; line {at}: the mark {mark} stands inside a line, and a quote opens only with <s:body> at the start" in found
+    )
+    assert found.rpartition(", in ")[0].endswith(
+      " so nothing of this word ran: write the quote on lines of its own before the call, and give the call the name"
+      " body"
+    )
+  (found,) = engine.gate('k = "a <s:body> b"\nclose(', on=root)
+  assert "stands inside" not in found
+
+
 async def test_a_word_that_is_not_python_on_a_line_that_starts_with_a_lone_equals_finds_that_its_binding_has_no_name() -> (
   None
 ):

@@ -262,6 +262,7 @@ def gate(word: str, on: str = "") -> list[str]:
   A finding on a call of a function names the signature of that function, so a model reads how to call it.
   A finding on an await of a value that is no act says that a value which an await gave stands in its name already, so use the name and await it no more.
   A word that is not python and that holds a fence of markdown, the markup of a tool call or a sentence of prose finds the first such line and what it is, and that a reply is python and quotes only, with no fence, no markup and no prose, so nothing of this word ran: delete each such line.
+  A word that is not python and that holds a mark of a quote inside a line, as write(Text(path, <s:name>, finds the first such mark, and that a quote opens only with <s:name> at the start of a line and closes only with </s:name> at the end of a line, so nothing of this word ran: write the quote on lines of its own before the call, and give the call the name.
   A word that is not python and that leaves a bracket open finds the line and the column of the innermost bracket that stays open.
   A word that is not python and that starts with a shell command finds that the line is a shell command, so write it as await bash("..."), and nothing of this word ran.
   A word that is not python on a line that starts with a lone = finds that the line starts with =, so its binding has no name: write the name before =, as in got = 1, and nothing of this word ran.
