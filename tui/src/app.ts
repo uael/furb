@@ -277,6 +277,8 @@ export class App {
   deskKey = "";
   /** The parts of the extensions for the TUI, which add panels, rows, keys and commands. */
   readonly parts: Parts;
+  /** The first load of the parts, which ends once each part that the configs give is loaded or has its error. */
+  readonly partsReady: Promise<void>;
   /** The panels of the parts over the input, the key of what it shows, and what takes the keys of the parts away. */
   readonly dock: BoxRenderable;
   dockKey = "";
@@ -630,7 +632,7 @@ export class App {
     this.keymap = keymapOf(renderer);
     this.layersOff = this.layers();
     this.parts = new Parts(session.host.directory, this.partsChanged);
-    void this.parts.load();
+    this.partsReady = this.parts.load();
     renderer.on("resize", this.render);
     renderer.on("selection", this.copySelection);
     renderer.on("theme_mode", this.modeChanged);
