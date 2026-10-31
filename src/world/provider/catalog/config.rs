@@ -151,7 +151,8 @@ struct ConfiguredModel {
 const LEVELS: [&str; 4] = ["off", "low", "medium", "high"];
 
 impl Catalog {
-  /// The catalog with the provider settings of the user and then the project. A false entry removes a provider.
+  /// The catalog with the provider settings of the configs, in the order of [`crate::extension::configs`]: the user,
+  /// the project, then the local config of the project. A false entry removes a provider.
   /// Invalid settings give an error. A running provider keeps its previous settings when a reload fails.
   pub fn configured(
     mut self,
@@ -159,8 +160,7 @@ impl Catalog {
     config: Option<&std::path::Path>,
   ) -> Result<Catalog, String> {
     let places = crate::extension::Places::here();
-    let files =
-      [config.unwrap_or(&places.config).join("config.json"), directory.join(".furb/config.json")];
+    let files = crate::extension::configs(config.unwrap_or(&places.config), directory);
     let mut entries: IndexMap<String, Value> = IndexMap::new();
     for file in files {
       let text = match fs::read_to_string(&file) {

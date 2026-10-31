@@ -8,7 +8,8 @@ use std::{
 };
 
 use super::{
-  Extension, Part, Places, configured, definitions, enabled, extensions, load, parts, reloads, word,
+  Extension, Part, Places, configs, configured, definitions, enabled, extensions, load, parts,
+  projected, reloads, word,
 };
 use crate::{
   Ear, Engine, Fact, Object,
@@ -742,4 +743,53 @@ fn a_write_of_the_life_in_the_folder_of_an_extension_that_a_config_turns_on_relo
     )
     .unwrap();
   assert_eq!(enables(&at).len(), 2, "a write outside the folder of an extension reloads nothing");
+}
+
+#[test]
+fn the_local_config_of_a_project_comes_after_its_config_and_wins_for_a_name() {
+  let at = place("local");
+  let places = Places { config: at.join("user"), home: None };
+  let project = at.join("project");
+  let furb = project.join(".furb");
+  assert_eq!(
+    configs(&places.config, &project),
+    [at.join("user").join("config.json"), furb.join("config.json"), furb.join("config.local.json")],
+    "each reader reads the user, the project, then the local config of the project"
+  );
+  folder(&project.join("near"), r#"{"name": "near", "word": "note.py", "tui": "tui.ts"}"#, "n = 1");
+  config(&furb.join("config.json"), r#"{"extensions": {"near": "../near", "skills": false}}"#);
+  let names = |got: Vec<Extension>| got.into_iter().map(|one| one.name).collect::<Vec<_>>();
+  assert_eq!(
+    names(configured(&places, &project).unwrap()),
+    ["catchup", "memory", "compaction", "ouroboros", "web", "mcp", "near"]
+  );
+  config(
+    &furb.join("config.local.json"),
+    r#"{"extensions": {"near": false, "skills": true, "mcp": false}}"#,
+  );
+  assert_eq!(
+    names(configured(&places, &project).unwrap()),
+    ["catchup", "memory", "skills", "compaction", "ouroboros", "web"],
+    "the local config wins for a name"
+  );
+  let shown = parts(&places, &project).unwrap().into_iter().map(|one| one.name).collect::<Vec<_>>();
+  assert_eq!(shown, ["compaction"], "the parts follow the local config too");
+}
+
+#[test]
+fn a_write_of_the_local_config_of_the_project_turns_on_each_extension_that_it_gives_by_its_path() {
+  let at = place("local-write");
+  fs::write(at.join("note.txt"), "noted\n").unwrap();
+  folder(
+    &at.join(".furb").join("extensions").join("note"),
+    r#"{"name": "note", "word": "note.py"}"#,
+    NOTE,
+  );
+  let mut engine = lived(&at, vec![]);
+  let file = projected(&at)[1].display().to_string();
+  let text = r#"{"extensions": {"note": "extensions/note"}}"#;
+  engine
+    .write(&crate::value::Text::new(file, text), verbs::Write { on: Some("chain1".to_owned()) })
+    .unwrap();
+  assert_eq!(enables(&at), [NOTE.to_owned()]);
 }

@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import type { LiveAct } from "furb";
 import { demoSession } from "../src/demo.ts";
 import { loadPart, Parts, plainError, type Seen, summary } from "../src/parts.ts";
 import { composing, pressEscape } from "./composing.ts";
@@ -164,6 +165,20 @@ test("the parts load the part of each extension that the configs give, and a con
   expect(parts.loaded.map((one) => one.name)).toEqual(["extensions"]);
   expect(parts.loaded[0]?.error).toContain("A config is a map, whose extensions is a map");
   expect(changes).toBe(2);
+  parts.dispose();
+});
+
+test("the parts load again when a write of the local config of the project lands, and that config wins over the config of the project", async () => {
+  const { directory } = project();
+  let changes = 0;
+  const parts = new Parts(directory, () => changes++);
+  await parts.load();
+  expect(parts.loaded.map((one) => one.name)).toEqual(["compaction", "mcp", "todo"]);
+  writeFileSync(join(directory, ".furb", "config.local.json"), '{"extensions": {"todo": false}}\n');
+  const write = { id: "write1", kind: "write", done: true, words: [{ path: ".furb/config.local.json" }] };
+  parts.heard([write as unknown as LiveAct]);
+  for (let tries = 0; tries < 400 && changes < 2; tries++) await Bun.sleep(10);
+  expect(parts.loaded.map((one) => one.name)).toEqual(["compaction", "mcp"]);
   parts.dispose();
 });
 

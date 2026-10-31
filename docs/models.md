@@ -84,8 +84,10 @@ for OpenAI Responses, `anthropic` for Anthropic Messages, or `gemini` for Google
 the server needs no key and a protocol follows it. `/provider remove office` disables the provider and keeps its
 settings for a later add.
 
-The same settings can be written in `config.json` in the user config directory, or in `.furb/config.json` in the
-project. The project wins for each field that it gives. Other config fields stay as they are.
+The same settings can be written in `config.json` in the user config directory, in `.furb/config.json` in the
+project, or in `.furb/config.local.json` beside it, which git ignores: a project keeps its local models there, as
+those of a server on this machine. Each config is read in that order, and a later one wins for each field that it
+gives. Other config fields stay as they are. `/provider` and the dialog of the providers write `.furb/config.json`.
 
 ```json
 {
@@ -135,7 +137,8 @@ its roster.
 ## Thinking
 
 `MAX_THINKING_TOKENS` gives the most tokens that a model can think in one turn, and 0 turns thought off. The key
-`max_thinking_tokens` of `.furb/config.json` gives it for one project. The environment wins over the config, and with
+`max_thinking_tokens` of `.furb/config.json` gives it for one project, and the same key of `.furb/config.local.json`
+wins over it. The environment wins over the config, and with
 neither, it is 32768. A model with adaptive reasoning thinks as its effort says and cannot turn its thought off.
 
 ## A local model

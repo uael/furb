@@ -5,9 +5,9 @@
 //! reads it. The word is that file less those imports. The official extensions are the crate's own, which it
 //! carries in the same form.
 //!
-//! A host finds the extensions in two configs, `config.json` in the config directory of the user and
-//! `.furb/config.json` in the directory of the life, each `{"extensions": {name: true, false, or a path}}`. The
-//! config of the project comes after the config of the user, so it wins for a name.
+//! A host finds the extensions in the configs that [`configs`] gives, in its order, each `{"extensions": {name:
+//! true, false, or a path}}`: `config.json` in the config directory of the user, `.furb/config.json` in the directory
+//! of the life, then `.furb/config.local.json` beside it, which git ignores. A later config wins for a name.
 //!
 //! An extension enters a life as rungs, and never enters the module of the engine or the system prompt, so a chain
 //! that takes one grows at its end, and what a provider caches of it stands. The ear [`extensions`] enables each
@@ -166,6 +166,21 @@ impl Places {
   }
 }
 
+/// The configs that each reader reads, in this order, a later one winning over an earlier one for a name:
+/// `config.json` in the config directory of the user, then the configs of the project that [`projected`] gives.
+pub fn configs(user: &Path, project: &Path) -> [PathBuf; 3] {
+  let [shared, local] = projected(project);
+  [user.join("config.json"), shared, local]
+}
+
+/// The configs of a project, in the order of [`configs`]: `.furb/config.json`, which git keeps, then
+/// `.furb/config.local.json`, which git ignores, so a project keeps there what serves this machine alone, as its local
+/// models and its local extensions.
+pub fn projected(project: &Path) -> [PathBuf; 2] {
+  let furb = project.join(".furb");
+  [furb.join("config.json"), furb.join("config.local.json")]
+}
+
 /// The official extensions, in the order a life runs them, each with the file of its word: in dev mode the file of the
 /// checkout of git that this furb was built from, else the official copy, `.furb/extensions/<name>/<file>` in the
 /// home, which it writes from the text that it carries when that copy differs, as the doctrine does.
@@ -281,7 +296,7 @@ fn turned_on(places: &Places, project: &Path) -> Result<Vec<(String, Option<Path
   let official = official();
   let mut named: Vec<(String, Option<PathBuf>, bool)> =
     official.iter().map(|one| (one.name.clone(), None, true)).collect();
-  for file in [places.config.join("config.json"), project.join(".furb").join("config.json")] {
+  for file in configs(&places.config, project) {
     let refused = |why: String| Fault::refused(format!("{why}: {}", file.display()));
     let text = match fs::read_to_string(&file) {
       Err(no) if no.kind() == ErrorKind::NotFound => continue,
@@ -591,15 +606,15 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
           }
           Vec::new()
         }
-        // A write of the config of the project that lands turns on each extension that it gives by its path and
+        // A write of a config of the project that lands turns on each extension that it gives by its path and
         // that the life does not run, as the configs do at the tip.
-        // A write that lands of the config of the project turns on each extension that it gives by its path and that
+        // A write that lands of a config of the project turns on each extension that it gives by its path and that
         // the life does not run, as the configs do at the tip. A write in the folder of an extension that the life
         // runs and that a config turns on reloads it when its word changed.
         "done" if named(a.about(), "write") && a.by() != JOURNAL => {
           let Some(text) = a.word(0).and_then(Text::of) else { continue };
           let Ok(file) = files::placed(Path::new(""), &text.path) else { continue };
-          let config = file.ends_with(Path::new(".furb").join("config.json"));
+          let config = projected(Path::new("")).iter().any(|one| file.ends_with(one));
           if !config && !file.parent().is_some_and(|one| one.join("furb.json").is_file()) {
             continue;
           }
@@ -610,7 +625,7 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
             continue;
           };
           let places = Places::here();
-          if file == project.join(".furb").join("config.json") {
+          if projected(&project).contains(&file) {
             turned(&file, &text.content, &places).into_iter().filter(|one| !runs(one)).collect()
           } else {
             let folders = turned_on(&places, &project).unwrap_or_default().into_iter();

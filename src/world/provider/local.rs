@@ -7,7 +7,7 @@
 //! place of the one that the server gives, and `FURB_LOCAL_TOKENS` the most that a model of it writes in one turn,
 //! which is a quarter of its window when it is unsaid; vLLM refuses a turn whose prompt and that most pass the
 //! window. A model of it thinks at most the tokens of thought in one turn that `MAX_THINKING_TOKENS` or the key
-//! `max_thinking_tokens` of `.furb/config.json` gives, 32768 by default: past it, the provider asks the model again
+//! `max_thinking_tokens` of a config of the project gives, 32768 by default: past it, the provider asks the model again
 //! with that thought and with its thought turned off, as llama.cpp and vLLM read `enable_thinking` in
 //! `chat_template_kwargs`, so it writes its word at once, and at 0 the provider asks with its thought off from the
 //! first request. Each of its models is named `local:` and the id that the server lists, and costs nothing. It takes

@@ -44,7 +44,8 @@ notes/
   notes.py    the word: a python module that imports from furb.engine what it uses, and only defines
 ```
 
-The life word starts the work of the extension on each chain. The file `.furb/config.json` of a project turns it on:
+The life word starts the work of the extension on each chain. The file `.furb/config.json` of a project turns it on, or
+`.furb/config.local.json` beside it, which git ignores, for an extension of this machine alone:
 
 ```json
 { "extensions": { "notes": "path/to/notes" } }

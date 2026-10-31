@@ -2050,3 +2050,24 @@ fn a_turn_of_the_model_that_the_gate_refused_goes_on_the_user_side_quoted_under_
   assert!(text.contains(quoted), "{said:?}");
   assert_eq!(said[1][0], "assistant");
 }
+
+#[test]
+fn the_local_config_of_the_project_gives_the_most_thought_over_its_config() {
+  let at = yard("thinking-local");
+  fs::create_dir_all(at.join(".furb")).expect("the folder of the config");
+  fs::write(at.join(".furb").join("config.json"), r#"{"max_thinking_tokens": 0}"#)
+    .expect("the config");
+  let local = at.join(".furb").join("config.local.json");
+  fs::write(&local, r#"{"max_thinking_tokens": 2048}"#).expect("the local config");
+  assert_eq!(
+    thinking(None, &at),
+    Thinking { most: 2048, inherited: false },
+    "the local config wins"
+  );
+  fs::write(&local, r#"{"max_thinking_tokens": "much"}"#).expect("the local config");
+  assert_eq!(
+    thinking(None, &at),
+    Thinking { most: 0, inherited: false },
+    "a local value that is no count is as unsaid"
+  );
+}

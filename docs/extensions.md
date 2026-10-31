@@ -74,8 +74,10 @@ reads on each chain.
 
 ## Turn an extension on or off
 
-Two configs say which extensions a life runs: `config.json` in the config directory of the user, then
-`.furb/config.json` in the directory of the project. The project wins for a name. The config directory is
+Three configs say which extensions a life runs, in this order: `config.json` in the config directory of the user,
+`.furb/config.json` in the directory of the project, then `.furb/config.local.json` beside it. A later config wins
+for a name. Git keeps `.furb/config.json`, and ignores `.furb/config.local.json`: a project keeps its local
+extensions there, as the ones that serve this machine alone. The config directory is
 `FURB_CONFIG_DIR`, else `furb` under `XDG_CONFIG_HOME`, else `furb` under `~/.config`, or under `%APPDATA%` on
 Windows.
 
@@ -249,7 +251,7 @@ same words. [`src/furb/AGENTS.md`](../src/furb/AGENTS.md) says what the fact mea
 ear `extensions` of [`src/extension.rs`](../src/extension.rs) says the fact and plays it.
 
 The extensions that a life enables at its start are those that the configs turn on. When a write of
-`.furb/config.json` lands in the middle of a life, the life enables each extension that the config turns on by its
+`.furb/config.json` or of `.furb/config.local.json` lands in the middle of a life, the life enables each extension that the config turns on by its
 path and that it does not run yet. An extension that a config turns off runs on until the life ends.
 
 A life reloads an extension that it runs when its word changes: at its start, or at a later stand, for the word that the
