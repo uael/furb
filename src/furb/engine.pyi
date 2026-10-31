@@ -261,6 +261,8 @@ def gate(word: str, on: str = "") -> list[str]:
   Each finding names the line and the column of the word it is found on, and the rule, and quotes that line, cut to 80 characters, so a model reads what the gate read.
   A finding on a call of a function names the signature of that function, so a model reads how to call it.
   A finding on an await of a value that is no act says that a value which an await gave stands in its name already, so use the name and await it no more.
+  A finding on a Text that a word uses as a str says that a Text is no str, so use its .content for its text and its .lines for its lines.
+  A finding on a str that a word asks for the .content or the .lines of a Text says that a name which a tell binds, as read1_text, holds a str and no Text, so use read(path) to get a Text, whose .content is its text.
   A word that is not python and that holds a fence of markdown, the markup of a tool call or a sentence of prose finds the first such line and what it is, and that a reply is python and quotes only, with no fence, no markup and no prose, so nothing of this word ran: delete each such line.
   A word that is not python and that holds a mark of a quote inside a line, as write(Text(path, <s:name>, finds the first such mark, and that a quote opens only with <s:name> at the start of a line and closes only with </s:name> at the end of a line, so nothing of this word ran: write the quote on lines of its own before the call, and give the call the name.
   A word that is not python and that leaves a bracket open finds the line and the column of the innermost bracket that stays open.
