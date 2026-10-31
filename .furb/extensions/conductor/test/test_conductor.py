@@ -2083,6 +2083,59 @@ def test_an_item_has_a_kind_whose_model_and_brief_it_takes(conductor: Round) -> 
   assert len(conductor.prompts) == 1
 
 
+REGISTER = """# Register of the audit look
+
+| Dn | key | model | area | brief |
+|----|-----|-------|------|-------|
+| D1 | fix-a | sonnet/high | conductor | Fix the first thing. |
+| D2 | Fix B | claude-cli:opus/high | pr | Fix the second thing. |
+| D3 | fix-c | xhigh | | Fix the third thing. |
+| D4 | fix-a | sonnet/medium | tui | A row whose key stands already. |
+"""
+
+
+def test_an_auditor_that_ends_queues_the_rows_of_its_register_once_at_the_end_of_the_queue(conductor: Round) -> None:
+  conductor.ns["quietly"] = lambda verb, *args, **words: (
+    asyncio.run(verb(*args, **words)) if verb == conductor.bash else verb(*args, **words)
+  )
+  conductor.kinds["look"] = "audit"
+  conductor.queue.append(("early", "", ""))
+  name = conductor.real_hire("look", "find the leaks", "defects")
+  prompt = conductor.prompts[-1][0]
+  assert "| Dn | key | model | area | brief |" in prompt and "the item triage-<key>" in prompt
+  assert "claude-cli:sonnet/high" in prompt and "{models}" not in prompt
+  conductor.ns["DEBRIEFS"] = False
+  conductor.files["scratch://audit/look.md"] = REGISTER
+  conductor.done[name] = (0, "found three")
+  conductor.tend()
+  assert [key for key, _, _ in conductor.queue] == ["early", "triage-fix-a", "triage-fix-b", "triage-fix-c"]
+  assert conductor.queue[1] == (
+    "triage-fix-a",
+    "Fix the first thing.\n\nThis item is row D1 of the register scratch://audit/look.md of the audit look.",
+    "conductor",
+  )
+  assert [conductor.queue[2][2], conductor.queue[3][2]] == ["pr", "triage"]
+  assert conductor.efforts == {"triage-fix-a": SONNET_HIGH, "triage-fix-b": "claude-cli:opus/high"}
+  assert conductor.heard[-1].startswith("The auditor look left 3 items in its register")
+  conductor.register("look", name)
+  assert len(conductor.queue) == 4
+
+
+def test_an_auditor_whose_register_is_missing_or_has_no_table_queues_nothing(conductor: Round) -> None:
+  conductor.ns["quietly"] = lambda verb, *args, **words: (
+    asyncio.run(verb(*args, **words)) if verb == conductor.bash else verb(*args, **words)
+  )
+  conductor.kinds["look"] = "audit"
+  name = conductor.real_hire("look", "find the leaks", "defects")
+  conductor.ns["DEBRIEFS"] = False
+  conductor.done[name] = (0, "found none")
+  conductor.tend()
+  assert conductor.queue == [] and len(conductor.heard) == 1
+  conductor.files["scratch://audit/look.md"] = "No table here.\n| D1 | only | three |\n"
+  conductor.register("look", "other")
+  assert conductor.queue == []
+
+
 def test_an_ended_worker_takes_the_next_item_of_its_area_until_half_of_its_window_and_a_hire_forks_the_base(
   conductor: Round,
 ) -> None:
