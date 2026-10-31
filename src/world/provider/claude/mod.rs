@@ -113,6 +113,21 @@ const SIGNED_OUT: [&str; 6] = [
   NO_TOKEN,
 ];
 
+/// The words that begin the failure of a turn that finds every account signed out.
+const ALL_SIGNED_OUT: &str = "Every account of the claude command line is signed out.";
+
+/// Whether a failure is a failed sign in of the command line, or that every account of it is signed out. A sign in
+/// outside furb ends it, so the provider waits and asks again.
+pub(super) fn signed_out(no: &CompletionError) -> bool {
+  let CompletionError::ProviderError(said) = no else { return false };
+  let said = said.to_lowercase();
+  said.starts_with(&ALL_SIGNED_OUT.to_lowercase()) || signed_out_words(&said)
+}
+
+fn signed_out_words(said: &str) -> bool {
+  SIGNED_OUT.iter().any(|one| said.contains(one))
+}
+
 /// The claude command line: its program, how long a turn may go with no progress, how long a process waits for a
 /// program that is missing or does not run, and the conversations it holds.
 ///
@@ -419,9 +434,7 @@ impl Claude {
   fn exhausted(&self, now: SystemTime) -> CompletionError {
     match self.program.accounts.earliest(now) {
       Some(end) => failed(format!("Claude AI usage limit reached|{}", epoch(end))),
-      None => failed(
-        "Every account of the claude command line is signed out. Sign one in, then run /reload.",
-      ),
+      None => failed(format!("{ALL_SIGNED_OUT} Sign one in, then run /reload.")),
     }
   }
 
@@ -467,7 +480,7 @@ fn refusal(no: &CompletionError) -> Option<Refusal> {
   }
   let CompletionError::ProviderError(said) = no else { return None };
   let said = said.to_lowercase();
-  SIGNED_OUT.iter().any(|one| said.contains(one)).then_some(Refusal::SignedOut)
+  signed_out_words(&said).then_some(Refusal::SignedOut)
 }
 
 /// A time as the seconds since 1970, which the older message of a usage limit gives.
