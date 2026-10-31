@@ -56,6 +56,17 @@ test("the life of the demo is as dense as a real one: chains in a tree, threads,
     expect(missing).toEqual([]);
     expect(Math.max(...words.map((word) => word.split("\n").length))).toBeGreaterThanOrEqual(30);
     const asks = [...session.host.prompts.values()].map((ask) => ask.shape);
+    if (!asks.includes("int"))
+      console.log(
+        "DIAG",
+        JSON.stringify(
+          session.acts
+            .filter((act) => act.kind === "prompt")
+            .map((act) => [act.id, act.done, act.on, String(act.words[1]).slice(0, 12), act.by])
+            .slice(-14),
+        ),
+        JSON.stringify([...session.host.prompts.keys()]),
+      );
     expect(asks).toEqual(expect.arrayContaining(["bool", "int", "str"]));
     expect(asks.some((shape) => shape.startsWith("Literal"))).toBe(true);
     expect(session.acts.some((act) => act.run?.status === "failed")).toBe(true);
