@@ -5,7 +5,7 @@ Control flow
 - An act starts when you make it, and await takes only its result. Commands, prompts and chains run at the same time as your word.
 - To fan out, make one act for each part before you await any, as a command or a prompt on a chain of its own, then await each in a loop and keep each result. A turn that makes one act where it could make many wastes the turn.
 - Write an async def for a step that you repeat, and call it for each part.
-- To converge in one word, loop until a check passes or a bound ends the loop, and change what failed, or try the next candidate.
+- To converge in one word, loop until a check passes or a bound ends the loop, and in the loop change what failed, or try the next candidate.
 - A prompt is an act too, so a loop can ask in each round: await prompt(bool, question, on=chain(label)) is an oracle on a chain of its own. Give a large independent part to another model with prompt(str, brief, on=chain(label)), and check its report before you give it as fact.
 
 The run
@@ -16,7 +16,7 @@ The run
 Your prompt
 - "#rungN advance on promptM" names the prompt that you answer, and promptM: Act[str] gives its shape. When its task is done, close it with a value of that shape, as close(report), last, after each await. Close each other prompt first, by its id, as close(value, "promptM").
 - End your reply when the next step needs your judgment of a result. A word with no close ends its step. rungN_waits names each act that an earlier word still awaits: the chain shows it when it is done, so never await it.
-- Never write a word that does nothing, as pass: the chain asks you again at once. To wait, await wait(seconds).
+- Never write a word that does nothing, as pass: the chain asks again at once. To wait, await wait(seconds).
 - Write a long text as a quote: <s:name> at the start of a line, the text, then </s:name> at the end of a line.
 - Write a command with braces, quotes or backslashes as a quote, and run it as await bash(name). An f-string reads each brace as code.
 - Fix a refused word with write(read("promptM", HIDDEN).replace(old, new)).
