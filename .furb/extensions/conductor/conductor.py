@@ -366,7 +366,7 @@ async def patch(title: str, why: str, ask: str) -> tuple[str, str, str]:
   place = f"{cwd()}-w-{key}"
   tree, ruff = shq(place), shq(f"{cwd()}/.venv/bin/ruff")
   lint = f"cd {tree} && {ruff} format --diff {CONDUCTOR} 2>/dev/null; {ruff} check --output-format concise {CONDUCTOR}"
-  made = await bash(
+  made = await conduct_sh(
     f"git worktree remove --force {tree} 2>/dev/null; git fetch -q origin main"
     f" && git worktree add -q {tree} -B w/{key} origin/main && cat {tree}/{CONDUCTOR}",
     show=HIDDEN,
@@ -377,8 +377,8 @@ async def patch(title: str, why: str, ask: str) -> tuple[str, str, str]:
   try:
     was = word = made.stdout.content
     known = {re.sub(r"^line \d+: ", "", x) for x in gate(was)}
-    base = linted((await bash(lint, show=HIDDEN, timeout=120)).stdout.content)
-    rules = (await bash(f"cd {tree} && ls AGENTS.md 2>/dev/null || echo CLAUDE.md", show=HIDDEN)).stdout.content
+    base = linted((await conduct_sh(lint, show=HIDDEN, timeout=120)).stdout.content)
+    rules = (await conduct_sh(f"cd {tree} && ls AGENTS.md 2>/dev/null || echo CLAUDE.md", show=HIDDEN)).stdout.content
     listed = "\n".join(f"{n}. " + box.replace("{rules}", rules.strip()) for n, box in enumerate(PR_BOXES, 1))
     where = chain(f"patch/{key}")
     quietly(rung, f"actor = {PATCHER!r}", on=where)
@@ -394,12 +394,12 @@ async def patch(title: str, why: str, ask: str) -> tuple[str, str, str]:
         found = [x for x in gate(word) if re.sub(r"^line \d+: ", "", x) not in known]
         if found:
           raise Refused("the gate refuses the word:\n" + "\n".join(found))
-        wrote = await bash(
+        wrote = await conduct_sh(
           f"cd {tree} && cat > {CONDUCTOR} && git status --porcelain", stdin=word, show=HIDDEN, timeout=60
         )
         if wrote.stdout.content.strip() != f"M {CONDUCTOR}":
           raise Refused(f"git sees more than the pairs: {wrote.stdout.content[:300]}")
-        fresh = sorted(linted((await bash(lint, show=HIDDEN, timeout=120)).stdout.content) - base)
+        fresh = sorted(linted((await conduct_sh(lint, show=HIDDEN, timeout=120)).stdout.content) - base)
         if fresh:
           raise Refused("ruff finds what it does not find in the word of origin/main:\n" + "\n".join(fresh)[:1500])
       except (Refused, TypeError, ValueError) as fault:
@@ -408,7 +408,7 @@ async def patch(title: str, why: str, ask: str) -> tuple[str, str, str]:
           " Close again with the whole list of pairs, fixed."
         )
         continue
-      diff = (await bash(f"cd {tree} && git diff", show=HIDDEN, timeout=60)).stdout.content
+      diff = (await conduct_sh(f"cd {tree} && git diff", show=HIDDEN, timeout=60)).stdout.content
       answered = await prompt(
         tuple[list[str], list[str]], CHECKED.format(boxes=listed, diff=diff), to=PATCHER, on=where
       )
@@ -424,7 +424,7 @@ async def patch(title: str, why: str, ask: str) -> tuple[str, str, str]:
       )
     else:
       raise Refused(f"{where} gave no pairs and checks that pass in {TRIES + 1} answers. {brief}")
-    pushed = await bash(
+    pushed = await conduct_sh(
       f"cd {tree} && git commit -q --no-verify -am {shq(title)}"
       f" && (git fetch -q origin w/{key} 2>/dev/null; true) && git push -q --force-with-lease -u origin w/{key}"
       f" && (gh label create w:{key} --force >/dev/null 2>&1; true)",
@@ -591,7 +591,7 @@ async def based_now(pr: dict) -> str:
     return said + ref
   old, new = shifted[n]
   setup = f"base={shq(base)} head={shq(head)} old={shq(old)}\n"
-  got = await bash(setup + REBASED, show=HIDDEN, timeout=120)
+  got = await conduct_sh(setup + REBASED, show=HIDDEN, timeout=120)
   if got.code != 0 or len(got.stdout.lines) < 3:
     return said + ref
   how, cut, count, *gained = got.stdout.lines
@@ -609,7 +609,7 @@ git cherry -v origin/main "$sha" | cut -c1-120"""
 
 
 async def squashed(pr: dict) -> str:
-  got = await bash(f"n={pr['n']} sha={shq(pr['sha'])}\n" + SQUASHED, show=HIDDEN, timeout=120)
+  got = await conduct_sh(f"n={pr['n']} sha={shq(pr['sha'])}\n" + SQUASHED, show=HIDDEN, timeout=120)
   rows = [x.split(" ", 2) for x in got.stdout.lines if x[:2] in ("+ ", "- ")] if got.code == 0 else []
   held = [(x[1], x[2] if len(x) > 2 else "") for x in rows if x[0] == "-"]
   if not held:
@@ -629,7 +629,7 @@ async def squashed(pr: dict) -> str:
 
 async def main_changes(pr: dict) -> str:
   held = await squashed(pr)
-  got = await bash(f"n={pr['n']} sha={shq(pr['sha'])}\n" + CHANGED, show=HIDDEN, timeout=120)
+  got = await conduct_sh(f"n={pr['n']} sha={shq(pr['sha'])}\n" + CHANGED, show=HIDDEN, timeout=120)
   if got.code != 0:
     return held
   commits: list[list] = []
@@ -660,7 +660,7 @@ async def main_changes(pr: dict) -> str:
 
 
 async def stale(pr: dict, conflict: bool = False) -> bool:
-  got = await bash(VIEW.replace("{n}", str(pr["n"])), show=HIDDEN, timeout=120)
+  got = await conduct_sh(VIEW.replace("{n}", str(pr["n"])), show=HIDDEN, timeout=120)
   parts = got.stdout.content.split()
   if got.code != 0 or len(parts) != 3:
     return False
@@ -1150,7 +1150,7 @@ async def mend(pr: dict, now: float, red: bool) -> str:
   if not red and n in onmain:
     waited = onmain.pop(n)
     if waited[2] and waited[0] == sha and tended(pr) and not fixing(pr) and not pr["draft"]:
-      got = await bash(BEHIND.replace("{sha}", sha).replace("{n}", str(n)), show=HIDDEN, timeout=180)
+      got = await conduct_sh(BEHIND.replace("{sha}", sha).replace("{n}", str(n)), show=HIDDEN, timeout=180)
       if "updated" in got.stdout.content:
         warn(pr, f"The round updated the branch of your PR #{n} with main.")
         heard.append(
@@ -1236,7 +1236,7 @@ async def mend(pr: dict, now: float, red: bool) -> str:
 
 
 async def failed_lines(pr: dict) -> list[str]:
-  got = await bash(PRLINES.replace("{sha}", pr["sha"]), show=HIDDEN, timeout=300)
+  got = await conduct_sh(PRLINES.replace("{sha}", pr["sha"]), show=HIDDEN, timeout=300)
   return [x for x in got.stdout.lines if x.strip()][:30]
 
 
@@ -1266,7 +1266,7 @@ async def evidence(pr: dict) -> str:
   files = sorted({f for x in seen for f in re.findall(r"[\w./-]+\.(?:py|rs|tsx?|json|toml|md|ya?ml|sh)\b", x)})[:8]
   if not files:
     return said
-  lacks = await bash(
+  lacks = await conduct_sh(
     f"git fetch -q origin main refs/pull/{pr['n']}/head 2>/dev/null; git log --format='%h %s' {shq(pr['sha'])}..origin/main -- "
     + " ".join(shq(f) for f in files)
     + " | head -8",
@@ -1310,7 +1310,7 @@ def spec(head: str) -> str:
 async def restack(old: str, onto: str, kid: dict, parent: int = 0) -> None:
   head = kid["head"]
   setup = f"onto={shq(onto)} head={shq(head)} old={shq(old)} sha={shq(kid['sha'])} parent={parent}\n"
-  got = await bash(setup + RESTACK, show=HIDDEN, timeout=300)
+  got = await conduct_sh(setup + RESTACK, show=HIDDEN, timeout=300)
   if got.code != 0:
     why = " ".join((got.stdout.content + got.stderr.content).split())[-300:]
     heard.append(f"#{kid['n']} was not rebased onto {onto}, exit {got.code}: {why}")
@@ -1344,7 +1344,7 @@ def shift() -> list[tuple[dict, str]]:
 
 
 async def probe(pr: dict) -> None:
-  got = await bash(
+  got = await conduct_sh(
     f"git fetch -q origin {spec(pr['base'])}; git fetch -q origin refs/pull/{pr['n']}/head;"
     f" git merge-tree --write-tree {shq('origin/' + pr['base'])} {shq(pr['sha'])} >/dev/null 2>&1; echo $?",
     show=HIDDEN,
@@ -1368,7 +1368,7 @@ async def restack_forced() -> set[int]:
     if key in noticed or fixing(kid) or on_hold(kid) or "paused" in kid["labels"] or not kid["head"].startswith("w/"):
       continue
     noticed.add(key)
-    got = await bash(
+    got = await conduct_sh(
       f"git fetch -q origin {spec(parent['head'])}; git merge-base --is-ancestor {shq(old)} {shq(new)}; echo $?",
       show=HIDDEN,
       timeout=180,
@@ -1491,7 +1491,7 @@ async def bent(pr: dict) -> bool:
       show=HIDDEN,
     )
     return True
-  got = await bash(
+  got = await conduct_sh(
     f"git fetch -q origin main refs/pull/{n}/head && git diff origin/main...{sha}", show=HIDDEN, timeout=180
   )
   diff = got.stdout.content
@@ -1524,7 +1524,7 @@ async def whole(layers: list[dict]) -> str:
   if len(ready) < 2:
     return ""
   names = " <- ".join("#" + str(up["n"]) for up in ready)
-  got = await bash(
+  got = await conduct_sh(
     f"out=$(gh stack merge {ready[-1]['n']} --yes --squash 2>&1); echo \"$out\" | tail -4;"
     + "".join(f" gh pr view {up['n']} --json state --jq .state;" for up in ready),
     show=HIDDEN,
@@ -1554,13 +1554,13 @@ async def land(pr: dict, red: bool) -> None:
     layers.append(ups[0])
   if len(layers) > 1 and f"no stack {pr['head']}" not in noticed and await whole(layers):
     return
-  same = await bash(
+  same = await conduct_sh(
     f"git fetch -q origin main refs/pull/{n}/head 2>/dev/null; t=$(git rev-parse {sha}^{{tree}} 2>/dev/null) && [ \"$(git merge-tree --write-tree origin/main {sha} 2>/dev/null | head -1)\" = \"$t\" ] && echo same",
     show=HIDDEN,
     timeout=180,
   )
   if "same" not in same.stdout.content:
-    got = await bash(
+    got = await conduct_sh(
       f"gh api 'repos/{{owner}}/{{repo}}/compare/{sha}...main' --jq '.files[].filename' && echo --- && gh pr view {n} --json files --jq '.files[].path'",
       show=HIDDEN,
       timeout=120,
@@ -1571,21 +1571,21 @@ async def land(pr: dict, red: bool) -> None:
     if {x for x in moved.splitlines() if SERIAL.search(x)} & {x for x in own.splitlines() if x}:
       if not red and f"land update {sha}" not in noticed:
         noticed.add(f"land update {sha}")
-        updated = await bash(f"gh pr update-branch {n}", show=HIDDEN, timeout=120)
+        updated = await conduct_sh(f"gh pr update-branch {n}", show=HIDDEN, timeout=120)
         if updated.code == 0:
           warn(pr, f"The round updated the branch of your PR #{n} with main.")
       return
   kids = [up for up in prs.values() if up["base"] == pr["head"]]
   cuts = {}
   for up in kids:
-    found = await bash(
+    found = await conduct_sh(
       f"git fetch -q origin {spec(pr['head'])} {spec(up['head'])} && git merge-base {shq('origin/' + pr['head'])} {shq('origin/' + up['head'])}",
       show=HIDDEN,
       timeout=120,
     )
     cuts[up["n"]] = found.stdout.content.strip() if found.code == 0 and found.stdout.content.strip() else pr["sha"]
   moves = "".join(f"gh pr edit {up['n']} --base main >/dev/null 2>&1; " for up in kids)
-  got = await bash(
+  got = await conduct_sh(
     f"{moves}out=$(gh pr merge {n} --squash --delete-branch 2>&1) || out=\"$out $(gh stack merge {n} --yes --squash 2>&1)\";"
     f" sleep 5; echo \"$out\" | tail -4; gh pr view {n} --json state --jq .state",
     show=HIDDEN,
@@ -1619,7 +1619,7 @@ def owner_review(pr: dict, line: str) -> bool:
 
 
 async def review(seed: bool) -> None:
-  got = await bash(REVIEWS, show=HIDDEN, timeout=600)
+  got = await conduct_sh(REVIEWS, show=HIDDEN, timeout=600)
   rows = [p for p in (x.split("\t", 5) for x in got.stdout.content.splitlines()) if len(p) == 6 and p[1] not in comments]
   mine = [p for p in rows if p[2] == OWNER and not p[5].startswith(MARKS)]
   kinds = {"c": "pulls", "i": "issues"}
@@ -1630,7 +1630,7 @@ async def review(seed: bool) -> None:
       + "/reactions --jq '[.[] | select(.content == \"+1\") | .user.login] | index(\"" + OWNER + "\") != null' 2>/dev/null)"
       for p in others
     ]
-    seen = await bash("; ".join(asks), show=HIDDEN, timeout=300)
+    seen = await conduct_sh("; ".join(asks), show=HIDDEN, timeout=300)
     yes = {x.split(" ")[0] for x in seen.stdout.content.splitlines() if x.endswith(" true")}
     mine += [p for p in others if p[1] in yes]
   comments.update(p[1] for p in rows if p[2] == OWNER)
@@ -1662,17 +1662,17 @@ async def review(seed: bool) -> None:
     else:
       told.append(line)
   if held:
-    await bash("".join(f"gh pr edit {n} --add-label hold >/dev/null 2>&1; " for n in sorted(held)), show=HIDDEN, timeout=300)
+    await conduct_sh("".join(f"gh pr edit {n} --add-label hold >/dev/null 2>&1; " for n in sorted(held)), show=HIDDEN, timeout=300)
   if told:
     quietly(prompt, None, "New comments of the owner that no worker owns:\n" + "\n".join(told) + merged_since())
 
 
 async def decide(title: str, text: str) -> str:
   repo = ops()[0]
-  count = await bash(f"gh issue list --repo {shq(repo)} --label decision --state all --limit 500 --json number --jq length", show=HIDDEN, timeout=120)
+  count = await conduct_sh(f"gh issue list --repo {shq(repo)} --label decision --state all --limit 500 --json number --jq length", show=HIDDEN, timeout=120)
   n = 1 + int(count.stdout.content.strip() or "0")
   body = "🤖 " + text + "\n\nKeep it with no answer, or comment here with your change or your veto."
-  made = await bash(f"gh issue create --repo {shq(repo)} --label decision --title {shq(f'D{n}. {title}')} --body-file -", stdin=body, show=HIDDEN, timeout=120)
+  made = await conduct_sh(f"gh issue create --repo {shq(repo)} --label decision --title {shq(f'D{n}. {title}')} --body-file -", stdin=body, show=HIDDEN, timeout=120)
   return f"D{n} ({made.stdout.content.strip()})"
 
 
@@ -1748,7 +1748,7 @@ AGAIN = """Workers did parts of this issue before, and it is still open. Their P
 
 
 async def take_issues() -> None:
-  got = await bash(ISSUES, show=HIDDEN, timeout=120)
+  got = await conduct_sh(ISSUES, show=HIDDEN, timeout=120)
   if got.code != 0 or not got.stdout.content.startswith("["):
     notice(f"issues {int(clock() // 3600)}", "The command that lists the issues failed: " + (got.stderr.content or got.stdout.content)[-500:])
     return
@@ -1761,13 +1761,13 @@ async def take_issues() -> None:
     if key in handled and not fresh:
       continue
     if body.startswith(MARKS):
-      yes = await bash("gh api repos/{owner}/{repo}/issues/" + str(it["n"]) + "/reactions --jq '[.[] | select(.content == \"+1\") | .user.login] | index(\"" + OWNER + "\") != null'", show=HIDDEN, timeout=120)
+      yes = await conduct_sh("gh api repos/{owner}/{repo}/issues/" + str(it["n"]) + "/reactions --jq '[.[] | select(.content == \"+1\") | .user.login] | index(\"" + OWNER + "\") != null'", show=HIDDEN, timeout=120)
       if yes.stdout.content.strip() != "true":
         continue
     handled.add(key)
     if taken(key) or any(q[0] == key for q in backlog) or any(f"w:{key}" in pr["labels"] for pr in prs.values()):
       continue
-    got = await bash(NAMING.replace("{n}", str(it["n"])), show=HIDDEN, timeout=120)
+    got = await conduct_sh(NAMING.replace("{n}", str(it["n"])), show=HIDDEN, timeout=120)
     named = [x for x in got.stdout.lines if x.strip()] if got.code == 0 else []
     if any(" OPEN " in x for x in named):
       handled.discard(key)
@@ -1844,7 +1844,7 @@ async def mark() -> None:
         + " >/dev/null 2>&1"
       )
   if edits:
-    await bash("; ".join(edits), show=HIDDEN, timeout=600)
+    await conduct_sh("; ".join(edits), show=HIDDEN, timeout=600)
 
 
 PRIVATE = ".furb/extensions/conductor/private.json"
@@ -1924,11 +1924,11 @@ async def heal(pr: dict, red: bool) -> str:
   ):
     noticed.add(f"gateless {sha}")
     if not red:
-      got = await bash(BEHIND.replace("{sha}", sha).replace("{n}", str(n)), show=HIDDEN, timeout=180)
+      got = await conduct_sh(BEHIND.replace("{sha}", sha).replace("{n}", str(n)), show=HIDDEN, timeout=180)
       if "updated" in got.stdout.content:
         warn(pr, f"The round updated the branch of your PR #{n} with main.")
         return f"#{n} had no run of the gates at {sha[:7]}, so the round updated its branch."
-    got = await bash(rehead("true"), show=HIDDEN, timeout=300)
+    got = await conduct_sh(rehead("true"), show=HIDDEN, timeout=300)
     if got.stdout.content.strip():
       return f"#{n} had no run of the gates at {sha[:7]}, and the round ran its workflows again."
     notice(
@@ -1940,12 +1940,12 @@ async def heal(pr: dict, red: bool) -> str:
     if "CANCELLED" not in pr["checks"] or f"rerun {sha}" in noticed or f"{n} {sha}" in deferred.values():
       return ""
     noticed.add(f"rerun {sha}")
-    got = await bash(rehead('.conclusion == "cancelled"'), show=HIDDEN, timeout=300)
+    got = await conduct_sh(rehead('.conclusion == "cancelled"'), show=HIDDEN, timeout=300)
     ran = got.stdout.content.strip()
     return f"#{n} had a run cancelled at its head {sha[:7]}, and the round ran it again." if ran else ""
   if len(failed) == 1 and f"retry {sha}" not in noticed:
     noticed.add(f"retry {sha}")
-    got = await bash(
+    got = await conduct_sh(
       rehead('.conclusion == "failure" or .conclusion == "timed_out"', " --failed"), show=HIDDEN, timeout=300
     )
     if got.stdout.content.strip():
@@ -1962,7 +1962,7 @@ async def heal(pr: dict, red: bool) -> str:
   ):
     noticed.add(f"heal update {sha}")
     updated[n] = clock()
-    got = await bash(BEHIND.replace("{sha}", sha).replace("{n}", str(n)), show=HIDDEN, timeout=180)
+    got = await conduct_sh(BEHIND.replace("{sha}", sha).replace("{n}", str(n)), show=HIDDEN, timeout=180)
     if "updated" in got.stdout.content:
       warn(pr, f"The round updated the branch of your PR #{n} with main.")
       return f"#{n} failed at {sha[:7]} behind main, which is green, so the round updated its branch."
@@ -2146,7 +2146,7 @@ def invariants() -> None:
 
 
 async def upstream_watch() -> None:
-  got = await bash(UPSTREAMING.replace("{upstream}", UPSTREAM), show=HIDDEN, timeout=120)
+  got = await conduct_sh(UPSTREAMING.replace("{upstream}", UPSTREAM), show=HIDDEN, timeout=120)
   for line in got.stdout.lines:
     n, head, title, url = [*line.split("\t"), "", "", ""][:4]
     if n and f"upstream-ready {n}" not in noticed:
@@ -2418,7 +2418,7 @@ async def prune() -> str:
     "tmp": "/tmp",
   }
   quietly(write, Text("scratch://prune.json", json.dumps(spec)))
-  got = await bash(
+  got = await conduct_sh(
     's=$(dirname "$TMPDIR"); [ "$(basename "$s")" = scratch ] || s=/nonexistent; python3 -I - "$TMPDIR/prune.json" "$s"',
     stdin=PRUNE_PY,
     show=HIDDEN,
@@ -2535,7 +2535,7 @@ async def watch_ci() -> None:
         return k, ""
     return "", ""
 
-  got = await bash(f"python3 -I - {shq(json.dumps(sorted(runs_read)))}", stdin=CI_PY, show=HIDDEN, timeout=900)
+  got = await conduct_sh(f"python3 -I - {shq(json.dumps(sorted(runs_read)))}", stdin=CI_PY, show=HIDDEN, timeout=900)
   if got.code != 0 or not got.stdout.content.startswith("{"):
     notice(f"ci {int(clock() // 3600)}", "The command that measures the gates failed: " + (got.stderr.content or got.stdout.content)[-500:])
     return
@@ -2600,7 +2600,7 @@ async def linking() -> None:
     if len(layers) < 2 or f"linked {numbers}" in noticed:
       continue
     noticed.add(f"linked {numbers}")
-    got = await bash(f"gh stack link {numbers} 2>&1", show=HIDDEN, timeout=120)
+    got = await conduct_sh(f"gh stack link {numbers} 2>&1", show=HIDDEN, timeout=120)
     said = " ".join(got.stdout.content.split())[-200:]
     names = " <- ".join("#" + str(up["n"]) for up in layers)
     linked = got.code == 0 and "✗" not in got.stdout.content
@@ -2614,7 +2614,7 @@ THROTTLE = 6
 
 async def throttle() -> None:
   """Each sweep cancels the queued runs of the gates that can serve no merge, so the runners take those that can."""
-  got = await bash(
+  got = await conduct_sh(
     "gh run list --workflow gates.yml --status queued --limit 100 --json databaseId,headBranch,headSha,event",
     show=HIDDEN,
     timeout=120,
@@ -2646,7 +2646,7 @@ async def throttle() -> None:
       if str(run["databaseId"]) not in deferred:
         noticed.add(f"rerun {run['headSha']}")
   if cut:
-    await bash("; ".join(f"gh run cancel {run['databaseId']} >/dev/null 2>&1" for run, _ in cut), show=HIDDEN, timeout=120)
+    await conduct_sh("; ".join(f"gh run cancel {run['databaseId']} >/dev/null 2>&1" for run, _ in cut), show=HIDDEN, timeout=120)
     said = ", ".join(f"#{(heads.get(run['headBranch']) or {}).get('n', run['headBranch'])} ({why})" for run, why in cut)
     heard.append(f"The round cancelled queued runs of the gates that could serve no merge: {said}.")
     for run, _ in cut:
@@ -2678,11 +2678,11 @@ async def throttle() -> None:
       continue
     del deferred[one]
     if pr and pr["sha"] == sha:
-      await bash(f"gh run rerun {one}", show=HIDDEN, timeout=120)
+      await conduct_sh(f"gh run rerun {one}", show=HIDDEN, timeout=120)
 
 
 async def sweep(every: float) -> None:
-  got = await bash(PRS, show=HIDDEN, timeout=300)
+  got = await conduct_sh(PRS, show=HIDDEN, timeout=300)
   bits = re.split(r"\n--- (\d+)\n", got.stdout.content)
   steps = ("the open PRs", "the merged PRs", "the gates of main")
   whole = len(bits) == 2 * len(steps) + 1
@@ -2704,7 +2704,7 @@ async def sweep(every: float) -> None:
     prs[pr["n"]] = pr
   merged.update(json.loads(parts[1]))
   for one in [x for x in pool.values() if x["pr"] and x["folders"] is None]:
-    files = await bash(f"gh pr view {one['pr']} --json files --jq '.files[].path'", show=HIDDEN, timeout=120)
+    files = await conduct_sh(f"gh pr view {one['pr']} --json files --jq '.files[].path'", show=HIDDEN, timeout=120)
     if files.code == 0:
       one["folders"] = sorted({x.split("/")[0] for x in files.stdout.lines if x.strip()})
   left = shift()
@@ -2725,7 +2725,7 @@ async def sweep(every: float) -> None:
   if not red:
     redmain.clear()
   elif tip not in redmain:
-    failed = await bash(REDLINES.replace("{sha}", tip), show=HIDDEN, timeout=300)
+    failed = await conduct_sh(REDLINES.replace("{sha}", tip), show=HIDDEN, timeout=300)
     redmain.clear()
     redmain[tip] = list(failed.stdout.lines)
   if red:
@@ -2764,7 +2764,7 @@ async def sweep(every: float) -> None:
       continue
     if pr.get("files") == 0 and not pr["draft"]:
       said = "🤖 This PR changes no file: main holds all of its change, so the round closes it."
-      await bash(f"gh pr close {n} --comment {shq(said)}", show=HIDDEN, timeout=120)
+      await conduct_sh(f"gh pr close {n} --comment {shq(said)}", show=HIDDEN, timeout=120)
       heard.append(f"#{n} ({pr['head']}) changed no file, so the round closed it.")
       continue
     pr["state"] = await mend(pr, now, red)
@@ -2811,7 +2811,7 @@ async def sweep(every: float) -> None:
   await upstream_watch()
   repo = ops()[0]
   if repo:
-    watched = await bash(OPS_WATCH.replace("{ops}", repo), show=HIDDEN, timeout=300)
+    watched = await conduct_sh(OPS_WATCH.replace("{ops}", repo), show=HIDDEN, timeout=300)
     wrote = [
       p for p in (x.split("\t", 3) for x in watched.stdout.content.splitlines()) if len(p) == 4 and p[1] not in comments
     ]
@@ -2852,7 +2852,7 @@ async def conduct(every: float = 300) -> dict[str, object]:
   here, at = follow(), "labels"
   try:
     made = "".join(f"gh label create {s} --force -c {c} -d {shq(d)} >/dev/null 2>&1; " for s, (c, d) in STATUS.items())
-    await bash(made + LABELS, show=HIDDEN)
+    await conduct_sh(made + LABELS, show=HIDDEN)
     while lead.get("home") == here:
       for at in ("tend", "sweep", "staff", "invariants"):
         try:
@@ -3003,6 +3003,6 @@ def threads() -> str:
   return "\n".join(out)
 
 
-# The code of this word reads the code of each command itself.
-def accepts(command, code):
-  return True
+def conduct_sh(command, **named):
+  """The commands of this word read their own codes, so each is run with every code accepted."""
+  return bash(command, ok=True, **named)

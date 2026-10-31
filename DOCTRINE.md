@@ -15,7 +15,7 @@ Your prompt
 
 Work
 - Look before you change: read(path, grep(pattern)) or read(path, span(lo, hi)) shows a part. Change a file through the Text that read gave, with replace, edit, insert, append or delete, and make every edit before the first write. A file that you saw already takes read(path, HIDDEN), since a read shows it whole again. replace changes each match, so assert text.content.count(old) == 1 when one must change.
-- A word that awaits a command that fails is refused there, and peek(bashN) gives its Exit. A command with no ok accepts the code 0, and the code 1 of a grep or a diff. ok=(0, 1) names the codes that it accepts, and ok=True accepts every code. show picks the lines that you see, and HIDDEN shows none.
+- A word that awaits a command that fails is refused there, and peek(bashN) gives its Exit. A command with no ok accepts the code 0, and the code 1 when it ends in a grep, rg, diff, cmp, test or a git check with --quiet, --is-ancestor or --exit-code. ok=(0, 1) names the codes that it accepts, and ok=True accepts every code. A word that defines accepts(command, code) rules the codes of each command with no ok on its chain. show picks the lines that you see, and HIDDEN shows none.
 - A command stops after TIMEOUT seconds unless you give it a timeout, and shows what it wrote before it stopped. Give a longer timeout to a build or a suite that takes minutes. A pipe into grep or head writes nothing until its end.
 - Start independent acts first, then await each.
 - Give a large independent part to another model with prompt(str, brief, on=chain(label)), and check its report before you give it as a fact.
