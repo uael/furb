@@ -139,6 +139,11 @@ clock, a chance, and a prompt to the operator. It can also make acts that an ear
 Python, as `remember()` does, and answer the reads of a scheme of its own. An extension that needs an ear in Rust is
 a change of furb. The skill `extending` gives an example of each.
 
+A word sets the actor of a chain that it made, or of a chain that waits, with a rung on that chain: `rung("actor =
+'claude-cli:sonnet/medium'", on=chain)` rebinds the default actor, and `wake(chain)` lets a paused chain go on. The next
+prompt on the chain with no `to` goes to the new actor. `hire()` and `resume()` of the conductor do this, and the note
+that a model limit tells a chain names the same two calls.
+
 An official extension also has a contract, `<name>.pyi`, whose laws its suite in `test/` holds, as [the hygiene
 laws](../AGENTS.md#the-hygiene-laws) say, and an ear of the World in `src/extension/<name>.rs` when it reads the disk or
 the network, as `memory`, `skills`, `web`, `compaction` and `mcp` do. Its part for the TUI, `tui.ts` beside its word as
