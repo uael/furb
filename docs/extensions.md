@@ -39,9 +39,10 @@ Seven extensions come with furb, and each life runs them unless a config turns t
   compacts at once. `compacted()` does the same for one chain each time an answer fills more than `SHARE`, 0.6, of the
   window, and moves, stops and pauses nothing. `imported(record, source)` makes a chain that goes on from the chain
   `source`, `chain1` by default, of another record: its turns and its open prompts come, and the values of its module,
-  its words and its open commands do not. The extension has no life word. A project changes `SHARE`, `FILTERS`,
-  `CHOOSER`, `LISTED` or `BRIEF` in an extension of its own. In the TUI, a rule with the summary marks each compaction
-  in the feed, and `/compact` runs `await condense()` on the chain on screen.
+  its words and its open commands do not. Only the log of a record shows the close of a prompt by a word, so from a
+  record whose log does not agree, only the open prompts that no model worked on come. The extension has no life word.
+  A project changes `SHARE`, `FILTERS`, `CHOOSER`, `LISTED` or `BRIEF` in an extension of its own. In the TUI, a rule
+  with the summary marks each compaction in the feed, and `/compact` runs `await condense()` on the chain on screen.
 - **`ouroboros`** teaches a model to extend furb. Its file holds the lore, which every chain reads in the setup, in the
   turn after the read of the file, so it has no life word. The lore says the three ways to extend furb and when to take each: a def in a word, which lives with
   its chain; `extend(name, *rungs)`, which writes the words of those rungs as an extension of the project and turns it

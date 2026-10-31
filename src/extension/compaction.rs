@@ -21,7 +21,8 @@ pub const CARRIED: &str = "reply0";
 /// resolves, with a dict: `record`, the path, with `~` for the home of the user; `entries`, the count of its entries; `digest`, the sha256 of its last
 /// entry; `logged`, whether its log gave the facts; `turns`, each tell and each reply of the chain with its done, as
 /// its model read them after the last prefix said on it; and `prompts`, each open prompt of a model on that chain, as
-/// `(name, shape, message, to)`. Each carried fact is about [`CARRIED`] and said by the carry, so a fork keeps the
+/// `(name, shape, message, to)`. When the log does not give the facts, the record shows no close that a word gave, so
+/// `prompts` holds only each open prompt that no rung of a model worked on. Each carried fact is about [`CARRIED`] and said by the carry, so a fork keeps the
 /// turns whole and a filter of the extension keeps or drops them with the carry. A record of no log gives its replies and no tell, since a record keeps no
 /// tell. It refuses a carry of a path that holds no record, of a record that it cannot read, or of a chain that the
 /// record does not hold.
@@ -98,10 +99,16 @@ fn carried(
       _ => {}
     }
   }
+  let worked: HashSet<&str> = if told.logged {
+    HashSet::new()
+  } else {
+    held.iter().filter(|one| one.question() && one.kind() == "rung").map(Fact::by).collect()
+  };
   let open = |one: &&Fact| {
     one.question()
       && one.kind() == "prompt"
       && !done.contains(one.about())
+      && !worked.contains(one.about())
       && fact_text(one, 3) != "operator"
   };
   let prompts = held

@@ -175,3 +175,31 @@ fn measure_a_carry_of_a_record() {
     wire::record(got.as_ref()).to_string().len()
   );
 }
+
+#[test]
+fn a_carry_of_a_record_with_no_log_gives_only_the_open_prompts_that_no_word_of_a_model_worked_on() {
+  let at = place("unlogged");
+  let mut old = scripted(&at, "old.jsonl", &["close('hi')"]).boot::<String>([]).unwrap().0;
+  let ask = |engine: &mut Engine, message: &str| {
+    let with = verbs::Prompt {
+      message: Some(message.to_owned()),
+      on: Some("chain1".to_owned()),
+      ..Default::default()
+    };
+    engine.prompt(Object::string("str"), with).unwrap().id().to_owned()
+  };
+  let hi = ask(&mut old, "Say hi.");
+  closed(&mut old, &until("chain1", &format!("'done', '{hi}'")));
+  ask(&mut old, "Later.");
+  closed(&mut old, &until("chain1", "wait(3600)"));
+  let next = ask(&mut old, "Next.");
+  drop(old);
+  fs::remove_file(format!("{}.log", at.join("old.jsonl").display())).unwrap();
+  let mut new = scripted(&at, "new.jsonl", &[]).boot::<String>([]).unwrap().0;
+  let word = "got = await carry('old.jsonl')\nassert isinstance(got, dict)\nclose([got['logged'], got['prompts']])";
+  assert_eq!(
+    closed(&mut new, word).as_ref().py_repr(),
+    format!("[False, [('{next}', 'str', 'Next.', '')]]"),
+    "a prompt that a word of a model may have closed comes no more"
+  );
+}
