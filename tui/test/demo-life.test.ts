@@ -66,6 +66,11 @@ test("the life of the demo is as dense as a real one: chains in a tree, threads,
             .slice(-14),
         ),
         JSON.stringify([...session.host.prompts.keys()]),
+        JSON.stringify(
+          session.host.facts
+            .map((fact, at) => [at, fact[0], fact[1], fact[2]])
+            .filter((one) => ["prompt34", "prompt35", "prompt36"].includes(String(one[2]))),
+        ),
       );
     expect(asks).toEqual(expect.arrayContaining(["bool", "int", "str"]));
     expect(asks.some((shape) => shape.startsWith("Literal"))).toBe(true);
