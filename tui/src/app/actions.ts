@@ -113,10 +113,7 @@ export const actions = part({
       return true;
     }
     if (text.startsWith("/workspace ")) {
-      const group = await library.add(text.slice(11).trim());
-      const entry = group.sessions[0];
-      if (entry) await library.select(entry);
-      else await library.create(group);
+      await library.enter(await library.add(text.slice(11).trim()));
       return true;
     }
     if (name === "extensions" && !argument) {

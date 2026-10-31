@@ -308,8 +308,7 @@ export const rail = part({
     const kept = group.sessions.filter((entry) => !entry.archived);
     const asks = (entry: SessionEntry) => Boolean(entry.session?.desk.asks.some((ask) => !ask.notice));
     const pick = kept.find(asks) ?? kept.find((entry) => entry.session) ?? kept[0];
-    if (pick) await lib.select(pick);
-    else await lib.create(group);
+    await lib.enter(group, pick);
   },
 
   /** A workspace that does not hold the focus opens to show its sessions, or folds again. */
