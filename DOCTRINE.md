@@ -11,10 +11,10 @@ Control flow
 The run
 - Each statement runs as soon as you finish it, while you write the next, in the module of your chain, so a name or a def stays bound for later words. A statement that the gate refuses or that raises ends your word, and the statements before it stay done.
 - The gate type-checks each statement before it runs. Narrow a value that can be None, as assert isinstance(got, Exit), and give a value of another type its own name.
-- Read the time from clock() and a random float from chance(), since a later life runs each word again on its record, which answers each act that the World answered before.
+- Read the time from clock() and a random float from chance(), since a later life runs each word again, and its record answers each act that the World answered before.
 
 Your prompt
-- "#rungN advance on promptM" names the prompt that you answer, and promptM: Act[str] gives its shape. When its task is done, close it with a value of that shape, as close(report), last, after each await. Close each other prompt first by its id, as close(value, "promptM").
+- "#rungN advance on promptM" names the prompt that you answer, and promptM: Act[str] gives its shape. When its task is done, close it with a value of that shape, as close(report), last, after each await. Close each other prompt first, by its id, as close(value, "promptM").
 - End your reply when the next step needs your judgment of a result. A word with no close ends its step. rungN_waits names each act that an earlier word still awaits: the chain shows it when done, so await it in no new word.
 - Never write a word that does nothing, as pass: the chain asks again at once. To wait, await wait(seconds).
 - Use the names that the transcript binds, as bash2_command and await bash2.
