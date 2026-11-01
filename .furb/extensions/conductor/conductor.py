@@ -70,6 +70,7 @@ An item that takes a PR by its brief, and not by a label or a push, names it in 
 At each round a watchdog reads each open command of each worker, with no model: a wait on CI (gh pr checks --watch, gh run watch, or a loop of sleep around gh) that runs over 10 minutes is cancelled, and its reason tells the worker to stay on its PR, wait for the checks again with await checked(number) and close only when the PR merged. Any other command whose output did not grow for 15 minutes is a line in the next notice, and at 30 minutes it is cancelled with its reason and told to you. It ends a wait or a command, never a task. It also reads every chain of the life, not the workers alone: when a wait or a run of a word has held a chain for HELD seconds while a prompt of the operator on it is not over and no reply of a rung of it was said, the round cancels that wait (else that run, and says done with CancelledError when the cancel left it open), tells the chain once to await nothing over 60 s and to peek at the next advance, and names the chain in the next notice. It leaves the home of the round alone.
 DEBRIEFS is on by default and lives in the state of the round: DEBRIEFS = False in a word turns off the debrief of each worker that ends, which saves tokens.
 An item waits for others with after[key] = [keys], set before you queue it: staff() hires it only once each PR that those keys ended with merged, an item of backlog whose keys merged goes to queue, and the round lists in a notice each key that no item holds. The entries of held_items in the module of the root move into backlog at each round, so a dict of your own chain is not needed.
+An item that names a file which an open PR of the round changes waits for that PR, as an after on it, by the defect e372: each sweep reads the files that each open PR changes, in touched[n], and staff() holds an item whose brief or areas[key] names a path with a folder that one changes, in serial[key], until that PR is no longer open, so two designs of one file never race. A PR that the item names as #N, labels w:key, or owns, holds nothing.
 Method, at each notice: read the whole state, fix every thing that is off in one go, read the state again to verify, and go on until nothing is off. Only then report. Each round also checks the state in invariants(): it gives each open PR that the round tends a home, from the chain that pushed its head, wakes no chain, and lists in the next notice what code cannot fix.
 A PR waits on a decision of the owner while awaited[decision] names one of its labels, or its number as #N, and the decision is an act that is not over, as the prompt that asked him: a failed check of that PR gets no order, no handover and no fixer, a conflict of it still does, and the round names the decision once. When the act ends, the round drops it and tends the PR again.
 The round holds at most cap() chains that hold an open prompt with a shape, and counts the chains of workers, of sub-chains and of judges alike: room() counts them, and a resume of a worker waits for a slot. A sub-chain that a chain of a live worker made, at any depth, counts within the slot of that worker, since the worker waits on it: the round never parks it. A parked chain takes the next free slot before any new chain, since tend and sweep hire before staff wakes. When more chains stand, the round pauses the newest overflow with a note and wakes it in order when a slot frees, and it never ends its task.
@@ -131,6 +132,8 @@ kinds: dict[str, str] = globals().setdefault("kinds", {})
 pool: dict[str, dict] = globals().setdefault("pool", {})
 slots: dict[str, str] = globals().setdefault("slots", {})
 areas: dict[str, list[str]] = globals().setdefault("areas", {})
+touched: dict[int, dict] = globals().setdefault("touched", {})
+serial: dict[str, int] = globals().setdefault("serial", {})
 round_faults: dict[str, int] = globals().setdefault("round_faults", {})
 DEBRIEFS = globals().get("DEBRIEFS", True)
 vetoes: dict = globals().setdefault("vetoes", {})
@@ -2397,6 +2400,43 @@ def triage() -> None:
     heard.append(f"The triage folded the item {b[0]} into {a[0]}, which it is like.")
 
 
+PATH = r"(?:[\w.~-]+/)+[\w.-]+\.(?:py|pyi|rs|tsx?|json|toml|md|ya?ml|sh)\b"
+
+
+async def changed_files() -> None:
+  for n in [n for n in touched if n not in prs]:
+    del touched[n]
+  for pr in [p for p in prs.values() if p["head"].startswith("w/") and touched.get(p["n"], {}).get("sha") != p["sha"]]:
+    got = await bash(f"gh pr view {pr['n']} --json files --jq '.files[].path'", show=HIDDEN, timeout=120)
+    if got.code == 0:
+      touched[pr["n"]] = {"sha": pr["sha"], "paths": [x.strip() for x in got.stdout.lines if x.strip()]}
+
+
+def rival(key: str, brief: str) -> tuple[int, list[str]] | None:
+  mine = set(re.findall(PATH, brief)) | {a.strip("/") for a in areas.get(key, []) if "/" in a.strip("/")}
+  for pr in prs.values() if mine else []:
+    if f"w:{key}" in pr["labels"] or pr["n"] in owns.get(key, []) or re.search(rf"#{pr['n']}\b", brief):
+      continue
+    paths = touched.get(pr["n"], {}).get("paths", [])
+    hit = sorted({p for p in paths for x in mine if p == x or x.endswith("/" + p) or p.startswith(x + "/")})
+    if hit:
+      return pr["n"], hit
+  return None
+
+
+def serialized(key: str, brief: str) -> bool:
+  if serial.get(key) in prs:
+    return True
+  serial.pop(key, None)
+  found = rival(key, brief)
+  if found:
+    serial[key] = found[0]
+    heard.append(
+      f"{key} waits for #{found[0]}, which changes {', '.join(found[1][:4])} that it names, so two designs of one file do not race."
+    )
+  return bool(found)
+
+
 def staff() -> None:
   under = tree()
   for c in list(parked):
@@ -2441,7 +2481,7 @@ def staff() -> None:
     queue.append(backlog.pop(ready[0]))
   triage()
   for item in list(queue):
-    if met(item[0]) and family(model_of(item[0])) not in blocked and can(item[0]):
+    if met(item[0]) and family(model_of(item[0])) not in blocked and not serialized(item[0], item[1]) and can(item[0]):
       queue.remove(item)
       hire(*item)
 
@@ -3092,6 +3132,7 @@ async def sweep(every: float) -> None:
     files = await bash(f"gh pr view {one['pr']} --json files --jq '.files[].path'", show=HIDDEN, timeout=120, ok=True)
     if files.code == 0:
       one["folders"] = sorted({x.split("/")[0] for x in files.stdout.lines if x.strip()})
+  await changed_files()
   left = shift()
   for one in prs.values():
     if one["mergeable"] == "UNKNOWN":
