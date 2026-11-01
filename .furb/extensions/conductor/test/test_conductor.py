@@ -887,7 +887,7 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 
 STATE = (
   "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed assigned silent"
-  " comments measures timers noted debriefs briefed owns watched after parked awaited covering kinds pool slots areas round_faults vetoes rulings judged tips shifted parents redmain onmain hired paced landed heard bindings handled ends requeued"
+  " comments measures timers noted debriefs briefed owns watched after parked awaited covering kinds pool slots areas touched serial round_faults vetoes rulings judged tips shifted parents redmain onmain hired paced landed heard bindings handled ends requeued"
   " statused secret updated budgeted flaky runs_read deferred"
 ).split()
 
@@ -2168,6 +2168,55 @@ def test_an_item_with_an_unmerged_after_stays_in_the_backlog_and_starts_once_it_
   conductor.merged.add(7)
   conductor.staff()
   assert [key for key, _ in conductor.hired] == ["k2"] and conductor.backlog == []
+
+
+def test_an_item_that_names_a_file_of_an_open_pr_waits_for_that_pr_and_starts_once_it_closed(conductor: Round) -> None:
+  conductor.prs[7] = conductor.pr(n=7, labels=["w:reader-cache"])
+  conductor.touched[7] = {"sha": "abc", "paths": ["src/world/reader.rs", "docs/x.md"]}
+  conductor.queue.append(("reader-stream", "Make src/world/reader.rs stream its facts.", "defects"))
+  conductor.staff()
+  conductor.staff()
+  assert conductor.hired == [] and [x[0] for x in conductor.queue] == ["reader-stream"]
+  assert conductor.serial == {"reader-stream": 7}
+  assert [x for x in conductor.heard if "#7" in x] == [
+    "reader-stream waits for #7, which changes src/world/reader.rs that it names, so two designs of one file do not race."
+  ]
+  del conductor.prs[7]
+  conductor.staff()
+  assert [key for key, _ in conductor.hired] == ["reader-stream"] and conductor.serial == {}
+
+
+def test_an_item_waits_for_a_pr_that_changes_a_folder_of_its_areas_or_its_absolute_path(conductor: Round) -> None:
+  conductor.prs[7] = conductor.pr(n=7)
+  conductor.touched[7] = {"sha": "abc", "paths": ["src/extension/mcp/config.rs"]}
+  conductor.areas["k1"] = ["src/extension/mcp"]
+  conductor.areas["k3"] = ["src"]
+  conductor.queue.extend([("k1", "brief", "defects"), ("k2", "Read ~/repo/src/extension/mcp/config.rs.", "defects")])
+  conductor.queue.append(("k3", "Read AGENTS.md and src/other.rs.", "defects"))
+  conductor.staff()
+  assert [key for key, _ in conductor.hired] == ["k3"] and conductor.serial == {"k1": 7, "k2": 7}
+
+
+def test_an_item_never_waits_for_the_pr_that_it_names_labels_or_owns(conductor: Round) -> None:
+  for n in (7, 8, 9):
+    conductor.prs[n] = conductor.pr(n=n, labels=["w:k2"] if n == 8 else [])
+    conductor.touched[n] = {"sha": "abc", "paths": ["src/life.rs"]}
+  conductor.owns["k3"] = [9]
+  briefs = {"k1": "Fix src/life.rs on #7, #8 and #9.", "k2": "Fix src/life.rs on #7 and #9.", "k3": "Fix src/life.rs on #7 and #8."}
+  assert [conductor.serialized(key, brief) for key, brief in briefs.items()] == [False, False, False]
+  assert conductor.serialized("k4", "Fix src/life.rs on #7.") and conductor.serial == {"k4": 8}
+
+
+@JQ
+def test_a_sweep_reads_the_files_of_each_open_pr_of_the_round_once_for_each_head(conductor: Round) -> None:
+  conductor.say(r"pr view 7 --json files", json.dumps({"files": [{"path": "a/b.py"}, {"path": "c.md"}]}))
+  conductor.prs[7] = conductor.pr(n=7)
+  conductor.prs[8] = conductor.pr(n=8, head="other")
+  conductor.touched[6] = {"sha": "old", "paths": ["x/y.py"]}
+  asyncio.run(conductor.changed_files())
+  asyncio.run(conductor.changed_files())
+  assert conductor.touched == {7: {"sha": "abc", "paths": ["a/b.py", "c.md"]}}
+  assert conductor.log().count("pr view 7 --json files") == 1 and "pr view 8" not in conductor.log()
 
 
 def test_the_items_held_by_the_coordinator_move_into_the_backlog_with_their_keys(conductor: Round) -> None:
