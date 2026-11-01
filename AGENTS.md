@@ -289,7 +289,7 @@ fix what your change broke, and report what was broken before.
   `--files <files>` to run some files. In a new worktree, `uv run --no-sync pre-commit` makes an empty `.venv` and runs
   the old `pre-commit` of the system, which cannot read the config, so do not use it there. A `git commit` runs the hooks, `cargo test`
   among them, and takes minutes: give it a timeout in `bash` of twice the time that it took last. The hook
-  `script/hooks/pre-commit`, which `git config core.hooksPath script/hooks` turns on, prints only what fails. A merge commit, which `git merge` makes or `git commit` ends after a conflict, runs the hooks on
+  `script/hooks/pre-commit`, which `git config core.hooksPath script/hooks` turns on, prints only what fails. The hook `script/hooks/pre-push` refuses each push that moves or deletes `main` of a remote: `main` changes only through the merge of a pull request, `gh pr merge`, which runs no hook here. A merge commit, which `git merge` makes or `git commit` ends after a conflict, runs the hooks on
   each file that it changes against its first parent, as a commit does. Run the
   push as its own command after the commit, so that its result stands in the tail of that command. The hook `cargo test` runs only when a file that the crate
   or its tests read changed, and the gates run every hook on every file. The hook of the links runs only for a README or
