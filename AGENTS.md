@@ -360,6 +360,8 @@ fix what your change broke, and report what was broken before.
   of each capture, which a model that cannot see an image reads, `FURB_GALLERY_CELLS=<folder>` writes the cells of each
   capture as JSON, which the extension `converge-tui` of the project reads, and `FURB_STILL_CLOCK` sets the time of the
   view, which stands still by default. A model sees a capture as an image when its word reads the PNG.
+  Both draw in process, with the test renderer of `@opentui/core` and the rasterizer `tui/script/raster.ts`, and open no
+  window.
 - `python script/budgets.py`: set the budget of time of each job of the gates in `.github/budgets.json`, from its last
   green runs on `main`. The round of the conductor, an extension of the project in `.furb/extensions/conductor`, queues
   an item for a job that passes its budget.
