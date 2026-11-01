@@ -2,8 +2,8 @@
 // So a test counts its own time alone against its limit of thirty seconds, and no test runs beside a test that
 // changes what they share, such as the environment or the clock. A first run of each file, which matches no name,
 // lists its tests. Then the tests of all the files go into runs of at most one size, about four runs for each core,
-// the runs of the largest files first. Twice as many runs go at once as the machine has cores, since a test waits for
-// its session as much as it works. A word given filters the files by their path, or by the name of their package and their file, as tui/host, and a flag goes to each run. A test
+// the runs of the largest files first. As many runs go at once as the machine has cores: twice as many made each test
+// take more than twice its time on the four cores of a runner of Windows, and the whole suite no less time. A word given filters the files by their path, or by the name of their package and their file, as tui/host, and a flag goes to each run. A test
 // that passes shows its line, a run that fails shows all that it wrote, and one failed run fails them all. The
 // last line counts the tests that passed and failed, and a filter that matches no file fails. FURB_TEST_OUTPUT=1
 // shows all that each run wrote, so a console.log in a test shows too. Each
@@ -125,7 +125,7 @@ for (const { file, names, text } of listed)
     process.stdout.write(text);
     failed.push(file);
   }
-await deal(runs, 2 * cores, async ({ file, names }) => {
+await deal(runs, cores, async ({ file, names }) => {
   const pattern = `^(${names.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})$`;
   const { text, passed } = await test(["--timeout", "30000", "--test-name-pattern", pattern, ...flags, file]);
   passes += text.match(/^\(pass\)/gm)?.length ?? 0;
