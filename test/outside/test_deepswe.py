@@ -126,3 +126,13 @@ def test_default_work_and_collection_roots_are_outside_the_temporary_directory(
   assert Path.home() / ".cache/furb/deepswe-work" == deepswe.WORK
   assert scratch not in deepswe.CACHE.parents
   assert scratch not in deepswe.WORK.parents
+
+
+def test_the_task_life_has_a_test_first_loop_and_test_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
+  deepswe = rig(monkeypatch)
+  assert "its own tests and verifier as the oracle" in deepswe.FIRST
+  assert "await tdd(" in deepswe.FIRST
+  assert "await converge(" in deepswe.FIRST
+  compile(deepswe.PRIMITIVES, "<deepswe primitives>", "exec")
+  assert 'for group in ("failing", "passing")' in deepswe.PRIMITIVES
+  assert "results.append((group, test, got.code))" in deepswe.PRIMITIVES

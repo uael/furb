@@ -87,6 +87,29 @@ STEP = 1800.0
 """STEP is the seconds one step of the rig may take, since a step that waits for ever holds the whole of it."""
 ASKED = "\n\nWhen the work is done, close with a float from 0 to 1: how sure you are that this task is complete."
 """ASKED is what the rig adds to the instruction of the task, which says the shape of the answer and no more."""
+FIRST = """Work on the task below, in this checkout. Treat its own tests and verifier as the oracle.
+Read the task and locate its tests before editing. First add or identify a regression test for the requested behavior
+and run it. Use `await tdd("test command")` to run one test command. Then make the smallest fix.
+Use `await converge({"failing": ["regression test command"], "passing": ["existing test command"]})` after each
+change. The first list holds tests that failed before your fix; the second holds tests that passed before it. The
+helper runs both lists and returns their exit codes. Fix any failure and call it again. Continue until every command
+in both lists passes. Do not claim success from a test you did not run. Before closing, run the task's full required
+test command and report its result.
+"""
+"""FIRST sets a test-first loop for each task, with the task's own tests as its oracle."""
+PRIMITIVES = """async def tdd(test):
+  return await bash(test)
+
+
+async def converge(oracle):
+  results = []
+  for group in ("failing", "passing"):
+    for test in oracle[group]:
+      got = await tdd(test)
+      results.append((group, test, got.code))
+  return results
+"""
+"""PRIMITIVES binds the test runner words in the task's main chain."""
 AGAIN = "confidence level {} is too low, continue"
 """AGAIN is what the operator says to a model that closed under the confidence it wants."""
 NOTHING = (
@@ -807,6 +830,12 @@ def changed(app: Path, syn: str) -> bool:
   return captured([*gits(app), "diff", "--quiet", syn]).returncode != 0
 
 
+async def equip(root: str) -> None:
+  """Bind the task-test helpers once in the main chain, including on a resumed life."""
+  if not any("async def tdd(" in word for word in engine.program(root).values()):
+    await engine.rung(PRIMITIVES, on=root)
+
+
 async def worked(told: str, app: Path, run_dir: Path, args: argparse.Namespace, syn: str) -> tuple[object, str, Path]:
   """One life on the checkout, asked the task and nothing else, and what it answered.
 
@@ -820,7 +849,8 @@ async def worked(told: str, app: Path, run_dir: Path, args: argparse.Namespace, 
   say(f"[deepswe] life on {app}, root {root}, {len(held)} facts kept")
   if args.ceiling:
     engine.grant(usd=args.ceiling, on=root)
-  stopped, got, looks, message = "", None, 0, told + ASKED
+  await equip(root)
+  stopped, got, looks, message = "", None, 0, told + "\n\n" + FIRST + ASKED
   empty = False
   mark: dict[str, float] = {"did": 0, "answers": 0}
   began = time.monotonic()
