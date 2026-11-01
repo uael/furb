@@ -78,6 +78,13 @@ repos:
         language: system
         always_run: true
         pass_filenames: false
+      - id: workflows
+        name: the workflows parse and keep their shape
+        # Each commit runs it, a merge commit too, since a bad merge of a workflow shows in CI only after minutes.
+        entry: uv run --no-sync python script/workflows.py
+        language: system
+        always_run: true
+        pass_filenames: false
       - id: stray
         name: no backup or reject file
         entry: A backup or reject file of a patch or of sed is in the commit. Delete it.
