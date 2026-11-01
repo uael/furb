@@ -1,0 +1,8 @@
+{
+  "extensions": {
+    "pr": "extensions/pr",
+    "conductor": "extensions/conductor",
+    "converge": "extensions/converge",
+    "converge-tui": "extensions/converge-tui"
+  }
+}

@@ -1,0 +1,837 @@
+import { afterAll, expect, setSystemTime, test } from "bun:test";
+import { RGBA } from "@opentui/core";
+import { setRendererCapabilities } from "@opentui/core/testing";
+import { until } from "../../bind/typescript/test/until.ts";
+import { removeDemoDirectories } from "../src/demo.ts";
+import { emojis } from "../src/emoji.ts";
+import { count } from "../src/format.ts";
+import { palettes } from "../src/theme.ts";
+import { cellAt, composing, drawn } from "./composing.ts";
+import { idle } from "./idle.ts";
+
+// Each test opens a demo session, with its worker and its record, as the tests of the App do, and so has their time:
+// a Windows runner has run such a test four times slower than usual, past the five seconds that bun gives by default.
+afterAll(removeDemoDirectories);
+
+test("a terminal with no kitty keyboard protocol reaches each action by a chord it sends, and the help names those chords", () =>
+  composing(
+    async ({ session, app, screen, frame }) => {
+      screen.mockInput.pressKey("3", { meta: true });
+      expect(session.view).toBe("changes");
+      screen.mockInput.pressKey("1", { meta: true });
+      expect(session.view).toBe("feed");
+      screen.mockInput.pressKey("m", { meta: true });
+      expect(await frame()).toContain("The chain sends its next prompt to this model.");
+      app.closeOverlay();
+      screen.mockInput.pressKey("r", { ctrl: true });
+      expect(session.mode).toBe("python");
+      await frame();
+      await screen.mockInput.typeText('x = "你好"');
+      screen.mockInput.pressKey("j", { ctrl: true });
+      await screen.mockInput.typeText("if x:");
+      screen.mockInput.pressKey("j", { ctrl: true });
+      expect(app.composer.plainText).toBe('x = "你好"\nif x:\n  ');
+      screen.mockInput.pressKey("F1");
+      let help = await frame();
+      expect(help).toContain("⌥1-3");
+      expect(help).not.toContain("⌃1-3");
+      expect(help).toContain("⌥M");
+      app.closeOverlay();
+      setRendererCapabilities(screen.renderer, { kitty_keyboard: true });
+      app.help();
+      help = await frame();
+      expect(help).toContain("⌃1-3 or ⌥1-3");
+      expect(help).toContain("⇧Enter or ⌃J");
+    },
+    undefined,
+    true,
+  ));
+
+test("a text that a command puts in the composer keeps the draft one undo away", () =>
+  composing(async ({ app, screen, frame }) => {
+    await screen.mockInput.typeText("a long question I was writing");
+    screen.mockInput.pressKey("n", { ctrl: true });
+    expect(app.composer.plainText).toBe("/chain ");
+    expect(app.composer.undo()).toBe(true);
+    expect(app.composer.plainText).toBe("a long question I was writing");
+    app.palette();
+    expect(await frame()).toContain("Commands");
+    await screen.mockInput.typeText("budget");
+    expect(await frame()).toContain("Set budget");
+    screen.mockInput.pressEnter();
+    await frame();
+    expect(app.composer.plainText).toBe("/grant ");
+    app.composer.undo();
+    expect(app.composer.plainText).toBe("a long question I was writing");
+  }));
+
+test("Alt+Enter queues a message, and leaves Python input and a program under edit in the composer", () =>
+  composing(
+    async ({ session, app, screen }) => {
+      app.toggleMode();
+      await screen.mockInput.typeText("queued_value = 7");
+      screen.mockInput.pressEnter({ meta: true });
+      expect(app.composer.plainText).toBe("queued_value = 7");
+      expect(session.queued).toEqual([]);
+      expect(session.notice).toContain("Only a message can wait in the queue.");
+      await session.command("/edit");
+      const program = app.composer.plainText;
+      expect(session.editing).toBeDefined();
+      screen.mockInput.pressEnter({ meta: true });
+      expect(app.composer.plainText).toBe(program);
+      expect(session.queued).toEqual([]);
+      screen.mockInput.pressEscape();
+      app.toggleMode();
+      app.render();
+      app.composer.setText("a follow-up");
+      screen.mockInput.pressEnter({ meta: true });
+      expect(app.composer.plainText).toBe("");
+      await until(session, () =>
+        session.acts.some((act) => act.kind === "prompt" && act.words[1] === "a follow-up"),
+      );
+    },
+    { width: 120, height: 44, kittyKeyboard: true },
+    true,
+  ));
+
+test("a command that the text names whole comes first among its suggestions", () =>
+  composing(
+    async ({ session, app, screen, frame }) => {
+      await screen.mockInput.typeText("/edit");
+      const rows = (await frame()).split("\n").filter((line) => /\/edit/.test(line) && !line.includes("│"));
+      expect(rows[0]).toContain("/edit [prompt id]");
+      expect(rows[1]).toContain("/editor");
+      screen.mockInput.pressTab();
+      expect(app.composer.plainText).toBe("/edit ");
+      app.composer.setText("");
+      await screen.mockInput.typeText("/edit");
+      await frame();
+      screen.mockInput.pressEnter();
+      await until(session, () => session.editing !== undefined);
+      expect(app.composer.plainText).toContain("close(");
+    },
+    undefined,
+    true,
+  ));
+
+test("the shape picker marks the shape of the next prompt and runs /shape, and /edit and its picker offer each prompt with a program", () =>
+  composing(
+    async ({ session, app, screen, frame }) => {
+      app.shapes();
+      let shown = await frame();
+      expect(shown).toContain("The engine validates the result against this Python type.");
+      expect(shown).toContain("✓ str");
+      await screen.mockInput.typeText("int");
+      screen.mockInput.pressEnter();
+      await until(session, () => session.shape === "int");
+      await idle(session);
+      // The prompt of the operator and a prompt that a rung made each hold a program once the model answers it.
+      await session.command('/run prompt("str", message="Summarize the notes.")');
+      await until(session, () => session.activity.some((act) => act.id === "prompt2"));
+      await idle(session);
+      app.ladders();
+      shown = await frame();
+      expect(shown).toContain("Edit a prompt program");
+      expect(shown).toContain("✓ prompt1  Explore this project");
+      expect(shown).toContain("❯ ✓ prompt2  Summarize the notes.");
+      app.closeOverlay();
+      await screen.mockInput.typeText("/edit ");
+      shown = await frame();
+      expect(shown).toContain("❯ prompt1  Explore this project");
+      expect(shown).toContain("prompt2  Summarize the notes.");
+      app.composer.setText("/edit");
+      await app.submit();
+      await until(session, () => session.editing !== undefined);
+      expect(session.editing).toBe("prompt2");
+    },
+    undefined,
+    true,
+  ));
+
+test("a sent text leaves its draft at once, and a program under edit opens from its door the next time", () =>
+  composing(
+    async ({ session, app, screen, frame }) => {
+      // /edit opens the latest prompt with a program, so the demo settles first: its last prompt may still run.
+      await idle(session);
+      const prompt = session.draftKey;
+      await screen.mockInput.typeText("/edit");
+      await frame();
+      screen.mockInput.pressEnter();
+      await until(session, () => session.editing !== undefined);
+      const edited = session.draftKey;
+      app.composer.setText('close("edited once")');
+      await app.submit();
+      expect(session.editing).toBeUndefined();
+      await frame();
+      expect(session.drafts[prompt]).toBeUndefined();
+      expect(session.drafts[edited]).toBeUndefined();
+      expect(session.histories[edited]).toEqual(['close("edited once")']);
+      app.composer.setText("/edit");
+      await app.submit();
+      expect(app.composer.plainText).toBe('close("edited once")');
+      screen.mockInput.pressEscape();
+      await frame();
+      expect(app.composer.plainText).toBe("");
+      // A draft typed while the text is sent stays in the composer, and the sent text enters the history of its draft.
+      const submit = session.submit.bind(session);
+      const { promise: gate, resolve: release } = Promise.withResolvers<void>();
+      session.submit = async (input) => {
+        await gate;
+        return submit(input);
+      };
+      app.composer.setText("a question");
+      const sending = app.submit();
+      expect(app.composer.plainText).toBe("");
+      await screen.mockInput.typeText("the next one");
+      release();
+      await sending;
+      session.submit = submit;
+      expect(app.composer.plainText).toBe("the next one");
+      expect(session.histories[prompt]).toEqual(["/edit", "a question"]);
+      // A text that is not sent goes back to its draft.
+      app.composer.setText("");
+      app.composer.setText("/model nothing");
+      await app.submit();
+      app.closeOverlay();
+      expect(app.composer.plainText).toBe("/model nothing");
+    },
+    { width: 120, height: 44, kittyKeyboard: true },
+    true,
+  ));
+
+test("the completion of a token reads the text before the cursor, whatever the width of the characters before it", () =>
+  composing(async ({ session, app, screen, frame }) => {
+    await session.projectFiles();
+    // A combining mark is inserted with the letter it marks, as a paste or an input method gives it.
+    app.composer.insertText("Compare cafe\u0301 with ");
+    await screen.mockInput.typeText("@READ");
+    await frame();
+    screen.mockInput.pressTab();
+    expect(app.composer.plainText).toBe("Compare cafe\u0301 with @README.md ");
+    app.composer.setText("");
+    app.composer.insertText("总结 @READ 的内容");
+    for (let step = 0; step < 4; step++) screen.mockInput.pressArrow("left");
+    expect(await frame()).toContain("@README.md");
+    screen.mockInput.pressTab();
+    expect(app.composer.plainText).toBe("总结 @README.md  的内容");
+  }));
+
+test("a click on a suggestion completes the token as it stands when it is clicked", () =>
+  composing(
+    async ({ session, app, screen, frame, click }) => {
+      await session.projectFiles();
+      for (const [typed, more, completed] of [
+        ["/rewi", "n", "/rewind "],
+        ["Read @READ", "M", "Read @README.md "],
+      ] as const) {
+        app.composer.setText("");
+        await screen.mockInput.typeText(typed);
+        await frame();
+        await screen.mockInput.typeText(more);
+        await click(completed.trim().split(" ").at(-1) ?? "");
+        expect(app.composer.plainText).toBe(completed);
+      }
+    },
+    { width: 120, height: 44, useMouse: true },
+  ));
+
+test("a command that opens a picker opens it in the view, and the session refuses it with no argument", () =>
+  composing(async ({ session, app, frame }) => {
+    app.composer.setText("/model");
+    await app.submit();
+    expect(await frame()).toContain("The chain sends its next prompt to this model.");
+    app.closeOverlay();
+    expect(String(await session.submit("/model").catch((error: unknown) => error))).toContain(
+      "Use /model followed by a model name.",
+    );
+    expect((await frame()).split("\n").findLast((line) => line.trim())).toContain("Ready");
+  }));
+
+test("a slash command typed under edit runs as the command it names, and the program stays as its door holds it", () =>
+  composing(
+    async ({ session, app }) => {
+      app.composer.setText("/edit");
+      await app.submit();
+      await until(session, () => session.editing !== undefined);
+      const editing = session.editing;
+      if (!editing) throw new Error("No program under edit.");
+      const program = app.composer.plainText;
+      app.composer.setText("/name renamed");
+      await app.submit();
+      expect(session.sessionName).toBe("renamed");
+      expect(session.editing).toBe(editing);
+      const door = (await session.engine.read(editing, { on: session.selected })) as { content: string };
+      expect(door.content).toBe(program);
+    },
+    undefined,
+    true,
+  ));
+
+test("Up and Down walk the history from the edges of the input, and Up on an empty input takes back a queued message", () =>
+  composing(
+    async ({ session, app, screen }) => {
+      for (const name of ["first", "second"]) {
+        app.composer.setText(`/name ${name}`);
+        await app.submit();
+      }
+      app.composer.setText("");
+      screen.mockInput.pressArrow("up");
+      expect(app.composer.plainText).toBe("/name second");
+      screen.mockInput.pressArrow("up");
+      expect(app.composer.plainText).toBe("/name first");
+      screen.mockInput.pressArrow("down");
+      expect(app.composer.plainText).toBe("/name second");
+      screen.mockInput.pressArrow("down");
+      expect(app.composer.plainText).toBe("");
+      // Typed text keeps the walk to the entries that start with it, and Down brings the text back.
+      app.composer.setText("/name f");
+      screen.mockInput.pressArrow("up");
+      expect(app.composer.plainText).toBe("/name first");
+      screen.mockInput.pressArrow("up");
+      expect(app.composer.plainText).toBe("/name first");
+      screen.mockInput.pressArrow("down");
+      expect(app.composer.plainText).toBe("/name f");
+      // The history holds the entries of the other chains, older than those of this chain.
+      session.histories[`other:${session.mode}`] = ["from another chain", "/name second"];
+      app.composer.setText("from");
+      screen.mockInput.pressArrow("up");
+      expect(app.composer.plainText).toBe("from another chain");
+      screen.mockInput.pressArrow("down");
+      expect(app.composer.plainText).toBe("from");
+      app.composer.setText("");
+      session.queueHeld = true;
+      session.enqueue("a queued message");
+      expect(session.queued).toHaveLength(1);
+      screen.mockInput.pressArrow("up");
+      expect(app.composer.plainText).toBe("a queued message");
+      expect(session.queued).toEqual([]);
+    },
+    { width: 120, height: 44, kittyKeyboard: true },
+  ));
+
+test("Ctrl+S puts the input aside, the line under the input shows it, and Ctrl+S brings it back", () =>
+  composing(async ({ session, app, screen, frame }) => {
+    await screen.mockInput.typeText("a long draft");
+    screen.mockInput.pressKey("s", { ctrl: true });
+    expect(app.composer.plainText).toBe("");
+    expect(session.stashes[session.draftKey]).toBe("a long draft");
+    expect(await frame()).toContain("stashed");
+    await screen.mockInput.typeText("a quick question");
+    screen.mockInput.pressKey("s", { ctrl: true });
+    expect(app.composer.plainText).toBe("a long draft");
+    expect(session.stashes[session.draftKey]).toBe("a quick question");
+    app.composer.setText("");
+    screen.mockInput.pressKey("s", { ctrl: true });
+    expect(app.composer.plainText).toBe("a quick question");
+    expect(session.stashes[session.draftKey]).toBeUndefined();
+    expect(await frame()).not.toContain("stashed");
+  }));
+
+test("Escape twice opens the rewind tree in the feed, which keys move, fold, and close", () =>
+  composing(
+    async ({ session, app, screen, frame }) => {
+      await idle(session);
+      await frame();
+      // Two Escapes rewind when the clock moved less than the window between them. The clock stands still between
+      // the two, so the window holds them however long the frame between them takes.
+      setSystemTime(new Date());
+      try {
+        screen.mockInput.pressEscape();
+        expect(await frame()).toContain("Press Escape again to rewind.");
+        screen.mockInput.pressEscape();
+      } finally {
+        setSystemTime();
+      }
+      const tree = await frame();
+      expect(tree).toContain("Rewind");
+      const rows = () => app.scroll.getChildren().map((node) => node.id);
+      expect(rows().every((id) => id.startsWith("tree-"))).toBe(true);
+      const last = session.activity.findLast((act) => session.isUserPrompt(act));
+      // The pointer starts on the last message, and Enter would give it back on a new branch.
+      expect(tree).toContain("edit it on a new branch");
+      const before = rows().length;
+      screen.mockInput.pressArrow("up");
+      screen.mockInput.pressArrow("up");
+      expect(await frame()).not.toContain("edit it on a new branch");
+      // Home goes to the chain at the top, and Left folds it.
+      // The mock names a key as KeyCodes does: "home" sends no Home.
+      screen.mockInput.pressKey("HOME");
+      screen.mockInput.pressArrow("left");
+      await frame();
+      expect(rows().length).toBeLessThan(before);
+      screen.mockInput.pressArrow("right");
+      await frame();
+      expect(rows().length).toBe(before);
+      screen.mockInput.pressEscape();
+      await frame();
+      expect(rows().some((id) => id.startsWith("tree-"))).toBe(false);
+      expect(session.selected).toBe(last?.on ?? "");
+    },
+    { width: 132, height: 44, kittyKeyboard: true },
+    true,
+  ));
+
+test("a space after a command whose values are known lists them, and Enter on a value runs the command", () =>
+  composing(async ({ session, app, screen, frame }) => {
+    await screen.mockInput.typeText("/effort ");
+    let shown = await frame();
+    expect(shown).toContain("Quick answers to simple work");
+    expect(shown).toContain("A balance of speed and depth");
+    await screen.mockInput.typeText("hi");
+    shown = await frame();
+    expect(shown).toContain("More thought for hard work");
+    expect(shown).not.toContain("A balance of speed and depth");
+    screen.mockInput.pressEnter();
+    await until(session, () => session.actorChoice.effort === "high");
+    expect(app.composer.plainText).toBe("");
+    // A value that no known value holds is sent as it is typed.
+    await screen.mockInput.typeText("/theme nothing");
+    expect(await frame()).toContain("No known value matches. Enter sends what is typed.");
+  }));
+
+test("/feed lists the commands whose stdin is open, and the line of such a command says that its input is open once it opens", () =>
+  composing(async ({ session, app, screen, frame }) => {
+    const on = session.engine.root;
+    const open = String(await session.engine.bash("exec sleep 30", { stdin: null, on }));
+    const shut = String(await session.engine.bash("exec sleep 31", { on }));
+    try {
+      await until(session, () => [open, shut].every((id) => session.activity.some((act) => act.id === id)));
+      // The list of /feed names each command whose stdin is open, by its id, and a folded card names none.
+      await screen.mockInput.typeText("/feed ");
+      // The feed names each command on its line, so the list is the rest of the frame.
+      const listed = (await frame())
+        .split("\n")
+        .filter((row) => !row.includes(" = bash("))
+        .join("\n");
+      expect(listed).toContain(open);
+      expect(listed).not.toContain(shut);
+      app.composer.setText("");
+      await frame();
+      // Each line opens at a click, and what its act gave under it says whether its input is open.
+      for (const id of [open, shut]) {
+        // A command of the operator stands in a panel, whose first row is its edge.
+        const line = app.scroll.getChildren().find((node) => node.id === id);
+        if (!line) throw new Error(`No line for ${id}.`);
+        await screen.mockMouse.click(line.x + 8, line.y + 1);
+        await screen.flush();
+      }
+      const cards = await frame();
+      expect(cards.split("input open").length).toBe(2);
+      expect(cards.indexOf("input open")).toBeLessThan(cards.indexOf("exec sleep 31"));
+    } finally {
+      session.engine.cancel(open);
+      session.engine.cancel(shut);
+    }
+  }));
+
+test("⌃Tab rolls to the next chain and ⇧⌃Tab to the one before it, round from the last to the first", () =>
+  composing(
+    async ({ session, screen, frame }) => {
+      await session.refresh();
+      const chains = session.chains.map((chain) => chain.id);
+      expect(chains.length).toBeGreaterThan(1);
+      const first = session.selected;
+      screen.mockInput.pressKey("TAB", { ctrl: true });
+      await until(session, () => session.selected === chains[1]);
+      await until(session, () => session.notice.endsWith(`chain 2 of ${chains.length}`));
+      expect(await frame()).toContain(`chain 2 of ${chains.length}`);
+      screen.mockInput.pressKey("TAB", { ctrl: true, shift: true });
+      await until(session, () => session.selected === first);
+      screen.mockInput.pressKey("TAB", { ctrl: true, shift: true });
+      await until(session, () => session.selected === chains.at(-1));
+    },
+    { width: 132, height: 44, kittyKeyboard: true },
+    true,
+  ));
+
+test("the switch of the views fills the view shown with the accent, names its chord, and a click on a view shows it", () =>
+  composing(async ({ session, screen, frame, click }) => {
+    const top = (await frame()).split("\n")[0] ?? "";
+    expect(top).toContain("Feed");
+    expect(top).toContain("⌥1-3");
+    const accent = RGBA.fromHex(palettes.ink.accent);
+    const filled = (label: string) =>
+      Boolean(cellAt(screen.captureSpans(), top.indexOf(label), 0).bg?.equals(accent));
+    expect([filled("Feed"), filled("Changes")]).toEqual([true, false]);
+    await click("Changes");
+    await until(session, () => session.view === "changes");
+    await frame();
+    expect([filled("Feed"), filled("Changes")]).toEqual([false, true]);
+    await click("Feed");
+    await until(session, () => session.view === "feed");
+  }));
+
+test("the switch of the input shows Prompt and Python, ⌃R names it, and a click on a mode chooses it", () =>
+  composing(async ({ session, screen, frame }) => {
+    const lines = (await frame()).split("\n");
+    const row = lines.findIndex((line) => line.includes("Python") && line.includes("Prompt"));
+    expect(row).toBeGreaterThanOrEqual(0);
+    expect(lines[row]).toContain("⌃R");
+    await screen.mockMouse.click((lines[row] ?? "").indexOf("Python") + 1, row);
+    await until(session, () => session.mode === "python");
+    await frame();
+    await screen.mockMouse.click((lines[row] ?? "").indexOf("Prompt") + 1, row);
+    await until(session, () => session.mode === "prompt");
+  }));
+
+test("the meter of the context says its share and where the chain pauses when the pointer is over it", () =>
+  composing(
+    async ({ session, screen, frame }) => {
+      await session.submit("/context 0.3");
+      await until(session, () =>
+        session.activity.some((act) => act.kind === "grant" && act.words[1] === 0.3),
+      );
+      const lines = (await frame()).split("\n");
+      expect(lines.some((line) => line.includes("Pause at"))).toBe(false);
+      const row = lines.findIndex((line) => line.includes("━"));
+      expect(row).toBeGreaterThan(0);
+      await screen.mockMouse.moveTo((lines[row] ?? "").indexOf("━") + 2, row);
+      const tip = await frame();
+      expect(tip).toContain("of the context window");
+      expect(tip).toContain("pauses at 30%");
+      expect(tip).not.toContain("30.000000000000004");
+    },
+    { width: 120, height: 44 },
+    true,
+  ));
+
+test("the usage counts each token once, and the context share shows from the first answer with no grant", () =>
+  composing(async ({ session, frame }) => {
+    // Each answer of the demo reads a prompt of 3240 tokens, 2800 of them from the cache, and writes 184.
+    await session.submit("Explore this project.");
+    // The setup of the root holds assistant turns that furb wrote, which no model answered and which hold no usage, so
+    // the answer of the model is the assistant turn that holds its usage.
+    await until(session, () => session.turns.some((turn) => turn[0] === "assistant" && turn[2] !== null));
+    await session.refresh();
+    // The read of the doctrine is an assistant turn that the World wrote, and no model answered it, so it holds no usage.
+    const answers = session.turns.filter((turn) => turn[0] === "assistant" && turn[2] !== null).length;
+    expect(answers).toBe(1);
+    expect(session.spend).toEqual({
+      input: 440 * answers,
+      output: 184 * answers,
+      cacheRead: 2800 * answers,
+      cacheWrite: 0,
+      dollars: expect.closeTo(0.0024 * answers, 6),
+    });
+    expect(session.activity.some((act) => act.kind === "grant")).toBe(false);
+    expect(session.filled).toBe(0);
+    expect(session.context).toBe(3240);
+    const shown = await frame();
+    expect(shown).toContain("0%");
+    expect(shown).toContain("━");
+    const numbers = shown.split("\n").find((line) => line.includes("3.2k prompt"));
+    expect(numbers).toContain(`${count(2800 * answers)} cached`);
+    expect(shown).not.toContain("Fresh input");
+  }));
+
+test("the usage of a fork counts the answers of the fork alone, and not those of its origin", () =>
+  composing(async ({ session, frame }) => {
+    await session.submit("Explore this project.");
+    // The setup of the root holds assistant turns that furb wrote, which no model answered and which hold no usage, so
+    // the answer of the model is the assistant turn that holds its usage.
+    await until(session, () => session.turns.some((turn) => turn[0] === "assistant" && turn[2] !== null));
+    await session.refresh();
+    const origin = session.selected;
+    const answered = session.turns.filter((turn) => turn[0] === "assistant").length;
+    await session.submit("/fork");
+    await until(session, () => session.selected !== origin);
+    await session.refresh();
+    expect(session.turns.filter((turn) => turn[0] === "assistant").length).toBe(answered);
+    expect(session.spend).toEqual({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, dollars: 0 });
+    const shown = await frame();
+    expect(shown).toContain("3.2k prompt");
+    expect(shown).not.toContain("cached");
+  }));
+
+test("a branch that a word made with a filter shows the messages that it took, with their answers, and not the one it left out", () =>
+  composing(async ({ session, frame, screen }) => {
+    await session.submit("Explore this project.");
+    await until(session, () => session.activity.some((act) => session.isUserPrompt(act) && act.done));
+    await session.submit("Read the notes again.");
+    await until(
+      session,
+      () => session.activity.filter((act) => session.isUserPrompt(act) && act.done).length === 2,
+    );
+    const origin = session.selected;
+    const [first] = session.activity.filter((act) => session.isUserPrompt(act));
+    const made = await session.engine.rung({
+      word: `chain("cut", source=${JSON.stringify(origin)}, filter=take(${JSON.stringify(first?.id)}, inside=False))`,
+      on: origin,
+    });
+    await until(session, () => session.acts.some((act) => act.kind === "chain" && act.by === made));
+    const branch = session.acts.find((act) => act.kind === "chain" && act.by === made);
+    await session.select(String(branch?.id));
+    // A message and an answer are markdown, which a slow machine lays out a frame or more after the code.
+    const shown = await drawn(frame, screen.renderer.root);
+    expect(shown).toContain("It takes the message before it, with its answer.");
+    expect(shown).toContain("Read the notes again.");
+    expect(shown).not.toContain("Explore this project.");
+    expect(shown).not.toContain("Watch a life");
+  }));
+
+test("a paused chain says so at the end of its feed and in the footer, and Wake wakes it", () =>
+  composing(async ({ session, frame, click }) => {
+    await session.submit("/pause");
+    await until(session, () => session.paused);
+    let shown = await frame();
+    expect(shown).toContain("This chain is paused");
+    expect(shown).toContain("/wake wake the chain");
+    await click("Wake");
+    await until(session, () => !session.paused);
+    shown = await frame();
+    expect(shown).not.toContain("This chain is paused");
+  }));
+
+test("a paused chain names no cancel as its cause, since a word that closed its prompt or was cancelled did not fail", () =>
+  composing(async ({ session, frame }) => {
+    const id = await session.engine.rung({
+      word: "from asyncio import CancelledError\nraise CancelledError()",
+      on: session.selected,
+    });
+    await until(session, () => session.activity.some((act) => act.id === id && act.done));
+    await session.submit("/pause");
+    await until(session, () => session.paused);
+    const rows = (await frame()).split("\n");
+    const top = rows.findIndex((row) => row.includes("This chain is paused"));
+    const end = rows.findIndex((row, at) => at > top && row.includes("Wake"));
+    expect(top).toBeGreaterThan(-1);
+    expect(rows.slice(top, end + 1).join("\n")).not.toContain("CancelledError");
+  }));
+
+test("a paused chain names the act that paused it and its own error, and no older error of a word", () =>
+  composing(async ({ session, frame }) => {
+    const id = await session.engine.rung({ word: 'read("scratch://missing.txt")', on: session.selected });
+    await until(session, () => session.activity.some((act) => act.id === id && act.done));
+    await session.engine.pause(session.selected, { why: "reply9 found no ear to take it" });
+    await until(session, () => session.paused);
+    const rows = (await frame()).split("\n");
+    const top = rows.findIndex((row) => row.includes("This chain is paused"));
+    const end = rows.findIndex((row, at) => at > top && row.includes("Wake"));
+    expect(top).toBeGreaterThan(-1);
+    const banner = rows.slice(top, end + 1).join("\n");
+    expect(banner).toContain("the operator: reply9 found no ear to take it");
+    expect(banner).not.toContain("There is no file");
+  }));
+
+test("the footer offers the keys of the top layer that acts, and a click on one does what its key does", () =>
+  composing(
+    async ({ session, app, screen, frame, click }) => {
+      // The last row holds the usage of the chain at the right, in the sidebar, so the footer is the row to the end of the feed.
+      const footer = async () =>
+        ((await frame()).trimEnd().split("\n").at(-1) ?? "").slice(0, app.feedWidth + 2).trim();
+      await idle(session);
+      expect(await footer()).toEndWith("⌃P commands   F1 help");
+      const id = await session.engine.prompt("bool", {
+        message: "Continue with the change?",
+        to: "operator",
+        on: session.engine.root,
+      });
+      await until(session.host, () => session.host.prompts.has(id));
+      await session.refresh();
+      expect(await footer()).toEndWith("↑↓ choose   Enter answer");
+      await click("Enter answer");
+      expect(await session.engine.result(id)).toBe(true);
+      await until(session, () => !session.operatorPrompt);
+      await frame();
+      await screen.mockInput.typeText("/mo");
+      expect(await footer()).toEndWith("↑↓ choose   Tab complete   Esc hide");
+      await click("Esc hide");
+      expect(await footer()).toEndWith("⌃P commands   F1 help");
+      app.composer.setText("");
+      app.sessionTree();
+      expect(await footer()).toContain("↑↓ move");
+      expect(await footer()).toEndWith("Esc back");
+      await click("Esc back");
+      expect(await footer()).toEndWith("⌃P commands   F1 help");
+      await session.command("/edit");
+      expect(await footer()).toEndWith("Enter run   Esc leave the program");
+      screen.mockInput.pressEscape();
+      await until(session, () => session.editing === undefined);
+      app.composer.setText("Think until I cancel.");
+      await app.submit();
+      await until(session, () => session.activity.some((act) => act.kind === "rung" && !act.done));
+      expect(await footer()).toEndWith("⌃P commands   ⌃C take back   Esc pause   F1 help");
+      screen.mockInput.pressEscape();
+      await until(session, () => session.paused);
+      expect(await footer()).toEndWith("/wake wake the chain   ⌃P commands   ⌃C take back   F1 help");
+    },
+    undefined,
+    true,
+  ));
+
+test("a message sent to a paused chain wakes it, and the answer comes", () =>
+  composing(async ({ session, app }) => {
+    await session.submit("/pause");
+    await until(session, () => session.paused);
+    app.composer.setText("Explore this project.");
+    await app.submit();
+    expect(session.paused).toBe(false);
+    expect(session.notice).toBe("This message woke the paused chain.");
+    await until(session, () => session.turns.some((turn) => turn[0] === "assistant"));
+  }));
+
+test("a notice cut to the room of the footer keeps one line and the mark of its cut, and shows whole in a tip while the pointer is over it", () =>
+  composing(
+    async ({ session, screen, frame }) => {
+      session.notice = `A notice longer than its line ${"and longer ".repeat(12)}to its very end`;
+      const lines = (await frame()).split("\n");
+      const row = lines.findIndex((line) => line.includes("A notice longer"));
+      expect(lines[row]).not.toContain("to its very end");
+      expect(lines[row]).toContain("…");
+      expect(lines[row]).toContain("F1 help");
+      expect(lines.filter((line) => line.includes("and longer"))).toHaveLength(1);
+      await screen.mockMouse.moveTo((lines[row] ?? "").indexOf("A notice") + 2, row);
+      // The tip stays inside the feed, so it wraps the notice at its words: the end of the notice comes on a row of the tip.
+      expect(await frame()).toContain("very end");
+    },
+    { width: 152, height: 40 },
+  ));
+
+test("a cancelled message keeps its place in the feed, and its cancel reads as a cancel, not as a failure", () =>
+  composing(async ({ session, app, screen, frame }) => {
+    app.composer.setText("Think until I cancel.");
+    await app.submit();
+    await until(session, () => session.activity.some((act) => act.kind === "rung" && !act.done));
+    await session.submit("/cancel");
+    await idle(session);
+    await session.submit("/newthread");
+    app.composer.setText("A second message.");
+    await app.submit();
+    await until(session, () => session.turns.some((turn) => turn[0] === "assistant"));
+    await session.refresh();
+    const shown = await drawn(frame, screen.renderer.root);
+    expect(shown).not.toContain("failed");
+    expect(shown).not.toContain("CancelledError");
+    // The first message says its cancel at its right, above the second message, and the rung that the cancel ended
+    // before it wrote a word shows nothing.
+    const lines = shown.split("\n");
+    const first = lines.findIndex((line) => line.includes("Think until I"));
+    // A folded thread stands as its message in the block of a message, with no mark before it, no id of a rung and no
+    // type, and its state, its count of steps and its control at its right.
+    expect(lines[first]).toMatch(/┃ Think until I\b.*⊘ cancelled {2}1 step {2}▸ Expand/);
+    expect(lines[first]).not.toMatch(/rung\d|\bstr\b/);
+    expect(lines[first]).not.toContain("✗");
+    expect(first).toBeLessThan(lines.findIndex((line) => line.includes("A second message.")));
+    expect(lines.filter((line) => line.includes(" cancelled") && line.includes("⊘"))).toHaveLength(1);
+    // A message that its answer closed says no state, only the type of its answer.
+    // The feed holds the message in its block, and the sidebar names its thread on a row of its own.
+    expect(lines.find((line) => line.includes("┃ A second message."))).toMatch(
+      /┃ A second message\.\s+str\s+▾ Collapse/,
+    );
+  }));
+
+test("a word that the gate refused shows a cross on the line that the refusal names and the reason under it, and the word that replaced it follows in the program of its thread", () =>
+  composing(
+    async ({ session, frame }) => {
+      await session.submit("/newthread");
+      await session.submit("Give me an answer in a fence.");
+      await until(session, () =>
+        session.turns.some((turn) => turn[0] === "assistant" && turn[1].includes("plain Python")),
+      );
+      await idle(session);
+      await session.refresh();
+      const lines = (await frame()).split("\n");
+      const refused = lines.findIndex((line) => /1 ```python +✗/.test(line));
+      expect(refused).toBeGreaterThan(0);
+      expect(lines[refused + 1]).toMatch(/^[ ┃]+# error\[invalid-syntax\].*Got unexpected token/);
+      // The numbers of the thread go on from the refused word to the word that replaced it.
+      const retried = lines.findIndex((line) => / 4 close\("Here it is again as plain Python/.test(line));
+      expect(retried).toBeGreaterThan(refused + 1);
+      expect(lines.slice(retried).join("\n")).not.toContain("✗");
+      expect(lines.join("\n")).not.toContain("failed");
+    },
+    { width: 152, height: 44 },
+    true,
+  ));
+
+test("a colon that starts a word lists the emojis whose shortcode holds what follows it, and Tab or Enter puts the chosen emoji in its place", () =>
+  composing(async ({ app, screen, frame }) => {
+    await screen.mockInput.typeText("Ship it :rocke");
+    const rows = (await frame()).split("\n").filter((line) => line.includes(":rocket:"));
+    expect(rows[0]).toContain("🚀 :rocket:");
+    screen.mockInput.pressTab();
+    expect(app.composer.plainText).toBe("Ship it 🚀");
+    app.composer.setText("");
+    await screen.mockInput.typeText(":smile");
+    await frame();
+    screen.mockInput.pressArrow("down");
+    screen.mockInput.pressEnter();
+    expect(app.composer.plainText).toBe(emojis("smile")[1]?.emoji ?? "");
+  }));
+
+test("a colon inside a word opens no emoji list, and a whole shortcode becomes its emoji", () =>
+  composing(async ({ app, screen, frame }) => {
+    for (const typed of ["10:30", "a:rock", "https://rock"]) {
+      app.composer.setText("");
+      await screen.mockInput.typeText(typed);
+      expect(await frame()).not.toContain(":rocket:");
+    }
+    app.composer.setText("");
+    for (const typed of ["Thanks :+1:", " and :tada:", "!"]) {
+      await screen.mockInput.typeText(typed);
+      await frame();
+    }
+    expect(app.composer.plainText).toBe("Thanks 👍 and 🎉!");
+  }));
+
+test("Escape, a space, a removed colon, or no match closes the emoji list and keeps the text, and Enter then sends it", () =>
+  composing(async ({ session, app, screen, frame }) => {
+    await screen.mockInput.typeText(":rock");
+    expect(await frame()).toContain(":rocket:");
+    screen.mockInput.pressEscape();
+    // A lone Escape reaches the app once the parser knows that no sequence follows it.
+    for (let tries = 0; tries < 100 && (await frame()).includes(":rocket:"); tries++) await Bun.sleep(10);
+    expect(await frame()).not.toContain(":rocket:");
+    expect(app.composer.plainText).toBe(":rock");
+    app.composer.setText("");
+    await screen.mockInput.typeText(":rock ");
+    expect(await frame()).not.toContain(":rocket:");
+    app.composer.setText("");
+    await screen.mockInput.typeText(":rocke");
+    expect(await frame()).toContain(":rocket:");
+    for (let step = 0; step < 6; step++) screen.mockInput.pressBackspace();
+    expect(await frame()).not.toContain(":rocket:");
+    await screen.mockInput.typeText(":rocketzz");
+    expect(await frame()).not.toContain(":rocket:");
+    const sent = session.activity.length;
+    screen.mockInput.pressEnter();
+    await until(session, () => session.activity.length > sent);
+    expect(app.composer.plainText).toBe("");
+  }));
+
+test("The input draws the rest of a line from the history in grey, and Right, Ctrl+F and Alt+Right take it at the end of the line", () =>
+  composing(async ({ session, app, screen, frame }) => {
+    session.histories[session.draftKey] = ["tell me about the weather", "tell me about the harbor today"];
+    await screen.mockInput.typeText("tell me about the h");
+    const rows = (await frame()).split("\n");
+    const row = rows.findIndex((line) => line.includes("tell me about the harbor today"));
+    expect(row).toBeGreaterThanOrEqual(0);
+    const column = (rows[row] ?? "").indexOf("arbor today");
+    const typed = cellAt(screen.captureSpans(), column - 1, row);
+    const grey = cellAt(screen.captureSpans(), column, row);
+    expect(grey.fg?.equals(RGBA.fromHex(palettes.ink.faint))).toBe(true);
+    expect(typed.fg?.equals(grey.fg ?? RGBA.fromHex("#000000"))).toBe(false);
+    // The grey rest is no text: the input holds only what was typed.
+    expect(app.composer.plainText).toBe("tell me about the h");
+    screen.mockInput.pressArrow("right");
+    expect(app.composer.plainText).toBe("tell me about the harbor today");
+    expect(await frame()).toContain("tell me about the harbor today");
+    app.composer.setText("");
+    await screen.mockInput.typeText("tell me about the h");
+    screen.mockInput.pressKey("f", { ctrl: true });
+    expect(app.composer.plainText).toBe("tell me about the harbor today");
+    app.composer.setText("");
+    await screen.mockInput.typeText("tell me about the h");
+    screen.mockInput.pressArrow("right", { meta: true });
+    expect(app.composer.plainText).toBe("tell me about the harbor");
+    // Away from the end of the text, or with no longer entry, the keys only move the cursor.
+    app.composer.setText("");
+    await screen.mockInput.typeText("tell me about the h");
+    screen.mockInput.pressArrow("left");
+    expect(await frame()).not.toContain("harbor today");
+    screen.mockInput.pressArrow("right");
+    expect(app.composer.plainText).toBe("tell me about the h");
+    app.composer.setText("");
+    await screen.mockInput.typeText("something else");
+    expect(await frame()).not.toContain("tell me about");
+  }));

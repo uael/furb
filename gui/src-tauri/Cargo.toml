@@ -1,0 +1,36 @@
+[package]
+name = "furb-gui"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+description = "furb, the desktop app: a window that runs a life of furb on the host of the TUI, with a UI of the web."
+license = "AGPL-3.0-only"
+repository = "https://github.com/uael/furb"
+publish = false
+
+[[bin]]
+name = "furb-gui"
+path = "src/main.rs"
+
+[dependencies]
+# The window and the web view, which show the UI of gui/src, and give it the address of the host of the life.
+tauri = { version = "2", features = [] }
+# The native dialog that picks a project or a record.
+tauri-plugin-dialog = "2"
+serde_json = "1"
+
+# The private property of WKWebView that names the process of its web content, which a check prints.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+# A workspace of its own: Tauri needs the web view of the system, which the gates of the crate do not install.
+[workspace]
+
+# Each dependency optimized, so the window runs as fast as in a release while the app builds quickly.
+[profile.dev.package."*"]
+opt-level = 3
+debug-assertions = false
+overflow-checks = false

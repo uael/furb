@@ -1,0 +1,34 @@
+{
+  "name": "@uael/furb-linux-x64-gnu",
+  "version": "0.3.5",
+  "cpu": [
+    "x64"
+  ],
+  "main": "furb.linux-x64-gnu.node",
+  "files": [
+    "furb.linux-x64-gnu.node",
+    "LICENSE"
+  ],
+  "description": "The engine of furb, built for Linux on x64 with glibc. npm installs it with the package furb on that system alone.",
+  "homepage": "https://github.com/uael/furb/tree/main/bind/typescript#readme",
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "bun": ">=1.4.2",
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/uael/furb.git",
+    "directory": "bind/typescript"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "os": [
+    "linux"
+  ],
+  "libc": [
+    "glibc"
+  ]
+}

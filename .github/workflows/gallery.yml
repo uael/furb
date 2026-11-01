@@ -1,0 +1,130 @@
+name: gallery
+
+# The gallery of the TUI, docs/screenshots and docs/furb.gif, rendered again from main. The README and docs/tui.md show
+# these files, so a change that a screen shows leaves them old until something renders them. This workflow renders
+# both on a runner of CI, as `bun run screenshots` and `bun run animation` do on a machine, and keeps one pull request
+# open on one fixed branch with the files that changed. The next run replaces the files of that branch, so only one
+# such pull request stands at a time, and it conflicts with nothing, since each run builds the branch again from the
+# commit that it renders. A run on a branch other than main does the same on a branch of its own, w/gallery-proof,
+# and opens a draft, which the round of the conductor does not merge.
+on:
+  workflow_dispatch:
+  # Every three hours, by the ruling of the owner on 10-29: a render on each push to main made a pull request to
+  # merge after nearly every merge, and its gates took the runners. The owner merges the open one early when he
+  # wants it, or runs this workflow by hand.
+  schedule:
+    - cron: "17 */3 * * *"
+
+# A run on a newer commit ends the run before it: only the render of the newest commit is worth a pull request.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_DEV_INCREMENTAL: "false"
+
+jobs:
+  render:
+    name: the render
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # This job opens the pull request of the gallery as github-actions[bot], with GITHUB_TOKEN, whose push and pull
+    # request start no workflow: a render of screenshots runs no gate, by the ruling of the owner on 10-29.
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      # The round of the conductor merges a pull request only from a branch w/..., so the one fixed branch is one.
+      BRANCH: ${{ github.ref == 'refs/heads/main' && 'w/gallery' || 'w/gallery-proof' }}
+      DRAFT: ${{ github.ref == 'refs/heads/main' && 'false' || 'true' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          python: none
+      - run: |
+          echo "CARGO_BUILD_TARGET=$(rustc -vV | sed -n 's/^host: //p')" >> "$GITHUB_ENV"
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.2"
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: bun run screenshots
+      - run: bun run animation
+      # The files of the render stay for a week, to read them without a checkout.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: gallery
+          path: |
+            docs/screenshots
+            docs/furb.gif
+          retention-days: 7
+      - name: open the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: "chore(tui): Render the gallery again"
+        run: |
+          set -euo pipefail
+          files="docs/screenshots docs/furb.gif"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch -q "$remote" "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" 2>/dev/null || true
+          number=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+          git add -A -- $files
+          if git diff --cached --quiet; then
+            echo "The gallery of main is the gallery that it shows."
+            if [ -n "$number" ]; then
+              gh pr close "$number" --delete-branch --comment "🤖 The gallery of $(git rev-parse --short HEAD) shows what main holds, so this pull request has nothing to change."
+            elif git rev-parse -q --verify "origin/$BRANCH" >/dev/null; then
+              git push "$remote" --delete "$BRANCH"
+            fi
+            exit 0
+          fi
+          added=$(git diff --cached --name-only --diff-filter=A | wc -l | tr -d ' ')
+          changed=$(git diff --cached --name-only --diff-filter=M | wc -l | tr -d ' ')
+          removed=$(git diff --cached --name-only --diff-filter=D | wc -l | tr -d ' ')
+          sha=$(git rev-parse --short HEAD)
+          run="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          cat > "$RUNNER_TEMP/body.md" <<EOF
+          🤖
+
+          ## Why
+
+          A screen changed on main, and the files of the gallery did not. The README shows docs/furb.gif and docs/tui.md shows docs/screenshots, so a reader sees a TUI that main does not have.
+
+          ## Outcome
+
+          - docs/screenshots and docs/furb.gif show the TUI of main at $sha again. Files added: $added. Files changed: $changed. Files removed: $removed.
+          - A runner of CI drew them with bun run screenshots and bun run animation, in $run.
+          - One such pull request stands at a time. The next push to main that changes a screen draws the gallery again on this branch and in this body.
+
+          ---
+
+          - [x] I am accountable for this diff, whoever or whatever wrote it.
+          - [x] It is one change. No part belongs in another PR. No part could be its own PR.
+          - [x] Its comments obey AGENTS.md: none.
+          - [x] Its prose obeys AGENTS.md: Simplified Technical English, for a general non-technical audience.
+          - [x] Every flaw I know of is fixed in this diff or named in \`## Outcome\`.
+          - [x] I checked each statement above. I did not assume it.
+          EOF
+          pushed=false
+          if [ -z "$number" ] || ! git rev-parse -q --verify "origin/$BRANCH" >/dev/null || ! git diff --cached --quiet "origin/$BRANCH" -- $files; then
+            git switch -q -C "$BRANCH"
+            git commit -q -m "$TITLE"
+            git push -q --force "$remote" "$BRANCH"
+            pushed=true
+          fi
+          if [ -z "$number" ]; then
+            draft=""
+            [ "$DRAFT" = true ] && draft="--draft"
+            gh pr create --base main --head "$BRANCH" --title "$TITLE" --body-file "$RUNNER_TEMP/body.md" $draft
+          else
+            gh pr edit "$number" --title "$TITLE" --body-file "$RUNNER_TEMP/body.md"
+          fi

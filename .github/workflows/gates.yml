@@ -1,0 +1,305 @@
+name: gates
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    # A render of the gallery changes only these files, which no gate reads, so it runs no gate, by the ruling of
+    # the owner on 10-29.
+    paths-ignore:
+      - docs/screenshots/**
+      - docs/furb.gif
+  push:
+    branches: [main]
+
+# One run of the gates for one branch: a push that follows another ends the run before it. On main, it ends only a run
+# that waits, since a group holds one run that waits at most, and the run in progress goes to its end. Only a run of
+# main that passes saves the caches of rust, and a run that a push ends during its save leaves a key that no later run
+# can save: a cancel on main made the bindings on Windows build their dependencies again on each run, in 12 minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+  # The step clear of each job deletes the old cache of rust of that job, on main.
+  actions: write
+
+env:
+  # The one uv every gate installs, so a run of today and a run of next month read the lock the same way.
+  UV_VERSION: "0.12.17"
+  # A gate builds once and runs no debugger, so a build writes no debug information and keeps no incremental state.
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_DEV_INCREMENTAL: "false"
+
+jobs:
+  scope:
+    # A runner of macOS waits in a queue of its own, for 10 minutes in the median. The jobs on Linux always run and hold
+    # the whole proof of the logic; the jobs on macOS and on Windows prove the system alone, so a pull request runs them
+    # only when a path that it changes can behave in another way there, which script/scope.py says. A run on main, or
+    # by hand, runs every job.
+    name: the scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      suite_os: ${{ steps.scope.outputs.suite_os }}
+      ts_os: ${{ steps.scope.outputs.ts_os }}
+      crate: ${{ steps.scope.outputs.crate }}
+      gui: ${{ steps.scope.outputs.gui }}
+      code: ${{ steps.scope.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: scope
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            git diff --name-only "origin/$GITHUB_BASE_REF...HEAD" | python3 script/scope.py
+          else
+            python3 script/scope.py --all
+          fi | tee -a "$GITHUB_OUTPUT"
+
+  hooks:
+    name: the hooks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The hooks check the python with its tools alone, and read furb_monty from its source.
+      - uses: ./.github/actions/setup
+        with:
+          python: tools
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+      # The suite is a gate of its own below, on three systems, and no hook runs it a second time here.
+      - run: uv run pre-commit run --all-files --show-diff-on-failure
+        env:
+          SKIP: pytest
+          UV_NO_SYNC: "1"
+      - uses: ./.github/actions/clear
+
+  suite:
+    # The engine speaks to a machine through the World, and a machine answers as itself: the suite runs on each,
+    # and on both engines, the one of the interpreter and the one in the sandbox of monty.
+    name: the suite on ${{ matrix.os }}
+    needs: scope
+    if: needs.scope.outputs.code == 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(needs.scope.outputs.suite_os) }}
+    # On Windows the commands of the tests run in the sh of Git for Windows, which the bash of Git puts on PATH.
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      # The test of the walls counts tokens with a vocabulary that tiktoken downloads at its first use. A download that
+      # stalls past the 30 seconds of a test ends the worker of the suite, which reports a crash and no cause, so the
+      # vocabulary comes here, where a stall is bounded, and the suite reads it from disk.
+      - run: echo "TIKTOKEN_CACHE_DIR=$RUNNER_TEMP/tiktoken" >> "$GITHUB_ENV"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/tiktoken
+          key: tiktoken-o200k_base
+      - run: |
+          for try in 1 2 3; do
+            uv run python -c "import socket, tiktoken; socket.setdefaulttimeout(60); tiktoken.get_encoding('o200k_base')" && exit 0
+          done
+          exit 1
+        timeout-minutes: 5
+        env:
+          UV_NO_SYNC: "1"
+      # The run syncs nothing, so it does not build the program furb that the setup leaves out.
+      - run: uv run pytest -q
+        env:
+          UV_NO_SYNC: "1"
+          FURB_UNCOUNTED: ${{ runner.os == 'Windows' && '*/src/furb/life.py' || '' }}
+      - uses: ./.github/actions/clear
+
+  crate:
+    # The hooks run the gates of the crate and of the command line on Linux. Windows and macOS have a job of their own,
+    # since a path, a line end and a process are of another form there. It builds the crate with the feature of the
+    # bindings of TypeScript too, so it runs their clippy and their tests. On macOS it is a job of its own beside the
+    # bindings, which build the crate a third time for the package, on a runner of three cores: one job that held
+    # the clippy, the tests and the package took its three builds of the crate one after the other. Windows builds
+    # the command line too, whose processes take another form there.
+    name: the crate on ${{ matrix.os }}
+    needs: scope
+    if: needs.scope.outputs.crate == 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            crates: --workspace --features furb/typescript
+          - os: macos-latest
+            crates: --features typescript
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          python: none
+          key: typescript
+      - run: cargo clippy --all-targets ${{ matrix.crates }} -- -D warnings
+      - run: cargo test ${{ matrix.crates }}
+      - uses: ./.github/actions/clear
+        with:
+          key: typescript
+
+  typescript:
+    name: the bindings and the TUI on ${{ matrix.os }}
+    needs: scope
+    if: needs.scope.outputs.code == 'true'
+    runs-on: ${{ matrix.os }}
+    # A change of the lock or of this file makes every system build each crate from nothing, and main saves the cache
+    # only from a job that passes. A limit shorter than that build fails every later run too, since none finds a cache.
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(needs.scope.outputs.ts_os) }}
+    # One shell on every system. On Windows it is the bash of Git for Windows, which puts on PATH the sh and the tools
+    # that the commands of the tests run.
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # On Windows the job builds the package alone, so its cache holds other artifacts than on the other systems.
+      - uses: ./.github/actions/setup
+        with:
+          python: none
+          key: ${{ runner.os == 'Windows' && 'package' || '' }}
+      # napi builds for the triple of the machine, in a folder of its own: cargo builds for it too, so the tests and
+      # the package share every dependency.
+      - run: |
+          echo "CARGO_BUILD_TARGET=$(rustc -vV | sed -n 's/^host: //p')" >> "$GITHUB_ENV"
+      # The bun:ffi of bun 1.3 builds its native callbacks with TinyCC in pages of the heap of Windows, which lose
+      # their right to run code while the process lives, and a call into OpenTUI then crashes. From bun 1.4 on, the
+      # engine builds them.
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.2"
+      - run: bun install --frozen-lockfile
+      # The job of the crate runs the clippy and the tests of the crate with this feature on Windows and on macOS, and
+      # the job of the speed of the TUI on Linux.
+      - run: bun run build
+      - run: bun run docs
+      - run: git diff --exit-code -- bind/typescript/index.d.cts tui/README.md
+      - run: bun run check
+      - run: bun run lint
+      - run: bun run test
+      - uses: ./.github/actions/clear
+        with:
+          key: ${{ runner.os == 'Windows' && 'package' || '' }}
+
+  bench:
+    # The budget of the speed of the TUI holds on Linux, on a machine that runs no other work while it measures: the
+    # first frame of a life of 160000 facts, the frames of the renderer at 60 each second while it scrolls and streams,
+    # and the cost of a new fact against that in a life of a tenth of the size, each against a measure of the same
+    # machine, since one runner of ubuntu-latest is half as fast as another. Then the job runs the clippy and the tests
+    # of the crate with the feature of the bindings. It runs beside the bindings on Linux, whose tests take most of
+    # their time, so neither job waits for the other.
+    name: the crate and the speed of the TUI on ubuntu-latest
+    needs: scope
+    if: needs.scope.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The job builds from the dependencies that the bindings on Linux built and saved.
+      - uses: ./.github/actions/setup
+        with:
+          python: none
+          shared: typescript
+      - run: |
+          echo "CARGO_BUILD_TARGET=$(rustc -vV | sed -n 's/^host: //p')" >> "$GITHUB_ENV"
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.2"
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: bun run bench
+      - run: cargo clippy --all-targets --features typescript -- -D warnings
+      - run: cargo test --features typescript
+
+  app:
+    # The app on macOS, whose web view is the WKWebView of the system: furb-gui --check opens the record of a life of
+    # the demo that gui/src-tauri/tests/fixtures holds, through its host, draws it whole with the counts of furb facts,
+    # under the budget of its web view, and ends, in a window that shows and in one that is hidden, as a window behind
+    # others. The app is a workspace of its own, whose lints the hooks do not run. A change that no path of the app or
+    # of the crate holds does not run it. It is a job of its own, beside the bindings on macOS, so neither job waits
+    # for the other.
+    name: the app on macos-latest
+    needs: scope
+    if: needs.scope.outputs.gui == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The cache keeps the dependencies of a workspace and removes each other one from its target before it saves.
+      # The app builds in the target of the crate on a machine, so the cache of that target lost each dependency of
+      # the app, and each run built them again, in about 5 minutes. On the gates the app builds in a target of its own,
+      # which the cache keeps as the workspace of the app.
+      - uses: ./.github/actions/setup
+        with:
+          python: none
+          key: app
+          workspaces: |
+            . -> target
+            gui/src-tauri -> target
+      - run: |
+          echo "CARGO_BUILD_TARGET=$(rustc -vV | sed -n 's/^host: //p')" >> "$GITHUB_ENV"
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.2"
+      - run: bun install --frozen-lockfile
+      # The host of the app runs on the package of the bindings, and the check runs the program furb.
+      - run: bun run build
+      - run: cargo build -p furb-cli
+      - working-directory: gui
+        run: bun run build
+      - working-directory: gui/src-tauri
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/gui/src-tauri/target
+        run: cargo fmt --check && cargo clippy --all-targets -- -D warnings
+      - working-directory: gui/src-tauri
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/gui/src-tauri/target
+        run: FURB_CLI="$GITHUB_WORKSPACE/target/$CARGO_BUILD_TARGET/debug/furb" cargo test --features tauri/custom-protocol -- --test-threads 1
+      # A check that does not end leaves its processes and the logs of the system, which say where WebKit stopped.
+      - if: failure()
+        run: |
+          ps -axo pid,etime,command | grep -E 'furb|WebContent|WebKit|bun' | grep -v grep || true
+          ls -t ~/Library/Logs/DiagnosticReports | head -20 || true
+          log show --last 25m --style compact --predicate 'process == "furb-gui" OR process CONTAINS "WebContent" OR process == "launchservicesd"' | tail -150 || true
+      - uses: ./.github/actions/clear
+        with:
+          key: app

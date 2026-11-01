@@ -1,0 +1,354 @@
+import { afterAll, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, join } from "node:path";
+import { store } from "furb";
+import { alive, printPid, remove } from "../../bind/typescript/test/processes.ts";
+import { until } from "../../bind/typescript/test/until.ts";
+import type { Engine } from "../src/bridge.ts";
+import { demoSession, removeDemoDirectories } from "../src/demo.ts";
+import type { Session } from "../src/session.ts";
+import { withDemo } from "./composing.ts";
+import { idle } from "./idle.ts";
+
+afterAll(removeDemoDirectories);
+
+test("an @word that names no file is text of the message, and a word that names a file is read first", () =>
+  withDemo(async (session) => {
+    const message = "Add @dataclass to Point, as @README.md says, and install @types/node for @alice.";
+    await session.submit(message);
+    await idle(session);
+    await session.refresh();
+    const reads = session.acts.filter(
+      (act) => act.kind === "rung" && act.by === "operator" && String(act.words[0]).startsWith("read("),
+    );
+    expect(reads.map((act) => [act.words[0], act.run?.status])).toEqual([['read("README.md")', "done"]]);
+    expect(session.acts.filter((act) => session.isUserPrompt(act)).map((act) => act.words[1])).toEqual([
+      message,
+    ]);
+  }));
+
+test("a view that cannot be read opens the record with the default view and names the file", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-view-"));
+  const record = join(directory, "life.jsonl");
+  let session: Session | undefined;
+  try {
+    session = await demoSession({ record });
+    session.sessionName = "Named";
+    await session.engine.result(await session.engine.rung({ word: "kept = 7", on: session.engine.root }));
+    await session.dispose();
+    for (const damaged of ["", '{"sessionName": "cut', "[1, 2]"]) {
+      await writeFile(`${record}.ui.json`, damaged);
+      session = await demoSession({ record });
+      expect(session.notice).toContain(`Could not read ${record}.ui.json`);
+      expect(session.sessionName).toBe(basename(directory));
+      expect((await session.engine.inspect("kept", session.selected)).value).toBe(7);
+      await session.dispose();
+    }
+    session = undefined;
+  } finally {
+    await session?.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a view whose field has another form opens that field empty and names it, and keeps the others", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-view-form-"));
+  const record = join(directory, "life.jsonl");
+  let session: Session | undefined;
+  try {
+    session = await demoSession({ record });
+    await session.dispose();
+    const view = JSON.parse(await readFile(`${record}.ui.json`, "utf8"));
+    await writeFile(
+      `${record}.ui.json`,
+      JSON.stringify({ ...view, sessionName: "Kept", queued: "one", models: [1] }),
+    );
+    session = await demoSession({ record });
+    expect(session.notice).toBe(
+      `${record}.ui.json holds queued, models in a form this release does not read: each opened empty.`,
+    );
+    expect([session.sessionName, session.queued, session.models]).toEqual(["Kept", [], []]);
+    await session.dispose();
+    session = undefined;
+  } finally {
+    await session?.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a session that cannot save its view still ends its life, its commands and its lease", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-dispose-"));
+  const record = join(directory, "life.jsonl");
+  const session = await demoSession({ record });
+  try {
+    const command = await session.engine.bash(`${printPid}; sleep 30`, { on: session.engine.root });
+    const pid = () =>
+      Number(
+        (session.acts.find((act) => act.id === command)?.value as { stdout?: { content: string } })?.stdout
+          ?.content,
+      );
+    await until(session, () => pid() > 0);
+    // A directory where the save writes its file makes the save fail on every system.
+    await mkdir(`${record}.ui.json.tmp`);
+    const failed = await session.dispose().catch((error: unknown) => error);
+    expect(String(failed)).toContain("life.jsonl.ui.json.tmp");
+    expect(session.engine.disposed).toBe(true);
+    for (let tries = 0; alive(pid()) && tries < 100; tries++) await Bun.sleep(20);
+    expect(alive(pid())).toBe(false);
+    store(record)[1].dispose();
+  } finally {
+    await remove(directory);
+  }
+});
+
+test("a snapshot asked before a model choice lands after it, and the choice holds for the next prompt", async () => {
+  const session = await demoSession();
+  const snapshot = session.host.snapshot.bind(session.host);
+  const { promise: gate, resolve: release } = Promise.withResolvers<void>();
+  try {
+    await idle(session);
+    const { promise: asked, resolve: taken } = Promise.withResolvers<void>();
+    session.host.snapshot = async (chain) => {
+      session.host.snapshot = snapshot;
+      const early = await snapshot(chain);
+      taken();
+      await gate;
+      return early;
+    };
+    const reading = session.refresh();
+    await asked;
+    await session.command("/model claude-cli:opus");
+    release();
+    await reading;
+    expect(session.actor).toBe("claude-cli:opus/high");
+    await session.submit("Which model reads this?");
+    const prompt = session.acts.findLast((act) => session.isUserPrompt(act));
+    expect(prompt?.words).toEqual(["str", "Which model reads this?", ""]);
+    await idle(session);
+    await session.refresh();
+    expect(session.acts.find((act) => act.kind === "rung" && act.by === prompt?.id)?.words[2]).toBe(
+      "claude-cli:opus/high",
+    );
+    expect((await session.engine.inspect("actor", session.engine.root)).value).toBe("claude-cli:opus/high");
+    expect(session.actor).toBe("claude-cli:opus/high");
+  } finally {
+    release();
+    session.host.snapshot = snapshot;
+    await session.dispose();
+  }
+});
+
+/** The actor word of each rung that a prompt made, in order. */
+const asked = (session: Session, prompt: string | undefined) =>
+  session.acts.filter((act) => act.kind === "rung" && act.by === prompt).map((act) => act.words[2]);
+
+/** Make the demo hold its prompt on a question to the operator, set the effort low while it is held, and wait until
+ * that choice has run on the chain, so the next rung of the prompt comes after the choice. */
+async function heldWhileEffortChanges(
+  session: Session,
+  during: () => void = () => {},
+): Promise<string | undefined> {
+  await session.submit("Look around.");
+  await idle(session);
+  // The demo asks the operator and closes nothing, so its prompt makes no next rung until the operator answers.
+  await session.submit("Ask me first, then answer.");
+  const prompt = session.acts.findLast((act) => session.isUserPrompt(act))?.id;
+  await until(session, () => session.operatorPrompt !== undefined);
+  during();
+  await session.submit("/effort low");
+  await until(session, () =>
+    session.acts.some(
+      (act) => act.by === "operator" && act.words[0] === 'actor = "claude-cli:sonnet/low"' && act.done,
+    ),
+  );
+  await session.submit("Take the low effort.");
+  await idle(session);
+  return prompt;
+}
+
+test("/effort changes the actor of the next rung of a running chain", () =>
+  withDemo(async (session) => {
+    const prompt = await heldWhileEffortChanges(session);
+    await session.refresh();
+    expect(asked(session, prompt)).toEqual(["claude-cli:sonnet/high", "claude-cli:sonnet/low"]);
+  }));
+
+test("a follow-up goes to the actor of its chain when it is sent", () =>
+  withDemo(async (session) => {
+    await heldWhileEffortChanges(session, () =>
+      session.enqueue("Check keyboard navigation after this answer."),
+    );
+    await until(session, () => session.queued.length === 0);
+    await idle(session);
+    await session.refresh();
+    const follow = session.acts.findLast((act) => session.isUserPrompt(act));
+    expect(asked(session, follow?.id)).toEqual(["claude-cli:sonnet/low"]);
+    expect(follow?.words).toEqual(["str", "Check keyboard navigation after this answer.", ""]);
+  }));
+
+test("a follow-up that the operator removes while an earlier one is sent is not sent", async () => {
+  const session = await demoSession();
+  const send = session.host.sendQueued.bind(session.host);
+  try {
+    const other = await session.engine.chain({ label: "Other" });
+    session.queueHeld = true;
+    session.enqueue("First follow-up on main");
+    await session.select(other);
+    session.enqueue("Second follow-up on the other chain, about @README.md");
+    session.host.sendQueued = async (entry) => {
+      const later = session.queued.find((item) => item.id !== entry.id);
+      if (later) session.removeQueued(later.id);
+      return send(entry);
+    };
+    session.queueHeld = false;
+    await session.drainQueue();
+    await idle(session);
+    await session.refresh();
+    expect(session.queued).toEqual([]);
+    expect(session.acts.filter((act) => session.isUserPrompt(act)).map((act) => act.words[1])).toEqual([
+      "First follow-up on main",
+    ]);
+    // The other chain holds only the rungs that run again the words of the setup of the root that its prefix holds,
+    // the debug of the extensions and what it told, the read of the doctrine and what that read told, then the stand and the cd that it
+    // plays on itself, as the root played its own.
+    const setup = session.acts.filter((act) => act.kind === "rung" && act.by === session.engine.root);
+    const [first, read] = setup;
+    const stood = setup.at(-1);
+    expect(first?.word).toBe('debug(t"{standing()[4]=}")');
+    expect(read?.word).toMatch(/^read\('.*DOCTRINE\.md'\)$/);
+    expect(stood?.word).toMatch(/^stand\(\)\ncd\('.*'\)$/);
+    expect(
+      session.acts.filter((act) => act.on === other && act.kind === "rung").map((act) => [act.by, act.words]),
+    ).toEqual([
+      [other, [first?.word, first?.id, ""]],
+      [other, ["#rung1 debugged\nrung1_debug = 'standing()[4]=[]'", `${read?.id}_told`, ""]],
+      [other, [read?.word, read?.id, ""]],
+      [other, [expect.stringMatching(/^#read1\nread1_path = '.*DOCTRINE\.md'\n/), `${stood?.id}_told`, ""]],
+      [other, [stood?.word, "", "claude-cli:sonnet/high"]],
+    ]);
+  } finally {
+    session.host.sendQueued = send;
+    await session.dispose();
+  }
+});
+
+test("a follow-up that the operator removes while its files are read is not sent", async () => {
+  const session = await demoSession();
+  const engine = session.engine;
+  try {
+    session.queueHeld = true;
+    session.enqueue("Explain @README.md");
+    const [entry] = session.queued;
+    if (!entry) throw new Error("No follow-up.");
+    // The operator removes the follow-up as the read of its file starts.
+    const reading = new Proxy(engine, {
+      get(target, key) {
+        const value = Reflect.get(target, key);
+        if (key !== "rung") return value;
+        return (...args: Parameters<Engine["rung"]>) => {
+          if (session.queued.includes(entry)) session.removeQueued(entry.id);
+          return engine.rung(...args);
+        };
+      },
+    });
+    Object.assign(session, { engine: reading });
+    session.queueHeld = false;
+    await session.drainQueue();
+    Object.assign(session, { engine });
+    await idle(session);
+    await session.refresh();
+    expect(session.queued).toEqual([]);
+    expect(session.acts.some((act) => act.kind === "rung" && act.words[0] === 'read("README.md")')).toBe(
+      true,
+    );
+    expect(session.acts.filter((act) => session.isUserPrompt(act))).toEqual([]);
+  } finally {
+    Object.assign(session, { engine });
+    await session.dispose();
+  }
+});
+
+test("each /feed sends one line, and a /feed with no text closes the input", () =>
+  withDemo(async (session) => {
+    const command = await session.engine.bash('read -r a; read -r b; echo "a=[$a] b=[$b]"; cat', {
+      stdin: null,
+      on: session.engine.root,
+    });
+    await session.submit(`/feed ${command} yes`);
+    await session.submit(`/feed ${command} two  words`);
+    await until(session, () =>
+      String(
+        (session.acts.find((act) => act.id === command)?.value as { stdout?: { content: string } })?.stdout
+          ?.content,
+      ).includes("a=[yes] b=[two  words]\n"),
+    );
+    expect((await session.engine.outcome(command)).done).toBe(false);
+    await session.submit(`/feed ${command}`);
+    expect(await session.engine.result(command)).toMatchObject({
+      code: 0,
+      stdout: { content: "a=[yes] b=[two  words]\n" },
+    });
+  }));
+
+test("a path that starts with ~ is read from the home directory by /share, /export and /image", async () => {
+  const home = await mkdtemp(join(tmpdir(), "furb-home-"));
+  const script = join(home, "run.ts");
+  const pixel =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=";
+  try {
+    await writeFile(join(home, "pixel.png"), Buffer.from(pixel, "base64"));
+    // The home directory of a process is read once, so a process of its own gives the test a home of its own.
+    await writeFile(
+      script,
+      `import { demoSession, removeDemoDirectories } from ${JSON.stringify(join(import.meta.dir, "../src/demo.ts"))};
+const session = await demoSession();
+try {
+  await session.submit("/share ~/shared/chat.html");
+  await session.submit("/export ~/export.json");
+  await session.attachImage("~/pixel.png");
+  console.log(JSON.stringify({ images: session.images[session.selected]?.length }));
+} finally {
+  await session.dispose();
+  await removeDemoDirectories();
+}
+`,
+    );
+    // Windows reads the home directory from USERPROFILE, and every other system from HOME.
+    const child = Bun.spawn([process.execPath, script], {
+      cwd: home,
+      env: { ...process.env, HOME: home, USERPROFILE: home },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [code, output, errors] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect(errors).toBe("");
+    expect(code).toBe(0);
+    expect(JSON.parse(output)).toEqual({ images: 1 });
+    expect(await readFile(join(home, "shared/chat.html"), "utf8")).toContain("<!doctype html>");
+    expect(JSON.parse(await readFile(join(home, "export.json"), "utf8")).chain).toBe("chain1");
+    expect(existsSync(join(home, "~"))).toBe(false);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("an undo leaves out of its branch a grant that came after the message it takes back", () =>
+  withDemo(async (session) => {
+    await session.submit("Explore this project.");
+    await idle(session);
+    await session.submit("/grant 1.5");
+    await session.refresh();
+    const grant = session.activity.find((act) => act.kind === "grant");
+    if (!grant) throw new Error("The grant made no act.");
+    await session.undo();
+    await session.refresh();
+    const told = session.turns.map(([, python]) => python).join("\n");
+    expect(told).not.toContain(`#${grant.id}`);
+    expect(session.activity.some((act) => act.kind === "grant")).toBe(false);
+  }));

@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "frontend-design": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "skillPath": "skills/frontend-design/SKILL.md",
+      "computedHash": "89496d5dd00f4810205f351759594fc2742bf8eea85a2f2b2d1de59f4bd91576"
+    },
+    "opentui": {
+      "source": "msmps/opentui-skill",
+      "sourceType": "github",
+      "skillPath": "skill/opentui/SKILL.md",
+      "computedHash": "7244056422f5d578beaffc95ae20a4b421923f70a8eb6a4decf49b3d79c0d2db"
+    }
+  }
+}

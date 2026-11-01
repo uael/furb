@@ -1,0 +1,611 @@
+import { afterAll, expect, setSystemTime, test } from "bun:test";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { type Renderable, TextRenderable } from "@opentui/core";
+import { createTestRenderer } from "@opentui/core/testing";
+import { until } from "../../bind/typescript/test/until.ts";
+import { find } from "../script/stage.ts";
+import { App } from "../src/app.ts";
+import { demoLibrary, demoSession, removeDemoDirectories } from "../src/demo.ts";
+import type { View } from "../src/session.ts";
+import { type Composing, composing, withDemo } from "./composing.ts";
+import { idle } from "./idle.ts";
+
+afterAll(removeDemoDirectories);
+
+/** Every text under a node of the view. */
+const texts = (node: Renderable): string[] =>
+  node
+    .getChildren()
+    .flatMap((child) => [...(child instanceof TextRenderable ? [child.plainText] : []), ...texts(child)]);
+
+/** A view shown, read, and laid out, so that it stands where it opens. */
+async function show({ session, app, screen }: Pick<Composing, "session" | "app" | "screen">, view: View) {
+  session.show(view);
+  await session.refresh();
+  app.render();
+  await screen.flush();
+  await screen.flush();
+}
+
+test("a view opens at the offset it was left at, after a shorter view, in a new App, and after a reopen", async () => {
+  const session = await demoSession({ seed: true });
+  const library = await demoLibrary(session);
+  const screen = await createTestRenderer({ width: 120, height: 30, exitSignals: [] });
+  let app = new App(screen.renderer, session, { quit() {}, workspaces: library });
+  let record: string | undefined;
+  try {
+    await show({ session, app, screen }, "transcript");
+    expect(app.scroll.scrollHeight).toBeGreaterThan(app.scroll.viewport.height + 20);
+    app.scroll.scrollTo(20);
+    await show({ session, app, screen }, "changes");
+    expect(app.scroll.scrollHeight).toBeLessThanOrEqual(app.scroll.viewport.height);
+    await show({ session, app, screen }, "transcript");
+    expect(app.scroll.scrollTop).toBe(20);
+    app.dispose();
+    app = new App(screen.renderer, session, app.options);
+    await screen.flush();
+    await screen.flush();
+    expect(app.scroll.scrollTop).toBe(20);
+    record = session.host.record;
+  } finally {
+    app.dispose();
+    screen.renderer.destroy();
+    await library.dispose();
+  }
+  const reopened = await demoSession({ record });
+  await composing(
+    async ({ session, app, screen }) => {
+      await screen.flush();
+      expect(session.view).toBe("transcript");
+      expect(app.scroll.scrollTop).toBe(20);
+    },
+    { width: 120, height: 30 },
+    reopened,
+  );
+});
+
+test("a command that printed more than a row holds sends the tail and its length, and its open line shows all of it", () =>
+  composing(
+    async ({ session, app, screen, frame }) => {
+      await session.submit("/bash seq 1 3000");
+      const command = session.activity.find((act) => act.kind === "bash");
+      if (!command) throw new Error("No command.");
+      await session.engine.result(command.id);
+      await session.refresh();
+      const row = session.acts.find((act) => act.id === command.id);
+      const printed = Array.from({ length: 3000 }, (_, index) => `${index + 1}\n`).join("");
+      const stdout = (row?.value as { stdout: { content: string } }).stdout.content;
+      expect(row?.output).toBe(printed.length);
+      expect(stdout.length).toBeLessThanOrEqual(2000);
+      expect(printed.endsWith(stdout)).toBe(true);
+      await frame();
+      // A command of the operator stands in a panel, whose first row is its edge.
+      const line = app.scroll.getChildren().find((node) => node.id === command.id);
+      if (!line) throw new Error("No line for the command.");
+      await screen.mockMouse.click(line.x + 8, line.y + 1);
+      await screen.flush();
+      await until(
+        screen.renderer,
+        () => app.scroll.getChildren().some((node) => node.id === `opened-${command.id}-0`),
+        "frame",
+      );
+      const opened = app.scroll.getChildren().find((node) => node.id === `opened-${command.id}-0`);
+      if (!opened) throw new Error("No open line for the command.");
+      // The line end that closes the output ends its last row, and the card draws no empty row for it.
+      const shown = printed.replace(/\n$/, "");
+      await until(screen.renderer, () => texts(opened).includes(shown), "frame");
+      expect(texts(opened)).toContain(shown);
+    },
+    { width: 120, height: 40, useMouse: true },
+  ));
+
+test("the views say each quantity one way, read the changes of a scope once, and set a heading only when it changes", () =>
+  composing(
+    async ({ session, app, frame }) => {
+      const reads: (string[] | null)[] = [];
+      const netChanges = session.host.netChanges.bind(session.host);
+      session.host.netChanges = (writes) => {
+        reads.push(writes);
+        return netChanges(writes);
+      };
+      try {
+        // The sidebar says the ceiling of the grant that holds now: a share of the context, then a sum of dollars.
+        await session.submit("/context 0.3");
+        await session.engine.result(
+          await session.engine.rung({ word: "counted = 1", on: session.engine.root }),
+        );
+        await session.submit("/grant 1.5");
+        await session.refresh();
+        expect(await frame()).toContain("$1.50");
+        // The word of a folded rung takes its colors off the main thread, which change its heading once.
+        await app.colorsDone();
+        await frame();
+        const card = app.scroll.getChildren().find((node) => /^rung\d+$/.test(node.id));
+        const heading = card?.getChildren()[0] as TextRenderable | undefined;
+        if (!heading) throw new Error("No card for the rung.");
+        const content = heading.content;
+        await frame();
+        expect(heading.content).toBe(content);
+        await session.engine.result(
+          await session.engine.rung({ word: 'write(Text("note.txt", "one\\n"))', on: session.engine.root }),
+        );
+        await until(session.host, () => session.host.changes === 1);
+        session.show("changes");
+        await session.refresh();
+        await session.refresh();
+        expect(reads.length).toBe(1);
+        expect(session.changes.map((change) => [change.added, change.removed])).toEqual([[1, 0]]);
+        // A view that shows a change says no word of an empty view.
+        expect(await frame()).not.toContain("No file changes");
+        await session.engine.result(
+          await session.engine.rung({ word: 'write(Text("note.txt", "two\\n"))', on: session.engine.root }),
+        );
+        await until(session.host, () => session.host.changes === 2);
+        await session.refresh();
+        expect(reads.length).toBe(2);
+        // The review shows the net change of the file: the second write replaced the first.
+        expect(session.changes.map((change) => change.hunks.flatMap((hunk) => hunk.lines))).toEqual([
+          ["+two"],
+        ]);
+      } finally {
+        session.host.netChanges = netChanges;
+      }
+    },
+    { width: 150, height: 40 },
+  ));
+
+test("a damaged journal of file changes says what broke, with no word of the parser, and a click repairs it", () =>
+  composing(
+    async ({ session, frame, click }) => {
+      await session.engine.result(
+        await session.engine.rung({ word: 'write(Text("note.txt", "one\\n"))', on: session.engine.root }),
+      );
+      await until(session.host, () => session.host.changes === 1);
+      await writeFile(`${session.host.record}.changes.jsonl`, "{ damaged journal }");
+      session.show("changes");
+      await session.refresh().catch(session.fail);
+      const shown = await frame();
+      expect(shown).toContain("The journal of file changes is damaged");
+      // The message wraps where the path of the journal ends, which differs from one machine to the next.
+      expect(session.damagedJournal).toEndWith("is damaged: change 1 cannot be read.");
+      expect(shown).toContain("cannot be read");
+      expect(shown).toContain("Repair the journal");
+      expect(shown).toContain("Start a new journal");
+      expect(shown).not.toContain("JSON");
+      await click("Repair the journal");
+      await until(session, () => session.notice.startsWith("The journal is repaired"));
+      expect(session.notice).toBe("The journal is repaired: 0 changes kept, 1 line removed.");
+      expect(session.error).toBe("");
+      expect(await frame()).not.toContain("The journal of file changes is damaged");
+    },
+    { width: 150, height: 40 },
+  ));
+
+test("the footer counts down the wait of a call of a model that the provider makes again, with its attempt and why", () =>
+  composing(
+    async ({ session, frame }) => {
+      // The clock stands still, so the seconds left are what the test moves it by, however long the frames take.
+      const start = Date.now();
+      const retry = { attempt: 2, most: 10, until: start + 3500, why: "connection reset" };
+      // Each state of the worker carries the streams of its session, and a state that the opening of the demo sent can
+      // come after the test starts. So the stream that the test makes comes again with each state.
+      const stream = () => {
+        session.host.streams = new Map([
+          ["rung1", { chain: session.selected, text: "", thinking: "", retry }],
+        ]);
+      };
+      setSystemTime(new Date(start));
+      stream();
+      session.host.on("change", stream);
+      try {
+        expect(await frame()).toContain(
+          "Retrying in 4 s, attempt 2 of 10, connection reset: /retry or /cancel",
+        );
+        setSystemTime(new Date(start + 1000));
+        expect(await frame()).toContain("Retrying in 3 s, attempt 2 of 10, connection reset");
+      } finally {
+        session.host.off("change", stream);
+        setSystemTime();
+      }
+    },
+    { width: 152, height: 40 },
+  ));
+
+test("the footer says the end of a usage limit and how many chains wait for it, with no attempt and no countdown", () =>
+  composing(
+    async ({ session, frame }) => {
+      const limit = {
+        attempt: 2,
+        most: 10,
+        until: Date.now() + 86_400_000,
+        why: "usage limit until 2026-10-30 16:00 (EST)",
+      };
+      // Each state of the worker carries the streams of its session, so the streams of the test come again with each.
+      const stream = () => {
+        session.host.streams = new Map(
+          ["rung1", "rung2", "rung3"].map(
+            (rung, at) =>
+              [
+                rung,
+                { chain: at ? `chain${at + 1}` : session.selected, text: "", thinking: "", retry: limit },
+              ] as const,
+          ),
+        );
+      };
+      stream();
+      session.host.on("change", stream);
+      try {
+        const shown = await frame();
+        expect(shown).toContain("usage limit until 2026-10-30 16:00 (EST), 3 chains wait: /retry or /cancel");
+        expect(shown).not.toContain("attempt 2");
+      } finally {
+        session.host.off("change", stream);
+      }
+    },
+    { width: 152, height: 40 },
+  ));
+
+test("a window whose life ended says so in plain words, and offers to open the life again and to stop its host", () =>
+  composing(
+    async ({ session, frame }) => {
+      session.host.local = true;
+      session.host.lost = "The life was ended from another window.";
+      session.host.emit("change");
+      let shown = await frame();
+      for (let tries = 0; tries < 40 && !shown.includes("Stop the host"); tries++) {
+        await Bun.sleep(50);
+        shown = await frame();
+      }
+      expect(shown).toContain("The life is not open in this window");
+      expect(shown).toContain("The life was ended from another window.");
+      expect(shown).toContain("Open the life again");
+      expect(shown).toContain("Stop the host");
+      expect(shown).not.toContain("view could not load");
+    },
+    { width: 152, height: 40 },
+    true,
+  ));
+
+test("a word of the operator that the gate refused says in one more line what to do", () =>
+  composing(
+    async ({ session, frame }) => {
+      await session.submit("/run this is invalid python !!!").catch(session.fail);
+      await until(session, () => session.findings.length > 0);
+      await session.refresh();
+      expect(await frame()).toContain("Press ↑ in the input to bring the word back");
+    },
+    { width: 150, height: 44 },
+  ));
+
+test("a relative path that the operator types is read from the directory of the selected chain", () =>
+  withDemo(async (session) => {
+    const directory = join(session.host.directory, "sub");
+    await mkdir(directory);
+    const pixel =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=";
+    await writeFile(join(directory, "pixel.png"), Buffer.from(pixel, "base64"));
+    await session.submit("/cd sub");
+    await until(session, () => session.directory === directory);
+    expect(session.path("out.json")).toBe(join(directory, "out.json"));
+    await session.submit("/export out.json");
+    await session.submit("/share page.html");
+    await session.attachImage("pixel.png");
+    expect(JSON.parse(await Bun.file(join(directory, "out.json")).text()).chain).toBe(session.selected);
+    expect(await Bun.file(join(directory, "page.html")).exists()).toBe(true);
+    expect(session.images[session.selected]?.map((image) => image.name)).toEqual(["pixel.png"]);
+  }));
+
+test("the stand and the cd that the World plays on a chain are no card of the conversation, though its turns bind the roster, the actor and the directory", () =>
+  composing(
+    async (context) => {
+      const { session, app } = context;
+      await show(context, "feed");
+      const told = session.turns.flatMap(([role, python]) => (role === "user" ? python.split("\n") : []));
+      const at = told.findIndex((line) => /^#stand\d+$/.test(line));
+      const stand = told[at]?.slice(1);
+      expect(told.slice(at + 1, at + 4).map((line) => line.split(" = ", 1)[0])).toEqual([
+        `${stand}_roster`,
+        `${stand}_actor`,
+        "",
+      ]);
+      expect(told[at + 4]).toMatch(/^#cd\d+$/);
+      const headings = app.scroll.getChildren().map((card) => (texts(card)[0] ?? "").replace(/^[▸▾] /, ""));
+      expect(headings).toContain("You");
+      expect(headings.filter((heading) => /^(#?stand\d*|#?cd\d*|roster|cwd|actor)\b/.test(heading))).toEqual(
+        [],
+      );
+    },
+    { width: 120, height: 30 },
+    true,
+  ));
+
+test("a card that the view goes to, or a thread that Details expands, is in view once the view has laid it out", () =>
+  composing(
+    async ({ session, app, screen, frame }) => {
+      const laid = async () => {
+        await frame();
+        await screen.flush();
+      };
+      const card = (id: string) => {
+        const found = app.scroll.getChildren().find((node) => node.id === id);
+        if (!found) throw new Error(`No card ${id} in the view.`);
+        return found;
+      };
+      // A card taller than the view is in view when its top is at the top of the view.
+      const seen = (id: string) => {
+        const { y, height } = card(id);
+        const view = app.scroll.viewport;
+        return y >= view.y && (y + height <= view.y + view.height || y === view.y);
+      };
+      for (let i = 0; i < 24; i++) await session.command(`/run v${i} = ${i}`);
+      await session.command("/run target = 1");
+      // A rung the Kernel has not run yet stands in the program once it runs.
+      await until(session, () => Object.values(session.program).includes("target = 1"));
+      const rung = Object.entries(session.program).find(([, word]) => word === "target = 1")?.[0];
+      if (!rung) throw new Error("No rung in the program.");
+      session.show("transcript");
+      await session.refresh();
+      await laid();
+      await app.inspect("target");
+      await laid();
+      screen.mockInput.pressEnter();
+      await laid();
+      expect(session.view).toBe("feed");
+      expect(app.scroll.scrollHeight).toBeGreaterThan(app.scroll.viewport.height * 2);
+      expect(seen(rung)).toBe(true);
+      // A thread folded to its header, far above the foot of the view, opens from Details and comes into view.
+      const thread = session.acts.find(
+        (act) => act.kind === "prompt" && String(act.words[1]).startsWith("Explore"),
+      );
+      if (!thread) throw new Error("No thread of the demo.");
+      session.folds[`thread:${thread.id}`] = true;
+      app.renderContent();
+      app.scroll.scrollTo(app.scroll.scrollHeight);
+      await laid();
+      expect(app.scroll.getChildren().some((node) => node.id === `program-${thread.id}`)).toBe(false);
+      expect(seen(thread.id)).toBe(false);
+      app.details();
+      await screen.mockInput.typeText("Explore this project");
+      screen.mockInput.pressEnter();
+      await laid();
+      expect(session.folds[`thread:${thread.id}`]).toBe(false);
+      expect(app.scroll.getChildren().some((node) => node.id === `program-${thread.id}`)).toBe(true);
+      expect(seen(thread.id)).toBe(true);
+    },
+    { width: 120, height: 24 },
+    true,
+  ));
+
+test("the palette lists as many choices as its rows hold, with the selected one among them, inside its panel", () =>
+  composing(
+    async ({ app, screen, frame }) => {
+      /** The rows of the frame that the palette takes, and the row of its selected choice. */
+      const palette = async () => {
+        const lines = (await frame()).split("\n");
+        const found = (node: Renderable): Renderable | undefined =>
+          node.id === "palette" ? node : node.getChildren().map(found).find(Boolean);
+        const panel = found(screen.renderer.root);
+        if (!panel) throw new Error("No palette.");
+        return {
+          top: panel.y,
+          bottom: panel.y + panel.height,
+          // The selected choice has the bar of the selection at its left, inside the panel.
+          selected: lines.findIndex(
+            (line, row) =>
+              row >= panel.y &&
+              row < panel.y + panel.height &&
+              line.slice(panel.x, panel.x + panel.width).includes("▎ "),
+          ),
+        };
+      };
+      app.palette();
+      let shown = await palette();
+      expect(shown.bottom).toBeLessThanOrEqual(30);
+      for (let i = 0; i < shown.bottom - shown.top + 4; i++) screen.mockInput.pressArrow("down");
+      shown = await palette();
+      expect(shown.bottom).toBeLessThanOrEqual(30);
+      expect(shown.selected).toBeGreaterThan(shown.top);
+      expect(shown.selected).toBeLessThan(shown.bottom);
+    },
+    { width: 120, height: 30 },
+  ));
+
+test("a dialog covers the feed whole and a menu at the sidebar covers the sidebar whole, so that no edge cuts a word", () =>
+  composing(
+    async ({ app, screen, session }) => {
+      const panel = () => {
+        const found = (node: Renderable): Renderable | undefined =>
+          node.id === "palette" ? node : node.getChildren().map(found).find(Boolean);
+        const node = found(screen.renderer.root);
+        if (!node) throw new Error("No palette.");
+        return { left: node.x, right: node.x + node.width };
+      };
+      const side = session.preferences.sidebarWidth;
+      const width = screen.renderer.width;
+      app.palette();
+      await screen.flush();
+      await screen.flush();
+      expect(panel()).toEqual({ left: 0, right: width - side });
+      app.closeOverlay();
+      app.openPalette("Menu", [{ label: "Open", detail: "", run() {} }], { at: { x: width - 5, y: 5 } });
+      await screen.flush();
+      await screen.flush();
+      expect(panel()).toEqual({ left: width - side, right: width });
+    },
+    { width: 120, height: 30 },
+  ));
+
+test("the feed left at its end opens at its end, and one left above its end opens where it was", () =>
+  composing(
+    async (context) => {
+      const { session, app } = context;
+      const end = () => Math.max(0, app.scroll.scrollHeight - app.scroll.viewport.height);
+      await show(context, "feed");
+      expect(app.scroll.scrollTop).toBe(end());
+      await show(context, "transcript");
+      for (let i = 0; i < 12; i++) await session.command(`/run grown${i} = ${i}`);
+      await until(session, () => Object.values(session.program).includes("grown11 = 11"));
+      // The earlier words stand open, so that the feed is longer than its view.
+      session.folds[`prompts:${session.selected}`] = false;
+      await show(context, "feed");
+      expect(end()).toBeGreaterThan(0);
+      expect(app.scroll.scrollTop).toBe(end());
+      app.scroll.scrollTo(3);
+      await show(context, "transcript");
+      await show(context, "feed");
+      expect(app.scroll.scrollTop).toBe(3);
+    },
+    { width: 120, height: 30 },
+    true,
+  ));
+
+test("the feed at its end stays at its end when the input grows, and a turn of the wheel stays where it went", () =>
+  composing(
+    async (context) => {
+      const { session, app, screen } = context;
+      const end = () => Math.max(0, app.scroll.scrollHeight - app.scroll.viewport.height);
+      await show(context, "transcript");
+      for (let i = 0; i < 12; i++) await session.command(`/run grown${i} = ${i}`);
+      await until(session, () => Object.values(session.program).includes("grown11 = 11"));
+      // The earlier words stand open, so that the feed is longer than its view.
+      session.folds[`prompts:${session.selected}`] = false;
+      await show(context, "feed");
+      const tall = app.scroll.viewport.height;
+      app.composer.setText("one\ntwo\nthree\nfour\nfive");
+      app.render();
+      await screen.flush();
+      await screen.flush();
+      expect(app.scroll.viewport.height).toBeLessThan(tall);
+      expect(app.scroll.scrollTop).toBe(end());
+      // A render that changes nothing on the screen draws no frame, and the wheel still moves the feed.
+      app.render();
+      await screen.flush();
+      // The wheel turns over the feed.
+      await screen.mockMouse.scroll(10, app.scroll.y + 1, "up");
+      await screen.flush();
+      await screen.flush();
+      expect(app.scroll.scrollTop).toBeLessThan(end());
+    },
+    { width: 120, height: 30, useMouse: true },
+    true,
+  ));
+
+test("the help list shows each description of its first keys whole, with no cut at its end", () =>
+  composing(
+    async ({ session, frame, click }) => {
+      await idle(session);
+      await click("F1 help");
+      const rows = (await frame())
+        .split("\n")
+        .map((row) => row.slice(0, 160 - session.preferences.sidebarWidth));
+      const first = rows.findIndex((row) => row.includes("Send a message, or run Python input"));
+      const last = rows.findIndex((row) => row.includes("Inspect a value and follow its definition"));
+      expect(first).toBeGreaterThan(0);
+      expect(last).toBeGreaterThan(first);
+      expect(rows.slice(first, last + 1).filter((row) => row.includes("…"))).toEqual([]);
+    },
+    { width: 160, height: 60 },
+    true,
+  ));
+
+test("the keys of the footer and the palette answer the mouse, and a drag over the header of a thread selects and copies its text", () =>
+  composing(
+    async ({ session, app, screen, frame, click }) => {
+      await idle(session);
+      await click("F1 help");
+      await frame();
+      expect(find(screen, "Keys and commands")[1]).toBeGreaterThan(0);
+      // The wheel moves the selection of the palette, and a click on a choice runs it.
+      app.closeOverlay();
+      app.palette();
+      await frame();
+      const [x, y] = find(screen, "Transcript view");
+      await screen.mockMouse.scroll(x, y, "down");
+      await screen.flush();
+      await screen.mockMouse.click(x, y);
+      expect(session.view).toBe("transcript");
+      session.show("feed");
+      // The screen draws the feed, with the palette gone, before the pointer acts on it again.
+      await frame();
+      // A drag over the header of a thread selects its text and leaves the thread as it was.
+      const texts = (node: Renderable): TextRenderable[] => [
+        ...("plainText" in node ? [node as TextRenderable] : []),
+        ...node.getChildren().flatMap(texts),
+      ];
+      const card = app.scroll.getChildren().find((node) => /^prompt\d+$/.test(node.id));
+      const heading = card && texts(card).find((node) => node.plainText.includes("Explore this project"));
+      if (!card || !heading) throw new Error("No thread in the feed.");
+      const program = () => app.scroll.getChildren().some((node) => node.id === `program-${card.id}`);
+      expect(program()).toBe(true);
+      await screen.mockMouse.drag(heading.x, heading.y, heading.x + 6, heading.y);
+      await frame();
+      expect(program()).toBe(true);
+      const selected = screen.renderer.getSelection()?.getSelectedText() ?? "";
+      expect(selected.length).toBeGreaterThan(0);
+      expect(heading.plainText).toContain(selected);
+      expect(session.notice).toStartWith("Copied");
+    },
+    { width: 140, height: 40, useMouse: true },
+    true,
+  ));
+
+test("the sidebar lists the threads, and a question that waits stands first with its values, which a click answers", () =>
+  composing(
+    async ({ session, frame, click }) => {
+      await idle(session);
+      let shown = await frame();
+      expect(shown).toContain("Threads");
+      session.preferences.sidebarStyle = "inbox";
+      const question = await session.engine.prompt("bool", {
+        message: "Apply the search shortcut?",
+        on: session.engine.root,
+        to: "operator",
+      });
+      await until(session.host, () => session.host.prompts.has(question));
+      await session.refresh();
+      shown = await frame();
+      const rows = shown.split("\n");
+      const needs = rows.findIndex((line) => line.includes("needs you"));
+      expect(needs).toBeGreaterThan(-1);
+      expect(rows[needs + 2]).toContain("Main");
+      expect(shown).toContain("Apply the search shortcut?");
+      expect(shown).toContain(" 3 Other ");
+      await click(" 1 yes ");
+      expect(await session.engine.result(question)).toBe(true);
+    },
+    { width: 140, height: 44, useMouse: true },
+    true,
+  ));
+
+test("a folded rung shows the first line of its word in the colors of its grammar", () =>
+  composing(
+    async ({ session, app, screen, frame }) => {
+      await idle(session);
+      await frame();
+      await app.colorsDone();
+      // The parser colors the word off the main thread, and the view draws it again once it has.
+      const colored = () => {
+        const line = screen.captureSpans().lines.find((one) =>
+          one.spans
+            .map((span) => span.text)
+            .join("")
+            .includes('notes = read("README.md")'),
+        );
+        return new Set(
+          line?.spans
+            .filter((span) => /read|README|notes/.test(span.text))
+            .map((span) => JSON.stringify(span.fg)),
+        );
+      };
+      for (let step = 0; step < 80; step++) {
+        app.render();
+        await screen.flush();
+        if (colored().size > 1) break;
+        await Bun.sleep(25);
+      }
+      expect(colored().size).toBeGreaterThan(1);
+    },
+    { width: 140, height: 44 },
+    true,
+  ));

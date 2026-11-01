@@ -1,0 +1,31 @@
+{
+  "name": "@uael/furb-darwin-arm64",
+  "version": "0.3.5",
+  "cpu": [
+    "arm64"
+  ],
+  "main": "furb.darwin-arm64.node",
+  "files": [
+    "furb.darwin-arm64.node",
+    "LICENSE"
+  ],
+  "description": "The engine of furb, built for macOS on Apple silicon. npm installs it with the package furb on that system alone.",
+  "homepage": "https://github.com/uael/furb/tree/main/bind/typescript#readme",
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "bun": ">=1.4.2",
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/uael/furb.git",
+    "directory": "bind/typescript"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "os": [
+    "darwin"
+  ]
+}

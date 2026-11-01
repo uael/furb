@@ -1,0 +1,33 @@
+{
+  "name": "furb-workspace",
+  "private": true,
+  "workspaces": [
+    "bind/typescript",
+    "tui",
+    "docs/examples",
+    "gui"
+  ],
+  "scripts": {
+    "build": "bun run bind/typescript/build.ts",
+    "tui": "bun run tui/src/cli.ts",
+    "demo": "bun run tui/src/cli.ts --demo",
+    "screenshots": "bun run tui/script/screenshots.ts",
+    "animation": "bun run tui/script/animation.ts",
+    "docs": "bun run tui/script/docs.ts",
+    "check": "tsc --noEmit && tsc --noEmit -p gui",
+    "test": "bun run tui/script/test.ts",
+    "bench": "bun run tui/script/bench.ts",
+    "format": "biome format --write bind/typescript tui gui docs/examples extensions package.json tsconfig.json biome.json",
+    "lint": "biome check bind/typescript tui gui docs/examples extensions package.json tsconfig.json biome.json"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.6",
+    "@napi-rs/cli": "^3.10.5",
+    "@resvg/resvg-js": "^2.6.2",
+    "@types/bun": "latest",
+    "@types/upng-js": "2.1.5",
+    "gifenc": "1.0.3",
+    "typescript": "~5.9.3",
+    "upng-js": "2.1.0"
+  }
+}

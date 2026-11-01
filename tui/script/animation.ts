@@ -1,0 +1,165 @@
+import { writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
+import { createTestRenderer } from "@opentui/core/testing";
+import { until } from "../../bind/typescript/test/until.ts";
+import { demoSession, removeDemoDirectories, seedDemoFiles } from "../src/demo.ts";
+import { loadParsers } from "../src/parsers.ts";
+import { paletteOf } from "../src/theme.ts";
+import { idle } from "../test/idle.ts";
+import { gif, pack, type Still } from "./gif.ts";
+import { pixels } from "./raster.ts";
+import { click, end, highlighting, home, mount, watch } from "./stage.ts";
+
+// The model of the demo writes its words as a stream in the animation, as a real model does.
+process.env.FURB_DEMO_STREAM = "1";
+const directory = join(await home("furb-animation"), "fieldnotes");
+/** What the script waits for: a picture whose state never comes ends the script with an error that names it. */
+const waits = watch();
+
+/** The terminal of the animation, and the scale of its pictures, which a screen of high density shows sharp. */
+const columns = 138,
+  rows = 40,
+  zoom = 2;
+const output = resolve(process.env.FURB_ANIMATION_OUT ?? "docs/furb.gif");
+await seedDemoFiles(directory);
+const session = await demoSession({ cwd: directory });
+await session.command("/name Explore project");
+// With the kitty keyboard protocol, an Escape is a key of its own that no key after it joins.
+const test = await createTestRenderer({ width: columns, height: rows, useMouse: true, kittyKeyboard: true });
+const { library, app } = await mount(session, test.renderer);
+const stills: Still[] = [];
+let size = { width: 0, height: 0 };
+/** The screen as it is now, which stays for a time in hundredths of a second. */
+async function still(delay: number): Promise<void> {
+  waits(`picture ${stills.length + 1}`);
+  // The input is colored by a parser off the main thread, which a moment lets finish.
+  await new Promise((done) => setTimeout(done, 30));
+  app().render();
+  await test.flush();
+  await Promise.all(highlighting(test.renderer.root));
+  // The folded rungs color the first line of their word off the main thread too, and the view draws them again.
+  await app().colorsDone();
+  app().render();
+  await test.flush();
+  // The text of each picture goes to a folder that FURB_ANIMATION_TEXT names, to read the animation without its pictures.
+  const texts = process.env.FURB_ANIMATION_TEXT;
+  if (texts)
+    await writeFile(join(texts, `${String(stills.length).padStart(3, "0")}.txt`), test.captureCharFrame());
+  const image = pixels(test.captureSpans(), paletteOf(session.theme), "furb", zoom);
+  size = { width: image.width, height: image.height };
+  stills.push(pack(image.pixels, delay));
+}
+/** Text typed a few characters at a time, each step a picture. */
+async function type(text: string, step = 3, delay = 5): Promise<void> {
+  for (let at = 0; at < text.length; at += step) {
+    await test.mockInput.typeText(text.slice(at, at + step));
+    await still(delay);
+  }
+}
+/** The screen while the session works, a picture for each moment, until it rests. */
+async function working(delay = 8): Promise<void> {
+  for (let moment = 0; moment < 120; moment++) {
+    await new Promise((done) => setTimeout(done, delay * 10));
+    await still(delay);
+    if (!session.activity.some((act) => !act.done && ["prompt", "rung", "bash"].includes(act.kind))) break;
+  }
+  await idle(session);
+  await session.refresh();
+}
+
+let failed = false;
+try {
+  await loadParsers();
+  await still(180);
+  await type("Explore this project, run its checks, and suggest a next step.", 2, 4);
+  await still(40);
+  test.mockInput.pressEnter();
+  await working();
+  await still(260);
+  // Python input: the operator writes a word with the same gate as the model.
+  test.mockInput.pressKey("r", { ctrl: true });
+  await still(60);
+  await type('write(read("README.md").append("\\nPress Ctrl+K to search.\\n"))', 3, 3);
+  await still(80);
+  test.mockInput.pressEnter();
+  await working();
+  test.mockInput.pressKey("r", { ctrl: true });
+  await still(150);
+  // Two questions wait at once, on two chains: the desk over the input counts them, and the input answers the one of
+  // the chain shown. A click on the desk opens the other, and its choice answers it.
+  await type("Ask me first, then add a test for the shortcut.", 2, 4);
+  test.mockInput.pressEnter();
+  await until(session.host, () => session.host.prompts.size === 1);
+  const checks = await session.engine.chain({ label: "Checks" });
+  await session.engine.rung({
+    word: 'await prompt(bool, "Run the slow checks too?", to=OPERATOR)',
+    on: checks,
+  });
+  await until(session.host, () => session.host.prompts.size === 2);
+  await session.refresh();
+  await still(260);
+  await type("high", 1, 10);
+  await still(40);
+  test.mockInput.pressEnter();
+  await until(session.host, () => session.host.prompts.size === 1);
+  await session.refresh();
+  await still(160);
+  await click(test, "waits on other chains");
+  await still(160);
+  test.mockInput.pressEnter();
+  await until(session.host, () => !session.host.prompts.size);
+  await session.select(session.engine.root);
+  await working();
+  await still(220);
+  await click(test, "Changes");
+  await still(200);
+  await click(test, "Transcript");
+  await still(150);
+  await click(test, "Feed");
+  await still(80);
+  // The palette finds any action by its name or its slash command.
+  test.mockInput.pressKey("p", { ctrl: true });
+  await still(120);
+  await type("rew", 1, 12);
+  await still(140);
+  test.mockInput.pressEscape();
+  await still(30);
+  // Escape twice opens the rewind tree in the feed. A picture takes longer to draw than the time between the two
+  // presses, so the picture comes after both.
+  test.mockInput.pressEscape();
+  test.mockInput.pressEscape();
+  await still(160);
+  if (!test.captureCharFrame().includes("Rewind")) throw new Error("The rewind tree did not open.");
+  test.mockInput.pressArrow("down");
+  await still(60);
+  test.mockInput.pressArrow("down");
+  await still(110);
+  test.mockInput.pressEscape();
+  await still(120);
+  // Ctrl+T changes the colors of every surface, and the choice shows at once.
+  test.mockInput.pressKey("t", { ctrl: true });
+  await still(80);
+  await type("paper", 1, 10);
+  await still(60);
+  test.mockInput.pressEnter();
+  await still(200);
+  test.mockInput.pressKey("t", { ctrl: true });
+  await still(50);
+  await type("github", 1, 8);
+  test.mockInput.pressEnter();
+  await still(220);
+  // The lights of the title bar are rare pixels, which the palette keeps all the same.
+  await writeFile(output, gif(stills, size.width, size.height, [0xff5f57, 0xfebc2e, 0x28c840]));
+  console.log(`${output}: ${stills.length} pictures`);
+} catch (error) {
+  console.error(error);
+  failed = true;
+}
+waits("the end of the script");
+await end(
+  failed,
+  () => app().dispose(),
+  () => test.renderer.destroy(),
+  () => library.dispose(),
+  removeDemoDirectories,
+);

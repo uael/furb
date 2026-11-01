@@ -1,0 +1,58 @@
+[project]
+name = "furb-monty"
+# maturin takes the version of the crate, which is the version of the workspace.
+dynamic = ["version"]
+description = "furb for python, with the engine in monty: every name of engine.pyi, over one life in the sandbox."
+readme = "README.md"
+requires-python = ">=3.14"
+# The license of the repository stands over this too; maturin reads no file above its own directory, so the
+# distribution names the license and carries none of its own.
+license = "AGPL-3.0-only"
+authors = [{ name = "Abel Lucas", email = "uaelucas@gmail.com" }]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Rust",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.14",
+  "Typing :: Typed",
+]
+# The package of the engine, at its own version: both carry the engine, and a release is the two together.
+dependencies = ["furb==0.3.5"] # x-release-please-version
+
+[project.urls]
+Source = "https://github.com/uael/furb"
+Issues = "https://github.com/uael/furb/issues"
+
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[tool.maturin]
+# The crate at the root of the repository, built with its python feature. The command line, the other crate of its
+# workspace, is the package furb-cli.
+manifest-path = "../../Cargo.toml"
+module-name = "furb_monty._monty"
+features = ["extension-module"]
+
+[tool.uv.sources]
+furb = { workspace = true }
+
+# The files that the build of the crate reads. When one of them changes, the next sync builds the package again, so a
+# change of the engine reaches the suite with no reinstall.
+[tool.uv]
+cache-keys = [
+  { file = "pyproject.toml" },
+  { file = "../../Cargo.toml" },
+  { file = "../../Cargo.lock" },
+  { file = "../../build.rs" },
+  { file = "../../DOCTRINE.md" },
+  { file = "../../src/**/*.rs" },
+  { file = "../../src/**/*.py" },
+  { file = "../../src/**/*.pyi" },
+  { file = "../../src/**/*.json" },
+  { file = "../../extensions/*/*.py" },
+  { file = "../../extensions/*/furb.json" },
+  { file = "../../extensions/*/tui.ts" },
+  { file = "../../extensions/*/*/SKILL.md" },
+]

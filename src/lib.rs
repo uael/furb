@@ -1,0 +1,58 @@
+//! The core of an AI harness: the engine in a sandbox, behind an async API, on ears of your own.
+//!
+//! The engine is one python file, `src/furb/engine.py`, which this crate runs inside monty, a python interpreter
+//! written in rust for untrusted code. [`Engine`] is one life of it: its methods are the verbs of the contract, made
+//! from the contract when the crate is built, and an act is awaited as an [`Act`]. [`Ear`] is what the engine hears
+//! by, a coroutine that [`ear::ear`] makes, and [`world`] holds the ears the crate writes: files, commands, time,
+//! the store of the record, and the provider of models. [`extension`] says what an extension is and plays the ones a
+//! life runs as rungs, and [`life::Opening`] opens a life on the record and on the ears of the crate, to which a host
+//! adds its own. The Kernel and the gate are the crate's. [`wire`] carries a value as JSON, as the record keeps it,
+//! and [`binding`] gives the host API to python and to TypeScript.
+
+pub mod checkpoint;
+pub mod ear;
+pub mod engine;
+pub mod extension;
+pub mod fact;
+pub mod gate;
+pub mod life;
+mod sand;
+mod snapshot;
+pub mod value;
+pub mod wire;
+pub mod world;
+
+#[cfg(any(feature = "python", feature = "typescript"))]
+pub mod binding;
+
+/// The allocator that counts each byte a program asks for, which is how the sandbox reads its memory. A program that
+/// links the crate gives it the `allocator` feature, or installs this one itself as `#[global_allocator]`.
+#[cfg(feature = "allocator")]
+#[global_allocator]
+static ALLOCATOR: monty_alloc::LimitedAllocator = monty_alloc::LimitedAllocator;
+
+pub use crate::{
+  ear::{Ear, Heard, Spoken, Step},
+  engine::{Act, Engine, Life, Plain, verbs},
+  fact::Fact,
+  value::{Exit, Fault, Object, ObjectRef, Text},
+};
+
+/// The engine: the one file the sandbox runs, and the whole system prompt of a model.
+///
+/// The crate carries the same file the python package ships, so the engine a host runs and the engine a model
+/// reads are one thing.
+#[cfg_attr(feature = "typescript", napi_derive::napi)]
+pub const ENGINE: &str = include_str!("furb/engine.py");
+
+/// The system prompt of every model: the engine minified with its program kept as it is, and nothing else.
+///
+/// The build makes it from [`ENGINE`], and stops unless it is the same program.
+#[cfg_attr(feature = "typescript", napi_derive::napi)]
+pub const SYSTEM: &str = include_str!(concat!(env!("OUT_DIR"), "/system.py"));
+
+/// The sheet the gate reads a word on, which the Kernel of the sandbox writes the same way the python package does.
+pub const SHEET: &str = include_str!("furb/sheet.py");
+
+/// The Kernel, which the sandbox loads in a module of its own, as the python package imports it.
+pub const KERNEL: &str = include_str!("furb/kernel.py");

@@ -1,0 +1,404 @@
+"""The sheet the gate reads a word on, and the findings it reads off it.
+
+The contract says the word of a rung runs only if the gate accepts it, that the gate reads the word after the
+program of its chain, and that a response which is not python is a finding like any other. The reading is ty's,
+and ty reads a file: this is that file, written the same way by every Kernel, so that a word is judged the same
+wherever the engine runs.
+
+The word stands on a sheet of its own::
+
+  import __engine__
+  async def __body():
+    <each name ty gives a module that a chain in the sandbox does not hold>: object
+    <each name of the engine that is not private> = __engine__.<that name>
+    actor = ""
+    raised: BaseException | None = None
+    __acts = (<the name of each act of the chain>, ...)
+    __words = (<the name of the rung of each word of the program>, ...)
+    try:
+      acting()
+      <a word of the program of the chain before the word>
+    except BaseException:
+      pass
+    <one try of its own for each other word of the program, in order>
+    <the word>
+
+Every line of it is there for a reason. The gate gives the checker the engine once, as the module MODULE, which
+the sheet alone imports, so a reading costs the program and the word and not the engine. The gate of the crate lays
+the words of the program out in modules of its own, which its checker reads once, so a reading costs the words
+that it did not read before and the word. The body is async, so a
+word may await at its top level. ty gives every module names that a chain in the sandbox does not hold, UNBOUND,
+so the body declares each of them and never binds it: ty refuses a word that reads it, as the sandbox does, on
+every engine. The module of a chain holds every name of the engine, an import of the engine among them, so the
+body binds each of them next, with the type the engine gives it. Each is a plain binding, as it is in the module
+of a chain, so a word may read a name of the engine and bind it again to any value, as the contract lets it. The
+two names a chain binds of its own come next, with the types the contract gives them. The names of the acts of the
+chain come next, as ACTS, which the gate reads: the transcript binds the name of each act and each name of a value
+that a tell of it binds, as bash12_stdout, so a word that binds one says what no act gave, and the gate refuses it.
+The names of the rungs of the program come next, as WORDS, in the order of their words, which the gate reads too:
+a def, a class, an import and a name with a type declare that name, and ty refuses a later value of another type
+for it, though python binds it, so the gate names the rung that declares the name, which may be the rung of an
+extension, and the model gives its value another name. Each word of the program
+stands in a try of its own, since a rung that raised keeps what it bound before the raise and the word after it
+runs all the same: ty reads the next word through the except, with every name the words before it bound before
+they raised, so a word that raises at its top level hides no name a later word binds, and a rung that never ends
+leaves the word reachable the same way. But ty reads a name after a try through its except too, which may come
+before any statement of the try, so it gives a name that a later word binds again each type it was bound to. So
+the gate deletes each name that a statement at the top of a word binds again before the try of that word, and the
+name has the type of its last binding, as python gives it when the words run in order. A call opens each try, since ty reads an except that no statement before
+it can reach, and an empty word still has a body. And the program and the word keep their own lines, so a finding
+is counted back to the line the model wrote.
+
+The word is read as the body of a module before ty reads what it means: the sheet stands it inside a function,
+where a return is legal and the engine takes none, so a word the interpreter will not take as a body is a finding
+before the sheet is written. This module runs where the engine runs, so it asks nothing of the interpreter that a
+word of a rung does not.
+"""
+
+import re
+from ast import PyCF_ALLOW_TOP_LEVEL_AWAIT
+from collections.abc import Callable, Generator, Mapping, Sequence
+
+type Checked = Callable[[str], Sequence[tuple[int, str]]]
+"""What reads a sheet: ty, in whichever form the Kernel holds it, giving each finding by its line."""
+type Ear = Generator[tuple | set[str] | None, tuple | None]
+"""An ear, as the engine hears one."""
+
+MODULE = "__engine__"
+"""MODULE is the name the checker holds the engine under. The sheet alone imports it, and no word knows it, so a
+word that imports the engine by the name of its package is refused, as the run refuses it."""
+UNBOUND = ("__file__", "__path__", "__annotations__", "__annotate__", "__builtins__", "__warningregistry__")
+"""UNBOUND are the names ty gives every module as globals that a chain in the sandbox does not hold. ty gives them in
+module_type_implicit_global_symbol of ty_python_semantic: the names the typeshed declares in the class
+types.ModuleType, but __dict__, __init__ and __getattr__, and __builtins__, __debug__ and __warningregistry__, which
+ty adds itself. A chain in the sandbox holds __name__, which the engine binds, and __doc__, __package__, __spec__,
+__loader__ and __debug__, which the module of the engine holds before the engine runs. A word is judged the same on
+every engine, in the vocabulary of the sandbox, so the gate of python refuses these names too, though python runs
+some of them."""
+ACTS = "__acts"
+"""ACTS is the name the sheet binds to the names of the acts of the chain, which the gate reads to refuse a word that
+binds a name that the transcript binds."""
+WORDS = "__words"
+"""WORDS is the name the sheet binds to the names of the rungs of the program, in the order of their words, which the
+gate reads to name the rung that declares a name that a word binds again."""
+BOUND = '  actor = ""\n  raised: BaseException | None = None\n'
+"""BOUND binds the two names a chain binds of its own."""
+OPENED = "  try:\n    acting()\n"
+"""OPENED opens the try of a word of the program."""
+CAUGHT = "  except BaseException:\n    pass\n"
+"""CAUGHT closes the try of a word of the program."""
+CUT = 80
+"""CUT is the most characters of a line that a finding quotes."""
+PROSE = 3
+"""PROSE is the fewest words of a line that starts with a capital letter that a finding reads as a sentence."""
+STRAY = (
+  "a reply is python and quotes only, with no fence, no markup and no prose, so nothing of this word ran: delete each"
+  " such line"
+)
+"""STRAY is what a finding adds when a word that is not python holds a fence, the markup of a tool call or prose."""
+QUOTING = (
+  "the mark {mark} stands inside a line, and a quote opens only with <s:{name}> at the start of a line and closes only"
+  " with </s:{name}> at the end of a line, so nothing of this word ran: write the quote on lines of its own before the"
+  " call, and give the call the name {name}"
+)
+"""QUOTING is what a finding adds when a word that is not python holds a mark of a quote inside a line, as a model
+that opens a quote inside a call writes it."""
+UNTERMINATED = (
+  "a string of one quote ends at the end of its line, so write a text of several lines as a triple quote, or as a"
+  " quote <s:name> on lines of its own before the call, and nothing of this word ran"
+)
+"""UNTERMINATED is what a finding adds when a word that is not python holds a string of one quote that a newline
+ends, as a model that writes a text of several lines inside one pair of quote marks writes it."""
+
+SHELL = (
+  "git",
+  "gh",
+  "cd",
+  "ls",
+  "cat",
+  "grep",
+  "sed",
+  "echo",
+  "mkdir",
+  "rm",
+  "python",
+  "python3",
+  "uv",
+  "cargo",
+  "bun",
+  "pytest",
+  "ruff",
+  "npm",
+  "make",
+  "find",
+  "head",
+  "tail",
+  "curl",
+  "sh",
+)
+"""SHELL are the commands that start the line of a model that sent a shell command as its word."""
+SHELLED = 'the line is a shell command, so write it as await bash("..."), and nothing of this word ran'
+"""SHELLED is what a finding adds when the first line of a word that is not python is a shell command."""
+INDENT = 2
+"""INDENT is how far the sheet lays a word into its body, which the columns of a finding count and the gate takes back."""
+TEXTLESS = (
+  "a name that a tell binds, as read1_text, holds a str and no Text, so use read(path) to get a Text, whose .content"
+  " is its text"
+)
+"""TEXTLESS is what a finding adds when a word asks a str for the .content or the .lines of a Text."""
+HINTS = (
+  ("[invalid-await]", "a value that an await gave stands in the name already, so use the name and await it no more"),
+  ("`Text`", "a Text is no str, so use its .content for its text and its .lines for its lines"),
+  ("has no attribute `content`", TEXTLESS),
+  ("has no attribute `lines`", TEXTLESS),
+)
+"""HINTS are the markers of a rule of the checker and what a finding of that rule adds."""
+NAMELESS = (
+  "the line starts with =, so its binding has no name: write the name before =, as in got = 1, and nothing of this word"
+  " ran"
+)
+"""NAMELESS is what a finding adds when the line of a word that is not python starts with a lone =, as the line of a
+model that left out the name that it binds."""
+
+
+def quoted(word: str, n: int, why: str) -> str:
+  """A finding: the line of the word it is found on, what it says, and the line itself, cut to CUT characters, so a
+  model reads what the gate read."""
+  lines = word.split("\n")
+  line = lines[n - 1].strip() if 0 < n <= len(lines) else ""
+  cut = line if len(line) <= CUT else line[: CUT - 3] + "..."
+  return f"line {n}: {why}, in {cut!r}" if cut else f"line {n}: {why}"
+
+
+DASHES = ("--", "---", "\u2013", "\u2014")
+"""DASHES are the marks that stand alone between the words of prose and that no python line holds, since a lone - is a
+minus."""
+
+
+def worded(word: str) -> bool:
+  """Whether a word of a line reads as a word of prose: letters with a mark of punctuation or of a quote at its edges and
+  an apostrophe, a hyphen or a dash between letters, a word that holds a backtick, or a dash that stands alone."""
+  if "`" in word or word in DASHES:
+    return True
+  return all(
+    part.isalpha() for part in re.split("['\u2019\\-\u2013\u2014]", word.strip(".,:;!?'\"\u2019\u201c\u201d()*_"))
+  )
+
+
+def stray(line: str) -> str:
+  """What a line is that is no python a model means: a fence of markdown, the markup of a tool call, or a sentence of
+  prose, and nothing for any other line."""
+  text = line.strip()
+  words = text.split()
+  if text.startswith(("```", "~~~")):
+    return "a fence"
+  if text.startswith("<") and not text.startswith(("<s:", "</s:")):
+    return "markup"
+  prose = len(words) >= PROSE and words[0][:1].isupper() and all(map(worded, words))
+  return "prose" if prose else ""
+
+
+def inline(lines: list[str]) -> tuple[int, str, str] | None:
+  """The first mark of a quote that stands inside a line, as its line, the mark and its name: an open mark with text
+  before it, as write(Text(path, <s:name>, or a close mark with text after it, as </s:name>)). A line that is one
+  string already, as a quote that has its marks in place becomes, holds no mark of its own."""
+  for n, one in enumerate(lines, 1):
+    name, equals, rest = one.partition(" = ")
+    if equals and name.isidentifier() and rest[:1] in "'\"" and rest[-1:] == rest[:1]:
+      continue
+    if (hit := re.search(r"<s:(\w+)>", one)) and hit.start() > 0:
+      return n, hit[0], hit[1]
+    if (hit := re.search(r"</s:(\w+)>", one)) and one[hit.end() :].strip():
+      return n, hit[0], hit[1]
+  return None
+
+
+def unclosed(word: str) -> tuple[int, int, str] | None:
+  """The innermost bracket that the word opens and never closes, as its line, its column and the bracket, read past
+  the comments and the strings."""
+  stack: list[tuple[int, int, str]] = []
+  pairs = {")": "(", "]": "[", "}": "{"}
+  n, col, quote, i = 1, 0, "", 0
+  while i < len(word):
+    ch, skip = word[i], 1
+    col += 1
+    if ch == "\n":
+      n, col = n + 1, 0
+      quote = quote if quote[1:] else ""
+    elif quote:
+      if ch == "\\":
+        skip = 2
+        if word[i + 1 : i + 2] == "\n":
+          n, col = n + 1, 0
+      elif word.startswith(quote, i):
+        skip, quote = len(quote), ""
+    elif ch == "#":
+      end = word.find("\n", i)
+      skip = (end if end >= 0 else len(word)) - i
+    elif ch in "'\"":
+      quote = ch * 3 if word.startswith(ch * 3, i) else ch
+      skip = len(quote)
+    elif ch in "([{":
+      stack.append((n, col, ch))
+    elif ch in pairs and stack and stack[-1][2] == pairs[ch]:
+      stack.pop()
+    col += skip - 1 if word[i : i + 1] != "\n" else 0
+    i += skip
+  return stack[-1] if stack else None
+
+
+LITERAL = r"""'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*\""""
+"""LITERAL matches one string literal on one line, as unquoted writes the value of a quote."""
+LONE = (
+  "the word is the quote <s:{name}> and nothing else, so it only binds {name} and nothing of it runs: write the code"
+  " as the word itself, with no quote around it, and quote only a text that the code uses"
+)
+"""LONE is what a finding says when a word is one quote and nothing else, as a model that wraps its word in a quote
+of the name of its rung writes it."""
+
+
+def lone(word: str) -> str:
+  """The name of the quote that the word is and nothing else, as unquoted gives it: one line that binds a name to one
+  string literal, and after it only the empty lines that stood for the lines of the quote. Nothing for any other
+  word."""
+  line, newline, rest = word.partition("\n")
+  name, equals, value = line.partition(" = ")
+  if newline and not rest.strip() and equals and name.isidentifier() and re.fullmatch(LITERAL, value):
+    return name
+  return ""
+
+
+def swallowed(lines: list[str]) -> list[tuple[int, str, int]]:
+  """The open marks that stand inside the text of the quote of their own name, as (line, name, line of the quote).
+  The word is read after its quotes became strings of one line each, so the text of a quote is the string on the line
+  of its open mark, and each line of it follows as a newline of the string."""
+  found: list[tuple[int, str, int]] = []
+  for n, one in enumerate(lines, 1):
+    name, equals, rest = one.partition(" = ")
+    if not (equals and name.isidentifier() and re.fullmatch(LITERAL, rest)):
+      continue
+    # monty has no literal_eval, and the match above holds the line to one string literal, so eval runs no code.
+    text = eval(rest, {"__builtins__": {}})  # noqa: S307
+    found += [(n + 1 + k, name, n) for k, x in enumerate(text.split("\n")) if x.strip() == f"<s:{name}>"]
+  return found
+
+
+def python(word: str) -> list[str]:
+  """What the word is as python, before ty reads what it means: nothing for a word the interpreter takes as the
+  body of a module, and the fault for one it does not."""
+  lines = word.split("\n")
+  # A quote that has a close mark is a string already, so an open mark that stands as it is has none.
+  marks = [(n, one.strip()[3:-1]) for n, one in enumerate(lines, 1) if one.strip()[3:-1].isidentifier()]
+  opened = [(n, name) for n, name in marks if lines[n - 1].strip() == f"<s:{name}>"]
+  if opened:
+    return [
+      quoted(word, n, f"the quote <s:{name}> has no close mark </s:{name}> at the end of a line") for n, name in opened
+    ]
+  if inside := swallowed(lines):
+    return [
+      quoted(
+        word,
+        n,
+        f"the open mark <s:{name}> stands inside the quote <s:{name}> of line {first}, and one close mark"
+        f" </s:{name}> ends both: close the first quote, or delete this mark",
+      )
+      for n, name, first in inside
+    ]
+  try:
+    compile(word, "<gate>", "exec", flags=PyCF_ALLOW_TOP_LEVEL_AWAIT)
+  except (SyntaxError, NotImplementedError) as bad:
+    # monty raises NotImplementedError for a syntax that it does not support, as a keyword of a metaclass.
+    # Which line and what it said is what an interpreter offers of it, and one that offers neither gives the text.
+    why = str(getattr(bad, "msg", None) or bad)
+    column = getattr(bad, "offset", None)
+    # An interpreter that gives no line number may name the line at the end of its text, as (<string>, line 2).
+    tail = str(bad).rpartition(", line ")[2].removesuffix(")")
+    n = getattr(bad, "lineno", None) or (int(tail) if tail.isdigit() else 1)
+    line = lines[n - 1].strip() if 0 < n <= len(lines) else ""
+    why = f"error[invalid-syntax]{f' (column {column})' if column else ''} {why}"
+    if line.startswith("=") and not line.startswith("=="):
+      why += f"; {NAMELESS}"
+    if line.partition(" ")[0] in SHELL and " " in line:
+      why += f"; {SHELLED}"
+    if bracket := unclosed(word):
+      why += f"; the bracket {bracket[2]} of line {bracket[0]}, column {bracket[1]}, stays open"
+    if re.search(r"unterminated string|missing closing quote", why):
+      why += f"; {UNTERMINATED}"
+    if mark := inline(lines):
+      why += f"; line {mark[0]}: {QUOTING.format(mark=mark[1], name=mark[2])}"
+    first = next(((k, kind) for k, one in enumerate(lines, 1) if (kind := stray(one))), None)
+    if first:
+      why += f"; line {first[0]} is {first[1]}: {STRAY}"
+    return [quoted(word, n, why)]
+  return []
+
+
+def laid(text: str, depth: int) -> str:
+  """The text as it stands on the sheet, indented into the body, with every line where it was, so a finding keeps
+  the line it was found on."""
+  return "".join(f"{' ' * depth}{line}\n" if line.strip() else "\n" for line in text.split("\n"))
+
+
+def sheet(
+  engine: dict[str, object], program: Mapping[str, str], word: str, acts: Sequence[str] = ()
+) -> tuple[str, int]:
+  """The word on its sheet, laid out as this module says, and how many lines stand above the word, which every
+  finding is counted back by. The program gives each word under the name of its rung, in its order."""
+  unbound = "".join(f"  {name}: object\n" for name in UNBOUND)
+  names = "".join(f"  {name} = {MODULE}.{name}\n" for name in engine if not name.startswith("_"))
+  words = "".join(OPENED + laid(one, 4) + CAUGHT for one in program.values())
+  above = f"import {MODULE}\nasync def __body():\n{unbound}{names}{BOUND}  {ACTS} = {tuple(acts)!r}\n  {WORDS} = {tuple(program)!r}\n{words or OPENED + CAUGHT}"
+  return above + laid(word, 2), above.count("\n")
+
+
+def shifted(why: str) -> str:
+  """The finding with its column counted in the word, which the sheet lays INDENT columns into its body, and with
+  what its rule adds."""
+  hit = re.search(r"\(column (\d+)\)", why)
+  if hit:
+    why = why[: hit.start(1)] + str(max(int(hit[1]) - INDENT, 1)) + why[hit.end(1) :]
+  return why + "".join(f"; {hint}" for marker, hint in HINTS if marker in why)
+
+
+def gate(
+  engine: dict[str, object], program: Mapping[str, str], word: str, checked: Checked, acts: Sequence[str] = ()
+) -> list[str]:
+  """What the gate finds against a word: the word is read for what the interpreter will take, and then ty reads it
+  on its sheet after the program of its chain, and each finding below the word is counted back to its line."""
+  if found := python(word):
+    return found
+  text, above = sheet(engine, program, word, acts)
+  return [quoted(word, n - above, shifted(why)) for n, why in checked(text) if n > above]
+
+
+def against(engine: dict[str, object], checked: Checked, on: str, word: str) -> list[str]:
+  """What the gate finds against a word on the sheet of the engine whose names it is given, after the program of its
+  chain as it stands now and the parts that the writings of a rung with no run hold, each word under the name of its
+  rung, with the names of the acts of the chain. It makes no
+  fact, so a host may read it while a model still writes the word."""
+  program, question, transcript = engine["program"], engine["question"], engine["transcript"]
+  assert callable(program)
+  assert callable(question)
+  assert callable(transcript)
+  words, facts = program(on), transcript(on)
+  assert isinstance(words, dict)
+  assert isinstance(facts, list)
+  written: dict[str, str] = {}
+  for x in facts:
+    if x[0] == "module":
+      written = {}
+    elif x[0] == "writing" and x[1] not in words:
+      written[str(x[1])] = written.get(str(x[1]), "") + str(x[3])
+  return gate(engine, {**words, **written}, word, checked, [str(x[1]) for x in facts if question(x)])
+
+
+def gating(engine: dict[str, object], checked: Checked) -> Ear:
+  """The gate as the ear of a life: it answers each gate with what it finds against the word, on its chain as the
+  chain stands when the gate takes it. A word that is one quote and nothing else is a finding of the gate alone, and
+  not of against, which a host reads while a model writes the word, as a quote that the rest of the word uses."""
+  gates = {"gate"}
+  while True:
+    match (yield gates):
+      case ("gate", qid, _, on, word):
+        name = lone(word)
+        yield "done", qid, [quoted(word, 1, LONE.format(name=name))] if name else against(engine, checked, on, word)
