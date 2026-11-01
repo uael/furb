@@ -22,7 +22,7 @@ from email import message_from_string
 from functools import cache
 from http.client import HTTPResponse
 from pathlib import Path
-from tempfile import gettempdir, mkdtemp
+from tempfile import mkdtemp
 from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -38,9 +38,9 @@ TRACES = ROOT / "traces"
 """TRACES is where the record and the result of every graded run are kept."""
 COLLECTION = "https://github.com/datacurve-ai/deep-swe"
 """COLLECTION is the repository of tasks, fetched once and kept."""
-CACHE = Path(os.environ.get("DEEPSWE_DIR") or Path(gettempdir()) / "deep-swe")
+CACHE = Path(os.environ.get("DEEPSWE_DIR") or Path.home() / ".cache/furb/deep-swe")
 """CACHE is where the collection of tasks is kept."""
-WORK = Path(os.environ.get("DEEPSWE_WORK") or Path(gettempdir()) / "furb-deepswe")
+WORK = Path(os.environ.get("DEEPSWE_WORK") or Path.home() / ".cache/furb/deepswe-work")
 """WORK is where the checkout of every task stands."""
 HOMES = Path.home() / ".cache/furb-deepswe"
 """HOMES is what outlives a workroot: a reporter whose path this host does not let the rig write, and the layers.
