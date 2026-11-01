@@ -1708,6 +1708,12 @@ async def seconded(pr: dict, held: dict, claims: dict[str, str]) -> bool:
   got = await bash(f"git fetch -q origin main refs/pull/{n}/head && git diff origin/main...{sha}", show=HIDDEN, timeout=180, ok=True)
   diff = got.stdout.content
   if got.code != 0 or not diff.strip():
+    notice(
+      f"second diff {n} {sha}",
+      f"The round could not read the diff of #{n} at {sha[:7]} for the second judge of its account, so the PR does not"
+      f" merge. gh said: {got.stderr.content[-300:] or 'nothing'}. The round tries again at each sweep: fix the cause, or"
+      f" set judged[{f'{n} {sha}'!r}]['seconded'] to True after you read each fix in the diff yourself.",
+    )
     return False
   if len(diff) > RULER_DIFF:
     diff = diff[:RULER_DIFF] + f"\n(The diff is cut here: read the rest with gh pr diff {n}.)"
