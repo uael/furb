@@ -468,6 +468,22 @@ def test_a_worker_that_ends_with_a_pr_is_a_line_and_its_debrief_feeds_the_ledger
   assert "- e1 2x A  slow gate\n- e0 1x No jq on the PATH\nThe prune found nothing to remove." in told
 
 
+def test_a_report_that_names_a_mistake_is_a_notice_of_its_own_and_not_a_line(conductor: Round) -> None:
+  report = "IMPORTANT, a mistake of mine: I pushed them to origin/main, which deleted nearly all files from main."
+  for name, key, pr, said in (("prompt1", "item1", 12, report), ("prompt2", "item2", 13, "Opened it. The gates pass.")):
+    conductor.working[name] = key
+    conductor.facts[name] = ("prompt", name, "rung1", "chain5", "tuple[int, str]", "brief", "")
+    conductor.done[name] = (pr, said)
+  conductor.tend()
+  assert conductor.heard == ["The worker item2 (prompt2) ended with PR #13, and results['prompt2'] keeps its report."]
+  told = [message for message, _ in conductor.prompts if "names a mistake" in message]
+  assert len(told) == 1 and told[0].startswith("The report of the worker item1 (prompt1) names a mistake")
+  assert report in told[0] and "The worker item1 (prompt1) ended with PR #12" in told[0]
+  assert "item2" not in told[0]
+  conductor.tend()
+  assert len([message for message, _ in conductor.prompts if "names a mistake" in message]) == 1
+
+
 @POSIX
 @JQ
 async def test_a_notice_carries_its_context_and_each_other_event_is_a_line(conductor: Round) -> None:
