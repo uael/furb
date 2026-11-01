@@ -329,6 +329,10 @@ fix what your change broke, and report what was broken before.
 - `uv run python script/paths.py`: check that each path of the repository that a file of `script/` or of
   `.github/workflows/` names is a file or a folder that git holds, or a file that a build makes and git ignores. It
   names the file, the line and the path of each one that stands no more, and it reads git alone. The hooks run it.
+- `uv run --no-sync python script/workflows.py`: parse each file of `.github/workflows/` with PyYAML, in a second, with no
+  build. It fails on a syntax fault, on a key that a mapping holds twice, on a marker of a conflict, on a job with
+  neither `runs-on` nor `uses`, on a step with neither `run` nor `uses`, and on a `needs` that names no job. Run it
+  after a merge or a rebase that touched a workflow. The hooks run it on every commit, a merge commit too.
 - `bun install && bun run build`: install the TypeScript workspace, and build the N-API package that the TUI uses.
 - `bun run check`, `bun run lint` and `bun run test`: the type check, the lint and the tests of the TypeScript side.
   `tui/script/test.ts` deals the tests into runs, each a process that runs one test at a time with a limit of thirty
