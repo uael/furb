@@ -150,6 +150,20 @@ class Round:
     ns.update(act=lambda kind, on, ear, *words: kind, close=lambda value, id="": self.closed.append((id, value)))
     ns.update(grant=lambda usd=None, share=None, on="": "grant")
     ns.update(filled=lambda about: None, gate=lambda word, on="": [], wait=self.wait)
+    # Existing behavior tests use an explicit multi-family room map.
+    ns["limits"] = {
+      "room": {"opus": 1, "sonnet": 3, "opus/high": 1},
+      "fixer": "claude-cli:sonnet/high",
+      "models": {
+        "actor": "claude-cli:opus/medium",
+        "handover": "claude-cli:sonnet/medium",
+        "editor": "claude-cli:sonnet/high",
+        "patcher": "claude-cli:opus/medium",
+        "ruler": "claude-cli:opus/medium",
+        "stronger": "claude-cli:opus/high",
+        "audit": "claude-cli:opus/medium",
+      },
+    }
     # The root plays pr before the conductor, which uses its names, as .furb/config.json orders them.
     exec(compile(IMPORT.sub("", PULL.read_text(encoding="utf-8")), str(PULL), "exec"), ns)  # noqa: S102
     exec(compile(IMPORT.sub("", SOURCE), str(HERE / "conductor.py"), "exec"), ns)  # noqa: S102
@@ -867,6 +881,15 @@ TOP = "claude-cli:opus/high"
 SONNET_HIGH = "claude-cli:sonnet/high"
 
 
+def test_the_default_round_uses_codex_luna_for_each_role(conductor: Round) -> None:
+  luna = "codex:gpt-6-luna/medium"
+  assert conductor.LIMITS["fixer"] == luna
+  assert conductor.LIMITS["room"] == {"gpt-6-luna": 5}
+  assert conductor.LIMITS["models"] == dict.fromkeys(
+    ("actor", "handover", "editor", "patcher", "ruler", "stronger", "audit"), luna
+  )
+
+
 def test_the_rulings_of_the_owner_stand_in_conducting_in_his_words(conductor: Round) -> None:
   for words in ('limits["models"]', 'actor, handover, editor, patcher, ruler, stronger and audit', "reload keeps your choices"):
     assert words in conductor.CONDUCTING
@@ -894,10 +917,10 @@ def test_a_fixer_runs_on_sonnet_high_unless_its_effort_says_otherwise(conductor:
 def test_a_reload_adds_model_roles_to_a_round_that_predates_them(conductor: Round) -> None:
   conductor.limits.pop("models")
   exec(compile(IMPORT.sub("", SOURCE), str(HERE / "conductor.py"), "exec"), conductor.ns)  # noqa: S102
-  assert conductor.limits["models"] == {
-    "actor": OPUS, "handover": SONNET, "editor": SONNET_HIGH, "patcher": OPUS,
-    "ruler": OPUS, "stronger": TOP, "audit": OPUS,
-  }
+  luna = "codex:gpt-6-luna/medium"
+  assert conductor.limits["models"] == dict.fromkeys(
+    ("actor", "handover", "editor", "patcher", "ruler", "stronger", "audit"), luna
+  )
 
 
 def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(conductor: Round) -> None:
@@ -980,13 +1003,11 @@ def test_the_word_plays_on_a_module_of_the_previous_conductor_that_binds_no_name
   for name in STATE:
     del conductor.ns[name]
   play(conductor)
+  luna = "codex:gpt-6-luna/medium"
   assert conductor.limits == {
-    "room": {"opus": 1, "sonnet": 3, "opus/high": 1},
-    "fixer": SONNET_HIGH,
-    "models": {
-      "actor": OPUS, "handover": SONNET, "editor": SONNET_HIGH, "patcher": OPUS,
-      "ruler": OPUS, "stronger": TOP, "audit": OPUS,
-    },
+    "room": {"gpt-6-luna": 5},
+    "fixer": luna,
+    "models": dict.fromkeys(("actor", "handover", "editor", "patcher", "ruler", "stronger", "audit"), luna),
   }
   assert conductor.cap() == 5
   for name in STATE[1:]:
