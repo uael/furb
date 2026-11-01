@@ -780,6 +780,25 @@ def notice(key: str, message: str) -> None:
     quietly(prompt, None, message + merged_since())
 
 
+MISTAKE = re.compile(
+  r"\bmistakes?\b|\b(?:restor(?:e|ed|es|ing)|lost|deleted)\b"
+  r"|\bpush(?:ed|es)?\b(?: [\w/.-]+){0,3} (?:to|onto) (?:origin/)?main\b"
+  r"|\bchang(?:ed|es?)\b(?: to)? (?:origin/)?main\b|\bforce[- ]push",
+  re.I,
+)
+
+
+def confessed(key: str, name: str, got: object) -> None:
+  report = got[1] if isinstance(got, tuple) and len(got) == 2 else ""
+  if isinstance(report, str) and MISTAKE.search(report):
+    # A line of the next notice hid a report that told the coordinator of a push to main, so such a report goes whole.
+    notice(
+      f"mistake {name}",
+      f"The report of the worker {key} ({name}) names a mistake, a push or a change to main, a lost file or a restore."
+      f" Read it whole:\n\n{report}",
+    )
+
+
 def working_at(name: str) -> str:
   for _ in range(5):
     where = str(get(name)[3])
@@ -983,8 +1002,10 @@ def tend() -> None:
       debriefs[str(quietly(debrief, name))] = key
     if isinstance(got, tuple) and len(got) == 2 and isinstance(got[0], int) and got[0] > 0:
       heard.append(f"The worker {key} ({name}) ended with PR #{got[0]}, and results[{name!r}] keeps its report.")
+      confessed(key, name, got)
     elif kind_of(key) == "audit" and isinstance(got, tuple) and len(got) == 2:
       heard.append(f"The auditor {key} ({name}) ended, and results[{name!r}] keeps its report.")
+      confessed(key, name, got)
       register(key, name)
     else:
       quietly(prompt, None, f"The worker {key} ({name}) ended with no PR:\n\n{str(got)[:2000]}" + merged_since())
