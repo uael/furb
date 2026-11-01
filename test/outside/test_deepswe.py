@@ -157,3 +157,34 @@ def test_watched_ends_when_record_numbers_fall(tmp_path: Path, monkeypatch: pyte
   monkeypatch.setattr(deepswe.engine, "paused", lambda _root: False)
   why = deepswe.watched(record, "root", 0, {"did": 2, "answers": 2, "commands": 1})
   assert "answers, commands fell below an earlier mark" in why
+
+
+def test_deepswe_enables_compaction_without_dropping_local_config(
+  tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+  """A DeepSWE checkout enables compaction and keeps its other local settings."""
+  deepswe = rig(monkeypatch)
+  config = tmp_path / ".furb" / "config.local.json"
+  config.parent.mkdir()
+  config.write_text(json.dumps({"actor": "fixture:model", "extensions": {"skills": False}}))
+  deepswe.enable_compaction(tmp_path)
+  got = json.loads(config.read_text())
+  assert got == {"actor": "fixture:model", "extensions": {"skills": False, "compaction": True}}
+
+
+async def test_task_context_under_a_262144_token_window_triggers_compaction(
+  tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+  from conftest import settle  # noqa: PLC0415
+  from extensions import conftest as extension_fixtures  # noqa: PLC0415
+  from furb import engine  # noqa: PLC0415
+
+  stands = [[["operator", [], 200000], ["m", ["low", "high"], 262144]], "/w", "m/low"]
+  monkeypatch.setattr(extension_fixtures, "STANDS", stands)
+  sand, root, _ = extension_fixtures.compacting(tmp_path)
+  await engine.rung("compacted()", on=root)
+  sand.cost = (160000, 0, 0, 0, 0.0)
+  sand.script[root] = ["x = 1", "close(x)"]
+  assert await engine.prompt(int, "past the share", on=root) == 1
+  await settle()
+  assert engine.get("chain2") is not None
