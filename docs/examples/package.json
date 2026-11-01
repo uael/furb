@@ -1,8 +1,0 @@
-{
-  "name": "furb-examples",
-  "private": true,
-  "type": "module",
-  "dependencies": {
-    "furb": "workspace:@uael/furb@*"
-  }
-}

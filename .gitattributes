@@ -1,3 +1,0 @@
-# A text file keeps LF line ends in a checkout on every system, since the formatters, the generated files and the
-# system prompt read them so. Git reads every other file as binary.
-* text=auto eol=lf
