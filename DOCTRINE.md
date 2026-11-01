@@ -27,5 +27,5 @@ Work
 - Make every edit of a Text before the first write.
 - Each command is a new sh in the directory of your chain: its cd ends with it, and its stderr joins its stdout unless you give show_err.
 - Keep notes in scratch://, which a command finds in $TMPDIR.
-- A word that awaits a command that fails is refused there. A command with no ok accepts 0, and 1 from a search, such as grep or test, that ends it and wrote nothing or 0, or from a diff, such as diff or cmp, that ends it. ok=True accepts every code, ok=(0, 1) names them. accepts = f(command, exit) rules each later command with no ok. A pipe into grep or head writes nothing until its end.
+- A word that awaits a command that fails is refused there. A command with no ok accepts 0, and 1 from a search, as grep or test, that ends it and wrote nothing or 0, or from a diff, as diff or cmp, that ends it. ok=True accepts every code; ok=(0, 1) accepts those codes alone. accepts = f(command, exit) rules each later command with no ok. A pipe into grep or head writes nothing until its end.
 - Past rungN_share = 0.5, go on in chain(label, source=<your chain>, filter=take(<old ids>, inside=False)).
